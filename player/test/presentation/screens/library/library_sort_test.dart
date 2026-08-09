@@ -72,14 +72,51 @@ void main() {
     expect(LibrarySort.defaultSort.direction, SortDirection.desc);
   });
 
-  test('the seed is not part of equality, so it never busts persistence', () {
-    const a = LibrarySort(field: SortField.title, direction: SortDirection.asc);
-    const b = LibrarySort(
-      field: SortField.title,
+  // LibrarySort is a Riverpod family argument, so equality decides whether
+  // re-selecting Random gets a new watcher. If two shuffles compared equal the
+  // provider would be reused and the reshuffle would silently do nothing.
+  test('two random shuffles with different seeds are not equal', () {
+    const a = LibrarySort(
+      field: SortField.random,
       direction: SortDirection.asc,
-      randomSeed: 9,
+      randomSeed: 1,
+    );
+    const b = LibrarySort(
+      field: SortField.random,
+      direction: SortDirection.asc,
+      randomSeed: 2,
+    );
+
+    expect(a, isNot(b));
+    expect(a.hashCode, isNot(b.hashCode));
+  });
+
+  test('the same seed compares equal', () {
+    const a = LibrarySort(
+      field: SortField.random,
+      direction: SortDirection.asc,
+      randomSeed: 7,
+    );
+    const b = LibrarySort(
+      field: SortField.random,
+      direction: SortDirection.asc,
+      randomSeed: 7,
     );
 
     expect(a, b);
+    expect(a.hashCode, b.hashCode);
+  });
+
+  // The seed drives the family key but must not reach storage, or one
+  // permutation would be frozen forever.
+  test('the seed never reaches the encoded form', () {
+    const sort = LibrarySort(
+      field: SortField.random,
+      direction: SortDirection.asc,
+      randomSeed: 12345,
+    );
+
+    expect(sort.encode(), isNot(contains('12345')));
+    expect(sort.encode(), 'RANDOM:ASC');
   });
 }

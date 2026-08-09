@@ -57,9 +57,14 @@ enum SortDirection {
 
 /// A chosen ordering, ready to send as the `sort` GraphQL variable.
 ///
-/// [randomSeed] is deliberately excluded from equality and from [encode]. It
-/// is session state, not a preference: persisting it would freeze one
-/// permutation forever, which is the opposite of what picking Random means.
+/// [randomSeed] is session state rather than a preference, so it is excluded
+/// from [encode]: persisting it would freeze one permutation forever, which is
+/// the opposite of what picking Random means.
+///
+/// It is part of equality, though, and deliberately so. This type is a Riverpod
+/// family argument, so equality decides whether re-selecting Random gets a new
+/// watcher. Excluding the seed would make two shuffles compare equal and the
+/// reshuffle would silently do nothing.
 class LibrarySort {
   const LibrarySort({
     required this.field,
@@ -117,11 +122,13 @@ class LibrarySort {
   bool operator ==(Object other) =>
       other is LibrarySort &&
       other.field == field &&
-      other.direction == direction;
+      other.direction == direction &&
+      other.randomSeed == randomSeed;
 
   @override
-  int get hashCode => Object.hash(field, direction);
+  int get hashCode => Object.hash(field, direction, randomSeed);
 
   @override
-  String toString() => 'LibrarySort(${field.wireName}, ${direction.wireName})';
+  String toString() =>
+      'LibrarySort(${field.wireName}, ${direction.wireName}, seed: $randomSeed)';
 }

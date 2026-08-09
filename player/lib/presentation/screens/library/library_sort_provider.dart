@@ -14,7 +14,7 @@ part 'library_sort_provider.g.dart';
 /// of the wrong order.
 @riverpod
 class LibrarySortController extends _$LibrarySortController {
-  static const _movieSeedBase = 0x5EED;
+  static const _seedBase = 0x5EED;
 
   String get _storageKey =>
       libraryType == LibraryType.movies ? 'movies' : 'tvShows';
@@ -66,6 +66,5 @@ class LibrarySortController extends _$LibrarySortController {
   // DateTime rather than Random so the seed varies per selection without
   // pulling in another dependency. Collisions only mean a repeated shuffle.
   int _mintSeed() =>
-      DateTime.now().microsecondsSinceEpoch.remainder(0x7FFFFFFF) ^
-      _movieSeedBase;
+      DateTime.now().microsecondsSinceEpoch.remainder(0x7FFFFFFF) ^ _seedBase;
 }
