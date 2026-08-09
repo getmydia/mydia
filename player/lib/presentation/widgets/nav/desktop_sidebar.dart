@@ -3,18 +3,14 @@ import 'package:flutter/material.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/depth_tokens.dart';
-import '../app_shell.dart';
 import '../glass_surface.dart';
 import 'back_to_mydia_button.dart';
+import 'sidebar_content.dart';
 
 /// Desktop sidebar navigation with collapsible sections
 class DesktopSidebar extends StatelessWidget {
   final String location;
   final ValueChanged<String> onNavigate;
-  final bool homeExpanded;
-  final bool libraryExpanded;
-  final VoidCallback onToggleHome;
-  final VoidCallback onToggleLibrary;
   final bool showBackToMydia;
   final bool isOffline;
 
@@ -22,10 +18,6 @@ class DesktopSidebar extends StatelessWidget {
     super.key,
     required this.location,
     required this.onNavigate,
-    required this.homeExpanded,
-    required this.libraryExpanded,
-    required this.onToggleHome,
-    required this.onToggleLibrary,
     this.showBackToMydia = false,
     this.isOffline = false,
   });
@@ -38,10 +30,6 @@ class DesktopSidebar extends StatelessWidget {
         child: SidebarContent(
           location: location,
           onNavigate: onNavigate,
-          homeExpanded: homeExpanded,
-          libraryExpanded: libraryExpanded,
-          onToggleHome: onToggleHome,
-          onToggleLibrary: onToggleLibrary,
           isOffline: isOffline,
           backToMydiaWidget: showBackToMydia ? const BackToMydiaButton() : null,
         ),
