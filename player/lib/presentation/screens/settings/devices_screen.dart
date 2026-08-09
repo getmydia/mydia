@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/format/relative_time.dart';
 import '../../../core/theme/colors.dart';
+import '../../../core/theme/depth_tokens.dart';
 import '../../../domain/models/remote_device.dart';
 import 'devices_controller.dart';
 
@@ -15,6 +16,8 @@ class DevicesScreen extends ConsumerWidget {
   ) async {
     // Don't allow revoking if already revoked
     if (device.isRevoked) return;
+
+    final scheme = Theme.of(context).colorScheme;
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -32,7 +35,7 @@ class DevicesScreen extends ConsumerWidget {
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: TextButton.styleFrom(
-              foregroundColor: AppColors.error,
+              foregroundColor: scheme.error,
             ),
             child: const Text('Revoke'),
           ),
@@ -47,6 +50,7 @@ class DevicesScreen extends ConsumerWidget {
             .revokeDevice(device.id);
 
         if (context.mounted) {
+          final scheme = Theme.of(context).colorScheme;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
@@ -54,16 +58,17 @@ class DevicesScreen extends ConsumerWidget {
                     ? 'Device revoked successfully'
                     : 'Failed to revoke device',
               ),
-              backgroundColor: success ? AppColors.success : AppColors.error,
+              backgroundColor: success ? AppColors.success : scheme.error,
             ),
           );
         }
       } catch (e) {
         if (context.mounted) {
+          final scheme = Theme.of(context).colorScheme;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Error: ${e.toString()}'),
-              backgroundColor: AppColors.error,
+              backgroundColor: scheme.error,
             ),
           );
         }
@@ -106,7 +111,7 @@ class DevicesScreen extends ConsumerWidget {
               separatorBuilder: (context, index) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
                 final device = devices[index];
-                return _DeviceCard(
+                return DeviceCard(
                   device: device,
                   onRevoke: () => _handleRevoke(context, ref, device),
                 );
@@ -119,19 +124,22 @@ class DevicesScreen extends ConsumerWidget {
   }
 }
 
-class _DeviceCard extends StatelessWidget {
+class DeviceCard extends StatelessWidget {
   final RemoteDevice device;
   final VoidCallback onRevoke;
 
-  const _DeviceCard({
+  const DeviceCard({
+    super.key,
     required this.device,
     required this.onRevoke,
   });
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
     return Material(
-      color: AppColors.surface,
+      color: DepthTokens.surfaceVariant,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -149,16 +157,16 @@ class _DeviceCard extends StatelessWidget {
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: device.isRevoked
-                          ? AppColors.surfaceVariant.withValues(alpha: 0.5)
-                          : AppColors.primary.withValues(alpha: 0.15),
+                          ? DepthTokens.surfaceHigh.withValues(alpha: 0.5)
+                          : scheme.primary.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(
                       _getPlatformIcon(device.platform),
                       size: 24,
                       color: device.isRevoked
-                          ? AppColors.textSecondary
-                          : AppColors.primary,
+                          ? scheme.onSurfaceVariant
+                          : scheme.primary,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -174,8 +182,8 @@ class _DeviceCard extends StatelessWidget {
                               Theme.of(context).textTheme.titleMedium?.copyWith(
                                     fontWeight: FontWeight.w600,
                                     color: device.isRevoked
-                                        ? AppColors.textSecondary
-                                        : AppColors.textPrimary,
+                                        ? scheme.onSurfaceVariant
+                                        : scheme.onSurface,
                                   ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -185,7 +193,7 @@ class _DeviceCard extends StatelessWidget {
                           _formatPlatform(device.platform),
                           style:
                               Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: AppColors.textSecondary,
+                                    color: scheme.onSurfaceVariant,
                                   ),
                         ),
                       ],
@@ -232,9 +240,9 @@ class _DeviceCard extends StatelessWidget {
                     icon: const Icon(Icons.block_rounded, size: 18),
                     label: const Text('Revoke Device'),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.error,
+                      foregroundColor: scheme.error,
                       side: BorderSide(
-                          color: AppColors.error.withValues(alpha: 0.5)),
+                          color: scheme.error.withValues(alpha: 0.5)),
                     ),
                   ),
                 ),
@@ -282,11 +290,12 @@ class _StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final color = device.isRevoked
-        ? AppColors.error
+        ? scheme.error
         : device.isRecentlyActive
             ? AppColors.success
-            : AppColors.textSecondary;
+            : scheme.onSurfaceVariant;
 
     final text = device.isRevoked
         ? 'Revoked'
@@ -325,12 +334,14 @@ class _InfoRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
     return Row(
       children: [
         Icon(
           icon,
           size: 16,
-          color: AppColors.textSecondary,
+          color: scheme.onSurfaceVariant,
         ),
         const SizedBox(width: 6),
         Expanded(
@@ -340,14 +351,14 @@ class _InfoRow extends StatelessWidget {
               Text(
                 label,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.textSecondary,
+                      color: scheme.onSurfaceVariant,
                       fontSize: 11,
                     ),
               ),
               Text(
                 value,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.textPrimary,
+                      color: scheme.onSurface,
                       fontWeight: FontWeight.w500,
                     ),
                 maxLines: 1,
@@ -366,6 +377,8 @@ class _EmptyView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -375,13 +388,13 @@ class _EmptyView extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.1),
+                color: scheme.primary.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.devices_rounded,
                 size: 56,
-                color: AppColors.primary,
+                color: scheme.primary,
               ),
             ),
             const SizedBox(height: 24),
@@ -396,7 +409,7 @@ class _EmptyView extends StatelessWidget {
             Text(
               'No devices are currently paired with your account',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textSecondary,
+                    color: scheme.onSurfaceVariant,
                   ),
               textAlign: TextAlign.center,
             ),
@@ -414,6 +427,8 @@ class _ErrorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -423,13 +438,13 @@ class _ErrorView extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: AppColors.error.withValues(alpha: 0.1),
+                color: scheme.error.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.error_outline_rounded,
                 size: 48,
-                color: AppColors.error,
+                color: scheme.error,
               ),
             ),
             const SizedBox(height: 24),
@@ -444,7 +459,7 @@ class _ErrorView extends StatelessWidget {
             Text(
               error,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textSecondary,
+                    color: scheme.onSurfaceVariant,
                   ),
               textAlign: TextAlign.center,
             ),
