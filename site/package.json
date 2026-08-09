@@ -6,6 +6,7 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
+    "test": "vitest run",
     "astro": "astro"
   },
   "dependencies": {
@@ -15,5 +16,9 @@
     "astro": "^5.17.1",
     "daisyui": "^5.5.19",
     "tailwindcss": "^4.2.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260809.1",
+    "vitest": "^4.1.10"
   }
 }
