@@ -10,7 +10,7 @@ import '../../presentation/screens/show/show_detail_screen.dart';
 import '../../presentation/screens/episode/episode_detail_screen.dart';
 import '../../presentation/screens/library/library_screen.dart';
 import '../../presentation/screens/library/library_controller.dart';
-import '../../presentation/screens/settings_screen.dart';
+import '../../presentation/screens/settings/settings_screen.dart';
 import '../../presentation/screens/settings/devices_screen.dart';
 import '../../presentation/screens/settings/diagnostics_screen.dart';
 import '../../presentation/screens/player/player_screen.dart';
