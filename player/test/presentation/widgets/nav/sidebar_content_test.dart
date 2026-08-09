@@ -21,8 +21,9 @@ Future<void> _pump(
   SidebarLayoutStore? store,
   void Function(String)? onNavigate,
   bool isOffline = false,
+  double height = 1400,
 }) async {
-  tester.view.physicalSize = const Size(1200, 1600);
+  tester.view.physicalSize = Size(1200, height + 200);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
@@ -38,7 +39,7 @@ Future<void> _pump(
         home: Scaffold(
           body: SizedBox(
             width: 260,
-            height: 1400,
+            height: height,
             child: SidebarContent(
               location: location,
               onNavigate: onNavigate ?? (_) {},
@@ -67,6 +68,22 @@ void main() {
     // The old tree's chevron is gone, and so is the Library group header.
     expect(find.byIcon(Icons.expand_more_rounded), findsNothing);
     expect(find.text('Library'), findsNothing);
+  });
+
+  testWidgets('does not overflow on a short viewport', (tester) async {
+    // The flat list renders every destination at once where the old tree kept
+    // Library collapsed, so it is materially taller than what it replaced. A
+    // laptop-height sidebar overflowed by ~100px and the render library threw,
+    // which only the E2E job caught because every widget test here had been
+    // pumping a 1400px column. The anchors stay pinned and the middle scrolls.
+    await _pump(tester, location: '/', height: 500);
+
+    expect(tester.takeException(), isNull);
+
+    // Both bottom anchors stay on screen rather than scrolling away. Settings
+    // in particular is the only route back from a hidden destination.
+    expect(find.text('Settings'), findsOneWidget);
+    expect(find.text('Search'), findsOneWidget);
   });
 
   testWidgets('a hidden destination is not rendered', (tester) async {

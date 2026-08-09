@@ -177,11 +177,16 @@ class SidebarContent extends ConsumerWidget {
                   ),
                   const SizedBox(height: 2),
                 ],
-                if (middle.isNotEmpty)
-                  ReorderableListView.builder(
-                    shrinkWrap: true,
+                // The reorderable region owns the leftover vertical space and
+                // scrolls inside it. It must not size to its content: the flat
+                // list renders every destination at once, where the old tree
+                // kept Library collapsed, so on a short viewport the column
+                // overflowed by ~100px and the render library threw. Anchors
+                // stay outside this so Downloads and Settings never scroll
+                // away, Settings being the only route back from a hidden row.
+                Expanded(
+                  child: ReorderableListView.builder(
                     buildDefaultDragHandles: false,
-                    physics: const NeverScrollableScrollPhysics(),
                     itemCount: middle.length,
                     onReorder: (oldIndex, newIndex) => _onReorder(
                       ref: ref,
@@ -206,6 +211,7 @@ class SidebarContent extends ConsumerWidget {
                       );
                     },
                   ),
+                ),
                 SidebarRow(
                   icon: Icons.add_rounded,
                   selectedIcon: Icons.add_rounded,
@@ -217,7 +223,6 @@ class SidebarContent extends ConsumerWidget {
                     initialFilter: MediaFilter.allMovies,
                   ),
                 ),
-                const Spacer(),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   child: Divider(
