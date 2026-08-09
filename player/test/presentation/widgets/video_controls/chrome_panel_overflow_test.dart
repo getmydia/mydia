@@ -52,9 +52,10 @@ import 'package:player/presentation/widgets/video_controls/video_progress_bar.da
 
 /// Mirrors `PlaybackChrome`'s real composition as closely as a `Player`-free
 /// test can: episode-nav wired unconditionally (as `PlaybackChrome` now does
-/// — see its wiring comment), `compact` following `metrics.touchTargets`
-/// (dropping seek/episode-nav to play/pause-only below the mobile
-/// breakpoint), `volume` supplied whenever `metrics.showVolume`, and the
+/// — see its wiring comment), `compact` following `metrics.compactTransport`
+/// (split from `touchTargets`; dropping seek/episode-nav to play/pause-only
+/// below the mobile breakpoint), `volume` supplied whenever
+/// `metrics.showVolume`, and the
 /// quality button shown whenever [quality] requests it — every tier's
 /// `metrics.showQuality` is true now, so there is no gate left to replicate
 /// (see the file header's `quality` axis note). This is deliberately the
@@ -82,7 +83,7 @@ Widget _panel(double width, {bool quality = false, bool alwaysOnTop = false}) {
             isPlaying: true,
             onPreviousEpisode: () {},
             onNextEpisode: () {},
-            compact: metrics.touchTargets,
+            compact: metrics.compactTransport,
           ),
           volume: metrics.showVolume
               ? VolumeSurface(

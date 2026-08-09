@@ -462,7 +462,10 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
 
   @override
   Widget build(BuildContext context) {
-    final metrics = PanelMetrics.forWidth(MediaQuery.sizeOf(context).width);
+    final metrics = PanelMetrics.resolve(
+      width: MediaQuery.sizeOf(context).width,
+      touchPrimary: false,
+    );
 
     return StreamBuilder<bool>(
       stream: widget.player.stream.playing,
@@ -546,7 +549,7 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                           // below this breakpoint. See this task's report for
                           // the open follow-up; do not read this comment as
                           // "handled".
-                          compact: metrics.touchTargets,
+                          compact: metrics.compactTransport,
                         ),
                         // Unconditional per ChromePanel's `volume` dartdoc:
                         // it already gates visibility internally via
