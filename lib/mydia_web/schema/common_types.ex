@@ -85,6 +85,9 @@ defmodule MydiaWeb.Schema.CommonTypes do
   input_object :sort_input do
     field :field, :sort_field, default_value: :title
     field :direction, :sort_direction, default_value: :asc
+
+    @desc "Seed for the random sort. Send the same value across pages of one shuffle."
+    field :seed, :integer
   end
 
   @desc "Pagination info for cursor-based pagination"

@@ -21,6 +21,10 @@ defmodule MydiaWeb.Schema.Resolvers.MediaSort do
 
   @default_sort %{field: :title, direction: :asc}
 
+  # Used when a client selects random without minting a seed. Any fixed value
+  # works; what matters is that the order stays stable across page requests.
+  @default_random_seed 0
+
   @doc """
   Sorts `items` according to `sort`.
 
@@ -29,6 +33,15 @@ defmodule MydiaWeb.Schema.Resolvers.MediaSort do
   """
   @spec sort([struct()], map() | nil, map()) :: [struct()]
   def sort(items, sort, progress \\ %{})
+
+  def sort(items, %{field: :random} = sort, _progress) do
+    seed = Map.get(sort, :seed) || @default_random_seed
+
+    # phash2 is deterministic across processes and restarts, which :rand is
+    # not. Pagination re-sorts the whole list per request, so the permutation
+    # has to be reproducible or infinite scroll duplicates and skips items.
+    Enum.sort_by(items, &:erlang.phash2({&1.id, seed}))
+  end
 
   def sort(items, %{field: field, direction: direction}, progress)
       when direction in [:asc, :desc] do

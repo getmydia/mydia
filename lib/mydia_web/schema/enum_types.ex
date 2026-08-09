@@ -40,6 +40,7 @@ defmodule MydiaWeb.Schema.EnumTypes do
     value(:popularity, description: "Sort by popularity")
     value(:content_rating, description: "Sort by content rating")
     value(:release_date, description: "Sort by release date")
+    value(:random, description: "Shuffle, stable for a given seed")
   end
 
   @desc "Sort direction"

@@ -213,4 +213,60 @@ defmodule MydiaWeb.Schema.Resolvers.MediaSortTest do
              ]
     end
   end
+
+  describe "random" do
+    test "the same seed always yields the same order" do
+      items = many(50)
+
+      first = MediaSort.sort(items, %{field: :random, direction: :asc, seed: 12_345})
+      second = MediaSort.sort(items, %{field: :random, direction: :asc, seed: 12_345})
+
+      assert ids(first) == ids(second)
+    end
+
+    test "different seeds yield different orders" do
+      items = many(50)
+
+      a = MediaSort.sort(items, %{field: :random, direction: :asc, seed: 1})
+      b = MediaSort.sort(items, %{field: :random, direction: :asc, seed: 2})
+
+      assert ids(a) != ids(b)
+    end
+
+    test "it is a permutation, losing and duplicating nothing" do
+      items = many(50)
+
+      shuffled = MediaSort.sort(items, %{field: :random, direction: :asc, seed: 7})
+
+      assert Enum.sort(ids(shuffled)) == Enum.sort(ids(items))
+    end
+
+    test "paging under one seed produces no overlap and no gap" do
+      items = many(50)
+      sorted = MediaSort.sort(items, %{field: :random, direction: :asc, seed: 99})
+
+      # What the resolver does: re-sort the full list per request, then slice.
+      page_one = sorted |> Enum.take(20) |> ids()
+
+      page_two =
+        items
+        |> MediaSort.sort(%{field: :random, direction: :asc, seed: 99})
+        |> Enum.drop(20)
+        |> Enum.take(20)
+        |> ids()
+
+      assert page_one -- page_two == page_one
+      assert length(Enum.uniq(page_one ++ page_two)) == 40
+    end
+
+    test "a missing seed still returns a stable permutation" do
+      items = many(20)
+
+      first = MediaSort.sort(items, %{field: :random, direction: :asc})
+      second = MediaSort.sort(items, %{field: :random, direction: :asc})
+
+      assert ids(first) == ids(second)
+      assert Enum.sort(ids(first)) == Enum.sort(ids(items))
+    end
+  end
 end
