@@ -2,6 +2,8 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Components do
   @moduledoc false
   use MydiaWeb, :html
 
+  import MydiaWeb.AdminQualityProfilesLive.CustomFormatSection
+
   @doc """
   Renders the Quality Profiles tab content.
   """
@@ -233,6 +235,8 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Components do
   attr :quality_profile_form, :any, required: true
   attr :quality_profile_mode, :atom, required: true
   attr :quality_profile_active_tab, :string, required: true
+  attr :custom_formats, :list, required: true
+  attr :custom_format_assignments, :map, required: true
 
   def quality_profile_modal(assigns) do
     ~H"""
@@ -289,6 +293,10 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Components do
           <%!-- Quality Standards Tab - Always rendered, hidden when not active --%>
           <div class={if @quality_profile_active_tab != "standards", do: "hidden"}>
             <.quality_profile_standards_tab form={@quality_profile_form} />
+            <.custom_format_section
+              formats={@custom_formats}
+              assignments={@custom_format_assignments}
+            />
           </div>
 
           <%!-- Exclude Tab - Always rendered, hidden when not active --%>
