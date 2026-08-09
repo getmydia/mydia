@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../domain/navigation/media_filter.dart';
 import 'library_controller.dart';
 import 'library_sort.dart';
 import 'library_sort_provider.dart';
@@ -61,6 +62,27 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     super.dispose();
   }
 
+  MediaFilter _mediaFilter(LibrarySort sort) => MediaFilter(
+        kind: widget.libraryType == LibraryType.movies
+            ? MediaKind.movies
+            : MediaKind.shows,
+        category: null,
+        watch: WatchScope.all,
+        sort: sort,
+      );
+
+  QueryKey _freshnessKey(MediaFilter filter) {
+    if (filter.watch == WatchScope.unwatched) {
+      return QueryKeys.unwatchedList;
+    }
+    if (filter.watch == WatchScope.favorites) {
+      return QueryKeys.favoritesList;
+    }
+    return filter.kind == MediaKind.movies
+        ? QueryKeys.moviesList
+        : QueryKeys.tvShowsList;
+  }
+
   void _onScroll() {
     if (_scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent - 200) {
@@ -68,7 +90,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           ref.read(librarySortControllerProvider(widget.libraryType)).value ??
               LibrarySort.defaultSort;
       ref
-          .read(libraryControllerProvider(widget.libraryType, sort).notifier)
+          .read(libraryControllerProvider(_mediaFilter(sort)).notifier)
           .loadMore();
     }
   }
@@ -134,8 +156,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    final libraryAsync =
-        ref.watch(libraryControllerProvider(widget.libraryType, sort));
+    final filter = _mediaFilter(sort);
+    final libraryAsync = ref.watch(libraryControllerProvider(filter));
     final title =
         widget.libraryType == LibraryType.movies ? 'Movies' : 'TV Shows';
     final icon = widget.libraryType == LibraryType.movies
@@ -178,13 +200,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
             edgeOffset: chromeTop,
             onRefresh: () async {
               await ref
-                  .read(libraryControllerProvider(widget.libraryType, sort)
-                      .notifier)
+                  .read(libraryControllerProvider(filter).notifier)
                   .refresh();
             },
             child: libraryAsync.when(
               loading: () => _buildLoadingView(),
-              error: (error, stackTrace) => _buildErrorView(error, sort),
+              error: (error, stackTrace) => _buildErrorView(error, filter),
               data: (data) {
                 if (data.isEmpty) {
                   return _buildEmptyState();
@@ -217,11 +238,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
             left: 0,
             right: 0,
             child: FreshnessHeader(
-              queryKeys: [
-                widget.libraryType == LibraryType.movies
-                    ? QueryKeys.moviesList
-                    : QueryKeys.tvShowsList,
-              ],
+              queryKeys: [_freshnessKey(filter)],
               topInset: chromeTop,
             ),
           ),
@@ -378,7 +395,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     );
   }
 
-  Widget _buildErrorView(Object error, LibrarySort sort) {
+  Widget _buildErrorView(Object error, MediaFilter filter) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -416,10 +433,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
             const SizedBox(height: 32),
             FilledButton.icon(
               onPressed: () {
-                ref
-                    .read(libraryControllerProvider(widget.libraryType, sort)
-                        .notifier)
-                    .refresh();
+                ref.read(libraryControllerProvider(filter).notifier).refresh();
               },
               icon: const Icon(Icons.refresh_rounded),
               label: const Text('Try Again'),

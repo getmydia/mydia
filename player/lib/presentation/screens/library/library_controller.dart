@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -5,8 +7,8 @@ import '../../../core/graphql/watch/connection_merge.dart';
 import '../../../core/graphql/watch/controller_watcher.dart';
 import '../../../core/graphql/watch/query_key.dart';
 import '../../../core/graphql/watch/query_watcher.dart';
+import '../../../domain/navigation/media_filter.dart';
 import '../../models/library_data.dart';
-import 'library_sort.dart';
 
 part 'library_controller.g.dart';
 
@@ -15,8 +17,8 @@ const int _pageSize = 20;
 enum LibraryType { movies, tvShows }
 
 const String moviesListQuery = r'''
-query MoviesList($first: Int, $after: String, $sort: SortInput) {
-  movies(first: $first, after: $after, sort: $sort) {
+query MoviesList($first: Int, $after: String, $sort: SortInput, $category: MediaCategory) {
+  movies(first: $first, after: $after, sort: $sort, category: $category) {
     edges {
       node {
         id
@@ -55,8 +57,8 @@ query MoviesList($first: Int, $after: String, $sort: SortInput) {
 ''';
 
 const String tvShowsListQuery = r'''
-query TvShowsList($first: Int, $after: String, $sort: SortInput) {
-  tvShows(first: $first, after: $after, sort: $sort) {
+query TvShowsList($first: Int, $after: String, $sort: SortInput, $category: MediaCategory) {
+  tvShows(first: $first, after: $after, sort: $sort, category: $category) {
     edges {
       node {
         id
@@ -94,6 +96,41 @@ query TvShowsList($first: Int, $after: String, $sort: SortInput) {
   }
 }
 ''';
+
+const String unwatchedListQuery = r'''
+query UnwatchedList($first: Int, $after: String, $types: [MediaType], $category: MediaCategory, $sort: SortInput) {
+  unwatched(first: $first, after: $after, types: $types, category: $category, sort: $sort) {
+    id
+    title
+    year
+    type
+    artwork {
+      posterUrl
+      backdropUrl
+      thumbnailUrl
+    }
+  }
+}
+''';
+
+const String favoritesListQuery = r'''
+query FavoritesList($first: Int, $after: String, $types: [MediaType], $category: MediaCategory, $sort: SortInput) {
+  favorites(first: $first, after: $after, types: $types, category: $category, sort: $sort) {
+    id
+    title
+    year
+    type
+    artwork {
+      posterUrl
+      backdropUrl
+      thumbnailUrl
+    }
+  }
+}
+''';
+
+String _encodeOffsetCursor(int offset) =>
+    base64Encode(utf8.encode('cursor:$offset'));
 
 LibraryData _parseMovies(Map<String, dynamic> data) {
   final connection = data['movies'] as Map<String, dynamic>;
@@ -156,6 +193,55 @@ LibraryData _parseConnection(
   );
 }
 
+LibraryData _parseFlatList(
+  String field,
+  Map<String, dynamic> data, {
+  required bool isFavorite,
+}) {
+  final items = (data[field] as List<dynamic>? ?? const [])
+      .cast<Map<String, dynamic>>()
+      .map((node) => LibraryItem(
+            id: node['id'] as String,
+            title: node['title'] as String,
+            year: node['year'] as int?,
+            posterUrl: (node['artwork'] as Map<String, dynamic>?)?['posterUrl']
+                as String?,
+            progressPercentage: null,
+            rating: null,
+            isFavorite: isFavorite,
+            type: node['type'] as String? ?? 'movie',
+            subtitle: node['year']?.toString(),
+          ))
+      .toList();
+
+  // These queries return a bare list with no pageInfo. A short page means the
+  // end; a full page means there may be more, and the offset cursor the server
+  // builds is positional, so the cursor is the item count so far.
+  return LibraryData(
+    items: items,
+    hasMore: items.length >= _pageSize,
+    totalCount: null,
+    endCursor: items.isEmpty ? null : _encodeOffsetCursor(items.length - 1),
+  );
+}
+
+Map<String, dynamic>? _mergeFlatList(
+  String field,
+  Map<String, dynamic>? previous,
+  Map<String, dynamic>? fetched,
+) {
+  if (fetched == null) return previous;
+  if (previous == null) return fetched;
+
+  final previousList = previous[field] as List<dynamic>? ?? const [];
+  final fetchedList = fetched[field] as List<dynamic>? ?? const [];
+
+  return {
+    ...fetched,
+    field: [...previousList, ...fetchedList],
+  };
+}
+
 @riverpod
 class LibraryController extends _$LibraryController {
   late QueryWatcher<LibraryData> _watcher;
@@ -175,11 +261,60 @@ class LibraryController extends _$LibraryController {
   /// they reset the flag in [build] instead.
   late bool _hasPaginated;
 
-  bool get _isMovies => libraryType == LibraryType.movies;
-  String get _connectionField => _isMovies ? 'movies' : 'tvShows';
+  bool get _isConnection => filter.watch == WatchScope.all;
+
+  String get _connectionField =>
+      filter.kind == MediaKind.movies ? 'movies' : 'tvShows';
+
+  String get _flatField =>
+      filter.watch == WatchScope.unwatched ? 'unwatched' : 'favorites';
+
+  QueryKey get _queryKey {
+    if (_isConnection) {
+      return filter.kind == MediaKind.movies
+          ? QueryKeys.moviesList
+          : QueryKeys.tvShowsList;
+    }
+    return filter.watch == WatchScope.unwatched
+        ? QueryKeys.unwatchedList
+        : QueryKeys.favoritesList;
+  }
+
+  String get _document {
+    if (_isConnection) {
+      return filter.kind == MediaKind.movies
+          ? moviesListQuery
+          : tvShowsListQuery;
+    }
+    return filter.watch == WatchScope.unwatched
+        ? unwatchedListQuery
+        : favoritesListQuery;
+  }
+
+  Map<String, dynamic> _variables({String? after}) => {
+        'first': _pageSize,
+        'sort': filter.sort.toVariables(),
+        if (after != null) 'after': after,
+        if (filter.categoryVariable != null)
+          'category': filter.categoryVariable,
+        if (!_isConnection) 'types': filter.typesVariable,
+      };
+
+  LibraryData _parse(Map<String, dynamic> data) {
+    if (_isConnection) {
+      return filter.kind == MediaKind.movies
+          ? _parseMovies(data)
+          : _parseTvShows(data);
+    }
+    return _parseFlatList(
+      _flatField,
+      data,
+      isFavorite: filter.watch == WatchScope.favorites,
+    );
+  }
 
   @override
-  Stream<LibraryData> build(LibraryType libraryType, LibrarySort sort) {
+  Stream<LibraryData> build(MediaFilter filter) {
     // Reset the pagination flag when the watcher is created. The flag tracks
     // the *current* watcher's pagination state, so a new watcher always starts
     // at page 1 with the flag cleared.
@@ -187,10 +322,10 @@ class LibraryController extends _$LibraryController {
 
     _watcher = createWatcher<LibraryData>(
       ref,
-      key: _isMovies ? QueryKeys.moviesList : QueryKeys.tvShowsList,
-      document: gql(_isMovies ? moviesListQuery : tvShowsListQuery),
-      variables: {'first': _pageSize, 'sort': sort.toVariables()},
-      parse: _isMovies ? _parseMovies : _parseTvShows,
+      key: _queryKey,
+      document: gql(_document),
+      variables: _variables(),
+      parse: _parse,
       canRefetch: () => !_hasPaginated,
     );
     return _watcher.stream;
@@ -212,13 +347,10 @@ class LibraryController extends _$LibraryController {
     try {
       await _watcher.fetchMore(
         FetchMoreOptions(
-          variables: {
-            'first': _pageSize,
-            'after': cursor,
-            'sort': sort.toVariables(),
-          },
-          updateQuery: (previous, fetched) =>
-              mergeConnection(_connectionField, previous, fetched),
+          variables: _variables(after: cursor),
+          updateQuery: (previous, fetched) => _isConnection
+              ? mergeConnection(_connectionField, previous, fetched)
+              : _mergeFlatList(_flatField, previous, fetched),
         ),
       );
       _hasPaginated = true;
@@ -227,7 +359,7 @@ class LibraryController extends _$LibraryController {
       // schema-shape violation) must not blank the already-rendered library
       // to an error screen just because page 2 hiccuped. Leave `state.value`
       // as-is; the guard above lets a later scroll retry.
-      debugPrint('LibraryController($libraryType).loadMore failed: $error');
+      debugPrint('LibraryController($filter).loadMore failed: $error');
     } finally {
       _loadingMore = false;
     }
