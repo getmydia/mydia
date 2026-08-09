@@ -318,6 +318,22 @@ defmodule Mydia.CrashReporter do
   end
 
   defp get_ui_setting do
+    # Injectable so tests can simulate a DBConnection ownership EXIT without
+    # racing a live sandbox owner (see ReportResilienceTest).
+    lookup =
+      Application.get_env(:mydia, :crash_reporter_ui_setting_fun, &default_ui_setting_lookup/0)
+
+    lookup.()
+  rescue
+    # If database is not available (e.g., during startup), fall back
+    _ -> :not_configured
+  catch
+    # Sandbox ownership failures surface as EXIT, not exceptions. Without this,
+    # TowerReporter's async Task dies before enqueueing under Postgres CI.
+    :exit, _ -> :not_configured
+  end
+
+  defp default_ui_setting_lookup do
     # Try to get the setting from the database
     # This queries the config_settings table for "crash_reporting.enabled"
     case Mydia.Settings.get_config_setting_by_key("crash_reporting.enabled") do
@@ -327,9 +343,6 @@ defmodule Mydia.CrashReporter do
       setting ->
         {:ok, parse_boolean(setting.value)}
     end
-  rescue
-    # If database is not available (e.g., during startup), fall back
-    _ -> :not_configured
   end
 
   defp get_env_setting do
