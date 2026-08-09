@@ -6,6 +6,7 @@
 pub mod candidates;
 pub mod codec_string;
 pub mod compatibility;
+pub mod remux;
 
 use thiserror::Error;
 

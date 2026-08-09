@@ -16,6 +16,17 @@ pub async fn movie_library() -> tempfile::TempDir {
     dir
 }
 
+/// A one-movie library whose file is an MKV, which is the remux case.
+pub async fn mkv_library() -> tempfile::TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    let movie = dir.path().join("Remux Film (2020)");
+    std::fs::create_dir_all(&movie).unwrap();
+
+    synthesize(&movie.join("Remux Film (2020) - 720p.mkv"));
+
+    dir
+}
+
 /// Writes a two-second 720p H.264/AAC file. Panics rather than skipping,
 /// because a playback slice cannot be meaningfully verified without ffmpeg.
 pub fn synthesize(path: &std::path::Path) {

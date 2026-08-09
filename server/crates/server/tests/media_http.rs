@@ -157,3 +157,30 @@ async fn an_unknown_file_is_a_404() {
 
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
+
+#[tokio::test]
+async fn the_remux_strategy_serves_fragmented_mp4() {
+    let media = support::mkv_library().await;
+    let (app, _guard, token) =
+        app_over_library("admin", "adminadmin", media.path(), "movies").await;
+    let file_id = support::first_file_id(app.clone(), &token).await;
+
+    let response = get(
+        app,
+        &format!("/api/v1/stream/file/{file_id}?strategy=REMUX"),
+        &token,
+        None,
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()["content-type"], "video/mp4");
+    assert_eq!(response.headers()["x-streaming-mode"], "remux");
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    // "ftyp" is the first box of any MP4. Its presence proves the pipe carried
+    // a real container rather than an error message.
+    assert_eq!(&body[4..8], b"ftyp");
+}

@@ -1435,9 +1435,13 @@ dependencies = [
 name = "mydia-streaming"
 version = "0.1.0"
 dependencies = [
+ "bytes",
+ "futures-util",
+ "serde_json",
  "tempfile",
  "thiserror",
  "tokio",
+ "tokio-util",
  "tracing",
 ]
 
