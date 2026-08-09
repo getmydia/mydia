@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/presentation/screens/library/library_controller.dart';
+import 'package:player/presentation/screens/library/library_sort.dart';
 
 import '../../../test_utils/riverpod_helpers.dart';
 import '../../../test_utils/stub_graphql_client.dart';
@@ -122,7 +123,7 @@ void main() {
 
     final data = await waitForValue(
       container,
-      libraryControllerProvider(LibraryType.movies),
+      libraryControllerProvider(LibraryType.movies, LibrarySort.defaultSort),
       (value) => value.items.isNotEmpty,
     );
 
@@ -148,7 +149,8 @@ void main() {
     );
     addTearDown(container.dispose);
 
-    final provider = libraryControllerProvider(LibraryType.movies);
+    final provider =
+        libraryControllerProvider(LibraryType.movies, LibrarySort.defaultSort);
     await waitForValue(container, provider, (value) => value.items.isNotEmpty);
 
     await container.read(provider.notifier).loadMore();
@@ -190,7 +192,8 @@ void main() {
     );
     addTearDown(container.dispose);
 
-    final provider = libraryControllerProvider(LibraryType.movies);
+    final provider =
+        libraryControllerProvider(LibraryType.movies, LibrarySort.defaultSort);
     await waitForValue(container, provider, (value) => value.items.isNotEmpty);
 
     await container.read(provider.notifier).loadMore();
@@ -220,7 +223,8 @@ void main() {
     );
     addTearDown(container.dispose);
 
-    final provider = libraryControllerProvider(LibraryType.movies);
+    final provider =
+        libraryControllerProvider(LibraryType.movies, LibrarySort.defaultSort);
     await waitForValue(container, provider, (value) => value.items.isNotEmpty);
     final before = link.requests.length;
 
@@ -245,7 +249,8 @@ void main() {
     );
     addTearDown(container.dispose);
 
-    final provider = libraryControllerProvider(LibraryType.movies);
+    final provider =
+        libraryControllerProvider(LibraryType.movies, LibrarySort.defaultSort);
     await waitForValue(container, provider, (value) => value.items.isNotEmpty);
     final before = link.requests.length;
 
@@ -277,7 +282,7 @@ void main() {
 
     final data = await waitForValue(
       container,
-      libraryControllerProvider(LibraryType.movies),
+      libraryControllerProvider(LibraryType.movies, LibrarySort.defaultSort),
       (value) => value.items.isNotEmpty,
     );
 
@@ -300,7 +305,7 @@ void main() {
 
     final data = await waitForValue(
       container,
-      libraryControllerProvider(LibraryType.movies),
+      libraryControllerProvider(LibraryType.movies, LibrarySort.defaultSort),
       (value) => value.items.isNotEmpty,
     );
 
@@ -326,7 +331,7 @@ void main() {
 
     final data = await waitForValue(
       container,
-      libraryControllerProvider(LibraryType.tvShows),
+      libraryControllerProvider(LibraryType.tvShows, LibrarySort.defaultSort),
       (value) => value.items.isNotEmpty,
     );
 
@@ -350,10 +355,72 @@ void main() {
 
     final data = await waitForValue(
       container,
-      libraryControllerProvider(LibraryType.tvShows),
+      libraryControllerProvider(LibraryType.tvShows, LibrarySort.defaultSort),
       (value) => value.items.isNotEmpty,
     );
 
     expect(data.items.single.rating, isNull);
+  });
+
+  test('sends the selected sort as a GraphQL variable', () async {
+    final link = StubLink.responses([
+      _moviesPage(['1', '2'], hasNextPage: false)
+    ]);
+    final container = ProviderContainer(
+      overrides: [
+        asyncGraphqlClientProvider
+            .overrideWith((ref) async => stubClient(link)),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await waitForValue(
+      container,
+      libraryControllerProvider(
+        LibraryType.movies,
+        const LibrarySort(
+          field: SortField.rating,
+          direction: SortDirection.desc,
+        ),
+      ),
+      (value) => value.items.isNotEmpty,
+    );
+
+    expect(link.requests, isNotEmpty);
+    expect(
+      link.requests.first.variables['sort'],
+      {'field': 'RATING', 'direction': 'DESC'},
+    );
+  });
+
+  test('sends the seed and omits direction when sorting randomly', () async {
+    final link = StubLink.responses([
+      _moviesPage(['1'], hasNextPage: false)
+    ]);
+    final container = ProviderContainer(
+      overrides: [
+        asyncGraphqlClientProvider
+            .overrideWith((ref) async => stubClient(link)),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await waitForValue(
+      container,
+      libraryControllerProvider(
+        LibraryType.movies,
+        const LibrarySort(
+          field: SortField.random,
+          direction: SortDirection.asc,
+          randomSeed: 777,
+        ),
+      ),
+      (value) => value.items.isNotEmpty,
+    );
+
+    expect(
+      link.requests.first.variables['sort'],
+      {'field': 'RANDOM', 'seed': 777},
+    );
   });
 }
