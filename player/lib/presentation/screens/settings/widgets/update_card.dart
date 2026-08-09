@@ -40,83 +40,90 @@ class UpdateCard extends ConsumerWidget {
     final update = updateState.availableUpdate;
     if (update == null) return const SizedBox.shrink();
 
-    return SettingsCard(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Update available: v${update.version}',
-                style: const TextStyle(
-                  fontSize: 14.5,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                update.releaseTitle,
-                style: const TextStyle(
-                  fontSize: 12.5,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              const SizedBox(height: 14),
-              if (updateState.isApplying)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    LinearProgressIndicator(
-                      value: updateState.downloadProgress > 0
-                          ? updateState.downloadProgress
-                          : null,
-                    ),
-                    const SizedBox(height: 6),
-                    // At zero the bar is indeterminate, so a "0%" label would
-                    // claim a precision the bar itself is not showing.
-                    Text(
-                      updateState.downloadProgress > 0
-                          ? 'Downloading ${(updateState.downloadProgress * 100).toInt()}%'
-                          : 'Downloading',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                )
-              else
-                Row(
-                  children: [
-                    FilledButton.icon(
-                      onPressed: () => _handleUpdateTap(context, ref),
-                      icon: const Icon(Icons.download, size: 18),
-                      label: const Text('Update Now'),
-                    ),
-                    const SizedBox(width: 8),
-                    TextButton(
-                      onPressed: () =>
-                          _openReleaseNotes(update.releaseNotesUrl),
-                      child: const Text('Release Notes'),
-                    ),
-                  ],
-                ),
-              if (updateState.error != null) ...[
-                const SizedBox(height: 8),
+    // The card owns the space below it rather than the screen owning the space
+    // above it. Both early returns above contribute nothing, so the screen
+    // needs no spacer either way and an available update cannot butt up against
+    // the section that follows.
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 18),
+      child: SettingsCard(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                 Text(
-                  updateState.error!,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Theme.of(context).colorScheme.error,
+                  'Update available: v${update.version}',
+                  style: const TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
                   ),
                 ),
+                const SizedBox(height: 2),
+                Text(
+                  update.releaseTitle,
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                if (updateState.isApplying)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      LinearProgressIndicator(
+                        value: updateState.downloadProgress > 0
+                            ? updateState.downloadProgress
+                            : null,
+                      ),
+                      const SizedBox(height: 6),
+                      // At zero the bar is indeterminate, so a "0%" label would
+                      // claim a precision the bar itself is not showing.
+                      Text(
+                        updateState.downloadProgress > 0
+                            ? 'Downloading ${(updateState.downloadProgress * 100).toInt()}%'
+                            : 'Downloading',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  )
+                else
+                  Row(
+                    children: [
+                      FilledButton.icon(
+                        onPressed: () => _handleUpdateTap(context, ref),
+                        icon: const Icon(Icons.download, size: 18),
+                        label: const Text('Update Now'),
+                      ),
+                      const SizedBox(width: 8),
+                      TextButton(
+                        onPressed: () =>
+                            _openReleaseNotes(update.releaseNotesUrl),
+                        child: const Text('Release Notes'),
+                      ),
+                    ],
+                  ),
+                if (updateState.error != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    updateState.error!,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
