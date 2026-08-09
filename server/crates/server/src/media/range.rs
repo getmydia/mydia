@@ -15,9 +15,17 @@ pub enum Range {
 }
 
 pub fn parse(header: Option<&str>, size: u64) -> Range {
-    let Some(header) = header.filter(|h| !h.is_empty()) else {
+    let Some(header) = header else {
         return Range::Absent;
     };
+
+    // An empty header value is not the same as no header. range_helper.ex:26-27
+    // answers :error for both, but stream_controller.ex:443 only serves the
+    // whole file when the header is genuinely absent (`is_nil`), so an empty
+    // string falls through to the 416 clause at :454.
+    if header.is_empty() {
+        return Range::Unsatisfiable;
+    }
 
     let Some(("bytes", spec)) = header.split_once('=') else {
         return Range::Unsatisfiable;
@@ -93,10 +101,18 @@ mod tests {
 
     #[test]
     fn a_missing_header_is_absent_not_unsatisfiable() {
-        // range_helper.ex:27 and stream_controller.ex:443. The distinction is
-        // the difference between a 200 and a 416.
+        // stream_controller.ex:443 serves the whole file only when the header
+        // is genuinely absent. The distinction is a 200 against a 416.
         assert_eq!(parse(None, 1000), Range::Absent);
-        assert_eq!(parse(Some(""), 1000), Range::Absent);
+    }
+
+    #[test]
+    fn an_empty_header_value_is_unsatisfiable_not_absent() {
+        // `Range:` with no value reaches stream_controller.ex as "" rather than
+        // nil, so it misses the `is_nil` clause at :443 and lands on the 416 at
+        // :454. Nothing sends this in practice, but the two servers are
+        // compared against each other, so the answers have to match.
+        assert_eq!(parse(Some(""), 1000), Range::Unsatisfiable);
     }
 
     #[test]
