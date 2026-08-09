@@ -7,7 +7,7 @@
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/colors.dart';
-import 'package:player/presentation/widgets/app_shell.dart';
+import 'package:player/presentation/widgets/mydia_logo.dart';
 
 /// Records the colour of each paint operation so tests can assert on what
 /// `paint()` actually draws, not merely on the constants it declares.
