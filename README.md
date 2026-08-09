@@ -1,7 +1,7 @@
 # Mydia
 
-[![Test & Quality](https://github.com/getmydia/mydia/actions/workflows/test.yml/badge.svg)](https://github.com/getmydia/mydia/actions/workflows/test.yml)
-[![Documentation](https://github.com/getmydia/mydia/actions/workflows/docs.yml/badge.svg)](https://docs.mydia.dev)
+[![CI](https://github.com/getmydia/mydia/actions/workflows/ci.yml/badge.svg)](https://github.com/getmydia/mydia/actions/workflows/ci.yml)
+[![Documentation](https://github.com/getmydia/mydia/actions/workflows/ci-docs.yml/badge.svg)](https://docs.mydia.dev)
 [![TestFlight](https://img.shields.io/badge/TestFlight-Join%20iOS%20Beta-0D96F6?logo=apple&logoColor=white)](https://testflight.apple.com/join/KFSYxaQP)
 
 **Your personal media companion, built with Phoenix LiveView**
@@ -66,13 +66,21 @@ Open http://localhost:4000 and create your admin account.
 - **Import Lists** - Sync from TMDB watchlists, popular, trending (experimental)
 - **Real-Time UI** - Phoenix LiveView with instant updates
 
-## Mobile App (iOS Beta)
+## Mydia Player
 
-The Mydia player is in open beta on TestFlight. On an iPhone or iPad with the [TestFlight app](https://apps.apple.com/app/testflight/id899247664) installed:
+A cross-platform app that streams your library from anywhere over an encrypted
+peer-to-peer connection. No port forwarding, no VPN.
 
-**[Join the iOS Beta →](https://testflight.apple.com/join/KFSYxaQP)**
+| Platform | Get it | Notes |
+|---|---|---|
+| Android | [Download APK](https://mydia.dev/download/android) | Allow installs from unknown sources |
+| iOS | [Join the TestFlight beta](https://testflight.apple.com/join/KFSYxaQP) | Needs the TestFlight app |
+| macOS | [Download .dmg](https://mydia.dev/download/macos) | Notarized, updates itself |
+| Windows | [Download installer](https://mydia.dev/download/windows) | Per-user install, unsigned build |
+| Linux | [Flatpak](https://mydia.dev/download/flatpak) or [.tar.gz](https://mydia.dev/download/linux) | Flatpak recommended |
+| Web | Served by your own Mydia server at `/player` | Nothing to install |
 
-New builds reach testers automatically as they ship.
+**[All platforms and install instructions](https://mydia.dev/download)**
 
 ## Documentation
 
