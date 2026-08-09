@@ -31,6 +31,57 @@ void main() {
       expect(find.byIcon(Icons.chevron_right), findsOneWidget);
     });
 
+    testWidgets('draws a status dot before the subtitle when given a colour',
+        (tester) async {
+      await _pump(
+        tester,
+        SettingsRow.navigation(
+          icon: Icons.lan_outlined,
+          title: 'Connection details',
+          subtitle: 'Connected through a relay',
+          subtitleDotColor: const Color(0xFFE8722C),
+          onTap: () {},
+        ),
+      );
+
+      final dot = tester.widget<Container>(
+        find.byKey(const Key('settings-row-status-dot')),
+      );
+      final decoration = dot.decoration as BoxDecoration;
+
+      expect(decoration.color, const Color(0xFFE8722C));
+      expect(find.text('Connected through a relay'), findsOneWidget);
+    });
+
+    testWidgets('draws no dot when no colour is given', (tester) async {
+      await _pump(
+        tester,
+        SettingsRow.navigation(
+          icon: Icons.lan_outlined,
+          title: 'Connection details',
+          subtitle: 'Connected through a relay',
+          onTap: () {},
+        ),
+      );
+
+      expect(find.byKey(const Key('settings-row-status-dot')), findsNothing);
+    });
+
+    testWidgets('draws no dot when there is no subtitle to sit beside',
+        (tester) async {
+      await _pump(
+        tester,
+        SettingsRow.navigation(
+          icon: Icons.lan_outlined,
+          title: 'Connection details',
+          subtitleDotColor: const Color(0xFFE8722C),
+          onTap: () {},
+        ),
+      );
+
+      expect(find.byKey(const Key('settings-row-status-dot')), findsNothing);
+    });
+
     testWidgets('a null onTap dims the row', (tester) async {
       await _pump(
         tester,
