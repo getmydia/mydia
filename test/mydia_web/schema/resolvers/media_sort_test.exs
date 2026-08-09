@@ -269,4 +269,113 @@ defmodule MydiaWeb.Schema.Resolvers.MediaSortTest do
       assert Enum.sort(ids(first)) == Enum.sort(ids(items))
     end
   end
+
+  describe "watch_state" do
+    test "ascending puts unwatched first, descending puts watched first" do
+      items = [
+        item("seen", %{title: "A"}),
+        item("unseen", %{title: "B"})
+      ]
+
+      progress = %{"seen" => %{watched: true, last_watched_at: ~U[2026-01-01 00:00:00Z]}}
+
+      assert ids(MediaSort.sort(items, %{field: :watch_state, direction: :asc}, progress)) ==
+               ["unseen", "seen"]
+
+      assert ids(MediaSort.sort(items, %{field: :watch_state, direction: :desc}, progress)) ==
+               ["seen", "unseen"]
+    end
+
+    test "an item with no progress row counts as unwatched, not unknown" do
+      items = [
+        item("seen", %{title: "A"}),
+        item("never", %{title: "B"})
+      ]
+
+      progress = %{"seen" => %{watched: true, last_watched_at: nil}}
+
+      # "never" groups with the unwatched items rather than falling to the end.
+      assert ids(MediaSort.sort(items, %{field: :watch_state, direction: :asc}, progress)) ==
+               ["never", "seen"]
+    end
+  end
+
+  describe "last_played" do
+    test "sorts by last watched time chronologically" do
+      items = [
+        item("recent", %{title: "A"}),
+        item("stale", %{title: "B"})
+      ]
+
+      progress = %{
+        "recent" => %{watched: true, last_watched_at: ~U[2026-08-01 00:00:00Z]},
+        "stale" => %{watched: true, last_watched_at: ~U[2020-01-01 00:00:00Z]}
+      }
+
+      assert ids(MediaSort.sort(items, %{field: :last_played, direction: :desc}, progress)) ==
+               ["recent", "stale"]
+
+      assert ids(MediaSort.sort(items, %{field: :last_played, direction: :asc}, progress)) ==
+               ["stale", "recent"]
+    end
+
+    test "never-played items sort last in both directions" do
+      items = [
+        item("never", %{title: "A"}),
+        item("played", %{title: "B"})
+      ]
+
+      progress = %{"played" => %{watched: true, last_watched_at: ~U[2026-08-01 00:00:00Z]}}
+
+      assert ids(MediaSort.sort(items, %{field: :last_played, direction: :asc}, progress)) ==
+               ["played", "never"]
+
+      assert ids(MediaSort.sort(items, %{field: :last_played, direction: :desc}, progress)) ==
+               ["played", "never"]
+    end
+
+    test "an empty progress map leaves every item unknown and preserves input order" do
+      items = [item("1", %{title: "b"}), item("2", %{title: "a"})]
+
+      assert ids(MediaSort.sort(items, %{field: :last_played, direction: :desc}, %{})) ==
+               ["1", "2"]
+    end
+  end
+
+  describe "progress_map/2" do
+    test "returns an empty map for fields that do not need progress" do
+      assert MediaSort.progress_map(nil, :title) == %{}
+      assert MediaSort.progress_map(%{id: "u1"}, :title) == %{}
+    end
+
+    test "returns an empty map when there is no user" do
+      assert MediaSort.progress_map(nil, :last_played) == %{}
+      assert MediaSort.progress_map(nil, :watch_state) == %{}
+    end
+  end
+
+  describe "effective_sort/2" do
+    test "downgrades watch-state fields to title ascending with no user" do
+      default = %{field: :title, direction: :asc}
+
+      assert MediaSort.effective_sort(%{field: :last_played, direction: :desc}, nil) == default
+      assert MediaSort.effective_sort(%{field: :watch_state, direction: :asc}, nil) == default
+    end
+
+    test "leaves every other field alone with no user" do
+      sort = %{field: :year, direction: :desc}
+
+      assert MediaSort.effective_sort(sort, nil) == sort
+    end
+
+    test "leaves watch-state fields alone when there is a user" do
+      sort = %{field: :last_played, direction: :desc}
+
+      assert MediaSort.effective_sort(sort, %{id: "u1"}) == sort
+    end
+
+    test "a nil sort stays nil so sort/3 applies its own default" do
+      assert MediaSort.effective_sort(nil, nil) == nil
+    end
+  end
 end

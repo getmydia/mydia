@@ -676,7 +676,11 @@ type Progress {
 "Input for sorting lists"
 input SortInput {
   field: SortField
+
   direction: SortDirection
+
+  "Seed for the random sort. Send the same value across pages of one shuffle."
+  seed: Int
 }
 
 "Pagination info for cursor-based pagination"
@@ -1156,6 +1160,27 @@ enum SortField {
 
   "Sort by rating"
   RATING
+
+  "Sort by duration"
+  RUNTIME
+
+  "Sort by popularity"
+  POPULARITY
+
+  "Sort by content rating"
+  CONTENT_RATING
+
+  "Sort by release date"
+  RELEASE_DATE
+
+  "Shuffle, stable for a given seed"
+  RANDOM
+
+  "Sort by when the viewer last watched it"
+  LAST_PLAYED
+
+  "Sort by watched state; ascending puts unwatched first"
+  WATCH_STATE
 }
 
 "Sort direction"
