@@ -27,14 +27,12 @@ class SettingsController extends _$SettingsController {
 
     final session = await authService.getSession();
     final defaultQuality = await settingsService.getDefaultQuality();
-    final autoPlayNext = await settingsService.getAutoPlayNext();
     final autoSkipSegments = await settingsService.getAutoSkipSegments();
 
     return UserSettings(
       serverUrl: session['serverUrl'] ?? '',
       username: session['username'] ?? '',
       defaultQuality: defaultQuality,
-      autoPlayNextEpisode: autoPlayNext,
       autoSkipSegments: autoSkipSegments,
     );
   }
@@ -48,18 +46,6 @@ class SettingsController extends _$SettingsController {
     state = await AsyncValue.guard(() async {
       final currentSettings = await future;
       return currentSettings.copyWith(defaultQuality: quality);
-    });
-  }
-
-  /// Set the auto-play next episode preference.
-  Future<void> setAutoPlayNext(bool enabled) async {
-    final settingsService = ref.read(settingsServiceProvider);
-    await settingsService.setAutoPlayNext(enabled);
-
-    // Update the state
-    state = await AsyncValue.guard(() async {
-      final currentSettings = await future;
-      return currentSettings.copyWith(autoPlayNextEpisode: enabled);
     });
   }
 

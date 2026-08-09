@@ -13,7 +13,6 @@ class SettingsService {
   );
 
   static const _defaultQualityKey = 'default_quality';
-  static const _autoPlayNextKey = 'auto_play_next_episode';
   static const _autoSkipSegmentsKey = 'auto_skip_segments';
 
   /// Get the default quality setting.
@@ -25,18 +24,6 @@ class SettingsService {
   /// Set the default quality setting.
   Future<void> setDefaultQuality(String quality) async {
     await _storage.write(key: _defaultQualityKey, value: quality);
-  }
-
-  /// Get the auto-play next episode setting.
-  Future<bool> getAutoPlayNext() async {
-    final value = await _storage.read(key: _autoPlayNextKey);
-    if (value == null) return true; // Default to enabled
-    return value == 'true';
-  }
-
-  /// Set the auto-play next episode setting.
-  Future<void> setAutoPlayNext(bool enabled) async {
-    await _storage.write(key: _autoPlayNextKey, value: enabled.toString());
   }
 
   /// Get the automatic intro and credits skipping setting.
@@ -57,7 +44,6 @@ class SettingsService {
   Future<void> clearSettings() async {
     await Future.wait([
       _storage.delete(key: _defaultQualityKey),
-      _storage.delete(key: _autoPlayNextKey),
       _storage.delete(key: _autoSkipSegmentsKey),
     ]);
   }
