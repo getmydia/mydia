@@ -15,6 +15,60 @@ import '../../../domain/models/download_settings.dart';
 import '../../../domain/models/storage_settings.dart';
 import '../../../core/theme/colors.dart';
 import 'series_downloads_screen.dart';
+import 'widgets/download_recovery_banner.dart';
+
+export 'widgets/download_recovery_banner.dart'
+    show DownloadRecoveryBanner, downloadStateLabel;
+
+/// The action list shown for an active download in the options sheet.
+///
+/// Extracted from the sheet so its status logic can be widget-tested without
+/// standing up a provider scope or a populated database.
+Widget activeDownloadSheetActions({
+  required BuildContext context,
+  required String status,
+  required VoidCallback onPause,
+  required VoidCallback onResume,
+  required VoidCallback onRestart,
+  required VoidCallback onCancel,
+}) {
+  const resumable = {'paused', 'interrupted', 'stalled'};
+  final canResume = resumable.contains(status);
+
+  return Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      if (canResume)
+        ListTile(
+          key: const Key('downloads-sheet-resume'),
+          leading:
+              const Icon(Icons.play_arrow_rounded, color: AppColors.primary),
+          title: const Text('Resume Download'),
+          onTap: onResume,
+        )
+      else
+        ListTile(
+          key: const Key('downloads-sheet-pause'),
+          leading: const Icon(Icons.pause_rounded, color: AppColors.primary),
+          title: const Text('Pause Download'),
+          onTap: onPause,
+        ),
+      ListTile(
+        key: const Key('downloads-sheet-restart'),
+        leading: const Icon(Icons.refresh_rounded, color: AppColors.primary),
+        title: const Text('Restart Download'),
+        subtitle: const Text('Discards progress and starts over'),
+        onTap: onRestart,
+      ),
+      ListTile(
+        key: const Key('downloads-sheet-cancel'),
+        leading: const Icon(Icons.cancel_outlined, color: AppColors.error),
+        title: const Text('Cancel Download'),
+        onTap: onCancel,
+      ),
+    ],
+  );
+}
 
 class DownloadsScreen extends ConsumerWidget {
   const DownloadsScreen({super.key});
@@ -449,12 +503,33 @@ class DownloadsScreen extends ConsumerWidget {
                     ),
                   ),
 
-                // Download stats (only when active)
-                if (isActive)
+                if (activeTask != null &&
+                    downloadStateLabel(activeTask).isNotEmpty)
                   Builder(
                     builder: (context) {
-                      final bytesText = activeTask!.progressBytesDisplay ??
-                          activeTask.fileSizeDisplay;
+                      final task = activeTask;
+                      return Consumer(
+                        builder: (context, ref, _) => DownloadRecoveryBanner(
+                          task: task,
+                          onResume: () async {
+                            final manager =
+                                await ref.read(downloadManagerProvider.future);
+                            await manager.resumeDownload(task.id);
+                          },
+                        ),
+                      );
+                    },
+                  ),
+
+                // Download stats (only when active and not recovering)
+                if (isActive &&
+                    activeTask != null &&
+                    downloadStateLabel(activeTask).isEmpty)
+                  Builder(
+                    builder: (context) {
+                      final task = activeTask;
+                      final bytesText =
+                          task.progressBytesDisplay ?? task.fileSizeDisplay;
 
                       return Consumer(
                         builder: (context, ref, _) {
@@ -463,7 +538,7 @@ class DownloadsScreen extends ConsumerWidget {
                           String? speedText;
                           speedAsync.when(
                             data: (speedMap) {
-                              final info = speedMap[activeTask.id];
+                              final info = speedMap[task.id];
                               if (info != null && info.bytesPerSecond > 0) {
                                 speedText = info.speedDisplay;
                               }
@@ -473,7 +548,8 @@ class DownloadsScreen extends ConsumerWidget {
                           );
 
                           final parts = <String>[bytesText];
-                          if (speedText != null) parts.add(speedText!);
+                          final speed = speedText;
+                          if (speed != null) parts.add(speed);
 
                           return Text(
                             parts.join(' \u00B7 '),
@@ -582,17 +658,35 @@ class DownloadsScreen extends ConsumerWidget {
               const SizedBox(height: 8),
 
               if (isActive) ...[
-                // Active download: cancel option
-                ListTile(
-                  leading:
-                      const Icon(Icons.cancel_outlined, color: AppColors.error),
-                  title: const Text('Cancel Download'),
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    final task = group.activeTasks.first;
-                    _showCancelDialog(context, ref, task);
-                  },
-                ),
+                Builder(builder: (_) {
+                  final task = group.activeTasks.first;
+                  return activeDownloadSheetActions(
+                    context: context,
+                    status: task.status,
+                    onPause: () async {
+                      Navigator.pop(sheetContext);
+                      final manager =
+                          await ref.read(downloadManagerProvider.future);
+                      await manager.pauseDownload(task.id);
+                    },
+                    onResume: () async {
+                      Navigator.pop(sheetContext);
+                      final manager =
+                          await ref.read(downloadManagerProvider.future);
+                      await manager.resumeDownload(task.id);
+                    },
+                    onRestart: () async {
+                      Navigator.pop(sheetContext);
+                      final manager =
+                          await ref.read(downloadManagerProvider.future);
+                      await manager.restartDownload(task.id);
+                    },
+                    onCancel: () {
+                      Navigator.pop(sheetContext);
+                      _showCancelDialog(context, ref, task);
+                    },
+                  );
+                }),
               ] else if (group.type == GroupType.movie) ...[
                 // Completed movie: play + delete
                 ListTile(
