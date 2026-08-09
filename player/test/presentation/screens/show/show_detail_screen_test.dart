@@ -484,9 +484,58 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // The rail picks; the hero plays. Nothing here reaches the player.
+    // Cheap defense: the old hero path awaited DeviceContext.detect, which
+    // never completes in a widget test, so the player route was unreachable
+    // anyway. This is not the regression guard.
     expect(pushed, isEmpty);
-    // And the pick landed: the hero now describes the episode that was tapped.
-    expect(find.textContaining('E3'), findsWidgets);
+    final cards = tester
+        .widgetList<EpisodeRailCard>(find.byType(EpisodeRailCard))
+        .toList();
+    expect(cards.last.selected, isTrue);
+  });
+
+  testWidgets('tapping a rail card carries the viewport back to the hero',
+      (tester) async {
+    final playable = _episodeJson(3, files: [_fileJson('file-3')]);
+
+    await _pumpScreen(
+      tester,
+      // Phone-shaped, so the rail sits well below the fold and there is real
+      // scroll extent for _revealHero to travel back across. 1200px tall is
+      // the minimum height where the episode sliver is built but still below
+      // the fold; at 800px the lazy sliver never mounts and at 1400px+ the
+      // rail is already visible without scrolling.
+      size: const Size(400, 1200),
+      episodesBySeason: {
+        1: [_episodeJson(1, watched: true), _episodeJson(2), playable],
+      },
+    );
+    await tester.pumpAndSettle();
+
+    final verticalScrollable = find
+        .descendant(
+          of: find.byType(CustomScrollView),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+
+    await tester.scrollUntilVisible(
+      find.byType(EpisodeRailCard).first,
+      300,
+      scrollable: verticalScrollable,
+    );
+    await tester.pumpAndSettle();
+
+    final position = tester.state<ScrollableState>(verticalScrollable).position;
+    expect(
+      position.pixels,
+      greaterThan(position.minScrollExtent),
+      reason: 'the rail must start below the fold or this test is vacuous',
+    );
+
+    await tester.tap(find.byType(EpisodeRailCard).first);
+    await tester.pumpAndSettle();
+
+    expect(position.pixels, position.minScrollExtent);
   });
 }
