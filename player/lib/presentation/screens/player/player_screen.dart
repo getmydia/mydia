@@ -20,6 +20,7 @@ import '../../../core/playback/playback_progress_providers.dart';
 import '../../../core/playback/playback_progress_store.dart';
 import '../../../core/utils/file_utils.dart' as file_utils;
 import '../../../core/utils/web_lifecycle.dart' as web_lifecycle;
+import '../../../core/player/input_capabilities.dart';
 import '../../../core/player/platform_features.dart';
 import '../../../core/player/playback_error.dart';
 import '../../../core/player/stream_timeline.dart';
@@ -2946,7 +2947,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
     // Wrap with gesture controls for mobile
     final player = _player;
-    if (PlatformFeatures.supportsGestureControls && player != null) {
+    if (InputCapabilities.supportsGestureControls && player != null) {
       videoPlayer = GestureControls(
         player: player,
         timeline: _timeline,
