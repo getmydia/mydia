@@ -4,8 +4,8 @@ import '../storage/secure_storage_options.dart';
 
 /// Service for managing user settings and preferences.
 ///
-/// Uses secure storage to persist user preferences like default quality
-/// and auto-play settings.
+/// Uses secure storage to persist user preferences like default quality,
+/// intro skipping, and per-library sort order.
 class SettingsService {
   static const _storage = FlutterSecureStorage(
     aOptions: kAndroidSecureStorageOptions,
