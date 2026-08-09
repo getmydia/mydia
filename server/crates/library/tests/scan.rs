@@ -333,7 +333,7 @@ async fn the_media_file_carries_probed_facts() {
     let files = media_files::list_for_item(&db, &item).await.unwrap();
 
     assert_eq!(files[0].resolution.as_deref(), Some("360p"));
-    assert_eq!(files[0].codec.as_deref(), Some("H.264"));
+    assert_eq!(files[0].codec.as_deref(), Some("H.264 (High)"));
     assert!(files[0].size.unwrap_or(0) > 0);
     assert!(files[0].duration_seconds.unwrap_or(0.0) > 0.0);
 }
@@ -358,4 +358,49 @@ async fn the_library_path_records_when_it_was_scanned() {
 
     // Silence the unused-import warning for media_items in this file.
     let _ = media_items::find(&db, "nothing").await.unwrap();
+}
+
+#[tokio::test]
+async fn the_scan_records_sidecar_subtitles_next_to_a_video() {
+    let (db, _guard) = mydia_db::pool::connect_temp().await.unwrap();
+    let media = tempfile::tempdir().unwrap();
+
+    // A real video is required: probe failure skips persist, so a zero-byte
+    // file would never get a media_files row (unlike the plan's assumption).
+    if !synthesize(media.path(), "Film (2019)/Film (2019).mkv") {
+        eprintln!("ffmpeg unavailable or failed to encode a fixture, skipping");
+        return;
+    }
+    std::fs::write(media.path().join("Film (2019)/Film (2019).eng.srt"), b"1\n").unwrap();
+
+    let rows = mydia_db::library_paths::sync_from_config(
+        &db,
+        &[(media.path().display().to_string(), "movies".to_string())],
+    )
+    .await
+    .unwrap();
+
+    mydia_library::scan::scan_library_path(&db, &rows[0])
+        .await
+        .unwrap();
+
+    let file = mydia_db::media_files::find_by_path(
+        &db,
+        media
+            .path()
+            .join("Film (2019)/Film (2019).mkv")
+            .to_str()
+            .unwrap(),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+
+    let subs = mydia_db::external_subtitles::list_for_file(&db, &file.id)
+        .await
+        .unwrap();
+
+    assert_eq!(subs.len(), 1);
+    assert_eq!(subs[0].language, "eng");
+    assert_eq!(subs[0].format, "srt");
 }

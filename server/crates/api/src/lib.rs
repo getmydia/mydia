@@ -11,6 +11,7 @@ pub mod mutation;
 pub mod node_id;
 pub mod query;
 pub mod sdl;
+pub mod streaming;
 pub mod subscription;
 pub mod types;
 

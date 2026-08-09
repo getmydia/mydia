@@ -1342,6 +1342,8 @@ dependencies = [
  "futures-util",
  "mydia-auth",
  "mydia-db",
+ "mydia-library",
+ "mydia-streaming",
  "serde",
  "serde_json",
  "thiserror",
@@ -1417,13 +1419,30 @@ dependencies = [
  "mydia-config",
  "mydia-db",
  "mydia-library",
+ "mydia-streaming",
+ "serde",
  "serde_json",
  "sqlx",
  "tempfile",
  "tokio",
+ "tokio-util",
  "tower",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "mydia-streaming"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "futures-util",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "tracing",
 ]
 
 [[package]]

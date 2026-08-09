@@ -1,7 +1,13 @@
-use mydia_api::mapping::{media_file_from, movie_from, season_node_id, tv_show_from};
+use mydia_api::mapping::{
+    media_file_from, movie_from, season_node_id, tv_show_from, ExternalsByFile,
+};
 use mydia_db::episodes::EpisodeRow;
 use mydia_db::media_files::MediaFileRow;
 use mydia_db::media_items::MediaItemRow;
+
+fn no_externals() -> ExternalsByFile {
+    ExternalsByFile::new()
+}
 
 fn item(media_type: &str, title: &str) -> MediaItemRow {
     MediaItemRow {
@@ -73,14 +79,14 @@ fn episode(season: i64, number: i64) -> EpisodeRow {
 
 #[test]
 fn a_multi_gigabyte_size_survives_mapping() {
-    let mapped = media_file_from(&file(8_000_000_000));
+    let mapped = media_file_from(&file(8_000_000_000), &[]);
 
     assert_eq!(mapped.size, Some(8_000_000_000));
 }
 
 #[test]
 fn embedded_subtitle_tracks_are_decoded() {
-    let mapped = media_file_from(&file(1));
+    let mapped = media_file_from(&file(1), &[]);
     let tracks = mapped.subtitles.expect("tracks");
 
     assert_eq!(tracks.len(), 1);
@@ -94,23 +100,29 @@ fn malformed_subtitle_json_becomes_an_empty_list_not_a_panic() {
     let mut row = file(1);
     row.subtitle_tracks = Some("{not json".to_string());
 
-    let mapped = media_file_from(&row);
+    let mapped = media_file_from(&row, &[]);
 
     assert_eq!(mapped.subtitles.map(|t| t.len()), Some(0));
 }
 
 #[test]
-fn playback_fields_stay_absent_until_slice_three() {
-    let mapped = media_file_from(&file(1));
+fn playback_fields_are_relative_urls_keyed_on_the_file_id() {
+    let mapped = media_file_from(&file(1), &[]);
 
-    assert_eq!(mapped.stream_url, None);
-    assert_eq!(mapped.direct_play_url, None);
-    assert_eq!(mapped.direct_play_supported, None);
+    assert_eq!(mapped.direct_play_supported, Some(true));
+    assert_eq!(
+        mapped.stream_url.as_deref(),
+        Some("/api/v1/stream/file/file-1")
+    );
+    assert_eq!(
+        mapped.direct_play_url.as_deref(),
+        Some("/api/v1/stream/file/file-1?strategy=DIRECT_PLAY")
+    );
 }
 
 #[test]
 fn a_movie_with_a_file_is_playable() {
-    let mapped = movie_from(&item("movie", "The Matrix"), &[file(1)]);
+    let mapped = movie_from(&item("movie", "The Matrix"), &[file(1)], &no_externals());
 
     assert!(mapped.is_playable);
     assert_eq!(mapped.title, "The Matrix");
@@ -120,14 +132,14 @@ fn a_movie_with_a_file_is_playable() {
 
 #[test]
 fn a_movie_without_files_is_not_playable() {
-    let mapped = movie_from(&item("movie", "The Matrix"), &[]);
+    let mapped = movie_from(&item("movie", "The Matrix"), &[], &no_externals());
 
     assert!(!mapped.is_playable);
 }
 
 #[test]
 fn capabilities_this_product_does_not_have_are_false() {
-    let mapped = movie_from(&item("movie", "The Matrix"), &[file(1)]);
+    let mapped = movie_from(&item("movie", "The Matrix"), &[file(1)], &no_externals());
 
     // There is no monitoring in Mydia Server. The field exists because the
     // contract has it, and it answers false rather than null.
@@ -143,7 +155,7 @@ fn a_show_counts_its_seasons_and_episodes() {
         (episode(0, 1), vec![file(1)]),
     ];
 
-    let mapped = tv_show_from(&item("tv_show", "Show Name"), &episodes);
+    let mapped = tv_show_from(&item("tv_show", "Show Name"), &episodes, &no_externals());
 
     // Season 0 is specials and does not count toward seasonCount, matching
     // how the player labels a show.
@@ -160,7 +172,7 @@ fn a_show_next_episode_is_its_lowest_numbered_one() {
         (episode(1, 1), vec![file(1)]),
     ];
 
-    let mapped = tv_show_from(&item("tv_show", "Show Name"), &episodes);
+    let mapped = tv_show_from(&item("tv_show", "Show Name"), &episodes, &no_externals());
     let next = mapped.next_episode.expect("next episode");
 
     assert_eq!((next.season_number, next.episode_number), (1, 1));

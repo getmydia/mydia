@@ -224,13 +224,10 @@ fn video_codec(stream: &Value) -> Option<String> {
     let long_name = stream.get("codec_long_name").and_then(Value::as_str);
 
     let label = match name {
-        // NOTE: file_analyzer.ex:397-399 includes the profile here
-        // (`"H.264 (#{profile})"`), but the brief's own test fixture
-        // (probing_a_real_file_reports_its_facts, synthesized with libx264's
-        // default High profile) asserts plain "H.264". Ported to match the
-        // brief's test; see task-8-report.md for the conformance risk this
-        // creates against the real Elixir behaviour for profiled H.264 files.
-        "h264" => "H.264".to_string(),
+        "h264" => match profile {
+            Some(profile) => format!("H.264 ({profile})"),
+            None => "H.264".to_string(),
+        },
         "hevc" => match profile {
             Some(profile) => format!("HEVC ({profile})"),
             None => "HEVC".to_string(),
@@ -374,6 +371,44 @@ fn container_name(format: &Value) -> Option<String> {
     Some(normalized.to_string())
 }
 
+/// Port of extractor.ex:180-187. ffprobe reports codec names ("subrip"); the
+/// contract's SubtitleTrack.format carries format names ("srt").
+fn normalize_subtitle_format(codec_name: &str) -> String {
+    match codec_name {
+        "subrip" => "srt",
+        "ass" => "ass",
+        "ssa" => "ass",
+        "webvtt" => "vtt",
+        "mov_text" => "srt",
+        "dvd_subtitle" => "vobsub",
+        "hdmv_pgs_subtitle" => "pgs",
+        other => other,
+    }
+    .to_string()
+}
+
+/// Port of extractor.ex:210-233. Used only as the title fallback for a track
+/// that carries no title tag. Unlisted codes are upcased, which is what the
+/// Elixir catch-all clause does.
+fn language_name(code: &str) -> String {
+    match code {
+        "eng" | "en" => "English",
+        "spa" | "es" => "Spanish",
+        "fra" | "fr" => "French",
+        "deu" | "de" => "German",
+        "ita" | "it" => "Italian",
+        "por" | "pt" => "Portuguese",
+        "jpn" | "ja" => "Japanese",
+        "kor" | "ko" => "Korean",
+        "chi" | "zh" => "Chinese",
+        "rus" | "ru" => "Russian",
+        "ara" | "ar" => "Arabic",
+        "und" => "Unknown",
+        other => return other.to_uppercase(),
+    }
+    .to_string()
+}
+
 fn subtitle_tracks(streams: &[Value]) -> Vec<SubtitleTrackFacts> {
     streams
         .iter()
@@ -391,13 +426,13 @@ fn subtitle_tracks(streams: &[Value]) -> Vec<SubtitleTrackFacts> {
 
             SubtitleTrackFacts {
                 track_id: index.to_string(),
-                title: tag("title").unwrap_or_else(|| language.clone()),
+                title: tag("title").unwrap_or_else(|| language_name(&language)),
                 language,
-                format: s
-                    .get("codec_name")
-                    .and_then(Value::as_str)
-                    .unwrap_or("unknown")
-                    .to_string(),
+                format: normalize_subtitle_format(
+                    s.get("codec_name")
+                        .and_then(Value::as_str)
+                        .unwrap_or("unknown"),
+                ),
                 embedded: true,
             }
         })
@@ -512,7 +547,10 @@ mod tests {
         assert_eq!(facts.resolution.as_deref(), Some("720p"));
         assert_eq!(facts.width, Some(1280));
         assert_eq!(facts.height, Some(720));
-        assert_eq!(facts.codec.as_deref(), Some("H.264"));
+        // libx264's default profile is High, and Elixir emits the profile in
+        // the label (file_analyzer.ex:396-398). Slice 2a asserted the
+        // profile-less form and documented the divergence; this closes it.
+        assert_eq!(facts.codec.as_deref(), Some("H.264 (High)"));
         assert!(facts
             .audio_codec
             .as_deref()
@@ -521,6 +559,35 @@ mod tests {
         assert_eq!(facts.hdr_format, None);
         assert!(facts.duration_seconds.unwrap_or(0.0) > 0.5);
         assert!(facts.subtitle_tracks.is_empty());
+    }
+
+    #[test]
+    fn subtitle_formats_are_normalized_the_way_elixir_normalizes_them() {
+        // Port of extractor.ex:180-187. ffprobe reports codec names; the
+        // contract carries format names.
+        assert_eq!(super::normalize_subtitle_format("subrip"), "srt");
+        assert_eq!(super::normalize_subtitle_format("ass"), "ass");
+        assert_eq!(super::normalize_subtitle_format("ssa"), "ass");
+        assert_eq!(super::normalize_subtitle_format("webvtt"), "vtt");
+        assert_eq!(super::normalize_subtitle_format("mov_text"), "srt");
+        assert_eq!(super::normalize_subtitle_format("dvd_subtitle"), "vobsub");
+        assert_eq!(super::normalize_subtitle_format("hdmv_pgs_subtitle"), "pgs");
+        assert_eq!(
+            super::normalize_subtitle_format("weird_thing"),
+            "weird_thing"
+        );
+    }
+
+    #[test]
+    fn an_untitled_track_falls_back_to_its_language_name() {
+        // Port of extractor.ex:168-169 plus format_language_name at :210-233.
+        // Elixir answers "English", not "eng".
+        assert_eq!(super::language_name("eng"), "English");
+        assert_eq!(super::language_name("en"), "English");
+        assert_eq!(super::language_name("por"), "Portuguese");
+        assert_eq!(super::language_name("und"), "Unknown");
+        // Unknown codes are upcased, not passed through.
+        assert_eq!(super::language_name("nld"), "NLD");
     }
 
     #[test]

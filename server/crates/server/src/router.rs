@@ -7,19 +7,45 @@ use mydia_api::context::{ApiContext, BearerToken};
 use mydia_api::MydiaSchema;
 
 #[derive(Clone)]
-struct AppState {
-    schema: MydiaSchema,
+pub struct AppState {
+    pub schema: MydiaSchema,
+    pub db: mydia_db::Db,
+    pub issuer: mydia_auth::tokens::Issuer,
 }
 
 /// Assembles the HTTP router. Later slices add media byte serving and the
 /// admin UI.
 pub fn build_router(ctx: ApiContext) -> Router {
+    let db = ctx.db.clone();
+    let issuer = ctx.issuer.clone();
     let schema = mydia_api::build_schema(ctx);
 
     Router::new()
         .route("/health", get(health))
         .route("/api/graphql", post(graphql))
-        .with_state(AppState { schema })
+        .route(
+            "/api/v1/stream/file/{id}",
+            get(crate::media::stream::stream_file),
+        )
+        .route(
+            "/api/v1/stream/movie/{id}",
+            get(crate::media::stream::stream_movie),
+        )
+        .route(
+            "/api/v1/stream/episode/{id}",
+            get(crate::media::stream::stream_episode),
+        )
+        // The bare form is what older clients use; the Elixir router keeps it
+        // too (router.ex:270). It means "file".
+        .route(
+            "/api/v1/stream/{id}",
+            get(crate::media::stream::stream_file),
+        )
+        .route(
+            "/api/player/v1/subtitles/file/{file_id}/{track_id}",
+            get(crate::media::subtitles::serve),
+        )
+        .with_state(AppState { schema, db, issuer })
 }
 
 async fn health() -> &'static str {
