@@ -153,7 +153,6 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Index do
   defp changeset_message(changeset) do
     changeset
     |> Ecto.Changeset.traverse_errors(fn {msg, _opts} -> msg end)
-    |> Enum.map(fn {field, messages} -> "#{field}: #{Enum.join(messages, ", ")}" end)
-    |> Enum.join("; ")
+    |> Enum.map_join("; ", fn {field, messages} -> "#{field}: #{Enum.join(messages, ", ")}" end)
   end
 end
