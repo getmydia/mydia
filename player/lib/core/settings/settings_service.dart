@@ -14,6 +14,7 @@ class SettingsService {
 
   static const _defaultQualityKey = 'default_quality';
   static const _autoSkipSegmentsKey = 'auto_skip_segments';
+  static const _librarySortKeyPrefix = 'library_sort_';
 
   /// Get the default quality setting.
   Future<String> getDefaultQuality() async {
@@ -40,11 +41,31 @@ class SettingsService {
     await _storage.write(key: _autoSkipSegmentsKey, value: enabled.toString());
   }
 
+  /// Get the remembered sort for a library, as its encoded string.
+  ///
+  /// [libraryKey] is 'movies' or 'tvShows'. Each library remembers its own
+  /// ordering, since a preference that suits films rarely suits shows.
+  /// Returns null when nothing has been stored yet; decoding, including the
+  /// default, belongs to the caller.
+  Future<String?> getLibrarySort(String libraryKey) async {
+    return _storage.read(key: '$_librarySortKeyPrefix$libraryKey');
+  }
+
+  /// Set the remembered sort for a library, as its encoded string.
+  Future<void> setLibrarySort(String libraryKey, String encoded) async {
+    await _storage.write(
+      key: '$_librarySortKeyPrefix$libraryKey',
+      value: encoded,
+    );
+  }
+
   /// Clear all settings.
   Future<void> clearSettings() async {
     await Future.wait([
       _storage.delete(key: _defaultQualityKey),
       _storage.delete(key: _autoSkipSegmentsKey),
+      _storage.delete(key: '${_librarySortKeyPrefix}movies'),
+      _storage.delete(key: '${_librarySortKeyPrefix}tvShows'),
     ]);
   }
 }

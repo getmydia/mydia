@@ -4,6 +4,7 @@ defmodule MydiaWeb.Schema.Resolvers.BrowseResolver do
   """
 
   alias Mydia.{Media, Settings}
+  alias MydiaWeb.Schema.Resolvers.MediaSort
   alias MydiaWeb.Schema.Resolvers.NodeId
 
   @doc """
@@ -62,7 +63,7 @@ defmodule MydiaWeb.Schema.Resolvers.BrowseResolver do
     Ecto.NoResultsError -> {:error, "Episode not found"}
   end
 
-  def list_movies(_parent, args, _info) do
+  def list_movies(_parent, args, resolution) do
     first = Map.get(args, :first, 20)
     after_cursor = Map.get(args, :after)
     sort = Map.get(args, :sort, %{field: :title, direction: :asc})
@@ -80,8 +81,14 @@ defmodule MydiaWeb.Schema.Resolvers.BrowseResolver do
     # Get all movies for now (pagination will be implemented properly later)
     all_movies = Media.list_media_items(opts)
 
-    # Sort
-    sorted_movies = sort_items(all_movies, sort)
+    # Sort. The watch-state fields need one batched progress lookup; every
+    # other field gets an empty map and costs nothing extra. A signed-out
+    # caller has no history, so those fields downgrade to the default rather
+    # than returning an arbitrary order that would look like a broken sort.
+    user = current_user(resolution)
+    effective = MediaSort.effective_sort(sort, user)
+    progress = MediaSort.progress_map(user, sort_field(effective))
+    sorted_movies = MediaSort.sort(all_movies, effective, progress)
 
     # Apply cursor pagination
     {movies, page_info} = paginate(sorted_movies, first, after_cursor)
@@ -105,7 +112,7 @@ defmodule MydiaWeb.Schema.Resolvers.BrowseResolver do
      }}
   end
 
-  def list_tv_shows(_parent, args, _info) do
+  def list_tv_shows(_parent, args, resolution) do
     first = Map.get(args, :first, 20)
     after_cursor = Map.get(args, :after)
     sort = Map.get(args, :sort, %{field: :title, direction: :asc})
@@ -123,8 +130,14 @@ defmodule MydiaWeb.Schema.Resolvers.BrowseResolver do
     # Get all TV shows
     all_shows = Media.list_media_items(opts)
 
-    # Sort
-    sorted_shows = sort_items(all_shows, sort)
+    # Sort. The watch-state fields need one batched progress lookup; every
+    # other field gets an empty map and costs nothing extra. A signed-out
+    # caller has no history, so those fields downgrade to the default rather
+    # than returning an arbitrary order that would look like a broken sort.
+    user = current_user(resolution)
+    effective = MediaSort.effective_sort(sort, user)
+    progress = MediaSort.progress_map(user, sort_field(effective))
+    sorted_shows = MediaSort.sort(all_shows, effective, progress)
 
     # Apply cursor pagination
     {shows, page_info} = paginate(sorted_shows, first, after_cursor)
@@ -159,30 +172,11 @@ defmodule MydiaWeb.Schema.Resolvers.BrowseResolver do
 
   # Helper functions
 
-  defp sort_items(items, %{field: field, direction: direction}) do
-    sorter =
-      case field do
-        :title -> & &1.title
-        :year -> & &1.year
-        :added_at -> & &1.inserted_at
-        :rating -> &get_rating/1
-        _ -> & &1.title
-      end
+  defp current_user(%{context: context}), do: context[:current_user]
+  defp current_user(_resolution), do: nil
 
-    sorted = Enum.sort_by(items, sorter)
-
-    if direction == :desc do
-      Enum.reverse(sorted)
-    else
-      sorted
-    end
-  end
-
-  defp sort_items(items, _), do: Enum.sort_by(items, & &1.title)
-
-  defp get_rating(%{metadata: nil}), do: 0
-  defp get_rating(%{metadata: %{vote_average: rating}}) when is_number(rating), do: rating
-  defp get_rating(_), do: 0
+  defp sort_field(%{field: field}), do: field
+  defp sort_field(_sort), do: :title
 
   defp paginate(items, first, nil) do
     # No cursor - start from beginning

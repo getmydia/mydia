@@ -273,6 +273,34 @@ void main() {
       expect(find.byKey(SecondaryCluster.qualityKey), findsOneWidget);
     });
 
+    testWidgets('omits fullscreen when no callback is supplied',
+        (tester) async {
+      // Null means the browser has no fullscreen route at all
+      // (`FullscreenMode.unsupported`), not that fullscreen is momentarily
+      // unavailable, so a dead button would be worse than none.
+      await tester.pumpWidget(_host(const SecondaryCluster()));
+      expect(find.byKey(SecondaryCluster.fullscreenKey), findsNothing);
+    });
+
+    testWidgets('shows fullscreen when a callback is supplied', (tester) async {
+      await tester.pumpWidget(
+        _host(SecondaryCluster(onFullscreenTap: () {})),
+      );
+      expect(find.byKey(SecondaryCluster.fullscreenKey), findsOneWidget);
+    });
+
+    testWidgets('taps reach the fullscreen callback', (tester) async {
+      var taps = 0;
+      await tester.pumpWidget(
+        _host(SecondaryCluster(onFullscreenTap: () => taps++)),
+      );
+
+      await tester.tap(find.byKey(SecondaryCluster.fullscreenKey));
+      await tester.pump();
+
+      expect(taps, 1);
+    });
+
     testWidgets('swaps the fullscreen glyph', (tester) async {
       await tester.pumpWidget(
         _host(SecondaryCluster(isFullscreen: true, onFullscreenTap: () {})),

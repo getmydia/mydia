@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 // `Override` is not re-exported by the main `flutter_riverpod.dart` barrel in
 // Riverpod 3.x; it lives in the `misc.dart` sub-library.
 import 'package:flutter_riverpod/misc.dart' show Override;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
@@ -231,6 +232,15 @@ List<Override> refreshingOverrides() => [
     ];
 
 void main() {
+  // LibraryScreen now awaits LibrarySortController before querying, and that
+  // controller reads flutter_secure_storage. Without the mock, the read never
+  // completes in widget tests, the sort spinner spins forever, and
+  // pumpAndSettle times out. StubLink scripting is unchanged: still one
+  // library page response after the sort resolves.
+  setUp(() {
+    FlutterSecureStorage.setMockInitialValues({});
+  });
+
   testWidgets('grid starts just below the app bar on desktop', (tester) async {
     await pumpLibrary(tester, size: kDesktopSize);
 

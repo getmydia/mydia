@@ -107,9 +107,16 @@ pub enum BrowseField {
 #[derive(Debug, Clone, Copy)]
 pub struct BrowseSort {
     pub field: BrowseField,
-    /// The Elixir server reverses the ascending sort rather than sorting
-    /// descending (browse_resolver.ex:172-176), which moves nulls to the
-    /// front. The ORDER BY clauses below reproduce that.
+    /// The ORDER BY clauses below reproduce the Elixir server's *old*
+    /// behaviour: it reversed the ascending sort rather than sorting
+    /// descending, which moved nulls to the front and flipped tie groups.
+    ///
+    /// Elixir no longer does that. `MydiaWeb.Schema.Resolvers.MediaSort` now
+    /// sorts by direction and puts unknown keys last in both directions, so
+    /// these clauses are a known behavioural divergence from the contract
+    /// partner. Structural parity is what the contract gate enforces; matching
+    /// this ordering is follow-up work, and the clauses below are the thing to
+    /// change when it happens.
     pub descending: bool,
 }
 

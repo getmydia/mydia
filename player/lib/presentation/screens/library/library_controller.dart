@@ -6,6 +6,7 @@ import '../../../core/graphql/watch/controller_watcher.dart';
 import '../../../core/graphql/watch/query_key.dart';
 import '../../../core/graphql/watch/query_watcher.dart';
 import '../../models/library_data.dart';
+import 'library_sort.dart';
 
 part 'library_controller.g.dart';
 
@@ -13,20 +14,9 @@ const int _pageSize = 20;
 
 enum LibraryType { movies, tvShows }
 
-enum SortOption {
-  titleAsc('Title A-Z'),
-  titleDesc('Title Z-A'),
-  yearDesc('Year (Newest)'),
-  yearAsc('Year (Oldest)'),
-  recentlyAdded('Recently Added');
-
-  const SortOption(this.displayName);
-  final String displayName;
-}
-
 const String moviesListQuery = r'''
-query MoviesList($first: Int, $after: String) {
-  movies(first: $first, after: $after) {
+query MoviesList($first: Int, $after: String, $sort: SortInput) {
+  movies(first: $first, after: $after, sort: $sort) {
     edges {
       node {
         id
@@ -65,8 +55,8 @@ query MoviesList($first: Int, $after: String) {
 ''';
 
 const String tvShowsListQuery = r'''
-query TvShowsList($first: Int, $after: String) {
-  tvShows(first: $first, after: $after) {
+query TvShowsList($first: Int, $after: String, $sort: SortInput) {
+  tvShows(first: $first, after: $after, sort: $sort) {
     edges {
       node {
         id
@@ -178,17 +168,18 @@ class LibraryController extends _$LibraryController {
   /// library, because `ObservableQuery.refetch()` re-issues the original
   /// page-1 variables and the library overwrites the accumulated edges with
   /// that single page, silently snapping the scroll position back to the
-  /// top. A user-initiated [refresh] or [setSort] is exempt on purpose: both
-  /// call `_watcher.refetch()` directly rather than going through the guard,
-  /// and both reset this flag, since going back to page 1 is exactly what
-  /// the user asked for.
+  /// top. A user-initiated [refresh] is exempt on purpose: it calls
+  /// `_watcher.refetch()` directly rather than going through the guard, and
+  /// resets this flag, since going back to page 1 is exactly what the user
+  /// asked for. Sort changes remount a new watcher via the family key, so
+  /// they reset the flag in [build] instead.
   late bool _hasPaginated;
 
   bool get _isMovies => libraryType == LibraryType.movies;
   String get _connectionField => _isMovies ? 'movies' : 'tvShows';
 
   @override
-  Stream<LibraryData> build(LibraryType libraryType) {
+  Stream<LibraryData> build(LibraryType libraryType, LibrarySort sort) {
     // Reset the pagination flag when the watcher is created. The flag tracks
     // the *current* watcher's pagination state, so a new watcher always starts
     // at page 1 with the flag cleared.
@@ -198,7 +189,7 @@ class LibraryController extends _$LibraryController {
       ref,
       key: _isMovies ? QueryKeys.moviesList : QueryKeys.tvShowsList,
       document: gql(_isMovies ? moviesListQuery : tvShowsListQuery),
-      variables: const {'first': _pageSize},
+      variables: {'first': _pageSize, 'sort': sort.toVariables()},
       parse: _isMovies ? _parseMovies : _parseTvShows,
       canRefetch: () => !_hasPaginated,
     );
@@ -206,19 +197,6 @@ class LibraryController extends _$LibraryController {
   }
 
   Future<void> refresh() {
-    _hasPaginated = false;
-    return _watcher.refetch();
-  }
-
-  /// Refetches from page 1 after the user picks a sort order.
-  ///
-  /// [sort] is deliberately unused: neither `moviesListQuery` nor
-  /// `tvShowsListQuery` takes a sort argument, so sorting has never changed
-  /// what the server returns, and this migration preserved that rather than
-  /// quietly changing it. The parameter stays because the screen already
-  /// passes its selection and this is where sort belongs once the query grows
-  /// an argument for it. Until then the only honest behavior is a refetch.
-  Future<void> setSort(SortOption sort) {
     _hasPaginated = false;
     return _watcher.refetch();
   }
@@ -234,7 +212,11 @@ class LibraryController extends _$LibraryController {
     try {
       await _watcher.fetchMore(
         FetchMoreOptions(
-          variables: {'first': _pageSize, 'after': cursor},
+          variables: {
+            'first': _pageSize,
+            'after': cursor,
+            'sort': sort.toVariables(),
+          },
           updateQuery: (previous, fetched) =>
               mergeConnection(_connectionField, previous, fetched),
         ),
