@@ -750,6 +750,10 @@ defmodule Mydia.Metadata.Provider.Relay do
     end
   end
 
+  # Bound each episode translation fetch. `:infinity` let a single hung
+  # Bypass/relay request pin the whole ExUnit case until the 60s wall clock.
+  @episode_translation_timeout_ms 15_000
+
   # TVDB season extended responses include episodes but without translation text.
   # Fetch each episode's extended data to get its translation bundle (all languages).
   defp enrich_tvdb_episodes_with_translations(req, data) do
@@ -763,15 +767,22 @@ defmodule Mydia.Metadata.Provider.Relay do
         |> Task.async_stream(
           fn ep -> fetch_tvdb_episode_translations(req, ep) end,
           max_concurrency: 5,
-          # Bound each episode fetch. `:infinity` let a single hung Bypass/relay
-          # request pin the whole ExUnit case until the 60s wall-clock timeout.
-          timeout: 15_000,
+          timeout: @episode_translation_timeout_ms,
           on_timeout: :kill_task
         )
         |> Enum.zip(episodes)
         |> Enum.map(fn
-          {{:ok, ep}, _orig} -> ep
-          {{:exit, _reason}, orig} -> orig
+          {{:ok, ep}, _orig} ->
+            ep
+
+          {{:exit, reason}, orig} ->
+            Logger.warning(
+              "TVDB episode translation fetch exited; keeping untranslated episode",
+              episode_id: orig["id"],
+              reason: inspect(reason)
+            )
+
+            orig
         end)
 
       Map.put(data, "episodes", enriched)
