@@ -47,11 +47,19 @@ class MediaContextTarget {
 /// Pure, so the visibility rules are unit-testable without pumping a menu.
 /// An empty result means the card gets no menu at all.
 List<MediaContextAction> mediaContextActionsFor(MediaContextTarget target) {
+  // A card whose own tap opens the title earns no menu at all. Gating only
+  // `movieDetails` on this left two holes: an episode target got
+  // `episodeDetails` regardless, duplicating what its tap already did, and any
+  // target with a file got `play` even where the rail had no play handler to
+  // run, since `_openMenu` routes Play through a nullable `onItemActivate`.
+  // That is a Play entry that silently does nothing.
+  if (!target.tapPlays) return const [];
+
   return [
     if (target.hasFile) MediaContextAction.play,
     if (target.showId != null) MediaContextAction.goToShow,
     if (target.isEpisode) MediaContextAction.episodeDetails,
-    if (target.isMovie && target.tapPlays) MediaContextAction.movieDetails,
+    if (target.isMovie) MediaContextAction.movieDetails,
   ];
 }
 

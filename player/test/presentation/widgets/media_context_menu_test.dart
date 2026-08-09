@@ -77,6 +77,38 @@ void main() {
       expect(mediaContextActionsFor(target), isEmpty);
     });
 
+    // Regression for the two holes left by gating only movieDetails on
+    // tapPlays. A playable episode on a rail with no play handler used to be
+    // offered Play, which routes through a nullable onItemActivate and would
+    // have done nothing, plus an Episode details entry duplicating its own tap.
+    test('a playable episode whose tap navigates earns an empty menu', () {
+      const target = MediaContextTarget(
+        id: 'ep-4',
+        type: 'episode',
+        showId: 'show-1',
+        hasFile: true,
+      );
+
+      expect(mediaContextActionsFor(target), isEmpty);
+    });
+
+    test('no target that navigates on tap is ever offered Play', () {
+      for (final type in ['movie', 'tv_show', 'episode']) {
+        final target = MediaContextTarget(
+          id: 'x',
+          type: type,
+          showId: 'show-1',
+          hasFile: true,
+        );
+
+        expect(
+          mediaContextActionsFor(target),
+          isEmpty,
+          reason: '$type with tapPlays false must earn no menu',
+        );
+      }
+    });
+
     test('every action has a label and an icon', () {
       for (final action in MediaContextAction.values) {
         expect(mediaContextLabel(action), isNotEmpty);
