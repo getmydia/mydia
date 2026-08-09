@@ -62,6 +62,7 @@ defmodule Mydia.Jobs.TVShowSearch do
   alias Mydia.Library
   alias Mydia.Media.{MediaItem, Episode}
   alias Mydia.Library.MediaFile
+  alias Mydia.Settings.CustomFormats
   alias Mydia.Settings.QualityProfile
   alias Mydia.Upgrades
   alias Phoenix.PubSub
@@ -1433,8 +1434,11 @@ defmodule Mydia.Jobs.TVShowSearch do
     # the expected season AND episode so the ranker's identity penalty can rank
     # the requested episode above wrong episodes and season packs (which match
     # the season but lack the episode).
+    profile = QualityProfileResolver.resolve(episode.media_item)
+
     RankingOptions.build(%{
-      quality_profile: QualityProfileResolver.resolve(episode.media_item),
+      quality_profile: profile,
+      custom_formats: CustomFormats.resolve_for_profile(profile),
       media_type: :episode,
       min_seeders: args.min_seeders || get_min_seeders(),
       size_range: args.size_range,
@@ -1452,8 +1456,11 @@ defmodule Mydia.Jobs.TVShowSearch do
     # supplies only the expected season (no episode), so the identity penalty
     # matches on season alone — a season pack for the requested season matches,
     # a wrong-season pack is penalized.
+    profile = QualityProfileResolver.resolve(media_item)
+
     RankingOptions.build(%{
-      quality_profile: QualityProfileResolver.resolve(media_item),
+      quality_profile: profile,
+      custom_formats: CustomFormats.resolve_for_profile(profile),
       media_type: :episode,
       min_seeders: args.min_seeders || get_min_seeders(),
       size_range: args.size_range,
