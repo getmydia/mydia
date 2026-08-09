@@ -111,27 +111,27 @@ pub fn start(path: &str, duration: Option<f64>) -> Result<RemuxStream, Streaming
         let source = path.to_string();
 
         tokio::spawn(async move {
-            use tokio::io::AsyncReadExt;
+            use tokio::io::{AsyncBufReadExt, BufReader};
 
-            let mut stderr = stderr;
-            let mut captured = String::new();
+            // A ring of the last few lines rather than the whole stream. A
+            // remux runs for as long as the viewer watches, so a file that
+            // makes ffmpeg complain once per frame would otherwise grow this
+            // buffer without bound for the sake of five lines we actually log.
+            const KEEP: usize = 5;
 
-            if stderr.read_to_string(&mut captured).await.is_err() {
-                return;
+            let mut lines = BufReader::new(stderr).lines();
+            let mut tail: std::collections::VecDeque<String> = std::collections::VecDeque::new();
+
+            while let Ok(Some(line)) = lines.next_line().await {
+                if tail.len() == KEEP {
+                    tail.pop_front();
+                }
+                tail.push_back(line);
             }
 
-            let tail: String = captured
-                .lines()
-                .rev()
-                .take(5)
-                .collect::<Vec<_>>()
-                .into_iter()
-                .rev()
-                .collect::<Vec<_>>()
-                .join(" | ");
-
             if !tail.is_empty() {
-                tracing::error!(path = %source, detail = %tail, "ffmpeg reported a remux problem");
+                let detail = tail.into_iter().collect::<Vec<_>>().join(" | ");
+                tracing::error!(path = %source, %detail, "ffmpeg reported a remux problem");
             }
         });
     }

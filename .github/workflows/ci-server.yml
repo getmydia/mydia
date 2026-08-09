@@ -38,6 +38,15 @@ jobs:
         with:
           workspaces: server
 
+      # The playback tests synthesize their own media with ffmpeg rather than
+      # committing binary fixtures, and probe remux output with ffprobe. Both
+      # are runtime dependencies of the server itself, so a runner without them
+      # cannot verify playback at all.
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
+
       - name: Format
         run: cargo fmt --manifest-path server/Cargo.toml --all -- --check
 

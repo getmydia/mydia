@@ -67,7 +67,19 @@ async fn run(args: &[&str], source: &str, format: &str) -> Result<Vec<u8>, Strea
     if !output.status.success() {
         // Rule 3: carry the stderr tail, not a bare failure.
         let stderr = String::from_utf8_lossy(&output.stderr);
-        let tail: String = stderr.lines().rev().take(5).collect::<Vec<_>>().join(" | ");
+        // Last five lines, still in the order ffmpeg emitted them. Taking from
+        // the reversed iterator without reversing back would report the tail
+        // newest first, which reads backwards when ffmpeg emits a multi-line
+        // failure. The remux drainer does the same thing.
+        let tail: String = stderr
+            .lines()
+            .rev()
+            .take(5)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect::<Vec<_>>()
+            .join(" | ");
 
         return Err(StreamingError::Ffmpeg {
             path: source.to_string(),

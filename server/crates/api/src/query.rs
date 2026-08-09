@@ -512,20 +512,23 @@ pub(crate) async fn load_show(
     Ok(crate::mapping::tv_show_from(item, &episodes, &externals))
 }
 
-/// Loads external subtitle rows for each file. A query per file is acceptable
-/// here: a detail screen holds a handful of files, and Slice 2a's browse
-/// resolvers already run one query per item for their files.
+/// Loads external subtitle rows for a set of files in one query, grouped by
+/// file.
+///
+/// One query per file reads fine for a movie, which has one or two, but
+/// `load_show` passes every file of every episode: a long-running series turns
+/// a single `tvShow` query into hundreds of round trips.
 async fn externals_for(db: &mydia_db::Db, files: &[MediaFileRow]) -> Result<ExternalsByFile> {
+    let ids: Vec<String> = files.iter().map(|f| f.id.clone()).collect();
+
+    let rows = mydia_db::external_subtitles::list_for_files(db, &ids)
+        .await
+        .map_err(|e| Error::new(e.to_string()))?;
+
     let mut map = ExternalsByFile::new();
 
-    for file in files {
-        let rows = mydia_db::external_subtitles::list_for_file(db, &file.id)
-            .await
-            .map_err(|e| Error::new(e.to_string()))?;
-
-        if !rows.is_empty() {
-            map.insert(file.id.clone(), rows);
-        }
+    for row in rows {
+        map.entry(row.media_file_id.clone()).or_default().push(row);
     }
 
     Ok(map)

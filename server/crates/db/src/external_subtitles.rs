@@ -65,6 +65,42 @@ pub async fn list_for_file(
     Ok(rows)
 }
 
+/// Loads external subtitles for many files at once.
+///
+/// A show detail query holds every file of every episode, so asking per file
+/// turns one request into one query per episode. Chunked because SQLite caps
+/// bound parameters per statement, and a large enough library would otherwise
+/// fail on the limit rather than merely being slow.
+pub async fn list_for_files(
+    db: &Db,
+    media_file_ids: &[String],
+) -> Result<Vec<ExternalSubtitleRow>, DbError> {
+    const CHUNK: usize = 500;
+
+    let mut out = Vec::new();
+
+    for chunk in media_file_ids.chunks(CHUNK) {
+        let placeholders = (1..=chunk.len())
+            .map(|i| format!("?{i}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        let sql = format!(
+            "{SELECT} WHERE media_file_id IN ({placeholders})
+             ORDER BY media_file_id, language, path"
+        );
+
+        let mut query = sqlx::query_as::<_, ExternalSubtitleRow>(&sql);
+        for id in chunk {
+            query = query.bind(id);
+        }
+
+        out.extend(query.fetch_all(db.pool()).await?);
+    }
+
+    Ok(out)
+}
+
 pub async fn find(db: &Db, id: &str) -> Result<Option<ExternalSubtitleRow>, DbError> {
     let row = sqlx::query_as::<_, ExternalSubtitleRow>(&format!("{SELECT} WHERE id = ?1"))
         .bind(id)

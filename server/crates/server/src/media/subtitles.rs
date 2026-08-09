@@ -27,8 +27,17 @@ pub async fn serve(
     // subtitle_controller.ex:96 defaults to srt; the contract's `url` field
     // defaults to vtt and always sends the parameter, so this default is only
     // reached by a hand-written request.
+    // Every text format SubtitleFormat can render into a URL has to be
+    // servable here, or `SubtitleTrack.url` hands clients a link that 400s.
+    // ssa and ass are the same format, which is why the scan already collapses
+    // them (ffprobe.rs normalize_subtitle_format).
+    //
+    // pgs and vobsub are image-based and have no text rendering, so there is
+    // nothing to convert to and they stay a 400. `unknown` is not a format at
+    // all. Neither is reachable from the player, which only ever asks for VTT.
     let format = match query.format.as_deref().unwrap_or("srt") {
         f @ ("srt" | "vtt" | "ass") => f,
+        "ssa" => "ass",
         _ => return StatusCode::BAD_REQUEST.into_response(),
     };
 
