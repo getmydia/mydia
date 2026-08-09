@@ -39,10 +39,10 @@ type RootQueryType {
   upNext(first: Int, after: String): [UpNextItem]
 
   "Get the user's favorite items"
-  favorites(first: Int, after: String, types: [MediaType]): [RecentlyAddedItem]
+  favorites(first: Int, after: String, types: [MediaType], category: MediaCategory, sort: SortInput): [RecentlyAddedItem]
 
   "Get unwatched items with files"
-  unwatched(first: Int, after: String, types: [MediaType]): [RecentlyAddedItem]
+  unwatched(first: Int, after: String, types: [MediaType], category: MediaCategory, sort: SortInput): [RecentlyAddedItem]
 
   "Search the library across movies, TV shows, episodes, and collections"
   search(query: String!, types: [SearchResultType], first: Int): SearchResults
