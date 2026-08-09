@@ -100,6 +100,17 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Index do
          socket
          |> assign(:form, save_error_form(changeset, params, socket.assigns.editing))
          |> put_flash(:error, changeset_message(changeset))}
+
+      # The format disappeared between opening the modal and submitting it:
+      # another admin deleted it, or an upgrade dropped a built-in from the
+      # manifest. Close the modal and re-read the list rather than letting the
+      # unmatched tuple crash the LiveView.
+      {:error, :not_found} ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "That format no longer exists. The list has been refreshed.")
+         |> assign(:editing, nil)
+         |> load_formats()}
     end
   end
 

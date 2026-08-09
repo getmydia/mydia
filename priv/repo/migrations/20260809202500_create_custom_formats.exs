@@ -7,7 +7,9 @@ defmodule Mydia.Repo.Migrations.CreateCustomFormats do
       add :slug, :string, null: false
       add :name, :string, null: false
       add :description, :string
-      add :patterns, {:array, :string}, default: []
+      # NOT NULL because every consumer assumes a list: the changeset validates
+      # non-empty, and both the admin list and the matcher would fail on nil.
+      add :patterns, {:array, :string}, default: [], null: false
       add :overrides_builtin, :boolean, default: false, null: false
 
       timestamps(type: :utc_datetime)

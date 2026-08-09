@@ -16,6 +16,26 @@ defmodule MydiaWeb.AdminCustomFormatsLiveTest do
     assert has_element?(view, "#custom-format-row-lang-vfq")
   end
 
+  # Two admin tabs: the format is deleted in one while the other has its edit
+  # modal open. The save must not crash the LiveView.
+  test "saving a format that was deleted meanwhile does not crash", %{conn: conn} do
+    format = Mydia.SettingsFixtures.custom_format_fixture(%{name: "Doomed", slug: "doomed"})
+
+    {:ok, view, _html} = live(conn, ~p"/admin/config/custom-formats")
+
+    view |> element("#custom-format-edit-#{format.slug}") |> render_click()
+
+    :ok = Mydia.Settings.CustomFormats.delete_format(format.slug)
+
+    html =
+      view
+      |> form("#custom-format-form", custom_format: %{name: "Doomed", patterns_text: "\\bX\\b"})
+      |> render_submit()
+
+    assert html =~ "no longer exists"
+    refute has_element?(view, "#custom-format-row-doomed")
+  end
+
   # Without a nav entry the page is reachable only by typing the URL, which for
   # a self-hosted operator means the feature may as well not exist.
   test "is reachable from the admin tab nav", %{conn: conn} do
