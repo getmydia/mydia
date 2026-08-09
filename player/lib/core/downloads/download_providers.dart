@@ -5,6 +5,7 @@ import 'download_service.dart';
 import 'download_speed_tracker.dart';
 
 import 'download_job_providers.dart';
+import 'download_queue_providers.dart';
 
 part 'download_providers.g.dart';
 
@@ -53,6 +54,14 @@ Future<DownloadService> downloadManager(Ref ref) async {
   final database = await ref.watch(downloadDatabaseProvider.future);
   final service = getDownloadService();
   service.setDatabase(database);
+
+  // Settings are watched, so changing the concurrency limit or the auto-start
+  // toggle reaches the downloader instead of only being written to Hive.
+  final settings = await ref.watch(downloadSettingsProvider.future);
+  service.applySettings(
+    maxConcurrentDownloads: settings.maxConcurrentDownloads,
+    autoStartQueued: settings.autoStartQueued,
+  );
 
   // Inject unified job service (works for both HTTP and P2P modes)
   final jobService = ref.watch(unifiedDownloadJobServiceProvider);

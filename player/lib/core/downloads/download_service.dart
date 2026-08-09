@@ -64,6 +64,12 @@ abstract class DownloadService {
   void setJobService(
       dynamic jobService); // Dynamic to avoid circular imports in interface
 
+  /// Apply the user's download settings. Called whenever settings change.
+  void applySettings({
+    required int maxConcurrentDownloads,
+    required bool autoStartQueued,
+  });
+
   Stream<DownloadTask> get progressStream;
 
   Future<DownloadTask> startDownload({

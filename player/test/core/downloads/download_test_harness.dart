@@ -319,6 +319,12 @@ Future<DownloadHarness> makeHarness({
   service.setDatabase(database);
   if (attachJobService) service.setJobService(jobService);
 
+  // setDatabase schedules cleanupOrphanedFiles via Future.microtask. That
+  // async work yields across the caller's first awaits and will delete any
+  // partial file created before the corresponding paused/active task is
+  // saved. Drain it here so tests can seed partials safely.
+  await Future<void>.delayed(const Duration(milliseconds: 50));
+
   return DownloadHarness(
     service: service,
     database: database,

@@ -236,14 +236,14 @@ class _NativeDownloadService implements DownloadService {
   int _maxConcurrentDownloads = 2;
   bool _autoStartQueued = true;
 
-  /// Set the maximum concurrent downloads limit.
-  void setMaxConcurrentDownloads(int max) {
-    _maxConcurrentDownloads = max;
-  }
-
-  /// Set whether to auto-start queued downloads.
-  void setAutoStartQueued(bool autoStart) {
-    _autoStartQueued = autoStart;
+  @override
+  void applySettings({
+    required int maxConcurrentDownloads,
+    required bool autoStartQueued,
+  }) {
+    _maxConcurrentDownloads = maxConcurrentDownloads;
+    _autoStartQueued = autoStartQueued;
+    if (_autoStartQueued) _processQueue();
   }
 
   /// Get the number of currently active downloads.
@@ -846,9 +846,11 @@ class _NativeDownloadService implements DownloadService {
     DownloadTask updatedTask = task;
 
     try {
-      final downloadDir = await _getDownloadDirectory();
-      final fileName = _generateFileName(task);
-      final filePath = '$downloadDir/$fileName';
+      // Reuse the path already recorded for this task so a resumed download
+      // continues into its partial file. Only a genuinely new download gets a
+      // freshly generated name.
+      final filePath = task.filePath ??
+          '${await _getDownloadDirectory()}/${_generateFileName(task)}';
 
       updatedTask = task.copyWith(filePath: filePath);
       await _database!.saveTask(updatedTask);
@@ -912,13 +914,11 @@ class _NativeDownloadService implements DownloadService {
       _progressController.add(updatedTask);
 
       // Progressive download loop - handles the case where file is still growing
-      int downloadedBytes = updatedTask.downloadedBytes ?? 0;
       final file = File(filePath);
 
-      // If resuming, check existing file size
-      if (await file.exists()) {
-        downloadedBytes = await file.length();
-      }
+      // The file on disk is the truth. The persisted downloadedBytes can
+      // disagree after a crash part-way through a write.
+      int downloadedBytes = await file.exists() ? await file.length() : 0;
 
       bool downloadComplete = false;
 
@@ -965,6 +965,9 @@ class _NativeDownloadService implements DownloadService {
             filePath,
             cancelToken: cancelToken,
             deleteOnError: false,
+            fileAccessMode: downloadedBytes > 0
+                ? FileAccessMode.append
+                : FileAccessMode.write,
             options: Options(
               headers: headers,
               responseType: ResponseType.stream,
@@ -1107,9 +1110,11 @@ class _NativeDownloadService implements DownloadService {
 
     DownloadTask updatedTask = task;
     try {
-      final downloadDir = await _getDownloadDirectory();
-      final fileName = _generateFileName(task);
-      final filePath = '$downloadDir/$fileName';
+      final filePath = task.filePath ??
+          '${await _getDownloadDirectory()}/${_generateFileName(task)}';
+
+      final existing = File(filePath);
+      final resumeFrom = await existing.exists() ? await existing.length() : 0;
 
       // Update status to downloading
       updatedTask = task.copyWith(
@@ -1124,15 +1129,21 @@ class _NativeDownloadService implements DownloadService {
         task.downloadUrl!,
         filePath,
         cancelToken: cancelToken,
+        fileAccessMode:
+            resumeFrom > 0 ? FileAccessMode.append : FileAccessMode.write,
+        options: resumeFrom > 0
+            ? Options(headers: {'Range': 'bytes=$resumeFrom-'})
+            : null,
         onReceiveProgress: (received, total) async {
           if (total != -1) {
-            final progress = received / total;
+            final actualReceived = resumeFrom + received;
+            final estimatedTotal = resumeFrom + total;
             updatedTask = updatedTask.copyWith(
-              progress: progress,
-              fileSize: total,
-              downloadedBytes: received,
+              progress: actualReceived / estimatedTotal,
+              fileSize: estimatedTotal,
+              downloadedBytes: actualReceived,
             );
-            _speedTracker.recordProgress(task.id, received);
+            _speedTracker.recordProgress(task.id, actualReceived);
             await _database!.saveTask(updatedTask);
             _progressController.add(updatedTask);
           }

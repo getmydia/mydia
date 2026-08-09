@@ -92,6 +92,12 @@ class _StubDownloadService implements DownloadService {
   }
 
   @override
+  void applySettings({
+    required int maxConcurrentDownloads,
+    required bool autoStartQueued,
+  }) {}
+
+  @override
   Stream<DownloadTask> get progressStream => _progressController.stream;
 
   @override
