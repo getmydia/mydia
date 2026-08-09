@@ -6,11 +6,14 @@
 //! does not have (monitoring, organizing, renaming, writing NFO files) answer
 //! false, because they are absent from the product rather than unfinished.
 
+use std::collections::HashMap;
+
 use async_graphql::ID;
 use chrono::{DateTime, TimeZone, Utc};
 use serde::Deserialize;
 
 use mydia_db::episodes::EpisodeRow;
+use mydia_db::external_subtitles::ExternalSubtitleRow;
 use mydia_db::library_paths::LibraryPathRow;
 use mydia_db::media_files::MediaFileRow;
 use mydia_db::media_items::MediaItemRow;
@@ -19,6 +22,9 @@ use crate::types::common::{LibraryType, MediaCategory};
 use crate::types::media::{
     Artwork, Episode, LibraryPath, MediaFile, Movie, Season, SubtitleTrack, TvShow,
 };
+
+/// External subtitle rows keyed by the media file they belong to.
+pub type ExternalsByFile = HashMap<String, Vec<ExternalSubtitleRow>>;
 
 /// The stored shape of `media_files.subtitle_tracks`, written by
 /// `mydia_library::ffprobe::SubtitleTrackFacts`.
@@ -88,24 +94,45 @@ pub fn library_path_from(row: &LibraryPathRow) -> LibraryPath {
     }
 }
 
-pub fn media_file_from(row: &MediaFileRow) -> MediaFile {
-    let subtitles = row.subtitle_tracks.as_deref().map(|raw| {
-        // A malformed column yields an empty list rather than an error:
-        // the file is still browsable, it just has no subtitle tracks.
-        serde_json::from_str::<Vec<StoredSubtitleTrack>>(raw)
-            .unwrap_or_default()
-            .into_iter()
-            .map(|track| {
-                Some(SubtitleTrack {
-                    track_id: track.track_id,
-                    language: track.language,
-                    title: track.title,
-                    format: track.format,
-                    embedded: track.embedded,
+/// Embedded tracks come from the scan's JSON column; external ones are read
+/// from `external_subtitles` by the caller and passed in. Elixir runs ffprobe
+/// per request for the embedded half (extractor.ex:46-54); this does not need
+/// to, because Slice 2a already persisted it.
+pub fn media_file_from(row: &MediaFileRow, external: &[ExternalSubtitleRow]) -> MediaFile {
+    let mut tracks: Vec<Option<SubtitleTrack>> = row
+        .subtitle_tracks
+        .as_deref()
+        .map(|raw| {
+            // A malformed column yields an empty list rather than an error:
+            // the file is still browsable, it just has no subtitle tracks.
+            serde_json::from_str::<Vec<StoredSubtitleTrack>>(raw)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|track| {
+                    Some(SubtitleTrack {
+                        track_id: track.track_id,
+                        language: track.language,
+                        title: track.title,
+                        format: track.format,
+                        embedded: track.embedded,
+                        media_file_id: row.id.clone(),
+                    })
                 })
-            })
-            .collect::<Vec<_>>()
-    });
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    // Embedded first, then external, matching extractor.ex:59.
+    tracks.extend(external.iter().map(|sub| {
+        Some(SubtitleTrack {
+            track_id: sub.id.clone(),
+            language: sub.language.clone(),
+            title: external_title(&sub.language),
+            format: sub.format.clone(),
+            embedded: false,
+            media_file_id: row.id.clone(),
+        })
+    }));
 
     MediaFile {
         id: ID(row.id.clone()),
@@ -125,12 +152,56 @@ pub fn media_file_from(row: &MediaFileRow) -> MediaFile {
             "/api/v1/stream/file/{}?strategy=DIRECT_PLAY",
             row.id
         )),
-        subtitles,
+        subtitles: Some(tracks),
+        // Slice 8.
         segments: Vec::new(),
     }
 }
 
-pub fn movie_from(item: &MediaItemRow, files: &[MediaFileRow]) -> Movie {
+fn files_of(files: &[MediaFileRow], externals: &ExternalsByFile) -> Option<Vec<Option<MediaFile>>> {
+    Some(
+        files
+            .iter()
+            .map(|f| {
+                let external = externals.get(&f.id).map(Vec::as_slice).unwrap_or(&[]);
+                Some(media_file_from(f, external))
+            })
+            .collect(),
+    )
+}
+
+/// extractor.ex:203-207.
+fn external_title(language: &str) -> String {
+    format!("{} (External)", language_name(language))
+}
+
+/// extractor.ex:210-233. Duplicated from mydia-library rather than depended
+/// on: this is contract text, and mydia-api should not pull in a scanning
+/// crate for one match statement.
+fn language_name(code: &str) -> String {
+    match code {
+        "eng" | "en" => "English",
+        "spa" | "es" => "Spanish",
+        "fra" | "fr" => "French",
+        "deu" | "de" => "German",
+        "ita" | "it" => "Italian",
+        "por" | "pt" => "Portuguese",
+        "jpn" | "ja" => "Japanese",
+        "kor" | "ko" => "Korean",
+        "chi" | "zh" => "Chinese",
+        "rus" | "ru" => "Russian",
+        "ara" | "ar" => "Arabic",
+        "und" => "Unknown",
+        other => return other.to_uppercase(),
+    }
+    .to_string()
+}
+
+pub fn movie_from(
+    item: &MediaItemRow,
+    files: &[MediaFileRow],
+    externals: &ExternalsByFile,
+) -> Movie {
     Movie {
         id: ID(item.id.clone()),
         parent: None,
@@ -155,7 +226,7 @@ pub fn movie_from(item: &MediaItemRow, files: &[MediaFileRow]) -> Movie {
         similar: None,
         rating: item.rating,
         artwork: artwork(item),
-        files: Some(files.iter().map(|f| Some(media_file_from(f))).collect()),
+        files: files_of(files, externals),
         // Progress and favorites land in Slice 4.
         progress: None,
         is_favorite: false,
@@ -166,6 +237,7 @@ pub fn episode_from(
     row: &EpisodeRow,
     files: &[MediaFileRow],
     show: Option<Box<TvShow>>,
+    externals: &ExternalsByFile,
 ) -> Episode {
     Episode {
         id: ID(row.id.clone()),
@@ -180,14 +252,18 @@ pub fn episode_from(
         overview: row.overview.clone(),
         runtime: row.runtime.and_then(|v| i32::try_from(v).ok()),
         thumbnail_url: row.thumbnail_url.clone(),
-        files: Some(files.iter().map(|f| Some(media_file_from(f))).collect()),
+        files: files_of(files, externals),
         progress: None,
         has_file: !files.is_empty(),
         show,
     }
 }
 
-pub fn tv_show_from(item: &MediaItemRow, episodes: &[(EpisodeRow, Vec<MediaFileRow>)]) -> TvShow {
+pub fn tv_show_from(
+    item: &MediaItemRow,
+    episodes: &[(EpisodeRow, Vec<MediaFileRow>)],
+    externals: &ExternalsByFile,
+) -> TvShow {
     let mut season_numbers: Vec<i64> = episodes.iter().map(|(e, _)| e.season_number).collect();
     season_numbers.sort_unstable();
     season_numbers.dedup();
@@ -214,7 +290,7 @@ pub fn tv_show_from(item: &MediaItemRow, episodes: &[(EpisodeRow, Vec<MediaFileR
                 episodes: Some(
                     in_season
                         .iter()
-                        .map(|(row, files)| Some(episode_from(row, files, None)))
+                        .map(|(row, files)| Some(episode_from(row, files, None, externals)))
                         .collect(),
                 ),
             })
@@ -227,7 +303,7 @@ pub fn tv_show_from(item: &MediaItemRow, episodes: &[(EpisodeRow, Vec<MediaFileR
     let next = episodes
         .iter()
         .min_by_key(|(e, _)| (e.season_number, e.episode_number))
-        .map(|(row, files)| episode_from(row, files, None));
+        .map(|(row, files)| episode_from(row, files, None, externals));
 
     TvShow {
         id: ID(item.id.clone()),

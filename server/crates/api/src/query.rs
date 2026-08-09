@@ -8,6 +8,7 @@
 use async_graphql::{Context, Error, Object, Result, ID};
 
 use crate::context::{authenticated_user, ApiContext};
+use crate::mapping::ExternalsByFile;
 use crate::types::auth::{remote_device_from, ApiKey, RemoteDevice};
 use crate::types::common::{MediaCategory, MediaType, Node, PageInfo, SearchResultType, SortInput};
 use crate::types::discovery::{
@@ -18,6 +19,7 @@ use crate::types::media::{
     TvShowConnection, TvShowEdge,
 };
 use crate::types::streaming::StreamingCandidatesResult;
+use mydia_db::media_files::MediaFileRow;
 use mydia_db::media_items::{BrowseField, BrowseSort};
 
 /// An empty page, for connection fields that back an empty library. The
@@ -51,9 +53,10 @@ impl RootQueryType {
                     let files = mydia_db::media_files::list_for_item(&api.db, &item.id)
                         .await
                         .map_err(|e| Error::new(e.to_string()))?;
+                    let externals = externals_for(&api.db, &files).await?;
 
                     Some(Node::Movie(Box::new(crate::mapping::movie_from(
-                        &item, &files,
+                        &item, &files, &externals,
                     ))))
                 }
                 None => None,
@@ -71,9 +74,10 @@ impl RootQueryType {
                         let files = mydia_db::media_files::list_for_episode(&api.db, &row.id)
                             .await
                             .map_err(|e| Error::new(e.to_string()))?;
+                        let externals = externals_for(&api.db, &files).await?;
 
                         Some(Node::Episode(Box::new(crate::mapping::episode_from(
-                            &row, &files, None,
+                            &row, &files, None, &externals,
                         ))))
                     }
                     None => None,
@@ -139,8 +143,9 @@ impl RootQueryType {
         let files = mydia_db::media_files::list_for_item(&api.db, &item.id)
             .await
             .map_err(|e| Error::new(e.to_string()))?;
+        let externals = externals_for(&api.db, &files).await?;
 
-        Ok(Some(crate::mapping::movie_from(&item, &files)))
+        Ok(Some(crate::mapping::movie_from(&item, &files, &externals)))
     }
 
     /// Get a TV show by ID
@@ -177,8 +182,11 @@ impl RootQueryType {
         let files = mydia_db::media_files::list_for_episode(&api.db, &row.id)
             .await
             .map_err(|e| Error::new(e.to_string()))?;
+        let externals = externals_for(&api.db, &files).await?;
 
-        Ok(Some(crate::mapping::episode_from(&row, &files, None)))
+        Ok(Some(crate::mapping::episode_from(
+            &row, &files, None, &externals,
+        )))
     }
 
     /// List all movies with pagination
@@ -225,9 +233,10 @@ impl RootQueryType {
             let files = mydia_db::media_files::list_for_item(&api.db, &item.id)
                 .await
                 .map_err(|e| Error::new(e.to_string()))?;
+            let externals = externals_for(&api.db, &files).await?;
 
             edges.push(MovieEdge {
-                node: crate::mapping::movie_from(item, &files),
+                node: crate::mapping::movie_from(item, &files, &externals),
                 // Page-local, mirroring browse_resolver.ex:93-97. See the
                 // note in this task's description before "fixing" it.
                 cursor: crate::cursor::encode(index as i64),
@@ -316,8 +325,11 @@ impl RootQueryType {
             let files = mydia_db::media_files::list_for_episode(&api.db, &row.id)
                 .await
                 .map_err(|e| Error::new(e.to_string()))?;
+            let externals = externals_for(&api.db, &files).await?;
 
-            episodes.push(Some(crate::mapping::episode_from(&row, &files, None)));
+            episodes.push(Some(crate::mapping::episode_from(
+                &row, &files, None, &externals,
+            )));
         }
 
         Ok(Some(episodes))
@@ -491,7 +503,32 @@ pub(crate) async fn load_show(
         episodes.push((row, files));
     }
 
-    Ok(crate::mapping::tv_show_from(item, &episodes))
+    let all_files: Vec<MediaFileRow> = episodes
+        .iter()
+        .flat_map(|(_, files)| files.iter().cloned())
+        .collect();
+    let externals = externals_for(&api.db, &all_files).await?;
+
+    Ok(crate::mapping::tv_show_from(item, &episodes, &externals))
+}
+
+/// Loads external subtitle rows for each file. A query per file is acceptable
+/// here: a detail screen holds a handful of files, and Slice 2a's browse
+/// resolvers already run one query per item for their files.
+async fn externals_for(db: &mydia_db::Db, files: &[MediaFileRow]) -> Result<ExternalsByFile> {
+    let mut map = ExternalsByFile::new();
+
+    for file in files {
+        let rows = mydia_db::external_subtitles::list_for_file(db, &file.id)
+            .await
+            .map_err(|e| Error::new(e.to_string()))?;
+
+        if !rows.is_empty() {
+            map.insert(file.id.clone(), rows);
+        }
+    }
+
+    Ok(map)
 }
 
 /// One page's worth of arguments, with the Elixir server's defaults

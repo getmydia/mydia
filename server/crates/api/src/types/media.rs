@@ -69,12 +69,36 @@ pub struct SubtitleTrack {
     pub title: String,
     pub format: String,
     pub embedded: bool,
+    /// The file this track belongs to. Not part of the contract; the URL
+    /// resolver needs it. The Elixir resolver does the same thing by stuffing
+    /// `_media_file_id` onto the track map (subtitle_resolver.ex:31).
+    #[graphql(skip)]
+    pub media_file_id: String,
 }
 
 #[ComplexObject]
 impl SubtitleTrack {
-    async fn url(&self, _format: Option<SubtitleFormat>) -> Option<String> {
-        None
+    /// common_types.ex:394-406. Note the prefix: subtitles live under
+    /// /api/player/v1, not the /api/v1 the stream URLs use.
+    ///
+    /// Every SubtitleFormat variant is matched: Elixir's Atom.to_string/1
+    /// lowercases the enum atom into the query value, including ssa/pgs/
+    /// vobsub/unknown which the plan's three-arm match omitted.
+    async fn url(&self, format: Option<SubtitleFormat>) -> Option<String> {
+        let format = match format.unwrap_or(SubtitleFormat::Vtt) {
+            SubtitleFormat::Srt => "srt",
+            SubtitleFormat::Vtt => "vtt",
+            SubtitleFormat::Ass => "ass",
+            SubtitleFormat::Ssa => "ssa",
+            SubtitleFormat::Pgs => "pgs",
+            SubtitleFormat::Vobsub => "vobsub",
+            SubtitleFormat::Unknown => "unknown",
+        };
+
+        Some(format!(
+            "/api/player/v1/subtitles/file/{}/{}?format={}",
+            self.media_file_id, self.track_id, format
+        ))
     }
 }
 

@@ -81,3 +81,19 @@ pub async fn first_file_id(app: Router, token: &str) -> String {
         .expect("the scanned movie should have a file")
         .to_string()
 }
+
+/// A movie with an English sidecar beside a real playable file.
+pub async fn library_with_sidecar() -> tempfile::TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    let movie = dir.path().join("Subbed Film (2022)");
+    std::fs::create_dir_all(&movie).unwrap();
+
+    synthesize(&movie.join("Subbed Film (2022) - 720p.mp4"));
+    std::fs::write(
+        movie.join("Subbed Film (2022) - 720p.eng.srt"),
+        "1\n00:00:00,000 --> 00:00:01,000\nhello\n",
+    )
+    .unwrap();
+
+    dir
+}

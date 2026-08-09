@@ -117,3 +117,40 @@ async fn an_unknown_id_is_a_graphql_error_not_a_null() {
 
     assert!(body["errors"].as_array().is_some_and(|e| !e.is_empty()));
 }
+
+#[tokio::test]
+async fn subtitle_tracks_carry_a_url_the_player_can_fetch() {
+    let media = support::library_with_sidecar().await;
+    let (app, _guard, token) =
+        app_over_library("admin", "adminadmin", media.path(), "movies").await;
+
+    let id = support::first_movie_id(app.clone(), &token).await;
+
+    let body = post_graphql_with_variables(
+        app,
+        MOVIE_WITH_FILES,
+        serde_json::json!({ "id": id }),
+        &token,
+    )
+    .await;
+
+    let file = &body["data"]["movie"]["files"][0];
+    let file_id = file["id"].as_str().unwrap();
+    let tracks = file["subtitles"].as_array().unwrap();
+
+    let external = tracks
+        .iter()
+        .find(|t| t["embedded"] == serde_json::json!(false))
+        .expect("the sidecar should appear as an external track");
+
+    assert_eq!(external["language"], serde_json::json!("eng"));
+    assert_eq!(external["format"], serde_json::json!("srt"));
+    // extractor.ex:203-207 titles external tracks this way.
+    assert_eq!(external["title"], serde_json::json!("English (External)"));
+
+    let track_id = external["trackId"].as_str().unwrap();
+    assert_eq!(
+        external["url"].as_str().unwrap(),
+        format!("/api/player/v1/subtitles/file/{file_id}/{track_id}?format=vtt")
+    );
+}
