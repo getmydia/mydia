@@ -1,6 +1,7 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../domain/models/download.dart';
+import '../../domain/models/download_settings.dart';
 import 'download_service.dart';
 import 'download_speed_tracker.dart';
 
@@ -55,13 +56,23 @@ Future<DownloadService> downloadManager(Ref ref) async {
   final service = getDownloadService();
   service.setDatabase(database);
 
-  // Settings are watched, so changing the concurrency limit or the auto-start
-  // toggle reaches the downloader instead of only being written to Hive.
-  final settings = await ref.watch(downloadSettingsProvider.future);
-  service.applySettings(
-    maxConcurrentDownloads: settings.maxConcurrentDownloads,
-    autoStartQueued: settings.autoStartQueued,
-  );
+  // Read the settings once, then listen for later changes. Watching would make
+  // this provider a dependent of downloadSettingsProvider, so saving the
+  // storage sheet would rebuild it, and the ref.onDispose below would dispose
+  // the service and cancel every download in flight. Applying settings must
+  // never cost the user their active downloads.
+  void pushSettings(DownloadSettings settings) {
+    service.applySettings(
+      maxConcurrentDownloads: settings.maxConcurrentDownloads,
+      autoStartQueued: settings.autoStartQueued,
+    );
+  }
+
+  pushSettings(await ref.read(downloadSettingsProvider.future));
+  ref.listen(downloadSettingsProvider, (_, next) {
+    final settings = next.value;
+    if (settings != null) pushSettings(settings);
+  });
 
   // Inject unified job service (works for both HTTP and P2P modes)
   final jobService = ref.watch(unifiedDownloadJobServiceProvider);

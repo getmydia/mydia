@@ -98,11 +98,13 @@ Future<DownloadQueueStatus> downloadQueueStatus(Ref ref) async {
           t.status == 'stalled')
       .toList();
 
+  // Deliberately excludes 'transcoding'. It is already counted as active
+  // above, because it holds a concurrency slot, and listing it here too
+  // double-counted it in totalPending. It also made the "Cancel N queued
+  // downloads" button overstate itself, since cancelAllQueued only acts on
+  // 'queued' and 'pending'.
   final queuedDownloads = allTasks
-      .where((t) =>
-          t.status == 'pending' ||
-          t.status == 'queued' ||
-          t.status == 'transcoding')
+      .where((t) => t.status == 'pending' || t.status == 'queued')
       .toList()
     // Sort by creation date (FIFO)
     ..sort((a, b) => a.createdAt.compareTo(b.createdAt));

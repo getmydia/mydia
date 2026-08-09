@@ -223,6 +223,19 @@ class _NativeDownloadService implements DownloadService {
   final StreamController<DownloadTask> _progressController =
       StreamController<DownloadTask>.broadcast();
 
+  /// Publish a task update to listeners.
+  ///
+  /// Downloads are fire-and-forget, so a loop can still be mid-flight when the
+  /// service is disposed and the controller closed. Adding to a closed
+  /// controller throws "Cannot add new events after calling close", which
+  /// surfaced as an intermittent test failure and would be a real crash on
+  /// teardown. Every emit goes through here rather than touching the
+  /// controller directly.
+  void _emit(DownloadTask task) {
+    if (_progressController.isClosed) return;
+    _progressController.add(task);
+  }
+
   // Foreground service for keeping the process alive on Android
   final _notificationService = DownloadNotificationService.instance;
   StreamSubscription<DownloadTask>? _notificationProgressSub;
@@ -278,7 +291,7 @@ class _NativeDownloadService implements DownloadService {
           error: 'Cancelled by user',
         );
         await _database!.saveTask(cancelledTask);
-        _progressController.add(cancelledTask);
+        _emit(cancelledTask);
 
         if (cancelledTask.filePath != null) {
           final file = File(cancelledTask.filePath!);
@@ -338,7 +351,7 @@ class _NativeDownloadService implements DownloadService {
             isProgressive: prepareResult.status != DownloadJobStatusType.ready,
           );
           await _database!.saveTask(preparedTask);
-          _progressController.add(preparedTask);
+          _emit(preparedTask);
 
           _driveProgressiveTask(preparedTask);
         } catch (e) {
@@ -347,7 +360,7 @@ class _NativeDownloadService implements DownloadService {
             error: 'Failed to prepare download: $e',
           );
           await _database!.saveTask(errorTask);
-          _progressController.add(errorTask);
+          _emit(errorTask);
         }
       } else if (task.downloadUrl != null) {
         _startDownloadTask(pendingTask);
@@ -425,12 +438,12 @@ class _NativeDownloadService implements DownloadService {
               '$maxRecoveryAttempts recovery attempts.',
         );
         await _database!.saveTask(failed);
-        _progressController.add(failed);
+        _emit(failed);
 
       case RecoveryAction.requeue:
         final queued = task.copyWith(status: 'queued');
         await _database!.saveTask(queued);
-        _progressController.add(queued);
+        _emit(queued);
 
       case RecoveryAction.reprepare:
         // No usable transcode job, so the partial file is meaningless.
@@ -443,7 +456,7 @@ class _NativeDownloadService implements DownloadService {
           lastProgressAt: _clock(),
         );
         await _database!.saveTask(claimed);
-        _progressController.add(claimed);
+        _emit(claimed);
 
         if (claimed.isProgressive && claimed.transcodeJobId != null) {
           _driveProgressiveTask(claimed);
@@ -490,7 +503,7 @@ class _NativeDownloadService implements DownloadService {
 
       final stalled = task.copyWith(status: 'stalled');
       await _database!.saveTask(stalled);
-      _progressController.add(stalled);
+      _emit(stalled);
     }
 
     if (found) await recoverStuckDownloads();
@@ -757,7 +770,7 @@ class _NativeDownloadService implements DownloadService {
     );
 
     await _database!.saveTask(task);
-    _progressController.add(task);
+    _emit(task);
 
     if (!shouldQueue) {
       _startDownloadTask(task);
@@ -845,7 +858,7 @@ class _NativeDownloadService implements DownloadService {
       );
 
       await _database!.saveTask(task);
-      _progressController.add(task);
+      _emit(task);
       return task;
     }
 
@@ -886,7 +899,7 @@ class _NativeDownloadService implements DownloadService {
     );
 
     await _database!.saveTask(task);
-    _progressController.add(task);
+    _emit(task);
 
     // Store the cancel callback for this task
     if (cancelJob != null) {
@@ -966,7 +979,7 @@ class _NativeDownloadService implements DownloadService {
           recoveryAttempts: 0,
         );
         await _database!.saveTask(updatedTask);
-        _progressController.add(updatedTask);
+        _emit(updatedTask);
 
         if (status.status == 'ready') {
           transcodeComplete = true;
@@ -994,7 +1007,7 @@ class _NativeDownloadService implements DownloadService {
         fileSize: lastKnownFileSize ?? updatedTask.fileSize,
       );
       await _database!.saveTask(updatedTask);
-      _progressController.add(updatedTask);
+      _emit(updatedTask);
 
       // Progressive download loop - handles the case where file is still growing
       final file = File(filePath);
@@ -1022,7 +1035,7 @@ class _NativeDownloadService implements DownloadService {
             downloadedBytes: downloadedBytes,
           );
           await _database!.saveTask(updatedTask);
-          _progressController.add(updatedTask);
+          _emit(updatedTask);
           await Future.delayed(const Duration(seconds: 1));
           continue;
         }
@@ -1081,7 +1094,7 @@ class _NativeDownloadService implements DownloadService {
                 );
                 _speedTracker.recordProgress(task.id, actualReceived);
                 await _database!.saveTask(updatedTask);
-                _progressController.add(updatedTask);
+                _emit(updatedTask);
               }
             },
           );
@@ -1127,9 +1140,7 @@ class _NativeDownloadService implements DownloadService {
               await _database!.saveTask(interrupted);
               // saveTask is what waitForStatus observes; tearDown may close the
               // progress stream before we reach add. Skip if already disposed.
-              if (!_progressController.isClosed) {
-                _progressController.add(interrupted);
-              }
+              _emit(interrupted);
               _cancelTokens.remove(task.id);
               _pausedTasks.remove(task.id);
               _speedTracker.clearTask(task.id);
@@ -1167,7 +1178,7 @@ class _NativeDownloadService implements DownloadService {
       // disk and must not be delayed or failed by an image fetch.
       unawaited(warmThumbnailCache(updatedTask));
 
-      _progressController.add(updatedTask);
+      _emit(updatedTask);
       _cancelTokens.remove(task.id);
       _pausedTasks.remove(task.id);
       _cancelJobCallbacks.remove(task.id);
@@ -1182,9 +1193,7 @@ class _NativeDownloadService implements DownloadService {
         recoveryAttempts: maxRecoveryAttempts,
       );
       await _database!.saveTask(failed);
-      if (!_progressController.isClosed) {
-        _progressController.add(failed);
-      }
+      _emit(failed);
       _cancelTokens.remove(task.id);
       _pausedTasks.remove(task.id);
       _cancelJobCallbacks.remove(task.id);
@@ -1199,9 +1208,7 @@ class _NativeDownloadService implements DownloadService {
       final errorMessage = e.message ?? 'Download failed';
       updatedTask = updatedTask.copyWith(status: 'failed', error: errorMessage);
       await _database!.saveTask(updatedTask);
-      if (!_progressController.isClosed) {
-        _progressController.add(updatedTask);
-      }
+      _emit(updatedTask);
       _cancelTokens.remove(task.id);
       _pausedTasks.remove(task.id);
       _cancelJobCallbacks.remove(task.id);
@@ -1213,9 +1220,7 @@ class _NativeDownloadService implements DownloadService {
         error: e.toString(),
       );
       await _database!.saveTask(errorTask);
-      if (!_progressController.isClosed) {
-        _progressController.add(errorTask);
-      }
+      _emit(errorTask);
       _cancelTokens.remove(task.id);
       _pausedTasks.remove(task.id);
       _cancelJobCallbacks.remove(task.id);
@@ -1256,7 +1261,7 @@ class _NativeDownloadService implements DownloadService {
         error: 'Download URL is not available',
       );
       await _database!.saveTask(errorTask);
-      _progressController.add(errorTask);
+      _emit(errorTask);
       return;
     }
 
@@ -1277,7 +1282,7 @@ class _NativeDownloadService implements DownloadService {
         filePath: filePath,
       );
       await _database!.saveTask(updatedTask);
-      _progressController.add(updatedTask);
+      _emit(updatedTask);
 
       // Download the file
       await _dio.download(
@@ -1302,7 +1307,7 @@ class _NativeDownloadService implements DownloadService {
             );
             _speedTracker.recordProgress(task.id, actualReceived);
             await _database!.saveTask(updatedTask);
-            _progressController.add(updatedTask);
+            _emit(updatedTask);
           }
         },
       );
@@ -1326,7 +1331,7 @@ class _NativeDownloadService implements DownloadService {
       // disk and must not be delayed or failed by an image fetch.
       unawaited(warmThumbnailCache(updatedTask));
 
-      _progressController.add(updatedTask);
+      _emit(updatedTask);
       _cancelTokens.remove(task.id);
       _speedTracker.clearTask(task.id);
 
@@ -1346,7 +1351,7 @@ class _NativeDownloadService implements DownloadService {
             error: 'Download cancelled',
           );
           await _database!.saveTask(updatedTask);
-          _progressController.add(updatedTask);
+          _emit(updatedTask);
         }
       } else {
         updatedTask = task.copyWith(
@@ -1354,7 +1359,7 @@ class _NativeDownloadService implements DownloadService {
           error: e.message ?? 'Download failed',
         );
         await _database!.saveTask(updatedTask);
-        _progressController.add(updatedTask);
+        _emit(updatedTask);
       }
       _cancelTokens.remove(task.id);
       _speedTracker.clearTask(task.id);
@@ -1367,7 +1372,7 @@ class _NativeDownloadService implements DownloadService {
         error: e.toString(),
       );
       await _database!.saveTask(errorTask);
-      _progressController.add(errorTask);
+      _emit(errorTask);
       _cancelTokens.remove(task.id);
       _speedTracker.clearTask(task.id);
 
@@ -1388,7 +1393,7 @@ class _NativeDownloadService implements DownloadService {
       _pausedTasks[taskId] = true;
       final pausedTask = task.copyWith(status: 'paused');
       await _database!.saveTask(pausedTask);
-      _progressController.add(pausedTask);
+      _emit(pausedTask);
       return;
     }
 
@@ -1399,7 +1404,7 @@ class _NativeDownloadService implements DownloadService {
     // emits a spurious 'cancelled' on the progress stream on the way.
     final pausedTask = task.copyWith(status: 'paused');
     await _database!.saveTask(pausedTask);
-    _progressController.add(pausedTask);
+    _emit(pausedTask);
 
     // Cancel the token if one is live. An orphan has none, because the map is
     // rebuilt empty on every launch, and it still has to become paused rather
@@ -1427,7 +1432,7 @@ class _NativeDownloadService implements DownloadService {
         lastProgressAt: _clock(),
       );
       await _database!.saveTask(resumedTask);
-      _progressController.add(resumedTask);
+      _emit(resumedTask);
 
       if (!_cancelTokens.containsKey(taskId) && _jobService != null) {
         _driveProgressiveTask(resumedTask);
@@ -1491,7 +1496,7 @@ class _NativeDownloadService implements DownloadService {
         error: 'Cancelled by user',
       );
       await _database!.saveTask(cancelledTask);
-      _progressController.add(cancelledTask);
+      _emit(cancelledTask);
 
       // 5. Delete partial file if exists
       if (task.filePath != null) {
@@ -1585,7 +1590,7 @@ class _NativeDownloadService implements DownloadService {
               : 'transcoding',
         );
         await _database!.saveTask(restarted);
-        _progressController.add(restarted);
+        _emit(restarted);
         _driveProgressiveTask(restarted);
       } catch (e) {
         final errorTask = cleared.copyWith(
@@ -1593,13 +1598,13 @@ class _NativeDownloadService implements DownloadService {
           error: 'Restart failed: $e',
         );
         await _database!.saveTask(errorTask);
-        _progressController.add(errorTask);
+        _emit(errorTask);
       }
       return;
     }
 
     await _database!.saveTask(cleared);
-    _progressController.add(cleared);
+    _emit(cleared);
     await _startDownloadTask(cleared);
   }
 
@@ -1667,7 +1672,7 @@ class _NativeDownloadService implements DownloadService {
       // Delete task record
       await _database!.deleteTask(task.id);
       // Emit a cancelled event so UI updates
-      _progressController.add(task.copyWith(status: 'cancelled'));
+      _emit(task.copyWith(status: 'cancelled'));
     }
 
     return failedTasks.length;
