@@ -40,6 +40,13 @@ defmodule MydiaWeb.AdminComponents do
         Quality
       </.tab_link>
       <.tab_link
+        active={@active_tab == :custom_formats}
+        to="/admin/config/custom-formats"
+        icon="hero-language"
+      >
+        Custom Formats
+      </.tab_link>
+      <.tab_link
         active={@active_tab == :clients}
         to="/admin/config/clients"
         icon="hero-arrow-down-tray"

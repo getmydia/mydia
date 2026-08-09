@@ -1,116 +1,118 @@
-<Layouts.app flash={@flash} current_scope={@current_scope}>
-  <div class="max-w-4xl mx-auto p-4 space-y-4">
-    <div class="flex items-center justify-between">
-      <div>
-        <h1 class="text-2xl font-bold">Custom Formats</h1>
-        <p class="text-sm opacity-70">
-          Match release titles by regex. Assign scores per quality profile.
-        </p>
+<Layouts.app {assigns}>
+  <.admin_page active_tab={@active_tab}>
+    <div class="space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <h1 class="text-2xl font-bold">Custom Formats</h1>
+          <p class="text-sm opacity-70">
+            Match release titles by regex. Assign scores per quality profile.
+          </p>
+        </div>
+        <.button id="custom-format-new" phx-click="new" class="btn-primary">
+          <.icon name="hero-plus" class="w-4 h-4" /> New format
+        </.button>
       </div>
-      <.button id="custom-format-new" phx-click="new" class="btn-primary">
-        <.icon name="hero-plus" class="w-4 h-4" /> New format
-      </.button>
-    </div>
 
-    <div class="card bg-base-100 shadow">
-      <div class="card-body p-0 divide-y divide-base-200">
-        <div
-          :for={format <- @formats}
-          id={"custom-format-row-#{format.slug}"}
-          class="flex items-center gap-3 p-4"
-        >
-          <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-2">
-              <span class="font-medium">{format.name}</span>
-              <span :if={format.builtin?} class="badge badge-sm badge-ghost">Built-in</span>
-              <span :if={format.overridden?} class="badge badge-sm badge-warning">Edited</span>
+      <div class="card bg-base-100 shadow">
+        <div class="card-body p-0 divide-y divide-base-200">
+          <div
+            :for={format <- @formats}
+            id={"custom-format-row-#{format.slug}"}
+            class="flex items-center gap-3 p-4"
+          >
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2">
+                <span class="font-medium">{format.name}</span>
+                <span :if={format.builtin?} class="badge badge-sm badge-ghost">Built-in</span>
+                <span :if={format.overridden?} class="badge badge-sm badge-warning">Edited</span>
+              </div>
+              <div class="text-xs opacity-60 truncate font-mono">
+                {Enum.join(format.patterns, "  ")}
+              </div>
             </div>
-            <div class="text-xs opacity-60 truncate font-mono">
-              {Enum.join(format.patterns, "  ")}
-            </div>
+
+            <.button
+              id={"custom-format-edit-#{format.slug}"}
+              phx-click="edit"
+              phx-value-slug={format.slug}
+              class="btn-sm btn-ghost"
+            >
+              Edit
+            </.button>
+
+            <.button
+              :if={format.overridden?}
+              id={"custom-format-reset-#{format.slug}"}
+              phx-click="reset"
+              phx-value-slug={format.slug}
+              class="btn-sm btn-ghost"
+            >
+              Reset
+            </.button>
+
+            <.button
+              :if={not format.builtin?}
+              id={"custom-format-delete-#{format.slug}"}
+              phx-click="delete"
+              phx-value-slug={format.slug}
+              data-confirm={"Delete #{format.name}?"}
+              class="btn-sm btn-ghost text-error"
+            >
+              Delete
+            </.button>
           </div>
-
-          <.button
-            id={"custom-format-edit-#{format.slug}"}
-            phx-click="edit"
-            phx-value-slug={format.slug}
-            class="btn-sm btn-ghost"
-          >
-            Edit
-          </.button>
-
-          <.button
-            :if={format.overridden?}
-            id={"custom-format-reset-#{format.slug}"}
-            phx-click="reset"
-            phx-value-slug={format.slug}
-            class="btn-sm btn-ghost"
-          >
-            Reset
-          </.button>
-
-          <.button
-            :if={not format.builtin?}
-            id={"custom-format-delete-#{format.slug}"}
-            phx-click="delete"
-            phx-value-slug={format.slug}
-            data-confirm={"Delete #{format.name}?"}
-            class="btn-sm btn-ghost text-error"
-          >
-            Delete
-          </.button>
         </div>
       </div>
-    </div>
 
-    <div :if={@editing} class="modal modal-open">
-      <div class="modal-box max-w-2xl">
-        <h3 class="font-bold text-lg mb-4">
-          {if @editing.slug, do: "Edit #{@editing.name}", else: "New format"}
-        </h3>
+      <div :if={@editing} class="modal modal-open">
+        <div class="modal-box max-w-2xl">
+          <h3 class="font-bold text-lg mb-4">
+            {if @editing.slug, do: "Edit #{@editing.name}", else: "New format"}
+          </h3>
 
-        <.form for={@form} id="custom-format-form" phx-change="validate" phx-submit="save">
-          <.input field={@form[:name]} type="text" label="Name" disabled={@editing.builtin?} />
-          <.input field={@form[:description]} type="text" label="Description" />
-          <.input
-            field={@form[:patterns_text]}
-            type="textarea"
-            label="Patterns (one per line)"
-            rows="6"
-          />
+          <.form for={@form} id="custom-format-form" phx-change="validate" phx-submit="save">
+            <.input field={@form[:name]} type="text" label="Name" disabled={@editing.builtin?} />
+            <.input field={@form[:description]} type="text" label="Description" />
+            <.input
+              field={@form[:patterns_text]}
+              type="textarea"
+              label="Patterns (one per line)"
+              rows="6"
+            />
 
-          <div class="divider">Test</div>
+            <div class="divider">Test</div>
 
-          <.input
-            field={@form[:test_title]}
-            id="custom-format-test-input"
-            type="text"
-            label="Paste a release title"
-            placeholder="Film.2024.VFF.1080p.WEB-DL.x264-GROUP"
-          />
+            <.input
+              field={@form[:test_title]}
+              id="custom-format-test-input"
+              type="text"
+              label="Paste a release title"
+              placeholder="Film.2024.VFF.1080p.WEB-DL.x264-GROUP"
+            />
 
-          <ul :if={@test_results != []} class="mt-2 space-y-1 text-sm">
-            <li :for={r <- @test_results} class="flex items-center gap-2 font-mono">
-              <span :if={r.status == :match} class="custom-format-test-match text-success">
-                <.icon name="hero-check-circle" class="w-4 h-4" />
-              </span>
-              <span :if={r.status == :miss} class="opacity-40">
-                <.icon name="hero-x-circle" class="w-4 h-4" />
-              </span>
-              <span :if={match?({:error, _}, r.status)} class="text-error">
-                <.icon name="hero-exclamation-triangle" class="w-4 h-4" />
-              </span>
-              <span>{r.pattern}</span>
-            </li>
-          </ul>
+            <ul :if={@test_results != []} class="mt-2 space-y-1 text-sm">
+              <li :for={r <- @test_results} class="flex items-center gap-2 font-mono">
+                <span :if={r.status == :match} class="custom-format-test-match text-success">
+                  <.icon name="hero-check-circle" class="w-4 h-4" />
+                </span>
+                <span :if={r.status == :miss} class="opacity-40">
+                  <.icon name="hero-x-circle" class="w-4 h-4" />
+                </span>
+                <span :if={match?({:error, _}, r.status)} class="text-error">
+                  <.icon name="hero-exclamation-triangle" class="w-4 h-4" />
+                </span>
+                <span>{r.pattern}</span>
+              </li>
+            </ul>
 
-          <div class="modal-action">
-            <.button type="button" phx-click="cancel" class="btn-ghost">Cancel</.button>
-            <.button type="submit" class="btn-primary">Save</.button>
-          </div>
-        </.form>
+            <div class="modal-action">
+              <.button type="button" phx-click="cancel" class="btn-ghost">Cancel</.button>
+              <.button type="submit" class="btn-primary">Save</.button>
+            </div>
+          </.form>
+        </div>
+        <div class="modal-backdrop" phx-click="cancel"></div>
       </div>
-      <div class="modal-backdrop" phx-click="cancel"></div>
     </div>
-  </div>
+  </.admin_page>
 </Layouts.app>

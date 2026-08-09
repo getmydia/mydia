@@ -16,6 +16,20 @@ defmodule MydiaWeb.AdminCustomFormatsLiveTest do
     assert has_element?(view, "#custom-format-row-lang-vfq")
   end
 
+  # Without a nav entry the page is reachable only by typing the URL, which for
+  # a self-hosted operator means the feature may as well not exist.
+  test "is reachable from the admin tab nav", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/admin/config/custom-formats")
+
+    assert has_element?(view, ~s|a[href="/admin/config/custom-formats"]|)
+  end
+
+  test "the admin nav on a sibling page links here", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/admin/config/quality")
+
+    assert has_element?(view, ~s|a[href="/admin/config/custom-formats"]|)
+  end
+
   test "opens the edit modal for a built-in", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/admin/config/custom-formats")
 
