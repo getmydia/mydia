@@ -14,20 +14,13 @@ import '../../../widgets/glass_surface.dart';
 class SettingsCard extends StatelessWidget {
   final List<Widget> children;
 
-  /// Optional fill for the hero variant, which uses a gradient rather than the
-  /// flat container tone.
-  final Gradient? gradient;
-
-  const SettingsCard({super.key, required this.children, this.gradient});
+  const SettingsCard({super.key, required this.children});
 
   @override
   Widget build(BuildContext context) {
     return GlassSurface.faux(
       borderRadius: BorderRadius.circular(AppTheme.radiusCard),
-      fillColor: gradient == null
-          ? DepthTokens.surfaceVariant.withValues(alpha: 0.55)
-          : null,
-      gradient: gradient,
+      fillColor: DepthTokens.surfaceVariant.withValues(alpha: 0.55),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,

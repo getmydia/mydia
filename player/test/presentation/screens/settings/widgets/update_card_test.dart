@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/update/update_provider.dart';
 import 'package:player/domain/models/app_update.dart';
+import 'package:player/presentation/screens/settings/widgets/settings_section.dart';
 import 'package:player/presentation/screens/settings/widgets/update_card.dart';
 
 class _FakeUpdateNotifier extends UpdateNotifier {
@@ -35,6 +36,40 @@ Future<void> _pump(
       child: MaterialApp(
         home: Scaffold(
           body: ListView(
+            children: [UpdateCard(supportedOverride: supportedOverride)],
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.pump();
+}
+
+/// Pumps the card in a [Column] rather than a [ListView], for the two tests
+/// that measure its height.
+///
+/// A zero-height child inside a ListView is culled by the sliver, so
+/// `find.byType(UpdateCard)` matches nothing at all and `getSize` throws
+/// `Bad state: No element` rather than reporting zero. A Column keeps the
+/// element in the tree at zero height, which is the thing under test.
+///
+/// `stretch` so children get the full width, matching what the ListView in
+/// [_pump] gives them.
+Future<void> _pumpInColumn(
+  WidgetTester tester, {
+  required UpdateState state,
+  bool? supportedOverride,
+}) async {
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        updateProvider.overrideWith(() => _FakeUpdateNotifier(state)),
+      ],
+      child: MaterialApp(
+        home: Scaffold(
+          body: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
             children: [UpdateCard(supportedOverride: supportedOverride)],
           ),
         ),
@@ -126,5 +161,35 @@ void main() {
           .value,
       isNull,
     );
+  });
+
+  testWidgets('a hidden card contributes no height at all', (tester) async {
+    // The screen emits no spacer around this card, so a hidden card that still
+    // occupied space would open a gap under the identity band.
+    await _pumpInColumn(
+      tester,
+      state: const UpdateState(currentVersion: '0.14.2'),
+      supportedOverride: true,
+    );
+
+    expect(tester.getSize(find.byType(UpdateCard)).height, 0);
+  });
+
+  testWidgets(
+      'a visible card carries the space that separates it from the '
+      'section below', (tester) async {
+    await _pumpInColumn(
+      tester,
+      state: UpdateState(
+        currentVersion: '0.14.2',
+        availableUpdate: _update(),
+      ),
+      supportedOverride: true,
+    );
+
+    final outer = tester.getSize(find.byType(UpdateCard)).height;
+    final card = tester.getSize(find.byType(SettingsCard)).height;
+
+    expect(outer - card, 18);
   });
 }

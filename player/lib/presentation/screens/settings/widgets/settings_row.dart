@@ -18,6 +18,11 @@ class SettingsRow extends StatelessWidget {
   /// Muted trailing text. `.navigation` only.
   final String? valueLabel;
 
+  /// Colour of a small status dot drawn before the subtitle. `.navigation`
+  /// only, and only meaningful alongside a subtitle. Null draws no dot, which
+  /// is every row that is not reporting live state.
+  final Color? subtitleDotColor;
+
   /// Arbitrary trailing widget. `.action` only.
   final Widget? trailing;
 
@@ -36,6 +41,7 @@ class SettingsRow extends StatelessWidget {
     required this.title,
     this.subtitle,
     String? value,
+    this.subtitleDotColor,
     required this.onTap,
   })  : _kind = _RowKind.navigation,
         valueLabel = value,
@@ -60,7 +66,8 @@ class SettingsRow extends StatelessWidget {
         trailing = null,
         onTap = null,
         danger = false,
-        toggleValue = value;
+        toggleValue = value,
+        subtitleDotColor = null;
 
   /// A row that does something in place, or that simply states a fact.
   ///
@@ -78,7 +85,8 @@ class SettingsRow extends StatelessWidget {
   })  : _kind = _RowKind.action,
         valueLabel = null,
         toggleValue = false,
-        onChanged = null;
+        onChanged = null,
+        subtitleDotColor = null;
 
   @override
   Widget build(BuildContext context) {
@@ -86,6 +94,7 @@ class SettingsRow extends StatelessWidget {
     final isToggle = _kind == _RowKind.toggle;
     final dimmed = (_kind == _RowKind.navigation && onTap == null) ||
         (isToggle && onChanged == null);
+    final subtitleText = subtitle;
 
     final content = Padding(
       padding:
@@ -110,16 +119,9 @@ class SettingsRow extends StatelessWidget {
                       color: danger ? scheme.error : AppColors.textPrimary,
                     ),
                   ),
-                  if (subtitle != null) ...[
+                  if (subtitleText != null) ...[
                     const SizedBox(height: 2),
-                    Text(
-                      subtitle!,
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        height: 1.4,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
+                    _Subtitle(text: subtitleText, dotColor: subtitleDotColor),
                   ],
                 ],
               ),
@@ -195,6 +197,38 @@ class _ValueText extends StatelessWidget {
     return Text(
       value,
       style: const TextStyle(fontSize: 13.5, color: AppColors.textSecondary),
+    );
+  }
+}
+
+class _Subtitle extends StatelessWidget {
+  const _Subtitle({required this.text, this.dotColor});
+
+  final String text;
+  final Color? dotColor;
+
+  static const _style = TextStyle(
+    fontSize: 12.5,
+    height: 1.4,
+    color: AppColors.textSecondary,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final color = dotColor;
+    if (color == null) return Text(text, style: _style);
+
+    return Row(
+      children: [
+        Container(
+          key: const Key('settings-row-status-dot'),
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+        ),
+        const SizedBox(width: 7),
+        Flexible(child: Text(text, style: _style)),
+      ],
     );
   }
 }
