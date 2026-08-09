@@ -221,4 +221,45 @@ void main() {
     expect(anime.items.single.id, 'anime');
     expect(cartoon.items.single.id, 'cartoon');
   });
+
+  test('flat-list loadMore clears hasMore when the last page is short',
+      () async {
+    var call = 0;
+    final link = StubLink((_, __) {
+      call++;
+      return call == 1
+          ? _flatListPage('unwatched', List.generate(20, (i) => 'p1-$i'))
+          : _flatListPage('unwatched', List.generate(5, (i) => 'p2-$i'));
+    });
+    final container = ProviderContainer(
+      overrides: [
+        asyncGraphqlClientProvider.overrideWith(
+          (ref) async => stubClient(link),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    const filter = MediaFilter(
+      kind: MediaKind.movies,
+      category: null,
+      watch: WatchScope.unwatched,
+      sort: LibrarySort.defaultSort,
+    );
+    final provider = libraryControllerProvider(filter);
+
+    await waitForValue(
+        container, provider, (value) => value.items.length == 20);
+    expect(container.read(provider).value?.hasMore, isTrue);
+
+    await container.read(provider.notifier).loadMore();
+
+    final data = await waitForValue(
+      container,
+      provider,
+      (value) => value.items.length == 25,
+    );
+
+    expect(data.hasMore, isFalse);
+  });
 }

@@ -14,6 +14,11 @@ part 'library_controller.g.dart';
 
 const int _pageSize = 20;
 
+/// Synthetic pagination metadata attached by [_mergeFlatList]. Not a GraphQL
+/// field; lets [_parseFlatList] read hasMore from the last fetch, not the
+/// cumulative merged length.
+const _flatPageInfoKey = '__flatPageInfo';
+
 enum LibraryType { movies, tvShows }
 
 const String moviesListQuery = r'''
@@ -214,14 +219,22 @@ LibraryData _parseFlatList(
           ))
       .toList();
 
+  final pageInfo = data[_flatPageInfoKey] as Map<String, dynamic>?;
+  final hasMore = pageInfo != null
+      ? pageInfo['hasNextPage'] as bool? ?? false
+      : items.length >= _pageSize;
+  final endCursor = pageInfo != null
+      ? pageInfo['endCursor'] as String?
+      : (items.isEmpty ? null : _encodeOffsetCursor(items.length - 1));
+
   // These queries return a bare list with no pageInfo. A short page means the
   // end; a full page means there may be more, and the offset cursor the server
   // builds is positional, so the cursor is the item count so far.
   return LibraryData(
     items: items,
-    hasMore: items.length >= _pageSize,
+    hasMore: hasMore,
     totalCount: null,
-    endCursor: items.isEmpty ? null : _encodeOffsetCursor(items.length - 1),
+    endCursor: endCursor,
   );
 }
 
@@ -235,10 +248,16 @@ Map<String, dynamic>? _mergeFlatList(
 
   final previousList = previous[field] as List<dynamic>? ?? const [];
   final fetchedList = fetched[field] as List<dynamic>? ?? const [];
+  final merged = [...previousList, ...fetchedList];
 
   return {
     ...fetched,
-    field: [...previousList, ...fetchedList],
+    field: merged,
+    _flatPageInfoKey: {
+      'hasNextPage': fetchedList.length >= _pageSize,
+      'endCursor':
+          merged.isEmpty ? null : _encodeOffsetCursor(merged.length - 1),
+    },
   };
 }
 
