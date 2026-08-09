@@ -49,4 +49,46 @@ void main() {
       );
     });
   });
+
+  group('strategiesAllowNativeDirectPlay', () {
+    test('true when first is DIRECT_PLAY, REMUX, or HLS_COPY', () {
+      expect(
+        strategiesAllowNativeDirectPlay(['DIRECT_PLAY', 'TRANSCODE']),
+        isTrue,
+      );
+      expect(
+        strategiesAllowNativeDirectPlay(['REMUX', 'HLS_COPY', 'TRANSCODE']),
+        isTrue,
+      );
+      expect(
+        strategiesAllowNativeDirectPlay(['HLS_COPY', 'TRANSCODE']),
+        isTrue,
+      );
+    });
+
+    test('false when empty or first is TRANSCODE', () {
+      expect(strategiesAllowNativeDirectPlay([]), isFalse);
+      expect(strategiesAllowNativeDirectPlay(['TRANSCODE']), isFalse);
+    });
+  });
+
+  group('strategiesAllowLosslessDelivery', () {
+    test('true when any HLS_COPY or REMUX is present', () {
+      expect(
+        strategiesAllowLosslessDelivery(['REMUX', 'TRANSCODE']),
+        isTrue,
+      );
+      expect(
+        strategiesAllowLosslessDelivery(['HLS_COPY', 'TRANSCODE']),
+        isTrue,
+      );
+    });
+
+    test('false for DIRECT_PLAY + TRANSCODE only (web direct-play shape)', () {
+      expect(
+        strategiesAllowLosslessDelivery(['DIRECT_PLAY', 'TRANSCODE']),
+        isFalse,
+      );
+    });
+  });
 }
