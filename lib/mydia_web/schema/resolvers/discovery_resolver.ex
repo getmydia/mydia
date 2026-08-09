@@ -173,12 +173,17 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
           media_items
           |> Enum.reject(&MapSet.member?(watched_ids, &1.id))
           |> maybe_filter_by_type(types)
-          |> sort_items(sort, resolution)
 
+        # Built before ordering, because the default order is keyed on it.
         added_at = RecentlyAdded.added_at_map(ids: Enum.map(unwatched, & &1.id))
 
+        ordered =
+          if sort,
+            do: sort_items(unwatched, sort, resolution),
+            else: sort_by_arrival(unwatched, added_at)
+
         all_items =
-          Enum.map(unwatched, fn item ->
+          Enum.map(ordered, fn item ->
             ItemBuilder.recently_added_item(item, added_at: Map.get(added_at, item.id))
           end)
 
@@ -205,13 +210,41 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
   # Sorting must run over the whole list before `paginate_simple/3`, whose
   # cursor is a positional offset. `MediaSort` is stable with nil keys last and
   # seeds random with phash2, so page boundaries hold across requests.
+  # An explicit sort always wins. Without one, each surface keeps the default
+  # ordering it has always had, and both of those are total orders, which is
+  # what `paginate_simple/3`'s positional cursor requires:
+  #
+  #   * `unwatched` orders by content arrival via `sort_by_arrival/2`.
+  #   * `favorites` keeps `list_collection_items/2`'s `asc: position`, which is
+  #     the order the user dragged items into and is already deterministic.
+  #
+  # Handing back an unordered repo result here instead would let page
+  # boundaries shift between the page-1 and page-2 requests on Postgres, which
+  # surfaces as duplicated and skipped items mid-scroll rather than as anything
+  # resembling a sort bug.
   defp sort_items(items, nil, _resolution), do: items
 
   defp sort_items(items, sort, resolution) do
     user = current_user(resolution)
     effective = MediaSort.effective_sort(sort, user)
-    progress = MediaSort.progress_map(user, Map.get(effective, :field))
+    progress = MediaSort.progress_map(user, sort_field(effective))
     MediaSort.sort(items, effective, progress)
+  end
+
+  defp sort_field(nil), do: nil
+  defp sort_field(sort), do: Map.get(sort, :field)
+
+  # `unwatched`'s default ordering: newest content first, by when the file
+  # actually arrived rather than when the record happened to be written.
+  # `MydiaWeb.SchemaTest` pins this distinction, and it only fails on Postgres,
+  # where an unordered `list_media_items/1` returns rows in whatever order the
+  # scan produced. SQLite hands back rowid order, which masks the bug.
+  defp sort_by_arrival(items, added_at) do
+    Enum.sort_by(
+      items,
+      &(Map.get(added_at, &1.id) || &1.inserted_at),
+      {:desc, DateTime}
+    )
   end
 
   defp current_user(%{context: context}), do: context[:current_user]

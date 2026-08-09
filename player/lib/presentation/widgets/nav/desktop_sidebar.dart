@@ -7,7 +7,11 @@ import '../glass_surface.dart';
 import 'back_to_mydia_button.dart';
 import 'sidebar_content.dart';
 
-/// Desktop sidebar navigation with collapsible sections
+/// Desktop sidebar navigation.
+///
+/// Renders one flat, reorderable list of destinations. The collapsible Home
+/// and Library sections this widget used to carry were removed when built-in
+/// destinations and saved filters became the same kind of thing.
 class DesktopSidebar extends StatelessWidget {
   final String location;
   final ValueChanged<String> onNavigate;

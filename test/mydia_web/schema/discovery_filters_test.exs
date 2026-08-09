@@ -70,6 +70,26 @@ defmodule MydiaWeb.Schema.DiscoveryFiltersTest do
     assert titles == ["Anime Film"]
   end
 
+  test "unwatched with no sort returns a stable order across calls", %{user: user} do
+    # `paginate_simple/3` pages by positional offset, so an omitted sort must
+    # still produce a total order. `list_media_items/1` carries no ORDER BY,
+    # and on Postgres an unordered scan can hand back a different order per
+    # request, which surfaces as duplicated and skipped items mid-scroll.
+    # Asserting stability rather than one specific sequence keeps this from
+    # depending on timestamp granularity between fixtures.
+    for title <- ["Zulu", "Alpha", "Mike"] do
+      item = media_item_fixture(%{title: title, type: "movie", category: "movie"})
+      # `unwatched` filters on has_files, so an item with no file is invisible.
+      media_file_fixture(%{media_item_id: item.id})
+    end
+
+    first_call = Enum.map(run_query(@query, %{}, user)["unwatched"], & &1["title"])
+    second_call = Enum.map(run_query(@query, %{}, user)["unwatched"], & &1["title"])
+
+    assert length(first_call) == 3
+    assert first_call == second_call
+  end
+
   defp run_query(query, variables, user) do
     assert {:ok, %{data: data}} =
              Absinthe.run(query, MydiaWeb.Schema,
