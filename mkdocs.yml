@@ -123,6 +123,8 @@ nav:
           - using/explanation/remote-access.md
           - using/explanation/how-mydia-runs.md
           - using/explanation/vs-radarr-sonarr.md
+  - Configuration:
+      - configuration/custom-formats.md
   - Building Plugins:
       - plugins/index.md
       - Tutorial:
