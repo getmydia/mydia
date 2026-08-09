@@ -155,6 +155,9 @@ defmodule Mydia.Media do
     - `:actor_id` - The ID of the actor (user_id, job name, etc.)
     - `:season_monitoring` - For TV shows, which seasons to fetch ("all", "first", "latest", "none") - defaults to "all"
     - `:skip_episode_refresh` - Skip automatic episode fetching (for tests or special cases) - defaults to false
+    - `:config` - Metadata relay config forwarded to `refresh_episodes_for_tv_show/2`.
+      Callers that inject a Bypass (or any non-default relay) must pass it here;
+      otherwise the automatic refresh silently uses `Metadata.default_relay_config/0`.
   """
   @spec create_media_item(map(), keyword()) :: {:ok, MediaItem.t()} | {:error, Ecto.Changeset.t()}
   def create_media_item(attrs \\ %{}, opts \\ []) do
@@ -178,7 +181,11 @@ defmodule Mydia.Media do
       if media_item.type == "tv_show" and not Keyword.get(opts, :skip_episode_refresh, false) do
         season_monitoring = Keyword.get(opts, :season_monitoring, "all")
 
-        case refresh_episodes_for_tv_show(media_item, season_monitoring: season_monitoring) do
+        refresh_opts =
+          [season_monitoring: season_monitoring]
+          |> maybe_put_refresh_config(Keyword.get(opts, :config))
+
+        case refresh_episodes_for_tv_show(media_item, refresh_opts) do
           {:ok, count} ->
             Logger.info("Created #{count} episodes for #{media_item.title}")
 
@@ -192,6 +199,9 @@ defmodule Mydia.Media do
       {:ok, media_item}
     end
   end
+
+  defp maybe_put_refresh_config(opts, nil), do: opts
+  defp maybe_put_refresh_config(opts, config), do: Keyword.put(opts, :config, config)
 
   @doc """
   Updates a media item.
@@ -1114,6 +1124,9 @@ defmodule Mydia.Media do
     - `media_item` - The TV show media item (must be type "tv_show")
     - `opts` - Options for episode creation
       - `:season_monitoring` - Which seasons to fetch ("all", "first", "latest", "none")
+      - `:config` - Metadata relay config. Defaults to `Metadata.default_relay_config/0`.
+        Callers that inject a Bypass (or any non-default relay) must pass it;
+        otherwise the refresh silently uses the global default.
 
   ## Returns
     - `{:ok, count}` - Number of episodes created
@@ -1135,7 +1148,12 @@ defmodule Mydia.Media do
     alias Mydia.Metadata
 
     season_monitoring = Keyword.get(opts, :season_monitoring, "all")
-    config = Metadata.default_relay_config()
+    # Honour an injected relay config (Bypass in tests, or a caller-specific
+    # relay). Ignoring opts[:config] silently falls back to the global default
+    # and was the root of the MediaAddHelpers CI timeout flake: the Bypass
+    # stubs covered the add-path fetch, then create_media_item refreshed
+    # against the real relay with Task.async_stream timeout: :infinity.
+    config = Keyword.get(opts, :config) || Metadata.default_relay_config()
 
     # Resolve the provider to fetch from. `metadata_source` (when set) is the
     # authoritative provenance; only fall back to the legacy TVDB-precedence
@@ -1196,9 +1214,6 @@ defmodule Mydia.Media do
 
         {:ok, episode_count}
       else
-        # Fetch fresh metadata to get seasons info
-        config = Metadata.default_relay_config()
-
         case Metadata.fetch_by_id(config, provider_id,
                media_type: :tv_show,
                provider: provider_source

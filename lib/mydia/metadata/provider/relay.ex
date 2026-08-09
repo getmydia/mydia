@@ -763,11 +763,15 @@ defmodule Mydia.Metadata.Provider.Relay do
         |> Task.async_stream(
           fn ep -> fetch_tvdb_episode_translations(req, ep) end,
           max_concurrency: 5,
-          timeout: :infinity
+          # Bound each episode fetch. `:infinity` let a single hung Bypass/relay
+          # request pin the whole ExUnit case until the 60s wall-clock timeout.
+          timeout: 15_000,
+          on_timeout: :kill_task
         )
-        |> Enum.flat_map(fn
-          {:ok, ep} -> [ep]
-          {:exit, _reason} -> []
+        |> Enum.zip(episodes)
+        |> Enum.map(fn
+          {{:ok, ep}, _orig} -> ep
+          {{:exit, _reason}, orig} -> orig
         end)
 
       Map.put(data, "episodes", enriched)
