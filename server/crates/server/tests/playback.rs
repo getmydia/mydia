@@ -154,3 +154,63 @@ async fn subtitle_tracks_carry_a_url_the_player_can_fetch() {
         format!("/api/player/v1/subtitles/file/{file_id}/{track_id}?format=vtt")
     );
 }
+
+/// Every playback-related document the player ships, run verbatim against the
+/// server. Read from the repository rather than copied, so a change to the
+/// player's documents fails here rather than drifting silently.
+#[tokio::test]
+async fn every_player_playback_document_resolves() {
+    let media = support::library_with_sidecar().await;
+    let (app, _guard, token) =
+        app_over_library("admin", "adminadmin", media.path(), "movies").await;
+
+    let id = support::first_movie_id(app.clone(), &token).await;
+    let file_id = support::first_file_id(app.clone(), &token).await;
+
+    // Path is relative to this package's manifest dir (server/crates/server),
+    // not the process cwd, matching sdl_parity and the other contract readers.
+    let fragment = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../../player/lib/graphql/fragments/media_file_fragment.graphql"
+    ))
+    .expect("the player's MediaFileFragment should be readable from the workspace");
+
+    let document = format!(
+        "{fragment}\n{}",
+        r#"
+query Probe($id: ID!) {
+  movie(id: $id) { id files { ...MediaFileFragment } }
+}
+"#
+    );
+
+    let body = post_graphql_with_variables(
+        app.clone(),
+        &document,
+        serde_json::json!({ "id": id }),
+        &token,
+    )
+    .await;
+
+    assert!(
+        body["errors"].is_null(),
+        "the player's own fragment did not resolve: {}",
+        body["errors"]
+    );
+
+    // And the candidates document, by file id rather than by movie, which is
+    // the path player_screen.dart takes first.
+    let body = post_graphql_with_variables(
+        app,
+        CANDIDATES,
+        serde_json::json!({ "contentType": "file", "id": file_id }),
+        &token,
+    )
+    .await;
+
+    assert!(body["errors"].is_null(), "{}", body["errors"]);
+    assert_eq!(
+        body["data"]["streamingCandidates"]["fileId"],
+        serde_json::json!(file_id)
+    );
+}
