@@ -194,6 +194,11 @@ class _WebDownloadService implements DownloadService {
   }
 
   @override
+  Future<void> restartDownload(String taskId) async {
+    throw UnsupportedError('Downloads are not supported on web');
+  }
+
+  @override
   Future<void> retryDownload(String taskId) async {
     throw UnsupportedError('Downloads are not supported on web');
   }

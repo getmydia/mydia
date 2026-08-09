@@ -149,6 +149,15 @@ abstract class DownloadService {
   Future<void> pauseDownload(String taskId);
   Future<void> resumeDownload(String taskId);
   Future<void> cancelDownload(String taskId);
+
+  /// Discard all progress and start the download again.
+  ///
+  /// Accepts a task in any status except `completed`: it cancels a live loop,
+  /// deletes the partial file, re-prepares the transcode job when the task is
+  /// progressive, and starts fresh.
+  Future<void> restartDownload(String taskId);
+
+  /// Retry a `failed` or `cancelled` task. Delegates to [restartDownload].
   Future<void> retryDownload(String taskId);
   Future<void> deleteDownload(String mediaId);
 

@@ -178,6 +178,9 @@ class _StubDownloadService implements DownloadService {
   Future<void> cancelDownload(String taskId) async {}
 
   @override
+  Future<void> restartDownload(String taskId) async {}
+
+  @override
   Future<void> retryDownload(String taskId) async {}
 
   @override
