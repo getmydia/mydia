@@ -130,6 +130,7 @@ void main() {
                     child: MediaCard(
                       title: 'Movie',
                       posterUrl: 'https://example.com/p.jpg',
+                      action: MediaCardAction.open,
                     ),
                   ),
                 ),
@@ -177,7 +178,8 @@ void main() {
                 child: SizedBox(
                   width: 130,
                   height: 260,
-                  child: MediaCard(title: 'No Art'),
+                  child:
+                      MediaCard(title: 'No Art', action: MediaCardAction.open),
                 ),
               ),
             ),

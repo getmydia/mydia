@@ -17,7 +17,6 @@ import '../../widgets/episode_rail.dart';
 import '../../widgets/freshness_header.dart';
 import '../../widgets/quality_download_dialog.dart';
 import '../../../core/graphql/watch/query_key.dart';
-import '../../../core/player/media_file_selector.dart';
 import '../../../core/player/resume_plan.dart';
 import '../../../core/theme/colors.dart';
 import '../../widgets/cast_actions.dart';
@@ -224,6 +223,26 @@ class ShowDetailScreen extends ConsumerWidget {
     if (episodes.isEmpty) return null;
     return episodes.where((e) => e.id == selectedEpisodeId).firstOrNull ??
         episodes.first;
+  }
+
+  /// Carries the viewport back to the hero after a rail selection.
+  ///
+  /// The rail sits at the foot of a long page while the hero it feeds sits at
+  /// the head, so on a phone a selection lands entirely off-screen and the tap
+  /// reads as dead. Drives the enclosing [Scrollable] rather than a
+  /// [ScrollController], because [ShowDetailScreen] is a [ConsumerWidget] with
+  /// no state to own one; the hero is the first sliver, so the minimum extent
+  /// is the hero by construction.
+  void _revealHero(BuildContext railContext) {
+    final position = Scrollable.maybeOf(railContext)?.position;
+    if (position == null || position.pixels <= position.minScrollExtent) {
+      return;
+    }
+    position.animateTo(
+      position.minScrollExtent,
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   Widget _buildContent(BuildContext context, WidgetRef ref, ShowDetail show) {
@@ -982,48 +1001,40 @@ class ShowDetailScreen extends ConsumerWidget {
         return SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.only(top: 16),
-            child: EpisodeRail(
-              episodes: episodes,
-              showTitle: show?.title ?? 'Unknown Show',
-              showId: show?.id,
-              showPosterUrl: show?.artwork.posterUrl,
-              // Resolved through the same helper the hero uses, so the rail
-              // highlights whichever episode the hero describes — including
-              // the fallback cases where the selected id matches nothing in
-              // this season's list.
-              selectedEpisodeId: _resolveSelectedEpisode(
-                ref.watch(selectedEpisodeProvider(id)),
-                episodes,
-              )?.id,
-              onEpisodeTap: (episode) async {
-                ref
-                    .read(selectedEpisodeProvider(id).notifier)
-                    .select(episode.id);
-                if (episode.seasonNumber != selectedSeason) {
+            // Builder so the tap handler closes over a context *inside* the
+            // CustomScrollView. _buildEpisodeList receives _buildContent's
+            // context, which sits outside it, and _revealHero needs the
+            // enclosing Scrollable.
+            child: Builder(
+              builder: (railContext) => EpisodeRail(
+                episodes: episodes,
+                showTitle: show?.title ?? 'Unknown Show',
+                showId: show?.id,
+                showPosterUrl: show?.artwork.posterUrl,
+                // Resolved through the same helper the hero uses, so the rail
+                // highlights whichever episode the hero describes — including
+                // the fallback cases where the selected id matches nothing in
+                // this season's list.
+                selectedEpisodeId: _resolveSelectedEpisode(
+                  ref.watch(selectedEpisodeProvider(id)),
+                  episodes,
+                )?.id,
+                // The rail picks; the hero plays. Tapping a card used to
+                // resolve a file and launch the player, which gave the show
+                // page's own tap a different meaning from every other card in
+                // the app and left no route to the episode's details.
+                onEpisodeTap: (episode) {
                   ref
-                      .read(selectedSeasonProvider(id).notifier)
-                      .select(episode.seasonNumber);
-                }
-                if (episode.files.isNotEmpty) {
-                  final screenWidth = MediaQuery.sizeOf(context).width;
-                  final deviceContext = await DeviceContext.detect(screenWidth);
-                  final selectedFile = MediaFileSelector.selectBest(
-                    episode.files,
-                    deviceContext,
-                  );
-                  if (selectedFile != null && context.mounted) {
-                    final showAsync =
-                        ref.read(showDetailControllerProvider(id));
-                    final show = showAsync.value;
-                    final title = show != null
-                        ? '${show.title} - ${episode.episodeCode}'
-                        : episode.title;
-                    context.push(
-                      '/player/episode/${episode.id}?fileId=${selectedFile.id}&title=${Uri.encodeComponent(title)}&showId=$id&seasonNumber=${episode.seasonNumber}',
-                    );
+                      .read(selectedEpisodeProvider(id).notifier)
+                      .select(episode.id);
+                  if (episode.seasonNumber != selectedSeason) {
+                    ref
+                        .read(selectedSeasonProvider(id).notifier)
+                        .select(episode.seasonNumber);
                   }
-                }
-              },
+                  _revealHero(railContext);
+                },
+              ),
             ),
           ),
         );

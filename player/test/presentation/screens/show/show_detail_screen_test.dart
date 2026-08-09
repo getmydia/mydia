@@ -9,6 +9,7 @@ import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/presentation/screens/show/show_detail_screen.dart';
 import 'package:player/presentation/widgets/cast_rail.dart';
 import 'package:player/presentation/widgets/detail_action_row.dart';
+import 'package:player/presentation/widgets/episode_rail_card.dart';
 import 'package:player/presentation/widgets/play_button.dart';
 
 import '../../../test_utils/mock_network_images.dart';
@@ -459,5 +460,82 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.text('Play'), findsOneWidget);
+  });
+
+  testWidgets(
+      'tapping a rail card selects the episode without starting playback',
+      (tester) async {
+    final pushed = <String>[];
+    final playable = _episodeJson(3, files: [_fileJson('file-3')]);
+
+    await _pumpScreen(
+      tester,
+      size: const Size(1000, 2200),
+      episodesBySeason: {
+        1: [_episodeJson(1, watched: true), _episodeJson(2), playable],
+      },
+      pushedRoutes: pushed,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byType(EpisodeRailCard).last,
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+
+    // Cheap defense: the old hero path awaited DeviceContext.detect, which
+    // never completes in a widget test, so the player route was unreachable
+    // anyway. This is not the regression guard.
+    expect(pushed, isEmpty);
+    final cards = tester
+        .widgetList<EpisodeRailCard>(find.byType(EpisodeRailCard))
+        .toList();
+    expect(cards.last.selected, isTrue);
+  });
+
+  testWidgets('tapping a rail card carries the viewport back to the hero',
+      (tester) async {
+    final playable = _episodeJson(3, files: [_fileJson('file-3')]);
+
+    await _pumpScreen(
+      tester,
+      // Phone-shaped, so the rail sits well below the fold and there is real
+      // scroll extent for _revealHero to travel back across. 1200px tall is
+      // the minimum height where the episode sliver is built but still below
+      // the fold; at 800px the lazy sliver never mounts and at 1400px+ the
+      // rail is already visible without scrolling.
+      size: const Size(400, 1200),
+      episodesBySeason: {
+        1: [_episodeJson(1, watched: true), _episodeJson(2), playable],
+      },
+    );
+    await tester.pumpAndSettle();
+
+    final verticalScrollable = find
+        .descendant(
+          of: find.byType(CustomScrollView),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+
+    await tester.scrollUntilVisible(
+      find.byType(EpisodeRailCard).first,
+      300,
+      scrollable: verticalScrollable,
+    );
+    await tester.pumpAndSettle();
+
+    final position = tester.state<ScrollableState>(verticalScrollable).position;
+    expect(
+      position.pixels,
+      greaterThan(position.minScrollExtent),
+      reason: 'the rail must start below the fold or this test is vacuous',
+    );
+
+    await tester.tap(find.byType(EpisodeRailCard).first);
+    await tester.pumpAndSettle();
+
+    expect(position.pixels, position.minScrollExtent);
   });
 }

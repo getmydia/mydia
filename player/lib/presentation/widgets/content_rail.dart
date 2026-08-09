@@ -5,6 +5,7 @@ import '../../domain/models/continue_watching_item.dart';
 import '../../domain/models/recently_added_item.dart';
 import '../../domain/models/up_next_item.dart';
 import 'media_card.dart';
+import 'media_context_menu.dart';
 
 class ContentRail extends StatefulWidget {
   final String title;
@@ -196,6 +197,13 @@ class _ContentRailState extends State<ContentRail> {
     final cardSize = Breakpoints.getCardSize(context);
 
     if (item is ContinueWatchingItem) {
+      final target = MediaContextTarget(
+        id: item.id,
+        type: item.type,
+        showId: item.showId,
+        hasFile: item.files.isNotEmpty,
+        tapPlays: widget.onItemActivate != null,
+      );
       return MediaCard(
         posterUrl: item.posterUrl,
         title: item.title,
@@ -203,31 +211,67 @@ class _ContentRailState extends State<ContentRail> {
         progressPercentage: item.progress?.percentage,
         width: cardSize.width,
         height: cardSize.height,
+        action: _actionFor(target),
         onTap: () => widget.onItemActivate != null
             ? widget.onItemActivate!(item)
             : widget.onItemTap?.call(item.id, item.type),
+        onContextMenu: (cardContext) => _openMenu(cardContext, target, item),
       );
     } else if (item is RecentlyAddedItem) {
+      final target = MediaContextTarget(id: item.id, type: item.type);
       return MediaCard(
         posterUrl: item.posterUrl,
         title: item.title,
         subtitle: item.newContentLabel ?? item.year?.toString(),
         width: cardSize.width,
         height: cardSize.height,
+        action: _actionFor(target),
         onTap: () => widget.onItemTap?.call(item.id, item.type),
+        onContextMenu: (cardContext) => _openMenu(cardContext, target, item),
       );
     } else if (item is UpNextItem) {
+      final target = MediaContextTarget(
+        id: item.episode.id,
+        type: 'episode',
+        showId: item.show.id,
+        hasFile: item.episode.hasFile,
+        tapPlays: widget.onItemActivate != null,
+      );
       return MediaCard(
         posterUrl: item.posterUrl,
         title: item.show.title,
         subtitle: item.episode.episodeCode,
         width: cardSize.width,
         height: cardSize.height,
+        action: _actionFor(target),
         onTap: () => widget.onItemActivate != null
             ? widget.onItemActivate!(item)
             : widget.onItemTap?.call(item.episode.id, 'episode'),
+        onContextMenu: (cardContext) => _openMenu(cardContext, target, item),
       );
     }
     return const SizedBox.shrink();
+  }
+
+  /// A card promises playback exactly when its tap delivers it, which is when
+  /// this rail was given an activate handler and the target is playable.
+  MediaCardAction _actionFor(MediaContextTarget target) =>
+      target.tapPlays && target.hasFile
+          ? MediaCardAction.play
+          : MediaCardAction.open;
+
+  /// The rail owns the menu rather than forwarding it to the screen: it
+  /// already knows how to turn each item type into a target, and it already
+  /// holds the play handler the menu's Play entry needs.
+  void _openMenu(
+    BuildContext cardContext,
+    MediaContextTarget target,
+    Object item,
+  ) {
+    showMediaContextMenu(
+      cardContext,
+      target: target,
+      onPlay: () => widget.onItemActivate?.call(item),
+    );
   }
 }
