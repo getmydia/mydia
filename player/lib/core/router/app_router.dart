@@ -8,6 +8,7 @@ import '../../presentation/screens/login_screen.dart';
 import '../../presentation/screens/movie/movie_detail_screen.dart';
 import '../../presentation/screens/show/show_detail_screen.dart';
 import '../../presentation/screens/episode/episode_detail_screen.dart';
+import '../../presentation/screens/filter/filter_screen.dart';
 import '../../presentation/screens/library/library_screen.dart';
 import '../../presentation/screens/library/library_controller.dart';
 import '../../presentation/screens/settings/settings_screen.dart';
@@ -151,6 +152,12 @@ GoRouter appRouter(Ref ref) {
             builder: (context, state) => const LibraryScreen(
               libraryType: LibraryType.tvShows,
             ),
+          ),
+          GoRoute(
+            path: '/filter/:id',
+            name: 'filter',
+            builder: (context, state) =>
+                FilterScreen(filterId: state.pathParameters['id']!),
           ),
           GoRoute(
             path: '/favorites',

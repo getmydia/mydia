@@ -1,23 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import '../../../domain/navigation/media_filter.dart';
 import 'library_controller.dart';
+import 'library_grid_body.dart';
 import 'library_sort.dart';
 import 'library_sort_provider.dart';
-import '../../models/library_data.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/app_shell.dart';
 import '../../widgets/cast_actions.dart';
 import '../../widgets/cast_button.dart';
 import '../../widgets/freshness_header.dart';
 import '../../widgets/glass_surface.dart';
-import '../../widgets/media_poster.dart';
-import '../../../core/graphql/watch/query_key.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/theme/colors.dart';
-
-enum ViewMode { grid, list }
 
 class LibraryScreen extends ConsumerStatefulWidget {
   final LibraryType libraryType;
@@ -34,7 +29,7 @@ class LibraryScreen extends ConsumerStatefulWidget {
 class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
-  ViewMode _viewMode = ViewMode.grid;
+  LibraryViewMode _viewMode = LibraryViewMode.grid;
   bool _showSearch = false;
 
   /// Height of the search row when it is expanded. Matches the
@@ -48,12 +43,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   /// The old copies all said 120 while the bar actually builds 112.
   double _barHeight(bool showSearch) =>
       kToolbarHeight + (showSearch ? _searchRowHeight : 0);
-
-  @override
-  void initState() {
-    super.initState();
-    _scrollController.addListener(_onScroll);
-  }
 
   @override
   void dispose() {
@@ -71,33 +60,11 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         sort: sort,
       );
 
-  QueryKey _freshnessKey(MediaFilter filter) {
-    if (filter.watch == WatchScope.unwatched) {
-      return QueryKeys.unwatchedList;
-    }
-    if (filter.watch == WatchScope.favorites) {
-      return QueryKeys.favoritesList;
-    }
-    return filter.kind == MediaKind.movies
-        ? QueryKeys.moviesList
-        : QueryKeys.tvShowsList;
-  }
-
-  void _onScroll() {
-    if (_scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent - 200) {
-      final sort =
-          ref.read(librarySortControllerProvider(widget.libraryType)).value ??
-              LibrarySort.defaultSort;
-      ref
-          .read(libraryControllerProvider(_mediaFilter(sort)).notifier)
-          .loadMore();
-    }
-  }
-
   void _toggleViewMode() {
     setState(() {
-      _viewMode = _viewMode == ViewMode.grid ? ViewMode.list : ViewMode.grid;
+      _viewMode = _viewMode == LibraryViewMode.grid
+          ? LibraryViewMode.list
+          : LibraryViewMode.grid;
     });
   }
 
@@ -134,15 +101,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     }
   }
 
-  void _handleItemTap(String id, String type) {
-    final normalizedType = type.toLowerCase();
-    if (normalizedType == 'movie') {
-      context.push('/movie/$id');
-    } else if (normalizedType == 'tv_show' || normalizedType == 'show') {
-      context.push('/show/$id');
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final sortAsync = ref.watch(
@@ -157,7 +115,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     }
 
     final filter = _mediaFilter(sort);
-    final libraryAsync = ref.watch(libraryControllerProvider(filter));
     final title =
         widget.libraryType == LibraryType.movies ? 'Movies' : 'TV Shows';
     final icon = widget.libraryType == LibraryType.movies
@@ -193,56 +150,24 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       // every background refetch shoved the whole grid down by ~161px on top
       // of its own padding. Overlaying keeps the header in the same pixels
       // without it owning any of the scroll view's space.
-      body: Stack(
-        children: [
-          RefreshIndicator(
-            // Without this the spinner drops from y=0, behind the glass bar.
-            edgeOffset: chromeTop,
-            onRefresh: () async {
-              await ref
-                  .read(libraryControllerProvider(filter).notifier)
-                  .refresh();
-            },
-            child: libraryAsync.when(
-              loading: () => _buildLoadingView(),
-              error: (error, stackTrace) => _buildErrorView(error, filter),
-              data: (data) {
-                if (data.isEmpty) {
-                  return _buildEmptyState();
-                }
-
-                // Filter items based on search query
-                final searchQuery = _searchController.text.toLowerCase().trim();
-                final filteredItems = searchQuery.isEmpty
-                    ? data.items
-                    : data.items
-                        .where((item) =>
-                            item.title.toLowerCase().contains(searchQuery))
-                        .toList();
-
-                if (filteredItems.isEmpty && searchQuery.isNotEmpty) {
-                  return _buildNoSearchResultsState(searchQuery);
-                }
-
-                return _viewMode == ViewMode.grid
-                    ? _buildGridView(context, filteredItems, scrollTopPadding)
-                    : _buildListView(context, filteredItems, scrollTopPadding);
-              },
-            ),
-          ),
-          // `Positioned` rather than a bare `Stack` child so the header spans
-          // the full width explicitly instead of relying on loose constraints
-          // plus the banner's own `width: double.infinity`.
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: FreshnessHeader(
-              queryKeys: [_freshnessKey(filter)],
-              topInset: chromeTop,
-            ),
-          ),
-        ],
+      body: LibraryMediaBody(
+        filter: filter,
+        scrollController: _scrollController,
+        chromeTop: chromeTop,
+        scrollTopPadding: scrollTopPadding,
+        viewMode: _viewMode,
+        emptyTitle: widget.libraryType == LibraryType.movies
+            ? 'No movies yet'
+            : 'No TV shows yet',
+        emptySubtitle: 'Add content to your library to see it here',
+        emptyIcon: widget.libraryType == LibraryType.movies
+            ? Icons.movie_filter_rounded
+            : Icons.live_tv_rounded,
+        searchQuery: _searchController.text,
+        onSearchClear: () {
+          _searchController.clear();
+          setState(() {});
+        },
       ),
     );
   }
@@ -318,7 +243,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                       ),
                       const SizedBox(width: 4),
                       _ActionButton(
-                        icon: _viewMode == ViewMode.grid
+                        icon: _viewMode == LibraryViewMode.grid
                             ? Icons.view_list_rounded
                             : Icons.grid_view_rounded,
                         onPressed: _toggleViewMode,
@@ -388,233 +313,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       ),
     );
   }
-
-  Widget _buildLoadingView() {
-    return const Center(
-      child: CircularProgressIndicator(),
-    );
-  }
-
-  Widget _buildErrorView(Object error, MediaFilter filter) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: AppColors.error.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.error_outline_rounded,
-                size: 48,
-                color: AppColors.error,
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Failed to load library',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              error.toString(),
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 32),
-            FilledButton.icon(
-              onPressed: () {
-                ref.read(libraryControllerProvider(filter).notifier).refresh();
-              },
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('Try Again'),
-              style: FilledButton.styleFrom(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    final message = widget.libraryType == LibraryType.movies
-        ? 'No movies yet'
-        : 'No TV shows yet';
-    final icon = widget.libraryType == LibraryType.movies
-        ? Icons.movie_filter_rounded
-        : Icons.live_tv_rounded;
-
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                icon,
-                size: 56,
-                color: AppColors.primary,
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              message,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Add content to your library to see it here',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNoSearchResultsState(String query) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: AppColors.surfaceVariant.withValues(alpha: 0.3),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.search_off_rounded,
-                size: 56,
-                color: AppColors.textSecondary,
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'No results found',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'No matches for "$query"',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            TextButton(
-              onPressed: () {
-                _searchController.clear();
-                setState(() {});
-              },
-              child: const Text('Clear search'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildGridView(
-      BuildContext context, List<LibraryItem> items, double topPadding) {
-    final isDesktop = Breakpoints.isDesktop(context);
-    final horizontalPadding = Breakpoints.getHorizontalPadding(context);
-    final cardSpacing = Breakpoints.getCardSpacing(context);
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final crossAxisCount = _calculateCrossAxisCount(constraints.maxWidth);
-        // Less bottom padding on desktop (no bottom nav)
-        final bottomPadding = isDesktop ? 32.0 : 100.0;
-
-        return GridView.builder(
-          controller: _scrollController,
-          padding: EdgeInsets.fromLTRB(
-              horizontalPadding, topPadding, horizontalPadding, bottomPadding),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: crossAxisCount,
-            childAspectRatio: 0.58,
-            crossAxisSpacing: cardSpacing,
-            mainAxisSpacing: cardSpacing + 4,
-          ),
-          itemCount: items.length,
-          itemBuilder: (context, index) {
-            final item = items[index];
-            return MediaPoster(
-              key: ValueKey(item.id),
-              posterUrl: item.posterUrl,
-              title: item.title,
-              progressPercentage: item.progressPercentage,
-              rating: item.rating,
-              isFavorite: item.isFavorite,
-              onTap: () => _handleItemTap(item.id, item.type),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildListView(
-      BuildContext context, List<LibraryItem> items, double topPadding) {
-    final isDesktop = Breakpoints.isDesktop(context);
-    final horizontalPadding = Breakpoints.getHorizontalPadding(context);
-    final bottomPadding = isDesktop ? 32.0 : 100.0;
-
-    return ListView.builder(
-      controller: _scrollController,
-      padding: EdgeInsets.fromLTRB(
-          horizontalPadding, topPadding, horizontalPadding, bottomPadding),
-      itemCount: items.length,
-      itemBuilder: (context, index) {
-        final item = items[index];
-        return _ListItem(
-          item: item,
-          onTap: () => _handleItemTap(item.id, item.type),
-        );
-      },
-    );
-  }
-
-  int _calculateCrossAxisCount(double width) {
-    if (width > 1400) return 8;
-    if (width > 1200) return 7;
-    if (width > 1000) return 6;
-    if (width > 800) return 5;
-    if (width > 600) return 4;
-    if (width > 400) return 3;
-    return 2;
-  }
 }
 
 class _ActionButton extends StatelessWidget {
@@ -650,106 +348,6 @@ class _ActionButton extends StatelessWidget {
               icon,
               size: 20,
               color: isActive ? AppColors.primary : AppColors.textSecondary,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ListItem extends StatelessWidget {
-  final LibraryItem item;
-  final VoidCallback onTap;
-
-  const _ListItem({
-    required this.item,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Material(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                // Poster
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: SizedBox(
-                    width: 60,
-                    height: 90,
-                    child: MediaPoster(
-                      posterUrl: item.posterUrl,
-                      title: item.title,
-                      progressPercentage: item.progressPercentage,
-                      isFavorite: item.isFavorite,
-                      showTitle: false,
-                      onTap: onTap,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-
-                // Content
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.title,
-                        style:
-                            Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (item.subtitle != null) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          item.subtitle!,
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: AppColors.textSecondary,
-                                  ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-
-                // Favorite indicator
-                if (item.isFavorite)
-                  const Padding(
-                    padding: EdgeInsets.only(left: 12),
-                    child: Icon(
-                      Icons.favorite_rounded,
-                      color: AppColors.error,
-                      size: 20,
-                    ),
-                  ),
-
-                // Chevron
-                const Padding(
-                  padding: EdgeInsets.only(left: 8),
-                  child: Icon(
-                    Icons.chevron_right_rounded,
-                    color: AppColors.textSecondary,
-                    size: 24,
-                  ),
-                ),
-              ],
             ),
           ),
         ),
