@@ -1,15 +1,12 @@
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/auth/auth_status.dart';
 import '../../core/config/web_config.dart';
-import '../../core/downloads/collection_sync_providers.dart';
-import '../../core/downloads/collection_sync_service.dart';
+import '../../core/downloads/collection_auto_sync.dart';
 import '../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../core/graphql/graphql_provider.dart';
 import '../../core/playback/playback_progress_providers.dart';
-import '../screens/collections/collection_detail_controller.dart';
 import '../../core/layout/breakpoints.dart';
 import '../../core/theme/colors.dart';
 import 'ambient_backdrop.dart';
@@ -103,25 +100,17 @@ class AppShell extends ConsumerStatefulWidget {
 }
 
 class _AppShellState extends ConsumerState<AppShell> {
-  AppLifecycleListener? _lifecycleListener;
   GoRouter? _router;
-  DateTime? _lastAutoSyncTime;
+  CollectionAutoSync? _collectionAutoSync;
 
   @override
   void initState() {
     super.initState();
-    // Only add lifecycle listener on native platforms (not web)
-    if (!kIsWeb) {
-      _lifecycleListener = AppLifecycleListener(
-        onResume: _onAppResume,
-      );
-      // Auto-sync collections after first frame
-      if (isDownloadSupported) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _performCollectionAutoSync();
-        });
-      }
-    }
+    _collectionAutoSync = ref.read(collectionAutoSyncProvider)(ref);
+    _collectionAutoSync!.install(
+      enabled: isDownloadSupported,
+      onQueued: _showAutoSyncSnackBar,
+    );
   }
 
   @override
@@ -144,94 +133,27 @@ class _AppShellState extends ConsumerState<AppShell> {
   @override
   void dispose() {
     _router?.routerDelegate.removeListener(_onRouteChanged);
-    _lifecycleListener?.dispose();
+    _collectionAutoSync?.dispose();
     super.dispose();
   }
 
-  /// Called when app resumes from background.
-  /// Checks connection status and triggers reconnection if needed.
-  void _onAppResume() {
-    debugPrint('[AppShell] App resumed from background');
-    // Connection health checks are handled by the connection provider
-    if (isDownloadSupported) {
-      _performCollectionAutoSync();
-    }
-  }
-
-  /// Auto-sync all collections that have sync enabled.
-  /// Debounced to skip if already ran within the last 5 minutes.
-  Future<void> _performCollectionAutoSync() async {
-    // Debounce: skip if last sync was less than 5 minutes ago
-    final now = DateTime.now();
-    if (_lastAutoSyncTime != null &&
-        now.difference(_lastAutoSyncTime!) < const Duration(minutes: 5)) {
-      debugPrint('[AppShell] Skipping auto-sync (debounced)');
-      return;
-    }
-    _lastAutoSyncTime = now;
-
-    try {
-      final syncConfigs = await ref.read(allSyncedCollectionsProvider.future);
-      if (syncConfigs.isEmpty) return;
-
-      debugPrint(
-        '[AppShell] Auto-syncing ${syncConfigs.length} collection(s)',
-      );
-
-      int totalQueued = 0;
-      for (final entry in syncConfigs.entries) {
-        final collectionId = entry.key;
-        final config = entry.value;
-        final resolution = config['resolution'];
-        if (resolution == null) continue;
-
-        try {
-          final items = await ref.read(
-            collectionDetailControllerProvider(collectionId).future,
-          );
-
-          if (items.isEmpty) continue;
-
-          final result = await syncCollectionItems(
-            items: items,
-            resolution: resolution,
-            ref: ref,
-          );
-          totalQueued += result.totalQueued;
-
-          if (result.hasNewDownloads) {
-            debugPrint(
-              '[AppShell] Auto-sync: ${config['name']} - '
-              '${result.moviesQueued} movies, '
-              '${result.episodesQueued} episodes queued',
-            );
-          }
-        } catch (e) {
-          debugPrint(
-            '[AppShell] Auto-sync failed for ${config['name']}: $e',
-          );
-        }
-      }
-
-      if (totalQueued > 0 && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.sync_rounded, color: Colors.white, size: 20),
-                const SizedBox(width: 12),
-                Text(
-                  'Auto-sync: queued $totalQueued new item${totalQueued != 1 ? 's' : ''} for download',
-                ),
-              ],
-            ),
-            backgroundColor: AppColors.primary,
-            behavior: SnackBarBehavior.floating,
+  void _showAutoSyncSnackBar(int totalQueued) {
+    if (totalQueued > 0 && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.sync_rounded, color: Colors.white, size: 20),
+              const SizedBox(width: 12),
+              Text(
+                'Auto-sync: queued $totalQueued new item${totalQueued != 1 ? 's' : ''} for download',
+              ),
+            ],
           ),
-        );
-      }
-    } catch (e) {
-      debugPrint('[AppShell] Auto-sync error: $e');
+          backgroundColor: AppColors.primary,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
