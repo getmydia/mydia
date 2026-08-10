@@ -1065,8 +1065,10 @@ defmodule Mydia.Media do
     %AvailabilityStatus{
       state: state,
       # A monitored show with every episode unmonitored is not chasing anything, so it
-      # renders muted rather than claiming a pursuit that will never happen.
-      monitored: media_item.monitored and monitored_episodes != [],
+      # renders muted rather than claiming a pursuit that will never happen. A show with
+      # no episodes at all is a different case: nothing contradicts the show's own flag
+      # yet, so a freshly added show awaiting metadata stays un-muted.
+      monitored: media_item.monitored and (episodes == [] or monitored_episodes != []),
       downloaded: downloaded_count,
       total: total
     }

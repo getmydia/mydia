@@ -151,6 +151,28 @@ defmodule Mydia.Media.MediaStatusTest do
 
       assert %AvailabilityStatus{state: :missing, downloaded: 0, total: 0} = status
     end
+
+    # A freshly added show has no episodes until metadata lands. Nothing contradicts its
+    # own monitored flag yet, so it must not render muted like the deliberately
+    # all-unmonitored case below it.
+    test "a monitored show awaiting episode metadata stays monitored" do
+      status = Media.get_media_status(show(monitored: true, episodes: []))
+
+      assert %AvailabilityStatus{monitored: true} = status
+    end
+
+    test "an unmonitored show with no episodes stays unmonitored" do
+      status = Media.get_media_status(show(monitored: false, episodes: []))
+
+      assert %AvailabilityStatus{monitored: false} = status
+    end
+
+    test "a monitored show with episodes but none monitored still mutes" do
+      status =
+        Media.get_media_status(show(monitored: true, episodes: [episode(monitored: false)]))
+
+      assert %AvailabilityStatus{monitored: false} = status
+    end
   end
 
   test "no code path returns the retired :not_monitored state" do
