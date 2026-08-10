@@ -1039,33 +1039,59 @@ defmodule MydiaWeb.CoreComponents do
   end
 
   @doc """
-  Renders a progress badge for media cards.
+  Renders the badge stack overlaid on a media poster's top-right corner.
 
-  Shows "Continue Watching" for in-progress content or "Watched" for completed content.
+  Owns that corner so playback state and quality cannot collide. Both badges
+  live in one flex column instead of each independently claiming
+  `absolute top-2 right-2`.
+
+  Renders nothing when neither a playback badge nor a quality badge applies,
+  so no empty positioned container is emitted.
 
   ## Examples
 
-      <.progress_badge progress={@progress} />
+      <.poster_badges id="poster-badges-1" progress={@progress} quality="1080p" />
   """
-  attr :progress, :map, required: true, doc: "The progress struct"
+  attr :id, :string, default: nil, doc: "DOM id for the container"
+  attr :progress, :map, default: nil, doc: "The progress struct, or nil"
+  attr :quality, :string, default: nil, doc: "Quality resolution string, or nil"
   attr :class, :string, default: "", doc: "Additional CSS classes"
 
-  def progress_badge(assigns) do
+  def poster_badges(assigns) do
     ~H"""
-    <div :if={@progress} class={["absolute top-2 right-2 z-10", @class]}>
-      <span
-        :if={@progress.completion_percentage > 0 && !@progress.watched}
-        class="badge badge-primary badge-sm shadow-md"
-      >
+    <div
+      :if={playback_badge?(@progress) or @quality != nil}
+      id={@id}
+      class={["absolute top-2 right-2 z-10 flex flex-col items-end gap-1", @class]}
+    >
+      <span :if={continue_badge?(@progress)} class="badge badge-primary badge-sm shadow-md">
         Continue
       </span>
 
-      <span :if={@progress.watched} class="badge badge-success badge-sm shadow-md gap-1">
+      <span
+        :if={watched_badge?(@progress)}
+        class="badge badge-success badge-sm shadow-md gap-1"
+      >
         <.icon name="hero-check" class="w-3 h-3" /> Watched
       </span>
+
+      <span :if={@quality} class="badge badge-neutral badge-sm shadow-md">{@quality}</span>
     </div>
     """
   end
+
+  # The container gate and the two badge branches are derived from the same
+  # predicates, so they can never disagree and leave an empty container.
+  defp continue_badge?(%{watched: false, completion_percentage: pct}) when is_number(pct),
+    do: pct > 0
+
+  defp continue_badge?(_), do: false
+
+  defp watched_badge?(%{watched: true}), do: true
+  defp watched_badge?(_), do: false
+
+  defp playback_badge?(progress),
+    do: continue_badge?(progress) or watched_badge?(progress)
 
   @doc """
   Formats time remaining from progress data.
