@@ -577,6 +577,139 @@ defmodule MydiaWeb.MediaLive.IndexTest do
                "#test-debug-info[data-progress-filter='downloaded'][data-stream-count='2']"
              )
     end
+
+    test "missing filter surfaces unmonitored movies with no files", %{conn: conn} do
+      _unmonitored_missing =
+        media_item_fixture(%{
+          title: "Backlog Reminder Movie",
+          original_title: nil,
+          year: 2024,
+          type: "movie",
+          monitored: false,
+          metadata: %{"overview" => "Added as a reminder, downloaded manually later"}
+        })
+
+      monitored_downloaded =
+        media_item_fixture(%{
+          title: "Backlog Reminder Owned",
+          original_title: nil,
+          year: 2024,
+          type: "movie",
+          monitored: true,
+          metadata: %{"overview" => "Already on disk"}
+        })
+
+      media_file_fixture(%{media_item_id: monitored_downloaded.id})
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      view
+      |> element("#library-search-form")
+      |> render_change(%{"search" => "Backlog Reminder"})
+
+      assert has_element?(
+               view,
+               "#test-debug-info[data-search-query='Backlog Reminder'][data-stream-count='2']"
+             )
+
+      # The reported bug: this used to return 0 because unmonitored items classified as
+      # :not_monitored and could never match :missing.
+      view
+      |> element("form#library-filter-form")
+      |> render_change(%{"progress" => "missing"})
+
+      assert has_element?(
+               view,
+               "#test-debug-info[data-progress-filter='missing'][data-stream-count='1']"
+             )
+    end
+
+    test "missing plus monitored still narrows to monitored items only", %{conn: conn} do
+      _unmonitored_missing =
+        media_item_fixture(%{
+          title: "Narrowing Unmonitored",
+          original_title: nil,
+          year: 2024,
+          type: "movie",
+          monitored: false,
+          metadata: %{"overview" => "No file, not monitored"}
+        })
+
+      _monitored_missing =
+        media_item_fixture(%{
+          title: "Narrowing Monitored",
+          original_title: nil,
+          year: 2024,
+          type: "movie",
+          monitored: true,
+          metadata: %{"overview" => "No file, monitored"}
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      view
+      |> element("#library-search-form")
+      |> render_change(%{"search" => "Narrowing"})
+
+      assert has_element?(
+               view,
+               "#test-debug-info[data-search-query='Narrowing'][data-stream-count='2']"
+             )
+
+      view
+      |> element("form#library-filter-form")
+      |> render_change(%{"progress" => "missing"})
+
+      assert has_element?(
+               view,
+               "#test-debug-info[data-progress-filter='missing'][data-stream-count='2']"
+             )
+
+      # Both selects must be sent together: handle_event/3 reads each independently and
+      # treats an absent key as "no filter".
+      view
+      |> element("form#library-filter-form")
+      |> render_change(%{"progress" => "missing", "monitored" => "true"})
+
+      assert has_element?(
+               view,
+               "#test-debug-info[data-progress-filter='missing'][data-stream-count='1']"
+             )
+    end
+
+    test "an unmonitored show with no episode files matches the missing filter", %{conn: conn} do
+      unmonitored_show =
+        media_item_fixture(%{
+          title: "Backlog Reminder Show",
+          original_title: nil,
+          year: 2024,
+          type: "tv_show",
+          monitored: false,
+          metadata: %{"overview" => "A show tracked but not chased"}
+        })
+
+      episode_fixture(%{
+        media_item_id: unmonitored_show.id,
+        season_number: 1,
+        episode_number: 1,
+        air_date: ~D[2024-01-01]
+      })
+
+      {:ok, view, _html} = live(conn, ~p"/tv")
+
+      view
+      |> element("#library-search-form")
+      |> render_change(%{"search" => "Backlog Reminder Show"})
+
+      view
+      |> element("form#library-filter-form")
+      |> render_change(%{"progress" => "missing"})
+
+      assert has_element?(
+               view,
+               "#test-debug-info[data-progress-filter='missing'][data-stream-count='1']"
+             )
+    end
   end
 
   describe "date sorting" do
