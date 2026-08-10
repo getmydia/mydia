@@ -5,6 +5,7 @@ defmodule MydiaWeb.MediaLive.Show.Helpers do
   """
 
   alias Mydia.Media
+  alias Mydia.Media.AvailabilityStatus
   alias Mydia.Media.EpisodeStatus
   alias Mydia.Library
   alias Mydia.Metadata.Structs.MediaMetadata
@@ -231,13 +232,9 @@ defmodule MydiaWeb.MediaLive.Show.Helpers do
     EpisodeStatus.get_episode_status_with_downloads(episode)
   end
 
-  def episode_status_color(status) do
-    EpisodeStatus.status_color(status)
-  end
+  def episode_status_color(status), do: AvailabilityStatus.color(status)
 
-  def episode_status_icon(status) do
-    EpisodeStatus.status_icon(status)
-  end
+  def episode_status_icon(status), do: AvailabilityStatus.icon(status)
 
   @doc "Human-readable label for a TV metadata provider."
   def provider_label(:tvdb), do: "TheTVDB"

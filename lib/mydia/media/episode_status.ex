@@ -2,91 +2,77 @@ defmodule Mydia.Media.EpisodeStatus do
   @moduledoc """
   Provides utilities for determining and displaying episode availability status.
 
-  Status priority (matching calendar view logic):
-  1. Not monitored → :not_monitored
-  2. Has media files → :downloaded
+  Availability and monitoring are separate axes. This module answers only the first;
+  the monitoring flag rides along on the returned `AvailabilityStatus` so the UI can
+  render an unmonitored episode's real state at reduced weight.
+
+  Status priority:
+  1. Has media files → :downloaded
+  2. Air date not set → :tba
   3. Air date in future → :upcoming
   4. Has active downloads → :downloading
   5. Otherwise → :missing
   """
 
   alias Mydia.Media.Episode
-
-  @type status ::
-          :downloaded | :downloading | :missing | :upcoming | :not_monitored | :tba | :partial
+  alias Mydia.Media.AvailabilityStatus
 
   @doc """
-  Determines the current status of an episode based on its attributes.
-
-  Returns one of: :downloaded, :downloading, :missing, :upcoming, :not_monitored, :tba, :partial
-
-  ## Examples
-
-      iex> get_episode_status(%Episode{monitored: false})
-      :not_monitored
-
-      iex> get_episode_status(%Episode{monitored: true, media_files: [%MediaFile{}]})
-      :downloaded
-
-      iex> get_episode_status(%Episode{monitored: true, air_date: ~D[2099-12-31]})
-      :upcoming
-
-      iex> get_episode_status(%Episode{monitored: true, air_date: nil})
-      :tba
+  Determines the current availability of an episode, ignoring its downloads.
   """
-  @spec get_episode_status(Episode.t()) :: status()
-  def get_episode_status(%Episode{monitored: false}), do: :not_monitored
-
-  def get_episode_status(%Episode{media_files: media_files}) when media_files != [],
-    do: :downloaded
-
-  def get_episode_status(%Episode{air_date: air_date}) when not is_nil(air_date) do
-    today = Date.utc_today()
-
-    if Date.compare(air_date, today) == :gt do
-      :upcoming
-    else
-      check_downloading_or_missing()
-    end
+  @spec get_episode_status(Episode.t()) :: AvailabilityStatus.t()
+  def get_episode_status(%Episode{} = episode) do
+    build(episode, state_without_downloads(episode))
   end
 
-  def get_episode_status(%Episode{air_date: nil}), do: :tba
+  defp state_without_downloads(%Episode{media_files: media_files}) when media_files != [],
+    do: :downloaded
 
-  defp check_downloading_or_missing do
-    # This will be enhanced when we pass downloads data
-    # For now, return :missing as the default for aired episodes
-    :missing
+  defp state_without_downloads(%Episode{air_date: nil}), do: :tba
+
+  defp state_without_downloads(%Episode{air_date: air_date}) do
+    if Date.compare(air_date, Date.utc_today()) == :gt, do: :upcoming, else: :missing
   end
 
   @doc """
   Enhanced version that checks for active downloads.
   Pass the episode with preloaded downloads association.
   """
-  @spec get_episode_status_with_downloads(Episode.t()) :: status()
-  def get_episode_status_with_downloads(%Episode{monitored: false}), do: :not_monitored
+  @spec get_episode_status_with_downloads(Episode.t()) :: AvailabilityStatus.t()
+  def get_episode_status_with_downloads(%Episode{} = episode) do
+    build(episode, state_with_downloads(episode))
+  end
 
-  def get_episode_status_with_downloads(%Episode{media_files: media_files})
-      when media_files != [],
-      do: :downloaded
+  defp state_with_downloads(%Episode{media_files: media_files}) when media_files != [],
+    do: :downloaded
 
-  def get_episode_status_with_downloads(%Episode{air_date: air_date} = episode)
-      when not is_nil(air_date) do
-    today = Date.utc_today()
+  defp state_with_downloads(%Episode{air_date: nil}), do: :tba
 
-    if Date.compare(air_date, today) == :gt do
-      :upcoming
-    else
-      check_downloads(episode)
+  defp state_with_downloads(%Episode{air_date: air_date} = episode) do
+    cond do
+      Date.compare(air_date, Date.utc_today()) == :gt -> :upcoming
+      downloading?(episode) -> :downloading
+      true -> :missing
     end
   end
 
-  def get_episode_status_with_downloads(%Episode{air_date: nil}), do: :tba
+  defp downloading?(%Episode{downloads: downloads}) when is_list(downloads),
+    do: Enum.any?(downloads, &occupying_download?/1)
 
-  defp check_downloads(%Episode{downloads: downloads}) when is_list(downloads) do
-    if Enum.any?(downloads, &occupying_download?/1), do: :downloading, else: :missing
+  defp downloading?(_episode), do: false
+
+  defp build(%Episode{} = episode, state) do
+    %AvailabilityStatus{
+      state: state,
+      monitored: episode.monitored,
+      file_count: file_count(episode)
+    }
   end
 
-  defp check_downloads(_episode), do: :missing
+  defp file_count(%Episode{media_files: media_files}) when is_list(media_files),
+    do: length(media_files)
+
+  defp file_count(_episode), do: 0
 
   # In-memory mirror of Mydia.Downloads.Download.occupying/1: a download counts as
   # still in flight toward import — and so keeps the episode out of :missing —
@@ -104,76 +90,21 @@ defmodule Mydia.Media.EpisodeStatus do
   end
 
   @doc """
-  Returns DaisyUI badge color classes for a given status.
-
-  ## Examples
-
-      iex> status_color(:downloaded)
-      "badge-success"
-
-      iex> status_color(:downloading)
-      "badge-info"
-  """
-  @spec status_color(status()) :: String.t()
-  def status_color(:downloaded), do: "badge-success"
-  def status_color(:downloading), do: "badge-info"
-  def status_color(:missing), do: "badge-error"
-  def status_color(:not_monitored), do: "badge-ghost"
-  def status_color(:upcoming), do: "badge-outline"
-  def status_color(:tba), do: "badge-warning"
-  def status_color(:partial), do: "badge-warning"
-
-  @doc """
-  Returns HeroIcon name for a given status (for accessibility).
-
-  ## Examples
-
-      iex: status_icon(:downloaded)
-      "hero-check-circle"
-
-      iex: status_icon(:downloading)
-      "hero-arrow-down-tray"
-  """
-  @spec status_icon(status()) :: String.t()
-  def status_icon(:downloaded), do: "hero-check-circle"
-  def status_icon(:downloading), do: "hero-arrow-down-tray"
-  def status_icon(:missing), do: "hero-exclamation-circle"
-  def status_icon(:not_monitored), do: "hero-eye-slash"
-  def status_icon(:upcoming), do: "hero-clock"
-  def status_icon(:tba), do: "hero-question-mark-circle"
-  def status_icon(:partial), do: "hero-minus-circle"
-
-  @doc """
-  Returns human-readable label for a given status.
-
-  ## Examples
-
-      iex> status_label(:downloaded)
-      "Downloaded"
-
-      iex> status_label(:not_monitored)
-      "Not Monitored"
-  """
-  @spec status_label(status()) :: String.t()
-  def status_label(:downloaded), do: "Downloaded"
-  def status_label(:downloading), do: "Downloading"
-  def status_label(:missing), do: "Missing"
-  def status_label(:not_monitored), do: "Not Monitored"
-  def status_label(:upcoming), do: "Upcoming"
-  def status_label(:tba), do: "TBA"
-  def status_label(:partial), do: "Partial"
-
-  @doc """
   Returns detailed status information for display in tooltips.
 
   ## Examples
 
       iex> status_details(%Episode{monitored: true, media_files: [%{resolution: "1080p"}]})
-      "Downloaded (1 file)"
+      "Downloaded (1 file • 1080p)"
   """
   @spec status_details(Episode.t()) :: String.t()
-  def status_details(%Episode{media_files: media_files})
-      when media_files != [] do
+  def status_details(%Episode{} = episode) do
+    detail = availability_detail(episode)
+
+    if episode.monitored, do: detail, else: detail <> " · Not monitored"
+  end
+
+  defp availability_detail(%Episode{media_files: media_files}) when media_files != [] do
     file_count = length(media_files)
     quality = get_best_quality(media_files)
 
@@ -184,52 +115,28 @@ defmodule Mydia.Media.EpisodeStatus do
     end
   end
 
-  def status_details(%Episode{downloads: downloads} = episode) when is_list(downloads) do
-    active_downloads = Enum.filter(downloads, &occupying_download?/1)
+  defp availability_detail(%Episode{downloads: downloads} = episode) when is_list(downloads) do
+    case Enum.filter(downloads, &occupying_download?/1) do
+      [] ->
+        air_date_detail(episode)
 
-    case length(active_downloads) do
-      0 ->
-        cond do
-          !episode.monitored ->
-            "Not Monitored"
-
-          is_nil(episode.air_date) ->
-            "Air date to be announced"
-
-          episode.air_date && Date.compare(episode.air_date, Date.utc_today()) == :gt ->
-            format_upcoming_date(episode.air_date)
-
-          true ->
-            "Missing"
-        end
-
-      count ->
-        download = hd(active_downloads)
-
-        # Handle both plain Download structs and enriched download maps
-        progress = get_download_progress(download)
-
-        if progress do
-          "Downloading (#{round(progress)}%)"
-        else
-          "Downloading (#{count} active)"
+      [download | _] = active ->
+        case get_download_progress(download) do
+          nil -> "Downloading (#{length(active)} active)"
+          progress -> "Downloading (#{round(progress)}%)"
         end
     end
   end
 
-  def status_details(%Episode{air_date: air_date, monitored: monitored}) do
-    cond do
-      !monitored ->
-        "Not Monitored"
+  defp availability_detail(%Episode{} = episode), do: air_date_detail(episode)
 
-      is_nil(air_date) ->
-        "Air date to be announced"
+  defp air_date_detail(%Episode{air_date: nil}), do: "Air date to be announced"
 
-      air_date && Date.compare(air_date, Date.utc_today()) == :gt ->
-        format_upcoming_date(air_date)
-
-      true ->
-        "Missing"
+  defp air_date_detail(%Episode{air_date: air_date}) do
+    if Date.compare(air_date, Date.utc_today()) == :gt do
+      format_upcoming_date(air_date)
+    else
+      "Missing"
     end
   end
 

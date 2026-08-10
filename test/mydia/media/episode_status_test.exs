@@ -1,7 +1,7 @@
 defmodule Mydia.Media.EpisodeStatusTest do
   use ExUnit.Case, async: true
 
-  alias Mydia.Media.{Episode, EpisodeStatus}
+  alias Mydia.Media.{AvailabilityStatus, Episode, EpisodeStatus}
 
   describe "get_episode_status/1" do
     test "returns :tba for episodes with nil air_date" do
@@ -12,10 +12,10 @@ defmodule Mydia.Media.EpisodeStatusTest do
         downloads: []
       }
 
-      assert EpisodeStatus.get_episode_status(episode) == :tba
+      assert %AvailabilityStatus{state: :tba} = EpisodeStatus.get_episode_status(episode)
     end
 
-    test "returns :not_monitored for unmonitored episodes" do
+    test "reports real availability for unmonitored episodes" do
       episode = %Episode{
         monitored: false,
         air_date: nil,
@@ -23,7 +23,20 @@ defmodule Mydia.Media.EpisodeStatusTest do
         downloads: []
       }
 
-      assert EpisodeStatus.get_episode_status(episode) == :not_monitored
+      assert %AvailabilityStatus{state: :tba, monitored: false} =
+               EpisodeStatus.get_episode_status(episode)
+    end
+
+    test "an unmonitored aired episode with no file is missing" do
+      episode = %Episode{
+        monitored: false,
+        air_date: ~D[2024-01-01],
+        media_files: [],
+        downloads: []
+      }
+
+      assert %AvailabilityStatus{state: :missing, monitored: false} =
+               EpisodeStatus.get_episode_status(episode)
     end
 
     test "returns :downloaded for episodes with media files" do
@@ -34,7 +47,7 @@ defmodule Mydia.Media.EpisodeStatusTest do
         downloads: []
       }
 
-      assert EpisodeStatus.get_episode_status(episode) == :downloaded
+      assert %AvailabilityStatus{state: :downloaded} = EpisodeStatus.get_episode_status(episode)
     end
 
     test "returns :upcoming for episodes with future air dates" do
@@ -47,7 +60,7 @@ defmodule Mydia.Media.EpisodeStatusTest do
         downloads: []
       }
 
-      assert EpisodeStatus.get_episode_status(episode) == :upcoming
+      assert %AvailabilityStatus{state: :upcoming} = EpisodeStatus.get_episode_status(episode)
     end
   end
 
@@ -60,10 +73,11 @@ defmodule Mydia.Media.EpisodeStatusTest do
         downloads: []
       }
 
-      assert EpisodeStatus.get_episode_status_with_downloads(episode) == :tba
+      assert %AvailabilityStatus{state: :tba} =
+               EpisodeStatus.get_episode_status_with_downloads(episode)
     end
 
-    test "returns :not_monitored for unmonitored episodes regardless of air_date" do
+    test "reports real availability for unmonitored episodes regardless of air_date" do
       episode = %Episode{
         monitored: false,
         air_date: nil,
@@ -71,7 +85,20 @@ defmodule Mydia.Media.EpisodeStatusTest do
         downloads: []
       }
 
-      assert EpisodeStatus.get_episode_status_with_downloads(episode) == :not_monitored
+      assert %AvailabilityStatus{state: :tba, monitored: false} =
+               EpisodeStatus.get_episode_status_with_downloads(episode)
+    end
+
+    test "an unmonitored episode with a file is downloaded, not hidden" do
+      episode = %Episode{
+        monitored: false,
+        air_date: ~D[2024-01-01],
+        media_files: [%Mydia.Library.MediaFile{}],
+        downloads: []
+      }
+
+      assert %AvailabilityStatus{state: :downloaded, monitored: false, file_count: 1} =
+               EpisodeStatus.get_episode_status_with_downloads(episode)
     end
 
     test "returns :downloaded for episodes with media files even with nil air_date" do
@@ -82,33 +109,8 @@ defmodule Mydia.Media.EpisodeStatusTest do
         downloads: []
       }
 
-      assert EpisodeStatus.get_episode_status_with_downloads(episode) == :downloaded
-    end
-  end
-
-  describe "status UI helpers" do
-    test "status_color/1 returns badge-warning for :tba" do
-      assert EpisodeStatus.status_color(:tba) == "badge-warning"
-    end
-
-    test "status_icon/1 returns hero-question-mark-circle for :tba" do
-      assert EpisodeStatus.status_icon(:tba) == "hero-question-mark-circle"
-    end
-
-    test "status_label/1 returns TBA for :tba" do
-      assert EpisodeStatus.status_label(:tba) == "TBA"
-    end
-
-    test "status_color/1 returns badge-warning for :partial" do
-      assert EpisodeStatus.status_color(:partial) == "badge-warning"
-    end
-
-    test "status_icon/1 returns hero-minus-circle for :partial" do
-      assert EpisodeStatus.status_icon(:partial) == "hero-minus-circle"
-    end
-
-    test "status_label/1 returns Partial for :partial" do
-      assert EpisodeStatus.status_label(:partial) == "Partial"
+      assert %AvailabilityStatus{state: :downloaded} =
+               EpisodeStatus.get_episode_status_with_downloads(episode)
     end
   end
 
@@ -122,17 +124,6 @@ defmodule Mydia.Media.EpisodeStatusTest do
       }
 
       assert EpisodeStatus.status_details(episode) == "Air date to be announced"
-    end
-
-    test "returns 'Not Monitored' for unmonitored episodes" do
-      episode = %Episode{
-        monitored: false,
-        air_date: nil,
-        media_files: [],
-        downloads: []
-      }
-
-      assert EpisodeStatus.status_details(episode) == "Not Monitored"
     end
 
     test "handles plain Download struct without progress field" do
@@ -206,6 +197,28 @@ defmodule Mydia.Media.EpisodeStatusTest do
 
       # Should return count of active downloads
       assert EpisodeStatus.status_details(episode) == "Downloading (2 active)"
+    end
+
+    test "notes the monitoring state without hiding availability" do
+      episode = %Episode{
+        monitored: false,
+        air_date: ~D[2024-01-01],
+        media_files: [],
+        downloads: []
+      }
+
+      assert EpisodeStatus.status_details(episode) == "Missing · Not monitored"
+    end
+
+    test "leaves monitored episodes unsuffixed" do
+      episode = %Episode{
+        monitored: true,
+        air_date: ~D[2024-01-01],
+        media_files: [],
+        downloads: []
+      }
+
+      assert EpisodeStatus.status_details(episode) == "Missing"
     end
   end
 end
