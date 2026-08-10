@@ -5,6 +5,7 @@ defmodule MetadataRelayWeb.Router do
   import Plug.Conn
   import Phoenix.Controller
   import Phoenix.LiveView.Router
+  import MetadataRelayWeb.DashboardAuth
 
   pipeline :browser do
     plug(:accepts, ["html"])
@@ -16,7 +17,7 @@ defmodule MetadataRelayWeb.Router do
   end
 
   pipeline :authed_dashboard do
-    plug(:dashboard_basic_auth)
+    plug(:require_dashboard_auth)
   end
 
   scope "/auth", MetadataRelayWeb do
@@ -31,20 +32,18 @@ defmodule MetadataRelayWeb.Router do
   # Maintainer dashboards
   scope "/" do
     pipe_through([:browser, :authed_dashboard])
-    error_tracker_dashboard("/errors")
-    live("/feedback", MetadataRelayWeb.FeedbackLive.Index, :index)
+
+    error_tracker_dashboard("/errors",
+      on_mount: [{MetadataRelayWeb.DashboardAuth, :require_github_login}]
+    )
+
+    live_session :feedback,
+      on_mount: [{MetadataRelayWeb.DashboardAuth, :require_github_login}],
+      session: {MetadataRelayWeb.DashboardAuth, :live_session_data, []} do
+      live("/feedback", MetadataRelayWeb.FeedbackLive.Index, :index)
+    end
   end
 
   # Forward all other requests to the API router
   forward("/", MetadataRelay.Router)
-
-  defp dashboard_basic_auth(conn, _opts) do
-    Plug.BasicAuth.basic_auth(
-      conn,
-      Keyword.merge(
-        [realm: "Metadata Relay Dashboard"],
-        Application.fetch_env!(:metadata_relay, :dashboard_auth)
-      )
-    )
-  end
 end

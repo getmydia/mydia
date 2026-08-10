@@ -49,6 +49,7 @@ defmodule MetadataRelayWeb.AuthController do
 
   def logout(conn, _params) do
     conn
+    |> clear_session()
     |> configure_session(drop: true)
     |> redirect(to: "/auth/login")
   end
@@ -65,6 +66,7 @@ defmodule MetadataRelayWeb.AuthController do
 
   defp deny(conn, reason) do
     conn
+    |> clear_session()
     |> configure_session(drop: true)
     |> redirect(to: "/auth/login?error=" <> reason)
   end
