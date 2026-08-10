@@ -19,6 +19,15 @@ defmodule MetadataRelayWeb.Router do
     plug(:dashboard_basic_auth)
   end
 
+  scope "/auth", MetadataRelayWeb do
+    pipe_through(:browser)
+
+    get("/login", AuthController, :login)
+    get("/github", AuthController, :request)
+    get("/github/callback", AuthController, :callback)
+    post("/logout", AuthController, :logout)
+  end
+
   # Maintainer dashboards
   scope "/" do
     pipe_through([:browser, :authed_dashboard])
