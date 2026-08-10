@@ -1,15 +1,20 @@
 defmodule MetadataRelayWeb.Endpoint do
   use Phoenix.Endpoint, otp_app: :metadata_relay
 
-  # The session will be stored in the cookie and signed,
-  # this means its contents can be read but not tampered with.
-  # Set :encryption_salt if you would also like to encrypt it.
   @session_options [
     store: :cookie,
     key: "_metadata_relay_key",
     signing_salt: "error_tracker_salt",
+    encryption_salt: "metadata_relay_session_encryption",
     same_site: "Lax"
   ]
+
+  @doc """
+  Session options shared by the plug pipeline and the LiveView socket.
+
+  Exposed so tests can assert on the cookie configuration.
+  """
+  def session_options, do: @session_options
 
   socket("/live", Phoenix.LiveView.Socket, websocket: [connect_info: [session: @session_options]])
 

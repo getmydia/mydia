@@ -16,6 +16,24 @@ if config_env() != :test do
     end
   end
 
+  secret_key_base =
+    case normalize_env.("SECRET_KEY_BASE") do
+      nil ->
+        IO.puts(
+          :stderr,
+          "[metadata_relay] SECRET_KEY_BASE is not set. Generating a random key for this boot. " <>
+            "Dashboard sessions will not survive a restart."
+        )
+
+        48 |> :crypto.strong_rand_bytes() |> Base.encode64()
+
+      value when byte_size(value) < 64 ->
+        raise("SECRET_KEY_BASE must be at least 64 bytes")
+
+      value ->
+        value
+    end
+
   dashboard_username =
     System.get_env("DASHBOARD_USERNAME") ||
       if config_env() == :prod do
@@ -47,7 +65,8 @@ if config_env() != :test do
 
   config :metadata_relay, MetadataRelayWeb.Endpoint,
     http: [port: port],
-    server: true
+    server: true,
+    secret_key_base: secret_key_base
 
   feedback_email_to = normalize_env.("FEEDBACK_EMAIL_TO")
   feedback_email_from = normalize_env.("FEEDBACK_EMAIL_FROM") || "metadata-relay@localhost"
