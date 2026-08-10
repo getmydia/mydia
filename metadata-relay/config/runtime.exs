@@ -111,6 +111,11 @@ if config_env() != :test do
     end
   end
 
+  config :metadata_relay, MetadataRelay.GitHub,
+    client_id: normalize_env.("GITHUB_APP_CLIENT_ID"),
+    client_secret: normalize_env.("GITHUB_APP_CLIENT_SECRET"),
+    repo: normalize_env.("FEEDBACK_GITHUB_REPO") || "getmydia/mydia"
+
   if config_env() == :prod do
     # API keys from environment
     tmdb_api_key = System.get_env("TMDB_API_KEY")

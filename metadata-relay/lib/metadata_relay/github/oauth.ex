@@ -1,0 +1,110 @@
+defmodule MetadataRelay.GitHub.OAuth do
+  @moduledoc """
+  User-to-server authorization against the Mydia Relay GitHub App.
+
+  The App's registered callback URL is used, so no `redirect_uri` is sent.
+  GitHub Apps take their permissions from the App declaration, so no `scope`
+  parameter is sent either.
+
+  ## Testing
+
+  Inject a Req adapter through application config:
+
+      config :metadata_relay, :github_http_adapter, fn request ->
+        {request, Req.Response.new(status: 200, body: %{})}
+      end
+  """
+
+  @config_key MetadataRelay.GitHub
+
+  @authorize_url "https://github.com/login/oauth/authorize"
+  @token_url "https://github.com/login/oauth/access_token"
+  @api_url "https://api.github.com"
+
+  @doc "True when both App credentials are present."
+  def configured?, do: not is_nil(client_id()) and not is_nil(client_secret())
+
+  @doc "URL to send the browser to, carrying an anti-forgery state value."
+  def authorize_url(state) when is_binary(state) do
+    query = URI.encode_query(%{"client_id" => client_id(), "state" => state})
+    @authorize_url <> "?" <> query
+  end
+
+  @doc "Trades an authorization code for a user access token."
+  def exchange_code(code) when is_binary(code) do
+    request =
+      req_new(
+        url: @token_url,
+        method: :post,
+        headers: [{"accept", "application/json"}],
+        json: %{
+          client_id: client_id(),
+          client_secret: client_secret(),
+          code: code
+        }
+      )
+
+    case Req.request(request) do
+      {:ok, %{status: 200, body: %{"access_token" => token}}} when is_binary(token) ->
+        {:ok, token}
+
+      {:ok, %{status: 200, body: %{"error" => error} = body}} ->
+        {:error, {:oauth, Map.get(body, "error_description", error)}}
+
+      {:ok, %{status: status}} ->
+        {:error, {:http, status}}
+
+      {:error, reason} ->
+        {:error, {:transport, reason}}
+    end
+  end
+
+  @doc "Looks up the authenticated user for a token."
+  def fetch_user(token) when is_binary(token) do
+    request =
+      req_new(
+        url: @api_url <> "/user",
+        method: :get,
+        headers: [
+          {"accept", "application/vnd.github+json"},
+          {"authorization", "Bearer " <> token},
+          {"x-github-api-version", "2022-11-28"}
+        ]
+      )
+
+    case Req.request(request) do
+      {:ok, %{status: 200, body: %{"login" => login}}} when is_binary(login) ->
+        {:ok, %{login: login}}
+
+      {:ok, %{status: status}} ->
+        {:error, {:http, status}}
+
+      {:error, reason} ->
+        {:error, {:transport, reason}}
+    end
+  end
+
+  defp req_new(opts) do
+    adapter = Application.get_env(:metadata_relay, :github_http_adapter)
+    opts = if adapter, do: Keyword.put(opts, :adapter, adapter), else: opts
+
+    Req.new(opts)
+  end
+
+  defp client_id, do: config(:client_id)
+  defp client_secret, do: config(:client_secret)
+
+  defp config(key) do
+    :metadata_relay
+    |> Application.get_env(@config_key, [])
+    |> Keyword.get(key)
+    |> normalize()
+  end
+
+  defp normalize(value) when is_binary(value) do
+    trimmed = String.trim(value)
+    if trimmed == "", do: nil, else: trimmed
+  end
+
+  defp normalize(_), do: nil
+end
