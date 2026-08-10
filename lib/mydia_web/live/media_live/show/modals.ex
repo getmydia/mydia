@@ -882,7 +882,11 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                         <.icon name="hero-arrow-top-right-on-square" class="w-3 h-3" />
                       </a>
                     <% else %>
-                      <span class="badge badge-outline badge-sm">{result.indexer}</span>
+                      <%!-- No usable URL: keep the pre-existing xs-screen hiding, since a
+                           non-actionable badge earns no room in a dense mobile row. --%>
+                      <span class="badge badge-outline badge-sm hidden sm:inline-flex">
+                        {result.indexer}
+                      </span>
                     <% end %>
                   </div>
                   <%= if reason = Map.get(result, :grab_failed) do %>
