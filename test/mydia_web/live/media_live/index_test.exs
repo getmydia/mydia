@@ -530,7 +530,7 @@ defmodule MydiaWeb.MediaLive.IndexTest do
              )
     end
 
-    test "progress filter excludes unmonitored items", %{conn: conn} do
+    test "progress filter includes unmonitored items on their real availability", %{conn: conn} do
       monitored_movie =
         media_item_fixture(%{
           title: "Progress Monitoring On",
@@ -566,15 +566,15 @@ defmodule MydiaWeb.MediaLive.IndexTest do
                "#test-debug-info[data-search-query='Progress Monitoring'][data-stream-count='2']"
              )
 
-      # Unmonitored items are :not_monitored rather than :downloaded, so the
-      # filter agrees with the badge instead of contradicting it.
+      # Availability and monitoring are separate axes, so a downloaded movie matches the
+      # downloaded filter whether or not it is monitored.
       view
       |> element("form#library-filter-form")
       |> render_change(%{"progress" => "downloaded"})
 
       assert has_element?(
                view,
-               "#test-debug-info[data-progress-filter='downloaded'][data-stream-count='1']"
+               "#test-debug-info[data-progress-filter='downloaded'][data-stream-count='2']"
              )
     end
   end

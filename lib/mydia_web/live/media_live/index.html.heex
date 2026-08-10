@@ -383,7 +383,7 @@
                   {item.title}
                 </h3>
                 <%!-- Status badge and year --%>
-                <% {status, counts} = get_media_item_status(item) %>
+                <% status = get_media_item_status(item) %>
                 <div class="flex flex-col gap-1">
                   <div class="flex items-center justify-between gap-2">
                     <div class="flex items-center gap-1">
@@ -392,17 +392,6 @@
                           <.icon name={media_status_icon(status)} class="w-3 h-3" />
                         </span>
                       </div>
-                      <%!-- File indicator for unmonitored items with files --%>
-                      <%= if show_file_indicator?(status, counts) do %>
-                        <div
-                          class="tooltip tooltip-right"
-                          data-tip={get_file_indicator_tooltip(counts)}
-                        >
-                          <span class="badge badge-xs badge-success">
-                            <.icon name="hero-document-check" class="w-3 h-3" />
-                          </span>
-                        </div>
-                      <% end %>
                       <%!-- Category badge --%>
                       <%= if item.category do %>
                         <div>
@@ -416,7 +405,7 @@
                     </div>
                     <span class="text-xs text-base-content/70">{format_year(item.year)}</span>
                   </div>
-                  <%= if episode_count = format_episode_count(counts) do %>
+                  <%= if episode_count = format_episode_count(status) do %>
                     <span class="text-xs text-base-content/70">{episode_count}</span>
                   <% end %>
                 </div>
@@ -523,7 +512,7 @@
             </div>
             <%!-- Status column --%>
             <div class="w-28 hidden lg:block flex-shrink-0">
-              <% {status, counts} = get_media_item_status(item) %>
+              <% status = get_media_item_status(item) %>
               <div class="flex flex-col gap-0.5">
                 <div class="flex items-center gap-1">
                   <div class="tooltip tooltip-left" data-tip={media_status_label(status)}>
@@ -531,19 +520,8 @@
                       <.icon name={media_status_icon(status)} class="w-3 h-3" />
                     </span>
                   </div>
-                  <%!-- File indicator for unmonitored items with files --%>
-                  <%= if show_file_indicator?(status, counts) do %>
-                    <div
-                      class="tooltip tooltip-left"
-                      data-tip={get_file_indicator_tooltip(counts)}
-                    >
-                      <span class="badge badge-sm badge-success">
-                        <.icon name="hero-document-check" class="w-3 h-3" />
-                      </span>
-                    </div>
-                  <% end %>
                 </div>
-                <%= if episode_count = format_episode_count(counts) do %>
+                <%= if episode_count = format_episode_count(status) do %>
                   <span class="text-xs text-base-content/60">{episode_count}</span>
                 <% end %>
               </div>
