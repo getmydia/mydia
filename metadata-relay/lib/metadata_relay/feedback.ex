@@ -84,6 +84,43 @@ defmodule MetadataRelay.Feedback do
     |> Repo.update()
   end
 
+  @doc """
+  Base URL of the maintainer dashboard, with any trailing slash removed.
+
+  Shared by the email notifier and the GitHub issue body so both derive their
+  backlink from one place.
+  """
+  def dashboard_url do
+    :metadata_relay
+    |> Application.get_env(MetadataRelay.Feedback.Notifier, [])
+    |> Keyword.get(:dashboard_url)
+    |> case do
+      value when is_binary(value) ->
+        case String.trim(value) do
+          "" -> nil
+          trimmed -> String.trim_trailing(trimmed, "/")
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  @doc """
+  Dashboard link for a submission, focusing and anchoring it.
+
+  The two-argument form takes the base URL so pure callers such as
+  `MetadataRelay.Feedback.IssueDraft` can build the same link without reading
+  configuration. This is the single definition of the link format.
+  """
+  def submission_url(submission), do: submission_url(submission, dashboard_url())
+
+  def submission_url(_submission, nil), do: nil
+
+  def submission_url(%Submission{id: id}, base) when is_binary(base) do
+    "#{base}/feedback?focus=#{id}#feedback-#{id}"
+  end
+
   defp maybe_filter(query, _field, nil), do: query
   defp maybe_filter(query, _field, "all"), do: query
   defp maybe_filter(query, _field, :all), do: query

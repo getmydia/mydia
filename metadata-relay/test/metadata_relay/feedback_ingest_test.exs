@@ -75,7 +75,7 @@ defmodule MetadataRelay.FeedbackIngestTest do
       assert email.text_body =~ "Instance: instance-1"
       assert email.text_body =~ "Mydia version: 1.2.3"
       assert email.text_body =~ "Message:\nAdd watch party mode"
-      assert email.text_body =~ "Dashboard: https://relay.example.com/feedback#feedback-"
+      assert email.text_body =~ "Dashboard: https://relay.example.com/feedback?focus="
     end
 
     test "sets reply-to to the contact when it is an email address" do

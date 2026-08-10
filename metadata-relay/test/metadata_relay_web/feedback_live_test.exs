@@ -156,6 +156,26 @@ defmodule MetadataRelayWeb.FeedbackLiveTest do
     assert has_element?(view, "#dashboard-flash-error", "Feedback no longer exists.")
   end
 
+  test "a focus parameter expands the targeted submission" do
+    long_message = String.duplicate("This message is long enough to be truncated. ", 12)
+    {:ok, focused} = Feedback.create_submission(%{type: "bug", message: long_message})
+    {:ok, other} = Feedback.create_submission(%{type: "bug", message: long_message})
+
+    {:ok, view, _html} = live(authed_conn(), "/feedback?focus=#{focused.id}")
+
+    assert has_element?(view, "#toggle-expand-#{focused.id}", "Collapse message")
+    assert has_element?(view, "#toggle-expand-#{other.id}", "Expand message")
+  end
+
+  test "an unknown focus parameter expands nothing" do
+    long_message = String.duplicate("This message is long enough to be truncated. ", 12)
+    {:ok, submission} = Feedback.create_submission(%{type: "bug", message: long_message})
+
+    {:ok, view, _html} = live(authed_conn(), "/feedback?focus=#{Ecto.UUID.generate()}")
+
+    assert has_element?(view, "#toggle-expand-#{submission.id}", "Expand message")
+  end
+
   defp authed_conn do
     build_conn()
     |> put_req_header("authorization", "Basic " <> Base.encode64("admin:admin"))

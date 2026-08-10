@@ -11,6 +11,18 @@
               Review product feedback from Mydia instances, focus on unread items first, and keep GitHub filing notes attached to each submission.
             </p>
           </div>
+
+          <form
+            :if={@github_login}
+            id="sign-out-form"
+            action="/auth/logout"
+            method="post"
+            class="flex items-center gap-3"
+          >
+            <input type="hidden" name="_csrf_token" value={Phoenix.Controller.get_csrf_token()} />
+            <span class="text-sm text-base-content/60">Signed in as {@github_login}</span>
+            <button id="sign-out" type="submit" class="btn btn-ghost btn-xs">Sign out</button>
+          </form>
         </div>
 
         <div class="stats stats-vertical rounded-box border border-base-300 bg-base-200/70 shadow-sm sm:stats-horizontal">

@@ -86,20 +86,9 @@ defmodule MetadataRelay.Feedback.Notifier do
   end
 
   defp dashboard_line(submission) do
-    case dashboard_url() do
+    case MetadataRelay.Feedback.submission_url(submission) do
       nil -> ""
-      dashboard_url -> "\n\nDashboard: #{dashboard_url}/feedback#feedback-#{submission.id}"
-    end
-  end
-
-  defp dashboard_url do
-    @config_key
-    |> config()
-    |> Keyword.get(:dashboard_url)
-    |> normalize_optional_string()
-    |> case do
-      nil -> nil
-      url -> String.trim_trailing(url, "/")
+      url -> "\n\nDashboard: #{url}"
     end
   end
 

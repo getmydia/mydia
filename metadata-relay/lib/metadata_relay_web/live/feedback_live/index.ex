@@ -12,15 +12,18 @@ defmodule MetadataRelayWeb.FeedbackLive.Index do
   @valid_type_filters ~w(bug idea question all)
 
   @impl true
-  def mount(_params, _session, socket) do
+  def mount(params, _session, socket) do
     {:ok,
      socket
      |> assign(:state_filter, "unread")
      |> assign(:type_filter, "all")
-     |> assign(:expanded_ids, MapSet.new())
+     |> assign(:expanded_ids, focused_ids(params))
      |> assign(:page_title, "Feedback Dashboard")
      |> load_dashboard()}
   end
+
+  defp focused_ids(%{"focus" => focus}) when is_binary(focus), do: MapSet.new([focus])
+  defp focused_ids(_params), do: MapSet.new()
 
   @impl true
   def handle_event("filter", %{"filters" => filters}, socket) do
