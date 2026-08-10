@@ -63,4 +63,16 @@ if "$SCRIPT" "$BROKEN" >/dev/null 2>&1; then
   exit 1
 fi
 
+# A missing objects/ is a broken transfer, not a dropped empty directory, so it
+# must be reported here rather than created and deferred into flatpak.
+NOOBJECTS="$WORK/no-objects"
+mkdir -p "$NOOBJECTS/refs/heads"
+echo "config" > "$NOOBJECTS/config"
+if "$SCRIPT" "$NOOBJECTS" >/dev/null 2>&1; then
+  echo "FAIL: a repo with a config but no objects/ must exit non-zero"
+  exit 1
+fi
+[ ! -d "$NOOBJECTS/objects" ] \
+  || { echo "FAIL: objects/ must never be created, only asserted"; exit 1; }
+
 echo "PASS"

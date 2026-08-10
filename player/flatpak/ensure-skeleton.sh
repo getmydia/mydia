@@ -27,9 +27,12 @@
 # happens to drop, because mkdir -p on a directory that already exists costs
 # nothing and does not require reasoning about which refs a build produced.
 # refs/heads normally survives, in that it holds the app ref; it is listed for
-# that reason, not because it is expected to be missing. objects/ is omitted
-# because it always carries content, so its absence would mean a broken repo
-# rather than a dropped empty directory, and should fail loudly.
+# that reason, not because it is expected to be missing.
+#
+# objects/ is deliberately NOT created. It always carries content, so its
+# absence means a broken transfer rather than a dropped empty directory, and
+# creating it would paper over that and defer the failure into flatpak. It is
+# asserted instead, so the break is reported here and names itself.
 set -euo pipefail
 
 REPO="${1:?repo path required}"
@@ -45,5 +48,14 @@ done
 for d in "${DIRS[@]}"; do
   test -d "$REPO/$d" || { echo "::error::$REPO/$d missing" >&2; exit 1; }
 done
+
+# Gated on config, which is a file and therefore survives every transfer. Its
+# presence is what distinguishes an existing repo, where objects/ must be
+# there, from a first publish against an empty directory, where nothing has
+# been initialised yet and its absence is expected.
+if [ -e "$REPO/config" ] && [ ! -d "$REPO/objects" ]; then
+  echo "::error::$REPO/objects is missing from a repo that has a config. That is a broken transfer, not a dropped empty directory." >&2
+  exit 1
+fi
 
 echo "skeleton: $REPO ok"
