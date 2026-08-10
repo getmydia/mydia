@@ -37,6 +37,11 @@ defmodule MetadataRelay.Feedback do
               "coalesce(sum(case when ? = 'read' then 1 else 0 end), 0)",
               submission.state
             ),
+          filed:
+            fragment(
+              "coalesce(sum(case when ? = 'filed' then 1 else 0 end), 0)",
+              submission.state
+            ),
           archived:
             fragment(
               "coalesce(sum(case when ? = 'archived' then 1 else 0 end), 0)",

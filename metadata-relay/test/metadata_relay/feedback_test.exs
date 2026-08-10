@@ -101,4 +101,48 @@ defmodule MetadataRelay.FeedbackTest do
     assert {:error, changeset} = Feedback.update_state(submission, "invalid")
     assert {"is invalid", _} = changeset.errors[:state]
   end
+
+  test "summary counts filed submissions" do
+    {:ok, filed} = Feedback.create_submission(%{type: "bug", message: "Filed"})
+    {:ok, _filed} = Feedback.update_state(filed, "filed")
+
+    assert %{filed: 1} = Feedback.submission_summary()
+  end
+
+  test "saving a github ref promotes unread to filed" do
+    {:ok, submission} = Feedback.create_submission(%{type: "bug", message: "Unread"})
+
+    {:ok, updated} = Feedback.set_github_ref(submission, "#123")
+
+    assert updated.state == "filed"
+    assert updated.github_ref == "#123"
+  end
+
+  test "saving a github ref promotes read to filed" do
+    {:ok, submission} = Feedback.create_submission(%{type: "bug", message: "Read"})
+    {:ok, submission} = Feedback.update_state(submission, "read")
+
+    {:ok, updated} = Feedback.set_github_ref(submission, "#123")
+
+    assert updated.state == "filed"
+  end
+
+  test "saving a github ref leaves an archived submission archived" do
+    {:ok, submission} = Feedback.create_submission(%{type: "bug", message: "Archived"})
+    {:ok, submission} = Feedback.update_state(submission, "archived")
+
+    {:ok, updated} = Feedback.set_github_ref(submission, "#123")
+
+    assert updated.state == "archived"
+  end
+
+  test "clearing a github ref does not demote the state" do
+    {:ok, submission} = Feedback.create_submission(%{type: "bug", message: "Filed"})
+    {:ok, submission} = Feedback.set_github_ref(submission, "#123")
+
+    {:ok, updated} = Feedback.set_github_ref(submission, nil)
+
+    assert updated.state == "filed"
+    assert updated.github_ref == nil
+  end
 end

@@ -8,7 +8,7 @@ defmodule MetadataRelayWeb.FeedbackLive.Index do
   alias MetadataRelay.Feedback
 
   @message_preview_limit 220
-  @valid_state_filters ~w(unread read archived all)
+  @valid_state_filters ~w(unread read filed archived all)
   @valid_type_filters ~w(bug idea question all)
 
   @impl true
@@ -125,6 +125,7 @@ defmodule MetadataRelayWeb.FeedbackLive.Index do
 
   def state_label("unread"), do: "Unread"
   def state_label("read"), do: "Read"
+  def state_label("filed"), do: "Filed"
   def state_label("archived"), do: "Archived"
 
   def type_badge_class("bug"), do: "badge-error"
@@ -133,6 +134,7 @@ defmodule MetadataRelayWeb.FeedbackLive.Index do
 
   def state_badge_class("unread"), do: "badge-primary"
   def state_badge_class("read"), do: "badge-ghost"
+  def state_badge_class("filed"), do: "badge-success"
   def state_badge_class("archived"), do: "badge-neutral"
 
   def expandable_message?(message), do: byte_size(message) > @message_preview_limit
@@ -143,6 +145,7 @@ defmodule MetadataRelayWeb.FeedbackLive.Index do
   defp label_for_state_filter("all"), do: "all states"
   defp label_for_state_filter("unread"), do: "unread"
   defp label_for_state_filter("read"), do: "read"
+  defp label_for_state_filter("filed"), do: "filed"
   defp label_for_state_filter("archived"), do: "archived"
   defp label_for_state_filter(_), do: "all states"
 

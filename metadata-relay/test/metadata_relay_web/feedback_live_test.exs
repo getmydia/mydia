@@ -118,7 +118,7 @@ defmodule MetadataRelayWeb.FeedbackLiveTest do
 
     {:ok, view, _html} = live(authed_conn(), "/feedback")
 
-    html =
+    _html =
       view
       |> form("#feedback-github-ref-#{submission.id}", %{
         "github_ref" => "gh#123"
@@ -126,6 +126,15 @@ defmodule MetadataRelayWeb.FeedbackLiveTest do
       |> render_submit()
 
     assert Feedback.get_submission!(submission.id).github_ref == "gh#123"
+    assert Feedback.get_submission!(submission.id).state == "filed"
+
+    # Saving a ref promotes the submission out of the unread inbox, so switch to
+    # the all filter before asserting on the rendered card.
+    html =
+      view
+      |> form("#feedback-filters", %{"filters" => %{"state" => "all", "type" => "all"}})
+      |> render_change()
+
     assert html =~ "Filed as gh#123"
     assert has_element?(view, "#github-ref-input-#{submission.id}[value='gh#123']")
   end
