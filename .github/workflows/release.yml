@@ -1365,45 +1365,14 @@ jobs:
           path: staged-repo
 
       - name: Restore the staged repo's empty directories
-        run: |
-          set -euo pipefail
-          # upload-artifact does not preserve empty directories, and an ostree
-          # repo is full of them: refs/remotes, refs/mirrors, extensions, state
-          # and tmp/cache all survive a build empty. The artifact round trip
-          # drops them, so the first thing to read the downloaded repo dies with
-          # "Listing refs: opendir(refs/remotes): No such file or directory".
-          #
-          # The dry run cannot catch this. It rehearses against $PWD/staged-repo
-          # in the build job, which never goes through an artifact, so the
-          # skeleton is still intact there.
-          #
-          # mkdir, not `ostree init`. Whether init repairs an existing repo is
-          # version dependent: libostree 2026.2 recreates the missing skeleton,
-          # but the 2024.5 on ubuntu-latest returns 0 and changes nothing, so
-          # the repair silently did not happen and build-commit-from still died.
-          # That is what failed the flatpak publish on v0.13.0-beta.5. Creating
-          # the directories outright does not depend on any of that.
-          #
-          # The whole refs skeleton is recreated rather than just the subset a
-          # given build happens to leave empty, because mkdir -p on a directory
-          # that already exists costs nothing and does not require reasoning
-          # about which refs a build produced. refs/heads normally survives, in
-          # that it holds the app ref; it is listed for that reason, not because
-          # it is expected to be missing. objects/ is omitted because it always
-          # carries content, so its absence would mean a broken artifact rather
-          # than a dropped empty directory, and should fail loudly.
-          mkdir -p \
-            staged-repo/refs/heads \
-            staged-repo/refs/mirrors \
-            staged-repo/refs/remotes \
-            staged-repo/extensions \
-            staged-repo/state \
-            staged-repo/tmp/cache
-          # Fail here rather than inside flatpak build-commit-from, where the
-          # same problem surfaces as an opaque refs error.
-          for d in refs/heads refs/mirrors refs/remotes extensions state tmp/cache; do
-            test -d "staged-repo/$d" || { echo "::error::staged-repo/$d missing" >&2; exit 1; }
-          done
+        # upload-artifact does not preserve empty directories, and an ostree
+        # repo is full of them. See player/flatpak/ensure-skeleton.sh for why
+        # this is mkdir rather than `ostree init`.
+        #
+        # The dry run cannot catch a regression here. It rehearses against
+        # $PWD/staged-repo in the build job, which never goes through an
+        # artifact, so the skeleton is still intact there.
+        run: ./player/flatpak/ensure-skeleton.sh staged-repo
 
       - name: Import the signing key
         env:

@@ -307,6 +307,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # player/flatpak/test/ holds four script tests and nothing ran any of
+      # them, which is how the publish.sh skeleton bug reached v0.13.1. This one
+      # needs no packages beyond bash, so it runs first. The other three want
+      # ostree, rclone, flatpak and gpg and are still manual.
+      - name: Test the ostree skeleton repair
+        run: ./player/flatpak/test/ensure-skeleton-test.sh
+
       # Seconds, not minutes. Catches most manifest metadata mistakes long
       # before the full flatpak-build job below finishes compiling mpv.
       - name: Install validators
