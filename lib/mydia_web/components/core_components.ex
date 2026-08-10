@@ -1039,35 +1039,6 @@ defmodule MydiaWeb.CoreComponents do
   end
 
   @doc """
-  Renders a progress badge for media cards.
-
-  Shows "Continue Watching" for in-progress content or "Watched" for completed content.
-
-  ## Examples
-
-      <.progress_badge progress={@progress} />
-  """
-  attr :progress, :map, required: true, doc: "The progress struct"
-  attr :class, :string, default: "", doc: "Additional CSS classes"
-
-  def progress_badge(assigns) do
-    ~H"""
-    <div :if={@progress} class={["absolute top-2 right-2 z-10", @class]}>
-      <span
-        :if={@progress.completion_percentage > 0 && !@progress.watched}
-        class="badge badge-primary badge-sm shadow-md"
-      >
-        Continue
-      </span>
-
-      <span :if={@progress.watched} class="badge badge-success badge-sm shadow-md gap-1">
-        <.icon name="hero-check" class="w-3 h-3" /> Watched
-      </span>
-    </div>
-    """
-  end
-
-  @doc """
   Renders the badge stack overlaid on a media poster's top-right corner.
 
   Owns that corner so playback state and quality cannot collide. Both badges

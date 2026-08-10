@@ -10,7 +10,7 @@ defmodule MydiaWeb.LibraryComponents do
   alias Phoenix.LiveView.JS
 
   # Import only what we need to avoid circular dependency
-  import MydiaWeb.CoreComponents, only: [icon: 1, progress_bar: 1, progress_badge: 1, modal: 1]
+  import MydiaWeb.CoreComponents, only: [icon: 1, progress_bar: 1, poster_badges: 1, modal: 1]
 
   use Phoenix.VerifiedRoutes,
     endpoint: MydiaWeb.Endpoint,
@@ -200,13 +200,12 @@ defmodule MydiaWeb.LibraryComponents do
             />
             <%!-- Progress indicators --%>
             <.progress_bar :if={@progress} progress={@progress} />
-            <.progress_badge :if={@progress} progress={@progress} />
-            <%!-- Quality badge --%>
-            <%= if @quality do %>
-              <div class="badge badge-primary badge-sm absolute top-2 right-2 z-10 shadow-md">
-                {@quality}
-              </div>
-            <% end %>
+            <%!-- Playback status and quality, stacked in one top-right container --%>
+            <.poster_badges
+              id={"poster-badges-#{@item.id}"}
+              progress={@progress}
+              quality={@quality}
+            />
             <%!-- Custom badges slot --%>
             {render_slot(@badges)}
           </figure>
