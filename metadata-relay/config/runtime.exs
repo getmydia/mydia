@@ -50,8 +50,21 @@ if config_env() != :test do
         "admin"
       end
 
+  dashboard_github_users =
+    case normalize_env.("DASHBOARD_GITHUB_USERS") do
+      nil ->
+        []
+
+      value ->
+        value
+        |> String.split(",")
+        |> Enum.map(&String.trim/1)
+        |> Enum.reject(&(&1 == ""))
+    end
+
   config :metadata_relay,
-    dashboard_auth: [username: dashboard_username, password: dashboard_password]
+    dashboard_auth: [username: dashboard_username, password: dashboard_password],
+    dashboard_github_users: dashboard_github_users
 
   # Database configuration (all environments except test)
   db_path = System.get_env("SQLITE_DB_PATH") || "./metadata_relay.db"
