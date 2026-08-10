@@ -1,7 +1,7 @@
 defmodule MydiaWeb.MediaLive.Index do
   use MydiaWeb, :live_view
   alias Mydia.Media
-  alias Mydia.Media.EpisodeStatus
+  alias Mydia.Media.AvailabilityStatus
   alias Mydia.Metadata.Structs.MediaMetadata
   alias Mydia.Settings
   alias Mydia.Collections
@@ -807,14 +807,13 @@ defmodule MydiaWeb.MediaLive.Index do
 
   defp apply_progress_filter(items, nil), do: items
 
-  # Reuses `Media.get_media_status/1` — the same classifier that renders each
-  # item's status badge — so the filter can never disagree with what the badge
-  # says. Statuses outside the dropdown (`:downloading`, `:upcoming`,
-  # `:not_monitored`, `:tba`) simply match nothing and are filtered out.
+  # Reuses `Media.get_media_status/1` — the same classifier that renders each item's
+  # status badge — so the filter can never disagree with what the badge says. Monitoring
+  # is a separate axis now, so unmonitored items match on their real availability; narrow
+  # with the monitored select to get monitored-only results.
   defp apply_progress_filter(items, progress) do
     Enum.filter(items, fn item ->
-      {status, _counts} = Media.get_media_status(item)
-      status == progress
+      Media.get_media_status(item).state == progress
     end)
   end
 
@@ -1043,49 +1042,15 @@ defmodule MydiaWeb.MediaLive.Index do
     Media.get_media_status(media_item)
   end
 
-  defp media_status_color(status) do
-    EpisodeStatus.status_color(status)
-  end
+  defp media_status_color(status), do: AvailabilityStatus.color(status)
 
-  defp media_status_icon(status) do
-    EpisodeStatus.status_icon(status)
-  end
+  defp media_status_icon(status), do: AvailabilityStatus.icon(status)
 
-  defp media_status_label(status) do
-    EpisodeStatus.status_label(status)
-  end
+  defp media_status_label(status), do: AvailabilityStatus.label(status)
 
-  defp format_episode_count(nil), do: nil
-
-  defp format_episode_count(%{downloaded: downloaded, total: total}) do
-    "#{downloaded}/#{total} episodes"
-  end
+  defp format_episode_count(%AvailabilityStatus{downloaded: downloaded, total: total})
+       when is_integer(downloaded) and is_integer(total),
+       do: "#{downloaded}/#{total} episodes"
 
   defp format_episode_count(_), do: nil
-
-  # File indicator helpers for unmonitored items (movies only, not series)
-  defp show_file_indicator?(status, counts) do
-    status == :not_monitored && has_files?(counts) && !is_series?(counts)
-  end
-
-  defp has_files?(nil), do: false
-  defp has_files?(%{has_files: has_files}), do: has_files
-  defp has_files?(%{downloaded: downloaded}), do: downloaded > 0
-
-  # Series have episode counts (downloaded/total), movies don't
-  defp is_series?(%{total: total}) when is_integer(total), do: true
-  defp is_series?(_), do: false
-
-  defp get_file_indicator_tooltip(counts) do
-    case counts do
-      %{file_count: count} when count > 0 ->
-        "#{count} file#{if count == 1, do: "", else: "s"} available"
-
-      %{downloaded: downloaded, total: _total} when downloaded > 0 ->
-        "#{downloaded} episode#{if downloaded == 1, do: "", else: "s"} downloaded"
-
-      _ ->
-        "Files available"
-    end
-  end
 end

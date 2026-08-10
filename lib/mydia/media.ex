@@ -7,7 +7,7 @@ defmodule Mydia.Media do
   import Mydia.QueryHelpers
   require Logger
   alias Mydia.Repo
-  alias Mydia.Media.{MediaItem, Episode, CategoryClassifier}
+  alias Mydia.Media.{AvailabilityStatus, MediaItem, Episode, CategoryClassifier}
   alias Mydia.Media.Structs.CalendarEntry
   alias Mydia.Metadata.Access, as: MetadataAccess
   alias Mydia.Events
@@ -999,98 +999,79 @@ defmodule Mydia.Media do
   end
 
   @doc """
-  Gets aggregate status for a media item (TV show or movie).
+  Gets the aggregate availability of a media item, independent of monitoring.
 
-  For TV shows, returns status based on all episodes:
-  - `:not_monitored` - Media item not monitored
-  - `:downloaded` - All monitored episodes downloaded
-  - `:partial` - Some episodes downloaded, some missing
-  - `:downloading` - Has active downloads
-  - `:missing` - No episodes downloaded
-  - `:upcoming` - All episodes are upcoming
+  Returns an `AvailabilityStatus` whose `state` describes what is on disk and whose
+  `monitored` field describes whether anything is actively being pursued. The two are
+  deliberately separate: an unmonitored movie with no file is `:missing` with
+  `monitored: false`, not hidden behind a `:not_monitored` state.
 
-  For movies, returns simple status based on media files and downloads.
-
-  Returns tuple: `{status, %{downloaded: count, total: count}}` for TV shows
-  or `{status, nil}` for movies.
+  For series, episodes are classified over the monitored episodes when there are any,
+  and over every episode when there are none, so the counts always have a meaningful
+  denominator.
 
   ## Examples
 
-      iex> get_media_status(%MediaItem{type: "tv_show", monitored: true, episodes: [...]})
-      {:partial, %{downloaded: 5, total: 24}}
-
-      iex> get_media_status(%MediaItem{type: "movie", monitored: true})
-      {:downloaded, nil}
+      iex> get_media_status(%MediaItem{type: "movie", monitored: false, media_files: [], downloads: []})
+      %AvailabilityStatus{state: :missing, monitored: false, file_count: 0}
   """
-  @spec get_media_status(MediaItem.t()) :: {atom(), map() | nil}
-  def get_media_status(%MediaItem{type: "movie", monitored: false} = media_item) do
-    # For non-monitored movies, include file count information
-    file_count = length(media_item.media_files)
-    {:not_monitored, %{has_files: file_count > 0, file_count: file_count}}
-  end
-
+  @spec get_media_status(MediaItem.t()) :: AvailabilityStatus.t()
   def get_media_status(%MediaItem{type: "movie"} = media_item) do
     has_files = media_item.media_files != []
+    has_downloads = Enum.any?(media_item.downloads, &download_active?/1)
 
-    has_downloads =
-      media_item.downloads != [] &&
-        Enum.any?(media_item.downloads, &download_active?/1)
-
-    status =
+    state =
       cond do
         has_files -> :downloaded
         has_downloads -> :downloading
         true -> :missing
       end
 
-    {status, nil}
+    %AvailabilityStatus{
+      state: state,
+      monitored: media_item.monitored,
+      file_count: length(media_item.media_files)
+    }
   end
 
-  def get_media_status(%MediaItem{type: "tv_show", monitored: false, episodes: episodes}) do
-    # For non-monitored TV shows, still show episode counts
-    total_episodes = length(episodes)
-    downloaded_count = Enum.count(episodes, fn ep -> ep.media_files != [] end)
-
-    {:not_monitored, %{downloaded: downloaded_count, total: total_episodes}}
-  end
-
-  def get_media_status(%MediaItem{type: "tv_show", episodes: episodes}) do
+  def get_media_status(%MediaItem{type: "tv_show", episodes: episodes} = media_item) do
     monitored_episodes = Enum.filter(episodes, & &1.monitored)
-    total_monitored = length(monitored_episodes)
 
-    if total_monitored == 0 do
-      # No monitored episodes - show all episodes count instead
-      total_episodes = length(episodes)
-      downloaded_count = Enum.count(episodes, fn ep -> ep.media_files != [] end)
-      {:not_monitored, %{downloaded: downloaded_count, total: total_episodes}}
-    else
-      downloaded_count =
-        monitored_episodes
-        |> Enum.count(fn ep -> ep.media_files != [] end)
+    # With nothing monitored there is no meaningful denominator, so fall back to every
+    # episode. That keeps the x/y counts readable instead of rendering 0/0.
+    scope = if monitored_episodes == [], do: episodes, else: monitored_episodes
 
-      has_active_downloads =
-        monitored_episodes
-        |> Enum.any?(fn ep ->
-          Enum.any?(ep.downloads, &download_active?/1)
-        end)
+    total = length(scope)
+    downloaded_count = Enum.count(scope, fn ep -> ep.media_files != [] end)
 
-      all_upcoming =
-        monitored_episodes
-        |> Enum.all?(fn ep ->
+    has_active_downloads =
+      Enum.any?(scope, fn ep -> Enum.any?(ep.downloads, &download_active?/1) end)
+
+    all_upcoming =
+      scope != [] and
+        Enum.all?(scope, fn ep ->
           ep.air_date && Date.compare(ep.air_date, Date.utc_today()) == :gt
         end)
 
-      status =
-        cond do
-          downloaded_count == total_monitored -> :downloaded
-          has_active_downloads -> :downloading
-          all_upcoming -> :upcoming
-          downloaded_count > 0 -> :partial
-          true -> :missing
-        end
+    state =
+      cond do
+        total > 0 and downloaded_count == total -> :downloaded
+        has_active_downloads -> :downloading
+        all_upcoming -> :upcoming
+        downloaded_count > 0 -> :partial
+        true -> :missing
+      end
 
-      {status, %{downloaded: downloaded_count, total: total_monitored}}
-    end
+    %AvailabilityStatus{
+      state: state,
+      # A monitored show with every episode unmonitored is not chasing anything, so it
+      # renders muted rather than claiming a pursuit that will never happen. A show with
+      # no episodes at all is a different case: nothing contradicts the show's own flag
+      # yet, so a freshly added show awaiting metadata stays un-muted.
+      monitored: media_item.monitored and (episodes == [] or monitored_episodes != []),
+      downloaded: downloaded_count,
+      total: total
+    }
   end
 
   @doc """
