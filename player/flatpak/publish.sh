@@ -26,10 +26,13 @@ mkdir -p "$LIVE"
 rclone sync "$DEST" "$LIVE" --create-empty-src-dirs \
   --transfers 32 --checkers 32 --retries 5
 
-# Idempotent, and it recreates the refs/ skeleton if object storage ever lost
-# an empty directory. Safe on an existing repo: ostree init leaves the config
-# and objects alone.
+# Creates the repo on a first publish, when $DEST is still empty. Safe on an
+# existing repo: ostree init leaves the config and objects alone. It does NOT
+# repair a repo whose empty directories the sync dropped, which is what
+# ensure-skeleton.sh below is for.
 ostree init --repo="$LIVE" --mode=archive
+
+"$(dirname "${BASH_SOURCE[0]}")/ensure-skeleton.sh" "$LIVE"
 
 echo "publish: committing the staged build into $LIVE"
 flatpak build-commit-from \
