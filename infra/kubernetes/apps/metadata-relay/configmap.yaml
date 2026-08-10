@@ -23,6 +23,12 @@ data:
   FEEDBACK_EMAIL_TO: "feedback@mydia.dev"
   FEEDBACK_EMAIL_FROM: "feedback@mydia.dev"
   FEEDBACK_DASHBOARD_URL: "https://relay.mydia.dev"
+  # Comma-separated GitHub logins allowed into /feedback and /errors.
+  # Setting this switches the dashboards from basic auth to GitHub sign-in.
+  # Leave empty to keep basic auth.
+  DASHBOARD_GITHUB_USERS: "arsfeld"
+  # Repository that issues filed from the feedback dashboard land in.
+  FEEDBACK_GITHUB_REPO: "getmydia/mydia"
   SMTP_HOST: "smtp.resend.com"
   SMTP_PORT: "587"
   SMTP_USERNAME: "resend"

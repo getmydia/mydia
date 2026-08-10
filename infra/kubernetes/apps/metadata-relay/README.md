@@ -74,6 +74,9 @@ curl https://relay.mydia.dev/health
 - `PHX_HOST`: Hostname for Phoenix (relay.mydia.dev)
 - `MIX_ENV`: Environment (prod)
 - `SQLITE_DB_PATH`: Path to SQLite database file
+- `FEEDBACK_DASHBOARD_URL`: Base URL used in feedback notification links
+- `DASHBOARD_GITHUB_USERS`: Comma-separated GitHub logins allowed into `/feedback` and `/errors`. Setting this switches the dashboards from basic auth to GitHub sign-in. Leave empty to keep basic auth.
+- `FEEDBACK_GITHUB_REPO`: Repository that issues filed from the feedback dashboard land in (default `getmydia/mydia`)
 
 ### Secrets (secret.yaml)
 
@@ -87,6 +90,25 @@ Optional secrets:
   `/api/v1/subtitles/*` endpoint returns 503 until it is set, so it is
   required for subtitle functionality specifically, not for the service to
   boot.
+- `SECRET_KEY_BASE`: Phoenix session signing and encryption key (generate with `head -c 48 /dev/urandom | base64`). A random key is generated per boot if unset, but dashboard sessions will not survive a restart.
+- `GITHUB_APP_CLIENT_ID`: Client ID of the "Mydia Relay" GitHub App
+- `GITHUB_APP_CLIENT_SECRET`: Client secret of the "Mydia Relay" GitHub App
+
+### Maintainer access
+
+The `/feedback` and `/errors` dashboards support two mutually exclusive access modes.
+
+**Basic auth** (default): leave `DASHBOARD_GITHUB_USERS` empty and set `DASHBOARD_USERNAME` / `DASHBOARD_PASSWORD`. The issue-filing button is hidden.
+
+**GitHub App sign-in**: set `DASHBOARD_GITHUB_USERS` to an allowlist of GitHub logins. Basic auth is disabled. Maintainers sign in through the "Mydia Relay" GitHub App, and the feedback dashboard can file issues as the signed-in maintainer.
+
+To enable GitHub sign-in:
+
+1. Create a GitHub App named "Mydia Relay" owned by the `getmydia` organization. Repository permissions: Issues, read and write. Callback URL: `https://relay.mydia.dev/auth/github/callback`. Leave "Expire user authorization tokens" unchecked. Disable webhooks.
+2. Install the App on `getmydia/mydia`.
+3. Add `SECRET_KEY_BASE`, `GITHUB_APP_CLIENT_ID`, and `GITHUB_APP_CLIENT_SECRET` to the cluster secret, and `DASHBOARD_GITHUB_USERS` plus `FEEDBACK_GITHUB_REPO` to the ConfigMap.
+
+Without the App credentials and allowlist the relay stays in basic-auth mode, so there is no window in which the dashboards are unprotected.
 
 ### Storage
 

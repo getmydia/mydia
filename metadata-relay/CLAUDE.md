@@ -26,7 +26,9 @@ mix test
 mix format
 ```
 
-Environment variables: `PORT` (default 4001), `DASHBOARD_USERNAME` and `DASHBOARD_PASSWORD` (required in production for `/errors` and `/feedback` dashboards), `TMDB_API_KEY`, `TVDB_API_KEY`, `SUBDL_API_KEY`, `REDIS_URL` (optional).
+Environment variables: `PORT` (default 4001), `SECRET_KEY_BASE` (optional; a random key is generated per boot if unset, so sessions do not survive a restart), `DASHBOARD_USERNAME` and `DASHBOARD_PASSWORD` (required in production unless `DASHBOARD_GITHUB_USERS` is set), `DASHBOARD_GITHUB_USERS` (comma-separated GitHub logins; setting this switches `/errors` and `/feedback` from basic auth to GitHub App sign-in and disables basic auth), `GITHUB_APP_CLIENT_ID` and `GITHUB_APP_CLIENT_SECRET` (the "Mydia Relay" GitHub App), `FEEDBACK_GITHUB_REPO` (default `getmydia/mydia`), `TMDB_API_KEY`, `TVDB_API_KEY`, `SUBDL_API_KEY`, `REDIS_URL` (optional).
+
+The two dashboard access modes are mutually exclusive. With `DASHBOARD_GITHUB_USERS` set, GitHub sign-in is the only way in and the feedback dashboard can file issues as the signed-in maintainer. With it empty, basic auth applies and the issue-filing button is hidden.
 
 ## Deploying a New Version
 
