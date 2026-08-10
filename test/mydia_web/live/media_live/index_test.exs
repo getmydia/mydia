@@ -950,4 +950,118 @@ defmodule MydiaWeb.MediaLive.IndexTest do
       assert Mydia.Repo.all(Oban.Job) == []
     end
   end
+
+  describe "poster badge stack" do
+    setup %{conn: conn} do
+      admin = admin_user_fixture()
+      %{conn: log_in_user(conn, admin), admin: admin}
+    end
+
+    test "paused movie stacks Continue and quality in one container", %{
+      conn: conn,
+      admin: admin
+    } do
+      movie = media_item_fixture(%{title: "Paused Movie", type: "movie"})
+      media_file_fixture(%{media_item_id: movie.id, resolution: "1080p"})
+
+      # 1800/7200 = 25%, which is below the 90% auto-watched threshold.
+      {:ok, progress} =
+        Mydia.Playback.save_progress(admin.id, [media_item_id: movie.id], %{
+          position_seconds: 1800,
+          duration_seconds: 7200
+        })
+
+      assert progress.completion_percentage == 25.0
+      refute progress.watched
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      container = "#poster-badges-#{movie.id}"
+
+      assert has_element?(view, container)
+      assert has_element?(view, "#{container} .badge-primary", "Continue")
+      assert has_element?(view, "#{container} .badge-neutral", "1080p")
+
+      # The actual regression: only one element may claim the poster's
+      # top-right anchor. Two would render on top of each other.
+      anchors =
+        view
+        |> render()
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query("#grid-item-#{movie.id} .absolute.top-2.right-2")
+        |> LazyHTML.attribute("class")
+
+      assert length(anchors) == 1
+    end
+
+    test "finished movie stacks Watched and quality in one container", %{
+      conn: conn,
+      admin: admin
+    } do
+      movie = media_item_fixture(%{title: "Finished Movie", type: "movie"})
+      media_file_fixture(%{media_item_id: movie.id, resolution: "2160p"})
+
+      # 7000/7200 = 97.2%, which crosses the 90% auto-watched threshold.
+      {:ok, progress} =
+        Mydia.Playback.save_progress(admin.id, [media_item_id: movie.id], %{
+          position_seconds: 7000,
+          duration_seconds: 7200
+        })
+
+      assert progress.watched
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      container = "#poster-badges-#{movie.id}"
+
+      assert has_element?(view, container)
+      assert has_element?(view, "#{container} .badge-success", "Watched")
+      assert has_element?(view, "#{container} .badge-neutral", "2160p")
+
+      anchors =
+        view
+        |> render()
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query("#grid-item-#{movie.id} .absolute.top-2.right-2")
+        |> LazyHTML.attribute("class")
+
+      assert length(anchors) == 1
+    end
+
+    test "movie with quality but no progress still renders the quality badge", %{conn: conn} do
+      movie = media_item_fixture(%{title: "Unwatched Movie", type: "movie"})
+      media_file_fixture(%{media_item_id: movie.id, resolution: "720p"})
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      container = "#poster-badges-#{movie.id}"
+
+      assert has_element?(view, container)
+      assert has_element?(view, "#{container} .badge-neutral", "720p")
+      refute has_element?(view, "#{container} .badge-primary")
+      refute has_element?(view, "#{container} .badge-success")
+    end
+
+    test "movie with zero progress and no quality renders no badge container", %{
+      conn: conn,
+      admin: admin
+    } do
+      movie = media_item_fixture(%{title: "Barely Started Movie", type: "movie"})
+
+      {:ok, progress} =
+        Mydia.Playback.save_progress(admin.id, [media_item_id: movie.id], %{
+          position_seconds: 0,
+          duration_seconds: 7200
+        })
+
+      assert progress.completion_percentage == 0.0
+      refute progress.watched
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      # The card renders, so the refute below is not vacuous.
+      assert has_element?(view, "#grid-item-#{movie.id}")
+      refute has_element?(view, "#poster-badges-#{movie.id}")
+    end
+  end
 end
