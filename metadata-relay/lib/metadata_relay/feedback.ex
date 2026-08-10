@@ -6,6 +6,7 @@ defmodule MetadataRelay.Feedback do
   import Ecto.Query
 
   alias MetadataRelay.Feedback.Submission
+  alias MetadataRelay.GitHub.Client
   alias MetadataRelay.Repo
 
   def create_submission(attrs) when is_map(attrs) do
@@ -87,6 +88,21 @@ defmodule MetadataRelay.Feedback do
     submission
     |> Submission.github_ref_changeset(github_ref)
     |> Repo.update()
+  end
+
+  @doc """
+  Creates a GitHub issue for a submission using the caller's token.
+
+  On success the reference, URL, and state are written in one update. On
+  failure the row is left untouched, so a failed call never leaves a
+  half-filed submission behind.
+  """
+  def file_issue(%Submission{} = submission, attrs, token) do
+    with {:ok, %{number: number, html_url: html_url}} <- Client.create_issue(attrs, token) do
+      submission
+      |> Submission.filed_changeset("##{number}", html_url)
+      |> Repo.update()
+    end
   end
 
   @doc """
