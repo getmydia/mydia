@@ -6,6 +6,8 @@ defmodule MetadataRelayWeb.FeedbackLive.Index do
   use Phoenix.LiveView
 
   alias MetadataRelay.Feedback
+  alias MetadataRelay.Feedback.IssueDraft
+  alias MetadataRelay.GitHub.Client
 
   @message_preview_limit 220
   @valid_state_filters ~w(unread read filed archived all)
@@ -19,6 +21,10 @@ defmodule MetadataRelayWeb.FeedbackLive.Index do
      |> assign(:type_filter, "all")
      |> assign(:expanded_ids, focused_ids(params))
      |> assign(:page_title, "Feedback Dashboard")
+     |> assign(:issue_draft, nil)
+     |> assign(:issue_error, nil)
+     |> assign(:issue_submitting?, false)
+     |> assign(:github_repo, Client.repo())
      |> load_dashboard()}
   end
 
@@ -59,6 +65,93 @@ defmodule MetadataRelayWeb.FeedbackLive.Index do
     update_submission(socket, id, fn submission ->
       Feedback.set_github_ref(submission, github_ref)
     end)
+  end
+
+  def handle_event("open_issue", %{"id" => id}, socket) do
+    case Feedback.get_submission(id) do
+      nil ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "Feedback no longer exists.")
+         |> load_dashboard()}
+
+      submission ->
+        draft = IssueDraft.from_submission(submission, Feedback.dashboard_url())
+
+        {:noreply,
+         socket
+         |> assign(:issue_draft, %{
+           submission_id: submission.id,
+           title: draft.title,
+           body: draft.body,
+           labels: draft.labels
+         })
+         |> assign(:issue_error, nil)
+         |> assign(:issue_submitting?, false)}
+    end
+  end
+
+  def handle_event("close_issue", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:issue_draft, nil)
+     |> assign(:issue_error, nil)
+     |> assign(:issue_submitting?, false)}
+  end
+
+  def handle_event("submit_issue", %{"title" => title, "body" => body}, socket) do
+    draft = socket.assigns.issue_draft
+    token = socket.assigns.github_token
+
+    attrs = %{title: title, body: body, labels: draft.labels}
+    submission_id = draft.submission_id
+
+    {:noreply,
+     socket
+     |> assign(:issue_draft, %{draft | title: title, body: body})
+     |> assign(:issue_error, nil)
+     |> assign(:issue_submitting?, true)
+     |> start_async(:file_issue, fn ->
+       case Feedback.get_submission(submission_id) do
+         nil -> {:error, {:missing, "Feedback no longer exists."}}
+         submission -> Feedback.file_issue(submission, attrs, token)
+       end
+     end)}
+  end
+
+  @impl true
+  def handle_async(:file_issue, {:ok, {:ok, submission}}, socket) do
+    {:noreply,
+     socket
+     |> assign(:issue_draft, nil)
+     |> assign(:issue_error, nil)
+     |> assign(:issue_submitting?, false)
+     |> put_flash(:info, "Filed as #{submission.github_ref}")
+     |> load_dashboard()}
+  end
+
+  def handle_async(:file_issue, {:ok, {:error, {_reason, message}}}, socket) do
+    {:noreply,
+     socket
+     |> assign(:issue_error, message)
+     |> assign(:issue_submitting?, false)}
+  end
+
+  def handle_async(:file_issue, {:ok, {:error, _changeset}}, socket) do
+    {:noreply,
+     socket
+     |> assign(
+       :issue_error,
+       "The issue was created but could not be recorded. Reload and check GitHub."
+     )
+     |> assign(:issue_submitting?, false)}
+  end
+
+  def handle_async(:file_issue, {:exit, _reason}, socket) do
+    {:noreply,
+     socket
+     |> assign(:issue_error, "GitHub is unreachable. Your draft is preserved, try again.")
+     |> assign(:issue_submitting?, false)}
   end
 
   defp update_submission(socket, id, updater) do
