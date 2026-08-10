@@ -106,6 +106,8 @@ defmodule Mydia.Indexers.SearchResult do
     :guid
   ]
 
+  @info_url_schemes ~w(http https)
+
   @doc """
   Creates a new search result with default values.
 
@@ -209,7 +211,59 @@ defmodule Mydia.Indexers.SearchResult do
     end
   end
 
+  @doc """
+  Returns a URL safe to render as a link to the release's page on the indexer.
+
+  Returns `nil` unless `:info_url` is an absolute `http`/`https` URL with a host
+  that differs from `:download_url`.
+
+  Indexers supply this value, and Cardigann definitions are fetched from an
+  external repository, so the scheme allowlist is a security boundary: HEEx does
+  not validate URL schemes, and a `javascript:` string would otherwise render as
+  a live script URL. The `:download_url` check exists because Prowlarr and
+  Jackett fall back to the torznab `<guid>`, which on some indexers is the
+  `.torrent` link rather than a details page.
+
+  ## Examples
+
+      iex> result = %SearchResult{title: "T", size: 1, seeders: 1, leechers: 1,
+      ...>   download_url: "magnet:?xt=urn:btih:abc", indexer: "X",
+      ...>   info_url: "https://tracker.example/details/42"}
+      iex> SearchResult.info_page_url(result)
+      "https://tracker.example/details/42"
+
+      iex> result = %SearchResult{title: "T", size: 1, seeders: 1, leechers: 1,
+      ...>   download_url: "magnet:?xt=urn:btih:abc", indexer: "X",
+      ...>   info_url: "javascript:alert(1)"}
+      iex> SearchResult.info_page_url(result)
+      nil
+  """
+  @spec info_page_url(t()) :: String.t() | nil
+  def info_page_url(%__MODULE__{info_url: info_url, download_url: download_url})
+      when is_binary(info_url) do
+    trimmed = String.trim(info_url)
+
+    cond do
+      trimmed == "" -> nil
+      trimmed == download_url -> nil
+      not linkable_scheme?(trimmed) -> nil
+      true -> trimmed
+    end
+  end
+
+  def info_page_url(%__MODULE__{}), do: nil
+
   # Private helpers
+
+  defp linkable_scheme?(url) do
+    case URI.parse(url) do
+      %URI{scheme: scheme, host: host} when scheme in @info_url_schemes ->
+        is_binary(host) and host != ""
+
+      _ ->
+        false
+    end
+  end
 
   defp format_bytes(bytes) when bytes < 1024, do: "#{bytes} B"
 

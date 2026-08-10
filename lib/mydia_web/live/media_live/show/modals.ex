@@ -10,6 +10,8 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   import MydiaWeb.Formatters, only: [format_progress: 1]
   import MydiaWeb.MediaLive.Show.SearchHelpers
 
+  alias Mydia.Indexers.SearchResult
+
   @doc """
   Delete confirmation modal for removing media item from library.
   Allows user to choose whether to delete files from disk.
@@ -866,10 +868,26 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                       <.icon name="hero-arrow-up" class="w-3 h-3 mr-0.5" />
                       {result.seeders}
                     </span>
-                    <%!-- Indexer badge (visible on larger screens) --%>
-                    <span class="badge badge-outline badge-sm hidden sm:inline-flex">
-                      {result.indexer}
-                    </span>
+                    <%!-- Indexer badge, linking to the release's tracker page when usable --%>
+                    <% info_page_url = SearchResult.info_page_url(result) %>
+                    <%= if info_page_url do %>
+                      <a
+                        href={info_page_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="badge badge-outline badge-sm gap-1 hover:border-primary hover:text-primary transition-colors"
+                        title={"View this release on #{result.indexer}"}
+                      >
+                        {result.indexer}
+                        <.icon name="hero-arrow-top-right-on-square" class="w-3 h-3" />
+                      </a>
+                    <% else %>
+                      <%!-- No usable URL: keep the pre-existing xs-screen hiding, since a
+                           non-actionable badge earns no room in a dense mobile row. --%>
+                      <span class="badge badge-outline badge-sm hidden sm:inline-flex">
+                        {result.indexer}
+                      </span>
+                    <% end %>
                   </div>
                   <%= if reason = Map.get(result, :grab_failed) do %>
                     <div class="text-xs text-error mt-1 line-clamp-2">{reason}</div>

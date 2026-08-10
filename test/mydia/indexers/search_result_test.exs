@@ -3,6 +3,19 @@ defmodule Mydia.Indexers.SearchResultTest do
 
   alias Mydia.Indexers.SearchResult
 
+  defp search_result(attrs) do
+    defaults = %{
+      title: "Test.Release.2024.1080p.BluRay.x264-GROUP",
+      size: 4_000_000_000,
+      seeders: 25,
+      leechers: 5,
+      download_url: "magnet:?xt=urn:btih:abc123",
+      indexer: "Test Indexer"
+    }
+
+    struct!(SearchResult, Map.merge(defaults, Map.new(attrs)))
+  end
+
   describe "new/1" do
     test "creates search result with required fields" do
       result =
@@ -299,6 +312,91 @@ defmodule Mydia.Indexers.SearchResultTest do
       }
 
       assert SearchResult.quality_description(result) == "720p x264"
+    end
+  end
+
+  describe "info_page_url/1" do
+    test "returns an https URL unchanged" do
+      result = search_result(info_url: "https://tracker.example/details/42")
+
+      assert SearchResult.info_page_url(result) == "https://tracker.example/details/42"
+    end
+
+    test "returns an http URL unchanged" do
+      result = search_result(info_url: "http://tracker.example/details/42")
+
+      assert SearchResult.info_page_url(result) == "http://tracker.example/details/42"
+    end
+
+    test "trims surrounding whitespace" do
+      result = search_result(info_url: "  https://tracker.example/details/42\n")
+
+      assert SearchResult.info_page_url(result) == "https://tracker.example/details/42"
+    end
+
+    test "rejects a javascript: URL" do
+      result = search_result(info_url: "javascript:alert(1)")
+
+      assert SearchResult.info_page_url(result) == nil
+    end
+
+    test "rejects a data: URL" do
+      result = search_result(info_url: "data:text/html,<script>alert(1)</script>")
+
+      assert SearchResult.info_page_url(result) == nil
+    end
+
+    test "rejects a protocol-relative URL" do
+      result = search_result(info_url: "//evil.example/details/42")
+
+      assert SearchResult.info_page_url(result) == nil
+    end
+
+    test "rejects a relative path" do
+      result = search_result(info_url: "/details/42")
+
+      assert SearchResult.info_page_url(result) == nil
+    end
+
+    test "rejects a magnet link" do
+      result = search_result(info_url: "magnet:?xt=urn:btih:def456")
+
+      assert SearchResult.info_page_url(result) == nil
+    end
+
+    test "rejects an http URL with no host" do
+      result = search_result(info_url: "http://")
+
+      assert SearchResult.info_page_url(result) == nil
+    end
+
+    test "returns nil when info_url is nil" do
+      result = search_result(info_url: nil)
+
+      assert SearchResult.info_page_url(result) == nil
+    end
+
+    test "returns nil for an empty or whitespace-only info_url" do
+      assert SearchResult.info_page_url(search_result(info_url: "")) == nil
+      assert SearchResult.info_page_url(search_result(info_url: "   ")) == nil
+    end
+
+    test "returns nil when info_url is identical to download_url" do
+      result =
+        search_result(
+          download_url: "https://tracker.example/download/42.torrent",
+          info_url: "https://tracker.example/download/42.torrent"
+        )
+
+      assert SearchResult.info_page_url(result) == nil
+    end
+
+    test "still resolves for a struct carrying the stream_position key" do
+      streamed =
+        search_result(info_url: "https://tracker.example/details/42")
+        |> Map.put(:stream_position, 3)
+
+      assert SearchResult.info_page_url(streamed) == "https://tracker.example/details/42"
     end
   end
 end
