@@ -2526,4 +2526,143 @@ defmodule Mydia.Indexers.ReleaseRankerTest do
       refute Map.has_key?(stats["rejection_counts"], "size_out_of_range")
     end
   end
+
+  describe "custom formats" do
+    defp compiled_format(name, patterns, opts) do
+      {:ok, compiled} = Mydia.Settings.CustomFormats.Matcher.compile_patterns(patterns)
+
+      %{
+        slug: String.downcase(name),
+        name: name,
+        score: Keyword.get(opts, :score, 0),
+        reject: Keyword.get(opts, :reject, false),
+        patterns: compiled
+      }
+    end
+
+    test "a rejecting format drops the release" do
+      vfq = compiled_format("VFQ", ["\\bVFQ\\b"], reject: true)
+
+      title_vfq = "Film.2024.VFQ.1080p.WEB-DL"
+      title_vff = "Film.2024.VFF.1080p.WEB-DL"
+
+      results = [
+        build_result(%{title: title_vfq, seeders: 500}),
+        build_result(%{title: title_vff, seeders: 5})
+      ]
+
+      kept = ReleaseRanker.filter_acceptable(results, custom_formats: [vfq])
+      assert Enum.map(kept, & &1.title) == [title_vff]
+    end
+
+    test "format score outranks seeders within a resolution tier" do
+      vff = compiled_format("VFF", ["\\bVFF\\b"], score: 100)
+
+      title_vfq = "Film.2024.VFQ.1080p.WEB-DL"
+      title_vff = "Film.2024.VFF.1080p.WEB-DL"
+
+      results = [
+        build_result(%{
+          title: title_vfq,
+          seeders: 500,
+          quality: QualityParser.parse(title_vfq)
+        }),
+        build_result(%{
+          title: title_vff,
+          seeders: 5,
+          quality: QualityParser.parse(title_vff)
+        })
+      ]
+
+      ranked =
+        ReleaseRanker.rank_all(results,
+          media_type: :movie,
+          preferred_qualities: ["1080p"],
+          custom_formats: [vff]
+        )
+
+      assert hd(ranked).result.title == title_vff
+    end
+
+    test "format score does not promote across resolution tiers" do
+      vff = compiled_format("VFF", ["\\bVFF\\b"], score: 1000)
+
+      title_vff_720 = "Film.2024.VFF.720p.WEB-DL"
+      title_vfq_1080 = "Film.2024.VFQ.1080p.WEB-DL"
+
+      results = [
+        build_result(%{
+          title: title_vff_720,
+          seeders: 5,
+          quality: QualityParser.parse(title_vff_720)
+        }),
+        build_result(%{
+          title: title_vfq_1080,
+          seeders: 5,
+          quality: QualityParser.parse(title_vfq_1080)
+        })
+      ]
+
+      ranked =
+        ReleaseRanker.rank_all(results,
+          media_type: :movie,
+          preferred_qualities: ["1080p", "720p"],
+          custom_formats: [vff]
+        )
+
+      assert hd(ranked).result.title == title_vfq_1080
+    end
+
+    test "with no formats the ordering is unchanged" do
+      title_vfq = "Film.2024.VFQ.1080p.WEB-DL"
+      title_vff = "Film.2024.VFF.1080p.WEB-DL"
+
+      results = [
+        build_result(%{
+          title: title_vfq,
+          seeders: 500,
+          quality: QualityParser.parse(title_vfq)
+        }),
+        build_result(%{
+          title: title_vff,
+          seeders: 5,
+          quality: QualityParser.parse(title_vff)
+        })
+      ]
+
+      with_formats =
+        ReleaseRanker.rank_all(results, media_type: :movie, preferred_qualities: ["1080p"])
+
+      without_key =
+        ReleaseRanker.rank_all(results,
+          media_type: :movie,
+          preferred_qualities: ["1080p"],
+          custom_formats: []
+        )
+
+      assert Enum.map(with_formats, & &1.result.title) ==
+               Enum.map(without_key, & &1.result.title)
+    end
+
+    test "breakdown carries the summed format score" do
+      vff = compiled_format("VFF", ["\\bVFF\\b"], score: 100)
+      title = "Film.2024.VFF.1080p.WEB-DL"
+      result = build_result(%{title: title, seeders: 10})
+
+      breakdown =
+        ReleaseRanker.calculate_score_breakdown(result, media_type: :movie, custom_formats: [vff])
+
+      assert breakdown.custom_format_score == 100
+    end
+
+    test "score_all_with_reasons reports the rejection reason" do
+      vfq = compiled_format("VFQ", ["\\bVFQ\\b"], reject: true)
+      title = "Film.2024.VFQ.1080p.WEB-DL"
+      results = [build_result(%{title: title, seeders: 10})]
+
+      [row] = ReleaseRanker.score_all_with_reasons(results, custom_formats: [vfq])
+      assert row.status == :rejected
+      assert row.rejection_reason == "custom_format: VFQ"
+    end
+  end
 end

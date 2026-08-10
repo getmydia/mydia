@@ -57,6 +57,7 @@ defmodule Mydia.Indexers.ReleaseRanker do
   alias Mydia.Library.ReleaseParser
   alias Mydia.Library.Structs.ParsedFileInfo
   alias Mydia.Quality.Sources
+  alias Mydia.Settings.CustomFormats.Matcher
   alias Mydia.Settings.QualityProfile
 
   @type ranked_result :: RankedResult.t()
@@ -77,7 +78,8 @@ defmodule Mydia.Indexers.ReleaseRanker do
           expected_episode: non_neg_integer() | nil,
           min_post_age_minutes: non_neg_integer() | nil,
           now: DateTime.t() | nil,
-          apply_source_exclusion: boolean() | nil
+          apply_source_exclusion: boolean() | nil,
+          custom_formats: [map()]
         ]
 
   @default_min_seeders 0
@@ -193,6 +195,7 @@ defmodule Mydia.Indexers.ReleaseRanker do
   @spec filter_acceptable([SearchResult.t()], ranking_options()) :: [SearchResult.t()]
   def filter_acceptable(results, opts \\ []) do
     blocked_tags = Keyword.get(opts, :blocked_tags, [])
+    custom_formats = Keyword.get(opts, :custom_formats, [])
     min_post_age_minutes = Keyword.get(opts, :min_post_age_minutes)
     now = Keyword.get(opts, :now) || DateTime.utc_now()
 
@@ -204,6 +207,13 @@ defmodule Mydia.Indexers.ReleaseRanker do
       cond do
         not not_blocked?(result, blocked_tags) ->
           Logger.info("[ReleaseRanker] Filtered out (blocked tag): #{result.title}")
+          false
+
+        rejecting = rejecting_format(result, custom_formats) ->
+          Logger.info(
+            "[ReleaseRanker] Filtered out (custom format #{rejecting}): #{result.title}"
+          )
+
           false
 
         not meets_post_age_minimum?(result, min_post_age_minutes, now) ->
@@ -337,6 +347,17 @@ defmodule Mydia.Indexers.ReleaseRanker do
     end)
   end
 
+  # Returns the name of the first rejecting format that matches, or nil.
+  # Rejection is a hard removal for the same reason excluded_sources is: there
+  # is no minimum-score threshold before grabbing, so a merely down-scored
+  # release is still downloaded when it is the only survivor.
+  defp rejecting_format(%SearchResult{title: title}, custom_formats) do
+    case Matcher.score_title(title, Enum.filter(custom_formats, & &1.reject)) do
+      %{matched: [name | _]} -> name
+      _ -> nil
+    end
+  end
+
   ## Scoring Functions
 
   @doc """
@@ -385,6 +406,11 @@ defmodule Mydia.Indexers.ReleaseRanker do
     # Calculate tag bonus from preferred_tags
     tag_bonus = calculate_tag_bonus(result.title, preferred_tags)
 
+    custom_format_score =
+      result.title
+      |> Matcher.score_title(Keyword.get(opts, :custom_formats, []))
+      |> Map.fetch!(:score)
+
     # Soft penalties derived per-result from the ranking options. Each helper
     # returns a value <= 0.0 that is layered onto the base score. They stay at
     # 0.0 when the relevant option is absent or the result is within bounds.
@@ -414,6 +440,7 @@ defmodule Mydia.Indexers.ReleaseRanker do
         - Seeders:  #{Float.round(seeder_score, 2)} (30% weight in combined score)
         - Title:    #{Float.round(title_bonus, 2)} (10% weight in combined score)
         - Tag bonus: #{Float.round(tag_bonus, 2)}
+        - Custom formats: #{custom_format_score}
         - Zero-seeder penalty: #{Map.get(breakdown, :zero_seeder_penalty, 1.0)}
       TOTAL: #{Float.round(total_score, 2)}
     """)
@@ -426,6 +453,7 @@ defmodule Mydia.Indexers.ReleaseRanker do
       age: 0.0,
       title_match: round_score(title_bonus),
       tag_bonus: round_score(tag_bonus),
+      custom_format_score: custom_format_score,
       total: round_score(total_score),
       size_penalty: round_score(size_penalty),
       seeder_penalty: round_score(seeder_penalty),
@@ -565,16 +593,22 @@ defmodule Mydia.Indexers.ReleaseRanker do
 
   ## Private Functions - Sorting
 
+  # Sort keys, outermost first:
+  #   1. resolution preference index, so a profile's resolution choice is never
+  #      overridden by a format score
+  #   2. custom format score, so within a tier a preferred-language release
+  #      beats a better-seeded one
+  #   3. the base composite score
   defp sort_by_score_and_preferences(ranked_results, nil) do
-    Enum.sort_by(ranked_results, & &1.score, :desc)
+    Enum.sort_by(ranked_results, fn %{score: score, breakdown: breakdown} ->
+      {-breakdown.custom_format_score, -score}
+    end)
   end
 
   defp sort_by_score_and_preferences(ranked_results, preferred_qualities) do
-    ranked_results
-    |> Enum.sort_by(fn %{result: result, score: score} ->
-      quality_index = quality_preference_index(result, preferred_qualities)
-      # Sort by: quality preference (lower index = higher priority), then score
-      {quality_index, -score}
+    Enum.sort_by(ranked_results, fn %{result: result, score: score, breakdown: breakdown} ->
+      {quality_preference_index(result, preferred_qualities), -breakdown.custom_format_score,
+       -score}
     end)
   end
 
@@ -627,12 +661,14 @@ defmodule Mydia.Indexers.ReleaseRanker do
       iex> ReleaseRanker.score_all_with_reasons(results, min_seeders: 10)
       [
         %{title: "Movie.2024.1080p", score: 75.5, status: :accepted, ...},
-        %{title: "Movie.2024.CAM", score: 0, status: :rejected, rejection_reason: "blocked_tag: CAM", ...}
+        %{title: "Movie.2024.CAM", score: 0, status: :rejected, rejection_reason: "blocked_tag: CAM", ...},
+        %{title: "Movie.2024.VFQ", score: 0, status: :rejected, rejection_reason: "custom_format: VFQ", ...}
       ]
   """
   @spec score_all_with_reasons([SearchResult.t()], ranking_options()) :: [map()]
   def score_all_with_reasons(results, opts \\ []) do
     blocked_tags = Keyword.get(opts, :blocked_tags, [])
+    custom_formats = Keyword.get(opts, :custom_formats, [])
     expected_title = Keyword.get(opts, :expected_title)
 
     results
@@ -650,7 +686,13 @@ defmodule Mydia.Indexers.ReleaseRanker do
       # Only hard removals are reported as rejections now; size/seeders/ratio
       # shortcomings are penalties on accepted results (mirrors filter_acceptable
       # and the identity penalty, which must stay in lockstep — see Risks).
-      case get_rejection_reason(result, blocked_tags, expected_title, excluded_sources(opts)) do
+      case get_rejection_reason(
+             result,
+             blocked_tags,
+             expected_title,
+             excluded_sources(opts),
+             custom_formats
+           ) do
         nil ->
           # Accepted — record the full breakdown (including penalties) so the
           # Activity view can render the penalized-but-kept state.
@@ -658,6 +700,7 @@ defmodule Mydia.Indexers.ReleaseRanker do
 
           Map.merge(base_info, %{
             score: breakdown.total,
+            custom_format_score: breakdown.custom_format_score,
             status: :accepted,
             rejection_reason: nil,
             breakdown: %{
@@ -667,6 +710,7 @@ defmodule Mydia.Indexers.ReleaseRanker do
               age: breakdown.age,
               title_match: breakdown.title_match,
               tag_bonus: breakdown.tag_bonus,
+              custom_format_score: breakdown.custom_format_score,
               size_penalty: breakdown.size_penalty,
               seeder_penalty: breakdown.seeder_penalty,
               identity_penalty: breakdown.identity_penalty
@@ -676,13 +720,14 @@ defmodule Mydia.Indexers.ReleaseRanker do
         reason ->
           Map.merge(base_info, %{
             score: 0.0,
+            custom_format_score: 0,
             status: :rejected,
             rejection_reason: reason,
             breakdown: nil
           })
       end
     end)
-    |> Enum.sort_by(& &1.score, :desc)
+    |> Enum.sort_by(&{-&1.custom_format_score, -&1.score})
   end
 
   @doc """
@@ -764,7 +809,7 @@ defmodule Mydia.Indexers.ReleaseRanker do
   # removals are invalid releases (validator), blocked tags, and wrong-show
   # title mismatches. Size/seeders/ratio are no longer rejection reasons — they
   # are soft penalties on accepted results.
-  defp get_rejection_reason(result, blocked_tags, expected_title, excluded) do
+  defp get_rejection_reason(result, blocked_tags, expected_title, excluded, custom_formats) do
     cond do
       invalid_reason = invalid_release_reason(result) ->
         "invalid: #{invalid_reason}"
@@ -774,6 +819,9 @@ defmodule Mydia.Indexers.ReleaseRanker do
 
       (source = result_source(result)) && source in excluded ->
         "excluded_source: #{source}"
+
+      rejecting = rejecting_format(result, custom_formats) ->
+        "custom_format: #{rejecting}"
 
       expected_title_mismatch?(result, expected_title) ->
         "title_mismatch"

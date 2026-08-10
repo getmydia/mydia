@@ -40,9 +40,18 @@ defmodule Mydia.Indexers.RankingOptions do
   `Mydia.Indexers.QualityProfileResolver`. Call sites must resolve through
   that function rather than reading `media_item.quality_profile` directly,
   otherwise the fallback drifts out of one search path the way `min_ratio` did.
+
+  ## Custom formats (resolved upstream)
+
+  `:custom_formats` arrives already resolved and compiled from
+  `Mydia.Settings.CustomFormats.resolve_for_profile/1`. Resolution stays
+  outside this module so it remains database-free; call sites pass the
+  resolved list in the input map and this builder threads it through.
   """
 
   alias Mydia.Settings.QualityProfile
+
+  require Logger
 
   @type media_type :: :movie | :episode
 
@@ -56,7 +65,8 @@ defmodule Mydia.Indexers.RankingOptions do
           optional(:expected_season) => non_neg_integer() | nil,
           optional(:expected_episode) => non_neg_integer() | nil,
           optional(:blocked_tags) => [String.t()] | nil,
-          optional(:preferred_tags) => [String.t()] | nil
+          optional(:preferred_tags) => [String.t()] | nil,
+          optional(:custom_formats) => [map()] | nil
         }
 
   @doc """
@@ -85,6 +95,8 @@ defmodule Mydia.Indexers.RankingOptions do
     opts_with_quality =
       case quality_profile do
         %QualityProfile{} = profile ->
+          warn_on_missing_custom_formats(input)
+
           base_opts
           |> Keyword.put(:quality_profile, profile)
           |> Keyword.merge(build_quality_options(profile, media_type))
@@ -96,6 +108,20 @@ defmodule Mydia.Indexers.RankingOptions do
     opts_with_quality
     |> maybe_add_option(:blocked_tags, Map.get(input, :blocked_tags))
     |> maybe_add_option(:preferred_tags, Map.get(input, :preferred_tags))
+    |> maybe_add_option(:custom_formats, Map.get(input, :custom_formats))
+  end
+
+  # Six call sites build ranking options, and a forgotten one would silently
+  # ignore every custom format for that search path. That is exactly the drift
+  # this module's moduledoc exists to prevent, so an absent key is loud. An
+  # explicitly empty list is silent: it means "resolved, nothing scored".
+  defp warn_on_missing_custom_formats(input) do
+    unless Map.has_key?(input, :custom_formats) do
+      Logger.warning(
+        "[RankingOptions] built with a quality profile but no :custom_formats key; " <>
+          "custom formats will be ignored for this search"
+      )
+    end
   end
 
   @doc """

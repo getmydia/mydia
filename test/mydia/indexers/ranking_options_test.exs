@@ -1,5 +1,8 @@
 defmodule Mydia.Indexers.RankingOptionsTest do
-  use ExUnit.Case, async: true
+  use Mydia.DataCase, async: true
+
+  import ExUnit.CaptureLog
+  import Mydia.SettingsFixtures
 
   alias Mydia.Indexers.RankingOptions
   alias Mydia.Settings.QualityProfile
@@ -221,6 +224,53 @@ defmodule Mydia.Indexers.RankingOptionsTest do
         })
 
       assert Keyword.get(opts, :preferred_qualities) == ["1080p"]
+    end
+  end
+
+  describe "custom formats" do
+    test "passes :custom_formats through when given" do
+      formats = [%{slug: "lang-vff", name: "VFF", score: 100, reject: false, patterns: []}]
+
+      opts =
+        RankingOptions.build(%{
+          media_type: :movie,
+          quality_profile: quality_profile_fixture(),
+          custom_formats: formats
+        })
+
+      assert Keyword.get(opts, :custom_formats) == formats
+    end
+
+    test "omits :custom_formats when the list is empty" do
+      opts =
+        RankingOptions.build(%{
+          media_type: :movie,
+          quality_profile: quality_profile_fixture(),
+          custom_formats: []
+        })
+
+      refute Keyword.has_key?(opts, :custom_formats)
+    end
+
+    test "warns when a profile is given but the :custom_formats key is absent" do
+      log =
+        capture_log(fn ->
+          RankingOptions.build(%{
+            media_type: :movie,
+            quality_profile: quality_profile_fixture()
+          })
+        end)
+
+      assert log =~ "custom formats will be ignored"
+    end
+
+    test "does not warn when there is no profile" do
+      log =
+        capture_log(fn ->
+          RankingOptions.build(%{media_type: :movie})
+        end)
+
+      refute log =~ "custom formats will be ignored"
     end
   end
 end

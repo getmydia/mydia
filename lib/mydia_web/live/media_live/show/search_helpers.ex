@@ -11,6 +11,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
   alias Mydia.Indexers.SearchResult
   alias Mydia.Indexers.SearchScorer
   alias Mydia.Media
+  alias Mydia.Settings.CustomFormats
 
   def generate_result_id(%SearchResult{} = result) do
     # Generate a unique ID based on the download URL and indexer
@@ -148,6 +149,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
     ranking_opts =
       RankingOptions.build(%{
         quality_profile: quality_profile,
+        custom_formats: CustomFormats.resolve_for_profile(quality_profile),
         media_type: media_type,
         search_query: search_query
       })
@@ -240,8 +242,11 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
 
     {expected_season, expected_episode} = expected_identity(context)
 
+    profile = QualityProfileResolver.resolve(media_item)
+
     RankingOptions.build(%{
-      quality_profile: QualityProfileResolver.resolve(media_item),
+      quality_profile: profile,
+      custom_formats: CustomFormats.resolve_for_profile(profile),
       media_type: get_media_type(media_item),
       min_seeders: Map.get(assigns, :min_seeders),
       search_query: Map.get(assigns, :manual_search_query),
@@ -310,7 +315,11 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
   def profile_score_breakdown(%SearchResult{} = result, quality_profile, media_type) do
     profile_score_breakdown(
       result,
-      RankingOptions.build(%{quality_profile: quality_profile, media_type: media_type})
+      RankingOptions.build(%{
+        quality_profile: quality_profile,
+        custom_formats: CustomFormats.resolve_for_profile(quality_profile),
+        media_type: media_type
+      })
     )
   end
 

@@ -2,6 +2,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
   use MydiaWeb, :live_view
 
   alias Mydia.Settings
+  alias Mydia.Settings.CustomFormats
   alias Mydia.Settings.QualityProfile
 
   require Logger
@@ -13,6 +14,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
      socket
      |> assign(:page_title, "Configuration - Quality Profiles")
      |> assign(:active_tab, :quality)
+     |> assign(:custom_formats, CustomFormats.list_all())
      |> load_data()}
   end
 
@@ -56,7 +58,8 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
      |> assign(:show_quality_profile_modal, true)
      |> assign(:quality_profile_form, to_form(changeset))
      |> assign(:quality_profile_mode, :new)
-     |> assign(:quality_profile_active_tab, "basic")}
+     |> assign(:quality_profile_active_tab, "basic")
+     |> assign(:custom_format_assignments, %{})}
   end
 
   @impl true
@@ -70,7 +73,8 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
      |> assign(:quality_profile_form, to_form(changeset))
      |> assign(:quality_profile_mode, :edit)
      |> assign(:editing_quality_profile, profile)
-     |> assign(:quality_profile_active_tab, "basic")}
+     |> assign(:quality_profile_active_tab, "basic")
+     |> assign_custom_format_assignments(profile)}
   end
 
   @impl true
@@ -92,7 +96,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
   end
 
   @impl true
-  def handle_event("save_quality_profile", %{"quality_profile" => params}, socket) do
+  def handle_event("save_quality_profile", %{"quality_profile" => params} = all_params, socket) do
     transformed_params = transform_quality_profile_params(params)
 
     result =
@@ -108,12 +112,26 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
       end
 
     case result do
-      {:ok, _profile} ->
-        {:noreply,
-         socket
-         |> assign(:show_quality_profile_modal, false)
-         |> put_flash(:info, "Quality profile saved successfully")
-         |> load_data()}
+      {:ok, profile} ->
+        case save_custom_formats(profile, all_params) do
+          :ok ->
+            {:noreply,
+             socket
+             |> assign(:show_quality_profile_modal, false)
+             |> put_flash(:info, "Quality profile saved successfully")
+             |> load_data()}
+
+          {:error, %Ecto.Changeset{} = assignment_changeset} ->
+            {:noreply,
+             socket
+             |> assign(:show_quality_profile_modal, false)
+             |> put_flash(
+               :error,
+               "Quality profile saved, but custom format settings could not be saved: " <>
+                 assignment_error_message(assignment_changeset)
+             )
+             |> load_data()}
+        end
 
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign(socket, :quality_profile_form, to_form(changeset))}
@@ -360,6 +378,46 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
   end
 
   ## Private Helpers
+
+  defp assign_custom_format_assignments(socket, profile) do
+    assignments =
+      profile
+      |> CustomFormats.list_assignments()
+      |> Map.new(&{&1.format_slug, %{score: &1.score, reject: &1.reject}})
+
+    assign(socket, :custom_format_assignments, assignments)
+  end
+
+  defp save_custom_formats(profile, params) do
+    entries =
+      params
+      |> Map.get("custom_formats", %{})
+      |> Enum.map(fn {slug, attrs} ->
+        %{
+          format_slug: slug,
+          score: parse_score(Map.get(attrs, "score")),
+          reject: Map.get(attrs, "reject") == "true"
+        }
+      end)
+
+    CustomFormats.set_assignments(profile, entries)
+  end
+
+  defp parse_score(nil), do: 0
+  defp parse_score(""), do: 0
+
+  defp parse_score(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {n, _} -> n
+      :error -> 0
+    end
+  end
+
+  defp assignment_error_message(changeset) do
+    changeset
+    |> Ecto.Changeset.traverse_errors(fn {msg, _opts} -> msg end)
+    |> Enum.map_join("; ", fn {field, messages} -> "#{field}: #{Enum.join(messages, ", ")}" end)
+  end
 
   defp load_data(socket) do
     socket

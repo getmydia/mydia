@@ -403,6 +403,8 @@ defmodule MydiaWeb.ActivityLive.Index do
       "tag_bonus" -> "Tag bonus"
       "preferred_tags" -> "Preferred"
       "blocked_tags" -> "Blocked"
+      "custom_format" -> "Custom format"
+      "custom_format_score" -> "Custom format"
       "title_relevance" -> "Title match"
       "title_match" -> "Title match"
       # Soft-penalty contributions

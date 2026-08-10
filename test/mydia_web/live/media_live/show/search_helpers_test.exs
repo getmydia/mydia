@@ -1,5 +1,7 @@
 defmodule MydiaWeb.MediaLive.Show.SearchHelpersTest do
-  use ExUnit.Case, async: true
+  use Mydia.DataCase, async: true
+
+  import Mydia.SettingsFixtures
 
   alias MydiaWeb.MediaLive.Show.SearchHelpers
   alias Mydia.Indexers.{QualityParser, RankingOptions, ReleaseRanker, SearchResult}
@@ -24,12 +26,12 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpersTest do
   end
 
   defp build_quality_profile do
-    %QualityProfile{
+    quality_profile_fixture(%{
       name: "Test Profile",
       quality_standards: %{
         preferred_resolutions: ["1080p", "720p"]
       }
-    }
+    })
   end
 
   describe "sort_search_results/5 with title relevance" do
@@ -306,10 +308,14 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpersTest do
     end
 
     test "sort_search_results/5 (the back-compat manual entry point) also does not exclude" do
-      profile = %QualityProfile{
-        name: "Excludes telesync",
-        quality_standards: %{excluded_sources: ["Telesync"]}
-      }
+      profile =
+        quality_profile_fixture(%{
+          name: "Excludes telesync",
+          quality_standards: %{
+            preferred_resolutions: ["1080p"],
+            excluded_sources: ["Telesync"]
+          }
+        })
 
       telesync_title = "The.Odyssey.2026.1080p.TELESYNC.HEVC.AAC2.0-SLH"
 

@@ -14,6 +14,8 @@ defmodule Mydia.Indexers.Structs.ScoreBreakdown do
   - `:age` - Score from release age (slight preference for newer)
   - `:title_match` - Score from title matching relevance to search query
   - `:tag_bonus` - Bonus points from preferred tags
+  - `:custom_format_score` - Summed score of every matching custom format. A
+    separate sort axis, deliberately NOT folded into `:total`.
   - `:total` - Final total score (sum of all components minus penalties)
 
   Penalty fields are optional floats `<= 0.0` (default `0.0`) recording the
@@ -23,7 +25,16 @@ defmodule Mydia.Indexers.Structs.ScoreBreakdown do
   - `:identity_penalty` - Penalty for episode/season identity mismatch or absence
   """
 
-  @enforce_keys [:quality, :seeders, :size, :age, :title_match, :tag_bonus, :total]
+  @enforce_keys [
+    :quality,
+    :seeders,
+    :size,
+    :age,
+    :title_match,
+    :tag_bonus,
+    :custom_format_score,
+    :total
+  ]
   defstruct [
     :quality,
     :seeders,
@@ -31,6 +42,7 @@ defmodule Mydia.Indexers.Structs.ScoreBreakdown do
     :age,
     :title_match,
     :tag_bonus,
+    :custom_format_score,
     :total,
     size_penalty: 0.0,
     seeder_penalty: 0.0,
@@ -44,6 +56,7 @@ defmodule Mydia.Indexers.Structs.ScoreBreakdown do
           age: float(),
           title_match: float(),
           tag_bonus: float(),
+          custom_format_score: integer(),
           total: float(),
           size_penalty: float(),
           seeder_penalty: float(),

@@ -41,6 +41,7 @@ defmodule Mydia.Jobs.MovieSearch do
   alias Mydia.Library
   alias Mydia.Library.MediaFile
   alias Mydia.Media.MediaItem
+  alias Mydia.Settings.CustomFormats
   alias Mydia.Settings.QualityProfile
   alias Mydia.Upgrades
   alias Phoenix.PubSub
@@ -629,8 +630,11 @@ defmodule Mydia.Jobs.MovieSearch do
     # one option-building path. A movie expects no season/episode identity, so
     # no expected_season/expected_episode are supplied (a TV-pattern release is
     # softly penalized as an identity mismatch inside the ranker).
+    profile = QualityProfileResolver.resolve(movie)
+
     RankingOptions.build(%{
-      quality_profile: QualityProfileResolver.resolve(movie),
+      quality_profile: profile,
+      custom_formats: CustomFormats.resolve_for_profile(profile),
       media_type: :movie,
       min_seeders: args.min_seeders || get_min_seeders(),
       size_range: args.size_range,
