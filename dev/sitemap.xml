@@ -2,222 +2,226 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://docs.mydia.dev/dev/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
+    </url>
+    <url>
+         <loc>https://docs.mydia.dev/dev/configuration/custom-formats/</loc>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/contributing/architecture/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/contributing/ci-artifacts/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/contributing/e2e-testing/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/contributing/releasing/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/contributing/setup/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/contributing/testing/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/plugins/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/plugins/explanation/plugin-model/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/plugins/how-to/media-data/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/plugins/how-to/notifications/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/plugins/how-to/test-and-iterate/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/plugins/how-to/two-way-sync/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/plugins/reference/host-api/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/plugins/reference/manifest/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/plugins/tutorial/write-your-first-plugin/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/explanation/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/explanation/configuration-model/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/explanation/how-mydia-runs/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/explanation/media-pipeline/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/explanation/quality-decisions/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/explanation/remote-access/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/explanation/vs-radarr-sonarr/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/how-to/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/how-to/add-media/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/how-to/automatic-quality-upgrades/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/how-to/backup-restore/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/how-to/cardigann-indexers/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/how-to/connect-download-client/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/how-to/connect-indexer/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/how-to/import-existing-collection/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/how-to/install-docker-compose/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/how-to/install-player-linux/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/how-to/manage-libraries/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/how-to/manage-users/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/how-to/monitor-and-logs/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/how-to/nixos/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/how-to/postgresql/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/how-to/quality-profiles/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/how-to/remote-access/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/how-to/reverse-proxy/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/how-to/sso-oidc/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/how-to/update-mydia/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/reference/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/reference/api/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/reference/configuration/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/reference/database/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/reference/download-clients/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/reference/environment-variables/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/reference/indexers/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/reference/library-types/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/reference/quality-profiles/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/tutorials/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/tutorials/first-library-import/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/using/tutorials/get-mydia-running/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-10</lastmod>
     </url>
 </urlset>
