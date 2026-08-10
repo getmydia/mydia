@@ -172,6 +172,29 @@ defmodule MetadataRelayWeb.FeedbackIssueLiveTest do
     assert has_element?(view, "#feedback-#{submission.id}")
   end
 
+  test "submitting with no draft open reports it instead of crashing" do
+    {:ok, view, _html} = live(signed_in_conn(), "/feedback")
+
+    html = render_hook(view, "submit_issue", %{"title" => "T", "body" => "B"})
+
+    assert html =~ "No issue draft is open."
+    assert has_element?(view, "#dashboard-flash-error", "No issue draft is open.")
+  end
+
+  test "submitting without a GitHub token reports a sign-in error, not a transport error" do
+    Application.delete_env(:metadata_relay, :dashboard_github_users)
+    {:ok, submission} = Feedback.create_submission(%{type: "bug", message: "Playback stalls"})
+
+    {:ok, view, _html} = live(basic_conn(), "/feedback")
+
+    render_hook(view, "open_issue", %{"id" => submission.id})
+    html = render_hook(view, "submit_issue", %{"title" => "T", "body" => "B"})
+
+    assert html =~ "GitHub sign-in is missing"
+    refute html =~ "unreachable"
+    assert Feedback.get_submission!(submission.id).github_ref == nil
+  end
+
   defp signed_in_conn do
     build_conn()
     |> init_test_session(github_login: "arsfeld", github_token: "gho_token")

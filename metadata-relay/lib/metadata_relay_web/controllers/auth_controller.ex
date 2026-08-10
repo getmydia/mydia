@@ -59,6 +59,10 @@ defmodule MetadataRelayWeb.AuthController do
 
     conn
     |> configure_session(renew: true)
+    # The state has served its purpose. Dropping it makes it single-use, so a
+    # replayed callback URL cannot be validated against a stale value.
+    |> delete_session(:oauth_state)
+    |> delete_session(:return_to)
     |> put_session(:github_login, login)
     |> put_session(:github_token, token)
     |> redirect(to: return_to)

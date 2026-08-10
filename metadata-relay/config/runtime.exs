@@ -34,22 +34,6 @@ if config_env() != :test do
         value
     end
 
-  dashboard_username =
-    System.get_env("DASHBOARD_USERNAME") ||
-      if config_env() == :prod do
-        raise("DASHBOARD_USERNAME not set")
-      else
-        "admin"
-      end
-
-  dashboard_password =
-    System.get_env("DASHBOARD_PASSWORD") ||
-      if config_env() == :prod do
-        raise("DASHBOARD_PASSWORD not set")
-      else
-        "admin"
-      end
-
   dashboard_github_users =
     case normalize_env.("DASHBOARD_GITHUB_USERS") do
       nil ->
@@ -61,6 +45,25 @@ if config_env() != :test do
         |> Enum.map(&String.trim/1)
         |> Enum.reject(&(&1 == ""))
     end
+
+  # Basic auth credentials are only required when GitHub sign-in is not
+  # configured. The two modes are mutually exclusive, so demanding unused
+  # basic-auth credentials from a GitHub-only deployment would be busywork.
+  github_dashboard? = dashboard_github_users != []
+
+  require_dashboard_credential = fn name ->
+    cond do
+      github_dashboard? -> nil
+      config_env() == :prod -> raise("#{name} not set, and DASHBOARD_GITHUB_USERS is empty")
+      true -> "admin"
+    end
+  end
+
+  dashboard_username =
+    System.get_env("DASHBOARD_USERNAME") || require_dashboard_credential.("DASHBOARD_USERNAME")
+
+  dashboard_password =
+    System.get_env("DASHBOARD_PASSWORD") || require_dashboard_credential.("DASHBOARD_PASSWORD")
 
   config :metadata_relay,
     dashboard_auth: [username: dashboard_username, password: dashboard_password],

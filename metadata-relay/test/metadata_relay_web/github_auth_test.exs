@@ -146,6 +146,19 @@ defmodule MetadataRelayWeb.GitHubAuthTest do
     assert get_session(conn, :github_login) == nil
   end
 
+  test "a successful callback consumes the one-time oauth state" do
+    stub_successful_github("arsfeld")
+
+    conn =
+      build_conn()
+      |> init_test_session(oauth_state: "st4te", return_to: "/feedback")
+      |> get("/auth/github/callback", %{"code" => "ok", "state" => "st4te"})
+
+    assert get_session(conn, :github_login) == "arsfeld"
+    assert get_session(conn, :oauth_state) == nil
+    assert get_session(conn, :return_to) == nil
+  end
+
   defp stub_successful_github(login) do
     set_github_adapter(fn request ->
       case URI.to_string(request.url) do

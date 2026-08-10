@@ -100,23 +100,36 @@ defmodule MetadataRelayWeb.FeedbackLive.Index do
   end
 
   def handle_event("submit_issue", %{"title" => title, "body" => body}, socket) do
-    draft = socket.assigns.issue_draft
-    token = socket.assigns.github_token
+    # The modal only renders with a draft and a token, but a client can push
+    # this event regardless. Handle both gaps explicitly: a nil draft would
+    # raise here, and a nil token would fail inside the async task and surface
+    # as a misleading "GitHub is unreachable".
+    case {socket.assigns.issue_draft, socket.assigns.github_token} do
+      {nil, _token} ->
+        {:noreply, put_flash(socket, :error, "No issue draft is open.")}
 
-    attrs = %{title: title, body: body, labels: draft.labels}
-    submission_id = draft.submission_id
+      {_draft, token} when not is_binary(token) ->
+        {:noreply,
+         socket
+         |> assign(:issue_error, "Your GitHub sign-in is missing. Sign in again and retry.")
+         |> assign(:issue_submitting?, false)}
 
-    {:noreply,
-     socket
-     |> assign(:issue_draft, %{draft | title: title, body: body})
-     |> assign(:issue_error, nil)
-     |> assign(:issue_submitting?, true)
-     |> start_async(:file_issue, fn ->
-       case Feedback.get_submission(submission_id) do
-         nil -> {:error, {:missing, "Feedback no longer exists."}}
-         submission -> Feedback.file_issue(submission, attrs, token)
-       end
-     end)}
+      {draft, token} ->
+        attrs = %{title: title, body: body, labels: draft.labels}
+        submission_id = draft.submission_id
+
+        {:noreply,
+         socket
+         |> assign(:issue_draft, %{draft | title: title, body: body})
+         |> assign(:issue_error, nil)
+         |> assign(:issue_submitting?, true)
+         |> start_async(:file_issue, fn ->
+           case Feedback.get_submission(submission_id) do
+             nil -> {:error, {:missing, "Feedback no longer exists."}}
+             submission -> Feedback.file_issue(submission, attrs, token)
+           end
+         end)}
+    end
   end
 
   @impl true
