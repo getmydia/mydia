@@ -22,6 +22,59 @@ defmodule Mydia.Settings.LibraryPaths do
     RC.merge_with_runtime_config(db_paths, &RC.get_runtime_library_paths/0, :path)
   end
 
+  @kind_types %{movies: [:movies, :mixed], series: [:series, :mixed]}
+  @kind_fields %{movies: :default_for_movies, series: :default_for_series}
+
+  @doc """
+  Makes `library_path` the default download target for `kind`.
+
+  Clears the flag from whichever row currently holds it, in one transaction, so
+  the partial unique index is a backstop rather than the thing that surfaces a
+  conflict to the user.
+
+  Returns `{:error, :incompatible_type}` when the library's `type` cannot serve
+  the kind.
+  """
+  @spec set_default_library(LibraryPath.t(), :movies | :series) ::
+          {:ok, LibraryPath.t()} | {:error, Ecto.Changeset.t() | :incompatible_type}
+  def set_default_library(%LibraryPath{} = library_path, kind) when kind in [:movies, :series] do
+    field = Map.fetch!(@kind_fields, kind)
+
+    if library_path.type in Map.fetch!(@kind_types, kind) do
+      Repo.transaction(fn ->
+        LibraryPath
+        |> where([l], field(l, ^field) == true)
+        |> where([l], l.id != ^library_path.id)
+        |> Repo.update_all(set: [{field, false}])
+
+        library_path
+        |> LibraryPath.changeset(%{field => true})
+        |> Repo.update()
+        |> case do
+          {:ok, updated} -> updated
+          {:error, changeset} -> Repo.rollback(changeset)
+        end
+      end)
+    else
+      {:error, :incompatible_type}
+    end
+  end
+
+  @doc """
+  Returns the library flagged as the default target for `kind`, or nil.
+
+  Disabled libraries are excluded, matching `list_library_paths/1`.
+  """
+  @spec default_library_for(:movies | :series) :: LibraryPath.t() | nil
+  def default_library_for(kind) when kind in [:movies, :series] do
+    field = Map.fetch!(@kind_fields, kind)
+
+    LibraryPath
+    |> where([l], field(l, ^field) == true)
+    |> where([l], l.disabled == false or is_nil(l.disabled))
+    |> Repo.one()
+  end
+
   @tv_library_types [:series, :mixed]
 
   @doc """
