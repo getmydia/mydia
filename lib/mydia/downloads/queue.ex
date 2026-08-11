@@ -142,13 +142,21 @@ defmodule Mydia.Downloads.Queue do
   The blacklist write happens first: if a later step fails, the release must
   still not be re-grabbed. Client removal is best effort, since the torrent may
   already be gone.
+
+  Accepts `:failure_reason` (default `"rejected_by_user"`) so a system-initiated
+  rejection is distinguishable from an operator's in `release_blacklist`.
   """
   @spec reject_release(Download.t(), keyword()) ::
           {:ok, :rejected} | {:error, :no_indexer | :no_guid | term()}
   def reject_release(%Download{} = download, opts \\ []) do
     with {:ok, indexer, guid} <- Blacklists.extract_key(download),
          {:ok, _row} <-
-           Blacklists.add(indexer, guid, download.title || "Unknown release", "rejected_by_user") do
+           Blacklists.add(
+             indexer,
+             guid,
+             download.title || "Unknown release",
+             Keyword.get(opts, :failure_reason, "rejected_by_user")
+           ) do
       # Computed before deletion: it reads through the media_item association.
       search = replacement_search(download)
 

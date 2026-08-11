@@ -12,6 +12,7 @@ defmodule Mydia.Downloads.QueueTest do
   alias Mydia.Downloads.Queue
   alias Mydia.Downloads.Client.Registry
   alias Mydia.Downloads.Download
+  alias Mydia.Downloads.ReleaseBlacklist
   alias Mydia.Repo
   alias Mydia.Settings.DownloadClientConfig
 
@@ -626,6 +627,45 @@ defmodule Mydia.Downloads.QueueTest do
                Queue.check_for_active_download(search_result, movie.id, nil,
                  exclude_download_id: existing.id
                )
+    end
+  end
+
+  describe "reject_release/2 failure_reason" do
+    test "defaults to rejected_by_user" do
+      media_item = media_item_fixture()
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          indexer: "1337x",
+          metadata: %{"indexer" => "1337x", "guid" => "guid-default"}
+        })
+
+      assert {:ok, :rejected} = Queue.reject_release(download)
+
+      row = Repo.get_by(ReleaseBlacklist, indexer: "1337x", guid: "guid-default")
+      assert row.failure_reason == "rejected_by_user"
+    end
+
+    test "records the caller's reason when given" do
+      media_item = media_item_fixture()
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          indexer: "1337x",
+          metadata: %{"indexer" => "1337x", "guid" => "guid-custom"}
+        })
+
+      assert {:ok, :rejected} =
+               Queue.reject_release(download,
+                 actor_type: :system,
+                 actor_id: "download_monitor",
+                 failure_reason: "no_importable_files"
+               )
+
+      row = Repo.get_by(ReleaseBlacklist, indexer: "1337x", guid: "guid-custom")
+      assert row.failure_reason == "no_importable_files"
     end
   end
 end

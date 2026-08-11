@@ -402,7 +402,11 @@ defmodule Mydia.Jobs.DownloadMonitor do
 
     download = Downloads.get_download!(download_map.id)
 
-    case Queue.reject_release(download, actor_type: :system, actor_id: "download_monitor") do
+    case Queue.reject_release(download,
+           actor_type: :system,
+           actor_id: "download_monitor",
+           failure_reason: "no_importable_files"
+         ) do
       {:ok, :rejected} ->
         :ok
 
