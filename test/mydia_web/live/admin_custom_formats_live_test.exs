@@ -136,4 +136,23 @@ defmodule MydiaWeb.AdminCustomFormatsLiveTest do
     assert Mydia.Settings.CustomFormats.get("lang-vff").patterns ==
              ["\\bVFF\\b", "\\bTRUEFRENCH\\b"]
   end
+
+  # An unmodified built-in has nothing to reset. The button still renders so the
+  # action column keeps a fixed width, but it must not be clickable.
+  test "reset is disabled on an unmodified built-in and enabled once overridden", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/admin/config/custom-formats")
+
+    assert has_element?(view, "#custom-format-reset-lang-vff[disabled]")
+
+    {:ok, _} =
+      Mydia.Settings.CustomFormats.override_builtin("lang-vff", %{
+        name: "VFF",
+        patterns: ["\\bONLYVFF\\b"]
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/admin/config/custom-formats")
+
+    assert has_element?(view, "#custom-format-reset-lang-vff")
+    refute has_element?(view, "#custom-format-reset-lang-vff[disabled]")
+  end
 end

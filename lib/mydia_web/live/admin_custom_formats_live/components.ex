@@ -21,56 +21,79 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Components do
       </div>
 
       <div class="bg-base-200 rounded-box divide-y divide-base-300">
-        <div
-          :for={format <- @formats}
-          id={"custom-format-row-#{format.slug}"}
-          class="flex items-center gap-3 p-3 sm:p-4"
-        >
-          <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-2">
-              <span class="font-medium">{format.name}</span>
-              <span :if={format.builtin?} class="badge badge-sm badge-ghost">Built-in</span>
-              <span :if={format.overridden?} class="badge badge-sm badge-warning">Edited</span>
-            </div>
-            <div class="text-xs opacity-60 truncate font-mono">
-              {Enum.join(format.patterns, "  ")}
-            </div>
+        <.custom_format_row :for={format <- @formats} format={format} />
+      </div>
+    </div>
+    """
+  end
+
+  attr :format, :map, required: true
+
+  defp custom_format_row(assigns) do
+    ~H"""
+    <div id={"custom-format-row-#{@format.slug}"} class="p-3 sm:p-4">
+      <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div class="flex-1 min-w-0">
+          <div class="font-semibold">{@format.name}</div>
+          <div class="text-xs opacity-60 font-mono truncate mt-0.5">{row_descriptor(@format)}</div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <span :if={@format.builtin?} class="badge badge-sm badge-outline">Built-in</span>
+          <span :if={@format.overridden?} class="badge badge-sm badge-warning">Edited</span>
+
+          <div class="join ml-auto sm:ml-2">
+            <button
+              id={"custom-format-edit-#{@format.slug}"}
+              class="btn btn-sm btn-ghost join-item"
+              phx-click="edit_custom_format"
+              phx-value-slug={@format.slug}
+              title="Edit"
+            >
+              <.icon name="hero-pencil" class="w-4 h-4" />
+            </button>
+            <%= if @format.builtin? do %>
+              <button
+                id={"custom-format-reset-#{@format.slug}"}
+                class="btn btn-sm btn-ghost join-item"
+                phx-click="reset_custom_format"
+                phx-value-slug={@format.slug}
+                disabled={not @format.overridden?}
+                title={
+                  if(@format.overridden?,
+                    do: "Reset to the shipped definition",
+                    else: "Not modified"
+                  )
+                }
+              >
+                <.icon
+                  name="hero-arrow-uturn-left"
+                  class={["w-4 h-4", not @format.overridden? && "opacity-30"]}
+                />
+              </button>
+            <% else %>
+              <button
+                id={"custom-format-delete-#{@format.slug}"}
+                class="btn btn-sm btn-ghost join-item text-error"
+                phx-click="delete_custom_format"
+                phx-value-slug={@format.slug}
+                data-confirm={"Delete #{@format.name}?"}
+                title="Delete"
+              >
+                <.icon name="hero-trash" class="w-4 h-4" />
+              </button>
+            <% end %>
           </div>
-
-          <.button
-            id={"custom-format-edit-#{format.slug}"}
-            phx-click="edit_custom_format"
-            phx-value-slug={format.slug}
-            class="btn-sm btn-ghost"
-          >
-            Edit
-          </.button>
-
-          <.button
-            :if={format.overridden?}
-            id={"custom-format-reset-#{format.slug}"}
-            phx-click="reset_custom_format"
-            phx-value-slug={format.slug}
-            class="btn-sm btn-ghost"
-          >
-            Reset
-          </.button>
-
-          <.button
-            :if={not format.builtin?}
-            id={"custom-format-delete-#{format.slug}"}
-            phx-click="delete_custom_format"
-            phx-value-slug={format.slug}
-            data-confirm={"Delete #{format.name}?"}
-            class="btn-sm btn-ghost text-error"
-          >
-            Delete
-          </.button>
         </div>
       </div>
     </div>
     """
   end
+
+  # Formats normally show their patterns. A format with none would otherwise
+  # render a blank second line, so fall back to the description.
+  defp row_descriptor(%{patterns: []} = format), do: format.description || "No patterns"
+  defp row_descriptor(format), do: Enum.join(format.patterns, "  ")
 
   @doc """
   Renders the Custom Format modal.
