@@ -27,12 +27,19 @@ void main() {
   group('DockInsets under a real BottomNav', () {
     testWidgets('reserves more than the 100.0 screens used to hardcode',
         (tester) async {
-      // 600 wide, not 400. Setting `view.physicalSize` really constrains
-      // layout (unlike Task 2, which only wraps a MediaQueryData and leaves
-      // the default ~800 view), and BottomNav's Row overflows by 152px at
-      // 400. That is a pre-existing responsive limit of the dock, unrelated
-      // to clearance; see the note at the end of this plan. Still below
-      // Breakpoints.tablet (900), so this is the mobile branch with a dock.
+      // 600 wide, not 400. Setting `view.physicalSize` genuinely constrains
+      // layout, unlike `app_shell_dock_inset_test.dart`, which only wraps a
+      // `MediaQueryData` and so leaves the default ~800 view in place. At 400
+      // BottomNav's Row overflows by 152px.
+      //
+      // That overflow is a pre-existing responsive limit of the dock, not a
+      // clearance problem, and it is NOT evidence of a bug on real 400px
+      // phones: widget tests render text in a placeholder font whose every
+      // glyph is a full em square, so labels measure far wider here than on a
+      // device. `library_screen_layout_test.dart` carries the same caveat.
+      //
+      // 600 is still below Breakpoints.tablet (900), so this is the mobile
+      // branch and the dock is present.
       tester.view.physicalSize = const Size(600, 800);
       tester.view.devicePixelRatio = 1.0;
       tester.view.padding = const FakeViewPadding(bottom: 34);

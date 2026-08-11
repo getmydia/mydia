@@ -97,11 +97,14 @@ class AppShell extends ConsumerStatefulWidget {
 
   /// Wraps the bottom dock so it disappears while the nav drawer is open.
   ///
-  /// Flutter's `Scaffold` adds its drawer slot before `bottomNavigationBar`
-  /// (see `Scaffold.build`: `drawer` at 2983, `bottomNavigationBar` at 3167)
-  /// and paints in that order, so the floating dock would otherwise sit on top
-  /// of the drawer AND its scrim, and keep intercepting taps: tapping where
-  /// "Home" sits navigates while the drawer is open.
+  /// In `Scaffold.build`, the drawer slot is added to the child list before
+  /// `bottomNavigationBar`, and the layout paints in that order. So a floating
+  /// dock would otherwise sit on top of the drawer AND its scrim, and keep
+  /// intercepting taps: tapping where "Home" sits navigates while the drawer
+  /// is open.
+  ///
+  /// `app_shell_drawer_dock_test.dart` pins this behaviour, so a Flutter
+  /// upgrade that reorders those slots surfaces there rather than here.
   ///
   /// [child] stays MOUNTED rather than being swapped for `null`. Removing the
   /// bar would drop `MediaQuery.padding.bottom` to zero, which is the exact
