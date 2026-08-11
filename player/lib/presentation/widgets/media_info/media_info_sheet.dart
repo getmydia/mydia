@@ -85,7 +85,9 @@ class _PanelSurface extends StatelessWidget {
       color: AppColors.surface,
       borderRadius:
           isWide ? null : const BorderRadius.vertical(top: Radius.circular(16)),
-      clipBehavior: Clip.antiAlias,
+      // Only the bottom sheet has corners to clip. The side panel is a plain
+      // rectangle, so clipping there is pure rasterization cost.
+      clipBehavior: isWide ? Clip.none : Clip.antiAlias,
       child: Container(
         width: isWide ? sideWidth(context) : double.infinity,
         height: isWide ? double.infinity : null,
