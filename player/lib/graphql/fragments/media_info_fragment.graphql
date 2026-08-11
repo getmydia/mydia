@@ -1,0 +1,46 @@
+fragment MediaInfoFragment on MediaFile {
+  id
+  fileName
+  directory
+  container
+  duration
+  size
+  bitrate
+  resolution
+  codec
+  streams {
+    index
+    type
+    codec
+    codecLong
+    profile
+    level
+    language
+    title
+    bitrate
+    isDefault
+    isForced
+    isHearingImpaired
+    isCommentary
+    width
+    height
+    frameRate
+    pixelFormat
+    bitDepth
+    colorSpace
+    colorTransfer
+    colorPrimaries
+    dolbyVisionProfile
+    aspectRatio
+    channels
+    channelLayout
+    sampleRate
+  }
+  externalSubtitles {
+    trackId
+    language
+    title
+    format
+    embedded
+  }
+}

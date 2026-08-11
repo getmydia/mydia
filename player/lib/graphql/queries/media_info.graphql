@@ -1,0 +1,53 @@
+#import '../fragments/media_info_fragment.graphql'
+
+query MovieMediaInfo($id: ID!) {
+  movie(id: $id) {
+    id
+    title
+    files {
+      ...MediaInfoFragment
+    }
+  }
+}
+
+query EpisodeMediaInfo($id: ID!) {
+  episode(id: $id) {
+    id
+    title
+    files {
+      ...MediaInfoFragment
+    }
+  }
+}
+
+query MovieMediaInfoLegacy($id: ID!) {
+  movie(id: $id) {
+    id
+    title
+    files {
+      id
+      size
+      bitrate
+      resolution
+      codec
+      audioCodec
+      hdrFormat
+    }
+  }
+}
+
+query EpisodeMediaInfoLegacy($id: ID!) {
+  episode(id: $id) {
+    id
+    title
+    files {
+      id
+      size
+      bitrate
+      resolution
+      codec
+      audioCodec
+      hdrFormat
+    }
+  }
+}
