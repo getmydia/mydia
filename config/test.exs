@@ -119,11 +119,33 @@ config :tower,
 wallaby_headless = System.get_env("WALLABY_HEADLESS", "true") == "true"
 is_ci = System.get_env("CI") == "true" || System.get_env("GITHUB_ACTIONS") == "true"
 
+# `binary` pins the *browser* the way `path` pins the driver, and it matters as
+# much. Wallaby resolves Chrome itself in `Wallaby.Chrome.find_chrome_executable/0`,
+# which searches `[chromedriver_config[:binary] | default_paths]` and falls
+# through to whatever `google-chrome` is on PATH. On a GitHub runner that is the
+# system Chrome, which tracks stable and moves independently of nixpkgs, so
+# Wallaby compared it against devenv's pinned chromedriver and aborted every
+# session with "invalid session id" once the runner image reached Chrome 151
+# while nixpkgs pinned chromedriver 149.
+#
+# `scripts/run-feature-tests.sh` already prefers CHROME_PATH for exactly this
+# reason (see `get_chrome_version`), so its preflight reported a clean 149/149
+# match and Wallaby then failed its own independent check. Setting `binary` here
+# is what makes the two agree.
 wallaby_chromedriver_opts =
-  case System.get_env("CHROMEDRIVER_PATH") do
-    nil -> [headless: wallaby_headless]
-    path -> [path: path, headless: wallaby_headless]
-  end
+  [headless: wallaby_headless]
+  |> then(fn opts ->
+    case System.get_env("CHROMEDRIVER_PATH") do
+      nil -> opts
+      path -> Keyword.put(opts, :path, path)
+    end
+  end)
+  |> then(fn opts ->
+    case System.get_env("CHROME_PATH") do
+      nil -> opts
+      binary -> Keyword.put(opts, :binary, binary)
+    end
+  end)
 
 # Chrome capabilities for headless mode
 # These are especially important for CI environments
