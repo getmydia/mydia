@@ -96,4 +96,70 @@ defmodule Mydia.Settings.LibraryPathDefaultsTest do
       assert Settings.default_library_for(:movies) == nil
     end
   end
+
+  describe "backfill" do
+    # Migration modules are not compiled into the app, so load the file explicitly.
+    Code.require_file("priv/repo/migrations/20260811173217_backfill_default_library_flags.exs")
+
+    alias Mydia.Repo.Migrations.BackfillDefaultLibraryFlags, as: Backfill
+
+    test "flags the oldest monitored library of each kind" do
+      older = library_path_fixture(%{type: "movies"})
+      newer = library_path_fixture(%{type: "movies"})
+      series = library_path_fixture(%{type: "series"})
+
+      # library_path_fixture inserts in call order, so `older` has the earlier
+      # inserted_at. Force a gap so the ordering is unambiguous under a
+      # second-resolution timestamp column.
+      backdate(older, ~U[2020-01-01 00:00:00Z])
+      backdate(newer, ~U[2021-01-01 00:00:00Z])
+      backdate(series, ~U[2020-01-01 00:00:00Z])
+
+      Backfill.backfill()
+
+      assert Mydia.Repo.get!(LibraryPath, older.id).default_for_movies
+      refute Mydia.Repo.get!(LibraryPath, newer.id).default_for_movies
+      assert Mydia.Repo.get!(LibraryPath, series.id).default_for_series
+    end
+
+    test "does not overwrite an existing flag" do
+      older = library_path_fixture(%{type: "movies"})
+      newer = library_path_fixture(%{type: "movies"})
+      backdate(older, ~U[2020-01-01 00:00:00Z])
+      backdate(newer, ~U[2021-01-01 00:00:00Z])
+
+      {:ok, _} = Settings.set_default_library(newer, :movies)
+
+      Backfill.backfill()
+
+      assert Mydia.Repo.get!(LibraryPath, newer.id).default_for_movies
+      refute Mydia.Repo.get!(LibraryPath, older.id).default_for_movies
+    end
+
+    test "skips unmonitored libraries" do
+      unmonitored = library_path_fixture(%{type: "movies", monitored: false})
+      monitored = library_path_fixture(%{type: "movies"})
+      backdate(unmonitored, ~U[2020-01-01 00:00:00Z])
+      backdate(monitored, ~U[2021-01-01 00:00:00Z])
+
+      Backfill.backfill()
+
+      assert Mydia.Repo.get!(LibraryPath, monitored.id).default_for_movies
+      refute Mydia.Repo.get!(LibraryPath, unmonitored.id).default_for_movies
+    end
+
+    test "is a no-op when there are no libraries" do
+      assert Backfill.backfill() == :ok
+      assert Settings.default_library_for(:movies) == nil
+    end
+
+    defp backdate(library_path, at) do
+      import Ecto.Query
+
+      Mydia.Repo.update_all(
+        from(l in LibraryPath, where: l.id == ^library_path.id),
+        set: [inserted_at: at]
+      )
+    end
+  end
 end
