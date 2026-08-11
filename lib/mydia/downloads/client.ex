@@ -302,6 +302,25 @@ defmodule Mydia.Downloads.Client do
   """
   @callback supported_protocols() :: [protocol(), ...]
 
+  @doc """
+  Lists the individual files belonging to a torrent.
+
+  Unlike `DownloadStatus.files`, which is a *scoping* path that may be a
+  single directory (qBittorrent and rtorrent both report one), this returns a
+  complete leaf-level enumeration: one entry per real file. Entries are
+  absolute paths.
+
+  Optional. Adapters that cannot enumerate a torrent's contents simply do not
+  implement it, and the facade reports `{:error, :unsupported}` on their
+  behalf. Callers MUST treat `:unsupported` and `{:ok, []}` as "unknown" and
+  never as "this torrent has no files": an empty list from a torrent client
+  normally means metadata has not resolved yet.
+  """
+  @callback list_files(config(), client_id :: String.t()) ::
+              {:ok, [String.t()]} | {:error, :unsupported | Error.t() | term()}
+
+  @optional_callbacks list_files: 2
+
   ## Convenience Functions
 
   # Adapter resolution flows through Client.Registry.lookup/1, which returns nil
@@ -383,5 +402,23 @@ defmodule Mydia.Downloads.Client do
 
   def resume_torrent(adapter, config, client_id) when is_atom(adapter) do
     adapter.resume_torrent(config, client_id)
+  end
+
+  @doc """
+  Lists a torrent's individual files using the specified adapter.
+
+  Returns `{:error, :unsupported}` for adapters that do not implement the
+  optional `c:list_files/2` callback, so a caller never has to know which
+  adapters can enumerate. See the `no_adapter_error/0` comment above for why
+  the nil clause exists.
+  """
+  def list_files(nil, _config, _client_id), do: no_adapter_error()
+
+  def list_files(adapter, config, client_id) when is_atom(adapter) do
+    if Code.ensure_loaded?(adapter) and function_exported?(adapter, :list_files, 2) do
+      adapter.list_files(config, client_id)
+    else
+      {:error, :unsupported}
+    end
   end
 end
