@@ -5,25 +5,24 @@ defmodule Mydia.MediaServer.Client.Plex do
 
   @behaviour Mydia.MediaServer.Client
 
+  alias Mydia.MediaServer.Error
+
   require Logger
 
   @impl true
-  def test_connection(%{url: nil}), do: {:error, "URL is required"}
-  def test_connection(%{url: ""}), do: {:error, "URL is required"}
-  def test_connection(%{token: nil}), do: {:error, "Token is required"}
-  def test_connection(%{token: ""}), do: {:error, "Token is required"}
+  def test_connection(%{url: nil}), do: {:error, Error.unexpected("URL is required")}
+  def test_connection(%{url: ""}), do: {:error, Error.unexpected("URL is required")}
+  def test_connection(%{token: nil}), do: {:error, Error.auth("Token is required")}
+  def test_connection(%{token: ""}), do: {:error, Error.auth("Token is required")}
 
   def test_connection(config) do
-    # Plex identity endpoint: /identity
-    # Headers: X-Plex-Token
-
-    url = build_url(config, "/identity")
-
-    case Req.get(url, headers: headers(config)) do
-      {:ok, %{status: 200}} -> :ok
-      {:ok, %{status: status}} -> {:error, "Connection failed: HTTP #{status}"}
-      {:error, exception} -> {:error, "Connection failed: #{Exception.message(exception)}"}
-    end
+    # `/library/sections` requires a valid token. `/identity` does NOT: it
+    # answers 200 with a garbage token or with no token header at all, which is
+    # why it must never be used to validate credentials.
+    config
+    |> build_url("/library/sections")
+    |> Req.get(headers: headers(config), retry: false)
+    |> classify()
   end
 
   @impl true
@@ -46,12 +45,23 @@ defmodule Mydia.MediaServer.Client.Plex do
 
     Logger.info("Triggering Plex library scan", server: config.name, path: path)
 
-    case Req.get(url, headers: headers(config), params: params) do
-      {:ok, %{status: 200}} -> :ok
-      {:ok, %{status: status}} -> {:error, "Scan failed: HTTP #{status}"}
-      {:error, exception} -> {:error, "Scan failed: #{Exception.message(exception)}"}
-    end
+    url
+    |> Req.get(headers: headers(config), params: params)
+    |> classify()
   end
+
+  defp classify({:ok, %{status: status}}) when status in 200..299, do: :ok
+
+  defp classify({:ok, %{status: status}}) when status in [401, 403],
+    do: {:error, Error.auth("HTTP #{status}")}
+
+  defp classify({:ok, %{status: status}}), do: {:error, Error.unexpected("HTTP #{status}")}
+
+  defp classify({:error, %Req.TransportError{} = e}),
+    do: {:error, Error.unreachable(Exception.message(e))}
+
+  defp classify({:error, exception}),
+    do: {:error, Error.unexpected(Exception.message(exception))}
 
   # ── Watched Sync API ──────────────────────────────────────────────
 

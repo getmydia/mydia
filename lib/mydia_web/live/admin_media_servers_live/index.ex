@@ -4,6 +4,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
   alias Mydia.Settings
   alias Mydia.Settings.MediaServerConfig
   alias Mydia.MediaServer.Client, as: MediaServerClient
+  alias Mydia.MediaServer.Error
   alias Mydia.MediaServer.PlexOAuth
 
   require Logger
@@ -345,18 +346,18 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
          |> put_flash(:info, "Connection to #{server.name} successful!")
          |> load_data()}
 
-      {:error, reason} ->
+      {:error, %Error{} = error} ->
         MydiaLogger.log_warning(:liveview, "Media server connection test failed",
           operation: :test_media_server,
           server_id: id,
           server_type: server.type,
-          error: reason,
+          error: Error.message(error),
           user_id: socket.assigns.current_user.id
         )
 
         {:noreply,
          socket
-         |> put_flash(:error, "Connection failed: #{reason}")
+         |> put_flash(:error, "Connection failed: #{Error.message(error)}")
          |> load_data()}
     end
   end
@@ -412,18 +413,18 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
          |> assign(:testing_media_server_connection, false)
          |> put_flash(:info, "Connection successful!")}
 
-      {:error, reason} ->
+      {:error, %Error{} = error} ->
         MydiaLogger.log_warning(:liveview, "Media server connection test failed",
           operation: :test_media_server_connection,
           server_type: type,
-          error: reason,
+          error: Error.message(error),
           user_id: socket.assigns.current_user.id
         )
 
         {:noreply,
          socket
          |> assign(:testing_media_server_connection, false)
-         |> put_flash(:error, "Connection failed: #{reason}")}
+         |> put_flash(:error, "Connection failed: #{Error.message(error)}")}
     end
   end
 
