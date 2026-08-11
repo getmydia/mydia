@@ -223,7 +223,14 @@ defmodule MydiaWeb.DashboardLive.Index do
   end
 
   def handle_info({:add_media_to_library, provider_id, media_type, library_path_id}, socket) do
-    opts = if library_path_id, do: [library_path_id: library_path_id], else: []
+    # Comes from client params, so a blank string is possible. "" is truthy in
+    # Elixir and would reach the changeset as library_path_id: "", failing the
+    # foreign key instead of falling back to normal resolution.
+    opts =
+      case library_path_id do
+        id when is_binary(id) and id != "" -> [library_path_id: id]
+        _ -> []
+      end
 
     case MediaAddHelpers.handle_add_media_to_library(
            provider_id,

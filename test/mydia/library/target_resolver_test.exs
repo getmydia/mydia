@@ -40,6 +40,26 @@ defmodule Mydia.Library.TargetResolverTest do
       assert resolved.id == override.id
     end
 
+    test "a download override still applies when the association is not preloaded" do
+      chosen = library_path_fixture(%{type: "movies"})
+      override = library_path_fixture(%{type: "movies"})
+      item = movie(%{library_path_id: chosen.id})
+
+      download = %Mydia.Downloads.Download{
+        library_path_id: override.id,
+        library_path: %Ecto.Association.NotLoaded{
+          __field__: :library_path,
+          __owner__: Mydia.Downloads.Download,
+          __cardinality__: :one
+        }
+      }
+
+      assert {:ok, resolved, :download_override} =
+               TargetResolver.resolve(item, download: download)
+
+      assert resolved.id == override.id
+    end
+
     test "an explicit target wins over existing files" do
       chosen = library_path_fixture(%{type: "movies"})
       elsewhere = library_path_fixture(%{type: "movies"})

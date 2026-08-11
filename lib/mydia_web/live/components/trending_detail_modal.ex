@@ -192,12 +192,8 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
                   <.library_picker_menu
                     libraries={@libraries}
                     event="add_to_library"
-                    extra_values={
-                      %{
-                        tmdb_id: @item.provider_id,
-                        media_type: media_type_string(@item)
-                      }
-                    }
+                    tmdb_id={@item.provider_id}
+                    media_type={media_type_string(@item)}
                   />
                 </div>
               <% end %>

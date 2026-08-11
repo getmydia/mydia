@@ -96,6 +96,13 @@ defmodule Mydia.Library.TargetResolver do
 
   defp download_target(nil), do: nil
   defp download_target(%{library_path: %LibraryPath{} = library_path}), do: library_path
+
+  # Fall back to the id when the association is not preloaded. Without this a
+  # caller passing a Download whose `library_path_id` is set but whose
+  # `library_path` was never loaded would silently skip the override and
+  # resolve somewhere else.
+  defp download_target(%{library_path_id: id}) when not is_nil(id), do: Repo.get(LibraryPath, id)
+
   defp download_target(_), do: nil
 
   defp explicit_target(%MediaItem{library_path_id: nil}, _paths), do: nil
@@ -110,7 +117,9 @@ defmodule Mydia.Library.TargetResolver do
     |> where([f], is_nil(f.trashed_at))
     |> where([f], not is_nil(f.library_path_id))
     |> group_by([f], f.library_path_id)
-    |> order_by([f], desc: count(f.id), desc: max(f.inserted_at))
+    # library_path_id is the tertiary key so an exact tie on both count and
+    # recency still resolves the same way on every run.
+    |> order_by([f], desc: count(f.id), desc: max(f.inserted_at), asc: f.library_path_id)
     |> limit(1)
     |> select([f], f.library_path_id)
     |> Repo.one()

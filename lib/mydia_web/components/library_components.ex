@@ -538,7 +538,8 @@ defmodule MydiaWeb.LibraryComponents do
   """
   attr :libraries, :list, required: true
   attr :event, :string, required: true
-  attr :extra_values, :map, default: %{}
+  attr :tmdb_id, :any, default: nil
+  attr :media_type, :any, default: nil
   attr :selected_id, :string, default: nil
 
   def library_picker_menu(assigns) do
@@ -563,7 +564,8 @@ defmodule MydiaWeb.LibraryComponents do
             type="button"
             phx-click={@event}
             phx-value-library_path_id={library.id}
-            {phx_values(@extra_values)}
+            phx-value-tmdb_id={@tmdb_id}
+            phx-value-media_type={@media_type}
             class="flex-col items-start gap-0"
           >
             <span class="font-medium">{Path.basename(library.path)}</span>
@@ -573,9 +575,5 @@ defmodule MydiaWeb.LibraryComponents do
       </ul>
     </div>
     """
-  end
-
-  defp phx_values(values) do
-    Map.new(values, fn {key, value} -> {:"phx-value-#{key}", value} end)
   end
 end
