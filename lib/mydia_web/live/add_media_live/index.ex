@@ -230,8 +230,8 @@ defmodule MydiaWeb.AddMediaLive.Index do
 
         case Media.create_media_item(attrs, season_monitoring: season_monitoring) do
           {:ok, media_item} ->
-            # Stay on page with success message
-            # Use provider_id as key (integer) for tracking added items
+            maybe_queue_search(media_item, config)
+
             id_key = String.to_integer(selected.provider_id)
 
             {:noreply,
@@ -404,6 +404,24 @@ defmodule MydiaWeb.AddMediaLive.Index do
 
   defp path_exists?(paths, id) do
     Enum.any?(paths, &(&1.id == id))
+  end
+
+  # Uses the shared auto-search path rather than enqueuing directly: it is
+  # already Oban-dedupe-safe (singular insert/1, not insert_all/1) and is what
+  # the media detail page uses.
+  defp maybe_queue_search(media_item, config) do
+    if Map.get(config, :search_on_add) do
+      case Mydia.Search.queue_auto_searches([media_item]) do
+        {:ok, _count} ->
+          :ok
+
+        {:error, reason} ->
+          Logger.warning("Failed to queue search on add",
+            media_item_id: media_item.id,
+            reason: inspect(reason)
+          )
+      end
+    end
   end
 
   defp build_media_item_attrs(metadata, config, media_type) do

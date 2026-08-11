@@ -135,6 +135,54 @@ defmodule MydiaWeb.AddMediaLive.ConfigModalTest do
     end
   end
 
+  describe "search on add" do
+    test "queues a search job when search_on_add is set", %{conn: conn, library: library} do
+      {:ok, view, _html} = live(conn, ~p"/add/movie?q=matrix")
+
+      assert render(view) =~ "The Matrix"
+
+      view
+      |> element(~s(button[phx-click="open_config_modal"][phx-value-index="0"]))
+      |> render_click()
+
+      params = %{
+        "config" => %{
+          "library_path_id" => to_string(library.id),
+          "quality_profile_id" => "",
+          "season_monitoring" => "all",
+          "search_on_add" => "true"
+        }
+      }
+
+      render_hook(view, "submit_config_modal", params)
+
+      assert eventually(fn -> Mydia.Repo.aggregate(Oban.Job, :count) > 0 end)
+    end
+
+    test "queues nothing when search_on_add is absent", %{conn: conn, library: library} do
+      {:ok, view, _html} = live(conn, ~p"/add/movie?q=matrix")
+
+      assert render(view) =~ "The Matrix"
+
+      view
+      |> element(~s(button[phx-click="open_config_modal"][phx-value-index="0"]))
+      |> render_click()
+
+      params = %{
+        "config" => %{
+          "library_path_id" => to_string(library.id),
+          "quality_profile_id" => "",
+          "season_monitoring" => "all"
+        }
+      }
+
+      render_hook(view, "submit_config_modal", params)
+
+      assert eventually(fn -> Media.list_media_items() != [] end)
+      assert Mydia.Repo.aggregate(Oban.Job, :count) == 0
+    end
+  end
+
   defp assert_no_crash(view) do
     # A LiveView that died mid-handle_info raises here; a live one renders.
     assert render(view) =~ "add"
