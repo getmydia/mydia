@@ -7,6 +7,7 @@ import 'package:mockito/mockito.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
+import 'package:player/core/layout/breakpoints.dart';
 import 'package:player/domain/models/search_result.dart';
 import 'package:player/presentation/screens/search/search_controller.dart';
 import 'package:player/presentation/screens/search/search_screen.dart';
@@ -51,7 +52,15 @@ const _twoSections = {
 void main() {
   late MockGraphQLClient client;
 
-  Widget host({String? initialQuery, SearchResultType? initialType}) {
+  /// [contentWidth] narrows the screen without narrowing the window, which is
+  /// what `AppShell`'s desktop layout does by putting a fixed 260px
+  /// `DesktopSidebar` beside it. Grid geometry must follow the content area,
+  /// not `MediaQuery`.
+  Widget host({
+    String? initialQuery,
+    SearchResultType? initialType,
+    double? contentWidth,
+  }) {
     client = MockGraphQLClient();
     when(client.query(any)).thenAnswer(
       (_) async => QueryResult(
@@ -59,6 +68,11 @@ void main() {
         source: QueryResultSource.network,
         data: const {'search': _twoSections},
       ),
+    );
+
+    final screen = SearchScreen(
+      initialQuery: initialQuery,
+      initialType: initialType,
     );
 
     return ProviderScope(
@@ -69,10 +83,12 @@ void main() {
         ),
       ],
       child: MaterialApp(
-        home: SearchScreen(
-          initialQuery: initialQuery,
-          initialType: initialType,
-        ),
+        home: contentWidth == null
+            ? screen
+            : Align(
+                alignment: Alignment.topLeft,
+                child: SizedBox(width: contentWidth, child: screen),
+              ),
       ),
     );
   }
@@ -428,5 +444,28 @@ void main() {
     // Was SliverGridDelegateWithMaxCrossAxisExtent(180) at aspect 0.55,
     // the only grid in the app that did not match the library.
     expect(delegate.childAspectRatio, 0.58);
+  });
+
+  testWidgets('counts columns from the content area, not the window',
+      (tester) async {
+    // A 1400px window whose content area is only 700px, which is the shape
+    // `AppShell` creates on desktop with its fixed 260px `DesktopSidebar`.
+    // Reading `MediaQuery` here would say 1400 and lay out 7 columns into
+    // space that fits 4, cramping every card.
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await mockNetworkImages(() async {
+      await tester.pumpWidget(host(initialQuery: 'alien', contentWidth: 700));
+      await tester.pumpAndSettle();
+    });
+
+    final grid = tester.widget<SliverGrid>(find.byType(SliverGrid));
+    final delegate =
+        grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
+
+    expect(delegate.crossAxisCount, libraryCrossAxisCount(700));
+    expect(delegate.crossAxisCount, isNot(libraryCrossAxisCount(1400)));
   });
 }

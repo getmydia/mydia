@@ -427,28 +427,37 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               },
             )
           else
-            SliverPadding(
-              padding: EdgeInsets.symmetric(
-                horizontal: Breakpoints.getHorizontalPadding(context),
-              ),
-              sliver: SliverGrid.builder(
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: libraryCrossAxisCount(
-                    MediaQuery.sizeOf(context).width,
-                  ),
-                  childAspectRatio: 0.58,
-                  crossAxisSpacing: Breakpoints.getCardSpacing(context),
-                  mainAxisSpacing: Breakpoints.getCardSpacing(context) + 4,
+            // `SliverLayoutBuilder`, not `MediaQuery`: on desktop `AppShell`
+            // puts a fixed 260px `DesktopSidebar` beside this screen, so the
+            // window is wider than the content area. Counting columns from
+            // the window overestimates the space and cramps every card.
+            // `crossAxisExtent` here is the viewport's, measured outside the
+            // padding below, which matches how `BrowseGrid` reads
+            // `constraints.maxWidth` so both grids bucket identically.
+            SliverLayoutBuilder(
+              builder: (context, sliverConstraints) => SliverPadding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: Breakpoints.getHorizontalPadding(context),
                 ),
-                itemCount: section.results.length,
-                itemBuilder: (context, index) {
-                  final result = section.results[index];
-                  return SearchResultCard(
-                    key: ValueKey(result.id),
-                    result: result,
-                    onTap: () => context.push(result.routePath),
-                  );
-                },
+                sliver: SliverGrid.builder(
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: libraryCrossAxisCount(
+                      sliverConstraints.crossAxisExtent,
+                    ),
+                    childAspectRatio: 0.58,
+                    crossAxisSpacing: Breakpoints.getCardSpacing(context),
+                    mainAxisSpacing: Breakpoints.getCardSpacing(context) + 4,
+                  ),
+                  itemCount: section.results.length,
+                  itemBuilder: (context, index) {
+                    final result = section.results[index];
+                    return SearchResultCard(
+                      key: ValueKey(result.id),
+                      result: result,
+                      onTap: () => context.push(result.routePath),
+                    );
+                  },
+                ),
               ),
             ),
         ],
