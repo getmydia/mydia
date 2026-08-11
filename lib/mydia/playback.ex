@@ -300,15 +300,26 @@ defmodule Mydia.Playback do
   """
   def delete_progress(user_id, content_id, opts \\ [])
 
-  def delete_progress(user_id, content_id, _opts) when is_list(content_id) do
+  def delete_progress(user_id, content_id, opts) when is_list(content_id) do
     case get_progress(user_id, content_id) do
       nil ->
         {:error, :not_found}
 
       existing_progress ->
-        # `:origin` is accepted so sync callers can tag the write. Emitting a
-        # `playback.unwatched` event from that origin lands in a later change.
-        Repo.delete(existing_progress)
+        result = Repo.delete(existing_progress)
+
+        # An unwatch deletes the row, so without this event nothing downstream
+        # can ever learn it happened.
+        with {:ok, _} <- result do
+          Events.playback_event(
+            "unwatched",
+            user_id,
+            content_id,
+            playback_meta(existing_progress, Keyword.get(opts, :origin, "player"))
+          )
+        end
+
+        result
     end
   end
 

@@ -255,6 +255,12 @@ defmodule Mydia.Events.Presentation do
       icon: "hero-check-circle",
       color: "text-success",
       title: "Playback finished"
+    },
+    %{
+      type: "playback.unwatched",
+      icon: "hero-eye-slash",
+      color: "text-info",
+      title: "Marked unwatched"
     }
   ]
 
@@ -472,7 +478,7 @@ defmodule Mydia.Events.Presentation do
     "#{slug} #{current} to #{latest}"
   end
 
-  @playback_types ~w(playback.started playback.progressed playback.paused playback.finished)
+  @playback_types ~w(playback.started playback.progressed playback.paused playback.finished playback.unwatched)
 
   def detail(%Event{type: type, metadata: metadata}) when type in @playback_types do
     [
