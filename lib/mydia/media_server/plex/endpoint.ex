@@ -1,0 +1,175 @@
+defmodule Mydia.MediaServer.Plex.Endpoint do
+  @moduledoc """
+  Resolves a working Plex base URL at call time.
+
+  A Plex server advertises several addresses and any of them can stop working
+  when it moves networks. Storing one frozen address (the previous behaviour)
+  produced a config that timed out for months with no way to recover. This
+  module probes every candidate concurrently, caches the winner, and drops the
+  cache when it stops working.
+  """
+
+  alias Mydia.MediaServer.Error
+  alias Mydia.Settings.MediaServerConfig
+
+  @table :plex_endpoint_cache
+  @probe_path "/library/sections"
+  @probe_timeout_ms 3_000
+  @cache_ttl_ms :timer.minutes(10)
+
+  @doc """
+  Returns a working base URL for the config.
+
+  An explicit `url` on the config is a manual operator override and wins over
+  discovery. Otherwise the cached winner is reused when fresh, and failing that
+  every candidate is probed concurrently.
+  """
+  @spec resolve(MediaServerConfig.t()) :: {:ok, String.t()} | {:error, Error.t()}
+  def resolve(%MediaServerConfig{url: url} = config) when is_binary(url) and url != "" do
+    case probe(url, config.token) do
+      :ok -> {:ok, url}
+      {:error, _} = err -> err
+    end
+  end
+
+  def resolve(%MediaServerConfig{} = config) do
+    case cached(config) do
+      {:ok, url} -> {:ok, url}
+      :miss -> probe_all(config)
+    end
+  end
+
+  @doc "Drops the cached winner so the next resolve re-probes."
+  @spec invalidate(MediaServerConfig.t()) :: :ok
+  def invalidate(%MediaServerConfig{id: id}) do
+    ensure_table()
+    :ets.delete(@table, id)
+    :ok
+  end
+
+  @doc false
+  @spec invalidate_all() :: :ok
+  def invalidate_all do
+    ensure_table()
+    :ets.delete_all_objects(@table)
+    :ok
+  end
+
+  # ── Private ────────────────────────────────────────────────────────
+
+  defp probe_all(%MediaServerConfig{connections: connections, token: token} = config) do
+    uris = connections |> Enum.map(&candidate_uri/1) |> Enum.reject(&is_nil/1) |> Enum.uniq()
+
+    results =
+      uris
+      |> Task.async_stream(fn uri -> {uri, probe(uri, token)} end,
+        timeout: @probe_timeout_ms + 1_000,
+        on_timeout: :kill_task,
+        max_concurrency: max(length(uris), 1)
+      )
+      |> Enum.flat_map(fn
+        {:ok, result} -> [result]
+        {:exit, _} -> []
+      end)
+
+    case Enum.find(results, fn {_uri, res} -> res == :ok end) do
+      {uri, :ok} ->
+        put_cache(config, uri)
+        {:ok, uri}
+
+      nil ->
+        {:error, worst_error(results)}
+    end
+  end
+
+  # An auth failure is more informative than a timeout: it means we reached a
+  # Plex server and it rejected us, so rediscovery would not help.
+  defp worst_error([]), do: Error.unreachable("no connection candidates configured")
+
+  defp worst_error(results) do
+    errors = for {_uri, {:error, e}} <- results, do: e
+
+    Enum.find(errors, &(&1.kind == :auth)) ||
+      Enum.find(errors, &(&1.kind == :unexpected)) ||
+      List.first(errors) ||
+      Error.unreachable("all candidates failed")
+  end
+
+  defp candidate_uri(%{"uri" => uri}) when is_binary(uri), do: uri
+  defp candidate_uri(%{uri: uri}) when is_binary(uri), do: uri
+  defp candidate_uri(_), do: nil
+
+  defp probe(uri, token) do
+    (String.trim_trailing(uri, "/") <> @probe_path)
+    |> Req.get(
+      headers: [{"X-Plex-Token", token || ""}, {"Accept", "application/json"}],
+      retry: false,
+      receive_timeout: @probe_timeout_ms,
+      connect_options: [timeout: @probe_timeout_ms]
+    )
+    |> classify()
+  end
+
+  defp classify({:ok, %{status: s}}) when s in 200..299, do: :ok
+  defp classify({:ok, %{status: s}}) when s in [401, 403], do: {:error, Error.auth("HTTP #{s}")}
+  defp classify({:ok, %{status: s}}), do: {:error, Error.unexpected("HTTP #{s}")}
+
+  defp classify({:error, %Req.TransportError{} = e}),
+    do: {:error, Error.unreachable(Exception.message(e))}
+
+  defp classify({:error, e}), do: {:error, Error.unexpected(Exception.message(e))}
+
+  @doc """
+  Creates the cache table, owned by a process that lives as long as the
+  application.
+
+  Called from `Mydia.Application.start/2`. An ETS table belongs to the process
+  that created it, so creating it lazily from whichever caller arrived first
+  would tie the cache's lifetime to a request or job process and destroy it
+  when that process exits.
+  """
+  @spec init_cache() :: :ok
+  def init_cache, do: ensure_table()
+
+  defp cached(%MediaServerConfig{id: id}) do
+    ensure_table()
+
+    case :ets.lookup(@table, id) do
+      [{^id, url, stored_at}] ->
+        if System.monotonic_time(:millisecond) - stored_at < @cache_ttl_ms do
+          {:ok, url}
+        else
+          :ets.delete(@table, id)
+          :miss
+        end
+
+      [] ->
+        :miss
+    end
+  rescue
+    # The table vanishing mid-read must degrade to a miss and a re-probe, never
+    # take down the caller. A cache is not worth an exception.
+    ArgumentError -> :miss
+  end
+
+  defp put_cache(%MediaServerConfig{id: id}, url) do
+    ensure_table()
+    :ets.insert(@table, {id, url, System.monotonic_time(:millisecond)})
+    :ok
+  rescue
+    ArgumentError -> :ok
+  end
+
+  defp ensure_table do
+    case :ets.whereis(@table) do
+      :undefined ->
+        :ets.new(@table, [:named_table, :public, :set, read_concurrency: true])
+        :ok
+
+      _ ->
+        :ok
+    end
+  rescue
+    ArgumentError -> :ok
+  end
+end
