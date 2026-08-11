@@ -38,7 +38,8 @@
   <style>
     body {
       margin: 0;
-      background-color: #0f172a;
+      /* AppColors.background */
+      background-color: #0b0b0c;
     }
     .loading-container {
       position: fixed;
@@ -47,7 +48,8 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      background-color: #0f172a;
+      /* AppColors.background */
+      background-color: #0b0b0c;
       z-index: 9999;
       transition: opacity 0.3s ease-out;
     }
@@ -58,14 +60,17 @@
     .spinner {
       width: 48px;
       height: 48px;
-      border: 3px solid rgba(148, 163, 184, 0.2);
-      border-top-color: #3b82f6;
+      /* AppColors.textSecondary at 0.2 */
+      border: 3px solid rgba(154, 152, 148, 0.2);
+      /* AppColors.primary, matching progressIndicatorTheme in app_theme.dart */
+      border-top-color: #e9a23b;
       border-radius: 50%;
       animation: spin 1s linear infinite;
     }
     .loading-text {
       margin-top: 16px;
-      color: #94a3b8;
+      /* AppColors.textSecondary */
+      color: #9a9894;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       font-size: 14px;
       letter-spacing: 0.02em;
