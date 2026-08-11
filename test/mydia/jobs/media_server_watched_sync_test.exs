@@ -4,6 +4,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
 
   alias Mydia.Jobs.MediaServerWatchedSync
   alias Mydia.Settings
+  alias Mydia.Sync
 
   import Mydia.AccountsFixtures
 
@@ -83,6 +84,72 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
                  "config_id" => server.id,
                  "user_id" => user.id
                })
+    end
+  end
+
+  describe "skip visibility" do
+    test "an individual job whose config was disabled after enqueue records a skip" do
+      # A job can be enqueued and then have its config disabled before it runs.
+      # That path used to return {:ok, :skipped} with no trace, which is the
+      # same silence this change exists to remove.
+      user = user_fixture()
+
+      {:ok, config} =
+        Settings.create_media_server_config(%{
+          name: "Storage",
+          type: :plex,
+          url: "http://localhost:32400",
+          token: "tok",
+          enabled: false,
+          connection_settings: %{"sync_watched" => "true"}
+        })
+
+      assert {:ok, :skipped} =
+               perform_job(MediaServerWatchedSync, %{
+                 "config_id" => config.id,
+                 "user_id" => user.id
+               })
+
+      run = Sync.last_run("plex", config.id)
+      assert run.status == :skipped
+      assert run.skip_reason == "server_disabled"
+      assert run.user_id == user.id
+    end
+
+    test "a server with watched sync disabled records a skipped run" do
+      {:ok, config} =
+        Settings.create_media_server_config(%{
+          name: "Storage",
+          type: :plex,
+          url: "http://localhost:32400",
+          token: "tok",
+          enabled: true
+          # connection_settings deliberately absent: this is the exact
+          # production state that produced 335 invisible no-op runs.
+        })
+
+      assert :ok = perform_job(MediaServerWatchedSync, %{"mode" => "all_enabled"})
+
+      run = Sync.last_run("plex", config.id)
+
+      assert run.status == :skipped
+      assert run.skip_reason == "sync_disabled"
+    end
+
+    test "a disabled server records a skipped run with its own reason" do
+      {:ok, config} =
+        Settings.create_media_server_config(%{
+          name: "Off",
+          type: :plex,
+          url: "http://localhost:32400",
+          token: "tok",
+          enabled: false,
+          connection_settings: %{"sync_watched" => "true"}
+        })
+
+      assert :ok = perform_job(MediaServerWatchedSync, %{"mode" => "all_enabled"})
+
+      assert Sync.last_run("plex", config.id).skip_reason == "server_disabled"
     end
   end
 end

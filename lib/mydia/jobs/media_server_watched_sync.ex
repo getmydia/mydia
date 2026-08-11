@@ -13,6 +13,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
   use Oban.Worker, queue: :integrations, max_attempts: 3
 
   alias Mydia.Accounts
+  alias Mydia.MediaServer.Error
   alias Mydia.MediaServer.WatchedSync
   alias Mydia.MediaServer.WatchedSync.Orchestrator
   alias Mydia.Settings
@@ -40,25 +41,15 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
 
   @spec perform(Oban.Job.t()) :: :ok | {:ok, term()} | {:error, term()} | {:snooze, pos_integer()}
   @impl Oban.Worker
-  def perform(%Oban.Job{args: %{"mode" => "all_enabled"} = raw_args}) do
-    _args = Args.parse(raw_args)
-
-    servers =
-      Settings.list_media_server_configs()
-      |> Enum.filter(fn config ->
-        config.enabled && watched_sync_enabled?(config)
-      end)
-
+  def perform(%Oban.Job{args: %{"mode" => "all_enabled"}}) do
     users = Accounts.list_users()
 
-    Enum.each(servers, fn server ->
-      Enum.each(users, fn user ->
-        changeset =
-          %{"config_id" => server.id, "user_id" => user.id}
-          |> __MODULE__.new()
-
-        safe_insert(changeset)
-      end)
+    Settings.list_media_server_configs()
+    |> Enum.each(fn config ->
+      case skip_reason(config) do
+        nil -> Enum.each(users, &enqueue(config, &1))
+        reason -> record_skip(config, reason)
+      end
     end)
 
     :ok
@@ -76,29 +67,73 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
       Logger.info("Starting watched sync (#{direction}) for #{config.name}, user #{user_id}")
 
       with {:ok, _adapter} <- WatchedSync.adapter_for(config) do
-        result = Orchestrator.sync(config, user_id, direction: direction)
+        {:ok, run} =
+          Mydia.Sync.start_run(%{
+            provider: to_string(config.type),
+            provider_instance_id: config.id,
+            user_id: user_id,
+            direction: direction
+          })
 
-        # Update last sync timestamp
-        update_last_sync_timestamp(config)
-
-        case result do
+        case Orchestrator.sync(config, user_id, direction: direction) do
           {:ok, stats} ->
-            Logger.info("Watched sync complete for #{config.name}: #{inspect(stats)}")
+            Mydia.Sync.finish_run(run, :ok, stats, nil)
+            # Only a successful sync updates the last-sync timestamp. It was
+            # previously stamped unconditionally, so failures looked like successes.
+            update_last_sync_timestamp(config)
             :ok
 
           {:error, reason} ->
-            Logger.error("Watched sync failed for #{config.name}: #{inspect(reason)}")
+            Mydia.Sync.finish_run(run, :error, %{}, describe_error(reason))
             {:error, reason}
         end
       end
     else
-      Logger.debug(
-        "Skipping watched sync for #{config.name}: disabled or sync_watched not enabled"
-      )
+      # Reachable when a config is disabled between enqueue and execution.
+      # Rare, but returning {:ok, :skipped} with no trace is the exact pattern
+      # this change exists to remove, so it is recorded like any other skip.
+      reason = skip_reason(config) || :sync_disabled
+
+      Logger.debug("Skipping watched sync for #{config.name}: #{reason}")
+
+      record_skip(config, reason, user_id)
 
       {:ok, :skipped}
     end
   end
+
+  # A skip is a first-class recorded outcome, not an early return. Returning
+  # :ok without a trace is what made this job look healthy for 335 consecutive
+  # runs while doing nothing at all.
+  defp skip_reason(%{enabled: false}), do: :server_disabled
+
+  defp skip_reason(config) do
+    cond do
+      not watched_sync_enabled?(config) -> :sync_disabled
+      match?({:error, _}, WatchedSync.adapter_for(config)) -> :unsupported_provider
+      true -> nil
+    end
+  end
+
+  defp record_skip(config, reason, user_id \\ nil) do
+    Mydia.Sync.record_skip(
+      %{
+        provider: to_string(config.type),
+        provider_instance_id: config.id,
+        user_id: user_id
+      },
+      reason
+    )
+  end
+
+  defp enqueue(config, user) do
+    %{"config_id" => config.id, "user_id" => user.id}
+    |> __MODULE__.new()
+    |> safe_insert()
+  end
+
+  defp describe_error(%Error{} = error), do: Error.message(error)
+  defp describe_error(reason), do: inspect(reason)
 
   defp watched_sync_enabled?(config) do
     get_in_connection_settings(config, "sync_watched") in [true, "true"]
