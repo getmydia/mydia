@@ -199,6 +199,30 @@ defmodule Mydia.MediaServer.Client.Plex do
   end
 
   @doc """
+  Reports a playback position to Plex.
+
+  `position_seconds` is converted to milliseconds, which is what `/:/progress`
+  expects.
+  """
+  @spec update_progress(map(), String.t(), integer(), String.t()) :: :ok | {:error, Error.t()}
+  def update_progress(config, rating_key, position_seconds, state \\ "stopped") do
+    with_url(config, "/:/progress", fn url ->
+      url
+      |> Req.get(
+        headers: headers(config),
+        retry: false,
+        params: [
+          identifier: "com.plexapp.plugins.library",
+          key: rating_key,
+          time: position_seconds * 1000,
+          state: state
+        ]
+      )
+      |> classify()
+    end)
+  end
+
+  @doc """
   Parses Plex GUID entries into a map of external IDs.
 
   Plex returns GUIDs like `[%{"id" => "tmdb://12345"}, %{"id" => "imdb://tt1234567"}]`.

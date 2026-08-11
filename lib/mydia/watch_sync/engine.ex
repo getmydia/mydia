@@ -222,37 +222,56 @@ defmodule Mydia.WatchSync.Engine do
     }
   end
 
-  defp apply_local(user_id, content_id, %{watched: false}, _at, origin) do
-    # Unwatch is a delete, matching Mydia's existing semantics. It also avoids
-    # the changeset's 90% auto-mark re-marking a nearly-finished item.
-    case Playback.delete_progress(user_id, content_id, origin: origin) do
-      {:ok, _} -> :ok
-      {:error, :not_found} -> :ok
-      other -> other
+  defp apply_local(user_id, content_id, resolved, at, origin) do
+    watched_at = at || now()
+
+    cond do
+      # Unwatch is a delete, matching Mydia's existing semantics. Detect it by
+      # a currently-watched local row rather than by a nil position: Plex may
+      # still report a leftover viewOffset on an unwatched item.
+      resolved.watched == false and locally_watched?(user_id, content_id) ->
+        case Playback.delete_progress(user_id, content_id, origin: origin) do
+          {:ok, _} -> :ok
+          {:error, :not_found} -> :ok
+          other -> other
+        end
+
+      # Position present: write it authoritatively so the 90% auto-mark and the
+      # "stamp now" default cannot diverge from the remote watched flag or at.
+      not is_nil(resolved.position_seconds) ->
+        Playback.save_progress(
+          user_id,
+          content_id,
+          %{
+            position_seconds: resolved.position_seconds,
+            duration_seconds: duration_for(content_id, resolved.position_seconds),
+            watched: resolved.watched,
+            last_watched_at: watched_at
+          },
+          origin: origin,
+          authoritative_watched: true
+        )
+
+        :ok
+
+      resolved.watched ->
+        Playback.ensure_watched(user_id, content_id, origin: origin, watched_at: watched_at)
+        :ok
+
+      true ->
+        case Playback.delete_progress(user_id, content_id, origin: origin) do
+          {:ok, _} -> :ok
+          {:error, :not_found} -> :ok
+          other -> other
+        end
     end
   end
 
-  defp apply_local(user_id, content_id, %{watched: true} = resolved, at, origin) do
-    watched_at = at || now()
-
-    if resolved.position_seconds do
-      Playback.save_progress(
-        user_id,
-        content_id,
-        %{
-          position_seconds: resolved.position_seconds,
-          duration_seconds: duration_for(content_id, resolved.position_seconds),
-          watched: true,
-          last_watched_at: watched_at
-        },
-        origin: origin,
-        authoritative_watched: true
-      )
-    else
-      Playback.ensure_watched(user_id, content_id, origin: origin, watched_at: watched_at)
+  defp locally_watched?(user_id, content_id) do
+    case Playback.get_progress(user_id, content_id) do
+      %{watched: true} -> true
+      _ -> false
     end
-
-    :ok
   end
 
   # A duration is required by the changeset. Prefer the local runtime; fall back

@@ -3,10 +3,9 @@ defmodule Mydia.WatchSync.Providers.Plex do
   Plex implementation of `Mydia.WatchSync.Provider`.
 
   `refresh_mappings/2` is the only full-library crawl; it runs on first sync
-  and on demand. `list_changes/3` reads watch state (and, when present,
-  resume position) for items the user has viewed. Position push via
-  `/:/progress` is filled in later; `apply_change/4` currently scrobbles and
-  unscrobbles only.
+  and on demand. `list_changes/3` reads watch state and resume position.
+  `apply_change/4` scrobbles, unscrobbles, and pushes resume position via
+  `/:/progress`.
   """
 
   @behaviour Mydia.WatchSync.Provider
@@ -40,13 +39,31 @@ defmodule Mydia.WatchSync.Providers.Plex do
   end
 
   @impl true
-  def apply_change(config, _user_scope, remote_id, %{watched: true}) do
+  def apply_change(config, _user_scope, remote_id, change) do
+    # Watched flag first, then position: an unscrobble must not clear a resume
+    # point we are about to write for an in-progress unwatched item.
+    with :ok <- maybe_push_watched(config, remote_id, change),
+         :ok <- maybe_push_position(config, remote_id, change) do
+      :ok
+    end
+  end
+
+  defp maybe_push_position(config, remote_id, %{position_seconds: position})
+       when is_integer(position) do
+    PlexClient.update_progress(config, remote_id, position)
+  end
+
+  defp maybe_push_position(_config, _remote_id, _change), do: :ok
+
+  defp maybe_push_watched(config, remote_id, %{watched: true}) do
     PlexClient.scrobble(config, remote_id)
   end
 
-  def apply_change(config, _user_scope, remote_id, %{watched: false}) do
+  defp maybe_push_watched(config, remote_id, %{watched: false}) do
     PlexClient.unscrobble(config, remote_id)
   end
+
+  defp maybe_push_watched(_config, _remote_id, _change), do: :ok
 
   # ── Mappings ───────────────────────────────────────────────────────
 
