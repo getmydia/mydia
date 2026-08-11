@@ -2296,4 +2296,71 @@ defmodule Mydia.Jobs.MediaImportTest do
       assert_raise Ecto.NoResultsError, fn -> Mydia.Downloads.get_download!(download.id) end
     end
   end
+
+  describe "determine_library_path/1 destination stability" do
+    test "a newly added alphabetically-first library does not capture an item with existing files" do
+      # Reproduces the reported bug: "Cartoons" sorts before "Movies", and
+      # before this change Enum.find over path-ascending order picked it for
+      # every movie, including ones whose files already lived in Movies.
+      movies = library_path_fixture(%{type: "movies", path: "/tmp/zzz-Movies"})
+      _cartoons = library_path_fixture(%{type: "movies", path: "/tmp/aaa-Cartoons"})
+
+      item = media_item_fixture(%{type: "movie", title: "Old Movie", year: 2001})
+
+      {:ok, _file} =
+        Mydia.Library.create_media_file(%{
+          media_item_id: item.id,
+          library_path_id: movies.id,
+          relative_path: "Old Movie (2001)/old.mkv",
+          path: Path.join(movies.path, "Old Movie (2001)/old.mkv")
+        })
+
+      download = %Mydia.Downloads.Download{
+        media_item_id: item.id,
+        media_item: item,
+        episode: nil,
+        library_path: nil,
+        library_path_id: nil
+      }
+
+      assert Mydia.Jobs.MediaImport.determine_library_path(download).id == movies.id
+    end
+
+    test "an explicit target on the media item wins" do
+      _movies = library_path_fixture(%{type: "movies", path: "/tmp/aaa-Movies"})
+      cartoons = library_path_fixture(%{type: "movies", path: "/tmp/zzz-Cartoons"})
+
+      item =
+        media_item_fixture(%{
+          type: "movie",
+          title: "Chosen Movie",
+          year: 2024,
+          library_path_id: cartoons.id
+        })
+
+      download = %Mydia.Downloads.Download{
+        media_item_id: item.id,
+        media_item: item,
+        episode: nil,
+        library_path: nil,
+        library_path_id: nil
+      }
+
+      assert Mydia.Jobs.MediaImport.determine_library_path(download).id == cartoons.id
+    end
+
+    test "a download with no media item still resolves to a mixed library" do
+      mixed = library_path_fixture(%{type: "mixed"})
+
+      download = %Mydia.Downloads.Download{
+        media_item_id: nil,
+        media_item: nil,
+        episode: nil,
+        library_path: nil,
+        library_path_id: nil
+      }
+
+      assert Mydia.Jobs.MediaImport.determine_library_path(download).id == mixed.id
+    end
+  end
 end
