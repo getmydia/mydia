@@ -223,6 +223,7 @@
               media_type={:movie}
               current_user={@current_user}
               adding_item_id={@adding_item_id}
+              libraries={@movie_libraries}
             />
           <% end %>
         </div>
@@ -256,6 +257,7 @@
               media_type={:tv_show}
               current_user={@current_user}
               adding_item_id={@adding_item_id}
+              libraries={@show_libraries}
             />
           <% end %>
         </div>
@@ -361,5 +363,11 @@
     loading={@detail_loading}
     current_user={@current_user}
     open={@selected_item != nil}
+    libraries={
+      if(@selected_item && @selected_item.media_type == :tv_show,
+        do: @show_libraries,
+        else: @movie_libraries
+      )
+    }
   />
 </Layouts.app>

@@ -5,6 +5,7 @@ defmodule MydiaWeb.AddMediaLive.Index do
 
   alias Mydia.{Media, Metadata, Settings}
   alias MydiaWeb.Live.Authorization
+  alias MydiaWeb.Live.Helpers.MediaAddHelpers
 
   @impl true
   def mount(_params, session, socket) do
@@ -59,14 +60,8 @@ defmodule MydiaWeb.AddMediaLive.Index do
   defp maybe_trigger_search(socket, _params), do: socket
 
   defp load_library_paths(socket, type) do
-    paths =
-      Settings.list_library_paths()
-      |> Enum.filter(fn lp ->
-        (lp.type == type or lp.type == :mixed) and lp.monitored and
-          not String.starts_with?(to_string(lp.id), "runtime::")
-      end)
-
-    assign(socket, :library_paths, paths)
+    media_type = if type == :movies, do: :movie, else: :tv_show
+    assign(socket, :library_paths, MediaAddHelpers.candidate_libraries(media_type))
   end
 
   ## Event Handlers

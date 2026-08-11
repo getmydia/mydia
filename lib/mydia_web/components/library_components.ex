@@ -526,4 +526,56 @@ defmodule MydiaWeb.LibraryComponents do
     </.modal>
     """
   end
+
+  @doc """
+  A caret button opening a menu of target libraries.
+
+  Renders nothing when there are fewer than two candidates, so a single-library
+  install sees the plain add button exactly as before.
+
+  Libraries have no `name` column, only `path`, so each entry shows the
+  basename with the full path as secondary text.
+  """
+  attr :libraries, :list, required: true
+  attr :event, :string, required: true
+  attr :extra_values, :map, default: %{}
+  attr :selected_id, :string, default: nil
+
+  def library_picker_menu(assigns) do
+    ~H"""
+    <div :if={length(@libraries) > 1} class="dropdown dropdown-end">
+      <div
+        tabindex="0"
+        role="button"
+        data-test="library-picker-caret"
+        class="btn btn-primary btn-sm join-item px-2"
+        title="Choose a library"
+      >
+        <.icon name="hero-chevron-down" class="w-3 h-3" />
+      </div>
+      <ul
+        tabindex="0"
+        class="dropdown-content z-[1] menu p-2 shadow-lg bg-base-100 rounded-box w-60 border border-base-300"
+      >
+        <li class="menu-title text-xs">Add to library</li>
+        <li :for={library <- @libraries}>
+          <button
+            type="button"
+            phx-click={@event}
+            phx-value-library_path_id={library.id}
+            {phx_values(@extra_values)}
+            class="flex-col items-start gap-0"
+          >
+            <span class="font-medium">{Path.basename(library.path)}</span>
+            <span class="text-xs text-base-content/50 truncate w-full">{library.path}</span>
+          </button>
+        </li>
+      </ul>
+    </div>
+    """
+  end
+
+  defp phx_values(values) do
+    Map.new(values, fn {key, value} -> {:"phx-value-#{key}", value} end)
+  end
 end

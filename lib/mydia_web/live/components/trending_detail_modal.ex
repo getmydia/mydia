@@ -180,14 +180,26 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
                   <.icon name="hero-paper-airplane" class="w-4 h-4" /> Request
                 </.link>
               <% else %>
-                <button
-                  phx-click="add_to_library"
-                  phx-value-tmdb_id={@item.provider_id}
-                  phx-value-media_type={media_type_string(@item)}
-                  class="btn btn-primary"
-                >
-                  <.icon name="hero-plus" class="w-4 h-4" /> Add to Library
-                </button>
+                <div class="join">
+                  <button
+                    phx-click="add_to_library"
+                    phx-value-tmdb_id={@item.provider_id}
+                    phx-value-media_type={media_type_string(@item)}
+                    class="btn btn-primary join-item"
+                  >
+                    <.icon name="hero-plus" class="w-4 h-4" /> Add to Library
+                  </button>
+                  <.library_picker_menu
+                    libraries={@libraries}
+                    event="add_to_library"
+                    extra_values={
+                      %{
+                        tmdb_id: @item.provider_id,
+                        media_type: media_type_string(@item)
+                      }
+                    }
+                  />
+                </div>
               <% end %>
             <% else %>
               <.link navigate={library_path(@item)} class="btn btn-ghost">
@@ -213,7 +225,8 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
      |> assign(assigns)
      |> assign_new(:open, fn -> false end)
      |> assign_new(:loading, fn -> false end)
-     |> assign_new(:metadata, fn -> nil end)}
+     |> assign_new(:metadata, fn -> nil end)
+     |> assign_new(:libraries, fn -> [] end)}
   end
 
   # Helper functions for accessing data from either SearchResult (item) or MediaMetadata

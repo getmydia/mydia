@@ -8,6 +8,7 @@ defmodule MydiaWeb.DiscoverComponents do
   import MydiaWeb.CoreComponents, only: [icon: 1]
 
   alias Mydia.Metadata.ImageUrl
+  alias MydiaWeb.LibraryComponents
 
   use Phoenix.VerifiedRoutes,
     endpoint: MydiaWeb.Endpoint,
@@ -30,6 +31,7 @@ defmodule MydiaWeb.DiscoverComponents do
   attr :media_type, :atom, required: true
   attr :current_user, :map, required: true
   attr :adding_item_id, :string, default: nil
+  attr :libraries, :list, default: []
 
   def trending_card(assigns) do
     ~H"""
@@ -88,6 +90,7 @@ defmodule MydiaWeb.DiscoverComponents do
           media_type={@media_type}
           current_user={@current_user}
           adding_item_id={@adding_item_id}
+          libraries={@libraries}
         />
       </div>
     </div>
@@ -98,6 +101,7 @@ defmodule MydiaWeb.DiscoverComponents do
   attr :media_type, :atom, required: true
   attr :current_user, :map, required: true
   attr :adding_item_id, :string, default: nil
+  attr :libraries, :list, default: []
 
   defp trending_card_action(assigns) do
     ~H"""
@@ -110,19 +114,26 @@ defmodule MydiaWeb.DiscoverComponents do
           <.icon name="hero-paper-airplane" class="w-4 h-4" /> Request
         </.link>
       <% else %>
-        <button
-          phx-click="add_to_library"
-          phx-value-tmdb_id={@item.provider_id}
-          phx-value-media_type={@media_type}
-          disabled={@adding_item_id == to_string(@item.provider_id)}
-          class="btn btn-primary btn-sm mt-2 w-full"
-        >
-          <%= if @adding_item_id == to_string(@item.provider_id) do %>
-            <span class="loading loading-spinner loading-xs"></span> Adding...
-          <% else %>
-            <.icon name="hero-plus" class="w-4 h-4" /> Add to Library
-          <% end %>
-        </button>
+        <div class="join w-full mt-2">
+          <button
+            phx-click="add_to_library"
+            phx-value-tmdb_id={@item.provider_id}
+            phx-value-media_type={@media_type}
+            disabled={@adding_item_id == to_string(@item.provider_id)}
+            class="btn btn-primary btn-sm join-item flex-1"
+          >
+            <%= if @adding_item_id == to_string(@item.provider_id) do %>
+              <span class="loading loading-spinner loading-xs"></span> Adding...
+            <% else %>
+              <.icon name="hero-plus" class="w-4 h-4" /> Add to Library
+            <% end %>
+          </button>
+          <LibraryComponents.library_picker_menu
+            libraries={@libraries}
+            event="add_to_library"
+            extra_values={%{tmdb_id: @item.provider_id, media_type: @media_type}}
+          />
+        </div>
       <% end %>
     <% else %>
       <.link navigate={library_path(@media_type, @item.id)} class="btn btn-ghost btn-sm mt-2 w-full">
