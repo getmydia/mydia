@@ -26,6 +26,7 @@ import '../../widgets/cast_rail.dart';
 import '../../widgets/content_rail.dart';
 import '../../widgets/detail_action_row.dart';
 import '../../widgets/hero_play_control.dart';
+import '../../widgets/media_info/media_info_sheet.dart';
 
 /// Below this width the hero's action column and tag column stack instead
 /// of sitting side by side. Matches the movie detail hero's breakpoint — see
@@ -588,6 +589,13 @@ class ShowDetailScreen extends ConsumerWidget {
       // the selected episode.
       isDownloaded:
           ref.watch(isMediaDownloadedProvider(episode.id)).value ?? false,
+      onShowMediaInfo: episode.files.isEmpty
+          ? null
+          : () => showMediaInfo(
+                context: context,
+                id: episode.id,
+                target: MediaInfoTarget.episode,
+              ),
     );
   }
 

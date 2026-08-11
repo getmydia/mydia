@@ -18,6 +18,7 @@ defmodule Mydia.Library.Structs.FileAnalysisResult do
   - `:size` - File size in bytes
   - `:duration` - Duration in seconds (floating point for precision)
   - `:container` - Container format (e.g., "mp4", "mkv", "webm")
+  - `:streams` - Every video, audio and subtitle stream (see `Mydia.Library.Structs.StreamInfo`)
 
   All fields are optional as FFprobe may not be able to extract all metadata.
   """
@@ -32,7 +33,8 @@ defmodule Mydia.Library.Structs.FileAnalysisResult do
     :hdr_format,
     :size,
     :duration,
-    :container
+    :container,
+    :streams
   ]
 
   @type t :: %__MODULE__{
@@ -45,7 +47,8 @@ defmodule Mydia.Library.Structs.FileAnalysisResult do
           hdr_format: String.t() | nil,
           size: integer() | nil,
           duration: float() | nil,
-          container: String.t() | nil
+          container: String.t() | nil,
+          streams: [Mydia.Library.Structs.StreamInfo.t()] | nil
         }
 
   @doc """

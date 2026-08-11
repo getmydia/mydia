@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/colors.dart';
 
-/// Four-button action row in the detail body, below the hero: mark
-/// watched/unwatched, favorite, download, and (when a trailer exists) open it
-/// on YouTube in a new tab. Shared between the movie and TV show detail
-/// screens, since both need the identical row.
+/// Action row in the detail body, below the hero: mark watched/unwatched,
+/// favorite, download, open the trailer on YouTube when one exists, and open
+/// the Media Info panel when the title has files. Shared between the movie and
+/// TV show detail screens, since both need the identical row.
 class DetailActionRow extends StatelessWidget {
   final bool watched;
   final VoidCallback onToggleWatched;
@@ -27,6 +27,10 @@ class DetailActionRow extends StatelessWidget {
   /// pre-redesign app-bar download button used to show.
   final bool isDownloaded;
 
+  /// Opens the Media Info panel. Null hides the action, which is what callers
+  /// pass when the title has no files to describe.
+  final VoidCallback? onShowMediaInfo;
+
   const DetailActionRow({
     super.key,
     required this.watched,
@@ -37,6 +41,7 @@ class DetailActionRow extends StatelessWidget {
     required this.trailerUrl,
     this.showDownload = true,
     this.isDownloaded = false,
+    this.onShowMediaInfo,
   });
 
   @override
@@ -80,6 +85,14 @@ class DetailActionRow extends StatelessWidget {
             highlighted: false,
             highlightColor: AppColors.primary,
             onTap: () => _openTrailer(context, trailerUrl),
+          ),
+        if (onShowMediaInfo != null)
+          _ActionButton(
+            icon: Icons.info_outline_rounded,
+            label: 'Info',
+            highlighted: false,
+            highlightColor: AppColors.textPrimary,
+            onTap: onShowMediaInfo!,
           ),
       ],
     );

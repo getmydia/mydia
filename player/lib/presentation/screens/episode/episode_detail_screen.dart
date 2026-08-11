@@ -16,6 +16,7 @@ import '../../../domain/models/download.dart';
 import '../../../core/theme/colors.dart';
 import '../../widgets/cast_actions.dart';
 import '../../widgets/cast_button.dart';
+import '../../widgets/media_info/media_info_sheet.dart';
 import '../../widgets/smart_play_button.dart';
 
 class EpisodeDetailScreen extends ConsumerWidget {
@@ -213,8 +214,8 @@ class EpisodeDetailScreen extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 20),
-              if (isDownloadSupported) ...[
-                _buildDownloadRow(context, ref, episode),
+              if (isDownloadSupported || episode.files.isNotEmpty) ...[
+                _buildActionRow(context, ref, episode),
                 const SizedBox(height: 20),
               ],
               _buildMetadata(context, episode),
@@ -417,14 +418,37 @@ class EpisodeDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildDownloadRow(
+  Widget _buildActionRow(
       BuildContext context, WidgetRef ref, EpisodeDetail episode) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
         children: [
-          _buildDownloadButton(context, ref, episode),
+          if (isDownloadSupported) _buildDownloadButton(context, ref, episode),
+          if (episode.files.isNotEmpty) ...[
+            if (isDownloadSupported) const SizedBox(width: 8),
+            _buildMediaInfoButton(context, episode),
+          ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildMediaInfoButton(BuildContext context, EpisodeDetail episode) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: IconButton(
+        key: const Key('episode-media-info'),
+        onPressed: () => showMediaInfo(
+          context: context,
+          id: episode.id,
+          target: MediaInfoTarget.episode,
+        ),
+        icon: const Icon(Icons.info_outline_rounded, color: Colors.white),
+        tooltip: 'Media Info',
       ),
     );
   }

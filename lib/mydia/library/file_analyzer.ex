@@ -14,6 +14,7 @@ defmodule Mydia.Library.FileAnalyzer do
   require Logger
 
   alias Mydia.Library.Structs.FileAnalysisResult
+  alias Mydia.Library.Structs.StreamInfo
 
   @type analysis_result :: FileAnalysisResult.t()
 
@@ -254,11 +255,22 @@ defmodule Mydia.Library.FileAnalyzer do
         hdr_format: extract_hdr_format(video_stream),
         duration: extract_duration(format),
         container: extract_container(format),
-        size: nil
+        size: nil,
+        streams: extract_streams(streams)
       })
 
     {:ok, metadata}
   end
+
+  # Every video, audio and subtitle stream, in ffprobe's own order. Attachment
+  # and data streams return nil from from_ffprobe_stream/1 and are dropped.
+  defp extract_streams(streams) when is_list(streams) do
+    streams
+    |> Enum.map(&StreamInfo.from_ffprobe_stream/1)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp extract_streams(_streams), do: []
 
   defp extract_duration(format) do
     case format["duration"] do

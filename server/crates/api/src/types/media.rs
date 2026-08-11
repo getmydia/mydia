@@ -1,9 +1,9 @@
 //! Media-shaped types.
 //!
-//! The 17 types owned by this module (keep in sync with
+//! The 18 types owned by this module (keep in sync with
 //! tests/types_media.rs): Movie, TvShow, Season, Episode, ShowNextUp,
 //! MovieEdge, MovieConnection, TvShowEdge, TvShowConnection, Artwork,
-//! CastMember, MediaFile, MediaSegment, Progress, LibraryPath,
+//! CastMember, MediaFile, MediaStream, MediaSegment, Progress, LibraryPath,
 //! RecentlyAddedItem, SubtitleTrack.
 
 use async_graphql::{
@@ -12,8 +12,8 @@ use async_graphql::{
 use chrono::{DateTime, NaiveDate, Utc};
 
 use crate::types::common::{
-    LibraryType, MediaCategory, MediaType, Node, NodeConnection, PageInfo, SegmentType,
-    SubtitleFormat,
+    LibraryType, MediaCategory, MediaStreamType, MediaType, Node, NodeConnection, PageInfo,
+    SegmentType, SubtitleFormat,
 };
 
 #[derive(Clone)]
@@ -102,6 +102,45 @@ impl SubtitleTrack {
     }
 }
 
+/// One elementary stream of a media file, as reported by ffprobe.
+///
+/// Values are raw. Composing display strings ("HEVC Main 10", "7.1 (8 ch)") is
+/// the client's job, which keeps this type a straight mirror of the contract.
+///
+/// The disposition fields are `isDefault` / `isForced` rather than `default` /
+/// `forced`: `default` is a reserved word in Dart, and these names reach the
+/// Flutter player verbatim through GraphQL codegen.
+#[derive(SimpleObject)]
+pub struct MediaStream {
+    pub index: Option<i32>,
+    #[graphql(name = "type")]
+    pub stream_type: MediaStreamType,
+    pub codec: Option<String>,
+    pub codec_long: Option<String>,
+    pub profile: Option<String>,
+    pub level: Option<i32>,
+    pub language: Option<String>,
+    pub title: Option<String>,
+    pub bitrate: Option<i32>,
+    pub is_default: Option<bool>,
+    pub is_forced: Option<bool>,
+    pub is_hearing_impaired: Option<bool>,
+    pub is_commentary: Option<bool>,
+    pub width: Option<i32>,
+    pub height: Option<i32>,
+    pub frame_rate: Option<f64>,
+    pub pixel_format: Option<String>,
+    pub bit_depth: Option<i32>,
+    pub color_space: Option<String>,
+    pub color_transfer: Option<String>,
+    pub color_primaries: Option<String>,
+    pub dolby_vision_profile: Option<i32>,
+    pub aspect_ratio: Option<String>,
+    pub channels: Option<i32>,
+    pub channel_layout: Option<String>,
+    pub sample_rate: Option<i32>,
+}
+
 #[derive(SimpleObject)]
 pub struct MediaFile {
     pub id: ID,
@@ -109,6 +148,17 @@ pub struct MediaFile {
     pub codec: Option<String>,
     pub audio_codec: Option<String>,
     pub hdr_format: Option<String>,
+    pub file_name: Option<String>,
+    pub directory: Option<String>,
+    pub container: Option<String>,
+    pub duration: Option<f64>,
+    /// Null means detailed per-stream capture has not run for this file, which
+    /// is what the player's Media Info panel renders as "not captured yet".
+    pub streams: Option<Vec<Option<MediaStream>>>,
+    /// Sidecar subtitle files only. `subtitles` carries these too, after the
+    /// embedded tracks; this field lets a client ask for just the external ones
+    /// without the embedded half.
+    pub external_subtitles: Option<Vec<Option<SubtitleTrack>>>,
     /// Bytes. i64 rather than i32: a 4 GB film overflows 32 bits, and the
     /// contract's `Int` is Absinthe's non-spec-compliant 2^53 Int, so the
     /// Elixir server already emits real byte counts. async-graphql renders

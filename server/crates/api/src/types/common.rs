@@ -1,11 +1,12 @@
 //! Enums, the Node interface, pagination machinery, and the shared sort
 //! input.
 //!
-//! The 16 types owned by this module (keep in sync with
+//! The 17 types owned by this module (keep in sync with
 //! tests/types_common.rs): Node, NodeEdge, NodeConnection, PageInfo,
 //! SortInput, and the enums DeviceEventType, MediaType, SearchResultType,
 //! LibraryType, SortField, SortDirection, MediaCategory, SubtitleFormat,
-//! StreamingStrategy, StreamingCandidateStrategy, SegmentType.
+//! StreamingStrategy, StreamingCandidateStrategy, SegmentType,
+//! MediaStreamType.
 
 use async_graphql::{Enum, InputObject, Interface, Object, SimpleObject, ID};
 
@@ -160,6 +161,14 @@ pub enum StreamingCandidateStrategy {
 pub enum SegmentType {
     Intro,
     Credits,
+}
+
+/// What kind of elementary stream a `MediaStream` describes.
+#[derive(Enum, Copy, Clone, Eq, PartialEq)]
+pub enum MediaStreamType {
+    Video,
+    Audio,
+    Subtitle,
 }
 
 /// Renders just this group's types as SDL, so the group can be compared
