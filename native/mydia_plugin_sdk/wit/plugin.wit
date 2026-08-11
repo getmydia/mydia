@@ -13,7 +13,10 @@
 // still instantiates and handles `on-event` against a 1.1 host (wasmtime serves
 // the older interface as a semver-compatible subset of the superset the host
 // provides). New 1.1 guests refuse old hosts via the manifest `min_host_version`.
-package mydia:plugin@1.1.0;
+// 1.2.0 (additive): `position-seconds` / `duration-seconds` on `playback-progress`,
+// and `set-watch-state` (unwatch + optional resume position). `ensure-watched`
+// remains for 1.1 guests.
+package mydia:plugin@1.2.0;
 
 /// Shared types for the plugin contract.
 interface types {
@@ -109,6 +112,10 @@ interface types {
     season-number: option<u32>,
     episode-number: option<u32>,
     watched: bool,
+    /// Resume position in seconds; absent when never started.
+    position-seconds: option<u32>,
+    /// Runtime in seconds; absent when unknown.
+    duration-seconds: option<u32>,
     /// RFC3339; absent when never watched.
     last-watched-at: option<string>,
     /// RFC3339; the row's update time, used as the keyset cursor anchor.
@@ -151,6 +158,21 @@ interface types {
 
   record ensure-watched-result {
     status: ensure-watched-status,
+  }
+
+  /// Target for `set-watch-state` (1.2). A superset of `watch-target`: it can
+  /// clear a watch, which `ensure-watched` cannot express.
+  record watch-state-target {
+    user-id: string,
+    imdb-id: option<string>,
+    tmdb-id: option<s64>,
+    tvdb-id: option<s64>,
+    season-number: option<u32>,
+    episode-number: option<u32>,
+    watched: bool,
+    position-seconds: option<u32>,
+    duration-seconds: option<u32>,
+    watched-at: option<string>,
   }
 
   /// Lifecycle status of a per-user connection.
@@ -197,7 +219,7 @@ interface types {
 interface host {
   use types.{outbound-request, outbound-response, data-request, read-result,
              list-request, list-result, watch-target, ensure-watched-result,
-             connection, host-error};
+             watch-state-target, connection, host-error};
 
   /// Outbound HTTP request, subject to the plugin's net:http grant and the SSRF
   /// egress gate. Requires net:http.
@@ -237,6 +259,11 @@ interface host {
   /// matching. Requires surfaces:write scoped to "playback:watched" and an
   /// active connection to the target user (R21).
   ensure-watched: func(target: watch-target) -> result<ensure-watched-result, host-error>;
+
+  /// Set watch state for a user, including clearing it. Requires the same
+  /// surfaces:write "playback:watched" scope as `ensure-watched`, which
+  /// remains for 1.1 guests.
+  set-watch-state: func(target: watch-state-target) -> result<ensure-watched-result, host-error>;
 
   /// List the plugin's per-user connections (identity + status only, never a
   /// token — R22). Requires users:connections.

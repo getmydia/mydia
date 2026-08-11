@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Two-way watched-state sync with Simkl: pulls your Simkl history into mydia and pushes what you watch in mydia back to Simkl.",
   "author": "Mydia",
-  "min_host_version": "1.1.0",
+  "min_host_version": "1.2.0",
   "capabilities": {
     "events:subscribe": ["playback.finished"],
     "net:http": ["api.simkl.com", "simkl.com"],

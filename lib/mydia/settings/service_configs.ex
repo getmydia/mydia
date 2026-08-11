@@ -10,6 +10,7 @@ defmodule Mydia.Settings.ServiceConfigs do
     DownloadClientConfig,
     IndexerConfig,
     MediaServerConfig,
+    MediaServerUserLink,
     PathMappingConfig,
     PluginConfig
   }
@@ -284,6 +285,36 @@ defmodule Mydia.Settings.ServiceConfigs do
 
   def change_media_server_config(%MediaServerConfig{} = config, attrs \\ %{}) do
     MediaServerConfig.changeset(config, attrs)
+  end
+
+  ## Media Server User Links
+
+  def list_media_server_user_links(media_server_config_id) do
+    MediaServerUserLink
+    |> where([l], l.media_server_config_id == ^media_server_config_id)
+    |> order_by([l], asc: l.plex_username)
+    |> Repo.all()
+  end
+
+  def upsert_media_server_user_link(attrs) do
+    %MediaServerUserLink{}
+    |> MediaServerUserLink.changeset(attrs)
+    |> Repo.insert(
+      on_conflict:
+        {:replace,
+         [
+           :plex_account_id,
+           :plex_username,
+           :access_token,
+           :enabled,
+           :updated_at
+         ]},
+      conflict_target: [:media_server_config_id, :user_id]
+    )
+  end
+
+  def delete_media_server_user_link(%MediaServerUserLink{} = link) do
+    Repo.delete(link)
   end
 
   ## Plugin Configs

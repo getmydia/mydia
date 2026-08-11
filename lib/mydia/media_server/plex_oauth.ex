@@ -23,6 +23,8 @@ defmodule Mydia.MediaServer.PlexOAuth do
   @type server :: %{
           name: String.t(),
           client_identifier: String.t(),
+          machine_identifier: String.t(),
+          access_token: String.t() | nil,
           provides: String.t(),
           owned: boolean(),
           presence: boolean(),
@@ -140,10 +142,14 @@ defmodule Mydia.MediaServer.PlexOAuth do
 
   Returns a list of servers with their connection information.
   Servers are filtered to only include those that provide "server" capability.
+
+  Options:
+    * `:plex_tv_base` - override the plex.tv base URL (tests only)
   """
-  @spec list_servers(String.t()) :: {:ok, [server()]} | {:error, term()}
-  def list_servers(auth_token) do
-    url = "#{@plex_api_base}/resources"
+  @spec list_servers(String.t(), keyword()) :: {:ok, [server()]} | {:error, term()}
+  def list_servers(auth_token, opts \\ []) do
+    base = Keyword.get(opts, :plex_tv_base, @plex_api_base)
+    url = "#{base}/resources"
 
     headers = [
       {"Accept", "application/json"},
@@ -214,10 +220,18 @@ defmodule Mydia.MediaServer.PlexOAuth do
 
   defp server_resource?(_), do: false
 
-  defp parse_server(resource) do
+  @doc """
+  Parses one `/api/v2/resources` entry.
+
+  Public because rediscovery re-parses the same payload when a server's
+  addresses change.
+  """
+  def parse_server(resource) do
     %{
       name: resource["name"],
       client_identifier: resource["clientIdentifier"],
+      machine_identifier: resource["clientIdentifier"],
+      access_token: resource["accessToken"],
       provides: resource["provides"],
       owned: resource["owned"] == true,
       presence: resource["presence"] == true,

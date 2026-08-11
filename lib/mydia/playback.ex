@@ -57,6 +57,7 @@ defmodule Mydia.Playback do
   """
   def save_progress(user_id, content_id, attrs, opts \\ []) when is_list(content_id) do
     origin = Keyword.get(opts, :origin, "player")
+    changeset_opts = Keyword.take(opts, [:authoritative_watched])
 
     attrs =
       attrs
@@ -69,12 +70,12 @@ defmodule Mydia.Playback do
       case previous do
         nil ->
           %Progress{}
-          |> Progress.changeset(attrs)
+          |> Progress.changeset(attrs, changeset_opts)
           |> Repo.insert()
 
         existing_progress ->
           existing_progress
-          |> Progress.changeset(attrs)
+          |> Progress.changeset(attrs, changeset_opts)
           |> Repo.update()
       end
 
@@ -253,9 +254,34 @@ defmodule Mydia.Playback do
   end
 
   @doc """
+  Best-known runtime in seconds for a content id, or nil.
+
+  Used by sync imports, which carry a position from the remote but no duration.
+  """
+  @spec get_progress_duration(keyword()) :: integer() | nil
+  def get_progress_duration(content_id) do
+    case get_progress_any_user(content_id) do
+      %{duration_seconds: d} when is_integer(d) and d > 0 -> d
+      _ -> nil
+    end
+  end
+
+  defp get_progress_any_user(media_item_id: id) do
+    Progress |> where([p], p.media_item_id == ^id) |> limit(1) |> Repo.one()
+  end
+
+  defp get_progress_any_user(episode_id: id) do
+    Progress |> where([p], p.episode_id == ^id) |> limit(1) |> Repo.one()
+  end
+
+  @doc """
   Deletes playback progress for a user and content.
 
   Useful for "Mark as Unwatched" functionality.
+
+  ## Options
+
+    * `:origin` - write origin for downstream event tagging (default unused here)
 
   ## Examples
 
@@ -269,13 +295,28 @@ defmodule Mydia.Playback do
       {:error, :not_found}
 
   """
-  def delete_progress(user_id, content_id) do
+  def delete_progress(user_id, content_id, opts \\ [])
+
+  def delete_progress(user_id, content_id, opts) when is_list(content_id) do
     case get_progress(user_id, content_id) do
       nil ->
         {:error, :not_found}
 
       existing_progress ->
-        Repo.delete(existing_progress)
+        result = Repo.delete(existing_progress)
+
+        # An unwatch deletes the row, so without this event nothing downstream
+        # can ever learn it happened.
+        with {:ok, _} <- result do
+          Events.playback_event(
+            "unwatched",
+            user_id,
+            content_id,
+            playback_meta(existing_progress, Keyword.get(opts, :origin, "player"))
+          )
+        end
+
+        result
     end
   end
 

@@ -3,12 +3,13 @@ defmodule Mydia.MediaServer.Client do
   Behaviour for media server adapters (Plex, Jellyfin).
   """
 
+  alias Mydia.MediaServer.Error
   alias Mydia.Settings.MediaServerConfig
 
   @doc """
   Tests the connection to the media server.
   """
-  @callback test_connection(config :: MediaServerConfig.t()) :: :ok | {:error, String.t()}
+  @callback test_connection(config :: MediaServerConfig.t()) :: :ok | {:error, Error.t()}
 
   @doc """
   Triggers a library scan/update on the media server.
@@ -17,7 +18,7 @@ defmodule Mydia.MediaServer.Client do
   - `path`: Specific path to scan (if supported)
   """
   @callback update_library(config :: MediaServerConfig.t(), opts :: keyword()) ::
-              :ok | {:error, String.t()}
+              :ok | {:error, Error.t()}
 
   @doc """
   Returns the adapter module for the given configuration.

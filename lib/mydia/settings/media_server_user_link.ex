@@ -1,0 +1,55 @@
+defmodule Mydia.Settings.MediaServerUserLink do
+  @moduledoc """
+  Binds one Mydia user to one account on a media server.
+
+  Without this, the sync scheduler fanned out over every Mydia user against a
+  single admin token, so all users read and wrote the same remote watch state.
+  A user with no link is skipped rather than defaulted, because defaulting is
+  what silently merged separate people's history.
+  """
+  use Ecto.Schema
+  import Ecto.Changeset
+
+  @primary_key {:id, :binary_id, autogenerate: true}
+  @foreign_key_type :binary_id
+
+  @type t :: %__MODULE__{
+          id: binary(),
+          media_server_config_id: binary(),
+          user_id: binary(),
+          plex_account_id: String.t() | nil,
+          plex_username: String.t() | nil,
+          access_token: String.t() | nil,
+          enabled: boolean(),
+          inserted_at: DateTime.t(),
+          updated_at: DateTime.t()
+        }
+
+  schema "media_server_user_links" do
+    field :plex_account_id, :string
+    field :plex_username, :string
+    field :access_token, :string, redact: true
+    field :enabled, :boolean, default: true
+
+    belongs_to :media_server_config, Mydia.Settings.MediaServerConfig
+    belongs_to :user, Mydia.Accounts.User
+
+    timestamps(type: :utc_datetime)
+  end
+
+  def changeset(link, attrs) do
+    link
+    |> cast(attrs, [
+      :media_server_config_id,
+      :user_id,
+      :plex_account_id,
+      :plex_username,
+      :access_token,
+      :enabled
+    ])
+    |> validate_required([:media_server_config_id, :user_id])
+    |> unique_constraint([:media_server_config_id, :user_id])
+    |> foreign_key_constraint(:media_server_config_id)
+    |> foreign_key_constraint(:user_id)
+  end
+end

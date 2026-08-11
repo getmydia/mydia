@@ -4,7 +4,9 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
   alias Mydia.Settings
   alias Mydia.Settings.MediaServerConfig
   alias Mydia.MediaServer.Client, as: MediaServerClient
+  alias Mydia.MediaServer.Error
   alias Mydia.MediaServer.PlexOAuth
+  alias Mydia.Sync
 
   require Logger
   alias Mydia.Logger, as: MydiaLogger
@@ -81,6 +83,37 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
        |> assign(:plex_oauth_servers, [])
        |> assign(:plex_oauth_token, nil)
        |> assign(:plex_manual_entry, true)}
+    end
+  end
+
+  @impl true
+  def handle_event("reconnect_plex", %{"id" => id}, socket) do
+    server = Settings.get_media_server_config!(id)
+
+    if Settings.runtime_config?(server) do
+      {:noreply,
+       socket
+       |> put_flash(
+         :error,
+         "Cannot reconnect a runtime-configured media server. This server is configured via environment variables and is read-only in the UI."
+       )}
+    else
+      changeset = Settings.change_media_server_config(server)
+
+      # Reuse the existing PIN modal bound to this config so reconnect
+      # updates the row in place and never creates a second config.
+      {:noreply,
+       socket
+       |> assign(:show_media_server_modal, true)
+       |> assign(:media_server_form, to_form(changeset))
+       |> assign(:media_server_mode, :edit)
+       |> assign(:editing_media_server, server)
+       |> assign(:testing_media_server_connection, false)
+       |> assign(:plex_oauth_state, :idle)
+       |> assign(:plex_oauth_pin_id, nil)
+       |> assign(:plex_oauth_servers, [])
+       |> assign(:plex_oauth_token, nil)
+       |> assign(:plex_manual_entry, false)}
     end
   end
 
@@ -278,7 +311,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
   end
 
   @impl true
-  def handle_event("select_plex_connection", %{"url" => url}, socket) do
+  def handle_event("select_plex_connection", %{"url" => _url}, socket) do
     server = socket.assigns.plex_selected_server
     token = socket.assigns.plex_oauth_token
 
@@ -288,19 +321,48 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
         :edit -> socket.assigns.editing_media_server
       end
 
-    changeset =
-      Settings.change_media_server_config(server_base, %{
-        name: server.name,
-        type: :plex,
-        url: url,
-        token: token,
-        enabled: true
-      })
+    # url stays nil so it remains a pure manual override; discovery owns the
+    # candidate list and Endpoint.resolve/1 picks a working address at call time.
+    attrs = %{
+      name: server.name,
+      type: :plex,
+      url: nil,
+      token: token,
+      machine_identifier: server.machine_identifier,
+      connections: server.connections,
+      server_access_token: server.access_token,
+      enabled: true
+    }
 
-    {:noreply,
-     socket
-     |> assign(:plex_oauth_state, :complete)
-     |> assign(:media_server_form, to_form(changeset))}
+    case socket.assigns.media_server_mode do
+      :edit ->
+        # Reconnect (and edit-time re-auth) must update the existing row in
+        # place so user links and sync state are not orphaned.
+        attrs = Map.merge(attrs, %{last_auth_error: nil, last_auth_error_at: nil})
+
+        case Settings.update_media_server_config(server_base, attrs) do
+          {:ok, _updated} ->
+            {:noreply,
+             socket
+             |> put_flash(:info, "Plex reconnected successfully")
+             |> load_data()}
+
+          {:error, %Ecto.Changeset{} = changeset} ->
+            {:noreply,
+             socket
+             |> assign(:plex_oauth_state, :error)
+             |> assign(:media_server_form, to_form(changeset))
+             |> put_flash(:error, "Failed to update media server")}
+        end
+
+      :new ->
+        changeset = Settings.change_media_server_config(server_base, attrs)
+
+        {:noreply,
+         socket
+         |> assign(:plex_oauth_state, :complete)
+         |> assign(:media_server_form, to_form(changeset))}
+    end
   end
 
   @impl true
@@ -345,18 +407,18 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
          |> put_flash(:info, "Connection to #{server.name} successful!")
          |> load_data()}
 
-      {:error, reason} ->
+      {:error, %Error{} = error} ->
         MydiaLogger.log_warning(:liveview, "Media server connection test failed",
           operation: :test_media_server,
           server_id: id,
           server_type: server.type,
-          error: reason,
+          error: Error.message(error),
           user_id: socket.assigns.current_user.id
         )
 
         {:noreply,
          socket
-         |> put_flash(:error, "Connection failed: #{reason}")
+         |> put_flash(:error, "Connection failed: #{Error.message(error)}")
          |> load_data()}
     end
   end
@@ -412,18 +474,18 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
          |> assign(:testing_media_server_connection, false)
          |> put_flash(:info, "Connection successful!")}
 
-      {:error, reason} ->
+      {:error, %Error{} = error} ->
         MydiaLogger.log_warning(:liveview, "Media server connection test failed",
           operation: :test_media_server_connection,
           server_type: type,
-          error: reason,
+          error: Error.message(error),
           user_id: socket.assigns.current_user.id
         )
 
         {:noreply,
          socket
          |> assign(:testing_media_server_connection, false)
-         |> put_flash(:error, "Connection failed: #{reason}")}
+         |> put_flash(:error, "Connection failed: #{Error.message(error)}")}
     end
   end
 
@@ -433,9 +495,15 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
     media_servers = Settings.list_media_server_configs()
     media_server_health = get_media_server_health_status(media_servers)
 
+    last_runs =
+      Map.new(media_servers, fn server ->
+        {server.id, Sync.last_run(to_string(server.type), server.id)}
+      end)
+
     socket
     |> assign(:media_servers, media_servers)
     |> assign(:media_server_health, media_server_health)
+    |> assign(:last_runs, last_runs)
     |> assign(:show_media_server_modal, false)
     |> assign(:testing_media_server_connection, false)
     |> assign(:plex_oauth_state, :idle)

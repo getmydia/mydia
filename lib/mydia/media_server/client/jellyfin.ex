@@ -5,6 +5,8 @@ defmodule Mydia.MediaServer.Client.Jellyfin do
 
   @behaviour Mydia.MediaServer.Client
 
+  alias Mydia.MediaServer.Error
+
   require Logger
 
   @impl true
@@ -14,9 +16,17 @@ defmodule Mydia.MediaServer.Client.Jellyfin do
     url = build_url(config, "/System/Info")
 
     case Req.get(url, headers: headers(config)) do
-      {:ok, %{status: 200}} -> :ok
-      {:ok, %{status: status}} -> {:error, "Connection failed: HTTP #{status}"}
-      {:error, exception} -> {:error, "Connection failed: #{Exception.message(exception)}"}
+      {:ok, %{status: 200}} ->
+        :ok
+
+      {:ok, %{status: status}} when status in [401, 403] ->
+        {:error, Error.auth("HTTP #{status}")}
+
+      {:ok, %{status: status}} ->
+        {:error, Error.unexpected("Connection failed: HTTP #{status}")}
+
+      {:error, exception} ->
+        {:error, Error.unexpected("Connection failed: #{Exception.message(exception)}")}
     end
   end
 
@@ -31,10 +41,20 @@ defmodule Mydia.MediaServer.Client.Jellyfin do
 
     case Req.post(url, headers: headers(config)) do
       # 204 No Content is success
-      {:ok, %{status: 204}} -> :ok
-      {:ok, %{status: 200}} -> :ok
-      {:ok, %{status: status}} -> {:error, "Scan failed: HTTP #{status}"}
-      {:error, exception} -> {:error, "Scan failed: #{Exception.message(exception)}"}
+      {:ok, %{status: 204}} ->
+        :ok
+
+      {:ok, %{status: 200}} ->
+        :ok
+
+      {:ok, %{status: status}} when status in [401, 403] ->
+        {:error, Error.auth("HTTP #{status}")}
+
+      {:ok, %{status: status}} ->
+        {:error, Error.unexpected("Scan failed: HTTP #{status}")}
+
+      {:error, exception} ->
+        {:error, Error.unexpected("Scan failed: #{Exception.message(exception)}")}
     end
   end
 

@@ -38,8 +38,13 @@ defmodule Mydia.Playback.Progress do
 
   @doc """
   Changeset for creating or updating playback progress.
+
+  ## Options
+
+    * `:authoritative_watched` - when true, skip the 90% auto-mark so a sync
+      import can preserve the remote's own watched flag
   """
-  def changeset(progress, attrs) do
+  def changeset(progress, attrs, opts \\ []) do
     progress
     |> cast(attrs, [
       :user_id,
@@ -56,7 +61,7 @@ defmodule Mydia.Playback.Progress do
     |> validate_number(:position_seconds, greater_than_or_equal_to: 0)
     |> validate_number(:duration_seconds, greater_than: 0)
     |> calculate_completion_percentage()
-    |> auto_mark_watched()
+    |> auto_mark_watched(Keyword.get(opts, :authoritative_watched, false))
     |> set_last_watched_at()
     |> unique_constraint([:user_id, :media_item_id])
     |> unique_constraint([:user_id, :episode_id])
@@ -99,8 +104,11 @@ defmodule Mydia.Playback.Progress do
     end
   end
 
-  # Automatically set watched to true when completion >= 90%
-  defp auto_mark_watched(changeset) do
+  # When a sync carries the remote's own watched flag, that flag is the truth.
+  # Auto-marking at 90% would silently override it and diverge from the server.
+  defp auto_mark_watched(changeset, true), do: changeset
+
+  defp auto_mark_watched(changeset, false) do
     percentage = get_field(changeset, :completion_percentage)
 
     if percentage && percentage >= 90.0 do

@@ -118,6 +118,7 @@ defmodule Mydia.Plugins.Manifest do
     playback.progressed
     playback.paused
     playback.finished
+    playback.unwatched
   )
 
   # All taxonomy classes (reserved + implemented). The schema/approval UI know
