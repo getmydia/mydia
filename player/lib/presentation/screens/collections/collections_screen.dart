@@ -2,16 +2,14 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'collections_controller.dart';
-import '../../../domain/models/collection.dart';
-import '../../widgets/ambient_backdrop_provider.dart';
-import '../../widgets/app_shell.dart';
-import '../../widgets/freshness_header.dart';
-import '../../widgets/glass_surface.dart';
+
 import '../../../core/graphql/watch/query_key.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/theme/colors.dart';
+import '../../../domain/models/collection.dart';
+import '../../widgets/browse_scaffold.dart';
+import 'collections_controller.dart';
 
 class CollectionsScreen extends ConsumerWidget {
   const CollectionsScreen({super.key});
@@ -19,102 +17,38 @@ class CollectionsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final collectionsData = ref.watch(collectionsControllerProvider);
-    final isDesktop = Breakpoints.isDesktop(context);
 
-    // Grid screens use the calm static backdrop (no per-title artwork).
-    publishBackdropSource(ref, BackdropSource.none);
-
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      extendBodyBehindAppBar: true,
-      appBar: _buildAppBar(context, isDesktop),
-      body: Column(
-        children: [
-          FreshnessHeader(
-            queryKeys: [QueryKeys.collections],
-            topInset: freshnessTopInset(
-              context,
-              appBarHeight: isDesktop ? null : kToolbarHeight,
+    return BrowseScaffold(
+      icon: Icons.collections_bookmark_rounded,
+      title: 'Collections',
+      queryKeys: [QueryKeys.collections],
+      actions: [
+        if (!Breakpoints.isDesktop(context))
+          IconButton(
+            icon: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceVariant.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.search_rounded, size: 20),
             ),
+            onPressed: () => context.push('/search'),
+            tooltip: 'Search',
           ),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: () async {
-                await ref
-                    .read(collectionsControllerProvider.notifier)
-                    .refresh();
-              },
-              child: collectionsData.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (error, _) => _buildErrorView(context, error, ref),
-                data: (collections) {
-                  if (collections.isEmpty) {
-                    return _buildEmptyState(context);
-                  }
-                  return _buildGridView(context, collections);
-                },
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  PreferredSizeWidget _buildAppBar(BuildContext context, bool isDesktop) {
-    if (isDesktop) {
-      return const PreferredSize(
-          preferredSize: Size.fromHeight(0), child: SizedBox.shrink());
-    }
-    return PreferredSize(
-      preferredSize: const Size.fromHeight(kToolbarHeight),
-      child: GlassSurface.appBar(
-        child: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          leading: IconButton(
-            icon: const Icon(Icons.menu_rounded),
-            onPressed: () {
-              AppShell.scaffoldKey.currentState?.openDrawer();
-            },
-            tooltip: 'Menu',
-          ),
-          title: const Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.collections_bookmark_rounded,
-                color: AppColors.primary,
-                size: 22,
-              ),
-              SizedBox(width: 10),
-              Text(
-                'Collections',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: -0.5,
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            IconButton(
-              icon: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceVariant.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.search_rounded, size: 20),
-              ),
-              onPressed: () {
-                context.push('/search');
-              },
-              tooltip: 'Search',
-            ),
-            const SizedBox(width: 8),
-          ],
-        ),
+      ],
+      onRefresh: () async {
+        await ref.read(collectionsControllerProvider.notifier).refresh();
+      },
+      body: (context, scrollTopPadding) => collectionsData.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, _) => _buildErrorView(context, error, ref),
+        data: (collections) {
+          if (collections.isEmpty) {
+            return _buildEmptyState(context);
+          }
+          return _buildGridView(context, collections, scrollTopPadding);
+        },
       ),
     );
   }
@@ -213,7 +147,11 @@ class CollectionsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildGridView(BuildContext context, List<Collection> collections) {
+  Widget _buildGridView(
+    BuildContext context,
+    List<Collection> collections,
+    double scrollTopPadding,
+  ) {
     final horizontalPadding = Breakpoints.getHorizontalPadding(context);
     final cardSpacing = Breakpoints.getCardSpacing(context);
     final bottomPadding = DockInsets.bottomOf(context);
@@ -224,7 +162,11 @@ class CollectionsScreen extends ConsumerWidget {
 
         return GridView.builder(
           padding: EdgeInsets.fromLTRB(
-              horizontalPadding, 100, horizontalPadding, bottomPadding),
+            horizontalPadding,
+            scrollTopPadding,
+            horizontalPadding,
+            bottomPadding,
+          ),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: crossAxisCount,
             childAspectRatio: 0.85,
@@ -382,7 +324,6 @@ class _CollectionCardState extends State<_CollectionCard> {
       );
     }
 
-    // 2x2 grid collage for 2-4 posters
     return GridView.count(
       crossAxisCount: 2,
       physics: const NeverScrollableScrollPhysics(),
