@@ -8,6 +8,7 @@ defmodule MydiaWeb.MediaLive.Show do
   alias MydiaWeb.MediaLive.Show.EpisodeEvents
   alias MydiaWeb.MediaLive.Show.DownloadEvents
   alias MydiaWeb.MediaLive.Show.MediaItemEvents
+  alias MydiaWeb.MediaLive.Show.LibraryEvents
   alias MydiaWeb.MediaLive.Show.CategoryEvents
   alias MydiaWeb.MediaLive.Show.CollectionEvents
   alias MydiaWeb.MediaLive.Show.SubtitleEvents
@@ -164,6 +165,7 @@ defmodule MydiaWeb.MediaLive.Show do
      |> CollectionEvents.load_collection_data(media_item)
      |> SegmentEvents.assign_segment_status(media_item)
      |> FranchiseEvents.maybe_load()
+     |> assign_target_library(media_item)
      |> stream_configure(:search_results, dom_id: &generate_positioned_id/1)
      |> stream(:search_results, [])}
   end
@@ -379,6 +381,9 @@ defmodule MydiaWeb.MediaLive.Show do
 
   def handle_event("update_quality_profile", params, socket),
     do: CategoryEvents.update_quality_profile(params, socket)
+
+  def handle_event("update_target_library", params, socket),
+    do: LibraryEvents.update_target_library(params, socket)
 
   # Collection events
 
