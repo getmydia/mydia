@@ -9,67 +9,63 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Components do
 
   def custom_formats_tab(assigns) do
     ~H"""
-    <div class="space-y-4">
-      <div class="flex items-center justify-between">
-        <div>
-          <h1 class="text-2xl font-bold">Custom Formats</h1>
-          <p class="text-sm opacity-70">
-            Match release titles by regex. Assign scores per quality profile.
-          </p>
-        </div>
-        <.button id="custom-format-new" phx-click="new_custom_format" class="btn-primary">
-          <.icon name="hero-plus" class="w-4 h-4" /> New format
-        </.button>
+    <div class="p-4 sm:p-6 space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <h2 class="text-lg font-semibold flex items-center gap-2">
+          <.icon name="hero-language" class="w-5 h-5 opacity-60" /> Custom Formats
+          <span class="badge badge-ghost">{length(@formats)}</span>
+        </h2>
+        <button id="custom-format-new" class="btn btn-sm btn-primary" phx-click="new_custom_format">
+          <.icon name="hero-plus" class="w-4 h-4" /> New
+        </button>
       </div>
 
-      <div class="card bg-base-100 shadow">
-        <div class="card-body p-0 divide-y divide-base-200">
-          <div
-            :for={format <- @formats}
-            id={"custom-format-row-#{format.slug}"}
-            class="flex items-center gap-3 p-4"
-          >
-            <div class="flex-1 min-w-0">
-              <div class="flex items-center gap-2">
-                <span class="font-medium">{format.name}</span>
-                <span :if={format.builtin?} class="badge badge-sm badge-ghost">Built-in</span>
-                <span :if={format.overridden?} class="badge badge-sm badge-warning">Edited</span>
-              </div>
-              <div class="text-xs opacity-60 truncate font-mono">
-                {Enum.join(format.patterns, "  ")}
-              </div>
+      <div class="bg-base-200 rounded-box divide-y divide-base-300">
+        <div
+          :for={format <- @formats}
+          id={"custom-format-row-#{format.slug}"}
+          class="flex items-center gap-3 p-3 sm:p-4"
+        >
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2">
+              <span class="font-medium">{format.name}</span>
+              <span :if={format.builtin?} class="badge badge-sm badge-ghost">Built-in</span>
+              <span :if={format.overridden?} class="badge badge-sm badge-warning">Edited</span>
             </div>
-
-            <.button
-              id={"custom-format-edit-#{format.slug}"}
-              phx-click="edit_custom_format"
-              phx-value-slug={format.slug}
-              class="btn-sm btn-ghost"
-            >
-              Edit
-            </.button>
-
-            <.button
-              :if={format.overridden?}
-              id={"custom-format-reset-#{format.slug}"}
-              phx-click="reset_custom_format"
-              phx-value-slug={format.slug}
-              class="btn-sm btn-ghost"
-            >
-              Reset
-            </.button>
-
-            <.button
-              :if={not format.builtin?}
-              id={"custom-format-delete-#{format.slug}"}
-              phx-click="delete_custom_format"
-              phx-value-slug={format.slug}
-              data-confirm={"Delete #{format.name}?"}
-              class="btn-sm btn-ghost text-error"
-            >
-              Delete
-            </.button>
+            <div class="text-xs opacity-60 truncate font-mono">
+              {Enum.join(format.patterns, "  ")}
+            </div>
           </div>
+
+          <.button
+            id={"custom-format-edit-#{format.slug}"}
+            phx-click="edit_custom_format"
+            phx-value-slug={format.slug}
+            class="btn-sm btn-ghost"
+          >
+            Edit
+          </.button>
+
+          <.button
+            :if={format.overridden?}
+            id={"custom-format-reset-#{format.slug}"}
+            phx-click="reset_custom_format"
+            phx-value-slug={format.slug}
+            class="btn-sm btn-ghost"
+          >
+            Reset
+          </.button>
+
+          <.button
+            :if={not format.builtin?}
+            id={"custom-format-delete-#{format.slug}"}
+            phx-click="delete_custom_format"
+            phx-value-slug={format.slug}
+            data-confirm={"Delete #{format.name}?"}
+            class="btn-sm btn-ghost text-error"
+          >
+            Delete
+          </.button>
         </div>
       </div>
     </div>
