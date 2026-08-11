@@ -307,16 +307,8 @@ defmodule MydiaWeb.AddMediaLive.Index do
   end
 
   defp assign_config_form(socket) do
-    # Build changeset from current toolbar settings for the modal
     changeset =
-      {%{},
-       %{
-         quality_profile_id: :string,
-         library_path_id: :string,
-         monitored: :boolean,
-         search_on_add: :boolean,
-         season_monitoring: :string
-       }}
+      {config_defaults(), config_types()}
       |> Ecto.Changeset.cast(
         %{
           quality_profile_id: socket.assigns.toolbar_quality_profile_id,
@@ -325,22 +317,42 @@ defmodule MydiaWeb.AddMediaLive.Index do
           search_on_add: socket.assigns.toolbar_search_on_add,
           season_monitoring: socket.assigns.toolbar_season_monitoring
         },
-        [:quality_profile_id, :library_path_id, :monitored, :search_on_add, :season_monitoring]
+        Map.keys(config_types())
       )
 
     assign(socket, :config_form, to_form(changeset, as: :config))
   end
 
-  defp validate_config(params, assigns) do
-    types = %{
+  # The changeset is schemaless, so `apply_changes/1` returns
+  # `Map.merge(data, changes)`. Seeding `data` with every key means a field
+  # submitted as nil or "" (blank quality profile, unticked checkbox) is still
+  # present in the result. With `%{}` as data it would be absent, and the dot
+  # access in build_media_item_attrs/3 would raise KeyError. Seeding is
+  # structural: it immunises any field added later, not just today's two.
+  defp config_defaults do
+    %{
+      quality_profile_id: nil,
+      library_path_id: nil,
+      monitored: true,
+      search_on_add: false,
+      season_monitoring: "all"
+    }
+  end
+
+  defp config_types do
+    %{
       quality_profile_id: :string,
       library_path_id: :string,
       monitored: :boolean,
       search_on_add: :boolean,
       season_monitoring: :string
     }
+  end
 
-    {%{}, types}
+  defp validate_config(params, assigns) do
+    types = config_types()
+
+    {config_defaults(), types}
     |> Ecto.Changeset.cast(params, Map.keys(types))
     |> Ecto.Changeset.validate_required([:library_path_id])
     |> validate_profile_exists(assigns.quality_profiles)

@@ -327,9 +327,11 @@
             <%!-- Monitoring --%>
             <div class="form-control mb-4">
               <label class="label cursor-pointer justify-start gap-4">
+                <input type="hidden" name="config[monitored]" value="false" />
                 <input
                   type="checkbox"
                   name="config[monitored]"
+                  value="true"
                   class="toggle toggle-primary"
                   checked={@config_form[:monitored].value}
                 />
