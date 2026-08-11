@@ -1556,12 +1556,12 @@ defmodule Mydia.Events do
 
   ## Playback Event Helpers (U1)
 
-  @playback_actions ~w(started progressed paused finished)
+  @playback_actions ~w(started progressed paused finished unwatched)
 
   @doc """
   Records a `playback.<action>` event for a user's watch activity.
 
-  `action` is one of `"started"`, `"progressed"`, `"paused"`, or `"finished"`.
+  `action` is one of `"started"`, `"progressed"`, `"paused"`, `"finished"`, or `"unwatched"`.
   `content_id` is the keyword tuple used throughout `Mydia.Playback`
   (`[media_item_id: id]` or `[episode_id: id]`); the user rides in the event
   envelope as `actor_id`. `meta` is a string-key map carrying playback context

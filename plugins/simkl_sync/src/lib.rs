@@ -1,9 +1,9 @@
 //! Simkl two-way watched-state sync plugin (U9).
 //!
-//! Proves the 1.1 platform surfaces end to end: per-user connections (the host
+//! Proves the 1.2 platform surfaces end to end: per-user connections (the host
 //! attaches the bearer token via `connection-request` — the guest never sees a
 //! token), KV state for watermarks/cursors/checkpoints, scheduled invocation,
-//! list reads, and watched write-back.
+//! list reads, and watched write-back via `set-watch-state`.
 //!
 //! All per-connection state is keyed under the host-sweepable `conn/<id>/`
 //! prefix (R20), so reconnecting a different account starts fresh and a removed
@@ -11,7 +11,7 @@
 //!
 //! Invariants:
 //!   * Pull (R15): each chunk's pulled-set delta is checkpointed to KV *before*
-//!     `ensure-watched` is applied, so a kill mid-pull resumes idempotently
+//!     `set-watch-state` is applied, so a kill mid-pull resumes idempotently
 //!     without losing the echo guard.
 //!   * Push (R16): the pending batch is persisted to KV before POST and cleared
 //!     after, so a kill between POST and clear re-sends (a duplicate Simkl
@@ -21,7 +21,7 @@
 use mydia_plugin_sdk::host;
 use mydia_plugin_sdk::types::{
     Connection, ConnectionStatus, EnsureFavoriteStatus, Event, FavoriteTarget, LibraryItem,
-    ListItem, ListRequest, OutboundRequest, PlaybackProgress, ScheduleTick, WatchTarget,
+    ListItem, ListRequest, OutboundRequest, PlaybackProgress, ScheduleTick, WatchStateTarget,
 };
 use std::collections::{BTreeSet, HashMap};
 use tinyjson::JsonValue;
@@ -266,14 +266,14 @@ fn pull(conn: &Connection, api_base: &str) -> Result<(BTreeSet<String>, usize, u
     let mut unmatched = 0usize;
 
     for item in &items {
-        // R15: persist the pulled-set delta BEFORE applying ensure-watched, so a
+        // R15: persist the pulled-set delta BEFORE applying set-watch-state, so a
         // kill after the checkpoint keeps the item out of the push even though
         // the local write has not happened yet (the next run re-applies it
         // idempotently).
         pulled_keys.insert(item.key());
         save_pulled_set(conn, &pulled_keys);
 
-        match host::ensure_watched(&item.to_target(conn)) {
+        match host::set_watch_state(&item.to_target(conn)) {
             Ok(_) => applied += 1,
             Err(_) => unmatched += 1,
         }
@@ -584,14 +584,18 @@ impl PulledItem {
         )
     }
 
-    fn to_target(&self, conn: &Connection) -> WatchTarget {
-        WatchTarget {
+    fn to_target(&self, conn: &Connection) -> WatchStateTarget {
+        WatchStateTarget {
             user_id: conn.user_id.clone(),
             imdb_id: self.imdb.clone(),
             tmdb_id: self.tmdb,
             tvdb_id: self.tvdb,
             season_number: self.season,
             episode_number: self.episode,
+            // Pull only surfaces watched history entries.
+            watched: true,
+            position_seconds: None,
+            duration_seconds: None,
             watched_at: self.watched_at.clone(),
         }
     }
@@ -1359,6 +1363,8 @@ mod tests {
             season_number: Some(1),
             episode_number: Some(2),
             watched: true,
+            position_seconds: None,
+            duration_seconds: None,
             last_watched_at: None,
             updated_at: "t".into(),
         })
@@ -1594,6 +1600,8 @@ mod tests {
             episode_number: None,
             watched: true,
             last_watched_at: None,
+            position_seconds: None,
+            duration_seconds: None,
             updated_at: "2026-08-11T00:00:00Z".to_string(),
         }
     }

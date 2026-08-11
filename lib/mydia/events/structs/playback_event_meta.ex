@@ -8,7 +8,7 @@ defmodule Mydia.Events.Structs.PlaybackEventMeta do
   `actor_id`, not here.
 
   `origin` is one of `"player"` (a real client write), `"sync:<provider>"`
-  (a media-server / Trakt import), or `"plugin:<slug>"` (a plugin write-back).
+  (a media-server import), or `"plugin:<slug>"` (a plugin write-back).
   The dispatcher uses it to suppress delivery of an event back to the plugin
   that caused it (R14).
   """

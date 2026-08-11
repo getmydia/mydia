@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/models/media_stream.dart';
+import '../../../domain/models/subtitle_track.dart';
 import 'stream_formatters.dart';
 
 /// Shown when the server has not captured detailed streams for a file yet.
@@ -22,11 +23,20 @@ class MediaInfoContent extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onSelectVersion;
 
+  /// Whether the host sizes itself to this content.
+  ///
+  /// The side panel has a bounded height and leaves this false, so rows build
+  /// lazily. The bottom sheet sizes to its content and must pass true, which
+  /// forces every row to be measured. A definite sheet height would avoid that
+  /// but would leave a one-stream file 78% of the screen tall.
+  final bool shrinkWrap;
+
   const MediaInfoContent({
     super.key,
     required this.files,
     required this.selectedIndex,
     required this.onSelectVersion,
+    this.shrinkWrap = false,
   });
 
   @override
@@ -44,15 +54,69 @@ class MediaInfoContent extends StatelessWidget {
     final index = selectedIndex.clamp(0, files.length - 1);
     final file = files[index];
 
-    return ListView(
-      shrinkWrap: true,
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-      children: [
-        if (files.length > 1) _versionSwitcher(index),
-        _fileSection(file),
-        ..._streamSections(file),
-        if (!file.hasDetailedStreams) _pendingNote(),
+    final video = file.ofType(MediaStreamType.video);
+    final audio = file.ofType(MediaStreamType.audio);
+    final subtitle = file.ofType(MediaStreamType.subtitle);
+    final external = file.externalSubtitles;
+
+    return CustomScrollView(
+      shrinkWrap: shrinkWrap,
+      slivers: [
+        if (files.length > 1)
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(18, 12, 18, 0),
+            sliver: SliverToBoxAdapter(child: _versionSwitcher(index)),
+          ),
+        _header('File', 1),
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          sliver: SliverToBoxAdapter(child: _fileBlock(file)),
+        ),
+        if (video.isNotEmpty) ...[
+          _header('Video', video.length),
+          _streams(
+            video.length,
+            (i) => _VideoStreamTile(
+              key: Key('media-info-stream-${video[i].index}'),
+              stream: video[i],
+            ),
+          ),
+        ],
+        if (audio.isNotEmpty) ...[
+          _header('Audio', audio.length),
+          _streams(audio.length, (i) => _audioRow(audio[i])),
+        ],
+        if (subtitle.isNotEmpty || external.isNotEmpty) ...[
+          _header('Subtitles', subtitle.length + external.length),
+          _streams(
+            subtitle.length + external.length,
+            (i) => i < subtitle.length
+                ? _subtitleRow(subtitle[i])
+                : _externalSubtitleRow(external[i - subtitle.length]),
+          ),
+        ],
+        if (!file.hasDetailedStreams)
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 0),
+            sliver: SliverToBoxAdapter(child: _pendingNote()),
+          ),
+        const SliverToBoxAdapter(child: SizedBox(height: 24)),
       ],
+    );
+  }
+
+  Widget _header(String label, int count) => SliverPersistentHeader(
+        pinned: true,
+        delegate: _SectionHeaderDelegate(label: label, count: count),
+      );
+
+  Widget _streams(int count, Widget Function(int index) builder) {
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: 18),
+      sliver: SliverList.builder(
+        itemCount: count,
+        itemBuilder: (_, index) => builder(index),
+      ),
     );
   }
 
@@ -81,7 +145,7 @@ class MediaInfoContent extends StatelessWidget {
     return size == null ? file.versionLabel : '${file.versionLabel} · $size';
   }
 
-  Widget _fileSection(MediaFileInfo file) {
+  Widget _fileBlock(MediaFileInfo file) {
     final size = formatBytes(file.sizeBytes);
     final duration = formatDuration(file.durationSeconds);
     final bitrate = formatBitrate(file.bitrate);
@@ -92,8 +156,8 @@ class MediaInfoContent extends StatelessWidget {
       if (bitrate != null) bitrate,
     ];
 
-    return _Section(
-      label: 'File',
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (file.fileName != null)
           Text(
@@ -118,38 +182,6 @@ class MediaInfoContent extends StatelessWidget {
     );
   }
 
-  List<Widget> _streamSections(MediaFileInfo file) {
-    final video = file.ofType(MediaStreamType.video);
-    final audio = file.ofType(MediaStreamType.audio);
-    final subtitle = file.ofType(MediaStreamType.subtitle);
-
-    return [
-      if (video.isNotEmpty)
-        _Section(
-          label: 'Video',
-          children: [for (final s in video) _StreamTile(stream: s)],
-        ),
-      if (audio.isNotEmpty)
-        _Section(
-          label:
-              'Audio · ${audio.length} ${audio.length == 1 ? 'track' : 'tracks'}',
-          children: [for (final s in audio) _StreamTile(stream: s)],
-        ),
-      if (subtitle.isNotEmpty || file.externalSubtitles.isNotEmpty)
-        _Section(
-          label: 'Subtitles',
-          children: [
-            for (final s in subtitle) _StreamTile(stream: s),
-            for (final s in file.externalSubtitles)
-              _ExternalSubtitleTile(
-                language: languageName(s.language) ?? s.language,
-                format: s.format,
-              ),
-          ],
-        ),
-    ];
-  }
-
   Widget _pendingNote() {
     return const Padding(
       padding: EdgeInsets.only(top: 16),
@@ -162,40 +194,14 @@ class MediaInfoContent extends StatelessWidget {
   }
 }
 
-class _Section extends StatelessWidget {
-  final String label;
-  final List<Widget> children;
-
-  const _Section({required this.label, required this.children});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label.toUpperCase(),
-            style: const TextStyle(
-              color: AppColors.textDisabled,
-              fontSize: 10,
-              letterSpacing: 1.6,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          ...children,
-        ],
-      ),
-    );
-  }
-}
-
-class _StreamTile extends StatelessWidget {
+/// A video stream, kept as a multi-line block.
+///
+/// There is rarely more than one, and profile, geometry, Dolby Vision profile,
+/// colour primaries, colour transfer and pixel format do not fit a single row.
+class _VideoStreamTile extends StatelessWidget {
   final MediaStream stream;
 
-  const _StreamTile({required this.stream});
+  const _VideoStreamTile({super.key, required this.stream});
 
   @override
   Widget build(BuildContext context) {
@@ -222,7 +228,7 @@ class _StreamTile extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 2),
-          for (final line in _lines()) _DetailLine(line),
+          for (final line in _videoLines()) _DetailLine(line),
         ],
       ),
     );
@@ -234,20 +240,7 @@ class _StreamTile extends StatelessWidget {
       if (language != null) language,
       if (stream.isDefault) 'Default',
       if (stream.isForced) 'Forced',
-      if (stream.isHearingImpaired) 'SDH',
-      if (stream.isCommentary) 'Commentary',
     ];
-  }
-
-  List<String> _lines() {
-    switch (stream.type) {
-      case MediaStreamType.video:
-        return _videoLines();
-      case MediaStreamType.audio:
-        return _audioLines();
-      case MediaStreamType.subtitle:
-        return _subtitleLines();
-    }
   }
 
   List<String> _videoLines() {
@@ -275,72 +268,190 @@ class _StreamTile extends StatelessWidget {
       if (bitrate != null) bitrate,
     ];
   }
-
-  List<String> _audioLines() {
-    final channels = formatChannels(stream.channels, stream.channelLayout);
-    final sampleRate = formatSampleRate(stream.sampleRate);
-    final bitrate = formatBitrate(stream.bitrate);
-    final parts = <String>[
-      if (channels != null) channels,
-      if (sampleRate != null) sampleRate,
-      if (stream.bitDepth != null) '${stream.bitDepth}-bit',
-      if (bitrate != null) bitrate,
-    ];
-
-    return [
-      if (stream.title != null) stream.title!,
-      if (parts.isNotEmpty) parts.join(' · '),
-    ];
-  }
-
-  List<String> _subtitleLines() {
-    const imageCodecs = {
-      'hdmv_pgs_subtitle',
-      'dvd_subtitle',
-      'dvb_subtitle',
-      'xsub'
-    };
-    final isImage = imageCodecs.contains(stream.codec?.toLowerCase());
-    return [
-      if (stream.title != null) stream.title!,
-      isImage ? 'Image based' : 'Text based',
-    ];
-  }
 }
 
-class _ExternalSubtitleTile extends StatelessWidget {
-  final String language;
-  final String format;
+/// One audio or subtitle stream, as a single aligned line.
+///
+/// Fixed leading column widths are what make values line up down the list; the
+/// monospace face keeps numbers aligned within a column. A second muted line
+/// renders only when the stream carries data the columns cannot hold, so in a
+/// 34-track remux most subtitle rows stay exactly one line tall.
+class _StreamRow extends StatelessWidget {
+  final String? index;
+  final String codec;
+  final String? language;
+  final String detail;
+  final List<String> flags;
+  final List<String> extra;
 
-  const _ExternalSubtitleTile({required this.language, required this.format});
+  const _StreamRow({
+    super.key,
+    required this.index,
+    required this.codec,
+    required this.language,
+    required this.detail,
+    required this.flags,
+    required this.extra,
+  });
+
+  static const double _indexWidth = 22;
+  static const double _codecWidth = 66;
+  static const double _languageWidth = 88;
+  static const double _gap = 8;
+
+  static const TextStyle _codecStyle = TextStyle(
+    color: AppColors.textPrimary,
+    fontSize: 11,
+    height: 1.5,
+    fontWeight: FontWeight.w600,
+    fontFamily: 'monospace',
+  );
+
+  static const TextStyle _valueStyle = TextStyle(
+    color: AppColors.textSecondary,
+    fontSize: 11,
+    height: 1.5,
+    fontFamily: 'monospace',
+  );
+
+  static const TextStyle _mutedStyle = TextStyle(
+    color: AppColors.textDisabled,
+    fontSize: 11,
+    height: 1.5,
+    fontFamily: 'monospace',
+  );
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(vertical: 3),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Wrap(
-            spacing: 6,
-            crossAxisAlignment: WrapCrossAlignment.center,
+          Row(
             children: [
-              Text(
-                format.toUpperCase(),
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
+              SizedBox(
+                width: _indexWidth,
+                child: Text(
+                  index ?? '',
+                  textAlign: TextAlign.right,
+                  style: _mutedStyle,
                 ),
               ),
-              _FlagChip(label: language),
-              const _FlagChip(label: 'External'),
+              const SizedBox(width: _gap),
+              SizedBox(
+                width: _codecWidth,
+                child: Text(
+                  codec.toUpperCase(),
+                  overflow: TextOverflow.ellipsis,
+                  style: _codecStyle,
+                ),
+              ),
+              const SizedBox(width: _gap),
+              SizedBox(
+                width: _languageWidth,
+                child: Text(
+                  language ?? '',
+                  overflow: TextOverflow.ellipsis,
+                  style: _valueStyle,
+                ),
+              ),
+              const SizedBox(width: _gap),
+              Expanded(
+                child: Text(
+                  detail,
+                  overflow: TextOverflow.ellipsis,
+                  style: _valueStyle,
+                ),
+              ),
+              if (flags.isNotEmpty) ...[
+                const SizedBox(width: _gap),
+                Text(flags.join(' · '), style: _mutedStyle),
+              ],
             ],
           ),
+          if (extra.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(
+                left: _indexWidth + _codecWidth + _gap * 2,
+              ),
+              child: Text(
+                extra.join(' · '),
+                overflow: TextOverflow.ellipsis,
+                style: _mutedStyle,
+              ),
+            ),
         ],
       ),
     );
   }
+}
+
+/// Subtitle codecs that carry bitmaps rather than text.
+const Set<String> _imageSubtitleCodecs = {
+  'hdmv_pgs_subtitle',
+  'dvd_subtitle',
+  'dvb_subtitle',
+  'xsub',
+};
+
+bool _isImageSubtitle(String? codec) =>
+    _imageSubtitleCodecs.contains(codec?.toLowerCase());
+
+/// Playback-affecting flags. Language is deliberately absent: it has its own
+/// column in [_StreamRow], unlike the video tile where it stays a chip.
+List<String> _rowFlags(MediaStream stream) => [
+      if (stream.isDefault) 'Default',
+      if (stream.isForced) 'Forced',
+      if (stream.isHearingImpaired) 'SDH',
+      if (stream.isCommentary) 'Commentary',
+    ];
+
+_StreamRow _audioRow(MediaStream stream) {
+  final channels = formatChannels(stream.channels, stream.channelLayout);
+  final sampleRate = formatSampleRate(stream.sampleRate);
+  final bitrate = formatBitrate(stream.bitrate);
+
+  return _StreamRow(
+    key: Key('media-info-stream-${stream.index}'),
+    index: stream.index?.toString(),
+    codec: stream.codec ?? 'Unknown',
+    language: languageName(stream.language),
+    detail: [
+      if (channels != null) channels,
+      if (sampleRate != null) sampleRate,
+    ].join(' · '),
+    flags: _rowFlags(stream),
+    extra: [
+      if (stream.title != null) stream.title!,
+      if (bitrate != null) bitrate,
+      if (stream.bitDepth != null) '${stream.bitDepth}-bit',
+    ],
+  );
+}
+
+_StreamRow _subtitleRow(MediaStream stream) {
+  return _StreamRow(
+    key: Key('media-info-stream-${stream.index}'),
+    index: stream.index?.toString(),
+    codec: stream.codec ?? 'Unknown',
+    language: languageName(stream.language),
+    detail: _isImageSubtitle(stream.codec) ? 'Image' : 'Text',
+    flags: _rowFlags(stream),
+    extra: [if (stream.title != null) stream.title!],
+  );
+}
+
+_StreamRow _externalSubtitleRow(SubtitleTrack track) {
+  return _StreamRow(
+    key: Key('media-info-external-${track.id}'),
+    index: null,
+    codec: track.format,
+    language: languageName(track.language),
+    detail: _isImageSubtitle(track.format) ? 'Image' : 'Text',
+    flags: const ['External'],
+    extra: [if (track.title != null) track.title!],
+  );
 }
 
 class _DetailLine extends StatelessWidget {
@@ -441,4 +552,53 @@ class _VersionChip extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A section label that stays put while its rows scroll under it.
+///
+/// It paints [AppColors.surface] rather than sitting transparent so rows do not
+/// show through it once pinned.
+class _SectionHeaderDelegate extends SliverPersistentHeaderDelegate {
+  final String label;
+  final int count;
+
+  const _SectionHeaderDelegate({required this.label, required this.count});
+
+  static const double _height = 30;
+
+  @override
+  double get minExtent => _height;
+
+  @override
+  double get maxExtent => _height;
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    final text = count > 1 ? '$label · $count' : label;
+
+    return Container(
+      key: Key('media-info-header-${label.toLowerCase()}'),
+      height: _height,
+      color: AppColors.surface,
+      alignment: Alignment.bottomLeft,
+      padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
+      child: Text(
+        text.toUpperCase(),
+        style: const TextStyle(
+          color: AppColors.textDisabled,
+          fontSize: 10,
+          letterSpacing: 1.6,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(_SectionHeaderDelegate oldDelegate) =>
+      oldDelegate.label != label || oldDelegate.count != count;
 }

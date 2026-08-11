@@ -43,12 +43,6 @@ defmodule MetadataRelay.Plug.Cache do
   end
 
   @impl true
-  def call(%Plug.Conn{method: "GET", request_path: "/trakt/sync/" <> _rest} = conn, _opts) do
-    # Skip caching for Trakt sync endpoints (user-specific data)
-    conn
-  end
-
-  @impl true
   def call(%Plug.Conn{method: "GET"} = conn, _opts) do
     cache_key = build_cache_key(conn)
 

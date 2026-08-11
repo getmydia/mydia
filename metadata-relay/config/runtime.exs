@@ -97,14 +97,9 @@ if config_env() != :test do
     tmdb_api_key = System.get_env("TMDB_API_KEY")
     tvdb_api_key = System.get_env("TVDB_API_KEY")
 
-    trakt_client_id = System.get_env("TRAKT_CLIENT_ID")
-    trakt_client_secret = System.get_env("TRAKT_CLIENT_SECRET")
-
     config :metadata_relay,
       tmdb_api_key: tmdb_api_key,
-      tvdb_api_key: tvdb_api_key,
-      trakt_client_id: trakt_client_id,
-      trakt_client_secret: trakt_client_secret
+      tvdb_api_key: tvdb_api_key
 
     config :metadata_relay,
       rendezvous_master_pepper:

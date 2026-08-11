@@ -211,7 +211,7 @@ against an older minor keeps working: the host detects each guest's contract
 version from its bytes and serves the matching interface namespace and exports,
 so a `1.0` guest's `on-event` still resolves against a `1.1` host. Only a removal
 or a signature change bumps the major version. Target the lowest host you need
-via `min_host_version`; a `1.2` guest sets `"min_host_version": "1.2.0"` so an
+via `min_host_version`; a `1.3` guest sets `"min_host_version": "1.3.0"` so an
 older host refuses it cleanly rather than failing to link.
 
 ## Reference

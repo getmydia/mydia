@@ -4,7 +4,7 @@
   "version": "1.1.0",
   "description": "Two-way watched-state and list sync with Simkl: pulls your Simkl history into mydia, pushes what you watch back, syncs unwatched library items to Plan to Watch, and adds Simkl Plan to Watch items to your Favorites.",
   "author": "Mydia",
-  "min_host_version": "1.2.0",
+  "min_host_version": "1.3.0",
   "capabilities": {
     "events:subscribe": ["playback.finished"],
     "net:http": ["api.simkl.com", "simkl.com"],

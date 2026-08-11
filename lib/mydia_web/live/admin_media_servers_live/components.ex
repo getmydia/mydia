@@ -9,6 +9,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   """
   attr :media_servers, :list, required: true
   attr :media_server_health, :map, required: true
+  attr :last_runs, :map, default: %{}
 
   def media_servers_tab(assigns) do
     ~H"""
@@ -36,6 +37,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
           <%= for server <- @media_servers do %>
             <% health = Map.get(@media_server_health, server.id, %{status: :unknown}) %>
             <% is_runtime = Settings.runtime_config?(server) %>
+            <% last_run = Map.get(@last_runs, server.id) %>
 
             <div class={[
               "card bg-base-100 border transition-all duration-200 hover:shadow-lg",
@@ -120,10 +122,14 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                 </div>
 
                 <%!-- Watched Sync Status --%>
-                <% sync_enabled = get_in(server.connection_settings || %{}, ["sync_watched"]) == true %>
+                <% sync_enabled =
+                  get_in(server.connection_settings || %{}, ["sync_watched"]) in [true, "true"] %>
                 <% last_sync = get_in(server.connection_settings || %{}, ["last_watched_sync_at"]) %>
                 <%= if sync_enabled do %>
-                  <div class="flex items-center gap-2 text-xs text-base-content/60">
+                  <div
+                    data-test="watched-sync-enabled"
+                    class="flex items-center gap-2 text-xs text-base-content/60"
+                  >
                     <.icon name="hero-arrow-path" class="w-3.5 h-3.5" />
                     <span>
                       Watched sync enabled
@@ -134,8 +140,33 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                   </div>
                 <% end %>
 
+                <div
+                  :if={last_run}
+                  data-test="last-sync-run"
+                  class="flex items-center gap-2 text-xs"
+                >
+                  <span class={[
+                    "badge badge-xs",
+                    last_run.status == :ok && "badge-success",
+                    last_run.status == :error && "badge-error",
+                    last_run.status == :skipped && "badge-warning"
+                  ]}>
+                    {run_label(last_run)}
+                  </span>
+                  <span :if={last_run.error} class="text-error/80">{last_run.error}</span>
+                </div>
+
                 <%!-- Bottom Row: Actions --%>
                 <div class="flex items-center justify-end gap-1 pt-2 border-t border-base-200">
+                  <button
+                    :if={server.last_auth_error_at}
+                    data-test="reconnect-plex"
+                    class="btn btn-sm btn-warning gap-1"
+                    phx-click="reconnect_plex"
+                    phx-value-id={server.id}
+                  >
+                    <.icon name="hero-arrow-path" class="w-4 h-4" /> Reconnect Plex
+                  </button>
                   <%= if sync_enabled and server.type == :plex do %>
                     <button
                       class="btn btn-sm btn-ghost gap-1"
@@ -636,22 +667,25 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                       <label class="label">
                         <span class="label-text text-sm">Sync Direction</span>
                       </label>
+                      <% direction =
+                        get_in(
+                          Phoenix.HTML.Form.input_value(@media_server_form, :connection_settings) ||
+                            %{},
+                          ["sync_watched_direction"]
+                        ) || "bidirectional" %>
                       <select
                         name="media_server_config[connection_settings][sync_watched_direction]"
                         class="select select-bordered select-sm w-full"
-                        value={
-                          get_in(
-                            Phoenix.HTML.Form.input_value(
-                              @media_server_form,
-                              :connection_settings
-                            ) || %{},
-                            ["sync_watched_direction"]
-                          ) || "bidirectional"
-                        }
                       >
-                        <option value="bidirectional">Bidirectional</option>
-                        <option value="import">Import only (server → Mydia)</option>
-                        <option value="export">Export only (Mydia → server)</option>
+                        <option value="bidirectional" selected={direction == "bidirectional"}>
+                          Bidirectional
+                        </option>
+                        <option value="import" selected={direction == "import"}>
+                          Import only (server → Mydia)
+                        </option>
+                        <option value="export" selected={direction == "export"}>
+                          Export only (Mydia → server)
+                        </option>
                       </select>
                     </div>
                   </div>
@@ -730,6 +764,19 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   defp health_status_label(:healthy), do: "Healthy"
   defp health_status_label(:unhealthy), do: "Unhealthy"
   defp health_status_label(:unknown), do: "Unknown"
+
+  defp run_label(%{status: :skipped, skip_reason: reason}) when is_binary(reason) do
+    "Skipped: #{reason}"
+  end
+
+  defp run_label(%{status: :ok, counts: counts}) when is_map(counts) do
+    imported = Map.get(counts, "imported") || Map.get(counts, :imported) || 0
+    exported = Map.get(counts, "exported") || Map.get(counts, :exported) || 0
+    "Synced #{imported} in, #{exported} out"
+  end
+
+  defp run_label(%{status: :error}), do: "Failed"
+  defp run_label(_), do: "Failed"
 
   # Simplify plex.direct URLs to show just the IP/host and port
   # e.g., "https://10-1-1-5.abc123.plex.direct:32400" -> "(ssl) 10.1.1.5:32400"

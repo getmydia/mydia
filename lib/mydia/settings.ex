@@ -41,6 +41,7 @@ defmodule Mydia.Settings do
     DownloadClientConfig,
     IndexerConfig,
     MediaServerConfig,
+    MediaServerUserLink,
     LibraryPath,
     PathMappingConfig,
     PluginConfig
@@ -550,6 +551,27 @@ defmodule Mydia.Settings do
   """
   @spec change_media_server_config(MediaServerConfig.t(), map()) :: Ecto.Changeset.t()
   defdelegate change_media_server_config(config, attrs \\ %{}), to: Mydia.Settings.ServiceConfigs
+
+  @doc """
+  Lists per-user account links for a media server config.
+  """
+  @spec list_media_server_user_links(binary()) :: [MediaServerUserLink.t()]
+  defdelegate list_media_server_user_links(media_server_config_id),
+    to: Mydia.Settings.ServiceConfigs
+
+  @doc """
+  Upserts a media server user link, keyed by (config, user).
+  """
+  @spec upsert_media_server_user_link(map()) ::
+          {:ok, MediaServerUserLink.t()} | {:error, Ecto.Changeset.t()}
+  defdelegate upsert_media_server_user_link(attrs), to: Mydia.Settings.ServiceConfigs
+
+  @doc """
+  Deletes a media server user link.
+  """
+  @spec delete_media_server_user_link(MediaServerUserLink.t()) ::
+          {:ok, MediaServerUserLink.t()} | {:error, Ecto.Changeset.t()}
+  defdelegate delete_media_server_user_link(link), to: Mydia.Settings.ServiceConfigs
 
   # ── Plugin Configs ───────────────────────────────────────────────────
 
