@@ -26,7 +26,9 @@ mix test
 mix format
 ```
 
-Environment variables: `PORT` (default 4001), `DASHBOARD_USERNAME` and `DASHBOARD_PASSWORD` (required in production for `/errors` and `/feedback` dashboards), `TMDB_API_KEY`, `TVDB_API_KEY`, `REDIS_URL` (optional).
+Environment variables: `PORT` (default 4001), `DASHBOARD_USERNAME` and `DASHBOARD_PASSWORD` (required in production for `/errors` and `/feedback` dashboards), `TMDB_API_KEY`, `TVDB_API_KEY`, `TRAKT_CLIENT_ID` and `TRAKT_CLIENT_SECRET` (required for the Trakt integration; without them every `/trakt/*` endpoint answers 503 `trakt_not_configured`), `REDIS_URL` (optional).
+
+When adding a proxy for a new upstream that needs its own credentials, add them in the same change to `README.md`'s env table, `docker-compose.yml`, and `infra/kubernetes/apps/metadata-relay/secret.yaml.example`. Trakt shipped without those entries and stayed dead in production until someone reported it.
 
 ## Deploying a New Version
 

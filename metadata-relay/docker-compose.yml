@@ -12,6 +12,9 @@ services:
       - MIX_ENV=dev
       - TMDB_API_KEY=${TMDB_API_KEY:-your_api_key_here}
       - TVDB_API_KEY=${TVDB_API_KEY:-your_tvdb_key_here}
+      # Trakt is optional - /trakt/* answers 503 trakt_not_configured when unset
+      - TRAKT_CLIENT_ID=${TRAKT_CLIENT_ID:-}
+      - TRAKT_CLIENT_SECRET=${TRAKT_CLIENT_SECRET:-}
       # Redis is optional - comment out to use in-memory caching
       - REDIS_URL=redis://redis:6379
       # SQLite database path

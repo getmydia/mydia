@@ -9,6 +9,10 @@ defmodule MydiaWeb.IntegrationsLive.Index do
 
   require Logger
 
+  @trakt_not_configured_message "Trakt is unavailable because the metadata relay this server " <>
+                                  "uses has no Trakt credentials configured. If you run your own " <>
+                                  "relay, set TRAKT_CLIENT_ID and TRAKT_CLIENT_SECRET on it."
+
   @impl true
   def mount(_params, _session, socket) do
     user = socket.assigns.current_user
@@ -63,8 +67,10 @@ defmodule MydiaWeb.IntegrationsLive.Index do
       {:error, reason} ->
         Logger.error("Failed to generate Trakt device code: #{inspect(reason)}")
 
-        {:noreply,
-         assign(socket, :trakt_error, "Failed to start Trakt authorization. Please try again.")}
+        message =
+          trakt_error_message(reason, "Failed to start Trakt authorization. Please try again.")
+
+        {:noreply, assign(socket, :trakt_error, message)}
     end
   end
 
@@ -231,7 +237,10 @@ defmodule MydiaWeb.IntegrationsLive.Index do
           {:noreply,
            socket
            |> assign(:trakt_polling, false)
-           |> assign(:trakt_error, "An error occurred. Please try again.")}
+           |> assign(
+             :trakt_error,
+             trakt_error_message(reason, "An error occurred. Please try again.")
+           )}
       end
     else
       {:noreply, socket}
@@ -329,6 +338,13 @@ defmodule MydiaWeb.IntegrationsLive.Index do
   end
 
   ## Private Helpers
+
+  # The relay answers 503 with this code when it carries no Trakt credentials.
+  # Retrying never clears it, so say what actually needs to happen.
+  defp trakt_error_message({:http_error, 503, %{"error" => "trakt_not_configured"}}, _fallback),
+    do: @trakt_not_configured_message
+
+  defp trakt_error_message(_reason, fallback), do: fallback
 
   defp compute_trakt_expiry(nil), do: nil
 

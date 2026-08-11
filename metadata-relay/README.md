@@ -135,6 +135,8 @@ The service is configured entirely via environment variables for maximum flexibi
 | `PORT`            | No       | `4001`             | HTTP port the server listens on                                                                                         |
 | `TMDB_API_KEY`    | Yes      | -                  | API key for The Movie Database. Get one at https://www.themoviedb.org/settings/api                                      |
 | `TVDB_API_KEY`    | Yes      | -                  | API key for TheTVDB. Get one at https://thetvdb.com/api-information                                                     |
+| `TRAKT_CLIENT_ID` | Required for Trakt | -        | Trakt application client ID. Create an app at https://trakt.tv/oauth/applications. Without it, every `/trakt/*` endpoint answers 503 `trakt_not_configured` |
+| `TRAKT_CLIENT_SECRET` | Required for Trakt | -    | Trakt application client secret, held only by the relay so Mydia instances never see it                                  |
 | `REDIS_URL`       | No       | -                  | Redis connection URL for persistent caching. Format: `redis://[password@]host:port`. If not set, uses in-memory caching |
 | `FEEDBACK_EMAIL_TO` | No     | -                  | Email address that receives a notification for each new feedback submission. Notifications are disabled when unset       |
 | `FEEDBACK_EMAIL_FROM` | No   | `metadata-relay@localhost` | Sender address for feedback notification emails                                                                   |

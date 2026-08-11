@@ -78,11 +78,21 @@ defmodule MetadataRelay.Trakt.Client do
   end
 
   @doc """
+  Returns true when both Trakt credentials are present.
+
+  Relays that do not carry Trakt credentials still serve TMDB and TVDB
+  normally, so callers check this and reply with a clear error rather than
+  letting `client_id/0` raise into a generic 500.
+  """
+  def configured? do
+    not is_nil(fetch_client_id()) and not is_nil(fetch_client_secret())
+  end
+
+  @doc """
   Returns the client_id (public, safe to expose to Mydia instances for building authorize URLs).
   """
   def client_id do
-    Application.get_env(:metadata_relay, :trakt_client_id) ||
-      System.get_env("TRAKT_CLIENT_ID") ||
+    fetch_client_id() ||
       raise(RuntimeError, "TRAKT_CLIENT_ID environment variable is not set.")
   end
 
@@ -90,10 +100,29 @@ defmodule MetadataRelay.Trakt.Client do
   Returns the client_secret (private, never exposed outside the relay).
   """
   def client_secret do
-    Application.get_env(:metadata_relay, :trakt_client_secret) ||
-      System.get_env("TRAKT_CLIENT_SECRET") ||
+    fetch_client_secret() ||
       raise(RuntimeError, "TRAKT_CLIENT_SECRET environment variable is not set.")
   end
+
+  defp fetch_client_id do
+    presence(
+      Application.get_env(:metadata_relay, :trakt_client_id) || System.get_env("TRAKT_CLIENT_ID")
+    )
+  end
+
+  defp fetch_client_secret do
+    presence(
+      Application.get_env(:metadata_relay, :trakt_client_secret) ||
+        System.get_env("TRAKT_CLIENT_SECRET")
+    )
+  end
+
+  defp presence(nil), do: nil
+
+  defp presence(value) when is_binary(value),
+    do: if(String.trim(value) == "", do: nil, else: value)
+
+  defp presence(value), do: value
 
   defp auth_header(nil), do: []
   defp auth_header(token), do: [{"authorization", "Bearer #{token}"}]

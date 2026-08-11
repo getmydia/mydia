@@ -12,6 +12,7 @@ defmodule MetadataRelay.Router do
   alias MetadataRelay.OpenLibrary.Handler, as: OpenLibraryHandler
   alias MetadataRelay.OpenSubtitles.Handler, as: SubtitlesHandler
   alias MetadataRelay.Pairing.Handler, as: PairingHandler
+  alias MetadataRelay.Trakt.Client, as: TraktClient
   alias MetadataRelay.Trakt.Handler, as: TraktHandler
 
   @feedback_param_atoms %{
@@ -1228,6 +1229,12 @@ defmodule MetadataRelay.Router do
   # Trakt device poll handler — passes Trakt's HTTP status codes through transparently
   # so the client can distinguish pending (400), expired (410), denied (418), slow down (429)
   defp handle_trakt_device_poll(conn, handler_fn) do
+    with_trakt_configured(conn, fn ->
+      do_handle_trakt_device_poll(conn, handler_fn)
+    end)
+  end
+
+  defp do_handle_trakt_device_poll(conn, handler_fn) do
     case handler_fn.() do
       {:ok, body} ->
         MetadataRelay.Metrics.inc("metadata_relay_requests_total",
@@ -1268,6 +1275,37 @@ defmodule MetadataRelay.Router do
 
   # Trakt request handler
   defp handle_trakt_request(conn, handler_fn) do
+    with_trakt_configured(conn, fn ->
+      do_handle_trakt_request(conn, handler_fn)
+    end)
+  end
+
+  # Trakt credentials are optional: a relay without them still serves TMDB and
+  # TVDB. Reply with a machine-readable 503 so clients can tell "this relay has
+  # no Trakt" apart from a transient outage, instead of raising into a 500.
+  defp with_trakt_configured(conn, fun) do
+    if TraktClient.configured?() do
+      fun.()
+    else
+      MetadataRelay.Metrics.inc("metadata_relay_requests_total",
+        service: "trakt",
+        status: "not_configured"
+      )
+
+      body = %{
+        error: "trakt_not_configured",
+        message:
+          "This metadata relay has no Trakt credentials configured. " <>
+            "Set TRAKT_CLIENT_ID and TRAKT_CLIENT_SECRET on the relay to enable Trakt."
+      }
+
+      conn
+      |> put_resp_content_type("application/json")
+      |> send_resp(503, Jason.encode!(body))
+    end
+  end
+
+  defp do_handle_trakt_request(conn, handler_fn) do
     case handler_fn.() do
       {:ok, body} ->
         MetadataRelay.Metrics.inc("metadata_relay_requests_total",
