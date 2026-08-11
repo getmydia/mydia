@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/cache/poster_cache_manager.dart';
+import '../../../core/layout/dock_insets.dart';
 import '../../../core/downloads/download_providers.dart';
 import '../../../domain/models/download.dart';
 import '../../../core/theme/colors.dart';
@@ -83,6 +84,7 @@ class SeriesDownloadsScreen extends ConsumerWidget {
               ]),
             ),
           ),
+          const SliverDockGap(),
         ],
       ),
     );

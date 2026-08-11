@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/cache/poster_cache_manager.dart';
+import '../../../core/layout/dock_insets.dart';
 import '../../../core/downloads/bulk_download_helper.dart';
 import '../../../core/downloads/download_job_providers.dart';
 import '../../../core/downloads/download_providers.dart';
@@ -311,9 +312,7 @@ class ShowDetailScreen extends ConsumerWidget {
           ),
         ),
         _buildEpisodeList(context, ref),
-        const SliverToBoxAdapter(
-          child: SizedBox(height: 32),
-        ),
+        const SliverDockGap(),
       ],
     );
   }
