@@ -142,13 +142,21 @@ defmodule Mydia.Downloads.Queue do
   The blacklist write happens first: if a later step fails, the release must
   still not be re-grabbed. Client removal is best effort, since the torrent may
   already be gone.
+
+  Accepts `:failure_reason` (default `"rejected_by_user"`) so a system-initiated
+  rejection is distinguishable from an operator's in `release_blacklist`.
   """
   @spec reject_release(Download.t(), keyword()) ::
           {:ok, :rejected} | {:error, :no_indexer | :no_guid | term()}
   def reject_release(%Download{} = download, opts \\ []) do
     with {:ok, indexer, guid} <- Blacklists.extract_key(download),
          {:ok, _row} <-
-           Blacklists.add(indexer, guid, download.title || "Unknown release", "rejected_by_user") do
+           Blacklists.add(
+             indexer,
+             guid,
+             download.title || "Unknown release",
+             Keyword.get(opts, :failure_reason, "rejected_by_user")
+           ) do
       # Computed before deletion: it reads through the media_item association.
       search = replacement_search(download)
 
@@ -893,6 +901,21 @@ defmodule Mydia.Downloads.Queue do
       {:error, _reason} ->
         # Client config not found - can't verify, assume active
         :active
+    end
+  end
+
+  @doc false
+  # Resolves a client name to {adapter, config_map}. Public so callers outside
+  # this module (Mydia.Jobs.DownloadMonitor) can talk to a download client
+  # without duplicating the config lookup, adapter lookup and config_to_map
+  # conversion for a sixth time.
+  @spec resolve_adapter(String.t() | nil) :: {:ok, module(), map()} | {:error, term()}
+  def resolve_adapter(nil), do: {:error, :no_client}
+
+  def resolve_adapter(client_name) do
+    with {:ok, client_config} <- find_client_config(client_name),
+         {:ok, adapter} <- get_adapter_for_client(client_config) do
+      {:ok, adapter, config_to_map(client_config)}
     end
   end
 

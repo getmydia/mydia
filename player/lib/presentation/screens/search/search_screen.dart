@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/layout/dock_insets.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/models/search_result.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
@@ -463,8 +464,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               ),
             ),
         ],
-        // Clears the floating mobile bottom nav.
-        const SliverToBoxAdapter(child: SizedBox(height: 120)),
+        const SliverDockGap(),
       ],
     );
   }

@@ -16,6 +16,7 @@ import '../widgets/freshness_header.dart';
 import '../widgets/glass_surface.dart';
 import '../widgets/shimmer_card.dart';
 import '../../core/layout/breakpoints.dart';
+import '../../core/layout/dock_insets.dart';
 import '../../core/theme/colors.dart';
 import '../widgets/app_shell.dart';
 import '../widgets/mydia_logo.dart';
@@ -150,7 +151,7 @@ class HomeScreen extends ConsumerWidget {
     final homeData = ref.watch(homeControllerProvider);
     final isDesktop = Breakpoints.isDesktop(context);
     // On desktop, no bottom nav so less padding needed
-    final bottomPadding = isDesktop ? 32.0 : 100.0;
+    final bottomPadding = DockInsets.bottomOf(context);
 
     return Scaffold(
       backgroundColor: Colors.transparent,

@@ -236,6 +236,24 @@ defmodule Mydia.Downloads.History do
   end
 
   @doc """
+  Stamps `content_checked_at` on the given downloads.
+
+  Called by `Mydia.Jobs.DownloadMonitor` once a torrent's file list has been
+  successfully enumerated, so the enumeration is never repeated for that
+  download. A no-op for an empty list.
+  """
+  @spec mark_content_checked([binary()]) :: {integer(), nil}
+  def mark_content_checked([]), do: {0, nil}
+
+  def mark_content_checked(ids) when is_list(ids) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    Download
+    |> where([d], d.id in ^ids)
+    |> Repo.update_all(set: [content_checked_at: now])
+  end
+
+  @doc """
   Lists failed downloads classified as a path-mapping mismatch whose reported
   path is at or under `remote_prefix`. Used to fan out an applied mapping to
   every affected download.
@@ -567,6 +585,7 @@ defmodule Mydia.Downloads.History do
       import_reported_path: download.import_reported_path,
       import_next_retry_at: download.import_next_retry_at,
       import_failed_at: download.import_failed_at,
+      content_checked_at: download.content_checked_at,
       last_progress_at: download.last_progress_at,
       last_known_bytes: download.last_known_bytes,
       last_observed_at: download.last_observed_at,
@@ -615,6 +634,7 @@ defmodule Mydia.Downloads.History do
       import_reported_path: download.import_reported_path,
       import_next_retry_at: download.import_next_retry_at,
       import_failed_at: download.import_failed_at,
+      content_checked_at: download.content_checked_at,
       last_progress_at: download.last_progress_at,
       last_known_bytes: download.last_known_bytes,
       # Carry the persisted stall state through an outage. The soft-stall badge
@@ -687,6 +707,7 @@ defmodule Mydia.Downloads.History do
       import_reported_path: download.import_reported_path,
       import_next_retry_at: download.import_next_retry_at,
       import_failed_at: download.import_failed_at,
+      content_checked_at: download.content_checked_at,
       last_progress_at: download.last_progress_at,
       last_known_bytes: download.last_known_bytes,
       last_observed_at: download.last_observed_at,

@@ -416,6 +416,72 @@ defmodule Mydia.Downloads.Client.RqbitTest do
     end
   end
 
+  describe "list_files/2" do
+    setup do
+      bypass = Bypass.open()
+      {:ok, bypass: bypass, config: bypass_config(bypass)}
+    end
+
+    test "returns the torrent's absolute file paths", %{bypass: bypass, config: config} do
+      Bypass.expect(bypass, "GET", "/torrents/#{@hash}", fn conn ->
+        json_resp(conn, 200, %{
+          "id" => 0,
+          "info_hash" => @hash,
+          "name" => "Some.Movie.2026.720p",
+          "output_folder" => "/downloads",
+          "files" => [
+            %{
+              "name" => "Some.Movie.2026.720p/movie.mkv",
+              "components" => ["Some.Movie.2026.720p", "movie.mkv"],
+              "length" => 1,
+              "included" => true
+            },
+            %{
+              "name" => "Some.Movie.2026.720p/sub.srt",
+              "components" => ["Some.Movie.2026.720p", "sub.srt"],
+              "length" => 2,
+              "included" => true
+            }
+          ]
+        })
+      end)
+
+      stub_stats(
+        bypass,
+        stats(state: "live", finished: false, progress_bytes: 1, total_bytes: 3)
+      )
+
+      assert {:ok, files} = Rqbit.list_files(config, @hash)
+
+      assert files == [
+               "/downloads/Some.Movie.2026.720p/movie.mkv",
+               "/downloads/Some.Movie.2026.720p/sub.srt"
+             ]
+    end
+
+    test "returns an empty list when the client reports no files yet", %{
+      bypass: bypass,
+      config: config
+    } do
+      Bypass.expect(bypass, "GET", "/torrents/#{@hash}", fn conn ->
+        json_resp(conn, 200, %{
+          "id" => 0,
+          "info_hash" => @hash,
+          "name" => "Some.Movie.2026.720p",
+          "output_folder" => "/downloads",
+          "files" => []
+        })
+      end)
+
+      stub_stats(
+        bypass,
+        stats(state: "live", finished: false, progress_bytes: 0, total_bytes: 0)
+      )
+
+      assert {:ok, []} = Rqbit.list_files(config, @hash)
+    end
+  end
+
   ## Helpers
 
   defp bypass_config(bypass) do

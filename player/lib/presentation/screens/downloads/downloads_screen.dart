@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/cache/poster_cache_manager.dart';
+import '../../../core/layout/dock_insets.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/cast_actions.dart';
 import '../../widgets/cast_button.dart';
@@ -207,8 +208,7 @@ class DownloadsScreen extends ConsumerWidget {
               },
             ),
 
-          // Bottom padding
-          const SliverToBoxAdapter(child: SizedBox(height: 100)),
+          const SliverDockGap(),
         ],
       ),
     );

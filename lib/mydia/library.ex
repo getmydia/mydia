@@ -375,6 +375,7 @@ defmodule Mydia.Library do
         |> maybe_put_struct_field(:container, result.container)
         |> maybe_put_struct_field(:width, result.width)
         |> maybe_put_struct_field(:height, result.height)
+        |> maybe_put_struct_field(:streams, result.streams)
         # The `audio_codec` column below is normalized for streaming
         # compatibility, which collapses "DD+ 5.1" to "ac3" and "TrueHD Atmos"
         # to "truehd" — losing the channel layout and the Atmos/E-AC3
@@ -533,16 +534,21 @@ defmodule Mydia.Library do
           |> maybe_put_struct_field(:container, result.container)
           |> maybe_put_struct_field(:width, result.width)
           |> maybe_put_struct_field(:height, result.height)
+          |> maybe_put_struct_field(:streams, result.streams)
 
         set = build_analysis_success_set(result, metadata, now)
 
+        # This guard must stay in lockstep with FileAnalysis.fetch_repair_rows/3
+        # and repair_candidate?/1. If it is narrower than the selection, the
+        # lane re-probes the same rows on every tick and writes nothing.
         query =
           from(mf in MediaFile,
             where:
               mf.id == ^media_file.id and mf.updated_at == ^current.updated_at and
                 mf.analyzed_at == ^current.analyzed_at and
                 (is_nil(json_extract(mf.metadata, "$.width")) or
-                   is_nil(json_extract(mf.metadata, "$.height")))
+                   is_nil(json_extract(mf.metadata, "$.height")) or
+                   is_nil(json_extract(mf.metadata, "$.streams")))
           )
 
         case Repo.update_all(query, set: set) do
@@ -2325,6 +2331,13 @@ defmodule Mydia.Library do
           {:error, :file_not_found}
         end
     end
+  end
+
+  @doc false
+  # Test seam for the repair write path, which is otherwise only reachable
+  # through repair_file_metadata/1 and therefore through a real ffprobe run.
+  def apply_repair_analysis_for_test(%MediaFile{} = media_file, result) do
+    apply_repair_analysis(media_file, result)
   end
 
   @doc """

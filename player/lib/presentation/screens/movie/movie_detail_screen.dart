@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/cache/poster_cache_manager.dart';
+import '../../../core/layout/dock_insets.dart';
 import 'movie_detail_controller.dart';
 import '../../widgets/freshness_header.dart';
 import '../../widgets/quality_download_dialog.dart';
@@ -18,6 +19,7 @@ import '../../widgets/cast_button.dart';
 import '../../widgets/cast_rail.dart';
 import '../../widgets/content_rail.dart';
 import '../../widgets/detail_action_row.dart';
+import '../../widgets/media_info/media_info_sheet.dart';
 import '../../widgets/movie_watched_controls.dart';
 import '../../widgets/hero_play_control.dart';
 
@@ -255,7 +257,7 @@ class MovieDetailScreen extends ConsumerWidget {
               },
             ),
           ),
-        const SliverToBoxAdapter(child: SizedBox(height: 32)),
+        const SliverDockGap(),
       ],
     );
   }
@@ -273,6 +275,13 @@ class MovieDetailScreen extends ConsumerWidget {
       showDownload: isDownloadSupported && movie.files.isNotEmpty,
       isDownloaded:
           ref.watch(isMediaDownloadedProvider(movie.id)).value ?? false,
+      onShowMediaInfo: movie.files.isEmpty
+          ? null
+          : () => showMediaInfo(
+                context: context,
+                id: movie.id,
+                target: MediaInfoTarget.movie,
+              ),
     );
   }
 

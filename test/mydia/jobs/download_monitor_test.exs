@@ -1241,6 +1241,257 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
       refute Mydia.Downloads.Blacklists.blacklisted?("1337x", "guid-pending")
       assert Mydia.Downloads.get_download!(download.id)
     end
+
+    # The regression tests below drive a real qBittorrent adapter rather than
+    # Transmission, because the bug lived entirely in qBittorrent's shape:
+    # `parse_torrent_status/1` reports `files: [content_path]`, and
+    # `content_path` is the torrent's root DIRECTORY for a multi-file torrent.
+    # A Transmission fixture cannot express that, so a Transmission-based test
+    # here would pass both before and after the fix and prove nothing.
+    defp start_qbittorrent_bypass(overrides \\ %{}) do
+      bypass = Bypass.open()
+
+      client_config =
+        download_client_config_fixture(
+          Map.merge(%{type: "qbittorrent", host: "localhost", port: bypass.port}, overrides)
+        )
+
+      Bypass.stub(bypass, "POST", "/api/v2/auth/login", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("set-cookie", "SID=test-sid; HttpOnly")
+        |> Plug.Conn.resp(200, "Ok.")
+      end)
+
+      # reject_release/2 removes the torrent from the client; stub it so the
+      # rejection path can complete instead of erroring on an unknown route.
+      Bypass.stub(bypass, "POST", "/api/v2/torrents/delete", fn conn ->
+        Plug.Conn.resp(conn, 200, "")
+      end)
+
+      {bypass, client_config}
+    end
+
+    defp mock_qbittorrent(bypass, torrents, files) do
+      Bypass.stub(bypass, "GET", "/api/v2/torrents/info", fn conn ->
+        json_resp(conn, 200, torrents)
+      end)
+
+      Bypass.stub(bypass, "GET", "/api/v2/torrents/files", fn conn ->
+        json_resp(conn, 200, files)
+      end)
+    end
+
+    defp qbittorrent_torrent(hash, name) do
+      %{
+        "hash" => hash,
+        "name" => name,
+        "state" => "downloading",
+        "progress" => 0.42,
+        "save_path" => "/downloads",
+        # The whole bug in one field: the root folder, not a file.
+        "content_path" => "/downloads/#{name}"
+      }
+    end
+
+    test "keeps a qBittorrent torrent whose content_path is the release folder" do
+      {bypass, client_config} = start_qbittorrent_bypass()
+
+      # `Path.extname("Minions.Monsters.2026.720p.WEBRip.x264-YTS")` is
+      # ".x264-YTS", which is not a video extension, so judging the torrent
+      # from `content_path` destroyed it mid-download. The real enumeration
+      # below holds an .mkv, so it must survive.
+      name = "Minions.Monsters.2026.720p.WEBRip.x264-YTS"
+
+      mock_qbittorrent(
+        bypass,
+        [qbittorrent_torrent("folder-hash", name)],
+        [%{"name" => "#{name}/movie.mkv", "size" => 1}]
+      )
+
+      media_item = media_item_fixture()
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          title: name,
+          indexer: "1337x",
+          download_client: client_config.name,
+          download_client_id: "folder-hash",
+          metadata: %{indexer: "1337x", guid: "guid-folder"}
+        })
+
+      assert :ok = perform_job(DownloadMonitor, %{})
+
+      # Still there, still ours, not blacklisted.
+      assert Mydia.Downloads.get_download!(download.id)
+      refute Mydia.Downloads.Blacklists.blacklisted?("1337x", "guid-folder")
+    end
+
+    test "still rejects a qBittorrent torrent whose enumeration holds no video" do
+      # The other half of the regression: gating on a real enumeration must
+      # not cost qBittorrent users the malware protection this check exists
+      # for. Same directory-shaped content_path, genuinely bad contents.
+      {bypass, client_config} = start_qbittorrent_bypass()
+
+      name = "Some.Movie.2026.720p.WEBRip"
+
+      mock_qbittorrent(
+        bypass,
+        [qbittorrent_torrent("exe-hash", name)],
+        [%{"name" => "#{name}/payload.exe", "size" => 1}]
+      )
+
+      media_item = media_item_fixture()
+
+      download_fixture(%{
+        media_item_id: media_item.id,
+        title: name,
+        indexer: "1337x",
+        download_client: client_config.name,
+        download_client_id: "exe-hash",
+        metadata: %{indexer: "1337x", guid: "guid-exe"}
+      })
+
+      assert :ok = perform_job(DownloadMonitor, %{})
+
+      assert Mydia.Downloads.Blacklists.blacklisted?("1337x", "guid-exe")
+    end
+
+    test "stamps content_checked_at so the enumeration runs only once" do
+      {bypass, client_config} = start_transmission_bypass()
+
+      torrent = %{
+        "hashString" => "once-hash",
+        "name" => "Some.Movie.2026.720p",
+        "status" => 4,
+        "percentDone" => 0.42,
+        "downloadDir" => "/downloads",
+        "files" => [%{"name" => "Some.Movie.2026.720p/movie.mkv", "length" => 1}]
+      }
+
+      mock_transmission_torrent_get(bypass, [torrent])
+
+      media_item = media_item_fixture()
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          title: "Some.Movie.2026.720p",
+          indexer: "1337x",
+          download_client: client_config.name,
+          download_client_id: "once-hash",
+          metadata: %{indexer: "1337x", guid: "guid-once"}
+        })
+
+      assert :ok = perform_job(DownloadMonitor, %{})
+      assert Mydia.Downloads.get_download!(download.id).content_checked_at
+    end
+
+    test "does not reject when the client reports no files yet" do
+      {bypass, client_config} = start_transmission_bypass()
+
+      torrent = %{
+        "hashString" => "empty-hash",
+        "name" => "Some.Movie.2026.720p",
+        "status" => 4,
+        "percentDone" => 0.0,
+        "downloadDir" => "/downloads",
+        "files" => []
+      }
+
+      mock_transmission_torrent_get(bypass, [torrent])
+
+      media_item = media_item_fixture()
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          title: "Some.Movie.2026.720p",
+          indexer: "1337x",
+          download_client: client_config.name,
+          download_client_id: "empty-hash",
+          metadata: %{indexer: "1337x", guid: "guid-empty"}
+        })
+
+      assert :ok = perform_job(DownloadMonitor, %{})
+
+      assert Mydia.Downloads.get_download!(download.id)
+      refute Mydia.Downloads.Blacklists.blacklisted?("1337x", "guid-empty")
+      # An empty enumeration means "metadata not resolved yet", so we must be
+      # willing to look again on the next poll.
+      refute Mydia.Downloads.get_download!(download.id).content_checked_at
+    end
+
+    test "stops auto-rejecting a media item after the configured limit" do
+      {bypass, client_config} = start_transmission_bypass()
+      media_item = media_item_fixture()
+
+      # Pre-load the counter to the default limit of 3.
+      for _ <- 1..3 do
+        Mydia.Search.record_failure("auto_reject", media_item.id, "no_importable_files")
+      end
+
+      torrent = %{
+        "hashString" => "capped-hash",
+        "name" => "Some.Movie.2026.720p",
+        "status" => 4,
+        "percentDone" => 0.42,
+        "downloadDir" => "/downloads",
+        "files" => [%{"name" => "Some.Movie.2026.720p/payload.exe", "length" => 1}]
+      }
+
+      mock_transmission_torrent_get(bypass, [torrent])
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          title: "Some.Movie.2026.720p",
+          indexer: "1337x",
+          download_client: client_config.name,
+          download_client_id: "capped-hash",
+          metadata: %{indexer: "1337x", guid: "guid-capped"}
+        })
+
+      assert :ok = perform_job(DownloadMonitor, %{})
+
+      # Suppressed: torrent untouched, release not blacklisted.
+      reloaded = Mydia.Downloads.get_download!(download.id)
+      refute Mydia.Downloads.Blacklists.blacklisted?("1337x", "guid-capped")
+
+      # Left non-terminal so it can still complete and import normally.
+      refute reloaded.import_failed_at
+      refute reloaded.import_failure_reason
+    end
+
+    test "still rejects while under the limit, and counts the rejection" do
+      {bypass, client_config} = start_transmission_bypass()
+      media_item = media_item_fixture()
+
+      torrent = %{
+        "hashString" => "under-hash",
+        "name" => "Some.Movie.2026.720p",
+        "status" => 4,
+        "percentDone" => 0.42,
+        "downloadDir" => "/downloads",
+        "files" => [%{"name" => "Some.Movie.2026.720p/payload.exe", "length" => 1}]
+      }
+
+      mock_transmission_torrent_get(bypass, [torrent])
+
+      download_fixture(%{
+        media_item_id: media_item.id,
+        title: "Some.Movie.2026.720p",
+        indexer: "1337x",
+        download_client: client_config.name,
+        download_client_id: "under-hash",
+        metadata: %{indexer: "1337x", guid: "guid-under"}
+      })
+
+      assert :ok = perform_job(DownloadMonitor, %{})
+
+      assert Mydia.Downloads.Blacklists.blacklisted?("1337x", "guid-under")
+      assert %{failure_count: 1} = Mydia.Search.get_backoff_info("auto_reject", media_item.id)
+    end
   end
 
   describe "handle_failure/1 with a classified debrid failure" do

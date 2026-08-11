@@ -97,6 +97,11 @@ defmodule Mydia.Config.Schema do
       # inserted without an explicit `expires_at`. See `Mydia.Downloads.Blacklists`
       # (#123).
       field :release_blacklist_default_ttl_days, :integer, default: 30
+      # How many consecutive system auto-rejections (see
+      # Mydia.Jobs.DownloadMonitor) one media item may accrue before Mydia
+      # stops auto-rejecting it. Bounds a systematic false positive to this
+      # many releases instead of the item's entire search result set.
+      field :auto_reject_limit, :integer, default: 3
     end
 
     embeds_one :upgrades, Upgrades, on_replace: :update, primary_key: false do
@@ -352,9 +357,14 @@ defmodule Mydia.Config.Schema do
 
   defp downloads_changeset(schema, attrs) do
     schema
-    |> cast(attrs, [:monitor_interval_minutes, :release_blacklist_default_ttl_days])
+    |> cast(attrs, [
+      :monitor_interval_minutes,
+      :release_blacklist_default_ttl_days,
+      :auto_reject_limit
+    ])
     |> validate_number(:monitor_interval_minutes, greater_than: 0)
     |> validate_number(:release_blacklist_default_ttl_days, greater_than: 0)
+    |> validate_number(:auto_reject_limit, greater_than: 0)
   end
 
   defp upgrades_changeset(schema, attrs) do

@@ -255,6 +255,93 @@ defmodule Mydia.Library.FileAnalyzerTest do
     end
   end
 
+  describe "stream capture" do
+    setup do
+      target_file = write_temp_file("fake video content")
+
+      on_exit(fn ->
+        Application.delete_env(:mydia, :ffprobe_path)
+        File.rm(target_file)
+      end)
+
+      %{target_file: target_file}
+    end
+
+    test "captures every video, audio and subtitle stream", %{target_file: target_file} do
+      shim =
+        write_json_shim(~s({"streams":[
+          {"index":0,"codec_type":"video","codec_name":"hevc","width":3840,"height":2160,"avg_frame_rate":"24000/1001"},
+          {"index":1,"codec_type":"audio","codec_name":"truehd","channels":8,"tags":{"language":"eng"}},
+          {"index":2,"codec_type":"audio","codec_name":"eac3","channels":6,"tags":{"language":"eng"}},
+          {"index":3,"codec_type":"subtitle","codec_name":"subrip","tags":{"language":"spa"}}
+        ],"format":{"duration":"9780.0","format_name":"matroska"}}))
+
+      try do
+        Application.put_env(:mydia, :ffprobe_path, shim)
+
+        assert {:ok, result} = FileAnalyzer.analyze(target_file)
+        assert length(result.streams) == 4
+        assert Enum.map(result.streams, & &1.type) == [:video, :audio, :audio, :subtitle]
+        assert Enum.at(result.streams, 1).channels == 8
+        assert Enum.at(result.streams, 3).language == "spa"
+      after
+        File.rm(shim)
+      end
+    end
+
+    test "drops attachment streams", %{target_file: target_file} do
+      shim =
+        write_json_shim(~s({"streams":[
+          {"index":0,"codec_type":"video","codec_name":"h264","width":1920,"height":1080},
+          {"index":1,"codec_type":"attachment","codec_name":"ttf"}
+        ],"format":{"duration":"60.0","format_name":"matroska"}}))
+
+      try do
+        Application.put_env(:mydia, :ffprobe_path, shim)
+
+        assert {:ok, result} = FileAnalyzer.analyze(target_file)
+        assert length(result.streams) == 1
+        assert hd(result.streams).type == :video
+      after
+        File.rm(shim)
+      end
+    end
+
+    test "returns an empty list when there are no usable streams", %{target_file: target_file} do
+      shim =
+        write_json_shim(~s({"streams":[],"format":{"duration":"60.0","format_name":"matroska"}}))
+
+      try do
+        Application.put_env(:mydia, :ffprobe_path, shim)
+
+        assert {:ok, result} = FileAnalyzer.analyze(target_file)
+        assert result.streams == []
+      after
+        File.rm(shim)
+      end
+    end
+
+    test "leaves the derived flat fields unchanged", %{target_file: target_file} do
+      shim =
+        write_json_shim(~s({"streams":[
+          {"index":0,"codec_type":"video","codec_name":"h264","width":1920,"height":1080},
+          {"index":1,"codec_type":"audio","codec_name":"aac","channels":6}
+        ],"format":{"duration":"60.0","format_name":"matroska"}}))
+
+      try do
+        Application.put_env(:mydia, :ffprobe_path, shim)
+
+        assert {:ok, result} = FileAnalyzer.analyze(target_file)
+        assert result.resolution == "1080p"
+        assert result.width == 1920
+        assert result.height == 1080
+        assert result.container == "mkv"
+      after
+        File.rm(shim)
+      end
+    end
+  end
+
   defp write_temp_file(content) do
     path = Path.join(System.tmp_dir!(), "ffprobe_test_#{:rand.uniform(10_000_000)}.mkv")
     File.write!(path, content)

@@ -1,7 +1,7 @@
 defmodule Mydia.Downloads.Client.QBittorrentTest do
   use ExUnit.Case, async: true
 
-  alias Mydia.Downloads.Client.QBittorrent
+  alias Mydia.Downloads.Client.{Error, QBittorrent}
 
   @config %{
     type: :qbittorrent,
@@ -919,6 +919,115 @@ defmodule Mydia.Downloads.Client.QBittorrentTest do
                  priority: :high,
                  title: "Test"
                )
+    end
+  end
+
+  describe "list_files/2" do
+    test "errors rather than returning relative paths when save_path is blank" do
+      bypass = Bypass.open()
+      config = bypass_config(bypass)
+
+      Bypass.expect(bypass, "POST", "/api/v2/auth/login", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("set-cookie", "SID=abc; path=/")
+        |> Plug.Conn.resp(200, "Ok.")
+      end)
+
+      Bypass.expect(bypass, "GET", "/api/v2/torrents/info", fn conn ->
+        json_resp(conn, 200, [%{"hash" => "abc", "save_path" => ""}])
+      end)
+
+      # The callback contract promises absolute paths. Joining onto "" would
+      # hand back relative ones, so this must fail closed instead.
+      assert {:error, %Error{}} = QBittorrent.list_files(config, "abc")
+    end
+
+    test "returns absolute leaf paths for a multi-file torrent" do
+      bypass = Bypass.open()
+      config = bypass_config(bypass)
+
+      Bypass.expect(bypass, "POST", "/api/v2/auth/login", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("set-cookie", "SID=abc; path=/")
+        |> Plug.Conn.resp(200, "Ok.")
+      end)
+
+      Bypass.expect(bypass, "GET", "/api/v2/torrents/info", fn conn ->
+        json_resp(conn, 200, [%{"hash" => "abc", "save_path" => "/downloads"}])
+      end)
+
+      Bypass.expect(bypass, "GET", "/api/v2/torrents/files", fn conn ->
+        json_resp(conn, 200, [
+          %{"name" => "Minions.Monsters.2026.720p.WEBRip.x264-YTS/movie.mkv", "size" => 1},
+          %{"name" => "Minions.Monsters.2026.720p.WEBRip.x264-YTS/subs.srt", "size" => 2}
+        ])
+      end)
+
+      assert {:ok, files} = QBittorrent.list_files(config, "abc")
+
+      assert files == [
+               "/downloads/Minions.Monsters.2026.720p.WEBRip.x264-YTS/movie.mkv",
+               "/downloads/Minions.Monsters.2026.720p.WEBRip.x264-YTS/subs.srt"
+             ]
+    end
+
+    test "reports names without the .!qB incomplete suffix" do
+      bypass = Bypass.open()
+      config = bypass_config(bypass)
+
+      Bypass.expect(bypass, "POST", "/api/v2/auth/login", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("set-cookie", "SID=abc; path=/")
+        |> Plug.Conn.resp(200, "Ok.")
+      end)
+
+      Bypass.expect(bypass, "GET", "/api/v2/torrents/info", fn conn ->
+        json_resp(conn, 200, [%{"hash" => "abc", "save_path" => "/downloads"}])
+      end)
+
+      Bypass.expect(bypass, "GET", "/api/v2/torrents/files", fn conn ->
+        json_resp(conn, 200, [%{"name" => "movie.mkv", "size" => 1}])
+      end)
+
+      assert {:ok, ["/downloads/movie.mkv"]} = QBittorrent.list_files(config, "abc")
+    end
+
+    test "returns not_found when the torrent is absent" do
+      bypass = Bypass.open()
+      config = bypass_config(bypass)
+
+      Bypass.expect(bypass, "POST", "/api/v2/auth/login", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("set-cookie", "SID=abc; path=/")
+        |> Plug.Conn.resp(200, "Ok.")
+      end)
+
+      Bypass.expect(bypass, "GET", "/api/v2/torrents/info", fn conn ->
+        json_resp(conn, 200, [])
+      end)
+
+      assert {:error, %Error{type: :not_found}} = QBittorrent.list_files(config, "abc")
+    end
+
+    test "returns an error rather than crashing on a malformed files body" do
+      bypass = Bypass.open()
+      config = bypass_config(bypass)
+
+      Bypass.expect(bypass, "POST", "/api/v2/auth/login", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("set-cookie", "SID=abc; path=/")
+        |> Plug.Conn.resp(200, "Ok.")
+      end)
+
+      Bypass.expect(bypass, "GET", "/api/v2/torrents/info", fn conn ->
+        json_resp(conn, 200, [%{"hash" => "abc", "save_path" => "/downloads"}])
+      end)
+
+      Bypass.expect(bypass, "GET", "/api/v2/torrents/files", fn conn ->
+        json_resp(conn, 200, %{"unexpected" => true})
+      end)
+
+      assert {:error, %Error{}} = QBittorrent.list_files(config, "abc")
     end
   end
 

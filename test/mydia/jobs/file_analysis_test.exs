@@ -5,6 +5,7 @@ defmodule Mydia.Jobs.FileAnalysisTest do
   use Oban.Testing, repo: Mydia.Repo
 
   import Ecto.Query
+  import Mydia.MediaFixtures
   import Mydia.SettingsFixtures
 
   alias Mydia.Jobs.FileAnalysis
@@ -170,6 +171,71 @@ defmodule Mydia.Jobs.FileAnalysisTest do
         File.rm(shim)
         File.rm(path)
       end
+    end
+  end
+
+  describe "repair lane backfills streams" do
+    test "selects an analyzed row that has dimensions but no streams" do
+      media_file =
+        media_file_fixture(%{
+          analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second),
+          codec: "h264",
+          resolution: "1080p",
+          metadata: %Mydia.Library.Structs.FileMetadata{
+            width: 1920,
+            height: 1080,
+            streams: nil
+          }
+        })
+
+      rows = FileAnalysis.repair_rows_for_test(50, 3, [])
+
+      assert Enum.any?(rows, &(&1.id == media_file.id))
+    end
+
+    test "does not select a row that already has streams" do
+      media_file =
+        media_file_fixture(%{
+          analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second),
+          codec: "h264",
+          resolution: "1080p",
+          metadata: %Mydia.Library.Structs.FileMetadata{
+            width: 1920,
+            height: 1080,
+            streams: [%Mydia.Library.Structs.StreamInfo{index: 0, type: :video, codec: "h264"}]
+          }
+        })
+
+      rows = FileAnalysis.repair_rows_for_test(50, 3, [])
+
+      refute Enum.any?(rows, &(&1.id == media_file.id))
+    end
+
+    test "the repair write matches a row that has dimensions but no streams" do
+      media_file =
+        media_file_fixture(%{
+          analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second),
+          codec: "h264",
+          resolution: "1080p",
+          metadata: %Mydia.Library.Structs.FileMetadata{
+            width: 1920,
+            height: 1080,
+            streams: nil
+          }
+        })
+
+      result = %Mydia.Library.Structs.FileAnalysisResult{
+        resolution: "1080p",
+        codec: "H.264",
+        width: 1920,
+        height: 1080,
+        streams: [%Mydia.Library.Structs.StreamInfo{index: 0, type: :video, codec: "h264"}]
+      }
+
+      assert :ok = Mydia.Library.apply_repair_analysis_for_test(media_file, result)
+
+      reloaded = Mydia.Library.get_media_file!(media_file.id)
+      assert [%Mydia.Library.Structs.StreamInfo{codec: "h264"}] = reloaded.metadata.streams
     end
   end
 

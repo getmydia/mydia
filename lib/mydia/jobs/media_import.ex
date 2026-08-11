@@ -538,6 +538,15 @@ defmodule Mydia.Jobs.MediaImport do
 
         case Downloads.update_download(updated_download, import_update) do
           {:ok, _updated} ->
+            # A successful import means whatever this item grabbed was real,
+            # so the consecutive-auto-rejection counter that
+            # Mydia.Jobs.DownloadMonitor keeps must not carry over. Without
+            # this, three genuine malware rejections would permanently
+            # disable auto-rejection for the item.
+            if download.media_item_id do
+              Mydia.Search.reset_backoff("auto_reject", download.media_item_id)
+            end
+
             Logger.info("Download marked as imported",
               download_id: download.id,
               has_unresolved: has_unresolved

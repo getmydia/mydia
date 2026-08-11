@@ -40,6 +40,18 @@ defmodule Mydia.Jobs.DownloadMonitorAdoptionBypassTest do
       |> Plug.Conn.resp(200, Jason.encode!([torrent_payload(@hash)]))
     end)
 
+    # DownloadMonitor's pre-completion content check calls list_files/2, which
+    # hits /torrents/files after /torrents/info. Stub it so healthy torrents
+    # are not treated as unknown and so Bypass does not see an unexpected route.
+    Bypass.stub(bypass, "GET", "/api/v2/torrents/files", fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(
+        200,
+        Jason.encode!([%{"name" => "Movie.2024.1080p.mkv", "size" => 1}])
+      )
+    end)
+
     {:ok, bypass: bypass}
   end
 
@@ -174,6 +186,15 @@ defmodule Mydia.Jobs.DownloadMonitorAdoptionBypassTest do
       conn
       |> Plug.Conn.put_resp_content_type("application/json")
       |> Plug.Conn.resp(200, Jason.encode!([torrent_payload(@hash)]))
+    end)
+
+    Bypass.stub(bypass, "GET", "/api/v2/torrents/files", fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(
+        200,
+        Jason.encode!([%{"name" => "Movie.2024.1080p.mkv", "size" => 1}])
+      )
     end)
 
     setup_runtime_config([reachable_client("qbit-new", bypass.port)])

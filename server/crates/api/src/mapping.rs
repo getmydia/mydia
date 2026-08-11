@@ -7,6 +7,7 @@
 //! false, because they are absent from the product rather than unfinished.
 
 use std::collections::HashMap;
+use std::path::Path;
 
 use async_graphql::ID;
 use chrono::{DateTime, TimeZone, Utc};
@@ -122,17 +123,24 @@ pub fn media_file_from(row: &MediaFileRow, external: &[ExternalSubtitleRow]) -> 
         })
         .unwrap_or_default();
 
+    let external_tracks = || -> Vec<Option<SubtitleTrack>> {
+        external
+            .iter()
+            .map(|sub| {
+                Some(SubtitleTrack {
+                    track_id: sub.id.clone(),
+                    language: sub.language.clone(),
+                    title: external_title(&sub.language),
+                    format: sub.format.clone(),
+                    embedded: false,
+                    media_file_id: row.id.clone(),
+                })
+            })
+            .collect()
+    };
+
     // Embedded first, then external, matching extractor.ex:59.
-    tracks.extend(external.iter().map(|sub| {
-        Some(SubtitleTrack {
-            track_id: sub.id.clone(),
-            language: sub.language.clone(),
-            title: external_title(&sub.language),
-            format: sub.format.clone(),
-            embedded: false,
-            media_file_id: row.id.clone(),
-        })
-    }));
+    tracks.extend(external_tracks());
 
     MediaFile {
         id: ID(row.id.clone()),
@@ -140,6 +148,20 @@ pub fn media_file_from(row: &MediaFileRow, external: &[ExternalSubtitleRow]) -> 
         codec: row.codec.clone(),
         audio_codec: row.audio_codec.clone(),
         hdr_format: row.hdr_format.clone(),
+        file_name: Path::new(&row.path)
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned()),
+        directory: Path::new(&row.path)
+            .parent()
+            .map(|dir| dir.to_string_lossy().into_owned()),
+        container: row.container.clone(),
+        duration: row.duration_seconds,
+        // Null, not empty: the contract distinguishes "capture has not run"
+        // from "ran and found nothing", and this scanner does not persist
+        // per-stream detail yet. The player renders null as "not captured
+        // yet" and degrades cleanly, the same way `segments` does below.
+        streams: None,
+        external_subtitles: Some(external_tracks()),
         size: row.size,
         bitrate: row.bitrate.and_then(|v| i32::try_from(v).ok()),
         // Elixir hardcodes true behind a "TODO: Implement based on client

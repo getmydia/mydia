@@ -139,10 +139,13 @@ Future<void> pumpLibrary(
   double? rating,
   List<Override> extraOverrides = const [],
   bool settle = true,
+  double bottomInset = 0,
+  Widget Function(Widget child)? wrap,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
-  tester.view.padding = const FakeViewPadding(top: kStatusBarTop);
+  tester.view.padding =
+      FakeViewPadding(top: kStatusBarTop, bottom: bottomInset);
   addTearDown(tester.view.reset);
 
   final ids = List.generate(itemCount, (i) => '$i');
@@ -161,9 +164,9 @@ Future<void> pumpLibrary(
               .overrideWithValue(const CastCapabilities.full()),
           ...extraOverrides,
         ],
-        child: MaterialApp(
-          home: LibraryScreen(libraryType: libraryType),
-        ),
+        child: wrap == null
+            ? MaterialApp(home: LibraryScreen(libraryType: libraryType))
+            : wrap(LibraryScreen(libraryType: libraryType)),
       ),
     );
 
