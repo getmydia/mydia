@@ -484,16 +484,25 @@ defmodule Mydia.Jobs.DownloadMonitor do
         |> Enum.map(&Path.basename/1)
     )
 
-    if download.media_item_id do
-      Mydia.Search.record_failure("auto_reject", download.media_item_id, "no_importable_files")
-    end
-
     case Queue.reject_release(download,
            actor_type: :system,
            actor_id: "download_monitor",
            failure_reason: "no_importable_files"
          ) do
       {:ok, :rejected} ->
+        # Counted only once the rejection actually happened. Counting it up
+        # front would let a release that can never be rejected (no indexer or
+        # guid, so `Blacklists.extract_key/1` fails) burn through the cap and
+        # suppress future *real* auto-rejections for this item, having never
+        # rejected anything.
+        if download.media_item_id do
+          Mydia.Search.record_failure(
+            "auto_reject",
+            download.media_item_id,
+            "no_importable_files"
+          )
+        end
+
         :ok
 
       {:error, reason} ->

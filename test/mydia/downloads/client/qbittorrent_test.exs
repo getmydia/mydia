@@ -923,6 +923,25 @@ defmodule Mydia.Downloads.Client.QBittorrentTest do
   end
 
   describe "list_files/2" do
+    test "errors rather than returning relative paths when save_path is blank" do
+      bypass = Bypass.open()
+      config = bypass_config(bypass)
+
+      Bypass.expect(bypass, "POST", "/api/v2/auth/login", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("set-cookie", "SID=abc; path=/")
+        |> Plug.Conn.resp(200, "Ok.")
+      end)
+
+      Bypass.expect(bypass, "GET", "/api/v2/torrents/info", fn conn ->
+        json_resp(conn, 200, [%{"hash" => "abc", "save_path" => ""}])
+      end)
+
+      # The callback contract promises absolute paths. Joining onto "" would
+      # hand back relative ones, so this must fail closed instead.
+      assert {:error, %Error{}} = QBittorrent.list_files(config, "abc")
+    end
+
     test "returns absolute leaf paths for a multi-file torrent" do
       bypass = Bypass.open()
       config = bypass_config(bypass)

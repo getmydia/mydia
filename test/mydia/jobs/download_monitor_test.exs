@@ -1242,32 +1242,78 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
       assert Mydia.Downloads.get_download!(download.id)
     end
 
-    test "does not reject a torrent whose file list is a single directory path" do
-      # Reproduces the qBittorrent shape: `files` holds one entry, and that
-      # entry is the torrent's root FOLDER, not a leaf file. Transmission is
-      # used as the transport here only because this describe block already
-      # has a Bypass harness for it; the point is the shape of the data.
-      {bypass, client_config} = start_transmission_bypass()
+    # The regression tests below drive a real qBittorrent adapter rather than
+    # Transmission, because the bug lived entirely in qBittorrent's shape:
+    # `parse_torrent_status/1` reports `files: [content_path]`, and
+    # `content_path` is the torrent's root DIRECTORY for a multi-file torrent.
+    # A Transmission fixture cannot express that, so a Transmission-based test
+    # here would pass both before and after the fix and prove nothing.
+    defp start_qbittorrent_bypass(overrides \\ %{}) do
+      bypass = Bypass.open()
 
-      torrent = %{
-        "hashString" => "folder-hash",
-        "name" => "Minions.Monsters.2026.720p.WEBRip.x264-YTS",
-        "status" => 4,
-        "percentDone" => 0.42,
-        "downloadDir" => "/downloads",
-        "files" => [
-          %{"name" => "Minions.Monsters.2026.720p.WEBRip.x264-YTS/movie.mkv", "length" => 1}
-        ]
+      client_config =
+        download_client_config_fixture(
+          Map.merge(%{type: "qbittorrent", host: "localhost", port: bypass.port}, overrides)
+        )
+
+      Bypass.stub(bypass, "POST", "/api/v2/auth/login", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("set-cookie", "SID=test-sid; HttpOnly")
+        |> Plug.Conn.resp(200, "Ok.")
+      end)
+
+      # reject_release/2 removes the torrent from the client; stub it so the
+      # rejection path can complete instead of erroring on an unknown route.
+      Bypass.stub(bypass, "POST", "/api/v2/torrents/delete", fn conn ->
+        Plug.Conn.resp(conn, 200, "")
+      end)
+
+      {bypass, client_config}
+    end
+
+    defp mock_qbittorrent(bypass, torrents, files) do
+      Bypass.stub(bypass, "GET", "/api/v2/torrents/info", fn conn ->
+        json_resp(conn, 200, torrents)
+      end)
+
+      Bypass.stub(bypass, "GET", "/api/v2/torrents/files", fn conn ->
+        json_resp(conn, 200, files)
+      end)
+    end
+
+    defp qbittorrent_torrent(hash, name) do
+      %{
+        "hash" => hash,
+        "name" => name,
+        "state" => "downloading",
+        "progress" => 0.42,
+        "save_path" => "/downloads",
+        # The whole bug in one field: the root folder, not a file.
+        "content_path" => "/downloads/#{name}"
       }
+    end
 
-      mock_transmission_torrent_get(bypass, [torrent])
+    test "keeps a qBittorrent torrent whose content_path is the release folder" do
+      {bypass, client_config} = start_qbittorrent_bypass()
+
+      # `Path.extname("Minions.Monsters.2026.720p.WEBRip.x264-YTS")` is
+      # ".x264-YTS", which is not a video extension, so judging the torrent
+      # from `content_path` destroyed it mid-download. The real enumeration
+      # below holds an .mkv, so it must survive.
+      name = "Minions.Monsters.2026.720p.WEBRip.x264-YTS"
+
+      mock_qbittorrent(
+        bypass,
+        [qbittorrent_torrent("folder-hash", name)],
+        [%{"name" => "#{name}/movie.mkv", "size" => 1}]
+      )
 
       media_item = media_item_fixture()
 
       download =
         download_fixture(%{
           media_item_id: media_item.id,
-          title: "Minions.Monsters.2026.720p.WEBRip.x264-YTS",
+          title: name,
           indexer: "1337x",
           download_client: client_config.name,
           download_client_id: "folder-hash",
@@ -1279,6 +1325,36 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
       # Still there, still ours, not blacklisted.
       assert Mydia.Downloads.get_download!(download.id)
       refute Mydia.Downloads.Blacklists.blacklisted?("1337x", "guid-folder")
+    end
+
+    test "still rejects a qBittorrent torrent whose enumeration holds no video" do
+      # The other half of the regression: gating on a real enumeration must
+      # not cost qBittorrent users the malware protection this check exists
+      # for. Same directory-shaped content_path, genuinely bad contents.
+      {bypass, client_config} = start_qbittorrent_bypass()
+
+      name = "Some.Movie.2026.720p.WEBRip"
+
+      mock_qbittorrent(
+        bypass,
+        [qbittorrent_torrent("exe-hash", name)],
+        [%{"name" => "#{name}/payload.exe", "size" => 1}]
+      )
+
+      media_item = media_item_fixture()
+
+      download_fixture(%{
+        media_item_id: media_item.id,
+        title: name,
+        indexer: "1337x",
+        download_client: client_config.name,
+        download_client_id: "exe-hash",
+        metadata: %{indexer: "1337x", guid: "guid-exe"}
+      })
+
+      assert :ok = perform_job(DownloadMonitor, %{})
+
+      assert Mydia.Downloads.Blacklists.blacklisted?("1337x", "guid-exe")
     end
 
     test "stamps content_checked_at so the enumeration runs only once" do

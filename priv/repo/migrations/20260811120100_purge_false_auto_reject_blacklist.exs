@@ -16,8 +16,12 @@ defmodule Mydia.Repo.Migrations.PurgeFalseAutoRejectBlacklist do
   #
   # Rows written after the fix carry `no_importable_files` and are untouched.
   #
-  # Plain DELETE with an ISO-8601 literal, identical on SQLite (lexicographic
-  # text comparison) and PostgreSQL (timestamp cast), so no adapter branching.
+  # Plain DELETE. The cutoff is written as a `YYYY-MM-DD HH:MM:SS.ffffff`
+  # timestamp literal, matching the stored format exactly rather than the
+  # `T`-separated ISO-8601 form: SQLite compares it lexicographically as text,
+  # so a format that differs from what is stored would compare wrong, while
+  # PostgreSQL casts it to a timestamp. One literal is correct on both, so no
+  # adapter branching is needed.
   def up do
     execute("""
     DELETE FROM release_blacklist

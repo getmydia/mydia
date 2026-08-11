@@ -596,7 +596,20 @@ defmodule Mydia.Downloads.Client.QBittorrent do
   # /torrents/info is hit first purely for `save_path`: /torrents/files reports
   # each `name` relative to it, and the callback contract promises absolute
   # paths. Both requests share one authenticated session.
-  defp save_path_from_info([torrent | _]), do: {:ok, torrent["save_path"] || ""}
+  # A blank save_path is an error rather than a "" default: `Path.join("", name)`
+  # yields a RELATIVE path, and the callback contract promises absolute ones.
+  # Erroring makes the caller treat the torrent as unevaluated, which is the
+  # safe direction, instead of silently handing back paths of the wrong kind.
+  defp save_path_from_info([torrent | _]) do
+    case torrent["save_path"] do
+      path when is_binary(path) and path != "" ->
+        {:ok, path}
+
+      _blank ->
+        {:error, Error.parse_error("Torrent reported no save_path")}
+    end
+  end
+
   defp save_path_from_info([]), do: {:error, Error.not_found("Torrent not found")}
   defp save_path_from_info(_other), do: {:error, Error.parse_error("Unexpected response body")}
 
