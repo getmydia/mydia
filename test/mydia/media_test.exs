@@ -2174,4 +2174,54 @@ defmodule Mydia.MediaTest do
       assert Media.list_media_items(ids: []) == []
     end
   end
+
+  describe "list_library_items_page/1" do
+    import Mydia.MediaFixtures
+
+    test "marks a movie with an untrashed file as owned" do
+      movie = media_item_fixture(%{type: "movie", title: "Owned Movie"})
+      _file = media_file_fixture(%{media_item_id: movie.id})
+
+      assert [row] = Enum.filter(Media.list_library_items_page(), &(&1.id == movie.id))
+      assert row.owned
+      assert row.type == "movie"
+    end
+
+    test "marks a movie with no files as not owned" do
+      movie = media_item_fixture(%{type: "movie", title: "Catalogued Only"})
+
+      assert [row] = Enum.filter(Media.list_library_items_page(), &(&1.id == movie.id))
+      refute row.owned
+    end
+
+    test "marks a show owned when any episode has an untrashed file" do
+      show = media_item_fixture(%{type: "tv_show", title: "Owned Show"})
+      episode = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
+      _file = media_file_fixture(%{episode_id: episode.id})
+
+      assert [row] = Enum.filter(Media.list_library_items_page(), &(&1.id == show.id))
+      assert row.owned
+    end
+
+    test "ignores trashed files when deciding ownership" do
+      movie = media_item_fixture(%{type: "movie", title: "Trashed Only"})
+
+      _file =
+        media_file_fixture(%{
+          media_item_id: movie.id,
+          trashed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      assert [row] = Enum.filter(Media.list_library_items_page(), &(&1.id == movie.id))
+      refute row.owned
+    end
+
+    test "carries the keyset fields the host cursor needs" do
+      movie = media_item_fixture(%{type: "movie", title: "Cursor Fields"})
+
+      assert [row] = Enum.filter(Media.list_library_items_page(), &(&1.id == movie.id))
+      assert %DateTime{} = row.updated_at
+      assert is_binary(row.id)
+    end
+  end
 end
