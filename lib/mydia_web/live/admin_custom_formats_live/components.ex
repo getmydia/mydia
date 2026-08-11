@@ -68,7 +68,7 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Components do
               >
                 <.icon
                   name="hero-arrow-uturn-left"
-                  class={["w-4 h-4", not @format.overridden? && "opacity-30"]}
+                  class={if(@format.overridden?, do: "w-4 h-4", else: "w-4 h-4 opacity-30")}
                 />
               </button>
             <% else %>
@@ -107,67 +107,104 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Components do
     ~H"""
     <div class="modal modal-open">
       <div class="modal-box max-w-2xl">
-        <h3 class="font-bold text-lg mb-4">
-          {if(@custom_format_mode == :new,
-            do: "New format",
-            else: "Edit #{@editing_custom_format.name}"
-          )}
-        </h3>
-
         <.form
           for={@custom_format_form}
           id="custom-format-form"
           phx-change="validate_custom_format"
           phx-submit="save_custom_format"
         >
-          <.input
-            field={@custom_format_form[:name]}
-            type="text"
-            label="Name"
-            disabled={@editing_custom_format.builtin?}
-          />
-          <.input field={@custom_format_form[:description]} type="text" label="Description" />
-          <.input
-            field={@custom_format_form[:patterns_text]}
-            type="textarea"
-            label="Patterns (one per line)"
-            rows="6"
-          />
+          <%!-- Header --%>
+          <div class="flex items-center gap-3 mb-5">
+            <div class="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
+              <.icon
+                name={
+                  if(@custom_format_mode == :new,
+                    do: "hero-plus-circle",
+                    else: "hero-pencil-square"
+                  )
+                }
+                class="w-5 h-5 text-primary"
+              />
+            </div>
+            <div>
+              <h3 class="font-bold text-lg">
+                {if(@custom_format_mode == :new,
+                  do: "New Format",
+                  else: "Edit #{@editing_custom_format.name}"
+                )}
+              </h3>
+              <p class="text-sm text-base-content/60">
+                {if(@custom_format_mode == :new,
+                  do: "Match release titles by regex. Scores are set per quality profile.",
+                  else: "Update its patterns. Scores are set per quality profile."
+                )}
+              </p>
+            </div>
+          </div>
 
-          <div class="divider">Test</div>
+          <div class="space-y-5">
+            <div>
+              <.input
+                field={@custom_format_form[:name]}
+                type="text"
+                label="Name"
+                disabled={@editing_custom_format.builtin?}
+              />
+              <p :if={@editing_custom_format.builtin?} class="text-xs text-base-content/60 mt-1">
+                Built-in names are fixed. Saving stores a local override of the shipped definition.
+              </p>
+            </div>
 
-          <.input
-            field={@custom_format_form[:test_title]}
-            id="custom-format-test-input"
-            type="text"
-            label="Paste a release title"
-            placeholder="Film.2024.VFF.1080p.WEB-DL.x264-GROUP"
-          />
+            <.input field={@custom_format_form[:description]} type="text" label="Description" />
 
-          <ul :if={@test_results != []} class="mt-2 space-y-1 text-sm">
-            <li :for={r <- @test_results} class="flex items-center gap-2 font-mono">
-              <span :if={r.status == :match} class="custom-format-test-match text-success">
-                <.icon name="hero-check-circle" class="w-4 h-4" />
-              </span>
-              <span :if={r.status == :miss} class="opacity-40">
-                <.icon name="hero-x-circle" class="w-4 h-4" />
-              </span>
-              <span :if={match?({:error, _}, r.status)} class="text-error">
-                <.icon name="hero-exclamation-triangle" class="w-4 h-4" />
-              </span>
-              <span>{r.pattern}</span>
-            </li>
-          </ul>
+            <.input
+              field={@custom_format_form[:patterns_text]}
+              type="textarea"
+              label="Patterns (one per line)"
+              rows="6"
+            />
 
-          <div class="modal-action">
-            <.button type="button" phx-click="close_custom_format_modal" class="btn-ghost">
+            <div class="divider text-xs text-base-content/40 my-2">
+              Test against a release title
+            </div>
+
+            <.input
+              field={@custom_format_form[:test_title]}
+              id="custom-format-test-input"
+              type="text"
+              label="Paste a release title"
+              placeholder="Film.2024.VFF.1080p.WEB-DL.x264-GROUP"
+            />
+
+            <ul :if={@test_results != []} class="space-y-1 text-sm">
+              <li :for={r <- @test_results} class="flex items-center gap-2 font-mono">
+                <span :if={r.status == :match} class="custom-format-test-match text-success">
+                  <.icon name="hero-check-circle" class="w-4 h-4" />
+                </span>
+                <span :if={r.status == :miss} class="opacity-40">
+                  <.icon name="hero-x-circle" class="w-4 h-4" />
+                </span>
+                <span :if={match?({:error, _}, r.status)} class="text-error">
+                  <.icon name="hero-exclamation-triangle" class="w-4 h-4" />
+                </span>
+                <span>{r.pattern}</span>
+              </li>
+            </ul>
+          </div>
+
+          <%!-- Modal Actions --%>
+          <div class="modal-action mt-6 pt-4 border-t border-base-300">
+            <button type="button" class="btn btn-ghost" phx-click="close_custom_format_modal">
               Cancel
-            </.button>
-            <.button type="submit" class="btn-primary">Save</.button>
+            </button>
+            <button type="submit" class="btn btn-primary gap-2">
+              <.icon name="hero-check" class="w-4 h-4" />
+              {if(@custom_format_mode == :new, do: "Add Format", else: "Save Changes")}
+            </button>
           </div>
         </.form>
       </div>
-      <div class="modal-backdrop" phx-click="close_custom_format_modal"></div>
+      <div class="modal-backdrop bg-black/50" phx-click="close_custom_format_modal"></div>
     </div>
     """
   end
