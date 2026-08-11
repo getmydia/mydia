@@ -10,6 +10,8 @@ defmodule Mydia.MediaServer.Plex.Endpoint do
   """
 
   alias Mydia.MediaServer.Error
+  alias Mydia.MediaServer.PlexOAuth
+  alias Mydia.Settings
   alias Mydia.Settings.MediaServerConfig
 
   @table :plex_endpoint_cache
@@ -39,6 +41,42 @@ defmodule Mydia.MediaServer.Plex.Endpoint do
     end
   end
 
+  @doc """
+  Re-fetches the server's advertised addresses from plex.tv and persists them.
+
+  Matches on `machine_identifier` rather than name or address, because the name
+  is editable and every address can change at once. This is the "my Plex server
+  moved" recovery path and requires no operator action.
+
+  Options:
+    * `:plex_tv_base` - override the plex.tv base URL (tests only)
+  """
+  @spec rediscover(MediaServerConfig.t(), keyword()) ::
+          {:ok, MediaServerConfig.t()} | {:error, Error.t()}
+  # Multiple clauses with a default argument require an explicit function head.
+  def rediscover(config, opts \\ [])
+
+  def rediscover(%MediaServerConfig{machine_identifier: nil}, _opts),
+    do: {:error, Error.unexpected("no machine_identifier recorded; reconnect this server")}
+
+  def rediscover(%MediaServerConfig{} = config, opts) do
+    with {:ok, servers} <- PlexOAuth.list_servers(config.token, opts),
+         %{} = match <- find_by_identifier(servers, config.machine_identifier),
+         {:ok, updated} <- persist(config, match) do
+      invalidate(config)
+      {:ok, updated}
+    else
+      nil ->
+        {:error, Error.unexpected("server #{config.machine_identifier} not on this account")}
+
+      {:error, %Error{}} = err ->
+        err
+
+      {:error, reason} ->
+        {:error, Error.unexpected(inspect(reason))}
+    end
+  end
+
   @doc "Drops the cached winner so the next resolve re-probes."
   @spec invalidate(MediaServerConfig.t()) :: :ok
   def invalidate(%MediaServerConfig{id: id}) do
@@ -57,7 +95,9 @@ defmodule Mydia.MediaServer.Plex.Endpoint do
 
   # ── Private ────────────────────────────────────────────────────────
 
-  defp probe_all(%MediaServerConfig{connections: connections, token: token} = config) do
+  defp probe_all(config), do: probe_all(config, false)
+
+  defp probe_all(%MediaServerConfig{connections: connections, token: token} = config, retried?) do
     uris = connections |> Enum.map(&candidate_uri/1) |> Enum.reject(&is_nil/1) |> Enum.uniq()
 
     results =
@@ -78,7 +118,17 @@ defmodule Mydia.MediaServer.Plex.Endpoint do
         {:ok, uri}
 
       nil ->
-        {:error, worst_error(results)}
+        error = worst_error(results)
+
+        if not retried? and error.kind == :unreachable and
+             is_binary(config.machine_identifier) do
+          case rediscover(config) do
+            {:ok, updated} -> probe_all(updated, true)
+            {:error, _} -> {:error, error}
+          end
+        else
+          {:error, error}
+        end
     end
   end
 
@@ -93,6 +143,39 @@ defmodule Mydia.MediaServer.Plex.Endpoint do
       Enum.find(errors, &(&1.kind == :unexpected)) ||
       List.first(errors) ||
       Error.unreachable("all candidates failed")
+  end
+
+  defp find_by_identifier(servers, identifier) do
+    Enum.find(servers, &(&1.machine_identifier == identifier))
+  end
+
+  defp persist(config, server) do
+    Settings.update_media_server_config(config, %{
+      connections: connections_for_storage(server.connections),
+      server_access_token: server.access_token
+    })
+  end
+
+  # parse_server/1 yields atom-keyed connection maps for LiveView; storage and
+  # reload use string keys via Jason, so persist the same shape the DB returns.
+  defp connections_for_storage(connections) do
+    Enum.map(connections, fn
+      %{uri: _} = conn ->
+        %{
+          "uri" => conn.uri,
+          "protocol" => conn.protocol,
+          "address" => conn.address,
+          "port" => conn.port,
+          "local" => conn.local,
+          "relay" => conn.relay
+        }
+
+      %{"uri" => _} = conn ->
+        conn
+
+      other ->
+        other
+    end)
   end
 
   defp candidate_uri(%{"uri" => uri}) when is_binary(uri), do: uri

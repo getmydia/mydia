@@ -279,7 +279,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
   end
 
   @impl true
-  def handle_event("select_plex_connection", %{"url" => url}, socket) do
+  def handle_event("select_plex_connection", %{"url" => _url}, socket) do
     server = socket.assigns.plex_selected_server
     token = socket.assigns.plex_oauth_token
 
@@ -289,12 +289,17 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
         :edit -> socket.assigns.editing_media_server
       end
 
+    # url stays nil so it remains a pure manual override; discovery owns the
+    # candidate list and Endpoint.resolve/1 picks a working address at call time.
     changeset =
       Settings.change_media_server_config(server_base, %{
         name: server.name,
         type: :plex,
-        url: url,
+        url: nil,
         token: token,
+        machine_identifier: server.machine_identifier,
+        connections: server.connections,
+        server_access_token: server.access_token,
         enabled: true
       })
 

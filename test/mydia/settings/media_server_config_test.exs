@@ -44,4 +44,45 @@ defmodule Mydia.Settings.MediaServerConfigTest do
       assert %MediaServerConfig{}.connections == []
     end
   end
+
+  describe "changeset/2 addressability" do
+    test "a Plex config with discovery data needs no url" do
+      changeset =
+        MediaServerConfig.changeset(%MediaServerConfig{}, %{
+          name: "Storage",
+          type: :plex,
+          machine_identifier: "cf3ab3f4",
+          connections: [%{"uri" => "http://localhost:32400"}]
+        })
+
+      assert changeset.valid?
+    end
+
+    test "a Jellyfin config without a url is rejected" do
+      # Jellyfin has no discovery, and Client.Jellyfin calls
+      # String.trim_trailing(config.url, "/"), which raises on nil. Letting this
+      # save would move the failure from validation to runtime.
+      changeset = MediaServerConfig.changeset(%MediaServerConfig{}, %{name: "J", type: :jellyfin})
+
+      refute changeset.valid?
+      assert %{url: ["can't be blank"]} = errors_on(changeset)
+    end
+
+    test "a Plex config with neither url nor discovery data is rejected" do
+      changeset = MediaServerConfig.changeset(%MediaServerConfig{}, %{name: "P", type: :plex})
+
+      refute changeset.valid?
+    end
+
+    test "a blank url does not count as addressable" do
+      changeset =
+        MediaServerConfig.changeset(%MediaServerConfig{}, %{
+          name: "J",
+          type: :jellyfin,
+          url: "   "
+        })
+
+      refute changeset.valid?
+    end
+  end
 end

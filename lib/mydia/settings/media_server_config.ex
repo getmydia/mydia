@@ -66,8 +66,39 @@ defmodule Mydia.Settings.MediaServerConfig do
       :last_auth_error_at,
       :updated_by_id
     ])
-    |> validate_required([:name, :type, :url])
+    |> validate_required([:name, :type])
     |> validate_inclusion(:type, @server_types)
+    |> validate_addressable()
     |> unique_constraint(:name)
   end
+
+  # `url` stopped being unconditionally required when Plex gained discovery: a
+  # Plex config addresses itself through `connections` and resolves an endpoint
+  # at call time. Every other server type still has only `url` to go on, and
+  # `Client.Jellyfin` calls `String.trim_trailing(config.url, "/")` directly,
+  # which raises on nil. So the requirement is per-type rather than dropped.
+  defp validate_addressable(changeset) do
+    url = get_field(changeset, :url)
+
+    cond do
+      present?(url) ->
+        changeset
+
+      get_field(changeset, :type) == :plex and addressable_by_discovery?(changeset) ->
+        changeset
+
+      get_field(changeset, :type) == :plex ->
+        add_error(changeset, :url, "is required until a Plex server is discovered")
+
+      true ->
+        add_error(changeset, :url, "can't be blank")
+    end
+  end
+
+  defp addressable_by_discovery?(changeset) do
+    present?(get_field(changeset, :machine_identifier)) or
+      get_field(changeset, :connections) not in [nil, []]
+  end
+
+  defp present?(value), do: is_binary(value) and String.trim(value) != ""
 end
