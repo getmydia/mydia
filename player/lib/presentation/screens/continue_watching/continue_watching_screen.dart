@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/graphql/watch/query_key.dart';
 import '../../../core/layout/breakpoints.dart';
+import '../../../core/layout/dock_insets.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/models/continue_watching_item.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
@@ -240,10 +241,9 @@ class _ContinueWatchingScreenState
     List<ContinueWatchingItem> items,
     double scrollTopPadding,
   ) {
-    final isDesktop = Breakpoints.isDesktop(context);
     final horizontalPadding = Breakpoints.getHorizontalPadding(context);
     final cardSpacing = Breakpoints.getCardSpacing(context);
-    final bottomPadding = isDesktop ? 32.0 : 100.0;
+    final bottomPadding = DockInsets.bottomOf(context);
 
     return LayoutBuilder(
       builder: (context, constraints) {

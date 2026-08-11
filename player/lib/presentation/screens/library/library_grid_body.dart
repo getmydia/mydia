@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/graphql/watch/query_key.dart';
 import '../../../core/layout/breakpoints.dart';
+import '../../../core/layout/dock_insets.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/navigation/media_filter.dart';
 import '../../models/library_data.dart';
@@ -284,10 +285,9 @@ class _LibraryMediaBodyState extends ConsumerState<LibraryMediaBody> {
   }
 
   Widget _buildGridView(BuildContext context, List<LibraryItem> items) {
-    final isDesktop = Breakpoints.isDesktop(context);
     final horizontalPadding = Breakpoints.getHorizontalPadding(context);
     final cardSpacing = Breakpoints.getCardSpacing(context);
-    final bottomPadding = isDesktop ? 32.0 : 100.0;
+    final bottomPadding = DockInsets.bottomOf(context);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -320,9 +320,8 @@ class _LibraryMediaBodyState extends ConsumerState<LibraryMediaBody> {
   }
 
   Widget _buildListView(BuildContext context, List<LibraryItem> items) {
-    final isDesktop = Breakpoints.isDesktop(context);
     final horizontalPadding = Breakpoints.getHorizontalPadding(context);
-    final bottomPadding = isDesktop ? 32.0 : 100.0;
+    final bottomPadding = DockInsets.bottomOf(context);
 
     return ListView.builder(
       controller: widget.scrollController,
