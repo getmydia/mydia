@@ -78,8 +78,7 @@ metadata-relay/
 │   │   ├── router.ex          # HTTP router (Plug)
 │   │   ├── plug/              # Cache, metrics, and other plugs
 │   │   ├── tmdb/              # TMDB proxy handlers
-│   │   ├── tvdb/              # TVDB proxy handlers + auth
-│   │   └── trakt/             # Trakt proxy handlers
+│   │   └── tvdb/              # TVDB proxy handlers + auth
 │   └── metadata_relay_web/    # Phoenix router for error dashboard
 ├── config/                    # dev, test, prod, runtime configs
 ├── priv/repo/migrations/      # Ecto migrations
