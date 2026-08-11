@@ -300,8 +300,6 @@ config :mydia, Oban,
        {"*/5 * * * *", Mydia.Jobs.SegmentDetectionScheduler},
        # Refresh metadata for all monitored items weekly on Sunday at 5 AM
        {"0 5 * * 0", Mydia.Jobs.MetadataRefresh, args: %{"refresh_all" => true}},
-       # Refresh Trakt tokens approaching expiry daily at 6 AM
-       {"0 6 * * *", Mydia.Jobs.TraktTokenRefresh},
        # Permanently delete trashed media files past retention period daily at 5 AM
        {"0 5 * * *", Mydia.Jobs.TrashCleanup},
        # Sync watched status with media servers every 30 minutes
