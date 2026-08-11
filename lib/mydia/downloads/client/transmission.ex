@@ -223,6 +223,20 @@ defmodule Mydia.Downloads.Client.Transmission do
   end
 
   @impl true
+  def list_files(config, client_id) do
+    # `resolve_torrent_files/2` already produces a genuine leaf enumeration
+    # from torrent-get's `files` array, so `get_status/2` is the single source
+    # of truth here. `files` is nil when the client reported none yet, which
+    # the callback contract represents as an empty list ("unknown"), never as
+    # "this torrent is empty".
+    case get_status(config, client_id) do
+      {:ok, %DownloadStatus{files: files}} when is_list(files) -> {:ok, files}
+      {:ok, %DownloadStatus{}} -> {:ok, []}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @impl true
   def remove_torrent(config, client_id, opts \\ []) do
     # client_id is the torrent hash string
     torrent_id = parse_torrent_id(client_id)
