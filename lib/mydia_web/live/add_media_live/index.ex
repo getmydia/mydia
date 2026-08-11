@@ -61,7 +61,10 @@ defmodule MydiaWeb.AddMediaLive.Index do
   defp load_library_paths(socket, type) do
     paths =
       Settings.list_library_paths()
-      |> Enum.filter(&((&1.type == type or &1.type == :mixed) and &1.monitored))
+      |> Enum.filter(fn lp ->
+        (lp.type == type or lp.type == :mixed) and lp.monitored and
+          not String.starts_with?(to_string(lp.id), "runtime::")
+      end)
 
     assign(socket, :library_paths, paths)
   end
@@ -414,7 +417,8 @@ defmodule MydiaWeb.AddMediaLive.Index do
       imdb_id: metadata.imdb_id,
       metadata: metadata,
       monitored: config.monitored,
-      quality_profile_id: config.quality_profile_id
+      quality_profile_id: config.quality_profile_id,
+      library_path_id: config.library_path_id
     }
 
     # For TV shows fetched via TVDB, store tvdb_id; for movies, store tmdb_id

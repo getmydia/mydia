@@ -8,6 +8,7 @@ defmodule MydiaWeb.AddMediaLive.ConfigModalTest do
   import Mydia.SettingsFixtures
   import Mydia.AccountsFixtures
 
+  alias Mydia.Media
   alias Mydia.Metadata.Provider
   alias Mydia.Metadata.Structs.{ImagesResponse, MediaMetadata, SearchResult}
 
@@ -104,10 +105,52 @@ defmodule MydiaWeb.AddMediaLive.ConfigModalTest do
 
       assert_no_crash(view)
     end
+
+    test "stores the selected library on the created item", %{conn: conn, library: library} do
+      {:ok, view, _html} = live(conn, ~p"/add/movie?q=matrix")
+
+      assert render(view) =~ "The Matrix"
+
+      view
+      |> element(~s(button[phx-click="open_config_modal"][phx-value-index="0"]))
+      |> render_click()
+
+      params = %{
+        "config" => %{
+          "library_path_id" => to_string(library.id),
+          "quality_profile_id" => "",
+          "season_monitoring" => "all"
+        }
+      }
+
+      render_hook(view, "submit_config_modal", params)
+
+      # Poll briefly: creation happens in handle_info after a metadata fetch.
+      assert eventually(fn ->
+               case Media.list_media_items() do
+                 [item | _] -> item.library_path_id == library.id
+                 [] -> false
+               end
+             end)
+    end
   end
 
   defp assert_no_crash(view) do
     # A LiveView that died mid-handle_info raises here; a live one renders.
     assert render(view) =~ "add"
+  end
+
+  defp eventually(fun, retries \\ 20) do
+    cond do
+      fun.() ->
+        true
+
+      retries == 0 ->
+        false
+
+      true ->
+        Process.sleep(50)
+        eventually(fun, retries - 1)
+    end
   end
 end
