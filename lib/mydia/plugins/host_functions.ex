@@ -572,6 +572,13 @@ defmodule Mydia.Plugins.HostFunctions do
     {:ok, %{items: items, "next-cursor": next_cursor(next)}}
   end
 
+  defp list_namespace(_plugin, "library_item", cursor, since, limit) do
+    rows = Media.list_library_items_page(after: cursor, updated_since: since, limit: limit + 1)
+    {page, next} = paginate(rows, limit)
+    items = Enum.map(page, fn row -> {:"library-item", to_library_item(row)} end)
+    {:ok, %{items: items, "next-cursor": next_cursor(next)}}
+  end
+
   defp list_namespace(plugin, "playback_progress", cursor, since, limit) do
     # Consent-scoped (R21): only users with an active connection to this plugin
     # are visible — a non-connected user's rows are absent entirely.
@@ -641,6 +648,24 @@ defmodule Mydia.Plugins.HostFunctions do
 
   defp clamp_list_limit(n) when is_integer(n) and n > 0, do: min(n, @data_list_page_cap)
   defp clamp_list_limit(_), do: @data_list_page_cap
+
+  # Library row -> the WIT library-item record. Ownership is the whole point of
+  # the namespace: `media-item` carries metadata but cannot answer "do we have
+  # the file", which is what a sync guest needs to distinguish a catalogued item
+  # from an owned one.
+  defp to_library_item(row) do
+    %{
+      id: row.id,
+      "item-type": row.type || "",
+      title: row.title || "",
+      year: to_option(row.year),
+      "tmdb-id": to_option(row.tmdb_id),
+      "tvdb-id": to_option(row.tvdb_id),
+      "imdb-id": to_option(row.imdb_id),
+      owned: row.owned == true,
+      "updated-at": DateTime.to_iso8601(row.updated_at)
+    }
+  end
 
   # Progress row -> the WIT playback-progress record. A movie carries the item's
   # own external ids; an episode carries its coordinates plus the show's ids.

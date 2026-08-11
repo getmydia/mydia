@@ -143,7 +143,7 @@ defmodule Mydia.Plugins.Manifest do
   # is served by both `data-read` (single) and `data-list` (enumerate);
   # `playback_progress` (U5) is a `data-list`-only per-user watch projection,
   # consent-scoped to users with an active connection to the calling plugin.
-  @data_namespaces ~w(media_item playback_progress)
+  @data_namespaces ~w(media_item playback_progress library_item)
 
   # Field types a `settings_schema` entry may declare. `text` renders as a
   # multiline textarea (used for template fields); otherwise like `string`.

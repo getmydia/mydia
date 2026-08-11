@@ -449,6 +449,32 @@ defmodule Mydia.Plugins.HostFunctionsTest do
     end
   end
 
+  describe "data_list/2 library_item namespace" do
+    test "denies a plugin without the library_item namespace" do
+      p = plugin(%{"data:read" => ["media_item"]})
+
+      assert {:error, %Error{type: :capability_denied}} =
+               HostFunctions.data_list(p, %{namespace: "library_item"})
+    end
+
+    test "projects the owned flag onto the WIT record" do
+      movie = media_item_fixture(%{type: "movie", title: "Owned"})
+      _file = media_file_fixture(%{media_item_id: movie.id})
+
+      p = plugin(%{"data:read" => ["library_item"]})
+
+      assert {:ok, %{items: items}} =
+               HostFunctions.data_list(p, %{namespace: "library_item"})
+
+      assert {:"library-item", record} =
+               Enum.find(items, fn {_tag, r} -> r.id == movie.id end)
+
+      assert record.owned == true
+      assert record[:"item-type"] == "movie"
+      assert is_binary(record[:"updated-at"])
+    end
+  end
+
   describe "connection_request/4 (host-attached auth)" do
     setup do
       {:ok, _} =
