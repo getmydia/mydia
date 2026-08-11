@@ -18,6 +18,7 @@ import '../../widgets/cast_button.dart';
 import '../../widgets/cast_rail.dart';
 import '../../widgets/content_rail.dart';
 import '../../widgets/detail_action_row.dart';
+import '../../widgets/media_info/media_info_sheet.dart';
 import '../../widgets/movie_watched_controls.dart';
 import '../../widgets/hero_play_control.dart';
 
@@ -273,6 +274,13 @@ class MovieDetailScreen extends ConsumerWidget {
       showDownload: isDownloadSupported && movie.files.isNotEmpty,
       isDownloaded:
           ref.watch(isMediaDownloadedProvider(movie.id)).value ?? false,
+      onShowMediaInfo: movie.files.isEmpty
+          ? null
+          : () => showMediaInfo(
+                context: context,
+                id: movie.id,
+                target: MediaInfoTarget.movie,
+              ),
     );
   }
 
