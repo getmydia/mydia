@@ -174,7 +174,7 @@ defmodule Mydia.Plugins.HostFunctionsTest do
 
       imports = builder.(%{slug: "tester", invocation_id: "x", test_run: false})
 
-      assert %{"mydia:plugin/host@1.2.0" => fns} = imports
+      assert %{"mydia:plugin/host@1.3.0" => fns} = imports
 
       assert %{"http-request" => {:fn, f1}, "data-read" => {:fn, f2}, "log" => {:fn, f3}} = fns
       assert is_function(f1, 1) and is_function(f2, 1) and is_function(f3, 2)
@@ -190,6 +190,28 @@ defmodule Mydia.Plugins.HostFunctionsTest do
                "connections-list" => {:fn, _},
                "connection-request" => {:fn, _}
              } = fns
+    end
+
+    test "narrows each older namespace to the functions that version declared" do
+      builder = HostFunctions.imports_for("tester")
+      imports = builder.(%{slug: "tester", invocation_id: "x", test_run: false})
+
+      v13 = Map.fetch!(imports, "mydia:plugin/host@1.3.0")
+      v12 = Map.fetch!(imports, "mydia:plugin/host@1.2.0")
+      v11 = Map.fetch!(imports, "mydia:plugin/host@1.1.0")
+
+      # Offering a newer function under an older key is not harmless: wasmtime
+      # links against the guest's exact imported interface, so an older guest
+      # must be handed exactly what its own contract declared.
+      assert Map.has_key?(v13, "ensure-favorite")
+      assert Map.has_key?(v13, "set-watch-state")
+
+      refute Map.has_key?(v12, "ensure-favorite")
+      assert Map.has_key?(v12, "set-watch-state")
+
+      refute Map.has_key?(v11, "ensure-favorite")
+      refute Map.has_key?(v11, "set-watch-state")
+      assert Map.has_key?(v11, "ensure-watched")
     end
   end
 

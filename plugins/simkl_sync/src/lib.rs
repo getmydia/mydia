@@ -58,6 +58,25 @@ fn on_schedule(tick: ScheduleTick) -> Result<String, String> {
 
     let settings = list_settings_from(&tick.config_json);
 
+    // One full progress scan per tick, not per connection. `data-list` is
+    // consent-scoped host-side, so a single fetch covers every connected user,
+    // and `local_intent_set` already filters by user id. Skipped entirely when
+    // no connection will use it.
+    let progress = if conns
+        .iter()
+        .any(|c| !matches!(c.status, ConnectionStatus::Error))
+    {
+        match list_progress(None) {
+            Ok(rows) => rows,
+            Err(SyncError::Unauthorized) => Vec::new(),
+            Err(SyncError::Host(msg)) => {
+                return Err(format!("data-list playback_progress failed: {msg}"))
+            }
+        }
+    } else {
+        Vec::new()
+    };
+
     let mut invalid: Vec<String> = Vec::new();
     let mut pulled_total = 0usize;
     let mut pushed_total = 0usize;
@@ -70,7 +89,7 @@ fn on_schedule(tick: ScheduleTick) -> Result<String, String> {
             continue;
         }
 
-        match sync_connection(&conn, &api_base, &settings) {
+        match sync_connection(&conn, &api_base, &settings, &progress) {
             Ok(counts) => {
                 host::log(
                     "info",
@@ -161,6 +180,7 @@ fn sync_connection(
     conn: &Connection,
     api_base: &str,
     settings: &ListSettings,
+    progress: &[PlaybackProgress],
 ) -> Result<Counts, SyncError> {
     // The history legs and the list leg are independent: a Simkl failure in one
     // must not cost the other its run, since they share no state beyond the
@@ -173,7 +193,7 @@ fn sync_connection(
         return Err(SyncError::Unauthorized);
     }
 
-    let lists = sync_lists(conn, api_base, settings);
+    let lists = sync_lists(conn, api_base, settings, progress);
 
     if matches!(lists, Err(SyncError::Unauthorized)) {
         return Err(SyncError::Unauthorized);
@@ -306,7 +326,7 @@ fn push(
     }
 
     let watermark = kv_get(&watermark_key);
-    let rows = list_progress(conn, watermark.as_deref());
+    let rows = list_progress(watermark.as_deref())?;
 
     let to_push: Vec<PushItem> = rows
         .iter()
@@ -347,7 +367,7 @@ fn push(
 /// attaching a media file to an existing item does not necessarily touch
 /// `media_items.updated_at`, so a delta window would miss items catalogued
 /// first and downloaded later.
-fn list_library() -> Vec<LibraryItem> {
+fn list_library() -> Result<Vec<LibraryItem>, SyncError> {
     let mut out = Vec::new();
     let mut cursor: Option<String> = None;
 
@@ -359,10 +379,8 @@ fn list_library() -> Vec<LibraryItem> {
             limit: Some(200),
         };
 
-        let result = match host::data_list(&req) {
-            Ok(r) => r,
-            Err(_) => break,
-        };
+        let result = host::data_list(&req)
+            .map_err(|e| SyncError::Host(format!("data-list library_item: {:?}", e)))?;
 
         for item in result.items {
             if let ListItem::LibraryItem(l) = item {
@@ -376,7 +394,7 @@ fn list_library() -> Vec<LibraryItem> {
         }
     }
 
-    out
+    Ok(out)
 }
 
 /// The list leg: one set difference in each direction.
@@ -390,6 +408,7 @@ fn sync_lists(
     conn: &Connection,
     api_base: &str,
     settings: &ListSettings,
+    progress: &[PlaybackProgress],
 ) -> Result<(usize, usize), SyncError> {
     let pending_key = key(conn, "lists_pending");
 
@@ -400,9 +419,8 @@ fn sync_lists(
         let _ = host::kv_delete(&pending_key);
     }
 
-    let library = list_library();
-    let progress = list_progress(conn, None);
-    let intent = local_intent_set(&library, &progress, &conn.user_id);
+    let library = list_library()?;
+    let intent = local_intent_set(&library, progress, &conn.user_id);
 
     let mut remote: Vec<ListEntry> = Vec::new();
     for (path, is_show) in [("movies", false), ("shows", true)] {
@@ -527,7 +545,11 @@ fn clear_pulled_set(conn: &Connection) {
 
 // ── data-list (paginated) ─────────────────────────────────────────────────────
 
-fn list_progress(conn: &Connection, updated_since: Option<&str>) -> Vec<PlaybackProgress> {
+// A truncated page here is not a smaller answer, it is a wrong one: the list
+// leg derives set differences from these rows, so a swallowed `Denied` (an
+// operator has not re-approved a widened grant yet) would read as "nothing is
+// watched" and push the whole library. Errors propagate.
+fn list_progress(updated_since: Option<&str>) -> Result<Vec<PlaybackProgress>, SyncError> {
     let mut out = Vec::new();
     let mut cursor: Option<String> = None;
 
@@ -539,10 +561,8 @@ fn list_progress(conn: &Connection, updated_since: Option<&str>) -> Vec<Playback
             limit: Some(200),
         };
 
-        let result = match host::data_list(&req) {
-            Ok(r) => r,
-            Err(_) => break,
-        };
+        let result = host::data_list(&req)
+            .map_err(|e| SyncError::Host(format!("data-list playback_progress: {:?}", e)))?;
 
         for item in result.items {
             if let ListItem::PlaybackProgress(p) = item {
@@ -556,8 +576,7 @@ fn list_progress(conn: &Connection, updated_since: Option<&str>) -> Vec<Playback
         }
     }
 
-    let _ = conn;
-    out
+    Ok(out)
 }
 
 // ── Pure helpers (unit-tested) ────────────────────────────────────────────────

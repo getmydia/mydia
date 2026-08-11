@@ -784,7 +784,19 @@ defmodule Mydia.Plugins.HostFunctions do
            {:ok, _item} <- Collections.add_item(favorites, media_item_id) do
         {:ok, %{status: :changed}}
       else
-        _ -> {:error, Error.new(:internal, "could not add favorite")}
+        # The check above is not atomic with the insert. A concurrent favorite
+        # (the user tapping the star while a sync tick runs) trips the
+        # `collection_items` unique index, which is the same outcome the check
+        # guards against, so report it as such rather than as a host failure.
+        {:error, %Ecto.Changeset{errors: errors}} ->
+          if Keyword.has_key?(errors, :collection_id) or Keyword.has_key?(errors, :media_item_id) do
+            {:ok, %{status: :"already-favorited"}}
+          else
+            {:error, Error.new(:internal, "could not add favorite")}
+          end
+
+        _ ->
+          {:error, Error.new(:internal, "could not add favorite")}
       end
     end
   end
