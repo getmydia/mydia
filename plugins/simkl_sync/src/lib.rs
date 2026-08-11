@@ -162,9 +162,25 @@ fn sync_connection(
     api_base: &str,
     settings: &ListSettings,
 ) -> Result<Counts, SyncError> {
-    let (pulled_keys, pulled, unmatched) = pull(conn, api_base)?;
-    let pushed = push(conn, api_base, &pulled_keys)?;
-    let (listed, favorited) = sync_lists(conn, api_base, settings)?;
+    // The history legs and the list leg are independent: a Simkl failure in one
+    // must not cost the other its run, since they share no state beyond the
+    // connection. A 401 is the exception — the token is dead for both, so it
+    // propagates and marks the connection invalid instead of silently syncing
+    // nothing on every tick.
+    let history = history_legs(conn, api_base);
+
+    if matches!(history, Err(SyncError::Unauthorized)) {
+        return Err(SyncError::Unauthorized);
+    }
+
+    let lists = sync_lists(conn, api_base, settings);
+
+    if matches!(lists, Err(SyncError::Unauthorized)) {
+        return Err(SyncError::Unauthorized);
+    }
+
+    let (pulled, pushed, unmatched) = leg_or_default(history, "history", (0, 0, 0));
+    let (listed, favorited) = leg_or_default(lists, "list", (0, 0));
 
     Ok(Counts {
         pulled,
@@ -173,6 +189,27 @@ fn sync_connection(
         listed,
         favorited,
     })
+}
+
+// The watched-state legs, run as a unit: push consumes pull's echo guard, so
+// these two genuinely do depend on each other.
+fn history_legs(conn: &Connection, api_base: &str) -> Result<(usize, usize, usize), SyncError> {
+    let (pulled_keys, pulled, unmatched) = pull(conn, api_base)?;
+    let pushed = push(conn, api_base, &pulled_keys)?;
+    Ok((pulled, pushed, unmatched))
+}
+
+// Narrates a failed leg and yields zero counts for it, so one leg's outage
+// never suppresses the other's reporting.
+fn leg_or_default<T>(result: Result<T, SyncError>, leg: &str, fallback: T) -> T {
+    match result {
+        Ok(value) => value,
+        Err(SyncError::Host(msg)) => {
+            host::log("warn", &format!("simkl {leg} leg failed: {msg}"));
+            fallback
+        }
+        Err(SyncError::Unauthorized) => fallback,
+    }
 }
 
 // Pull leg — gated by the activities cursor. Returns the pulled-set (for the
@@ -636,20 +673,24 @@ fn intent_key(imdb: Option<&str>, tmdb: Option<i64>, tvdb: Option<i64>) -> Strin
     item_key(imdb, tmdb, tvdb, None, None)
 }
 
-/// The local intent set D: owned, and with no watch progress for this user.
+/// The local intent set D: owned, and with nothing *watched* by this user.
 ///
 /// Progress rows are keyed item-level on purpose. An episode row carries its
 /// *show's* external ids (the host's `progress_dimensions`), so one watched
 /// episode drops the whole show out of D, which is correct: Simkl already
 /// files a partly watched show under "watching" from the history leg.
+///
+/// Only `watched` rows count. An abandoned start is not a watch, and treating
+/// it as one would strand the item: the history leg pushes watched items only,
+/// so it would appear on neither Simkl list.
 fn local_intent_set(
     library: &[LibraryItem],
     progress: &[PlaybackProgress],
     user_id: &str,
 ) -> BTreeSet<String> {
-    let touched: BTreeSet<String> = progress
+    let watched: BTreeSet<String> = progress
         .iter()
-        .filter(|p| p.user_id == user_id)
+        .filter(|p| p.user_id == user_id && p.watched)
         .map(|p| intent_key(p.imdb_id.as_deref(), p.tmdb_id, p.tvdb_id))
         .collect();
 
@@ -659,7 +700,7 @@ fn local_intent_set(
         .map(|l| intent_key(l.imdb_id.as_deref(), l.tmdb_id, l.tvdb_id))
         // `k` is a `&String` here, so compare and look up through `as_str()`:
         // `&String == &str` is not implemented.
-        .filter(|k| k.as_str() != "unknown" && !touched.contains(k.as_str()))
+        .filter(|k| k.as_str() != "unknown" && !watched.contains(k.as_str()))
         .collect()
 }
 
@@ -1430,8 +1471,20 @@ mod tests {
         let set = local_intent_set(&library, &progress, "u1");
 
         assert!(set.contains("imdb:tt1"));
-        assert!(!set.contains("imdb:tt2"), "any progress removes an item");
+        assert!(!set.contains("imdb:tt2"), "a watched item is not intent");
         assert!(!set.contains("imdb:tt3"), "not owned is not intent");
+    }
+
+    #[test]
+    fn local_intent_set_keeps_an_abandoned_start() {
+        // Started but never finished is not a watch. If this dropped out of D,
+        // the item would reach neither Simkl list: the history leg pushes only
+        // watched rows.
+        let library = vec![lib_item("owned", "movie", Some("tt1"), true)];
+        let mut row = progress_row("u1", "movie", Some("tt1"));
+        row.watched = false;
+
+        assert!(local_intent_set(&library, &[row], "u1").contains("imdb:tt1"));
     }
 
     #[test]
