@@ -1345,6 +1345,77 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
       # willing to look again on the next poll.
       refute Mydia.Downloads.get_download!(download.id).content_checked_at
     end
+
+    test "stops auto-rejecting a media item after the configured limit" do
+      {bypass, client_config} = start_transmission_bypass()
+      media_item = media_item_fixture()
+
+      # Pre-load the counter to the default limit of 3.
+      for _ <- 1..3 do
+        Mydia.Search.record_failure("auto_reject", media_item.id, "no_importable_files")
+      end
+
+      torrent = %{
+        "hashString" => "capped-hash",
+        "name" => "Some.Movie.2026.720p",
+        "status" => 4,
+        "percentDone" => 0.42,
+        "downloadDir" => "/downloads",
+        "files" => [%{"name" => "Some.Movie.2026.720p/payload.exe", "length" => 1}]
+      }
+
+      mock_transmission_torrent_get(bypass, [torrent])
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          title: "Some.Movie.2026.720p",
+          indexer: "1337x",
+          download_client: client_config.name,
+          download_client_id: "capped-hash",
+          metadata: %{indexer: "1337x", guid: "guid-capped"}
+        })
+
+      assert :ok = perform_job(DownloadMonitor, %{})
+
+      # Suppressed: torrent untouched, release not blacklisted.
+      reloaded = Mydia.Downloads.get_download!(download.id)
+      refute Mydia.Downloads.Blacklists.blacklisted?("1337x", "guid-capped")
+
+      # Left non-terminal so it can still complete and import normally.
+      refute reloaded.import_failed_at
+      refute reloaded.import_failure_reason
+    end
+
+    test "still rejects while under the limit, and counts the rejection" do
+      {bypass, client_config} = start_transmission_bypass()
+      media_item = media_item_fixture()
+
+      torrent = %{
+        "hashString" => "under-hash",
+        "name" => "Some.Movie.2026.720p",
+        "status" => 4,
+        "percentDone" => 0.42,
+        "downloadDir" => "/downloads",
+        "files" => [%{"name" => "Some.Movie.2026.720p/payload.exe", "length" => 1}]
+      }
+
+      mock_transmission_torrent_get(bypass, [torrent])
+
+      download_fixture(%{
+        media_item_id: media_item.id,
+        title: "Some.Movie.2026.720p",
+        indexer: "1337x",
+        download_client: client_config.name,
+        download_client_id: "under-hash",
+        metadata: %{indexer: "1337x", guid: "guid-under"}
+      })
+
+      assert :ok = perform_job(DownloadMonitor, %{})
+
+      assert Mydia.Downloads.Blacklists.blacklisted?("1337x", "guid-under")
+      assert %{failure_count: 1} = Mydia.Search.get_backoff_info("auto_reject", media_item.id)
+    end
   end
 
   describe "handle_failure/1 with a classified debrid failure" do
