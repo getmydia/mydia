@@ -168,6 +168,18 @@ defmodule Mydia.Downloads.Client.QBittorrent do
   end
 
   @impl true
+  def list_files(config, client_id) do
+    with_authenticated_session(config, fn req ->
+      with {:ok, info_response} <- get_info(req, hashes: client_id),
+           {:ok, save_path} <- save_path_from_info(info_response.body),
+           {:ok, files_response} <-
+             authed_request(req, :get, "/api/v2/torrents/files", params: [hash: client_id]) do
+        parse_file_entries(save_path, files_response.body)
+      end
+    end)
+  end
+
+  @impl true
   def remove_torrent(config, client_id, opts \\ []) do
     delete_files = Keyword.get(opts, :delete_files, false)
     body = %{hashes: client_id, deleteFiles: to_string(delete_files)}
@@ -580,6 +592,26 @@ defmodule Mydia.Downloads.Client.QBittorrent do
   end
 
   defp content_files(_save_path, _content_path), do: nil
+
+  # /torrents/info is hit first purely for `save_path`: /torrents/files reports
+  # each `name` relative to it, and the callback contract promises absolute
+  # paths. Both requests share one authenticated session.
+  defp save_path_from_info([torrent | _]), do: {:ok, torrent["save_path"] || ""}
+  defp save_path_from_info([]), do: {:error, Error.not_found("Torrent not found")}
+  defp save_path_from_info(_other), do: {:error, Error.parse_error("Unexpected response body")}
+
+  defp parse_file_entries(save_path, entries) when is_list(entries) do
+    paths =
+      entries
+      |> Enum.map(& &1["name"])
+      |> Enum.filter(&(is_binary(&1) and &1 != ""))
+      |> Enum.map(&Path.join(save_path, &1))
+
+    {:ok, paths}
+  end
+
+  defp parse_file_entries(_save_path, _other),
+    do: {:error, Error.parse_error("Unexpected /torrents/files response body")}
 
   # State mappings. Unknown / unrecognised states deliberately fall through to
   # :checking (transient) rather than :error, because DownloadMonitor deletes
