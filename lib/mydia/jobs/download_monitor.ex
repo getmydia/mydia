@@ -53,6 +53,7 @@ defmodule Mydia.Jobs.DownloadMonitor do
   require Logger
   alias Mydia.Downloads
   alias Mydia.Downloads.Blacklists
+  alias Mydia.Downloads.Client
   alias Mydia.Downloads.ClientAdoption
   alias Mydia.Downloads.Client.FailureCategory
   alias Mydia.Downloads.ImportCandidates
@@ -174,9 +175,8 @@ defmodule Mydia.Jobs.DownloadMonitor do
     # torrent (a single disguised .exe with no video file at all) from
     # pulling its full multi-hundred-MB-to-multi-GB payload just to be
     # thrown away by the post-completion importer.
-    bad_content =
-      Enum.filter(active_for_stall_check, fn d -> is_list(d.files) and d.files != [] end)
-      |> Enum.reject(&any_importable_file?/1)
+    {bad_content, content_checked_ids} = evaluate_content(active_for_stall_check)
+    Downloads.mark_content_checked(content_checked_ids)
 
     active_for_stall_check = active_for_stall_check -- bad_content
 
@@ -369,15 +369,54 @@ defmodule Mydia.Jobs.DownloadMonitor do
 
   # --- Pre-completion content check --------------------------------------
 
-  # `downloads.media_item_id` only ever points at a `movie` or `tv_show`
-  # media item (the only two `MediaItem.valid_types/0`), so every download
-  # reaching this check wants a video file regardless of which of the two it
-  # is — `ImportCandidates.importable?/2` treats `:movies`/`:series`/`:mixed`
-  # identically. Passing `:series` unconditionally is exact, not a guess.
-  defp any_importable_file?(%{files: files}) do
-    Enum.any?(files, fn path ->
-      ImportCandidates.importable?(%{name: Path.basename(path)}, :series)
+  # Decides which active downloads hold nothing importable, and which ones we
+  # managed to evaluate at all.
+  #
+  # This deliberately does NOT read `DownloadStatus.files`. That field is an
+  # import-*scoping* path and qBittorrent and rtorrent both report a single
+  # entry that is the torrent's root DIRECTORY, whose extension
+  # (`.x264-YTS`, or none at all) is never a video extension. Judging content
+  # from it rejected every multi-file qBittorrent torrent mid-download,
+  # blacklisted the release, deleted the data and grabbed a replacement that
+  # met the same fate. `Client.list_files/3` is the enumeration contract:
+  # adapters that cannot enumerate report `:unsupported` and are skipped.
+  #
+  # `{:error, _}` and `{:ok, []}` both mean "we do not know". An empty list
+  # from a torrent client means metadata has not resolved yet, never that the
+  # torrent is empty, so neither is stamped and both are retried next poll.
+  defp evaluate_content(candidates) do
+    Enum.reduce(candidates, {[], []}, fn download_map, {bad, checked} ->
+      if download_map.content_checked_at do
+        {bad, checked}
+      else
+        case enumerate_files(download_map) do
+          {:ok, [_ | _] = files} ->
+            if Enum.any?(files, &importable_path?/1) do
+              {bad, [download_map.id | checked]}
+            else
+              {[download_map | bad], [download_map.id | checked]}
+            end
+
+          _unknown ->
+            {bad, checked}
+        end
+      end
     end)
+  end
+
+  defp enumerate_files(download_map) do
+    with {:ok, adapter, config} <- Queue.resolve_adapter(download_map.download_client) do
+      Client.list_files(adapter, config, download_map.download_client_id)
+    end
+  end
+
+  # `downloads.media_item_id` only ever points at a `movie` or `tv_show` media
+  # item (the only two `MediaItem.valid_types/0`), so every download reaching
+  # this check wants a video file regardless of which of the two it is:
+  # `ImportCandidates.importable?/2` treats `:movies`/`:series`/`:mixed`
+  # identically. Passing `:series` unconditionally is exact, not a guess.
+  defp importable_path?(path) do
+    ImportCandidates.importable?(%{name: Path.basename(path)}, :series)
   end
 
   # Rejects a still-downloading torrent whose already-known file list
@@ -391,19 +430,79 @@ defmodule Mydia.Jobs.DownloadMonitor do
   @bad_content_log_sample 10
 
   defp reject_bad_content(download_map) do
+    download = Downloads.get_download!(download_map.id, preload: [:media_item])
+
+    if auto_reject_exhausted?(download.media_item_id) do
+      suppress_auto_reject(download, download_map)
+    else
+      do_reject_bad_content(download, download_map)
+    end
+  rescue
+    Ecto.NoResultsError -> :ok
+  end
+
+  # A media item with no id (an unbound download) has no counter to consult,
+  # so it is never capped.
+  defp auto_reject_exhausted?(nil), do: false
+
+  defp auto_reject_exhausted?(media_item_id) do
+    case Mydia.Search.get_backoff_info("auto_reject", media_item_id) do
+      %{failure_count: count} -> count >= auto_reject_limit()
+      _ -> false
+    end
+  end
+
+  # The torrent is left completely untouched. Writing `import_failure_reason`
+  # here would be the obvious way to surface it, but the Issues filter
+  # (Mydia.Downloads.History, the `:failed` branch) needs `import_failed_at`
+  # or a failed/missing status, and setting either would present a healthy,
+  # still-progressing download as terminally failed. When the cap trips the
+  # likely truth is that our detector is wrong, so the right outcome is that
+  # this download finishes and imports.
+  defp suppress_auto_reject(download, download_map) do
+    Logger.warning(
+      "Auto-reject limit reached, leaving download alone",
+      download_id: download_map.id,
+      title: download_map.title,
+      media_item_id: download.media_item_id,
+      limit: auto_reject_limit()
+    )
+
+    Events.download_auto_reject_suppressed(download, media_item: download.media_item)
+    :ok
+  end
+
+  defp do_reject_bad_content(download, download_map) do
     Logger.warning(
       "Rejecting download before completion — no importable files in torrent",
       download_id: download_map.id,
       title: download_map.title,
-      file_count: length(download_map.files),
+      file_count: length(download_map.files || []),
       files_sample:
-        download_map.files |> Enum.take(@bad_content_log_sample) |> Enum.map(&Path.basename/1)
+        (download_map.files || [])
+        |> Enum.take(@bad_content_log_sample)
+        |> Enum.map(&Path.basename/1)
     )
 
-    download = Downloads.get_download!(download_map.id)
-
-    case Queue.reject_release(download, actor_type: :system, actor_id: "download_monitor") do
+    case Queue.reject_release(download,
+           actor_type: :system,
+           actor_id: "download_monitor",
+           failure_reason: "no_importable_files"
+         ) do
       {:ok, :rejected} ->
+        # Counted only once the rejection actually happened. Counting it up
+        # front would let a release that can never be rejected (no indexer or
+        # guid, so `Blacklists.extract_key/1` fails) burn through the cap and
+        # suppress future *real* auto-rejections for this item, having never
+        # rejected anything.
+        if download.media_item_id do
+          Mydia.Search.record_failure(
+            "auto_reject",
+            download.media_item_id,
+            "no_importable_files"
+          )
+        end
+
         :ok
 
       {:error, reason} ->
@@ -414,8 +513,17 @@ defmodule Mydia.Jobs.DownloadMonitor do
 
         :ok
     end
-  rescue
-    Ecto.NoResultsError -> :ok
+  end
+
+  # See UpgradeSweep.enabled?/0 for why this reads through the layered runtime
+  # config rather than a flat Application.get_env key: nothing explodes the
+  # resolved Config.Schema struct back out to flat top-level keys, so a flat
+  # read would silently ignore both the env var and the settings UI.
+  defp auto_reject_limit do
+    case Mydia.Config.get() do
+      %{downloads: %{auto_reject_limit: limit}} when is_integer(limit) and limit > 0 -> limit
+      _ -> 3
+    end
   end
 
   # --- Release blacklist (#123) ------------------------------------------

@@ -331,36 +331,7 @@ defmodule Mydia.Downloads.Client.TransmissionTest do
   describe "get_status/2 file list (Bypass)" do
     setup do
       bypass = Bypass.open()
-
-      config = %{
-        @config
-        | host: "localhost",
-          port: bypass.port
-      }
-
-      {:ok, bypass: bypass, config: config}
-    end
-
-    defp respond_torrent_get(conn, session_id, arguments_assertion, torrents) do
-      case Plug.Conn.get_req_header(conn, "x-transmission-session-id") do
-        [] ->
-          conn
-          |> Plug.Conn.put_resp_header("x-transmission-session-id", session_id)
-          |> Plug.Conn.resp(409, "")
-
-        [^session_id] ->
-          {:ok, body, conn} = Plug.Conn.read_body(conn, length: 1_000_000)
-          decoded = Jason.decode!(body)
-          assert decoded["method"] == "torrent-get"
-          arguments_assertion.(decoded["arguments"])
-
-          conn
-          |> Plug.Conn.put_resp_content_type("application/json")
-          |> Plug.Conn.resp(
-            200,
-            Jason.encode!(%{"result" => "success", "arguments" => %{"torrents" => torrents}})
-          )
-      end
+      {:ok, bypass: bypass, config: bypass_config(bypass)}
     end
 
     test "requests the files field and resolves it to absolute paths",
@@ -465,6 +436,95 @@ defmodule Mydia.Downloads.Client.TransmissionTest do
 
       assert {:ok, status} = Transmission.get_status(config, "jkl012")
       assert status.files == nil
+    end
+  end
+
+  describe "list_files/2" do
+    test "returns the torrent's absolute file paths" do
+      bypass = Bypass.open()
+      config = bypass_config(bypass)
+
+      mock_torrent_get(bypass, [
+        %{
+          "hashString" => "abc",
+          "name" => "Some.Movie.2026.720p",
+          "status" => 4,
+          "percentDone" => 0.1,
+          "downloadDir" => "/downloads",
+          "files" => [
+            %{"name" => "Some.Movie.2026.720p/movie.mkv", "length" => 1},
+            %{"name" => "Some.Movie.2026.720p/sub.srt", "length" => 2}
+          ]
+        }
+      ])
+
+      assert {:ok, files} = Transmission.list_files(config, "abc")
+
+      assert files == [
+               "/downloads/Some.Movie.2026.720p/movie.mkv",
+               "/downloads/Some.Movie.2026.720p/sub.srt"
+             ]
+    end
+
+    test "returns an empty list when the client reports no files yet" do
+      bypass = Bypass.open()
+      config = bypass_config(bypass)
+
+      mock_torrent_get(bypass, [
+        %{
+          "hashString" => "abc",
+          "name" => "Some.Movie.2026.720p",
+          "status" => 4,
+          "percentDone" => 0.0,
+          "downloadDir" => "/downloads",
+          "files" => []
+        }
+      ])
+
+      assert {:ok, []} = Transmission.list_files(config, "abc")
+    end
+  end
+
+  ## Helpers
+
+  defp bypass_config(bypass) do
+    %{
+      @config
+      | host: "localhost",
+        port: bypass.port
+    }
+  end
+
+  defp mock_torrent_get(bypass, torrents) do
+    Bypass.expect(bypass, "POST", "/transmission/rpc", fn conn ->
+      respond_torrent_get(
+        conn,
+        "session-list-files",
+        fn args -> assert "files" in args["fields"] end,
+        torrents
+      )
+    end)
+  end
+
+  defp respond_torrent_get(conn, session_id, arguments_assertion, torrents) do
+    case Plug.Conn.get_req_header(conn, "x-transmission-session-id") do
+      [] ->
+        conn
+        |> Plug.Conn.put_resp_header("x-transmission-session-id", session_id)
+        |> Plug.Conn.resp(409, "")
+
+      [^session_id] ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn, length: 1_000_000)
+        decoded = Jason.decode!(body)
+        assert decoded["method"] == "torrent-get"
+        arguments_assertion.(decoded["arguments"])
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          200,
+          Jason.encode!(%{"result" => "success", "arguments" => %{"torrents" => torrents}})
+        )
     end
   end
 

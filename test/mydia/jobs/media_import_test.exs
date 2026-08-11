@@ -2296,4 +2296,54 @@ defmodule Mydia.Jobs.MediaImportTest do
       assert_raise Ecto.NoResultsError, fn -> Mydia.Downloads.get_download!(download.id) end
     end
   end
+
+  describe "auto_reject counter" do
+    @tag :tmp_dir
+    test "a successful import clears the media item's auto_reject counter", %{tmp_dir: tmp_dir} do
+      # Staging copied from "falls back to save_path when client query fails"
+      # — a completed download with a real video on disk and an unreachable
+      # client, importing via the save_path job arg.
+      _library_path = create_test_library_path(tmp_dir, :movies)
+
+      download_dir = Path.join(tmp_dir, "downloads")
+      File.mkdir_p!(download_dir)
+      video_file = Path.join(download_dir, "AutoReject.Reset.2024.1080p.mkv")
+      File.write!(video_file, "fake video content")
+
+      media_item =
+        media_item_fixture(%{type: "movie", title: "AutoReject Reset Movie", year: 2024})
+
+      Mydia.Search.record_failure("auto_reject", media_item.id, "no_importable_files")
+      assert Mydia.Search.get_backoff_info("auto_reject", media_item.id)
+
+      {:ok, _} =
+        Settings.create_download_client_config(%{
+          name: "AutoRejectResetClient",
+          type: :qbittorrent,
+          host: "nonexistent.invalid",
+          port: 9999,
+          username: "test",
+          password: "test",
+          enabled: true,
+          priority: 1
+        })
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          status: "completed",
+          completed_at: DateTime.utc_now(),
+          download_client: "AutoRejectResetClient",
+          download_client_id: "auto-reject-reset"
+        })
+
+      assert {:ok, :imported} =
+               perform_job(MediaImport, %{
+                 "download_id" => download.id,
+                 "save_path" => download_dir
+               })
+
+      refute Mydia.Search.get_backoff_info("auto_reject", media_item.id)
+    end
+  end
 end

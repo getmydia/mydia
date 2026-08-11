@@ -32,6 +32,7 @@ defmodule Mydia.Downloads.Download do
           last_observed_at: DateTime.t() | nil,
           stalled_since: DateTime.t() | nil,
           bytes_pulled: integer() | nil,
+          content_checked_at: DateTime.t() | nil,
           media_item: Mydia.Media.MediaItem.t() | Ecto.Association.NotLoaded.t(),
           episode: Mydia.Media.Episode.t() | nil | Ecto.Association.NotLoaded.t(),
           library_path: Mydia.Settings.LibraryPath.t() | nil | Ecto.Association.NotLoaded.t(),
@@ -85,6 +86,12 @@ defmodule Mydia.Downloads.Download do
     # in `Fetcher.init/1` knows where to resume after a crash. Nil for adapters
     # that don't perform a local pull.
     field :bytes_pulled, :integer
+
+    # Set once DownloadMonitor has successfully enumerated this torrent's
+    # files for the pre-completion content check. Nil means "not yet
+    # evaluated"; once set, the enumeration is never repeated. See
+    # Mydia.Jobs.DownloadMonitor.evaluate_content/1.
+    field :content_checked_at, :utc_datetime
 
     belongs_to :media_item, Mydia.Media.MediaItem
     belongs_to :episode, Mydia.Media.Episode
@@ -153,7 +160,8 @@ defmodule Mydia.Downloads.Download do
       :last_known_bytes,
       :last_observed_at,
       :stalled_since,
-      :bytes_pulled
+      :bytes_pulled,
+      :content_checked_at
     ])
     |> validate_required([:title])
     |> validate_inclusion(:match_status, ["unresolved_files", "partial_pack"])

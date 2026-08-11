@@ -129,6 +129,8 @@ defmodule Mydia.Downloads do
   @spec update_download(Download.t(), map()) :: {:ok, Download.t()} | {:error, Ecto.Changeset.t()}
   defdelegate update_download(download, attrs), to: Mydia.Downloads.History
 
+  defdelegate mark_content_checked(ids), to: Mydia.Downloads.History
+
   @doc """
   Lists failed path-mapping-mismatch downloads whose reported path is at or under
   the given remote prefix (the apply-mapping fan-out set).

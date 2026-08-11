@@ -83,7 +83,10 @@ defmodule Mydia.Search.SearchBackoff do
       "episode",
       "movie_upgrade",
       "episode_upgrade",
-      "season_upgrade"
+      "season_upgrade",
+      # Consecutive DownloadMonitor auto-rejections for one media item
+      # (see Mydia.Jobs.DownloadMonitor).
+      "auto_reject"
     ])
   end
 end

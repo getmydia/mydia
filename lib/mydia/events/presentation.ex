@@ -146,6 +146,12 @@ defmodule Mydia.Events.Presentation do
       title: "Download recovered"
     },
     %{
+      type: "download.auto_reject_suppressed",
+      icon: "hero-shield-exclamation",
+      color: "text-warning",
+      title: "Auto-reject suppressed"
+    },
+    %{
       type: "download.cleared",
       icon: "hero-archive-box-x-mark",
       color: "text-base-content/60",
@@ -359,6 +365,7 @@ defmodule Mydia.Events.Presentation do
   @plain_download_types ~w(
     download.initiated download.completed download.cancelled
     download.paused download.resumed download.unstalled
+    download.auto_reject_suppressed
   )
 
   def detail(%Event{type: type, metadata: metadata}) when type in @plain_download_types,

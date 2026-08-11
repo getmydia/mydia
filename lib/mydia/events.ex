@@ -863,6 +863,43 @@ defmodule Mydia.Events do
   end
 
   @doc """
+  Records that Mydia declined to auto-reject a download because the media item
+  had already hit `downloads.auto_reject_limit`.
+
+  When the cap trips, the likely truth is that our own content detection is
+  wrong and the torrent is fine, so the download is left alone to finish and
+  import. This event is the operator's record that the detector misfired.
+  """
+  def download_auto_reject_suppressed(download, opts \\ []) do
+    media_item = opts[:media_item]
+
+    {resource_type, resource_id} =
+      if media_item do
+        {"media_item", media_item.id}
+      else
+        {"download", download.id}
+      end
+
+    metadata =
+      %{
+        "title" => download.title,
+        "download_client" => download.download_client,
+        "download_id" => download.id
+      }
+      |> maybe_add_media_context(media_item)
+
+    create_event_async(%{
+      category: "downloads",
+      type: "download.auto_reject_suppressed",
+      actor_type: :system,
+      actor_id: "download_monitor",
+      resource_type: resource_type,
+      resource_id: resource_id,
+      metadata: metadata
+    })
+  end
+
+  @doc """
   Records a download.cleared event.
 
   This event is recorded when a user explicitly clears a completed download
