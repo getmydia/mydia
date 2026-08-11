@@ -318,12 +318,27 @@ defmodule Mydia.WatchSync.Engine do
     |> Repo.insert_or_update()
   end
 
+  # Overlap window applied to the incremental cursor.
+  #
+  # `synced_at` is stamped when we write, not when the remote event happened. A
+  # view that lands during a sync run (after we fetched its page, before the run
+  # finishes) therefore carries a `lastViewedAt` earlier than the cursor we go on
+  # to record, and a strictly-greater-than filter would skip it forever, since
+  # the cursor only moves forward. Rewinding by more than a run's duration turns
+  # that permanent loss into a little redundant work: re-examined items reconcile
+  # to :noop because local, remote and snapshot already agree.
+  @cursor_overlap_seconds 900
+
   defp cursor(user_id, provider, instance_id) do
     State
     |> where([s], s.user_id == ^user_id)
     |> where([s], s.provider == ^provider and s.provider_instance_id == ^instance_id)
     |> select([s], max(s.synced_at))
     |> Repo.one()
+    |> case do
+      nil -> nil
+      %DateTime{} = at -> DateTime.add(at, -@cursor_overlap_seconds, :second)
+    end
   end
 
   defp bump(counts, key), do: Map.update!(counts, key, &(&1 + 1))

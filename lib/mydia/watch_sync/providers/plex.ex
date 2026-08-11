@@ -14,7 +14,7 @@ defmodule Mydia.WatchSync.Providers.Plex do
 
   require Logger
 
-  @page_size 100
+  @page_size 200
 
   @impl true
   def refresh_mappings(config, _opts) do
