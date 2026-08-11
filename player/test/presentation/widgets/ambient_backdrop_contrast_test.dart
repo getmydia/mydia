@@ -4,7 +4,7 @@
 // worst-case bright (white) artwork must keep primary text at WCAG AAA (>=7:1)
 // and secondary text at WCAG AA body (>=4.5:1). With the tuned
 // `AmbientBackdropScrim.baseDim`, the effective background over white artwork is
-// ~rgb(39,46,59): primary ~11.6:1, secondary ~4.7:1. Real artwork (non-white,
+// ~rgb(40,40,41): primary ~12.8:1, secondary ~5.1:1. Real artwork (non-white,
 // blurred) yields higher contrast, so these are conservative lower bounds.
 //
 // Frame-rate / scroll performance is MANUAL and cannot run in this headless
@@ -33,7 +33,9 @@ import 'package:player/presentation/widgets/ambient_backdrop.dart';
 double _relativeLuminance(Color color) {
   double channel(double c) {
     final s = c; // already 0..1
-    return s <= 0.03928 ? s / 12.92 : math.pow((s + 0.055) / 1.055, 2.4) as double;
+    return s <= 0.03928
+        ? s / 12.92
+        : math.pow((s + 0.055) / 1.055, 2.4) as double;
   }
 
   final r = channel(color.r);
@@ -67,8 +69,11 @@ void main() {
   // scrim composited over it sets the effective background text sits on.
   const brightArtwork = Color(0xFFFFFFFF);
 
-  // The scrim base color is AppColors.background; its alpha is the tuned dim.
-  final scrim = AppColors.background.withValues(
+  // Both the base colour and the alpha are read off the widget, so this can no
+  // longer drift from what AmbientBackdropScrim actually paints. The previous
+  // version named AppColors.background here while the widget painted a navy
+  // literal, and stayed green throughout.
+  final scrim = AmbientBackdropScrim.baseColor.withValues(
     alpha: AmbientBackdropScrim.baseDim,
   );
   final effectiveBackground = _composite(scrim, brightArtwork);
@@ -144,6 +149,21 @@ void main() {
         DepthTokens.chromeFillOpacity,
         greaterThanOrEqualTo(DepthTokens.glassLegibilityFloor),
       );
+    });
+  });
+
+  // The invariant the old hardcoded navy violated. Mirrors the
+  // `playerChromeTint` test in depth_tokens_test.dart: a scrim carrying a hue
+  // drains the blurred poster behind it toward that hue instead of letting the
+  // artwork's own colour through.
+  group('AmbientBackdrop scrim base colour', () {
+    test('is hueless so it does not drain colour from the artwork', () {
+      final c = AmbientBackdropScrim.baseColor;
+      const tolerance = 2 / 255;
+      expect((c.b - c.r).abs(), lessThanOrEqualTo(tolerance),
+          reason: 'blue cast of ${(c.b - c.r).abs()}');
+      expect((c.g - c.r).abs(), lessThanOrEqualTo(tolerance),
+          reason: 'green cast of ${(c.g - c.r).abs()}');
     });
   });
 }

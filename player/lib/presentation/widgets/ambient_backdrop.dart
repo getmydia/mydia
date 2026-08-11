@@ -185,10 +185,20 @@ class _ArtworkLayer extends StatelessWidget {
 /// contrast (plan R3 / U8). A flat dim plus a slightly stronger bottom gradient
 /// keeps content legible without crushing the artwork to pure black.
 ///
-/// [baseDim] is the single source of truth for the top-of-scrim alpha and is
-/// asserted against worst-case bright artwork in `ambient_backdrop_contrast_test`.
+/// [baseColor] and [baseDim] are the single source of truth for the scrim's
+/// colour and top-of-scrim alpha, and both are asserted against worst-case
+/// bright artwork in `ambient_backdrop_contrast_test`. Naming only the alpha
+/// here is what let the base colour drift to a navy literal unnoticed.
 class AmbientBackdropScrim extends StatelessWidget {
   const AmbientBackdropScrim({super.key});
+
+  /// Base colour of the scrim, before [baseDim] / [bottomDim] are applied.
+  ///
+  /// Sourced from the palette rather than written as a literal. The previous
+  /// hardcoded navy survived the move to the neutral palette precisely because
+  /// nothing tied it to a token, and it tinted every Home backdrop blue. Same
+  /// arrangement as `DepthTokens.playerChromeTint`, for the same reason.
+  static const Color baseColor = AppColors.background;
 
   /// Top-of-scrim dim alpha applied over the blurred artwork. Tuned in U8 so
   /// primary text clears WCAG AAA (7:1) and secondary text clears AA (4.5:1)
@@ -201,16 +211,20 @@ class AmbientBackdropScrim extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const DecoratedBox(
+    // Not a const expression: `withValues` is an instance method, so the
+    // decoration is built here rather than inlined as const colour literals.
+    // The widget itself is still const-constructed by its caller, so this runs
+    // once per mount rather than per frame.
+    return DecoratedBox(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            Color.fromRGBO(10, 17, 32, baseDim),
-            Color.fromRGBO(10, 17, 32, bottomDim),
+            baseColor.withValues(alpha: baseDim),
+            baseColor.withValues(alpha: bottomDim),
           ],
-          stops: [0.0, 1.0],
+          stops: const [0.0, 1.0],
         ),
       ),
     );
