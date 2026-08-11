@@ -151,10 +151,23 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Index do
 
       case validate_directory(validated_data.path) do
         :ok ->
+          save_params = strip_new_default_flags(params, library_path)
+
           result =
             case socket.assigns.library_path_mode do
-              :new -> Settings.create_library_path(params)
-              :edit -> Settings.update_library_path(socket.assigns.editing_library_path, params)
+              :new ->
+                with {:ok, path} <- Settings.create_library_path(save_params) do
+                  apply_default_flags(path, params)
+                end
+
+              :edit ->
+                with {:ok, path} <-
+                       Settings.update_library_path(
+                         socket.assigns.editing_library_path,
+                         save_params
+                       ) do
+                  apply_default_flags(path, params)
+                end
             end
 
           case result do
@@ -167,6 +180,10 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Index do
 
             {:error, %Ecto.Changeset{} = changeset} ->
               {:noreply, assign(socket, :library_path_form, to_form(changeset))}
+
+            {:error, :incompatible_type} ->
+              {:noreply,
+               put_flash(socket, :error, "Library type cannot serve as default for that kind")}
           end
 
         {:error, reason} ->
@@ -266,6 +283,38 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Index do
   end
 
   ## Private Helpers
+
+  defp strip_new_default_flags(params, library_path) do
+    Enum.reduce(["default_for_movies", "default_for_series"], params, fn key, acc ->
+      field = String.to_existing_atom(key)
+      already? = Map.fetch!(library_path, field) == true
+
+      if acc[key] in ["true", true] and not already? do
+        Map.delete(acc, key)
+      else
+        acc
+      end
+    end)
+  end
+
+  defp apply_default_flags(library_path, params) do
+    Enum.reduce_while(
+      [{:movies, "default_for_movies"}, {:series, "default_for_series"}],
+      {:ok, library_path},
+      fn
+        {kind, param_key}, {:ok, acc} ->
+          if params[param_key] in ["true", true] and
+               not Map.fetch!(acc, String.to_existing_atom(param_key)) do
+            case Settings.set_default_library(acc, kind) do
+              {:ok, updated} -> {:cont, {:ok, updated}}
+              error -> {:halt, error}
+            end
+          else
+            {:cont, {:ok, acc}}
+          end
+      end
+    )
+  end
 
   defp load_data(socket) do
     socket

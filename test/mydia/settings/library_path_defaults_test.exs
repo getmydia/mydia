@@ -1,5 +1,7 @@
 defmodule Mydia.Settings.LibraryPathDefaultsTest do
-  use Mydia.DataCase, async: true
+  # async: false — the env configuration describe mutates System env
+  # (same hazard as test/mydia/config/loader_test.exs).
+  use Mydia.DataCase, async: false
 
   import Mydia.SettingsFixtures
 
@@ -160,6 +162,27 @@ defmodule Mydia.Settings.LibraryPathDefaultsTest do
         from(l in LibraryPath, where: l.id == ^library_path.id),
         set: [inserted_at: at]
       )
+    end
+  end
+
+  describe "env configuration" do
+    # Matches loader_test isolation: put_env + on_exit cleanup, assert on the
+    # validated config struct (not the raw env map).
+    test "LIBRARY_PATH_<N>_DEFAULT_FOR_MOVIES is parsed" do
+      System.put_env("LIBRARY_PATH_1_PATH", "/tmp/env-movies")
+      System.put_env("LIBRARY_PATH_1_TYPE", "movies")
+      System.put_env("LIBRARY_PATH_1_DEFAULT_FOR_MOVIES", "true")
+
+      on_exit(fn ->
+        System.delete_env("LIBRARY_PATH_1_PATH")
+        System.delete_env("LIBRARY_PATH_1_TYPE")
+        System.delete_env("LIBRARY_PATH_1_DEFAULT_FOR_MOVIES")
+      end)
+
+      {:ok, config} = Mydia.Config.Loader.load(config_file: "nonexistent.yml")
+      entry = Enum.find(config.library_paths, &(&1.path == "/tmp/env-movies"))
+
+      assert entry.default_for_movies == true
     end
   end
 end

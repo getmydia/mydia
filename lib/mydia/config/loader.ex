@@ -512,6 +512,16 @@ defmodule Mydia.Config.Loader do
         System.get_env("#{prefix}CATEGORY_PATHS"),
         &parse_json/1
       )
+      |> put_if_present(
+        :default_for_movies,
+        System.get_env("#{prefix}DEFAULT_FOR_MOVIES"),
+        &parse_boolean/1
+      )
+      |> put_if_present(
+        :default_for_series,
+        System.get_env("#{prefix}DEFAULT_FOR_SERIES"),
+        &parse_boolean/1
+      )
     end)
     |> Enum.reject(&(&1 == %{}))
   end

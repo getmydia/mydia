@@ -247,6 +247,19 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
                   />
                 </div>
 
+                <.input
+                  :if={@library_path_form[:type].value in ["movies", "mixed", :movies, :mixed]}
+                  field={@library_path_form[:default_for_movies]}
+                  type="checkbox"
+                  label="Default library for movies"
+                />
+                <.input
+                  :if={@library_path_form[:type].value in ["series", "mixed", :series, :mixed]}
+                  field={@library_path_form[:default_for_series]}
+                  type="checkbox"
+                  label="Default library for series"
+                />
+
                 <%!-- Write NFO Toggle (only for movies/series/mixed) --%>
                 <%= if to_string(@library_path_form[:type].value) in ["movies", "series", "mixed"] do %>
                   <div class="flex items-center justify-between bg-base-200 rounded-lg px-4 py-3">
@@ -377,6 +390,12 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
           <span class={["badge badge-sm", library_type_badge_class(@library_path.type)]}>
             <.icon name={library_type_icon(@library_path.type)} class="w-3 h-3 mr-1" />
             {library_type_display(@library_path.type)}
+          </span>
+          <span
+            :if={@library_path.default_for_movies or @library_path.default_for_series}
+            class="badge badge-sm badge-outline"
+          >
+            Default
           </span>
           <span class={[
             "badge badge-sm",
