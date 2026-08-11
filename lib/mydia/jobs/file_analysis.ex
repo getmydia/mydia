@@ -2,7 +2,8 @@ defmodule Mydia.Jobs.FileAnalysis do
   @moduledoc """
   Recurring worker that fills in tech metadata for `MediaFile` rows the
   import path leaves at `analyzed_at IS NULL`, then uses spare capacity to
-  repair legacy analyzed rows that are missing persisted dimensions.
+  repair legacy analyzed rows that are missing persisted dimensions or
+  per-stream detail.
 
   Selection is by row state, so the worker is naturally idempotent: every
   tick pulls a bounded batch of un-analyzed rows whose `analysis_attempts`
@@ -78,6 +79,12 @@ defmodule Mydia.Jobs.FileAnalysis do
     end
   end
 
+  @doc false
+  # Test seam for the repair lane's row selection. Not part of the public API.
+  def repair_rows_for_test(limit, max_attempts, exclude_ids) do
+    fetch_repair_rows(limit, max_attempts, exclude_ids)
+  end
+
   defp fetch_unanalyzed_rows(batch_size, max_attempts) do
     from(mf in MediaFile,
       where: is_nil(mf.analyzed_at) and mf.analysis_attempts < ^max_attempts,
@@ -99,7 +106,8 @@ defmodule Mydia.Jobs.FileAnalysis do
           mf.analysis_attempts < ^max_attempts and
           not is_nil(mf.codec) and not is_nil(mf.resolution) and
           (is_nil(json_extract(mf.metadata, "$.width")) or
-             is_nil(json_extract(mf.metadata, "$.height"))) and
+             is_nil(json_extract(mf.metadata, "$.height")) or
+             is_nil(json_extract(mf.metadata, "$.streams"))) and
           mf.id not in ^exclude_ids,
       order_by: [asc: mf.updated_at, asc: mf.id],
       limit: ^overscan_limit,
@@ -111,7 +119,7 @@ defmodule Mydia.Jobs.FileAnalysis do
   end
 
   defp repair_candidate?(%MediaFile{metadata: %FileMetadata{} = metadata}) do
-    is_nil(metadata.width) or is_nil(metadata.height)
+    is_nil(metadata.width) or is_nil(metadata.height) or is_nil(metadata.streams)
   end
 
   defp repair_candidate?(_), do: false
