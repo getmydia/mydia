@@ -78,4 +78,17 @@ defmodule Mydia.Plugins.MatcherTest do
     assert {:movie, id} = Matcher.match(%{tmdb: 4242})
     assert id == m.id
   end
+
+  describe "match_item/1" do
+    test "resolves a show by external ids without episode coordinates" do
+      show = Mydia.MediaFixtures.media_item_fixture(%{type: "tv_show", tvdb_id: 424_242})
+
+      assert {:media_item, id} = Matcher.match_item(%{tvdb: 424_242})
+      assert id == show.id
+    end
+
+    test "returns :not_found for unknown ids" do
+      assert :not_found = Matcher.match_item(%{tvdb: 999_999_999})
+    end
+  end
 end

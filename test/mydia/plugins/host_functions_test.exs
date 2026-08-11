@@ -675,4 +675,72 @@ defmodule Mydia.Plugins.HostFunctionsTest do
                })
     end
   end
+
+  describe "ensure_favorite/2 (surfaces:write collections:favorite)" do
+    setup do
+      {:ok, _} =
+        Mydia.Settings.create_plugin_config(%{
+          slug: "tester",
+          name: "Tester",
+          version: "1.0.0",
+          source_url: "test",
+          manifest: %{
+            "slug" => "tester",
+            "name" => "Tester",
+            "version" => "1.0.0",
+            "capabilities" => %{"events:subscribe" => ["media_item.added"]}
+          },
+          granted_capabilities: %{},
+          enabled: false
+        })
+
+      user = user_fixture()
+      {:ok, _} = Connections.connect("tester", user.id, %{access_token: "t"})
+      %{user: user}
+    end
+
+    defp fav_target(user_id, opts) do
+      %{
+        "user-id": user_id,
+        "imdb-id": opt(opts[:imdb]),
+        "tmdb-id": opt(opts[:tmdb]),
+        "tvdb-id": opt(opts[:tvdb])
+      }
+    end
+
+    test "write is denied without surfaces:write collections:favorite", %{user: user} do
+      p = plugin(%{"surfaces:write" => ["playback:watched"]})
+
+      assert {:error, %Error{type: :capability_denied}} =
+               HostFunctions.ensure_favorite(p, fav_target(user.id, imdb: "tt600"))
+    end
+
+    test "a user with no active connection is denied" do
+      stranger = user_fixture()
+      p = plugin(%{"surfaces:write" => ["collections:favorite"]})
+
+      assert {:error, %Error{type: :capability_denied}} =
+               HostFunctions.ensure_favorite(p, fav_target(stranger.id, imdb: "tt601"))
+    end
+
+    test "a matched item is favorited; re-applying is an idempotent no-op", %{user: user} do
+      movie = movie_with(%{imdb_id: "tt602", tmdb_id: 602})
+      p = plugin(%{"surfaces:write" => ["collections:favorite"]})
+
+      assert {:ok, %{status: :changed}} =
+               HostFunctions.ensure_favorite(p, fav_target(user.id, imdb: "tt602"))
+
+      assert Mydia.Collections.is_favorite?(user, movie.id)
+
+      assert {:ok, %{status: :"already-favorited"}} =
+               HostFunctions.ensure_favorite(p, fav_target(user.id, imdb: "tt602"))
+    end
+
+    test "reports :not-found for ids with no local match", %{user: user} do
+      p = plugin(%{"surfaces:write" => ["collections:favorite"]})
+
+      assert {:ok, %{status: :"not-found"}} =
+               HostFunctions.ensure_favorite(p, fav_target(user.id, imdb: "tt999999"))
+    end
+  end
 end

@@ -119,6 +119,20 @@ defmodule Mydia.Plugins.ManifestTest do
       assert caps["surfaces:write"] == ["playback:watched"]
     end
 
+    test "accepts collections:favorite as a write surface" do
+      manifest = %{
+        "slug" => "t",
+        "name" => "T",
+        "version" => "1.0.0",
+        "capabilities" => %{
+          "events:subscribe" => ["media_item.added"],
+          "surfaces:write" => ["collections:favorite"]
+        }
+      }
+
+      assert {:ok, _} = Manifest.parse(manifest)
+    end
+
     test "rejects an unknown surfaces:write surface" do
       map =
         valid_map(%{

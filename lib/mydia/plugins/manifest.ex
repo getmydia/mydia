@@ -133,7 +133,7 @@ defmodule Mydia.Plugins.Manifest do
   # The value vocabulary for `surfaces:write` — the curated write surfaces a
   # plugin may target. Only `playback:watched` (the ensure-watched host function)
   # is honored in this version.
-  @write_surfaces ~w(playback:watched)
+  @write_surfaces ~w(playback:watched collections:favorite)
 
   # The lowest interval (minutes) a scheduled plugin may request — a floor so a
   # misconfigured manifest can't tick the host to death.

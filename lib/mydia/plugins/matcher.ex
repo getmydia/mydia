@@ -32,6 +32,22 @@ defmodule Mydia.Plugins.Matcher do
         }
 
   @type result :: {:movie, binary()} | {:episode, binary()} | :not_found
+  @type item_result :: {:media_item, binary()} | :not_found
+
+  @doc """
+  Resolves `target` to a local media item (movie or show), ignoring any episode
+  coordinates.
+
+  Item-level write surfaces (favorites, list membership) address a show as a
+  whole, so they must not fall through to an episode the way `match/1` does.
+  """
+  @spec match_item(target()) :: item_result()
+  def match_item(target) when is_map(target) do
+    case Media.find_by_external_ids(external_ids(target)) do
+      %{id: id} -> {:media_item, id}
+      _ -> :not_found
+    end
+  end
 
   @doc """
   Resolves `target` to a local content reference, or `:not_found`.

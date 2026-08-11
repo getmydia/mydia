@@ -41,6 +41,8 @@ defmodule Mydia.Plugins.HostFunctions do
 
   require Logger
 
+  alias Mydia.Accounts
+  alias Mydia.Collections
   alias Mydia.Media
   alias Mydia.Playback
   alias Mydia.Plugins
@@ -717,9 +719,48 @@ defmodule Mydia.Plugins.HostFunctions do
 
   @doc false
   @spec ensure_favorite(Plugin.t(), map()) :: {:ok, map()} | {:error, Error.t()}
-  def ensure_favorite(%Plugin{} = plugin, _target) do
-    with :ok <- require_surface(plugin, "collections:favorite") do
-      {:error, Error.new(:internal, "ensure-favorite not implemented")}
+  def ensure_favorite(%Plugin{} = plugin, target) do
+    with :ok <- require_surface(plugin, "collections:favorite"),
+         {:ok, user_id} <- fetch_favorite_user(target),
+         :ok <- require_active_connection(plugin, user_id) do
+      resolve_and_favorite(user_id, target)
+    end
+  end
+
+  defp resolve_and_favorite(user_id, target) do
+    matcher_target = %{
+      imdb: from_option(Map.get(target, :"imdb-id")),
+      tmdb: from_option(Map.get(target, :"tmdb-id")),
+      tvdb: from_option(Map.get(target, :"tvdb-id"))
+    }
+
+    case Matcher.match_item(matcher_target) do
+      :not_found -> {:ok, %{status: :"not-found"}}
+      {:media_item, id} -> apply_favorite(user_id, id)
+    end
+  end
+
+  # Additive by contract: a remote list can add to a user's Favorites but never
+  # remove from it, so a service-side deletion can never destroy local curation.
+  defp apply_favorite(user_id, media_item_id) do
+    user = Accounts.get_user!(user_id)
+
+    if Collections.is_favorite?(user, media_item_id) do
+      {:ok, %{status: :"already-favorited"}}
+    else
+      with {:ok, favorites} <- Collections.get_or_create_favorites(user),
+           {:ok, _item} <- Collections.add_item(favorites, media_item_id) do
+        {:ok, %{status: :changed}}
+      else
+        _ -> {:error, Error.new(:internal, "could not add favorite")}
+      end
+    end
+  end
+
+  defp fetch_favorite_user(target) do
+    case Map.get(target, :"user-id") do
+      id when is_binary(id) and id != "" -> {:ok, id}
+      _ -> {:error, Error.new(:invalid_request, "ensure-favorite requires a user-id")}
     end
   end
 
