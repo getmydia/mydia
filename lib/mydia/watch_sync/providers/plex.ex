@@ -42,9 +42,8 @@ defmodule Mydia.WatchSync.Providers.Plex do
   def apply_change(config, _user_scope, remote_id, change) do
     # Watched flag first, then position: an unscrobble must not clear a resume
     # point we are about to write for an in-progress unwatched item.
-    with :ok <- maybe_push_watched(config, remote_id, change),
-         :ok <- maybe_push_position(config, remote_id, change) do
-      :ok
+    with :ok <- maybe_push_watched(config, remote_id, change) do
+      maybe_push_position(config, remote_id, change)
     end
   end
 

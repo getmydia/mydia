@@ -9,9 +9,9 @@ defmodule Mydia.Plugins.HostFunctions do
   revoked capability takes effect immediately (a plugin can never widen its own
   grant — KTD6).
 
-  ## Component import ABI (1.1)
+  ## Component import ABI (1.2)
 
-  Imports live under the `"mydia:plugin/host@1.1.0"` interface namespace and
+  Imports live under the `"mydia:plugin/host@1.2.0"` interface namespace and
   receive/return **typed WIT records** — no linear-memory marshalling. Wasmex
   hands each import closure the decoded record (atom-keyed map; `option<T>` as
   `{:some, v}` / `:none`; `list<tuple>` as `[{k, v}]`) and marshals the closure's
@@ -22,7 +22,8 @@ defmodule Mydia.Plugins.HostFunctions do
     * `log(string, string)` — ungated, fire-and-forget
 
   are joined in 1.1 by `kv-get/set/delete`, `data-list`, `ensure-watched`,
-  `connections-list`, and `connection-request` (each capability-gated).
+  `connections-list`, and `connection-request` (each capability-gated), and in
+  1.2 by `set-watch-state` plus position fields on `playback-progress`.
 
   A closure must return exactly the WIT-declared shape: `{:ok, record}` /
   `{:error, host-error}` for the `result` functions. A wrong-typed return can
@@ -56,9 +57,12 @@ defmodule Mydia.Plugins.HostFunctions do
   @data_list_page_cap 200
 
   # The WIT host interface namespace. The version suffix is the ABI version.
-  # wasmtime serves this 1.1 superset to a 1.0 guest (which imports
-  # `host@1.0.0`) via component semver matching, so older guests keep working.
-  @namespace "mydia:plugin/host@1.1.0"
+  # wasmtime serves this 1.2 superset to a 1.1/1.0 guest (which imports
+  # `host@1.1.0` / `host@1.0.0`) via component semver matching, so older guests
+  # keep working. wasmex still needs exact namespace keys in the imports map
+  # (see `Mydia.Plugins.Host`), so 1.1 is also published under its own key.
+  @namespace "mydia:plugin/host@1.2.0"
+  @v11_namespace "mydia:plugin/host@1.1.0"
 
   # Per-invocation guest log-line cap. `log` is ungated, so a buggy or hostile
   # guest could spam it in a loop and flood plugin_logs before retention fires.
@@ -79,20 +83,27 @@ defmodule Mydia.Plugins.HostFunctions do
   @spec imports_for(String.t(), keyword()) :: (map() -> map())
   def imports_for(slug, gate_opts \\ []) when is_binary(slug) do
     fn ctx ->
+      funcs = %{
+        "http-request" => {:fn, http_import(slug, gate_opts)},
+        "data-read" => {:fn, data_import(slug)},
+        "log" => {:fn, log_import(slug, ctx)},
+        # ── 1.1.0 imports (U2 contract; bodies land in U3/U5/U6/U7) ──
+        "kv-get" => {:fn, kv_get_import(slug)},
+        "kv-set" => {:fn, kv_set_import(slug)},
+        "kv-delete" => {:fn, kv_delete_import(slug)},
+        "data-list" => {:fn, data_list_import(slug)},
+        "ensure-watched" => {:fn, ensure_watched_import(slug)},
+        "connections-list" => {:fn, connections_list_import(slug)},
+        "connection-request" => {:fn, connection_request_import(slug, gate_opts)},
+        # ── 1.2.0 ──
+        "set-watch-state" => {:fn, set_watch_state_import(slug)}
+      }
+
+      # Publish under both 1.2 and 1.1 keys: wasmex matches the guest's exact
+      # imported package name, so a 1.1 guest still links against a 1.2 host.
       %{
-        @namespace => %{
-          "http-request" => {:fn, http_import(slug, gate_opts)},
-          "data-read" => {:fn, data_import(slug)},
-          "log" => {:fn, log_import(slug, ctx)},
-          # ── 1.1.0 imports (U2 contract; bodies land in U3/U5/U6/U7) ──
-          "kv-get" => {:fn, kv_get_import(slug)},
-          "kv-set" => {:fn, kv_set_import(slug)},
-          "kv-delete" => {:fn, kv_delete_import(slug)},
-          "data-list" => {:fn, data_list_import(slug)},
-          "ensure-watched" => {:fn, ensure_watched_import(slug)},
-          "connections-list" => {:fn, connections_list_import(slug)},
-          "connection-request" => {:fn, connection_request_import(slug, gate_opts)}
-        }
+        @namespace => funcs,
+        @v11_namespace => Map.delete(funcs, "set-watch-state")
       }
     end
   end
@@ -150,6 +161,16 @@ defmodule Mydia.Plugins.HostFunctions do
       typed_result(fn ->
         with {:ok, plugin} <- Plugins.get_plugin(slug) do
           ensure_watched(plugin, target)
+        end
+      end)
+    end
+  end
+
+  defp set_watch_state_import(slug) do
+    fn target ->
+      typed_result(fn ->
+        with {:ok, plugin} <- Plugins.get_plugin(slug) do
+          set_watch_state(plugin, target)
         end
       end)
     end
@@ -363,6 +384,8 @@ defmodule Mydia.Plugins.HostFunctions do
   defp from_option({:some, value}), do: value
   defp from_option(:none), do: nil
   defp from_option(nil), do: nil
+  # Direct unit-test callers pass bare values; WIT marshalling uses option tuples.
+  defp from_option(value), do: value
 
   # ── http_request (net:http) ───────────────────────────────────────────────
 
@@ -647,6 +670,8 @@ defmodule Mydia.Plugins.HostFunctions do
       "season-number": to_option(season),
       "episode-number": to_option(epnum),
       watched: p.watched == true,
+      "position-seconds": to_option(p.position_seconds),
+      "duration-seconds": to_option(p.duration_seconds),
       "last-watched-at": to_option(iso_or_nil(p.last_watched_at)),
       "updated-at": DateTime.to_iso8601(p.updated_at)
     }
@@ -679,14 +704,19 @@ defmodule Mydia.Plugins.HostFunctions do
     end
   end
 
+  @doc false
+  @spec set_watch_state(Plugin.t(), map()) :: {:ok, map()} | {:error, Error.t()}
+  def set_watch_state(%Plugin{} = plugin, target) do
+    with :ok <- require_surface(plugin, "playback:watched"),
+         {:ok, user_id} <- fetch_target_user(target),
+         :ok <- require_active_connection(plugin, user_id),
+         {:ok, watched_at} <- parse_watched_at(from_option(Map.get(target, :"watched-at"))) do
+      resolve_and_set_state(plugin, user_id, target, watched_at)
+    end
+  end
+
   defp resolve_and_write(plugin, user_id, target, watched_at) do
-    matcher_target = %{
-      imdb: from_option(Map.get(target, :"imdb-id")),
-      tmdb: from_option(Map.get(target, :"tmdb-id")),
-      tvdb: from_option(Map.get(target, :"tvdb-id")),
-      season: from_option(Map.get(target, :"season-number")),
-      episode: from_option(Map.get(target, :"episode-number"))
-    }
+    matcher_target = matcher_target(target)
 
     case Matcher.match(matcher_target) do
       :not_found ->
@@ -700,6 +730,31 @@ defmodule Mydia.Plugins.HostFunctions do
     end
   end
 
+  defp resolve_and_set_state(plugin, user_id, target, watched_at) do
+    matcher_target = matcher_target(target)
+
+    case Matcher.match(matcher_target) do
+      :not_found ->
+        {:ok, %{status: :"not-found"}}
+
+      {:movie, id} ->
+        apply_watch_state(plugin, user_id, [media_item_id: id], target, watched_at)
+
+      {:episode, id} ->
+        apply_watch_state(plugin, user_id, [episode_id: id], target, watched_at)
+    end
+  end
+
+  defp matcher_target(target) do
+    %{
+      imdb: from_option(Map.get(target, :"imdb-id")),
+      tmdb: from_option(Map.get(target, :"tmdb-id")),
+      tvdb: from_option(Map.get(target, :"tvdb-id")),
+      season: from_option(Map.get(target, :"season-number")),
+      episode: from_option(Map.get(target, :"episode-number"))
+    }
+  end
+
   defp apply_watch(plugin, user_id, content_id, watched_at) do
     # Tagged plugin:<slug> so the dispatcher suppresses the echo to this plugin
     # (R14) while existing ripple (e.g. Trakt scrobble hooks) still fires.
@@ -710,6 +765,44 @@ defmodule Mydia.Plugins.HostFunctions do
       )
 
     {:ok, %{status: ensure_status(status)}}
+  end
+
+  defp apply_watch_state(plugin, user_id, content_id, target, watched_at) do
+    origin = "plugin:#{plugin.slug}"
+    position = from_option(Map.get(target, :"position-seconds"))
+    duration = from_option(Map.get(target, :"duration-seconds"))
+    watched = Map.get(target, :watched) == true
+
+    cond do
+      # A present resume position is authoritative: write it (and the watched
+      # flag) without the 90% auto-mark flipping an in-progress scrub to watched.
+      not is_nil(position) ->
+        attrs = %{
+          position_seconds: position,
+          duration_seconds: duration,
+          watched: watched
+        }
+
+        attrs =
+          if watched_at, do: Map.put(attrs, :last_watched_at, watched_at), else: attrs
+
+        case Playback.save_progress(user_id, content_id, attrs,
+               origin: origin,
+               authoritative_watched: true
+             ) do
+          {:ok, _} -> {:ok, %{status: :changed}}
+          {:error, _} -> {:error, Error.new(:internal, "set-watch-state failed to save progress")}
+        end
+
+      watched ->
+        apply_watch(plugin, user_id, content_id, watched_at)
+
+      true ->
+        case Playback.delete_progress(user_id, content_id, origin: origin) do
+          {:ok, _} -> {:ok, %{status: :changed}}
+          {:error, :not_found} -> {:ok, %{status: :"already-watched"}}
+        end
+    end
   end
 
   defp ensure_status(:already_watched), do: :"already-watched"

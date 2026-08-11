@@ -3,12 +3,12 @@ defmodule Mydia.Plugins.Host do
   WASM **component-model** runtime host for the plugin platform.
 
   Guests are WebAssembly components built against the canonical
-  `mydia:plugin@1.1.0` WIT contract (`native/mydia_plugin_sdk/wit/plugin.wit`).
+  `mydia:plugin@1.2.0` WIT contract (`native/mydia_plugin_sdk/wit/plugin.wit`).
   The host instantiates them through `Wasmex.Components.*` and calls the typed
   `handler.on-event` / `handler.on-schedule` exports. A guest built against an
-  older minor (1.0) is served the matching namespace + export, detected from the
+  older minor (1.0 or 1.1) is served the matching namespace + export, detected from the
   component bytes at `start_plugin` (`detect_legacy/1`), so old guests keep
-  working against the 1.1 host.
+  working against the 1.2 host.
 
   Each installed plugin gets its own `NimblePool`, which bounds how many guests
   run concurrently on the dirty NIF schedulers. Each *invocation* checks out a
@@ -80,19 +80,23 @@ defmodule Mydia.Plugins.Host do
 
   # The typed handler exports, addressed by their interface path. The interface
   # version is part of the path because the WIT package version IS the ABI
-  # version; wasmtime semver-matches so a 1.0 guest's `handler@1.0.0/on-event`
-  # still resolves against this 1.1 lookup. `on-schedule` is 1.1-only — a 1.0
+  # version; wasmtime semver-matches so a 1.1 guest's `handler@1.1.0/on-event`
+  # still resolves against this 1.2 lookup. `on-schedule` is 1.1+ — a 1.0
   # guest has no such export and the schedule call fails soft.
-  @handler_export ["mydia:plugin/handler@1.1.0", "on-event"]
-  @schedule_export ["mydia:plugin/handler@1.1.0", "on-schedule"]
+  @handler_export ["mydia:plugin/handler@1.2.0", "on-event"]
+  @schedule_export ["mydia:plugin/handler@1.2.0", "on-schedule"]
+  @v11_handler_export ["mydia:plugin/handler@1.1.0", "on-event"]
+  @v11_schedule_export ["mydia:plugin/handler@1.1.0", "on-schedule"]
   @legacy_handler_export ["mydia:plugin/handler@1.0.0", "on-event"]
 
   # Provided host-import namespaces. wasmex links the provided imports map to the
   # guest's *exact* imported package name (no semver fuzzing), so a 1.0 guest
   # (which imports `host@1.0.0` with only the original three functions) needs the
-  # map re-keyed and narrowed. We detect this once per plugin from the
-  # instantiation error and memoize it.
-  @host_namespace "mydia:plugin/host@1.1.0"
+  # map re-keyed and narrowed. 1.1 guests are served via a parallel key that
+  # `HostFunctions.imports_for/2` publishes alongside 1.2. We detect the contract
+  # once per plugin from the bytes and memoize it.
+  @host_namespace "mydia:plugin/host@1.2.0"
+  @v11_host_namespace "mydia:plugin/host@1.1.0"
   @legacy_host_namespace "mydia:plugin/host@1.0.0"
   @legacy_host_funcs ~w(http-request data-read log)
 
@@ -123,9 +127,9 @@ defmodule Mydia.Plugins.Host do
       # Detect the guest's contract version up front (wasmex links the provided
       # imports lazily at first call and rejects a package the guest doesn't
       # import, so we cannot probe by instantiation). The component embeds its
-      # imported interface names as UTF-8; a guest that does not import the 1.1
-      # host interface is served the 1.0 namespace + export.
-      :persistent_term.put({__MODULE__, :legacy, slug}, detect_legacy(wasm_bytes))
+      # imported interface names as UTF-8; a guest that does not import the 1.2
+      # or 1.1 host interface is served the 1.0 namespace + export.
+      :persistent_term.put({__MODULE__, :contract, slug}, detect_contract(wasm_bytes))
 
       worker_arg = %{
         slug: slug,
@@ -158,7 +162,7 @@ defmodule Mydia.Plugins.Host do
 
     # Drop the memoized contract-version verdict so a re-installed (possibly
     # rebuilt) artifact is re-detected on next start.
-    :persistent_term.erase({__MODULE__, :legacy, slug})
+    :persistent_term.erase({__MODULE__, :contract, slug})
     :ok
   end
 
@@ -289,7 +293,8 @@ defmodule Mydia.Plugins.Host do
   # the guest's exact imported package name, so the map is re-keyed/narrowed for
   # legacy guests (detected from the bytes at start_plugin).
   defp instantiate(slug, bytes, wasi, limits, full_imports, inv) do
-    imports = if legacy?(slug), do: to_legacy_imports(full_imports), else: full_imports
+    imports =
+      if contract(slug) == :v10, do: to_legacy_imports(full_imports), else: full_imports
 
     case Components.start_link(%{
            bytes: bytes,
@@ -315,18 +320,28 @@ defmodule Mydia.Plugins.Host do
     end
   end
 
-  # Re-key the full 1.1 imports map to the 1.0 namespace, keeping only the three
+  # Re-key the full 1.2 imports map to the 1.0 namespace, keeping only the three
   # functions a 1.0 guest imports.
   defp to_legacy_imports(full_imports) do
-    funcs = Map.get(full_imports, @host_namespace, %{})
+    funcs =
+      Map.get(full_imports, @host_namespace) ||
+        Map.get(full_imports, @v11_host_namespace, %{})
+
     %{@legacy_host_namespace => Map.take(funcs, @legacy_host_funcs)}
   end
 
-  # A guest is legacy (1.0) when its component does not import the 1.1 host
-  # interface. The interface name is embedded as UTF-8 in the component bytes.
-  defp detect_legacy(bytes), do: not String.contains?(bytes, @host_namespace)
+  # A guest's contract version is read from the UTF-8 interface names embedded
+  # in the component bytes. 1.2 and 1.1 both get the full imports map (published
+  # under both namespace keys); only 1.0 needs the narrowed legacy map.
+  defp detect_contract(bytes) do
+    cond do
+      String.contains?(bytes, @host_namespace) -> :v12
+      String.contains?(bytes, @v11_host_namespace) -> :v11
+      true -> :v10
+    end
+  end
 
-  defp legacy?(slug), do: :persistent_term.get({__MODULE__, :legacy, slug}, false)
+  defp contract(slug), do: :persistent_term.get({__MODULE__, :contract, slug}, :v12)
 
   # A static map is used as-is; a builder is called per invocation so closures
   # can capture this run's context (slug + invocation id, for log correlation).
@@ -352,14 +367,27 @@ defmodule Mydia.Plugins.Host do
   end
 
   # Pick the export + marshalled record for the requested handler. on-schedule
-  # is 1.1-only; a 1.0 guest lacks the export and call_function returns an error
+  # is 1.1+; a 1.0 guest lacks the export and call_function returns an error
   # the caller surfaces (fail-soft, no crash). on-event resolves at the guest's
-  # own interface version (legacy detected during instantiation).
-  defp handler_call(%{handler: :on_schedule, payload: payload}),
-    do: {@schedule_export, to_schedule_record(payload)}
+  # own interface version (detected during start_plugin).
+  defp handler_call(%{handler: :on_schedule, slug: slug, payload: payload}) do
+    export =
+      case contract(slug) do
+        :v11 -> @v11_schedule_export
+        _ -> @schedule_export
+      end
+
+    {export, to_schedule_record(payload)}
+  end
 
   defp handler_call(%{slug: slug, payload: payload}) do
-    export = if legacy?(slug), do: @legacy_handler_export, else: @handler_export
+    export =
+      case contract(slug) do
+        :v10 -> @legacy_handler_export
+        :v11 -> @v11_handler_export
+        :v12 -> @handler_export
+      end
+
     {export, to_event_record(payload)}
   end
 
