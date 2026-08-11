@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/models/media_stream.dart';
+import 'package:player/domain/models/subtitle_track.dart';
 import 'package:player/presentation/widgets/media_info/media_info_content.dart';
 
 MediaFileInfo _richFile() => MediaFileInfo(
@@ -109,5 +110,116 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(selected, 1);
+  });
+
+  MediaFileInfo manySubtitlesFile() => MediaFileInfo(
+        id: 'f3',
+        fileName: 'Remux.2160p.mkv',
+        container: 'mkv',
+        resolution: '2160p',
+        codec: 'hevc',
+        streams: [
+          const MediaStream(
+            index: 0,
+            type: MediaStreamType.video,
+            codec: 'hevc',
+            width: 3840,
+            height: 2160,
+          ),
+          const MediaStream(
+            index: 1,
+            type: MediaStreamType.audio,
+            codec: 'truehd',
+            language: 'eng',
+            channels: 8,
+            channelLayout: '7.1',
+          ),
+          for (var i = 2; i < 36; i++)
+            MediaStream(
+              index: i,
+              type: MediaStreamType.subtitle,
+              codec: 'subrip',
+              language: 'eng',
+            ),
+        ],
+      );
+
+  testWidgets('labels each section with its stream count', (tester) async {
+    await tester.pumpWidget(_wrap(MediaInfoContent(
+      files: [manySubtitlesFile()],
+      selectedIndex: 0,
+      onSelectVersion: (_) {},
+    )));
+
+    expect(find.byKey(const Key('media-info-header-file')), findsOneWidget);
+    expect(find.byKey(const Key('media-info-header-video')), findsOneWidget);
+    expect(find.byKey(const Key('media-info-header-audio')), findsOneWidget);
+    expect(
+      find.byKey(const Key('media-info-header-subtitles')),
+      findsOneWidget,
+    );
+    expect(find.text('SUBTITLES · 34'), findsOneWidget);
+  });
+
+  testWidgets('keeps the subtitles header pinned while scrolling',
+      (tester) async {
+    tester.view.physicalSize = const Size(520, 700);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(_wrap(MediaInfoContent(
+      files: [manySubtitlesFile()],
+      selectedIndex: 0,
+      onSelectVersion: (_) {},
+    )));
+
+    // scrollUntilVisible rather than a fixed drag distance: rows build lazily,
+    // so a hardcoded offset would depend on per-row heights that Task 4 then
+    // changes underneath this test.
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('media-info-stream-30')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    // Scrolled deep enough that an unpinned header would have left the
+    // viewport, yet the header is still on screen above its rows.
+    expect(find.byKey(const Key('media-info-stream-30')), findsOneWidget);
+    expect(
+      find.byKey(const Key('media-info-header-subtitles')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('shows external subtitles under the subtitles header',
+      (tester) async {
+    await tester.pumpWidget(_wrap(MediaInfoContent(
+      files: [
+        const MediaFileInfo(
+          id: 'f4',
+          fileName: 'Movie.mkv',
+          streams: [
+            MediaStream(index: 0, type: MediaStreamType.video, codec: 'h264'),
+          ],
+          externalSubtitles: [
+            SubtitleTrack(
+              id: 'ext-1',
+              language: 'por',
+              title: 'Portugues',
+              format: 'srt',
+            ),
+          ],
+        ),
+      ],
+      selectedIndex: 0,
+      onSelectVersion: (_) {},
+    )));
+
+    expect(
+      find.byKey(const Key('media-info-header-subtitles')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('media-info-external-ext-1')), findsOneWidget);
   });
 }

@@ -46,6 +46,7 @@ class _MediaInfoPanelState extends State<MediaInfoPanel> {
             child: MediaInfoContent(
               files: widget.files,
               selectedIndex: _selected,
+              shrinkWrap: !isWide,
               onSelectVersion: (index) => setState(() => _selected = index),
             ),
           ),

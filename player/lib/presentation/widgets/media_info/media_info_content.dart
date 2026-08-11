@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/models/media_stream.dart';
+import '../../../domain/models/subtitle_track.dart';
 import 'stream_formatters.dart';
 
 /// Shown when the server has not captured detailed streams for a file yet.
@@ -22,11 +23,20 @@ class MediaInfoContent extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onSelectVersion;
 
+  /// Whether the host sizes itself to this content.
+  ///
+  /// The side panel has a bounded height and leaves this false, so rows build
+  /// lazily. The bottom sheet sizes to its content and must pass true, which
+  /// forces every row to be measured. A definite sheet height would avoid that
+  /// but would leave a one-stream file 78% of the screen tall.
+  final bool shrinkWrap;
+
   const MediaInfoContent({
     super.key,
     required this.files,
     required this.selectedIndex,
     required this.onSelectVersion,
+    this.shrinkWrap = false,
   });
 
   @override
@@ -44,17 +54,86 @@ class MediaInfoContent extends StatelessWidget {
     final index = selectedIndex.clamp(0, files.length - 1);
     final file = files[index];
 
-    return ListView(
-      shrinkWrap: true,
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-      children: [
-        if (files.length > 1) _versionSwitcher(index),
-        _fileSection(file),
-        ..._streamSections(file),
-        if (!file.hasDetailedStreams) _pendingNote(),
+    final video = file.ofType(MediaStreamType.video);
+    final audio = file.ofType(MediaStreamType.audio);
+    final subtitle = file.ofType(MediaStreamType.subtitle);
+    final external = file.externalSubtitles;
+
+    return CustomScrollView(
+      shrinkWrap: shrinkWrap,
+      slivers: [
+        if (files.length > 1)
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(18, 12, 18, 0),
+            sliver: SliverToBoxAdapter(child: _versionSwitcher(index)),
+          ),
+        _header('File', 1),
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          sliver: SliverToBoxAdapter(child: _fileBlock(file)),
+        ),
+        if (video.isNotEmpty) ...[
+          _header('Video', video.length),
+          _streams(
+            video.length,
+            (i) => _StreamTile(
+              key: Key('media-info-stream-${video[i].index}'),
+              stream: video[i],
+            ),
+          ),
+        ],
+        if (audio.isNotEmpty) ...[
+          _header('Audio', audio.length),
+          _streams(
+            audio.length,
+            (i) => _StreamTile(
+              key: Key('media-info-stream-${audio[i].index}'),
+              stream: audio[i],
+            ),
+          ),
+        ],
+        if (subtitle.isNotEmpty || external.isNotEmpty) ...[
+          _header('Subtitles', subtitle.length + external.length),
+          _streams(
+            subtitle.length + external.length,
+            (i) => i < subtitle.length
+                ? _StreamTile(
+                    key: Key('media-info-stream-${subtitle[i].index}'),
+                    stream: subtitle[i],
+                  )
+                : _externalTile(external[i - subtitle.length]),
+          ),
+        ],
+        if (!file.hasDetailedStreams)
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 0),
+            sliver: SliverToBoxAdapter(child: _pendingNote()),
+          ),
+        const SliverToBoxAdapter(child: SizedBox(height: 24)),
       ],
     );
   }
+
+  Widget _header(String label, int count) => SliverPersistentHeader(
+        pinned: true,
+        delegate: _SectionHeaderDelegate(label: label, count: count),
+      );
+
+  Widget _streams(int count, Widget Function(int index) builder) {
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: 18),
+      sliver: SliverList.builder(
+        itemCount: count,
+        itemBuilder: (_, index) => builder(index),
+      ),
+    );
+  }
+
+  Widget _externalTile(SubtitleTrack track) => _ExternalSubtitleTile(
+        key: Key('media-info-external-${track.id}'),
+        language: languageName(track.language) ?? track.language,
+        format: track.format,
+      );
 
   Widget _versionSwitcher(int index) {
     return Padding(
@@ -81,7 +160,7 @@ class MediaInfoContent extends StatelessWidget {
     return size == null ? file.versionLabel : '${file.versionLabel} · $size';
   }
 
-  Widget _fileSection(MediaFileInfo file) {
+  Widget _fileBlock(MediaFileInfo file) {
     final size = formatBytes(file.sizeBytes);
     final duration = formatDuration(file.durationSeconds);
     final bitrate = formatBitrate(file.bitrate);
@@ -92,8 +171,8 @@ class MediaInfoContent extends StatelessWidget {
       if (bitrate != null) bitrate,
     ];
 
-    return _Section(
-      label: 'File',
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (file.fileName != null)
           Text(
@@ -118,38 +197,6 @@ class MediaInfoContent extends StatelessWidget {
     );
   }
 
-  List<Widget> _streamSections(MediaFileInfo file) {
-    final video = file.ofType(MediaStreamType.video);
-    final audio = file.ofType(MediaStreamType.audio);
-    final subtitle = file.ofType(MediaStreamType.subtitle);
-
-    return [
-      if (video.isNotEmpty)
-        _Section(
-          label: 'Video',
-          children: [for (final s in video) _StreamTile(stream: s)],
-        ),
-      if (audio.isNotEmpty)
-        _Section(
-          label:
-              'Audio · ${audio.length} ${audio.length == 1 ? 'track' : 'tracks'}',
-          children: [for (final s in audio) _StreamTile(stream: s)],
-        ),
-      if (subtitle.isNotEmpty || file.externalSubtitles.isNotEmpty)
-        _Section(
-          label: 'Subtitles',
-          children: [
-            for (final s in subtitle) _StreamTile(stream: s),
-            for (final s in file.externalSubtitles)
-              _ExternalSubtitleTile(
-                language: languageName(s.language) ?? s.language,
-                format: s.format,
-              ),
-          ],
-        ),
-    ];
-  }
-
   Widget _pendingNote() {
     return const Padding(
       padding: EdgeInsets.only(top: 16),
@@ -162,40 +209,10 @@ class MediaInfoContent extends StatelessWidget {
   }
 }
 
-class _Section extends StatelessWidget {
-  final String label;
-  final List<Widget> children;
-
-  const _Section({required this.label, required this.children});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label.toUpperCase(),
-            style: const TextStyle(
-              color: AppColors.textDisabled,
-              fontSize: 10,
-              letterSpacing: 1.6,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          ...children,
-        ],
-      ),
-    );
-  }
-}
-
 class _StreamTile extends StatelessWidget {
   final MediaStream stream;
 
-  const _StreamTile({required this.stream});
+  const _StreamTile({super.key, required this.stream});
 
   @override
   Widget build(BuildContext context) {
@@ -312,7 +329,11 @@ class _ExternalSubtitleTile extends StatelessWidget {
   final String language;
   final String format;
 
-  const _ExternalSubtitleTile({required this.language, required this.format});
+  const _ExternalSubtitleTile({
+    super.key,
+    required this.language,
+    required this.format,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -441,4 +462,53 @@ class _VersionChip extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A section label that stays put while its rows scroll under it.
+///
+/// It paints [AppColors.surface] rather than sitting transparent so rows do not
+/// show through it once pinned.
+class _SectionHeaderDelegate extends SliverPersistentHeaderDelegate {
+  final String label;
+  final int count;
+
+  const _SectionHeaderDelegate({required this.label, required this.count});
+
+  static const double _height = 30;
+
+  @override
+  double get minExtent => _height;
+
+  @override
+  double get maxExtent => _height;
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    final text = count > 1 ? '$label · $count' : label;
+
+    return Container(
+      key: Key('media-info-header-${label.toLowerCase()}'),
+      height: _height,
+      color: AppColors.surface,
+      alignment: Alignment.bottomLeft,
+      padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
+      child: Text(
+        text.toUpperCase(),
+        style: const TextStyle(
+          color: AppColors.textDisabled,
+          fontSize: 10,
+          letterSpacing: 1.6,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(_SectionHeaderDelegate oldDelegate) =>
+      oldDelegate.label != label || oldDelegate.count != count;
 }
