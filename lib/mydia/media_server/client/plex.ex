@@ -94,25 +94,34 @@ defmodule Mydia.MediaServer.Client.Plex do
   @doc """
   Lists all items in a library section with GUID metadata.
 
-  Returns items with `ratingKey`, `viewCount`, `lastViewedAt`, and parsed GUIDs.
+  Returns items with `ratingKey`, `viewCount`, `viewOffset`, `lastViewedAt`,
+  and parsed GUIDs.
+
+  ## Options
+
+    * `:start` - `X-Plex-Container-Start` offset (default 0)
+    * `:size` - `X-Plex-Container-Size` page length (omit for the server default)
+    * `:since` - when set, adds a `lastViewedAt>` filter so Plex only returns
+      items viewed at or after that instant
   """
-  def list_section_items(config, section_key) do
+  def list_section_items(config, section_key, opts \\ []) do
+    params =
+      [includeGuids: 1]
+      |> maybe_put_since(opts[:since])
+
+    headers =
+      config
+      |> headers()
+      |> maybe_put_container_header("X-Plex-Container-Start", opts[:start])
+      |> maybe_put_container_header("X-Plex-Container-Size", opts[:size])
+
     with_url(config, "/library/sections/#{section_key}/all", fn url ->
-      case Req.get(url, headers: headers(config), params: [includeGuids: 1]) do
+      case Req.get(url, headers: headers, params: params) do
         {:ok, %{status: 200, body: body}} ->
           items =
             get_in(body, ["MediaContainer", "Metadata"])
             |> List.wrap()
-            |> Enum.map(fn item ->
-              %{
-                rating_key: item["ratingKey"],
-                title: item["title"],
-                type: item["type"],
-                view_count: item["viewCount"] || 0,
-                last_viewed_at: item["lastViewedAt"],
-                guids: parse_guids(item["Guid"])
-              }
-            end)
+            |> Enum.map(&parse_library_item/1)
 
           {:ok, items}
 
@@ -141,6 +150,7 @@ defmodule Mydia.MediaServer.Client.Plex do
                 season_number: ep["parentIndex"],
                 episode_number: ep["index"],
                 view_count: ep["viewCount"] || 0,
+                view_offset: ep["viewOffset"],
                 last_viewed_at: ep["lastViewedAt"],
                 guids: parse_guids(ep["Guid"])
               }
@@ -209,6 +219,30 @@ defmodule Mydia.MediaServer.Client.Plex do
   end
 
   def parse_guids(_), do: %{}
+
+  defp parse_library_item(item) do
+    %{
+      rating_key: item["ratingKey"],
+      title: item["title"],
+      type: item["type"],
+      view_count: item["viewCount"] || 0,
+      view_offset: item["viewOffset"],
+      last_viewed_at: item["lastViewedAt"],
+      guids: parse_guids(item["Guid"])
+    }
+  end
+
+  defp maybe_put_since(params, nil), do: params
+
+  defp maybe_put_since(params, %DateTime{} = since) do
+    Keyword.put(params, :"lastViewedAt>", DateTime.to_unix(since))
+  end
+
+  defp maybe_put_container_header(headers, _name, nil), do: headers
+
+  defp maybe_put_container_header(headers, name, value) when is_integer(value) do
+    headers ++ [{name, Integer.to_string(value)}]
+  end
 
   # ── Private Helpers ────────────────────────────────────────────────
 

@@ -13,11 +13,11 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
   use Oban.Worker, queue: :integrations, max_attempts: 3
 
   alias Mydia.MediaServer.Error
-  alias Mydia.MediaServer.WatchedSync
-  alias Mydia.MediaServer.WatchedSync.Orchestrator
   alias Mydia.Repo
   alias Mydia.Settings
   alias Mydia.Settings.MediaServerUserLink
+  alias Mydia.WatchSync
+  alias Mydia.WatchSync.Providers.Plex
 
   require Logger
 
@@ -77,7 +77,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
 
       Logger.info("Starting watched sync (#{direction}) for #{config.name}, user #{user_id}")
 
-      with {:ok, _adapter} <- WatchedSync.adapter_for(config) do
+      with {:ok, provider} <- provider_for(config) do
         {:ok, run} =
           Mydia.Sync.start_run(%{
             provider: to_string(config.type),
@@ -86,7 +86,12 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
             direction: direction
           })
 
-        case Orchestrator.sync(config, user_id, direction: direction) do
+        case WatchSync.sync(
+               provider,
+               config,
+               %{user_id: user_id, access_token: config.token},
+               provider: to_string(config.type)
+             ) do
           {:ok, stats} ->
             Mydia.Sync.finish_run(run, :ok, stats, nil)
             # Only a successful sync updates the last-sync timestamp. It was
@@ -121,10 +126,13 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
   defp skip_reason(config) do
     cond do
       not watched_sync_enabled?(config) -> :sync_disabled
-      match?({:error, _}, WatchedSync.adapter_for(config)) -> :unsupported_provider
+      match?({:error, _}, provider_for(config)) -> :unsupported_provider
       true -> nil
     end
   end
+
+  defp provider_for(%{type: :plex}), do: {:ok, Plex}
+  defp provider_for(_), do: {:error, :unsupported_provider}
 
   defp record_skip(config, reason, user_id \\ nil) do
     Mydia.Sync.record_skip(
