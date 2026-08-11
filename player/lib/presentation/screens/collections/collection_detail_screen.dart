@@ -12,6 +12,7 @@ import '../../../core/downloads/collection_sync_service.dart';
 import '../../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../../core/graphql/watch/query_key.dart';
 import '../../../core/layout/breakpoints.dart';
+import '../../../core/layout/dock_insets.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/models/recently_added_item.dart';
 
@@ -203,10 +204,9 @@ class CollectionDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildGridView(BuildContext context, List items) {
-    final isDesktop = Breakpoints.isDesktop(context);
     final horizontalPadding = Breakpoints.getHorizontalPadding(context);
     final cardSpacing = Breakpoints.getCardSpacing(context);
-    final bottomPadding = isDesktop ? 32.0 : 100.0;
+    final bottomPadding = DockInsets.bottomOf(context);
 
     return LayoutBuilder(
       builder: (context, constraints) {

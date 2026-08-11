@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/cache/poster_cache_manager.dart';
+import '../../../core/layout/dock_insets.dart';
 import 'movie_detail_controller.dart';
 import '../../widgets/freshness_header.dart';
 import '../../widgets/quality_download_dialog.dart';
@@ -255,7 +256,7 @@ class MovieDetailScreen extends ConsumerWidget {
               },
             ),
           ),
-        const SliverToBoxAdapter(child: SizedBox(height: 32)),
+        const SliverDockGap(),
       ],
     );
   }

@@ -95,6 +95,44 @@ class AppShell extends ConsumerStatefulWidget {
         child: child,
       );
 
+  /// Wraps the bottom dock so it disappears while the nav drawer is open.
+  ///
+  /// In `Scaffold.build`, the drawer slot is added to the child list before
+  /// `bottomNavigationBar`, and the layout paints in that order. So a floating
+  /// dock would otherwise sit on top of the drawer AND its scrim, and keep
+  /// intercepting taps: tapping where "Home" sits navigates while the drawer
+  /// is open.
+  ///
+  /// `app_shell_drawer_dock_test.dart` pins this behaviour, so a Flutter
+  /// upgrade that reorders those slots surfaces there rather than here.
+  ///
+  /// [child] stays MOUNTED rather than being swapped for `null`. Removing the
+  /// bar would drop `MediaQuery.padding.bottom` to zero, which is the exact
+  /// value every screen's `DockInsets.bottomOf` reads, so all content would
+  /// reflow behind the open drawer and reflow back on close. Fading in place
+  /// holds the measured height stable.
+  ///
+  /// 200ms sits just inside Flutter's drawer settle duration (246ms), so the
+  /// dock is gone before the drawer finishes arriving.
+  ///
+  /// Public and `@visibleForTesting` for the reason [castOverlay] and
+  /// [contentGutter] are: a test can exercise the exact widget the shell
+  /// builds, instead of a mirror that silently drifts from the real call site
+  /// and would stay green if this wrapper were deleted.
+  @visibleForTesting
+  static Widget dockChrome({
+    required bool drawerOpen,
+    required Widget child,
+  }) =>
+      IgnorePointer(
+        ignoring: drawerOpen,
+        child: AnimatedOpacity(
+          opacity: drawerOpen ? 0 : 1,
+          duration: const Duration(milliseconds: 200),
+          child: child,
+        ),
+      );
+
   @override
   ConsumerState<AppShell> createState() => _AppShellState();
 }
@@ -102,6 +140,9 @@ class AppShell extends ConsumerStatefulWidget {
 class _AppShellState extends ConsumerState<AppShell> {
   GoRouter? _router;
   CollectionAutoSync? _collectionAutoSync;
+
+  /// Whether the nav drawer is open. Drives [AppShell.dockChrome].
+  bool _drawerOpen = false;
 
   @override
   void initState() {
@@ -252,6 +293,9 @@ class _AppShellState extends ConsumerState<AppShell> {
       key: AppShell.scaffoldKey,
       backgroundColor: Colors.transparent,
       extendBody: true,
+      onDrawerChanged: (isOpen) {
+        if (mounted) setState(() => _drawerOpen = isOpen);
+      },
       drawer: MobileDrawer(
         location: location,
         onNavigate: (route) {
@@ -275,11 +319,14 @@ class _AppShellState extends ConsumerState<AppShell> {
           if (showCastOverlay) AppShell.castOverlay(isDesktop: false),
         ],
       ),
-      bottomNavigationBar: BottomNav(
-        location: location,
-        onNavigate: _navigateTo,
-        isOffline: isOffline,
-        showBackToMydia: showBackToMydia,
+      bottomNavigationBar: AppShell.dockChrome(
+        drawerOpen: _drawerOpen,
+        child: BottomNav(
+          location: location,
+          onNavigate: _navigateTo,
+          isOffline: isOffline,
+          showBackToMydia: showBackToMydia,
+        ),
       ),
     );
   }

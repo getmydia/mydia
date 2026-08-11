@@ -9,6 +9,7 @@ import '../../widgets/freshness_header.dart';
 import '../../widgets/glass_surface.dart';
 import '../../../core/graphql/watch/query_key.dart';
 import '../../../core/layout/breakpoints.dart';
+import '../../../core/layout/dock_insets.dart';
 import '../../../core/theme/colors.dart';
 
 class UnwatchedScreen extends ConsumerWidget {
@@ -218,10 +219,9 @@ class UnwatchedScreen extends ConsumerWidget {
   }
 
   Widget _buildGridView(BuildContext context, List items) {
-    final isDesktop = Breakpoints.isDesktop(context);
     final horizontalPadding = Breakpoints.getHorizontalPadding(context);
     final cardSpacing = Breakpoints.getCardSpacing(context);
-    final bottomPadding = isDesktop ? 32.0 : 100.0;
+    final bottomPadding = DockInsets.bottomOf(context);
 
     return LayoutBuilder(
       builder: (context, constraints) {
