@@ -53,24 +53,30 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Components do
               <.icon name="hero-pencil" class="w-4 h-4" />
             </button>
             <%= if @format.builtin? do %>
-              <button
-                id={"custom-format-reset-#{@format.slug}"}
-                class="btn btn-sm btn-ghost join-item"
-                phx-click="reset_custom_format"
-                phx-value-slug={@format.slug}
-                disabled={not @format.overridden?}
-                title={
-                  if(@format.overridden?,
-                    do: "Reset to the shipped definition",
-                    else: "Not modified"
-                  )
-                }
-              >
-                <.icon
-                  name="hero-arrow-uturn-left"
-                  class={if(@format.overridden?, do: "w-4 h-4", else: "w-4 h-4 opacity-30")}
-                />
-              </button>
+              <%!-- A disabled <button> does not fire hover, so the native title
+                   attribute is unreliable there. Wrap it the way the other
+                   config pages do and let DaisyUI's .tooltip carry the text. --%>
+              <%= if @format.overridden? do %>
+                <button
+                  id={"custom-format-reset-#{@format.slug}"}
+                  class="btn btn-sm btn-ghost join-item"
+                  phx-click="reset_custom_format"
+                  phx-value-slug={@format.slug}
+                  title="Reset to the shipped definition"
+                >
+                  <.icon name="hero-arrow-uturn-left" class="w-4 h-4" />
+                </button>
+              <% else %>
+                <div class="tooltip" data-tip="Not modified">
+                  <button
+                    id={"custom-format-reset-#{@format.slug}"}
+                    class="btn btn-sm btn-ghost join-item"
+                    disabled
+                  >
+                    <.icon name="hero-arrow-uturn-left" class="w-4 h-4 opacity-30" />
+                  </button>
+                </div>
+              <% end %>
             <% else %>
               <button
                 id={"custom-format-delete-#{@format.slug}"}
