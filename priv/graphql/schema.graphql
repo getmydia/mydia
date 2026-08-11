@@ -598,6 +598,96 @@ type Artwork {
   thumbnailUrl: String
 }
 
+"What kind of elementary stream this is"
+enum MediaStreamType {
+  "Video stream"
+  VIDEO
+
+  "Audio stream"
+  AUDIO
+
+  "Subtitle stream"
+  SUBTITLE
+}
+
+"""
+One elementary stream of a media file, as reported by ffprobe.
+
+Values are raw. Composing display strings ("HEVC Main 10", "7.1 (8 ch)") is
+the client's job, so the same data can be formatted differently without a
+server change. Type-specific fields are null on streams of other types.
+
+The disposition fields are `isDefault` / `isForced` rather than `default` /
+`forced` because `default` is a reserved word in Dart and would make the
+player's GraphQL codegen emit invalid source.
+"""
+type MediaStream {
+  "Stream index within the container"
+  index: Int
+
+  type: MediaStreamType!
+
+  "Short codec name (e.g. hevc, truehd, subrip)"
+  codec: String
+
+  "Descriptive codec name"
+  codecLong: String
+
+  "Codec profile (e.g. Main 10)"
+  profile: String
+
+  "Codec level, as ffprobe's integer"
+  level: Int
+
+  "ISO 639-2 language code from container tags"
+  language: String
+
+  "Track title from container tags"
+  title: String
+
+  "Stream bitrate in bits per second"
+  bitrate: Int
+
+  isDefault: Boolean
+
+  isForced: Boolean
+
+  isHearingImpaired: Boolean
+
+  isCommentary: Boolean
+
+  width: Int
+
+  height: Int
+
+  "Average frame rate in frames per second"
+  frameRate: Float
+
+  pixelFormat: String
+
+  bitDepth: Int
+
+  colorSpace: String
+
+  colorTransfer: String
+
+  colorPrimaries: String
+
+  "Dolby Vision profile, when present"
+  dolbyVisionProfile: Int
+
+  "Display aspect ratio (e.g. 16:9)"
+  aspectRatio: String
+
+  channels: Int
+
+  "Channel layout (e.g. 5.1, 7.1)"
+  channelLayout: String
+
+  "Sample rate in Hz"
+  sampleRate: Int
+}
+
 "A playable video file"
 type MediaFile {
   "File ID"
@@ -620,6 +710,24 @@ type MediaFile {
 
   "Bitrate in bits per second"
   bitrate: Int
+
+  "Every video, audio and subtitle stream. Null when detailed capture has not run for this file yet."
+  streams: [MediaStream]
+
+  "File name without its directory"
+  fileName: String
+
+  "Absolute directory containing the file"
+  directory: String
+
+  "Container format (e.g. mkv, mp4)"
+  container: String
+
+  "Duration in seconds"
+  duration: Float
+
+  "Subtitle files stored alongside the media file. Unlike `subtitles`, this never probes the file."
+  externalSubtitles: [SubtitleTrack]
 
   "Whether this file can be direct played (no transcoding needed)"
   directPlaySupported: Boolean

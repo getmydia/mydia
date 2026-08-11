@@ -420,4 +420,24 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
   end
 
   def visible_segments(_media_file), do: []
+
+  @doc """
+  Absolute path of a media file, preloading `library_path` if the caller did not.
+
+  Kept here rather than inline in the schema so the preload fallback lives in
+  one place. Callers resolve a small `files` list per item, so the extra query
+  is bounded.
+  """
+  def absolute_path(%Mydia.Library.MediaFile{} = media_file) do
+    media_file =
+      if Ecto.assoc_loaded?(media_file.library_path) do
+        media_file
+      else
+        Mydia.Library.get_media_file!(media_file.id, preload: [:library_path])
+      end
+
+    Mydia.Library.MediaFile.absolute_path(media_file)
+  rescue
+    Ecto.NoResultsError -> nil
+  end
 end

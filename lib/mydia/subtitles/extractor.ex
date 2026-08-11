@@ -187,8 +187,13 @@ defmodule Mydia.Subtitles.Extractor do
   defp normalize_subtitle_format("hdmv_pgs_subtitle"), do: "pgs"
   defp normalize_subtitle_format(codec), do: codec || "unknown"
 
-  # Get external subtitles from database
-  defp get_external_subtitles(media_file_id) do
+  @doc """
+  Subtitle tracks stored as sidecar files for a media file.
+
+  Reads only the database. Unlike `list_subtitle_tracks/2` this never runs
+  ffprobe, which makes it safe to resolve on a hot GraphQL path.
+  """
+  def list_external_subtitle_tracks(media_file_id) do
     Mydia.Subtitles.list_subtitles(media_file_id)
     |> Enum.map(fn subtitle ->
       %{
@@ -200,6 +205,8 @@ defmodule Mydia.Subtitles.Extractor do
       }
     end)
   end
+
+  defp get_external_subtitles(media_file_id), do: list_external_subtitle_tracks(media_file_id)
 
   # Format external subtitle title
   defp format_external_title(subtitle) do

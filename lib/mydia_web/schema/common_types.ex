@@ -12,6 +12,56 @@ defmodule MydiaWeb.Schema.CommonTypes do
     field :thumbnail_url, :string, description: "Thumbnail image URL"
   end
 
+  @desc "What kind of elementary stream this is"
+  enum :media_stream_type do
+    value(:video, description: "Video stream")
+    value(:audio, description: "Audio stream")
+    value(:subtitle, description: "Subtitle stream")
+  end
+
+  @desc """
+  One elementary stream of a media file, as reported by ffprobe.
+
+  Values are raw. Composing display strings ("HEVC Main 10", "7.1 (8 ch)") is
+  the client's job, so the same data can be formatted differently without a
+  server change. Type-specific fields are null on streams of other types.
+
+  The disposition fields are `isDefault` / `isForced` rather than `default` /
+  `forced` because `default` is a reserved word in Dart and would make the
+  player's GraphQL codegen emit invalid source.
+  """
+  object :media_stream do
+    field :index, :integer, description: "Stream index within the container"
+    field :type, non_null(:media_stream_type)
+    field :codec, :string, description: "Short codec name (e.g. hevc, truehd, subrip)"
+    field :codec_long, :string, description: "Descriptive codec name"
+    field :profile, :string, description: "Codec profile (e.g. Main 10)"
+    field :level, :integer, description: "Codec level, as ffprobe's integer"
+    field :language, :string, description: "ISO 639-2 language code from container tags"
+    field :title, :string, description: "Track title from container tags"
+    field :bitrate, :integer, description: "Stream bitrate in bits per second"
+
+    field :is_default, :boolean
+    field :is_forced, :boolean
+    field :is_hearing_impaired, :boolean
+    field :is_commentary, :boolean
+
+    field :width, :integer
+    field :height, :integer
+    field :frame_rate, :float, description: "Average frame rate in frames per second"
+    field :pixel_format, :string
+    field :bit_depth, :integer
+    field :color_space, :string
+    field :color_transfer, :string
+    field :color_primaries, :string
+    field :dolby_vision_profile, :integer, description: "Dolby Vision profile, when present"
+    field :aspect_ratio, :string, description: "Display aspect ratio (e.g. 16:9)"
+
+    field :channels, :integer
+    field :channel_layout, :string, description: "Channel layout (e.g. 5.1, 7.1)"
+    field :sample_rate, :integer, description: "Sample rate in Hz"
+  end
+
   @desc "A playable video file"
   object :media_file do
     field :id, non_null(:id), description: "File ID"
@@ -21,6 +71,54 @@ defmodule MydiaWeb.Schema.CommonTypes do
     field :hdr_format, :string, description: "HDR format if applicable (e.g., dolby_vision)"
     field :size, :integer, description: "File size in bytes"
     field :bitrate, :integer, description: "Bitrate in bits per second"
+
+    @desc "Every video, audio and subtitle stream. Null when detailed capture has not run for this file yet."
+    field :streams, list_of(:media_stream) do
+      resolve(fn file, _args, _info ->
+        case file.metadata do
+          %Mydia.Library.Structs.FileMetadata{streams: streams} when is_list(streams) ->
+            {:ok, streams}
+
+          _ ->
+            {:ok, nil}
+        end
+      end)
+    end
+
+    @desc "File name without its directory"
+    field :file_name, :string do
+      resolve(fn file, _args, _info ->
+        # relative_path is on the row itself, so this needs no library_path preload.
+        {:ok, file.relative_path && Path.basename(file.relative_path)}
+      end)
+    end
+
+    @desc "Absolute directory containing the file"
+    field :directory, :string do
+      resolve(fn file, _args, _info ->
+        case MydiaWeb.Schema.Resolvers.MediaResolver.absolute_path(file) do
+          nil -> {:ok, nil}
+          path -> {:ok, Path.dirname(path)}
+        end
+      end)
+    end
+
+    @desc "Container format (e.g. mkv, mp4)"
+    field :container, :string do
+      resolve(fn file, _args, _info -> {:ok, metadata_field(file, :container)} end)
+    end
+
+    @desc "Duration in seconds"
+    field :duration, :float do
+      resolve(fn file, _args, _info -> {:ok, metadata_field(file, :duration)} end)
+    end
+
+    @desc "Subtitle files stored alongside the media file. Unlike `subtitles`, this never probes the file."
+    field :external_subtitles, list_of(:subtitle_track) do
+      resolve(fn file, _args, _info ->
+        {:ok, Mydia.Subtitles.Extractor.list_external_subtitle_tracks(file.id)}
+      end)
+    end
 
     @desc "Whether this file can be direct played (no transcoding needed)"
     field :direct_play_supported, :boolean do
@@ -410,4 +508,9 @@ defmodule MydiaWeb.Schema.CommonTypes do
       end)
     end
   end
+
+  defp metadata_field(%{metadata: %Mydia.Library.Structs.FileMetadata{} = metadata}, key),
+    do: Map.get(metadata, key)
+
+  defp metadata_field(_file, _key), do: nil
 end
