@@ -1,9 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
 
 import '../../../core/graphql/graphql_provider.dart';
 import '../../../core/graphql/watch/schema_downgrade.dart';
 import '../../../domain/models/media_stream.dart';
+import '../../../domain/models/subtitle_track.dart';
 import '../../../graphql/queries/media_info.graphql.dart';
 import 'media_info_sheet.dart';
 
@@ -60,12 +62,17 @@ final mediaInfoProvider =
 
   return files
       .cast<Map<String, dynamic>>()
-      .map(_fileFromJson)
+      .map(mediaFileInfoFromJson)
       .toList(growable: false);
 });
 
-MediaFileInfo _fileFromJson(Map<String, dynamic> json) {
+/// Maps one `MediaInfoFragment` payload onto [MediaFileInfo].
+///
+/// Public only so it can be unit tested without a GraphQL client.
+@visibleForTesting
+MediaFileInfo mediaFileInfoFromJson(Map<String, dynamic> json) {
   final streams = json['streams'] as List<dynamic>?;
+  final external = json['externalSubtitles'] as List<dynamic>?;
 
   return MediaFileInfo(
     id: json['id'].toString(),
@@ -79,6 +86,20 @@ MediaFileInfo _fileFromJson(Map<String, dynamic> json) {
     codec: json['codec'] as String?,
     streams:
         streams?.cast<Map<String, dynamic>>().map(_streamFromJson).toList(),
+    externalSubtitles: (external ?? const [])
+        .cast<Map<String, dynamic>>()
+        .map(_externalSubtitleFromJson)
+        .toList(growable: false),
+  );
+}
+
+SubtitleTrack _externalSubtitleFromJson(Map<String, dynamic> json) {
+  return SubtitleTrack(
+    id: json['trackId'].toString(),
+    language: json['language'] as String? ?? 'und',
+    title: json['title'] as String?,
+    format: json['format'] as String? ?? 'srt',
+    embedded: json['embedded'] as bool? ?? false,
   );
 }
 
