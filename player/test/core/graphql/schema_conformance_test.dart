@@ -85,6 +85,42 @@ void main() {
             'expose:\n  ${violations.join('\n  ')}',
       );
     });
+
+    test('the inline scanner sees both of Dart\'s triple-quote forms', () {
+      // The scanner originally matched only `'''`, so an inline operation
+      // written with `"""` would have slipped past the case above without
+      // anything reporting it.
+      final source = [
+        "const a = r'''\nquery A { movie(id: \"1\") { id } }\n''';",
+        'const b = r"""\nquery B { movie(id: "1") { id } }\n""";',
+        'const c = """\nquery C { movie(id: "1") { id } }\n""";',
+        "final d = gql(r'''\nquery D { movie(id: \"1\") { id } }\n''');",
+      ].join('\n');
+
+      final bodies =
+          _tripleQuoted.allMatches(source).map((m) => m.group(3)!.trim());
+
+      expect(bodies, hasLength(4));
+      expect(bodies.every((body) => body.startsWith('query ')), isTrue);
+    });
+
+    test('a triple quote inside a comment does not desync the scan', () {
+      // The failure this closes: an unanchored pattern treats the `"""` in the
+      // comment as an opening delimiter, pairs it with the real one on the line
+      // below, and every document after it in the file goes unscanned.
+      final source = [
+        '// Some note mentioning """ and \'\'\' in passing.',
+        'const a = r"""',
+        'query A { movie(id: "1") { id } }',
+        '""";',
+      ].join('\n');
+
+      final bodies =
+          _tripleQuoted.allMatches(source).map((m) => m.group(3)!.trim());
+
+      expect(bodies, hasLength(1));
+      expect(bodies.single, startsWith('query A'));
+    });
   });
 }
 
@@ -142,7 +178,7 @@ List<_Document> _collectDocuments() {
 
     for (final match in _tripleQuoted.allMatches(entity.readAsStringSync())) {
       final isRaw = match.group(1) == 'r';
-      var body = match.group(2)!;
+      var body = match.group(3)!;
       // Non-raw literals escape interpolation, so `\$id` in the source is `$id`
       // in the document the server receives.
       if (!isRaw) body = body.replaceAll(r'\$', r'$');
@@ -159,6 +195,23 @@ List<_Document> _collectDocuments() {
   return documents;
 }
 
-final RegExp _tripleQuoted = RegExp("(r?)'''(.*?)'''", dotAll: true);
+/// Matches both of Dart's triple-quote forms, raw or not: group 1 is the `r`
+/// prefix, group 2 the opening delimiter, group 3 the body. The backreference
+/// on group 2 keeps a `'''` block from being closed by a `"""`.
+///
+/// Matching only `'''` would leave a hole wide enough to defeat this file: an
+/// inline operation written with `"""` would never be scanned.
+///
+/// The leading `[=(]` anchor matters more than it looks. Without it, a triple
+/// quote appearing anywhere else — most often inside a comment describing one —
+/// is read as an opening delimiter, pairs with the *real* opening delimiter
+/// below it, and shifts every subsequent pairing in that file. Coverage then
+/// drops silently for the rest of the file rather than failing. Every inline
+/// document in this codebase is either assigned (`= r'''`) or passed straight
+/// to `gql(` , so anchoring costs nothing and removes the failure mode.
+final RegExp _tripleQuoted = RegExp(
+  '[=(]\\s*(r?)(\'\'\'|""")(.*?)\\2',
+  dotAll: true,
+);
 final RegExp _graphqlOpener =
     RegExp(r'^\s*(query|mutation|subscription|fragment)\s', multiLine: false);
