@@ -673,6 +673,19 @@ defmodule Mydia.Settings do
           {:ok, LibraryPath.t()} | {:error, Ecto.Changeset.t()}
   defdelegate delete_library_path(library_path), to: Mydia.Settings.LibraryPaths
 
+  @doc """
+  Makes a library the default download target for `:movies` or `:series`.
+  """
+  @spec set_default_library(LibraryPath.t(), :movies | :series) ::
+          {:ok, LibraryPath.t()} | {:error, Ecto.Changeset.t() | :incompatible_type}
+  defdelegate set_default_library(library_path, kind), to: Mydia.Settings.LibraryPaths
+
+  @doc """
+  Returns the default target library for `:movies` or `:series`, or nil.
+  """
+  @spec default_library_for(:movies | :series) :: LibraryPath.t() | nil
+  defdelegate default_library_for(kind), to: Mydia.Settings.LibraryPaths
+
   # ── Runtime Configuration ────────────────────────────────────────────
 
   @doc """
