@@ -1,11 +1,11 @@
 // The shell pins CastOverlayButton into its own Stack so casting is reachable
-// even on desktop screens that suppress their app bar entirely (Home,
-// Unwatched, Favorites, RecentlyAdded, Collections). But some in-shell
-// screens (Library, Downloads, Settings, Search) keep a real, always-visible
-// app bar with their own action buttons in the same top-right band the
-// overlay paints into — those screens carry their own CastButton instead, and
-// the shell must not also paint the overlay there, or the overlay sits on top
-// of and intercepts taps for the screen's own actions.
+// even on desktop screens that suppress their app bar entirely (Home). But some
+// in-shell screens (Library, Downloads, Settings, Search, Unwatched,
+// ContinueWatching, Favorites, RecentlyAdded, Collections) keep a real,
+// always-visible app bar with their own action buttons in the same top-right
+// band the overlay paints into — those screens carry their own CastButton
+// instead, and the shell must not also paint the overlay there, or the overlay
+// sits on top of and intercepts taps for the screen's own actions.
 //
 // `AppShell.hasOwnCastButton` is the single routing decision that keeps these
 // two mutually exclusive. It's asserted directly here (rather than by
@@ -35,6 +35,14 @@ void main() {
       '/downloads',
       '/settings',
       '/search',
+      // Gained an always-visible glass bar with its own CastButton when they
+      // moved onto `BrowseScaffold`. Before that they suppressed their bar
+      // entirely on desktop and the overlay was their only affordance.
+      '/unwatched',
+      '/continue-watching',
+      '/favorites',
+      '/recently-added',
+      '/collections',
       // Sub-paths under a route with its own button must also be excluded
       // from the overlay, matching how `_isHomeSection`/`_isLibrarySection`
       // already treat these as prefixes, not exact matches.
@@ -46,15 +54,10 @@ void main() {
       });
     }
 
-    // Home, Unwatched, Favorites, RecentlyAdded and Collections all suppress
-    // their app bar entirely on desktop — the overlay is the only cast
-    // affordance they ever get, so it must stay lit for these routes.
+    // Home is the last in-shell destination that still suppresses its app bar
+    // on desktop, so the overlay remains its only cast affordance.
     for (final location in [
       '/',
-      '/unwatched',
-      '/favorites',
-      '/recently-added',
-      '/collections',
     ]) {
       test('is false for $location (overlay is the only affordance)', () {
         expect(AppShell.hasOwnCastButton(location), isFalse);
