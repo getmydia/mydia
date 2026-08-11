@@ -5,7 +5,7 @@
       <div>
         <h1 class="text-3xl font-bold">Integrations</h1>
         <p class="text-base-content/70 mt-1">
-          Connect external services to sync your watch history and ratings.
+          Connect external services to sync your watch history.
         </p>
       </div>
     </div>
@@ -17,96 +17,18 @@
         </h2>
 
         <div class="space-y-4">
-          <div>
-            <h3 class="font-medium mb-1">Trakt.tv</h3>
-            <p class="text-sm text-base-content/60 mb-3">
-              Track your watch history and sync ratings with Trakt.tv.
-            </p>
-          </div>
-
-          <%= if @trakt_error do %>
-            <div class="alert alert-error" id="trakt-error">
-              <.icon name="hero-exclamation-circle" class="w-5 h-5" />
-              <span>{@trakt_error}</span>
-            </div>
-          <% end %>
-
-          <%= cond do %>
-            <% @trakt_user_code != nil -> %>
-              <%!-- Device code active — waiting for user authorization --%>
-              <div
-                class="bg-base-200 rounded-lg p-4 text-center space-y-3"
-                id="trakt-device-auth"
-              >
-                <p class="text-sm text-base-content/70">
-                  Go to the following URL and enter the code below:
-                </p>
-                <a
-                  href={@trakt_verification_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="link link-primary text-sm"
-                >
-                  {@trakt_verification_url}
-                </a>
-                <div class="py-2">
-                  <%!-- phx-no-format keeps the code on one line so select-all copies no surrounding whitespace --%>
-                  <code
-                    phx-no-format
-                    class="text-3xl font-mono font-bold tracking-widest select-all"
-                  >{@trakt_user_code}</code>
-                </div>
-                <div class="flex items-center justify-center gap-2 text-sm text-base-content/60">
-                  <span class="loading loading-spinner loading-xs"></span>
-                  Waiting for authorization...
-                </div>
-                <button
-                  type="button"
-                  id="trakt-cancel-btn"
-                  class="btn btn-ghost btn-sm"
-                  phx-click="trakt_cancel"
-                >
-                  Cancel
-                </button>
-              </div>
-            <% @trakt_integration != nil -> %>
-              <%!-- Connected --%>
-              <div class="flex items-center justify-between" id="trakt-connected">
-                <div class="flex items-center gap-2">
-                  <span class="badge badge-success gap-1">
-                    <.icon name="hero-check-circle" class="w-3 h-3" /> Connected
-                  </span>
-                  <%= if @trakt_integration.external_username do %>
-                    <span class="text-sm text-base-content/70">
-                      as {@trakt_integration.external_username}
-                    </span>
-                  <% end %>
-                </div>
-                <button
-                  type="button"
-                  id="trakt-disconnect-btn"
-                  class="btn btn-outline btn-error btn-sm"
-                  phx-click="trakt_disconnect"
-                  data-confirm="Are you sure you want to disconnect Trakt.tv?"
-                >
-                  Disconnect
-                </button>
-              </div>
-            <% true -> %>
-              <%!-- Not connected --%>
-              <button
-                type="button"
-                id="trakt-connect-btn"
-                class="btn btn-primary btn-sm"
-                phx-click="trakt_connect"
-              >
-                <.icon name="hero-link" class="w-4 h-4" /> Connect Trakt.tv
-              </button>
-          <% end %>
+          <p :if={@plugin_connections == []} class="text-sm text-base-content/60">
+            No integrations are available. Install a plugin that supports connections, such as
+            Simkl Sync, to sync your watch history.
+          </p>
 
           <%!-- Generic plugin connections (U8) — host-run device flow --%>
-          <div :for={pc <- @plugin_connections} class="pt-2" id={"plugin-conn-#{pc.slug}"}>
-            <div class="divider my-1"></div>
+          <div
+            :for={{pc, idx} <- Enum.with_index(@plugin_connections)}
+            class="pt-2"
+            id={"plugin-conn-#{pc.slug}"}
+          >
+            <div :if={idx > 0} class="divider my-1"></div>
             <h3 class="font-medium mb-1">{pc.name}</h3>
             <p class="text-sm text-base-content/60 mb-3">
               This connection is managed by the third-party plugin {pc.name}; it will be able to

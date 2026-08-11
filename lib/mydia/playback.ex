@@ -80,7 +80,6 @@ defmodule Mydia.Playback do
 
     case result do
       {:ok, progress} ->
-        maybe_scrobble(user_id, content_id, progress)
         emit_progress_event(user_id, content_id, previous, progress, origin)
         {:ok, progress}
 
@@ -205,8 +204,6 @@ defmodule Mydia.Playback do
 
     case result do
       {:ok, progress} ->
-        # Push to Trakt history (fire-and-forget)
-        maybe_push_trakt_history(user_id, content_id)
         # `finished` is idempotent: only emit on the unwatched -> watched edge,
         # so re-marking an already-watched row is a silent no-op (R14 echo guard).
         unless previous_watched?(previous) do
@@ -223,7 +220,7 @@ defmodule Mydia.Playback do
   @doc """
   Idempotently marks content watched for a user, the origin-tagged write-back
   entry used by the plugin `ensure-watched` host function (U6) and the same
-  synthetic-progress idiom the media-server and Trakt sync use.
+  synthetic-progress idiom the media-server sync uses.
 
   Returns `:already_watched` when the row is already watched (no write, no
   event), or `:changed` when a row was created (synthetic `position 0 /
@@ -490,21 +487,6 @@ defmodule Mydia.Playback do
       end
 
     Repo.all(query)
-  end
-
-  # ── Trakt Integration ────────────────────────────────────────────────
-
-  defp maybe_scrobble(user_id, content_id, progress) do
-    if Mydia.Integrations.trakt_scrobbling_enabled?(user_id) do
-      pct = progress.completion_percentage || 0.0
-      Mydia.Integrations.Trakt.Scrobbler.scrobble_progress(user_id, content_id, pct)
-    end
-  end
-
-  defp maybe_push_trakt_history(user_id, content_id) do
-    if Mydia.Integrations.trakt_enabled?(user_id) do
-      Mydia.Integrations.Trakt.Scrobbler.scrobble_stop(user_id, content_id, 100.0)
-    end
   end
 
   # ── Playback Events (U1) ─────────────────────────────────────────────

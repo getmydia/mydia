@@ -702,7 +702,7 @@ defmodule Mydia.Plugins.HostFunctions do
 
   defp apply_watch(plugin, user_id, content_id, watched_at) do
     # Tagged plugin:<slug> so the dispatcher suppresses the echo to this plugin
-    # (R14) while existing ripple (e.g. Trakt scrobble hooks) still fires.
+    # (R14) while existing ripple (e.g. media-server watched sync) still fires.
     status =
       Playback.ensure_watched(user_id, content_id,
         origin: "plugin:#{plugin.slug}",

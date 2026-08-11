@@ -13,7 +13,7 @@ defmodule Mydia.Plugins.Matcher do
     * Episode coordinates present (`season` and `episode` both integers) → the
       external ids identify the *show*; the episode is pinned within it. A show
       that resolves but lacks the episode is `:not_found` (no silent
-      fall-through to the show — the Trakt sync's silent skip is the
+      fall-through to the show — the media-server sync's silent skip is the
       anti-pattern).
     * No coordinates → the external ids identify a movie.
 

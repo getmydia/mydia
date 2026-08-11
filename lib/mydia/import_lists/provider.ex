@@ -3,7 +3,7 @@ defmodule Mydia.ImportLists.Provider do
   Behaviour for import list providers.
 
   This module defines the interface for fetching items from various import list sources.
-  Each provider implementation handles a specific source type (TMDB, Trakt, etc.).
+  Each provider implementation handles a specific source type (TMDB, etc.).
   """
 
   alias Mydia.ImportLists.ImportList

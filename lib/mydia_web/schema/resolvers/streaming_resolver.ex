@@ -219,7 +219,6 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
       )
 
       content_id = resolve_content_id(media_file)
-      Mydia.Integrations.Trakt.Scrobbler.scrobble_start(user_id, content_id)
 
       if content_id != [] do
         Mydia.Events.playback_event("started", user_id, content_id, %{"origin" => "player"})

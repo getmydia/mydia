@@ -1,6 +1,6 @@
 defmodule Mydia.Integrations.UserIntegration do
   @moduledoc """
-  Schema for external service integrations (e.g. Trakt.tv) linked to a user.
+  Schema for external service integrations linked to a user.
   """
   use Ecto.Schema
   import Ecto.Changeset

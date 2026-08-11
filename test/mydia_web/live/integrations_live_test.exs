@@ -67,10 +67,10 @@ defmodule MydiaWeb.IntegrationsLiveTest do
     %{conn: conn, user: user}
   end
 
-  test "mounts and offers the Trakt connect action", %{conn: conn} do
+  test "mounts and offers the plugin connection action", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/integrations")
 
-    assert has_element?(view, "#trakt-connect-btn")
+    assert has_element?(view, "#plugin-conn-#{@slug}")
   end
 
   test "exposes an Integrations link in the sidebar", %{conn: conn} do
