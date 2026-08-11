@@ -433,11 +433,12 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
       if Ecto.assoc_loaded?(media_file.library_path) do
         media_file
       else
-        Mydia.Library.get_media_file!(media_file.id, preload: [:library_path])
+        # Preload the one association rather than refetching the whole row:
+        # the struct is already in hand, and this cannot raise the way
+        # get_media_file!/2 does when the row is deleted mid-request.
+        Mydia.Repo.preload(media_file, :library_path)
       end
 
     Mydia.Library.MediaFile.absolute_path(media_file)
-  rescue
-    Ecto.NoResultsError -> nil
   end
 end

@@ -55,5 +55,26 @@ defmodule Mydia.Library.Structs.FileMetadataTest do
     test "an empty metadata map still has nil streams" do
       assert FileMetadata.empty().streams == nil
     end
+
+    test "drops malformed stream entries instead of raising" do
+      # This runs on every metadata load, so one bad entry in a hand-edited or
+      # legacy JSON column must cost that stream, not crash reads and repairs
+      # for the whole file.
+      restored =
+        FileMetadata.from_map(%{
+          "streams" => [
+            %{"type" => "video", "codec" => "h264"},
+            nil,
+            "not a stream",
+            42,
+            %{"type" => "audio", "codec" => "aac"}
+          ]
+        })
+
+      assert [
+               %StreamInfo{type: :video, codec: "h264"},
+               %StreamInfo{type: :audio, codec: "aac"}
+             ] = restored.streams
+    end
   end
 end

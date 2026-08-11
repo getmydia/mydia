@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
 
 import '../../../core/graphql/graphql_provider.dart';
+import '../../../core/graphql/watch/schema_downgrade.dart';
 import '../../../domain/models/media_stream.dart';
 import '../../../graphql/queries/media_info.graphql.dart';
 import 'media_info_sheet.dart';
@@ -41,7 +42,12 @@ final mediaInfoProvider =
   }
 
   var result = await run(document);
-  if (result.hasException) {
+
+  // Only an unknown-field rejection means the server predates these fields.
+  // Retrying on any exception would mask a network, auth or server error by
+  // re-running the narrower query and returning partial data as if it were
+  // whole. Same gate QueryWatcher uses for its own schema downgrade.
+  if (result.hasException && isUnknownFieldError(result.exception!)) {
     result = await run(fallback);
   }
   if (result.hasException) {

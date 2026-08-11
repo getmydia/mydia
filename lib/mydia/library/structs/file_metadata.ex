@@ -154,10 +154,16 @@ defmodule Mydia.Library.Structs.FileMetadata do
 
   # `streams` arrives either as StreamInfo structs (from the analyzer, via
   # Ecto.Type.cast/1) or as plain maps (from stored JSON, via load/1).
+  #
+  # Anything else in the list is dropped rather than raised on. This runs on
+  # every metadata load, so a single malformed entry in a hand-edited or legacy
+  # JSON column would otherwise crash reads and repairs for that file instead of
+  # costing it one stream.
   defp normalize_streams(streams) when is_list(streams) do
-    Enum.map(streams, fn
-      %StreamInfo{} = stream -> stream
-      map when is_map(map) -> StreamInfo.from_map(map)
+    Enum.flat_map(streams, fn
+      %StreamInfo{} = stream -> [stream]
+      map when is_map(map) -> [StreamInfo.from_map(map)]
+      _other -> []
     end)
   end
 
