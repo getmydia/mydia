@@ -911,6 +911,21 @@ defmodule Mydia.Downloads.Queue do
     end
   end
 
+  @doc false
+  # Resolves a client name to {adapter, config_map}. Public so callers outside
+  # this module (Mydia.Jobs.DownloadMonitor) can talk to a download client
+  # without duplicating the config lookup, adapter lookup and config_to_map
+  # conversion for a sixth time.
+  @spec resolve_adapter(String.t() | nil) :: {:ok, module(), map()} | {:error, term()}
+  def resolve_adapter(nil), do: {:error, :no_client}
+
+  def resolve_adapter(client_name) do
+    with {:ok, client_config} <- find_client_config(client_name),
+         {:ok, adapter} <- get_adapter_for_client(client_config) do
+      {:ok, adapter, config_to_map(client_config)}
+    end
+  end
+
   # Selects appropriate client and adds the download, with smart fallback if type is detected
   @doc false
   # Public so Mydia.Downloads.Grabber can reuse the fetch/select/add pipeline.

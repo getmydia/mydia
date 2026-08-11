@@ -1241,6 +1241,110 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
       refute Mydia.Downloads.Blacklists.blacklisted?("1337x", "guid-pending")
       assert Mydia.Downloads.get_download!(download.id)
     end
+
+    test "does not reject a torrent whose file list is a single directory path" do
+      # Reproduces the qBittorrent shape: `files` holds one entry, and that
+      # entry is the torrent's root FOLDER, not a leaf file. Transmission is
+      # used as the transport here only because this describe block already
+      # has a Bypass harness for it; the point is the shape of the data.
+      {bypass, client_config} = start_transmission_bypass()
+
+      torrent = %{
+        "hashString" => "folder-hash",
+        "name" => "Minions.Monsters.2026.720p.WEBRip.x264-YTS",
+        "status" => 4,
+        "percentDone" => 0.42,
+        "downloadDir" => "/downloads",
+        "files" => [
+          %{"name" => "Minions.Monsters.2026.720p.WEBRip.x264-YTS/movie.mkv", "length" => 1}
+        ]
+      }
+
+      mock_transmission_torrent_get(bypass, [torrent])
+
+      media_item = media_item_fixture()
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          title: "Minions.Monsters.2026.720p.WEBRip.x264-YTS",
+          indexer: "1337x",
+          download_client: client_config.name,
+          download_client_id: "folder-hash",
+          metadata: %{indexer: "1337x", guid: "guid-folder"}
+        })
+
+      assert :ok = perform_job(DownloadMonitor, %{})
+
+      # Still there, still ours, not blacklisted.
+      assert Mydia.Downloads.get_download!(download.id)
+      refute Mydia.Downloads.Blacklists.blacklisted?("1337x", "guid-folder")
+    end
+
+    test "stamps content_checked_at so the enumeration runs only once" do
+      {bypass, client_config} = start_transmission_bypass()
+
+      torrent = %{
+        "hashString" => "once-hash",
+        "name" => "Some.Movie.2026.720p",
+        "status" => 4,
+        "percentDone" => 0.42,
+        "downloadDir" => "/downloads",
+        "files" => [%{"name" => "Some.Movie.2026.720p/movie.mkv", "length" => 1}]
+      }
+
+      mock_transmission_torrent_get(bypass, [torrent])
+
+      media_item = media_item_fixture()
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          title: "Some.Movie.2026.720p",
+          indexer: "1337x",
+          download_client: client_config.name,
+          download_client_id: "once-hash",
+          metadata: %{indexer: "1337x", guid: "guid-once"}
+        })
+
+      assert :ok = perform_job(DownloadMonitor, %{})
+      assert Mydia.Downloads.get_download!(download.id).content_checked_at
+    end
+
+    test "does not reject when the client reports no files yet" do
+      {bypass, client_config} = start_transmission_bypass()
+
+      torrent = %{
+        "hashString" => "empty-hash",
+        "name" => "Some.Movie.2026.720p",
+        "status" => 4,
+        "percentDone" => 0.0,
+        "downloadDir" => "/downloads",
+        "files" => []
+      }
+
+      mock_transmission_torrent_get(bypass, [torrent])
+
+      media_item = media_item_fixture()
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          title: "Some.Movie.2026.720p",
+          indexer: "1337x",
+          download_client: client_config.name,
+          download_client_id: "empty-hash",
+          metadata: %{indexer: "1337x", guid: "guid-empty"}
+        })
+
+      assert :ok = perform_job(DownloadMonitor, %{})
+
+      assert Mydia.Downloads.get_download!(download.id)
+      refute Mydia.Downloads.Blacklists.blacklisted?("1337x", "guid-empty")
+      # An empty enumeration means "metadata not resolved yet", so we must be
+      # willing to look again on the next poll.
+      refute Mydia.Downloads.get_download!(download.id).content_checked_at
+    end
   end
 
   describe "handle_failure/1 with a classified debrid failure" do

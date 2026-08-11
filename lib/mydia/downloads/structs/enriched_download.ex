@@ -66,6 +66,9 @@ defmodule Mydia.Downloads.Structs.EnrichedDownload do
     :import_reported_path,
     :import_next_retry_at,
     :import_failed_at,
+    # Set once DownloadMonitor has enumerated this torrent's files for the
+    # pre-completion content check. Nil means not yet evaluated.
+    :content_checked_at,
     # Issues-tab path-mapping enrichment (computed in the LiveView; nil otherwise)
     :path_mapping_suggestion,
     :path_mapping_affected_count,
@@ -144,6 +147,7 @@ defmodule Mydia.Downloads.Structs.EnrichedDownload do
           import_reported_path: String.t() | nil,
           import_next_retry_at: DateTime.t() | nil,
           import_failed_at: DateTime.t() | nil,
+          content_checked_at: DateTime.t() | nil,
           path_mapping_suggestion: map() | nil,
           path_mapping_affected_count: integer() | nil,
           last_progress_at: DateTime.t() | nil,

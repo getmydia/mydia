@@ -53,6 +53,7 @@ defmodule Mydia.Jobs.DownloadMonitor do
   require Logger
   alias Mydia.Downloads
   alias Mydia.Downloads.Blacklists
+  alias Mydia.Downloads.Client
   alias Mydia.Downloads.ClientAdoption
   alias Mydia.Downloads.Client.FailureCategory
   alias Mydia.Downloads.ImportCandidates
@@ -174,9 +175,8 @@ defmodule Mydia.Jobs.DownloadMonitor do
     # torrent (a single disguised .exe with no video file at all) from
     # pulling its full multi-hundred-MB-to-multi-GB payload just to be
     # thrown away by the post-completion importer.
-    bad_content =
-      Enum.filter(active_for_stall_check, fn d -> is_list(d.files) and d.files != [] end)
-      |> Enum.reject(&any_importable_file?/1)
+    {bad_content, content_checked_ids} = evaluate_content(active_for_stall_check)
+    Downloads.mark_content_checked(content_checked_ids)
 
     active_for_stall_check = active_for_stall_check -- bad_content
 
@@ -369,15 +369,54 @@ defmodule Mydia.Jobs.DownloadMonitor do
 
   # --- Pre-completion content check --------------------------------------
 
-  # `downloads.media_item_id` only ever points at a `movie` or `tv_show`
-  # media item (the only two `MediaItem.valid_types/0`), so every download
-  # reaching this check wants a video file regardless of which of the two it
-  # is — `ImportCandidates.importable?/2` treats `:movies`/`:series`/`:mixed`
-  # identically. Passing `:series` unconditionally is exact, not a guess.
-  defp any_importable_file?(%{files: files}) do
-    Enum.any?(files, fn path ->
-      ImportCandidates.importable?(%{name: Path.basename(path)}, :series)
+  # Decides which active downloads hold nothing importable, and which ones we
+  # managed to evaluate at all.
+  #
+  # This deliberately does NOT read `DownloadStatus.files`. That field is an
+  # import-*scoping* path and qBittorrent and rtorrent both report a single
+  # entry that is the torrent's root DIRECTORY, whose extension
+  # (`.x264-YTS`, or none at all) is never a video extension. Judging content
+  # from it rejected every multi-file qBittorrent torrent mid-download,
+  # blacklisted the release, deleted the data and grabbed a replacement that
+  # met the same fate. `Client.list_files/3` is the enumeration contract:
+  # adapters that cannot enumerate report `:unsupported` and are skipped.
+  #
+  # `{:error, _}` and `{:ok, []}` both mean "we do not know". An empty list
+  # from a torrent client means metadata has not resolved yet, never that the
+  # torrent is empty, so neither is stamped and both are retried next poll.
+  defp evaluate_content(candidates) do
+    Enum.reduce(candidates, {[], []}, fn download_map, {bad, checked} ->
+      if download_map.content_checked_at do
+        {bad, checked}
+      else
+        case enumerate_files(download_map) do
+          {:ok, [_ | _] = files} ->
+            if Enum.any?(files, &importable_path?/1) do
+              {bad, [download_map.id | checked]}
+            else
+              {[download_map | bad], [download_map.id | checked]}
+            end
+
+          _unknown ->
+            {bad, checked}
+        end
+      end
     end)
+  end
+
+  defp enumerate_files(download_map) do
+    with {:ok, adapter, config} <- Queue.resolve_adapter(download_map.download_client) do
+      Client.list_files(adapter, config, download_map.download_client_id)
+    end
+  end
+
+  # `downloads.media_item_id` only ever points at a `movie` or `tv_show` media
+  # item (the only two `MediaItem.valid_types/0`), so every download reaching
+  # this check wants a video file regardless of which of the two it is:
+  # `ImportCandidates.importable?/2` treats `:movies`/`:series`/`:mixed`
+  # identically. Passing `:series` unconditionally is exact, not a guess.
+  defp importable_path?(path) do
+    ImportCandidates.importable?(%{name: Path.basename(path)}, :series)
   end
 
   # Rejects a still-downloading torrent whose already-known file list

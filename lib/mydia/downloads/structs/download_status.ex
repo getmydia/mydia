@@ -52,11 +52,16 @@ defmodule Mydia.Downloads.Structs.DownloadStatus do
     # classify their failures. See `Mydia.Downloads.Client.FailureCategory`.
     :failure_category,
     :failure_detail,
-    # Absolute paths of files that belong to THIS torrent/NZB only.
-    # When present and non-empty, MediaImport must import these paths
-    # instead of recursively listing `save_path` — clients like rqbit
-    # often share one output folder across many torrents, and a recursive
-    # listing would cross-contaminate series libraries.
+    # A path that scopes THIS torrent/NZB's data, so MediaImport can import it
+    # instead of recursively listing `save_path` (clients like rqbit share one
+    # output folder across many torrents, and a recursive listing would
+    # cross-contaminate libraries).
+    #
+    # NOT a reliable file listing. Transmission and rqbit populate it with
+    # real leaf paths, but qBittorrent reports a single `content_path` and
+    # rtorrent a single `base_path`, either of which is usually the torrent's
+    # root DIRECTORY. Anything that needs to know what is actually inside a
+    # torrent must use `Mydia.Downloads.Client.list_files/3` instead.
     files: nil
   ]
 
