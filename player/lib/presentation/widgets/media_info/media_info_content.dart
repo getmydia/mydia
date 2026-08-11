@@ -76,7 +76,7 @@ class MediaInfoContent extends StatelessWidget {
           _header('Video', video.length),
           _streams(
             video.length,
-            (i) => _StreamTile(
+            (i) => _VideoStreamTile(
               key: Key('media-info-stream-${video[i].index}'),
               stream: video[i],
             ),
@@ -84,24 +84,15 @@ class MediaInfoContent extends StatelessWidget {
         ],
         if (audio.isNotEmpty) ...[
           _header('Audio', audio.length),
-          _streams(
-            audio.length,
-            (i) => _StreamTile(
-              key: Key('media-info-stream-${audio[i].index}'),
-              stream: audio[i],
-            ),
-          ),
+          _streams(audio.length, (i) => _audioRow(audio[i])),
         ],
         if (subtitle.isNotEmpty || external.isNotEmpty) ...[
           _header('Subtitles', subtitle.length + external.length),
           _streams(
             subtitle.length + external.length,
             (i) => i < subtitle.length
-                ? _StreamTile(
-                    key: Key('media-info-stream-${subtitle[i].index}'),
-                    stream: subtitle[i],
-                  )
-                : _externalTile(external[i - subtitle.length]),
+                ? _subtitleRow(subtitle[i])
+                : _externalSubtitleRow(external[i - subtitle.length]),
           ),
         ],
         if (!file.hasDetailedStreams)
@@ -128,12 +119,6 @@ class MediaInfoContent extends StatelessWidget {
       ),
     );
   }
-
-  Widget _externalTile(SubtitleTrack track) => _ExternalSubtitleTile(
-        key: Key('media-info-external-${track.id}'),
-        language: languageName(track.language) ?? track.language,
-        format: track.format,
-      );
 
   Widget _versionSwitcher(int index) {
     return Padding(
@@ -209,10 +194,14 @@ class MediaInfoContent extends StatelessWidget {
   }
 }
 
-class _StreamTile extends StatelessWidget {
+/// A video stream, kept as a multi-line block.
+///
+/// There is rarely more than one, and profile, geometry, Dolby Vision profile,
+/// colour primaries, colour transfer and pixel format do not fit a single row.
+class _VideoStreamTile extends StatelessWidget {
   final MediaStream stream;
 
-  const _StreamTile({super.key, required this.stream});
+  const _VideoStreamTile({super.key, required this.stream});
 
   @override
   Widget build(BuildContext context) {
@@ -239,7 +228,7 @@ class _StreamTile extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 2),
-          for (final line in _lines()) _DetailLine(line),
+          for (final line in _videoLines()) _DetailLine(line),
         ],
       ),
     );
@@ -251,20 +240,7 @@ class _StreamTile extends StatelessWidget {
       if (language != null) language,
       if (stream.isDefault) 'Default',
       if (stream.isForced) 'Forced',
-      if (stream.isHearingImpaired) 'SDH',
-      if (stream.isCommentary) 'Commentary',
     ];
-  }
-
-  List<String> _lines() {
-    switch (stream.type) {
-      case MediaStreamType.video:
-        return _videoLines();
-      case MediaStreamType.audio:
-        return _audioLines();
-      case MediaStreamType.subtitle:
-        return _subtitleLines();
-    }
   }
 
   List<String> _videoLines() {
@@ -292,76 +268,190 @@ class _StreamTile extends StatelessWidget {
       if (bitrate != null) bitrate,
     ];
   }
-
-  List<String> _audioLines() {
-    final channels = formatChannels(stream.channels, stream.channelLayout);
-    final sampleRate = formatSampleRate(stream.sampleRate);
-    final bitrate = formatBitrate(stream.bitrate);
-    final parts = <String>[
-      if (channels != null) channels,
-      if (sampleRate != null) sampleRate,
-      if (stream.bitDepth != null) '${stream.bitDepth}-bit',
-      if (bitrate != null) bitrate,
-    ];
-
-    return [
-      if (stream.title != null) stream.title!,
-      if (parts.isNotEmpty) parts.join(' · '),
-    ];
-  }
-
-  List<String> _subtitleLines() {
-    const imageCodecs = {
-      'hdmv_pgs_subtitle',
-      'dvd_subtitle',
-      'dvb_subtitle',
-      'xsub'
-    };
-    final isImage = imageCodecs.contains(stream.codec?.toLowerCase());
-    return [
-      if (stream.title != null) stream.title!,
-      isImage ? 'Image based' : 'Text based',
-    ];
-  }
 }
 
-class _ExternalSubtitleTile extends StatelessWidget {
-  final String language;
-  final String format;
+/// One audio or subtitle stream, as a single aligned line.
+///
+/// Fixed leading column widths are what make values line up down the list; the
+/// monospace face keeps numbers aligned within a column. A second muted line
+/// renders only when the stream carries data the columns cannot hold, so in a
+/// 34-track remux most subtitle rows stay exactly one line tall.
+class _StreamRow extends StatelessWidget {
+  final String? index;
+  final String codec;
+  final String? language;
+  final String detail;
+  final List<String> flags;
+  final List<String> extra;
 
-  const _ExternalSubtitleTile({
+  const _StreamRow({
     super.key,
+    required this.index,
+    required this.codec,
     required this.language,
-    required this.format,
+    required this.detail,
+    required this.flags,
+    required this.extra,
   });
+
+  static const double _indexWidth = 22;
+  static const double _codecWidth = 66;
+  static const double _languageWidth = 88;
+  static const double _gap = 8;
+
+  static const TextStyle _codecStyle = TextStyle(
+    color: AppColors.textPrimary,
+    fontSize: 11,
+    height: 1.5,
+    fontWeight: FontWeight.w600,
+    fontFamily: 'monospace',
+  );
+
+  static const TextStyle _valueStyle = TextStyle(
+    color: AppColors.textSecondary,
+    fontSize: 11,
+    height: 1.5,
+    fontFamily: 'monospace',
+  );
+
+  static const TextStyle _mutedStyle = TextStyle(
+    color: AppColors.textDisabled,
+    fontSize: 11,
+    height: 1.5,
+    fontFamily: 'monospace',
+  );
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(vertical: 3),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Wrap(
-            spacing: 6,
-            crossAxisAlignment: WrapCrossAlignment.center,
+          Row(
             children: [
-              Text(
-                format.toUpperCase(),
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
+              SizedBox(
+                width: _indexWidth,
+                child: Text(
+                  index ?? '',
+                  textAlign: TextAlign.right,
+                  style: _mutedStyle,
                 ),
               ),
-              _FlagChip(label: language),
-              const _FlagChip(label: 'External'),
+              const SizedBox(width: _gap),
+              SizedBox(
+                width: _codecWidth,
+                child: Text(
+                  codec.toUpperCase(),
+                  overflow: TextOverflow.ellipsis,
+                  style: _codecStyle,
+                ),
+              ),
+              const SizedBox(width: _gap),
+              SizedBox(
+                width: _languageWidth,
+                child: Text(
+                  language ?? '',
+                  overflow: TextOverflow.ellipsis,
+                  style: _valueStyle,
+                ),
+              ),
+              const SizedBox(width: _gap),
+              Expanded(
+                child: Text(
+                  detail,
+                  overflow: TextOverflow.ellipsis,
+                  style: _valueStyle,
+                ),
+              ),
+              if (flags.isNotEmpty) ...[
+                const SizedBox(width: _gap),
+                Text(flags.join(' · '), style: _mutedStyle),
+              ],
             ],
           ),
+          if (extra.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(
+                left: _indexWidth + _codecWidth + _gap * 2,
+              ),
+              child: Text(
+                extra.join(' · '),
+                overflow: TextOverflow.ellipsis,
+                style: _mutedStyle,
+              ),
+            ),
         ],
       ),
     );
   }
+}
+
+/// Subtitle codecs that carry bitmaps rather than text.
+const Set<String> _imageSubtitleCodecs = {
+  'hdmv_pgs_subtitle',
+  'dvd_subtitle',
+  'dvb_subtitle',
+  'xsub',
+};
+
+bool _isImageSubtitle(String? codec) =>
+    _imageSubtitleCodecs.contains(codec?.toLowerCase());
+
+/// Playback-affecting flags. Language is deliberately absent: it has its own
+/// column in [_StreamRow], unlike the video tile where it stays a chip.
+List<String> _rowFlags(MediaStream stream) => [
+      if (stream.isDefault) 'Default',
+      if (stream.isForced) 'Forced',
+      if (stream.isHearingImpaired) 'SDH',
+      if (stream.isCommentary) 'Commentary',
+    ];
+
+_StreamRow _audioRow(MediaStream stream) {
+  final channels = formatChannels(stream.channels, stream.channelLayout);
+  final sampleRate = formatSampleRate(stream.sampleRate);
+  final bitrate = formatBitrate(stream.bitrate);
+
+  return _StreamRow(
+    key: Key('media-info-stream-${stream.index}'),
+    index: stream.index?.toString(),
+    codec: stream.codec ?? 'Unknown',
+    language: languageName(stream.language),
+    detail: [
+      if (channels != null) channels,
+      if (sampleRate != null) sampleRate,
+    ].join(' · '),
+    flags: _rowFlags(stream),
+    extra: [
+      if (stream.title != null) stream.title!,
+      if (bitrate != null) bitrate,
+      if (stream.bitDepth != null) '${stream.bitDepth}-bit',
+    ],
+  );
+}
+
+_StreamRow _subtitleRow(MediaStream stream) {
+  return _StreamRow(
+    key: Key('media-info-stream-${stream.index}'),
+    index: stream.index?.toString(),
+    codec: stream.codec ?? 'Unknown',
+    language: languageName(stream.language),
+    detail: _isImageSubtitle(stream.codec) ? 'Image' : 'Text',
+    flags: _rowFlags(stream),
+    extra: [if (stream.title != null) stream.title!],
+  );
+}
+
+_StreamRow _externalSubtitleRow(SubtitleTrack track) {
+  return _StreamRow(
+    key: Key('media-info-external-${track.id}'),
+    index: null,
+    codec: track.format,
+    language: languageName(track.language),
+    detail: _isImageSubtitle(track.format) ? 'Image' : 'Text',
+    flags: const ['External'],
+    extra: [if (track.title != null) track.title!],
+  );
 }
 
 class _DetailLine extends StatelessWidget {
