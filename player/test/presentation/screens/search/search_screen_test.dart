@@ -14,6 +14,7 @@ import 'package:player/presentation/screens/search/widgets/episode_result_row.da
 import 'package:player/presentation/screens/search/widgets/search_result_card.dart';
 import 'package:player/presentation/screens/search/widgets/search_section_header.dart';
 import 'package:player/presentation/widgets/ambient_backdrop_provider.dart';
+import 'package:player/presentation/widgets/browse_scaffold.dart';
 
 import '../../../test_utils/mock_network_images.dart';
 import 'search_screen_test.mocks.dart';
@@ -353,5 +354,79 @@ void main() {
       container.read(ambientBackdropControllerProvider.notifier).defaultSource,
       BackdropSource.none,
     );
+  });
+
+  testWidgets('gives the search field real gutters instead of sitting flush',
+      (tester) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await mockNetworkImages(() async {
+      await tester.pumpWidget(host(initialQuery: 'alien'));
+      await tester.pumpAndSettle();
+    });
+
+    final fieldLeft = tester.getTopLeft(find.byType(TextField)).dx;
+
+    // Breakpoints.getHorizontalPadding returns 32 at or above 1200 wide. The
+    // old bar used `titleSpacing: 0`, which put the field flush against the
+    // leading icon with no margin at all.
+    expect(fieldLeft, greaterThanOrEqualTo(32.0));
+  });
+
+  testWidgets('does not inherit the theme filled pill', (tester) async {
+    await mockNetworkImages(() async {
+      await tester.pumpWidget(host(initialQuery: 'alien'));
+      await tester.pumpAndSettle();
+    });
+
+    final field = tester.widget<TextField>(find.byType(TextField));
+
+    // The app theme sets `filled: true` with a rounded fill.
+    // `InputBorder.none` suppresses the stroke but not the fill, which is how
+    // this field came to render as a pill nobody designed.
+    expect(field.decoration?.filled, isFalse);
+  });
+
+  testWidgets('shows the screen title in its bar', (tester) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await mockNetworkImages(() async {
+      await tester.pumpWidget(host(initialQuery: 'alien'));
+      await tester.pumpAndSettle();
+    });
+
+    // Scoped to the bar: 'Search' would otherwise also match chip and section
+    // labels elsewhere on the screen.
+    expect(
+      find.descendant(
+        of: find.byType(BrowseScaffold),
+        matching: find.text('Search'),
+      ),
+      findsWidgets,
+    );
+  });
+
+  testWidgets('uses the app-wide poster geometry for result cards',
+      (tester) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await mockNetworkImages(() async {
+      await tester.pumpWidget(host(initialQuery: 'alien'));
+      await tester.pumpAndSettle();
+    });
+
+    final grid = tester.widget<SliverGrid>(find.byType(SliverGrid));
+    final delegate =
+        grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
+
+    // Was SliverGridDelegateWithMaxCrossAxisExtent(180) at aspect 0.55,
+    // the only grid in the app that did not match the library.
+    expect(delegate.childAspectRatio, 0.58);
   });
 }
