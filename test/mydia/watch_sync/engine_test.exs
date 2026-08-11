@@ -108,4 +108,71 @@ defmodule Mydia.WatchSync.EngineTest do
     assert counts.not_found == 1
     assert counts.imported == 0
   end
+
+  describe "direction" do
+    setup %{movie: movie} do
+      instance = %{
+        id: "inst-1",
+        test_pid: self(),
+        mappings: [
+          %{
+            remote_id: "rk1",
+            type: :movie,
+            external_ids: %{tmdb: "12345"},
+            season_number: nil,
+            episode_number: nil
+          }
+        ],
+        changes: [%{remote_id: "rk1", watched: true, position_seconds: 0, at: DateTime.utc_now()}]
+      }
+
+      {:ok, instance: instance, movie: movie}
+    end
+
+    test "export-only does not write remote state into Mydia",
+         %{user: user, movie: movie, instance: instance} do
+      scope = %{user_id: user.id, access_token: nil}
+
+      {:ok, counts} =
+        WatchSync.sync(StubProvider, instance, scope, provider: "stub", direction: :export)
+
+      # The operator chose export-only, so a remote watch must not be imported.
+      assert counts.imported == 0
+      assert counts.skipped_by_direction == 1
+      assert Playback.get_progress(user.id, media_item_id: movie.id) == nil
+    end
+
+    test "import-only does not push local state to the remote", %{user: user, movie: movie} do
+      {:ok, _} =
+        Playback.save_progress(user.id, [media_item_id: movie.id], %{
+          position_seconds: 100,
+          duration_seconds: 100
+        })
+
+      instance = %{
+        id: "inst-2",
+        test_pid: self(),
+        mappings: [
+          %{
+            remote_id: "rk1",
+            type: :movie,
+            external_ids: %{tmdb: "12345"},
+            season_number: nil,
+            episode_number: nil
+          }
+        ],
+        changes: [
+          %{remote_id: "rk1", watched: false, position_seconds: nil, at: DateTime.utc_now()}
+        ]
+      }
+
+      scope = %{user_id: user.id, access_token: nil}
+
+      {:ok, counts} =
+        WatchSync.sync(StubProvider, instance, scope, provider: "stub", direction: :import)
+
+      assert counts.exported == 0
+      refute_received {:applied, _, _}
+    end
+  end
 end

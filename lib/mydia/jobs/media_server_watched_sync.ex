@@ -65,7 +65,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
     user_id = args.user_id
     config = Settings.get_media_server_config!(config_id)
 
-    case apply_link_token(config, args.link_id) do
+    case apply_link_token(config, args.link_id, user_id) do
       {:ok, config} -> run_sync(config, user_id)
       {:error, reason} -> skip(config, reason, user_id)
     end
@@ -78,29 +78,27 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
       Logger.info("Starting watched sync (#{direction}) for #{config.name}, user #{user_id}")
 
       with {:ok, provider} <- provider_for(config) do
-        {:ok, run} =
-          Mydia.Sync.start_run(%{
-            provider: to_string(config.type),
-            provider_instance_id: config.id,
-            user_id: user_id,
-            direction: direction
-          })
+        # A failed run insert must not take the sync down with it. Bookkeeping is
+        # there to explain what happened, so losing it degrades observability
+        # rather than the feature.
+        run = start_run(config, user_id, direction)
 
         case WatchSync.sync(
                provider,
                config,
                %{user_id: user_id, access_token: config.token},
-               provider: to_string(config.type)
+               provider: to_string(config.type),
+               direction: direction
              ) do
           {:ok, stats} ->
-            Mydia.Sync.finish_run(run, :ok, stats, nil)
+            finish_run(run, :ok, stats, nil)
             # Only a successful sync updates the last-sync timestamp. It was
             # previously stamped unconditionally, so failures looked like successes.
             update_last_sync_timestamp(config)
             :ok
 
           {:error, reason} ->
-            Mydia.Sync.finish_run(run, :error, %{}, describe_error(reason))
+            finish_run(run, :error, %{}, describe_error(reason))
             {:error, reason}
         end
       end
@@ -117,6 +115,29 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
     record_skip(config, reason, user_id)
     {:ok, :skipped}
   end
+
+  # Returns the run, or nil when the insert failed. `finish_run/4` tolerates nil
+  # so a bookkeeping failure degrades observability instead of failing the sync.
+  defp start_run(config, user_id, direction) do
+    case Mydia.Sync.start_run(%{
+           provider: to_string(config.type),
+           provider_instance_id: config.id,
+           user_id: user_id,
+           direction: direction
+         }) do
+      {:ok, run} ->
+        run
+
+      {:error, reason} ->
+        Logger.warning("Could not record sync run start: #{inspect(reason)}")
+        nil
+    end
+  end
+
+  defp finish_run(nil, _status, _counts, _error), do: :ok
+
+  defp finish_run(run, status, counts, error),
+    do: Mydia.Sync.finish_run(run, status, counts, error)
 
   # A skip is a first-class recorded outcome, not an early return. Returning
   # :ok without a trace is what made this job look healthy for 335 consecutive
@@ -169,12 +190,20 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
   # link whose token cannot be resolved must NOT quietly fall back to the config
   # token: that would sync one user against another account's watch state, which
   # is exactly the merge bug links exist to prevent.
-  defp apply_link_token(config, nil), do: {:ok, config}
+  #
+  # The link must also belong to the user being synced. Resolving by link id
+  # alone would let a malformed or stale job pair user A with user B's token,
+  # reintroducing the same merge from the other direction.
+  defp apply_link_token(config, nil, _user_id), do: {:ok, config}
 
-  defp apply_link_token(config, link_id) do
+  defp apply_link_token(config, link_id, user_id) do
     case Repo.get(MediaServerUserLink, link_id) do
-      %MediaServerUserLink{access_token: token} when is_binary(token) and token != "" ->
+      %MediaServerUserLink{user_id: ^user_id, access_token: token}
+      when is_binary(token) and token != "" ->
         {:ok, %{config | token: token}}
+
+      %MediaServerUserLink{user_id: other} when other != user_id ->
+        {:error, :link_user_mismatch}
 
       _ ->
         {:error, :link_token_missing}

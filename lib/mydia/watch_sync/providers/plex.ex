@@ -161,10 +161,13 @@ defmodule Mydia.WatchSync.Providers.Plex do
 
     case PlexClient.list_section_items(config, section_key, opts) do
       {:ok, items} ->
-        acc = acc ++ items
+        # Prepend pages and reverse once at the end. `acc ++ items` copies the
+        # whole accumulator per page, which is O(n^2) over a large library and
+        # falls hardest on the initial crawl.
+        acc = [items | acc]
 
         if length(items) < @page_size do
-          acc
+          acc |> Enum.reverse() |> List.flatten()
         else
           page_section_items(section_key, config, since, start + @page_size, acc)
         end
@@ -174,7 +177,7 @@ defmodule Mydia.WatchSync.Providers.Plex do
           "Failed to page Plex section #{section_key} from #{start}: #{inspect(reason)}"
         )
 
-        acc
+        acc |> Enum.reverse() |> List.flatten()
     end
   end
 

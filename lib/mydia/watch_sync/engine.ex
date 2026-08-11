@@ -18,13 +18,14 @@ defmodule Mydia.WatchSync.Engine do
 
   require Logger
 
-  @empty_counts %{imported: 0, exported: 0, not_found: 0, unchanged: 0}
+  @empty_counts %{imported: 0, exported: 0, not_found: 0, unchanged: 0, skipped_by_direction: 0}
 
   @spec sync(module(), map(), map(), keyword()) :: {:ok, map()} | {:error, term()}
   def sync(provider_mod, instance, user_scope, opts) do
     provider = Keyword.fetch!(opts, :provider)
     instance_id = to_string(instance.id)
     origin = "sync:#{provider}"
+    direction = Keyword.get(opts, :direction, :bidirectional)
 
     with :ok <- maybe_refresh(provider_mod, instance, provider, instance_id, opts),
          cursor = cursor(user_scope.user_id, provider, instance_id),
@@ -42,7 +43,7 @@ defmodule Mydia.WatchSync.Engine do
                 provider_mod,
                 instance,
                 user_scope,
-                {provider, instance_id, origin},
+                {provider, instance_id, origin, direction},
                 content_id,
                 change,
                 acc
@@ -159,7 +160,7 @@ defmodule Mydia.WatchSync.Engine do
          provider_mod,
          instance,
          user_scope,
-         {provider, instance_id, origin},
+         {provider, instance_id, origin, direction},
          content_id,
          change,
          acc
@@ -173,6 +174,17 @@ defmodule Mydia.WatchSync.Engine do
     case Reconciler.resolve(local, remote, snapshot_side(state_row)) do
       :noop ->
         bump(acc, :unchanged)
+
+      # The operator's direction setting is honored here rather than at the
+      # reconciler, which stays pure and always reports what *should* happen.
+      # An import-only server still records state so the snapshot stays truthful.
+      {:pull, resolved} when direction == :export ->
+        put_state(state_row, user_id, provider, instance_id, content_id, resolved, remote.at)
+        bump(acc, :skipped_by_direction)
+
+      {:push, resolved} when direction == :import ->
+        put_state(state_row, user_id, provider, instance_id, content_id, resolved, remote.at)
+        bump(acc, :skipped_by_direction)
 
       {:pull, resolved} ->
         apply_local(user_id, content_id, resolved, remote.at, origin)

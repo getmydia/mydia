@@ -100,19 +100,25 @@ defmodule Mydia.MediaServer.Plex.Endpoint do
   defp probe_all(%MediaServerConfig{connections: connections, token: token} = config, retried?) do
     uris = connections |> Enum.map(&candidate_uri/1) |> Enum.reject(&is_nil/1) |> Enum.uniq()
 
-    results =
-      uris
-      |> Task.async_stream(fn uri -> {uri, probe(uri, token)} end,
+    # `ordered: false` plus a lazy scan lets the first working candidate win
+    # immediately. Materialising every result first would make resolution wait
+    # for the slowest dead address even when a good one answered at once, which
+    # is the latency this whole module exists to remove.
+    stream =
+      Task.async_stream(uris, fn uri -> {uri, probe(uri, token)} end,
         timeout: @probe_timeout_ms + 1_000,
         on_timeout: :kill_task,
+        ordered: false,
         max_concurrency: max(length(uris), 1)
       )
-      |> Enum.flat_map(fn
+      |> Stream.flat_map(fn
         {:ok, result} -> [result]
         {:exit, _} -> []
       end)
 
-    case Enum.find(results, fn {_uri, res} -> res == :ok end) do
+    {winner, results} = first_success(stream)
+
+    case winner do
       {uri, :ok} ->
         put_cache(config, uri)
         {:ok, uri}
@@ -130,6 +136,17 @@ defmodule Mydia.MediaServer.Plex.Endpoint do
           {:error, error}
         end
     end
+  end
+
+  # Walks the stream only as far as the first success. Returns that result (or
+  # nil) plus everything consumed, so error classification still sees the
+  # failures observed along the way.
+  defp first_success(stream) do
+    Enum.reduce_while(stream, {nil, []}, fn
+      {_uri, :ok} = hit, {_, seen} -> {:halt, {hit, [hit | seen]}}
+      other, {_, seen} -> {:cont, {nil, [other | seen]}}
+    end)
+    |> then(fn {hit, seen} -> {hit, Enum.reverse(seen)} end)
   end
 
   # An auth failure is more informative than a timeout: it means we reached a

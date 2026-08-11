@@ -200,6 +200,41 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
       assert run.skip_reason == "link_token_missing"
     end
 
+    test "a job whose link belongs to another user is refused" do
+      # Resolving a token by link id alone would pair user A with user B's
+      # token, reintroducing the cross-account merge from the other direction.
+      owner = user_fixture()
+      other = user_fixture()
+
+      {:ok, config} =
+        Settings.create_media_server_config(%{
+          name: "Storage",
+          type: :plex,
+          url: "http://localhost:32400",
+          token: "admin-token",
+          enabled: true,
+          connection_settings: %{"sync_watched" => "true"}
+        })
+
+      {:ok, link} =
+        Settings.upsert_media_server_user_link(%{
+          media_server_config_id: config.id,
+          user_id: owner.id,
+          plex_account_id: "1",
+          access_token: "owner-token",
+          enabled: true
+        })
+
+      assert {:ok, :skipped} =
+               perform_job(MediaServerWatchedSync, %{
+                 "config_id" => config.id,
+                 "user_id" => other.id,
+                 "link_id" => link.id
+               })
+
+      assert Sync.last_run("plex", config.id).skip_reason == "link_user_mismatch"
+    end
+
     test "a user with no link is skipped with a reason rather than defaulted" do
       {:ok, config} =
         Settings.create_media_server_config(%{
