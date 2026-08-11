@@ -157,7 +157,26 @@ class BrowseScaffold extends ConsumerWidget {
                   ),
                   child: Row(
                     children: [
-                      if (!isDesktop)
+                      // A pushed screen gets back; a shell destination gets
+                      // the drawer. Search is the case that forces this: every
+                      // other browse screen reaches it with
+                      // `context.push('/search')`, so it sits on top of the
+                      // shell navigator, and a hamburger there goes sideways
+                      // rather than back. Desktop had no leading control at
+                      // all, which made the push a one-way trip.
+                      //
+                      // `Navigator`, not go_router's `context.canPop()`:
+                      // inside the shell route this resolves the shell
+                      // navigator, which is exactly what a pushed screen sits
+                      // on, and it does not require a GoRouter ancestor, so
+                      // this widget stays pumpable in a plain widget test.
+                      if (Navigator.of(context).canPop())
+                        IconButton(
+                          icon: const Icon(Icons.arrow_back_rounded),
+                          onPressed: () => Navigator.of(context).maybePop(),
+                          tooltip: 'Back',
+                        )
+                      else if (!isDesktop)
                         IconButton(
                           icon: const Icon(Icons.menu_rounded),
                           onPressed: () {

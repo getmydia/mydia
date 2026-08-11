@@ -20,6 +20,18 @@ class _StubAuthState extends AuthStateNotifier {
 
 const _bodyKey = Key('browse-scaffold-test-body');
 
+/// The scaffold on its own, for tests that need to control how it is routed
+/// to rather than mounting it as `home`.
+final _scaffoldUnderTest = BrowseScaffold(
+  icon: Icons.search_rounded,
+  title: 'Search',
+  queryKeys: [QueryKeys.unwatched],
+  body: (context, scrollTopPadding) => ListView(
+    padding: EdgeInsets.only(top: scrollTopPadding),
+    children: const [SizedBox(key: _bodyKey, height: 400, width: 400)],
+  ),
+);
+
 Future<void> pumpScaffold(
   WidgetTester tester, {
   required Size size,
@@ -118,5 +130,68 @@ void main() {
 
     expect(find.byKey(const Key('second-row-field')), findsOneWidget);
     expect(withRow - withoutRow, BrowseScaffold.secondRowHeight);
+  });
+
+  group('when the screen was pushed rather than navigated to', () {
+    // Search is reached with `context.push('/search')` from every other
+    // browse screen, which puts it on top of the shell navigator. Without a
+    // back affordance that push is a one-way trip: the drawer hamburger goes
+    // sideways, not back, and desktop had no leading control at all.
+    Future<void> pumpPushed(WidgetTester tester, {required Size size}) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authStateProvider.overrideWith(_StubAuthState.new),
+            castCapabilitiesProvider
+                .overrideWithValue(const CastCapabilities.full()),
+          ],
+          child: MaterialApp(
+            home: Builder(
+              builder: (context) => Scaffold(
+                body: TextButton(
+                  key: const Key('push-trigger'),
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => _scaffoldUnderTest,
+                    ),
+                  ),
+                  child: const Text('push'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.byKey(const Key('push-trigger')));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('offers back instead of the drawer on mobile', (tester) async {
+      await pumpPushed(tester, size: const Size(400, 800));
+
+      expect(find.byIcon(Icons.arrow_back_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.menu_rounded), findsNothing);
+    });
+
+    testWidgets(
+        'offers back on desktop, which otherwise has no leading '
+        'control at all', (tester) async {
+      await pumpPushed(tester, size: const Size(1200, 900));
+
+      expect(find.byIcon(Icons.arrow_back_rounded), findsOneWidget);
+    });
+
+    testWidgets('back actually pops the route', (tester) async {
+      await pumpPushed(tester, size: const Size(400, 800));
+
+      await tester.tap(find.byIcon(Icons.arrow_back_rounded));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('push-trigger')), findsOneWidget);
+    });
   });
 }
