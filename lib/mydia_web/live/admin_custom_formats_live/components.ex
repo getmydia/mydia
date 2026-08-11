@@ -17,7 +17,7 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Components do
             Match release titles by regex. Assign scores per quality profile.
           </p>
         </div>
-        <.button id="custom-format-new" phx-click="new" class="btn-primary">
+        <.button id="custom-format-new" phx-click="new_custom_format" class="btn-primary">
           <.icon name="hero-plus" class="w-4 h-4" /> New format
         </.button>
       </div>
@@ -42,7 +42,7 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Components do
 
             <.button
               id={"custom-format-edit-#{format.slug}"}
-              phx-click="edit"
+              phx-click="edit_custom_format"
               phx-value-slug={format.slug}
               class="btn-sm btn-ghost"
             >
@@ -52,7 +52,7 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Components do
             <.button
               :if={format.overridden?}
               id={"custom-format-reset-#{format.slug}"}
-              phx-click="reset"
+              phx-click="reset_custom_format"
               phx-value-slug={format.slug}
               class="btn-sm btn-ghost"
             >
@@ -62,7 +62,7 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Components do
             <.button
               :if={not format.builtin?}
               id={"custom-format-delete-#{format.slug}"}
-              phx-click="delete"
+              phx-click="delete_custom_format"
               phx-value-slug={format.slug}
               data-confirm={"Delete #{format.name}?"}
               class="btn-sm btn-ghost text-error"
@@ -79,8 +79,9 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Components do
   @doc """
   Renders the Custom Format modal.
   """
-  attr :editing, :any, required: true
-  attr :form, :any, required: true
+  attr :custom_format_form, :any, required: true
+  attr :custom_format_mode, :atom, required: true
+  attr :editing_custom_format, :any, required: true
   attr :test_results, :list, default: []
 
   def custom_format_modal(assigns) do
@@ -88,14 +89,27 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Components do
     <div class="modal modal-open">
       <div class="modal-box max-w-2xl">
         <h3 class="font-bold text-lg mb-4">
-          {if(@editing.slug, do: "Edit #{@editing.name}", else: "New format")}
+          {if(@custom_format_mode == :new,
+            do: "New format",
+            else: "Edit #{@editing_custom_format.name}"
+          )}
         </h3>
 
-        <.form for={@form} id="custom-format-form" phx-change="validate" phx-submit="save">
-          <.input field={@form[:name]} type="text" label="Name" disabled={@editing.builtin?} />
-          <.input field={@form[:description]} type="text" label="Description" />
+        <.form
+          for={@custom_format_form}
+          id="custom-format-form"
+          phx-change="validate_custom_format"
+          phx-submit="save_custom_format"
+        >
           <.input
-            field={@form[:patterns_text]}
+            field={@custom_format_form[:name]}
+            type="text"
+            label="Name"
+            disabled={@editing_custom_format.builtin?}
+          />
+          <.input field={@custom_format_form[:description]} type="text" label="Description" />
+          <.input
+            field={@custom_format_form[:patterns_text]}
             type="textarea"
             label="Patterns (one per line)"
             rows="6"
@@ -104,7 +118,7 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Components do
           <div class="divider">Test</div>
 
           <.input
-            field={@form[:test_title]}
+            field={@custom_format_form[:test_title]}
             id="custom-format-test-input"
             type="text"
             label="Paste a release title"
@@ -127,12 +141,14 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Components do
           </ul>
 
           <div class="modal-action">
-            <.button type="button" phx-click="cancel" class="btn-ghost">Cancel</.button>
+            <.button type="button" phx-click="close_custom_format_modal" class="btn-ghost">
+              Cancel
+            </.button>
             <.button type="submit" class="btn-primary">Save</.button>
           </div>
         </.form>
       </div>
-      <div class="modal-backdrop" phx-click="cancel"></div>
+      <div class="modal-backdrop" phx-click="close_custom_format_modal"></div>
     </div>
     """
   end

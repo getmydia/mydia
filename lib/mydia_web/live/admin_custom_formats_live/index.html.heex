@@ -3,10 +3,11 @@
     <MydiaWeb.AdminCustomFormatsLive.Components.custom_formats_tab formats={@formats} />
 
     <%!-- Custom Format Modal --%>
-    <%= if @editing do %>
+    <%= if assigns[:show_custom_format_modal] do %>
       <MydiaWeb.AdminCustomFormatsLive.Components.custom_format_modal
-        editing={@editing}
-        form={@form}
+        custom_format_form={@custom_format_form}
+        custom_format_mode={@custom_format_mode}
+        editing_custom_format={@editing_custom_format}
         test_results={@test_results}
       />
     <% end %>
