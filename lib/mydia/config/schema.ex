@@ -224,6 +224,8 @@ defmodule Mydia.Config.Schema do
       field :type, Ecto.Enum, values: [:movies, :series, :mixed, :music, :books, :adult]
       field :monitored, :boolean, default: true
       field :scan_interval, :integer
+      field :default_for_movies, :boolean, default: false
+      field :default_for_series, :boolean, default: false
     end
 
     # Env/YAML-sourced installed plugins (PLUGIN_<N>_*). DB-sourced installs
@@ -572,7 +574,9 @@ defmodule Mydia.Config.Schema do
       :path,
       :type,
       :monitored,
-      :scan_interval
+      :scan_interval,
+      :default_for_movies,
+      :default_for_series
     ])
     |> validate_required([:path, :type])
     |> validate_inclusion(:type, [:movies, :series, :mixed, :music, :books, :adult])

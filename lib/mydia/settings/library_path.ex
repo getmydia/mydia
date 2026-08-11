@@ -27,6 +27,8 @@ defmodule Mydia.Settings.LibraryPath do
           write_nfo: boolean(),
           auto_rename: boolean(),
           tv_metadata_source: atom() | nil,
+          default_for_movies: boolean(),
+          default_for_series: boolean(),
           quality_profile:
             Mydia.Settings.QualityProfile.t() | nil | Ecto.Association.NotLoaded.t(),
           quality_profile_id: binary() | nil,
@@ -37,8 +39,14 @@ defmodule Mydia.Settings.LibraryPath do
         }
 
   @path_types [:movies, :series, :mixed, :music, :books, :adult]
+  @movie_library_types [:movies, :mixed]
+  @series_library_types [:series, :mixed]
   @scan_statuses [:success, :failed, :in_progress]
   @tv_metadata_sources [:tvdb, :tmdb]
+
+  @doc "Library types that can serve as the default target for each media kind."
+  def movie_library_types, do: @movie_library_types
+  def series_library_types, do: @series_library_types
 
   @doc "Valid TV metadata source providers for series/mixed libraries."
   def tv_metadata_sources, do: @tv_metadata_sources
@@ -67,6 +75,9 @@ defmodule Mydia.Settings.LibraryPath do
     field :auto_rename, :boolean, default: true
     # Metadata provider for TV shows in this library (series/mixed only)
     field :tv_metadata_source, Ecto.Enum, values: @tv_metadata_sources, default: :tvdb
+    # At most one library per media kind may be the default download target.
+    field :default_for_movies, :boolean, default: false
+    field :default_for_series, :boolean, default: false
 
     belongs_to :quality_profile, Mydia.Settings.QualityProfile
     belongs_to :updated_by, Mydia.Accounts.User
@@ -96,13 +107,24 @@ defmodule Mydia.Settings.LibraryPath do
       :auto_import,
       :write_nfo,
       :auto_rename,
-      :tv_metadata_source
+      :tv_metadata_source,
+      :default_for_movies,
+      :default_for_series
     ])
     |> validate_required([:path, :type])
     |> validate_inclusion(:type, @path_types)
     |> validate_inclusion(:tv_metadata_source, @tv_metadata_sources)
     |> validate_number(:scan_interval, greater_than_or_equal_to: 900)
     |> validate_category_paths()
+    |> validate_default_flag_types()
+    |> unique_constraint(:default_for_movies,
+      name: :library_paths_single_default_for_movies,
+      message: "another library is already the default for movies"
+    )
+    |> unique_constraint(:default_for_series,
+      name: :library_paths_single_default_for_series,
+      message: "another library is already the default for series"
+    )
     |> unique_constraint(:path)
   end
 
@@ -144,6 +166,32 @@ defmodule Mydia.Settings.LibraryPath do
 
   defp valid_category_key?(key) when is_atom(key), do: MediaCategory.valid?(key)
   defp valid_category_key?(_), do: false
+
+  @doc """
+  Rejects a default flag the library's own `type` cannot serve.
+
+  A :movies library cannot be the series default, and vice versa. A :mixed
+  library may hold both.
+  """
+  def validate_default_flag_types(changeset) do
+    type = get_field(changeset, :type)
+
+    changeset
+    |> validate_flag_for_type(:default_for_movies, type, @movie_library_types, "movies")
+    |> validate_flag_for_type(:default_for_series, type, @series_library_types, "series")
+  end
+
+  defp validate_flag_for_type(changeset, field, type, allowed_types, kind_label) do
+    if get_field(changeset, field) && type not in allowed_types do
+      add_error(
+        changeset,
+        field,
+        "cannot be the default #{kind_label} library for a #{type} library"
+      )
+    else
+      changeset
+    end
+  end
 
   @doc """
   Resolves the full destination path for a media item based on its category.

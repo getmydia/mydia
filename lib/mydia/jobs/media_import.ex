@@ -38,6 +38,7 @@ defmodule Mydia.Jobs.MediaImport do
   alias Mydia.Downloads.ImportCandidates
   alias Mydia.Library.{FileNamer, FileOrganizer, SampleDetector}
   alias Mydia.Library.ReleaseParser
+  alias Mydia.Library.TargetResolver
   alias Mydia.Library.ReleaseParser.TargetContext
   alias Mydia.Media.Episode
   alias Mydia.Indexers.QualityParser
@@ -840,53 +841,47 @@ defmodule Mydia.Jobs.MediaImport do
 
   @doc false
   def determine_library_path(download) do
-    # If download has a direct library_path association (specialized libraries),
-    # use that directly
-    if download.library_path do
-      download.library_path
-    else
-      # Get library paths from settings
-      library_paths = Settings.list_library_paths()
+    cond do
+      download.library_path ->
+        download.library_path
 
-      {media_type, required_types} =
-        cond do
-          # TV episode
-          download.episode && download.media_item ->
-            {"TV show", [:series, :mixed]}
+      is_nil(download.media_item) ->
+        # A download with no media item has no kind to resolve against. This
+        # branch preserves the historical :mixed-only lookup verbatim; nothing
+        # in the targeting design changes what should happen to an
+        # unattributed download.
+        resolve_unattributed(download)
 
-          # Movie
-          download.media_item && download.media_item.type == "movie" ->
-            {"movie", [:movies, :mixed]}
+      true ->
+        case TargetResolver.resolve(download.media_item, download: download) do
+          {:ok, library_path, _reason} ->
+            library_path
 
-          # TV show (no specific episode)
-          download.media_item && download.media_item.type == "tv_show" ->
-            {"TV show", [:series, :mixed]}
-
-          true ->
-            {"unknown", [:mixed]}
+          {:error, :no_compatible_library} ->
+            warn_no_library(download, download.media_item.type)
+            nil
         end
-
-      # Find compatible library path
-      library_path =
-        Enum.find(library_paths, fn lp ->
-          lp.type in required_types && lp.monitored
-        end)
-
-      # Log warning if no compatible library found
-      if is_nil(library_path) do
-        Logger.warning("No compatible library path found for import",
-          download_id: download.id,
-          media_type: media_type,
-          required_library_types: required_types,
-          available_libraries:
-            Enum.map(library_paths, fn lp ->
-              %{path: lp.path, type: lp.type, monitored: lp.monitored}
-            end)
-        )
-      end
-
-      library_path
     end
+  end
+
+  defp resolve_unattributed(download) do
+    library_paths = Settings.list_library_paths()
+    library_path = Enum.find(library_paths, &(&1.type == :mixed and &1.monitored))
+
+    if is_nil(library_path), do: warn_no_library(download, "unknown")
+
+    library_path
+  end
+
+  defp warn_no_library(download, media_type) do
+    Logger.warning("No compatible library path found for import",
+      download_id: download.id,
+      media_type: media_type,
+      available_libraries:
+        Enum.map(Settings.list_library_paths(), fn lp ->
+          %{path: lp.path, type: lp.type, monitored: lp.monitored}
+        end)
+    )
   end
 
   defp organize_and_import_files(download, files, library_path, args) do

@@ -7,8 +7,39 @@ defmodule Mydia.MediaTest do
     alias Mydia.Media.MediaItem
 
     import Mydia.MediaFixtures
+    import Mydia.SettingsFixtures
 
     @invalid_attrs %{type: nil, title: nil}
+
+    test "create_media_item/2 accepts an explicit library_path_id" do
+      library = library_path_fixture(%{type: "movies"})
+
+      {:ok, item} =
+        Media.create_media_item(%{
+          type: "movie",
+          title: "Targeted Movie",
+          year: 2024,
+          library_path_id: library.id
+        })
+
+      assert item.library_path_id == library.id
+    end
+
+    test "deleting a library path nils the media item's target instead of failing" do
+      library = library_path_fixture(%{type: "movies"})
+
+      {:ok, item} =
+        Media.create_media_item(%{
+          type: "movie",
+          title: "Orphaned Target",
+          year: 2024,
+          library_path_id: library.id
+        })
+
+      {:ok, _} = Mydia.Settings.delete_library_path(library)
+
+      assert Mydia.Repo.get!(Mydia.Media.MediaItem, item.id).library_path_id == nil
+    end
 
     test "list_media_items/0 returns all media items" do
       media_item = media_item_fixture()

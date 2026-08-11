@@ -10,6 +10,27 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   alias Mydia.Settings
 
   @doc """
+  Libraries a caller may pick as the add-time target for `media_type`.
+
+  Filters to monitored, type-compatible libraries and drops unmaterialised
+  runtime entries: those carry synthetic "runtime::" ids and have no
+  `library_paths` row for a foreign key to reference. `LibraryPathSync` upserts
+  env-configured paths into real rows at startup, so this list is complete in
+  practice.
+  """
+  @spec candidate_libraries(:movie | :tv_show) :: [Mydia.Settings.LibraryPath.t()]
+  def candidate_libraries(media_type) do
+    kind = if media_type == :movie, do: :movies, else: :series
+    allowed = Mydia.Library.TargetResolver.allowed_types(kind)
+
+    Settings.list_library_paths()
+    |> Enum.filter(fn lp ->
+      lp.type in allowed and lp.monitored and
+        not String.starts_with?(to_string(lp.id), "runtime::")
+    end)
+  end
+
+  @doc """
   Enriches a list of search result items with library status information.
 
   For each item, adds `:in_library`, `:monitored`, and `:id` fields
@@ -48,6 +69,8 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
     * `:monitored` - Monitored flag for the new item (default: `true`)
     * `:quality_profile_id` - Quality profile to assign. Omitted from the attrs
       entirely when nil.
+    * `:library_path_id` - Explicit target library. Omitted from the attrs
+      entirely when nil, leaving the item on dynamic resolution.
 
   If neither id is given, falls back to parsing `metadata.provider_id` as tmdb_id.
   """
@@ -78,6 +101,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
     }
 
     attrs = maybe_put_quality_profile(attrs, opts[:quality_profile_id])
+    attrs = maybe_put_library_path(attrs, opts[:library_path_id])
 
     # Record provenance for TV shows only; movies leave metadata_source nil.
     if media_type == :movie do
@@ -89,6 +113,9 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
 
   defp maybe_put_quality_profile(attrs, nil), do: attrs
   defp maybe_put_quality_profile(attrs, id), do: Map.put(attrs, :quality_profile_id, id)
+
+  defp maybe_put_library_path(attrs, nil), do: attrs
+  defp maybe_put_library_path(attrs, id), do: Map.put(attrs, :library_path_id, id)
 
   @doc """
   Looks up TVDB ID for a TV show by searching TVDB by title+year.
@@ -129,9 +156,10 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   An optional `config` (relay config map) can be injected for testing; it
   defaults to `Metadata.default_relay_config()`.
 
-  `opts` are forwarded to `build_media_item_attrs/3`; `:monitored` and
-  `:quality_profile_id` let a caller inherit settings from an item the user is
-  already looking at. TV shows ignore them today.
+  `opts` are forwarded to `build_media_item_attrs/3`; `:monitored`,
+  `:quality_profile_id` and `:library_path_id` let a caller inherit settings
+  from an item the user is already looking at, or pin an explicit target
+  library. TV shows ignore monitored and quality profile today.
   """
   def handle_add_media_to_library(
         provider_id,
@@ -145,7 +173,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
 
     result =
       if media_type == :tv_show do
-        add_tv_show_to_library(provider_id, provider_id_int, config)
+        add_tv_show_to_library(provider_id, provider_id_int, config, opts)
       else
         add_movie_to_library(provider_id, provider_id_int, config, opts)
       end
@@ -230,7 +258,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
     end
   end
 
-  defp add_tv_show_to_library(provider_id, provider_id_int, config) do
+  defp add_tv_show_to_library(provider_id, provider_id_int, config, opts) do
     # Derive the provider from the configured libraries. `derived` may be nil
     # (libraries disagree); the fetch still needs a provider, so fall back to
     # TVDB for content while leaving provenance unstamped.
@@ -241,7 +269,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
     case Metadata.fetch_by_id(config, provider_id, media_type: :tv_show, provider: :tmdb) do
       {:ok, tmdb_metadata} ->
         tmdb_metadata
-        |> build_tv_show_attrs(provider_id_int, derived, fetch_provider, config)
+        |> build_tv_show_attrs(provider_id_int, derived, fetch_provider, config, opts)
         |> create_media_item_result(config)
 
       {:error, reason} ->
@@ -251,10 +279,11 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
 
   # Derived source is TMDB: keep the TMDB metadata as primary, resolve a
   # secondary tvdb_id for dedup/future matching, and stamp :tmdb.
-  defp build_tv_show_attrs(tmdb_metadata, provider_id_int, derived, :tmdb, config) do
-    build_media_item_attrs(tmdb_metadata, :tv_show,
-      tmdb_id: provider_id_int,
-      metadata_source: derived
+  defp build_tv_show_attrs(tmdb_metadata, provider_id_int, derived, :tmdb, config, opts) do
+    build_media_item_attrs(
+      tmdb_metadata,
+      :tv_show,
+      Keyword.merge(opts, tmdb_id: provider_id_int, metadata_source: derived)
     )
     |> lookup_and_add_tvdb_id(config)
   end
@@ -262,19 +291,24 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   # Derived source is TVDB (or nil/conflict): use richer TVDB metadata as
   # primary when resolvable, else TMDB content with a tvdb_id from search.
   # Provenance is stamped as `derived` (:tvdb, or nil on conflict).
-  defp build_tv_show_attrs(tmdb_metadata, provider_id_int, derived, :tvdb, config) do
+  defp build_tv_show_attrs(tmdb_metadata, provider_id_int, derived, :tvdb, config, opts) do
     case resolve_tvdb_metadata(tmdb_metadata, config) do
       {:ok, tvdb_metadata, tvdb_id} ->
-        build_media_item_attrs(tvdb_metadata, :tv_show,
-          tmdb_id: provider_id_int,
-          tvdb_id: tvdb_id,
-          metadata_source: derived
+        build_media_item_attrs(
+          tvdb_metadata,
+          :tv_show,
+          Keyword.merge(opts,
+            tmdb_id: provider_id_int,
+            tvdb_id: tvdb_id,
+            metadata_source: derived
+          )
         )
 
       {:error, _} ->
-        build_media_item_attrs(tmdb_metadata, :tv_show,
-          tmdb_id: provider_id_int,
-          metadata_source: derived
+        build_media_item_attrs(
+          tmdb_metadata,
+          :tv_show,
+          Keyword.merge(opts, tmdb_id: provider_id_int, metadata_source: derived)
         )
         |> lookup_and_add_tvdb_id(config)
     end

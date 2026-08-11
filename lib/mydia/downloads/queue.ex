@@ -749,20 +749,13 @@ defmodule Mydia.Downloads.Queue do
   end
 
   defp resolve_rematch_destination(media_item, episode) do
-    # Build a probe reflecting the NEW target so determine_library_path resolves
-    # the correct destination (the download row still holds the old target here).
-    probe = %Download{
-      media_item_id: media_item && media_item.id,
-      media_item: media_item,
-      episode_id: episode && episode.id,
-      episode: episode,
-      library_path: nil,
-      library_path_id: nil
-    }
+    # Resolves against the NEW target: the download row still holds the old one
+    # here, so no download is passed and step 1 is skipped by design.
+    _ = episode
 
-    case Mydia.Jobs.MediaImport.determine_library_path(probe) do
-      nil -> {:error, :no_library_path}
-      library_path -> {:ok, library_path}
+    case media_item && Mydia.Library.TargetResolver.resolve(media_item) do
+      {:ok, library_path, _reason} -> {:ok, library_path}
+      _ -> {:error, :no_library_path}
     end
   end
 

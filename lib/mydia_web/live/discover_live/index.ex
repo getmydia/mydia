@@ -73,6 +73,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
       |> assign(:selected_metadata, nil)
       |> assign(:load_error, nil)
       |> assign(:detail_loading, false)
+      |> assign(:libraries, [])
 
     {:ok, socket}
   end
@@ -121,6 +122,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
         |> assign(:loading, true)
         |> assign(:load_error, nil)
         |> assign(:has_more, false)
+        |> assign(:libraries, MediaAddHelpers.candidate_libraries(media_type))
 
       # Load genres if not loaded yet or media type changed
       socket =
@@ -151,7 +153,8 @@ defmodule MydiaWeb.DiscoverLive.Index do
        |> assign(:selected_language, nil)
        |> assign(:selected_year, nil)
        |> assign(:min_rating, nil)
-       |> assign(:sort_by, "popularity.desc")}
+       |> assign(:sort_by, "popularity.desc")
+       |> assign(:libraries, MediaAddHelpers.candidate_libraries(:movie))}
     end
   end
 
@@ -216,12 +219,12 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
   def handle_event(
         "add_to_library",
-        %{"tmdb_id" => provider_id, "media_type" => media_type},
+        %{"tmdb_id" => provider_id, "media_type" => media_type} = params,
         socket
       ) do
     media_type_atom = String.to_existing_atom(media_type)
     socket = assign(socket, :adding_item_id, provider_id)
-    send(self(), {:add_media_to_library, provider_id, media_type_atom})
+    send(self(), {:add_media_to_library, provider_id, media_type_atom, params["library_path_id"]})
     {:noreply, socket}
   end
 
@@ -332,11 +335,22 @@ defmodule MydiaWeb.DiscoverLive.Index do
     end
   end
 
-  def handle_info({:add_media_to_library, provider_id, media_type}, socket) do
+  def handle_info({:add_media_to_library, provider_id, media_type, library_path_id}, socket) do
+    # Comes from client params, so a blank string is possible. "" is truthy in
+    # Elixir and would reach the changeset as library_path_id: "", failing the
+    # foreign key instead of falling back to normal resolution.
+    opts =
+      case library_path_id do
+        id when is_binary(id) and id != "" -> [library_path_id: id]
+        _ -> []
+      end
+
     case MediaAddHelpers.handle_add_media_to_library(
            provider_id,
            media_type,
-           socket.assigns.library_status_map
+           socket.assigns.library_status_map,
+           nil,
+           opts
          ) do
       {:ok, media_item, updated_map} ->
         items =

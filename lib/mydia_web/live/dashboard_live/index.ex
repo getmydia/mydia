@@ -29,6 +29,8 @@ defmodule MydiaWeb.DashboardLive.Index do
         |> assign(:selected_item, nil)
         |> assign(:selected_metadata, nil)
         |> assign(:detail_loading, false)
+        |> assign(:movie_libraries, MediaAddHelpers.candidate_libraries(:movie))
+        |> assign(:show_libraries, MediaAddHelpers.candidate_libraries(:tv_show))
         |> load_dashboard_data()
       else
         socket
@@ -48,6 +50,8 @@ defmodule MydiaWeb.DashboardLive.Index do
         |> assign(:selected_item, nil)
         |> assign(:selected_metadata, nil)
         |> assign(:detail_loading, false)
+        |> assign(:movie_libraries, [])
+        |> assign(:show_libraries, [])
       end
 
     {:ok, socket}
@@ -104,7 +108,7 @@ defmodule MydiaWeb.DashboardLive.Index do
   @impl true
   def handle_event(
         "add_to_library",
-        %{"tmdb_id" => provider_id, "media_type" => media_type},
+        %{"tmdb_id" => provider_id, "media_type" => media_type} = params,
         socket
       ) do
     media_type_atom = String.to_existing_atom(media_type)
@@ -113,7 +117,7 @@ defmodule MydiaWeb.DashboardLive.Index do
     socket = assign(socket, :adding_item_id, provider_id)
 
     # Start async task to add media
-    send(self(), {:add_media_to_library, provider_id, media_type_atom})
+    send(self(), {:add_media_to_library, provider_id, media_type_atom, params["library_path_id"]})
 
     {:noreply, socket}
   end
@@ -218,11 +222,22 @@ defmodule MydiaWeb.DashboardLive.Index do
     end
   end
 
-  def handle_info({:add_media_to_library, provider_id, media_type}, socket) do
+  def handle_info({:add_media_to_library, provider_id, media_type, library_path_id}, socket) do
+    # Comes from client params, so a blank string is possible. "" is truthy in
+    # Elixir and would reach the changeset as library_path_id: "", failing the
+    # foreign key instead of falling back to normal resolution.
+    opts =
+      case library_path_id do
+        id when is_binary(id) and id != "" -> [library_path_id: id]
+        _ -> []
+      end
+
     case MediaAddHelpers.handle_add_media_to_library(
            provider_id,
            media_type,
-           socket.assigns.library_status_map
+           socket.assigns.library_status_map,
+           nil,
+           opts
          ) do
       {:ok, media_item, updated_map} ->
         # Re-enrich trending items with updated library status

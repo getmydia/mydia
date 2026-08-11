@@ -5,6 +5,7 @@ defmodule MydiaWeb.AddMediaLive.Index do
 
   alias Mydia.{Media, Metadata, Settings}
   alias MydiaWeb.Live.Authorization
+  alias MydiaWeb.Live.Helpers.MediaAddHelpers
 
   @impl true
   def mount(_params, session, socket) do
@@ -59,11 +60,8 @@ defmodule MydiaWeb.AddMediaLive.Index do
   defp maybe_trigger_search(socket, _params), do: socket
 
   defp load_library_paths(socket, type) do
-    paths =
-      Settings.list_library_paths()
-      |> Enum.filter(&((&1.type == type or &1.type == :mixed) and &1.monitored))
-
-    assign(socket, :library_paths, paths)
+    media_type = if type == :movies, do: :movie, else: :tv_show
+    assign(socket, :library_paths, MediaAddHelpers.candidate_libraries(media_type))
   end
 
   ## Event Handlers
@@ -227,8 +225,8 @@ defmodule MydiaWeb.AddMediaLive.Index do
 
         case Media.create_media_item(attrs, season_monitoring: season_monitoring) do
           {:ok, media_item} ->
-            # Stay on page with success message
-            # Use provider_id as key (integer) for tracking added items
+            maybe_queue_search(media_item, config)
+
             id_key = String.to_integer(selected.provider_id)
 
             {:noreply,
@@ -307,16 +305,8 @@ defmodule MydiaWeb.AddMediaLive.Index do
   end
 
   defp assign_config_form(socket) do
-    # Build changeset from current toolbar settings for the modal
     changeset =
-      {%{},
-       %{
-         quality_profile_id: :string,
-         library_path_id: :string,
-         monitored: :boolean,
-         search_on_add: :boolean,
-         season_monitoring: :string
-       }}
+      {config_defaults(), config_types()}
       |> Ecto.Changeset.cast(
         %{
           quality_profile_id: socket.assigns.toolbar_quality_profile_id,
@@ -325,22 +315,42 @@ defmodule MydiaWeb.AddMediaLive.Index do
           search_on_add: socket.assigns.toolbar_search_on_add,
           season_monitoring: socket.assigns.toolbar_season_monitoring
         },
-        [:quality_profile_id, :library_path_id, :monitored, :search_on_add, :season_monitoring]
+        Map.keys(config_types())
       )
 
     assign(socket, :config_form, to_form(changeset, as: :config))
   end
 
-  defp validate_config(params, assigns) do
-    types = %{
+  # The changeset is schemaless, so `apply_changes/1` returns
+  # `Map.merge(data, changes)`. Seeding `data` with every key means a field
+  # submitted as nil or "" (blank quality profile, unticked checkbox) is still
+  # present in the result. With `%{}` as data it would be absent, and the dot
+  # access in build_media_item_attrs/3 would raise KeyError. Seeding is
+  # structural: it immunises any field added later, not just today's two.
+  defp config_defaults do
+    %{
+      quality_profile_id: nil,
+      library_path_id: nil,
+      monitored: true,
+      search_on_add: false,
+      season_monitoring: "all"
+    }
+  end
+
+  defp config_types do
+    %{
       quality_profile_id: :string,
       library_path_id: :string,
       monitored: :boolean,
       search_on_add: :boolean,
       season_monitoring: :string
     }
+  end
 
-    {%{}, types}
+  defp validate_config(params, assigns) do
+    types = config_types()
+
+    {config_defaults(), types}
     |> Ecto.Changeset.cast(params, Map.keys(types))
     |> Ecto.Changeset.validate_required([:library_path_id])
     |> validate_profile_exists(assigns.quality_profiles)
@@ -391,6 +401,24 @@ defmodule MydiaWeb.AddMediaLive.Index do
     Enum.any?(paths, &(&1.id == id))
   end
 
+  # Uses the shared auto-search path rather than enqueuing directly: it is
+  # already Oban-dedupe-safe (singular insert/1, not insert_all/1) and is what
+  # the media detail page uses.
+  defp maybe_queue_search(media_item, config) do
+    if Map.get(config, :search_on_add) do
+      case Mydia.Search.queue_auto_searches([media_item]) do
+        {:ok, _count} ->
+          :ok
+
+        {:error, reason} ->
+          Logger.warning("Failed to queue search on add",
+            media_item_id: media_item.id,
+            reason: inspect(reason)
+          )
+      end
+    end
+  end
+
   defp build_media_item_attrs(metadata, config, media_type) do
     type_string = if media_type == :movie, do: "movie", else: "tv_show"
 
@@ -402,7 +430,8 @@ defmodule MydiaWeb.AddMediaLive.Index do
       imdb_id: metadata.imdb_id,
       metadata: metadata,
       monitored: config.monitored,
-      quality_profile_id: config.quality_profile_id
+      quality_profile_id: config.quality_profile_id,
+      library_path_id: config.library_path_id
     }
 
     # For TV shows fetched via TVDB, store tvdb_id; for movies, store tmdb_id

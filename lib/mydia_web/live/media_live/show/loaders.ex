@@ -106,4 +106,25 @@ defmodule MydiaWeb.MediaLive.Show.Loaders do
     end)
     |> Map.new()
   end
+
+  @doc """
+  Assigns the resolved target library, the reason, and the candidate list.
+  """
+  def assign_target_library(socket, media_item) do
+    {library, reason} =
+      case Mydia.Library.TargetResolver.resolve(media_item) do
+        {:ok, library, reason} -> {library, reason}
+        {:error, :no_compatible_library} -> {nil, nil}
+      end
+
+    media_type = if media_item.type == "movie", do: :movie, else: :tv_show
+
+    socket
+    |> Phoenix.Component.assign(:target_library, library)
+    |> Phoenix.Component.assign(:target_reason, reason)
+    |> Phoenix.Component.assign(
+      :target_library_candidates,
+      MydiaWeb.Live.Helpers.MediaAddHelpers.candidate_libraries(media_type)
+    )
+  end
 end

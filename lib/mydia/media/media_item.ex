@@ -26,6 +26,8 @@ defmodule Mydia.Media.MediaItem do
           seasons_refreshed_at: DateTime.t() | nil,
           last_upgrade_check_at: DateTime.t() | nil,
           quality_profile: Mydia.Settings.QualityProfile.t() | Ecto.Association.NotLoaded.t(),
+          library_path: Mydia.Settings.LibraryPath.t() | nil | Ecto.Association.NotLoaded.t(),
+          library_path_id: binary() | nil,
           episodes: [Mydia.Media.Episode.t()] | Ecto.Association.NotLoaded.t(),
           media_files: [Mydia.Library.MediaFile.t()] | Ecto.Association.NotLoaded.t(),
           downloads: [Mydia.Downloads.Download.t()] | Ecto.Association.NotLoaded.t(),
@@ -63,6 +65,7 @@ defmodule Mydia.Media.MediaItem do
     field :last_upgrade_check_at, :utc_datetime
 
     belongs_to :quality_profile, Mydia.Settings.QualityProfile
+    belongs_to :library_path, Mydia.Settings.LibraryPath
     has_many :episodes, Mydia.Media.Episode
     has_many :media_files, Mydia.Library.MediaFile
     has_many :downloads, Mydia.Downloads.Download
@@ -89,7 +92,8 @@ defmodule Mydia.Media.MediaItem do
       :metadata,
       :monitored,
       :monitoring_preset,
-      :quality_profile_id
+      :quality_profile_id,
+      :library_path_id
     ])
     |> validate_required([:type, :title])
     |> validate_inclusion(:type, @type_values)
@@ -98,6 +102,7 @@ defmodule Mydia.Media.MediaItem do
     |> unique_constraint(:tmdb_id)
     |> unique_constraint(:tvdb_id)
     |> foreign_key_constraint(:quality_profile_id)
+    |> foreign_key_constraint(:library_path_id)
   end
 
   # Custom validation to ensure movies have year data

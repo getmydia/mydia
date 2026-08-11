@@ -164,6 +164,7 @@
               media_type={item.media_type || @media_type}
               current_user={@current_user}
               adding_item_id={@adding_item_id}
+              libraries={@libraries}
             />
           <% end %>
         </div>
@@ -196,5 +197,6 @@
     loading={@detail_loading}
     current_user={@current_user}
     open={@selected_item != nil}
+    libraries={@libraries}
   />
 </Layouts.app>

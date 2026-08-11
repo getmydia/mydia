@@ -6,6 +6,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   import MydiaWeb.MediaLive.Show.Formatters
   import MydiaWeb.MediaLive.Show.Helpers
 
+  alias MydiaWeb.MediaLive.Show.LibraryComponents
   alias MydiaWeb.MediaLive.Show.SegmentComponents
 
   @doc """
@@ -19,6 +20,9 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :downloads_with_status, :list, required: true
   attr :quality_profiles, :list, required: true
   attr :default_quality_profile_name, :string, default: nil
+  attr :target_library, :map, default: nil
+  attr :target_reason, :atom, default: nil
+  attr :target_library_candidates, :list, default: []
   attr :applying_monitoring_preset, :boolean, default: false
   attr :is_favorite, :boolean, default: false
   attr :item_collections, :list, default: []
@@ -330,6 +334,13 @@ defmodule MydiaWeb.MediaLive.Show.Components do
               </li>
             </ul>
           </div>
+
+          <LibraryComponents.target_library_row
+            media_item={@media_item}
+            target_library={@target_library}
+            target_reason={@target_reason}
+            libraries={@target_library_candidates}
+          />
 
           <%!-- Category --%>
           <button
