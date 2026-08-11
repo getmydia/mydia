@@ -50,8 +50,8 @@ operator approves it.
 |-------|---------|
 | `events:subscribe` | The event types the plugin reacts to (from the catalog above). Required. |
 | `net:http` | The exact hostnames the plugin may contact. **No wildcards** (a wildcard subdomain is an exfiltration channel). |
-| `data:read` | Scoped read namespaces (`media_item`, `playback_progress`). The host returns a curated, read-only projection: never raw rows or secrets. |
-| `surfaces:write` | Curated write surfaces. Vocabulary: `playback:watched` (mark items watched via `ensure-watched`). |
+| `data:read` | Scoped read namespaces (`media_item`, `playback_progress`, `library_item`). The host returns a curated, read-only projection: never raw rows or secrets. |
+| `surfaces:write` | Curated write surfaces. Vocabulary: `playback:watched` (mark items watched via `ensure-watched`), `collections:favorite` (add items to Favorites via `ensure-favorite`). |
 | `state:kv` | A per-plugin key/value store (`@max_keys` 256 keys, 64 KB per value) for watermarks, cursors, and dedupe sets. |
 | `users:connections` | Per-user third-party connections: the host holds the token; the plugin gets identity + status only. **Cross-user, consent-scoped.** |
 | `schedule:interval` | Run `on-schedule` on a fixed interval (manifest `schedule`, 5-minute floor). |
@@ -102,6 +102,7 @@ host::kv_delete("watermark").ok();
 
 // data:read via data-list (cursor-paginated, updated-since filtered). Walk
 // next_cursor until None. playback_progress is consent-scoped to connected users.
+// library_item lists catalogued items with an owned flag (a media file on disk).
 let page = host::data_list(&ListRequest {
     namespace: "playback_progress".into(),
     cursor: None,
@@ -110,6 +111,7 @@ let page = host::data_list(&ListRequest {
 }).unwrap();
 for item in page.items {
     if let ListItem::PlaybackProgress(p) = item { let _ = p.watched; }
+    if let ListItem::LibraryItem(li) = item { let _ = li.owned; }
 }
 
 // surfaces:write (mark watched for a user, idempotently). Host-side external-id
@@ -131,10 +133,32 @@ for c in host::connections_list().unwrap() { let _ = (c.id, c.user_id, c.status)
 // host::connection_request(&c.id, &outbound_request)
 ```
 
+### 1.2 host functions
+
+```rust
+use mydia_plugin_sdk::host;
+use mydia_plugin_sdk::types::FavoriteTarget;
+
+// surfaces:write (add to Favorites for a user, idempotently). Requires
+// surfaces:write scoped to collections:favorite and an active connection to
+// the target user. Host-side external-id matching; the response says
+// changed / already-favorited / not-found. Additive only: there is no
+// remove counterpart, so a remote list deletion cannot strip local curation.
+host::ensure_favorite(&FavoriteTarget {
+    user_id: "…".into(),
+    imdb_id: Some("tt100".into()),
+    tmdb_id: None, tvdb_id: None,
+}).ok();
+```
+
 Key guarantees:
 
 - `ensure-watched` is **idempotent**: re-marking a watched item reports
   `already-watched` and emits no event.
+- `ensure-favorite` is **idempotent**: re-adding an existing favorite reports
+  `already-favorited` and writes nothing. It requires an active connection to
+  the target user (consent-scoped, like `ensure-watched`). It is deliberately
+  **additive only**: no host function removes favorites.
 - `data-list` cursors are opaque and request-local: walk them within one run,
   never persist them.
 - `kv-set` is an engine-native upsert (last write wins); keys are opaque to the
@@ -187,7 +211,7 @@ against an older minor keeps working: the host detects each guest's contract
 version from its bytes and serves the matching interface namespace and exports,
 so a `1.0` guest's `on-event` still resolves against a `1.1` host. Only a removal
 or a signature change bumps the major version. Target the lowest host you need
-via `min_host_version`; a `1.1` guest sets `"min_host_version": "1.1.0"` so an
+via `min_host_version`; a `1.2` guest sets `"min_host_version": "1.2.0"` so an
 older host refuses it cleanly rather than failing to link.
 
 ## Reference

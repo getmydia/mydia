@@ -55,8 +55,8 @@ install time. A plugin can never widen its own grant at runtime.
 |------------|---------|
 | `events:subscribe` | The event types the plugin reacts to. Required. Each must be in the catalog. |
 | `net:http` | The exact hostnames the plugin may contact. No wildcards. |
-| `data:read` | Read namespaces the plugin may query (`media_item`, `playback_progress`). Returns a curated, read-only projection. |
-| `surfaces:write` | Curated write surfaces. Value vocabulary: `playback:watched` (the `ensure-watched` host function). |
+| `data:read` | Read namespaces the plugin may query (`media_item`, `playback_progress`, `library_item`). Returns a curated, read-only projection. |
+| `surfaces:write` | Curated write surfaces. Value vocabulary: `playback:watched` (the `ensure-watched` host function), `collections:favorite` (the `ensure-favorite` host function). |
 | `state:kv` | A small per-plugin key/value store that survives across invocations (watermarks, cursors, dedupe sets). |
 | `users:connections` | Per-user third-party connections the host holds on the plugin's behalf. **Cross-user**: see below. |
 | `schedule:interval` | Lets the plugin run on a fixed interval via `on-schedule`. Paired with the `schedule` descriptor. |
@@ -83,7 +83,7 @@ Every `playback.*` event carries an `origin` in its metadata: `player` (a real c
     scoped**: a user is only visible to the plugin after they click *Connect* on
     their profile. `data-list playback_progress` returns rows only for connected
     users, and `ensure-watched` is rejected for a user without an active
-    connection.
+    connection. The same consent gate applies to `ensure-favorite`.
 
 !!! warning "A manifest revision needs a re-approval"
     Declaring a new capability class, a new `net:http` host, or a new subscribed
