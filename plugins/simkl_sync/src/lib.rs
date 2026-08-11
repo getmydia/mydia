@@ -20,8 +20,8 @@
 
 use mydia_plugin_sdk::host;
 use mydia_plugin_sdk::types::{
-    Connection, ConnectionStatus, Event, ListItem, ListRequest, OutboundRequest, PlaybackProgress,
-    ScheduleTick, WatchTarget,
+    Connection, ConnectionStatus, Event, LibraryItem, ListItem, ListRequest, OutboundRequest,
+    PlaybackProgress, ScheduleTick, WatchTarget,
 };
 use std::collections::{BTreeSet, HashMap};
 use tinyjson::JsonValue;
@@ -437,6 +437,132 @@ fn item_key(
         (Some(s), Some(e)) => format!("{id}:s{s}e{e}"),
         _ => id,
     }
+}
+
+/// One entry on a Simkl list, or one local item destined for one. Movies and
+/// shows go into different arrays in every Simkl body, so the split is carried
+/// on the entry rather than recomputed at each call site.
+#[cfg_attr(not(test), allow(dead_code))]
+struct ListEntry {
+    imdb: Option<String>,
+    tmdb: Option<i64>,
+    tvdb: Option<i64>,
+    is_show: bool,
+    key: String,
+}
+
+/// An item-level key: the same shape `item_key` produces with no episode
+/// coordinates. Favorites and list membership address a show as a whole, so a
+/// single watched episode must collapse onto the show's key.
+#[cfg_attr(not(test), allow(dead_code))]
+fn intent_key(imdb: Option<&str>, tmdb: Option<i64>, tvdb: Option<i64>) -> String {
+    item_key(imdb, tmdb, tvdb, None, None)
+}
+
+/// The local intent set D: owned, and with no watch progress for this user.
+///
+/// Progress rows are keyed item-level on purpose. An episode row carries its
+/// *show's* external ids (the host's `progress_dimensions`), so one watched
+/// episode drops the whole show out of D, which is correct: Simkl already
+/// files a partly watched show under "watching" from the history leg.
+#[cfg_attr(not(test), allow(dead_code))]
+fn local_intent_set(
+    library: &[LibraryItem],
+    progress: &[PlaybackProgress],
+    user_id: &str,
+) -> BTreeSet<String> {
+    let touched: BTreeSet<String> = progress
+        .iter()
+        .filter(|p| p.user_id == user_id)
+        .map(|p| intent_key(p.imdb_id.as_deref(), p.tmdb_id, p.tvdb_id))
+        .collect();
+
+    library
+        .iter()
+        .filter(|l| l.owned)
+        .map(|l| intent_key(l.imdb_id.as_deref(), l.tmdb_id, l.tvdb_id))
+        // `k` is a `&String` here, so compare and look up through `as_str()`:
+        // `&String == &str` is not implemented.
+        .filter(|k| k.as_str() != "unknown" && !touched.contains(k.as_str()))
+        .collect()
+}
+
+/// Parses a `/sync/all-items/{type}/plantowatch?extended=simkl_ids_only` body.
+///
+/// Same nesting as the full shape the history leg parses: ids live under a
+/// `show`/`movie` sub-object, and `tvdb`/`tmdb` arrive as strings here but as
+/// numbers elsewhere, so `coerce_i64` stays bidirectional. A structural
+/// mismatch yields an empty list rather than an error, matching
+/// `parse_all_items`.
+#[cfg_attr(not(test), allow(dead_code))]
+fn parse_mini_list(body: &str, is_show: bool) -> Vec<ListEntry> {
+    let json: JsonValue = match body.parse() {
+        Ok(j) => j,
+        Err(_) => return Vec::new(),
+    };
+    let obj = match json.get::<HashMap<String, JsonValue>>() {
+        Some(o) => o,
+        None => return Vec::new(),
+    };
+
+    let (array_key, sub_key) = if is_show {
+        ("shows", "show")
+    } else {
+        ("movies", "movie")
+    };
+
+    let Some(JsonValue::Array(entries)) = obj.get(array_key) else {
+        return Vec::new();
+    };
+
+    entries
+        .iter()
+        .filter_map(|entry| {
+            let entry_obj = entry.get::<HashMap<String, JsonValue>>()?;
+            let ids = sub_ids(entry_obj, sub_key)?;
+            let (imdb, tmdb, tvdb) = extract_ids(ids);
+            let key = intent_key(imdb.as_deref(), tmdb, tvdb);
+
+            if key == "unknown" {
+                return None;
+            }
+
+            Some(ListEntry {
+                imdb,
+                tmdb,
+                tvdb,
+                is_show,
+                key,
+            })
+        })
+        .collect()
+}
+
+/// Builds a `/sync/add-to-list` body, splitting movies and shows and marking
+/// every entry `plantowatch`.
+#[cfg_attr(not(test), allow(dead_code))]
+fn build_add_to_list_body(items: &[ListEntry]) -> String {
+    let mut movies: Vec<String> = Vec::new();
+    let mut shows: Vec<String> = Vec::new();
+
+    for item in items {
+        let entry = format!(
+            "{{\"to\":\"plantowatch\",\"ids\":{}}}",
+            ids_json(item.imdb.as_deref(), item.tmdb, item.tvdb)
+        );
+
+        if item.is_show {
+            shows.push(entry);
+        } else {
+            movies.push(entry);
+        }
+    }
+
+    format!(
+        "{{\"movies\":[{}],\"shows\":[{}]}}",
+        movies.join(","),
+        shows.join(",")
+    )
 }
 
 /// Builds the Simkl `/sync/history` POST body from a batch of push items,
@@ -1037,5 +1163,146 @@ mod tests {
         let json = string_array_json(&set);
         let back: BTreeSet<String> = parse_string_array(&json).into_iter().collect();
         assert_eq!(set, back);
+    }
+
+    const MINI_MOVIES: &str = r#"{
+        "movies": [
+            { "status": "plantowatch", "movie": { "ids": { "imdb": "tt0111161", "tmdb": "278" } } },
+            { "status": "plantowatch", "movie": { "ids": { "simkl": 4242 } } }
+        ]
+    }"#;
+
+    const MINI_SHOWS: &str = r#"{
+        "shows": [
+            { "status": "plantowatch", "show": { "ids": { "tvdb": "320724", "tmdb": "67195" } } }
+        ]
+    }"#;
+
+    #[test]
+    fn parse_mini_list_reads_movie_ids() {
+        let entries = parse_mini_list(MINI_MOVIES, false);
+        assert_eq!(entries.len(), 1, "an entry with no usable id is skipped");
+        assert_eq!(entries[0].imdb.as_deref(), Some("tt0111161"));
+        assert_eq!(entries[0].key, "imdb:tt0111161");
+        assert!(!entries[0].is_show);
+    }
+
+    #[test]
+    fn parse_mini_list_reads_show_ids_as_strings() {
+        let entries = parse_mini_list(MINI_SHOWS, true);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].tvdb, Some(320_724));
+        assert!(entries[0].is_show);
+        assert_eq!(entries[0].key, "tmdb:67195");
+    }
+
+    #[test]
+    fn parse_mini_list_of_garbage_is_empty_not_an_error() {
+        assert!(parse_mini_list("not json", false).is_empty());
+        assert!(parse_mini_list("{}", true).is_empty());
+    }
+
+    #[test]
+    fn build_add_to_list_body_splits_movies_and_shows() {
+        let items = vec![
+            ListEntry {
+                imdb: Some("tt0111161".to_string()),
+                tmdb: None,
+                tvdb: None,
+                is_show: false,
+                key: "imdb:tt0111161".to_string(),
+            },
+            ListEntry {
+                imdb: None,
+                tmdb: Some(67195),
+                tvdb: Some(320_724),
+                is_show: true,
+                key: "tmdb:67195".to_string(),
+            },
+        ];
+
+        let body = build_add_to_list_body(&items);
+        assert!(body.contains("\"movies\""));
+        assert!(body.contains("\"shows\""));
+        assert!(body.contains("\"to\":\"plantowatch\""));
+        assert!(body.contains("tt0111161"));
+        assert!(body.contains("320724"));
+    }
+
+    #[test]
+    fn intent_key_matches_the_pulled_key_for_the_same_item() {
+        assert_eq!(
+            intent_key(Some("tt0111161"), Some(278), None),
+            item_key(Some("tt0111161"), Some(278), None, None, None)
+        );
+    }
+
+    #[test]
+    fn local_intent_set_holds_owned_and_unwatched_only() {
+        let library = vec![
+            lib_item("owned-unwatched", "movie", Some("tt1"), true),
+            lib_item("owned-watched", "movie", Some("tt2"), true),
+            lib_item("catalogued-only", "movie", Some("tt3"), false),
+        ];
+        let progress = vec![progress_row("u1", "movie", Some("tt2"))];
+
+        let set = local_intent_set(&library, &progress, "u1");
+
+        assert!(set.contains("imdb:tt1"));
+        assert!(!set.contains("imdb:tt2"), "any progress removes an item");
+        assert!(!set.contains("imdb:tt3"), "not owned is not intent");
+    }
+
+    #[test]
+    fn local_intent_set_ignores_another_users_progress() {
+        let library = vec![lib_item("owned-unwatched", "movie", Some("tt1"), true)];
+        let progress = vec![progress_row("someone-else", "movie", Some("tt1"))];
+
+        assert!(local_intent_set(&library, &progress, "u1").contains("imdb:tt1"));
+    }
+
+    #[test]
+    fn local_intent_set_drops_a_show_with_any_watched_episode() {
+        let library = vec![lib_item("show", "tv_show", Some("tt9"), true)];
+        // An episode progress row carries the *show's* external ids, which is
+        // why the intent key must ignore episode coordinates.
+        let mut row = progress_row("u1", "episode", Some("tt9"));
+        row.season_number = Some(1);
+        row.episode_number = Some(3);
+
+        assert!(local_intent_set(&library, &[row], "u1").is_empty());
+    }
+
+    // ── test builders ────────────────────────────────────────────────────────
+
+    fn lib_item(id: &str, item_type: &str, imdb: Option<&str>, owned: bool) -> LibraryItem {
+        LibraryItem {
+            id: id.to_string(),
+            item_type: item_type.to_string(),
+            title: id.to_string(),
+            year: None,
+            tmdb_id: None,
+            tvdb_id: None,
+            imdb_id: imdb.map(|s| s.to_string()),
+            owned,
+            updated_at: "2026-08-11T00:00:00Z".to_string(),
+        }
+    }
+
+    fn progress_row(user: &str, item_type: &str, imdb: Option<&str>) -> PlaybackProgress {
+        PlaybackProgress {
+            user_id: user.to_string(),
+            item_type: item_type.to_string(),
+            media_item_id: None,
+            episode_id: None,
+            tmdb_id: None,
+            tvdb_id: None,
+            imdb_id: imdb.map(|s| s.to_string()),
+            season_number: None,
+            episode_number: None,
+            watched: true,
+            last_watched_at: None,
+            updated_at: "2026-08-11T00:00:00Z".to_string(),
+        }
     }
 }
