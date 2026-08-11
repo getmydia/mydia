@@ -16,9 +16,12 @@ defmodule Mydia.Library.Structs.FileMetadata do
   - **VP9 codec details**: vp9_profile, vp9_level
   - **AV1 codec details**: av1_profile, av1_level, av1_tier
   - **Shared codec detail**: bit_depth
+  - **Streams**: streams (per-stream detail, see `Mydia.Library.Structs.StreamInfo`)
   - **Quality evaluation**: quality_evaluation (written by QualityProfileEngine)
   - **Catch-all**: extra (captures unknown keys from legacy data or future ffprobe versions)
   """
+
+  alias Mydia.Library.Structs.StreamInfo
 
   defstruct [
     # Core technical
@@ -60,6 +63,12 @@ defmodule Mydia.Library.Structs.FileMetadata do
     # Shared codec detail
     :bit_depth,
 
+    # Every video, audio and subtitle stream. nil means capture has never run
+    # for this file; [] means it ran and found nothing usable. The repair lane
+    # in Mydia.Jobs.FileAnalysis keys off nil, so writing [] is what stops a
+    # pathological file being re-probed on every tick forever.
+    :streams,
+
     # Quality evaluation (written by QualityProfileEngine)
     :quality_evaluation,
 
@@ -87,6 +96,7 @@ defmodule Mydia.Library.Structs.FileMetadata do
           av1_level: integer() | nil,
           av1_tier: integer() | nil,
           bit_depth: integer() | nil,
+          streams: [StreamInfo.t()] | nil,
           quality_evaluation: map() | nil,
           extra: map()
         }
@@ -112,6 +122,7 @@ defmodule Mydia.Library.Structs.FileMetadata do
     "av1_level" => :av1_level,
     "av1_tier" => :av1_tier,
     "bit_depth" => :bit_depth,
+    "streams" => :streams,
     "quality_evaluation" => :quality_evaluation
   }
 
@@ -127,6 +138,9 @@ defmodule Mydia.Library.Structs.FileMetadata do
     {known, extra} =
       Enum.reduce(map, {%{}, %{}}, fn {key, value}, {known_acc, extra_acc} ->
         case resolve_key(key) do
+          {:known, :streams} ->
+            {Map.put(known_acc, :streams, normalize_streams(value)), extra_acc}
+
           {:known, atom_key} ->
             {Map.put(known_acc, atom_key, value), extra_acc}
 
@@ -137,6 +151,17 @@ defmodule Mydia.Library.Structs.FileMetadata do
 
     struct(__MODULE__, Map.put(known, :extra, extra))
   end
+
+  # `streams` arrives either as StreamInfo structs (from the analyzer, via
+  # Ecto.Type.cast/1) or as plain maps (from stored JSON, via load/1).
+  defp normalize_streams(streams) when is_list(streams) do
+    Enum.map(streams, fn
+      %StreamInfo{} = stream -> stream
+      map when is_map(map) -> StreamInfo.from_map(map)
+    end)
+  end
+
+  defp normalize_streams(_streams), do: nil
 
   @doc """
   Creates an empty FileMetadata with all fields set to nil.
@@ -153,7 +178,10 @@ defmodule Mydia.Library.Structs.FileMetadata do
     |> Map.from_struct()
     |> Map.delete(:extra)
     |> Enum.reject(fn {_k, v} -> is_nil(v) end)
-    |> Enum.map(fn {k, v} -> {to_string(k), v} end)
+    |> Enum.map(fn
+      {:streams, streams} -> {"streams", Enum.map(streams, &StreamInfo.to_map/1)}
+      {k, v} -> {to_string(k), v}
+    end)
     |> Map.new()
     |> Map.merge(metadata.extra || %{})
   end
