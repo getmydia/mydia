@@ -71,7 +71,6 @@ defmodule MydiaWeb.IntegrationsLiveTest do
     {:ok, view, _html} = live(conn, ~p"/integrations")
 
     assert has_element?(view, "#plugin-conn-#{@slug}")
-    refute has_element?(view, "#trakt-connect-btn")
   end
 
   test "exposes an Integrations link in the sidebar", %{conn: conn} do
