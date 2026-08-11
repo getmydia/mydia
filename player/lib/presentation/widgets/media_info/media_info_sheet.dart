@@ -28,70 +28,77 @@ class _MediaInfoPanelState extends State<MediaInfoPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final content = MediaInfoContent(
-      files: widget.files,
-      selectedIndex: _selected,
-      onSelectVersion: (index) => setState(() => _selected = index),
-    );
-
     // Below the desktop breakpoint the panel is a bottom sheet; at or above it
     // is a right-hand side panel, so the backdrop and poster stay visible.
-    return Breakpoints.isDesktop(context)
-        ? _SidePanel(key: const Key('media-info-side'), child: content)
-        : _BottomPanel(key: const Key('media-info-bottom'), child: content);
-  }
-}
+    final isWide = Breakpoints.isDesktop(context);
 
-class _BottomPanel extends StatelessWidget {
-  final Widget child;
-
-  const _BottomPanel({super.key, required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.sizeOf(context).height * 0.78,
-      ),
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
+    return _PanelSurface(
+      key: isWide
+          ? const Key('media-info-side')
+          : const Key('media-info-bottom'),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisSize: isWide ? MainAxisSize.max : MainAxisSize.min,
         children: [
-          const _Grabber(),
+          if (isWide) const SizedBox(height: 12) else const _Grabber(),
           const _PanelHeader(),
-          Flexible(child: child),
+          Flexible(
+            fit: isWide ? FlexFit.tight : FlexFit.loose,
+            child: MediaInfoContent(
+              files: widget.files,
+              selectedIndex: _selected,
+              onSelectVersion: (index) => setState(() => _selected = index),
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
-class _SidePanel extends StatelessWidget {
+/// The panel's background, border, radius and width, for every state.
+///
+/// A [Material] rather than a decorated [Container]: `showGeneralDialog`'s page
+/// has no Material ancestor, and without one every [Text] inherits Flutter's
+/// fallback debug style (a yellow double underline) and every [InkWell] fails
+/// `debugCheckHasMaterial`. Owning the width here also means the loading, error
+/// and loaded states cannot disagree about it and make the panel jump.
+class _PanelSurface extends StatelessWidget {
   final Widget child;
 
-  const _SidePanel({super.key, required this.child});
+  const _PanelSurface({super.key, required this.child});
+
+  /// Side-panel width.
+  ///
+  /// `Breakpoints.isDesktop` is `width >= 900` despite its name, so a flat
+  /// fraction would make the panel *narrower* than the 420 it shipped with on
+  /// small laptops. The floor keeps every viewport at least as wide as before;
+  /// the ceiling stops it sprawling on an ultrawide.
+  static double sideWidth(BuildContext context) =>
+      (MediaQuery.sizeOf(context).width * 0.4).clamp(420.0, 520.0);
 
   @override
   Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerRight,
+    final isWide = Breakpoints.isDesktop(context);
+
+    return Material(
+      color: AppColors.surface,
+      borderRadius:
+          isWide ? null : const BorderRadius.vertical(top: Radius.circular(16)),
+      clipBehavior: Clip.antiAlias,
       child: Container(
-        width: 420,
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          color: AppColors.surface,
-          border: Border(left: BorderSide(color: AppColors.border)),
-        ),
-        child: Column(
-          children: [
-            const SizedBox(height: 12),
-            const _PanelHeader(),
-            Expanded(child: child),
-          ],
-        ),
+        width: isWide ? sideWidth(context) : double.infinity,
+        height: isWide ? double.infinity : null,
+        constraints: isWide
+            ? null
+            : BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(context).height * 0.78,
+              ),
+        decoration: isWide
+            ? const BoxDecoration(
+                border: Border(left: BorderSide(color: AppColors.border)),
+              )
+            : null,
+        child: child,
       ),
     );
   }
@@ -213,24 +220,11 @@ class _PanelShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isWide = Breakpoints.isDesktop(context);
-
-    return Container(
-      width: isWide ? 420 : double.infinity,
-      height: isWide ? double.infinity : null,
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: isWide
-            ? null
-            : const BorderRadius.vertical(top: Radius.circular(16)),
-        border: isWide
-            ? const Border(left: BorderSide(color: AppColors.border))
-            : null,
+    return _PanelSurface(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [const _PanelHeader(), child],
       ),
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const _PanelHeader(),
-        child,
-      ]),
     );
   }
 }
