@@ -135,3 +135,19 @@ class CardSize {
 
   double get aspectRatio => width / height;
 }
+
+/// Columns for a poster grid of [width] logical pixels.
+///
+/// Lived in `library_grid_body.dart` until `BrowseGrid` needed it: a widget in
+/// `presentation/widgets/` importing from a sibling screen folder inverts the
+/// layering, and `ContinueWatchingScreen` was already reaching across for it.
+/// The table is unchanged.
+int libraryCrossAxisCount(double width) {
+  if (width > 1400) return 8;
+  if (width > 1200) return 7;
+  if (width > 1000) return 6;
+  if (width > 800) return 5;
+  if (width > 600) return 4;
+  if (width > 400) return 3;
+  return 2;
+}

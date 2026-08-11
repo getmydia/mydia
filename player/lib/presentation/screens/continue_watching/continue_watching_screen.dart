@@ -12,7 +12,6 @@ import '../../widgets/app_shell.dart';
 import '../../widgets/freshness_header.dart';
 import '../../widgets/glass_surface.dart';
 import '../../widgets/media_poster.dart';
-import '../library/library_grid_body.dart';
 import 'continue_watching_controller.dart';
 
 class ContinueWatchingScreen extends ConsumerStatefulWidget {

@@ -339,16 +339,6 @@ class _LibraryMediaBodyState extends ConsumerState<LibraryMediaBody> {
   }
 }
 
-int libraryCrossAxisCount(double width) {
-  if (width > 1400) return 8;
-  if (width > 1200) return 7;
-  if (width > 1000) return 6;
-  if (width > 800) return 5;
-  if (width > 600) return 4;
-  if (width > 400) return 3;
-  return 2;
-}
-
 class LibraryListItem extends StatelessWidget {
   final LibraryItem item;
   final VoidCallback onTap;
