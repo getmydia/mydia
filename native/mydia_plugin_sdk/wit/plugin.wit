@@ -7,13 +7,9 @@
 // fields / new functions / new exports) for non-breaking changes; bump the major
 // for any removal or signature change.
 //
-// 1.1.0 (additive, U2): KV state, list reads, watched write-back, per-user
-// connections, host-attached auth (`connection-request`), and the `on-schedule`
-// handler export. Every 1.0 type and function is byte-stable, so a 1.0 guest
-// still instantiates and handles `on-event` against a 1.1 host (wasmtime serves
-// the older interface as a semver-compatible subset of the superset the host
-// provides). New 1.1 guests refuse old hosts via the manifest `min_host_version`.
-package mydia:plugin@1.1.0;
+// 1.2.0 (additive): library-ownership reads (`library-item`) and favorite
+// write-back (`ensure-favorite`). Every 1.1 type and function is byte-stable.
+package mydia:plugin@1.2.0;
 
 /// Shared types for the plugin contract.
 interface types {
@@ -119,6 +115,7 @@ interface types {
   variant list-item {
     media-item(media-item),
     playback-progress(playback-progress),
+    library-item(library-item),
   }
 
   record list-result {
@@ -151,6 +148,50 @@ interface types {
 
   record ensure-watched-result {
     status: ensure-watched-status,
+  }
+
+  // ── 1.2.0 additions ──────────────────────────────────────────────────────
+
+  /// A library-ownership projection (the `library_item` namespace). Answers
+  /// "does this instance have files for this item", which `media-item`
+  /// deliberately does not carry, so a sync guest can tell a catalogued item
+  /// from an owned one without enumerating files.
+  record library-item {
+    id: string,
+    /// "movie" | "tv_show".
+    item-type: string,
+    title: string,
+    year: option<u32>,
+    tmdb-id: option<s64>,
+    tvdb-id: option<s64>,
+    imdb-id: option<string>,
+    /// True when at least one untrashed media file exists for the item.
+    /// Episode files count for shows.
+    owned: bool,
+    /// RFC3339; the row's update time, used as the keyset cursor anchor.
+    updated-at: string,
+  }
+
+  /// Target for `ensure-favorite`. External ids are resolved host-side through
+  /// the same ordered candidates `ensure-watched` uses. No episode
+  /// coordinates: favorites are always item-level.
+  record favorite-target {
+    user-id: string,
+    imdb-id: option<string>,
+    tmdb-id: option<s64>,
+    tvdb-id: option<s64>,
+  }
+
+  /// Outcome of `ensure-favorite`. Idempotent by contract: re-adding an
+  /// existing favorite reports `already-favorited` and writes nothing.
+  enum ensure-favorite-status {
+    changed,
+    already-favorited,
+    not-found,
+  }
+
+  record ensure-favorite-result {
+    status: ensure-favorite-status,
   }
 
   /// Lifecycle status of a per-user connection.
@@ -197,6 +238,7 @@ interface types {
 interface host {
   use types.{outbound-request, outbound-response, data-request, read-result,
              list-request, list-result, watch-target, ensure-watched-result,
+             library-item, favorite-target, ensure-favorite-result,
              connection, host-error};
 
   /// Outbound HTTP request, subject to the plugin's net:http grant and the SSRF
@@ -237,6 +279,15 @@ interface host {
   /// matching. Requires surfaces:write scoped to "playback:watched" and an
   /// active connection to the target user (R21).
   ensure-watched: func(target: watch-target) -> result<ensure-watched-result, host-error>;
+
+  // ── 1.2.0 additions ──────────────────────────────────────────────────────
+
+  /// Add an item to a user's Favorites collection, idempotently, with
+  /// host-side external-id matching. Requires surfaces:write scoped to
+  /// "collections:favorite" and an active connection to the target user (R21).
+  /// Additive only: there is deliberately no remove counterpart, so a remote
+  /// service can never delete a user's local curation.
+  ensure-favorite: func(target: favorite-target) -> result<ensure-favorite-result, host-error>;
 
   /// List the plugin's per-user connections (identity + status only, never a
   /// token — R22). Requires users:connections.

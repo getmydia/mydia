@@ -174,7 +174,7 @@ defmodule Mydia.Plugins.HostFunctionsTest do
 
       imports = builder.(%{slug: "tester", invocation_id: "x", test_run: false})
 
-      assert %{"mydia:plugin/host@1.1.0" => fns} = imports
+      assert %{"mydia:plugin/host@1.2.0" => fns} = imports
 
       assert %{"http-request" => {:fn, f1}, "data-read" => {:fn, f2}, "log" => {:fn, f3}} = fns
       assert is_function(f1, 1) and is_function(f2, 1) and is_function(f3, 2)
@@ -186,6 +186,7 @@ defmodule Mydia.Plugins.HostFunctionsTest do
                "kv-delete" => {:fn, _},
                "data-list" => {:fn, _},
                "ensure-watched" => {:fn, _},
+               "ensure-favorite" => {:fn, _},
                "connections-list" => {:fn, _},
                "connection-request" => {:fn, _}
              } = fns
@@ -632,6 +633,20 @@ defmodule Mydia.Plugins.HostFunctionsTest do
       # A nonexistent episode of the same show is not-found.
       assert {:ok, %{status: :"not-found"}} =
                HostFunctions.ensure_watched(p, target(user.id, tvdb: 999, season: 9, episode: 9))
+    end
+  end
+
+  describe "ensure_favorite/2 capability gate" do
+    test "denies a plugin without the collections:favorite surface" do
+      p = plugin(%{"surfaces:write" => ["playback:watched"]})
+
+      assert {:error, %Error{type: :capability_denied}} =
+               HostFunctions.ensure_favorite(p, %{
+                 "user-id": "u1",
+                 "imdb-id": {:some, "tt0111161"},
+                 "tmdb-id": :none,
+                 "tvdb-id": :none
+               })
     end
   end
 end

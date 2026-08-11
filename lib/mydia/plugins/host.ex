@@ -3,7 +3,7 @@ defmodule Mydia.Plugins.Host do
   WASM **component-model** runtime host for the plugin platform.
 
   Guests are WebAssembly components built against the canonical
-  `mydia:plugin@1.1.0` WIT contract (`native/mydia_plugin_sdk/wit/plugin.wit`).
+  `mydia:plugin@1.2.0` WIT contract (`native/mydia_plugin_sdk/wit/plugin.wit`).
   The host instantiates them through `Wasmex.Components.*` and calls the typed
   `handler.on-event` / `handler.on-schedule` exports. A guest built against an
   older minor (1.0) is served the matching namespace + export, detected from the
@@ -83,8 +83,8 @@ defmodule Mydia.Plugins.Host do
   # version; wasmtime semver-matches so a 1.0 guest's `handler@1.0.0/on-event`
   # still resolves against this 1.1 lookup. `on-schedule` is 1.1-only — a 1.0
   # guest has no such export and the schedule call fails soft.
-  @handler_export ["mydia:plugin/handler@1.1.0", "on-event"]
-  @schedule_export ["mydia:plugin/handler@1.1.0", "on-schedule"]
+  @handler_export ["mydia:plugin/handler@1.2.0", "on-event"]
+  @schedule_export ["mydia:plugin/handler@1.2.0", "on-schedule"]
   @legacy_handler_export ["mydia:plugin/handler@1.0.0", "on-event"]
 
   # Provided host-import namespaces. wasmex links the provided imports map to the
@@ -92,7 +92,7 @@ defmodule Mydia.Plugins.Host do
   # (which imports `host@1.0.0` with only the original three functions) needs the
   # map re-keyed and narrowed. We detect this once per plugin from the
   # instantiation error and memoize it.
-  @host_namespace "mydia:plugin/host@1.1.0"
+  @host_namespace "mydia:plugin/host@1.2.0"
   @legacy_host_namespace "mydia:plugin/host@1.0.0"
   @legacy_host_funcs ~w(http-request data-read log)
 

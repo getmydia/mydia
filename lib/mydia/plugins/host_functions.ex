@@ -11,7 +11,7 @@ defmodule Mydia.Plugins.HostFunctions do
 
   ## Component import ABI (1.1)
 
-  Imports live under the `"mydia:plugin/host@1.1.0"` interface namespace and
+  Imports live under the `"mydia:plugin/host@1.2.0"` interface namespace and
   receive/return **typed WIT records** — no linear-memory marshalling. Wasmex
   hands each import closure the decoded record (atom-keyed map; `option<T>` as
   `{:some, v}` / `:none`; `list<tuple>` as `[{k, v}]`) and marshals the closure's
@@ -58,7 +58,7 @@ defmodule Mydia.Plugins.HostFunctions do
   # The WIT host interface namespace. The version suffix is the ABI version.
   # wasmtime serves this 1.1 superset to a 1.0 guest (which imports
   # `host@1.0.0`) via component semver matching, so older guests keep working.
-  @namespace "mydia:plugin/host@1.1.0"
+  @namespace "mydia:plugin/host@1.2.0"
 
   # Per-invocation guest log-line cap. `log` is ungated, so a buggy or hostile
   # guest could spam it in a loop and flood plugin_logs before retention fires.
@@ -90,6 +90,7 @@ defmodule Mydia.Plugins.HostFunctions do
           "kv-delete" => {:fn, kv_delete_import(slug)},
           "data-list" => {:fn, data_list_import(slug)},
           "ensure-watched" => {:fn, ensure_watched_import(slug)},
+          "ensure-favorite" => {:fn, ensure_favorite_import(slug)},
           "connections-list" => {:fn, connections_list_import(slug)},
           "connection-request" => {:fn, connection_request_import(slug, gate_opts)}
         }
@@ -150,6 +151,16 @@ defmodule Mydia.Plugins.HostFunctions do
       typed_result(fn ->
         with {:ok, plugin} <- Plugins.get_plugin(slug) do
           ensure_watched(plugin, target)
+        end
+      end)
+    end
+  end
+
+  defp ensure_favorite_import(slug) do
+    fn target ->
+      typed_result(fn ->
+        with {:ok, plugin} <- Plugins.get_plugin(slug) do
+          ensure_favorite(plugin, target)
         end
       end)
     end
@@ -676,6 +687,14 @@ defmodule Mydia.Plugins.HostFunctions do
          :ok <- require_active_connection(plugin, user_id),
          {:ok, watched_at} <- parse_watched_at(from_option(Map.get(target, :"watched-at"))) do
       resolve_and_write(plugin, user_id, target, watched_at)
+    end
+  end
+
+  @doc false
+  @spec ensure_favorite(Plugin.t(), map()) :: {:ok, map()} | {:error, Error.t()}
+  def ensure_favorite(%Plugin{} = plugin, _target) do
+    with :ok <- require_surface(plugin, "collections:favorite") do
+      {:error, Error.new(:internal, "ensure-favorite not implemented")}
     end
   end
 
