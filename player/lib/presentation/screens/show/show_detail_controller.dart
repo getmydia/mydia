@@ -7,6 +7,7 @@ import '../../../core/graphql/watch/query_key.dart';
 import '../../../core/graphql/watch/query_watcher.dart';
 import '../../../core/graphql/watch/watcher_registry.dart';
 import '../../../domain/models/show_detail.dart';
+import '../../../graphql/mutations/toggle_favorite.graphql.dart';
 
 part 'show_detail_controller.g.dart';
 
@@ -98,15 +99,6 @@ query TvShowDetail($id: ID!) {
 }
 ''';
 
-const String toggleShowFavoriteMutation = r'''
-mutation ToggleShowFavorite($id: ID!) {
-  toggleShowFavorite(showId: $id) {
-    id
-    isFavorite
-  }
-}
-''';
-
 ShowDetail _parseShow(Map<String, dynamic> data) {
   final show = data['tvShow'];
   if (show == null) throw Exception('TV show not found');
@@ -175,8 +167,10 @@ class ShowDetailController extends _$ShowDetailController {
       final client = await ref.read(asyncGraphqlClientProvider.future);
       final result = await client.mutate(
         MutationOptions(
-          document: gql(toggleShowFavoriteMutation),
-          variables: {'id': currentState.id},
+          document: documentNodeMutationToggleFavorite,
+          variables: Variables$Mutation$ToggleFavorite(
+            mediaItemId: currentState.id,
+          ).toJson(),
         ),
       );
 

@@ -67,16 +67,21 @@ Map<String, dynamic> _show({required bool isFavorite}) => {
       },
     };
 
-Map<String, dynamic> _toggleShowFavoriteMutationData() => {
+/// The shape the server actually returns: one `toggleFavorite` mutation over
+/// media item ids, for shows and movies alike. An earlier version of this stub
+/// answered a `toggleShowFavorite` field returning a `TvShow`, which the schema
+/// has never defined — the reason the real mutation failed on every tap while
+/// this test stayed green.
+Map<String, dynamic> _toggleFavoriteMutationData() => {
       '__typename': 'Mutation',
-      'toggleShowFavorite': {
-        '__typename': 'TvShow',
-        'id': 's1',
+      'toggleFavorite': {
+        '__typename': 'ToggleFavoriteResult',
         'isFavorite': true,
+        'mediaItemId': 's1',
       },
     };
 
-/// A [Link] whose response to the `ToggleShowFavorite` mutation only arrives
+/// A [Link] whose response to the `ToggleFavorite` mutation only arrives
 /// once [gate] completes, while every other request (the initial detail
 /// query, and any self-refetch it triggers) answers immediately. Used to
 /// simulate a user navigating away while a mutation is still in flight.
@@ -90,10 +95,10 @@ class _GatedMutationLink extends Link {
   Stream<Response> request(Request request, [NextLink? forward]) async* {
     requests.add(request);
 
-    if (_operationName(request) == 'ToggleShowFavorite') {
+    if (_operationName(request) == 'ToggleFavorite') {
       await gate;
       yield Response(
-        data: _toggleShowFavoriteMutationData(),
+        data: _toggleFavoriteMutationData(),
         response: const <String, dynamic>{},
       );
       return;
@@ -130,9 +135,9 @@ void main() {
         fetchLogProvider.overrideWithValue(log),
         asyncGraphqlClientProvider.overrideWith(
           (ref) async => stubClient(StubLink((request, _) {
-            if (_operationName(request) == 'ToggleShowFavorite') {
+            if (_operationName(request) == 'ToggleFavorite') {
               favorited = true;
-              return _toggleShowFavoriteMutationData();
+              return _toggleFavoriteMutationData();
             }
             return _show(isFavorite: favorited);
           })),

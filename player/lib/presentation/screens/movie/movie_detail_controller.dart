@@ -9,6 +9,7 @@ import '../../../core/graphql/watch/watcher_registry.dart';
 import '../../../domain/models/movie_detail.dart';
 import '../../../domain/models/progress.dart';
 import '../../../graphql/mutations/mark_watched.graphql.dart';
+import '../../../graphql/mutations/toggle_favorite.graphql.dart';
 
 part 'movie_detail_controller.g.dart';
 
@@ -75,15 +76,6 @@ query MovieDetail($id: ID!) {
 }
 ''';
 
-const String toggleMovieFavoriteMutation = r'''
-mutation ToggleMovieFavorite($id: ID!) {
-  toggleMovieFavorite(movieId: $id) {
-    id
-    isFavorite
-  }
-}
-''';
-
 MovieDetail _parseMovie(Map<String, dynamic> data) {
   final movie = data['movie'];
   if (movie == null) throw Exception('Movie not found');
@@ -127,8 +119,10 @@ class MovieDetailController extends _$MovieDetailController {
       final client = await ref.read(asyncGraphqlClientProvider.future);
       final result = await client.mutate(
         MutationOptions(
-          document: gql(toggleMovieFavoriteMutation),
-          variables: {'id': currentState.id},
+          document: documentNodeMutationToggleFavorite,
+          variables: Variables$Mutation$ToggleFavorite(
+            mediaItemId: currentState.id,
+          ).toJson(),
         ),
       );
 
