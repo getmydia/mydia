@@ -157,6 +157,7 @@ defmodule MetadataRelay.OpenSubtitles.Handler do
       "uploader" => file["uploader"] || %{} |> Map.get("name", "unknown"),
       "hearing_impaired" => file["hearing_impaired"] || false,
       "foreign_parts_only" => file["foreign_parts_only"] || false,
+      "moviehash_match" => file["moviehash_match"] || false,
       # Feature details (movie/show info)
       "feature_type" => feature["feature_type"],
       "title" => feature["title"],
