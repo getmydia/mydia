@@ -3219,11 +3219,11 @@ install time. A plugin can never widen its own grant at runtime.</p>
 </tr>
 <tr>
 <td><code>data:read</code></td>
-<td>Read namespaces the plugin may query (<code>media_item</code>, <code>playback_progress</code>). Returns a curated, read-only projection.</td>
+<td>Read namespaces the plugin may query (<code>media_item</code>, <code>playback_progress</code>, <code>library_item</code>). Returns a curated, read-only projection.</td>
 </tr>
 <tr>
 <td><code>surfaces:write</code></td>
-<td>Curated write surfaces. Value vocabulary: <code>playback:watched</code> (the <code>ensure-watched</code> host function).</td>
+<td>Curated write surfaces. Value vocabulary: <code>playback:watched</code> (the <code>ensure-watched</code> host function), <code>collections:favorite</code> (the <code>ensure-favorite</code> host function).</td>
 </tr>
 <tr>
 <td><code>state:kv</code></td>
@@ -3261,7 +3261,7 @@ watch history and mark items watched on their behalf. Access is <strong>consent-
 scoped</strong>: a user is only visible to the plugin after they click <em>Connect</em> on
 their profile. <code>data-list playback_progress</code> returns rows only for connected
 users, and <code>ensure-watched</code> is rejected for a user without an active
-connection.</p>
+connection. The same consent gate applies to <code>ensure-favorite</code>.</p>
 </div>
 <div class="admonition warning">
 <p class="admonition-title">A manifest revision needs a re-approval</p>

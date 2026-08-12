@@ -2296,6 +2296,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#list-sync-plan-to-watch-and-favorites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        List sync (Plan to Watch and Favorites)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#next-steps" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2846,6 +2857,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#list-sync-plan-to-watch-and-favorites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        List sync (Plan to Watch and Favorites)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#next-steps" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2898,6 +2920,9 @@ tested version; this recipe is the skeleton and the invariants that matter.</p>
   account starts clean.</li>
 <li><code>data:read playback_progress</code> + <code>surfaces:write playback:watched</code>: read what
   the user watched locally; mark what the service says they watched.</li>
+<li><code>data:read library_item</code> + <code>surfaces:write collections:favorite</code>: read what
+  the user owns in their library; favorite what the service lists but they do
+  not own locally.</li>
 </ul>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">fn</span><span class="w"> </span><span class="nf">on_schedule</span><span class="p">(</span><span class="n">tick</span><span class="p">:</span><span class="w"> </span><span class="nc">ScheduleTick</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="nb">String</span><span class="p">,</span><span class="w"> </span><span class="nb">String</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">invalid</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">Vec</span><span class="p">::</span><span class="n">new</span><span class="p">();</span>
@@ -2932,12 +2957,30 @@ per user, per direction, so a clock skew or a re-run never re-syncs the world.</
 write-backs are already suppressed) can push that single watch immediately; the
 scheduler's single-flight serializes it against a running sync so your KV state
 never interleaves.</p>
+<h2 id="list-sync-plan-to-watch-and-favorites">List sync (Plan to Watch and Favorites)</h2>
+<p>When a service exposes a "plan to watch" or wishlist alongside watch history, use
+the same set-difference guard as the history echo guard, without storing an echo
+set:</p>
+<ul>
+<li><strong>D</strong> is the set of unwatched, owned library items (<code>data-list library_item</code>
+  where <code>owned</code> is true and the item is not watched).</li>
+<li><strong>P</strong> is the set of plan-to-watch ids the service reports for the user.</li>
+</ul>
+<p>Push <strong>D \ P</strong> to the service (items you own locally that the service does not
+yet list). Favorite <strong>P \ D</strong> locally (items the service lists that you have
+catalogued but do not own). An item in <strong>D ∩ P</strong> was pushed on a prior run and
+echoed back by the stub or the live API: the intersection is excluded from both
+directions, so push-then-pull never favorites its own output and no durable echo
+state is needed.</p>
+<p><code>ensure-favorite</code> is additive and idempotent: re-adding reports
+<code>already-favorited</code>. There is no remove counterpart, so a deletion on the
+service side cannot strip local Favorites.</p>
 <h2 id="next-steps">Next steps</h2>
 <ul>
 <li><a href="../test-and-iterate/">Test and iterate</a> - build, sideload, and reload without a full release cycle</li>
 <li><a href="../media-data/">Read media and event data</a> - the <code>data:read</code> and <code>surfaces:write</code> calls this recipe leans on</li>
 <li><a href="../../reference/manifest/">Manifest reference</a> - the <code>connection</code> descriptor, <code>schedule</code>, and every capability string</li>
-<li><a href="../../reference/host-api/">Host API reference</a> - exact signatures for <code>connections-list</code>, <code>connection-request</code>, and <code>ensure-watched</code></li>
+<li><a href="../../reference/host-api/">Host API reference</a> - exact signatures for <code>connections-list</code>, <code>connection-request</code>, <code>ensure-watched</code>, and <code>ensure-favorite</code></li>
 </ul>
 
 
