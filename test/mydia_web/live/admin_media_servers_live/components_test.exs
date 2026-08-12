@@ -217,6 +217,30 @@ defmodule MydiaWeb.AdminMediaServersLive.ComponentsTest do
     end
   end
 
+  describe "media server modal, Enabled toggle form association" do
+    # The Enabled toggle sits in the modal header, above where <.form> opens,
+    # so it is not a descendant of the form element. Without an explicit
+    # `form="media-server-form"` attribute the browser never submits it: the
+    # hidden false-sentinel is dropped and the checkbox is dropped, so
+    # `enabled` never reaches phx-change or phx-submit at all.
+    defp enabled_inputs(html) do
+      html
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query(~s([name="media_server_config[enabled]"]))
+    end
+
+    test "both the hidden sentinel and the checkbox are associated with the form by id" do
+      html = render_modal(mode: :edit)
+
+      form_attrs =
+        html
+        |> enabled_inputs()
+        |> LazyHTML.attribute("form")
+
+      assert form_attrs == ["media-server-form", "media-server-form"]
+    end
+  end
+
   describe "media server modal, discovery review panel" do
     defp discovery_map do
       %{

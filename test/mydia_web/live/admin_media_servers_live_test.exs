@@ -195,4 +195,16 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
       assert [%{"uri" => "http://127.0.0.1:32400"}] = updated.connections
     end
   end
+
+  # A LiveView integration test for the Enabled toggle fix (form="media-server-form"
+  # on components.ex:290-298) was attempted here and deleted. Phoenix.LiveViewTest's
+  # form/3 collects inputs by walking descendants of the located <form> node; it does
+  # not implement HTML5 form-attribute association the way a real browser does, so a
+  # submit driven through form/3 never picks up the hidden sentinel or checkbox at all
+  # regardless of whether the form="media-server-form" attribute is present. Confirmed
+  # empirically: submitting via form/3 against a seeded enabled: true config left
+  # updated.enabled == true even with the fix in place, because no "enabled" key ever
+  # reached the params. That is a limitation of the test helper, not the fix. The
+  # honest pin for this fix lives in components_test.exs ("media server modal, Enabled
+  # toggle form association"), which asserts the form= attribute on the rendered markup.
 end
