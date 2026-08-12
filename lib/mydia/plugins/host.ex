@@ -85,6 +85,8 @@ defmodule Mydia.Plugins.Host do
   # guest has no such export and the schedule call fails soft.
   @handler_export ["mydia:plugin/handler@1.2.0", "on-event"]
   @schedule_export ["mydia:plugin/handler@1.2.0", "on-schedule"]
+  @v13_handler_export ["mydia:plugin/handler@1.3.0", "on-event"]
+  @v13_schedule_export ["mydia:plugin/handler@1.3.0", "on-schedule"]
   @v11_handler_export ["mydia:plugin/handler@1.1.0", "on-event"]
   @v11_schedule_export ["mydia:plugin/handler@1.1.0", "on-schedule"]
   @legacy_handler_export ["mydia:plugin/handler@1.0.0", "on-event"]
@@ -96,6 +98,7 @@ defmodule Mydia.Plugins.Host do
   # `HostFunctions.imports_for/2` publishes alongside 1.2. We detect the contract
   # once per plugin from the bytes and memoize it.
   @host_namespace "mydia:plugin/host@1.2.0"
+  @v13_host_namespace "mydia:plugin/host@1.3.0"
   @v11_host_namespace "mydia:plugin/host@1.1.0"
   @legacy_host_namespace "mydia:plugin/host@1.0.0"
   @legacy_host_funcs ~w(http-request data-read log)
@@ -335,6 +338,7 @@ defmodule Mydia.Plugins.Host do
   # under both namespace keys); only 1.0 needs the narrowed legacy map.
   defp detect_contract(bytes) do
     cond do
+      String.contains?(bytes, @v13_host_namespace) -> :v13
       String.contains?(bytes, @host_namespace) -> :v12
       String.contains?(bytes, @v11_host_namespace) -> :v11
       true -> :v10
@@ -374,6 +378,7 @@ defmodule Mydia.Plugins.Host do
     export =
       case contract(slug) do
         :v11 -> @v11_schedule_export
+        :v13 -> @v13_schedule_export
         _ -> @schedule_export
       end
 
@@ -385,6 +390,7 @@ defmodule Mydia.Plugins.Host do
       case contract(slug) do
         :v10 -> @legacy_handler_export
         :v11 -> @v11_handler_export
+        :v13 -> @v13_handler_export
         :v12 -> @handler_export
       end
 

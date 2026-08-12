@@ -514,6 +514,136 @@ defmodule Mydia.Plugins.HostFunctionsTest do
     end
   end
 
+  describe "connection_request/4 against an instance connection" do
+    setup do
+      {:ok, _} =
+        Mydia.Settings.create_plugin_config(%{
+          slug: "tester",
+          name: "Tester",
+          version: "1.0.0",
+          source_url: "test",
+          manifest: %{
+            "slug" => "tester",
+            "name" => "Tester",
+            "version" => "1.0.0",
+            "capabilities" => %{"users:connections" => []}
+          },
+          granted_capabilities: %{"users:connections" => []},
+          enabled: false
+        })
+
+      bypass = Bypass.open()
+
+      {:ok, conn} =
+        Connections.upsert("tester", %{
+          scope: "instance",
+          label: "srv",
+          base_urls: ["http://192.168.1.50:#{bypass.port}"],
+          access_token: "plex-token",
+          auth_kind: "header",
+          auth_key: "X-Plex-Token"
+        })
+
+      {:ok, bypass: bypass, conn: conn}
+    end
+
+    test "resolves a relative path and injects the header token", %{bypass: bypass, conn: conn} do
+      Bypass.expect_once(bypass, "GET", "/library/sections", fn c ->
+        assert Plug.Conn.get_req_header(c, "x-plex-token") == ["plex-token"]
+        assert Plug.Conn.get_req_header(c, "authorization") == []
+        Plug.Conn.resp(c, 200, ~s({"ok":true}))
+      end)
+
+      p = plugin(%{"users:connections" => []})
+
+      assert {:ok, %{"status" => 200}} =
+               HostFunctions.connection_request(p, conn.id, %{"url" => "/library/sections"},
+                 resolver: fn _ -> {:ok, [{127, 0, 0, 1}]} end,
+                 probe: fn _ -> :ok end
+               )
+    end
+
+    test "needs no net:http grant", %{bypass: bypass, conn: conn} do
+      Bypass.expect_once(bypass, "GET", "/ping", fn c -> Plug.Conn.resp(c, 200, "") end)
+
+      p = plugin(%{"users:connections" => []})
+
+      assert {:ok, _} =
+               HostFunctions.connection_request(p, conn.id, %{"url" => "/ping"},
+                 resolver: fn _ -> {:ok, [{127, 0, 0, 1}]} end,
+                 probe: fn _ -> :ok end
+               )
+    end
+
+    test "refuses an absolute URL", %{conn: conn} do
+      p = plugin(%{"users:connections" => [], "net:http" => ["evil.test"]})
+
+      assert {:error, %Error{type: :invalid_request}} =
+               HostFunctions.connection_request(p, conn.id, %{"url" => "http://evil.test/x"}, [])
+    end
+
+    test "strips a guest-supplied Authorization header", %{bypass: bypass, conn: conn} do
+      Bypass.expect_once(bypass, "GET", "/ping", fn c ->
+        assert Plug.Conn.get_req_header(c, "authorization") == []
+        Plug.Conn.resp(c, 200, "")
+      end)
+
+      p = plugin(%{"users:connections" => []})
+
+      assert {:ok, _} =
+               HostFunctions.connection_request(
+                 p,
+                 conn.id,
+                 %{"url" => "/ping", "headers" => %{"authorization" => "Bearer stolen"}},
+                 resolver: fn _ -> {:ok, [{127, 0, 0, 1}]} end,
+                 probe: fn _ -> :ok end
+               )
+    end
+
+    test "clears the cached endpoint when the request fails", %{conn: conn} do
+      {:ok, conn} = Connections.set_resolved_base_url(conn, "http://192.168.1.99:1")
+
+      p = plugin(%{"users:connections" => []})
+
+      assert {:error, _} =
+               HostFunctions.connection_request(p, conn.id, %{"url" => "/ping"},
+                 resolver: fn _ -> {:ok, [{127, 0, 0, 1}]} end
+               )
+
+      assert is_nil(Repo.reload(conn).resolved_base_url)
+    end
+  end
+
+  describe "connection_request/4 against a user connection" do
+    test "a relative URL is rejected: a user connection has no endpoint" do
+      user = user_fixture()
+
+      {:ok, _} =
+        Mydia.Settings.create_plugin_config(%{
+          slug: "tester",
+          name: "Tester",
+          version: "1.0.0",
+          source_url: "test",
+          manifest: %{
+            "slug" => "tester",
+            "name" => "Tester",
+            "version" => "1.0.0",
+            "capabilities" => %{"users:connections" => []}
+          },
+          granted_capabilities: %{"users:connections" => [], "net:http" => ["api.test"]},
+          enabled: false
+        })
+
+      {:ok, conn} =
+        Connections.upsert("tester", %{scope: "user", user_id: user.id, access_token: "t"})
+
+      p = plugin(%{"users:connections" => [], "net:http" => ["api.test"]})
+
+      assert {:error, %Error{type: :invalid_request}} =
+               HostFunctions.connection_request(p, conn.id, %{"url" => "/relative"}, [])
+    end
+  end
+
   describe "ensure_watched/2 (surfaces:write playback:watched)" do
     setup do
       {:ok, _} =

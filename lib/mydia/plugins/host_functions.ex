@@ -47,6 +47,7 @@ defmodule Mydia.Plugins.HostFunctions do
   alias Mydia.Playback
   alias Mydia.Plugins
   alias Mydia.Plugins.Connections
+  alias Mydia.Plugins.Endpoint
   alias Mydia.Plugins.Error
   alias Mydia.Plugins.Kv
   alias Mydia.Plugins.Logs
@@ -64,6 +65,7 @@ defmodule Mydia.Plugins.HostFunctions do
   # keep working. wasmex still needs exact namespace keys in the imports map
   # (see `Mydia.Plugins.Host`), so 1.1 is also published under its own key.
   @namespace "mydia:plugin/host@1.2.0"
+  @v13_namespace "mydia:plugin/host@1.3.0"
   @v11_namespace "mydia:plugin/host@1.1.0"
 
   # Per-invocation guest log-line cap. `log` is ungated, so a buggy or hostile
@@ -102,9 +104,10 @@ defmodule Mydia.Plugins.HostFunctions do
         "set-watch-state" => {:fn, set_watch_state_import(slug)}
       }
 
-      # Publish under both 1.2 and 1.1 keys: wasmex matches the guest's exact
-      # imported package name, so a 1.1 guest still links against a 1.2 host.
+      # Publish under 1.3, 1.2, and 1.1 keys: wasmex matches the guest's exact
+      # imported package name, so older guests still link against a newer host.
       %{
+        @v13_namespace => funcs,
         @namespace => funcs,
         @v11_namespace => Map.delete(funcs, "set-watch-state")
       }
@@ -984,12 +987,79 @@ defmodule Mydia.Plugins.HostFunctions do
   @spec connection_request(Plugin.t(), String.t(), map(), keyword()) ::
           {:ok, map()} | {:error, Error.t()}
   def connection_request(%Plugin{} = plugin, connection_id, request, opts) do
-    with :ok <- require_capability(plugin, "net:http"),
-         :ok <- require_capability(plugin, "users:connections"),
+    with :ok <- require_capability(plugin, "users:connections"),
          {:ok, conn} <- fetch_connection(plugin, connection_id),
          {:ok, url} <- fetch_string(request, "url") do
-      # Strip any guest-supplied Authorization and inject the bearer token the
-      # host holds (R22) — the guest never sees the token.
+      dispatch_connection_request(plugin, conn, url, request, opts)
+    end
+  end
+
+  # An instance connection is relative-only. Letting a guest pass an absolute URL
+  # would turn an operator-approved endpoint into an open proxy that skips the
+  # allowlist, so the two cases are separated rather than merged.
+  defp dispatch_connection_request(plugin, conn, url, request, opts) do
+    case {conn.scope, absolute?(url)} do
+      {"instance", false} ->
+        instance_request(plugin, conn, url, request, opts)
+
+      {"instance", true} ->
+        {:error,
+         Error.new(:invalid_request, "an instance connection accepts a path, not an absolute URL")}
+
+      {_, true} ->
+        user_request(plugin, conn, url, request, opts)
+
+      {_, false} ->
+        {:error, Error.new(:invalid_request, "a user connection needs an absolute URL")}
+    end
+  end
+
+  defp absolute?(url),
+    do: String.starts_with?(url, "http://") or String.starts_with?(url, "https://")
+
+  defp instance_request(_plugin, conn, path, request, opts) do
+    resolve_opts = Keyword.take(opts, [:probe, :probe_path])
+
+    case Endpoint.resolve(conn, resolve_opts) do
+      {:ok, base} ->
+        headers =
+          request
+          |> Map.get("headers", %{})
+          |> strip_authorization()
+          |> attach_auth(conn)
+
+        url = (base <> prefix_slash(path)) |> append_query_auth(conn)
+
+        gate_opts =
+          [
+            allowed_hosts: [],
+            endpoint_trust: :operator,
+            slug: conn.plugin_slug,
+            method: Map.get(request, "method", "GET"),
+            headers: headers,
+            body: Map.get(request, "body")
+          ] ++ Keyword.take(opts, [:resolver, :max_bytes, :timeout])
+
+        case Gate.request(url, gate_opts) do
+          {:ok, resp} ->
+            {:ok, http_response_map(resp)}
+
+          {:error, _} = err ->
+            # A dead cached candidate must not stick: clearing it makes the next
+            # call re-probe, which is what lets a moved server recover with no
+            # operator action.
+            Endpoint.invalidate(conn)
+            err
+        end
+
+      {:error, _} = err ->
+        Endpoint.invalidate(conn)
+        err
+    end
+  end
+
+  defp user_request(plugin, conn, url, request, opts) do
+    with :ok <- require_capability(plugin, "net:http") do
       headers =
         request
         |> Map.get("headers", %{})
@@ -1011,6 +1081,28 @@ defmodule Mydia.Plugins.HostFunctions do
       end
     end
   end
+
+  defp prefix_slash("/" <> _ = path), do: path
+  defp prefix_slash(path), do: "/" <> path
+
+  defp attach_auth(headers, %{auth_kind: "header", auth_key: key, access_token: token})
+       when is_binary(key) do
+    Map.put(headers, String.downcase(key), token)
+  end
+
+  defp attach_auth(headers, %{auth_kind: "bearer", access_token: token}) do
+    Map.put(headers, "authorization", "Bearer #{token}")
+  end
+
+  defp attach_auth(headers, _conn), do: headers
+
+  defp append_query_auth(url, %{auth_kind: "query", auth_key: key, access_token: token})
+       when is_binary(key) do
+    separator = if String.contains?(url, "?"), do: "&", else: "?"
+    url <> separator <> URI.encode_query(%{key => token})
+  end
+
+  defp append_query_auth(url, _conn), do: url
 
   defp fetch_connection(plugin, connection_id) when is_binary(connection_id) do
     case Connections.get_by_id(plugin.slug, connection_id) do
