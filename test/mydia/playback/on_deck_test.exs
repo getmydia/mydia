@@ -320,4 +320,27 @@ defmodule Mydia.Playback.OnDeckTest do
       assert OnDeckEntry.id(entry) == e2.id
     end
   end
+
+  describe "list/2 trashed files" do
+    test "an engaged show whose watched episode lost its file reports next", ctx do
+      {_show, [e1, e2]} = show_with_episodes(2)
+      watch(ctx.user, e1, ago(60))
+
+      # The watched episode's only file goes to the trash. `load_episodes_with_files`
+      # then drops e1 entirely, so the progress map handed to `NextEpisode` is
+      # empty and it answers `:start`, the same value it gives a show that was
+      # never touched. Engagement was already established from the full row set,
+      # so `OnDeck` has to normalize that back to `:next`.
+      #
+      # This is the only path that reaches the `:start` arm of build_show_entry.
+      Mydia.Repo.update_all(
+        from(mf in Mydia.Library.MediaFile, where: mf.episode_id == ^e1.id),
+        set: [trashed_at: DateTime.truncate(DateTime.utc_now(), :second)]
+      )
+
+      assert [entry] = OnDeck.list(ctx.user.id, now: now())
+      assert entry.state == :next
+      assert entry.episode.id == e2.id
+    end
+  end
 end
