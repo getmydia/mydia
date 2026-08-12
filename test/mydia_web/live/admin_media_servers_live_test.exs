@@ -183,4 +183,100 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
       refute render(view) =~ "seeding_links"
     end
   end
+
+  describe "Plex link seeding and Sync Now" do
+    setup %{conn: conn, token: token} do
+      start_supervised!(Mydia.Indexers.Health)
+
+      conn =
+        conn
+        |> init_test_session(%{})
+        |> put_session(:guardian_default_token, token)
+        |> put_req_header("authorization", "Bearer #{token}")
+
+      %{conn: conn}
+    end
+
+    test "saving a Plex config enqueues a link seed", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+
+      view
+      |> element("#media-servers-empty-cta")
+      |> render_click()
+
+      # The Plex wizard defaults to the OAuth flow, which renders no url/token
+      # inputs. Switch to manual entry (a real, existing escape hatch in the
+      # wizard) so the form actually has fields to submit.
+      view
+      |> element("button[phx-click='toggle_plex_manual_entry']")
+      |> render_click()
+
+      view
+      |> form("#media-server-form", %{
+        "media_server_config" => %{
+          "name" => "Seeded Plex",
+          "type" => "plex",
+          "url" => "http://localhost:32400",
+          "token" => "tok"
+        }
+      })
+      |> render_submit()
+
+      config = Mydia.Settings.list_media_server_configs() |> List.first()
+
+      assert_enqueued(worker: Mydia.Jobs.PlexLinkSeed, args: %{"config_id" => config.id})
+    end
+
+    test "saving a Jellyfin config does not enqueue a link seed", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+
+      view
+      |> element("#media-servers-empty-cta")
+      |> render_click()
+
+      # The modal defaults to type "plex", which renders the OAuth wizard
+      # instead of url/token inputs. Switch the type to jellyfin first so the
+      # form re-renders with the plain url/token fields jellyfin uses.
+      view
+      |> form("#media-server-form", %{"media_server_config" => %{"type" => "jellyfin"}})
+      |> render_change()
+
+      view
+      |> form("#media-server-form", %{
+        "media_server_config" => %{
+          "name" => "Jelly",
+          "type" => "jellyfin",
+          "url" => "http://localhost:8096",
+          "token" => "tok"
+        }
+      })
+      |> render_submit()
+
+      assert [] = all_enqueued(worker: Mydia.Jobs.PlexLinkSeed)
+      assert Mydia.Settings.list_media_server_configs() |> List.first()
+    end
+
+    test "Sync Now enqueues the server-mode job, not a per-user job", %{conn: conn} do
+      {:ok, config} =
+        Mydia.Settings.create_media_server_config(%{
+          name: "Sync Me",
+          type: :plex,
+          url: "http://localhost:32400",
+          token: "tok",
+          enabled: true,
+          connection_settings: %{"sync_watched" => true}
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+
+      view
+      |> element("button[phx-click='sync_watched'][phx-value-id='#{config.id}']")
+      |> render_click()
+
+      assert_enqueued(
+        worker: Mydia.Jobs.MediaServerWatchedSync,
+        args: %{"mode" => "server", "config_id" => config.id}
+      )
+    end
+  end
 end
