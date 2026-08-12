@@ -4,6 +4,7 @@ defmodule Mydia.Downloads.RejectReleaseTest do
 
   alias Mydia.Downloads
   alias Mydia.Downloads.Blacklists
+  alias Mydia.Downloads.ReleaseBlacklist
   alias Mydia.Repo
 
   import Mydia.DownloadsFixtures
@@ -105,6 +106,35 @@ defmodule Mydia.Downloads.RejectReleaseTest do
       refute Repo.get(Mydia.Downloads.Download, download.id)
       refute_enqueued(worker: Mydia.Jobs.TVShowSearch)
       refute_enqueued(worker: Mydia.Jobs.MovieSearch)
+    end
+
+    test "honours an explicit :ttl_days on the blacklist entry" do
+      download =
+        download_fixture(%{
+          indexer: "1337x",
+          metadata: %{"guid" => "ttl-guid"}
+        })
+
+      assert {:ok, :rejected} = Downloads.reject_release(download, ttl_days: 1)
+
+      row = Repo.get_by!(ReleaseBlacklist, indexer: "1337x", guid: "ttl-guid")
+
+      # 1 day out, not the 30-day default. Allow a minute of slack for clock drift.
+      expected = DateTime.add(DateTime.utc_now(), 1 * 24 * 60 * 60, :second)
+      assert abs(DateTime.diff(row.expires_at, expected, :second)) < 60
+    end
+
+    test "emits no event when :event is :none" do
+      download =
+        download_fixture(%{
+          indexer: "1337x",
+          metadata: %{"guid" => "quiet-guid"}
+        })
+
+      assert {:ok, :rejected} = Downloads.reject_release(download, event: :none)
+
+      Process.sleep(100)
+      assert Mydia.Events.list_events(type: "download.cancelled") == []
     end
   end
 end

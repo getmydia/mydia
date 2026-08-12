@@ -156,28 +156,55 @@ defmodule Mydia.Downloads.Queue do
              indexer,
              guid,
              download.title || "Unknown release",
-             Keyword.get(opts, :failure_reason, "rejected_by_user")
+             Keyword.get(opts, :failure_reason, "rejected_by_user"),
+             blacklist_opts(opts)
            ) do
-      # Computed before deletion: it reads through the media_item association.
-      search = replacement_search(download)
+      finish_reject(download, opts)
+    end
+  end
 
-      remove_from_client(download)
+  # Only forward :ttl_days when the caller set it, so Blacklists.add/5 keeps
+  # applying its own configured default for every existing caller.
+  defp blacklist_opts(opts) do
+    case Keyword.get(opts, :ttl_days) do
+      nil -> []
+      days -> [ttl_days: days]
+    end
+  end
 
-      case History.delete_download(download) do
-        {:ok, _deleted} ->
-          enqueue_search(search)
+  # Everything after the blacklist decision: clear the torrent, drop the row,
+  # queue a replacement, and (optionally) announce it.
+  defp finish_reject(%Download{} = download, opts) do
+    # Computed before deletion: it reads through the media_item association.
+    search = replacement_search(download)
 
-          Events.download_cancelled(
-            download,
-            Keyword.get(opts, :actor_type, :user),
-            Keyword.get(opts, :actor_id, "unknown")
-          )
+    remove_from_client(download)
 
-          {:ok, :rejected}
+    case History.delete_download(download) do
+      {:ok, _deleted} ->
+        enqueue_search(search)
+        emit_reject_event(download, opts)
 
-        {:error, reason} ->
-          {:error, reason}
-      end
+        {:ok, :rejected}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  # A caller that emits its own, more specific event passes `event: :none` so
+  # one give-up does not produce two entries in the activity feed.
+  defp emit_reject_event(download, opts) do
+    case Keyword.get(opts, :event, :cancelled) do
+      :none ->
+        :ok
+
+      :cancelled ->
+        Events.download_cancelled(
+          download,
+          Keyword.get(opts, :actor_type, :user),
+          Keyword.get(opts, :actor_id, "unknown")
+        )
     end
   end
 
