@@ -300,6 +300,8 @@ config :mydia, Oban,
        {"*/5 * * * *", Mydia.Jobs.SegmentDetectionScheduler},
        # Refresh metadata for all monitored items weekly on Sunday at 5 AM
        {"0 5 * * 0", Mydia.Jobs.MetadataRefresh, args: %{"refresh_all" => true}},
+       # Repair media items stored with no metadata (blank posters) daily at 5:15 AM
+       {"15 5 * * *", Mydia.Jobs.MetadataBackfill},
        # Permanently delete trashed media files past retention period daily at 5 AM
        {"0 5 * * *", Mydia.Jobs.TrashCleanup},
        # Sync runs accrue per server per user per tick, so they need pruning
