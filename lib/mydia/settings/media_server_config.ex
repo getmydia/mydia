@@ -21,6 +21,7 @@ defmodule Mydia.Settings.MediaServerConfig do
           server_access_token: String.t() | nil,
           last_auth_error: String.t() | nil,
           last_auth_error_at: DateTime.t() | nil,
+          connections_refreshed_at: DateTime.t() | nil,
           updated_by: Mydia.Accounts.User.t() | nil | Ecto.Association.NotLoaded.t(),
           updated_by_id: binary() | nil,
           inserted_at: DateTime.t(),
@@ -41,6 +42,7 @@ defmodule Mydia.Settings.MediaServerConfig do
     field :server_access_token, :string, redact: true
     field :last_auth_error, :string
     field :last_auth_error_at, :utc_datetime
+    field :connections_refreshed_at, :utc_datetime
 
     belongs_to :updated_by, Mydia.Accounts.User
 
@@ -64,6 +66,7 @@ defmodule Mydia.Settings.MediaServerConfig do
       :server_access_token,
       :last_auth_error,
       :last_auth_error_at,
+      :connections_refreshed_at,
       :updated_by_id
     ])
     |> validate_required([:name, :type])
