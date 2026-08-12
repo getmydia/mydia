@@ -4,6 +4,8 @@
       media_servers={@media_servers}
       media_server_health={@media_server_health}
       last_runs={@last_runs}
+      user_links={@user_links}
+      mydia_users={@mydia_users}
     />
 
     <%!-- Media Server Modal --%>
@@ -16,6 +18,17 @@
         plex_oauth_servers={assigns[:plex_oauth_servers] || []}
         plex_manual_entry={assigns[:plex_manual_entry] || false}
         plex_reachability={assigns[:plex_reachability] || :checking}
+      />
+    <% end %>
+
+    <%!-- User Mapping Modal --%>
+    <%= if assigns[:show_user_link_modal] do %>
+      <MydiaWeb.AdminMediaServersLive.UserLinkComponents.user_link_modal
+        form={@user_link_form}
+        mode={@user_link_mode}
+        server={@user_link_server}
+        accounts={@user_link_accounts}
+        mydia_users={@mydia_users}
       />
     <% end %>
   </.admin_page>

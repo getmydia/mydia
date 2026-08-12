@@ -560,6 +560,12 @@ defmodule Mydia.Settings do
     to: Mydia.Settings.ServiceConfigs
 
   @doc """
+  Gets a media server user link by ID. Raises if it does not exist.
+  """
+  @spec get_media_server_user_link!(binary()) :: MediaServerUserLink.t()
+  defdelegate get_media_server_user_link!(id), to: Mydia.Settings.ServiceConfigs
+
+  @doc """
   Upserts a media server user link, keyed by (config, user).
   """
   @spec upsert_media_server_user_link(map()) ::

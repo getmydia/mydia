@@ -296,6 +296,10 @@ defmodule Mydia.Settings.ServiceConfigs do
     |> Repo.all()
   end
 
+  def get_media_server_user_link!(id) do
+    Repo.get!(MediaServerUserLink, id)
+  end
+
   def upsert_media_server_user_link(attrs) do
     %MediaServerUserLink{}
     |> MediaServerUserLink.changeset(attrs)

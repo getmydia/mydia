@@ -3,6 +3,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   use MydiaWeb, :html
 
   alias Mydia.Settings
+  alias MydiaWeb.AdminMediaServersLive.UserLinkComponents
 
   @doc """
   Renders the Media Servers tab content.
@@ -10,6 +11,8 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   attr :media_servers, :list, required: true
   attr :media_server_health, :map, required: true
   attr :last_runs, :map, default: %{}
+  attr :user_links, :map, default: %{}
+  attr :mydia_users, :list, default: []
 
   def media_servers_tab(assigns) do
     ~H"""
@@ -167,6 +170,13 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                 >
                   Configured via environment variables, read-only
                 </p>
+
+                <%!-- Per-user account mapping --%>
+                <UserLinkComponents.user_links_section
+                  server={server}
+                  user_links={@user_links}
+                  mydia_users={@mydia_users}
+                />
 
                 <%!-- Bottom Row: Actions --%>
                 <div class="flex flex-wrap items-center gap-2 pt-3 border-t border-base-200 sm:justify-end sm:gap-1 sm:pt-2">

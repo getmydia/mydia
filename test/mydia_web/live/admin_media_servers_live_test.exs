@@ -238,6 +238,157 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
     end
   end
 
+  describe "User mapping" do
+    setup %{conn: conn, token: token} do
+      start_supervised!(Mydia.Indexers.Health)
+
+      conn =
+        conn
+        |> init_test_session(%{})
+        |> put_session(:guardian_default_token, token)
+        |> put_req_header("authorization", "Bearer #{token}")
+
+      %{conn: conn, bypass: Bypass.open()}
+    end
+
+    test "lists the mappings for a server", %{conn: conn, bypass: bypass} do
+      user = Mydia.AccountsFixtures.user_fixture(%{username: "tonix"})
+      server = jellyfin_server(bypass)
+
+      {:ok, link} =
+        Mydia.Settings.upsert_media_server_user_link(%{
+          media_server_config_id: server.id,
+          user_id: user.id,
+          remote_user_id: "guid-1",
+          remote_username: "Tonix",
+          enabled: true
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+
+      assert has_element?(view, "#user-link-#{link.id}")
+    end
+
+    test "removing a mapping deletes it", %{conn: conn, bypass: bypass} do
+      user = Mydia.AccountsFixtures.user_fixture(%{username: "tonix"})
+      server = jellyfin_server(bypass)
+
+      {:ok, link} =
+        Mydia.Settings.upsert_media_server_user_link(%{
+          media_server_config_id: server.id,
+          user_id: user.id,
+          remote_user_id: "guid-1",
+          remote_username: "Tonix",
+          enabled: true
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+
+      view
+      |> element("#user-link-#{link.id} button[phx-click='user_link_delete']")
+      |> render_click()
+
+      refute has_element?(view, "#user-link-#{link.id}")
+      assert Mydia.Settings.list_media_server_user_links(server.id) == []
+    end
+
+    test "saving a Jellyfin mapping stores the account GUID and no token",
+         %{conn: conn, bypass: bypass} do
+      user = Mydia.AccountsFixtures.user_fixture(%{username: "tonix"})
+      server = jellyfin_server(bypass)
+      stub_jellyfin_users(bypass, [%{"Id" => "guid-1", "Name" => "JellyfinTonix"}])
+
+      view = open_mapping_editor(conn, server)
+
+      view
+      |> form("#user-link-form", user_link: %{user_id: user.id, remote_user_id: "guid-1"})
+      |> render_submit()
+
+      assert [link] = Mydia.Settings.list_media_server_user_links(server.id)
+      assert link.user_id == user.id
+      assert link.remote_user_id == "guid-1"
+      assert link.remote_username == "JellyfinTonix"
+      assert link.access_token == nil
+    end
+
+    test "an access_token in the submitted form cannot reach the link",
+         %{conn: conn, bypass: bypass} do
+      user = Mydia.AccountsFixtures.user_fixture(%{username: "tonix"})
+      server = jellyfin_server(bypass)
+      stub_jellyfin_users(bypass, [%{"Id" => "guid-1", "Name" => "JellyfinTonix"}])
+
+      view = open_mapping_editor(conn, server)
+
+      view
+      |> element("#user-link-form")
+      |> render_submit(%{
+        "user_link" => %{
+          "user_id" => user.id,
+          "remote_user_id" => "guid-1",
+          "access_token" => "injected-credential"
+        }
+      })
+
+      assert [link] = Mydia.Settings.list_media_server_user_links(server.id)
+      assert link.access_token == nil
+    end
+
+    test "a mapping cannot name an account the server did not report",
+         %{conn: conn, bypass: bypass} do
+      user = Mydia.AccountsFixtures.user_fixture(%{username: "tonix"})
+      server = jellyfin_server(bypass)
+      stub_jellyfin_users(bypass, [%{"Id" => "guid-1", "Name" => "JellyfinTonix"}])
+
+      view = open_mapping_editor(conn, server)
+
+      html =
+        view
+        |> element("#user-link-form")
+        |> render_submit(%{
+          "user_link" => %{"user_id" => user.id, "remote_user_id" => "guid-made-up"}
+        })
+
+      assert html =~ "no longer lists that account"
+      assert Mydia.Settings.list_media_server_user_links(server.id) == []
+    end
+
+    test "discovering accounts links the ones whose username already matches",
+         %{conn: conn, bypass: bypass, user: user} do
+      server = jellyfin_server(bypass)
+      stub_jellyfin_users(bypass, [%{"Id" => "guid-1", "Name" => user.username}])
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+
+      html =
+        view
+        |> element(~s{[phx-click="user_link_discover"][phx-value-id="#{server.id}"]})
+        |> render_click()
+
+      assert html =~ "Matched 1 account"
+      assert [link] = Mydia.Settings.list_media_server_user_links(server.id)
+      assert link.remote_user_id == "guid-1"
+    end
+
+    test "a server that cannot be read surfaces the reason instead of an editor",
+         %{conn: conn, bypass: bypass} do
+      server = jellyfin_server(bypass)
+
+      Bypass.stub(bypass, "GET", "/Users", fn conn ->
+        Plug.Conn.resp(conn, 401, "")
+      end)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+
+      html =
+        view
+        |> element(~s{[phx-click="user_link_new"][phx-value-id="#{server.id}"]})
+        |> render_click()
+
+      assert html =~ "Could not read accounts from"
+      refute has_element?(view, "#user-link-form")
+    end
+  end
+
   describe "Plex wizard auto-connect" do
     setup %{conn: conn, token: token} do
       start_supervised!(Mydia.Indexers.Health)
@@ -258,5 +409,40 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
       refute has_element?(view, "li.step", "Connection")
       assert has_element?(view, "li.step", "Server")
     end
+  end
+
+  defp jellyfin_server(bypass) do
+    {:ok, server} =
+      Mydia.Settings.create_media_server_config(%{
+        name: "Jellyfin",
+        type: :jellyfin,
+        url: "http://127.0.0.1:#{bypass.port}",
+        token: "api-key",
+        enabled: true,
+        connection_settings: %{}
+      })
+
+    server
+  end
+
+  # Req only decodes a body the response declares as JSON.
+  defp stub_jellyfin_users(bypass, users) do
+    Bypass.stub(bypass, "GET", "/Users", fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, Jason.encode!(users))
+    end)
+  end
+
+  defp open_mapping_editor(conn, server) do
+    {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+
+    view
+    |> element(~s{[phx-click="user_link_new"][phx-value-id="#{server.id}"]})
+    |> render_click()
+
+    assert has_element?(view, "#user-link-form")
+
+    view
   end
 end

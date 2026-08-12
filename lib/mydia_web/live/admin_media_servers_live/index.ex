@@ -1,6 +1,7 @@
 defmodule MydiaWeb.AdminMediaServersLive.Index do
   use MydiaWeb, :live_view
 
+  alias Mydia.Accounts
   alias Mydia.Settings
   alias Mydia.Settings.MediaServerConfig
   alias Mydia.MediaServer.Client, as: MediaServerClient
@@ -9,6 +10,8 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
   alias Mydia.MediaServer.PlexOAuth
   alias Mydia.MediaServer.Plex.Endpoint, as: PlexEndpoint
   alias Mydia.MediaServer.Plex.Selection
+  alias Mydia.MediaServer.RemoteAccount
+  alias Mydia.MediaServer.UserLinks
   alias Mydia.Sync
 
   require Logger
@@ -369,6 +372,65 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
     end
   end
 
+  ## User Mapping Events
+
+  @impl true
+  def handle_event("user_link_discover", %{"id" => id}, socket) do
+    server = Settings.get_media_server_config!(id)
+
+    case UserLinks.discover(server) do
+      {:ok, links} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, discover_message(links, server))
+         |> load_data()}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, read_accounts_error(server, reason))}
+    end
+  end
+
+  @impl true
+  def handle_event("user_link_new", %{"id" => id}, socket) do
+    server = Settings.get_media_server_config!(id)
+
+    open_user_link_modal(socket, server, :new, nil)
+  end
+
+  @impl true
+  def handle_event("user_link_edit", %{"id" => id}, socket) do
+    link = Settings.get_media_server_user_link!(id)
+    server = Settings.get_media_server_config!(link.media_server_config_id)
+
+    open_user_link_modal(socket, server, :edit, link)
+  end
+
+  @impl true
+  def handle_event("user_link_save", %{"user_link" => params}, socket) do
+    # The editor holds the config and the account list the save is checked
+    # against, so a save without one open has nothing to check and is refused.
+    case socket.assigns[:user_link_server] do
+      nil -> {:noreply, socket}
+      server -> save_user_link(socket, server, params)
+    end
+  end
+
+  @impl true
+  def handle_event("user_link_delete", %{"id" => id}, socket) do
+    link = Settings.get_media_server_user_link!(id)
+    {:ok, _link} = Settings.delete_media_server_user_link(link)
+
+    {:noreply,
+     socket
+     |> put_flash(:info, "User mapping removed")
+     |> load_data()}
+  end
+
+  @impl true
+  def handle_event("close_user_link_modal", _params, socket) do
+    {:noreply, assign(socket, :show_user_link_modal, false)}
+  end
+
   @impl true
   def handle_event("test_media_server_connection", _params, socket) do
     changeset = socket.assigns.media_server_form.source
@@ -482,6 +544,141 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
     socket
   end
 
+  # Picking an account by hand still needs the server's own list. What a link
+  # stores is a Jellyfin GUID or a Plex account id, neither of which an operator
+  # can reasonably type, and on Plex the per-user token has to be minted live
+  # anyway. So an unreachable server means no editor, with the reason in a flash.
+  defp open_user_link_modal(socket, server, mode, link) do
+    case UserLinks.list_remote_accounts(server) do
+      {:ok, []} ->
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           "#{server.name} reported no user accounts, so there is nothing to map yet"
+         )}
+
+      {:ok, accounts} ->
+        {:noreply,
+         socket
+         |> assign(:show_user_link_modal, true)
+         |> assign(:user_link_mode, mode)
+         |> assign(:user_link_server, server)
+         |> assign(:user_link_accounts, accounts)
+         |> assign(:user_link_form, user_link_form(socket, link))}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, read_accounts_error(server, reason))}
+    end
+  end
+
+  # Exactly three values reach the write: this config, a Mydia user from the list
+  # this page loaded, and an account the server itself just reported. The
+  # submitted params are never cast into the link, so a crafted or incomplete
+  # form cannot set or clear the link's access_token, and cannot name an account
+  # the server does not have.
+  defp save_user_link(socket, server, params) do
+    with {:ok, user} <- fetch_mydia_user(socket, params["user_id"]),
+         {:ok, account} <- fetch_remote_account(socket, params["remote_user_id"]),
+         {:ok, _link} <- UserLinks.link_user(server, user.id, account) do
+      {:noreply,
+       socket
+       |> assign(:show_user_link_modal, false)
+       |> put_flash(
+         :info,
+         "Mapped #{user.username} to #{RemoteAccount.label(account)} on #{server.name}"
+       )
+       |> load_data()}
+    else
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, save_link_error(server, reason))}
+    end
+  end
+
+  defp user_link_form(socket, nil) do
+    default_user = List.first(socket.assigns.mydia_users)
+
+    to_form(
+      %{"user_id" => (default_user && default_user.id) || "", "remote_user_id" => ""},
+      as: :user_link
+    )
+  end
+
+  defp user_link_form(_socket, link) do
+    to_form(
+      %{"user_id" => link.user_id, "remote_user_id" => link.remote_user_id || ""},
+      as: :user_link
+    )
+  end
+
+  defp fetch_mydia_user(socket, user_id) do
+    case Enum.find(socket.assigns.mydia_users, &(&1.id == user_id)) do
+      nil -> {:error, :unknown_user}
+      user -> {:ok, user}
+    end
+  end
+
+  # The picker's own list is the whitelist: a mapping can only name an account
+  # the server reported when the editor opened.
+  defp fetch_remote_account(socket, remote_user_id) do
+    case Enum.find(socket.assigns.user_link_accounts, &(&1.id == remote_user_id)) do
+      nil -> {:error, :unknown_remote_account}
+      account -> {:ok, account}
+    end
+  end
+
+  defp discover_message([], server) do
+    "No usernames matched on #{server.name}. Use Add mapping to pair accounts by hand."
+  end
+
+  defp discover_message([_link], server), do: "Matched 1 account on #{server.name}"
+
+  defp discover_message(links, server) do
+    "Matched #{length(links)} accounts on #{server.name}"
+  end
+
+  defp read_accounts_error(server, reason) do
+    "Could not read accounts from #{server.name}: #{describe_reason(reason)}"
+  end
+
+  defp save_link_error(_server, :unknown_user) do
+    "That Mydia user no longer exists. Reload the page and try again."
+  end
+
+  defp save_link_error(server, :unknown_remote_account) do
+    "#{server.name} no longer lists that account. Discover accounts again and retry."
+  end
+
+  defp save_link_error(server, :account_already_mapped) do
+    "That #{server.name} account is already mapped to another Mydia user. " <>
+      "Remove that mapping first."
+  end
+
+  # Only Plex reaches here with a media server error, from minting the per-user
+  # token. Saying the mapping is unchanged matters: the alternative would have
+  # been a link naming an account it holds no credential for.
+  defp save_link_error(server, %Error{} = error) do
+    "Could not get a #{server.name} token for that account: #{Error.message(error)}. " <>
+      "The mapping was left unchanged."
+  end
+
+  defp save_link_error(_server, reason) do
+    "Could not save the user mapping: #{describe_reason(reason)}"
+  end
+
+  defp describe_reason(%Error{} = error), do: Error.message(error)
+  defp describe_reason(%Ecto.Changeset{}), do: "the mapping could not be saved"
+
+  defp describe_reason({:unsupported_provider, type}) do
+    "#{type} does not support per-user mapping"
+  end
+
+  defp describe_reason(reason) when is_atom(reason) do
+    reason |> to_string() |> String.replace("_", " ")
+  end
+
+  defp describe_reason(reason), do: inspect(reason)
+
   defp load_data(socket) do
     media_servers = Settings.list_media_server_configs()
     media_server_health = MediaServerHealth.status_map(media_servers)
@@ -491,11 +688,19 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
         {server.id, Sync.last_run(to_string(server.type), server.id)}
       end)
 
+    user_links =
+      Map.new(media_servers, fn server ->
+        {server.id, Settings.list_media_server_user_links(server.id)}
+      end)
+
     socket
     |> assign(:media_servers, media_servers)
     |> assign(:media_server_health, media_server_health)
     |> assign(:last_runs, last_runs)
+    |> assign(:user_links, user_links)
+    |> assign(:mydia_users, Enum.sort_by(Accounts.list_users(), & &1.username))
     |> assign(:show_media_server_modal, false)
+    |> assign(:show_user_link_modal, false)
     |> assign(:testing_media_server_connection, false)
     |> assign(:plex_oauth_state, :idle)
     |> assign(:plex_oauth_servers, [])
