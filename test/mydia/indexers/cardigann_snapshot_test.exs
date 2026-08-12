@@ -330,7 +330,7 @@ defmodule Mydia.Indexers.CardigannSnapshotTest do
   end
 
   # ============================================================================
-  # BigCore - rows.after
+  # TorrentLT - rows.after
   # ============================================================================
 
   describe "TorrentLT snapshot" do
