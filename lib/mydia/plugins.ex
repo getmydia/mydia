@@ -226,6 +226,7 @@ defmodule Mydia.Plugins do
     # suite's app boot doesn't write to the shared DB (tests call ensure_bundled/0
     # explicitly when they need it).
     maybe_ensure_bundled()
+    maybe_sync_config_connections()
 
     Settings.get_db_plugin_configs()
     |> Enum.filter(& &1.enabled)
@@ -255,6 +256,27 @@ defmodule Mydia.Plugins do
   @spec maybe_ensure_bundled() :: :ok
   def maybe_ensure_bundled do
     if Application.get_env(:mydia, :start_health_monitors, true), do: ensure_bundled(), else: :ok
+  end
+
+  @doc """
+  Seeds config-declared instance connections into the database, gated by the same
+  boot-side-effects flag as `maybe_ensure_bundled/0`.
+
+  Without this the config layer only reaches the admin UI: `connections-list`
+  reads `plugin_user_connections` directly, so a connection declared in YAML or
+  env would render as a virtual row an operator can see and a plugin can never
+  use. Runs after `maybe_ensure_bundled/0` because the seed skips any slug that
+  has no plugin config row yet.
+
+  Idempotent, so it is safe on every boot and on config reload.
+  """
+  @spec maybe_sync_config_connections() :: :ok
+  def maybe_sync_config_connections do
+    if Application.get_env(:mydia, :start_health_monitors, true) do
+      Mydia.Settings.RuntimeConfig.sync_plugin_connections_from_config()
+    end
+
+    :ok
   end
 
   @doc """
