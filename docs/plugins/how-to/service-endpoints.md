@@ -119,6 +119,7 @@ When you know the endpoint, call `connection-upsert` (requires
 `surfaces:write` scoped to `"connections"`) and return `Done`:
 
 ```rust
+use mydia_plugin_sdk::host;
 use mydia_plugin_sdk::types::{
     ConnectDone, ConnectPending, ConnectRequest, ConnectResponse, ConnectionDraft,
 };

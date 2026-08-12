@@ -192,9 +192,10 @@ Add `on-connect` for interactive onboarding (declare a `connection` descriptor
 with `"onboarding": "guest"` in the manifest):
 
 ```rust
+use mydia_plugin_sdk::host;
 use mydia_plugin_sdk::types::{
     ConnectDone, ConnectPending, ConnectRequest, ConnectResponse,
-    ConnectionDraft,
+    ConnectionDraft, Event,
 };
 
 #[mydia_plugin_sdk::plugin(on_connect = on_connect)]
