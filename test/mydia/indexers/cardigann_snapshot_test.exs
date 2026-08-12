@@ -17,6 +17,8 @@ defmodule Mydia.Indexers.CardigannSnapshotTest do
   alias Mydia.Indexers.CardigannParser
   alias Mydia.Indexers.CardigannResultParser
 
+  import Mydia.CardigannSnapshotHelper, only: [run_snapshot: 2, run_download_snapshot: 1]
+
   @fixtures_base "test/fixtures/cardigann"
 
   # ============================================================================
@@ -228,6 +230,11 @@ defmodule Mydia.Indexers.CardigannSnapshotTest do
     end
 
     @tag :snapshot
+    test "download block resolves magnet from captured details page" do
+      run_download_snapshot(Path.join(@fixtures_base, "torrentgalaxyclone"))
+    end
+
+    @tag :snapshot
     test "extracts titles from title attribute" do
       {result, _def} = load_and_parse("torrentgalaxyclone")
       {:ok, results} = result
@@ -266,6 +273,78 @@ defmodule Mydia.Indexers.CardigannSnapshotTest do
 
       seeded = Enum.filter(results, &(&1.seeders >= 0))
       assert seeded != [], "LimeTorrents results should have seeders"
+    end
+  end
+
+  # ============================================================================
+  # MagnetDownload - download before + infohash
+  # ============================================================================
+
+  describe "MagnetDownload snapshot" do
+    @tag :snapshot
+    test "parses search results from captured HTML" do
+      run_snapshot(Path.join(@fixtures_base, "magnetdownload"), min_results: 1)
+    end
+
+    @tag :snapshot
+    test "infohash block resolves magnet from captured before-response body" do
+      run_download_snapshot(Path.join(@fixtures_base, "magnetdownload"))
+    end
+  end
+
+  # ============================================================================
+  # showRSS - XML response
+  # ============================================================================
+
+  describe "showRSS snapshot" do
+    @tag :snapshot
+    test "parses captured XML RSS feed without error" do
+      {result, _definition} = load_and_parse("showrss")
+      assert {:ok, _results} = result
+    end
+  end
+
+  # ============================================================================
+  # BlueRoms - allowEmptyInputs
+  # ============================================================================
+
+  describe "BlueRoms snapshot" do
+    @tag :snapshot
+    test "definition allows empty search inputs" do
+      fixture_dir = Path.join(@fixtures_base, "blueroms")
+
+      {:ok, definition} =
+        fixture_dir
+        |> Path.join("definition.yml")
+        |> File.read!()
+        |> CardigannParser.parse_definition()
+
+      assert definition.search[:allow_empty_inputs] == true
+    end
+
+    @tag :snapshot
+    test "parses captured search HTML" do
+      {result, _def} = load_and_parse("blueroms")
+      assert {:ok, _results} = result
+    end
+  end
+
+  # ============================================================================
+  # BigCore - rows.after
+  # ============================================================================
+
+  describe "TorrentLT snapshot" do
+    @tag :snapshot
+    test "definition exercises rows.after" do
+      fixture_dir = Path.join(@fixtures_base, "torrentlt")
+
+      {:ok, definition} =
+        fixture_dir
+        |> Path.join("definition.yml")
+        |> File.read!()
+        |> CardigannParser.parse_definition()
+
+      assert definition.search.rows[:after] == 1
     end
   end
 

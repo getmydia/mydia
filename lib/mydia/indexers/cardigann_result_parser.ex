@@ -1527,13 +1527,27 @@ defmodule Mydia.Indexers.CardigannResultParser do
 
   defp xml_rows_spec(selector) when is_binary(selector) do
     %SweetXpath{
-      path: String.to_charlist("//" <> selector),
+      path: normalize_xml_selector(selector, prefix: "//") |> String.to_charlist(),
       is_value: false,
       is_list: true,
       is_keyword: false,
       is_optional: false,
       cast_to: false
     }
+  end
+
+  # Prowlarr RSS definitions use CSS child combinators (`rss > channel > item`).
+  # SweetXml expects XPath, so normalize ` > ` to `/` before querying.
+  defp normalize_xml_selector(selector, opts) do
+    prefix = Keyword.get(opts, :prefix, "")
+
+    normalized =
+      selector
+      |> String.trim()
+      |> String.replace(" > ", "/")
+      |> String.replace(" ", "")
+
+    prefix <> normalized
   end
 
   defp xml_field_spec(".", attribute) when is_binary(attribute) and attribute != "" do

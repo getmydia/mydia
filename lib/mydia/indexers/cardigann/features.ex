@@ -160,6 +160,6 @@ defmodule Mydia.Indexers.Cardigann.Features do
 
   defp present_list_or_map?(nil), do: false
   defp present_list_or_map?([]), do: false
-  defp present_list_or_map?(%{}), do: false
+  defp present_list_or_map?(map) when is_map(map), do: map_size(map) > 0
   defp present_list_or_map?(_), do: true
 end
