@@ -222,6 +222,15 @@ defmodule Mydia.DBRuntimeTest do
   describe "runtime functions - verify compile includes both branches" do
     test "module exports all runtime functions" do
       # Verify all runtime functions are exported
+      #
+      # Defensive, unlike the same guard in the indexer adapter tests:
+      # function_exported?/3 answers false for an unloaded module, and this
+      # assertion only escapes that today because `use Mydia.DataCase` drags
+      # in the Repo stack and loads Mydia.DB as a side effect. Pinning it here
+      # means the test keeps testing exports rather than load order if that
+      # incidental dependency ever goes away.
+      Code.ensure_loaded!(Mydia.DB)
+
       assert function_exported?(Mydia.DB, :json_equals, 3)
       assert function_exported?(Mydia.DB, :json_integer_equals, 3)
       assert function_exported?(Mydia.DB, :json_is_true, 2)

@@ -193,6 +193,12 @@ defmodule Mydia.Indexers.Adapter.ProwlarrTest do
       # Mock response with quality indicators in title
       # This test would need to be expanded with actual response mocking
       # For now, we verify the adapter is properly structured
+      #
+      # function_exported?/3 answers false for a module that has not been
+      # loaded yet, so without this the assertion races on whether some
+      # earlier test in the run happened to reference Prowlarr first.
+      Code.ensure_loaded!(Prowlarr)
+
       assert function_exported?(Prowlarr, :search, 3)
       assert function_exported?(Prowlarr, :test_connection, 1)
       assert function_exported?(Prowlarr, :get_capabilities, 1)

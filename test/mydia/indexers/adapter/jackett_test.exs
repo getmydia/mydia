@@ -161,6 +161,12 @@ defmodule Mydia.Indexers.Adapter.JackettTest do
   describe "adapter structure" do
     test "implements required callbacks" do
       # Verify the adapter is properly structured
+      #
+      # function_exported?/3 answers false for a module that has not been
+      # loaded yet, so without this the assertion races on whether some
+      # earlier test in the run happened to reference Jackett first.
+      Code.ensure_loaded!(Jackett)
+
       assert function_exported?(Jackett, :search, 3)
       assert function_exported?(Jackett, :test_connection, 1)
       assert function_exported?(Jackett, :get_capabilities, 1)
