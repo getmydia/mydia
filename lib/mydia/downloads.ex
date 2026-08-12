@@ -406,17 +406,23 @@ defmodule Mydia.Downloads do
   defdelegate resolve_file_mappings(download, mappings), to: Mydia.Downloads.Queue
 
   @doc """
-  Rejects a release the operator has judged unusable: blacklists
-  `(indexer, guid)`, removes it from the download client (best effort),
-  deletes the download row, and queues a fresh search. See
-  `Mydia.Downloads.Queue.reject_release/2` for details.
+  Rejects a release judged unusable: blacklists `(indexer, guid)`, removes it
+  from the download client (best effort), deletes the download row, and queues
+  a fresh search. See `Mydia.Downloads.Queue.reject_release/2` for details.
+
+  A download with no blacklist key, or whose blacklist write fails, is still
+  cleared — it is simply not recorded. The torrent is dead either way.
 
   ## Options
     - `:actor_type` - The type of actor (:user, :system, :job) - defaults to :user
     - `:actor_id` - The ID of the actor (user_id, job name, etc.)
+    - `:failure_reason` - Blacklist reason slug - defaults to "rejected_by_user"
+    - `:ttl_days` - Days until the blacklist entry expires - defaults to the
+      configured `release_blacklist_default_ttl_days` (30)
+    - `:event` - `:cancelled` (default) emits `download.cancelled`; `:none`
+      emits nothing, for callers that emit their own more specific event
   """
-  @spec reject_release(Download.t(), keyword()) ::
-          {:ok, :rejected} | {:error, :no_indexer | :no_guid | term()}
+  @spec reject_release(Download.t(), keyword()) :: {:ok, :rejected} | {:error, term()}
   defdelegate reject_release(download, opts \\ []), to: Mydia.Downloads.Queue
 
   @doc """

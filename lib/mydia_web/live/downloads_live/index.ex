@@ -882,14 +882,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
            |> put_flash(:info, "Release blacklisted and a new search was queued")
            |> load_downloads()}
 
-        {:error, reason} when reason in [:no_indexer, :no_guid] ->
-          {:noreply,
-           assign(
-             socket,
-             :match_files_error,
-             "This download has no indexer or release id recorded, so it cannot be blacklisted."
-           )}
-
         {:error, _reason} ->
           {:noreply, assign(socket, :match_files_error, "Failed to reject the release.")}
       end

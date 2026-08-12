@@ -147,9 +147,18 @@ defmodule Mydia.Downloads.Queue do
   Accepts `:failure_reason` (default `"rejected_by_user"`) so a system-initiated
   rejection is distinguishable from an operator's in `release_blacklist`.
   """
-  @spec reject_release(Download.t(), keyword()) ::
-          {:ok, :rejected} | {:error, :no_indexer | :no_guid | term()}
+  @spec reject_release(Download.t(), keyword()) :: {:ok, :rejected} | {:error, term()}
   def reject_release(%Download{} = download, opts \\ []) do
+    blacklist_release(download, opts)
+    finish_reject(download, opts)
+  end
+
+  # Best effort, and deliberately so. A release we cannot key (no indexer or
+  # guid — externally-adopted torrents, manual grabs) or whose blacklist write
+  # fails is still a dead download: clearing it matters more than recording
+  # why. Leaving the torrent running because the bookkeeping failed is the
+  # exact bug this path exists to fix.
+  defp blacklist_release(%Download{} = download, opts) do
     with {:ok, indexer, guid} <- Blacklists.extract_key(download),
          {:ok, _row} <-
            Blacklists.add(
@@ -159,7 +168,15 @@ defmodule Mydia.Downloads.Queue do
              Keyword.get(opts, :failure_reason, "rejected_by_user"),
              blacklist_opts(opts)
            ) do
-      finish_reject(download, opts)
+      :ok
+    else
+      {:error, reason} ->
+        Logger.warning("Rejecting release without a blacklist entry",
+          download_id: download.id,
+          reason: inspect(reason)
+        )
+
+        :ok
     end
   end
 

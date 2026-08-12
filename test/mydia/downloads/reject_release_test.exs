@@ -70,18 +70,37 @@ defmodule Mydia.Downloads.RejectReleaseTest do
       )
     end
 
-    test "refuses and changes nothing when the guid is missing" do
-      download = download_fixture(%{indexer: "1337x", metadata: %{}})
+    # There is nothing to blacklist without a key, but the download is still
+    # dead and must not be left running in the client. Externally-adopted
+    # torrents and manual grabs land here.
+    test "clears the download without a blacklist entry when the guid is missing" do
+      media_item = media_item_fixture(%{type: "movie"})
 
-      assert {:error, :no_guid} = Downloads.reject_release(download)
-      assert Repo.get(Mydia.Downloads.Download, download.id)
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          indexer: "1337x",
+          metadata: %{}
+        })
+
+      assert {:ok, :rejected} = Downloads.reject_release(download)
+
+      refute Repo.get(Mydia.Downloads.Download, download.id)
+      assert Repo.aggregate(ReleaseBlacklist, :count) == 0
+
+      assert_enqueued(
+        worker: Mydia.Jobs.MovieSearch,
+        args: %{"mode" => "specific", "media_item_id" => media_item.id}
+      )
     end
 
-    test "refuses and changes nothing when the indexer is missing" do
+    test "clears the download without a blacklist entry when the indexer is missing" do
       download = download_fixture(%{indexer: nil, metadata: %{"guid" => "abc"}})
 
-      assert {:error, :no_indexer} = Downloads.reject_release(download)
-      assert Repo.get(Mydia.Downloads.Download, download.id)
+      assert {:ok, :rejected} = Downloads.reject_release(download)
+
+      refute Repo.get(Mydia.Downloads.Download, download.id)
+      assert Repo.aggregate(ReleaseBlacklist, :count) == 0
     end
 
     # Ordering-adjacent coverage: extract_key/1 and Blacklists.add/4 are the
