@@ -8,8 +8,6 @@ import '../../core/player/best_file.dart';
 import '../../core/player/resume_plan.dart';
 import '../../domain/models/continue_watching_item.dart';
 import '../../domain/models/media_file.dart';
-import '../../domain/models/show_next_up.dart';
-import '../../domain/models/up_next_item.dart';
 import '../widgets/ambient_backdrop_provider.dart';
 import '../widgets/content_rail.dart';
 import '../widgets/freshness_header.dart';
@@ -33,24 +31,6 @@ String _resumeSuffix({
     watched: watched,
   );
   return pass ? '&resume=$positionSeconds' : '';
-}
-
-/// Player route for an Up Next card.
-String playerRouteForUpNext(UpNextItem item, {required String fileId}) {
-  final episode = item.episode;
-  final progress = episode.progress;
-  final title = '${item.show.title} - ${episode.episodeCode}';
-
-  return '/player/episode/${episode.id}'
-      '?fileId=$fileId'
-      '&title=${Uri.encodeComponent(title)}'
-      '&showId=${item.show.id}'
-      '&seasonNumber=${episode.seasonNumber}'
-      '${_resumeSuffix(
-    isContinueState: item.state == NextUpState.continueWatching,
-    positionSeconds: progress?.positionSeconds,
-    watched: progress?.watched ?? false,
-  )}';
 }
 
 /// Player route for a Continue Watching card.
@@ -124,17 +104,6 @@ class HomeScreen extends ConsumerWidget {
   Future<void> _handlePlay(BuildContext context, Object item) async {
     final router = GoRouter.of(context);
     final screenWidth = MediaQuery.sizeOf(context).width;
-
-    if (item is UpNextItem) {
-      final file = await _bestFileOrNull(item.episode.files, screenWidth);
-      if (file == null) {
-        // Nothing playable: fall back to detail rather than a dead tap.
-        router.push('/episode/${item.episode.id}');
-        return;
-      }
-      router.push(playerRouteForUpNext(item, fileId: file.id));
-      return;
-    }
 
     if (item is ContinueWatchingItem) {
       final file = await _bestFileOrNull(item.files, screenWidth);
@@ -264,16 +233,6 @@ class HomeScreen extends ConsumerWidget {
                               onItemTap: (id, type) =>
                                   _handleItemTap(context, id, type),
                               onSeeAllTap: () => context.push('/favorites'),
-                            ),
-                          if (data.upNext.isNotEmpty)
-                            ContentRail(
-                              title: 'Up Next',
-                              items: data.upNext,
-                              showEpisodeInfo: true,
-                              onItemTap: (id, type) =>
-                                  _handleItemTap(context, id, type),
-                              onItemActivate: (item) =>
-                                  _handlePlay(context, item),
                             ),
                           SizedBox(height: bottomPadding),
                         ]),

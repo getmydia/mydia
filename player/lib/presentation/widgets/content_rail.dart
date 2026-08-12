@@ -207,7 +207,7 @@ class _ContentRailState extends State<ContentRail> {
       return MediaCard(
         posterUrl: item.posterUrl,
         title: item.title,
-        subtitle: item.showTitle,
+        subtitle: item.railSubtitle,
         progressPercentage: item.progress?.percentage,
         width: cardSize.width,
         height: cardSize.height,
