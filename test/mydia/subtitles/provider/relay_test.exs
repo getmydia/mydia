@@ -19,10 +19,12 @@ defmodule Mydia.Subtitles.Provider.RelayTest do
   describe "search/2" do
     # This fixture mirrors the actual output of
     # MetadataRelay.OpenSubtitles.Handler.transform_subtitle/1
-    # (metadata-relay/lib/metadata_relay/opensubtitles/handler.ex:144-167),
+    # (metadata-relay/lib/metadata_relay/opensubtitles/handler.ex:144-168),
     # not the field names SearchResult.from_map/1 reads. The relay emits
     # "id" (not "file_id"), "release" (not "file_name"), and never emits
-    # "subtitle_hash" or "moviehash_match" at all.
+    # "subtitle_hash" at all. moviehash_match, however, IS now emitted (the
+    # relay forwards it from OpenSubtitles' attributes object) -- see the
+    # dedicated moviehash_match test below.
     test "normalizes provider results from the relay's real wire format", %{bypass: bypass} do
       Bypass.expect_once(bypass, "POST", "/api/v1/subtitles/search", fn conn ->
         conn
@@ -41,6 +43,7 @@ defmodule Mydia.Subtitles.Provider.RelayTest do
                 "uploader" => "someuser",
                 "hearing_impaired" => false,
                 "foreign_parts_only" => false,
+                "moviehash_match" => false,
                 "feature_type" => "Movie",
                 "title" => "Movie",
                 "year" => 2020,
@@ -61,17 +64,49 @@ defmodule Mydia.Subtitles.Provider.RelayTest do
       assert result.rating == 8.5
       assert result.download_count == 4200
       refute result.hearing_impaired
-
-      # The relay never emits moviehash_match; from_map/1 defaults it false.
       refute result.moviehash_match
 
-      # The relay never emits subtitle_hash either, so it must be
-      # synthesized deterministically from (file_id, language) -- same
-      # formula as Mydia.Subtitles.generate_subtitle_hash/1.
+      # The relay never emits subtitle_hash, so it must be synthesized
+      # deterministically from (file_id, language) -- same formula as
+      # Mydia.Subtitles.generate_subtitle_hash/1.
       expected_hash =
         :crypto.hash(:sha256, "12345-en") |> Base.encode16(case: :lower)
 
       assert result.subtitle_hash == expected_hash
+    end
+
+    # moviehash_match is the strongest quality signal a subtitle result can
+    # carry (Mydia.Subtitles.calculate_score/2 weights it at 100 points vs 50
+    # for a metadata match), and normalize_subtitle/1 only adds keys on top
+    # of the relay's original map -- it must not accidentally shadow this one.
+    test "carries a true moviehash_match through the wire-format translation",
+         %{bypass: bypass} do
+      Bypass.expect_once(bypass, "POST", "/api/v1/subtitles/search", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          200,
+          Jason.encode!(%{
+            "subtitles" => [
+              %{
+                "id" => 12_345,
+                "language" => "en",
+                "format" => "srt",
+                "moviehash_match" => true
+              }
+            ]
+          })
+        )
+      end)
+
+      assert {:ok, [result]} =
+               Relay.search(@provider, %{
+                 languages: "en",
+                 file_hash: "8e245d9679d31e12",
+                 file_size: 742_086_656
+               })
+
+      assert result.moviehash_match == true
     end
 
     test "surfaces the relay's error reason without collapsing it", %{bypass: bypass} do
