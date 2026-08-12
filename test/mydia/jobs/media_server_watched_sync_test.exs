@@ -369,11 +369,12 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
       # credential. That silent fallback is exactly the merge bug per-user
       # links exist to prevent.
       #
-      # A mapping row is seeded so the sync skips its (legitimately
+      # A mapping row is seeded, and the config carries a fresh
+      # last_mapping_refresh_at, so the sync skips its (legitimately
       # admin-token-scoped) refresh crawl and calls straight into
-      # `list_changes/3`, which is the call this test is guarding. Without it,
-      # the assertion below could not tell a correct refusal apart from an
-      # unrelated connection failure against a URL with no real server.
+      # `list_changes/3`, which is the call this test is guarding. Without
+      # both, the assertion below could not tell a correct refusal apart from
+      # an unrelated connection failure against a URL with no real server.
       user = user_fixture()
       media_item = insert(:media_item)
 
@@ -384,7 +385,10 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
           url: "http://localhost:32400",
           token: "admin-token",
           enabled: true,
-          connection_settings: %{"sync_watched" => "true"}
+          connection_settings: %{
+            "sync_watched" => "true",
+            "last_mapping_refresh_at" => DateTime.utc_now() |> DateTime.to_iso8601()
+          }
         })
 
       {:ok, link} =
@@ -442,7 +446,10 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
           url: "http://localhost:#{bypass.port}",
           token: "api-key",
           enabled: true,
-          connection_settings: %{"sync_watched" => "true"}
+          connection_settings: %{
+            "sync_watched" => "true",
+            "last_mapping_refresh_at" => DateTime.utc_now() |> DateTime.to_iso8601()
+          }
         })
 
       # A token with no GUID is a valid-looking link that Jellyfin cannot use.
@@ -455,7 +462,8 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
           enabled: true
         })
 
-      # Seeded so the run skips its refresh crawl and calls straight into
+      # Seeded so the run skips its refresh crawl (the config above also
+      # carries a fresh last_mapping_refresh_at) and calls straight into
       # list_changes/3, the call under test.
       {:ok, _mapping} =
         %Mapping{}
@@ -768,6 +776,88 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
     end
   end
 
+  describe "mapping refresh staleness" do
+    setup do
+      bypass = Bypass.open()
+
+      Bypass.expect(bypass, "GET", "/Items", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(%{"Items" => [], "TotalRecordCount" => 0}))
+      end)
+
+      user = user_fixture()
+
+      {:ok, config} =
+        Settings.create_media_server_config(%{
+          name: "Jellyfin",
+          type: :jellyfin,
+          url: "http://localhost:#{bypass.port}",
+          token: "api-key",
+          enabled: true,
+          connection_settings: %{"sync_watched" => true}
+        })
+
+      link = link_fixture(config, user)
+
+      {:ok, config: config, user: user, link: link}
+    end
+
+    test "a server that has never crawled claims a refresh", ctx do
+      refute Map.has_key?(ctx.config.connection_settings, "last_mapping_refresh_at")
+
+      config = run(ctx.config, ctx.user, ctx.link)
+
+      assert is_binary(config.connection_settings["last_mapping_refresh_at"])
+    end
+
+    test "a fresh stamp is left alone on the next run", ctx do
+      first = run(ctx.config, ctx.user, ctx.link)
+      stamp = first.connection_settings["last_mapping_refresh_at"]
+
+      second = run(first, ctx.user, ctx.link)
+
+      assert second.connection_settings["last_mapping_refresh_at"] == stamp
+    end
+
+    test "a stamp older than the interval is refreshed", ctx do
+      stale =
+        DateTime.utc_now()
+        |> DateTime.add(-25 * 60 * 60, :second)
+        |> DateTime.truncate(:second)
+        |> DateTime.to_iso8601()
+
+      {:ok, config} =
+        Settings.update_media_server_config(ctx.config, %{
+          connection_settings:
+            Map.put(ctx.config.connection_settings, "last_mapping_refresh_at", stale)
+        })
+
+      config = run(config, ctx.user, ctx.link)
+
+      assert config.connection_settings["last_mapping_refresh_at"] != stale
+    end
+
+    test "an unreadable stamp is treated as never crawled", ctx do
+      {:ok, config} =
+        Settings.update_media_server_config(ctx.config, %{
+          connection_settings:
+            Map.put(ctx.config.connection_settings, "last_mapping_refresh_at", "not-a-timestamp")
+        })
+
+      config = run(config, ctx.user, ctx.link)
+
+      assert config.connection_settings["last_mapping_refresh_at"] != "not-a-timestamp"
+    end
+
+    test "claiming a refresh does not clobber the last sync timestamp", ctx do
+      config = run(ctx.config, ctx.user, ctx.link)
+
+      assert is_binary(config.connection_settings["last_mapping_refresh_at"])
+      assert is_binary(config.connection_settings["last_watched_sync_at"])
+    end
+  end
+
   defp link_fixture(config, user, attrs \\ %{}) do
     {:ok, link} =
       Settings.upsert_media_server_user_link(
@@ -785,5 +875,16 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
       )
 
     link
+  end
+
+  defp run(config, user, link) do
+    assert :ok =
+             perform_job(MediaServerWatchedSync, %{
+               "config_id" => config.id,
+               "user_id" => user.id,
+               "link_id" => link.id
+             })
+
+    Settings.get_media_server_config!(config.id)
   end
 end

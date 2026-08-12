@@ -29,6 +29,13 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
   # wants an account GUID.
   @misconfigured [:missing_user_token, :missing_remote_user_id]
 
+  # A mapping crawl is the expensive call, so it does not run on every tick. But
+  # the engine only crawls an instance that has no mappings at all, which means
+  # it runs exactly once in an instance's life: media added later is never
+  # mapped, and a fix to id matching is never picked up. Re-crawling on an
+  # interval is what makes both self-healing.
+  @mapping_refresh_interval_seconds 24 * 60 * 60
+
   alias Mydia.MediaServer.Error
   alias Mydia.Repo
   alias Mydia.Settings
@@ -142,10 +149,17 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
         # there to explain what happened, so losing it degrades observability
         # rather than the feature.
         run = start_run(config, scope.user_id, direction)
+        refresh = refresh_mode(config)
+
+        # Rebound deliberately: the claim writes connection_settings, and the
+        # later update_last_sync_timestamp/1 merges into whatever config it is
+        # handed. Passing the stale struct would drop the stamp we just wrote.
+        config = claim_mapping_refresh(config, refresh)
 
         case WatchSync.sync(provider, config, scope,
                provider: to_string(config.type),
-               direction: direction
+               direction: direction,
+               refresh_mappings: refresh
              ) do
           {:ok, stats} ->
             finish_run(run, :ok, stats, nil)
@@ -370,12 +384,47 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
     end
   end
 
+  # `:force` when no crawl has ever been recorded, when the stamp cannot be
+  # read, or when it has aged past the interval.
+  defp refresh_mode(config) do
+    with value when is_binary(value) <-
+           get_in_connection_settings(config, "last_mapping_refresh_at"),
+         {:ok, at, _offset} <- DateTime.from_iso8601(value) do
+      if DateTime.diff(DateTime.utc_now(), at, :second) >= @mapping_refresh_interval_seconds,
+        do: :force,
+        else: :auto
+    else
+      _ -> :force
+    end
+  end
+
+  # Stamped before the sync runs, not after it succeeds. A server with several
+  # linked users fans out one job per user on the same tick, and stamping on
+  # success would have every one of them crawl the whole library. Claiming it up
+  # front means the first job crawls and the rest read a fresh stamp.
+  #
+  # The cost is that a run failing after a forced crawl waits for the next
+  # interval instead of retrying immediately. That is acceptable: the crawl is
+  # idempotent upserts, so whatever it wrote persists.
+  defp claim_mapping_refresh(config, :auto), do: config
+
+  defp claim_mapping_refresh(config, :force) do
+    case put_connection_setting(config, "last_mapping_refresh_at", iso_now()) do
+      {:ok, updated} -> updated
+      {:error, _reason} -> config
+    end
+  end
+
   defp update_last_sync_timestamp(config) do
-    current_settings = config.connection_settings || %{}
-    now = DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.to_iso8601()
+    put_connection_setting(config, "last_watched_sync_at", iso_now())
+  end
 
-    updated_settings = Map.put(current_settings, "last_watched_sync_at", now)
+  defp put_connection_setting(config, key, value) do
+    settings = Map.put(config.connection_settings || %{}, key, value)
+    Settings.update_media_server_config(config, %{connection_settings: settings})
+  end
 
-    Settings.update_media_server_config(config, %{connection_settings: updated_settings})
+  defp iso_now do
+    DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.to_iso8601()
   end
 end
