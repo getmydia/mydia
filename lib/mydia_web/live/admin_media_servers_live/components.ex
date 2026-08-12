@@ -21,6 +21,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
           <span class="badge badge-ghost">{length(@media_servers)}</span>
         </h2>
         <button
+          id="new-media-server"
           class="btn btn-primary w-full min-h-11 sm:btn-sm sm:w-auto sm:min-h-8"
           phx-click="new_media_server"
         >
@@ -29,11 +30,32 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
       </div>
 
       <%= if @media_servers == [] do %>
-        <div class="alert alert-info">
-          <.icon name="hero-information-circle" class="w-5 h-5" />
-          <span>
-            No media servers configured yet. Add Plex or Jellyfin to enable automatic library updates.
-          </span>
+        <div
+          id="media-servers-empty"
+          class="card bg-base-100 border border-base-300"
+        >
+          <div class="card-body items-center text-center gap-3 py-10">
+            <div class="bg-primary/10 p-4 rounded-full">
+              <.icon name="hero-server-stack" class="w-8 h-8 text-primary" />
+            </div>
+            <h3 class="font-semibold text-lg">No media servers connected</h3>
+            <p class="text-sm text-base-content/70 max-w-md">
+              Connect Plex or Jellyfin and Mydia refreshes its library as soon as an import
+              finishes, so new episodes show up without waiting for the server's next
+              scheduled scan.
+            </p>
+            <p class="text-sm text-base-content/70 max-w-md">
+              Plex also syncs watched status in both directions, mapped separately for each
+              Plex Home profile.
+            </p>
+            <button
+              id="media-servers-empty-cta"
+              class="btn btn-primary mt-2 min-h-11 sm:min-h-8"
+              phx-click="new_media_server"
+            >
+              <.icon name="hero-plus" class="w-4 h-4" /> Connect a server
+            </button>
+          </div>
         </div>
       <% else %>
         <%!-- Server Cards Grid --%>
@@ -800,7 +822,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   defp modal_action_btn, do: "w-full min-h-11 sm:w-auto sm:min-h-8"
 
   defp run_label(%{status: :skipped, skip_reason: reason}) when is_binary(reason) do
-    "Skipped: #{reason}"
+    skip_reason_label(reason)
   end
 
   defp run_label(%{status: :ok, counts: counts}) when is_map(counts) do
@@ -811,6 +833,18 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
 
   defp run_label(%{status: :error}), do: "Failed"
   defp run_label(_), do: "Failed"
+
+  # sync_runs rows outlive the code that wrote them, so every reason ever
+  # recorded needs a label, including :no_user_mapping which nothing writes now.
+  defp skip_reason_label("server_disabled"), do: "Server is disabled"
+  defp skip_reason_label("sync_disabled"), do: "Watched sync is off"
+  defp skip_reason_label("unsupported_provider"), do: "Watched sync is Plex only"
+  defp skip_reason_label("no_user_mapping"), do: "No Plex users linked yet"
+  defp skip_reason_label("seeding_links"), do: "Linking Plex Home profiles"
+  defp skip_reason_label("no_matching_users"), do: "No Plex profile matched a Mydia user"
+  defp skip_reason_label("link_seeding_failed"), do: "Could not reach plex.tv to link users"
+  defp skip_reason_label("no_token"), do: "No API token configured"
+  defp skip_reason_label(other), do: "Skipped: #{other}"
 
   # Simplify plex.direct URLs to show just the IP/host and port
   # e.g., "https://10-1-1-5.abc123.plex.direct:32400" -> "(ssl) 10.1.1.5:32400"

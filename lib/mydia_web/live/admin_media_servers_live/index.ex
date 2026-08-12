@@ -169,7 +169,9 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
       end
 
     case result do
-      {:ok, _server} ->
+      {:ok, server} ->
+        maybe_seed_plex_links(server)
+
         {:noreply,
          socket
          |> assign(:show_media_server_modal, false)
@@ -358,19 +360,21 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
   @impl true
   def handle_event("sync_watched", %{"id" => id}, socket) do
     server = Settings.get_media_server_config!(id)
-    user_id = socket.assigns.current_user.id
 
+    # Server mode rather than a job for the clicking user. With per-user links in
+    # play, a job carrying no link_id falls back to the config token, which reads
+    # the admin's Plex watch state and writes it onto whoever clicked.
     changeset =
       Mydia.Jobs.MediaServerWatchedSync.new(%{
-        "config_id" => server.id,
-        "user_id" => user_id
+        "mode" => "server",
+        "config_id" => server.id
       })
 
-    case Oban.insert(changeset) do
+    case safe_insert(changeset) do
       {:ok, _job} ->
         {:noreply,
          socket
-         |> put_flash(:info, "Watched sync started for #{server.name}")
+         |> put_flash(:info, "Watched sync queued for #{server.name}")
          |> load_data()}
 
       {:error, _reason} ->
@@ -453,7 +457,9 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
         attrs = Map.merge(attrs, %{last_auth_error: nil, last_auth_error_at: nil})
 
         case Settings.update_media_server_config(socket.assigns.editing_media_server, attrs) do
-          {:ok, _updated} ->
+          {:ok, updated} ->
+            maybe_seed_plex_links(updated)
+
             socket
             |> put_flash(:info, "Plex reconnected successfully")
             |> load_data()
@@ -516,6 +522,31 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
     else
       socket
     end
+  end
+
+  # Seeds per-user Plex links after any Plex config is persisted. Fires on every
+  # Plex save, including one that only flips a sync direction: the job is cheap
+  # to enqueue, its 120-second uniqueness window collapses bursts, and the
+  # alternative is dirty-field tracking that would silently miss a changed token.
+  defp maybe_seed_plex_links(%MediaServerConfig{type: :plex, id: id}) when is_binary(id) do
+    %{"config_id" => id}
+    |> Mydia.Jobs.PlexLinkSeed.new()
+    |> safe_insert()
+
+    :ok
+  end
+
+  defp maybe_seed_plex_links(_config), do: :ok
+
+  # Oban's supervisor isn't started under `testing: :manual` (see
+  # `Mydia.Application.oban_children/0`), so a bare `Oban.insert/1` raises a
+  # RuntimeError there. Falling back to a plain repo insert keeps this working
+  # both in that mode and in production, matching the pattern already used by
+  # `Mydia.Jobs.MediaServerWatchedSync.safe_insert/1`.
+  defp safe_insert(changeset) do
+    Oban.insert(changeset)
+  rescue
+    RuntimeError -> Mydia.Repo.insert(changeset)
   end
 
   defp load_data(socket) do

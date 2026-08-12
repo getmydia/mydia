@@ -2,11 +2,17 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
   @moduledoc """
   Oban worker for syncing watched status between Mydia and media servers.
 
-  Two modes:
+  Three modes:
   - **Individual**: Sync a specific server for a specific user.
-    Args: `%{"config_id" => id, "user_id" => uid, "link_id" => lid}`
-  - **Scheduler**: Find all enabled servers with watched sync enabled
-    and enqueue individual jobs for each linked user.
+    Args: `%{"config_id" => id, "user_id" => uid, "link_id" => lid}` (`link_id`
+    is optional; without it the config's own token is used).
+  - **Server**: Fan out to an individual job for every enabled link on one
+    server, seeding Plex Home links first when none exist yet. This is what
+    the "Sync Now" button triggers, and what `Mydia.Jobs.PlexLinkSeed`
+    enqueues after a successful seed.
+    Args: `%{"mode" => "server", "config_id" => id}`
+  - **Scheduler**: Find every enabled server with watched sync enabled and
+    fan out the same way, one server at a time.
     Args: `%{"mode" => "all_enabled"}`
   """
 
@@ -36,6 +42,10 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
       %__MODULE__{mode: "all_enabled"}
     end
 
+    def parse(%{"mode" => "server", "config_id" => config_id}) do
+      %__MODULE__{mode: "server", config_id: config_id}
+    end
+
     def parse(%{"config_id" => config_id, "user_id" => user_id} = args) do
       %__MODULE__{
         config_id: config_id,
@@ -59,6 +69,25 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
     :ok
   end
 
+  # Syncs one server across every linked user. This is what the "Sync Now"
+  # button and a successful link seed both trigger, so manual and scheduled
+  # runs share one fan-out rather than drifting apart.
+  def perform(%Oban.Job{args: %{"mode" => "server", "config_id" => config_id}}) do
+    config = Settings.get_media_server_config!(config_id)
+
+    case skip_reason(config) do
+      nil -> enqueue_linked_users(config)
+      reason -> record_skip(config, reason)
+    end
+
+    :ok
+  rescue
+    # Deleting a media server while its jobs are still queued is ordinary
+    # operator behaviour, and a deleted config is a terminal state rather than a
+    # failure worth three retries. Mirrors Mydia.Jobs.PlexLinkSeed.
+    Ecto.NoResultsError -> :ok
+  end
+
   def perform(%Oban.Job{args: raw_args}) do
     args = Args.parse(raw_args)
     config_id = args.config_id
@@ -69,6 +98,9 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
       {:ok, config} -> run_sync(config, user_id)
       {:error, reason} -> skip(config, reason, user_id)
     end
+  rescue
+    # Same window, reached more often now that server mode fans these out.
+    Ecto.NoResultsError -> :ok
   end
 
   defp run_sync(config, user_id) do
@@ -148,12 +180,20 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
     cond do
       not watched_sync_enabled?(config) -> :sync_disabled
       match?({:error, _}, provider_for(config)) -> :unsupported_provider
+      not has_token?(config) -> :no_token
       true -> nil
     end
   end
 
   defp provider_for(%{type: :plex}), do: {:ok, Plex}
   defp provider_for(_), do: {:error, :unsupported_provider}
+
+  # token isn't validate_required on MediaServerConfig. Without this, a Plex
+  # config saved with sync on but a blank token would pass skip_reason/1,
+  # record :seeding_links on every tick, and enqueue a seed job that can never
+  # produce a link (PlexLinkSeed.seedable?/1 also requires a token) — a job
+  # reporting healthy while doing nothing forever.
+  defp has_token?(%{token: token}), do: is_binary(token) and token != ""
 
   defp record_skip(config, reason, user_id \\ nil) do
     Mydia.Sync.record_skip(
@@ -168,12 +208,23 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
 
   defp enqueue_linked_users(config) do
     case Settings.list_media_server_user_links(config.id) |> Enum.filter(& &1.enabled) do
+      # Links are created by Mydia.Jobs.PlexLinkSeed and nothing else. Recording
+      # :no_user_mapping and stopping is exactly what made this job report
+      # healthy while doing nothing: seed first, and the seed job re-enters sync
+      # once it has produced links.
       [] ->
-        record_skip(config, :no_user_mapping)
+        enqueue_seed(config)
+        record_skip(config, :seeding_links)
 
       links ->
         Enum.each(links, fn link -> enqueue(config, link) end)
     end
+  end
+
+  defp enqueue_seed(config) do
+    %{"config_id" => config.id}
+    |> Mydia.Jobs.PlexLinkSeed.new()
+    |> safe_insert()
   end
 
   defp enqueue(config, link) do
