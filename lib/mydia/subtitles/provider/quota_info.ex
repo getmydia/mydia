@@ -48,7 +48,7 @@ defmodule Mydia.Subtitles.Provider.QuotaInfo do
   """
 
   @type quota_type :: :unlimited | :limited
-  @type provider_type :: :relay | :opensubtitles
+  @type provider_type :: :relay | :opensubtitles | :gestdown | :subdl
 
   @type t :: %__MODULE__{
           type: quota_type(),
