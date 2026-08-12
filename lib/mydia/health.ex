@@ -9,8 +9,8 @@ defmodule Mydia.Health do
 
   Each health check returns a status map with:
 
-  - `:status` - `:healthy`, `:unhealthy`, or `:unknown`
-  - `:checked_at` - DateTime when the check was performed
+  - `:status` - `:healthy`, `:unhealthy`, `:unknown`, or `:disabled`
+  - `:checked_at` - DateTime when the check was performed, or `nil` if it never has been
   - `:details` - Additional information (version, capabilities, etc.)
   - `:error` - Error message if unhealthy
 
@@ -29,13 +29,14 @@ defmodule Mydia.Health do
   alias Mydia.Library.MediaFile
   alias Mydia.Repo
 
-  @type health_status :: :healthy | :unhealthy | :unknown
-  @type service_type :: :download_client | :metadata_provider | :indexer | :database
+  @type health_status :: :healthy | :unhealthy | :unknown | :disabled
+  @type service_type ::
+          :download_client | :metadata_provider | :indexer | :database | :media_server
   @type service_id :: String.t()
 
   @type health_result :: %{
           status: health_status(),
-          checked_at: DateTime.t(),
+          checked_at: DateTime.t() | nil,
           details: map(),
           error: String.t() | nil
         }

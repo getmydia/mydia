@@ -157,12 +157,45 @@ defmodule Mydia.Jobs do
   end
 
   @doc """
+  Returns the args a crontab entry declares for `worker`, or `%{}`.
+
+  Takes the crontab rather than reading it, so it can be tested without a
+  running Oban, which the test environment disables to keep its pool off the
+  SQL Sandbox. `crontab/0` supplies it in production.
+  """
+  @spec cron_args_from(list(), module()) :: map()
+  def cron_args_from(crontab, worker) when is_list(crontab) and is_atom(worker) do
+    Enum.find_value(crontab, %{}, fn
+      {_expression, ^worker, entry_opts} -> Keyword.get(entry_opts, :args, %{})
+      _entry -> nil
+    end)
+  end
+
+  @doc """
+  Builds the job changeset a manual trigger would insert for `worker`.
+
+  Split from `trigger_job/1` so the args-threading behaviour can be tested
+  without a running Oban, which the test environment disables.
+  """
+  @spec build_job(list(), module()) :: Ecto.Changeset.t()
+  def build_job(crontab, worker) when is_list(crontab) and is_atom(worker) do
+    crontab
+    |> cron_args_from(worker)
+    |> worker.new()
+  end
+
+  @doc """
   Manually triggers a job by enqueueing it to Oban.
+
+  Uses the worker's crontab args so a manual run is identical to a scheduled
+  one. Enqueueing `%{}` unconditionally used to strip `args:` from every
+  scheduled worker that declared them, which discarded the job.
 
   Returns {:ok, job} or {:error, changeset}.
   """
   def trigger_job(worker) when is_atom(worker) do
-    worker.new(%{})
+    crontab()
+    |> build_job(worker)
     |> Oban.insert()
   end
 
@@ -258,6 +291,15 @@ defmodule Mydia.Jobs do
   end
 
   # Private helpers
+
+  # The one place that reads the running Cron plugin's crontab, so callers that
+  # need a worker's scheduled args do not each re-derive it.
+  defp crontab do
+    case find_cron_plugin(Oban.config().plugins) do
+      {Oban.Plugins.Cron, opts} -> Keyword.get(opts, :crontab, [])
+      _ -> []
+    end
+  end
 
   defp find_cron_plugin(plugins) do
     Enum.find(plugins, fn

@@ -5,6 +5,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
   alias Mydia.Jobs.MediaServerWatchedSync
   alias Mydia.Settings
   alias Mydia.Sync
+  alias Mydia.WatchSync.Mapping
 
   import Mydia.AccountsFixtures
 
@@ -40,8 +41,8 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
         Settings.upsert_media_server_user_link(%{
           media_server_config_id: server.id,
           user_id: user.id,
-          plex_account_id: "1",
-          plex_username: user.username,
+          remote_user_id: "1",
+          remote_username: user.username,
           access_token: "user-token",
           enabled: true
         })
@@ -52,6 +53,10 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
         worker: MediaServerWatchedSync,
         args: %{"config_id" => server.id, "user_id" => user.id, "link_id" => link.id}
       )
+    end
+
+    test "treats unrecognised args as a scheduler run instead of raising" do
+      assert :ok = perform_job(MediaServerWatchedSync, %{})
     end
   end
 
@@ -73,11 +78,18 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
         Settings.upsert_media_server_user_link(%{
           media_server_config_id: server.id,
           user_id: user.id,
-          plex_account_id: "1",
-          plex_username: user.username,
+          remote_user_id: "1",
+          remote_username: user.username,
           access_token: "user-token",
           enabled: true
         })
+
+      # The link is the thing being fanned out over, so it has to actually name
+      # an account. These fields were written as plex_account_id/plex_username,
+      # which `cast/3` drops in silence, and the row went in with a nil identity
+      # while the assertions below still passed.
+      assert link.remote_user_id == "1"
+      assert link.remote_username == user.username
 
       assert :ok =
                perform_job(MediaServerWatchedSync, %{
@@ -137,10 +149,13 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
           connection_settings: %{"sync_watched" => true}
         })
 
+      link = link_fixture(server, user)
+
       assert {:ok, :skipped} =
                perform_job(MediaServerWatchedSync, %{
                  "config_id" => server.id,
-                 "user_id" => user.id
+                 "user_id" => user.id,
+                 "link_id" => link.id
                })
     end
 
@@ -157,11 +172,59 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
           connection_settings: %{}
         })
 
+      link = link_fixture(server, user)
+
       assert {:ok, :skipped} =
                perform_job(MediaServerWatchedSync, %{
                  "config_id" => server.id,
-                 "user_id" => user.id
+                 "user_id" => user.id,
+                 "link_id" => link.id
                })
+    end
+
+    test "runs a real Jellyfin sync to completion instead of skipping it as unsupported" do
+      # Regression test for the reported bug: this used to fall through
+      # provider_for/1's catch-all and record :unsupported_provider, badging
+      # Completed while syncing nothing. A Bypass-backed server proves the
+      # job actually drives Mydia.WatchSync end-to-end for Jellyfin, not just
+      # that provider_for/1 resolves.
+      bypass = Bypass.open()
+
+      Bypass.expect(bypass, "GET", "/Items", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(%{"Items" => [], "TotalRecordCount" => 0}))
+      end)
+
+      user = user_fixture()
+
+      {:ok, server} =
+        Settings.create_media_server_config(%{
+          name: "Jellyfin",
+          type: :jellyfin,
+          url: "http://localhost:#{bypass.port}",
+          token: "api-key",
+          enabled: true,
+          connection_settings: %{"sync_watched" => true}
+        })
+
+      {:ok, link} =
+        Settings.upsert_media_server_user_link(%{
+          media_server_config_id: server.id,
+          user_id: user.id,
+          remote_user_id: "jf1",
+          remote_username: user.username,
+          enabled: true
+        })
+
+      assert :ok =
+               perform_job(MediaServerWatchedSync, %{
+                 "config_id" => server.id,
+                 "user_id" => user.id,
+                 "link_id" => link.id
+               })
+
+      assert %{status: :ok, skip_reason: nil} = Sync.last_run("jellyfin", server.id)
     end
   end
 
@@ -182,10 +245,13 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
           connection_settings: %{"sync_watched" => "true"}
         })
 
+      link = link_fixture(config, user)
+
       assert {:ok, :skipped} =
                perform_job(MediaServerWatchedSync, %{
                  "config_id" => config.id,
-                 "user_id" => user.id
+                 "user_id" => user.id,
+                 "link_id" => link.id
                })
 
       run = Sync.last_run("plex", config.id)
@@ -230,11 +296,11 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
       assert Sync.last_run("plex", config.id).skip_reason == "server_disabled"
     end
 
-    test "a job whose link has no usable token is skipped, never run on the admin token" do
+    test "a job whose link has no usable identity is skipped, never run on the admin token" do
       # Falling back to config.token here would sync this user against the
       # admin's Plex watch state, which is the merge bug per-user links exist to
-      # prevent. Task 8 refuses to create tokenless links; this is the matching
-      # guard on the consuming side.
+      # prevent. Task 8 refuses to create identity-less links; this is the
+      # matching guard on the consuming side.
       user = user_fixture()
 
       {:ok, config} =
@@ -251,7 +317,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
         Settings.upsert_media_server_user_link(%{
           media_server_config_id: config.id,
           user_id: user.id,
-          plex_account_id: "2",
+          remote_user_id: nil,
           access_token: nil,
           enabled: true
         })
@@ -265,7 +331,175 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
 
       run = Sync.last_run("plex", config.id)
       assert run.status == :skipped
-      assert run.skip_reason == "link_token_missing"
+      assert run.skip_reason == "link_identity_missing"
+    end
+
+    test "an individual job carrying no link is refused, never scoped to the server's own token" do
+      # "Sync now" used to enqueue exactly this shape. Resolving it to
+      # config.token made whoever pressed the button read and write the server
+      # owner's watch state, the same cross-account merge per-user links exist
+      # to prevent, through a producer no per-task review looked at.
+      user = user_fixture()
+
+      {:ok, config} =
+        Settings.create_media_server_config(%{
+          name: "Storage",
+          type: :plex,
+          url: "http://localhost:32400",
+          token: "owner-token",
+          enabled: true,
+          connection_settings: %{"sync_watched" => "true"}
+        })
+
+      assert {:ok, :skipped} =
+               perform_job(MediaServerWatchedSync, %{
+                 "config_id" => config.id,
+                 "user_id" => user.id
+               })
+
+      run = Sync.last_run("plex", config.id)
+      assert run.status == :skipped
+      assert run.skip_reason == "link_not_found"
+    end
+
+    test "a job whose link has a remote user id but no Plex token never runs under the admin token" do
+      # A GUID-only link is a valid Jellyfin-shaped identity, but Plex identity
+      # IS the per-user token: this scope must be refused by the provider
+      # rather than silently proceeding on config.token, the admin's own
+      # credential. That silent fallback is exactly the merge bug per-user
+      # links exist to prevent.
+      #
+      # A mapping row is seeded so the sync skips its (legitimately
+      # admin-token-scoped) refresh crawl and calls straight into
+      # `list_changes/3`, which is the call this test is guarding. Without it,
+      # the assertion below could not tell a correct refusal apart from an
+      # unrelated connection failure against a URL with no real server.
+      user = user_fixture()
+      media_item = insert(:media_item)
+
+      {:ok, config} =
+        Settings.create_media_server_config(%{
+          name: "Storage",
+          type: :plex,
+          url: "http://localhost:32400",
+          token: "admin-token",
+          enabled: true,
+          connection_settings: %{"sync_watched" => "true"}
+        })
+
+      {:ok, link} =
+        Settings.upsert_media_server_user_link(%{
+          media_server_config_id: config.id,
+          user_id: user.id,
+          remote_user_id: "2",
+          access_token: nil,
+          enabled: true
+        })
+
+      {:ok, _mapping} =
+        %Mapping{}
+        |> Mapping.changeset(%{
+          provider: "plex",
+          provider_instance_id: config.id,
+          media_item_id: media_item.id,
+          remote_id: "rk1"
+        })
+        |> Repo.insert()
+
+      # Recorded as a skip, not returned as an error. A missing credential is a
+      # misconfiguration no retry can fix: as an error it burned all three Oban
+      # attempts and landed in `discarded`, which is the exact disappearance the
+      # user reported.
+      assert {:ok, :skipped} =
+               perform_job(MediaServerWatchedSync, %{
+                 "config_id" => config.id,
+                 "user_id" => user.id,
+                 "link_id" => link.id
+               })
+
+      run = Sync.last_run("plex", config.id)
+      assert run.status == :skipped
+      assert run.skip_reason == "missing_user_token"
+      assert run.finished_at
+
+      # The run already open for this attempt became the skip. A second row
+      # would leave an unfinished `:ok` run behind saying the opposite, and the
+      # admin page reads whichever landed last.
+      assert Repo.aggregate(Mydia.Sync.Run, :count) == 1
+    end
+
+    test "a Jellyfin link naming no account is recorded as a skip, not a retryable error" do
+      # The Jellyfin half of the same misconfiguration: identity there is the
+      # account GUID rather than a token, and its absence is just as permanent.
+      bypass = Bypass.open()
+      user = user_fixture()
+      media_item = insert(:media_item)
+
+      {:ok, config} =
+        Settings.create_media_server_config(%{
+          name: "Jellyfin",
+          type: :jellyfin,
+          url: "http://localhost:#{bypass.port}",
+          token: "api-key",
+          enabled: true,
+          connection_settings: %{"sync_watched" => "true"}
+        })
+
+      # A token with no GUID is a valid-looking link that Jellyfin cannot use.
+      {:ok, link} =
+        Settings.upsert_media_server_user_link(%{
+          media_server_config_id: config.id,
+          user_id: user.id,
+          remote_user_id: nil,
+          access_token: "leftover-token",
+          enabled: true
+        })
+
+      # Seeded so the run skips its refresh crawl and calls straight into
+      # list_changes/3, the call under test.
+      {:ok, _mapping} =
+        %Mapping{}
+        |> Mapping.changeset(%{
+          provider: "jellyfin",
+          provider_instance_id: config.id,
+          media_item_id: media_item.id,
+          remote_id: "jf1"
+        })
+        |> Repo.insert()
+
+      assert {:ok, :skipped} =
+               perform_job(MediaServerWatchedSync, %{
+                 "config_id" => config.id,
+                 "user_id" => user.id,
+                 "link_id" => link.id
+               })
+
+      run = Sync.last_run("jellyfin", config.id)
+      assert run.status == :skipped
+      assert run.skip_reason == "missing_remote_user_id"
+    end
+
+    test "a job whose link id does not resolve to any link is refused, distinctly from a missing identity" do
+      user = user_fixture()
+
+      {:ok, config} =
+        Settings.create_media_server_config(%{
+          name: "Storage",
+          type: :plex,
+          url: "http://localhost:32400",
+          token: "admin-token",
+          enabled: true,
+          connection_settings: %{"sync_watched" => "true"}
+        })
+
+      assert {:ok, :skipped} =
+               perform_job(MediaServerWatchedSync, %{
+                 "config_id" => config.id,
+                 "user_id" => user.id,
+                 "link_id" => Ecto.UUID.generate()
+               })
+
+      assert Sync.last_run("plex", config.id).skip_reason == "link_not_found"
     end
 
     test "a job whose link belongs to another user is refused" do
@@ -288,7 +522,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
         Settings.upsert_media_server_user_link(%{
           media_server_config_id: config.id,
           user_id: owner.id,
-          plex_account_id: "1",
+          remote_user_id: "1",
           access_token: "owner-token",
           enabled: true
         })
@@ -303,11 +537,42 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
       assert Sync.last_run("plex", config.id).skip_reason == "link_user_mismatch"
     end
 
+    test "skips a link that carries neither a token nor a remote user id" do
+      user = user_fixture()
+
+      {:ok, server} =
+        Settings.create_media_server_config(%{
+          name: "Jellyfin",
+          type: :jellyfin,
+          url: "http://localhost:8096",
+          token: "api-key",
+          enabled: true,
+          connection_settings: %{"sync_watched" => true}
+        })
+
+      {:ok, link} =
+        Settings.upsert_media_server_user_link(%{
+          media_server_config_id: server.id,
+          user_id: user.id,
+          enabled: true
+        })
+
+      assert {:ok, :skipped} =
+               perform_job(MediaServerWatchedSync, %{
+                 "config_id" => server.id,
+                 "user_id" => user.id,
+                 "link_id" => link.id
+               })
+
+      assert %{status: :skipped, skip_reason: "link_identity_missing"} =
+               Sync.last_run("jellyfin", server.id)
+    end
+
     test "a Plex config with watched sync on and a blank token records no_token and enqueues nothing" do
       # token isn't validate_required on MediaServerConfig, so a Plex config
       # saved with sync on but no token would otherwise reach enqueue_linked_users,
       # record :seeding_links every tick, and enqueue a seed job that can never
-      # produce a link (PlexLinkSeed.seedable?/1 also requires a token). That is
+      # produce a link (MediaServerLinkSeed.seedable?/1 also requires a token). That is
       # a job reporting healthy while doing nothing forever.
       {:ok, config} =
         Settings.create_media_server_config(%{
@@ -323,7 +588,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
 
       assert Sync.last_run("plex", config.id).skip_reason == "no_token"
       assert [] = all_enqueued(worker: MediaServerWatchedSync) |> Enum.reject(& &1.args["mode"])
-      assert [] = all_enqueued(worker: Mydia.Jobs.PlexLinkSeed)
+      assert [] = all_enqueued(worker: Mydia.Jobs.MediaServerLinkSeed)
     end
 
     test "a config with no links seeds them instead of skipping forever" do
@@ -347,48 +612,43 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
       assert :ok = perform_job(MediaServerWatchedSync, %{"mode" => "all_enabled"})
 
       assert Sync.last_run("plex", config.id).skip_reason == "seeding_links"
-      assert_enqueued(worker: Mydia.Jobs.PlexLinkSeed, args: %{"config_id" => config.id})
+      assert_enqueued(worker: Mydia.Jobs.MediaServerLinkSeed, args: %{"config_id" => config.id})
 
       # Still no per-user job: defaulting to the admin token is the bug this
       # test has always guarded, and seeding must not reintroduce it.
       assert [] = all_enqueued(worker: MediaServerWatchedSync) |> Enum.reject(& &1.args["mode"])
     end
 
-    test "stops announcing seeding once seeding has reported nothing to link" do
-      # :no_matching_users is terminal: no Plex profile shares a name with a
-      # Mydia user, and that does not change on its own. Re-recording
-      # :seeding_links every tick buried that verdict under a newer row, so the
-      # UI read "Linking Plex Home profiles" indefinitely while nothing was
-      # being linked and nothing ever would be.
+    test "a server that has already been seeded and now has no links is left alone" do
+      # Seeding is a first run, not a repair. The mapping modal promises that
+      # clearing a mapping stops watched sync for that user; re-seeding on the
+      # next tick would put every one of them back.
       {:ok, config} =
         Settings.create_media_server_config(%{
-          name: "Storage",
+          name: "Seeded Plex",
           type: :plex,
           url: "http://localhost:32400",
           token: "tok",
           enabled: true,
-          connection_settings: %{"sync_watched" => "true"}
+          connection_settings: %{
+            "sync_watched" => "true",
+            "plex_links_seeded_at" => "2026-08-12T00:00:00Z"
+          }
         })
 
-      Sync.record_skip(
-        %{provider: "plex", provider_instance_id: config.id, user_id: nil},
-        :no_matching_users
-      )
+      _user = user_fixture()
 
       assert :ok = perform_job(MediaServerWatchedSync, %{"mode" => "all_enabled"})
 
-      runs = Mydia.Repo.all(Mydia.Sync.Run)
-      refute Enum.any?(runs, &(&1.skip_reason == "seeding_links"))
-      assert Enum.count(runs, &(&1.skip_reason == "no_matching_users")) == 2
-
-      # Re-seeding would only reach the same verdict; the operator has to map
-      # the profiles by hand from here.
-      assert [] = all_enqueued(worker: Mydia.Jobs.PlexLinkSeed)
+      assert Sync.last_run("plex", config.id).skip_reason == "no_user_mapping"
+      assert [] = all_enqueued(worker: Mydia.Jobs.MediaServerLinkSeed)
+      assert [] = all_enqueued(worker: MediaServerWatchedSync) |> Enum.reject(& &1.args["mode"])
     end
 
     test "a transient seeding failure is retried rather than treated as terminal" do
-      # link_seeding_failed means plex.tv was unreachable, which is exactly the
-      # kind of thing that fixes itself. Only :no_matching_users is terminal.
+      # link_seeding_failed means the server was unreachable, which is exactly
+      # the kind of thing that fixes itself. Only a completed pass stamps the
+      # config, so an unstamped one is always worth another try.
       {:ok, config} =
         Settings.create_media_server_config(%{
           name: "Storage",
@@ -407,7 +667,56 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
       assert :ok = perform_job(MediaServerWatchedSync, %{"mode" => "all_enabled"})
 
       assert Sync.last_run("plex", config.id).skip_reason == "seeding_links"
-      assert_enqueued(worker: Mydia.Jobs.PlexLinkSeed, args: %{"config_id" => config.id})
+      assert_enqueued(worker: Mydia.Jobs.MediaServerLinkSeed, args: %{"config_id" => config.id})
+    end
+
+    # Jellyfin seeds by username match the same way Plex does, so a link-less
+    # Jellyfin server queues a seed rather than sitting on :no_user_mapping
+    # forever. The invariant both providers share is the one that matters: no
+    # link, no per-user job, so nothing ever runs against the server's own
+    # credential.
+    test "a Jellyfin config with no links seeds them and enqueues no per-user job" do
+      {:ok, config} =
+        Settings.create_media_server_config(%{
+          name: "Jellyfin",
+          type: :jellyfin,
+          url: "http://localhost:8096",
+          token: "api-key",
+          enabled: true,
+          connection_settings: %{"sync_watched" => "true"}
+        })
+
+      _u1 = user_fixture()
+      _u2 = user_fixture()
+
+      assert :ok = perform_job(MediaServerWatchedSync, %{"mode" => "all_enabled"})
+
+      assert Sync.last_run("jellyfin", config.id).skip_reason == "seeding_links"
+      assert_enqueued(worker: Mydia.Jobs.MediaServerLinkSeed, args: %{"config_id" => config.id})
+      assert [] = all_enqueued(worker: MediaServerWatchedSync) |> Enum.reject(& &1.args["mode"])
+    end
+
+    test "a seeded Jellyfin server with no links is left alone too" do
+      {:ok, config} =
+        Settings.create_media_server_config(%{
+          name: "Jellyfin",
+          type: :jellyfin,
+          url: "http://localhost:8096",
+          token: "api-key",
+          enabled: true,
+          connection_settings: %{
+            "sync_watched" => "true",
+            "plex_links_seeded_at" => "2026-08-12T00:00:00Z"
+          }
+        })
+
+      _u1 = user_fixture()
+
+      assert :ok = perform_job(MediaServerWatchedSync, %{"mode" => "all_enabled"})
+
+      assert Sync.last_run("jellyfin", config.id).skip_reason == "no_user_mapping"
+      assert [] = all_enqueued(worker: Mydia.Jobs.MediaServerLinkSeed)
+      assert [] = all_enqueued(worker: MediaServerWatchedSync) |> Enum.reject(& &1.args["mode"])
     end
   end
 
@@ -457,5 +766,24 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
                  "link_id" => ids.link_id
                })
     end
+  end
+
+  defp link_fixture(config, user, attrs \\ %{}) do
+    {:ok, link} =
+      Settings.upsert_media_server_user_link(
+        Map.merge(
+          %{
+            media_server_config_id: config.id,
+            user_id: user.id,
+            remote_user_id: "remote-#{System.unique_integer([:positive])}",
+            remote_username: user.username,
+            access_token: "user-token",
+            enabled: true
+          },
+          attrs
+        )
+      )
+
+    link
   end
 end

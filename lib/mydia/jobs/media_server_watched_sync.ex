@@ -4,25 +4,37 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
 
   Three modes:
   - **Individual**: Sync a specific server for a specific user.
-    Args: `%{"config_id" => id, "user_id" => uid, "link_id" => lid}` (`link_id`
-    is optional; without it the config's own token is used).
-  - **Server**: Fan out to an individual job for every enabled link on one
-    server, seeding Plex Home links first when none exist yet. This is what
-    the "Sync Now" button triggers, and what `Mydia.Jobs.PlexLinkSeed`
-    enqueues after a successful seed.
+    Args: `%{"config_id" => id, "user_id" => uid, "link_id" => lid}`.
+    `link_id` says which remote account the user is; a job without one is
+    recorded as a skip rather than run against the server owner's account.
+  - **Server**: Fan out to an individual job for every link on one server,
+    seeding links first when a server has none and has never been seeded. This
+    is what the "Sync Now" button triggers, and what
+    `Mydia.Jobs.MediaServerLinkSeed` enqueues after a successful seed. Fanning
+    out per link is also what keeps a manual sync off the server owner's
+    account: every job it produces names a link, so none of them can fall
+    through to the config's own token.
     Args: `%{"mode" => "server", "config_id" => id}`
   - **Scheduler**: Find every enabled server with watched sync enabled and
     fan out the same way, one server at a time.
     Args: `%{"mode" => "all_enabled"}`
+
+  Unrecognised args parse as the scheduler rather than crashing the worker.
   """
 
   use Oban.Worker, queue: :integrations, max_attempts: 3
+
+  # Provider refusals that no retry can fix: the link is missing the identity
+  # that provider's auth model needs. `Plex` wants a per-user token, `Jellyfin`
+  # wants an account GUID.
+  @misconfigured [:missing_user_token, :missing_remote_user_id]
 
   alias Mydia.MediaServer.Error
   alias Mydia.Repo
   alias Mydia.Settings
   alias Mydia.Settings.MediaServerUserLink
   alias Mydia.WatchSync
+  alias Mydia.WatchSync.Providers.Jellyfin
   alias Mydia.WatchSync.Providers.Plex
 
   require Logger
@@ -53,11 +65,24 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
         link_id: Map.get(args, "link_id")
       }
     end
+
+    # Anything else, an empty map included, runs as the scheduler rather than
+    # crashing the worker to `discarded`. Args this worker cannot read are a
+    # reason to do the scheduled thing, not to burn three attempts.
+    def parse(_args), do: %__MODULE__{mode: "all_enabled"}
   end
 
   @spec perform(Oban.Job.t()) :: :ok | {:ok, term()} | {:error, term()} | {:snooze, pos_integer()}
   @impl Oban.Worker
-  def perform(%Oban.Job{args: %{"mode" => "all_enabled"}}) do
+  def perform(%Oban.Job{args: raw_args}) do
+    case Args.parse(raw_args) do
+      %Args{mode: "all_enabled"} -> perform_all_enabled()
+      %Args{mode: "server"} = args -> perform_server(args)
+      %Args{} = args -> perform_individual(args)
+    end
+  end
+
+  defp perform_all_enabled do
     Settings.list_media_server_configs()
     |> Enum.each(fn config ->
       case skip_reason(config) do
@@ -72,7 +97,11 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
   # Syncs one server across every linked user. This is what the "Sync Now"
   # button and a successful link seed both trigger, so manual and scheduled
   # runs share one fan-out rather than drifting apart.
-  def perform(%Oban.Job{args: %{"mode" => "server", "config_id" => config_id}}) do
+  #
+  # It is also why "Sync now" no longer needs to resolve the pressing user's
+  # own link: this fans out to every linked user on the server, and each job it
+  # produces carries a link id, so none of them can reach the config's token.
+  defp perform_server(%Args{config_id: config_id}) do
     config = Settings.get_media_server_config!(config_id)
 
     case skip_reason(config) do
@@ -84,18 +113,15 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
   rescue
     # Deleting a media server while its jobs are still queued is ordinary
     # operator behaviour, and a deleted config is a terminal state rather than a
-    # failure worth three retries. Mirrors Mydia.Jobs.PlexLinkSeed.
+    # failure worth three retries. Mirrors Mydia.Jobs.MediaServerLinkSeed.
     Ecto.NoResultsError -> :ok
   end
 
-  def perform(%Oban.Job{args: raw_args}) do
-    args = Args.parse(raw_args)
-    config_id = args.config_id
-    user_id = args.user_id
+  defp perform_individual(%Args{config_id: config_id, user_id: user_id} = args) do
     config = Settings.get_media_server_config!(config_id)
 
-    case apply_link_token(config, args.link_id, user_id) do
-      {:ok, config} -> run_sync(config, user_id)
+    case resolve_user_scope(config, args.link_id, user_id) do
+      {:ok, scope} -> run_sync(config, scope)
       {:error, reason} -> skip(config, reason, user_id)
     end
   rescue
@@ -103,22 +129,21 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
     Ecto.NoResultsError -> :ok
   end
 
-  defp run_sync(config, user_id) do
+  defp run_sync(config, scope) do
     if config.enabled && watched_sync_enabled?(config) do
       direction = get_sync_direction(config)
 
-      Logger.info("Starting watched sync (#{direction}) for #{config.name}, user #{user_id}")
+      Logger.info(
+        "Starting watched sync (#{direction}) for #{config.name}, user #{scope.user_id}"
+      )
 
       with {:ok, provider} <- provider_for(config) do
         # A failed run insert must not take the sync down with it. Bookkeeping is
         # there to explain what happened, so losing it degrades observability
         # rather than the feature.
-        run = start_run(config, user_id, direction)
+        run = start_run(config, scope.user_id, direction)
 
-        case WatchSync.sync(
-               provider,
-               config,
-               %{user_id: user_id, access_token: config.token},
+        case WatchSync.sync(provider, config, scope,
                provider: to_string(config.type),
                direction: direction
              ) do
@@ -129,6 +154,15 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
             update_last_sync_timestamp(config)
             :ok
 
+          # A missing credential is a permanent misconfiguration, not a bad
+          # minute on the network. Returned as an error it burned all three
+          # Oban attempts and landed the job in `discarded`, where nothing in
+          # the UI could say why. Recorded as a skip it reads like every other
+          # credential problem on the page, and the operator gets told which
+          # mapping to fix.
+          {:error, reason} when reason in @misconfigured ->
+            skip(config, reason, scope.user_id, run)
+
           {:error, reason} ->
             finish_run(run, :error, %{}, describe_error(reason))
             {:error, reason}
@@ -138,15 +172,21 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
       # Reachable when a config is disabled between enqueue and execution.
       # Rare, but returning {:ok, :skipped} with no trace is the exact pattern
       # this change exists to remove, so it is recorded like any other skip.
-      skip(config, skip_reason(config) || :sync_disabled, user_id)
+      skip(config, skip_reason(config) || :sync_disabled, scope.user_id)
     end
   end
 
-  defp skip(config, reason, user_id) do
+  defp skip(config, reason, user_id, run \\ nil) do
     Logger.debug("Skipping watched sync for #{config.name}: #{reason}")
-    record_skip(config, reason, user_id)
+    write_skip(run, config, reason, user_id)
     {:ok, :skipped}
   end
+
+  # A run already open for this attempt becomes the skip. Inserting a second row
+  # instead would leave an unfinished `:ok` run next to it, and the admin page
+  # reads whichever landed last.
+  defp write_skip(nil, config, reason, user_id), do: record_skip(config, reason, user_id)
+  defp write_skip(run, _config, reason, _user_id), do: Mydia.Sync.skip_run(run, reason)
 
   # Returns the run, or nil when the insert failed. `finish_run/4` tolerates nil
   # so a bookkeeping failure degrades observability instead of failing the sync.
@@ -186,13 +226,14 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
   end
 
   defp provider_for(%{type: :plex}), do: {:ok, Plex}
+  defp provider_for(%{type: :jellyfin}), do: {:ok, Jellyfin}
   defp provider_for(_), do: {:error, :unsupported_provider}
 
   # token isn't validate_required on MediaServerConfig. Without this, a Plex
   # config saved with sync on but a blank token would pass skip_reason/1,
   # record :seeding_links on every tick, and enqueue a seed job that can never
-  # produce a link (PlexLinkSeed.seedable?/1 also requires a token) — a job
-  # reporting healthy while doing nothing forever.
+  # produce a link (MediaServerLinkSeed.seedable?/1 also requires a token), which is a
+  # job reporting healthy while doing nothing forever.
   defp has_token?(%{token: token}), do: is_binary(token) and token != ""
 
   defp record_skip(config, reason, user_id \\ nil) do
@@ -206,83 +247,97 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
     )
   end
 
-  defp enqueue_linked_users(config) do
-    case Settings.list_media_server_user_links(config.id) |> Enum.filter(& &1.enabled) do
-      # Links are created by Mydia.Jobs.PlexLinkSeed and nothing else. Recording
-      # :no_user_mapping and stopping is exactly what made this job report
-      # healthy while doing nothing: seed first, and the seed job re-enters sync
-      # once it has produced links.
-      [] ->
-        report_no_links(config)
+  # Enqueues one individual sync for the user a link names. Every producer of a
+  # per-user job goes through here, and the match on `%MediaServerUserLink{}` is
+  # what makes that worth something: `user_id` and `link_id` are read off the
+  # same row, so no caller can pair a user with someone else's identity by
+  # building the args map itself.
+  @spec enqueue(map(), MediaServerUserLink.t()) ::
+          {:ok, Oban.Job.t()} | {:error, Ecto.Changeset.t()}
+  defp enqueue(config, %MediaServerUserLink{} = link) do
+    %{"config_id" => config.id, "user_id" => link.user_id, "link_id" => link.id}
+    |> __MODULE__.new()
+    |> safe_insert()
+  end
 
-      links ->
-        Enum.each(links, fn link -> enqueue(config, link) end)
+  defp enqueue_linked_users(config) do
+    case Settings.list_media_server_user_links(config.id) do
+      [] -> handle_no_links(config)
+      links -> Enum.each(links, fn link -> enqueue(config, link) end)
     end
   end
 
-  # Seeding is only worth announcing while it can still produce something. Once
-  # PlexLinkSeed reports :no_matching_users — no Plex profile shares a name with
-  # a Mydia user — that verdict does not change on its own, and re-recording
-  # :seeding_links on the next tick buried it under a newer row. The UI then read
-  # "Linking Plex Home profiles" indefinitely for a state that was already dead,
-  # hiding the one message that tells the operator to map the profiles by hand.
-  defp report_no_links(config) do
-    if seeding_exhausted?(config) do
-      record_skip(config, :no_matching_users)
+  # Seeding is a first run, not a repair. Links are the operator's now: the
+  # account mapping modal creates, repoints and removes them, promising that
+  # watched sync will skip a user until they are mapped again. So a server that
+  # has already been through a seeding pass and now has nothing mapped is a
+  # decision, not a gap, and re-seeding it would put back the very rows the
+  # operator cleared. Only a server nobody has ever seeded is filled in
+  # automatically.
+  #
+  # This also stops :seeding_links being re-recorded on every tick. A seeding
+  # pass that matched no account stamps the config all the same, so its
+  # :no_matching_users verdict is no longer buried under a newer "Linking
+  # accounts" row that describes a state already dead.
+  defp handle_no_links(config) do
+    if Mydia.Jobs.MediaServerLinkSeed.seeded_before?(config) do
+      record_skip(config, :no_user_mapping)
     else
       enqueue_seed(config)
       record_skip(config, :seeding_links)
     end
   end
 
-  # Only :no_matching_users is terminal. :link_seeding_failed means plex.tv was
-  # unreachable, which is worth another attempt.
-  defp seeding_exhausted?(config) do
-    case Mydia.Sync.last_run(to_string(config.type), config.id) do
-      %{status: :skipped, skip_reason: "no_matching_users"} -> true
-      _ -> false
-    end
-  end
-
   defp enqueue_seed(config) do
     %{"config_id" => config.id}
-    |> Mydia.Jobs.PlexLinkSeed.new()
+    |> Mydia.Jobs.MediaServerLinkSeed.new()
     |> safe_insert()
   end
 
-  defp enqueue(config, link) do
-    %{"config_id" => config.id, "user_id" => link.user_id, "link_id" => link.id}
-    |> __MODULE__.new()
-    |> safe_insert()
-  end
-
-  # Per-user Plex tokens live on the link. Without swapping them onto the
-  # config, every synced user would still read and write the admin account.
+  # A link must say *which* remote account a user is, or the sync would run
+  # against the admin account and merge two people's watch history. That
+  # identity is a per-user token on Plex and a user GUID on Jellyfin, so the
+  # scope carries whichever the link holds and each provider reads the field
+  # its auth model uses. Only a link holding neither is refused.
   #
-  # A job with no link_id predates per-user mapping (or is the single-user
-  # fallback), where the config token is the right one. But a job that names a
-  # link whose token cannot be resolved must NOT quietly fall back to the config
-  # token: that would sync one user against another account's watch state, which
-  # is exactly the merge bug links exist to prevent.
+  # A link's access_token is carried as-is, nil included: it must never fall
+  # back to the server's own config.token, because that IS the admin account
+  # for token-based providers. A link with a GUID but no token is a valid
+  # Jellyfin-shaped scope and a refused Plex-shaped one; each provider decides
+  # which fields it needs, not this function.
   #
-  # The link must also belong to the user being synced. Resolving by link id
-  # alone would let a malformed or stale job pair user A with user B's token,
-  # reintroducing the same merge from the other direction.
-  defp apply_link_token(config, nil, _user_id), do: {:ok, config}
+  # The link must also belong to the user being synced, so a stale or malformed
+  # job cannot pair user A with user B's identity.
+  #
+  # A job carrying no link at all is refused rather than falling back to the
+  # server's own config.token. That fallback made whoever pressed "Sync now"
+  # read and write the server owner's watch state. Nothing produces that shape
+  # any more: `enqueue/2` is the only producer of a per-user job and it reads
+  # the user and the link off one row, while "Sync now" enqueues server mode and
+  # lets that fan-out name the links.
+  defp resolve_user_scope(_config, nil, _user_id), do: {:error, :link_not_found}
 
-  defp apply_link_token(config, link_id, user_id) do
+  defp resolve_user_scope(_config, link_id, user_id) do
     case Repo.get(MediaServerUserLink, link_id) do
-      %MediaServerUserLink{user_id: ^user_id, access_token: token}
-      when is_binary(token) and token != "" ->
-        {:ok, %{config | token: token}}
-
-      %MediaServerUserLink{user_id: other} when other != user_id ->
-        {:error, :link_user_mismatch}
-
-      _ ->
-        {:error, :link_token_missing}
+      %MediaServerUserLink{user_id: ^user_id} = link -> scope_from_link(link, user_id)
+      %MediaServerUserLink{} -> {:error, :link_user_mismatch}
+      nil -> {:error, :link_not_found}
     end
   end
+
+  defp scope_from_link(link, user_id) do
+    token = presence(link.access_token)
+    remote_user_id = presence(link.remote_user_id)
+
+    if is_nil(token) and is_nil(remote_user_id) do
+      {:error, :link_identity_missing}
+    else
+      {:ok, %{user_id: user_id, remote_user_id: remote_user_id, access_token: token}}
+    end
+  end
+
+  defp presence(value) when is_binary(value) and value != "", do: value
+  defp presence(_value), do: nil
 
   defp describe_error(%Error{} = error), do: Error.message(error)
   defp describe_error(reason), do: inspect(reason)

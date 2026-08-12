@@ -89,6 +89,7 @@ defmodule Mydia.Application do
         remote_access_children() ++
         client_health_children() ++
         indexer_health_children() ++
+        media_server_health_children() ++
         relay_children() ++
         oban_children() ++
         oidc_children() ++
@@ -176,6 +177,15 @@ defmodule Mydia.Application do
     # Don't start IndexerHealth in test environment to avoid SQL Sandbox conflicts
     if Application.get_env(:mydia, :start_health_monitors, true) do
       [Mydia.Indexers.Health]
+    else
+      []
+    end
+  end
+
+  defp media_server_health_children do
+    # Don't start MediaServerHealth in test environment to avoid SQL Sandbox conflicts
+    if Application.get_env(:mydia, :start_health_monitors, true) do
+      [Mydia.MediaServer.Health]
     else
       []
     end

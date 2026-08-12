@@ -4,6 +4,7 @@
       media_servers={@media_servers}
       media_server_health={@media_server_health}
       last_runs={@last_runs}
+      link_counts={@link_counts}
     />
 
     <%!-- Media Server Modal --%>
@@ -20,15 +21,15 @@
       />
     <% end %>
 
-    <%!-- Plex Home Profile Mapping Modal --%>
-    <%= if assigns[:plex_profiles_config] do %>
-      <MydiaWeb.AdminMediaServersLive.Components.plex_profiles_modal
-        config={@plex_profiles_config}
-        state={@plex_profiles_state}
-        profiles={assigns[:plex_profiles] || []}
-        users={assigns[:plex_profiles_users] || []}
-        mapping={assigns[:plex_profiles_mapping] || %{}}
-        saving={assigns[:plex_profiles_saving] || false}
+    <%!-- Account Mapping Modal --%>
+    <%= if assigns[:account_mapping_config] do %>
+      <MydiaWeb.AdminMediaServersLive.Components.account_mapping_modal
+        config={@account_mapping_config}
+        state={@account_mapping_state}
+        accounts={assigns[:account_mapping_accounts] || []}
+        users={assigns[:account_mapping_users] || []}
+        mapping={assigns[:account_mapping] || %{}}
+        saving={assigns[:account_mapping_saving] || false}
       />
     <% end %>
   </.admin_page>

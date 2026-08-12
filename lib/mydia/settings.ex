@@ -585,11 +585,27 @@ defmodule Mydia.Settings do
     to: Mydia.Settings.ServiceConfigs
 
   @doc """
-  Upserts a media server user link, keyed by (config, user).
+  Gets the link binding one Mydia user to one media server, or nil.
   """
-  @spec upsert_media_server_user_link(map()) ::
-          {:ok, MediaServerUserLink.t()} | {:error, Ecto.Changeset.t()}
-  defdelegate upsert_media_server_user_link(attrs), to: Mydia.Settings.ServiceConfigs
+  @spec get_media_server_user_link(binary(), binary()) :: MediaServerUserLink.t() | nil
+  defdelegate get_media_server_user_link(media_server_config_id, user_id),
+    to: Mydia.Settings.ServiceConfigs
+
+  @doc """
+  Upserts a media server user link, keyed by (config, user).
+
+  Refuses with `{:error, :account_already_mapped}` when a different Mydia user is
+  already mapped to that remote account on the same server.
+
+  Pass `only_new: true` to refuse with `{:error, :link_exists}` rather than touch
+  a mapping that is already there. Account discovery and link seeding both do,
+  because they match by username and a hand-made mapping is exactly the case
+  where the two names deliberately differ.
+  """
+  @spec upsert_media_server_user_link(map(), keyword()) ::
+          {:ok, MediaServerUserLink.t()}
+          | {:error, Ecto.Changeset.t() | :account_already_mapped | :link_exists}
+  defdelegate upsert_media_server_user_link(attrs, opts \\ []), to: Mydia.Settings.ServiceConfigs
 
   @doc """
   Deletes a media server user link.
