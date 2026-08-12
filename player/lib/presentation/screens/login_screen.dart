@@ -8,6 +8,7 @@ import '../../core/auth/auth_service.dart';
 import '../../core/p2p/p2p_service.dart' show defaultRelayUrl;
 import '../../core/theme/colors.dart';
 import '../widgets/glass_surface.dart';
+import '../widgets/storage_unavailable_dialog.dart';
 import '../widgets/update_required_dialog.dart';
 import 'login/login_controller.dart';
 
@@ -197,16 +198,30 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     _pairWithQrData(qrData);
   }
 
+  /// Finishes a successful pairing or login by entering the app.
+  ///
+  /// When the credentials could not be written to durable storage, the user
+  /// has to acknowledge that before going in. This is the only moment they are
+  /// told, because the login screen is gone immediately afterwards.
+  Future<void> _completePairing() async {
+    if (!mounted) return;
+
+    final state = ref.read(loginControllerProvider);
+    if (!state.success) return;
+
+    if (state.credentialsNotPersisted) {
+      await showStorageUnavailableDialog(context);
+      if (!mounted) return;
+    }
+
+    context.go('/');
+  }
+
   Future<void> _pairWithQrData(QrPairingData qrData) async {
     final controller = ref.read(loginControllerProvider.notifier);
     await controller.pairWithQrCode(qrData);
 
-    if (mounted) {
-      final state = ref.read(loginControllerProvider);
-      if (state.success) {
-        context.go('/');
-      }
-    }
+    await _completePairing();
   }
 
   Future<void> _handleLogin() async {
@@ -219,12 +234,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       _passwordController.text,
     );
 
-    if (mounted) {
-      final state = ref.read(loginControllerProvider);
-      if (state.success) {
-        context.go('/');
-      }
-    }
+    await _completePairing();
   }
 
   Future<void> _handleClaimCodeSubmit() async {
@@ -235,12 +245,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     // Custom relay URL is no longer needed - we use IPFS DHT bootstrap
     await controller.pairWithClaimCode(code);
 
-    if (mounted) {
-      final state = ref.read(loginControllerProvider);
-      if (state.success) {
-        context.go('/');
-      }
-    }
+    await _completePairing();
   }
 
   @override
