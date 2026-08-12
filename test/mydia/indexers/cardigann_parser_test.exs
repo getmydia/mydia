@@ -255,6 +255,28 @@ defmodule Mydia.Indexers.CardigannParserTest do
       assert is_map(parsed.download.infohash)
     end
 
+    test "preserves the nested selectors of an infohash block" do
+      assert {:ok, %Parsed{} = parsed} =
+               "test/fixtures/cardigann/magnetdownload.yml"
+               |> File.read!()
+               |> CardigannParser.parse_definition()
+
+      assert parsed.download.infohash.usebeforeresponse == true
+      assert parsed.download.infohash.hash.selector == ":root"
+      assert parsed.download.infohash.title.selector == ":root"
+      assert [%{"name" => "regexp"} | _] = parsed.download.infohash.hash.filters
+    end
+
+    test "parses the before-request of a download block" do
+      assert {:ok, %Parsed{} = parsed} =
+               "test/fixtures/cardigann/magnetdownload.yml"
+               |> File.read!()
+               |> CardigannParser.parse_definition()
+
+      assert parsed.download.before.path == "api/json_info"
+      assert parsed.download.before.inputs["hashes"] =~ "re_replace"
+    end
+
     test "parses indexer with settings" do
       assert {:ok, %Parsed{} = parsed} =
                CardigannParser.parse_definition(@indexer_with_settings)
