@@ -8,6 +8,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
   alias Mydia.Media
   alias Mydia.Metadata
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
+  alias MydiaWeb.Live.Helpers.MediaRequestHelpers
 
   @languages [
     {"en", "English"},
@@ -69,6 +70,8 @@ defmodule MydiaWeb.DiscoverLive.Index do
       |> assign(:genres, [])
       |> assign(:library_status_map, %{})
       |> assign(:adding_item_id, nil)
+      |> assign(:requesting_item_id, nil)
+      |> assign(:request_status_map, %{})
       |> assign(:selected_item, nil)
       |> assign(:selected_metadata, nil)
       |> assign(:load_error, nil)
@@ -135,7 +138,11 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
       # Load library status map
       library_status_map = Media.get_library_status_map()
-      socket = assign(socket, :library_status_map, library_status_map)
+
+      socket =
+        socket
+        |> assign(:library_status_map, library_status_map)
+        |> assign(:request_status_map, MediaRequestHelpers.request_status_map())
 
       send(self(), :load_data)
 
@@ -225,6 +232,17 @@ defmodule MydiaWeb.DiscoverLive.Index do
     media_type_atom = String.to_existing_atom(media_type)
     socket = assign(socket, :adding_item_id, provider_id)
     send(self(), {:add_media_to_library, provider_id, media_type_atom, params["library_path_id"]})
+    {:noreply, socket}
+  end
+
+  def handle_event(
+        "request_media",
+        %{"tmdb_id" => provider_id, "media_type" => media_type},
+        socket
+      ) do
+    media_type_atom = String.to_existing_atom(media_type)
+    socket = assign(socket, :requesting_item_id, provider_id)
+    send(self(), {:request_media, provider_id, media_type_atom})
     {:noreply, socket}
   end
 
@@ -354,7 +372,9 @@ defmodule MydiaWeb.DiscoverLive.Index do
          ) do
       {:ok, media_item, updated_map} ->
         items =
-          MediaAddHelpers.enrich_with_library_status(socket.assigns.items, updated_map)
+          socket.assigns.items
+          |> MediaAddHelpers.enrich_with_library_status(updated_map)
+          |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)
 
         {:noreply,
          socket
@@ -380,13 +400,58 @@ defmodule MydiaWeb.DiscoverLive.Index do
     end
   end
 
+  def handle_info({:request_media, provider_id, media_type}, socket) do
+    case Enum.find(socket.assigns.items, &(to_string(&1.provider_id) == provider_id)) do
+      nil ->
+        {:noreply, assign(socket, :requesting_item_id, nil)}
+
+      item ->
+        {:noreply, submit_request(socket, item, media_type)}
+    end
+  end
+
+  defp submit_request(socket, item, media_type) do
+    case MediaRequestHelpers.handle_request_media(
+           item,
+           media_type,
+           socket.assigns.current_user.id
+         ) do
+      {:ok, request, status_updates} ->
+        request_status_map = Map.merge(socket.assigns.request_status_map, status_updates)
+
+        items =
+          MediaRequestHelpers.enrich_with_request_status(socket.assigns.items, request_status_map)
+
+        socket
+        |> assign(:requesting_item_id, nil)
+        |> assign(:request_status_map, request_status_map)
+        |> assign(:items, items)
+        |> put_flash(:info, "#{request.title} requested. An admin will review it soon.")
+
+      {:error, reason} ->
+        socket
+        |> assign(:requesting_item_id, nil)
+        |> put_flash(:error, request_error_message(reason))
+    end
+  end
+
+  defp request_error_message(:duplicate_media), do: "That title is already in the library."
+  defp request_error_message(:duplicate_request), do: "Someone has already requested that title."
+
+  defp request_error_message(%Ecto.Changeset{} = changeset),
+    do: "Could not submit the request: #{MediaAddHelpers.format_changeset_errors(changeset)}"
+
+  defp request_error_message(_), do: "Could not submit the request. Please try again."
+
   # Private helpers
 
   defp handle_load_result(socket, result, mode) do
     case result do
       {:ok, %{results: results, page: page, total_pages: total_pages}} ->
         enriched =
-          MediaAddHelpers.enrich_with_library_status(results, socket.assigns.library_status_map)
+          results
+          |> MediaAddHelpers.enrich_with_library_status(socket.assigns.library_status_map)
+          |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)
 
         items =
           if mode == :append do
@@ -406,7 +471,9 @@ defmodule MydiaWeb.DiscoverLive.Index do
       {:ok, results} when is_list(results) ->
         # Search returns a flat list
         enriched =
-          MediaAddHelpers.enrich_with_library_status(results, socket.assigns.library_status_map)
+          results
+          |> MediaAddHelpers.enrich_with_library_status(socket.assigns.library_status_map)
+          |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)
 
         items =
           if mode == :append do
