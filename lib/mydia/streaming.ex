@@ -19,7 +19,11 @@ defmodule Mydia.Streaming do
       :episode_info,
       :mode,
       :started_at,
-      :ready
+      :ready,
+      :media_file_id,
+      :bitrate_bps,
+      :position_seconds,
+      :duration_seconds
     ]
   end
 
@@ -79,6 +83,14 @@ defmodule Mydia.Streaming do
               {movie.title, :movie, nil}
           end
 
+        content_id =
+          case media_file do
+            %{episode_id: episode_id} when not is_nil(episode_id) -> [episode_id: episode_id]
+            %{media_item_id: media_item_id} -> [media_item_id: media_item_id]
+          end
+
+        progress = user && Mydia.Playback.get_progress(user.id, content_id)
+
         %ActiveSession{
           session_id: session_id,
           user: user,
@@ -87,7 +99,11 @@ defmodule Mydia.Streaming do
           episode_info: episode_info,
           mode: mode,
           started_at: started_at,
-          ready: ready
+          ready: ready,
+          media_file_id: media_file_id,
+          bitrate_bps: media_file.bitrate,
+          position_seconds: progress && progress.position_seconds,
+          duration_seconds: progress && progress.duration_seconds
         }
       else
         nil
