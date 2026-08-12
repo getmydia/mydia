@@ -1,14 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/presentation/screens/continue_watching/continue_watching_screen.dart';
+import 'package:player/presentation/widgets/browse_grid.dart';
 import 'package:player/presentation/widgets/media_poster.dart';
 
 import '../../../test_utils/mock_network_images.dart';
 import '../../../test_utils/stub_graphql_client.dart';
+
+class _StubAuthState extends AuthStateNotifier {
+  @override
+  AsyncValue<AuthStatus> build() =>
+      const AsyncValue.data(AuthStatus.authenticated);
+}
 
 Map<String, dynamic> _continueWatchingResponse(
         List<Map<String, dynamic>> items) =>
@@ -68,6 +76,7 @@ Future<void> pumpContinueWatchingScreen(
           ),
           castCapabilitiesProvider
               .overrideWithValue(const CastCapabilities.full()),
+          authStateProvider.overrideWith(_StubAuthState.new),
         ],
         child: const MaterialApp(home: ContinueWatchingScreen()),
       ),
@@ -106,5 +115,32 @@ void main() {
     );
 
     expect(find.text('Nothing in progress.'), findsOneWidget);
+  });
+
+  testWidgets('shows its title on desktop, where it previously had none',
+      (tester) async {
+    await pumpContinueWatchingScreen(
+      tester,
+      link: StubLink.responses([
+        _continueWatchingResponse([
+          _continueWatchingItem(id: 'cw-1', title: 'In Progress Movie'),
+        ]),
+      ]),
+    );
+
+    expect(find.text('Continue Watching'), findsOneWidget);
+  });
+
+  testWidgets('renders items through the shared grid', (tester) async {
+    await pumpContinueWatchingScreen(
+      tester,
+      link: StubLink.responses([
+        _continueWatchingResponse([
+          _continueWatchingItem(id: 'cw-1', title: 'In Progress Movie'),
+        ]),
+      ]),
+    );
+
+    expect(find.byType(BrowseGrid), findsOneWidget);
   });
 }

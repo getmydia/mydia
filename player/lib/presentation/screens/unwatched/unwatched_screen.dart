@@ -1,16 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'unwatched_controller.dart';
-import '../../widgets/media_poster.dart';
-import '../../widgets/ambient_backdrop_provider.dart';
-import '../../widgets/app_shell.dart';
-import '../../widgets/freshness_header.dart';
-import '../../widgets/glass_surface.dart';
+
 import '../../../core/graphql/watch/query_key.dart';
 import '../../../core/layout/breakpoints.dart';
-import '../../../core/layout/dock_insets.dart';
 import '../../../core/theme/colors.dart';
+import '../../widgets/browse_grid.dart';
+import '../../widgets/browse_scaffold.dart';
+import '../../widgets/media_poster.dart';
+import 'unwatched_controller.dart';
 
 class UnwatchedScreen extends ConsumerWidget {
   const UnwatchedScreen({super.key});
@@ -27,99 +25,48 @@ class UnwatchedScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final data = ref.watch(unwatchedControllerProvider);
-    final isDesktop = Breakpoints.isDesktop(context);
 
-    // Grid screens use the calm static backdrop (no per-title artwork).
-    publishBackdropSource(ref, BackdropSource.none);
-
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      extendBodyBehindAppBar: true,
-      appBar: _buildAppBar(context, isDesktop),
-      body: Column(
-        children: [
-          FreshnessHeader(
-            queryKeys: [QueryKeys.unwatched],
-            topInset: freshnessTopInset(
-              context,
-              appBarHeight: isDesktop ? null : kToolbarHeight,
-            ),
-          ),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: () async {
-                await ref.read(unwatchedControllerProvider.notifier).refresh();
-              },
-              child: data.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (error, _) => _buildErrorView(context, error, ref),
-                data: (items) {
-                  if (items.isEmpty) {
-                    return _buildEmptyState(context);
-                  }
-                  return _buildGridView(context, items);
-                },
+    return BrowseScaffold(
+      icon: Icons.visibility_off_rounded,
+      title: 'Unwatched',
+      queryKeys: [QueryKeys.unwatched],
+      actions: [
+        if (!Breakpoints.isDesktop(context))
+          IconButton(
+            icon: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceVariant.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(10),
               ),
+              child: const Icon(Icons.search_rounded, size: 20),
             ),
+            onPressed: () => context.push('/search'),
+            tooltip: 'Search',
           ),
-        ],
-      ),
-    );
-  }
-
-  PreferredSizeWidget _buildAppBar(BuildContext context, bool isDesktop) {
-    if (isDesktop)
-      return const PreferredSize(
-          preferredSize: Size.fromHeight(0), child: SizedBox.shrink());
-    return PreferredSize(
-      preferredSize: const Size.fromHeight(kToolbarHeight),
-      child: GlassSurface.appBar(
-        child: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          leading: IconButton(
-            icon: const Icon(Icons.menu_rounded),
-            onPressed: () {
-              AppShell.scaffoldKey.currentState?.openDrawer();
+      ],
+      onRefresh: () async {
+        await ref.read(unwatchedControllerProvider.notifier).refresh();
+      },
+      body: (context, scrollTopPadding) => data.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, _) => _buildErrorView(context, error, ref),
+        data: (items) {
+          if (items.isEmpty) return _buildEmptyState(context);
+          return BrowseGrid(
+            itemCount: items.length,
+            scrollTopPadding: scrollTopPadding,
+            itemBuilder: (context, index) {
+              final item = items[index];
+              return MediaPoster(
+                key: ValueKey(item.id),
+                posterUrl: item.posterUrl,
+                title: item.title,
+                onTap: () => _handleItemTap(context, item.id, item.type),
+              );
             },
-            tooltip: 'Menu',
-          ),
-          title: const Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.visibility_off_rounded,
-                color: AppColors.primary,
-                size: 22,
-              ),
-              SizedBox(width: 10),
-              Text(
-                'Unwatched',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: -0.5,
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            IconButton(
-              icon: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceVariant.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.search_rounded, size: 20),
-              ),
-              onPressed: () {
-                context.push('/search');
-              },
-              tooltip: 'Search',
-            ),
-            const SizedBox(width: 8),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -206,7 +153,7 @@ class UnwatchedScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'You\'ve watched everything in your library',
+              "You've watched everything in your library",
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: AppColors.textSecondary,
                   ),
@@ -216,48 +163,5 @@ class UnwatchedScreen extends ConsumerWidget {
         ),
       ),
     );
-  }
-
-  Widget _buildGridView(BuildContext context, List items) {
-    final horizontalPadding = Breakpoints.getHorizontalPadding(context);
-    final cardSpacing = Breakpoints.getCardSpacing(context);
-    final bottomPadding = DockInsets.bottomOf(context);
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final crossAxisCount = _calculateCrossAxisCount(constraints.maxWidth);
-
-        return GridView.builder(
-          padding: EdgeInsets.fromLTRB(
-              horizontalPadding, 100, horizontalPadding, bottomPadding),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: crossAxisCount,
-            childAspectRatio: 0.58,
-            crossAxisSpacing: cardSpacing,
-            mainAxisSpacing: cardSpacing + 4,
-          ),
-          itemCount: items.length,
-          itemBuilder: (context, index) {
-            final item = items[index];
-            return MediaPoster(
-              key: ValueKey(item.id),
-              posterUrl: item.posterUrl,
-              title: item.title,
-              onTap: () => _handleItemTap(context, item.id, item.type),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  int _calculateCrossAxisCount(double width) {
-    if (width > 1400) return 8;
-    if (width > 1200) return 7;
-    if (width > 1000) return 6;
-    if (width > 800) return 5;
-    if (width > 600) return 4;
-    if (width > 400) return 3;
-    return 2;
   }
 }

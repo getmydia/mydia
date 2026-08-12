@@ -55,7 +55,12 @@ class AppShell extends ConsumerStatefulWidget {
       location.startsWith('/shows') ||
       location.startsWith('/downloads') ||
       location.startsWith('/settings') ||
-      location.startsWith('/search');
+      location.startsWith('/search') ||
+      location.startsWith('/unwatched') ||
+      location.startsWith('/continue-watching') ||
+      location.startsWith('/favorites') ||
+      location.startsWith('/recently-added') ||
+      location.startsWith('/collections');
 
   /// Builds the shell's cast overlay for the desktop or mobile branch.
   ///

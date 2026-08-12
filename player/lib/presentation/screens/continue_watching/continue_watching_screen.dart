@@ -4,15 +4,11 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/graphql/watch/query_key.dart';
 import '../../../core/layout/breakpoints.dart';
-import '../../../core/layout/dock_insets.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/models/continue_watching_item.dart';
-import '../../widgets/ambient_backdrop_provider.dart';
-import '../../widgets/app_shell.dart';
-import '../../widgets/freshness_header.dart';
-import '../../widgets/glass_surface.dart';
+import '../../widgets/browse_grid.dart';
+import '../../widgets/browse_scaffold.dart';
 import '../../widgets/media_poster.dart';
-import '../library/library_grid_body.dart';
 import 'continue_watching_controller.dart';
 
 class ContinueWatchingScreen extends ConsumerStatefulWidget {
@@ -60,110 +56,51 @@ class _ContinueWatchingScreenState
   @override
   Widget build(BuildContext context) {
     final data = ref.watch(continueWatchingControllerProvider);
-    final isDesktop = Breakpoints.isDesktop(context);
-    final chromeTop = freshnessTopInset(
-      context,
-      appBarHeight: isDesktop ? null : kToolbarHeight,
-    );
-    final scrollTopPadding = chromeTop + 8;
 
-    publishBackdropSource(ref, BackdropSource.none);
-
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      extendBodyBehindAppBar: true,
-      appBar: _buildAppBar(context, isDesktop),
-      body: Stack(
-        children: [
-          RefreshIndicator(
-            edgeOffset: chromeTop,
-            onRefresh: () async {
-              await ref
-                  .read(continueWatchingControllerProvider.notifier)
-                  .refresh();
+    return BrowseScaffold(
+      icon: Icons.play_circle_outline_rounded,
+      title: 'Continue Watching',
+      queryKeys: [QueryKeys.continueWatchingList],
+      actions: [
+        if (!Breakpoints.isDesktop(context))
+          IconButton(
+            icon: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceVariant.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.search_rounded, size: 20),
+            ),
+            onPressed: () => context.push('/search'),
+            tooltip: 'Search',
+          ),
+      ],
+      onRefresh: () async {
+        await ref.read(continueWatchingControllerProvider.notifier).refresh();
+      },
+      body: (context, scrollTopPadding) => data.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, _) => _buildErrorView(context, error, ref),
+        data: (page) {
+          if (page.isEmpty) return _buildEmptyState(context);
+          return BrowseGrid(
+            controller: _scrollController,
+            itemCount: page.items.length,
+            scrollTopPadding: scrollTopPadding,
+            itemBuilder: (context, index) {
+              final item = page.items[index];
+              return MediaPoster(
+                key: ValueKey(item.id),
+                posterUrl: item.posterUrl,
+                title: item.title,
+                subtitle: item.showTitle,
+                progressPercentage: item.progress?.percentage,
+                onTap: () => _handleItemTap(context, item),
+              );
             },
-            child: data.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, _) => _buildErrorView(context, error, ref),
-              data: (page) {
-                if (page.isEmpty) {
-                  return _buildEmptyState(context);
-                }
-                return _buildGridView(context, page.items, scrollTopPadding);
-              },
-            ),
-          ),
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: FreshnessHeader(
-              queryKeys: [QueryKeys.continueWatchingList],
-              topInset: chromeTop,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  PreferredSizeWidget _buildAppBar(BuildContext context, bool isDesktop) {
-    if (isDesktop) {
-      return const PreferredSize(
-        preferredSize: Size.fromHeight(0),
-        child: SizedBox.shrink(),
-      );
-    }
-
-    return PreferredSize(
-      preferredSize: const Size.fromHeight(kToolbarHeight),
-      child: GlassSurface.appBar(
-        child: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          leading: IconButton(
-            icon: const Icon(Icons.menu_rounded),
-            onPressed: () {
-              AppShell.scaffoldKey.currentState?.openDrawer();
-            },
-            tooltip: 'Menu',
-          ),
-          title: const Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.play_circle_outline_rounded,
-                color: AppColors.primary,
-                size: 22,
-              ),
-              SizedBox(width: 10),
-              Text(
-                'Continue Watching',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: -0.5,
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            IconButton(
-              icon: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceVariant.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.search_rounded, size: 20),
-              ),
-              onPressed: () {
-                context.push('/search');
-              },
-              tooltip: 'Search',
-            ),
-            const SizedBox(width: 8),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -233,48 +170,6 @@ class _ContinueWatchingScreenState
           textAlign: TextAlign.center,
         ),
       ),
-    );
-  }
-
-  Widget _buildGridView(
-    BuildContext context,
-    List<ContinueWatchingItem> items,
-    double scrollTopPadding,
-  ) {
-    final horizontalPadding = Breakpoints.getHorizontalPadding(context);
-    final cardSpacing = Breakpoints.getCardSpacing(context);
-    final bottomPadding = DockInsets.bottomOf(context);
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return GridView.builder(
-          controller: _scrollController,
-          padding: EdgeInsets.fromLTRB(
-            horizontalPadding,
-            scrollTopPadding,
-            horizontalPadding,
-            bottomPadding,
-          ),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: libraryCrossAxisCount(constraints.maxWidth),
-            childAspectRatio: 0.58,
-            crossAxisSpacing: cardSpacing,
-            mainAxisSpacing: cardSpacing + 4,
-          ),
-          itemCount: items.length,
-          itemBuilder: (context, index) {
-            final item = items[index];
-            return MediaPoster(
-              key: ValueKey(item.id),
-              posterUrl: item.posterUrl,
-              title: item.title,
-              subtitle: item.showTitle,
-              progressPercentage: item.progress?.percentage,
-              onTap: () => _handleItemTap(context, item),
-            );
-          },
-        );
-      },
     );
   }
 }

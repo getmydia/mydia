@@ -4,12 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/layout/breakpoints.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/models/search_result.dart';
-import '../../widgets/ambient_backdrop_provider.dart';
-import '../../widgets/cast_actions.dart';
-import '../../widgets/cast_button.dart';
+import '../../widgets/browse_scaffold.dart';
 import 'search_controller.dart';
 import 'widgets/episode_result_row.dart';
 import 'widgets/search_filter_chip.dart';
@@ -132,47 +131,22 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   Widget build(BuildContext context) {
     final searchState = ref.watch(searchControllerProvider);
 
-    // Search is a grid surface, so it uses the calm static backdrop rather than
-    // inheriting whatever artwork the previous screen published. Individual
-    // result posters still tint it on hover via PosterFrame.
-    publishBackdropSource(ref, BackdropSource.none);
-
-    return Scaffold(
-      // Transparent so the shell's ambient backdrop shows through, matching
-      // every other in-shell destination.
-      backgroundColor: Colors.transparent,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        surfaceTintColor: Colors.transparent,
-        // Navigator, not go_router's context.canPop(): inside the shell route
-        // this resolves the shell navigator, which is exactly what a pushed
-        // search screen sits on, and it does not require a GoRouter ancestor,
-        // so the screen stays pumpable in a plain widget test.
-        leading: Navigator.of(context).canPop()
-            ? IconButton(
-                icon: const Icon(Icons.arrow_back_rounded),
-                onPressed: () => Navigator.of(context).maybePop(),
-              )
-            : null,
-        automaticallyImplyLeading: false,
-        title: _buildSearchField(searchState),
-        titleSpacing: 0,
-        actions: [
-          if (_searchController.text.isNotEmpty)
-            IconButton(
-              icon: const Icon(Icons.close_rounded),
-              onPressed: _onClear,
-              tooltip: 'Clear',
-            ),
-          // SearchScreen's app bar is always visible (no desktop
-          // suppression), so it carries its own cast affordance instead of
-          // the shell's overlay — see AppShell._hasOwnCastButton.
-          CastButton(onPressed: () => pickCastDevice(context, ref)),
-          const SizedBox(width: 8),
-        ],
-      ),
-      body: Column(
+    return BrowseScaffold(
+      icon: Icons.search_rounded,
+      title: 'Search',
+      queryKeys: const [],
+      actions: [
+        if (_searchController.text.isNotEmpty)
+          IconButton(
+            icon: const Icon(Icons.close_rounded),
+            onPressed: _onClear,
+            tooltip: 'Clear',
+          ),
+      ],
+      secondRow: _buildSearchField(searchState),
+      body: (context, scrollTopPadding) => Column(
         children: [
+          SizedBox(height: scrollTopPadding),
           _buildFilterChips(searchState),
           Expanded(child: _buildBody(searchState)),
         ],
@@ -181,25 +155,35 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   Widget _buildSearchField(SearchState searchState) {
-    return TextField(
-      controller: _searchController,
-      focusNode: _focusNode,
-      onChanged: _onSearchChanged,
-      onSubmitted: (_) {
-        _debounceTimer?.cancel();
-        ref.read(searchControllerProvider.notifier).search();
-      },
-      style: const TextStyle(fontSize: 18),
-      decoration: InputDecoration(
-        hintText: 'Search your library...',
-        hintStyle: TextStyle(
-          color: AppColors.textSecondary.withValues(alpha: 0.6),
-          fontSize: 18,
+    return Center(
+      child: TextField(
+        controller: _searchController,
+        focusNode: _focusNode,
+        onChanged: _onSearchChanged,
+        onSubmitted: (_) {
+          _debounceTimer?.cancel();
+          ref.read(searchControllerProvider.notifier).search();
+        },
+        style: const TextStyle(fontSize: 18),
+        decoration: InputDecoration(
+          hintText: 'Search your library...',
+          hintStyle: TextStyle(
+            color: AppColors.textSecondary.withValues(alpha: 0.6),
+            fontSize: 18,
+          ),
+          // The app theme sets `filled: true` with a rounded fill.
+          // `InputBorder.none` alone suppresses the stroke but not the fill,
+          // which left this field rendering as a pill nobody designed, flush
+          // against the chrome. Both have to be off.
+          filled: false,
+          border: InputBorder.none,
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(vertical: 8),
+          prefixIcon: const Icon(Icons.search_rounded, size: 20),
+          prefixIconConstraints: const BoxConstraints(minWidth: 32),
         ),
-        border: InputBorder.none,
-        contentPadding: const EdgeInsets.symmetric(vertical: 12),
+        textInputAction: TextInputAction.search,
       ),
-      textInputAction: TextInputAction.search,
     );
   }
 
@@ -443,24 +427,37 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               },
             )
           else
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              sliver: SliverGrid.builder(
-                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                  maxCrossAxisExtent: 180,
-                  mainAxisSpacing: 16,
-                  crossAxisSpacing: 12,
-                  childAspectRatio: 0.55,
+            // `SliverLayoutBuilder`, not `MediaQuery`: on desktop `AppShell`
+            // puts a fixed 260px `DesktopSidebar` beside this screen, so the
+            // window is wider than the content area. Counting columns from
+            // the window overestimates the space and cramps every card.
+            // `crossAxisExtent` here is the viewport's, measured outside the
+            // padding below, which matches how `BrowseGrid` reads
+            // `constraints.maxWidth` so both grids bucket identically.
+            SliverLayoutBuilder(
+              builder: (context, sliverConstraints) => SliverPadding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: Breakpoints.getHorizontalPadding(context),
                 ),
-                itemCount: section.results.length,
-                itemBuilder: (context, index) {
-                  final result = section.results[index];
-                  return SearchResultCard(
-                    key: ValueKey(result.id),
-                    result: result,
-                    onTap: () => context.push(result.routePath),
-                  );
-                },
+                sliver: SliverGrid.builder(
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: libraryCrossAxisCount(
+                      sliverConstraints.crossAxisExtent,
+                    ),
+                    childAspectRatio: 0.58,
+                    crossAxisSpacing: Breakpoints.getCardSpacing(context),
+                    mainAxisSpacing: Breakpoints.getCardSpacing(context) + 4,
+                  ),
+                  itemCount: section.results.length,
+                  itemBuilder: (context, index) {
+                    final result = section.results[index];
+                    return SearchResultCard(
+                      key: ValueKey(result.id),
+                      result: result,
+                      onTap: () => context.push(result.routePath),
+                    );
+                  },
+                ),
               ),
             ),
         ],
