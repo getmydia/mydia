@@ -136,20 +136,135 @@ void main() {
       );
     });
 
-    test(
-        'a stale generation is not rescued by mounted and hasPlayer both '
-        'being true', () {
-      // Distinct generation values (not just "1 vs 2") so a check that
-      // merely compares against a hardcoded constant instead of the actual
-      // current generation cannot pass by accident.
+    // No fifth "distinct generation values" case here on purpose: a review
+    // round pointed out the earlier one (3 vs 5, both true) discriminated
+    // nothing the "1 vs 2" case above didn't already cover, since this is a
+    // plain equality check with no code path that could pass one pair and
+    // fail the other. Dropped rather than kept for the sake of a round
+    // number.
+  });
+
+  group('shouldStartSubtitleSelection', () {
+    test('starts when the requested target differs from the pending one', () {
       expect(
-        shouldApplySubtitleSelection(
-          requestGeneration: 3,
-          currentGeneration: 5,
+        shouldStartSubtitleSelection(
+          requested: textTrack,
+          pending: null,
           mounted: true,
-          hasPlayer: true,
+        ),
+        isTrue,
+      );
+    });
+
+    test('is a no-op when the requested target matches the pending one', () {
+      expect(
+        shouldStartSubtitleSelection(
+          requested: textTrack,
+          pending: textTrack,
+          mounted: true,
         ),
         isFalse,
+      );
+    });
+
+    test(
+        'is a no-op when unmounted, even if requested differs from '
+        'pending', () {
+      expect(
+        shouldStartSubtitleSelection(
+          requested: textTrack,
+          pending: null,
+          mounted: false,
+        ),
+        isFalse,
+      );
+    });
+  });
+
+  group('pendingSubtitleSelectionAfterFailure', () {
+    test(
+        'falls back to null when nothing is applied and this attempt is '
+        'still current', () {
+      expect(
+        pendingSubtitleSelectionAfterFailure(
+          requestGeneration: 1,
+          currentGeneration: 1,
+          currentPending: textTrack,
+          appliedSelection: null,
+        ),
+        isNull,
+      );
+    });
+
+    test('falls back to whatever non-null selection is actually applied', () {
+      expect(
+        pendingSubtitleSelectionAfterFailure(
+          requestGeneration: 1,
+          currentGeneration: 1,
+          currentPending: textTrack,
+          appliedSelection: embeddedTextTrack,
+        ),
+        embeddedTextTrack,
+      );
+    });
+
+    test(
+        'leaves pending untouched when a newer attempt has already '
+        'superseded this one', () {
+      // A superseded attempt must not clobber the newer request's own
+      // target -- `currentPending` here stands in for whatever that newer
+      // attempt already wrote.
+      expect(
+        pendingSubtitleSelectionAfterFailure(
+          requestGeneration: 1,
+          currentGeneration: 2,
+          currentPending: embeddedTextTrack,
+          appliedSelection: null,
+        ),
+        embeddedTextTrack,
+      );
+    });
+  });
+
+  group('failed-fetch retry (regression coverage)', () {
+    test(
+        'a track whose fetch failed can be requested again, instead of '
+        'silently matching stale pending state', () {
+      // Reproduces the exact regression a second review round caught: T1
+      // is requested, its fetch fails while nothing else has superseded
+      // it, and the viewer taps T1 again. Before this fix, the second tap
+      // compared its target against a pending value the first attempt
+      // never cleared and was silently swallowed -- no fetch, no log, no
+      // snackbar, despite a snackbar having just told the viewer to retry.
+      const generation = 1;
+
+      // 1. T1 requested: pending becomes T1 (mirrors
+      //    `_pendingSubtitleSelection = selected;` in _showSubtitleSelector).
+      SubtitleTrack? pending = textTrack;
+
+      // 2. The fetch fails. This attempt is still current (nothing else
+      //    ran), so pending must fall back to what's actually applied
+      //    (nothing, in this scenario) rather than staying at T1.
+      pending = pendingSubtitleSelectionAfterFailure(
+        requestGeneration: generation,
+        currentGeneration: generation,
+        currentPending: pending,
+        appliedSelection: null,
+      );
+      expect(pending, isNull,
+          reason: 'pending must not still be T1 after its own fetch failed');
+
+      // 3. The viewer taps T1 again. It must be recognised as a fresh
+      //    attempt, not a no-op against the stale pending value from step 1.
+      expect(
+        shouldStartSubtitleSelection(
+          requested: textTrack,
+          pending: pending,
+          mounted: true,
+        ),
+        isTrue,
+        reason: 're-tapping the same track after its fetch failed must '
+            'start a new attempt',
       );
     });
   });

@@ -58,3 +58,59 @@ bool shouldApplySubtitleSelection({
 }) {
   return requestGeneration == currentGeneration && mounted && hasPlayer;
 }
+
+/// Whether a tap on the subtitle sheet should start a new selection
+/// attempt, or be treated as a no-op.
+///
+/// Compared against [pending] — the target of whichever selection attempt
+/// is already in flight, tracked separately from what has actually been
+/// applied to the player (`_selectedSubtitleTrack` in `player_screen.dart`)
+/// — not against the applied value itself. A tap repeating an in-flight
+/// attempt's own target (a retry, or a cancel back to whatever's still
+/// displayed as current while that attempt resolves) is a no-op; a tap
+/// naming anything else, including a target that matches what's *already
+/// applied*, starts a fresh attempt.
+///
+/// This is the other half of the fix [pendingSubtitleSelectionAfterFailure]
+/// is for: comparing against a pending value that a failed attempt never
+/// clears would make every retry of that attempt read as a no-op forever.
+bool shouldStartSubtitleSelection({
+  required SubtitleTrack? requested,
+  required SubtitleTrack? pending,
+  required bool mounted,
+}) {
+  if (!mounted) return false;
+  return requested != pending;
+}
+
+/// What the pending selection target should become when an attempt
+/// concludes without applying — a failed fetch, the player disappearing
+/// mid-attempt, or the attempt having been superseded before it got that
+/// far.
+///
+/// If [requestGeneration] no longer matches [currentGeneration], a newer
+/// attempt has already been requested and now owns the pending value: this
+/// returns [currentPending] unchanged, because overwriting it here would
+/// clobber that newer attempt's own target with this, older one's.
+/// Otherwise this attempt is the one that set [currentPending] in the
+/// first place — nothing else could have without also bumping the
+/// generation — so this falls the tracker back to [appliedSelection],
+/// what is actually true on the player right now, rather than leaving it
+/// pointed at a target this attempt never reached.
+///
+/// Without this, a tap repeating that unreached target reads as a no-op
+/// forever (see [shouldStartSubtitleSelection]), and a genuine retry
+/// becomes impossible without picking something else first — exactly the
+/// regression this function exists to close: a failed `SubtitleContent`
+/// fetch (a dropped connection, a server error) left the pending target
+/// stuck at the track that just failed, so re-tapping it after the
+/// "could not load" snackbar was a silent no-op.
+SubtitleTrack? pendingSubtitleSelectionAfterFailure({
+  required int requestGeneration,
+  required int currentGeneration,
+  required SubtitleTrack? currentPending,
+  required SubtitleTrack? appliedSelection,
+}) {
+  if (requestGeneration != currentGeneration) return currentPending;
+  return appliedSelection;
+}
