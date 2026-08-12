@@ -673,4 +673,87 @@ defmodule Mydia.Indexers.CardigannParserTest do
       assert Map.has_key?(selectors, :poster)
     end
   end
+
+  describe "normalize_selector key coverage" do
+    test "carries rows after and count through to the search config" do
+      yaml = """
+      id: rows-test
+      name: Rows Test
+      description: d
+      language: en-US
+      type: public
+      encoding: UTF-8
+      links:
+        - https://example.com/
+      caps:
+        categories:
+          2000: Movies
+      settings: []
+      search:
+        paths:
+          - path: /search
+        rows:
+          selector: tr
+          after: 2
+          count: 25
+          multiple: true
+          missingAttributeEqualsNoResults: true
+        fields:
+          title:
+            selector: td.title
+          size:
+            selector: td.size
+          seeders:
+            selector: td.seeders
+          download:
+            selector: a
+            attribute: href
+      """
+
+      assert {:ok, parsed} = CardigannParser.parse_definition(yaml)
+
+      assert parsed.search.rows[:after] == 2
+      assert parsed.search.rows[:count] == 25
+      assert parsed.search.rows[:multiple] == true
+      assert parsed.search.rows[:missing_attribute_equals_no_results] == true
+    end
+
+    test "carries a field default through to the search config" do
+      yaml = """
+      id: default-test
+      name: Default Test
+      description: d
+      language: en-US
+      type: public
+      encoding: UTF-8
+      links:
+        - https://example.com/
+      caps:
+        categories:
+          2000: Movies
+      settings: []
+      search:
+        paths:
+          - path: /search
+        rows:
+          selector: tr
+        fields:
+          title:
+            selector: td.title
+          size:
+            selector: td.size
+          seeders:
+            selector: td.seeders
+            optional: true
+            default: 0
+          download:
+            selector: a
+            attribute: href
+      """
+
+      assert {:ok, parsed} = CardigannParser.parse_definition(yaml)
+      assert parsed.search.fields[:seeders][:default] == 0
+      assert parsed.search.fields[:seeders][:optional] == true
+    end
+  end
 end
