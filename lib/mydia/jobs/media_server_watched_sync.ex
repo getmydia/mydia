@@ -17,6 +17,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
   alias Mydia.Settings
   alias Mydia.Settings.MediaServerUserLink
   alias Mydia.WatchSync
+  alias Mydia.WatchSync.Providers.Jellyfin
   alias Mydia.WatchSync.Providers.Plex
 
   require Logger
@@ -160,6 +161,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
   end
 
   defp provider_for(%{type: :plex}), do: {:ok, Plex}
+  defp provider_for(%{type: :jellyfin}), do: {:ok, Jellyfin}
   defp provider_for(_), do: {:error, :unsupported_provider}
 
   defp record_skip(config, reason, user_id \\ nil) do

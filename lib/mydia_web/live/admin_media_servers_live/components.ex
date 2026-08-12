@@ -557,8 +557,8 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
               </div>
             <% end %>
 
-            <%!-- Watched Sync Section (only for Plex) --%>
-            <%= if @current_type == :plex do %>
+            <%!-- Watched Sync Section (Plex and Jellyfin) --%>
+            <%= if @current_type in [:plex, :jellyfin] do %>
               <div class="card bg-base-200/50 border border-base-300">
                 <div class="card-body p-4 gap-4">
                   <div class="flex items-center gap-2 text-sm font-medium text-base-content/70">
