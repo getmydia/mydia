@@ -139,7 +139,14 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
     end
   end
 
-  describe "Editing a server added through the Plex wizard" do
+  # Characterization test, not a regression test: pre-branch, edit-mode save
+  # already used `editing_media_server` as the changeset base, so
+  # `machine_identifier` and `connections` already survived a form-params-only
+  # save. What actually blocked editing a wizard-created server was the
+  # browser-level `required` attribute on the URL input, which `render_submit/1`
+  # does not enforce; that blockage is pinned separately in
+  # `components_test.exs` ("media server modal, Server URL requirement").
+  describe "discovery data on a Plex wizard config survives a form-params-only save" do
     setup %{conn: conn, token: token} do
       start_supervised!(Mydia.Indexers.Health)
 
@@ -163,7 +170,8 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
       %{conn: conn, config: config}
     end
 
-    test "the server can be renamed without supplying a url", %{conn: conn, config: config} do
+    test "renaming via form params alone preserves machine_identifier and connections",
+         %{conn: conn, config: config} do
       {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
 
       view |> element("[phx-click='edit_media_server']") |> render_click()

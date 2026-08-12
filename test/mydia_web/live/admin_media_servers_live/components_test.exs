@@ -168,6 +168,55 @@ defmodule MydiaWeb.AdminMediaServersLive.ComponentsTest do
     end
   end
 
+  describe "media server modal, submit button availability" do
+    defp submit_disabled?(html) do
+      disabled =
+        html
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query("#media-server-submit")
+        |> LazyHTML.attribute("disabled")
+
+      disabled != []
+    end
+
+    # New + Plex + no manual entry + not yet complete means there is no url
+    # input on screen at all: submitting would fail on a changeset error
+    # pinned to :url, which nothing on the page shows. Disable Add Server
+    # rather than let that happen silently.
+    test "Add Server is disabled for a new Plex server before the wizard completes" do
+      html = render_modal(mode: :new, oauth_state: :idle, manual_entry: false)
+
+      assert submit_disabled?(html)
+    end
+
+    test "Add Server is enabled once the Plex wizard reaches the review step" do
+      html =
+        render_modal(
+          mode: :new,
+          oauth_state: :complete,
+          manual_entry: false,
+          discovery: %{name: "Storage", machine_identifier: "machine-abc", connections: []}
+        )
+
+      refute submit_disabled?(html)
+    end
+
+    test "Save Changes stays enabled in edit mode even before the wizard completes" do
+      # In edit/reconnect mode the base struct already carries the discovery
+      # data, so the same visual state that blocks a new save can save
+      # successfully here.
+      html =
+        render_modal(
+          config: discovered_plex_config(),
+          mode: :edit,
+          oauth_state: :idle,
+          manual_entry: false
+        )
+
+      refute submit_disabled?(html)
+    end
+  end
+
   describe "media server modal, discovery review panel" do
     defp discovery_map do
       %{
@@ -191,8 +240,14 @@ defmodule MydiaWeb.AdminMediaServersLive.ComponentsTest do
     test "the review panel lists the discovered addresses with their badges" do
       html = render_modal(oauth_state: :complete, discovery: discovery_map())
 
-      assert html =~ "local"
-      assert html =~ "relay"
+      # `simplify_plex_url("https://relay.plex.direct:443")` renders as
+      # "relay:443" in the connection line itself, so a loose `html =~
+      # "relay"` passes even with the relay badge deleted. Assert on the
+      # DaisyUI badge classes the markup actually uses instead.
+      document = LazyHTML.from_fragment(html)
+
+      refute Enum.empty?(LazyHTML.query(document, ".badge-info"))
+      refute Enum.empty?(LazyHTML.query(document, ".badge-warning"))
     end
 
     test "the review panel offers a way back but collects no input" do

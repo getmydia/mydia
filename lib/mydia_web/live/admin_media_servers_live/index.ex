@@ -56,7 +56,8 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
      |> assign(:plex_oauth_token, nil)
      |> assign(:plex_reachability, :checking)
      |> assign(:plex_manual_entry, false)
-     |> assign(:plex_discovery, nil)}
+     |> assign(:plex_discovery, nil)
+     |> assign(:plex_discovery_summary, nil)}
   end
 
   @impl true
@@ -86,7 +87,8 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
        |> assign(:plex_oauth_token, nil)
        |> assign(:plex_reachability, :checking)
        |> assign(:plex_manual_entry, true)
-       |> assign(:plex_discovery, nil)}
+       |> assign(:plex_discovery, nil)
+       |> assign(:plex_discovery_summary, nil)}
     end
   end
 
@@ -118,7 +120,8 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
        |> assign(:plex_oauth_servers, [])
        |> assign(:plex_oauth_token, nil)
        |> assign(:plex_manual_entry, false)
-       |> assign(:plex_discovery, nil)}
+       |> assign(:plex_discovery, nil)
+       |> assign(:plex_discovery_summary, nil)}
     end
   end
 
@@ -306,6 +309,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
      |> assign(:plex_oauth_token, nil)
      |> assign(:plex_reachability, :checking)
      |> assign(:plex_discovery, nil)
+     |> assign(:plex_discovery_summary, nil)
      |> push_event("plex_auth_cancelled", %{})}
   end
 
@@ -319,7 +323,8 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
      |> assign(:plex_oauth_servers, [])
      |> assign(:plex_oauth_token, nil)
      |> assign(:plex_reachability, :checking)
-     |> assign(:plex_discovery, nil)}
+     |> assign(:plex_discovery, nil)
+     |> assign(:plex_discovery_summary, nil)}
   end
 
   @impl true
@@ -466,7 +471,16 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
         socket
         |> assign(:plex_oauth_state, :complete)
         |> assign(:plex_reachability, :checking)
+        # `plex_discovery` keeps the full attrs (including `token` and
+        # `server_access_token`) so `Selection.merge_discovery/2` still has
+        # what it needs on submit. `plex_discovery_summary` is the
+        # template-facing view: only the fields the review panel actually
+        # renders, so the two secrets never reach template scope.
         |> assign(:plex_discovery, attrs)
+        |> assign(
+          :plex_discovery_summary,
+          Map.take(attrs, [:name, :machine_identifier, :connections])
+        )
         |> start_reachability_probe(server)
         |> assign(:media_server_form, to_form(changeset))
     end
@@ -496,6 +510,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
     if socket.assigns[:plex_discovery] do
       socket
       |> assign(:plex_discovery, nil)
+      |> assign(:plex_discovery_summary, nil)
       |> assign(:plex_oauth_state, :idle)
       |> assign(:plex_reachability, :checking)
     else
@@ -522,6 +537,8 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
     |> assign(:plex_oauth_servers, [])
     |> assign(:plex_reachability, :checking)
     |> assign(:plex_manual_entry, false)
+    |> assign(:plex_discovery, nil)
+    |> assign(:plex_discovery_summary, nil)
   end
 
   defp get_media_server_health_status(media_servers) do

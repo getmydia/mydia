@@ -712,10 +712,15 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
             </button>
             <button
               type="submit"
+              id="media-server-submit"
               class={[
                 "btn btn-primary gap-2 col-span-2 order-first sm:order-none",
                 modal_action_btn()
               ]}
+              disabled={
+                @media_server_mode == :new and @current_type == :plex and
+                  not @plex_manual_entry and @plex_oauth_state != :complete
+              }
             >
               <.icon name="hero-check" class="w-4 h-4" />
               {if @media_server_mode == :new, do: "Add Server", else: "Save Changes"}
