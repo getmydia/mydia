@@ -491,6 +491,17 @@ defmodule MydiaWeb.Schema.CommonTypes do
     @desc "Whether the subtitle is embedded in the media file"
     field :embedded, non_null(:boolean)
 
+    @desc "Whether this track can be delivered as text. False for image-based subtitles (PGS, VobSub), which play only in direct mode"
+    field :deliverable, non_null(:boolean) do
+      resolve(fn track, _args, _info -> {:ok, Map.get(track, :deliverable, true)} end)
+    end
+
+    @desc "Subtitle body in the requested format. Null when the track is not deliverable"
+    field :content, :string do
+      arg(:format, :subtitle_format, default_value: :vtt)
+      resolve(&MydiaWeb.Schema.Resolvers.SubtitleResolver.content/3)
+    end
+
     @desc "URL to download this subtitle in the requested format"
     field :url, :string do
       arg(:format, :subtitle_format, default_value: :vtt)

@@ -14,7 +14,9 @@ defmodule MydiaWeb.Api.Player.V1.SubtitleController do
   alias Mydia.Library.FileRanking
   alias Mydia.Library.MediaFile
   alias Mydia.Repo
+  alias Mydia.Subtitles.Delivery
   alias Mydia.Subtitles.Extractor
+  alias Mydia.Subtitles.Subtitle
 
   require Logger
 
@@ -85,71 +87,116 @@ defmodule MydiaWeb.Api.Player.V1.SubtitleController do
     - format: Output format (srt, vtt, ass) - optional, defaults to srt
 
   Returns:
-    - Subtitle file content with appropriate Content-Type
+    - Subtitle content, converted to the requested format, with appropriate Content-Type
 
   Status codes:
     - 200: Success
+    - 400: Unsupported `format` value
     - 404: Media or track not found
+    - 415: Track is image-based and cannot be converted to text
     - 500: Extraction failed
   """
   def show(conn, %{"type" => type, "id" => id, "track" => track_param}) do
     format = Map.get(conn.query_params, "format", "srt")
-
-    # Parse track_id - could be integer (embedded) or string (external)
     track_id = parse_track_id(track_param)
 
-    case resolve_media_file(type, id) do
-      {:ok, media_file} ->
-        case Extractor.extract_subtitle_track(media_file, track_id, format: format) do
-          {:ok, file_path} ->
-            stream_subtitle_file(conn, file_path, format, track_id)
+    with {:format, true} <- {:format, format in Subtitle.supported_formats()},
+         {:media_file, {:ok, media_file}} <- {:media_file, resolve_media_file(type, id)},
+         {:track, %{deliverable: true}} <- {:track, find_track(media_file, track_id)} do
+      deliver(conn, media_file, track_id, format)
+    else
+      {:format, false} ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{
+          error:
+            "Invalid format. Accepted values: #{Enum.join(Subtitle.supported_formats(), ", ")}"
+        })
 
-          {:error, :subtitle_not_found} ->
-            conn
-            |> put_status(:not_found)
-            |> json(%{error: "Subtitle track not found"})
-
-          {:error, :file_not_found} ->
-            conn
-            |> put_status(:not_found)
-            |> json(%{error: "Subtitle file not found on disk"})
-
-          {:error, :unauthorized} ->
-            conn
-            |> put_status(:forbidden)
-            |> json(%{error: "Unauthorized access to subtitle"})
-
-          {:error, :media_file_not_found} ->
-            conn
-            |> put_status(:not_found)
-            |> json(%{error: "Media file not found on disk"})
-
-          {:error, reason} ->
-            Logger.error("Failed to extract subtitle",
-              media_file_id: media_file.id,
-              track_id: track_id,
-              reason: inspect(reason)
-            )
-
-            conn
-            |> put_status(:internal_server_error)
-            |> json(%{error: "Failed to extract subtitle track"})
-        end
-
-      {:error, :not_found} ->
+      {:media_file, {:error, :not_found}} ->
         conn
         |> put_status(:not_found)
         |> json(%{error: "Media not found"})
 
-      {:error, :no_media_files} ->
+      {:media_file, {:error, :no_media_files}} ->
         conn
         |> put_status(:not_found)
         |> json(%{error: "No media files available"})
 
-      {:error, :invalid_type} ->
+      {:media_file, {:error, :invalid_type}} ->
         conn
         |> put_status(:bad_request)
         |> json(%{error: "Invalid type. Use 'movie', 'episode', or 'file'"})
+
+      {:track, nil} ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{error: "Subtitle track not found"})
+
+      {:track, %{deliverable: false}} ->
+        conn
+        |> put_status(:unsupported_media_type)
+        |> json(%{error: "Image-based subtitles cannot be converted to text"})
+    end
+  end
+
+  # Resolves the track through the same listing the index action uses, so
+  # deliverability (false for image-based embedded tracks) is checked before
+  # ever calling Delivery. Delivery has no notion of "this integer track_id
+  # is actually a bitmap stream" - it would just hand the id to ffmpeg and
+  # fail with an opaque extraction error.
+  defp find_track(media_file, track_id) do
+    media_file
+    |> Extractor.list_subtitle_tracks()
+    |> Enum.find(&(&1.track_id == track_id))
+  end
+
+  defp deliver(conn, media_file, track_id, format) do
+    case Delivery.content(media_file, track_id, format) do
+      {:ok, body} ->
+        conn
+        |> put_resp_header("content-type", get_subtitle_mime_type(format))
+        |> put_resp_header(
+          "content-disposition",
+          "inline; filename=\"subtitle-#{track_id}.#{format}\""
+        )
+        |> send_resp(200, body)
+
+      {:error, :image_subtitle} ->
+        conn
+        |> put_status(:unsupported_media_type)
+        |> json(%{error: "Image-based subtitles cannot be converted to text"})
+
+      {:error, :subtitle_not_found} ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{error: "Subtitle track not found"})
+
+      {:error, :file_not_found} ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{error: "Subtitle file not found on disk"})
+
+      {:error, :unauthorized} ->
+        conn
+        |> put_status(:forbidden)
+        |> json(%{error: "Unauthorized access to subtitle"})
+
+      {:error, :media_file_not_found} ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{error: "Media file not found on disk"})
+
+      {:error, reason} ->
+        Logger.error("Failed to deliver subtitle",
+          media_file_id: media_file.id,
+          track_id: track_id,
+          reason: inspect(reason)
+        )
+
+        conn
+        |> put_status(:internal_server_error)
+        |> json(%{error: "Failed to extract subtitle track"})
     end
   end
 
@@ -216,34 +263,6 @@ defmodule MydiaWeb.Api.Player.V1.SubtitleController do
         track_param
     end
   end
-
-  # Stream subtitle file to client
-  defp stream_subtitle_file(conn, file_path, format, track_id) do
-    mime_type = get_subtitle_mime_type(format)
-    filename = "subtitle-#{track_id}.#{format}"
-
-    # For embedded subtitles (temporary files), we need to clean up after sending
-    is_temp_file = String.starts_with?(file_path, System.tmp_dir!())
-
-    conn
-    |> put_resp_header("content-type", mime_type)
-    |> put_resp_header("content-disposition", "inline; filename=\"#{filename}\"")
-    |> send_file(200, file_path)
-    |> maybe_cleanup_temp_file(file_path, is_temp_file)
-  end
-
-  # Clean up temporary files after sending
-  defp maybe_cleanup_temp_file(conn, file_path, true = _is_temp) do
-    # Schedule cleanup in a separate process to avoid blocking
-    spawn(fn ->
-      Process.sleep(1000)
-      File.rm(file_path)
-    end)
-
-    conn
-  end
-
-  defp maybe_cleanup_temp_file(conn, _file_path, false = _is_temp), do: conn
 
   # Get MIME type for subtitle format
   defp get_subtitle_mime_type("srt"), do: "text/plain; charset=utf-8"

@@ -266,6 +266,68 @@ defmodule MydiaWeb.Api.Player.V1.SubtitleControllerTest do
       # Should get 401 Unauthorized or redirect to login
       assert conn.status in [401, 302]
     end
+
+    test "returns 400 for an unsupported format", %{
+      conn: conn,
+      token: token,
+      movie: movie,
+      external_subtitle: external_subtitle
+    } do
+      conn =
+        conn
+        |> put_req_header("authorization", "Bearer #{token}")
+        |> get("/api/player/v1/subtitles/movie/#{movie.id}/#{external_subtitle.id}?format=xml")
+
+      body = json_response(conn, 400)
+      assert body["error"] =~ "srt"
+      assert body["error"] =~ "vtt"
+      assert body["error"] =~ "ass"
+    end
+
+    test "rejects a path-traversal format value rather than sanitizing it", %{
+      conn: conn,
+      token: token,
+      movie: movie,
+      external_subtitle: external_subtitle
+    } do
+      conn =
+        conn
+        |> put_req_header("authorization", "Bearer #{token}")
+        |> get(
+          "/api/player/v1/subtitles/movie/#{movie.id}/#{external_subtitle.id}?format=..%2F..%2Fetc%2Fpasswd"
+        )
+
+      assert json_response(conn, 400)["error"] =~ "Accepted"
+    end
+
+    test "returns 415 for an image-based embedded subtitle track", %{
+      conn: conn,
+      token: token
+    } do
+      movie = media_item_fixture(%{type: "movie"})
+
+      media_file_fixture(%{
+        media_item_id: movie.id,
+        metadata: %Mydia.Library.Structs.FileMetadata{
+          streams: [
+            %Mydia.Library.Structs.StreamInfo{
+              index: 2,
+              type: :subtitle,
+              codec: "hdmv_pgs_subtitle",
+              language: "eng"
+            }
+          ]
+        }
+      })
+
+      conn =
+        conn
+        |> put_req_header("authorization", "Bearer #{token}")
+        |> get("/api/player/v1/subtitles/movie/#{movie.id}/2")
+
+      assert json_response(conn, 415)["error"] =~
+               "Image-based subtitles cannot be converted to text"
+    end
   end
 
   describe "subtitle track listing file selection" do
