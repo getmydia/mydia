@@ -21,6 +21,46 @@ query ContinueWatchingList($first: Int, $after: String) {
     id
     type
     title
+    state
+    artwork {
+      posterUrl
+      backdropUrl
+      thumbnailUrl
+    }
+    progress {
+      positionSeconds
+      durationSeconds
+      percentage
+      watched
+      lastWatchedAt
+    }
+    showId
+    showTitle
+    seasonNumber
+    episodeNumber
+    files {
+      id
+      resolution
+      codec
+      audioCodec
+      hdrFormat
+      size
+      bitrate
+      directPlaySupported
+      streamUrl
+      directPlayUrl
+    }
+  }
+}
+''';
+
+/// The pre-merged-rail shape, for a server older than this build.
+const String continueWatchingListQueryLegacy = r'''
+query ContinueWatchingList($first: Int, $after: String) {
+  continueWatching(first: $first, after: $after) {
+    id
+    type
+    title
     artwork {
       posterUrl
       backdropUrl
@@ -134,6 +174,7 @@ class ContinueWatchingController extends _$ContinueWatchingController {
       ref,
       key: QueryKeys.continueWatchingList,
       document: gql(continueWatchingListQuery),
+      fallbackDocument: gql(continueWatchingListQueryLegacy),
       variables: _variables(),
       parse: _parseContinueWatching,
       canRefetch: () => !_hasPaginated,
