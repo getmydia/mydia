@@ -1490,4 +1490,42 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
       assert result.title == "Debian 12 ISO"
     end
   end
+
+  describe "rows.missingAttributeEqualsNoResults" do
+    test "returns no rows instead of an error when the attribute is missing" do
+      html =
+        "<html><body><table><tr><td href=\"magnet:?xt=urn:btih:abc\">no attr here</td></tr></table></body></html>"
+
+      definition = %Parsed{
+        id: "manr",
+        name: "MANR",
+        type: "public",
+        links: ["https://example.com"],
+        encoding: "UTF-8",
+        capabilities: %{},
+        settings: [],
+        search: %{
+          paths: [%{path: "/s"}],
+          inputs: %{},
+          headers: nil,
+          keywordsfilters: [],
+          rows: %{
+            selector: "tr",
+            attribute: "data-id",
+            missing_attribute_equals_no_results: true
+          },
+          fields: %{
+            "title" => %{selector: "td"},
+            "download" => %{selector: "td", attribute: "href"}
+          }
+        }
+      }
+
+      assert {:ok, []} =
+               CardigannResultParser.parse_results(definition, %{status: 200, body: html}, "MANR",
+                 template_context: %{},
+                 base_url: "https://example.com"
+               )
+    end
+  end
 end

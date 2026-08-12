@@ -13,6 +13,11 @@ defmodule Mydia.Indexers.CardigannResultParser do
   - Field selectors to extract data from each row
   - Attribute extraction (href, data-*, etc.)
   - Text content extraction
+  - `rows.multiple: true` documents that comma-separated selector alternatives
+    form one combined row set; `Selector.find/2` already unions them, so this flag
+    is a no-op at parse time
+  - `rows.missingAttributeEqualsNoResults: true` drops rows that lack the configured
+    row `attribute` instead of treating them as valid results
 
   ## JSON Parsing
 
@@ -417,6 +422,25 @@ defmodule Mydia.Indexers.CardigannResultParser do
       html_preview = document |> Floki.raw_html() |> String.slice(0, 1000)
       Logger.info("Debug: HTML preview: #{html_preview}")
     end
+
+    rows =
+      if Map.get(row_config, :multiple) == true do
+        # `multiple` means the selector's comma-separated alternatives are one
+        # combined row set rather than a first-match-wins choice.
+        rows
+      else
+        rows
+      end
+
+    missing_attr_no_results = Map.get(row_config, :missing_attribute_equals_no_results) == true
+    row_attribute = Map.get(row_config, :attribute)
+
+    rows =
+      if missing_attr_no_results and is_binary(row_attribute) do
+        Enum.filter(rows, fn row -> Floki.attribute([row], row_attribute) != [] end)
+      else
+        rows
+      end
 
     # Apply 'after' filter to skip header rows if configured
     rows_after_skip =
