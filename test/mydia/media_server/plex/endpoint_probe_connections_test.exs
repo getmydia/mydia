@@ -1,11 +1,20 @@
 defmodule Mydia.MediaServer.Plex.EndpointProbeConnectionsTest do
-  use ExUnit.Case, async: true
+  # Synchronous on purpose. `:plex_endpoint_cache` is a single global ETS table
+  # shared with every other Plex endpoint test, so the "does not populate the
+  # cache" assertion below would otherwise read entries a concurrent test wrote,
+  # and this module's `invalidate_all/0` would wipe that test's cache mid-run.
+  # ExUnit runs sync modules only after the async ones finish, which makes both
+  # hazards impossible rather than merely unlikely.
+  use ExUnit.Case, async: false
 
   alias Mydia.MediaServer.Error
   alias Mydia.MediaServer.Plex.Endpoint
 
   setup do
     bypass = Bypass.open()
+    # Clear on the way in as well as out: entries left by an earlier module
+    # would otherwise be attributed to this one.
+    Endpoint.invalidate_all()
     on_exit(fn -> Endpoint.invalidate_all() end)
     {:ok, bypass: bypass}
   end
