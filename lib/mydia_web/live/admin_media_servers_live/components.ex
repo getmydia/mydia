@@ -245,10 +245,14 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
     assigns = assign(assigns, :current_type, current_type)
 
     ~H"""
-    <div class="modal modal-open" id="media-server-modal" phx-hook="PlexOAuth">
+    <div
+      class="modal modal-bottom sm:modal-middle modal-open"
+      id="media-server-modal"
+      phx-hook="PlexOAuth"
+    >
       <div class="modal-box max-w-xl">
         <%!-- Modal Header --%>
-        <div class="flex items-center justify-between mb-5">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
           <div class="flex items-center gap-3">
             <div class={[
               "w-10 h-10 rounded-xl flex items-center justify-center",
@@ -274,7 +278,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
               </p>
             </div>
           </div>
-          <label class="label cursor-pointer gap-2">
+          <label class="label cursor-pointer gap-2 w-full justify-between sm:w-auto sm:justify-end">
             <span class="label-text text-sm">Enabled</span>
             <input type="hidden" name={@media_server_form[:enabled].name} value="false" />
             <input
@@ -403,7 +407,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                           <span class="font-medium text-sm">Authenticated successfully</span>
                         </div>
                         <p class="text-sm text-base-content/70">Select your Plex server:</p>
-                        <div class="space-y-2 max-h-48 overflow-y-auto">
+                        <div class="space-y-2 sm:max-h-48 sm:overflow-y-auto">
                           <%= for server <- @plex_oauth_servers do %>
                             <button
                               type="button"
@@ -460,7 +464,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                           <span class="font-medium">{@plex_selected_server.name}</span>
                         </div>
                         <p class="text-sm text-base-content/70">Choose a connection:</p>
-                        <div class="space-y-2 max-h-48 overflow-y-auto">
+                        <div class="space-y-2 sm:max-h-48 sm:overflow-y-auto">
                           <% sorted_connections =
                             Enum.sort_by(@plex_selected_server.connections, fn conn ->
                               case Map.get(@plex_connection_statuses, conn.uri, :testing) do
