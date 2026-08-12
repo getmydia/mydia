@@ -18,7 +18,7 @@ defmodule Mydia.Subtitles.Provider.Relay do
   def search(_provider, params) do
     case MetadataRelay.search(params) do
       {:ok, %{"subtitles" => subtitles}} when is_list(subtitles) ->
-        {:ok, Enum.map(subtitles, &SearchResult.from_map/1)}
+        {:ok, Enum.map(subtitles, &(&1 |> normalize_subtitle() |> SearchResult.from_map()))}
 
       {:ok, _unexpected} ->
         {:error, :invalid_search_response}
@@ -31,9 +31,20 @@ defmodule Mydia.Subtitles.Provider.Relay do
   @impl true
   def download(_provider, %{file_id: file_id}) do
     case MetadataRelay.get_download_url(file_id) do
-      {:ok, %{"download_url" => url}} -> fetch_subtitle_body(url)
-      {:ok, _unexpected} -> {:error, :invalid_download_response}
-      {:error, reason} -> {:error, reason}
+      {:ok, %{"download_url" => url}} when is_binary(url) ->
+        fetch_content(url)
+
+      # OpenSubtitles answers an exhausted download allowance with 406, which the
+      # relay forwards verbatim. That is a different condition from 429 rate
+      # limiting and the chain reports it differently.
+      {:error, {:http_error, 406, _body}} ->
+        {:error, :quota_exceeded}
+
+      {:ok, unexpected} ->
+        {:error, {:invalid_download_response, unexpected}}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -53,8 +64,49 @@ defmodule Mydia.Subtitles.Provider.Relay do
     }
   end
 
-  defp fetch_subtitle_body(url) do
-    case Req.get(url, decode_body: false, receive_timeout: 10_000) do
+  # Translates metadata-relay's OpenSubtitles wire format (see
+  # MetadataRelay.OpenSubtitles.Handler.transform_subtitle/1 in the
+  # metadata-relay service) into the keys SearchResult.from_map/1 expects.
+  # The relay emits "id", not "file_id"; "release", not "file_name"; and
+  # never emits "subtitle_hash" or "moviehash_match" at all. Each provider
+  # adapter owns its own translation here rather than SearchResult growing
+  # provider-specific clauses, since Task 6's direct OpenSubtitles adapter
+  # has yet another wire format.
+  defp normalize_subtitle(subtitle) do
+    file_id = Map.get(subtitle, "id")
+    language = Map.get(subtitle, "language")
+
+    subtitle
+    |> Map.put("file_id", file_id)
+    |> Map.put("file_name", Map.get(subtitle, "release"))
+    |> Map.put("subtitle_hash", synthesize_subtitle_hash(file_id, language))
+  end
+
+  # The relay never returns a subtitle_hash, so synthesize a deterministic
+  # one from (file_id, language). Same formula as
+  # Mydia.Subtitles.generate_subtitle_hash/1 (subtitles.ex is off limits for
+  # this task, so this mirrors rather than calls it): stable across repeated
+  # searches for the same subtitle, which is what dedup-by-subtitle_hash
+  # needs, but it is NOT a hash of the file's contents. Two different
+  # subtitle files that happen to share (file_id, language) would collide;
+  # in practice file_id is the provider's unique identifier for one file, so
+  # this does not happen in the relay's real data.
+  defp synthesize_subtitle_hash(file_id, language) do
+    :crypto.hash(:sha256, "#{file_id}-#{language}")
+    |> Base.encode16(case: :lower)
+  end
+
+  # The relay hands back a temporary download URL (see
+  # MetadataRelay.get_download_url/2); the Provider behaviour's download/2
+  # callback contract requires the raw file content, so fetch it here.
+  defp fetch_content(url) do
+    headers = [{"user-agent", Mydia.Metadata.Provider.HTTP.user_agent()}]
+
+    # decode_body: false keeps the response as a raw binary regardless of
+    # its content-type. download/2 promises {:ok, binary()}; without this,
+    # Req would auto-decode a JSON-served subtitle into a map and silently
+    # break that contract.
+    case Req.get(url, headers: headers, decode_body: false, receive_timeout: 10_000) do
       {:ok, %{status: 200, body: body}} when is_binary(body) ->
         {:ok, body}
 
