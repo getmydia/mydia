@@ -90,6 +90,99 @@ defmodule Mydia.MediaServer.Plex.Home do
     end
   end
 
+  @doc """
+  Applies an operator-chosen profile-to-user mapping.
+
+  `mapping` maps a Plex Home `plex_account_id` to a Mydia user id, or to `nil`
+  for "do not sync this profile".
+
+  `seed_links/2` can only ever link a profile whose name equals a Mydia
+  username. Self-hosters name Plex profiles after people and their Mydia
+  account `admin`, so on most installs that matches nothing, leaves zero links,
+  and watched sync sits skipped forever with no operator recourse. This is the
+  recourse.
+
+  Links whose profile is unmapped, or whose profile has disappeared from Plex
+  Home, are removed, so this unlinks as well as links.
+  """
+  @spec apply_mapping(map(), %{optional(String.t()) => binary() | nil}, keyword()) ::
+          {:ok, [MediaServerUserLink.t()]} | {:error, term()}
+  def apply_mapping(config, mapping, opts \\ []) do
+    with :ok <- validate_mapping(mapping),
+         {:ok, home_users} <- list_users(config, opts) do
+      desired =
+        for home_user <- home_users,
+            user_id = Map.get(mapping, home_user.plex_account_id),
+            not is_nil(user_id),
+            do: {home_user, user_id}
+
+      existing = Settings.list_media_server_user_links(config.id)
+      drop_unmapped(existing, desired)
+      upsert_mapped(config, desired, Map.new(existing, &{&1.plex_account_id, &1}), opts)
+    end
+  end
+
+  # Two profiles aimed at one Mydia user would not fail: media_server_user_links
+  # is unique on (config, user), so the second would quietly replace the first
+  # and leave a profile displaying as linked while syncing nothing.
+  defp validate_mapping(mapping) do
+    user_ids = mapping |> Map.values() |> Enum.reject(&is_nil/1)
+
+    if length(user_ids) == length(Enum.uniq(user_ids)),
+      do: :ok,
+      else: {:error, :duplicate_user}
+  end
+
+  defp drop_unmapped(existing, desired) do
+    keep = MapSet.new(desired, fn {_home_user, user_id} -> user_id end)
+
+    Enum.each(existing, fn link ->
+      unless MapSet.member?(keep, link.user_id) do
+        Settings.delete_media_server_user_link(link)
+      end
+    end)
+  end
+
+  defp upsert_mapped(config, desired, by_account, opts) do
+    desired
+    |> Enum.reduce_while({:ok, []}, fn {home_user, user_id}, {:ok, acc} ->
+      case Map.get(by_account, home_user.plex_account_id) do
+        # Already pointing at this user with a usable token. Re-minting would
+        # cost a plex.tv profile switch per profile on every save of a form the
+        # operator may not have changed at all.
+        %{user_id: ^user_id, access_token: token} = link
+        when is_binary(token) and token != "" ->
+          {:cont, {:ok, [link | acc]}}
+
+        _ ->
+          case link_user(config, home_user, user_id, opts) do
+            {:ok, link} -> {:cont, {:ok, [link | acc]}}
+            {:error, _} = error -> {:halt, error}
+          end
+      end
+    end)
+    |> case do
+      {:ok, links} -> {:ok, Enum.reverse(links)}
+      other -> other
+    end
+  end
+
+  # The one place a link is written. Both the auto-matcher and the manual
+  # mapping go through here so a link means the same thing however it was made:
+  # a Mydia user bound to a Plex profile by that profile's own token.
+  defp link_user(config, home_user, user_id, opts) do
+    with {:ok, token} <- token_for(config, home_user.plex_account_id, opts) do
+      Settings.upsert_media_server_user_link(%{
+        media_server_config_id: config.id,
+        user_id: user_id,
+        plex_account_id: home_user.plex_account_id,
+        plex_username: home_user.username,
+        access_token: token,
+        enabled: true
+      })
+    end
+  end
+
   defp seed_matched_links(config, home_users, opts) do
     by_username =
       Map.new(Accounts.list_users(), fn user ->
@@ -108,29 +201,20 @@ defmodule Mydia.MediaServer.Plex.Home do
           # Skip rather than fall back to the admin token. A link carrying the
           # wrong account's token silently merges two people's watch history,
           # which is precisely what per-user mapping is meant to prevent.
-          case token_for(config, home_user.plex_account_id, opts) do
-            {:ok, token} ->
-              attrs = %{
-                media_server_config_id: config.id,
-                user_id: user.id,
-                plex_account_id: home_user.plex_account_id,
-                plex_username: home_user.username,
-                access_token: token,
-                enabled: true
-              }
+          case link_user(config, home_user, user.id, opts) do
+            {:ok, link} ->
+              {:cont, {:ok, [link | acc]}}
 
-              case Settings.upsert_media_server_user_link(attrs) do
-                {:ok, link} -> {:cont, {:ok, [link | acc]}}
-                {:error, _} = err -> {:halt, err}
-              end
-
-            {:error, reason} ->
+            {:error, %Error{} = reason} ->
               Logger.warning(
                 "Skipping Plex Home link for #{home_user.username}: " <>
                   "could not mint a per-user token (#{inspect(reason)})"
               )
 
               {:cont, {:ok, acc}}
+
+            {:error, _} = err ->
+              {:halt, err}
           end
       end
     end)

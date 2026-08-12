@@ -347,5 +347,49 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
         args: %{"mode" => "server", "config_id" => config.id}
       )
     end
+
+    test "a Plex server syncing watched status offers profile mapping", %{conn: conn} do
+      # Auto-matching links a profile only when its name equals a Mydia
+      # username, which on most installs is never, and until this button there
+      # was no way for the operator to make the mapping themselves.
+      {:ok, config} =
+        Mydia.Settings.create_media_server_config(%{
+          name: "Map Me",
+          type: :plex,
+          url: "http://localhost:32400",
+          token: "tok",
+          enabled: true,
+          connection_settings: %{"sync_watched" => true}
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+
+      assert has_element?(
+               view,
+               "button[phx-click='open_plex_profiles'][phx-value-id='#{config.id}']"
+             )
+    end
+
+    test "a Plex server not syncing watched status does not offer profile mapping",
+         %{conn: conn} do
+      # Links exist only to keep per-user watch history apart. With sync off
+      # there is nothing to keep apart, and offering the mapping would imply a
+      # feature the operator never turned on.
+      {:ok, config} =
+        Mydia.Settings.create_media_server_config(%{
+          name: "No Sync",
+          type: :plex,
+          url: "http://localhost:32400",
+          token: "tok",
+          enabled: true
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+
+      refute has_element?(
+               view,
+               "button[phx-click='open_plex_profiles'][phx-value-id='#{config.id}']"
+             )
+    end
   end
 end

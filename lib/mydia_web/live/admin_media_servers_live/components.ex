@@ -200,6 +200,14 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                   </button>
                   <%= if sync_enabled and server.type == :plex do %>
                     <button
+                      data-test="plex-profiles"
+                      class={["btn btn-ghost gap-1", card_action_btn()]}
+                      phx-click="open_plex_profiles"
+                      phx-value-id={server.id}
+                    >
+                      <.icon name="hero-user-group" class="w-4 h-4" /> Profiles
+                    </button>
+                    <button
                       class={["btn btn-ghost gap-1", card_action_btn()]}
                       phx-click="sync_watched"
                       phx-value-id={server.id}
@@ -764,6 +772,142 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
     </div>
     """
   end
+
+  @doc """
+  Renders the Plex Home profile mapping modal.
+
+  Auto-matching links a profile only when its name equals a Mydia username.
+  People name Plex profiles after people and their Mydia account `admin`, so on
+  most installs nothing matches and watched sync sits skipped with no way out.
+  This is the way out.
+  """
+  attr :config, :map, required: true
+  attr :state, :any, required: true
+  attr :profiles, :list, default: []
+  attr :users, :list, default: []
+  attr :mapping, :map, default: %{}
+  attr :saving, :boolean, default: false
+
+  def plex_profiles_modal(assigns) do
+    ~H"""
+    <div class="modal modal-open" id="plex-profiles-modal">
+      <div class="modal-box max-w-2xl">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <h3 class="font-bold text-lg">Plex profiles</h3>
+            <p class="text-sm text-base-content/60 mt-1">
+              Choose which Mydia user each Plex Home profile syncs watched status with.
+              Each profile syncs through its own Plex token, so histories stay separate.
+            </p>
+          </div>
+          <button
+            type="button"
+            class="btn btn-sm btn-circle btn-ghost"
+            phx-click="close_plex_profiles"
+            aria-label="Close"
+          >
+            <.icon name="hero-x-mark" class="w-4 h-4" />
+          </button>
+        </div>
+
+        <div class="mt-5">
+          <%= case @state do %>
+            <% :loading -> %>
+              <div
+                id="plex-profiles-loading"
+                class="flex items-center justify-center gap-3 py-10 text-sm text-base-content/70"
+              >
+                <span class="loading loading-spinner loading-sm"></span>
+                Asking plex.tv for this account's Home profiles...
+              </div>
+            <% {:error, message} -> %>
+              <div id="plex-profiles-error" class="alert alert-error">
+                <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
+                <span>{message}</span>
+              </div>
+            <% :ready -> %>
+              <%= if @profiles == [] do %>
+                <div id="plex-profiles-empty" class="text-center py-10">
+                  <p class="text-sm text-base-content/70">
+                    This Plex account has no Home profiles, so there is nothing to map.
+                    Watched sync uses the account owner directly.
+                  </p>
+                </div>
+              <% else %>
+                <form id="plex-profiles-form" phx-submit="save_plex_profiles">
+                  <div class="flex items-center justify-between mb-2">
+                    <span class="text-sm font-medium">
+                      {length(@profiles)} {ngettext_profiles(@profiles)}
+                    </span>
+                    <span class="text-xs text-base-content/50">Mydia user</span>
+                  </div>
+
+                  <div class="flex flex-col gap-2">
+                    <div
+                      :for={profile <- @profiles}
+                      id={"plex-profile-#{profile.plex_account_id}"}
+                      class="flex flex-col gap-2 rounded-lg bg-base-200 px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div class="flex items-center gap-2 min-w-0">
+                        <.icon name="hero-user-circle" class="w-4 h-4 text-base-content/50" />
+                        <span class="truncate text-sm font-medium">
+                          {profile.username || "Unnamed profile"}
+                        </span>
+                        <span :if={profile.admin?} class="badge badge-xs badge-warning">owner</span>
+                      </div>
+                      <div class="sm:w-56">
+                        <.input
+                          type="select"
+                          id={"plex-profile-select-#{profile.plex_account_id}"}
+                          name={"mapping[#{profile.plex_account_id}]"}
+                          value={Map.get(@mapping, profile.plex_account_id)}
+                          options={user_options(@users)}
+                          class="select select-sm select-bordered w-full"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="modal-action mt-6">
+                    <button
+                      type="button"
+                      class={["btn btn-ghost", modal_action_btn()]}
+                      phx-click="close_plex_profiles"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      id="plex-profiles-save"
+                      class={["btn btn-primary gap-2", modal_action_btn()]}
+                      disabled={@saving}
+                    >
+                      <%= if @saving do %>
+                        <span class="loading loading-spinner loading-sm"></span> Saving...
+                      <% else %>
+                        <.icon name="hero-check" class="w-4 h-4" /> Save links
+                      <% end %>
+                    </button>
+                  </div>
+                </form>
+              <% end %>
+          <% end %>
+        </div>
+      </div>
+      <div class="modal-backdrop bg-black/50" phx-click="close_plex_profiles"></div>
+    </div>
+    """
+  end
+
+  # "Don't sync" carries the empty string so an unmapped profile round-trips as
+  # a present-but-blank param rather than vanishing from the form payload, which
+  # is what lets the save path tell "unlink this" apart from "never asked".
+  defp user_options(users) do
+    [{"Don't sync", ""} | Enum.map(users, &{&1.username, &1.id})]
+  end
+
+  defp ngettext_profiles([_]), do: "profile found"
+  defp ngettext_profiles(_), do: "profiles found"
 
   # Media server type helpers
   defp media_server_type_icon(:plex), do: "hero-play-circle"
