@@ -56,39 +56,41 @@ defmodule Mydia.Indexers.CardigannDownload do
 
   def resolve(%Parsed{download: download} = definition, download_url, user_config)
       when is_map(download) do
-    variables = template_variables(download_url)
-    infohash = Map.get(download, :infohash)
-    selectors = Map.get(download, :selectors) || []
+    with {:ok, download_url} <- absolutize_download_url(definition, download_url, user_config) do
+      variables = template_variables(download_url)
+      infohash = Map.get(download, :infohash)
+      selectors = Map.get(download, :selectors) || []
 
-    cond do
-      usable_infohash?(infohash) ->
-        with {:ok, before_response} <-
-               run_before(definition, Map.get(download, :before), variables, user_config) do
-          resolve_infohash(
-            definition,
-            infohash,
-            download_url,
-            before_response,
-            variables,
-            user_config
-          )
-        end
+      cond do
+        usable_infohash?(infohash) ->
+          with {:ok, before_response} <-
+                 run_before(definition, Map.get(download, :before), variables, user_config) do
+            resolve_infohash(
+              definition,
+              infohash,
+              download_url,
+              before_response,
+              variables,
+              user_config
+            )
+          end
 
-      selectors != [] ->
-        with {:ok, before_response} <-
-               run_before(definition, Map.get(download, :before), variables, user_config) do
-          resolve_selectors(
-            definition,
-            selectors,
-            download_url,
-            before_response,
-            variables,
-            user_config
-          )
-        end
+        selectors != [] ->
+          with {:ok, before_response} <-
+                 run_before(definition, Map.get(download, :before), variables, user_config) do
+            resolve_selectors(
+              definition,
+              selectors,
+              download_url,
+              before_response,
+              variables,
+              user_config
+            )
+          end
 
-      true ->
-        :not_applicable
+        true ->
+          :not_applicable
+      end
     end
   end
 
@@ -102,7 +104,7 @@ defmodule Mydia.Indexers.CardigannDownload do
   defp run_before(_definition, nil, _variables, _user_config), do: {:ok, nil}
 
   defp run_before(definition, before, variables, user_config) when is_map(before) do
-    with {:ok, base_url} <- base_url(definition),
+    with {:ok, base_url} <- base_url(definition, user_config),
          {:ok, path} <- render(Map.get(before, :path, ""), variables),
          {:ok, inputs} <- render_inputs(Map.get(before, :inputs) || %{}, variables) do
       url = join_url(base_url, path)
@@ -186,7 +188,7 @@ defmodule Mydia.Indexers.CardigannDownload do
           # Many definitions point their download selector straight at a magnet.
           # Handing that back as a link would send the grab path off to fetch a
           # `magnet:` URL over HTTP, which it cannot do.
-          case absolute_link(definition, download_url, link) do
+          case absolute_link(definition, download_url, link, config) do
             "magnet:" <> _ = magnet -> {:ok, {:magnet, magnet}}
             resolved -> {:ok, {:link, resolved}}
           end
@@ -285,18 +287,42 @@ defmodule Mydia.Indexers.CardigannDownload do
 
   # -- urls and templates -----------------------------------------------------
 
-  defp base_url(%Parsed{links: [link | _]}) when is_binary(link), do: {:ok, link}
+  # Phase 1 gave definitions a probed `active_link`; honour it here so a
+  # definition that failed over to a mirror resolves its download block against
+  # the mirror rather than the dead primary it just abandoned.
+  defp base_url(definition, user_config) do
+    case Map.get(user_config, :base_url) || Map.get(user_config, "base_url") do
+      url when is_binary(url) and url != "" -> {:ok, String.trim_trailing(url, "/")}
+      _ -> base_url(definition)
+    end
+  end
+
+  defp base_url(%Parsed{links: [link | _]}) when is_binary(link) do
+    {:ok, String.trim_trailing(link, "/")}
+  end
 
   defp base_url(%Parsed{id: id}),
     do: {:error, {:cardigann_download, "definition #{id} has no site link"}}
 
+  defp absolutize_download_url(_definition, "http://" <> _ = url, _user_config), do: {:ok, url}
+  defp absolutize_download_url(_definition, "https://" <> _ = url, _user_config), do: {:ok, url}
+  defp absolutize_download_url(_definition, "magnet:" <> _ = url, _user_config), do: {:ok, url}
+
+  defp absolutize_download_url(definition, download_url, user_config)
+       when is_binary(download_url) do
+    with {:ok, base} <- base_url(definition, user_config) do
+      {:ok, join_url(base, download_url)}
+    end
+  end
+
   defp join_url(base, path), do: base |> URI.merge(path) |> URI.to_string()
 
-  defp absolute_link(_definition, _download_url, "magnet:" <> _ = magnet), do: magnet
+  defp absolute_link(_definition, _download_url, "magnet:" <> _ = magnet, _user_config),
+    do: magnet
 
-  defp absolute_link(definition, download_url, link) do
+  defp absolute_link(definition, download_url, link, user_config) do
     base =
-      case base_url(definition) do
+      case base_url(definition, user_config) do
         {:ok, site} -> site
         {:error, _} -> download_url
       end
