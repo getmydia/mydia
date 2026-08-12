@@ -824,4 +824,68 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
                CardigannSearchEngine.execute_search(parsed, [query: "ubuntu"], %{}, %{})
     end
   end
+
+  describe "keywordsfilters" do
+    test "filters the query before template substitution" do
+      parsed = %Parsed{
+        id: "kw",
+        name: "KW",
+        type: "public",
+        links: ["https://example.com"],
+        legacylinks: [],
+        encoding: "UTF-8",
+        capabilities: %{},
+        settings: [],
+        search: %{
+          paths: [%{path: "/search?q={{ .Keywords }}"}],
+          inputs: %{},
+          headers: nil,
+          keywordsfilters: [
+            %{name: "re_replace", args: ["\\b(19|20)\\d{2}\\b", ""]},
+            %{name: "trim"}
+          ],
+          rows: %{selector: "tr"},
+          fields: %{}
+        }
+      }
+
+      assert {:ok, url} =
+               CardigannSearchEngine.build_search_url(parsed,
+                 query: "The Matrix 1999",
+                 base_url: "https://example.com"
+               )
+
+      assert url =~ "The%20Matrix" or url =~ "The+Matrix"
+      refute url =~ "1999"
+    end
+
+    test "leaves the query untouched when there are no filters" do
+      parsed = %Parsed{
+        id: "kw2",
+        name: "KW2",
+        type: "public",
+        links: ["https://example.com"],
+        legacylinks: [],
+        encoding: "UTF-8",
+        capabilities: %{},
+        settings: [],
+        search: %{
+          paths: [%{path: "/search?q={{ .Keywords }}"}],
+          inputs: %{},
+          headers: nil,
+          keywordsfilters: [],
+          rows: %{selector: "tr"},
+          fields: %{}
+        }
+      }
+
+      assert {:ok, url} =
+               CardigannSearchEngine.build_search_url(parsed,
+                 query: "The Matrix 1999",
+                 base_url: "https://example.com"
+               )
+
+      assert url =~ "1999"
+    end
+  end
 end

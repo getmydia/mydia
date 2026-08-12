@@ -54,6 +54,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
 
   alias Mydia.Indexers.Cardigann.Links
   alias Mydia.Indexers.CardigannDefinition.Parsed
+  alias Mydia.Indexers.CardigannFilters
   alias Mydia.Indexers.CardigannTemplate
   alias Mydia.Indexers.Adapter.Error
   alias Mydia.Indexers.FlareSolverr
@@ -657,7 +658,10 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
 
   # Build template context from definition and search options
   defp build_template_context(definition, opts) do
-    query = Keyword.get(opts, :query, "")
+    query =
+      opts
+      |> Keyword.get(:query, "")
+      |> apply_keywords_filters(definition)
 
     %{
       keywords: query,
@@ -674,6 +678,24 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       settings: definition.settings
     }
   end
+
+  # `search.keywordsfilters` sanitises the query before it reaches any
+  # `{{ .Keywords }}` substitution. Trackers use it to strip years, punctuation,
+  # or article prefixes their search engine chokes on.
+  defp apply_keywords_filters(query, %Parsed{search: %{keywordsfilters: filters}})
+       when is_list(filters) and filters != [] and is_binary(query) do
+    Enum.reduce(filters, query, fn filter, acc ->
+      case CardigannFilters.apply(normalize_filter_map(filter), acc) do
+        {:ok, filtered} -> filtered
+        _ -> acc
+      end
+    end)
+  end
+
+  defp apply_keywords_filters(query, _definition), do: query
+
+  defp normalize_filter_map(filter) when is_map(filter), do: filter
+  defp normalize_filter_map(filter), do: %{name: to_string(filter)}
 
   defp build_full_url(base_url, path) do
     # Ensure proper joining of base URL and path
