@@ -6,6 +6,8 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
   alias Mydia.MediaServer.Client, as: MediaServerClient
   alias Mydia.MediaServer.Error
   alias Mydia.MediaServer.PlexOAuth
+  alias Mydia.MediaServer.Plex.Endpoint, as: PlexEndpoint
+  alias Mydia.MediaServer.Plex.Selection
   alias Mydia.Sync
 
   require Logger
@@ -25,14 +27,12 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
     {:noreply, socket}
   end
 
-  ## Plex connection test result handler
+  ## Plex reachability probe result
 
   @impl true
-  def handle_info({:plex_connection_tested, uri, result}, socket) do
-    if socket.assigns[:plex_oauth_state] == :selecting_connection do
-      statuses = socket.assigns[:plex_connection_statuses] || %{}
-      updated_statuses = Map.put(statuses, uri, result)
-      {:noreply, assign(socket, :plex_connection_statuses, updated_statuses)}
+  def handle_info({:plex_reachability, result}, socket) do
+    if socket.assigns[:plex_oauth_state] == :complete do
+      {:noreply, assign(socket, :plex_reachability, result)}
     else
       {:noreply, socket}
     end
@@ -54,6 +54,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
      |> assign(:plex_oauth_pin_id, nil)
      |> assign(:plex_oauth_servers, [])
      |> assign(:plex_oauth_token, nil)
+     |> assign(:plex_reachability, :checking)
      |> assign(:plex_manual_entry, false)}
   end
 
@@ -82,6 +83,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
        |> assign(:plex_oauth_pin_id, nil)
        |> assign(:plex_oauth_servers, [])
        |> assign(:plex_oauth_token, nil)
+       |> assign(:plex_reachability, :checking)
        |> assign(:plex_manual_entry, true)}
     end
   end
@@ -231,14 +233,14 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
   def handle_event("check_plex_pin", %{"pin_id" => pin_id}, socket) do
     case PlexOAuth.check_pin(pin_id) do
       {:ok, %{auth_token: token}} ->
+        socket = assign(socket, :plex_oauth_token, token)
+
         case PlexOAuth.list_servers(token) do
           {:ok, servers} ->
             {:noreply,
              socket
-             |> assign(:plex_oauth_state, :selecting_server)
-             |> assign(:plex_oauth_token, token)
-             |> assign(:plex_oauth_servers, servers)
-             |> push_event("plex_auth_complete", %{})}
+             |> push_event("plex_auth_complete", %{})
+             |> apply_selection(servers)}
 
           {:error, reason} ->
             Logger.error("Failed to fetch Plex servers: #{inspect(reason)}")
@@ -278,110 +280,22 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
 
   @impl true
   def handle_event("select_plex_server", %{"server_id" => server_id}, socket) do
-    servers = socket.assigns.plex_oauth_servers
-    token = socket.assigns.plex_oauth_token
-
-    case Enum.find(servers, &(&1.client_identifier == server_id)) do
-      nil ->
-        {:noreply, put_flash(socket, :error, "Server not found")}
-
-      server ->
-        if server.connections == [] do
-          {:noreply, put_flash(socket, :error, "No available connections for this server")}
-        else
-          initial_statuses =
-            Map.new(server.connections, fn conn -> {conn.uri, :testing} end)
-
-          parent = self()
-
-          for conn <- server.connections do
-            Task.start(fn ->
-              result = test_plex_connection(conn, token)
-              send(parent, {:plex_connection_tested, conn.uri, result})
-            end)
-          end
-
-          {:noreply,
-           socket
-           |> assign(:plex_oauth_state, :selecting_connection)
-           |> assign(:plex_selected_server, server)
-           |> assign(:plex_connection_statuses, initial_statuses)}
-        end
-    end
-  end
-
-  @impl true
-  def handle_event("select_plex_connection", %{"url" => _url}, socket) do
-    server = socket.assigns.plex_selected_server
-    token = socket.assigns.plex_oauth_token
-
-    server_base =
-      case socket.assigns.media_server_mode do
-        :new -> %MediaServerConfig{}
-        :edit -> socket.assigns.editing_media_server
-      end
-
-    # url stays nil so it remains a pure manual override; discovery owns the
-    # candidate list and Endpoint.resolve/1 picks a working address at call time.
-    attrs = %{
-      name: server.name,
-      type: :plex,
-      url: nil,
-      token: token,
-      machine_identifier: server.machine_identifier,
-      connections: server.connections,
-      server_access_token: server.access_token,
-      enabled: true
-    }
-
-    case socket.assigns.media_server_mode do
-      :edit ->
-        # Reconnect (and edit-time re-auth) must update the existing row in
-        # place so user links and sync state are not orphaned.
-        attrs = Map.merge(attrs, %{last_auth_error: nil, last_auth_error_at: nil})
-
-        case Settings.update_media_server_config(server_base, attrs) do
-          {:ok, _updated} ->
-            {:noreply,
-             socket
-             |> put_flash(:info, "Plex reconnected successfully")
-             |> load_data()}
-
-          {:error, %Ecto.Changeset{} = changeset} ->
-            {:noreply,
-             socket
-             |> assign(:plex_oauth_state, :error)
-             |> assign(:media_server_form, to_form(changeset))
-             |> put_flash(:error, "Failed to update media server")}
-        end
-
-      :new ->
-        changeset = Settings.change_media_server_config(server_base, attrs)
-
-        {:noreply,
-         socket
-         |> assign(:plex_oauth_state, :complete)
-         |> assign(:media_server_form, to_form(changeset))}
+    case Enum.find(socket.assigns.plex_oauth_servers, &(&1.client_identifier == server_id)) do
+      nil -> {:noreply, put_flash(socket, :error, "Server not found")}
+      server -> {:noreply, attach_server(socket, server)}
     end
   end
 
   @impl true
   def handle_event("cancel_plex_oauth", _params, socket) do
-    if socket.assigns.plex_oauth_state == :selecting_connection do
-      {:noreply,
-       socket
-       |> assign(:plex_oauth_state, :selecting_server)
-       |> assign(:plex_selected_server, nil)}
-    else
-      {:noreply,
-       socket
-       |> assign(:plex_oauth_state, :idle)
-       |> assign(:plex_oauth_pin_id, nil)
-       |> assign(:plex_oauth_servers, [])
-       |> assign(:plex_oauth_token, nil)
-       |> assign(:plex_selected_server, nil)
-       |> push_event("plex_auth_cancelled", %{})}
-    end
+    {:noreply,
+     socket
+     |> assign(:plex_oauth_state, :idle)
+     |> assign(:plex_oauth_pin_id, nil)
+     |> assign(:plex_oauth_servers, [])
+     |> assign(:plex_oauth_token, nil)
+     |> assign(:plex_reachability, :checking)
+     |> push_event("plex_auth_cancelled", %{})}
   end
 
   @impl true
@@ -392,7 +306,8 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
      |> assign(:plex_oauth_state, :idle)
      |> assign(:plex_oauth_pin_id, nil)
      |> assign(:plex_oauth_servers, [])
-     |> assign(:plex_oauth_token, nil)}
+     |> assign(:plex_oauth_token, nil)
+     |> assign(:plex_reachability, :checking)}
   end
 
   @impl true
@@ -491,6 +406,74 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
 
   ## Private Helpers
 
+  # A Plex account often carries the operator's own server plus any shared by
+  # friends. Picking is only worth asking about when it is a real choice.
+  defp apply_selection(socket, servers) do
+    case Selection.auto_select(servers) do
+      {:ok, server} ->
+        attach_server(socket, server)
+
+      {:ambiguous, ranked} ->
+        socket
+        |> assign(:plex_oauth_state, :selecting_server)
+        |> assign(:plex_oauth_servers, ranked)
+
+      {:error, :no_servers} ->
+        socket
+        |> assign(:plex_oauth_state, :error)
+        |> assign(:plex_oauth_servers, [])
+        |> put_flash(:error, "No Plex servers found for this account")
+    end
+  end
+
+  defp attach_server(socket, server) do
+    attrs = Selection.config_attrs(server, socket.assigns.plex_oauth_token)
+
+    case socket.assigns.media_server_mode do
+      :edit ->
+        # Reconnect must update the existing row in place so user links and
+        # sync state are not orphaned.
+        attrs = Map.merge(attrs, %{last_auth_error: nil, last_auth_error_at: nil})
+
+        case Settings.update_media_server_config(socket.assigns.editing_media_server, attrs) do
+          {:ok, _updated} ->
+            socket
+            |> put_flash(:info, "Plex reconnected successfully")
+            |> load_data()
+
+          {:error, %Ecto.Changeset{} = changeset} ->
+            socket
+            |> assign(:plex_oauth_state, :error)
+            |> assign(:media_server_form, to_form(changeset))
+            |> put_flash(:error, "Failed to update media server")
+        end
+
+      :new ->
+        changeset = Settings.change_media_server_config(%MediaServerConfig{}, attrs)
+
+        socket
+        |> assign(:plex_oauth_state, :complete)
+        |> assign(:plex_reachability, :checking)
+        |> start_reachability_probe(server)
+        |> assign(:media_server_form, to_form(changeset))
+    end
+  end
+
+  # Advisory only. The review step never blocks Save on the result, because a
+  # server that is merely powered off is still worth saving: rediscovery finds
+  # it when it comes back.
+  defp start_reachability_probe(socket, server) do
+    parent = self()
+    token = socket.assigns.plex_oauth_token
+    connections = server.connections
+
+    Task.Supervisor.start_child(Mydia.TaskSupervisor, fn ->
+      send(parent, {:plex_reachability, PlexEndpoint.probe_connections(connections, token)})
+    end)
+
+    socket
+  end
+
   defp load_data(socket) do
     media_servers = Settings.list_media_server_configs()
     media_server_health = get_media_server_health_status(media_servers)
@@ -508,6 +491,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
     |> assign(:testing_media_server_connection, false)
     |> assign(:plex_oauth_state, :idle)
     |> assign(:plex_oauth_servers, [])
+    |> assign(:plex_reachability, :checking)
     |> assign(:plex_manual_entry, false)
   end
 
@@ -515,49 +499,5 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
     media_servers
     |> Enum.map(fn server -> {server.id, %{status: :unknown}} end)
     |> Map.new()
-  end
-
-  defp test_plex_connection(conn, token) do
-    protocol = conn.protocol || "https"
-    address = conn.address
-    port = conn.port
-
-    test_url = "#{protocol}://#{address}:#{port}/identity"
-
-    headers = [
-      {"X-Plex-Token", token},
-      {"Accept", "application/json"}
-    ]
-
-    Logger.info("Testing Plex connection: #{test_url}")
-
-    opts = [
-      headers: headers,
-      receive_timeout: 5_000,
-      pool_timeout: 5_000,
-      retry: false,
-      connect_options: [
-        timeout: 3_000,
-        transport_opts: [verify: :verify_none]
-      ]
-    ]
-
-    case Req.get(test_url, opts) do
-      {:ok, %{status: 200}} ->
-        Logger.info("Plex connection OK: #{conn.uri}")
-        :ok
-
-      {:ok, %{status: status}} ->
-        Logger.info("Plex connection failed HTTP #{status}: #{conn.uri}")
-        :error
-
-      {:error, error} ->
-        Logger.info("Plex connection error: #{conn.uri} - #{inspect(error)}")
-        :error
-    end
-  rescue
-    e ->
-      Logger.info("Plex connection exception: #{conn.uri} - #{inspect(e)}")
-      :error
   end
 end

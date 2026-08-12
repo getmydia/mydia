@@ -2273,11 +2273,20 @@ defmodule Mydia.Jobs.MediaImportTest do
 
       handler_id = {__MODULE__, :delete_download_before_snapshot_reload, download.id}
 
+      # Telemetry handlers are global and run inside whichever process emitted
+      # the event, so without this pid guard any *other* async test querying
+      # `library_paths` steals the handler. The delete then runs on that
+      # process's sandbox connection, where this row does not exist, and Ecto
+      # raises StaleEntryError; telemetry detaches the failed handler, so the
+      # row is never deleted and the assertion below fails. `perform_job/2` runs
+      # the worker inline in this process, so the intended trigger still fires.
+      test_pid = self()
+
       :telemetry.attach(
         handler_id,
         [:mydia, :repo, :query],
         fn _event, _measurements, metadata, _config ->
-          if metadata.source == "library_paths" do
+          if metadata.source == "library_paths" and self() == test_pid do
             :telemetry.detach(handler_id)
             {:ok, _} = Mydia.Downloads.delete_download(download)
           end

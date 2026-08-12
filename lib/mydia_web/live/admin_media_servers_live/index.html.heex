@@ -15,8 +15,7 @@
         plex_oauth_state={assigns[:plex_oauth_state] || :idle}
         plex_oauth_servers={assigns[:plex_oauth_servers] || []}
         plex_manual_entry={assigns[:plex_manual_entry] || false}
-        plex_selected_server={assigns[:plex_selected_server]}
-        plex_connection_statuses={assigns[:plex_connection_statuses] || %{}}
+        plex_reachability={assigns[:plex_reachability] || :checking}
       />
     <% end %>
   </.admin_page>

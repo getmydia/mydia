@@ -182,29 +182,6 @@ defmodule Mydia.MediaServer.PlexOAuth do
   end
 
   @doc """
-  Returns the best connection URL for a server.
-
-  Preference order:
-  1. Local HTTPS connections
-  2. Local HTTP connections
-  3. Remote HTTPS connections
-  4. Remote HTTP connections
-  5. Relay connections (last resort)
-  """
-  @spec best_connection_url([connection()]) :: String.t() | nil
-  def best_connection_url(connections) when is_list(connections) do
-    connections
-    |> Enum.sort_by(&connection_priority/1)
-    |> List.first()
-    |> case do
-      nil -> nil
-      conn -> conn.uri
-    end
-  end
-
-  def best_connection_url(_), do: nil
-
-  @doc """
   Returns the client identifier used for OAuth requests.
   """
   @spec client_identifier() :: String.t()
@@ -253,11 +230,4 @@ defmodule Mydia.MediaServer.PlexOAuth do
   end
 
   defp parse_connections(_), do: []
-
-  # Lower number = higher priority
-  defp connection_priority(%{relay: true}), do: 5
-  defp connection_priority(%{local: true, protocol: "https"}), do: 1
-  defp connection_priority(%{local: true}), do: 2
-  defp connection_priority(%{protocol: "https"}), do: 3
-  defp connection_priority(_), do: 4
 end

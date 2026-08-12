@@ -18,6 +18,8 @@ defmodule Mydia.MediaServer.Plex.Endpoint do
   @probe_path "/library/sections"
   @probe_timeout_ms 3_000
   @cache_ttl_ms :timer.minutes(10)
+  @refresh_after_ms :timer.hours(6)
+  @refresh_claim_ttl_ms :timer.minutes(2)
 
   @doc """
   Returns a working base URL for the config.
@@ -25,20 +27,36 @@ defmodule Mydia.MediaServer.Plex.Endpoint do
   An explicit `url` on the config is a manual operator override and wins over
   discovery. Otherwise the cached winner is reused when fresh, and failing that
   every candidate is probed concurrently.
+
+  Options:
+    * `:plex_tv_base` - override the plex.tv base URL (tests only)
   """
-  @spec resolve(MediaServerConfig.t()) :: {:ok, String.t()} | {:error, Error.t()}
-  def resolve(%MediaServerConfig{url: url} = config) when is_binary(url) and url != "" do
+  @spec resolve(MediaServerConfig.t(), keyword()) :: {:ok, String.t()} | {:error, Error.t()}
+  # Multiple clauses with a default argument require an explicit function head.
+  def resolve(config, opts \\ [])
+
+  def resolve(%MediaServerConfig{url: url} = config, _opts) when is_binary(url) and url != "" do
     case probe(url, config.token) do
       :ok -> {:ok, url}
       {:error, _} = err -> err
     end
   end
 
-  def resolve(%MediaServerConfig{} = config) do
-    case cached(config) do
-      {:ok, url} -> {:ok, url}
-      :miss -> probe_all(config)
+  def resolve(%MediaServerConfig{} = config, opts) do
+    result =
+      case cached(config) do
+        {:ok, url} -> {:ok, url}
+        :miss -> probe_all(config)
+      end
+
+    # Only on success. A failure has already been through probe_all's own
+    # rediscover retry, so a second refresh would be pure duplication.
+    case result do
+      {:ok, _} -> maybe_refresh_stale(config, opts)
+      {:error, _} -> :ok
     end
+
+    result
   end
 
   @doc """
@@ -63,7 +81,10 @@ defmodule Mydia.MediaServer.Plex.Endpoint do
     with {:ok, servers} <- PlexOAuth.list_servers(config.token, opts),
          %{} = match <- find_by_identifier(servers, config.machine_identifier),
          {:ok, updated} <- persist(config, match) do
-      invalidate(config)
+      # A six-hourly refresh that always invalidated would throw away a healthy
+      # cached winner for nothing. Only a changed address set justifies it.
+      if updated.connections != config.connections, do: invalidate(config)
+
       {:ok, updated}
     else
       nil ->
@@ -95,9 +116,14 @@ defmodule Mydia.MediaServer.Plex.Endpoint do
 
   # ── Private ────────────────────────────────────────────────────────
 
-  defp probe_all(config), do: probe_all(config, false)
+  @doc """
+  Races every candidate address and returns the first that answers.
 
-  defp probe_all(%MediaServerConfig{connections: connections, token: token} = config, retried?) do
+  Public and cache-free because the add-server wizard needs this for a config
+  that has not been saved yet, so there is no id to key the cache on.
+  """
+  @spec probe_connections([map()], String.t() | nil) :: {:ok, String.t()} | {:error, Error.t()}
+  def probe_connections(connections, token) do
     uris = connections |> Enum.map(&candidate_uri/1) |> Enum.reject(&is_nil/1) |> Enum.uniq()
 
     # `ordered: false` plus a lazy scan lets the first working candidate win
@@ -116,16 +142,21 @@ defmodule Mydia.MediaServer.Plex.Endpoint do
         {:exit, _} -> []
       end)
 
-    {winner, results} = first_success(stream)
+    case first_success(stream) do
+      {{uri, :ok}, _results} -> {:ok, uri}
+      {nil, results} -> {:error, worst_error(results)}
+    end
+  end
 
-    case winner do
-      {uri, :ok} ->
+  defp probe_all(config), do: probe_all(config, false)
+
+  defp probe_all(%MediaServerConfig{connections: connections, token: token} = config, retried?) do
+    case probe_connections(connections, token) do
+      {:ok, uri} ->
         put_cache(config, uri)
         {:ok, uri}
 
-      nil ->
-        error = worst_error(results)
-
+      {:error, error} ->
         if not retried? and error.kind == :unreachable and
              is_binary(config.machine_identifier) do
           case rediscover(config) do
@@ -136,6 +167,66 @@ defmodule Mydia.MediaServer.Plex.Endpoint do
           {:error, error}
         end
     end
+  end
+
+  # Fires a background rediscovery when the stored address list has aged out.
+  # The caller never waits: it already has a working URL, and a plex.tv round
+  # trip on the request path is exactly the latency this module avoids.
+  defp maybe_refresh_stale(%MediaServerConfig{machine_identifier: mi} = config, opts)
+       when is_binary(mi) do
+    if stale?(config) and claim_refresh(config) do
+      Task.Supervisor.start_child(Mydia.TaskSupervisor, fn ->
+        try do
+          rediscover(config, opts)
+        after
+          release_refresh(config)
+        end
+      end)
+    end
+
+    :ok
+  end
+
+  defp maybe_refresh_stale(_config, _opts), do: :ok
+
+  defp stale?(%MediaServerConfig{connections_refreshed_at: nil}), do: true
+
+  defp stale?(%MediaServerConfig{connections_refreshed_at: at}) do
+    DateTime.diff(DateTime.utc_now(), at, :millisecond) >= @refresh_after_ms
+  end
+
+  # Only one refresh per config at a time, so a burst of concurrent requests
+  # does not become a burst of plex.tv calls. A claim older than the TTL can be
+  # taken over, so a refresher that dies before releasing does not wedge the
+  # config forever. Two processes can in principle steal the same expired claim
+  # at once; the cost is one duplicate refresh, which is not worth a lock.
+  defp claim_refresh(%MediaServerConfig{id: id}) do
+    ensure_table()
+    key = {:refreshing, id}
+    now = System.monotonic_time(:millisecond)
+
+    if :ets.insert_new(@table, {key, now}) do
+      true
+    else
+      case :ets.lookup(@table, key) do
+        [{^key, claimed_at}] when now - claimed_at >= @refresh_claim_ttl_ms ->
+          :ets.insert(@table, {key, now})
+          true
+
+        _ ->
+          false
+      end
+    end
+  rescue
+    ArgumentError -> false
+  end
+
+  defp release_refresh(%MediaServerConfig{id: id}) do
+    ensure_table()
+    :ets.delete(@table, {:refreshing, id})
+    :ok
+  rescue
+    ArgumentError -> :ok
   end
 
   # Walks the stream only as far as the first success. Returns that result (or
@@ -169,7 +260,8 @@ defmodule Mydia.MediaServer.Plex.Endpoint do
   defp persist(config, server) do
     Settings.update_media_server_config(config, %{
       connections: connections_for_storage(server.connections),
-      server_access_token: server.access_token
+      server_access_token: server.access_token,
+      connections_refreshed_at: DateTime.utc_now() |> DateTime.truncate(:second)
     })
   end
 

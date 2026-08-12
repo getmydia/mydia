@@ -85,4 +85,38 @@ defmodule Mydia.Settings.MediaServerConfigTest do
       refute changeset.valid?
     end
   end
+
+  describe "connections_refreshed_at" do
+    test "is cast and round-trips through the database" do
+      at = DateTime.utc_now() |> DateTime.truncate(:second)
+
+      {:ok, config} =
+        Mydia.Settings.create_media_server_config(%{
+          name: "Refresh Stamp #{System.unique_integer([:positive])}",
+          type: :plex,
+          token: "tok",
+          machine_identifier: "abc123",
+          connections: [%{"uri" => "http://127.0.0.1:32400"}],
+          connections_refreshed_at: at
+        })
+
+      assert config.connections_refreshed_at == at
+
+      assert Mydia.Repo.get!(Mydia.Settings.MediaServerConfig, config.id).connections_refreshed_at ==
+               at
+    end
+
+    test "defaults to nil when not provided" do
+      {:ok, config} =
+        Mydia.Settings.create_media_server_config(%{
+          name: "No Stamp #{System.unique_integer([:positive])}",
+          type: :plex,
+          token: "tok",
+          machine_identifier: "def456",
+          connections: [%{"uri" => "http://127.0.0.1:32400"}]
+        })
+
+      assert is_nil(config.connections_refreshed_at)
+    end
+  end
 end

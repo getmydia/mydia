@@ -229,8 +229,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   attr :plex_oauth_state, :atom, default: :idle
   attr :plex_oauth_servers, :list, default: []
   attr :plex_manual_entry, :boolean, default: false
-  attr :plex_selected_server, :map, default: nil
-  attr :plex_connection_statuses, :map, default: %{}
+  attr :plex_reachability, :any, default: :checking
 
   def media_server_modal(assigns) do
     # Get the current type from the form
@@ -327,29 +326,16 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                   <ul class="steps steps-horizontal w-full text-xs mb-4">
                     <li class={[
                       "step",
-                      @plex_oauth_state in [
-                        :idle,
-                        :authorizing,
-                        :selecting_server,
-                        :selecting_connection,
-                        :complete,
-                        :error
-                      ] && "step-warning"
+                      @plex_oauth_state in [:idle, :authorizing, :selecting_server, :complete, :error] &&
+                        "step-warning"
                     ]}>
                       Sign In
                     </li>
                     <li class={[
                       "step",
-                      @plex_oauth_state in [:selecting_server, :selecting_connection, :complete] &&
-                        "step-warning"
+                      @plex_oauth_state in [:selecting_server, :complete] && "step-warning"
                     ]}>
                       Server
-                    </li>
-                    <li class={[
-                      "step",
-                      @plex_oauth_state in [:selecting_connection, :complete] && "step-warning"
-                    ]}>
-                      Connection
                     </li>
                     <li class={["step", @plex_oauth_state == :complete && "step-warning"]}>Done</li>
                   </ul>
@@ -455,91 +441,6 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                           <.icon name="hero-arrow-left" class="w-4 h-4" /> Start over
                         </button>
                       </div>
-                    <% :selecting_connection -> %>
-                      <div class="space-y-3">
-                        <div class="flex items-center gap-2 bg-base-100 rounded-lg p-2">
-                          <div class="bg-primary/10 p-2 rounded-lg">
-                            <.icon name="hero-server" class="w-5 h-5 text-primary" />
-                          </div>
-                          <span class="font-medium">{@plex_selected_server.name}</span>
-                        </div>
-                        <p class="text-sm text-base-content/70">Choose a connection:</p>
-                        <div class="space-y-2 sm:max-h-48 sm:overflow-y-auto">
-                          <% sorted_connections =
-                            Enum.sort_by(@plex_selected_server.connections, fn conn ->
-                              case Map.get(@plex_connection_statuses, conn.uri, :testing) do
-                                :ok -> 0
-                                :testing -> 1
-                                _ -> 2
-                              end
-                            end) %>
-                          <%= for conn <- sorted_connections do %>
-                            <% status = Map.get(@plex_connection_statuses, conn.uri, :testing) %>
-                            <button
-                              type="button"
-                              class={[
-                                "card card-compact bg-base-100 border w-full cursor-pointer transition-all",
-                                cond do
-                                  status == :ok ->
-                                    "border-success/50 hover:border-success hover:shadow-md"
-
-                                  status == :error ->
-                                    "border-error/30 opacity-50 cursor-not-allowed"
-
-                                  true ->
-                                    "border-base-300 hover:border-warning/50"
-                                end
-                              ]}
-                              phx-click="select_plex_connection"
-                              phx-value-url={conn.uri}
-                              disabled={status == :error}
-                            >
-                              <div class="card-body flex-row items-center gap-3 p-3">
-                                <%= case status do %>
-                                  <% :testing -> %>
-                                    <span class="loading loading-spinner loading-sm text-warning"></span>
-                                  <% :ok -> %>
-                                    <div class="bg-success/10 p-1.5 rounded-lg">
-                                      <.icon name="hero-check-circle" class="w-4 h-4 text-success" />
-                                    </div>
-                                  <% _ -> %>
-                                    <div class="bg-error/10 p-1.5 rounded-lg">
-                                      <.icon name="hero-x-circle" class="w-4 h-4 text-error" />
-                                    </div>
-                                <% end %>
-                                <div class="flex-1 text-left min-w-0">
-                                  <p class="font-mono text-xs truncate">
-                                    {simplify_plex_url(conn.uri)}
-                                  </p>
-                                  <div class="flex gap-1 mt-1">
-                                    <%= if conn.local do %>
-                                      <span class="badge badge-xs badge-info gap-1">
-                                        <.icon name="hero-home" class="w-3 h-3" /> local
-                                      </span>
-                                    <% end %>
-                                    <%= if conn.relay do %>
-                                      <span class="badge badge-xs badge-warning gap-1">
-                                        <.icon name="hero-cloud" class="w-3 h-3" /> relay
-                                      </span>
-                                    <% end %>
-                                  </div>
-                                </div>
-                              </div>
-                            </button>
-                          <% end %>
-                        </div>
-                        <p class="text-xs text-base-content/50">
-                          <.icon name="hero-check-circle" class="w-3 h-3 inline text-success" />
-                          connections are reachable. Choose "local" if on same network.
-                        </p>
-                        <button
-                          type="button"
-                          class="btn btn-ghost btn-sm gap-1"
-                          phx-click="cancel_plex_oauth"
-                        >
-                          <.icon name="hero-arrow-left" class="w-4 h-4" /> Back to servers
-                        </button>
-                      </div>
                     <% :complete -> %>
                       <div class="text-center py-2">
                         <div class="bg-success/10 inline-flex p-3 rounded-full mb-3">
@@ -549,6 +450,25 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                         <p class="text-sm text-base-content/60">
                           Review the details below and save.
                         </p>
+                        <div class="mt-3 text-xs">
+                          <%= case @plex_reachability do %>
+                            <% :checking -> %>
+                              <span class="inline-flex items-center gap-2 text-base-content/60">
+                                <span class="loading loading-spinner loading-xs"></span>
+                                Checking connectivity...
+                              </span>
+                            <% {:ok, uri} -> %>
+                              <span class="inline-flex items-center gap-1 text-success">
+                                <.icon name="hero-check-circle" class="w-3 h-3" /> Reachable at
+                                <span class="font-mono">{simplify_plex_url(uri)}</span>
+                              </span>
+                            <% {:error, _error} -> %>
+                              <span class="inline-flex items-center gap-1 text-warning">
+                                <.icon name="hero-exclamation-triangle" class="w-3 h-3" />
+                                No address responded yet. You can still save; Mydia will keep looking.
+                              </span>
+                          <% end %>
+                        </div>
                       </div>
                     <% :error -> %>
                       <div class="text-center space-y-4 py-2">
