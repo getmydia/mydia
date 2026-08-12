@@ -289,6 +289,8 @@ defmodule Mydia.Streaming.HlsSession do
 
         Mydia.Downloads.broadcast_job_update(job.id)
 
+        Mydia.Streaming.emit_playback_started(media_file_id, user_id)
+
         Logger.info("Temp directory: #{temp_dir}")
         Logger.info("Starting HLS transcoding with FFmpeg backend")
 

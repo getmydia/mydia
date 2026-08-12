@@ -7,6 +7,7 @@ defmodule Mydia.Streaming do
   alias Mydia.Streaming.HlsSession
   alias Mydia.Library
   alias Mydia.Accounts.User
+  alias Mydia.Events
   alias Mydia.Repo
 
   defmodule ActiveSession do
@@ -96,6 +97,34 @@ defmodule Mydia.Streaming do
     |> Enum.reject(&is_nil/1)
     |> Enum.filter(&(&1.user != nil))
     |> Enum.sort_by(& &1.started_at, {:desc, DateTime})
+  end
+
+  @doc """
+  Records that a play started on this server.
+
+  Sessions are the truthful signal for a play: a media-server sync writes
+  playback progress without ever creating one, and counting those would report
+  watches that happened on somebody else's box.
+
+  Returns `:ok` and emits nothing when the media file has been deleted out from
+  under the session, which is the same tolerance `list_active_sessions/0` has.
+  """
+  @spec emit_playback_started(binary(), binary()) :: :ok
+  def emit_playback_started(media_file_id, user_id) do
+    case Library.get_media_file(media_file_id) do
+      %{episode_id: episode_id} when not is_nil(episode_id) ->
+        Events.playback_event("started", user_id, [episode_id: episode_id], %{
+          "origin" => "player"
+        })
+
+      %{media_item_id: media_item_id} when not is_nil(media_item_id) ->
+        Events.playback_event("started", user_id, [media_item_id: media_item_id], %{
+          "origin" => "player"
+        })
+
+      _ ->
+        :ok
+    end
   end
 
   defp pad(num), do: String.pad_leading("#{num}", 2, "0")
