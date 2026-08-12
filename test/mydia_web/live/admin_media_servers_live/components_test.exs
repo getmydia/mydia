@@ -281,9 +281,11 @@ defmodule MydiaWeb.AdminMediaServersLive.ComponentsTest do
       refute html =~ ~s(id="media_server_config_url")
     end
 
-    # Test Connection builds its probe config from url and token alone, with no
-    # connections, so on the discovery path it always fails. The reachability
-    # line already on this screen reports the same thing honestly.
+    # The review step already reports reachability on its own, so a second
+    # button asking the same question is noise. (It used to be worse than noise:
+    # the probe config was built from url and token alone, so on the discovery
+    # path it answered "URL is required" every time. It now carries the
+    # discovered connections, but the panel still says it better.)
     test "Test Connection is hidden on the review step" do
       html = render_modal(oauth_state: :complete, discovery: discovery_map())
 
@@ -294,6 +296,112 @@ defmodule MydiaWeb.AdminMediaServersLive.ComponentsTest do
       html = render_modal(manual_entry: true)
 
       assert html =~ "test_media_server_connection"
+    end
+  end
+
+  describe "Plex Home profile mapping modal" do
+    defp render_profiles(opts) do
+      render_component(&Components.plex_profiles_modal/1, %{
+        config: Keyword.get(opts, :config, %MediaServerConfig{name: "Galactica", type: :plex}),
+        state: Keyword.get(opts, :state, :ready),
+        profiles: Keyword.get(opts, :profiles, []),
+        users: Keyword.get(opts, :users, []),
+        mapping: Keyword.get(opts, :mapping, %{}),
+        saving: Keyword.get(opts, :saving, false)
+      })
+    end
+
+    defp profile(id, username, admin? \\ false) do
+      %{plex_account_id: id, username: username, admin?: admin?}
+    end
+
+    defp users, do: [%{id: "u-admin", username: "admin"}, %{id: "u-alex", username: "alex"}]
+
+    defp selected_option(html, account_id) do
+      html
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query(~s(select[name="mapping[#{account_id}]"] option[selected]))
+      |> LazyHTML.attribute("value")
+      |> List.first()
+    end
+
+    test "shows a row and a user select for every Plex Home profile" do
+      html =
+        render_profiles(
+          profiles: [profile("1", "arsfeld", true), profile("2", "Camille")],
+          users: users()
+        )
+
+      assert html =~ ~s(id="plex-profile-1")
+      assert html =~ ~s(id="plex-profile-2")
+      assert html =~ "arsfeld"
+      assert html =~ "Camille"
+      assert html =~ ~s(name="mapping[1]")
+      assert html =~ ~s(name="mapping[2]")
+    end
+
+    test "every select offers Don't sync plus each Mydia user" do
+      html = render_profiles(profiles: [profile("2", "Camille")], users: users())
+
+      assert html =~ "Don&#39;t sync"
+      assert html =~ ~s(value="u-admin")
+      assert html =~ ~s(value="u-alex")
+    end
+
+    test "preselects the user the mapping names" do
+      # Without this the operator's saved links would render as unmapped and a
+      # blind re-save would silently unlink everyone.
+      html =
+        render_profiles(
+          profiles: [profile("1", "arsfeld"), profile("2", "Camille")],
+          users: users(),
+          mapping: %{"1" => "u-alex", "2" => nil}
+        )
+
+      assert selected_option(html, "1") == "u-alex"
+      assert selected_option(html, "2") in [nil, ""]
+    end
+
+    test "marks the Plex account owner" do
+      html = render_profiles(profiles: [profile("1", "arsfeld", true)], users: users())
+
+      assert html =~ "owner"
+    end
+
+    test "reports that plex.tv is still being asked" do
+      html = render_profiles(state: :loading)
+
+      assert html =~ ~s(id="plex-profiles-loading")
+      refute html =~ ~s(id="plex-profiles-form")
+    end
+
+    test "surfaces a load failure instead of an empty list" do
+      # An empty list and a failed request look identical on screen otherwise,
+      # and "this account has no profiles" is the wrong thing to tell someone
+      # whose token just expired.
+      html = render_profiles(state: {:error, "Could not load Plex Home profiles: HTTP 401"})
+
+      assert html =~ ~s(id="plex-profiles-error")
+      assert html =~ "HTTP 401"
+      refute html =~ ~s(id="plex-profiles-form")
+    end
+
+    test "explains an account with no Home profiles" do
+      html = render_profiles(state: :ready, profiles: [])
+
+      assert html =~ ~s(id="plex-profiles-empty")
+      refute html =~ ~s(id="plex-profiles-form")
+    end
+
+    test "disables the save button while a save is in flight" do
+      html = render_profiles(profiles: [profile("2", "Camille")], users: users(), saving: true)
+
+      assert html =~ "Saving..."
+
+      assert html
+             |> LazyHTML.from_fragment()
+             |> LazyHTML.query("#plex-profiles-save")
+             |> LazyHTML.attribute("disabled") != []
     end
   end
 end

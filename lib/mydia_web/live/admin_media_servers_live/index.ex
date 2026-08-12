@@ -1,12 +1,14 @@
 defmodule MydiaWeb.AdminMediaServersLive.Index do
   use MydiaWeb, :live_view
 
+  alias Mydia.Accounts
   alias Mydia.Settings
   alias Mydia.Settings.MediaServerConfig
   alias Mydia.MediaServer.Client, as: MediaServerClient
   alias Mydia.MediaServer.Error
   alias Mydia.MediaServer.PlexOAuth
   alias Mydia.MediaServer.Plex.Endpoint, as: PlexEndpoint
+  alias Mydia.MediaServer.Plex.Home, as: PlexHome
   alias Mydia.MediaServer.Plex.Selection
   alias Mydia.Sync
 
@@ -19,6 +21,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
      socket
      |> assign(:page_title, "Configuration - Media Servers")
      |> assign(:active_tab, :media_servers)
+     |> clear_plex_profiles()
      |> load_data()}
   end
 
@@ -38,7 +41,63 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
     end
   end
 
+  ## Plex Home profile mapping
+
+  @impl true
+  def handle_info({:plex_profiles, config_id, result}, socket) do
+    # Guarded on the id so a slow plex.tv answer for a server the operator has
+    # already closed cannot repopulate the modal for a different one.
+    case socket.assigns[:plex_profiles_config] do
+      %{id: ^config_id} = config -> {:noreply, apply_profile_load(socket, config, result)}
+      _ -> {:noreply, socket}
+    end
+  end
+
+  @impl true
+  def handle_info({:plex_profiles_saved, config_id, result}, socket) do
+    case socket.assigns[:plex_profiles_config] do
+      %{id: ^config_id} = config -> {:noreply, apply_profile_save(socket, config, result)}
+      _ -> {:noreply, socket}
+    end
+  end
+
   ## Media Server Events
+
+  @impl true
+  def handle_event("open_plex_profiles", %{"id" => id}, socket) do
+    config = Settings.get_media_server_config!(id)
+
+    {:noreply,
+     socket
+     |> assign(:plex_profiles_config, config)
+     |> assign(:plex_profiles_state, :loading)
+     |> assign(:plex_profiles, [])
+     |> assign(:plex_profiles_users, Accounts.list_users())
+     |> assign(:plex_profiles_mapping, %{})
+     |> assign(:plex_profiles_saving, false)
+     |> start_profile_load(config)}
+  end
+
+  @impl true
+  def handle_event("close_plex_profiles", _params, socket) do
+    {:noreply, clear_plex_profiles(socket)}
+  end
+
+  @impl true
+  def handle_event("save_plex_profiles", params, socket) do
+    config = socket.assigns.plex_profiles_config
+    mapping = normalize_mapping(params["mapping"] || %{})
+    parent = self()
+
+    # Off the LiveView process: applying a mapping is one plex.tv profile switch
+    # per newly linked profile, and blocking here would freeze every other event
+    # on the page while they run.
+    Task.Supervisor.start_child(Mydia.TaskSupervisor, fn ->
+      send(parent, {:plex_profiles_saved, config.id, PlexHome.apply_mapping(config, mapping)})
+    end)
+
+    {:noreply, assign(socket, :plex_profiles_saving, true)}
+  end
 
   @impl true
   def handle_event("new_media_server", _params, socket) do
@@ -394,11 +453,17 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
         _ -> :plex
       end
 
+    # `connections` and `machine_identifier` have to ride along. A server just
+    # picked through the OAuth wizard has no url yet and addresses itself purely
+    # through its advertised connections, so dropping them here made the test
+    # button report "URL is required" for a server it had only just discovered.
     test_config = %MediaServerConfig{
       type: type,
       url: params.url,
       token: params.token,
-      name: params.name || "Test"
+      name: params.name || "Test",
+      connections: params.connections || [],
+      machine_identifier: params.machine_identifier
     }
 
     adapter = MediaServerClient.adapter_for(test_config)
@@ -490,6 +555,140 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
         |> start_reachability_probe(server)
         |> assign(:media_server_form, to_form(changeset))
     end
+  end
+
+  defp start_profile_load(socket, config) do
+    parent = self()
+
+    Task.Supervisor.start_child(Mydia.TaskSupervisor, fn ->
+      send(parent, {:plex_profiles, config.id, PlexHome.list_users(config)})
+    end)
+
+    socket
+  end
+
+  defp apply_profile_load(socket, config, {:ok, profiles}) do
+    links = Settings.list_media_server_user_links(config.id)
+
+    socket
+    |> assign(:plex_profiles, profiles)
+    |> assign(
+      :plex_profiles_mapping,
+      initial_mapping(profiles, links, socket.assigns.plex_profiles_users)
+    )
+    |> assign(:plex_profiles_state, :ready)
+  end
+
+  defp apply_profile_load(socket, _config, {:error, %Error{} = error}) do
+    assign(
+      socket,
+      :plex_profiles_state,
+      {:error, "Could not load Plex Home profiles: #{Error.message(error)}"}
+    )
+  end
+
+  defp apply_profile_save(socket, config, {:ok, links}) do
+    # A fresh mapping is worth acting on immediately: the operator opened this
+    # because sync had been sitting idle, and making them wait for the next
+    # half-hourly tick to see whether it worked is the wrong answer.
+    if links != [], do: enqueue_server_sync(config)
+
+    socket
+    |> clear_plex_profiles()
+    |> put_flash(:info, link_flash(links, config))
+    |> load_data()
+  end
+
+  defp apply_profile_save(socket, _config, {:error, :duplicate_user}) do
+    socket
+    |> assign(:plex_profiles_saving, false)
+    |> put_flash(:error, "Each Mydia user can be linked to only one Plex profile.")
+  end
+
+  defp apply_profile_save(socket, _config, {:error, %Error{} = error}) do
+    socket
+    |> assign(:plex_profiles_saving, false)
+    |> put_flash(:error, "Could not save Plex profile links: #{Error.message(error)}")
+  end
+
+  defp apply_profile_save(socket, _config, {:error, reason}) do
+    MydiaLogger.log_warning(:liveview, "Saving Plex profile links failed",
+      operation: :save_plex_profiles,
+      error: inspect(reason)
+    )
+
+    socket
+    |> assign(:plex_profiles_saving, false)
+    |> put_flash(:error, "Could not save Plex profile links.")
+  end
+
+  defp link_flash([], config), do: "No Plex profiles are linked to #{config.name}."
+
+  defp link_flash(links, config) do
+    "Linked #{length(links)} Plex #{if length(links) == 1, do: "profile", else: "profiles"} " <>
+      "on #{config.name}. Watched sync queued."
+  end
+
+  defp enqueue_server_sync(config) do
+    %{"mode" => "server", "config_id" => config.id}
+    |> Mydia.Jobs.MediaServerWatchedSync.new()
+    |> safe_insert()
+
+    :ok
+  end
+
+  # A blank select is "do not sync this profile", which has to survive as an
+  # explicit nil: it is the difference between unlinking a profile and never
+  # having been asked about it.
+  defp normalize_mapping(mapping) do
+    Map.new(mapping, fn
+      {account_id, ""} -> {account_id, nil}
+      {account_id, user_id} -> {account_id, user_id}
+    end)
+  end
+
+  # A saved link is the operator's own decision and always wins. A username
+  # match is only a suggestion for a profile nobody has mapped yet, and it must
+  # never propose a user another profile already holds: two profiles on one user
+  # is refused on save, and offering that as the default would hand the operator
+  # a form that cannot be submitted without them working out why.
+  defp initial_mapping(profiles, links, users) do
+    by_account = Map.new(links, &{&1.plex_account_id, &1.user_id})
+    by_username = Map.new(users, &{String.downcase(&1.username), &1.id})
+
+    {mapping, _taken} =
+      Enum.reduce(profiles, {%{}, MapSet.new(Map.values(by_account))}, fn profile, {acc, taken} ->
+        case Map.get(by_account, profile.plex_account_id) do
+          nil ->
+            case Map.get(by_username, String.downcase(profile.username || "")) do
+              suggestion when is_binary(suggestion) ->
+                if MapSet.member?(taken, suggestion) do
+                  {Map.put(acc, profile.plex_account_id, nil), taken}
+                else
+                  {Map.put(acc, profile.plex_account_id, suggestion),
+                   MapSet.put(taken, suggestion)}
+                end
+
+              _ ->
+                {Map.put(acc, profile.plex_account_id, nil), taken}
+            end
+
+          user_id ->
+            {Map.put(acc, profile.plex_account_id, user_id), taken}
+        end
+      end)
+
+    mapping
+  end
+
+  defp clear_plex_profiles(socket) do
+    socket
+    |> assign(:plex_profiles_config, nil)
+    |> assign(:plex_profiles_state, :loading)
+    |> assign(:plex_profiles, [])
+    |> assign(:plex_profiles_users, [])
+    |> assign(:plex_profiles_mapping, %{})
+    |> assign(:plex_profiles_saving, false)
   end
 
   # Advisory only. The review step never blocks Save on the result, because a
