@@ -287,13 +287,19 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
           </div>
           <label class="label cursor-pointer gap-2 w-full justify-between sm:w-auto sm:justify-end">
             <span class="label-text text-sm">Enabled</span>
-            <input type="hidden" name={@media_server_form[:enabled].name} value="false" />
+            <input
+              type="hidden"
+              name={@media_server_form[:enabled].name}
+              value="false"
+              form="media-server-form"
+            />
             <input
               type="checkbox"
               name={@media_server_form[:enabled].name}
               value="true"
               checked={Phoenix.HTML.Form.input_value(@media_server_form, :enabled) in [true, "true"]}
               class="toggle toggle-success toggle-sm"
+              form="media-server-form"
             />
           </label>
         </div>
