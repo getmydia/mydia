@@ -89,4 +89,69 @@ defmodule Mydia.Playback.StatsTest do
       assert Stats.bucket_date(at, 0) == ~D[2026-08-12]
     end
   end
+
+  # fetch_events/3 deliberately widens the UTC window by a day on each side so a
+  # local-evening play under a negative offset is still fetched. That means rows
+  # outside the local window reach the reducer and must be discarded there. If
+  # the discard is wrong, plays leak onto days they did not happen on.
+  describe "local window boundaries" do
+    defp local_at(date, time, offset) do
+      date
+      |> DateTime.new!(time)
+      |> DateTime.add(-offset, :second)
+      |> DateTime.truncate(:second)
+    end
+
+    test "an event one day before the window is fetched but discarded" do
+      offset = Stats.local_utc_offset()
+      today = Stats.local_today(offset)
+      first_day = Date.add(today, -6)
+
+      insert_play("media_item", local_at(Date.add(first_day, -1), ~T[12:00:00], offset))
+
+      result = Stats.plays_by_day(7)
+
+      assert length(result) == 7
+      assert Enum.sum(Enum.map(result, & &1.movies)) == 0
+      assert List.first(result).date == first_day
+    end
+
+    test "an event dated tomorrow is fetched but discarded" do
+      offset = Stats.local_utc_offset()
+      today = Stats.local_today(offset)
+
+      insert_play("episode", local_at(Date.add(today, 1), ~T[12:00:00], offset))
+
+      result = Stats.plays_by_day(7)
+
+      assert Enum.sum(Enum.map(result, & &1.episodes)) == 0
+      assert List.last(result).date == today
+    end
+
+    test "a play at local 23:00 lands on today, not tomorrow" do
+      # This is the case local bucketing exists for: prime-time viewing under a
+      # negative offset is already tomorrow in UTC.
+      offset = Stats.local_utc_offset()
+      today = Stats.local_today(offset)
+
+      insert_play("media_item", local_at(today, ~T[23:00:00], offset))
+
+      result = Stats.plays_by_day(7)
+
+      assert List.last(result).date == today
+      assert List.last(result).movies == 1
+    end
+
+    test "a play at local 00:30 lands on today, not yesterday" do
+      offset = Stats.local_utc_offset()
+      today = Stats.local_today(offset)
+
+      insert_play("media_item", local_at(today, ~T[00:30:00], offset))
+
+      result = Stats.plays_by_day(7)
+
+      assert List.last(result).movies == 1
+      assert Enum.at(result, -2).movies == 0
+    end
+  end
 end
