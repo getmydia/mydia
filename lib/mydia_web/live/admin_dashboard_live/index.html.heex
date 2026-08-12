@@ -42,6 +42,25 @@
         <% end %>
       </div>
 
+      <%!--
+      Background transcodes only, never playback. Sessions already appear above
+      as now-playing cards, and both session types also insert a TranscodeJob
+      row, so listing every active job here would show each viewer twice.
+      --%>
+      <%= if @background_jobs != [] do %>
+        <div id="background-transcodes">
+          <h3 class="text-lg font-semibold flex items-center gap-2 mb-3">
+            <.icon name="hero-cog-6-tooth" class="w-5 h-5 text-primary" /> Background transcodes
+          </h3>
+          <div class="divide-y divide-base-300 bg-base-100 rounded-box border border-base-300">
+            <MydiaWeb.AdminDashboardLive.Components.recent_job_card
+              :for={job <- @background_jobs}
+              job={job}
+            />
+          </div>
+        </div>
+      <% end %>
+
       <MydiaWeb.AdminDashboardLive.Components.plays_chart days={@days} />
 
       <div class="bg-base-200 rounded-box p-4">

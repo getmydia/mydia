@@ -68,6 +68,51 @@ defmodule MydiaWeb.AdminDashboardLiveTest do
     assert render(view) =~ "bandwidth-chart"
   end
 
+  describe "background transcodes" do
+    defp insert_job(media_file, user, type, status) do
+      %Mydia.Downloads.TranscodeJob{}
+      |> Mydia.Downloads.TranscodeJob.changeset(%{
+        media_file_id: media_file.id,
+        user_id: user.id,
+        type: type,
+        status: status,
+        resolution: "1080p",
+        progress: 0.5,
+        started_at: DateTime.utc_now() |> DateTime.truncate(:second)
+      })
+      |> Mydia.Repo.insert!()
+    end
+
+    test "a download job is listed", %{conn: conn, token: token, user: user} do
+      movie = Mydia.MediaFixtures.media_item_fixture(%{type: "movie", title: "Arrival"})
+      media_file = Mydia.MediaFixtures.media_file_fixture(%{media_item_id: movie.id})
+
+      insert_job(media_file, user, "download", "transcoding")
+
+      {:ok, view, _html} = live(authed(conn, token), ~p"/admin/dashboard")
+
+      assert has_element?(view, "#background-transcodes")
+    end
+
+    test "a playback job is not listed, so viewers are not counted twice", %{
+      conn: conn,
+      token: token,
+      user: user
+    } do
+      # Both session types insert a TranscodeJob of type stream/direct. Those
+      # already show as now-playing cards; listing them here too is the double
+      # count the old Status tab had.
+      movie = Mydia.MediaFixtures.media_item_fixture(%{type: "movie", title: "Arrival"})
+      media_file = Mydia.MediaFixtures.media_file_fixture(%{media_item_id: movie.id})
+
+      insert_job(media_file, user, "stream", "transcoding")
+
+      {:ok, view, _html} = live(authed(conn, token), ~p"/admin/dashboard")
+
+      refute has_element?(view, "#background-transcodes")
+    end
+  end
+
   test "the chart keeps updating after the window fills", %{conn: conn, token: token} do
     # Regression: the trim was written as a positive Enum.take/2 over an
     # oldest-first list, which keeps the OLDEST 360 and discards every new
