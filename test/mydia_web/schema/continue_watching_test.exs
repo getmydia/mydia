@@ -91,6 +91,35 @@ defmodule MydiaWeb.Schema.ContinueWatchingTest do
              run_query(@query, %{"first" => 10}, ctx.user)
   end
 
+  test "an in-progress movie renders on the merged rail", ctx do
+    # The only test that reaches the `kind: :movie` clause of
+    # build_on_deck_item/1. The upNext movie test does not: that resolver
+    # filters to episodes, so it never builds a movie item. Without this, the
+    # movie clause and its String.to_existing_atom/1 call ship unexecuted.
+    movie = MediaFixtures.media_item_fixture(%{type: "movie", title: "Some Movie"})
+    MediaFixtures.media_file_fixture(%{media_item_id: movie.id})
+
+    {:ok, _} =
+      Playback.save_progress(
+        ctx.user.id,
+        [media_item_id: movie.id],
+        %{position_seconds: 900, duration_seconds: 7200}
+      )
+
+    assert {:ok, %{data: %{"continueWatching" => [item]}}} =
+             run_query(@query, %{"first" => 10}, ctx.user)
+
+    assert item["id"] == movie.id
+    assert item["type"] == "MOVIE"
+    assert item["title"] == "Some Movie"
+    assert item["state"] == "continue"
+    assert item["showId"] == nil
+    assert item["seasonNumber"] == nil
+    assert item["episodeNumber"] == nil
+    assert item["progress"]["positionSeconds"] == 900
+    assert length(item["files"]) == 1
+  end
+
   test "an anonymous caller is denied by the fail-closed auth gate" do
     # continueWatching requires authentication (MydiaWeb.Schema.middleware/3,
     # MydiaWeb.Schema.Middleware.RequireAuth), so the nil-user branch in
