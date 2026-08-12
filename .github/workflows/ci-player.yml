@@ -12,11 +12,18 @@ on:
       # player/. Without this, a change breaking the Android target lands green
       # (ci.yml only builds the NIF for the host) and surfaces at release time.
       - "native/**"
+      # test-player's build_runner step runs graphql_codegen, which validates
+      # the ~29 .graphql query files under player/lib/graphql/ against this
+      # schema. player/lib/graphql/schema.graphql is a symlink to this file,
+      # so filtering on the symlink's own path would never fire when only the
+      # target changes.
+      - "priv/graphql/schema.graphql"
       - ".github/workflows/ci-player.yml"
   pull_request:
     paths:
       - "player/**"
       - "native/**"
+      - "priv/graphql/schema.graphql"
       - ".github/workflows/ci-player.yml"
   workflow_dispatch:
 
