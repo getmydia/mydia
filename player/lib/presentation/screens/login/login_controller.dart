@@ -71,6 +71,7 @@ class LoginState {
     this.claimCodeStatus = ClaimCodeStatus.idle,
     this.claimCodeMessage,
     this.updateRequiredError,
+    this.credentialsNotPersisted = false,
   });
 
   final ConnectionMode mode;
@@ -84,6 +85,12 @@ class LoginState {
   /// The UI should show an UpdateRequiredDialog when this is not null.
   final UpdateRequiredError? updateRequiredError;
 
+  /// Set when pairing or login succeeded but the credentials could not be
+  /// written to durable storage, so they are lost when the app closes.
+  ///
+  /// The UI must warn the user before letting them into the app.
+  final bool credentialsNotPersisted;
+
   LoginState copyWith({
     ConnectionMode? mode,
     bool? isLoading,
@@ -93,6 +100,7 @@ class LoginState {
     String? claimCodeMessage,
     UpdateRequiredError? updateRequiredError,
     bool clearUpdateRequiredError = false,
+    bool? credentialsNotPersisted,
   }) {
     return LoginState(
       mode: mode ?? this.mode,
@@ -104,6 +112,8 @@ class LoginState {
       updateRequiredError: clearUpdateRequiredError
           ? null
           : (updateRequiredError ?? this.updateRequiredError),
+      credentialsNotPersisted:
+          credentialsNotPersisted ?? this.credentialsNotPersisted,
     );
   }
 
@@ -253,6 +263,7 @@ class LoginController extends _$LoginController {
         claimCodeStatus: ClaimCodeStatus.paired,
         claimCodeMessage: 'Paired successfully!',
         success: true,
+        credentialsNotPersisted: authService.storageDegraded,
       );
       debugPrint('[LoginController] Success state set!');
     } on UpdateRequiredError catch (e) {
@@ -299,7 +310,11 @@ class LoginController extends _$LoginController {
       await ref.read(authStateProvider.notifier).refresh();
 
       if (!ref.mounted) return;
-      state = state.copyWith(isLoading: false, success: true);
+      state = state.copyWith(
+        isLoading: false,
+        success: true,
+        credentialsNotPersisted: authService.storageDegraded,
+      );
     } catch (e) {
       // Check if still mounted before updating state
       if (!ref.mounted) return;
@@ -424,6 +439,7 @@ class LoginController extends _$LoginController {
         claimCodeStatus: ClaimCodeStatus.paired,
         claimCodeMessage: 'Paired successfully!',
         success: true,
+        credentialsNotPersisted: authService.storageDegraded,
       );
     } on UpdateRequiredError catch (e) {
       if (!ref.mounted) return;

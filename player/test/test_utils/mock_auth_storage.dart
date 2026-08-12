@@ -6,6 +6,12 @@ import 'package:player/core/auth/auth_storage.dart';
 class MockAuthStorage implements AuthStorage {
   final Map<String, String> _storage = {};
 
+  /// Set by tests that need to simulate storage that cannot persist.
+  bool degradedValue = false;
+
+  @override
+  bool get degraded => degradedValue;
+
   @override
   Future<String?> read(String key) async {
     return _storage[key];

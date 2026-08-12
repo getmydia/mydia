@@ -14,6 +14,11 @@ AuthStorage getAuthStorage() => _WebAuthStorage();
 class _WebAuthStorage implements AuthStorage {
   static const _prefix = 'mydia_auth_';
 
+  /// localStorage writes do not go through a fallback path, so there is no
+  /// degraded state to report on web.
+  @override
+  bool get degraded => false;
+
   @override
   Future<String?> read(String key) async {
     final value = web.window.localStorage.getItem('$_prefix$key');

@@ -12,6 +12,9 @@ class _StubAuthStorage implements AuthStorage {
   final Map<String, String> _data = {};
 
   @override
+  bool get degraded => false;
+
+  @override
   Future<String?> read(String key) async => _data[key];
 
   @override

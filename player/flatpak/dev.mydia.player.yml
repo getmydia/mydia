@@ -43,6 +43,11 @@ finish-args:
   - --device=dri
   # Stop the screen blanking during playback.
   - --talk-name=org.freedesktop.ScreenSaver
+  # flutter_secure_storage reaches the host Secret Service through libsecret,
+  # which talks D-Bus. Without this the sandbox reports the name as unknown,
+  # every credential write fails, and a pairing silently does not survive a
+  # restart. player/flatpak/test/finish-args-test.sh guards this line.
+  - --talk-name=org.freedesktop.secrets
   # The Flutter bundle and mpv both live under /app/lib.
   - --env=LD_LIBRARY_PATH=/app/lib
   # No --filesystem: the player streams from a server and reads no local media.

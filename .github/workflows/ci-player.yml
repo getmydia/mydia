@@ -327,6 +327,9 @@ jobs:
       - name: Validate AppStream metainfo
         run: appstreamcli validate --explain player/flatpak/dev.mydia.player.metainfo.xml
 
+      - name: Validate finish-args
+        run: player/flatpak/test/finish-args-test.sh
+
   flatpak-build:
     name: Flatpak / Build
     runs-on: ubuntu-latest

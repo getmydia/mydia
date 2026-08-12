@@ -15,8 +15,21 @@ import '../../graphql/mutations/login.graphql.dart';
 /// like auth tokens and server URLs. On native platforms, uses encrypted
 /// storage. On web, uses localStorage.
 class AuthService {
-  final AuthStorage _storage = getAuthStorage();
+  /// [storage] is injectable for tests. Production callers use the default,
+  /// which is the platform-appropriate implementation.
+  AuthService({AuthStorage? storage}) : _storage = storage ?? getAuthStorage();
+
+  final AuthStorage _storage;
   final DeviceInfoService _deviceInfo = DeviceInfoService();
+
+  /// Whether durability can still be guaranteed for credential writes.
+  ///
+  /// True once at least one write has failed to reach secure storage. It does
+  /// not mean every value is lost: writes before and after the failure may
+  /// well have persisted. It means the app can no longer promise that what it
+  /// just stored will be there next launch, which is enough to owe the user a
+  /// warning instead of a success message.
+  bool get storageDegraded => _storage.degraded;
 
   static const _authTokenKey = 'auth_token';
   static const _serverUrlKey = 'server_url';
