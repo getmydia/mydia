@@ -440,23 +440,8 @@ defmodule MydiaWeb.AdminSystemLive.Components do
   attr :progress, :map, required: true
 
   defp recent_watch_card(assigns) do
-    poster_path =
-      if assigns.progress.media_item && assigns.progress.media_item.metadata,
-        do: assigns.progress.media_item.metadata.poster_path
-
-    title =
-      cond do
-        assigns.progress.episode && assigns.progress.media_item ->
-          ep = assigns.progress.episode
-          "#{assigns.progress.media_item.title} - S#{ep.season_number}E#{ep.episode_number}"
-
-        assigns.progress.media_item ->
-          assigns.progress.media_item.title
-
-        true ->
-          "Unknown Media"
-      end
-
+    poster_path = Mydia.Playback.progress_poster_path(assigns.progress)
+    title = Mydia.Playback.progress_title(assigns.progress)
     user = assigns.progress.user
 
     assigns =

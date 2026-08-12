@@ -5,6 +5,8 @@ defmodule Mydia.Playback do
 
   import Ecto.Query, warn: false
   alias Mydia.Events
+  alias Mydia.Media.Episode
+  alias Mydia.Media.MediaItem
   alias Mydia.Repo
   alias Mydia.Playback.Progress
 
@@ -518,7 +520,7 @@ defmodule Mydia.Playback do
       from p in Progress,
         order_by: [desc: p.last_watched_at],
         limit: ^limit,
-        preload: [:user, :media_item, :episode]
+        preload: [:user, :media_item, episode: [:media_item]]
 
     query =
       if since do
@@ -529,6 +531,48 @@ defmodule Mydia.Playback do
 
     Repo.all(query)
   end
+
+  @doc """
+  Human-readable title for a progress row.
+
+  Progress rows are XOR by `Progress.validate_one_parent/1`: a movie row
+  carries `media_item`, an episode row carries `episode` and its show hangs off
+  `episode.media_item`. Reading a show title off `media_item` therefore always
+  finds `nil` on an episode row, which is what rendered every TV watch as
+  "Unknown Media".
+  """
+  @spec progress_title(Progress.t()) :: String.t()
+  def progress_title(%Progress{episode: %Episode{} = episode}), do: episode_label(episode)
+  def progress_title(%Progress{media_item: %MediaItem{title: title}}), do: title
+  def progress_title(%Progress{}), do: "Unknown Media"
+
+  @doc """
+  Poster path for a progress row, or nil when there is no artwork.
+
+  An episode's poster is its show's, since episode stills are not what the
+  activity list wants.
+  """
+  @spec progress_poster_path(Progress.t()) :: String.t() | nil
+  def progress_poster_path(%Progress{episode: %Episode{media_item: %MediaItem{} = item}}),
+    do: poster_path(item)
+
+  def progress_poster_path(%Progress{media_item: %MediaItem{} = item}), do: poster_path(item)
+  def progress_poster_path(%Progress{}), do: nil
+
+  defp poster_path(%MediaItem{metadata: %{poster_path: path}}), do: path
+  defp poster_path(_), do: nil
+
+  defp episode_label(%Episode{media_item: %MediaItem{title: show_title}} = episode) do
+    "#{show_title} - #{season_episode(episode)}"
+  end
+
+  defp episode_label(%Episode{} = episode), do: season_episode(episode)
+
+  defp season_episode(%Episode{season_number: season, episode_number: number}) do
+    "S#{pad2(season)}E#{pad2(number)}"
+  end
+
+  defp pad2(n), do: String.pad_leading("#{n}", 2, "0")
 
   # ── Playback Events (U1) ─────────────────────────────────────────────
 
