@@ -807,8 +807,22 @@ defmodule Mydia.Indexers.CardigannResultParser do
         row
       end
 
-    with {:ok, raw_value} <- extract_raw_value(effective_row, selector, attribute) do
-      apply_filters(raw_value, filters, template_context)
+    case extract_raw_value(effective_row, selector, attribute) do
+      {:ok, raw_value} ->
+        apply_filters(raw_value, filters, template_context)
+
+      {:error, :not_found} = error ->
+        optional = Map.get(field_config, :optional) || Map.get(field_config, "optional", false)
+        default = Map.get(field_config, :default) || Map.get(field_config, "default")
+
+        # The v11 schema declares `default` dependentRequired on `optional`, so
+        # a default on a required field is a malformed definition, not a licence
+        # to invent a value.
+        if optional && not is_nil(default) do
+          apply_filters(to_string(default), filters, template_context)
+        else
+          error
+        end
     end
   end
 

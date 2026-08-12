@@ -1113,4 +1113,82 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
       assert result.leechers == 0
     end
   end
+
+  describe "field default" do
+    defp default_definition(seeders_field) do
+      %Parsed{
+        id: "def-test",
+        name: "Def Test",
+        type: "public",
+        links: ["https://example.com"],
+        encoding: "UTF-8",
+        capabilities: %{},
+        settings: [],
+        search: %{
+          paths: [%{path: "/s"}],
+          inputs: %{},
+          headers: nil,
+          keywordsfilters: [],
+          rows: %{selector: "tr"},
+          fields: %{
+            "title" => %{selector: "td.title"},
+            "download" => %{selector: "a", attribute: "href"},
+            "seeders" => seeders_field
+          }
+        }
+      }
+    end
+
+    @html "<html><body><table><tr><td class=\"title\">Ubuntu</td><a href=\"magnet:?xt=urn:btih:AAA\">d</a></tr></table></body></html>"
+
+    test "uses the default when an optional selector misses" do
+      definition = default_definition(%{selector: "td.seeders", optional: true, default: 5})
+
+      assert {:ok, [result]} =
+               CardigannResultParser.parse_results(
+                 definition,
+                 %{status: 200, body: @html},
+                 "Def Test",
+                 template_context: %{},
+                 base_url: "https://example.com"
+               )
+
+      assert result.seeders == 5
+    end
+
+    test "ignores the default when the selector matches" do
+      html =
+        "<html><body><table><tr><td class=\"title\">Ubuntu</td><td class=\"seeders\">42</td><a href=\"magnet:?xt=urn:btih:AAA\">d</a></tr></table></body></html>"
+
+      definition = default_definition(%{selector: "td.seeders", optional: true, default: 0})
+
+      assert {:ok, [result]} =
+               CardigannResultParser.parse_results(
+                 definition,
+                 %{status: 200, body: html},
+                 "Def Test",
+                 template_context: %{},
+                 base_url: "https://example.com"
+               )
+
+      assert result.seeders == 42
+    end
+
+    test "does not apply a default to a non-optional field" do
+      definition = default_definition(%{selector: "td.seeders", default: 7})
+
+      assert {:ok, results} =
+               CardigannResultParser.parse_results(
+                 definition,
+                 %{status: 200, body: @html},
+                 "Def Test",
+                 template_context: %{},
+                 base_url: "https://example.com"
+               )
+
+      # A required field that matches nothing drops the row rather than
+      # inheriting a default it was never given permission to use.
+      assert results == [] or hd(results).seeders != 7
+    end
+  end
 end
