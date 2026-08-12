@@ -132,6 +132,7 @@ nav:
       - How-to guides:
           - plugins/how-to/notifications.md
           - plugins/how-to/media-data.md
+          - plugins/how-to/service-endpoints.md
           - plugins/how-to/two-way-sync.md
           - plugins/how-to/test-and-iterate.md
       - Reference:

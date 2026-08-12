@@ -115,6 +115,38 @@ what matters here is the shape of the guarantee: the host, not the plugin,
 decides what "having a capability" actually allows on every single call, not
 just the first one.
 
+## Operator-configured endpoints and the trust boundary
+
+The egress gate's threat model is a **guest choosing its own destination**: a
+malicious or compromised plugin could exfiltrate library data to any host on its
+`net:http` allowlist, or smuggle requests to private IPs if the gate were
+weaker. Every normal `http-request` therefore passes an exact-hostname
+allowlist and a resolve-and-validate step that rejects private addresses.
+
+An **instance connection** removes that choice. The operator typed the server
+address in trusted admin UI (or confirmed one the guest discovered during
+`on-connect` and stored via `connection-upsert`). The guest can only supply a
+**relative path** on `connection-request`; the host joins it to the stored base,
+attaches the stored secret, and sends the request with `endpoint_trust:
+:operator`.
+
+That exception skips two checks only:
+
+- The **`net:http` allowlist**, because the hostname was never something the
+  manifest could declare in advance.
+- The **private-range rejection**, because home-lab servers legitimately sit on
+  RFC1918 addresses the operator configured on purpose.
+
+Everything else still applies: only `http`/`https`, no userinfo in URLs, no
+redirect following, response size caps, aggressive timeouts, and audit logging.
+An absolute URL on an instance connection is rejected outright so an
+operator-approved endpoint cannot become an open proxy.
+
+User-scoped OAuth connections are unchanged: the guest still passes absolute
+URLs, still needs `net:http`, and still goes through the full allowlist and
+public-IP validation. Only instance-scoped service endpoints get the operator
+trust path.
+
 ## Two honest limitations
 
 The sandbox is real, but it isn't complete, and plugin authors will find the

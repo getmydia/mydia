@@ -56,7 +56,7 @@ install time. A plugin can never widen its own grant at runtime.
 | `events:subscribe` | The event types the plugin reacts to. Required. Each must be in the catalog. |
 | `net:http` | The exact hostnames the plugin may contact. No wildcards. |
 | `data:read` | Read namespaces the plugin may query (`media_item`, `playback_progress`). Returns a curated, read-only projection. |
-| `surfaces:write` | Curated write surfaces. Value vocabulary: `playback:watched` (the `ensure-watched` host function). |
+| `surfaces:write` | Curated write surfaces. Value vocabulary: `playback:watched` (the `ensure-watched` host function), `connections` (the `connection-upsert` host function). |
 | `state:kv` | A small per-plugin key/value store that survives across invocations (watermarks, cursors, dedupe sets). |
 | `users:connections` | Per-user third-party connections the host holds on the plugin's behalf. **Cross-user**: see below. |
 | `schedule:interval` | Lets the plugin run on a fixed interval via `on-schedule`. Paired with the `schedule` descriptor. |
@@ -206,6 +206,78 @@ never sees the token.
   `client_id` setting.
 - The plugin reaches the connected account with `connection-request`, which
   attaches the bearer token host-side (see the [Reference](host-api.md)).
+
+### Service endpoint descriptor
+
+A plugin that talks to an operator-configured server (Jellyfin, Emby, Plex, a
+self-hosted API) declares a `service_endpoint` connection instead of OAuth URLs.
+The operator supplies the address after the manifest was written, so there are
+no manifest URLs to validate. What the manifest owns is how the operator is
+asked for the endpoint and how the secret is attached.
+
+| Field | Required | Notes |
+|-------|----------|-------|
+| `type` | yes | Must be `"service_endpoint"`. |
+| `scope` | no | Must be `"instance"` (the only value in Phase 1). One Mydia instance, one or more labeled endpoints. |
+| `probe_path` | no | Relative path the host probes when resolving a connection (default `"/"`). Must start with `/`. |
+| `fields` | conditional | Static admin form fields. Required unless `"onboarding": "guest"`. |
+| `onboarding` | conditional | Set to `"guest"` to drive connect through the plugin's `on-connect` export instead of static fields. Mutually exclusive with `fields`. |
+| `auth` | yes | How the host attaches the secret on outbound requests. See below. |
+
+The `auth` object:
+
+| Field | Required | Notes |
+|-------|----------|-------|
+| `kind` | yes | `"header"`, `"query"`, or `"bearer"`. |
+| `key` | conditional | Header or query parameter name. Required for `"header"` and `"query"`; omitted for `"bearer"`. |
+
+Each `fields` entry needs a string `key` and `label`. Mark secrets with
+`"secret": true` so the admin UI masks them. The host maps `"url"` to
+`base_urls` and the first `"secret": true` field to the stored token.
+
+**Static form** (operator fills in a labeled URL and token in Configuration >
+Plugins):
+
+```json
+"connection": {
+  "type": "service_endpoint",
+  "scope": "instance",
+  "probe_path": "/System/Info",
+  "fields": [
+    { "key": "url", "label": "Server URL" },
+    { "key": "token", "label": "API token", "secret": true }
+  ],
+  "auth": { "kind": "header", "key": "X-Emby-Token" }
+},
+"capabilities": {
+  "events:subscribe": ["media_item.added"],
+  "users:connections": [],
+  "surfaces:write": ["connections"]
+}
+```
+
+**Guest onboarding** (the plugin discovers the endpoint interactively via
+`on-connect`; see [Connect to a service endpoint](../how-to/service-endpoints.md#write-an-on-connect-flow)):
+
+```json
+"connection": {
+  "type": "service_endpoint",
+  "scope": "instance",
+  "onboarding": "guest",
+  "probe_path": "/",
+  "auth": { "kind": "header", "key": "X-Plex-Token" }
+},
+"capabilities": {
+  "events:subscribe": ["media_item.added"],
+  "users:connections": [],
+  "surfaces:write": ["connections"]
+}
+```
+
+Instance connections are **relative-only**: the guest calls
+`connection-request` with a path such as `"/Library/Refresh"`, not an absolute
+URL. The host resolves the operator-configured base, attaches auth, and sends
+the request. See [The plugin model](../explanation/plugin-model.md#operator-configured-endpoints-and-the-trust-boundary).
 
 ## Host-version floor
 

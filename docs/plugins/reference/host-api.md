@@ -49,9 +49,9 @@ operator approves it.
 | Class | Meaning |
 |-------|---------|
 | `events:subscribe` | The event types the plugin reacts to (from the catalog above). Required. |
-| `net:http` | The exact hostnames the plugin may contact. **No wildcards** (a wildcard subdomain is an exfiltration channel). |
+| `net:http` | The exact hostnames the plugin may contact. **No wildcards** (a wildcard subdomain is an exfiltration channel). A relative request against an instance connection needs `users:connections` only, because there is no hostname to grant. |
 | `data:read` | Scoped read namespaces (`media_item`, `playback_progress`). The host returns a curated, read-only projection: never raw rows or secrets. |
-| `surfaces:write` | Curated write surfaces. Vocabulary: `playback:watched` (mark items watched via `ensure-watched`). |
+| `surfaces:write` | Curated write surfaces. Vocabulary: `playback:watched` (mark items watched via `ensure-watched`), `connections` (register or update a connection via `connection-upsert`). |
 | `state:kv` | A per-plugin key/value store (`@max_keys` 256 keys, 64 KB per value) for watermarks, cursors, and dedupe sets. |
 | `users:connections` | Per-user third-party connections: the host holds the token; the plugin gets identity + status only. **Cross-user, consent-scoped.** |
 | `schedule:interval` | Run `on-schedule` on a fixed interval (manifest `schedule`, 5-minute floor). |
@@ -141,6 +141,28 @@ Key guarantees:
   host. Keys under `conn/<connection-id>/...` are swept when that connection is
   removed.
 
+### 1.3 host functions
+
+```rust
+use mydia_plugin_sdk::host;
+use mydia_plugin_sdk::types::ConnectionDraft;
+
+// surfaces:write "connections": register or update a connection the guest
+// discovered during onboarding. The host stores the secret; no read path ever
+// returns it. Omit user_id for an instance-scoped service endpoint; set it for
+// a per-user account link.
+host::connection_upsert(&ConnectionDraft {
+    label: "Living room".into(),
+    base_urls: vec!["http://10.0.0.5:8096".into()],
+    secret: "operator-token".into(),
+    auth_kind: "header".into(),
+    auth_key: Some("X-Emby-Token".into()),
+    user_id: None,
+    external_user_id: None,
+    external_username: None,
+}).ok();
+```
+
 ### Scheduled handler
 
 Add `on-schedule` for periodic work (declare a `schedule` and the
@@ -164,6 +186,85 @@ A run that takes longer than one interval is fine: the next tick is skipped
 while it runs (non-reentrant), and your state must survive a wall-clock kill, so
 checkpoint progress to KV as you go.
 
+### Connect handler
+
+Add `on-connect` for interactive onboarding (declare a `connection` descriptor
+with `"onboarding": "guest"` in the manifest):
+
+```rust
+use mydia_plugin_sdk::types::{
+    ConnectDone, ConnectPending, ConnectRequest, ConnectResponse,
+    ConnectionDraft,
+};
+
+#[mydia_plugin_sdk::plugin(on_connect = on_connect)]
+fn on_event(_evt: Event) -> Result<String, String> { Ok("{}".into()) }
+
+fn on_connect(req: ConnectRequest) -> Result<ConnectResponse, String> {
+    match req.step.as_str() {
+        // Turn 1: the operator clicked Connect. Return Pending to show a code
+        // and poll, Prompt to show a form or picker, or Done when nothing
+        // interactive is needed.
+        "start" => Ok(ConnectResponse::Pending(ConnectPending {
+            message: "Enter this code at the provider".into(),
+            code: Some("ABCD-1234".into()),
+            verification_url: Some("https://provider.example/activate".into()),
+            interval_ms: 2_000,
+            state_json: "{}".into(),
+        })),
+
+        // Turn 2 (Pending path): the host re-invokes on interval_ms. Poll the
+        // provider, then upsert the connection and finish.
+        "poll" => {
+            host::connection_upsert(&ConnectionDraft {
+                label: "Discovered server".into(),
+                base_urls: vec!["http://10.0.0.9:9999".into()],
+                secret: "discovered-token".into(),
+                auth_kind: "header".into(),
+                auth_key: Some("X-Provider-Token".into()),
+                user_id: None,
+                external_user_id: None,
+                external_username: None,
+            })
+            .map_err(|e| format!("{e:?}"))?;
+
+            Ok(ConnectResponse::Done(ConnectDone {
+                message: "Connected".into(),
+            }))
+        }
+
+        // Turn 2 (Prompt path): the operator submitted the form the guest asked
+        // for on the previous turn. input_json carries their answers.
+        "submit" => {
+            let _input: serde_json::Value =
+                serde_json::from_str(&req.input_json).map_err(|e| e.to_string())?;
+            // Validate, call connection_upsert, return Done or another Prompt.
+            Ok(ConnectResponse::Done(ConnectDone {
+                message: "Saved".into(),
+            }))
+        }
+
+        other => Err(format!("unexpected step {other}")),
+    }
+}
+```
+
+The host drives a three-step state machine:
+
+1. **`start`** - one invocation when the operator clicks Connect. Return
+   `Pending` (show a code and poll), `Prompt` (show fields or choices), or
+   `Done`.
+2. **`poll`** - re-invoked on the `interval_ms` you returned from `Pending`.
+   Use it to poll a provider until ready, then `connection-upsert` and return
+   `Done`.
+3. **`submit`** - re-invoked once when the operator submits a `Prompt` form.
+   Read their answers from `input_json`, upsert if appropriate, return `Done`
+   or another `Prompt`.
+
+Each turn is a fresh invocation: carry state in `state_json` between turns.
+Sessions expire after ten minutes. A plugin without `on-connect` uses the
+manifest's static `fields` form instead.
+
 ## Manifest
 
 A plugin ships a JSON manifest declaring its identity, the events it
@@ -185,9 +286,9 @@ The WIT package version **is** the ABI version. The contract evolves
 exports are added without touching existing types or signatures. A plugin built
 against an older minor keeps working: the host detects each guest's contract
 version from its bytes and serves the matching interface namespace and exports,
-so a `1.0` guest's `on-event` still resolves against a `1.1` host. Only a removal
+so a `1.0` guest's `on-event` still resolves against a `1.3` host. Only a removal
 or a signature change bumps the major version. Target the lowest host you need
-via `min_host_version`; a `1.1` guest sets `"min_host_version": "1.1.0"` so an
+via `min_host_version`; a `1.3` guest sets `"min_host_version": "1.3.0"` so an
 older host refuses it cleanly rather than failing to link.
 
 ## Reference

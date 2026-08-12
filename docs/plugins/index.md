@@ -32,6 +32,7 @@ before the plugin ever runs.
 
     The how-to guides cover [sending notifications](how-to/notifications.md),
     [reading media and event data](how-to/media-data.md),
+    [connecting to a service endpoint](how-to/service-endpoints.md),
     [building a two-way sync](how-to/two-way-sync.md), and the
     [test and reload loop](how-to/test-and-iterate.md).
 
