@@ -165,6 +165,7 @@ defmodule Mydia.Indexers.CardigannParser do
         type: Map.fetch!(yaml_data, "type"),
         encoding: Map.fetch!(yaml_data, "encoding"),
         links: Map.fetch!(yaml_data, "links"),
+        legacylinks: Map.get(yaml_data, "legacylinks", []),
         capabilities: capabilities,
         search: search,
         login: login,
