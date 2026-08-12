@@ -116,19 +116,36 @@ defmodule Mydia.Playback.OnDeck do
 
     show_ids = Map.keys(sort_at_by_show)
     shows = show_ids |> load_media_items() |> Map.new(&{&1.id, &1})
+    episodes_by_show = load_episodes_with_files(show_ids)
+
+    all_episode_ids =
+      episodes_by_show |> Map.values() |> List.flatten() |> Enum.map(& &1.id)
+
+    progress_by_episode = load_progress_for_episodes(user_id, all_episode_ids)
 
     for show_id <- show_ids,
         show = Map.get(shows, show_id),
         not is_nil(show),
-        entry = build_show_entry(show, user_id, sort_at_by_show[show_id]),
+        entry =
+          build_show_entry(
+            show,
+            Map.get(episodes_by_show, show_id, []),
+            progress_by_episode,
+            sort_at_by_show[show_id]
+          ),
         not is_nil(entry) do
       entry
     end
   end
 
-  defp build_show_entry(show, user_id, sort_at) do
-    episodes = load_episodes_with_files(show.id)
-    progress_map = load_progress_for_episodes(user_id, Enum.map(episodes, & &1.id))
+  defp build_show_entry(show, episodes, progress_by_episode, sort_at) do
+    progress_map =
+      Enum.reduce(episodes, %{}, fn episode, acc ->
+        case Map.get(progress_by_episode, episode.id) do
+          nil -> acc
+          progress -> Map.put(acc, episode.id, progress)
+        end
+      end)
 
     case NextEpisode.determine(episodes, progress_map) do
       {:continue, episode} ->
@@ -182,16 +199,19 @@ defmodule Mydia.Playback.OnDeck do
     |> Map.new()
   end
 
-  defp load_episodes_with_files(show_id) do
+  defp load_episodes_with_files([]), do: %{}
+
+  defp load_episodes_with_files(show_ids) do
     active_files = from(mf in MediaFile, where: is_nil(mf.trashed_at))
 
     from(e in Episode,
-      where: e.media_item_id == ^show_id,
+      where: e.media_item_id in ^show_ids,
       order_by: [asc: e.season_number, asc: e.episode_number],
       preload: [media_files: ^active_files]
     )
     |> Repo.all()
     |> Enum.filter(&(&1.media_files != []))
+    |> Enum.group_by(& &1.media_item_id)
   end
 
   defp load_progress_for_episodes(_user_id, []), do: %{}
