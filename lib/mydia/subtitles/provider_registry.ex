@@ -30,6 +30,22 @@ defmodule Mydia.Subtitles.ProviderRegistry do
       default_enabled: false,
       default_priority: 10,
       requires_credentials: true
+    },
+    %{
+      type: :gestdown,
+      name: "Gestdown",
+      adapter: Mydia.Subtitles.Provider.Gestdown,
+      default_enabled: true,
+      default_priority: 20,
+      requires_credentials: false
+    },
+    %{
+      type: :subdl,
+      name: "SubDL",
+      adapter: Mydia.Subtitles.Provider.SubDL,
+      default_enabled: false,
+      default_priority: 10,
+      requires_credentials: true
     }
   ]
 

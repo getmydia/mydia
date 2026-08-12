@@ -45,7 +45,10 @@ defmodule MydiaWeb.Schema.Resolvers.SubtitleSearchResolver do
         context: %{current_user: %User{}}
       }) do
     with {:ok, payload} <- Candidate.verify(token, media_file_id),
-         {:ok, subtitle} <- Subtitles.download_subtitle(to_subtitle_info(payload), media_file_id) do
+         {:ok, subtitle} <-
+           Subtitles.download_subtitle(to_subtitle_info(payload), media_file_id,
+             provider_type: payload.provider_type
+           ) do
       track =
         media_file_id
         |> Extractor.list_external_subtitle_tracks()

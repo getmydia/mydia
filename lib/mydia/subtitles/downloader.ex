@@ -3,8 +3,8 @@ defmodule Mydia.Subtitles.Downloader do
   Downloads and stores subtitle files.
 
   Handles the complete subtitle download workflow:
-  1. Fetches download URL from configured provider
-  2. Downloads subtitle file content
+  1. Fetches subtitle content from the configured provider adapter
+  2. Writes content to a temporary file
   3. Validates subtitle format
   4. Stores file with proper naming convention
   5. Persists metadata to database
@@ -28,10 +28,8 @@ defmodule Mydia.Subtitles.Downloader do
   require Logger
   alias Mydia.Repo
   alias Mydia.Subtitles.Subtitle
-  alias Mydia.Subtitles.Client.MetadataRelay
   alias Mydia.Library.MediaFile
 
-  @download_timeout 30_000
   @temp_dir System.tmp_dir!()
 
   @doc """
@@ -49,8 +47,9 @@ defmodule Mydia.Subtitles.Downloader do
     - `:hearing_impaired` - Boolean indicating SDH/CC subtitles
   - `media_file_id` - Binary ID of the media file
   - `opts` - Keyword list of options:
-    - `:provider` - Provider type (default: "relay")
-    - `:timeout` - Download timeout in milliseconds (default: 30_000)
+    - `:provider_type` - Provider type atom (default: `:relay`)
+    - `:provider_config` - Provider config map; when omitted, a registry default
+      is used for the given type
 
   ## Returns
 
@@ -74,20 +73,24 @@ defmodule Mydia.Subtitles.Downloader do
   """
   @spec download(map(), binary(), keyword()) :: {:ok, Subtitle.t()} | {:error, term()}
   def download(subtitle_info, media_file_id, opts \\ []) do
-    provider = Keyword.get(opts, :provider, "relay")
-    timeout = Keyword.get(opts, :timeout, @download_timeout)
+    provider_type = Keyword.get(opts, :provider_type, :relay)
+    provider_config = Keyword.get(opts, :provider_config) || default_config(provider_type)
+    # No timeout is read here any more. Each adapter owns its own receive_timeout,
+    # because only the adapter knows how many requests its download takes.
 
     with {:ok, media_file} <- fetch_media_file(media_file_id),
          :ok <- validate_subtitle_info(subtitle_info),
          {:ok, _existing} <- check_duplicate(media_file_id, subtitle_info.subtitle_hash),
-         {:ok, download_url} <- fetch_download_url(subtitle_info.file_id, provider, timeout),
-         {:ok, temp_path} <- download_file(download_url, timeout),
+         {:ok, content} <- fetch_subtitle_content(subtitle_info, provider_config),
+         {:ok, temp_path} <- write_temp(content),
          :ok <- validate_format(temp_path, subtitle_info.format),
          {:ok, final_path} <- store_subtitle_file(temp_path, media_file, subtitle_info),
-         {:ok, subtitle} <- persist_subtitle(media_file, subtitle_info, final_path, provider) do
+         {:ok, subtitle} <-
+           persist_subtitle(media_file, subtitle_info, final_path, to_string(provider_type)) do
       Logger.info("Subtitle downloaded successfully",
         media_file_id: media_file_id,
         language: subtitle_info.language,
+        provider: provider_type,
         path: final_path
       )
 
@@ -108,6 +111,17 @@ defmodule Mydia.Subtitles.Downloader do
   end
 
   ## Private Functions
+
+  # A candidate may name a provider whose config row was edited or deleted inside
+  # the token's 15 minute window. Falling back to a registry-shaped config keeps
+  # a still-valid token working instead of failing on a technicality.
+  defp default_config(provider_type) do
+    Mydia.Subtitles.ProviderRegistry.default_configs()
+    |> Enum.find(%{type: provider_type, connection_settings: %{}}, &(&1.type == provider_type))
+  end
+
+  # No archive handling here. A provider that ships zips unwraps its own before
+  # returning, so the downloader stays ignorant of any provider's wire format.
 
   # Fetch media file from database with necessary associations
   defp fetch_media_file(media_file_id) do
@@ -154,59 +168,33 @@ defmodule Mydia.Subtitles.Downloader do
     end
   end
 
-  # Fetch download URL from configured provider
-  defp fetch_download_url(file_id, "relay", timeout) do
-    case MetadataRelay.get_download_url(file_id, timeout: timeout) do
-      {:ok, %{"download_url" => url}} when is_binary(url) ->
-        {:ok, url}
+  # Fetch the subtitle body through the provider that produced this candidate.
+  defp fetch_subtitle_content(subtitle_info, provider_config) do
+    adapter = Mydia.Subtitles.ProviderRegistry.adapter_for(provider_config)
 
-      {:ok, response} ->
-        Logger.error("Invalid download URL response", response: inspect(response))
-        {:error, :invalid_download_url_response}
+    case adapter.download(provider_config, subtitle_info) do
+      {:ok, content} when is_binary(content) ->
+        {:ok, content}
+
+      {:ok, other} ->
+        Logger.error("Invalid download response", response: inspect(other))
+        {:error, :invalid_download_response}
 
       {:error, reason} ->
-        {:error, {:download_url_fetch_failed, reason}}
+        {:error, {:download_failed, reason}}
     end
   end
 
-  defp fetch_download_url(_file_id, provider, _timeout) do
-    {:error, {:unsupported_provider, provider}}
-  end
+  # The provider already handed us bytes, so this only needs somewhere to put
+  # them for the format validation and storage steps that follow.
+  defp write_temp(content) do
+    path = Path.join(@temp_dir, "subtitle_#{:erlang.unique_integer([:positive])}.tmp")
 
-  # Download subtitle file to temporary location
-  defp download_file(url, timeout) do
-    temp_path = Path.join(@temp_dir, "subtitle_#{:erlang.unique_integer([:positive])}.tmp")
-
-    Logger.debug("Downloading subtitle file", url: url, temp_path: temp_path)
-
-    try do
-      case Req.get(url, receive_timeout: timeout, into: File.stream!(temp_path)) do
-        {:ok, %{status: 200}} ->
-          {:ok, temp_path}
-
-        {:ok, %{status: status}} ->
-          File.rm(temp_path)
-          Logger.warning("Subtitle download failed", status: status, url: url)
-          {:error, {:http_error, status}}
-
-        {:error, %{reason: :timeout}} ->
-          File.rm(temp_path)
-          {:error, :download_timeout}
-
-        {:error, reason} ->
-          File.rm(temp_path)
-          {:error, {:download_failed, reason}}
-      end
-    rescue
-      error ->
-        File.rm(temp_path)
-
-        Logger.error("Subtitle download exception",
-          error: Exception.message(error),
-          stacktrace: __STACKTRACE__
-        )
-
-        {:error, {:exception, error}}
+    with :ok <- File.mkdir_p(Path.dirname(path)),
+         :ok <- File.write(path, content) do
+      {:ok, path}
+    else
+      {:error, reason} -> {:error, {:temp_write_failed, reason}}
     end
   end
 
