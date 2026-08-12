@@ -221,6 +221,37 @@ defmodule MydiaWeb.Api.Player.V1.SubtitleControllerTest do
       File.rm(external_subtitle.file_path)
     end
 
+    test "converts external subtitle content to the requested format", %{
+      conn: conn,
+      token: token,
+      movie: movie,
+      external_subtitle: external_subtitle
+    } do
+      # A real SRT body with a comma-decimal timing line, so VTT conversion
+      # is observable rather than a coincidental no-op (the stored subtitle
+      # is "srt", matching the default `format=srt`, which is why the
+      # sibling "downloads external subtitle" test above can't tell a real
+      # conversion apart from the old raw send_file passthrough).
+      File.write!(external_subtitle.file_path, """
+      1
+      00:00:01,000 --> 00:00:04,000
+      Hello there.
+      """)
+
+      conn =
+        conn
+        |> put_req_header("authorization", "Bearer #{token}")
+        |> get("/api/player/v1/subtitles/movie/#{movie.id}/#{external_subtitle.id}?format=vtt")
+
+      body = response(conn, 200)
+      assert String.starts_with?(body, "WEBVTT")
+      assert body =~ "00:00:01.000 --> 00:00:04.000"
+      refute body =~ "00:00:01,000"
+      assert get_resp_header(conn, "content-type") == ["text/vtt; charset=utf-8"]
+
+      File.rm(external_subtitle.file_path)
+    end
+
     test "returns 404 for non-existent subtitle track", %{
       conn: conn,
       token: token,
@@ -287,15 +318,17 @@ defmodule MydiaWeb.Api.Player.V1.SubtitleControllerTest do
     test "rejects a path-traversal format value rather than sanitizing it", %{
       conn: conn,
       token: token,
-      movie: movie,
-      external_subtitle: external_subtitle
+      movie: movie
     } do
+      # Target an integer (embedded) track id: that's the branch Delivery
+      # unconditionally builds a cache filename and an ffmpeg output path
+      # from `format`, with no pure-Elixir shortcut to dodge the filesystem.
+      # The external/binary branch only reaches disk via Format.convert's
+      # ffmpeg fallback, so it's a weaker target for this regression guard.
       conn =
         conn
         |> put_req_header("authorization", "Bearer #{token}")
-        |> get(
-          "/api/player/v1/subtitles/movie/#{movie.id}/#{external_subtitle.id}?format=..%2F..%2Fetc%2Fpasswd"
-        )
+        |> get("/api/player/v1/subtitles/movie/#{movie.id}/0?format=..%2F..%2Fetc%2Fpasswd")
 
       assert json_response(conn, 400)["error"] =~ "Accepted"
     end
