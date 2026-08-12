@@ -317,6 +317,37 @@ defmodule Mydia.Settings.ServiceConfigs do
     Repo.delete(link)
   end
 
+  @doc """
+  Replaces a config's user links with `entries` in one transaction.
+
+  Any existing link for the config whose user is not named by `entries` is
+  deleted. Applying a mapping as separate deletes and upserts left a partial
+  mapping behind whenever one of them failed, which can unlink people who were
+  syncing fine.
+
+  Callers must resolve everything an entry needs, per-user Plex tokens
+  included, before calling. Nothing in here may make a network call: on SQLite a
+  write transaction locks the entire database, so a plex.tv round trip inside
+  one stalls every other writer for its duration.
+  """
+  def replace_media_server_user_links(media_server_config_id, entries) do
+    keep = MapSet.new(entries, & &1.user_id)
+
+    Repo.transaction(fn ->
+      media_server_config_id
+      |> list_media_server_user_links()
+      |> Enum.reject(&MapSet.member?(keep, &1.user_id))
+      |> Enum.each(&delete_media_server_user_link/1)
+
+      Enum.map(entries, fn attrs ->
+        case upsert_media_server_user_link(attrs) do
+          {:ok, link} -> link
+          {:error, changeset} -> Repo.rollback(changeset)
+        end
+      end)
+    end)
+  end
+
   ## Plugin Configs
 
   def list_plugin_configs(opts \\ []) do

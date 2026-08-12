@@ -171,6 +171,35 @@ defmodule Mydia.MediaServer.Plex.HomeTest do
                Home.apply_mapping(saved, %{"1" => user.id, "2" => user.id}, plex_tv_base: base)
     end
 
+    test "a failed token mint leaves the existing mapping untouched",
+         %{bypass: bypass, base: base, saved: saved} do
+      # Deleting before minting meant a mint that failed had already unlinked
+      # somebody who was syncing fine, and the operator saw only an error.
+      Bypass.stub(bypass, "POST", "/api/v2/home/users/2/switch", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(%{"authToken" => "camille-token"}))
+      end)
+
+      Bypass.stub(bypass, "POST", "/api/v2/home/users/1/switch", fn conn ->
+        Plug.Conn.resp(conn, 500, "")
+      end)
+
+      camille = Mydia.AccountsFixtures.user_fixture(%{username: "alex"})
+      owner = Mydia.AccountsFixtures.user_fixture(%{username: "arsfeld"})
+
+      assert {:ok, [_]} = Home.apply_mapping(saved, %{"2" => camille.id}, plex_tv_base: base)
+
+      # Unmap Camille and map the owner in one save. The owner's mint fails, so
+      # the save must not have unlinked Camille on its way there.
+      assert {:error, _} =
+               Home.apply_mapping(saved, %{"1" => owner.id, "2" => nil}, plex_tv_base: base)
+
+      assert [link] = Mydia.Settings.list_media_server_user_links(saved.id)
+      assert link.user_id == camille.id
+      assert link.plex_account_id == "2"
+    end
+
     test "re-saving an unchanged mapping does not mint a fresh token",
          %{bypass: bypass, base: base, saved: saved} do
       {:ok, switches} = Agent.start_link(fn -> 0 end)

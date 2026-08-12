@@ -104,21 +104,32 @@ defmodule Mydia.MediaServer.Plex.Home do
 
   Links whose profile is unmapped, or whose profile has disappeared from Plex
   Home, are removed, so this unlinks as well as links.
+
+  Every plex.tv round trip happens before the database is touched, and the
+  writes then land in one transaction. Minting is one profile switch per newly
+  linked profile, so a transaction held open across them would lock the whole
+  SQLite database for the length of a network call; doing the network first also
+  means a mint that fails leaves the existing mapping exactly as it was.
   """
   @spec apply_mapping(map(), %{optional(String.t()) => binary() | nil}, keyword()) ::
           {:ok, [MediaServerUserLink.t()]} | {:error, term()}
   def apply_mapping(config, mapping, opts \\ []) do
     with :ok <- validate_mapping(mapping),
          {:ok, home_users} <- list_users(config, opts) do
+      by_account =
+        config.id
+        |> Settings.list_media_server_user_links()
+        |> Map.new(&{&1.plex_account_id, &1})
+
       desired =
         for home_user <- home_users,
             user_id = Map.get(mapping, home_user.plex_account_id),
             not is_nil(user_id),
             do: {home_user, user_id}
 
-      existing = Settings.list_media_server_user_links(config.id)
-      drop_unmapped(existing, desired)
-      upsert_mapped(config, desired, Map.new(existing, &{&1.plex_account_id, &1}), opts)
+      with {:ok, entries} <- resolve_entries(config, desired, by_account, opts) do
+        Settings.replace_media_server_user_links(config.id, entries)
+      end
     end
   end
 
@@ -133,53 +144,55 @@ defmodule Mydia.MediaServer.Plex.Home do
       else: {:error, :duplicate_user}
   end
 
-  defp drop_unmapped(existing, desired) do
-    keep = MapSet.new(desired, fn {_home_user, user_id} -> user_id end)
-
-    Enum.each(existing, fn link ->
-      unless MapSet.member?(keep, link.user_id) do
-        Settings.delete_media_server_user_link(link)
-      end
-    end)
-  end
-
-  defp upsert_mapped(config, desired, by_account, opts) do
+  # Resolves the whole mapping to plain attrs, doing every token mint up front.
+  # Nothing is written here, so an error means the stored links are untouched.
+  defp resolve_entries(config, desired, by_account, opts) do
     desired
     |> Enum.reduce_while({:ok, []}, fn {home_user, user_id}, {:ok, acc} ->
-      case Map.get(by_account, home_user.plex_account_id) do
-        # Already pointing at this user with a usable token. Re-minting would
-        # cost a plex.tv profile switch per profile on every save of a form the
-        # operator may not have changed at all.
-        %{user_id: ^user_id, access_token: token} = link
-        when is_binary(token) and token != "" ->
-          {:cont, {:ok, [link | acc]}}
+      case token_for_mapping(config, home_user, user_id, by_account, opts) do
+        {:ok, token} ->
+          {:cont, {:ok, [link_attrs(config, home_user, user_id, token) | acc]}}
 
-        _ ->
-          case link_user(config, home_user, user_id, opts) do
-            {:ok, link} -> {:cont, {:ok, [link | acc]}}
-            {:error, _} = error -> {:halt, error}
-          end
+        {:error, _} = error ->
+          {:halt, error}
       end
     end)
     |> case do
-      {:ok, links} -> {:ok, Enum.reverse(links)}
+      {:ok, entries} -> {:ok, Enum.reverse(entries)}
       other -> other
     end
   end
 
-  # The one place a link is written. Both the auto-matcher and the manual
-  # mapping go through here so a link means the same thing however it was made:
-  # a Mydia user bound to a Plex profile by that profile's own token.
+  # Reuses the token already on a link that points at this same user. Re-minting
+  # would cost a plex.tv profile switch per profile on every save of a form the
+  # operator may not have changed at all.
+  defp token_for_mapping(config, home_user, user_id, by_account, opts) do
+    case Map.get(by_account, home_user.plex_account_id) do
+      %{user_id: ^user_id, access_token: token} when is_binary(token) and token != "" ->
+        {:ok, token}
+
+      _ ->
+        token_for(config, home_user.plex_account_id, opts)
+    end
+  end
+
+  # The one shape a link is ever written in. Both the auto-matcher and the
+  # manual mapping build it here so a link means the same thing however it was
+  # made: a Mydia user bound to a Plex profile by that profile's own token.
+  defp link_attrs(config, home_user, user_id, token) do
+    %{
+      media_server_config_id: config.id,
+      user_id: user_id,
+      plex_account_id: home_user.plex_account_id,
+      plex_username: home_user.username,
+      access_token: token,
+      enabled: true
+    }
+  end
+
   defp link_user(config, home_user, user_id, opts) do
     with {:ok, token} <- token_for(config, home_user.plex_account_id, opts) do
-      Settings.upsert_media_server_user_link(%{
-        media_server_config_id: config.id,
-        user_id: user_id,
-        plex_account_id: home_user.plex_account_id,
-        plex_username: home_user.username,
-        access_token: token,
-        enabled: true
-      })
+      Settings.upsert_media_server_user_link(link_attrs(config, home_user, user_id, token))
     end
   end
 

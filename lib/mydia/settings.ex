@@ -573,6 +573,16 @@ defmodule Mydia.Settings do
           {:ok, MediaServerUserLink.t()} | {:error, Ecto.Changeset.t()}
   defdelegate delete_media_server_user_link(link), to: Mydia.Settings.ServiceConfigs
 
+  @doc """
+  Replaces a config's user links with `entries` in one transaction, deleting any
+  link whose user is not named by `entries`. Callers must do all network work
+  first; see `Mydia.Settings.ServiceConfigs.replace_media_server_user_links/2`.
+  """
+  @spec replace_media_server_user_links(binary(), [map()]) ::
+          {:ok, [MediaServerUserLink.t()]} | {:error, Ecto.Changeset.t()}
+  defdelegate replace_media_server_user_links(media_server_config_id, entries),
+    to: Mydia.Settings.ServiceConfigs
+
   # ── Plugin Configs ───────────────────────────────────────────────────
 
   @doc """
