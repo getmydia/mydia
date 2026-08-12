@@ -78,6 +78,54 @@ defmodule MetadataRelay.FeedbackIngestTest do
       assert email.text_body =~ "Dashboard: https://relay.example.com/feedback#feedback-"
     end
 
+    test "sets reply-to to the contact when it is an email address" do
+      conn =
+        post_feedback(%{
+          "type" => "bug",
+          "message" => "Subtitles are offset",
+          "contact" => "  Reporter@Example.COM  "
+        })
+
+      assert conn.status == 201
+
+      email =
+        await_email(fn email ->
+          email.subject == "[Mydia feedback] bug: Subtitles are offset"
+        end)
+
+      assert email.reply_to == {"", "Reporter@Example.COM"}
+      assert email.from == {"", "metadata-relay@example.com"}
+    end
+
+    test "omits reply-to when the contact is not an email address" do
+      conn =
+        post_feedback(%{
+          "type" => "idea",
+          "message" => "Add a dark theme",
+          "contact" => "@some-github-handle"
+        })
+
+      assert conn.status == 201
+
+      email =
+        await_email(fn email -> email.subject == "[Mydia feedback] idea: Add a dark theme" end)
+
+      assert email.reply_to == nil
+    end
+
+    test "omits reply-to when no contact was given" do
+      conn = post_feedback(%{"type" => "question", "message" => "Where are logs stored?"})
+
+      assert conn.status == 201
+
+      email =
+        await_email(fn email ->
+          email.subject == "[Mydia feedback] question: Where are logs stored?"
+        end)
+
+      assert email.reply_to == nil
+    end
+
     test "returns 400 when type is missing" do
       conn = post_feedback(%{"message" => "Playback froze"})
 
