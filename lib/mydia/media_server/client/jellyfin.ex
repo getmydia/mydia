@@ -157,11 +157,15 @@ defmodule Mydia.MediaServer.Client.Jellyfin do
     case Req.get(build_url(config, "/Items"), headers: headers(config), params: params) do
       {:ok, %{status: 200, body: body}} ->
         items = List.wrap(body["Items"])
-        acc = acc ++ items
+        # Accumulated in reverse and flipped once at the end. Appending with
+        # `++` walks the whole accumulator on every page, so a large library
+        # pages in quadratic time. `last_page?/4` only reads `acc` through
+        # `length/1`, so the ordering here does not affect the stop condition.
+        acc = Enum.reverse(items, acc)
         total = body["TotalRecordCount"]
 
         if last_page?(items, acc, total, page_size) do
-          {:ok, acc}
+          {:ok, Enum.reverse(acc)}
         else
           fetch_items_page(config, user_id, page_size, start_index + length(items), acc)
         end
