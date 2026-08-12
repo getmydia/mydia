@@ -7,6 +7,7 @@ defmodule Mydia.Streaming do
   alias Mydia.Streaming.HlsSession
   alias Mydia.Library
   alias Mydia.Accounts.User
+  alias Mydia.Events
   alias Mydia.Repo
 
   defmodule ActiveSession do
@@ -18,7 +19,12 @@ defmodule Mydia.Streaming do
       :episode_info,
       :mode,
       :started_at,
-      :ready
+      :ready,
+      :media_file_id,
+      :bitrate_bps,
+      :position_seconds,
+      :duration_seconds,
+      :poster_path
     ]
   end
 
@@ -78,6 +84,8 @@ defmodule Mydia.Streaming do
               {movie.title, :movie, nil}
           end
 
+        progress = user && Mydia.Playback.get_progress(user.id, progress_content_id(media_file))
+
         %ActiveSession{
           session_id: session_id,
           user: user,
@@ -86,7 +94,12 @@ defmodule Mydia.Streaming do
           episode_info: episode_info,
           mode: mode,
           started_at: started_at,
-          ready: ready
+          ready: ready,
+          media_file_id: media_file_id,
+          bitrate_bps: media_file.bitrate,
+          position_seconds: progress && progress.position_seconds,
+          duration_seconds: progress && progress.duration_seconds,
+          poster_path: poster_path(media_file.media_item)
         }
       else
         nil
@@ -97,6 +110,65 @@ defmodule Mydia.Streaming do
     |> Enum.filter(&(&1.user != nil))
     |> Enum.sort_by(& &1.started_at, {:desc, DateTime})
   end
+
+  @doc """
+  Records that a play started on this server.
+
+  Sessions are the truthful signal for a play: a media-server sync writes
+  playback progress without ever creating one, and counting those would report
+  watches that happened on somebody else's box.
+
+  Returns `:ok` and emits nothing when the media file has been deleted out from
+  under the session, which is the same tolerance `list_active_sessions/0` has.
+  """
+  @spec emit_playback_started(binary(), binary()) :: :ok
+  def emit_playback_started(media_file_id, user_id) do
+    case Library.get_media_file(media_file_id) do
+      %{episode_id: episode_id} when not is_nil(episode_id) ->
+        Events.playback_event("started", user_id, [episode_id: episode_id], %{
+          "origin" => "player"
+        })
+
+      %{media_item_id: media_item_id} when not is_nil(media_item_id) ->
+        Events.playback_event("started", user_id, [media_item_id: media_item_id], %{
+          "origin" => "player"
+        })
+
+      _ ->
+        :ok
+    end
+  end
+
+  @doc """
+  The `Mydia.Playback` content key for a media file.
+
+  Playback progress is keyed by episode for a TV file and by media item for a
+  movie, and an episode's file carries both foreign keys (the episode, plus its
+  show), so the episode clause has to come first or every TV session would look
+  up the show's progress and find nothing.
+
+  Public because it is otherwise buried inside `list_active_sessions/0`, which
+  needs a live session registry to reach and so cannot be tested directly. The
+  `case` it replaced could raise `CaseClauseError` from inside the function that
+  renders the whole dashboard.
+  """
+  @spec progress_content_id(Mydia.Library.MediaFile.t()) :: keyword()
+  def progress_content_id(%{episode_id: episode_id}) when not is_nil(episode_id),
+    do: [episode_id: episode_id]
+
+  # No guard on this clause, matching the behaviour it was extracted from: a
+  # file with neither key yields [media_item_id: nil], which get_progress/2
+  # answers with nil. Unreachable today, since list_active_sessions/0 already
+  # drops files with no loaded media_item, but a crash here would be worse than
+  # a missing scrubber.
+  def progress_content_id(%{media_item_id: media_item_id}),
+    do: [media_item_id: media_item_id]
+
+  # An episode's media_file carries its show as media_item, so a TV session gets
+  # the show poster rather than an episode still, which is what the now-playing
+  # card wants.
+  defp poster_path(%{metadata: %{poster_path: path}}), do: path
+  defp poster_path(_), do: nil
 
   defp pad(num), do: String.pad_leading("#{num}", 2, "0")
 end

@@ -178,6 +178,13 @@ config :wallaby,
   # Increase timeout for CI environments which may be slower
   max_wait_time: 10_000
 
+# The sampler is a singleton reading a process registry that is global to the
+# whole suite, so a ticking sampler picks up sessions any other test happens to
+# leave running and leaks them into unrelated assertions. It also runs periodic
+# queries for the entire test run for no benefit. Tests that need samples drive
+# ticks explicitly with `GenServer.call(pid, :tick_now)` on their own instance.
+config :mydia, Mydia.Streaming.SessionSampler, tick: false
+
 # Migration tests start this repo themselves, one temp database per test, so it
 # is intentionally absent from :ecto_repos and carries no :database here.
 config :mydia, Mydia.MigrationTestRepo,

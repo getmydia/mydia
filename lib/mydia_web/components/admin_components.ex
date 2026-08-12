@@ -22,7 +22,14 @@ defmodule MydiaWeb.AdminComponents do
 
     ~H"""
     <div role="tablist" class="tabs tabs-border mb-6">
-      <.tab_link active={@active_tab == :status} to="/admin/config/status" icon="hero-chart-bar">
+      <.tab_link
+        active={@active_tab == :dashboard}
+        to="/admin/dashboard"
+        icon="hero-chart-bar"
+      >
+        Dashboard
+      </.tab_link>
+      <.tab_link active={@active_tab == :status} to="/admin/config/status" icon="hero-server">
         Status
       </.tab_link>
       <.tab_link
