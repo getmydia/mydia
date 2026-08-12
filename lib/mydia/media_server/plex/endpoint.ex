@@ -95,9 +95,14 @@ defmodule Mydia.MediaServer.Plex.Endpoint do
 
   # ── Private ────────────────────────────────────────────────────────
 
-  defp probe_all(config), do: probe_all(config, false)
+  @doc """
+  Races every candidate address and returns the first that answers.
 
-  defp probe_all(%MediaServerConfig{connections: connections, token: token} = config, retried?) do
+  Public and cache-free because the add-server wizard needs this for a config
+  that has not been saved yet, so there is no id to key the cache on.
+  """
+  @spec probe_connections([map()], String.t() | nil) :: {:ok, String.t()} | {:error, Error.t()}
+  def probe_connections(connections, token) do
     uris = connections |> Enum.map(&candidate_uri/1) |> Enum.reject(&is_nil/1) |> Enum.uniq()
 
     # `ordered: false` plus a lazy scan lets the first working candidate win
@@ -116,16 +121,21 @@ defmodule Mydia.MediaServer.Plex.Endpoint do
         {:exit, _} -> []
       end)
 
-    {winner, results} = first_success(stream)
+    case first_success(stream) do
+      {{uri, :ok}, _results} -> {:ok, uri}
+      {nil, results} -> {:error, worst_error(results)}
+    end
+  end
 
-    case winner do
-      {uri, :ok} ->
+  defp probe_all(config), do: probe_all(config, false)
+
+  defp probe_all(%MediaServerConfig{connections: connections, token: token} = config, retried?) do
+    case probe_connections(connections, token) do
+      {:ok, uri} ->
         put_cache(config, uri)
         {:ok, uri}
 
-      nil ->
-        error = worst_error(results)
-
+      {:error, error} ->
         if not retried? and error.kind == :unreachable and
              is_binary(config.machine_identifier) do
           case rediscover(config) do
