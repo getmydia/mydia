@@ -4,8 +4,34 @@ defmodule MydiaWeb.AdminPluginsLive.ConnectionsTest do
   import Phoenix.LiveViewTest
   import Mydia.AccountsFixtures
 
+  alias Mydia.Config.Schema
   alias Mydia.Plugins.Connections
   alias Mydia.Settings
+
+  defp inject_runtime_connections(connections) do
+    base = Schema.defaults()
+
+    install =
+      struct(Schema.PluginInstall, %{
+        slug: "srv",
+        name: "Srv",
+        version: "1.0.0",
+        connections: Enum.map(connections, &struct(Schema.PluginInstall.PluginConnection, &1))
+      })
+
+    config = %{base | plugin_installs: [install]}
+    previous = Application.get_env(:mydia, :runtime_config)
+    Application.put_env(:mydia, :runtime_config, config)
+
+    on_exit(fn ->
+      case previous do
+        nil -> Application.delete_env(:mydia, :runtime_config)
+        value -> Application.put_env(:mydia, :runtime_config, value)
+      end
+    end)
+
+    :ok
+  end
 
   setup %{conn: conn} do
     admin = admin_user_fixture()
@@ -93,5 +119,38 @@ defmodule MydiaWeb.AdminPluginsLive.ConnectionsTest do
     view |> element("#connection-remove-basement") |> render_click()
 
     assert Connections.list_instance_for_plugin("srv") == []
+  end
+
+  test "hides test and edit actions for config-sourced connections", %{conn: conn} do
+    inject_runtime_connections([
+      %{label: "Living room", url: "http://10.0.0.6:8096", token: "t"}
+    ])
+
+    {:ok, view, _html} = live(conn, ~p"/admin/plugins/srv")
+
+    assert has_element?(view, "#connection-row-living-room")
+    assert render(view) =~ "http://10.0.0.6:8096"
+    refute has_element?(view, "#connection-row-living-room button[phx-click=\"connection:test\"]")
+    refute has_element?(view, "#connection-row-living-room button[phx-click=\"connection:edit\"]")
+    refute has_element?(view, "#connection-remove-living-room")
+  end
+
+  test "overlays config url on a stale DB row for display", %{conn: conn} do
+    inject_runtime_connections([
+      %{label: "Living room", url: "http://10.0.0.6:8096", token: "t"}
+    ])
+
+    {:ok, _} =
+      Connections.upsert("srv", %{
+        scope: "instance",
+        label: "Living room",
+        base_urls: ["http://old.test"],
+        access_token: "old"
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/admin/plugins/srv")
+
+    assert render(view) =~ "http://10.0.0.6:8096"
+    refute render(view) =~ "http://old.test"
   end
 end

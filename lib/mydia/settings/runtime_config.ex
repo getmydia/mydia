@@ -350,16 +350,15 @@ defmodule Mydia.Settings.RuntimeConfig do
   """
   def instance_connections_for_plugin(slug) when is_binary(slug) do
     config_connections = config_connections_for_slug(slug)
-    config_labels = MapSet.new(config_connections, & &1.label)
+    config_by_label = Map.new(config_connections, &{&1.label, &1})
 
     db_connections =
       Connections.list_instance_for_plugin(slug)
       |> Enum.map(fn
         %Connections{} = conn ->
-          if MapSet.member?(config_labels, conn.label) do
-            %Connections{conn | from_config?: true}
-          else
-            conn
+          case Map.get(config_by_label, conn.label) do
+            nil -> conn
+            config -> overlay_config_onto_connection(conn, config)
           end
       end)
 
@@ -403,6 +402,18 @@ defmodule Mydia.Settings.RuntimeConfig do
       %{connections: connections} when is_list(connections) -> connections
       _ -> []
     end
+  end
+
+  defp overlay_config_onto_connection(%Connections{} = conn, config) do
+    url = Map.get(config, :url)
+    token = Map.get(config, :token)
+
+    %Connections{
+      conn
+      | from_config?: true,
+        base_urls: if(is_binary(url), do: [url], else: conn.base_urls),
+        access_token: if(is_binary(token), do: token, else: conn.access_token)
+    }
   end
 
   defp upsert_config_connection(slug, conn) do

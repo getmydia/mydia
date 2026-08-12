@@ -109,15 +109,17 @@ defmodule MydiaWeb.AdminPluginsLive.ConnectionsComponents do
           </span>
 
           <div class="join ml-auto sm:ml-2">
-            <button
-              type="button"
-              class="btn btn-sm btn-ghost join-item"
-              phx-click="connection:test"
-              phx-value-label={@connection.label}
-              title="Test connection"
-            >
-              <.icon name="hero-signal" class="w-4 h-4" />
-            </button>
+            <%= if not @read_only? do %>
+              <button
+                type="button"
+                class="btn btn-sm btn-ghost join-item"
+                phx-click="connection:test"
+                phx-value-label={@connection.label}
+                title="Test connection"
+              >
+                <.icon name="hero-signal" class="w-4 h-4" />
+              </button>
+            <% end %>
             <%= if not @read_only? do %>
               <button
                 type="button"

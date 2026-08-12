@@ -90,6 +90,7 @@ defmodule Mydia.Settings.RuntimeConfigTest do
       bedroom = Enum.find(connections, &(&1.label == "Bedroom"))
 
       assert living_room.from_config? == true
+      assert living_room.base_urls == ["http://10.0.0.6:8096"]
       assert bedroom.from_config? == true
       assert bedroom.base_urls == ["http://10.0.0.7:8096"]
     end
