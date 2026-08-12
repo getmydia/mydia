@@ -121,10 +121,16 @@ defmodule Mydia.Subtitles.ProviderRegistry do
     ArgumentError -> adapter_by_type(Map.get(config, :type))
   end
 
+  # The whole callback surface, not just the two the chain happens to call
+  # first. A module satisfying only those would pass here and then crash at
+  # download time, which is a worse failure than refusing the override outright.
+  @required_callbacks [search: 2, download: 2, validate_config: 1, quota_info: 1, capabilities: 0]
+
   defp provider_adapter?(module) do
     Code.ensure_loaded?(module) and
-      function_exported?(module, :search, 2) and
-      function_exported?(module, :capabilities, 0)
+      Enum.all?(@required_callbacks, fn {fun, arity} ->
+        function_exported?(module, fun, arity)
+      end)
   end
 
   defp adapter_by_type(type) do

@@ -6,6 +6,7 @@ defmodule MydiaWeb.Schema.Resolvers.SubtitleSearchResolver do
   require Logger
 
   alias Mydia.Accounts.User
+  alias Mydia.Settings.ServiceConfigs
   alias Mydia.Subtitles
   alias Mydia.Subtitles.Candidate
   alias Mydia.Subtitles.Extractor
@@ -46,8 +47,10 @@ defmodule MydiaWeb.Schema.Resolvers.SubtitleSearchResolver do
       }) do
     with {:ok, payload} <- Candidate.verify(token, media_file_id),
          {:ok, subtitle} <-
-           Subtitles.download_subtitle(to_subtitle_info(payload), media_file_id,
-             provider_type: payload.provider_type
+           Subtitles.download_subtitle(
+             to_subtitle_info(payload),
+             media_file_id,
+             download_opts(payload)
            ) do
       track =
         media_file_id
@@ -108,6 +111,33 @@ defmodule MydiaWeb.Schema.Resolvers.SubtitleSearchResolver do
   end
 
   defp normalize_format(_result), do: "srt"
+
+  # The token carries both the config id and the provider type. Prefer the id,
+  # because that config holds the credentials: a credentialed provider resolved
+  # by type alone falls back to a registry default with no API key, so a user
+  # with a working SubDL or OpenSubtitles account searches successfully and
+  # then cannot download anything they found.
+  #
+  # The type is the fallback for a config edited or deleted inside the token's
+  # 15 minute window, which is the case it was added for.
+  defp download_opts(payload) do
+    case Map.get(payload, :provider_id) do
+      nil ->
+        [provider_type: payload.provider_type]
+
+      provider_id ->
+        case fetch_provider_config(provider_id) do
+          nil -> [provider_type: payload.provider_type]
+          config -> [provider_type: config.type, provider_config: config]
+        end
+    end
+  end
+
+  defp fetch_provider_config(provider_id) do
+    [enabled: true]
+    |> ServiceConfigs.list_subtitle_provider_configs()
+    |> Enum.find(&(&1.id == provider_id))
+  end
 
   defp to_subtitle_info(payload) do
     %{

@@ -84,6 +84,22 @@ defmodule Mydia.Subtitles.ProviderRegistryTest do
     assert ProviderRegistry.adapter_for(config) == Mydia.Subtitles.Provider.Relay
   end
 
+  defmodule HalfAdapter do
+    # Implements what the chain calls first and nothing else. Honouring this
+    # would search fine and then crash at download time.
+    def search(_config, _params), do: {:ok, []}
+    def capabilities, do: %{}
+  end
+
+  test "adapter_for ignores a module implementing only part of the behaviour" do
+    config = %SubtitleProviderConfig{
+      type: :relay,
+      connection_settings: %{"adapter" => to_string(HalfAdapter)}
+    }
+
+    assert ProviderRegistry.adapter_for(config) == Mydia.Subtitles.Provider.Relay
+  end
+
   test "adapter_for ignores an override naming a module that does not exist" do
     config = %SubtitleProviderConfig{
       type: :relay,

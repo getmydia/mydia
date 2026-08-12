@@ -127,6 +127,18 @@ defmodule MydiaWeb.Api.Player.V1.SubtitleController do
           {:error, :media_file_not_found} ->
             conn |> put_status(:not_found) |> json(%{error: "Media file not found on disk"})
 
+          # An unsupported `format` is the caller asking for something that does
+          # not exist, not the server failing. It arrives from a query
+          # parameter, so it is entirely client-controlled.
+          {:error, {:unsupported_format, requested}} ->
+            conn
+            |> put_status(:bad_request)
+            |> json(%{
+              error: "Unsupported subtitle format",
+              requested: to_string(requested),
+              supported: Mydia.Subtitles.Subtitle.supported_formats()
+            })
+
           {:error, reason} ->
             Logger.error("Failed to deliver subtitle",
               media_file_id: media_file.id,

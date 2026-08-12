@@ -381,14 +381,27 @@ defmodule Mydia.Subtitles do
       subtitle_info = %{
         file_id: best.file_id,
         language: best.language,
-        format: best.file_name |> Path.extname() |> String.trim_leading("."),
+        # The provider states the format. Deriving it from the file name breaks
+        # on providers whose name carries no extension: Gestdown's is a release
+        # tag like "Bluray-CtrlHD", so Path.extname/1 returns "" and the
+        # download is rejected as an unsupported format.
+        format: best.format || "srt",
         subtitle_hash: best.subtitle_hash || generate_subtitle_hash(best),
         rating: best.rating,
         download_count: best.download_count,
         hearing_impaired: Map.get(best, :hearing_impaired) || false
       }
 
-      case download_subtitle(subtitle_info, media_file_id) do
+      # Route to the provider that produced this candidate. Without it the
+      # download goes to the relay by default and fails for anything found by
+      # Gestdown, SubDL or a direct OpenSubtitles account.
+      download_opts =
+        case Map.get(best, :provider_type) do
+          nil -> []
+          provider_type -> [provider_type: provider_type]
+        end
+
+      case download_subtitle(subtitle_info, media_file_id, download_opts) do
         {:ok, subtitle} ->
           Logger.info("Auto-downloaded high-confidence subtitle",
             media_file_id: media_file_id,
