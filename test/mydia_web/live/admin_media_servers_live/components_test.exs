@@ -57,4 +57,38 @@ defmodule MydiaWeb.AdminMediaServersLive.ComponentsTest do
       refute html =~ ~s(data-test="health-error")
     end
   end
+
+  describe "env-configured servers" do
+    defp runtime_server do
+      server(%{id: "runtime::media_server::storage"})
+    end
+
+    test "an env-configured server explains itself in text" do
+      s = runtime_server()
+
+      html = render_tab([s], %{s.id => %{status: :unknown}})
+
+      assert html =~ ~s(data-test="env-config-note")
+      assert html =~ "Configured via environment variables"
+    end
+
+    test "an env-configured server offers no edit or delete control" do
+      s = runtime_server()
+
+      html = render_tab([s], %{s.id => %{status: :unknown}})
+
+      refute html =~ "edit_media_server"
+      refute html =~ "delete_media_server"
+    end
+
+    test "a normal server offers edit and delete and carries no env note" do
+      s = server()
+
+      html = render_tab([s], %{s.id => %{status: :unknown}})
+
+      assert html =~ "edit_media_server"
+      assert html =~ "delete_media_server"
+      refute html =~ ~s(data-test="env-config-note")
+    end
+  end
 end

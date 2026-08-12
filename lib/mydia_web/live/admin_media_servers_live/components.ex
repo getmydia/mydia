@@ -65,10 +65,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                     <div class="flex items-center gap-2 flex-wrap">
                       <h3 class="font-semibold text-base truncate">{server.name}</h3>
                       <%= if is_runtime do %>
-                        <span
-                          class="badge badge-primary badge-xs gap-1 tooltip cursor-help"
-                          data-tip="Configured via environment variables (read-only)"
-                        >
+                        <span class="badge badge-primary badge-xs gap-1">
                           <.icon name="hero-lock-closed" class="w-3 h-3" /> ENV
                         </span>
                       <% end %>
@@ -156,6 +153,14 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                   <span :if={last_run.error} class="text-error/80">{last_run.error}</span>
                 </div>
 
+                <p
+                  :if={is_runtime}
+                  data-test="env-config-note"
+                  class="text-xs text-base-content/50"
+                >
+                  Configured via environment variables, read-only
+                </p>
+
                 <%!-- Bottom Row: Actions --%>
                 <div class="flex items-center justify-end gap-1 pt-2 border-t border-base-200">
                   <button
@@ -183,29 +188,23 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                   >
                     <.icon name="hero-signal" class="w-4 h-4" /> Test
                   </button>
-                  <%= if is_runtime do %>
-                    <div class="tooltip" data-tip="Cannot modify runtime-configured servers">
-                      <button class="btn btn-sm btn-ghost" disabled>
-                        <.icon name="hero-pencil" class="w-4 h-4 opacity-30" />
-                      </button>
-                    </div>
-                  <% else %>
-                    <button
-                      class="btn btn-sm btn-ghost"
-                      phx-click="edit_media_server"
-                      phx-value-id={server.id}
-                    >
-                      <.icon name="hero-pencil" class="w-4 h-4" />
-                    </button>
-                    <button
-                      class="btn btn-sm btn-ghost text-error hover:bg-error/10"
-                      phx-click="delete_media_server"
-                      phx-value-id={server.id}
-                      data-confirm="Are you sure you want to delete this media server?"
-                    >
-                      <.icon name="hero-trash" class="w-4 h-4" />
-                    </button>
-                  <% end %>
+                  <button
+                    :if={not is_runtime}
+                    class="btn btn-sm btn-ghost"
+                    phx-click="edit_media_server"
+                    phx-value-id={server.id}
+                  >
+                    <.icon name="hero-pencil" class="w-4 h-4" />
+                  </button>
+                  <button
+                    :if={not is_runtime}
+                    class="btn btn-sm btn-ghost text-error hover:bg-error/10"
+                    phx-click="delete_media_server"
+                    phx-value-id={server.id}
+                    data-confirm="Are you sure you want to delete this media server?"
+                  >
+                    <.icon name="hero-trash" class="w-4 h-4" />
+                  </button>
                 </div>
               </div>
             </div>
