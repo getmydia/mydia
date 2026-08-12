@@ -83,13 +83,7 @@ defmodule Mydia.Streaming do
               {movie.title, :movie, nil}
           end
 
-        content_id =
-          case media_file do
-            %{episode_id: episode_id} when not is_nil(episode_id) -> [episode_id: episode_id]
-            %{media_item_id: media_item_id} -> [media_item_id: media_item_id]
-          end
-
-        progress = user && Mydia.Playback.get_progress(user.id, content_id)
+        progress = user && Mydia.Playback.get_progress(user.id, progress_content_id(media_file))
 
         %ActiveSession{
           session_id: session_id,
@@ -142,6 +136,31 @@ defmodule Mydia.Streaming do
         :ok
     end
   end
+
+  @doc """
+  The `Mydia.Playback` content key for a media file.
+
+  Playback progress is keyed by episode for a TV file and by media item for a
+  movie, and an episode's file carries both foreign keys (the episode, plus its
+  show), so the episode clause has to come first or every TV session would look
+  up the show's progress and find nothing.
+
+  Public because it is otherwise buried inside `list_active_sessions/0`, which
+  needs a live session registry to reach and so cannot be tested directly. The
+  `case` it replaced could raise `CaseClauseError` from inside the function that
+  renders the whole dashboard.
+  """
+  @spec progress_content_id(Mydia.Library.MediaFile.t()) :: keyword()
+  def progress_content_id(%{episode_id: episode_id}) when not is_nil(episode_id),
+    do: [episode_id: episode_id]
+
+  # No guard on this clause, matching the behaviour it was extracted from: a
+  # file with neither key yields [media_item_id: nil], which get_progress/2
+  # answers with nil. Unreachable today, since list_active_sessions/0 already
+  # drops files with no loaded media_item, but a crash here would be worse than
+  # a missing scrubber.
+  def progress_content_id(%{media_item_id: media_item_id}),
+    do: [media_item_id: media_item_id]
 
   defp pad(num), do: String.pad_leading("#{num}", 2, "0")
 end
