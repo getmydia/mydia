@@ -503,7 +503,17 @@ defmodule MydiaWeb.Schema.CommonTypes do
       resolve(fn track, _args, _info -> {:ok, Map.get(track, :deliverable, true)} end)
     end
 
-    @desc "Subtitle body in the requested format. Null when the track is not deliverable"
+    @desc """
+    Subtitle body in the requested format. For an embedded track this can run
+    an ffmpeg extraction on a cold cache, so resolve it for the track being
+    played, not while selecting across a list of tracks or files.
+
+    Returns null when no media file can be resolved, when the track is not
+    deliverable, when the format falls outside
+    `Mydia.Subtitles.Subtitle.supported_formats/0` (SSA is a valid enum value
+    here but not a supported output format, so `content(format: SSA)` is
+    null), or when delivery otherwise fails.
+    """
     field :content, :string do
       arg(:format, :subtitle_format, default_value: :vtt)
       resolve(&MydiaWeb.Schema.Resolvers.SubtitleResolver.content/3)
