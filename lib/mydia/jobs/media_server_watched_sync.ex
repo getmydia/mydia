@@ -36,6 +36,10 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
       %__MODULE__{mode: "all_enabled"}
     end
 
+    def parse(%{"mode" => "server", "config_id" => config_id}) do
+      %__MODULE__{mode: "server", config_id: config_id}
+    end
+
     def parse(%{"config_id" => config_id, "user_id" => user_id} = args) do
       %__MODULE__{
         config_id: config_id,
@@ -55,6 +59,20 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
         reason -> record_skip(config, reason)
       end
     end)
+
+    :ok
+  end
+
+  # Syncs one server across every linked user. This is what the "Sync Now"
+  # button and a successful link seed both trigger, so manual and scheduled
+  # runs share one fan-out rather than drifting apart.
+  def perform(%Oban.Job{args: %{"mode" => "server", "config_id" => config_id}}) do
+    config = Settings.get_media_server_config!(config_id)
+
+    case skip_reason(config) do
+      nil -> enqueue_linked_users(config)
+      reason -> record_skip(config, reason)
+    end
 
     :ok
   end
