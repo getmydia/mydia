@@ -22,7 +22,7 @@ env:
 
 jobs:
   test:
-    name: Test
+    name: Relay / Test
     runs-on: ubuntu-latest
     defaults:
       run:
