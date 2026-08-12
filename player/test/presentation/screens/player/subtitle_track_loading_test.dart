@@ -75,4 +75,82 @@ void main() {
       );
     });
   });
+
+  group('shouldApplySubtitleSelection', () {
+    test('applies when nothing changed while the selection was in flight', () {
+      expect(
+        shouldApplySubtitleSelection(
+          requestGeneration: 1,
+          currentGeneration: 1,
+          mounted: true,
+          hasPlayer: true,
+        ),
+        isTrue,
+      );
+    });
+
+    test('discards when a newer selection has already been requested', () {
+      // e.g. the viewer picks T1 (generation 1, its content fetch starts),
+      // then picks "Off" before T1's fetch resolves (generation 2). T1's
+      // fetch finishing afterwards must not let it win the race just
+      // because its network round trip happened to land last.
+      expect(
+        shouldApplySubtitleSelection(
+          requestGeneration: 1,
+          currentGeneration: 2,
+          mounted: true,
+          hasPlayer: true,
+        ),
+        isFalse,
+      );
+    });
+
+    test(
+        'discards when the screen was unmounted while the selection was '
+        'in flight', () {
+      expect(
+        shouldApplySubtitleSelection(
+          requestGeneration: 1,
+          currentGeneration: 1,
+          mounted: false,
+          hasPlayer: true,
+        ),
+        isFalse,
+      );
+    });
+
+    test(
+        'discards when the player disappeared while the selection was '
+        'in flight', () {
+      // e.g. casting ended and _restartLocalPlayback cleared the player
+      // without unmounting the screen, so `mounted` alone would not have
+      // caught this.
+      expect(
+        shouldApplySubtitleSelection(
+          requestGeneration: 1,
+          currentGeneration: 1,
+          mounted: true,
+          hasPlayer: false,
+        ),
+        isFalse,
+      );
+    });
+
+    test(
+        'a stale generation is not rescued by mounted and hasPlayer both '
+        'being true', () {
+      // Distinct generation values (not just "1 vs 2") so a check that
+      // merely compares against a hardcoded constant instead of the actual
+      // current generation cannot pass by accident.
+      expect(
+        shouldApplySubtitleSelection(
+          requestGeneration: 3,
+          currentGeneration: 5,
+          mounted: true,
+          hasPlayer: true,
+        ),
+        isFalse,
+      );
+    });
+  });
 }

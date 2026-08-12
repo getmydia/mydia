@@ -308,6 +308,30 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   List<app_models_audio.AudioTrack> _audioTracks = [];
   app_models_audio.AudioTrack? _selectedAudioTrack;
 
+  /// The subtitle track most recently *requested* by the viewer, including
+  /// one whose apply is still in flight — as opposed to
+  /// [_selectedSubtitleTrack], which only reflects what has actually taken
+  /// effect on the player.
+  ///
+  /// The no-op guard at the top of [_showSubtitleSelector] compares the
+  /// sheet's result against this, not against [_selectedSubtitleTrack].
+  /// Comparing against the applied value would mean a tap matching
+  /// whatever is still displayed as current — because its own request
+  /// hasn't resolved yet — is invisible to the guard and gets silently
+  /// dropped instead of registering as a retry or a cancel. `null` means
+  /// "Off is the most recently requested state", same as
+  /// [_selectedSubtitleTrack]'s `null`; both start `null` because nothing
+  /// has been requested yet.
+  ///
+  /// [_selectedSubtitleTrack] and this field are allowed to disagree while
+  /// a request is in flight — that's the whole point of tracking them
+  /// separately — and the sheet still displays [_selectedSubtitleTrack] as
+  /// checked, not this. Showing the viewer that a selection is pending is
+  /// a UI concern for whichever task rebuilds this sheet with real
+  /// loading states; this field only exists to make the *comparison*
+  /// correct in the meantime.
+  app_models.SubtitleTrack? _pendingSubtitleSelection;
+
   /// Bumped on every non-no-op call into [_showSubtitleSelector].
   ///
   /// A subtitle selection now does real async work (an "Off" call to
@@ -315,13 +339,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// the tap that starts it is fire-and-forget from a sheet that has
   /// already closed, so nothing stops the viewer from picking again before
   /// the first pick resolves. Each call captures the generation it was
-  /// issued under and re-checks it after every await; whichever call the
-  /// viewer made *last* is the one whose generation is still current when
-  /// its work finishes, so it is the only one allowed to commit
-  /// [_selectedSubtitleTrack] or touch the player. An earlier call that
-  /// resolves later — a slow network response losing a race to a fast
-  /// "Off" tap, for instance — recognises it has been superseded and backs
-  /// off instead of fighting the newer choice for control of the player.
+  /// issued under; [_canApplySubtitleSelection] re-checks it (together with
+  /// `mounted` and whether a player still exists) after every await before
+  /// that call is allowed to commit [_selectedSubtitleTrack] or touch the
+  /// player. Whichever call the viewer made *last* is the one whose
+  /// generation is still current when its work finishes, so it is the only
+  /// one that can win; an earlier call that resolves later — a slow
+  /// network response losing a race to a fast "Off" tap, for instance —
+  /// recognises it has been superseded and backs off instead of fighting
+  /// the newer choice for control of the player. Bumped before the
+  /// no-player bailout in [_showSubtitleSelector], not after: an in-flight
+  /// call from *before* this tap must count as superseded even when this
+  /// tap itself has no player to act on.
   int _subtitleSelectionGeneration = 0;
 
   // Mapping from app model track IDs to media_kit track objects
@@ -2600,10 +2629,24 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// actually taken effect on the player. An earlier version committed it
   /// eagerly, before the (now-async, network-bound) work that applies it;
   /// on a failed fetch that left the sheet's checkmark pointing at a track
-  /// that was not actually playing, and — because the no-op guard above
-  /// compares against [_selectedSubtitleTrack] — permanently wedged that
-  /// track until the viewer picked something else. Committing only on
+  /// that was not actually playing, and — because the no-op guard below
+  /// used to compare against [_selectedSubtitleTrack] — permanently wedged
+  /// that track until the viewer picked something else. Committing only on
   /// success means a retry is just picking the same track again.
+  ///
+  /// Every point past the no-op guard where this method resumes from an
+  /// `await` calls [_canApplySubtitleSelection] before doing anything
+  /// further — touching `_player`, calling `setState` — rather than each
+  /// checking its own subset of "is this still current". An earlier
+  /// revision did the latter: the check after the content fetch verified
+  /// generation and `mounted` but not the player, the check after the
+  /// "Off" call verified generation and `mounted` too, and the final
+  /// `setState` after actually applying a resolved track had no check at
+  /// all — surfacing as `setState` after `dispose()`, or media_kit's
+  /// `AssertionError` on a disposed `Player`, if the viewer navigated away
+  /// during that specific `await`. See the Task 14 fix reports for the
+  /// history; [shouldApplySubtitleSelection] and its tests are what
+  /// replaced re-deriving this by hand at each site.
   Future<void> _showSubtitleSelector() async {
     final selected = await showSubtitleTrackSelector(
       context,
@@ -2611,27 +2654,29 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       _selectedSubtitleTrack,
     );
 
-    if (selected == _selectedSubtitleTrack || !mounted) return;
+    if (!mounted || selected == _pendingSubtitleSelection) return;
 
-    // Cheap upfront bailout, same as before this method grew an async
-    // fetch: no point starting a network round trip for a screen that has
-    // no player at all right now. Not a substitute for the re-checks below
-    // — `_player` can still change out from under a fetch already in
-    // flight — just avoids the obviously wasted case.
-    if (_player == null) return;
+    // Recorded before anything else below, including the no-player bailout
+    // right after: this is what makes a tap whose target matches an
+    // in-flight request's own target (a retry, or a cancel back to
+    // whatever's still displayed as current) register as a real tap
+    // instead of silently matching stale state. See
+    // [_pendingSubtitleSelection]'s dartdoc for why the comparison above
+    // uses this field and not [_selectedSubtitleTrack].
+    _pendingSubtitleSelection = selected;
 
-    // See [_subtitleSelectionGeneration]'s dartdoc: this call's work is all
-    // async from here on, so it needs a way to recognise a newer call
-    // (including "Off") has already won before it touches shared state.
+    // See [_subtitleSelectionGeneration]'s dartdoc for why this is bumped
+    // unconditionally, before the no-player bailout below, rather than
+    // after it.
     final generation = ++_subtitleSelectionGeneration;
 
-    if (selected == null) {
-      final player = _player;
-      if (player == null) return;
+    final player = _player;
+    if (player == null) return;
 
+    if (selected == null) {
       // "Off" - disable subtitles
       await player.setSubtitleTrack(SubtitleTrack.no());
-      if (!mounted || generation != _subtitleSelectionGeneration) return;
+      if (!_canApplySubtitleSelection(generation)) return;
       setState(() => _selectedSubtitleTrack = null);
       debugPrint('[PlayerScreen] Subtitles turned off');
       return;
@@ -2640,13 +2685,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     final mkTrack = await _resolveMediaKitSubtitleTrack(selected);
 
     // Superseded while the fetch was in flight (a re-tap, "Off", or the
-    // screen went away): drop this result silently rather than applying a
-    // choice the viewer has already moved past, or touching a player that
-    // may since have been disposed or replaced.
-    if (!mounted || generation != _subtitleSelectionGeneration) return;
+    // screen/player went away): drop this result silently rather than
+    // reporting a failure — or applying a success — for a choice the
+    // viewer has already moved past.
+    if (!_canApplySubtitleSelection(generation)) return;
 
     if (mkTrack == null) {
       debugPrint('[PlayerScreen] No media_kit track found for: ${selected.id}');
+      // `_canApplySubtitleSelection` above already confirmed `mounted`, but
+      // that check is behind a helper the analyzer can't see through, so it
+      // cannot itself prove `context` is safe to use here. This repeats the
+      // same check directly so it can.
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Could not load that subtitle track. Try again.'),
@@ -2655,18 +2705,42 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       return;
     }
 
-    // Re-read `_player` rather than reusing a value captured before the
-    // await above: `_restartLocalPlayback` nils this field out (without
-    // unmounting the screen, so the `mounted` check above would not have
-    // caught it) while a fetch could still be in flight, and a value
-    // captured earlier would be a media_kit `Player` nothing else holds a
-    // reference to.
-    final player = _player;
-    if (player == null) return;
+    // Re-read `_player` rather than reusing the `player` captured above:
+    // `_restartLocalPlayback` nils this field out (without unmounting the
+    // screen, which is why [_canApplySubtitleSelection] checks it
+    // separately from `mounted`) while a fetch could still be in flight,
+    // and a value captured before that would be a media_kit `Player`
+    // nothing else holds a reference to.
+    final currentPlayer = _player;
+    if (currentPlayer == null) return;
 
-    await player.setSubtitleTrack(mkTrack);
+    await currentPlayer.setSubtitleTrack(mkTrack);
+
+    // Re-checked again, not only before this await: dispose() or
+    // _restartLocalPlayback landing during *this specific* call is exactly
+    // as possible as during the fetch above, and `setState` after unmount
+    // throws just as surely as calling into a disposed `Player` does. This
+    // is the check that was missing entirely before this fix — see the
+    // dartdoc above.
+    if (!_canApplySubtitleSelection(generation)) return;
     setState(() => _selectedSubtitleTrack = selected);
     debugPrint('[PlayerScreen] Set subtitle track: ${selected.displayName}');
+  }
+
+  /// Whether a subtitle selection issued under [generation] is still the
+  /// live one and safe to apply, right now.
+  ///
+  /// A thin adapter over the pure [shouldApplySubtitleSelection], reading
+  /// this state's current values — see that function for what each input
+  /// guards against and why the check has to be all of them together, not
+  /// a subset re-derived per call site.
+  bool _canApplySubtitleSelection(int generation) {
+    return shouldApplySubtitleSelection(
+      requestGeneration: generation,
+      currentGeneration: _subtitleSelectionGeneration,
+      mounted: mounted,
+      hasPlayer: _player != null,
+    );
   }
 
   /// Resolve the media_kit track for [track], fetching its body over
