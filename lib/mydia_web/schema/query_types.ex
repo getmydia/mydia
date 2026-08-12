@@ -145,6 +145,7 @@ defmodule MydiaWeb.Schema.QueryTypes do
 
     @desc "Get next episodes to watch across all TV shows"
     field :up_next, list_of(:up_next_item) do
+      deprecate("Merged into continueWatching, which now carries next episodes as well")
       arg(:first, :integer, default_value: 10)
       arg(:after, :string)
       resolve(&DiscoveryResolver.up_next/3)

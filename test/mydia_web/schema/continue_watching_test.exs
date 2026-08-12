@@ -102,6 +102,75 @@ defmodule MydiaWeb.Schema.ContinueWatchingTest do
     assert Enum.any?(errors, &(&1.message =~ "Authentication required"))
   end
 
+  describe "upNext" do
+    @up_next_query """
+    query UpNext($first: Int) {
+      upNext(first: $first) {
+        progressState
+        episode {
+          id
+          seasonNumber
+          episodeNumber
+        }
+        show {
+          id
+          title
+        }
+      }
+    }
+    """
+
+    test "returns the successor of a finished episode", ctx do
+      [e1, e2, _e3] = ctx.episodes
+      :changed = Playback.ensure_watched(ctx.user.id, episode_id: e1.id)
+
+      assert {:ok, %{data: %{"upNext" => [item]}}} =
+               run_query(@up_next_query, %{"first" => 10}, ctx.user)
+
+      assert item["progressState"] == "next"
+      assert item["episode"]["id"] == e2.id
+      assert item["show"]["id"] == ctx.show.id
+    end
+
+    test "excludes never-started shows", ctx do
+      other = MediaFixtures.media_item_fixture(%{type: "tv_show", title: "Untouched"})
+
+      episode =
+        MediaFixtures.episode_fixture(%{
+          media_item_id: other.id,
+          season_number: 1,
+          episode_number: 1
+        })
+
+      MediaFixtures.media_file_fixture(%{episode_id: episode.id})
+
+      [e1, _e2, _e3] = ctx.episodes
+      :changed = Playback.ensure_watched(ctx.user.id, episode_id: e1.id)
+
+      assert {:ok, %{data: %{"upNext" => items}}} =
+               run_query(@up_next_query, %{"first" => 10}, ctx.user)
+
+      titles = Enum.map(items, & &1["show"]["title"])
+      assert titles == ["Test Show"]
+      refute "Untouched" in titles
+    end
+
+    test "excludes movies, which belong only on the merged rail", ctx do
+      movie = MediaFixtures.media_item_fixture(%{type: "movie", title: "A Movie"})
+      MediaFixtures.media_file_fixture(%{media_item_id: movie.id})
+
+      {:ok, _} =
+        Playback.save_progress(
+          ctx.user.id,
+          [media_item_id: movie.id],
+          %{position_seconds: 900, duration_seconds: 7200}
+        )
+
+      assert {:ok, %{data: %{"upNext" => []}}} =
+               run_query(@up_next_query, %{"first" => 10}, ctx.user)
+    end
+  end
+
   defp run_query(query, variables, user) do
     context = if user, do: %{current_user: user}, else: %{}
     Absinthe.run(query, MydiaWeb.Schema, variables: variables, context: context)

@@ -78,33 +78,19 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
         {:ok, []}
 
       user ->
-        # Get all TV shows with in-progress episodes
-        tv_shows = Media.list_media_items(type: "tv_show", has_files: true)
-
-        all_items =
-          tv_shows
-          |> Enum.map(fn show ->
-            case Playback.get_next_episode(show.id, user.id) do
-              nil ->
-                nil
-
-              :all_watched ->
-                nil
-
-              {state, episode} ->
-                %{
-                  episode: episode,
-                  show: Map.put(show, :added_at, show.inserted_at),
-                  progress_state: Atom.to_string(state)
-                }
-            end
+        items =
+          user.id
+          |> Playback.on_deck(limit: pagination_limit(first, after_cursor))
+          |> Enum.filter(&(&1.kind == :episode))
+          |> Enum.map(fn entry ->
+            %{
+              episode: entry.episode,
+              show: Map.put(entry.show, :added_at, entry.show.inserted_at),
+              progress_state: Atom.to_string(entry.state)
+            }
           end)
-          |> Enum.reject(&is_nil/1)
 
-        # Apply cursor pagination
-        items = paginate_simple(all_items, first, after_cursor)
-
-        {:ok, items}
+        {:ok, paginate_simple(items, first, after_cursor)}
     end
   end
 
