@@ -64,14 +64,11 @@ defmodule Mydia.Jobs.DownloadMonitor do
   alias Mydia.Events
   alias Mydia.Settings
 
-  # Fallback grace window (minutes) when a download has no resolvable client
-  # config. The DB schema's default is also 60; this just guards against a nil.
-  @default_grace_minutes 60
-
-  # A soft-stall escalates to a terminal failure only after it has persisted for
-  # `grace_minutes × @stall_escalation_multiplier` (default 60 × 3 = 180 min).
-  # A dedicated per-client knob is deferred.
-  @stall_escalation_multiplier 3
+  # How long a give-up blocklists the release. Deliberately far shorter than
+  # the 30-day default: a torrent with no seeds today may have seeds tomorrow,
+  # so a stall earns a cooldown, not the near-permanent ban a corrupt release
+  # gets.
+  @stall_blacklist_ttl_days 1
 
   # An observation gap larger than this resets the stall clock instead of
   # accruing stall time — covers client outages, Mydia restarts, and torrents
@@ -202,7 +199,7 @@ defmodule Mydia.Jobs.DownloadMonitor do
 
     # Track progress / flag stalled downloads. Grace minutes are read from each
     # download's configured client (DB or runtime config) — cached per poll.
-    grace_map = build_grace_map()
+    grace_map = Settings.download_client_grace_map()
     stalled_count = check_progress(active_for_stall_check, grace_map, now)
 
     # Find and match untracked torrents (manually added to clients)
@@ -842,18 +839,8 @@ defmodule Mydia.Jobs.DownloadMonitor do
 
   # --- Stall detection ----------------------------------------------------
 
-  # Build a `%{client_name => grace_minutes}` map once per poll. Both DB-backed
-  # and runtime-config clients flow through `Settings.list_download_client_configs/0`,
-  # so a single source is enough.
-  defp build_grace_map do
-    Settings.list_download_client_configs()
-    |> Enum.into(%{}, fn config ->
-      {config.name, config.incomplete_grace_minutes || @default_grace_minutes}
-    end)
-  end
-
   defp grace_minutes_for(client_name, grace_map) do
-    Map.get(grace_map, client_name, @default_grace_minutes)
+    Map.get(grace_map, client_name, Settings.default_grace_minutes())
   end
 
   # Iterate active downloads and apply the StallDetector decision. Returns the
@@ -864,7 +851,7 @@ defmodule Mydia.Jobs.DownloadMonitor do
   defp check_progress(active_downloads, grace_map, now) do
     Enum.reduce(active_downloads, 0, fn download, stalled_acc ->
       grace = grace_minutes_for(download.download_client, grace_map)
-      escalation = grace * @stall_escalation_multiplier
+      escalation = StallDetector.escalation_minutes(grace)
 
       decision =
         StallDetector.evaluate(
@@ -981,40 +968,106 @@ defmodule Mydia.Jobs.DownloadMonitor do
     end
   end
 
-  # Escalation — a soft-stall that outlasted the longer threshold becomes a
-  # terminal failure, releasing the episode for re-search (today's terminal
-  # behaviour, now reached only after escalation).
-  #
-  # IMPORTANT: do NOT cast `:status` here — `Download.changeset/2` silently
-  # drops it (known bug, tracked separately). Use `import_failed_at` +
-  # `import_last_error` as the terminal signal.
-  defp apply_progress_decision(download, {:escalate, error_message, now}, _now) do
-    Logger.warning("Download stall escalated to terminal failure",
+  # A soft-stall that outlasted the escalation window is a release we give up
+  # on. Reuse the same reject path bad content uses rather than inventing a
+  # third terminal shape: blocklist briefly, pull the torrent from the client,
+  # delete the row, queue a replacement. The old behaviour wrote two import
+  # fields and left the torrent running, which read to operators as "Mydia
+  # says this failed but it is still downloading".
+  defp apply_progress_decision(download, {:escalate, error_message, _at}, _now) do
+    db_download = Downloads.get_download!(download.id, preload: [:media_item])
+
+    if auto_reject_exhausted?(db_download.media_item_id) do
+      suppress_stall_reject(db_download, error_message)
+    else
+      do_reject_stalled(db_download, error_message)
+    end
+  end
+
+  defp do_reject_stalled(download, error_message) do
+    Logger.warning("Giving up on stalled download",
       download_id: download.id,
       download_client: download.download_client,
       stalled_since: download.stalled_since,
       error: error_message
     )
 
-    db_download = Downloads.get_download!(download.id, preload: [:media_item])
+    case Queue.reject_release(download,
+           actor_type: :system,
+           actor_id: "download_monitor",
+           failure_reason: "stalled",
+           ttl_days: @stall_blacklist_ttl_days,
+           event: :none
+         ) do
+      {:ok, :rejected} ->
+        # Emitted only once the reject actually happened. The in-memory struct
+        # outlives the deleted row, so the event loses nothing by waiting, and
+        # a reject that failed must not leave a terminal "failed" record behind
+        # for a download still sitting in the queue — the next poll would
+        # re-enter this branch and emit a second one.
+        Events.download_failed(download, error_message,
+          media_item: download.media_item,
+          failure_category: "stalled",
+          failure_detail: download.download_client
+        )
 
-    case Downloads.update_download(db_download, %{
-           import_failed_at: now,
-           import_last_error: error_message,
-           last_observed_at: now
-         }) do
-      {:ok, updated} ->
-        Events.download_failed(updated, error_message, media_item: updated.media_item)
+        if download.media_item_id do
+          Mydia.Search.record_failure("auto_reject", download.media_item_id, "stalled")
+        end
+
         1
 
+      {:error, reason} ->
+        Logger.warning("Could not clear stalled download",
+          download_id: download.id,
+          reason: inspect(reason)
+        )
+
+        # Nothing changed, so nothing newly stalled.
+        0
+    end
+  end
+
+  # Same reasoning as suppress_auto_reject/2: when the cap trips, the likeliest
+  # truth is that our detector is wrong, so the right outcome is that this
+  # download finishes and imports.
+  #
+  # Unlike that one, this resets the stall clock rather than touching nothing.
+  # A suppressed download stays past the escalation threshold, so every poll
+  # re-enters this branch and re-emits the event — a burst every 15s while the
+  # fast-followup chain is running, until the observation-gap reset happens to
+  # clear `stalled_since` as a side effect. Leaning on that accident is fragile;
+  # resetting the clock explicitly gives one event per full grace+escalation
+  # cycle. This is the same reset the operator's "Keep waiting" performs.
+  defp suppress_stall_reject(download, error_message) do
+    Logger.warning("Auto-reject limit reached, leaving stalled download alone",
+      download_id: download.id,
+      title: download.title,
+      media_item_id: download.media_item_id,
+      limit: auto_reject_limit(),
+      error: error_message
+    )
+
+    Events.download_auto_reject_suppressed(download, media_item: download.media_item)
+
+    now = DateTime.utc_now()
+
+    case Downloads.update_download(download, %{
+           stalled_since: nil,
+           last_progress_at: now,
+           last_observed_at: now
+         }) do
+      {:ok, _updated} ->
+        :ok
+
       {:error, changeset} ->
-        Logger.error("Failed to escalate stalled download",
+        Logger.error("Failed to reset the stall clock on a suppressed download",
           download_id: download.id,
           errors: inspect(changeset.errors)
         )
-
-        0
     end
+
+    0
   end
 
   # Persist a progress/reset decision that clears any in-flight soft-stall,

@@ -2,6 +2,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
   @moduledoc false
   use MydiaWeb, :html
 
+  alias Mydia.Downloads.StallDetector
   alias Mydia.Settings
 
   # Client types that surface category configuration in the admin form.
@@ -606,7 +607,9 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
               </div>
             <% end %>
 
-            <%!-- Stalled timeout. Visible for every client type. --%>
+            <%!-- Stalled timeout. Visible for every client type. The entered
+                 value is only the FIRST threshold; the give-up deadline is
+                 derived from it and was previously invisible everywhere. --%>
             <div class="space-y-2">
               <.input
                 field={@download_client_form[:incomplete_grace_minutes]}
@@ -616,8 +619,13 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
                 placeholder="60"
                 min="1"
               />
+              <% grace = grace_minutes_value(@download_client_form[:incomplete_grace_minutes].value) %>
+              <% escalation = StallDetector.escalation_minutes(grace) %>
               <p class="text-xs text-base-content/50">
-                A download with no byte progress for this many minutes is flagged as stalled.
+                Flagged as stalled after {format_duration(grace * 60)} without progress.
+                If it still hasn't moved {format_duration(escalation * 60)} later
+                ({format_duration((grace + escalation) * 60)} total), Mydia removes it
+                and searches for a different release.
               </p>
             </div>
 
@@ -960,6 +968,25 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
     case get_in(client.connection_settings || %{}, ["remote_fetch", "enabled"]) do
       enabled when enabled in [true, "true"] -> true
       _ -> false
+    end
+  end
+
+  # The form value arrives as a string while the operator types, as an integer
+  # from a loaded config, and as nil for a fresh form. Anything unusable falls
+  # back to the schema default so the help text never renders a broken number.
+  defp grace_minutes_value(value) do
+    case value do
+      n when is_integer(n) and n > 0 ->
+        n
+
+      s when is_binary(s) ->
+        case Integer.parse(s) do
+          {n, ""} when n > 0 -> n
+          _ -> Settings.default_grace_minutes()
+        end
+
+      _ ->
+        Settings.default_grace_minutes()
     end
   end
 end

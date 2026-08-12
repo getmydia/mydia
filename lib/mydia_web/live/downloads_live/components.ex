@@ -125,7 +125,6 @@ defmodule MydiaWeb.DownloadsLive.Components do
           class="btn btn-warning btn-sm"
           phx-click="reject_release"
           phx-value-id={@modal.download.id}
-          disabled={not rejectable?(@modal.download)}
           title={reject_hint(@modal.download)}
           data-confirm="Blacklist this release, remove the download and its data from the download client, and search again. Files already imported to the library are kept."
         >
@@ -194,15 +193,11 @@ defmodule MydiaWeb.DownloadsLive.Components do
   defp probe_label(%{"detail" => detail}), do: "Unknown (#{detail})"
   defp probe_label(_probe), do: nil
 
-  defp rejectable?(download) do
-    match?({:ok, _indexer, _guid}, Blacklists.extract_key(download))
-  end
-
   defp reject_hint(download) do
     case Blacklists.extract_key(download) do
       {:ok, _indexer, _guid} -> "Blacklist this release and search again"
-      {:error, :no_indexer} -> "No indexer recorded, so this release cannot be blacklisted"
-      {:error, :no_guid} -> "No release id recorded, so this release cannot be blacklisted"
+      {:error, :no_indexer} -> "Remove this download and search again (no indexer to blacklist)"
+      {:error, :no_guid} -> "Remove this download and search again (no release id to blacklist)"
     end
   end
 

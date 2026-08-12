@@ -221,39 +221,42 @@ defmodule Mydia.Downloads.StallDetectorTest do
                  now: past
                )
 
-      assert StallDetector.stalled?(msg)
+      assert msg == "no progress for 4h"
     end
   end
 
-  describe "stalled?/1" do
-    test "true for the canonical soft-stall message" do
-      assert StallDetector.stalled?("stalled after 60m without progress")
-    end
-
-    test "true for the escalation message" do
-      assert StallDetector.stalled?(StallDetector.escalation_message(180))
-    end
-
-    test "false for unrelated error messages" do
-      refute StallDetector.stalled?("Import failed: bad path")
-      refute StallDetector.stalled?("Removed from download client 'qBit'")
-    end
-
-    test "false for nil" do
-      refute StallDetector.stalled?(nil)
-    end
-  end
-
-  describe "stalled_message/1 and escalation_message/1" do
-    test "stalled_message interpolates the grace minutes" do
+  describe "stalled_message/1" do
+    test "interpolates the grace minutes" do
       assert StallDetector.stalled_message(60) == "stalled after 60m without progress"
       assert StallDetector.stalled_message(5) == "stalled after 5m without progress"
     end
+  end
 
-    test "escalation_message interpolates and is recognised as stalled" do
-      msg = StallDetector.escalation_message(180)
-      assert String.contains?(msg, "180m")
-      assert StallDetector.stalled?(msg)
+  describe "escalation_message/2" do
+    # The old message reported only the escalation window, understating the
+    # stall by the entire grace window: a default-config download reaching
+    # escalation last moved bytes 240 minutes ago, not 180.
+    test "reports the total time without progress, not just the escalation window" do
+      assert StallDetector.escalation_message(60, 180) == "no progress for 4h"
+    end
+
+    test "renders a sub-hour total in minutes" do
+      assert StallDetector.escalation_message(10, 20) == "no progress for 30m"
+    end
+
+    test "renders a ragged total with both units" do
+      assert StallDetector.escalation_message(45, 90) == "no progress for 2h 15m"
+    end
+
+    test "no longer claims to have escalated to a failure" do
+      refute StallDetector.escalation_message(60, 180) =~ "escalated"
+    end
+  end
+
+  describe "escalation_minutes/1" do
+    test "is three times the grace window" do
+      assert StallDetector.escalation_minutes(60) == 180
+      assert StallDetector.escalation_minutes(1440) == 4320
     end
   end
 end

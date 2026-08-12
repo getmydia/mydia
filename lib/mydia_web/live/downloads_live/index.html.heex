@@ -240,6 +240,39 @@
                 <% end %>
               </div>
             <% end %>
+            <%!-- Soft-stall: a recoverable warning. import_issue is nil here
+                 (a soft-stall never sets import_failed_at), so this is a
+                 sibling of the block above, not an alternative to it. This is
+                 the only place the give-up rule is visible while the operator
+                 can still change the outcome. --%>
+            <%= if soft_stalled?(download) do %>
+              <div class="text-xs text-warning flex flex-wrap items-center gap-1.5 mt-0.5">
+                <.icon name="hero-clock" class="size-3 shrink-0" />
+                <span>
+                  No progress for {format_duration(stall_elapsed_seconds(download))}. If nothing changes in the next {format_duration(
+                    stall_remaining_seconds(download, @stall_grace_map)
+                  )}, Mydia will remove it and search for a different release.
+                </span>
+                <button
+                  type="button"
+                  id={"stall-reject-#{download.id}"}
+                  class="btn btn-xs btn-warning btn-outline shrink-0"
+                  phx-click="reject_release"
+                  phx-value-id={download.id}
+                >
+                  Remove and find another
+                </button>
+                <button
+                  type="button"
+                  id={"stall-keep-waiting-#{download.id}"}
+                  class="btn btn-xs btn-ghost shrink-0"
+                  phx-click="keep_waiting"
+                  phx-value-id={download.id}
+                >
+                  Keep waiting
+                </button>
+              </div>
+            <% end %>
             <%!-- Line 3: compact metadata cluster (every metric carries an icon) --%>
             <div class="flex items-center gap-x-3 gap-y-1 flex-wrap mt-1 text-xs text-base-content/60">
               <% quality_str = Quality.format(get_metadata_value(download, "quality")) %>
