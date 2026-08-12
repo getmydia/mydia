@@ -1139,7 +1139,7 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
       }
     end
 
-    @html "<html><body><table><tr><td class=\"title\">Ubuntu</td><a href=\"magnet:?xt=urn:btih:AAA\">d</a></tr></table></body></html>"
+    @html ~s|<html><body><table><tr><td class="title">Ubuntu</td><a href="magnet:?xt=urn:btih:AAA">d</a></tr></table></body></html>|
 
     test "uses the default when an optional selector misses" do
       definition = default_definition(%{selector: "td.seeders", optional: true, default: 5})
@@ -1216,10 +1216,10 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
       }
 
       html =
-        "<html><body><table>" <>
-          "<tr><td class=\"title\">The Matrix 1999</td><a class=\"dl\" href=\"magnet:?xt=urn:btih:AAA\">d</a></tr>" <>
-          "<tr><td class=\"title\">The Matrix</td><a class=\"dl\" href=\"magnet:?xt=urn:btih:BBB\">d</a></tr>" <>
-          "</table></body></html>"
+        ~s|<html><body><table>| <>
+          ~s|<tr><td class="title">The Matrix 1999</td><a class="dl" href="magnet:?xt=urn:btih:AAA">d</a></tr>| <>
+          ~s|<tr><td class="title">The Matrix</td><a class="dl" href="magnet:?xt=urn:btih:BBB">d</a></tr>| <>
+          ~s|</table></body></html>|
 
       assert {:ok, filtered_results} =
                CardigannResultParser.parse_results(
@@ -1272,11 +1272,11 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
     end
 
     defp case_html(cat) do
-      "<html><body><table><tr>" <>
-        "<td class=\"title\">Ubuntu</td>" <>
-        "<td class=\"cat\"><a href=\"/browse?cat=#{cat}\">#{cat}</a></td>" <>
-        "<a class=\"dl\" href=\"magnet:?xt=urn:btih:AAA\">d</a>" <>
-        "</tr></table></body></html>"
+      ~s|<html><body><table><tr>| <>
+        ~s|<td class="title">Ubuntu</td>| <>
+        ~s|<td class="cat"><a href="/browse?cat=#{cat}">#{cat}</a></td>| <>
+        ~s|<a class="dl" href="magnet:?xt=urn:btih:AAA">d</a>| <>
+        ~s|</tr></table></body></html>|
     end
 
     test "resolves to the value of the first matching case selector" do
