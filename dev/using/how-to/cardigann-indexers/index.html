@@ -908,6 +908,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Supported Indexers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#dead-and-moved-domains" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dead and moved domains
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -3045,6 +3062,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Supported Indexers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#dead-and-moved-domains" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dead and moved domains
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -3237,8 +3271,12 @@
 <h1 id="cardigann-indexers">Cardigann Indexers</h1>
 <p>Mydia includes built-in Cardigann indexer support, allowing direct indexer connections without Prowlarr or Jackett.</p>
 <div class="admonition warning">
-<p class="admonition-title">Experimental Feature</p>
-<p>Cardigann support is highly experimental. Only a limited number of indexers have been tested. If you encounter issues, please report them on GitHub.</p>
+<p class="admonition-title">Public indexers are covered, private ones are not</p>
+<p>Mydia's Cardigann engine is tested against public trackers, which are the
+ones it handles well. Private and semi-private trackers need a login, and
+several login mechanisms (CAPTCHA, selector-derived inputs, separate submit
+paths) are not implemented. Expect those to fail. If you hit a problem,
+please report it on GitHub.</p>
 </div>
 <p>Cardigann is the community indexer definition format from Jackett, also used by
 Prowlarr. Mydia reads those definitions natively, so you can point it at trackers
@@ -3255,14 +3293,39 @@ running fewer services.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nv">ENABLE_CARDIGANN</span><span class="o">=</span><span class="nb">false</span>
 </code></pre></div>
 <h2 id="supported-indexers">Supported Indexers</h2>
-<p>Mydia includes definitions for many popular indexers. However, only a subset have been thoroughly tested.</p>
-<p><strong>Tested Indexers:</strong></p>
+<p>Mydia syncs the full upstream definition catalogue. Coverage is strongest for
+public trackers.</p>
+<p><strong>Covered by regression tests:</strong></p>
+<p>These indexers have captured responses in the test suite, so their parsing is
+verified on every build.</p>
 <ul>
 <li>1337x</li>
+<li>blueroms</li>
+<li>EZTV</li>
+<li>KickassTorrents</li>
+<li>LimeTorrents</li>
+<li>MagnetDownload</li>
+<li>Nyaa.si</li>
+<li>ShowRSS</li>
+<li>The Pirate Bay</li>
+<li>TorrentGalaxy (clone)</li>
+<li>TorrentLT</li>
 <li>YTS</li>
 </ul>
-<p><strong>Untested but Included:</strong></p>
-<p>Many more indexer definitions are included but haven't been verified. They may work, have issues, or not work at all.</p>
+<p><strong>Everything else:</strong></p>
+<p>The remaining definitions are included and may well work, but nothing pins their
+behaviour, so an upstream site change can break them silently. Private trackers
+in particular are likely to fail at login.</p>
+<p>To see what the engine actually supports against the current upstream
+catalogue, run the compatibility report:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>mix<span class="w"> </span>mydia.cardigann_compat<span class="w"> </span>--type<span class="w"> </span>public
+</code></pre></div>
+<p>It lists, per unsupported feature, how many definitions that feature blocks.</p>
+<h3 id="dead-and-moved-domains">Dead and moved domains</h3>
+<p>Public trackers rotate domains often. Mydia probes every link a definition
+ships, including its historical ones, picks the first that responds, and stores
+it. If that host later stops answering, a search transparently fails over to the
+next candidate and remembers the new one. No configuration is involved.</p>
 <h2 id="configuration">Configuration</h2>
 <h3 id="adding-a-cardigann-indexer">Adding a Cardigann Indexer</h3>
 <ol>
@@ -3288,10 +3351,10 @@ running fewer services.</p>
 <li>Run a FlareSolverr instance (e.g., via Docker)</li>
 <li>Configure the following environment variables:</li>
 </ol>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nv">FLARESOLVERR_URL</span><span class="o">=</span>http://flaresolverr:8191
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="c1"># FLARESOLVERR_ENABLED is auto-enabled when URL is set</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="c1"># FLARESOLVERR_TIMEOUT=60000</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c1"># FLARESOLVERR_MAX_TIMEOUT=120000</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nv">FLARESOLVERR_URL</span><span class="o">=</span>http://flaresolverr:8191
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="c1"># FLARESOLVERR_ENABLED is auto-enabled when URL is set</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="c1"># FLARESOLVERR_TIMEOUT=60000</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="c1"># FLARESOLVERR_MAX_TIMEOUT=120000</span>
 </code></pre></div>
 <p>See <a href="../../reference/environment-variables/#flaresolverr">Environment Variables</a> for the full reference.</p>
 <h2 id="limitations">Limitations</h2>
