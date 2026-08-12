@@ -40,4 +40,64 @@ void main() {
       expect(playbackErrorMessage(''), contains('unknown reason'));
     });
   });
+
+  group('autoplayBlocked', () {
+    // The exact strings each engine rejects `HTMLVideoElement.play()` with.
+    // They are transcribed rather than paraphrased on purpose: this function
+    // has nothing but the wording to go on, so a test that reworded them
+    // would stop defending anything.
+    test('recognises WebKit, which is what iOS Safari reports', () {
+      expect(
+        autoplayBlocked(
+          'The request is not allowed by the user agent or the platform in '
+          'the current context, possibly because the user denied permission.',
+        ),
+        isTrue,
+      );
+    });
+
+    test('recognises Firefox, which words it slightly differently', () {
+      expect(
+        autoplayBlocked(
+          'The play method is not allowed by the user agent or the platform '
+          'in the current context, possibly because the user denied '
+          'permission.',
+        ),
+        isTrue,
+      );
+    });
+
+    test('recognises Chromium, help URL and all', () {
+      expect(
+        autoplayBlocked(
+          "play() failed because the user didn't interact with the document "
+          'first. https://goo.gl/xX8pDD',
+        ),
+        isTrue,
+      );
+    });
+
+    test('survives Chromium changing its help URL or its apostrophe', () {
+      expect(
+        autoplayBlocked(
+          'play() failed because the user did not interact with the document '
+          'first.',
+        ),
+        isTrue,
+      );
+    });
+
+    test('leaves genuine load failures to the error screen', () {
+      expect(
+        autoplayBlocked(
+          'Failed to open http://127.0.0.1:12345/direct/file-old/stream.',
+        ),
+        isFalse,
+        reason: 'a dead source is fatal — offering a play button for it would '
+            'strand the viewer tapping at a stream that will never start',
+      );
+      expect(autoplayBlocked('Audio device init failed'), isFalse);
+      expect(autoplayBlocked(''), isFalse);
+    });
+  });
 }

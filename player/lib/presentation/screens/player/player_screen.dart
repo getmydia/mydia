@@ -43,6 +43,7 @@ import '../../widgets/cast_device_picker.dart';
 import '../../widgets/video_controls/cast_chrome_icon.dart';
 import '../../widgets/video_controls/custom_video_controls.dart';
 import '../../widgets/video_controls/skip_segment_button.dart';
+import '../../widgets/tap_to_play_overlay.dart';
 import '../../widgets/up_next_overlay.dart';
 import '../../../domain/models/audio_track.dart' as app_models_audio;
 import '../../../domain/models/media_segment.dart';
@@ -240,6 +241,23 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   bool _playbackAdvanced = false;
   bool _isLoading = true;
   String? _error;
+
+  /// Whether the browser refused to start playback for want of a user gesture.
+  ///
+  /// Deliberately not an [_error]. By the time this is set the media is open
+  /// and ready and only the *start* was declined, so the video is shown with a
+  /// play affordance over it rather than torn down for an error screen. See
+  /// [_onPlaybackError].
+  ///
+  /// Only ever true on web. Every browser requires a live user activation to
+  /// start an unmuted video, and on a cold start nothing here can promise one:
+  /// the tap that asked for playback is separated from [Player.play] by a
+  /// route change, the candidates and progress queries, `StartStreamingSession`
+  /// and the open itself. Over a remote server that routinely outlasts the
+  /// activation window, which is why this is a state to recover from rather
+  /// than a race to try to win.
+  bool _autoplayBlocked = false;
+
   String? _loadingMessage;
   int? _savedPositionSeconds;
   int? _savedDurationSeconds;
@@ -614,6 +632,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       setState(() {
         _isLoading = true;
         _error = null;
+        _autoplayBlocked = false;
       });
 
       // Check if we're in offline mode
@@ -1951,6 +1970,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// during `open` leaves the screen still loading, and `_buildBody` checks
   /// the loading state first, so an error set on its own would never be
   /// reached.
+  ///
+  /// A browser's autoplay refusal is routed to [_autoplayBlocked] instead of
+  /// [_error], because it is the one message on this stream that does not mean
+  /// the video failed. Checked after the [_playbackAdvanced] gate, not before:
+  /// once playback is under way the ordinary transport controls are on screen
+  /// and can start it again, and throwing a full-bleed overlay over a running
+  /// video would be the worse answer.
   void _onPlaybackError(String message) {
     debugPrint('[PlayerScreen] Playback error: $message');
     if (!mounted) return;
@@ -1961,9 +1987,35 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       return;
     }
 
+    if (autoplayBlocked(message)) {
+      setState(() {
+        _autoplayBlocked = true;
+        _isLoading = false;
+      });
+      return;
+    }
+
     setState(() {
       _error = playbackErrorMessage(message);
       _isLoading = false;
+    });
+  }
+
+  /// Start the playback the browser declined to start on its own.
+  ///
+  /// The [Player.play] call has to happen inside the tap handler itself. That
+  /// is the entire point: the gesture is what the browser was missing, and
+  /// awaiting anything first would spend it. For the same reason this does not
+  /// re-run [_initializePlayer] the way the error screen's Retry does — the
+  /// media is already open, and re-initialising would abandon a perfectly good
+  /// HLS session and make the server transcode the opening of the file twice.
+  void _playAfterAutoplayBlock() {
+    final player = _player;
+    if (player == null) return;
+
+    unawaited(player.play());
+    setState(() {
+      _autoplayBlocked = false;
     });
   }
 
@@ -2967,6 +3019,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         _videoController = null;
         _isLoading = true;
         _error = null;
+        _autoplayBlocked = false;
       });
     } else {
       _videoController = null;
@@ -3128,6 +3181,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             onPlayNow: _playNextEpisode,
             onCancel: _cancelAutoPlay,
           ),
+        // Last in the stack, so the tap that starts playback reaches this and
+        // not the seek gestures underneath. Nothing below it can do anything
+        // useful while the browser is still refusing to start.
+        if (_autoplayBlocked) TapToPlayOverlay(onPlay: _playAfterAutoplayBlock),
       ],
     );
   }
