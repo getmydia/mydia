@@ -55,6 +55,23 @@
   color: oklch(var(--bc) / 0.35);
 }
 
+/* iOS Safari zooms the viewport when a focused field is under 16px. DaisyUI 5
+   defaults .input/.select/.textarea to --font-size-min: .875rem (14px), so
+   every text field in the media server modal triggers it. Setting DaisyUI's own
+   variable is preferable to overriding font-size directly, which would fight
+   the component's `max()` expression.
+
+   This is an app-wide papercut; the same rule without the ID prefix would fix
+   every form in Mydia on iOS. Scoped here to match the agreed scope of the
+   media servers mobile work. */
+@media (max-width: 639px) {
+  #media-server-modal .input,
+  #media-server-modal .select,
+  #media-server-modal .textarea {
+    --font-size-min: 1rem;
+  }
+}
+
 /* This file is for your main application CSS */
 
 /* Hide badges when selection mode is active */

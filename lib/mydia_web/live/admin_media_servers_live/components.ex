@@ -19,7 +19,10 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
           <.icon name="hero-server-stack" class="w-5 h-5 opacity-60" /> Media Servers
           <span class="badge badge-ghost">{length(@media_servers)}</span>
         </h2>
-        <button class="btn btn-sm btn-primary" phx-click="new_media_server">
+        <button
+          class="btn btn-primary w-full min-h-11 sm:btn-sm sm:w-auto sm:min-h-8"
+          phx-click="new_media_server"
+        >
           <.icon name="hero-plus" class="w-4 h-4" /> New
         </button>
       </div>
@@ -51,12 +54,12 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                 <div class="flex items-start gap-3">
                   <%!-- Server Type Icon --%>
                   <div class={[
-                    "p-3 rounded-xl shrink-0",
+                    "p-2 sm:p-3 rounded-xl shrink-0",
                     media_server_type_bg_class(server.type)
                   ]}>
                     <.icon
                       name={media_server_type_icon(server.type)}
-                      class={"w-6 h-6 #{media_server_type_icon_class(server.type)}"}
+                      class={"w-5 h-5 sm:w-6 sm:h-6 #{media_server_type_icon_class(server.type)}"}
                     />
                   </div>
 
@@ -65,36 +68,25 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                     <div class="flex items-center gap-2 flex-wrap">
                       <h3 class="font-semibold text-base truncate">{server.name}</h3>
                       <%= if is_runtime do %>
-                        <span
-                          class="badge badge-primary badge-xs gap-1 tooltip cursor-help"
-                          data-tip="Configured via environment variables (read-only)"
-                        >
+                        <span class="badge badge-primary badge-xs gap-1">
                           <.icon name="hero-lock-closed" class="w-3 h-3" /> ENV
                         </span>
                       <% end %>
                     </div>
-                    <div class="text-xs text-base-content/50 mt-0.5 font-mono truncate">
+                    <div class="text-xs text-base-content/50 mt-0.5 font-mono break-all sm:truncate">
                       {server.url}
                     </div>
                   </div>
 
                   <%!-- Health Status Indicator --%>
                   <div
+                    role="img"
+                    aria-label={health_status_label(health.status)}
                     class={[
-                      "tooltip tooltip-left",
-                      health.status == :unhealthy && health[:error] && "cursor-help"
-                    ]}
-                    data-tip={
-                      if health.status == :unhealthy and health[:error],
-                        do: health.error,
-                        else: health_status_label(health.status)
-                    }
-                  >
-                    <div class={[
-                      "w-3 h-3 rounded-full",
+                      "w-3 h-3 rounded-full shrink-0 mt-1",
                       health_status_dot_class(health.status)
-                    ]}>
-                    </div>
+                    ]}
+                  >
                   </div>
                 </div>
 
@@ -120,6 +112,14 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                     {health_status_label(health.status)}
                   </span>
                 </div>
+
+                <p
+                  :if={health.status == :unhealthy and health[:error]}
+                  data-test="health-error"
+                  class="text-xs text-error/80 break-words"
+                >
+                  {health.error}
+                </p>
 
                 <%!-- Watched Sync Status --%>
                 <% sync_enabled =
@@ -156,12 +156,20 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                   <span :if={last_run.error} class="text-error/80">{last_run.error}</span>
                 </div>
 
+                <p
+                  :if={is_runtime}
+                  data-test="env-config-note"
+                  class="text-xs text-base-content/50"
+                >
+                  Configured via environment variables, read-only
+                </p>
+
                 <%!-- Bottom Row: Actions --%>
-                <div class="flex items-center justify-end gap-1 pt-2 border-t border-base-200">
+                <div class="flex flex-wrap items-center gap-2 pt-3 border-t border-base-200 sm:justify-end sm:gap-1 sm:pt-2">
                   <button
                     :if={server.last_auth_error_at}
                     data-test="reconnect-plex"
-                    class="btn btn-sm btn-warning gap-1"
+                    class={["btn btn-warning gap-1", card_action_btn()]}
                     phx-click="reconnect_plex"
                     phx-value-id={server.id}
                   >
@@ -169,7 +177,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                   </button>
                   <%= if sync_enabled and server.type == :plex do %>
                     <button
-                      class="btn btn-sm btn-ghost gap-1"
+                      class={["btn btn-ghost gap-1", card_action_btn()]}
                       phx-click="sync_watched"
                       phx-value-id={server.id}
                     >
@@ -177,35 +185,31 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                     </button>
                   <% end %>
                   <button
-                    class="btn btn-sm btn-ghost gap-1"
+                    class={["btn btn-ghost gap-1", card_action_btn()]}
                     phx-click="test_media_server"
                     phx-value-id={server.id}
                   >
                     <.icon name="hero-signal" class="w-4 h-4" /> Test
                   </button>
-                  <%= if is_runtime do %>
-                    <div class="tooltip" data-tip="Cannot modify runtime-configured servers">
-                      <button class="btn btn-sm btn-ghost" disabled>
-                        <.icon name="hero-pencil" class="w-4 h-4 opacity-30" />
-                      </button>
-                    </div>
-                  <% else %>
-                    <button
-                      class="btn btn-sm btn-ghost"
-                      phx-click="edit_media_server"
-                      phx-value-id={server.id}
-                    >
-                      <.icon name="hero-pencil" class="w-4 h-4" />
-                    </button>
-                    <button
-                      class="btn btn-sm btn-ghost text-error hover:bg-error/10"
-                      phx-click="delete_media_server"
-                      phx-value-id={server.id}
-                      data-confirm="Are you sure you want to delete this media server?"
-                    >
-                      <.icon name="hero-trash" class="w-4 h-4" />
-                    </button>
-                  <% end %>
+                  <button
+                    :if={not is_runtime}
+                    class={["btn btn-ghost gap-1", card_action_btn()]}
+                    phx-click="edit_media_server"
+                    phx-value-id={server.id}
+                  >
+                    <.icon name="hero-pencil" class="w-4 h-4" />
+                    <span class="sm:hidden">Edit</span>
+                  </button>
+                  <button
+                    :if={not is_runtime}
+                    class={["btn btn-ghost gap-1 text-error hover:bg-error/10", card_action_btn()]}
+                    phx-click="delete_media_server"
+                    phx-value-id={server.id}
+                    data-confirm="Are you sure you want to delete this media server?"
+                  >
+                    <.icon name="hero-trash" class="w-4 h-4" />
+                    <span class="sm:hidden">Delete</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -241,10 +245,14 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
     assigns = assign(assigns, :current_type, current_type)
 
     ~H"""
-    <div class="modal modal-open" id="media-server-modal" phx-hook="PlexOAuth">
+    <div
+      class="modal modal-bottom sm:modal-middle modal-open"
+      id="media-server-modal"
+      phx-hook="PlexOAuth"
+    >
       <div class="modal-box max-w-xl">
         <%!-- Modal Header --%>
-        <div class="flex items-center justify-between mb-5">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
           <div class="flex items-center gap-3">
             <div class={[
               "w-10 h-10 rounded-xl flex items-center justify-center",
@@ -270,7 +278,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
               </p>
             </div>
           </div>
-          <label class="label cursor-pointer gap-2">
+          <label class="label cursor-pointer gap-2 w-full justify-between sm:w-auto sm:justify-end">
             <span class="label-text text-sm">Enabled</span>
             <input type="hidden" name={@media_server_form[:enabled].name} value="false" />
             <input
@@ -399,7 +407,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                           <span class="font-medium text-sm">Authenticated successfully</span>
                         </div>
                         <p class="text-sm text-base-content/70">Select your Plex server:</p>
-                        <div class="space-y-2 max-h-48 overflow-y-auto">
+                        <div class="space-y-2 sm:max-h-48 sm:overflow-y-auto">
                           <%= for server <- @plex_oauth_servers do %>
                             <button
                               type="button"
@@ -456,7 +464,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                           <span class="font-medium">{@plex_selected_server.name}</span>
                         </div>
                         <p class="text-sm text-base-content/70">Choose a connection:</p>
-                        <div class="space-y-2 max-h-48 overflow-y-auto">
+                        <div class="space-y-2 sm:max-h-48 sm:overflow-y-auto">
                           <% sorted_connections =
                             Enum.sort_by(@plex_selected_server.connections, fn conn ->
                               case Map.get(@plex_connection_statuses, conn.uri, :testing) do
@@ -695,13 +703,17 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
           </div>
 
           <%!-- Modal Actions --%>
-          <div class="modal-action mt-6 pt-4 border-t border-base-300">
-            <button type="button" class="btn btn-ghost" phx-click="close_media_server_modal">
+          <div class="modal-action mt-6 grid grid-cols-2 gap-2 sticky bottom-0 bg-base-100 -mx-6 px-6 -mb-6 pb-6 pt-4 border-t border-base-300 sm:flex sm:gap-2">
+            <button
+              type="button"
+              class={["btn btn-ghost", modal_action_btn()]}
+              phx-click="close_media_server_modal"
+            >
               Cancel
             </button>
             <button
               type="button"
-              class="btn btn-outline btn-secondary gap-2"
+              class={["btn btn-outline btn-secondary gap-2", modal_action_btn()]}
               phx-click="test_media_server_connection"
               disabled={@testing_media_server_connection}
             >
@@ -711,7 +723,13 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                 <.icon name="hero-signal" class="w-4 h-4" /> Test Connection
               <% end %>
             </button>
-            <button type="submit" class="btn btn-primary gap-2">
+            <button
+              type="submit"
+              class={[
+                "btn btn-primary gap-2 col-span-2 order-first sm:order-none",
+                modal_action_btn()
+              ]}
+            >
               <.icon name="hero-check" class="w-4 h-4" />
               {if @media_server_mode == :new, do: "Add Server", else: "Save Changes"}
             </button>
@@ -764,6 +782,20 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   defp health_status_label(:healthy), do: "Healthy"
   defp health_status_label(:unhealthy), do: "Unhealthy"
   defp health_status_label(:unknown), do: "Unknown"
+
+  # Card action buttons: two per row on phones, with a lone trailing button
+  # stretching to fill, and today's compact right-aligned row from `sm` up.
+  #
+  # DaisyUI 5 .btn is 2.5rem and .btn-sm is 2rem, both under the 44px iOS and
+  # 48px Android touch-target guidance. `min-h-11` (2.75rem) clamps the
+  # component's own `height`; a Tailwind `h-*` utility would be competing with
+  # DaisyUI's own cascade layer and is not reliable here.
+  defp card_action_btn,
+    do: "flex-1 basis-[45%] min-h-11 sm:flex-none sm:basis-auto sm:btn-sm sm:min-h-8"
+
+  # Modal footer buttons: full-width stacked rows on phones, today's inline
+  # row from `sm` up. Same 44px reasoning as card_action_btn/0.
+  defp modal_action_btn, do: "w-full min-h-11 sm:w-auto sm:min-h-8"
 
   defp run_label(%{status: :skipped, skip_reason: reason}) when is_binary(reason) do
     "Skipped: #{reason}"
