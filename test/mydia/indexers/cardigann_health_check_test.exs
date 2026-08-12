@@ -3,6 +3,7 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
 
   alias Mydia.Indexers.CardigannHealthCheck
   alias Mydia.Indexers.CardigannDefinition
+  alias Mydia.Indexers.CardigannDefinition.Parsed
   alias Mydia.Repo
 
   import Mydia.IndexersFixtures
@@ -71,6 +72,121 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
       refute result.success
       assert result.status == "unhealthy"
       assert result.error != nil
+    end
+  end
+
+  describe "probe_candidates/2" do
+    setup do
+      dead = Bypass.open()
+      live = Bypass.open()
+      Bypass.down(dead)
+
+      {:ok,
+       dead: dead,
+       live: live,
+       dead_url: "http://localhost:#{dead.port}",
+       live_url: "http://localhost:#{live.port}"}
+    end
+
+    test "returns the first responding candidate", %{
+      dead_url: dead_url,
+      live_url: live_url,
+      live: live
+    } do
+      Bypass.expect(live, "GET", "/", fn conn -> Plug.Conn.resp(conn, 200, "ok") end)
+      parsed = %Parsed{links: [dead_url, live_url], legacylinks: []}
+
+      assert {:ok, chosen, status} = CardigannHealthCheck.probe_candidates(parsed, %{})
+      assert chosen == live_url
+      assert status[dead_url]["ok"] == false
+      assert status[live_url]["ok"] == true
+    end
+
+    test "prefers a live primary over a legacy link", %{
+      live_url: live_url,
+      dead_url: dead_url,
+      live: live
+    } do
+      Bypass.expect(live, "GET", "/", fn conn -> Plug.Conn.resp(conn, 200, "ok") end)
+      parsed = %Parsed{links: [live_url], legacylinks: [dead_url]}
+
+      assert {:ok, chosen, _status} = CardigannHealthCheck.probe_candidates(parsed, %{})
+      assert chosen == live_url
+    end
+
+    test "returns an error when every candidate fails", %{dead_url: dead_url} do
+      parsed = %Parsed{links: [dead_url], legacylinks: []}
+
+      assert {:error, status} = CardigannHealthCheck.probe_candidates(parsed, %{})
+      assert status[dead_url]["ok"] == false
+    end
+
+    test "returns an error when there are no candidates" do
+      assert {:error, status} =
+               CardigannHealthCheck.probe_candidates(%Parsed{links: [], legacylinks: []}, %{})
+
+      assert status == %{}
+    end
+  end
+
+  describe "execute_health_check/2 link persistence" do
+    test "stores the winning candidate as active_link" do
+      dead = Bypass.open()
+      live = Bypass.open()
+      Bypass.down(dead)
+      Bypass.expect(live, "GET", "/", fn conn -> Plug.Conn.resp(conn, 200, "ok") end)
+
+      dead_url = "http://localhost:#{dead.port}"
+      live_url = "http://localhost:#{live.port}"
+
+      {:ok, definition} =
+        %CardigannDefinition{}
+        |> CardigannDefinition.changeset(%{
+          indexer_id: "probe-test",
+          name: "Probe Test",
+          type: "public",
+          links: %{"0" => dead_url, "1" => live_url},
+          capabilities: %{},
+          schema_version: "v11",
+          definition: """
+          id: probe-test
+          name: Probe Test
+          description: d
+          language: en-US
+          type: public
+          encoding: UTF-8
+          links:
+            - #{dead_url}
+            - #{live_url}
+          caps:
+            categories:
+              2000: Movies
+          settings: []
+          search:
+            paths:
+              - path: /search
+            rows:
+              selector: tr
+            fields:
+              title:
+                selector: td.title
+              size:
+                selector: td.size
+              seeders:
+                selector: td.seeders
+              download:
+                selector: a
+                attribute: href
+          """
+        })
+        |> Repo.insert()
+
+      assert {:ok, _result} = CardigannHealthCheck.execute_health_check(definition)
+
+      reloaded = Repo.get!(CardigannDefinition, definition.id)
+      assert reloaded.active_link == live_url
+      assert reloaded.link_status[dead_url]["ok"] == false
+      assert reloaded.link_status[live_url]["ok"] == true
     end
   end
 
