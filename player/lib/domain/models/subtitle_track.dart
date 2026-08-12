@@ -23,6 +23,19 @@ class SubtitleTrack {
   /// Whether the subtitle is embedded in the video file
   final bool embedded;
 
+  /// Subtitle body already converted to WebVTT. Null for image-based tracks
+  /// and for tracks the server could not read.
+  ///
+  /// Deliberately absent from `MediaFileFragment`: resolving `content` for
+  /// an embedded track runs an ffmpeg extraction server-side, so it is
+  /// populated lazily via the targeted `SubtitleContent` query rather than
+  /// here in `fromGraphQL`.
+  final String? content;
+
+  /// False for image-based tracks (PGS, VobSub), which render only in direct
+  /// play where the client reads them from the container itself.
+  final bool deliverable;
+
   const SubtitleTrack({
     required this.id,
     required this.language,
@@ -31,6 +44,8 @@ class SubtitleTrack {
     this.isDefault = false,
     this.format = 'srt',
     this.embedded = false,
+    this.content,
+    this.deliverable = true,
   });
 
   /// Create from GraphQL fragment
@@ -42,6 +57,7 @@ class SubtitleTrack {
       url: sub.url,
       format: sub.format,
       embedded: sub.embedded,
+      deliverable: sub.deliverable,
     );
   }
 
