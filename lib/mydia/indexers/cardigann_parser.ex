@@ -72,6 +72,7 @@ defmodule Mydia.Indexers.CardigannParser do
         inputs: Map.get(search, "inputs", %{}),
         headers: Map.get(search, "headers"),
         keywordsfilters: Map.get(search, "keywordsfilters", []),
+        allow_empty_inputs: Map.get(search, "allowEmptyInputs", false),
         rows: rows,
         fields: fields
       }

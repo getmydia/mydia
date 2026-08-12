@@ -271,6 +271,44 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
     end
   end
 
+  describe "allowEmptyInputs" do
+    defp parsed_with_inputs(inputs, allow_empty) do
+      %Parsed{
+        id: "ei",
+        name: "EI",
+        type: "public",
+        links: ["https://example.com"],
+        legacylinks: [],
+        encoding: "UTF-8",
+        capabilities: %{},
+        settings: [],
+        search: %{
+          paths: [%{path: "/search"}],
+          inputs: inputs,
+          headers: nil,
+          keywordsfilters: [],
+          allow_empty_inputs: allow_empty,
+          rows: %{selector: "tr"},
+          fields: %{}
+        }
+      }
+    end
+
+    test "keeps empty inputs when allowEmptyInputs is true" do
+      parsed = parsed_with_inputs(%{"q" => "{{ .Keywords }}", "cat" => ""}, true)
+
+      assert {:ok, params} = CardigannSearchEngine.build_request_params(parsed, query: "")
+      assert Map.has_key?(params.query_params, "cat")
+    end
+
+    test "drops empty inputs by default" do
+      parsed = parsed_with_inputs(%{"q" => "{{ .Keywords }}", "cat" => ""}, nil)
+
+      assert {:ok, params} = CardigannSearchEngine.build_request_params(parsed, query: "")
+      refute Map.has_key?(params.query_params, "cat")
+    end
+  end
+
   describe "validate_response/1" do
     test "accepts valid 200 response" do
       response = %{status: 200, body: "<html>...</html>", headers: []}

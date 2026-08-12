@@ -717,6 +717,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   defp build_query_params(%Parsed{} = definition, opts) do
     # Start with inputs from the definition
     base_params = Map.get(definition.search, :inputs, %{})
+    allow_empty = Map.get(definition.search, :allow_empty_inputs, false) == true
 
     # Build template context
     context = build_template_context(definition, opts)
@@ -746,7 +747,11 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
             v
         end
 
-      Map.put(acc, key, substituted_value)
+      if substituted_value == "" and not allow_empty do
+        acc
+      else
+        Map.put(acc, key, substituted_value)
+      end
     end)
   end
 
