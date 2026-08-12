@@ -71,14 +71,28 @@ defmodule Mydia.Subtitles.ProviderRegistry do
   Returns the adapter module for a config.
 
   A config may name its own adapter in `connection_settings["adapter"]`, which
-  tests use to inject a stub without touching application environment.
+  tests use to inject a stub without touching application environment. The value
+  may arrive as a module atom (in-memory) or as a string (after a JSON column
+  round-trip); only already-loaded modules are accepted from strings.
   """
   @spec adapter_for(map()) :: module()
   def adapter_for(config) do
     case Map.get(config, :connection_settings) do
-      %{"adapter" => adapter} when is_atom(adapter) and not is_nil(adapter) -> adapter
-      _ -> adapter_by_type(Map.get(config, :type))
+      %{"adapter" => adapter} when is_atom(adapter) and not is_nil(adapter) ->
+        adapter
+
+      %{"adapter" => adapter} when is_binary(adapter) and adapter != "" ->
+        resolve_adapter_string(adapter, config)
+
+      _ ->
+        adapter_by_type(Map.get(config, :type))
     end
+  end
+
+  defp resolve_adapter_string(adapter, config) do
+    String.to_existing_atom(adapter)
+  rescue
+    ArgumentError -> adapter_by_type(Map.get(config, :type))
   end
 
   defp adapter_by_type(type) do

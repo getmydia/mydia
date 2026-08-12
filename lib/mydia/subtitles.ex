@@ -25,7 +25,6 @@ defmodule Mydia.Subtitles do
 
   alias Mydia.Repo
   alias Mydia.Subtitles.{Subtitle, MediaHash, Downloader}
-  alias Mydia.Subtitles.Client.MetadataRelay
   alias Mydia.Library.MediaFile
   alias Mydia.Media.{MediaItem, Episode}
 
@@ -69,7 +68,7 @@ defmodule Mydia.Subtitles do
 
     with {:ok, media_file} <- fetch_media_file_with_associations(media_file_id),
          {:ok, search_params} <- build_search_params(media_file, languages),
-         {:ok, raw_results} <- perform_search(search_params),
+         {:ok, raw_results, _providers} <- perform_search(search_params),
          scored_results <- score_results(raw_results, search_params) do
       handle_search_results(scored_results, media_file_id, auto_download)
     end
@@ -267,20 +266,10 @@ defmodule Mydia.Subtitles do
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
-  # Perform subtitle search via configured provider
+  # Perform subtitle search across every configured provider.
   defp perform_search(params) do
-    # For now, only relay mode is implemented
-    # Direct mode will be added in task 217.12
-    case MetadataRelay.search(params) do
-      {:ok, %{"subtitles" => subtitles}} when is_list(subtitles) ->
-        {:ok, subtitles}
-
-      {:ok, response} ->
-        Logger.warning("Unexpected search response format", response: inspect(response))
-        {:error, :invalid_search_response}
-
-      {:error, reason} ->
-        {:error, {:search_failed, reason}}
+    case Mydia.Subtitles.ProviderChain.search(params) do
+      {:ok, %{results: results, providers: providers}} -> {:ok, results, providers}
     end
   end
 
@@ -289,9 +278,9 @@ defmodule Mydia.Subtitles do
     results
     |> Enum.map(fn result ->
       score = calculate_score(result, search_params)
-      Map.put(result, "score", score)
+      Map.put(result, :score, score)
     end)
-    |> Enum.sort_by(& &1["score"], :desc)
+    |> Enum.sort_by(&{&1.score, Map.get(&1, :provider_priority, 0)}, :desc)
   end
 
   defp calculate_score(result, search_params) do
@@ -300,7 +289,7 @@ defmodule Mydia.Subtitles do
     # Hash match (highest confidence)
     score =
       if Map.has_key?(search_params, :file_hash) &&
-           Map.get(result, "moviehash_match") == true do
+           Map.get(result, :moviehash_match) == true do
         score + @scoring_weights.hash_match
       else
         score
@@ -317,7 +306,7 @@ defmodule Mydia.Subtitles do
 
     # Rating bonus (0-10 scale, multiply by weight)
     score =
-      case result["rating"] do
+      case Map.get(result, :rating) do
         rating when is_number(rating) ->
           score + round(rating * @scoring_weights.rating / 10)
 
@@ -327,7 +316,7 @@ defmodule Mydia.Subtitles do
 
     # Popularity bonus (download count)
     score =
-      case result["download_count"] do
+      case Map.get(result, :download_count) do
         count when is_integer(count) and count > 0 ->
           # Logarithmic scale: log10(count) * weight
           popularity_score = :math.log10(count) * @scoring_weights.popularity
@@ -347,16 +336,16 @@ defmodule Mydia.Subtitles do
 
   defp handle_search_results([best | _rest] = results, media_file_id, true) do
     # Check if auto-download is appropriate for high-confidence match
-    if best["score"] >= @high_confidence_threshold do
+    if best.score >= @high_confidence_threshold do
       # Auto-download high-confidence match
       subtitle_info = %{
-        file_id: best["file_id"],
-        language: best["language"],
-        format: best["file_name"] |> Path.extname() |> String.trim_leading("."),
-        subtitle_hash: best["subtitle_hash"] || generate_subtitle_hash(best),
-        rating: best["rating"],
-        download_count: best["download_count"],
-        hearing_impaired: best["hearing_impaired"] || false
+        file_id: best.file_id,
+        language: best.language,
+        format: best.file_name |> Path.extname() |> String.trim_leading("."),
+        subtitle_hash: best.subtitle_hash || generate_subtitle_hash(best),
+        rating: best.rating,
+        download_count: best.download_count,
+        hearing_impaired: Map.get(best, :hearing_impaired) || false
       }
 
       case download_subtitle(subtitle_info, media_file_id) do
@@ -364,7 +353,7 @@ defmodule Mydia.Subtitles do
           Logger.info("Auto-downloaded high-confidence subtitle",
             media_file_id: media_file_id,
             language: subtitle.language,
-            score: best["score"]
+            score: best.score
           )
 
           {:ok, {:downloaded, subtitle}}
@@ -388,7 +377,7 @@ defmodule Mydia.Subtitles do
   # Generate a subtitle hash if not provided by the API
   defp generate_subtitle_hash(result) do
     # Use file_id and language as unique identifier
-    :crypto.hash(:sha256, "#{result["file_id"]}-#{result["language"]}")
+    :crypto.hash(:sha256, "#{result.file_id}-#{result.language}")
     |> Base.encode16(case: :lower)
   end
 end
