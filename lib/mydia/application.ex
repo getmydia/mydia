@@ -61,6 +61,7 @@ defmodule Mydia.Application do
         # Per-plugin invocation single-flight lock (U4): serializes on-event /
         # on-schedule / inline calls for one plugin so shared KV state is safe.
         Mydia.Plugins.SingleFlight,
+        Mydia.Plugins.Connect,
         # Fans "events:all" out to subscribed plugins (U5). Replaces the Luerl
         # hooks manager removed in U11.
         Mydia.Plugins.Dispatcher,

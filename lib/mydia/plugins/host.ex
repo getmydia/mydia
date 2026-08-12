@@ -87,6 +87,7 @@ defmodule Mydia.Plugins.Host do
   @schedule_export ["mydia:plugin/handler@1.2.0", "on-schedule"]
   @v13_handler_export ["mydia:plugin/handler@1.3.0", "on-event"]
   @v13_schedule_export ["mydia:plugin/handler@1.3.0", "on-schedule"]
+  @connect_export ["mydia:plugin/handler@1.3.0", "on-connect"]
   @v11_handler_export ["mydia:plugin/handler@1.1.0", "on-event"]
   @v11_schedule_export ["mydia:plugin/handler@1.1.0", "on-schedule"]
   @legacy_handler_export ["mydia:plugin/handler@1.0.0", "on-event"]
@@ -187,7 +188,7 @@ defmodule Mydia.Plugins.Host do
     * `:test_run` - badge the markers/guest logs for this run as a test
     * `:memory_limit_bytes` - override the linear-memory cap for this call
       (defaults to config; a test seam for exercising `StoreLimits`)
-    * `:handler` - `:on_event` (default) or `:on_schedule`
+    * `:handler` - `:on_event` (default), `:on_schedule`, or `:on_connect`
     * `:single_flight` - `:wait` (default; block until the plugin's lock is free)
       or `:skip` (return a `:busy` error if a sibling invocation is in flight —
       the scheduler's non-reentrancy)
@@ -361,9 +362,17 @@ defmodule Mydia.Plugins.Host do
     args = Components.FieldConverter.maybe_convert_args([record], true)
 
     case Components.call_function(pid, export, args, inv.timeout) do
-      {:ok, {:ok, json}} -> decode_result(json)
-      {:ok, {:error, message}} -> {:error, Error.new(:guest_error, sanitize_message(message))}
-      {:error, reason} -> {:error, Error.new(:trap, to_string_reason(reason))}
+      {:ok, {:ok, response}} when inv.handler == :on_connect ->
+        decode_connect_response(response)
+
+      {:ok, {:ok, json}} ->
+        decode_result(json)
+
+      {:ok, {:error, message}} ->
+        {:error, Error.new(:guest_error, sanitize_message(message))}
+
+      {:error, reason} ->
+        {:error, Error.new(:trap, to_string_reason(reason))}
     end
   catch
     :exit, {:timeout, _} ->
@@ -374,6 +383,10 @@ defmodule Mydia.Plugins.Host do
   # is 1.1+; a 1.0 guest lacks the export and call_function returns an error
   # the caller surfaces (fail-soft, no crash). on-event resolves at the guest's
   # own interface version (detected during start_plugin).
+  defp handler_call(%{handler: :on_connect, payload: payload}) do
+    {@connect_export, connect_request_record(payload)}
+  end
+
   defp handler_call(%{handler: :on_schedule, slug: slug, payload: payload}) do
     export =
       case contract(slug) do
@@ -426,6 +439,87 @@ defmodule Mydia.Plugins.Host do
       config_json: Jason.encode!(Map.get(payload, "config") || %{})
     }
   end
+
+  defp connect_request_record(payload) do
+    %{
+      step: connect_field(payload, :step, ""),
+      state_json: connect_field(payload, :state_json, "{}"),
+      input_json: connect_field(payload, :input_json, "{}"),
+      config_json: connect_field(payload, :config_json, "{}")
+    }
+  end
+
+  defp connect_field(payload, key, default) do
+    payload
+    |> Map.get(key)
+    |> case do
+      nil -> Map.get(payload, Atom.to_string(key))
+      value -> value
+    end
+    |> then(&to_string(&1 || default))
+  end
+
+  defp decode_connect_response(response) do
+    response = Components.FieldConverter.to_elixir(response)
+
+    case response do
+      {:pending, payload} when is_map(payload) ->
+        {:ok, {:pending, normalize_connect_pending(payload)}}
+
+      {:prompt, payload} when is_map(payload) ->
+        {:ok, {:prompt, normalize_connect_prompt(payload)}}
+
+      {:done, payload} when is_map(payload) ->
+        {:ok, {:done, %{message: Map.get(payload, :message)}}}
+
+      other ->
+        {:error, Error.new(:invalid_output, "unexpected connect response: #{inspect(other)}")}
+    end
+  end
+
+  defp normalize_connect_pending(payload) do
+    %{
+      message: Map.get(payload, :message),
+      code: connect_opt_string(Map.get(payload, :code)),
+      verification_url: connect_opt_string(Map.get(payload, :verification_url)),
+      interval_ms: Map.get(payload, :interval_ms),
+      state_json: Map.get(payload, :state_json) || "{}"
+    }
+  end
+
+  defp normalize_connect_prompt(payload) do
+    %{
+      message: Map.get(payload, :message),
+      fields: normalize_connect_fields(Map.get(payload, :fields, [])),
+      choices: normalize_connect_choices(Map.get(payload, :choices, [])),
+      state_json: Map.get(payload, :state_json) || "{}"
+    }
+  end
+
+  defp normalize_connect_fields(fields) when is_list(fields) do
+    Enum.map(fields, fn field ->
+      %{
+        key: Map.get(field, :key),
+        label: Map.get(field, :label),
+        secret: Map.get(field, :secret) == true
+      }
+    end)
+  end
+
+  defp normalize_connect_choices(choices) when is_list(choices) do
+    Enum.map(choices, fn choice ->
+      %{
+        value: Map.get(choice, :value),
+        label: Map.get(choice, :label),
+        detail: connect_opt_string(Map.get(choice, :detail))
+      }
+    end)
+  end
+
+  defp connect_opt_string(:none), do: nil
+  defp connect_opt_string({:some, value}), do: to_string(value)
+  defp connect_opt_string(nil), do: nil
+  defp connect_opt_string(value), do: to_string(value)
 
   defp schedule_now(payload) do
     case Map.get(payload, "now") do
