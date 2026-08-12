@@ -89,10 +89,26 @@ defmodule Mydia.Subtitles.ProviderRegistry do
     end
   end
 
+  # `connection_settings` is operator-editable, so a name arriving here is only
+  # honoured when it resolves to a loaded module that actually implements the
+  # provider behaviour. Otherwise this would be a way to point the chain at any
+  # module in the release and call search/2 on it.
   defp resolve_adapter_string(adapter, config) do
-    String.to_existing_atom(adapter)
+    module = String.to_existing_atom(adapter)
+
+    if provider_adapter?(module) do
+      module
+    else
+      adapter_by_type(Map.get(config, :type))
+    end
   rescue
     ArgumentError -> adapter_by_type(Map.get(config, :type))
+  end
+
+  defp provider_adapter?(module) do
+    Code.ensure_loaded?(module) and
+      function_exported?(module, :search, 2) and
+      function_exported?(module, :capabilities, 0)
   end
 
   defp adapter_by_type(type) do
