@@ -7,31 +7,12 @@
 # movie, episode, season, and library query that touches MediaFileFragment,
 # serially, inside a single GraphQL resolution.
 #
-# The schema has no root `mediaFile(id:)` query (MediaFile does not implement
-# Node either), so this goes through the owning movie or episode, matching the
-# movie/episode split already used by media_segments.graphql.
-query MovieSubtitleContent($id: ID!) {
-  movie(id: $id) {
-    id
-    files {
-      id
-      subtitles {
-        trackId
-        content(format: VTT)
-      }
-    }
-  }
-}
-
-query EpisodeSubtitleContent($id: ID!) {
-  episode(id: $id) {
-    id
-    files {
-      id
-      subtitles {
-        trackId
-        content(format: VTT)
-      }
-    }
-  }
+# A root `mediaFile(id:)` query would let this go straight to the file, but
+# the schema has none (MediaFile does not implement Node either), so this
+# uses the targeted `subtitleContent` field instead: it takes the media file
+# id and track id directly and resolves only that one track, unlike routing
+# through `movie`/`episode` -> `files` -> `subtitles` -> `content`, which
+# would resolve every track of every file the query selects.
+query SubtitleContent($mediaFileId: ID!, $trackId: String!) {
+  subtitleContent(mediaFileId: $mediaFileId, trackId: $trackId)
 }

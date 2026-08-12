@@ -11,6 +11,7 @@ defmodule MydiaWeb.Schema.QueryTypes do
   alias MydiaWeb.Schema.Resolvers.ApiKeyResolver
   alias MydiaWeb.Schema.Resolvers.StreamingResolver
   alias MydiaWeb.Schema.Resolvers.CollectionResolver
+  alias MydiaWeb.Schema.Resolvers.SubtitleResolver
   alias MydiaWeb.Schema.Resolvers.SubtitleSearchResolver
 
   # Node interface for global node resolution with hierarchical navigation
@@ -290,6 +291,20 @@ defmodule MydiaWeb.Schema.QueryTypes do
       arg(:languages, non_null(list_of(non_null(:string))))
 
       resolve(&SubtitleSearchResolver.search/3)
+    end
+
+    @desc """
+    Fetch one subtitle track's body directly, without resolving every track
+    on the media file. There is no root `mediaFile(id:)` query and
+    `MediaFile` does not implement `Node`, so this field takes the media file
+    id and track id together rather than nesting through a movie or episode.
+    """
+    field :subtitle_content, :string do
+      arg(:media_file_id, non_null(:id))
+      arg(:track_id, non_null(:string))
+      arg(:format, :subtitle_format, default_value: :vtt)
+
+      resolve(&SubtitleResolver.subtitle_content/3)
     end
   end
 end
