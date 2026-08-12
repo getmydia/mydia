@@ -186,12 +186,23 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
 
   defp enqueue_linked_users(config) do
     case Settings.list_media_server_user_links(config.id) |> Enum.filter(& &1.enabled) do
+      # Links are created by Mydia.Jobs.PlexLinkSeed and nothing else. Recording
+      # :no_user_mapping and stopping is exactly what made this job report
+      # healthy while doing nothing: seed first, and the seed job re-enters sync
+      # once it has produced links.
       [] ->
-        record_skip(config, :no_user_mapping)
+        enqueue_seed(config)
+        record_skip(config, :seeding_links)
 
       links ->
         Enum.each(links, fn link -> enqueue(config, link) end)
     end
+  end
+
+  defp enqueue_seed(config) do
+    %{"config_id" => config.id}
+    |> Mydia.Jobs.PlexLinkSeed.new()
+    |> safe_insert()
   end
 
   defp enqueue(config, link) do

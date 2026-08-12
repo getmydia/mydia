@@ -303,7 +303,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
       assert Sync.last_run("plex", config.id).skip_reason == "link_user_mismatch"
     end
 
-    test "a user with no link is skipped with a reason rather than defaulted" do
+    test "a config with no links seeds them instead of skipping forever" do
       {:ok, config} =
         Settings.create_media_server_config(%{
           name: "Storage",
@@ -316,12 +316,18 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
 
       # Three users exist, none linked. Previously all three would sync against
       # the single admin token, merging their histories into one Plex account.
+      # Now the run seeds links rather than recording :no_user_mapping and
+      # stopping, which is what made this job do nothing on every install.
       _u1 = user_fixture()
       _u2 = user_fixture()
 
       assert :ok = perform_job(MediaServerWatchedSync, %{"mode" => "all_enabled"})
 
-      assert Sync.last_run("plex", config.id).skip_reason == "no_user_mapping"
+      assert Sync.last_run("plex", config.id).skip_reason == "seeding_links"
+      assert_enqueued(worker: Mydia.Jobs.PlexLinkSeed, args: %{"config_id" => config.id})
+
+      # Still no per-user job: defaulting to the admin token is the bug this
+      # test has always guarded, and seeding must not reintroduce it.
       assert [] = all_enqueued(worker: MediaServerWatchedSync) |> Enum.reject(& &1.args["mode"])
     end
   end
