@@ -23,7 +23,8 @@ defmodule Mydia.Streaming do
       :media_file_id,
       :bitrate_bps,
       :position_seconds,
-      :duration_seconds
+      :duration_seconds,
+      :poster_path
     ]
   end
 
@@ -97,7 +98,8 @@ defmodule Mydia.Streaming do
           media_file_id: media_file_id,
           bitrate_bps: media_file.bitrate,
           position_seconds: progress && progress.position_seconds,
-          duration_seconds: progress && progress.duration_seconds
+          duration_seconds: progress && progress.duration_seconds,
+          poster_path: poster_path(media_file.media_item)
         }
       else
         nil
@@ -161,6 +163,12 @@ defmodule Mydia.Streaming do
   # a missing scrubber.
   def progress_content_id(%{media_item_id: media_item_id}),
     do: [media_item_id: media_item_id]
+
+  # An episode's media_file carries its show as media_item, so a TV session gets
+  # the show poster rather than an episode still, which is what the now-playing
+  # card wants.
+  defp poster_path(%{metadata: %{poster_path: path}}), do: path
+  defp poster_path(_), do: nil
 
   defp pad(num), do: String.pad_leading("#{num}", 2, "0")
 end

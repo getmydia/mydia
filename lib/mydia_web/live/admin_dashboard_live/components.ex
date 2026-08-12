@@ -232,13 +232,21 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
     <div class="card bg-base-100 shadow-sm border border-base-300">
       <div class="card-body p-3 gap-2">
         <div class="flex items-center gap-3">
-          <div class="avatar placeholder">
-            <div class="bg-neutral text-neutral-content rounded-full w-10">
-              <span class="text-sm uppercase">
-                {String.slice(@username, 0, 2)}
-              </span>
+          <%= if @session.poster_path do %>
+            <div class="avatar">
+              <div class="w-10 rounded">
+                <img src={build_image_url(@session.poster_path)} alt="Poster" />
+              </div>
             </div>
-          </div>
+          <% else %>
+            <div class="avatar placeholder">
+              <div class="bg-neutral text-neutral-content rounded-full w-10">
+                <span class="text-sm uppercase">
+                  {String.slice(@username, 0, 2)}
+                </span>
+              </div>
+            </div>
+          <% end %>
           <div class="flex-1 min-w-0">
             <div class="font-medium text-sm truncate" title={@session.media_title}>
               {@session.media_title}

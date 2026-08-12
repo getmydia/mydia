@@ -184,4 +184,71 @@ defmodule MydiaWeb.AdminDashboardLive.ComponentsTest do
       assert html =~ "kpi-plays-week"
     end
   end
+
+  describe "now_playing_card/1" do
+    alias Mydia.Accounts.User
+    alias Mydia.Streaming.ActiveSession
+
+    defp session(attrs) do
+      struct(
+        %ActiveSession{
+          session_id: "s1",
+          user: %User{username: "alex", email: "alex@example.com"},
+          media_title: "Arrival",
+          media_type: :movie,
+          mode: :direct,
+          started_at: ~U[2026-08-12 10:00:00Z],
+          ready: true,
+          bitrate_bps: 8_000_000
+        },
+        attrs
+      )
+    end
+
+    test "renders the poster when the session has one" do
+      html =
+        render_component(&Components.now_playing_card/1,
+          session: session(%{poster_path: "/p.jpg"})
+        )
+
+      assert html =~ "Poster"
+      assert html =~ "Arrival"
+    end
+
+    test "falls back to an initials avatar when there is no poster" do
+      html =
+        render_component(&Components.now_playing_card/1, session: session(%{poster_path: nil}))
+
+      refute html =~ "alt=\"Poster\""
+      # Rendered lowercase; the `uppercase` class does the visual work.
+      assert html =~ "avatar placeholder"
+      assert html =~ "al"
+    end
+
+    test "renders a scrubber only when position and duration are both known" do
+      with_progress =
+        render_component(&Components.now_playing_card/1,
+          session: session(%{position_seconds: 300, duration_seconds: 6900})
+        )
+
+      without_progress =
+        render_component(&Components.now_playing_card/1,
+          session: session(%{position_seconds: nil, duration_seconds: nil})
+        )
+
+      assert with_progress =~ "<progress"
+      refute without_progress =~ "<progress"
+    end
+
+    test "labels direct play and transcode distinctly" do
+      direct =
+        render_component(&Components.now_playing_card/1, session: session(%{mode: :direct}))
+
+      transcode =
+        render_component(&Components.now_playing_card/1, session: session(%{mode: :transcode}))
+
+      assert direct =~ "Direct Play"
+      assert transcode =~ "Transcode"
+    end
+  end
 end
