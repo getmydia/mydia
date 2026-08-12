@@ -1192,6 +1192,60 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
     end
   end
 
+  describe "andmatch with filtered keywords" do
+    test "uses filtered keywords from template context" do
+      definition = %Parsed{
+        id: "andmatch-kw",
+        name: "Andmatch KW",
+        type: "public",
+        links: ["https://example.com"],
+        encoding: "UTF-8",
+        capabilities: %{},
+        settings: [],
+        search: %{
+          paths: [%{path: "/s"}],
+          inputs: %{},
+          headers: nil,
+          keywordsfilters: [],
+          rows: %{selector: "tr"},
+          fields: %{
+            "title" => %{selector: "td.title", filters: [%{name: "andmatch"}]},
+            "download" => %{selector: "a.dl", attribute: "href"}
+          }
+        }
+      }
+
+      html =
+        "<html><body><table>" <>
+          "<tr><td class=\"title\">The Matrix 1999</td><a class=\"dl\" href=\"magnet:?xt=urn:btih:AAA\">d</a></tr>" <>
+          "<tr><td class=\"title\">The Matrix</td><a class=\"dl\" href=\"magnet:?xt=urn:btih:BBB\">d</a></tr>" <>
+          "</table></body></html>"
+
+      assert {:ok, filtered_results} =
+               CardigannResultParser.parse_results(
+                 definition,
+                 %{status: 200, body: html},
+                 "Andmatch KW",
+                 template_context: %{keywords: "The Matrix"},
+                 base_url: "https://example.com"
+               )
+
+      assert length(filtered_results) == 2
+
+      assert {:ok, unfiltered_results} =
+               CardigannResultParser.parse_results(
+                 definition,
+                 %{status: 200, body: html},
+                 "Andmatch KW",
+                 template_context: %{keywords: "The Matrix 1999"},
+                 base_url: "https://example.com"
+               )
+
+      assert length(unfiltered_results) == 1
+      assert hd(unfiltered_results).title == "The Matrix 1999"
+    end
+  end
+
   describe "field case" do
     defp case_definition(category_field) do
       %Parsed{
@@ -1339,6 +1393,57 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
       assert length(results) == 2
       assert hd(results).title == "Ubuntu 24.04"
       assert hd(results).download_url == "magnet:?xt=urn:btih:AAA"
+    end
+
+    test "resolves field case selectors" do
+      xml = """
+      <?xml version="1.0"?>
+      <rss>
+        <channel>
+          <item>
+            <raw_title>Ubuntu 1080p WEB</raw_title>
+            <title>Ubuntu</title>
+            <link>magnet:?xt=urn:btih:DDD</link>
+          </item>
+        </channel>
+      </rss>
+      """
+
+      definition = %Parsed{
+        id: "xml-case",
+        name: "XML Case",
+        type: "public",
+        links: ["https://example.com"],
+        encoding: "UTF-8",
+        capabilities: %{},
+        settings: [],
+        search: %{
+          paths: [%{path: "/rss", response: %{type: "xml"}}],
+          inputs: %{},
+          headers: nil,
+          keywordsfilters: [],
+          rows: %{selector: "rss/channel/item"},
+          fields: %{
+            "title" => %{selector: "title"},
+            "download" => %{selector: "link"},
+            "category" => %{
+              selector: "raw_title",
+              case: %{":contains(\"1080p\")" => "2", "*" => "1"}
+            }
+          }
+        }
+      }
+
+      assert {:ok, [result]} =
+               CardigannResultParser.parse_results(
+                 definition,
+                 %{status: 200, body: xml},
+                 "XML Case",
+                 template_context: %{},
+                 base_url: "https://example.com"
+               )
+
+      assert result.category == 2
     end
 
     test "reads an XML attribute" do

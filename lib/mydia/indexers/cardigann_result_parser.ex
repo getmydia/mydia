@@ -1495,8 +1495,16 @@ defmodule Mydia.Indexers.CardigannResultParser do
     selector = Map.get(field_config, :selector) || Map.get(field_config, "selector")
     attribute = Map.get(field_config, :attribute) || Map.get(field_config, "attribute")
     filters = Map.get(field_config, :filters) || Map.get(field_config, "filters", [])
+    case_map = Map.get(field_config, :case) || Map.get(field_config, "case")
 
-    case extract_xml_raw_value(row, selector, attribute) do
+    raw_result =
+      if is_map(case_map) and map_size(case_map) > 0 do
+        extract_xml_case_value(row, selector, attribute, case_map)
+      else
+        extract_xml_raw_value(row, selector, attribute)
+      end
+
+    case raw_result do
       {:ok, raw_value} ->
         apply_filters(raw_value, filters, template_context)
 
@@ -1509,6 +1517,62 @@ defmodule Mydia.Indexers.CardigannResultParser do
         else
           error
         end
+    end
+  end
+
+  defp extract_xml_case_value(row, selector, attribute, case_map) do
+    {wildcard, specific} = Map.split(case_map, ["*"])
+
+    match =
+      Enum.find_value(specific, fn {case_key, value} ->
+        if xml_case_matches?(row, selector, attribute, to_string(case_key)) do
+          to_string(value)
+        end
+      end)
+
+    cond do
+      match -> {:ok, match}
+      map_size(wildcard) > 0 -> {:ok, to_string(Map.fetch!(wildcard, "*"))}
+      true -> {:error, :not_found}
+    end
+  end
+
+  defp xml_case_matches?(row, selector, attribute, ":contains(" <> _ = case_key) do
+    with {:ok, raw} <- extract_xml_raw_value(row, selector, attribute),
+         {:ok, needle} <- extract_xml_contains_needle(case_key) do
+      String.contains?(String.downcase(raw), String.downcase(needle))
+    else
+      _ -> false
+    end
+  end
+
+  defp xml_case_matches?(row, selector, attribute, case_key) do
+    with {:ok, raw} <- extract_xml_raw_value(row, selector, attribute) do
+      raw == case_key or xml_case_selector_matches?(row, selector, case_key)
+    else
+      _ -> false
+    end
+  end
+
+  defp extract_xml_contains_needle(case_key) do
+    case Regex.run(~r/^:contains\(\s*['"]([^'"]*)['"]\s*\)$/, case_key) do
+      [_, needle] -> {:ok, needle}
+      _ -> :error
+    end
+  end
+
+  defp xml_case_selector_matches?(row, selector, case_key) do
+    spec =
+      case selector do
+        nil -> xml_string_spec(".//#{case_key}")
+        "" -> xml_string_spec(".//#{case_key}")
+        sel -> xml_string_spec("./#{sel}/#{case_key}")
+      end
+
+    case xpath(row, spec) do
+      nil -> false
+      "" -> false
+      _ -> true
     end
   end
 

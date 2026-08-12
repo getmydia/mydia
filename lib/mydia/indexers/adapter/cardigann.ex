@@ -595,7 +595,6 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
 
   # Build template context for rendering filter arguments during result parsing
   defp build_template_context_for_parsing(parsed, user_config, search_opts) do
-    # Extract user configuration settings
     config_map =
       case user_config do
         %{config: config} when is_map(config) -> config
@@ -603,16 +602,8 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
         _ -> %{}
       end
 
-    # Extract query from search_opts
-    query = Keyword.get(search_opts, :query, "")
-
-    # Build context similar to search engine template context
-    %{
-      keywords: query,
-      config: config_map,
-      query: %{},
-      categories: [],
-      settings: parsed.settings || []
-    }
+    search_opts
+    |> Keyword.put(:config, config_map)
+    |> then(&Mydia.Indexers.Cardigann.TemplateContext.build(parsed, &1))
   end
 end

@@ -703,4 +703,27 @@ defmodule Mydia.Indexers.CardigannFilters do
         to_string(other)
     end
   end
+
+  @doc """
+  Applies `search.keywordsfilters` to a query before any `{{ .Keywords }}` substitution.
+
+  Trackers use this to strip years, punctuation, or article prefixes their search
+  engine cannot handle.
+  """
+  @spec apply_keywords_filters(String.t(), map()) :: String.t()
+  def apply_keywords_filters(query, %{search: %{keywordsfilters: filters}})
+      when is_list(filters) and filters != [] and is_binary(query) do
+    Enum.reduce(filters, query, fn filter, acc ->
+      case __MODULE__.apply(normalize_keywords_filter(filter), acc) do
+        {:ok, filtered} -> filtered
+        _ -> acc
+      end
+    end)
+  end
+
+  def apply_keywords_filters(query, _definition) when is_binary(query), do: query
+  def apply_keywords_filters(query, _definition), do: query || ""
+
+  defp normalize_keywords_filter(filter) when is_map(filter), do: filter
+  defp normalize_keywords_filter(filter), do: %{name: to_string(filter)}
 end

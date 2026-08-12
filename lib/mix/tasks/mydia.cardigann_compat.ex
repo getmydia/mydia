@@ -108,13 +108,9 @@ defmodule Mix.Tasks.Mydia.CardigannCompat do
       Mix.shell().info("Unsupported Features (definitions blocked):")
       Mix.shell().info(String.duplicate("-", 50))
 
-      supported = MapSet.new(Mydia.Indexers.Cardigann.Features.supported())
-
       Enum.each(report.by_feature, fn {feature, count} ->
-        status = if feature in supported, do: "[OK]", else: "[MISSING]"
-
         Mix.shell().info(
-          "  #{String.pad_trailing(to_string(feature), 35)} #{String.pad_leading(to_string(count), 5)}  #{status}"
+          "  #{String.pad_trailing(to_string(feature), 35)} #{String.pad_leading(to_string(count), 5)}  [MISSING]"
         )
       end)
 
