@@ -125,6 +125,89 @@ defmodule Mydia.Streaming.SessionSamplerTest do
     end
   end
 
+  # estimate_mbps/2 above is exercised against a hand-built map, which bypasses
+  # normalize/1. These drive the whole tick path from a realistic registry entry
+  # instead, so a normalize/1 that dropped max_bitrate could not pass unnoticed.
+  describe "tick path composition" do
+    test "a capped transcode stays capped end to end" do
+      media_file = measured_media_file(8_000_000)
+
+      sessions = fn ->
+        [
+          {{:hls_session, media_file.id, "user-1"}, self(),
+           %{media_file_id: media_file.id, mode: :transcode, max_bitrate: 4_000_000}}
+        ]
+      end
+
+      {:ok, pid} = start_sampler(sessions)
+
+      sample = GenServer.call(pid, :tick_now)
+
+      assert sample.sessions |> Map.values() |> hd() == 4.0
+    end
+
+    test "an uncapped transcode reports the source rate" do
+      media_file = measured_media_file(8_000_000)
+
+      sessions = fn ->
+        [
+          {{:hls_session, media_file.id, "user-1"}, self(),
+           %{media_file_id: media_file.id, mode: :transcode}}
+        ]
+      end
+
+      {:ok, pid} = start_sampler(sessions)
+
+      sample = GenServer.call(pid, :tick_now)
+
+      assert sample.sessions |> Map.values() |> hd() == 8.0
+    end
+
+    test "two sessions on one file get distinct keys so the chart draws two bands" do
+      media_file = measured_media_file(6_000_000)
+
+      sessions = fn ->
+        [
+          {{:hls_session, media_file.id, "user-1"}, self(),
+           %{media_file_id: media_file.id, mode: :direct}},
+          {{:hls_session, media_file.id, "user-2"}, self(),
+           %{media_file_id: media_file.id, mode: :direct}}
+        ]
+      end
+
+      {:ok, pid} = start_sampler(sessions)
+
+      sample = GenServer.call(pid, :tick_now)
+
+      assert map_size(sample.sessions) == 2
+      assert Enum.sum(Map.values(sample.sessions)) == 12.0
+    end
+  end
+
+  # The dashboard's live chart is driven entirely by this broadcast. Without it
+  # the chart silently freezes, which no other test would catch.
+  describe "broadcast" do
+    test "each tick broadcasts its sample on the dashboard's topic" do
+      media_file = measured_media_file(8_000_000)
+
+      sessions = fn ->
+        [
+          {{:hls_session, media_file.id, "user-1"}, self(),
+           %{media_file_id: media_file.id, mode: :direct}}
+        ]
+      end
+
+      :ok = Phoenix.PubSub.subscribe(Mydia.PubSub, SessionSampler.topic())
+
+      {:ok, pid} = start_sampler(sessions)
+
+      GenServer.call(pid, :tick_now)
+
+      assert_receive {:sample, %Sample{sessions: sessions_map}}, 1_000
+      assert sessions_map |> Map.values() |> hd() == 8.0
+    end
+  end
+
   defp start_sampler(list_sessions_fun, opts \\ []) do
     opts =
       Keyword.merge(
