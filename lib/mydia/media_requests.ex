@@ -16,6 +16,7 @@ defmodule Mydia.MediaRequests do
 
   alias Mydia.Repo
   alias Mydia.Media
+  alias Mydia.Media.Add
   alias Mydia.Media.MediaRequest
   alias Ecto.Multi
 
@@ -72,20 +73,72 @@ defmodule Mydia.MediaRequests do
   @doc """
   Approves a media request and creates the corresponding media item.
 
-  This operation is atomic - if media creation fails, the approval is rolled back.
+  Provider metadata is fetched before the transaction opens, so the media item
+  lands with the same poster, overview and provenance an admin-added item gets,
+  and no HTTP call is made while a write transaction is held. If the metadata
+  relay cannot be reached the request is left untouched and pending, so the
+  admin can retry rather than ending up with an artwork-less library entry.
+
+  The insert and the request update remain atomic: if either fails, both roll
+  back.
 
   ## Attributes
     - `approved_by_id` - Required, ID of the admin approving the request
     - `admin_notes` - Optional notes from the admin
+
+  ## Options
+    - `:config` - Relay config to fetch with. Defaults to
+      `Metadata.default_relay_config/0`. Inject a Bypass config in tests.
   """
-  def approve_request(%MediaRequest{} = request, attrs \\ %{}) do
+  def approve_request(%MediaRequest{} = request, attrs \\ %{}, opts \\ []) do
+    with {:ok, media_attrs} <- resolve_media_attrs(request, opts) do
+      insert_approval(request, media_attrs, attrs, opts)
+    end
+  end
+
+  defp resolve_media_attrs(request, opts) do
+    {provider_id, provider} = request_provider(request)
+    media_type = if request.media_type == "movie", do: :movie, else: :tv_show
+
+    case Add.resolve_attrs(provider_id, media_type, opts[:config],
+           provider: provider,
+           monitored: true
+         ) do
+      {:ok, media_attrs} ->
+        {:ok, media_attrs}
+
+      {:error, {:metadata, reason}} ->
+        Logger.warning(
+          "Cannot approve request #{request.id}: metadata fetch failed: #{inspect(reason)}"
+        )
+
+        {:error, {:metadata, reason}}
+    end
+  end
+
+  # A request may carry a TVDB id with no TMDB counterpart (the series search
+  # page stores whichever the provider returned). Sending a TVDB id down the
+  # TMDB path would fetch the wrong show.
+  defp request_provider(%MediaRequest{tmdb_id: tmdb_id}) when is_integer(tmdb_id),
+    do: {tmdb_id, :tmdb}
+
+  defp request_provider(%MediaRequest{tvdb_id: tvdb_id}) when is_integer(tvdb_id),
+    do: {tvdb_id, :tvdb}
+
+  defp request_provider(_request), do: {nil, :tmdb}
+
+  defp insert_approval(request, media_attrs, attrs, opts) do
     Multi.new()
     |> Multi.run(:media_item, fn _repo, _changes ->
-      # Create media item from request
-      create_media_from_request(request, attrs[:approved_by_id])
+      case Add.from_attrs(media_attrs, opts[:config],
+             actor_type: :user,
+             actor_id: attrs[:approved_by_id]
+           ) do
+        {:ok, media_item} -> {:ok, media_item}
+        {:error, {:changeset, changeset}} -> {:error, changeset}
+      end
     end)
     |> Multi.run(:request, fn _repo, %{media_item: media_item} ->
-      # Update request with approval
       request
       |> MediaRequest.approve_changeset(Map.put(attrs, :media_item_id, media_item.id))
       |> Repo.update()
@@ -173,22 +226,5 @@ defmodule Mydia.MediaRequests do
     else
       :ok
     end
-  end
-
-  defp create_media_from_request(request, approved_by_id) do
-    media_attrs = %{
-      type: request.media_type,
-      title: request.title,
-      original_title: request.original_title,
-      year: request.year,
-      tmdb_id: request.tmdb_id,
-      imdb_id: request.imdb_id,
-      monitored: true
-    }
-
-    Media.create_media_item(media_attrs,
-      actor_type: :user,
-      actor_id: approved_by_id
-    )
   end
 end

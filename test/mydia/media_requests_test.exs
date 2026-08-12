@@ -1,5 +1,5 @@
 defmodule Mydia.MediaRequestsTest do
-  use Mydia.DataCase, async: true
+  use Mydia.DataCase, async: false
 
   alias Mydia.MediaRequests
   alias Mydia.{Accounts, Media, Repo}
@@ -26,9 +26,13 @@ defmodule Mydia.MediaRequestsTest do
       approved = create_request(user, %{title: "Approved Movie"})
 
       admin = create_user(%{role: "admin"})
+      bypass = Bypass.open()
+      stub_tmdb_movie(bypass, approved.tmdb_id, "Approved Movie", "/x.jpg")
 
       {:ok, _} =
-        MediaRequests.approve_request(approved, %{approved_by_id: admin.id})
+        MediaRequests.approve_request(approved, %{approved_by_id: admin.id},
+          config: relay_config(bypass)
+        )
 
       pending_requests = MediaRequests.list_requests(status: "pending")
       assert length(pending_requests) == 1
@@ -163,17 +167,23 @@ defmodule Mydia.MediaRequestsTest do
       user = create_user()
       admin = create_user(%{role: "admin"})
       request = create_request(user)
-      %{user: user, admin: admin, request: request}
+      bypass = Bypass.open()
+      stub_tmdb_movie(bypass, request.tmdb_id, request.title, "/stub.jpg")
+      %{user: user, admin: admin, request: request, config: relay_config(bypass)}
     end
 
-    test "approves request and creates media item", %{request: request, admin: admin} do
+    test "approves request and creates media item", %{
+      request: request,
+      admin: admin,
+      config: config
+    } do
       attrs = %{
         approved_by_id: admin.id,
         admin_notes: "Looks good"
       }
 
       assert {:ok, %{request: updated_request, media_item: media_item}} =
-               MediaRequests.approve_request(request, attrs)
+               MediaRequests.approve_request(request, attrs, config: config)
 
       assert updated_request.status == "approved"
       assert updated_request.approved_by_id == admin.id
@@ -186,7 +196,11 @@ defmodule Mydia.MediaRequestsTest do
       assert media_item.type == request.media_type
     end
 
-    test "rolls back if media creation fails", %{request: request, admin: admin} do
+    test "rolls back if media creation fails", %{
+      request: request,
+      admin: admin,
+      config: config
+    } do
       # Create a media item with the same TMDB ID to cause a conflict
       {:ok, _existing} =
         Media.create_media_item(%{
@@ -198,7 +212,7 @@ defmodule Mydia.MediaRequestsTest do
 
       attrs = %{approved_by_id: admin.id}
 
-      assert {:error, _changeset} = MediaRequests.approve_request(request, attrs)
+      assert {:error, _changeset} = MediaRequests.approve_request(request, attrs, config: config)
 
       # Verify request was not updated
       reloaded = Repo.get!(MediaRequest, request.id)
@@ -206,9 +220,74 @@ defmodule Mydia.MediaRequestsTest do
       assert reloaded.approved_at == nil
     end
 
-    test "requires approved_by_id", %{request: request} do
-      assert {:error, changeset} = MediaRequests.approve_request(request, %{})
+    test "requires approved_by_id", %{request: request, config: config} do
+      assert {:error, changeset} = MediaRequests.approve_request(request, %{}, config: config)
       assert %{approved_by_id: ["can't be blank"]} = errors_on(changeset)
+    end
+  end
+
+  describe "approve_request/3 metadata" do
+    setup do
+      user = create_user()
+      admin = create_user(%{role: "admin"})
+      %{user: user, admin: admin}
+    end
+
+    test "populates the media item metadata with the provider poster", %{
+      user: user,
+      admin: admin
+    } do
+      bypass = Bypass.open()
+      request = create_request(user, %{title: "Stale Request Title"})
+      stub_tmdb_movie(bypass, request.tmdb_id, "Fresh Provider Title", "/approved.jpg")
+
+      assert {:ok, %{media_item: media_item}} =
+               MediaRequests.approve_request(request, %{approved_by_id: admin.id},
+                 config: relay_config(bypass)
+               )
+
+      assert media_item.metadata.poster_path == "/approved.jpg"
+      assert media_item.title == "Fresh Provider Title"
+      assert media_item.tmdb_id == request.tmdb_id
+    end
+
+    test "leaves the request pending and creates nothing when the relay is unreachable", %{
+      user: user,
+      admin: admin
+    } do
+      bypass = Bypass.open()
+      request = create_request(user)
+      Bypass.down(bypass)
+
+      assert {:error, {:metadata, _reason}} =
+               MediaRequests.approve_request(request, %{approved_by_id: admin.id},
+                 config: relay_config(bypass)
+               )
+
+      assert Repo.get!(MediaRequest, request.id).status == "pending"
+      refute Media.get_media_item_by_tmdb(request.tmdb_id)
+    end
+
+    test "reports a request with no TMDB or TVDB id rather than creating a shell", %{
+      user: user,
+      admin: admin
+    } do
+      bypass = Bypass.open()
+
+      {:ok, request} =
+        MediaRequests.create_request(%{
+          media_type: "movie",
+          title: "IMDB Only",
+          imdb_id: "tt0000001",
+          requester_id: user.id
+        })
+
+      assert {:error, {:metadata, :no_provider_id}} =
+               MediaRequests.approve_request(request, %{approved_by_id: admin.id},
+                 config: relay_config(bypass)
+               )
+
+      assert Repo.get!(MediaRequest, request.id).status == "pending"
     end
   end
 
@@ -267,7 +346,13 @@ defmodule Mydia.MediaRequestsTest do
 
       # Approve one
       request3 = create_request(user, %{title: "Third Movie"})
-      MediaRequests.approve_request(request3, %{approved_by_id: admin.id})
+      bypass = Bypass.open()
+      stub_tmdb_movie(bypass, request3.tmdb_id, "Third Movie", "/x.jpg")
+
+      MediaRequests.approve_request(request3, %{approved_by_id: admin.id},
+        config: relay_config(bypass)
+      )
+
       assert MediaRequests.count_pending_requests() == 2
     end
   end
@@ -292,6 +377,32 @@ defmodule Mydia.MediaRequestsTest do
   end
 
   # Test helpers
+
+  defp relay_config(bypass) do
+    %{
+      type: :metadata_relay,
+      base_url: "http://localhost:#{bypass.port}",
+      options: %{language: "en-US", include_adult: false}
+    }
+  end
+
+  defp stub_tmdb_movie(bypass, id, title, poster_path) do
+    body = %{
+      "id" => id,
+      "title" => title,
+      "release_date" => "2021-03-04",
+      "poster_path" => poster_path,
+      "overview" => "x",
+      "credits" => %{"cast" => [], "crew" => []},
+      "genres" => []
+    }
+
+    Bypass.stub(bypass, "GET", "/tmdb/movies/#{id}", fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, Jason.encode!(body))
+    end)
+  end
 
   defp create_user(attrs \\ %{}) do
     unique_id = System.unique_integer([:positive])
