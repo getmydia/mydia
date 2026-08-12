@@ -8,7 +8,8 @@ defmodule Mydia.Subtitles do
   ## Usage
 
       # Search for subtitles
-      {:ok, results} = Subtitles.search_subtitles(media_file_id, languages: "en,es")
+      {:ok, %{results: results, providers: providers}} =
+        Subtitles.search_subtitles(media_file_id, languages: "en,es", user_id: user_id)
 
       # Download a specific subtitle
       {:ok, subtitle} = Subtitles.download_subtitle(subtitle_info, media_file_id)
@@ -50,20 +51,37 @@ defmodule Mydia.Subtitles do
 
   ## Returns
 
-  - `{:ok, results}` - List of subtitle search results with scores
-  - `{:ok, {:downloaded, subtitle}}` - When auto_download is true and high-confidence match found
-  - `{:error, reason}` - Error tuple
+  - `{:ok, %{results: results, providers: providers}}` - Subtitle search
+    results with scores, plus one status entry per provider that was
+    searched. Each provider status is `%{name: String.t(), quota_remaining:
+    integer() | nil, quota_total: integer() | nil, error: String.t() |
+    nil}` — `error` is `nil` on success and a human-readable reason
+    (produced by `Mydia.Subtitles.ProviderChain`) otherwise. A provider
+    failing does not drop results a sibling provider found; callers should
+    always look at both fields, since an empty `results` list with a
+    non-empty `error` on some provider means the search did not actually
+    come up empty, it came up unable to ask.
+  - `{:ok, {:downloaded, subtitle}}` - When auto_download is true and a
+    high-confidence match is found
+  - `{:error, reason}` - Error tuple for failures that happen before any
+    provider is even contacted (the media file could not be found, or there
+    was not enough metadata to build a search)
 
   ## Examples
 
       iex> search_subtitles("media-file-id", languages: "en")
-      {:ok, [%{file_id: 12345, language: "en", score: 180, ...}]}
+      {:ok, %{
+        results: [%{file_id: 12345, language: "en", score: 180, ...}],
+        providers: [%{name: "Mydia Relay", quota_remaining: nil, quota_total: nil, error: nil}]
+      }}
 
       iex> search_subtitles("media-file-id", languages: "en", auto_download: true)
       {:ok, {:downloaded, %Subtitle{}}}
   """
   @spec search_subtitles(binary(), keyword()) ::
-          {:ok, list(map()) | {:downloaded, Subtitle.t()}} | {:error, term()}
+          {:ok, %{results: [map()], providers: [map()]}}
+          | {:ok, {:downloaded, Subtitle.t()}}
+          | {:error, term()}
   def search_subtitles(media_file_id, opts \\ []) do
     languages = Keyword.get(opts, :languages, "en")
     auto_download = Keyword.get(opts, :auto_download, false)
@@ -71,9 +89,9 @@ defmodule Mydia.Subtitles do
 
     with {:ok, media_file} <- fetch_media_file_with_associations(media_file_id),
          {:ok, search_params} <- build_search_params(media_file, languages),
-         {:ok, raw_results, _providers} <- perform_search(search_params, user_id),
+         {:ok, raw_results, providers} <- perform_search(search_params, user_id),
          scored_results <- score_results(raw_results, search_params) do
-      handle_search_results(scored_results, media_file_id, auto_download)
+      handle_search_results(scored_results, providers, media_file_id, auto_download)
     end
   end
 
@@ -332,12 +350,16 @@ defmodule Mydia.Subtitles do
     score
   end
 
-  # Handle search results based on auto_download setting
-  defp handle_search_results([], _media_file_id, _auto_download) do
-    {:ok, []}
+  # Handle search results based on auto_download setting. `providers` is the
+  # per-provider status list from Mydia.Subtitles.ProviderChain.search/2 and
+  # travels alongside `results` in every branch except the auto-download
+  # success path — once a subtitle has actually been downloaded, "which
+  # providers answered" is no longer the caller's concern.
+  defp handle_search_results([], providers, _media_file_id, _auto_download) do
+    {:ok, %{results: [], providers: providers}}
   end
 
-  defp handle_search_results([best | _rest] = results, media_file_id, true) do
+  defp handle_search_results([best | _rest] = results, providers, media_file_id, true) do
     # Check if auto-download is appropriate for high-confidence match
     if best.score >= @high_confidence_threshold do
       # Auto-download high-confidence match
@@ -366,15 +388,15 @@ defmodule Mydia.Subtitles do
             reason: inspect(reason)
           )
 
-          {:ok, results}
+          {:ok, %{results: results, providers: providers}}
       end
     else
-      {:ok, results}
+      {:ok, %{results: results, providers: providers}}
     end
   end
 
-  defp handle_search_results(results, _media_file_id, _auto_download) do
-    {:ok, results}
+  defp handle_search_results(results, providers, _media_file_id, _auto_download) do
+    {:ok, %{results: results, providers: providers}}
   end
 
   # Generate a subtitle hash if not provided by the API

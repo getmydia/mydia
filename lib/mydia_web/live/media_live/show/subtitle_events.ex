@@ -16,7 +16,8 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
      socket
      |> assign(:show_subtitle_search_modal, true)
      |> assign(:selected_media_file, media_file)
-     |> assign(:subtitle_search_results, [])}
+     |> assign(:subtitle_search_results, [])
+     |> assign(:subtitle_provider_statuses, [])}
   end
 
   def close_subtitle_search_modal(_params, socket) do
@@ -25,6 +26,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
      |> assign(:show_subtitle_search_modal, false)
      |> assign(:selected_media_file, nil)
      |> assign(:subtitle_search_results, [])
+     |> assign(:subtitle_provider_statuses, [])
      |> assign(:searching_subtitles, false)}
   end
 
@@ -35,12 +37,13 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
   def perform_subtitle_search(_params, socket) do
     media_file = socket.assigns.selected_media_file
     languages = Enum.join(socket.assigns.selected_languages, ",")
+    user_id = socket.assigns.current_user.id
 
     {:noreply,
      socket
      |> assign(:searching_subtitles, true)
      |> start_async(:subtitle_search, fn ->
-       Mydia.Subtitles.search_subtitles(media_file.id, languages: languages)
+       Mydia.Subtitles.search_subtitles(media_file.id, languages: languages, user_id: user_id)
      end)}
   end
 
@@ -92,13 +95,34 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
 
   # handle_async dispatches
 
-  def handle_subtitle_search_async({:ok, {:ok, results}}, socket) do
-    Logger.info("Subtitle search completed", result_count: length(results))
+  def handle_subtitle_search_async({:ok, {:ok, {:downloaded, subtitle}}}, socket) do
+    Logger.info("Subtitle auto-downloaded from search", language: subtitle.language)
 
     {:noreply,
      socket
      |> assign(:searching_subtitles, false)
-     |> assign(:subtitle_search_results, results)}
+     |> assign(:show_subtitle_search_modal, false)
+     |> assign(:selected_media_file, nil)
+     |> assign(:subtitle_search_results, [])
+     |> assign(:subtitle_provider_statuses, [])
+     |> assign(:media_file_subtitles, load_media_file_subtitles(socket.assigns.media_item))
+     |> put_flash(:info, "Subtitle downloaded successfully")}
+  end
+
+  def handle_subtitle_search_async(
+        {:ok, {:ok, %{results: results, providers: providers}}},
+        socket
+      ) do
+    Logger.info("Subtitle search completed",
+      result_count: length(results),
+      failed_provider_count: Enum.count(providers, & &1.error)
+    )
+
+    {:noreply,
+     socket
+     |> assign(:searching_subtitles, false)
+     |> assign(:subtitle_search_results, results)
+     |> assign(:subtitle_provider_statuses, providers)}
   end
 
   def handle_subtitle_search_async({:ok, {:error, reason}}, socket) do

@@ -35,12 +35,22 @@ defmodule Mydia.Subtitles.ProviderChainTest do
     end
 
     @impl true
-    def download(_provider, _info), do: {:ok, "https://example.com/sub.srt"}
+    def download(_provider, _info),
+      do: {:ok, "1\r\n00:00:01,000 --> 00:00:05,000\r\nHello there\r\n\r\n"}
 
     @impl true
     def validate_config(config), do: {:ok, config}
 
+    # "falsely-exhausted" reports a fully spent quota here while its search/2
+    # (via the catch-all clause above) still succeeds normally. This is what
+    # makes the Obligation B test below discriminating: an implementation
+    # that pre-checked quota_info/1 to decide whether to bother calling
+    # search/2 would skip this provider and return no results; the correct
+    # implementation never looks at quota_info/1 in the search path at all.
     @impl true
+    def quota_info(%{name: "falsely-exhausted"}),
+      do: {:ok, Mydia.Subtitles.Provider.QuotaInfo.limited(:opensubtitles, 0, 200)}
+
     def quota_info(_provider),
       do: {:ok, Mydia.Subtitles.Provider.QuotaInfo.unlimited(:relay)}
   end
@@ -168,20 +178,23 @@ defmodule Mydia.Subtitles.ProviderChainTest do
   test "does not consult quota_info/1 to decide whether to try a provider (Obligation B)", %{
     user: user
   } do
-    # The relay's quota_info/1 always reports :unlimited by design, even
-    # though its download/2 (and, in this stub, search/2) can still fail with
-    # :quota_exceeded. The chain must rely on the error returned from
-    # search/2 itself, never on a quota_info/1 pre-check.
+    # This provider's quota_info/1 reports 0 remaining out of 200 (fully
+    # exhausted), while its search/2 succeeds normally. An implementation
+    # that pre-checked quota_info/1 before deciding whether to search would
+    # skip this provider and come back with no results; the correct
+    # implementation reacts only to what search/2 itself returns, so results
+    # must come back here.
     {:ok, _} =
       Providers.create_provider(user.id, %{
-        name: "exhausted",
+        name: "falsely-exhausted",
         type: :relay,
         enabled: true
       })
 
-    assert {:ok, %{results: [], providers: [provider]}} =
+    assert {:ok, %{results: results, providers: [provider]}} =
              ProviderChain.search(user.id, %{languages: "en"})
 
-    assert provider.error =~ "quota"
+    assert length(results) == 1
+    assert provider.error == nil
   end
 end

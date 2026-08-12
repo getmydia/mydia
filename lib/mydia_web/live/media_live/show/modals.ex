@@ -1167,10 +1167,19 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   attr :media_file, :map, required: true
   attr :searching, :boolean, required: true
   attr :subtitle_search_results, :list, required: true
+  attr :subtitle_provider_statuses, :list, default: []
   attr :downloading_subtitle, :boolean, default: false
   attr :selected_languages, :list, default: ["en"]
 
   def subtitle_search_modal(assigns) do
+    failed_statuses = Enum.filter(assigns.subtitle_provider_statuses, & &1.error)
+    {quota_statuses, other_statuses} = Enum.split_with(failed_statuses, &subtitle_quota_error?/1)
+
+    assigns =
+      assigns
+      |> assign(:subtitle_quota_statuses, quota_statuses)
+      |> assign(:subtitle_other_failed_statuses, other_statuses)
+
     ~H"""
     <div class="modal modal-open">
       <div class="modal-box max-w-4xl">
@@ -1248,6 +1257,43 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
             <span class="loading loading-spinner loading-lg"></span>
           </div>
         <% else %>
+          <%!-- Quota-exhausted providers: named, with guidance the user can act on --%>
+          <%= if @subtitle_quota_statuses != [] do %>
+            <div class="alert alert-warning mb-4">
+              <.icon name="hero-exclamation-triangle" class="w-5 h-5 shrink-0" />
+              <div class="flex-1">
+                <div class="text-sm font-medium">
+                  {length(@subtitle_quota_statuses)} provider(s) out of quota for today
+                </div>
+                <ul class="text-xs opacity-80 mt-1">
+                  <%= for status <- @subtitle_quota_statuses do %>
+                    <li>{status.name}: {status.error}</li>
+                  <% end %>
+                </ul>
+                <p class="text-xs opacity-80 mt-1">
+                  Add your own OpenSubtitles account as a subtitle provider to keep searching once the shared quota resets.
+                </p>
+              </div>
+            </div>
+          <% end %>
+
+          <%!-- Other provider failures: named, with the reason the chain recorded --%>
+          <%= if @subtitle_other_failed_statuses != [] do %>
+            <div class="alert alert-error mb-4">
+              <.icon name="hero-x-circle" class="w-5 h-5 shrink-0" />
+              <div class="flex-1">
+                <div class="text-sm font-medium">
+                  {length(@subtitle_other_failed_statuses)} provider(s) could not be searched
+                </div>
+                <ul class="text-xs opacity-80 mt-1">
+                  <%= for status <- @subtitle_other_failed_statuses do %>
+                    <li>{status.name}: {status.error}</li>
+                  <% end %>
+                </ul>
+              </div>
+            </div>
+          <% end %>
+
           <%= if length(@subtitle_search_results) > 0 do %>
             <div class="overflow-x-auto">
               <table class="table table-sm">
@@ -1330,10 +1376,12 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
               </table>
             </div>
           <% else %>
-            <div class="alert alert-info">
-              <.icon name="hero-information-circle" class="w-5 h-5" />
-              <span>No subtitles found. Try searching with different languages.</span>
-            </div>
+            <%= if @subtitle_quota_statuses == [] and @subtitle_other_failed_statuses == [] do %>
+              <div class="alert alert-info">
+                <.icon name="hero-information-circle" class="w-5 h-5" />
+                <span>No subtitles found. Try searching with different languages.</span>
+              </div>
+            <% end %>
           <% end %>
         <% end %>
 
@@ -1347,6 +1395,14 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
     </div>
     """
   end
+
+  # A provider status is quota-related when its human-readable error (see
+  # Mydia.Subtitles.ProviderChain.describe/1) mentions quota. Distinguishing
+  # this from an ordinary failure matters because the user can act on it
+  # (add their own OpenSubtitles account), while an ordinary failure (down,
+  # rate-limited, bad credentials) is not something the search modal itself
+  # can offer a fix for.
+  defp subtitle_quota_error?(%{error: error}), do: is_binary(error) and error =~ "quota"
 
   @doc """
   Trailer modal for viewing embedded YouTube trailer.
