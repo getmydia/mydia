@@ -43,10 +43,20 @@ defmodule Mydia.Subtitles.CandidateTest do
     assert {:error, :media_file_mismatch} = Candidate.verify(token, other)
   end
 
+  # Tamper in the middle, not at the end. A trailing Base64 character can carry
+  # as few as two significant bits, so replacing it often decodes to identical
+  # bytes and the signature still verifies. Phoenix.Token embeds a timestamp, so
+  # the alignment shifts between runs: an end-tamper test passes on most seeds
+  # and quietly proves nothing on the rest. Seed 4242 caught it.
   test "rejects a tampered token" do
     token = Candidate.sign(@media_file_id, @result)
-    tampered = String.slice(token, 0..-2//1) <> "X"
 
+    middle = div(byte_size(token), 2)
+    <<head::binary-size(middle), original::binary-size(1), tail::binary>> = token
+    replacement = if original == "A", do: "B", else: "A"
+    tampered = head <> replacement <> tail
+
+    refute tampered == token
     assert {:error, :invalid} = Candidate.verify(tampered, @media_file_id)
   end
 

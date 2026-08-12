@@ -1,8 +1,21 @@
 defmodule Mydia.Subtitles.ProviderChainTest do
   use Mydia.DataCase, async: true
 
+  alias Mydia.Subtitles.Health
   alias Mydia.Subtitles.ProviderChain
   alias Mydia.SubtitleProviderFixtures
+
+  # `Health` is a singleton keyed by provider type, and searching records a
+  # success or failure against it. Almost every config here is `:relay`, so
+  # failures from one test carry into the next. Today the arithmetic happens to
+  # stay under the three-failure threshold, which is luck rather than design:
+  # adding one more failing-provider test would open the circuit part-way
+  # through the file and fail whichever test ran next, looking for all the world
+  # like a random flake.
+  setup do
+    for %{type: type} <- Mydia.Subtitles.ProviderRegistry.builtins(), do: Health.reset(type)
+    :ok
+  end
 
   defmodule StubAdapter do
     @behaviour Mydia.Subtitles.Provider
