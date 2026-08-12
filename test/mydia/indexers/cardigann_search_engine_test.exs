@@ -731,4 +731,97 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
                )
     end
   end
+
+  describe "execute_search/4 base URL failover" do
+    setup do
+      dead = Bypass.open()
+      live = Bypass.open()
+      Bypass.down(dead)
+
+      Bypass.stub(live, "GET", "/search", fn conn ->
+        Plug.Conn.resp(
+          conn,
+          200,
+          "<html><body><table><tr><td>row</td></tr></table></body></html>"
+        )
+      end)
+
+      {:ok, dead_url: "http://localhost:#{dead.port}", live_url: "http://localhost:#{live.port}"}
+    end
+
+    defp parsed_for(links) do
+      %Parsed{
+        id: "failover-test",
+        name: "Failover Test",
+        type: "public",
+        links: links,
+        legacylinks: [],
+        encoding: "UTF-8",
+        capabilities: %{},
+        settings: [],
+        search: %{
+          paths: [%{path: "/search"}],
+          inputs: %{},
+          headers: nil,
+          keywordsfilters: [],
+          rows: %{selector: "tr"},
+          fields: %{}
+        }
+      }
+    end
+
+    test "advances to the next candidate on a transport failure", %{
+      dead_url: dead_url,
+      live_url: live_url
+    } do
+      test_pid = self()
+      parsed = parsed_for([dead_url, live_url])
+
+      assert {:ok, %{status: 200}} =
+               CardigannSearchEngine.execute_search(
+                 parsed,
+                 [query: "ubuntu", on_promote: fn url -> send(test_pid, {:promoted, url}) end],
+                 %{},
+                 %{}
+               )
+
+      assert_received {:promoted, ^live_url}
+    end
+
+    test "does not fail over when the first candidate returns 200 with no rows", %{
+      live_url: live_url
+    } do
+      second = Bypass.open()
+      Bypass.stub(second, "GET", "/search", fn conn -> Plug.Conn.resp(conn, 200, "second") end)
+      second_url = "http://localhost:#{second.port}"
+
+      test_pid = self()
+      parsed = parsed_for([live_url, second_url])
+
+      assert {:ok, %{status: 200, body: body}} =
+               CardigannSearchEngine.execute_search(
+                 parsed,
+                 [query: "ubuntu", on_promote: fn url -> send(test_pid, {:promoted, url}) end],
+                 %{},
+                 %{}
+               )
+
+      refute body == "second"
+      refute_received {:promoted, _}
+    end
+
+    test "stops after three candidates" do
+      dead_urls =
+        for _ <- 1..5 do
+          b = Bypass.open()
+          Bypass.down(b)
+          "http://localhost:#{b.port}"
+        end
+
+      parsed = parsed_for(dead_urls)
+
+      assert {:error, _} =
+               CardigannSearchEngine.execute_search(parsed, [query: "ubuntu"], %{}, %{})
+    end
+  end
 end

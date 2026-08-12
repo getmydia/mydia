@@ -103,7 +103,9 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
         template_context = build_template_context_for_parsing(parsed, user_config, search_opts)
 
         # Get base URL for resolving relative URLs
-        base_url = List.first(parsed.links) || ""
+        base_url =
+          definition.active_link || List.first(Mydia.Indexers.Cardigann.Links.candidates(parsed)) ||
+            ""
 
         # Parse results with template context and base URL
         with {:ok, results} <-
@@ -413,27 +415,15 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
   end
 
   defp test_indexer_reachable(parsed, _config) do
-    # Build a simple test URL to check if the indexer is reachable
-    case parsed.links do
-      [base_url | _] ->
-        # Try to fetch the base URL to verify connectivity
-        case Req.get(base_url, receive_timeout: 10_000, redirect: false) do
-          {:ok, %Req.Response{status: status}} when status in 200..399 ->
-            :ok
+    case Mydia.Indexers.CardigannHealthCheck.probe_candidates(parsed, %{}) do
+      {:ok, _url, _status} ->
+        :ok
 
-          {:ok, %Req.Response{status: status}} ->
-            Logger.warning("Indexer returned HTTP #{status}, but may still be functional")
-            :ok
-
-          {:error, %Req.TransportError{reason: reason}} ->
-            {:error, Error.connection_failed("Connection failed: #{inspect(reason)}")}
-
-          {:error, reason} ->
-            {:error, Error.connection_failed("Request failed: #{inspect(reason)}")}
-        end
-
-      [] ->
+      {:error, status} when map_size(status) == 0 ->
         {:error, Error.invalid_config("No base URL configured in definition")}
+
+      {:error, _status} ->
+        {:error, Error.connection_failed("No reachable base URL")}
     end
   end
 
@@ -447,7 +437,13 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
       tmdb_id: Keyword.get(opts, :tmdb_id),
       tvdb_id: Keyword.get(opts, :tvdb_id),
       config: definition.config || %{},
-      settings: parsed.settings
+      settings: parsed.settings,
+      base_url: definition.active_link,
+      on_promote: fn winning_url ->
+        definition
+        |> Ecto.Changeset.change(%{active_link: winning_url})
+        |> Mydia.Repo.update()
+      end
     ]
 
     {:ok, search_opts}

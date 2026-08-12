@@ -52,6 +52,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       {:ok, response} = CardigannSearchEngine.execute_search(definition, opts)
   """
 
+  alias Mydia.Indexers.Cardigann.Links
   alias Mydia.Indexers.CardigannDefinition.Parsed
   alias Mydia.Indexers.CardigannTemplate
   alias Mydia.Indexers.Adapter.Error
@@ -59,6 +60,8 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   alias Mydia.Indexers.FlareSolverr.Response, as: FlareSolverrResponse
 
   require Logger
+
+  @max_search_candidates 3
 
   @type search_opts :: [
           query: String.t(),
@@ -119,18 +122,101 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
 
   def execute_search(%Parsed{} = definition, opts, user_config, flaresolverr_opts)
       when is_list(opts) do
-    with {:ok, url} <- build_search_url(definition, opts),
-         {:ok, request_params} <- build_request_params(definition, opts) do
-      # Determine if FlareSolverr should be used
-      use_flaresolverr = should_use_flaresolverr?(flaresolverr_opts)
+    candidates =
+      case Keyword.get(opts, :base_url) do
+        nil ->
+          Links.candidates(definition)
 
-      if use_flaresolverr do
-        execute_with_flaresolverr(definition, url, request_params, user_config)
-      else
-        execute_direct_request(definition, url, request_params, user_config, flaresolverr_opts)
+        active ->
+          [String.trim_trailing(active, "/") | Links.candidates(definition)] |> Enum.uniq()
+      end
+      |> Enum.take(@max_search_candidates)
+
+    case candidates do
+      [] ->
+        {:error, Error.search_failed("No base URL configured")}
+
+      candidates ->
+        try_candidates(
+          definition,
+          candidates,
+          opts,
+          user_config,
+          flaresolverr_opts,
+          nil,
+          hd(candidates)
+        )
+    end
+  end
+
+  defp try_candidates(
+         _definition,
+         [],
+         _opts,
+         _user_config,
+         _flaresolverr_opts,
+         last_error,
+         _first_tried
+       ) do
+    last_error || {:error, Error.search_failed("No base URL configured")}
+  end
+
+  defp try_candidates(
+         definition,
+         [candidate | rest],
+         opts,
+         user_config,
+         flaresolverr_opts,
+         _last_error,
+         first_tried
+       ) do
+    opts_for_candidate = Keyword.put(opts, :base_url, candidate)
+
+    with {:ok, url} <- build_search_url(definition, opts_for_candidate),
+         {:ok, request_params} <- build_request_params(definition, opts_for_candidate) do
+      result =
+        if should_use_flaresolverr?(flaresolverr_opts) do
+          execute_with_flaresolverr(definition, url, request_params, user_config)
+        else
+          execute_direct_request(definition, url, request_params, user_config, flaresolverr_opts)
+        end
+
+      cond do
+        elem(result, 0) == :ok ->
+          if candidate != first_tried, do: promote(opts, candidate)
+          result
+
+        retryable_failure?(result) and rest != [] ->
+          try_candidates(
+            definition,
+            rest,
+            opts,
+            user_config,
+            flaresolverr_opts,
+            result,
+            first_tried
+          )
+
+        true ->
+          result
       end
     end
   end
+
+  defp promote(opts, candidate) do
+    case Keyword.get(opts, :on_promote) do
+      fun when is_function(fun, 1) -> fun.(candidate)
+      _ -> :ok
+    end
+  end
+
+  defp retryable_failure?({:error, %Error{type: :connection_failed}}), do: true
+
+  defp retryable_failure?({:error, %Error{message: message}}) when is_binary(message) do
+    String.contains?(message, "Server error: HTTP 5")
+  end
+
+  defp retryable_failure?(_), do: false
 
   # Execute request directly and detect Cloudflare challenges
   defp execute_direct_request(definition, url, request_params, user_config, flaresolverr_opts) do
@@ -370,7 +456,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   """
   @spec build_search_url(Parsed.t(), search_opts()) :: {:ok, String.t()} | {:error, Error.t()}
   def build_search_url(%Parsed{} = definition, opts) do
-    with {:ok, base_url} <- get_base_url(definition),
+    with {:ok, base_url} <- get_base_url(definition, opts),
          {:ok, path_config} <- select_search_path(definition, opts),
          {:ok, path} <- render_template(path_config.path, definition, opts) do
       url = build_full_url(base_url, path)
@@ -528,11 +614,18 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
 
   # Private functions
 
-  defp get_base_url(%Parsed{links: [base_url | _]}),
-    do: {:ok, String.trim_trailing(base_url, "/")}
+  defp get_base_url(definition, opts) do
+    case Keyword.get(opts, :base_url) do
+      url when is_binary(url) and url != "" ->
+        {:ok, String.trim_trailing(url, "/")}
 
-  defp get_base_url(%Parsed{links: []}),
-    do: {:error, Error.search_failed("No base URL configured")}
+      _ ->
+        case Links.candidates(definition) do
+          [first | _] -> {:ok, first}
+          [] -> {:error, Error.search_failed("No base URL configured")}
+        end
+    end
+  end
 
   defp select_search_path(%Parsed{search: %{paths: paths}}, opts) do
     categories = Keyword.get(opts, :categories, [])
