@@ -1,5 +1,6 @@
 defmodule MydiaWeb.AdminMediaServersLiveTest do
   use MydiaWeb.ConnCase, async: false
+  use Oban.Testing, repo: Mydia.Repo
 
   import Phoenix.LiveViewTest
   alias Mydia.Accounts
@@ -132,10 +133,54 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
     end
 
     test "the modal no longer offers a Connection step", %{view: view} do
-      view |> element("[phx-click='new_media_server']") |> render_click()
+      view |> element("#new-media-server") |> render_click()
 
       refute has_element?(view, "li.step", "Connection")
       assert has_element?(view, "li.step", "Server")
+    end
+  end
+
+  describe "Empty state and skip reasons" do
+    setup %{conn: conn, token: token} do
+      start_supervised!(Mydia.Indexers.Health)
+
+      conn =
+        conn
+        |> init_test_session(%{})
+        |> put_session(:guardian_default_token, token)
+        |> put_req_header("authorization", "Bearer #{token}")
+
+      %{conn: conn}
+    end
+
+    test "renders the empty state with a connect action when nothing is configured",
+         %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+
+      assert has_element?(view, "#media-servers-empty")
+      assert has_element?(view, "#media-servers-empty-cta")
+    end
+
+    test "renders a humanized skip reason rather than a raw atom", %{conn: conn} do
+      {:ok, config} =
+        Mydia.Settings.create_media_server_config(%{
+          name: "Skipped Plex",
+          type: :plex,
+          url: "http://localhost:32400",
+          token: "tok",
+          enabled: true,
+          connection_settings: %{"sync_watched" => true}
+        })
+
+      Mydia.Sync.record_skip(
+        %{provider: "plex", provider_instance_id: config.id},
+        :seeding_links
+      )
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+
+      assert has_element?(view, "[data-test='last-sync-run']")
+      refute render(view) =~ "seeding_links"
     end
   end
 end
