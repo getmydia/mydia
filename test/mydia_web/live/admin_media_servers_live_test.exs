@@ -164,6 +164,80 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
     end
   end
 
+  describe "Test connection action" do
+    setup %{conn: conn, token: token} do
+      start_supervised!(Mydia.Indexers.Health)
+      # The forced check writes through the real ETS cache that `load_data/1`
+      # reads right back via `status_map/1`. Without the GenServer running,
+      # the cache write is silently rescued away and the badge would read
+      # stale "Unknown" instead of the status the flash just reported.
+      start_supervised!(Mydia.MediaServer.Health)
+
+      conn =
+        conn
+        |> init_test_session(%{})
+        |> put_session(:guardian_default_token, token)
+        |> put_req_header("authorization", "Bearer #{token}")
+
+      bypass = Bypass.open()
+      %{conn: conn, bypass: bypass}
+    end
+
+    test "a successful test shows the success flash and flips the badge to Healthy",
+         %{conn: conn, bypass: bypass} do
+      Bypass.expect_once(bypass, "GET", "/System/Info", fn conn ->
+        Plug.Conn.resp(conn, 200, ~s({"Version":"10.9.0"}))
+      end)
+
+      {:ok, config} =
+        Mydia.Settings.create_media_server_config(%{
+          name: "Reachable Jellyfin",
+          type: :jellyfin,
+          url: "http://localhost:#{bypass.port}",
+          token: "api-key",
+          enabled: true,
+          connection_settings: %{}
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+
+      html =
+        view
+        |> element(~s{[phx-click="test_media_server"][phx-value-id="#{config.id}"]})
+        |> render_click()
+
+      assert html =~ "Connection to #{config.name} successful!"
+      assert has_element?(view, "[aria-label='Healthy']")
+    end
+
+    test "a failed test shows the error flash and flips the badge to Unhealthy",
+         %{conn: conn, bypass: bypass} do
+      Bypass.expect_once(bypass, "GET", "/System/Info", fn conn ->
+        Plug.Conn.resp(conn, 401, "")
+      end)
+
+      {:ok, config} =
+        Mydia.Settings.create_media_server_config(%{
+          name: "Unreachable Jellyfin",
+          type: :jellyfin,
+          url: "http://localhost:#{bypass.port}",
+          token: "api-key",
+          enabled: true,
+          connection_settings: %{}
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+
+      html =
+        view
+        |> element(~s{[phx-click="test_media_server"][phx-value-id="#{config.id}"]})
+        |> render_click()
+
+      assert html =~ "Connection failed"
+      assert has_element?(view, "[aria-label='Unhealthy']")
+    end
+  end
+
   describe "Plex wizard auto-connect" do
     setup %{conn: conn, token: token} do
       start_supervised!(Mydia.Indexers.Health)

@@ -314,32 +314,35 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
   @impl true
   def handle_event("test_media_server", %{"id" => id}, socket) do
     server = Settings.get_media_server_config!(id)
-    adapter = MediaServerClient.adapter_for(server)
 
-    case adapter.test_connection(server) do
-      :ok ->
-        MediaServerHealth.check_health(server.id, force: true)
-
+    # A single forced check feeds both the flash and the badge, so they can
+    # never disagree about whether the connection just succeeded or failed.
+    # Two independent checks (one for the flash, one to refresh the cache)
+    # previously let a flaky server show a success flash next to an
+    # Unhealthy badge, or the reverse.
+    case MediaServerHealth.check_health(server.id, force: true) do
+      {:ok, %{status: :healthy}} ->
         {:noreply,
          socket
          |> put_flash(:info, "Connection to #{server.name} successful!")
          |> load_data()}
 
-      {:error, %Error{} = error} ->
+      {:ok, %{error: error}} ->
         MydiaLogger.log_warning(:liveview, "Media server connection test failed",
           operation: :test_media_server,
           server_id: id,
           server_type: server.type,
-          error: Error.message(error),
+          error: error,
           user_id: socket.assigns.current_user.id
         )
 
-        MediaServerHealth.check_health(server.id, force: true)
-
         {:noreply,
          socket
-         |> put_flash(:error, "Connection failed: #{Error.message(error)}")
+         |> put_flash(:error, "Connection failed: #{error}")
          |> load_data()}
+
+      {:error, :not_found} ->
+        {:noreply, put_flash(socket, :error, "That media server no longer exists")}
     end
   end
 
