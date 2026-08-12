@@ -10,6 +10,10 @@ defmodule MetadataRelay.Feedback.Notifier do
 
   @config_key __MODULE__
 
+  # Deliberately strict: \A..\z (not ^..$) so no trailing newline slips through,
+  # and the excluded characters keep a crafted contact from injecting headers.
+  @contact_address ~r/\A[^\s@,;:<>"]+@[^\s@,;:<>"]+\.[^\s@,;:<>"]+\z/
+
   def deliver_new_submission(%Submission{} = submission) do
     case recipient() do
       nil ->
@@ -30,6 +34,24 @@ defmodule MetadataRelay.Feedback.Notifier do
     |> from(from_address())
     |> subject(subject)
     |> text_body(text_body(submission))
+    |> maybe_reply_to(submission.contact)
+  end
+
+  # The contact field is free text, so it may be a GitHub handle, a Discord tag,
+  # or nothing at all. Only wire up Reply-To when it actually looks like an
+  # address, and keep From as the relay's own so SPF/DKIM alignment holds.
+  defp maybe_reply_to(email, contact) do
+    case contact_address(contact) do
+      nil -> email
+      address -> reply_to(email, address)
+    end
+  end
+
+  defp contact_address(contact) do
+    case normalize_optional_string(contact) do
+      nil -> nil
+      value -> if Regex.match?(@contact_address, value), do: value
+    end
   end
 
   defp text_body(submission) do
