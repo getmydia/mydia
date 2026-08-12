@@ -53,6 +53,10 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
         args: %{"config_id" => server.id, "user_id" => user.id, "link_id" => link.id}
       )
     end
+
+    test "treats unrecognised args as a scheduler run instead of raising" do
+      assert :ok = perform_job(MediaServerWatchedSync, %{})
+    end
   end
 
   describe "perform/1 with individual config" do

@@ -43,11 +43,22 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
         link_id: Map.get(args, "link_id")
       }
     end
+
+    # Anything else, notably the empty map the Jobs page used to enqueue, runs
+    # as the scheduler rather than crashing the worker to `discarded`.
+    def parse(_args), do: %__MODULE__{mode: "all_enabled"}
   end
 
   @spec perform(Oban.Job.t()) :: :ok | {:ok, term()} | {:error, term()} | {:snooze, pos_integer()}
   @impl Oban.Worker
-  def perform(%Oban.Job{args: %{"mode" => "all_enabled"}}) do
+  def perform(%Oban.Job{args: raw_args}) do
+    case Args.parse(raw_args) do
+      %Args{mode: "all_enabled"} -> perform_all_enabled()
+      %Args{} = args -> perform_individual(args)
+    end
+  end
+
+  defp perform_all_enabled do
     Settings.list_media_server_configs()
     |> Enum.each(fn config ->
       case skip_reason(config) do
@@ -59,10 +70,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
     :ok
   end
 
-  def perform(%Oban.Job{args: raw_args}) do
-    args = Args.parse(raw_args)
-    config_id = args.config_id
-    user_id = args.user_id
+  defp perform_individual(%Args{config_id: config_id, user_id: user_id} = args) do
     config = Settings.get_media_server_config!(config_id)
 
     case apply_link_token(config, args.link_id, user_id) do

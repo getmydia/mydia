@@ -157,12 +157,40 @@ defmodule Mydia.Jobs do
   end
 
   @doc """
+  Returns the args a worker's crontab entry declares, or `%{}` when the worker
+  is not scheduled or its entry declares none.
+  """
+  @spec cron_args(module()) :: map()
+  def cron_args(worker) when is_atom(worker) do
+    config = Oban.config()
+
+    case find_cron_plugin(config.plugins) do
+      {Oban.Plugins.Cron, opts} ->
+        opts
+        |> Keyword.get(:crontab, [])
+        |> Enum.find_value(%{}, fn
+          {_expression, ^worker, entry_opts} -> Keyword.get(entry_opts, :args, %{})
+          _entry -> nil
+        end)
+
+      _ ->
+        %{}
+    end
+  end
+
+  @doc """
   Manually triggers a job by enqueueing it to Oban.
+
+  Uses the worker's crontab args so a manual run is identical to a scheduled
+  one. Enqueueing `%{}` unconditionally used to strip `args:` from every
+  scheduled worker that declared them, which discarded the job.
 
   Returns {:ok, job} or {:error, changeset}.
   """
   def trigger_job(worker) when is_atom(worker) do
-    worker.new(%{})
+    worker
+    |> cron_args()
+    |> worker.new()
     |> Oban.insert()
   end
 
