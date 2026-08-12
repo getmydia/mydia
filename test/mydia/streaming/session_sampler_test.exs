@@ -1,5 +1,10 @@
 defmodule Mydia.Streaming.SessionSamplerTest do
-  use Mydia.DataCase, async: true
+  # async: false is required, not incidental. The sampler is a separate process
+  # that queries media files itself, and under the PostgreSQL non-shared sandbox
+  # a spawned process cannot see the test's uncommitted rows, so every bitrate
+  # lookup returns nil. SQLite is permissive enough to pass either way, which is
+  # exactly how this reached CI green locally and red on Postgres.
+  use Mydia.DataCase, async: false
 
   alias Mydia.Streaming.SessionSampler
   alias Mydia.Streaming.SessionSampler.Sample
