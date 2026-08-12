@@ -452,50 +452,7 @@ defmodule Mydia.Playback do
         |> Repo.all()
         |> Map.new()
 
-      # Find the next episode to watch
-      determine_next_episode(episodes_with_files, progress_map)
-    end
-  end
-
-  # Helper function to determine which episode to play next
-  defp determine_next_episode(episodes, progress_map) do
-    # First, check for in-progress episodes (< 90% completion)
-    in_progress_episode =
-      Enum.find(episodes, fn episode ->
-        case Map.get(progress_map, episode.id) do
-          %Progress{watched: false, completion_percentage: pct} when pct < 90.0 -> true
-          _ -> false
-        end
-      end)
-
-    if in_progress_episode do
-      {:continue, in_progress_episode}
-    else
-      # Find the first unwatched episode (no progress or not marked as watched)
-      unwatched_episode =
-        Enum.find(episodes, fn episode ->
-          case Map.get(progress_map, episode.id) do
-            nil -> true
-            %Progress{watched: false} -> true
-            _ -> false
-          end
-        end)
-
-      case unwatched_episode do
-        nil ->
-          # All episodes watched
-          :all_watched
-
-        episode ->
-          # Check if there's any progress at all
-          has_any_progress? = progress_map != %{}
-
-          if has_any_progress? do
-            {:next, episode}
-          else
-            {:start, episode}
-          end
-      end
+      Mydia.Playback.NextEpisode.determine(episodes_with_files, progress_map)
     end
   end
 
