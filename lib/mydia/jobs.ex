@@ -162,20 +162,24 @@ defmodule Mydia.Jobs do
   """
   @spec cron_args(module()) :: map()
   def cron_args(worker) when is_atom(worker) do
-    config = Oban.config()
-
-    case find_cron_plugin(config.plugins) do
-      {Oban.Plugins.Cron, opts} ->
-        opts
-        |> Keyword.get(:crontab, [])
-        |> Enum.find_value(%{}, fn
-          {_expression, ^worker, entry_opts} -> Keyword.get(entry_opts, :args, %{})
-          _entry -> nil
-        end)
-
-      _ ->
-        %{}
+    case find_cron_plugin(Oban.config().plugins) do
+      {Oban.Plugins.Cron, opts} -> cron_args_from(Keyword.get(opts, :crontab, []), worker)
+      _ -> %{}
     end
+  end
+
+  @doc """
+  Returns the args a crontab entry declares for `worker`, or `%{}`.
+
+  Split out from `cron_args/1` so it can be tested without a running Oban,
+  which the test environment disables to keep its pool off the SQL Sandbox.
+  """
+  @spec cron_args_from(list(), module()) :: map()
+  def cron_args_from(crontab, worker) when is_list(crontab) and is_atom(worker) do
+    Enum.find_value(crontab, %{}, fn
+      {_expression, ^worker, entry_opts} -> Keyword.get(entry_opts, :args, %{})
+      _entry -> nil
+    end)
   end
 
   @doc """
