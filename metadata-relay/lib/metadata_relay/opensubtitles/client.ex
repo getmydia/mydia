@@ -8,6 +8,16 @@ defmodule MetadataRelay.OpenSubtitles.Client do
 
   All requests require both an API key (for application identification) and
   a JWT token (for user authentication).
+
+  ## Testing
+
+  For testing, you can configure a custom HTTP adapter via application config,
+  same as `MetadataRelay.TMDB.Client`:
+
+      config :metadata_relay, :opensubtitles_http_adapter, fn request ->
+        {request, Req.Response.new(status: 200, body: %{})}
+      end
+
   """
 
   alias MetadataRelay.OpenSubtitles.Auth
@@ -26,16 +36,20 @@ defmodule MetadataRelay.OpenSubtitles.Client do
   def new do
     with {:ok, api_key} <- get_api_key(),
          {:ok, token} <- Auth.get_token() do
-      {:ok,
-       Req.new(
-         base_url: @base_url,
-         headers: [
-           {"Api-Key", api_key},
-           {"Authorization", "Bearer #{token}"},
-           {"Content-Type", "application/json"},
-           {"User-Agent", "metadata-relay v#{MetadataRelay.version()}"}
-         ]
-       )}
+      base_opts = [
+        base_url: @base_url,
+        headers: [
+          {"Api-Key", api_key},
+          {"Authorization", "Bearer #{token}"},
+          {"Content-Type", "application/json"},
+          {"User-Agent", "metadata-relay v#{MetadataRelay.version()}"}
+        ]
+      ]
+
+      adapter = Application.get_env(:metadata_relay, :opensubtitles_http_adapter)
+      opts = if adapter, do: Keyword.put(base_opts, :adapter, adapter), else: base_opts
+
+      {:ok, Req.new(opts)}
     end
   end
 
