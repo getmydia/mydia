@@ -23,6 +23,20 @@ defmodule MydiaWeb.Schema.SubtitleContentTest do
   }
   """
 
+  @external_subtitles_query """
+  query Movie($id: ID!) {
+    movie(id: $id) {
+      files {
+        externalSubtitles {
+          trackId
+          deliverable
+          content(format: VTT)
+        }
+      }
+    }
+  }
+  """
+
   @image_format_query """
   query Movie($id: ID!) {
     movie(id: $id) {
@@ -79,6 +93,24 @@ defmodule MydiaWeb.Schema.SubtitleContentTest do
     assert track["deliverable"] == true
     assert String.starts_with?(track["content"], "WEBVTT")
     assert track["content"] =~ "00:00:01.000 --> 00:00:04.000"
+  end
+
+  test "returns converted content via the externalSubtitles field too", %{
+    conn: conn,
+    movie: movie
+  } do
+    conn =
+      post(conn, "/api/graphql", %{
+        "query" => @external_subtitles_query,
+        "variables" => %{"id" => movie.id}
+      })
+
+    %{"data" => %{"movie" => %{"files" => files}}} = json_response(conn, 200)
+    tracks = files |> Enum.flat_map(& &1["externalSubtitles"])
+    assert [track] = tracks
+
+    assert track["deliverable"] == true
+    assert String.starts_with?(track["content"], "WEBVTT")
   end
 
   test "returns not-deliverable and nil content for an image-based embedded track", %{

@@ -116,7 +116,14 @@ defmodule MydiaWeb.Schema.CommonTypes do
     @desc "Subtitle files stored alongside the media file. Unlike `subtitles`, this never probes the file."
     field :external_subtitles, list_of(:subtitle_track) do
       resolve(fn file, _args, _info ->
-        {:ok, Mydia.Subtitles.Extractor.list_external_subtitle_tracks(file.id)}
+        # The `url` and `content` fields both read `_media_file_id` off the
+        # track map, mirroring what the `subtitles` field does.
+        tracks =
+          file.id
+          |> Mydia.Subtitles.Extractor.list_external_subtitle_tracks()
+          |> Enum.map(&Map.put(&1, :_media_file_id, file.id))
+
+        {:ok, tracks}
       end)
     end
 
