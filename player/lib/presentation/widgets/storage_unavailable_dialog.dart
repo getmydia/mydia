@@ -21,13 +21,14 @@ class StorageUnavailableDialog extends StatelessWidget {
         children: [
           const Text(
             'You are connected and can keep using the app, but this '
-            'connection will be lost when you close it.',
+            'connection may be lost when you close it.',
           ),
           const SizedBox(height: 12),
           Text(
-            'This system\'s secure storage is unavailable, so Mydia could not '
-            'save your credentials. On Linux this usually means no keyring '
-            'service is running.',
+            'Mydia could not save your credentials because this system\'s '
+            'secure storage rejected them. On Linux that usually means either '
+            'no keyring service is running, or the app is sandboxed without '
+            'permission to reach it.',
             style: theme.textTheme.bodySmall,
           ),
         ],

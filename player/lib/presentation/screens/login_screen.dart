@@ -242,7 +242,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     if (code.isEmpty) return;
 
     final controller = ref.read(loginControllerProvider.notifier);
-    // Custom relay URL is no longer needed - we use IPFS DHT bootstrap
+    // No custom relay URL: the claim code resolves through the relay API and
+    // iroh's default discovery.
     await controller.pairWithClaimCode(code);
 
     await _completePairing();

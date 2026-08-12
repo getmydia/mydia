@@ -107,43 +107,41 @@ class NativeAuthStorage implements AuthStorage {
 
   @override
   Future<String?> read(String key) async {
-    final value = await _withFallback<String?>(
-      () => _backend.read(key),
-      () => _memoryStorage[key],
-    );
-    // A prior write may have been the one call that failed and landed in
-    // memory, so fall back to it rather than reporting the key as missing.
-    return value ?? _memoryStorage[key];
+    // The overlay wins whenever it holds the key. Consulting the backend first
+    // would return whatever it still has from an earlier successful write,
+    // which is older than a write that has since fallen back to memory. That
+    // is how a failed token refresh would keep handing out the expired token
+    // for the rest of the session.
+    if (_memoryStorage.containsKey(key)) return _memoryStorage[key];
+
+    return _withFallback<String?>(() => _backend.read(key), () => null);
   }
 
   @override
   Future<void> write(String key, String value) async {
+    // Mirrored unconditionally, not just on failure, so the overlay is never
+    // staler than the backend. A write-on-failure-only overlay would let an
+    // old fallback value shadow a later successful write.
+    _memoryStorage[key] = value;
+
     await _withFallback<void>(
       () => _backend.write(key, value),
-      () {
-        _memoryStorage[key] = value;
-      },
+      () {},
       durability: true,
     );
   }
 
   @override
   Future<void> delete(String key) async {
-    await _withFallback<void>(
-      () => _backend.delete(key),
-      () {
-        _memoryStorage.remove(key);
-      },
-    );
+    _memoryStorage.remove(key);
+
+    await _withFallback<void>(() => _backend.delete(key), () {});
   }
 
   @override
   Future<void> deleteAll() async {
-    await _withFallback<void>(
-      _backend.deleteAll,
-      () {
-        _memoryStorage.clear();
-      },
-    );
+    _memoryStorage.clear();
+
+    await _withFallback<void>(_backend.deleteAll, () {});
   }
 }

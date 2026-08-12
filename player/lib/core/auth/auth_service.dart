@@ -22,10 +22,13 @@ class AuthService {
   final AuthStorage _storage;
   final DeviceInfoService _deviceInfo = DeviceInfoService();
 
-  /// Whether credential writes are reaching durable storage.
+  /// Whether durability can still be guaranteed for credential writes.
   ///
-  /// When true, everything written this session is lost when the app closes,
-  /// so the user must be told rather than shown a success message.
+  /// True once at least one write has failed to reach secure storage. It does
+  /// not mean every value is lost: writes before and after the failure may
+  /// well have persisted. It means the app can no longer promise that what it
+  /// just stored will be there next launch, which is enough to owe the user a
+  /// warning instead of a success message.
   bool get storageDegraded => _storage.degraded;
 
   static const _authTokenKey = 'auth_token';

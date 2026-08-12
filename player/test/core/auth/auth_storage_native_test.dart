@@ -71,6 +71,41 @@ void main() {
       expect(await storage.read('token'), equals('abc'));
     });
 
+    test('a failed write is not shadowed by an older backend value', () async {
+      // The backend already holds a value the keyring accepted earlier.
+      final backend = _FailingBackend(failWrite: true)
+        ..stored['token'] = 'stale';
+      final storage = NativeAuthStorage(backend: backend);
+
+      await storage.write('token', 'fresh');
+
+      // Reading must not prefer the backend here. A refreshed access token
+      // that failed to persist would otherwise leave every later read handing
+      // back the expired one for the rest of the session.
+      expect(await storage.read('token'), equals('fresh'));
+    });
+
+    test('a successful write is not shadowed by an earlier fallback', () async {
+      final storage = NativeAuthStorage(backend: _FailingBackend());
+
+      await storage.write('token', 'first');
+      await storage.write('token', 'second');
+
+      expect(await storage.read('token'), equals('second'));
+    });
+
+    test('a delete clears the in-memory overlay', () async {
+      final storage =
+          NativeAuthStorage(backend: _FailingBackend(failWrite: true));
+
+      await storage.write('token', 'abc');
+      await storage.delete('token');
+
+      // Without clearing the overlay, a deleted credential would keep being
+      // served for the rest of the session.
+      expect(await storage.read('token'), isNull);
+    });
+
     test('a failed delete does not report degraded', () async {
       final storage =
           NativeAuthStorage(backend: _FailingBackend(failDelete: true));
