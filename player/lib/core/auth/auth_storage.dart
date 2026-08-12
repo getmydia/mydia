@@ -16,4 +16,10 @@ abstract class AuthStorage {
   Future<void> write(String key, String value);
   Future<void> delete(String key);
   Future<void> deleteAll();
+
+  /// Whether any write has failed to reach durable storage in this process.
+  ///
+  /// A caller that has just written credentials should check this before
+  /// telling the user the credentials were saved.
+  bool get degraded;
 }
