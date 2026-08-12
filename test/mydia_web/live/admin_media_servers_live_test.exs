@@ -138,4 +138,53 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
       assert has_element?(view, "li.step", "Server")
     end
   end
+
+  describe "Editing a server added through the Plex wizard" do
+    setup %{conn: conn, token: token} do
+      start_supervised!(Mydia.Indexers.Health)
+
+      conn =
+        conn
+        |> init_test_session(%{})
+        |> put_session(:guardian_default_token, token)
+        |> put_req_header("authorization", "Bearer #{token}")
+
+      # A wizard-created config: no url, addressable only through discovery.
+      {:ok, config} =
+        Mydia.Settings.create_media_server_config(%{
+          name: "Storage",
+          type: :plex,
+          url: nil,
+          token: "acct-token",
+          machine_identifier: "machine-abc",
+          connections: [%{"uri" => "http://127.0.0.1:32400", "local" => true}]
+        })
+
+      %{conn: conn, config: config}
+    end
+
+    test "the server can be renamed without supplying a url", %{conn: conn, config: config} do
+      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+
+      view |> element("[phx-click='edit_media_server']") |> render_click()
+
+      view
+      |> form("#media-server-form", %{
+        "media_server_config" => %{
+          "name" => "Renamed",
+          "type" => "plex",
+          "url" => "",
+          "token" => "acct-token"
+        }
+      })
+      |> render_submit()
+
+      updated = Mydia.Settings.get_media_server_config!(config.id)
+
+      assert updated.name == "Renamed"
+      # Discovery data must survive a save driven purely by form params.
+      assert updated.machine_identifier == "machine-abc"
+      assert [%{"uri" => "http://127.0.0.1:32400"}] = updated.connections
+    end
+  end
 end

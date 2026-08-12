@@ -3,6 +3,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   use MydiaWeb, :html
 
   alias Mydia.Settings
+  alias Mydia.Settings.MediaServerConfig
 
   @doc """
   Renders the Media Servers tab content.
@@ -230,6 +231,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   attr :plex_oauth_servers, :list, default: []
   attr :plex_manual_entry, :boolean, default: false
   attr :plex_reachability, :any, default: :checking
+  attr :plex_discovery, :map, default: nil
 
   def media_server_modal(assigns) do
     # Get the current type from the form
@@ -241,7 +243,13 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
         type when is_binary(type) -> String.to_existing_atom(type)
       end
 
-    assigns = assign(assigns, :current_type, current_type)
+    assigns =
+      assigns
+      |> assign(:current_type, current_type)
+      |> assign(
+        :plex_addressable,
+        MediaServerConfig.addressable_by_discovery?(assigns.media_server_form.source)
+      )
 
     ~H"""
     <div
@@ -493,8 +501,10 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
               </div>
             <% end %>
 
-            <%!-- Manual entry fields - shown for Jellyfin, or Plex in manual mode, or after OAuth complete --%>
-            <%= if @current_type != :plex or @plex_manual_entry or @plex_oauth_state == :complete do %>
+            <%!-- Manual entry fields - shown for Jellyfin, or Plex in manual mode.
+                  The discovery path renders its own read-only review panel instead,
+                  because it has no url to collect and its token is not operator-editable. --%>
+            <%= if @current_type != :plex or @plex_manual_entry do %>
               <div class="card bg-base-200/50 border border-base-300">
                 <div class="card-body p-4 gap-4">
                   <div class="flex items-center gap-2 text-sm font-medium text-base-content/70">
@@ -512,13 +522,16 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                             do: "http://192.168.1.100:32400",
                             else: "http://192.168.1.100:8096"
                         }
-                        required
+                        required={@current_type != :plex or not @plex_addressable}
                       />
                       <p class="text-xs text-base-content/50 mt-1 ml-1">
-                        <%= if @current_type == :plex do %>
-                          Full URL including port (default: 32400)
-                        <% else %>
-                          Full URL including port (default: 8096)
+                        <%= cond do %>
+                          <% @current_type == :plex and @plex_addressable -> %>
+                            Optional manual override. Leave blank to use the addresses discovered from your Plex account.
+                          <% @current_type == :plex -> %>
+                            Full URL including port (default: 32400)
+                          <% true -> %>
+                            Full URL including port (default: 8096)
                         <% end %>
                       </p>
                     </div>
