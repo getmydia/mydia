@@ -78,4 +78,49 @@ defmodule Mydia.JobsTest do
       assert Ecto.Changeset.get_field(changeset, :worker) == inspect(Mydia.Jobs.TrashCleanup)
     end
   end
+
+  # build_job/2's tests above cover the args-threading logic, but nothing yet
+  # exercises trigger_job/1 itself: the line the original bug lived on
+  # (`worker.new(%{}) |> Oban.insert()`) and the only remaining untested
+  # composition. This crontab is a fixture invented for this test, not a copy
+  # of config/config.exs's real schedule: production crontab coverage is
+  # impossible here because config/test.exs deliberately disables Oban's
+  # plugins to keep its pool off the SQL Sandbox, so cron_args/1 can never
+  # read the real crontab from a test. Every entry uses "0 0 1 1 *" (midnight
+  # on January 1st) so it cannot fire and insert a stray job row during a
+  # test run.
+  describe "trigger_job/1" do
+    setup do
+      engine = if Mydia.DB.postgres?(), do: Oban.Engines.Basic, else: Oban.Engines.Lite
+
+      start_supervised!(
+        {Oban,
+         repo: Mydia.Repo,
+         engine: engine,
+         queues: [],
+         plugins: [
+           {Oban.Plugins.Cron,
+            crontab: [
+              {"0 0 1 1 *", Mydia.Jobs.BlacklistCleanup,
+               args: %{"fixture" => "trigger_job_test"}},
+              {"0 0 1 1 *", Mydia.Jobs.EventCleanup}
+            ]}
+         ]}
+      )
+
+      :ok
+    end
+
+    test "enqueues a job whose args equal the fixture crontab's declared args" do
+      assert {:ok, job} = Jobs.trigger_job(Mydia.Jobs.BlacklistCleanup)
+
+      assert job.args == %{"fixture" => "trigger_job_test"}
+    end
+
+    test "enqueues a job with an empty args map for a worker with no declared args" do
+      assert {:ok, job} = Jobs.trigger_job(Mydia.Jobs.EventCleanup)
+
+      assert job.args == %{}
+    end
+  end
 end
