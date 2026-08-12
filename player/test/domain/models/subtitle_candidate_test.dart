@@ -23,14 +23,14 @@ void main() {
     test('falls back to the uppercased code for unmapped languages', () {
       const other = SubtitleCandidate(
         token: 't',
-        language: 'sv',
+        language: 'th',
         format: 'srt',
         hearingImpaired: false,
         hashMatch: false,
         score: 10,
         providerName: 'p',
       );
-      expect(other.displayLanguage, 'SV');
+      expect(other.displayLanguage, 'TH');
     });
   });
 
@@ -45,6 +45,26 @@ void main() {
 
     test('returns null for an unrecognised three-letter code', () {
       expect(SubtitleCandidate.toIso6391('xyz'), isNull);
+    });
+
+    test('maps both three-letter forms of French', () {
+      expect(SubtitleCandidate.toIso6391('fre'), 'fr');
+      expect(SubtitleCandidate.toIso6391('fra'), 'fr');
+    });
+
+    test('maps both three-letter forms of German', () {
+      expect(SubtitleCandidate.toIso6391('ger'), 'de');
+      expect(SubtitleCandidate.toIso6391('deu'), 'de');
+    });
+
+    test('maps both three-letter forms of Chinese', () {
+      expect(SubtitleCandidate.toIso6391('chi'), 'zh');
+      expect(SubtitleCandidate.toIso6391('zho'), 'zh');
+    });
+
+    test('maps both three-letter forms of Dutch', () {
+      expect(SubtitleCandidate.toIso6391('dut'), 'nl');
+      expect(SubtitleCandidate.toIso6391('nld'), 'nl');
     });
   });
 

@@ -51,6 +51,7 @@ class SubtitleCandidate {
     'hi': 'Hindi',
     'nl': 'Dutch',
     'pl': 'Polish',
+    'sv': 'Swedish',
     'tr': 'Turkish',
   };
 
