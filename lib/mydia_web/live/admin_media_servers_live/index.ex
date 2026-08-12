@@ -55,7 +55,8 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
      |> assign(:plex_oauth_servers, [])
      |> assign(:plex_oauth_token, nil)
      |> assign(:plex_reachability, :checking)
-     |> assign(:plex_manual_entry, false)}
+     |> assign(:plex_manual_entry, false)
+     |> assign(:plex_discovery, nil)}
   end
 
   @impl true
@@ -84,7 +85,8 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
        |> assign(:plex_oauth_servers, [])
        |> assign(:plex_oauth_token, nil)
        |> assign(:plex_reachability, :checking)
-       |> assign(:plex_manual_entry, true)}
+       |> assign(:plex_manual_entry, true)
+       |> assign(:plex_discovery, nil)}
     end
   end
 
@@ -115,12 +117,15 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
        |> assign(:plex_oauth_pin_id, nil)
        |> assign(:plex_oauth_servers, [])
        |> assign(:plex_oauth_token, nil)
-       |> assign(:plex_manual_entry, false)}
+       |> assign(:plex_manual_entry, false)
+       |> assign(:plex_discovery, nil)}
     end
   end
 
   @impl true
   def handle_event("validate_media_server", %{"media_server_config" => params}, socket) do
+    params = Selection.merge_discovery(params, socket.assigns[:plex_discovery])
+
     server =
       case socket.assigns.media_server_mode do
         :new -> %MediaServerConfig{}
@@ -132,11 +137,16 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
       |> Settings.change_media_server_config(params)
       |> Map.put(:action, :validate)
 
-    {:noreply, assign(socket, :media_server_form, to_form(changeset))}
+    {:noreply,
+     socket
+     |> assign(:media_server_form, to_form(changeset))
+     |> reset_wizard_if_type_changed(params)}
   end
 
   @impl true
   def handle_event("save_media_server", %{"media_server_config" => params}, socket) do
+    params = Selection.merge_discovery(params, socket.assigns[:plex_discovery])
+
     params =
       case socket.assigns.media_server_mode do
         :edit ->
@@ -295,6 +305,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
      |> assign(:plex_oauth_servers, [])
      |> assign(:plex_oauth_token, nil)
      |> assign(:plex_reachability, :checking)
+     |> assign(:plex_discovery, nil)
      |> push_event("plex_auth_cancelled", %{})}
   end
 
@@ -307,7 +318,8 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
      |> assign(:plex_oauth_pin_id, nil)
      |> assign(:plex_oauth_servers, [])
      |> assign(:plex_oauth_token, nil)
-     |> assign(:plex_reachability, :checking)}
+     |> assign(:plex_reachability, :checking)
+     |> assign(:plex_discovery, nil)}
   end
 
   @impl true
@@ -454,6 +466,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
         socket
         |> assign(:plex_oauth_state, :complete)
         |> assign(:plex_reachability, :checking)
+        |> assign(:plex_discovery, attrs)
         |> start_reachability_probe(server)
         |> assign(:media_server_form, to_form(changeset))
     end
@@ -472,6 +485,22 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
     end)
 
     socket
+  end
+
+  # Moving the Type select off Plex makes the discovered data describe something
+  # other than what is being saved. Resetting the wizard is what stops a stale
+  # "Configuration complete!" panel from sitting above a Jellyfin form.
+  defp reset_wizard_if_type_changed(socket, %{"type" => "plex"}), do: socket
+
+  defp reset_wizard_if_type_changed(socket, _params) do
+    if socket.assigns[:plex_discovery] do
+      socket
+      |> assign(:plex_discovery, nil)
+      |> assign(:plex_oauth_state, :idle)
+      |> assign(:plex_reachability, :checking)
+    else
+      socket
+    end
   end
 
   defp load_data(socket) do
