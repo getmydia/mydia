@@ -80,21 +80,13 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
 
                   <%!-- Health Status Indicator --%>
                   <div
+                    role="img"
+                    aria-label={health_status_label(health.status)}
                     class={[
-                      "tooltip tooltip-left",
-                      health.status == :unhealthy && health[:error] && "cursor-help"
-                    ]}
-                    data-tip={
-                      if health.status == :unhealthy and health[:error],
-                        do: health.error,
-                        else: health_status_label(health.status)
-                    }
-                  >
-                    <div class={[
-                      "w-3 h-3 rounded-full",
+                      "w-3 h-3 rounded-full shrink-0 mt-1",
                       health_status_dot_class(health.status)
-                    ]}>
-                    </div>
+                    ]}
+                  >
                   </div>
                 </div>
 
@@ -120,6 +112,14 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                     {health_status_label(health.status)}
                   </span>
                 </div>
+
+                <p
+                  :if={health.status == :unhealthy and health[:error]}
+                  data-test="health-error"
+                  class="text-xs text-error/80 break-words"
+                >
+                  {health.error}
+                </p>
 
                 <%!-- Watched Sync Status --%>
                 <% sync_enabled =
