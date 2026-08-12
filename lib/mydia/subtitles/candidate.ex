@@ -34,11 +34,16 @@ defmodule Mydia.Subtitles.Candidate do
       |> Map.take(@fields)
       |> Map.put(:media_file_id, media_file_id)
 
-    Phoenix.Token.sign(MydiaWeb.Endpoint, @salt, payload)
+    Phoenix.Token.sign(MydiaWeb.Endpoint, @salt, payload, max_age: @max_age)
   end
 
   @doc """
   Verifies a token and confirms it was issued for `media_file_id`.
+
+  The `:max_age` option exists so tests can force expiry deterministically
+  instead of sleeping. Callers outside this module's own tests must not pass
+  it: threading a caller-supplied `:max_age` through would let a client
+  control how long its own tokens stay valid.
   """
   @spec verify(String.t(), binary(), keyword()) ::
           {:ok, map()} | {:error, :expired | :invalid | :media_file_mismatch}
