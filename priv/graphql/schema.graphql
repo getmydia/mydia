@@ -67,6 +67,14 @@ type RootQueryType {
 
   "Get items in a collection"
   collectionItems(collectionId: ID!, first: Int): [RecentlyAddedItem]
+
+  "Search every enabled subtitle provider for a media file"
+  subtitleSearch(
+    mediaFileId: ID!
+
+    "ISO 639-1 codes, for example [\"en\", \"es\"]"
+    languages: [String!]!
+  ): SubtitleSearchPayload!
 }
 
 type RootMutationType {
@@ -175,6 +183,9 @@ type RootMutationType {
     "The transcode job ID"
     jobId: ID!
   ): CancelDownloadResult
+
+  "Download a subtitle candidate returned by subtitleSearch"
+  downloadSubtitle(mediaFileId: ID!, token: String!): SubtitleTrack!
 }
 
 type RootSubscriptionType {
@@ -1211,6 +1222,51 @@ type SubtitleTrack {
 
   "URL to download this subtitle in the requested format"
   url(format: SubtitleFormat): String
+}
+
+"A subtitle available from a provider, not yet downloaded"
+type SubtitleCandidate {
+  "Opaque signed handle. Pass to downloadSubtitle. Valid for 15 minutes"
+  token: String!
+
+  "ISO 639-1 language code"
+  language: String!
+
+  "Provider's file name for this subtitle, usually the release it matches"
+  releaseName: String
+
+  format: String!
+
+  rating: Float
+
+  downloadCount: Int
+
+  hearingImpaired: Boolean!
+
+  "Whether the provider matched this subtitle by media file hash, the strongest signal"
+  hashMatch: Boolean!
+
+  score: Int!
+
+  providerName: String!
+}
+
+"Outcome of consulting one subtitle provider"
+type SubtitleProviderStatus {
+  name: String!
+
+  quotaRemaining: Int
+
+  quotaTotal: Int
+
+  "Null when the provider answered. A message when it did not"
+  error: String
+}
+
+"Results of a subtitle search across every enabled provider"
+type SubtitleSearchPayload {
+  results: [SubtitleCandidate!]!
+  providers: [SubtitleProviderStatus!]!
 }
 
 "Media content types"
