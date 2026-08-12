@@ -1,0 +1,70 @@
+<Layouts.app {assigns}>
+  <.admin_page active_tab={@active_tab}>
+    <div class="space-y-6 sm:space-y-8 p-4 sm:p-6">
+      <MydiaWeb.AdminDashboardLive.Components.kpi_row
+        active_streams={length(@active_sessions)}
+        total_mbps={
+          @samples
+          |> List.last()
+          |> then(&((&1 && &1.sessions) || %{}))
+          |> Map.values()
+          |> Enum.sum()
+        }
+        plays_today={@plays_today}
+        plays_week={@plays_week}
+        unmeasured_count={@samples |> List.last() |> then(&((&1 && &1.unmeasured_count) || 0))}
+      />
+
+      <MydiaWeb.AdminDashboardLive.Components.bandwidth_chart
+        samples={@samples}
+        unmeasured_count={@samples |> List.last() |> then(&((&1 && &1.unmeasured_count) || 0))}
+      />
+
+      <div>
+        <h3 class="text-lg font-semibold flex items-center gap-2 mb-3">
+          <.icon name="hero-play-circle" class="w-5 h-5 text-primary" /> Now Playing
+        </h3>
+        <%= if @active_sessions == [] do %>
+          <div
+            id="now-playing-empty"
+            class="flex flex-col items-center justify-center p-8 text-base-content/50 bg-base-200 rounded-box"
+          >
+            <.icon name="hero-play-circle" class="w-12 h-12 mb-2 opacity-20" />
+            <span class="text-sm">Nobody is watching anything right now</span>
+          </div>
+        <% else %>
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <MydiaWeb.AdminDashboardLive.Components.now_playing_card
+              :for={session <- @active_sessions}
+              session={session}
+            />
+          </div>
+        <% end %>
+      </div>
+
+      <MydiaWeb.AdminDashboardLive.Components.plays_chart days={@days} />
+
+      <div class="bg-base-200 rounded-box p-4">
+        <h3 class="font-semibold flex items-center gap-2 mb-4">
+          <.icon name="hero-clock" class="w-5 h-5 text-primary" /> Recent Activity
+        </h3>
+        <%= if @recent_activity == [] do %>
+          <div class="flex flex-col items-center justify-center p-8 text-base-content/50">
+            <.icon name="hero-clock" class="w-12 h-12 mb-2 opacity-20" />
+            <span class="text-sm">No recent activity</span>
+          </div>
+        <% else %>
+          <div class="divide-y divide-base-300 bg-base-100 rounded-box border border-base-300">
+            <%= for item <- @recent_activity do %>
+              <%= if item.type == :transcode_job do %>
+                <MydiaWeb.AdminDashboardLive.Components.recent_job_card job={item.data} />
+              <% else %>
+                <MydiaWeb.AdminDashboardLive.Components.recent_watch_card progress={item.data} />
+              <% end %>
+            <% end %>
+          </div>
+        <% end %>
+      </div>
+    </div>
+  </.admin_page>
+</Layouts.app>
