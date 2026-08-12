@@ -282,7 +282,7 @@ defmodule MydiaWeb.Schema.QueryTypes do
     field :subtitle_search, non_null(:subtitle_search_payload) do
       arg(:media_file_id, non_null(:id))
 
-      @desc "ISO 639-1 codes, for example [\"en\", \"es\"]"
+      @desc ~s|ISO 639-1 codes, for example ["en", "es"]|
       arg(:languages, non_null(list_of(non_null(:string))))
 
       resolve(&SubtitleSearchResolver.search/3)

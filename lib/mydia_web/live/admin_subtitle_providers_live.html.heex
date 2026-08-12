@@ -1,0 +1,15 @@
+<Layouts.app {assigns}>
+  <.admin_page active_tab={@active_tab}>
+    <MydiaWeb.AdminSubtitleProvidersLive.Components.providers_tab
+      providers={@providers}
+      circuit={@circuit}
+    />
+
+    <%= if @show_modal do %>
+      <MydiaWeb.AdminSubtitleProvidersLive.Components.provider_modal
+        form={@form}
+        mode={@mode}
+      />
+    <% end %>
+  </.admin_page>
+</Layouts.app>

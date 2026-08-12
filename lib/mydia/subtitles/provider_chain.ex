@@ -36,8 +36,10 @@ defmodule Mydia.Subtitles.ProviderChain do
     configs =
       [enabled: true]
       |> ServiceConfigs.list_subtitle_provider_configs()
-      |> Enum.filter(&Health.available?(&1.type))
-      |> Enum.filter(&eligible?(ProviderRegistry.adapter_for(&1).capabilities(), params))
+      |> Enum.filter(fn config ->
+        Health.available?(config.type) and
+          eligible?(ProviderRegistry.adapter_for(config).capabilities(), params)
+      end)
 
     outcomes = run_all(configs, params)
 

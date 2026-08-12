@@ -170,8 +170,7 @@ defmodule Mydia.Subtitles.Provider.SubDL do
     params
     |> Map.get(:languages, "en")
     |> String.split(",", trim: true)
-    |> Enum.map(&(&1 |> String.trim() |> String.upcase()))
-    |> Enum.join(",")
+    |> Enum.map_join(",", &(&1 |> String.trim() |> String.upcase()))
   end
 
   defp imdb_with_prefix("tt" <> _rest = id), do: id
