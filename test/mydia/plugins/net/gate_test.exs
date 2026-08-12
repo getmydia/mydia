@@ -173,6 +173,49 @@ defmodule Mydia.Plugins.Net.GateTest do
     end
   end
 
+  describe "endpoint_trust: :operator" do
+    setup do
+      {:ok, bypass: Bypass.open()}
+    end
+
+    test "reaches a private address that is on no allowlist", %{bypass: bypass} do
+      Bypass.expect_once(bypass, "GET", "/System/Info", fn conn ->
+        Plug.Conn.resp(conn, 200, ~s({"ok":true}))
+      end)
+
+      assert {:ok, %{status: 200}} =
+               Gate.request("http://192.168.1.50:#{bypass.port}/System/Info",
+                 allowed_hosts: [],
+                 endpoint_trust: :operator,
+                 resolver: fn _ -> {:ok, [{127, 0, 0, 1}]} end
+               )
+    end
+
+    test "still refuses a private address under the default trust", %{bypass: bypass} do
+      assert {:error, %Error{type: :blocked}} =
+               Gate.request("http://192.168.1.50:#{bypass.port}/System/Info",
+                 allowed_hosts: ["192.168.1.50"],
+                 resolver: fn _ -> {:ok, [{127, 0, 0, 1}]} end
+               )
+    end
+
+    test "still refuses an integer-encoded host under operator trust" do
+      assert {:error, %Error{type: :invalid_url}} =
+               Gate.request("http://0x7f000001/System/Info",
+                 allowed_hosts: [],
+                 endpoint_trust: :operator
+               )
+    end
+
+    test "still refuses userinfo under operator trust" do
+      assert {:error, %Error{type: :invalid_url}} =
+               Gate.request("http://user:pass@10.0.0.5/System/Info",
+                 allowed_hosts: [],
+                 endpoint_trust: :operator
+               )
+    end
+  end
+
   describe "audit" do
     test "every outbound call emits a plugin audit event" do
       Gate.request("https://evil.test/",

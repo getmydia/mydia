@@ -68,15 +68,21 @@ defmodule Mydia.Plugins.Net.Gate do
     * `:timeout` — connect/receive timeout in ms (default 5000)
     * `:resolver` — `(host -> {:ok, [ip_tuple]} | {:error, term})`, injected in tests
     * `:allow_private` — test seam (see moduledoc)
+    * `:endpoint_trust` — `:manifest` (default) or `:operator`. `:operator`
+      skips the allowlist and private-range checks for a destination the
+      operator configured on an instance-scoped connection, where the guest
+      supplies only a path. Every other check still applies. This is NOT
+      `:allow_private`, which remains a test-only seam.
   """
   @spec request(String.t(), keyword()) :: {:ok, result()} | {:error, Error.t()}
   def request(url, opts) when is_binary(url) do
     allowed = Keyword.get(opts, :allowed_hosts, [])
+    operator? = Keyword.get(opts, :endpoint_trust, :manifest) == :operator
     started = System.monotonic_time()
 
     outcome =
       with {:ok, uri} <- parse_url(url),
-           :ok <- check_allowlist(uri.host, allowed),
+           :ok <- check_allowlist(uri.host, allowed, operator?),
            {:ok, ip} <- resolve_and_validate(uri.host, opts) do
         perform(uri, ip, opts)
       end
@@ -124,6 +130,12 @@ defmodule Mydia.Plugins.Net.Gate do
 
   # ── 2. Exact-hostname allowlist ───────────────────────────────────────────
 
+  # An operator-configured endpoint is not in any manifest grant and never could
+  # be: the operator typed the address after the manifest was written.
+  defp check_allowlist(_host, _allowed, true), do: :ok
+
+  defp check_allowlist(host, allowed, false), do: check_allowlist(host, allowed)
+
   defp check_allowlist(host, allowed) do
     host_down = String.downcase(host)
     allowed_down = Enum.map(allowed, &String.downcase/1)
@@ -140,7 +152,10 @@ defmodule Mydia.Plugins.Net.Gate do
 
   defp resolve_and_validate(host, opts) do
     resolver = Keyword.get(opts, :resolver, &default_resolve/1)
-    allow_private = Keyword.get(opts, :allow_private, false)
+
+    allow_private =
+      Keyword.get(opts, :allow_private, false) or
+        Keyword.get(opts, :endpoint_trust, :manifest) == :operator
 
     case resolver.(host) do
       {:ok, []} ->
