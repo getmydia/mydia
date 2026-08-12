@@ -108,10 +108,12 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
             ""
 
         # Parse results with template context and base URL
-        with {:ok, results} <-
+        with {:ok, search_path} <- CardigannSearchEngine.select_search_path(parsed, search_opts),
+             {:ok, results} <-
                CardigannResultParser.parse_results(parsed, response, config.name,
                  template_context: template_context,
-                 base_url: base_url
+                 base_url: base_url,
+                 search_path: search_path
                ) do
           # Handle FlareSolverr result (store cookies, update flags)
           handle_flaresolverr_result(definition, flaresolverr_result)

@@ -59,6 +59,7 @@ defmodule Mydia.Indexers.CardigannResultParser do
   alias Mydia.Indexers.CategoryMapping
   alias Mydia.Indexers.Adapter.Error
   alias Mydia.Indexers.CardigannTemplate
+  alias Mydia.Indexers.CardigannSearchEngine
 
   import SweetXml, only: [xpath: 2]
 
@@ -126,7 +127,8 @@ defmodule Mydia.Indexers.CardigannResultParser do
         {:ok, []}
 
       true ->
-        declared_type = get_declared_response_type(definition.search)
+        search_path = resolve_search_path(definition, opts)
+        declared_type = get_declared_response_type(search_path)
 
         case detect_response_type(body, declared_type) do
           :html ->
@@ -1410,14 +1412,43 @@ defmodule Mydia.Indexers.CardigannResultParser do
   end
 
   defp parse_single_xml_row(row, fields, template_context) do
-    field_values =
-      Enum.reduce(fields, %{}, fn {field_name, field_config}, acc ->
-        case extract_xml_field_value(row, field_config, template_context) do
-          {:ok, value} ->
-            Map.put(acc, field_name, value)
+    {selector_fields, text_fields} =
+      Enum.split_with(fields, fn {_name, config} ->
+        if is_map(config) do
+          text_value = Map.get(config, :text) || Map.get(config, "text")
+          is_nil(text_value) || text_value == ""
+        else
+          true
+        end
+      end)
 
-          {:error, _reason} ->
-            acc
+    field_values =
+      Enum.reduce(selector_fields, %{}, fn {field_name, field_config}, acc ->
+        if is_map(field_config) do
+          case extract_xml_field_value(row, field_config, template_context) do
+            {:ok, value} ->
+              Map.put(acc, field_name, value)
+
+            {:error, _reason} ->
+              acc
+          end
+        else
+          acc
+        end
+      end)
+
+    field_values =
+      Enum.reduce(text_fields, field_values, fn {field_name, field_config}, acc ->
+        if is_map(field_config) do
+          case compute_text_field(field_config, acc, template_context) do
+            {:ok, value} ->
+              Map.put(acc, field_name, value)
+
+            {:error, _reason} ->
+              acc
+          end
+        else
+          acc
         end
       end)
 
@@ -1440,25 +1471,20 @@ defmodule Mydia.Indexers.CardigannResultParser do
     selector = Map.get(field_config, :selector) || Map.get(field_config, "selector")
     attribute = Map.get(field_config, :attribute) || Map.get(field_config, "attribute")
     filters = Map.get(field_config, :filters) || Map.get(field_config, "filters", [])
-    text_template = Map.get(field_config, :text) || Map.get(field_config, "text")
 
-    if is_binary(text_template) and text_template != "" do
-      compute_text_field(field_config, %{}, template_context)
-    else
-      case extract_xml_raw_value(row, selector, attribute) do
-        {:ok, raw_value} ->
-          apply_filters(raw_value, filters, template_context)
+    case extract_xml_raw_value(row, selector, attribute) do
+      {:ok, raw_value} ->
+        apply_filters(raw_value, filters, template_context)
 
-        {:error, :not_found} = error ->
-          optional = Map.get(field_config, :optional) || Map.get(field_config, "optional", false)
-          default = Map.get(field_config, :default) || Map.get(field_config, "default")
+      {:error, :not_found} = error ->
+        optional = Map.get(field_config, :optional) || Map.get(field_config, "optional", false)
+        default = Map.get(field_config, :default) || Map.get(field_config, "default")
 
-          if optional && not is_nil(default) do
-            apply_filters(to_string(default), filters, template_context)
-          else
-            error
-          end
-      end
+        if optional && not is_nil(default) do
+          apply_filters(to_string(default), filters, template_context)
+        else
+          error
+        end
     end
   end
 
@@ -1855,13 +1881,45 @@ defmodule Mydia.Indexers.CardigannResultParser do
 
   # Response Type Detection
 
-  defp get_declared_response_type(%{paths: paths}) when is_list(paths) do
-    Enum.find_value(paths, fn path ->
-      get_in(path, [:response, :type]) || get_in(path, ["response", "type"])
-    end)
+  defp resolve_search_path(definition, opts) do
+    case Keyword.get(opts, :search_path) do
+      path when is_map(path) ->
+        path
+
+      _ ->
+        paths = get_in(definition.search, [:paths]) || get_in(definition.search, ["paths"])
+
+        if is_list(paths) and paths != [] do
+          search_opts =
+            opts
+            |> Keyword.take([
+              :categories,
+              :config,
+              :settings,
+              :query,
+              :season,
+              :episode,
+              :imdb_id,
+              :tmdb_id,
+              :base_url
+            ])
+            |> Enum.reject(fn {_key, value} -> is_nil(value) end)
+
+          case CardigannSearchEngine.select_search_path(definition, search_opts) do
+            {:ok, path} -> path
+            {:error, _} -> nil
+          end
+        else
+          nil
+        end
+    end
   end
 
-  defp get_declared_response_type(_), do: nil
+  defp get_declared_response_type(nil), do: nil
+
+  defp get_declared_response_type(path) when is_map(path) do
+    get_in(path, [:response, :type]) || get_in(path, ["response", "type"])
+  end
 
   # A path-declared `response.type` is authoritative. Sniffing only decides when
   # the definition says nothing, because RSS and HTML both start with `<`.

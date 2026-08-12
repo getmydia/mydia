@@ -628,7 +628,14 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     end
   end
 
-  defp select_search_path(%Parsed{search: %{paths: paths}}, opts) do
+  @doc """
+  Selects the search path config for the given search options.
+
+  Matches category-specific paths when categories are provided, otherwise
+  returns the first configured path.
+  """
+  @spec select_search_path(Parsed.t(), search_opts()) :: {:ok, map()} | {:error, Error.t()}
+  def select_search_path(%Parsed{search: %{paths: paths}}, opts) do
     categories = Keyword.get(opts, :categories, [])
 
     # Find the first path that matches the categories, or use the first path
@@ -648,6 +655,10 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       nil -> {:error, Error.search_failed("No search path configured")}
       path -> {:ok, path}
     end
+  end
+
+  def select_search_path(%Parsed{}, _opts) do
+    {:error, Error.search_failed("No search path configured")}
   end
 
   # Render a template string using the CardigannTemplate engine

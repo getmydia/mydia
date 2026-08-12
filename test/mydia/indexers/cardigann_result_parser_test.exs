@@ -1381,5 +1381,113 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
 
       assert result.title == "Debian 12"
     end
+
+    test "uses declared type from the selected search path" do
+      xml = """
+      <?xml version="1.0"?>
+      <torrents>
+        <torrent name="Debian 12" magnet="magnet:?xt=urn:btih:CCC" />
+      </torrents>
+      """
+
+      html_path = %{
+        path: "/html",
+        response: %{type: "html"},
+        categories: [5000]
+      }
+
+      xml_path = %{
+        path: "/xml",
+        response: %{type: "xml"},
+        categories: [2000]
+      }
+
+      definition = %Parsed{
+        id: "xml-path",
+        name: "XML Path",
+        type: "public",
+        links: ["https://example.com"],
+        encoding: "UTF-8",
+        capabilities: %{},
+        settings: [],
+        search: %{
+          paths: [html_path, xml_path],
+          inputs: %{},
+          headers: nil,
+          keywordsfilters: [],
+          rows: %{selector: "torrents/torrent"},
+          fields: %{
+            "title" => %{selector: ".", attribute: "name"},
+            "download" => %{selector: ".", attribute: "magnet"}
+          }
+        }
+      }
+
+      response = %{status: 200, body: xml}
+
+      assert {:ok, []} =
+               CardigannResultParser.parse_results(
+                 definition,
+                 response,
+                 "XML Path",
+                 categories: [5000],
+                 template_context: %{},
+                 base_url: "https://example.com"
+               )
+
+      assert {:ok, [result]} =
+               CardigannResultParser.parse_results(
+                 definition,
+                 response,
+                 "XML Path",
+                 categories: [2000],
+                 template_context: %{},
+                 base_url: "https://example.com"
+               )
+
+      assert result.title == "Debian 12"
+    end
+
+    test "text fields use extracted values as .Result context" do
+      xml = """
+      <?xml version="1.0"?>
+      <torrents>
+        <torrent name="Debian 12" magnet="magnet:?xt=urn:btih:CCC" />
+      </torrents>
+      """
+
+      definition = %Parsed{
+        id: "xml-text",
+        name: "XML Text",
+        type: "public",
+        links: ["https://example.com"],
+        encoding: "UTF-8",
+        capabilities: %{},
+        settings: [],
+        search: %{
+          paths: [%{path: "/x", response: %{type: "xml"}}],
+          inputs: %{},
+          headers: nil,
+          keywordsfilters: [],
+          rows: %{selector: "torrents/torrent"},
+          fields: %{
+            "_name" => %{selector: ".", attribute: "name"},
+            "title" => %{text: "{{ .Result._name }} ISO"},
+            "download" => %{selector: ".", attribute: "magnet"}
+          }
+        }
+      }
+
+      assert {:ok, [result]} =
+               CardigannResultParser.parse_results(
+                 definition,
+                 %{status: 200, body: xml},
+                 "XML Text",
+                 template_context: %{},
+                 base_url: "https://example.com"
+               )
+
+      assert result.title == "Debian 12 ISO"
+    end
   end
 end
