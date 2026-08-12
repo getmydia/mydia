@@ -420,23 +420,110 @@ defmodule Mydia.Plugins.Manifest do
     do: {:error, Error.new(:invalid_manifest, "connection must be an object")}
 
   defp validate_connection(conn, capabilities) do
-    hosts = Map.get(capabilities, "net:http", [])
+    case Map.get(conn, "type") do
+      "oauth_device" -> validate_oauth_device(conn, capabilities)
+      "service_endpoint" -> validate_service_endpoint(conn)
+      other -> {:error, Error.new(:invalid_manifest, connection_type_message(other))}
+    end
+  end
 
-    with :ok <- validate_connection_type(Map.get(conn, "type")),
-         :ok <- validate_connection_url(conn, "code_url", hosts, true),
+  defp connection_type_message(other) do
+    "connection.type must be \"oauth_device\" or \"service_endpoint\", got: #{inspect(other)}"
+  end
+
+  defp validate_oauth_device(conn, capabilities) do
+    hosts = List.wrap(Map.get(capabilities, "net:http"))
+
+    with :ok <- validate_connection_url(conn, "code_url", hosts, true),
          :ok <- validate_connection_url(conn, "poll_url", hosts, true) do
       validate_connection_url(conn, "verification_url", hosts, false)
     end
   end
 
-  defp validate_connection_type("oauth_device"), do: :ok
+  # A service endpoint has no manifest URLs to validate: the operator supplies
+  # the address after the manifest was written. What the manifest does own is how
+  # the operator is asked for it, and how the secret is attached.
+  defp validate_service_endpoint(conn) do
+    with :ok <- validate_endpoint_scope(Map.get(conn, "scope", "instance")),
+         :ok <- validate_endpoint_onboarding(conn),
+         :ok <- validate_endpoint_auth(Map.get(conn, "auth")) do
+      validate_probe_path(Map.get(conn, "probe_path", "/"))
+    end
+  end
 
-  defp validate_connection_type(other),
+  defp validate_endpoint_scope("instance"), do: :ok
+
+  defp validate_endpoint_scope(other),
     do:
       {:error,
        Error.new(
          :invalid_manifest,
-         "connection.type must be \"oauth_device\", got: #{inspect(other)}"
+         "connection.scope must be \"instance\", got: #{inspect(other)}"
+       )}
+
+  defp validate_endpoint_onboarding(conn) do
+    guest? = Map.get(conn, "onboarding") == "guest"
+    fields = Map.get(conn, "fields")
+
+    cond do
+      guest? and is_nil(fields) ->
+        :ok
+
+      not guest? and is_list(fields) and fields != [] ->
+        validate_endpoint_fields(fields)
+
+      guest? and not is_nil(fields) ->
+        {:error,
+         Error.new(
+           :invalid_manifest,
+           "connection declares both \"onboarding\": \"guest\" and fields; pick one"
+         )}
+
+      true ->
+        {:error,
+         Error.new(
+           :invalid_manifest,
+           "connection must declare either a non-empty fields list or \"onboarding\": \"guest\""
+         )}
+    end
+  end
+
+  defp validate_endpoint_fields(fields) do
+    if Enum.all?(fields, fn f ->
+         is_map(f) and is_binary(Map.get(f, "key")) and is_binary(Map.get(f, "label"))
+       end) do
+      :ok
+    else
+      {:error,
+       Error.new(:invalid_manifest, "each connection.fields entry needs a string key and label")}
+    end
+  end
+
+  defp validate_endpoint_auth(%{"kind" => "bearer"}), do: :ok
+
+  defp validate_endpoint_auth(%{"kind" => kind, "key" => key})
+       when kind in ~w(header query) and is_binary(key) and key != "",
+       do: :ok
+
+  defp validate_endpoint_auth(%{"kind" => kind}) when kind in ~w(header query),
+    do: {:error, Error.new(:invalid_manifest, "connection.auth.key is required for kind #{kind}")}
+
+  defp validate_endpoint_auth(other),
+    do:
+      {:error,
+       Error.new(
+         :invalid_manifest,
+         "connection.auth.kind must be header, query, or bearer, got: #{inspect(other)}"
+       )}
+
+  defp validate_probe_path("/" <> _), do: :ok
+
+  defp validate_probe_path(other),
+    do:
+      {:error,
+       Error.new(
+         :invalid_manifest,
+         "connection.probe_path must start with /, got: #{inspect(other)}"
        )}
 
   defp validate_connection_url(conn, key, hosts, required?) do

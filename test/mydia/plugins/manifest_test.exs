@@ -426,6 +426,125 @@ defmodule Mydia.Plugins.ManifestTest do
     end
   end
 
+  describe "service_endpoint connection descriptor" do
+    defp manifest_with(connection) do
+      %{
+        "slug" => "srv",
+        "name" => "Srv",
+        "version" => "1.0.0",
+        "capabilities" => %{
+          "events:subscribe" => ["media_item.added"],
+          "users:connections" => []
+        },
+        "connection" => connection
+      }
+    end
+
+    test "accepts a static field form" do
+      assert {:ok, m} =
+               Manifest.parse(
+                 manifest_with(%{
+                   "type" => "service_endpoint",
+                   "scope" => "instance",
+                   "probe_path" => "/System/Info",
+                   "fields" => [
+                     %{"key" => "url", "label" => "Server URL"},
+                     %{"key" => "token", "label" => "API token", "secret" => true}
+                   ],
+                   "auth" => %{"kind" => "header", "key" => "X-Emby-Token"}
+                 })
+               )
+
+      assert m.connection["type"] == "service_endpoint"
+    end
+
+    test "accepts guest onboarding" do
+      assert {:ok, _} =
+               Manifest.parse(
+                 manifest_with(%{
+                   "type" => "service_endpoint",
+                   "onboarding" => "guest",
+                   "auth" => %{"kind" => "header", "key" => "X-Plex-Token"}
+                 })
+               )
+    end
+
+    test "rejects a descriptor with neither fields nor guest onboarding" do
+      assert {:error, %Error{type: :invalid_manifest}} =
+               Manifest.parse(
+                 manifest_with(%{
+                   "type" => "service_endpoint",
+                   "auth" => %{"kind" => "bearer"}
+                 })
+               )
+    end
+
+    test "rejects a descriptor with both" do
+      assert {:error, %Error{type: :invalid_manifest}} =
+               Manifest.parse(
+                 manifest_with(%{
+                   "type" => "service_endpoint",
+                   "onboarding" => "guest",
+                   "fields" => [%{"key" => "url", "label" => "URL"}],
+                   "auth" => %{"kind" => "bearer"}
+                 })
+               )
+    end
+
+    test "rejects an unknown auth kind" do
+      assert {:error, %Error{type: :invalid_manifest}} =
+               Manifest.parse(
+                 manifest_with(%{
+                   "type" => "service_endpoint",
+                   "onboarding" => "guest",
+                   "auth" => %{"kind" => "magic"}
+                 })
+               )
+    end
+
+    test "requires auth.key unless the kind is bearer" do
+      assert {:error, %Error{type: :invalid_manifest}} =
+               Manifest.parse(
+                 manifest_with(%{
+                   "type" => "service_endpoint",
+                   "onboarding" => "guest",
+                   "auth" => %{"kind" => "header"}
+                 })
+               )
+    end
+
+    test "rejects a probe_path that is not absolute" do
+      assert {:error, %Error{type: :invalid_manifest}} =
+               Manifest.parse(
+                 manifest_with(%{
+                   "type" => "service_endpoint",
+                   "onboarding" => "guest",
+                   "probe_path" => "System/Info",
+                   "auth" => %{"kind" => "bearer"}
+                 })
+               )
+    end
+
+    test "the oauth_device descriptor is unchanged" do
+      assert {:ok, _} =
+               Manifest.parse(%{
+                 "slug" => "s",
+                 "name" => "S",
+                 "version" => "1.0.0",
+                 "capabilities" => %{
+                   "events:subscribe" => ["media_item.added"],
+                   "net:http" => ["api.simkl.com"],
+                   "users:connections" => []
+                 },
+                 "connection" => %{
+                   "type" => "oauth_device",
+                   "code_url" => "https://api.simkl.com/oauth/pin",
+                   "poll_url" => "https://api.simkl.com/oauth/pin/{user_code}"
+                 }
+               })
+    end
+  end
+
   describe "schedule descriptor (U4)" do
     defp with_schedule(schedule, extra_caps \\ %{"schedule:interval" => []}) do
       valid_map(%{
