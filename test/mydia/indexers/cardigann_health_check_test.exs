@@ -188,6 +188,62 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
       assert reloaded.link_status[dead_url]["ok"] == false
       assert reloaded.link_status[live_url]["ok"] == true
     end
+
+    test "preserves active_link when all candidate probes fail" do
+      dead = Bypass.open()
+      Bypass.down(dead)
+      dead_url = "http://localhost:#{dead.port}"
+      prior_active_link = "https://prior-mirror.example.com"
+
+      {:ok, definition} =
+        %CardigannDefinition{}
+        |> CardigannDefinition.changeset(%{
+          indexer_id: "probe-fail-preserve",
+          name: "Probe Fail Preserve",
+          type: "public",
+          active_link: prior_active_link,
+          links: %{"0" => dead_url},
+          capabilities: %{},
+          schema_version: "v11",
+          definition: """
+          id: probe-fail-preserve
+          name: Probe Fail Preserve
+          description: d
+          language: en-US
+          type: public
+          encoding: UTF-8
+          links:
+            - #{dead_url}
+          caps:
+            categories:
+              2000: Movies
+          settings: []
+          search:
+            paths:
+              - path: /search
+            rows:
+              selector: tr
+            fields:
+              title:
+                selector: td.title
+              size:
+                selector: td.size
+              seeders:
+                selector: td.seeders
+              download:
+                selector: a
+                attribute: href
+          """
+        })
+        |> Repo.insert()
+
+      assert {:ok, result} = CardigannHealthCheck.execute_health_check(definition)
+      refute result.success
+
+      reloaded = Repo.get!(CardigannDefinition, definition.id)
+      assert reloaded.active_link == prior_active_link
+      assert reloaded.link_status[dead_url]["ok"] == false
+    end
   end
 
   describe "check_all_enabled/0" do
