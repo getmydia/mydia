@@ -88,6 +88,18 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
          )
          |> load_requests()}
 
+      {:error, {:metadata, reason}} ->
+        Logger.warning("Approval blocked by metadata failure: #{inspect(reason)}")
+
+        {:noreply,
+         socket
+         |> assign(:show_approve_modal, false)
+         |> assign(:selected_request, nil)
+         |> put_flash(
+           :error,
+           "Could not reach the metadata service, so the request was not approved. Please try again."
+         )}
+
       {:error, changeset} ->
         {:noreply,
          socket

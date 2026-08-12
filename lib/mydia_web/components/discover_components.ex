@@ -31,6 +31,7 @@ defmodule MydiaWeb.DiscoverComponents do
   attr :media_type, :atom, required: true
   attr :current_user, :map, required: true
   attr :adding_item_id, :string, default: nil
+  attr :requesting_item_id, :string, default: nil
   attr :libraries, :list, default: []
 
   def trending_card(assigns) do
@@ -90,6 +91,7 @@ defmodule MydiaWeb.DiscoverComponents do
           media_type={@media_type}
           current_user={@current_user}
           adding_item_id={@adding_item_id}
+          requesting_item_id={@requesting_item_id}
           libraries={@libraries}
         />
       </div>
@@ -101,18 +103,29 @@ defmodule MydiaWeb.DiscoverComponents do
   attr :media_type, :atom, required: true
   attr :current_user, :map, required: true
   attr :adding_item_id, :string, default: nil
+  attr :requesting_item_id, :string, default: nil
   attr :libraries, :list, default: []
 
   defp trending_card_action(assigns) do
     ~H"""
     <%= if not @item.in_library do %>
       <%= if @current_user && @current_user.role == "guest" do %>
-        <.link
-          navigate={request_path(@media_type, @item.provider_id)}
+        <button
+          phx-click="request_media"
+          phx-value-tmdb_id={@item.provider_id}
+          phx-value-media_type={@media_type}
+          disabled={requested?(@item) or requesting?(@item, @requesting_item_id)}
           class="btn btn-primary btn-sm mt-2 w-full"
         >
-          <.icon name="hero-paper-airplane" class="w-4 h-4" /> Request
-        </.link>
+          <%= cond do %>
+            <% requesting?(@item, @requesting_item_id) -> %>
+              <span class="loading loading-spinner loading-xs"></span> Requesting...
+            <% requested?(@item) -> %>
+              <.icon name="hero-check" class="w-4 h-4" /> Requested
+            <% true -> %>
+              <.icon name="hero-paper-airplane" class="w-4 h-4" /> Request
+          <% end %>
+        </button>
       <% else %>
         <div class="join w-full mt-2">
           <button
@@ -145,8 +158,10 @@ defmodule MydiaWeb.DiscoverComponents do
     """
   end
 
-  defp request_path(:movie, provider_id), do: ~p"/request/movie?tmdb_id=#{provider_id}"
-  defp request_path(:tv_show, provider_id), do: ~p"/request/series?tmdb_id=#{provider_id}"
+  defp requested?(item), do: Map.get(item, :request_status) != nil
+
+  defp requesting?(item, requesting_item_id),
+    do: requesting_item_id != nil and requesting_item_id == to_string(item.provider_id)
 
   defp library_path(:movie, id), do: "/movies/#{id}"
   defp library_path(:tv_show, id), do: "/tv/#{id}"

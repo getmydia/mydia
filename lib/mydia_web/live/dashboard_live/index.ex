@@ -12,6 +12,9 @@ defmodule MydiaWeb.DashboardLive.Index do
   alias Mydia.MediaRequests
   alias Mydia.Accounts.Authorization
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
+  alias MydiaWeb.Live.Helpers.MediaRequestHelpers
+
+  @unsupported_media_type "That media type is not supported."
 
   @impl true
   def mount(_params, _session, socket) do
@@ -26,6 +29,8 @@ defmodule MydiaWeb.DashboardLive.Index do
         |> assign(:trending_tv, [])
         |> assign(:library_status_map, %{})
         |> assign(:adding_item_id, nil)
+        |> assign(:requesting_item_id, nil)
+        |> assign(:request_status_map, %{})
         |> assign(:selected_item, nil)
         |> assign(:selected_metadata, nil)
         |> assign(:detail_loading, false)
@@ -46,6 +51,8 @@ defmodule MydiaWeb.DashboardLive.Index do
         |> assign(:upcoming_episodes, [])
         |> assign(:library_status_map, %{})
         |> assign(:adding_item_id, nil)
+        |> assign(:requesting_item_id, nil)
+        |> assign(:request_status_map, %{})
         |> assign(:pending_requests_count, 0)
         |> assign(:selected_item, nil)
         |> assign(:selected_metadata, nil)
@@ -100,6 +107,7 @@ defmodule MydiaWeb.DashboardLive.Index do
     |> assign(:active_downloads_count, active_downloads_count)
     |> assign(:total_storage, total_storage)
     |> assign(:library_status_map, library_status_map)
+    |> assign(:request_status_map, MediaRequestHelpers.request_status_map())
     |> assign(:recent_episodes, Enum.take(recent_episodes, 10))
     |> assign(:upcoming_episodes, Enum.take(upcoming_episodes, 10))
     |> assign(:pending_requests_count, pending_requests_count)
@@ -111,43 +119,53 @@ defmodule MydiaWeb.DashboardLive.Index do
         %{"tmdb_id" => provider_id, "media_type" => media_type} = params,
         socket
       ) do
-    media_type_atom = String.to_existing_atom(media_type)
+    case parse_event_media_type(media_type) do
+      {:ok, media_type_atom} ->
+        # Set the adding state
+        socket = assign(socket, :adding_item_id, provider_id)
 
-    # Set the adding state
-    socket = assign(socket, :adding_item_id, provider_id)
+        # Start async task to add media
+        send(
+          self(),
+          {:add_media_to_library, provider_id, media_type_atom, params["library_path_id"]}
+        )
 
-    # Start async task to add media
-    send(self(), {:add_media_to_library, provider_id, media_type_atom, params["library_path_id"]})
+        {:noreply, socket}
 
-    {:noreply, socket}
+      :error ->
+        {:noreply, put_flash(socket, :error, @unsupported_media_type)}
+    end
+  end
+
+  def handle_event(
+        "request_media",
+        %{"tmdb_id" => provider_id, "media_type" => media_type},
+        socket
+      ) do
+    case parse_event_media_type(media_type) do
+      {:ok, media_type_atom} ->
+        socket = assign(socket, :requesting_item_id, provider_id)
+        send(self(), {:request_media, provider_id, media_type_atom})
+        {:noreply, socket}
+
+      :error ->
+        {:noreply, put_flash(socket, :error, @unsupported_media_type)}
+    end
   end
 
   def handle_event("show_details", %{"id" => id, "type" => type}, socket) do
-    # Find the item from trending lists
-    media_type = String.to_existing_atom(type)
+    with {:ok, media_type} <- parse_event_media_type(type),
+         item when not is_nil(item) <- find_trending_item(socket, id, media_type) do
+      # Show modal with loading state and trigger metadata fetch
+      send(self(), {:fetch_detail_metadata, id, media_type})
 
-    item =
-      case media_type do
-        :movie ->
-          Enum.find(socket.assigns.trending_movies, &(&1.provider_id == id))
-
-        :tv_show ->
-          Enum.find(socket.assigns.trending_tv, &(&1.provider_id == id))
-      end
-
-    case item do
-      nil ->
-        {:noreply, socket}
-
-      item ->
-        # Show modal with loading state and trigger metadata fetch
-        send(self(), {:fetch_detail_metadata, id, media_type})
-
-        {:noreply,
-         socket
-         |> assign(:selected_item, item)
-         |> assign(:selected_metadata, nil)
-         |> assign(:detail_loading, true)}
+      {:noreply,
+       socket
+       |> assign(:selected_item, item)
+       |> assign(:selected_metadata, nil)
+       |> assign(:detail_loading, true)}
+    else
+      _ -> {:noreply, socket}
     end
   end
 
@@ -167,6 +185,7 @@ defmodule MydiaWeb.DashboardLive.Index do
           movies
           |> Enum.take(10)
           |> MediaAddHelpers.enrich_with_library_status(socket.assigns.library_status_map)
+          |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)
 
         {:noreply,
          socket
@@ -188,6 +207,7 @@ defmodule MydiaWeb.DashboardLive.Index do
           shows
           |> Enum.take(10)
           |> MediaAddHelpers.enrich_with_library_status(socket.assigns.library_status_map)
+          |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)
 
         {:noreply,
          socket
@@ -242,13 +262,14 @@ defmodule MydiaWeb.DashboardLive.Index do
       {:ok, media_item, updated_map} ->
         # Re-enrich trending items with updated library status
         trending_movies =
-          MediaAddHelpers.enrich_with_library_status(
-            socket.assigns.trending_movies,
-            updated_map
-          )
+          socket.assigns.trending_movies
+          |> MediaAddHelpers.enrich_with_library_status(updated_map)
+          |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)
 
         trending_tv =
-          MediaAddHelpers.enrich_with_library_status(socket.assigns.trending_tv, updated_map)
+          socket.assigns.trending_tv
+          |> MediaAddHelpers.enrich_with_library_status(updated_map)
+          |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)
 
         {:noreply,
          socket
@@ -272,6 +293,18 @@ defmodule MydiaWeb.DashboardLive.Index do
          socket
          |> assign(:adding_item_id, nil)
          |> put_flash(:error, "Failed to fetch metadata: #{inspect(reason)}")}
+    end
+  end
+
+  def handle_info({:request_media, provider_id, media_type}, socket) do
+    trending = socket.assigns.trending_movies ++ socket.assigns.trending_tv
+
+    case Enum.find(trending, &(to_string(&1.provider_id) == provider_id)) do
+      nil ->
+        {:noreply, assign(socket, :requesting_item_id, nil)}
+
+      item ->
+        {:noreply, submit_request(socket, item, media_type)}
     end
   end
 
@@ -311,4 +344,60 @@ defmodule MydiaWeb.DashboardLive.Index do
     tb = bytes / (1024 * 1024 * 1024 * 1024)
     "#{Float.round(tb, 2)} TB"
   end
+
+  defp submit_request(socket, item, media_type) do
+    case MediaRequestHelpers.handle_request_media(
+           item,
+           media_type,
+           socket.assigns.current_user.id
+         ) do
+      {:ok, request, status_updates} ->
+        request_status_map = Map.merge(socket.assigns.request_status_map, status_updates)
+
+        socket
+        |> assign(:requesting_item_id, nil)
+        |> assign(:request_status_map, request_status_map)
+        |> assign(
+          :trending_movies,
+          MediaRequestHelpers.enrich_with_request_status(
+            socket.assigns.trending_movies,
+            request_status_map
+          )
+        )
+        |> assign(
+          :trending_tv,
+          MediaRequestHelpers.enrich_with_request_status(
+            socket.assigns.trending_tv,
+            request_status_map
+          )
+        )
+        |> put_flash(:info, "#{request.title} requested. An admin will review it soon.")
+
+      {:error, reason} ->
+        socket
+        |> assign(:requesting_item_id, nil)
+        |> put_flash(:error, request_error_message(reason))
+    end
+  end
+
+  defp request_error_message(:duplicate_media), do: "That title is already in the library."
+  defp request_error_message(:duplicate_request), do: "Someone has already requested that title."
+
+  defp request_error_message(%Ecto.Changeset{} = changeset),
+    do: "Could not submit the request: #{MediaAddHelpers.format_changeset_errors(changeset)}"
+
+  defp request_error_message(_), do: "Could not submit the request. Please try again."
+
+  # phx-value payloads are client-controlled, and String.to_existing_atom/1
+  # would raise on anything unexpected and take the LiveView down with it.
+  # Match the two known types explicitly instead.
+  defp parse_event_media_type("movie"), do: {:ok, :movie}
+  defp parse_event_media_type("tv_show"), do: {:ok, :tv_show}
+  defp parse_event_media_type(_), do: :error
+
+  defp find_trending_item(socket, id, :movie),
+    do: Enum.find(socket.assigns.trending_movies, &(&1.provider_id == id))
+
+  defp find_trending_item(socket, id, :tv_show),
+    do: Enum.find(socket.assigns.trending_tv, &(&1.provider_id == id))
 end
