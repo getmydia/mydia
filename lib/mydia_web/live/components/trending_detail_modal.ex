@@ -173,12 +173,19 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
             </button>
             <%= if not in_library?(@item) do %>
               <%= if @current_user && @current_user.role == "guest" do %>
-                <.link
-                  navigate={request_path(@item)}
+                <button
+                  phx-click="request_media"
+                  phx-value-tmdb_id={@item.provider_id}
+                  phx-value-media_type={media_type_string(@item)}
+                  disabled={Map.get(@item, :request_status) != nil}
                   class="btn btn-primary"
                 >
-                  <.icon name="hero-paper-airplane" class="w-4 h-4" /> Request
-                </.link>
+                  <%= if Map.get(@item, :request_status) do %>
+                    <.icon name="hero-check" class="w-4 h-4" /> Requested
+                  <% else %>
+                    <.icon name="hero-paper-airplane" class="w-4 h-4" /> Request
+                  <% end %>
+                </button>
               <% else %>
                 <div class="join">
                   <button
@@ -279,14 +286,6 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
       :movie -> "Movie"
       :tv_show -> "Show"
       _ -> "Movie"
-    end
-  end
-
-  defp request_path(item) do
-    case item.media_type do
-      :movie -> "/request/movie?tmdb_id=#{item.provider_id}"
-      :tv_show -> "/request/series?tmdb_id=#{item.provider_id}"
-      _ -> "/request/movie?tmdb_id=#{item.provider_id}"
     end
   end
 
