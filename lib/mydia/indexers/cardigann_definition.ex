@@ -23,6 +23,8 @@ defmodule Mydia.Indexers.CardigannDefinition do
           type: String.t() | nil,
           encoding: String.t() | nil,
           links: map() | nil,
+          active_link: String.t() | nil,
+          link_status: map() | nil,
           capabilities: map() | nil,
           definition: String.t() | nil,
           schema_version: String.t() | nil,
@@ -49,6 +51,8 @@ defmodule Mydia.Indexers.CardigannDefinition do
     field :type, :string
     field :encoding, :string
     field :links, Mydia.Settings.JsonMapType
+    field :active_link, :string
+    field :link_status, Mydia.Settings.JsonMapType
     field :capabilities, Mydia.Settings.JsonMapType
     field :definition, :string
     field :schema_version, :string
@@ -85,6 +89,8 @@ defmodule Mydia.Indexers.CardigannDefinition do
       :type,
       :encoding,
       :links,
+      :active_link,
+      :link_status,
       :capabilities,
       :definition,
       :schema_version,
