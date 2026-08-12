@@ -3,20 +3,18 @@ defmodule Mydia.Indexers.CardigannCompat do
   Analyzes Cardigann indexer definitions for compatibility with our native engine.
 
   Downloads all v11 definitions from the Prowlarr/Indexers GitHub repository,
-  parses each one, scans for filter usage, and produces a compatibility report.
+  scores each one against the declared feature registry, and produces a
+  compatibility report ranked by which unsupported features block the most
+  definitions.
   """
 
   require Logger
 
+  alias Mydia.Indexers.Cardigann.Features
   alias Mydia.Indexers.CardigannParser
-  alias Mydia.Indexers.CardigannFilters
   alias Mydia.Indexers.DefinitionSync
 
-  @doc """
-  Returns the list of currently implemented filter names.
-  Delegates to `CardigannFilters.implemented_filters/0`.
-  """
-  defdelegate implemented_filters, to: CardigannFilters
+  @supported MapSet.new(Features.supported())
 
   @doc """
   Runs a full compatibility analysis against all upstream definitions.
@@ -25,29 +23,34 @@ defmodule Mydia.Indexers.CardigannCompat do
 
   - `:limit` - Maximum number of definitions to analyze (default: all)
   - `:cache_dir` - Directory to cache downloaded definitions (default: nil, no caching)
+  - `:type` - Filter definitions by privacy type (`"public"`, `"private"`,
+    `"semi-private"`, or `"all"`)
 
   ## Returns
 
   `{:ok, report}` where report is a map with:
-  - `:total` - Total definitions found
-  - `:parsed` - Successfully parsed count
-  - `:parse_failed` - Failed to parse count
-  - `:fully_compatible` - Use only implemented filters
-  - `:partially_compatible` - Use some unimplemented filters
-  - `:incompatible` - Cannot parse at all
-  - `:filter_usage` - Map of filter name => usage count (sorted descending)
-  - `:missing_filters` - Filter names we don't implement, with usage counts
+  - `:total` - Total definitions analyzed
+  - `:parsed` - Successfully analyzed count
+  - `:parse_failed` - Failed to analyze count
+  - `:fully_supported` - All required features are implemented
+  - `:partially_supported` - Uses at least one unsupported feature
+  - `:by_feature` - Feature atom to count of definitions that feature blocks
   - `:definitions` - List of per-definition analysis results
   - `:parse_failures` - List of `{filename, reason}` tuples
   """
   def analyze(opts \\ []) do
     limit = Keyword.get(opts, :limit)
     cache_dir = Keyword.get(opts, :cache_dir)
+    type_filter = Keyword.get(opts, :type)
 
     with {:ok, files} <- list_definitions(),
          files <- maybe_limit(files, limit),
          {:ok, yamls} <- fetch_all_definitions(files, cache_dir) do
-      results = analyze_definitions(yamls)
+      results =
+        yamls
+        |> analyze_definitions()
+        |> maybe_filter_by_type(type_filter)
+
       {:ok, build_report(results)}
     end
   end
@@ -59,66 +62,63 @@ defmodule Mydia.Indexers.CardigannCompat do
 
   A map with:
   - `:name` - Definition name or filename
-  - `:status` - `:fully_compatible`, `:partially_compatible`, or `:parse_failed`
-  - `:filters_used` - List of all filter names used
-  - `:missing_filters` - List of filter names not implemented
-  - `:error` - Error reason if parse failed
+  - `:id` - Definition id when present
+  - `:type` - Privacy type when present
+  - `:status` - `:fully_supported`, `:partially_supported`, or `:parse_failed`
+  - `:required_features` - List of feature atoms the definition needs
+  - `:missing_features` - Required features not in the supported registry
+  - `:error` - Error reason if analysis failed
   """
   def analyze_definition(yaml_content, filename \\ "unknown") do
-    case CardigannParser.parse_definition(yaml_content) do
-      {:ok, parsed} ->
-        filters = extract_filters_from_parsed(parsed)
-        filter_names = filters |> Enum.map(& &1.name) |> Enum.uniq()
-        impl = CardigannFilters.implemented_filters()
-        missing = Enum.reject(filter_names, &(&1 in impl))
-
-        status =
-          if missing == [] do
-            :fully_compatible
-          else
-            :partially_compatible
-          end
-
-        %{
-          name: parsed.name || filename,
-          id: parsed.id,
-          status: status,
-          filters_used: filter_names,
-          missing_filters: missing,
-          error: nil
-        }
+    case YamlElixir.read_from_string(yaml_content) do
+      {:ok, yaml_data} ->
+        if definition_analyzable?(yaml_data) do
+          analyze_yaml(yaml_data, yaml_content, filename)
+        else
+          parse_failed_result(
+            filename,
+            {:missing_required_fields, missing_analysis_fields(yaml_data)}
+          )
+        end
 
       {:error, reason} ->
-        %{
-          name: filename,
-          id: nil,
-          status: :parse_failed,
-          filters_used: [],
-          missing_filters: [],
-          error: reason
-        }
+        parse_failed_result(filename, {:yaml_parse_error, reason})
     end
   end
 
   @doc """
-  Extracts all filter references from a parsed Cardigann definition.
-
-  Returns a list of `%{name: filter_name, field: field_name}` maps.
+  Builds an aggregate compatibility report from per-definition analysis results.
   """
-  def extract_filters_from_parsed(%{search: search}) do
-    fields = Map.get(search, :fields, %{})
+  def build_report(results) do
+    total = length(results)
+    parsed = Enum.count(results, &(&1.status != :parse_failed))
+    parse_failed = total - parsed
+    fully_supported = Enum.count(results, &(&1.status == :fully_supported))
+    partially_supported = Enum.count(results, &(&1.status == :partially_supported))
 
-    Enum.flat_map(fields, fn {field_name, field_config} ->
-      filters = get_filters(field_config)
+    by_feature =
+      results
+      |> Enum.filter(&(&1.status == :partially_supported))
+      |> Enum.flat_map(& &1.missing_features)
+      |> Enum.frequencies()
+      |> Enum.sort_by(fn {_feature, count} -> -count end)
 
-      Enum.map(filters, fn filter ->
-        name = Map.get(filter, "name") || Map.get(filter, :name, "unknown")
-        %{name: to_string(name), field: to_string(field_name)}
-      end)
-    end)
+    parse_failures =
+      results
+      |> Enum.filter(&(&1.status == :parse_failed))
+      |> Enum.map(&{&1.name, &1.error})
+
+    %{
+      total: total,
+      parsed: parsed,
+      parse_failed: parse_failed,
+      fully_supported: fully_supported,
+      partially_supported: partially_supported,
+      by_feature: by_feature,
+      definitions: results,
+      parse_failures: parse_failures
+    }
   end
-
-  def extract_filters_from_parsed(_), do: []
 
   @doc """
   Extracts all filter names from raw YAML data (before full parsing).
@@ -133,7 +133,78 @@ defmodule Mydia.Indexers.CardigannCompat do
     end
   end
 
-  # Private implementation
+  defp analyze_yaml(yaml_data, yaml_content, filename) do
+    required = Features.required(yaml_data)
+    missing = MapSet.difference(required, @supported) |> MapSet.to_list()
+
+    status =
+      if missing == [] do
+        :fully_supported
+      else
+        :partially_supported
+      end
+
+    metadata = definition_metadata(yaml_data, yaml_content, filename)
+
+    Map.merge(metadata, %{
+      status: status,
+      required_features: MapSet.to_list(required),
+      missing_features: missing,
+      error: nil
+    })
+  end
+
+  defp definition_metadata(yaml_data, yaml_content, filename) do
+    case CardigannParser.parse_definition(yaml_content) do
+      {:ok, parsed} ->
+        %{name: parsed.name, id: parsed.id, type: parsed.type}
+
+      {:error, _} ->
+        %{
+          name: Map.get(yaml_data, "name", filename),
+          id: Map.get(yaml_data, "id"),
+          type: Map.get(yaml_data, "type")
+        }
+    end
+  end
+
+  defp definition_analyzable?(yaml_data) do
+    missing_analysis_fields(yaml_data) == []
+  end
+
+  defp missing_analysis_fields(yaml_data) do
+    []
+    |> maybe_missing_field(yaml_data, "id")
+    |> maybe_missing_field(yaml_data, "name")
+    |> maybe_missing_search(yaml_data)
+  end
+
+  defp maybe_missing_field(missing, yaml_data, key) do
+    if present?(Map.get(yaml_data, key)), do: missing, else: [key | missing]
+  end
+
+  defp maybe_missing_search(missing, yaml_data) do
+    case Map.get(yaml_data, "search") do
+      search when is_map(search) -> missing
+      _ -> ["search" | missing]
+    end
+  end
+
+  defp present?(nil), do: false
+  defp present?(""), do: false
+  defp present?(_), do: true
+
+  defp parse_failed_result(filename, reason) do
+    %{
+      name: filename,
+      id: nil,
+      type: nil,
+      status: :parse_failed,
+      required_features: [],
+      missing_features: [],
+      error: reason
+    }
+  end
 
   defp list_definitions do
     DefinitionSync.list_definition_files()
@@ -141,6 +212,14 @@ defmodule Mydia.Indexers.CardigannCompat do
 
   defp maybe_limit(files, nil), do: files
   defp maybe_limit(files, limit), do: Enum.take(files, limit)
+
+  defp maybe_filter_by_type(results, nil), do: results
+  defp maybe_filter_by_type(results, "all"), do: results
+
+  defp maybe_filter_by_type(results, type) when is_binary(type),
+    do: Enum.filter(results, &(&1.type == type))
+
+  defp maybe_filter_by_type(results, _), do: results
 
   defp fetch_all_definitions(files, cache_dir) do
     if cache_dir do
@@ -178,7 +257,6 @@ defmodule Mydia.Indexers.CardigannCompat do
     filename = Map.get(file, "name")
     download_url = Map.get(file, "download_url")
 
-    # Check cache first
     cached = if cache_dir, do: read_cache(cache_dir, filename), else: nil
 
     case cached do
@@ -201,7 +279,6 @@ defmodule Mydia.Indexers.CardigannCompat do
     path = Path.join(cache_dir, filename)
 
     if File.exists?(path) do
-      # Check if cache is less than 24 hours old
       case File.stat(path) do
         {:ok, %{mtime: mtime}} ->
           cache_age_seconds =
@@ -229,63 +306,9 @@ defmodule Mydia.Indexers.CardigannCompat do
 
   defp analyze_definitions(yamls) do
     Enum.map(yamls, fn {filename, yaml_content} ->
-      result = analyze_definition(yaml_content, filename)
-
-      # If parsing failed, try to extract filters from raw YAML as a fallback
-      if result.status == :parse_failed do
-        raw_filters = extract_filters_from_yaml(yaml_content)
-        Map.put(result, :raw_filters, raw_filters)
-      else
-        result
-      end
+      analyze_definition(yaml_content, filename)
     end)
   end
-
-  defp build_report(results) do
-    total = length(results)
-    parsed = Enum.count(results, &(&1.status != :parse_failed))
-    parse_failed = total - parsed
-    fully_compatible = Enum.count(results, &(&1.status == :fully_compatible))
-    partially_compatible = Enum.count(results, &(&1.status == :partially_compatible))
-
-    # Count filter usage across all definitions
-    filter_usage =
-      results
-      |> Enum.flat_map(& &1.filters_used)
-      |> Enum.frequencies()
-      |> Enum.sort_by(fn {_name, count} -> -count end)
-
-    # Missing filters with usage counts
-    missing_filters =
-      results
-      |> Enum.flat_map(& &1.missing_filters)
-      |> Enum.frequencies()
-      |> Enum.sort_by(fn {_name, count} -> -count end)
-
-    # Parse failures
-    parse_failures =
-      results
-      |> Enum.filter(&(&1.status == :parse_failed))
-      |> Enum.map(&{&1.name, &1.error})
-
-    %{
-      total: total,
-      parsed: parsed,
-      parse_failed: parse_failed,
-      fully_compatible: fully_compatible,
-      partially_compatible: partially_compatible,
-      filter_usage: filter_usage,
-      missing_filters: missing_filters,
-      definitions: results,
-      parse_failures: parse_failures
-    }
-  end
-
-  defp get_filters(field_config) when is_map(field_config) do
-    Map.get(field_config, :filters, []) ++ Map.get(field_config, "filters", [])
-  end
-
-  defp get_filters(_), do: []
 
   defp extract_filters_from_yaml_data(data) when is_map(data) do
     search = Map.get(data, "search", %{})
