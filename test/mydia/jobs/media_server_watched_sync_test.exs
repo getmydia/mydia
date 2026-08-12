@@ -354,4 +354,52 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
       assert [] = all_enqueued(worker: MediaServerWatchedSync) |> Enum.reject(& &1.args["mode"])
     end
   end
+
+  describe "a config deleted between enqueue and execution" do
+    setup do
+      user = user_fixture()
+
+      {:ok, config} =
+        Settings.create_media_server_config(%{
+          name: "Doomed",
+          type: :plex,
+          url: "http://localhost:32400",
+          token: "tok",
+          enabled: true,
+          connection_settings: %{"sync_watched" => true}
+        })
+
+      {:ok, link} =
+        Settings.upsert_media_server_user_link(%{
+          media_server_config_id: config.id,
+          user_id: user.id,
+          access_token: "user-token",
+          enabled: true
+        })
+
+      # Capture the ids, then delete. The jobs are already queued at this point
+      # in the real failure, so they still carry ids that no longer resolve.
+      ids = %{config_id: config.id, user_id: user.id, link_id: link.id}
+      {:ok, _} = Settings.delete_media_server_config(config)
+
+      ids
+    end
+
+    test "server mode is a no-op rather than three failed retries", ids do
+      assert :ok =
+               perform_job(MediaServerWatchedSync, %{
+                 "mode" => "server",
+                 "config_id" => ids.config_id
+               })
+    end
+
+    test "per-user mode is a no-op rather than three failed retries", ids do
+      assert :ok =
+               perform_job(MediaServerWatchedSync, %{
+                 "config_id" => ids.config_id,
+                 "user_id" => ids.user_id,
+                 "link_id" => ids.link_id
+               })
+    end
+  end
 end

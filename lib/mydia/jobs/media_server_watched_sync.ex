@@ -81,6 +81,11 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
     end
 
     :ok
+  rescue
+    # Deleting a media server while its jobs are still queued is ordinary
+    # operator behaviour, and a deleted config is a terminal state rather than a
+    # failure worth three retries. Mirrors Mydia.Jobs.PlexLinkSeed.
+    Ecto.NoResultsError -> :ok
   end
 
   def perform(%Oban.Job{args: raw_args}) do
@@ -93,6 +98,9 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
       {:ok, config} -> run_sync(config, user_id)
       {:error, reason} -> skip(config, reason, user_id)
     end
+  rescue
+    # Same window, reached more often now that server mode fans these out.
+    Ecto.NoResultsError -> :ok
   end
 
   defp run_sync(config, user_id) do
