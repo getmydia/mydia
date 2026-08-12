@@ -48,6 +48,23 @@ defmodule Mydia.Sync do
     |> Repo.insert()
   end
 
+  @doc """
+  Turns a run that was already started into a recorded skip.
+
+  Some reasons only surface once the sync is underway, and inserting a second
+  row for them would leave an unfinished `:ok` run behind claiming the opposite.
+  """
+  @spec skip_run(Run.t(), atom()) :: {:ok, Run.t()} | {:error, Ecto.Changeset.t()}
+  def skip_run(%Run{} = run, reason) when is_atom(reason) do
+    run
+    |> Run.changeset(%{
+      status: :skipped,
+      skip_reason: Atom.to_string(reason),
+      finished_at: now()
+    })
+    |> Repo.update()
+  end
+
   @spec last_run(String.t(), String.t()) :: Run.t() | nil
   def last_run(provider, instance_id) do
     Run

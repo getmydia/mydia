@@ -4,13 +4,20 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
 
   Two modes:
   - **Individual**: Sync a specific server for a specific user.
-    Args: `%{"config_id" => id, "user_id" => uid, "link_id" => lid}`
+    Args: `%{"config_id" => id, "user_id" => uid, "link_id" => lid}`.
+    `link_id` says which remote account the user is; a job without one is
+    recorded as a skip rather than run against the server owner's account.
   - **Scheduler**: Find all enabled servers with watched sync enabled
     and enqueue individual jobs for each linked user.
     Args: `%{"mode" => "all_enabled"}`
   """
 
   use Oban.Worker, queue: :integrations, max_attempts: 3
+
+  # Provider refusals that no retry can fix: the link is missing the identity
+  # that provider's auth model needs. `Plex` wants a per-user token, `Jellyfin`
+  # wants an account GUID.
+  @misconfigured [:missing_user_token, :missing_remote_user_id]
 
   alias Mydia.MediaServer.Error
   alias Mydia.Repo
@@ -105,6 +112,15 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
             update_last_sync_timestamp(config)
             :ok
 
+          # A missing credential is a permanent misconfiguration, not a bad
+          # minute on the network. Returned as an error it burned all three
+          # Oban attempts and landed the job in `discarded`, where nothing in
+          # the UI could say why. Recorded as a skip it reads like every other
+          # credential problem on the page, and the operator gets told which
+          # mapping to fix.
+          {:error, reason} when reason in @misconfigured ->
+            skip(config, reason, scope.user_id, run)
+
           {:error, reason} ->
             finish_run(run, :error, %{}, describe_error(reason))
             {:error, reason}
@@ -118,11 +134,17 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
     end
   end
 
-  defp skip(config, reason, user_id) do
+  defp skip(config, reason, user_id, run \\ nil) do
     Logger.debug("Skipping watched sync for #{config.name}: #{reason}")
-    record_skip(config, reason, user_id)
+    write_skip(run, config, reason, user_id)
     {:ok, :skipped}
   end
+
+  # A run already open for this attempt becomes the skip. Inserting a second row
+  # instead would leave an unfinished `:ok` run next to it, and the admin page
+  # reads whichever landed last.
+  defp write_skip(nil, config, reason, user_id), do: record_skip(config, reason, user_id)
+  defp write_skip(run, _config, reason, _user_id), do: Mydia.Sync.skip_run(run, reason)
 
   # Returns the run, or nil when the insert failed. `finish_run/4` tolerates nil
   # so a bookkeeping failure degrades observability instead of failing the sync.
@@ -175,6 +197,22 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
     )
   end
 
+  @doc """
+  Enqueues one individual sync for the user a link names.
+
+  Public because the admin page's "Sync now" is the other producer of these
+  jobs, and the three args have to agree: `user_id` and `link_id` are read off
+  the same row here, so no caller can pair a user with someone else's identity
+  by building the map itself.
+  """
+  @spec enqueue(map(), MediaServerUserLink.t()) ::
+          {:ok, Oban.Job.t()} | {:error, Ecto.Changeset.t()}
+  def enqueue(config, %MediaServerUserLink{} = link) do
+    %{"config_id" => config.id, "user_id" => link.user_id, "link_id" => link.id}
+    |> __MODULE__.new()
+    |> safe_insert()
+  end
+
   defp enqueue_linked_users(config) do
     case Settings.list_media_server_user_links(config.id) |> Enum.filter(& &1.enabled) do
       [] ->
@@ -183,12 +221,6 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
       links ->
         Enum.each(links, fn link -> enqueue(config, link) end)
     end
-  end
-
-  defp enqueue(config, link) do
-    %{"config_id" => config.id, "user_id" => link.user_id, "link_id" => link.id}
-    |> __MODULE__.new()
-    |> safe_insert()
   end
 
   # A link must say *which* remote account a user is, or the sync would run
@@ -205,9 +237,13 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
   #
   # The link must also belong to the user being synced, so a stale or malformed
   # job cannot pair user A with user B's identity.
-  defp resolve_user_scope(config, nil, user_id) do
-    {:ok, %{user_id: user_id, remote_user_id: nil, access_token: presence(config.token)}}
-  end
+  #
+  # A job carrying no link at all is refused rather than falling back to the
+  # server's own config.token. That fallback made whoever pressed "Sync now"
+  # read and write the server owner's watch state. Both producers name a link:
+  # `enqueue/2` reads it from the scheduler's own list, and the admin page
+  # resolves the pressing user's link before it enqueues anything.
+  defp resolve_user_scope(_config, nil, _user_id), do: {:error, :link_not_found}
 
   defp resolve_user_scope(_config, link_id, user_id) do
     case Repo.get(MediaServerUserLink, link_id) do

@@ -74,10 +74,13 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
           connection_settings: %{"sync_watched" => true}
         })
 
+      link = link_fixture(server, user)
+
       assert {:ok, :skipped} =
                perform_job(MediaServerWatchedSync, %{
                  "config_id" => server.id,
-                 "user_id" => user.id
+                 "user_id" => user.id,
+                 "link_id" => link.id
                })
     end
 
@@ -94,10 +97,13 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
           connection_settings: %{}
         })
 
+      link = link_fixture(server, user)
+
       assert {:ok, :skipped} =
                perform_job(MediaServerWatchedSync, %{
                  "config_id" => server.id,
-                 "user_id" => user.id
+                 "user_id" => user.id,
+                 "link_id" => link.id
                })
     end
 
@@ -164,10 +170,13 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
           connection_settings: %{"sync_watched" => "true"}
         })
 
+      link = link_fixture(config, user)
+
       assert {:ok, :skipped} =
                perform_job(MediaServerWatchedSync, %{
                  "config_id" => config.id,
-                 "user_id" => user.id
+                 "user_id" => user.id,
+                 "link_id" => link.id
                })
 
       run = Sync.last_run("plex", config.id)
@@ -250,6 +259,34 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
       assert run.skip_reason == "link_identity_missing"
     end
 
+    test "an individual job carrying no link is refused, never scoped to the server's own token" do
+      # "Sync now" used to enqueue exactly this shape. Resolving it to
+      # config.token made whoever pressed the button read and write the server
+      # owner's watch state, the same cross-account merge per-user links exist
+      # to prevent, through a producer no per-task review looked at.
+      user = user_fixture()
+
+      {:ok, config} =
+        Settings.create_media_server_config(%{
+          name: "Storage",
+          type: :plex,
+          url: "http://localhost:32400",
+          token: "owner-token",
+          enabled: true,
+          connection_settings: %{"sync_watched" => "true"}
+        })
+
+      assert {:ok, :skipped} =
+               perform_job(MediaServerWatchedSync, %{
+                 "config_id" => config.id,
+                 "user_id" => user.id
+               })
+
+      run = Sync.last_run("plex", config.id)
+      assert run.status == :skipped
+      assert run.skip_reason == "link_not_found"
+    end
+
     test "a job whose link has a remote user id but no Plex token never runs under the admin token" do
       # A GUID-only link is a valid Jellyfin-shaped identity, but Plex identity
       # IS the per-user token: this scope must be refused by the provider
@@ -294,7 +331,11 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
         })
         |> Repo.insert()
 
-      assert {:error, :missing_user_token} =
+      # Recorded as a skip, not returned as an error. A missing credential is a
+      # misconfiguration no retry can fix: as an error it burned all three Oban
+      # attempts and landed in `discarded`, which is the exact disappearance the
+      # user reported.
+      assert {:ok, :skipped} =
                perform_job(MediaServerWatchedSync, %{
                  "config_id" => config.id,
                  "user_id" => user.id,
@@ -302,8 +343,65 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
                })
 
       run = Sync.last_run("plex", config.id)
-      assert run.status == :error
-      assert run.error =~ "missing_user_token"
+      assert run.status == :skipped
+      assert run.skip_reason == "missing_user_token"
+      assert run.finished_at
+
+      # The run already open for this attempt became the skip. A second row
+      # would leave an unfinished `:ok` run behind saying the opposite, and the
+      # admin page reads whichever landed last.
+      assert Repo.aggregate(Mydia.Sync.Run, :count) == 1
+    end
+
+    test "a Jellyfin link naming no account is recorded as a skip, not a retryable error" do
+      # The Jellyfin half of the same misconfiguration: identity there is the
+      # account GUID rather than a token, and its absence is just as permanent.
+      bypass = Bypass.open()
+      user = user_fixture()
+      media_item = insert(:media_item)
+
+      {:ok, config} =
+        Settings.create_media_server_config(%{
+          name: "Jellyfin",
+          type: :jellyfin,
+          url: "http://localhost:#{bypass.port}",
+          token: "api-key",
+          enabled: true,
+          connection_settings: %{"sync_watched" => "true"}
+        })
+
+      # A token with no GUID is a valid-looking link that Jellyfin cannot use.
+      {:ok, link} =
+        Settings.upsert_media_server_user_link(%{
+          media_server_config_id: config.id,
+          user_id: user.id,
+          remote_user_id: nil,
+          access_token: "leftover-token",
+          enabled: true
+        })
+
+      # Seeded so the run skips its refresh crawl and calls straight into
+      # list_changes/3, the call under test.
+      {:ok, _mapping} =
+        %Mapping{}
+        |> Mapping.changeset(%{
+          provider: "jellyfin",
+          provider_instance_id: config.id,
+          media_item_id: media_item.id,
+          remote_id: "jf1"
+        })
+        |> Repo.insert()
+
+      assert {:ok, :skipped} =
+               perform_job(MediaServerWatchedSync, %{
+                 "config_id" => config.id,
+                 "user_id" => user.id,
+                 "link_id" => link.id
+               })
+
+      run = Sync.last_run("jellyfin", config.id)
+      assert run.status == :skipped
+      assert run.skip_reason == "missing_remote_user_id"
     end
 
     test "a job whose link id does not resolve to any link is refused, distinctly from a missing identity" do
@@ -416,5 +514,24 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
       assert Sync.last_run("plex", config.id).skip_reason == "no_user_mapping"
       assert [] = all_enqueued(worker: MediaServerWatchedSync) |> Enum.reject(& &1.args["mode"])
     end
+  end
+
+  defp link_fixture(config, user, attrs \\ %{}) do
+    {:ok, link} =
+      Settings.upsert_media_server_user_link(
+        Map.merge(
+          %{
+            media_server_config_id: config.id,
+            user_id: user.id,
+            remote_user_id: "remote-#{System.unique_integer([:positive])}",
+            remote_username: user.username,
+            access_token: "user-token",
+            enabled: true
+          },
+          attrs
+        )
+      )
+
+    link
   end
 end

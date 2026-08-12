@@ -300,6 +300,19 @@ defmodule Mydia.Settings.ServiceConfigs do
     Repo.get!(MediaServerUserLink, id)
   end
 
+  def get_media_server_user_link(media_server_config_id, user_id) do
+    Repo.get_by(MediaServerUserLink,
+      media_server_config_id: media_server_config_id,
+      user_id: user_id
+    )
+  end
+
+  def update_media_server_user_link(%MediaServerUserLink{} = link, attrs) do
+    link
+    |> MediaServerUserLink.changeset(attrs)
+    |> Repo.update()
+  end
+
   # One remote account belongs to at most one Mydia user per server. Two links
   # naming the same account would each import that account's watch history under
   # a different person's name, which is the merge this whole mapping exists to
@@ -309,6 +322,11 @@ defmodule Mydia.Settings.ServiceConfigs do
   #
   # A link with no remote_user_id claims nothing (Plex's owner fallback writes
   # one), so it is never refused.
+  #
+  # `:enabled` is deliberately absent from the replace list. Every caller passes
+  # `enabled: true`, so replacing it would make rediscovery silently resume a
+  # mapping the operator paused. A new row still starts enabled; only pausing is
+  # the operator's to undo.
   def upsert_media_server_user_link(attrs) do
     changeset = MediaServerUserLink.changeset(%MediaServerUserLink{}, attrs)
 
@@ -320,7 +338,6 @@ defmodule Mydia.Settings.ServiceConfigs do
              :remote_user_id,
              :remote_username,
              :access_token,
-             :enabled,
              :updated_at
            ]},
         conflict_target: [:media_server_config_id, :user_id]

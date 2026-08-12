@@ -179,6 +179,31 @@ defmodule Mydia.MediaServer.UserLinksTest do
       assert only.remote_user_id == "guid-1"
     end
 
+    test "a move onto a user who already has a mapping is refused, not silently collapsed",
+         %{bypass: bypass, user: user} do
+      # Editing A -> X onto Mydia user B, when B already has B -> Y, deleted A's
+      # row while the upsert overwrote B's. Two mappings became one and the
+      # operator was told the save succeeded.
+      config = jellyfin_config(bypass)
+      other = Mydia.AccountsFixtures.user_fixture(%{username: "sarah"})
+
+      assert {:ok, a_link} =
+               UserLinks.link_user(config, user.id, %RemoteAccount{id: "guid-x", name: "X"})
+
+      assert {:ok, b_link} =
+               UserLinks.link_user(config, other.id, %RemoteAccount{id: "guid-y", name: "Y"})
+
+      assert {:error, :user_already_mapped} =
+               UserLinks.link_user(config, other.id, %RemoteAccount{id: "guid-x", name: "X"},
+                 replaces: a_link
+               )
+
+      links = Settings.list_media_server_user_links(config.id)
+      assert length(links) == 2
+      assert Enum.find(links, &(&1.id == a_link.id)).user_id == user.id
+      assert Enum.find(links, &(&1.id == b_link.id)).remote_user_id == "guid-y"
+    end
+
     test "a failed mint leaves the mapping it would have replaced in place",
          %{bypass: bypass, user: user} do
       config = plex_config(bypass)

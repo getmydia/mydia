@@ -350,26 +350,18 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
     end
   end
 
+  # A manual run is still a per-user run. Enqueueing without a link resolved
+  # the scope to the server's own token, so whoever pressed this imported the
+  # server owner's history into their account and exported into the owner's.
+  # No link means no job, and the operator is told where to make one.
   @impl true
   def handle_event("sync_watched", %{"id" => id}, socket) do
     server = Settings.get_media_server_config!(id)
     user_id = socket.assigns.current_user.id
 
-    changeset =
-      Mydia.Jobs.MediaServerWatchedSync.new(%{
-        "config_id" => server.id,
-        "user_id" => user_id
-      })
-
-    case Oban.insert(changeset) do
-      {:ok, _job} ->
-        {:noreply,
-         socket
-         |> put_flash(:info, "Watched sync started for #{server.name}")
-         |> load_data()}
-
-      {:error, _reason} ->
-        {:noreply, put_flash(socket, :error, "Failed to start watched sync for #{server.name}")}
+    case Settings.get_media_server_user_link(server.id, user_id) do
+      %{enabled: true} = link -> enqueue_watched_sync(socket, server, link)
+      link -> {:noreply, put_flash(socket, :error, unmapped_sync_error(server, link))}
     end
   end
 
@@ -413,6 +405,22 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
     case socket.assigns[:user_link_server] do
       nil -> {:noreply, socket}
       server -> save_user_link(socket, server, params)
+    end
+  end
+
+  @impl true
+  def handle_event("user_link_toggle", %{"id" => id}, socket) do
+    link = Settings.get_media_server_user_link!(id)
+
+    case Settings.update_media_server_user_link(link, %{enabled: not link.enabled}) do
+      {:ok, updated} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, toggle_link_message(updated))
+         |> load_data()}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Could not change that mapping")}
     end
   end
 
@@ -476,6 +484,39 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
   end
 
   ## Private Helpers
+
+  # The worker owns the args shape, so a manual run and a scheduled one cannot
+  # drift apart. Drift is what let this button enqueue a job with no link.
+  defp enqueue_watched_sync(socket, server, link) do
+    case Mydia.Jobs.MediaServerWatchedSync.enqueue(server, link) do
+      {:ok, _job} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Watched sync started for #{server.name}")
+         |> load_data()}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to start watched sync for #{server.name}")}
+    end
+  end
+
+  defp unmapped_sync_error(server, nil) do
+    "Your Mydia account is not mapped to an account on #{server.name}, so there is nothing " <>
+      "to sync. Map it in the User mapping section on this page, then try again."
+  end
+
+  defp unmapped_sync_error(server, _paused_link) do
+    "Your mapping on #{server.name} is paused. Resume it in the User mapping section on " <>
+      "this page, then try again."
+  end
+
+  defp toggle_link_message(%{enabled: true}) do
+    "Mapping resumed. Watched sync will include this user again."
+  end
+
+  defp toggle_link_message(%{enabled: false}) do
+    "Mapping paused. Watched sync will skip this user until it is resumed."
+  end
 
   # A Plex account often carries the operator's own server plus any shared by
   # friends. Picking is only worth asking about when it is a real choice.
@@ -686,6 +727,11 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
   defp save_link_error(server, :account_already_mapped) do
     "That #{server.name} account is already mapped to another Mydia user. " <>
       "Remove that mapping first."
+  end
+
+  defp save_link_error(server, :user_already_mapped) do
+    "That Mydia user already has a mapping on #{server.name}. Saving this one would " <>
+      "replace it and remove the mapping you are editing. Remove the other mapping first."
   end
 
   # Only Plex reaches here with a media server error, from minting the per-user

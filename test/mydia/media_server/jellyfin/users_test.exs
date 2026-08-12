@@ -141,6 +141,38 @@ defmodule Mydia.MediaServer.Jellyfin.UsersTest do
     refute Enum.any?(Settings.list_media_server_user_links(config.id), &(&1.user_id == sarah.id))
   end
 
+  test "leaves a paused mapping paused instead of silently resuming it", %{
+    bypass: bypass,
+    config: config
+  } do
+    # Pausing is the operator saying "stop syncing this person". Discovery
+    # re-links the same account by name on every run, so replacing `enabled` on
+    # conflict quietly turned the pause off again and the badge that showed it
+    # could never be reached.
+    user = user_fixture(%{username: "tonix"})
+
+    {:ok, paused} =
+      Settings.upsert_media_server_user_link(%{
+        media_server_config_id: config.id,
+        user_id: user.id,
+        remote_user_id: "jf1",
+        remote_username: "tonix",
+        enabled: false
+      })
+
+    Bypass.expect_once(bypass, "GET", "/Users", fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, ~s([{"Id":"jf1","Name":"tonix"}]))
+    end)
+
+    assert {:ok, %SeedResult{}} = Users.seed_links(config)
+
+    assert [kept] = Settings.list_media_server_user_links(config.id)
+    assert kept.id == paused.id
+    refute kept.enabled
+  end
+
   test "propagates an error from list_users and creates no links", %{
     bypass: bypass,
     config: config

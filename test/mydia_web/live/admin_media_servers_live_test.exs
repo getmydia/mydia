@@ -1,8 +1,10 @@
 defmodule MydiaWeb.AdminMediaServersLiveTest do
   use MydiaWeb.ConnCase, async: false
+  use Oban.Testing, repo: Mydia.Repo
 
   import Phoenix.LiveViewTest
   alias Mydia.Accounts
+  alias Mydia.Jobs.MediaServerWatchedSync
 
   setup do
     unique_id = System.unique_integer([:positive])
@@ -535,6 +537,57 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
       refute moved.user_id == alex.id
     end
 
+    test "editing a mapping onto a user who already has one is refused, not collapsed",
+         %{conn: conn, bypass: bypass} do
+      # alex -> guid-1 edited onto sarah, who already holds sarah -> guid-2.
+      # This used to delete alex's row and overwrite sarah's, leaving one
+      # mapping where there had been two and saying nothing about it.
+      alex = Mydia.AccountsFixtures.user_fixture(%{username: "alex"})
+      sarah = Mydia.AccountsFixtures.user_fixture(%{username: "sarah"})
+      server = jellyfin_server(bypass)
+
+      stub_jellyfin_users(bypass, [
+        %{"Id" => "guid-1", "Name" => "One"},
+        %{"Id" => "guid-2", "Name" => "Two"}
+      ])
+
+      {:ok, alex_link} =
+        Mydia.Settings.upsert_media_server_user_link(%{
+          media_server_config_id: server.id,
+          user_id: alex.id,
+          remote_user_id: "guid-1",
+          remote_username: "One",
+          enabled: true
+        })
+
+      {:ok, sarah_link} =
+        Mydia.Settings.upsert_media_server_user_link(%{
+          media_server_config_id: server.id,
+          user_id: sarah.id,
+          remote_user_id: "guid-2",
+          remote_username: "Two",
+          enabled: true
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+
+      view
+      |> element("#user-link-#{alex_link.id} button[phx-click='user_link_edit']")
+      |> render_click()
+
+      html =
+        view
+        |> form("#user-link-form", user_link: %{user_id: sarah.id, remote_user_id: "guid-1"})
+        |> render_submit()
+
+      assert html =~ "already has a mapping"
+
+      links = Mydia.Settings.list_media_server_user_links(server.id)
+      assert length(links) == 2
+      assert Enum.find(links, &(&1.id == alex_link.id)).user_id == alex.id
+      assert Enum.find(links, &(&1.id == sarah_link.id)).remote_user_id == "guid-2"
+    end
+
     test "a failed save keeps what was already chosen", %{conn: conn, bypass: bypass} do
       user = Mydia.AccountsFixtures.user_fixture(%{username: "zzz-last"})
       server = jellyfin_server(bypass)
@@ -574,6 +627,131 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
     end
   end
 
+  describe "Sync now" do
+    setup %{conn: conn, token: token} do
+      start_supervised!(Mydia.Indexers.Health)
+
+      conn =
+        conn
+        |> init_test_session(%{})
+        |> put_session(:guardian_default_token, token)
+        |> put_req_header("authorization", "Bearer #{token}")
+
+      %{conn: conn, bypass: Bypass.open()}
+    end
+
+    test "a user with no mapping on that server enqueues nothing",
+         %{conn: conn, bypass: bypass} do
+      # Enqueueing without a link resolved the sync's scope to the server's own
+      # token, so pressing this imported the server owner's watch history into
+      # the pressing user's account and exported back into the owner's.
+      server = sync_enabled_server(bypass)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+
+      html =
+        view
+        |> element(~s{[phx-click="sync_watched"][phx-value-id="#{server.id}"]})
+        |> render_click()
+
+      assert html =~ "not mapped to an account"
+      assert all_enqueued(worker: MediaServerWatchedSync) == []
+    end
+
+    test "a mapped user enqueues exactly one job carrying their own link",
+         %{conn: conn, bypass: bypass, user: user} do
+      server = sync_enabled_server(bypass)
+
+      {:ok, link} =
+        Mydia.Settings.upsert_media_server_user_link(%{
+          media_server_config_id: server.id,
+          user_id: user.id,
+          remote_user_id: "guid-1",
+          remote_username: "Tonix",
+          enabled: true
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+
+      view
+      |> element(~s{[phx-click="sync_watched"][phx-value-id="#{server.id}"]})
+      |> render_click()
+
+      assert [job] = all_enqueued(worker: MediaServerWatchedSync)
+      assert job.args["config_id"] == server.id
+      assert job.args["user_id"] == user.id
+      assert job.args["link_id"] == link.id
+    end
+
+    test "a paused mapping enqueues nothing", %{conn: conn, bypass: bypass, user: user} do
+      server = sync_enabled_server(bypass)
+
+      {:ok, _link} =
+        Mydia.Settings.upsert_media_server_user_link(%{
+          media_server_config_id: server.id,
+          user_id: user.id,
+          remote_user_id: "guid-1",
+          remote_username: "Tonix",
+          enabled: false
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+
+      html =
+        view
+        |> element(~s{[phx-click="sync_watched"][phx-value-id="#{server.id}"]})
+        |> render_click()
+
+      assert html =~ "is paused"
+      assert all_enqueued(worker: MediaServerWatchedSync) == []
+    end
+  end
+
+  describe "Pausing a mapping" do
+    setup %{conn: conn, token: token} do
+      start_supervised!(Mydia.Indexers.Health)
+
+      conn =
+        conn
+        |> init_test_session(%{})
+        |> put_session(:guardian_default_token, token)
+        |> put_req_header("authorization", "Bearer #{token}")
+
+      %{conn: conn, bypass: Bypass.open()}
+    end
+
+    test "the toggle pauses a mapping and resumes it again", %{conn: conn, bypass: bypass} do
+      # Nothing in the UI could set enabled to false, so the Paused badge the
+      # row already rendered was a branch no operator could reach.
+      user = Mydia.AccountsFixtures.user_fixture(%{username: "tonix"})
+      server = jellyfin_server(bypass)
+
+      {:ok, link} =
+        Mydia.Settings.upsert_media_server_user_link(%{
+          media_server_config_id: server.id,
+          user_id: user.id,
+          remote_user_id: "guid-1",
+          remote_username: "Tonix",
+          enabled: true
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+
+      view
+      |> element("#user-link-#{link.id} button[phx-click='user_link_toggle']")
+      |> render_click()
+
+      refute Mydia.Settings.get_media_server_user_link!(link.id).enabled
+      assert has_element?(view, "#user-link-#{link.id}", "Paused")
+
+      view
+      |> element("#user-link-#{link.id} button[phx-click='user_link_toggle']")
+      |> render_click()
+
+      assert Mydia.Settings.get_media_server_user_link!(link.id).enabled
+    end
+  end
+
   describe "Plex wizard auto-connect" do
     setup %{conn: conn, token: token} do
       start_supervised!(Mydia.Indexers.Health)
@@ -605,6 +783,23 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
         token: "api-key",
         enabled: true,
         connection_settings: %{}
+      })
+
+    server
+  end
+
+  # Jellyfin rather than Plex on purpose: the Sync Now button used to be gated
+  # on `type == :plex` while the settings toggle offered watched sync to both,
+  # so a Jellyfin operator could enable it and had no way to run it.
+  defp sync_enabled_server(bypass) do
+    {:ok, server} =
+      Mydia.Settings.create_media_server_config(%{
+        name: "Jellyfin",
+        type: :jellyfin,
+        url: "http://127.0.0.1:#{bypass.port}",
+        token: "api-key",
+        enabled: true,
+        connection_settings: %{"sync_watched" => "true"}
       })
 
     server

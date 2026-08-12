@@ -17,7 +17,7 @@ defmodule Mydia.WatchSync.Providers.Jellyfin do
   stamping it (so a resume position we ourselves pushed via `set_position/4`
   carries no date), and `MarkUnplayed` explicitly nulls it. That means an
   unwatch performed in Jellyfin's own UI produces `watched: false`,
-  `position_seconds: 0`, `at: nil`, which is byte-identical to "this item was
+  `position_seconds: nil`, `at: nil`, which is byte-identical to "this item was
   never played" at this layer. `changed_since?/2` cannot tell the two apart,
   and the engine only holds the *previous synced snapshot*, not enough history
   to disambiguate either. So on an incremental run (`since` set), such an

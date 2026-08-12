@@ -65,6 +65,20 @@ defmodule MydiaWeb.AdminMediaServersLive.UserLinkComponents do
           </div>
 
           <div class="join ml-auto">
+            <%!-- Pausing is how an operator stops syncing one person without
+                  throwing away the account pairing, which on Plex costs a
+                  round trip to plex.tv to rebuild. --%>
+            <button
+              type="button"
+              data-test="user-link-toggle"
+              class="btn btn-xs btn-ghost join-item"
+              phx-click="user_link_toggle"
+              phx-value-id={link.id}
+              title={toggle_title(link)}
+              aria-label={toggle_title(link)}
+            >
+              <.icon name={toggle_icon(link)} class="w-3.5 h-3.5" />
+            </button>
             <button
               type="button"
               class="btn btn-xs btn-ghost join-item"
@@ -172,6 +186,12 @@ defmodule MydiaWeb.AdminMediaServersLive.UserLinkComponents do
   # provider without that model would need its own mapping story, so it opts in
   # here rather than inheriting one that cannot work.
   defp per_user_accounts?(type), do: type in [:plex, :jellyfin]
+
+  defp toggle_title(%{enabled: true}), do: "Pause syncing this mapping"
+  defp toggle_title(_link), do: "Resume syncing this mapping"
+
+  defp toggle_icon(%{enabled: true}), do: "hero-pause"
+  defp toggle_icon(_link), do: "hero-play"
 
   defp user_options(users), do: Enum.map(users, &{&1.username, &1.id})
 

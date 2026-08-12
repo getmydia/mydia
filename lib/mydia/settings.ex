@@ -566,6 +566,23 @@ defmodule Mydia.Settings do
   defdelegate get_media_server_user_link!(id), to: Mydia.Settings.ServiceConfigs
 
   @doc """
+  Gets the link binding one Mydia user to one media server, or nil.
+  """
+  @spec get_media_server_user_link(binary(), binary()) :: MediaServerUserLink.t() | nil
+  defdelegate get_media_server_user_link(media_server_config_id, user_id),
+    to: Mydia.Settings.ServiceConfigs
+
+  @doc """
+  Updates a media server user link.
+
+  This is the pause/resume path: `upsert_media_server_user_link/1` never
+  replaces `:enabled`, so a mapping's enabled state only ever changes here.
+  """
+  @spec update_media_server_user_link(MediaServerUserLink.t(), map()) ::
+          {:ok, MediaServerUserLink.t()} | {:error, Ecto.Changeset.t()}
+  defdelegate update_media_server_user_link(link, attrs), to: Mydia.Settings.ServiceConfigs
+
+  @doc """
   Upserts a media server user link, keyed by (config, user).
 
   Refuses with `{:error, :account_already_mapped}` when a different Mydia user is

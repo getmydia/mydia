@@ -204,7 +204,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                   >
                     <.icon name="hero-arrow-path" class="w-4 h-4" /> Reconnect Plex
                   </button>
-                  <%= if sync_enabled and server.type == :plex do %>
+                  <%= if sync_enabled and server.type in [:plex, :jellyfin] do %>
                     <button
                       class={["btn btn-ghost gap-1", card_action_btn()]}
                       phx-click="sync_watched"
@@ -786,6 +786,14 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   defp humanize_skip("link_not_found"),
     do:
       "The user mapping used for this run was deleted. Add or fix it in the User mapping section below."
+
+  defp humanize_skip("missing_user_token"),
+    do:
+      "A user mapping has no token of its own, so the sync would have read the server owner's account. Re-save it in the User mapping section below to mint one."
+
+  defp humanize_skip("missing_remote_user_id"),
+    do:
+      "A user mapping does not name an account on this server. Fix it in the User mapping section below."
 
   defp humanize_skip(other), do: other
 

@@ -96,7 +96,9 @@ defmodule Mydia.MediaServer.UserLinks do
 
     * `:replaces` - the link the editor is rewriting. When it belongs to a
       different Mydia user, the save is a *move*: that row is deleted in the same
-      transaction, so its account is never claimed twice.
+      transaction, so its account is never claimed twice. A move onto a user who
+      already has a mapping here is refused with `{:error, :user_already_mapped}`
+      rather than collapsing the two rows into one.
     * any option `Plex.Home.token_for/3` accepts.
   """
   @spec link_user(config(), binary(), RemoteAccount.t(), keyword()) ::
@@ -118,13 +120,32 @@ defmodule Mydia.MediaServer.UserLinks do
 
   defp write_link(config, user_id, account, access_token, replaces) do
     Repo.transaction(fn ->
-      with :ok <- release_claim(config, user_id, replaces),
+      with :ok <- ensure_move_target_free(config, user_id, replaces),
+           :ok <- release_claim(config, user_id, replaces),
            {:ok, link} <- upsert(config, user_id, account, access_token) do
         link
       else
         {:error, reason} -> Repo.rollback(reason)
       end
     end)
+  end
+
+  # A move onto a Mydia user who already has a mapping here is refused rather
+  # than performed. It would delete the row being moved and overwrite the row
+  # already there, so two mappings would silently become one and the operator
+  # would be told only that the save succeeded. Refused the same way a claimed
+  # account is, because it is the same kind of collision seen from the other
+  # side: the Mydia user, rather than the remote account, is the taken slot.
+  defp ensure_move_target_free(_config, _user_id, nil), do: :ok
+
+  defp ensure_move_target_free(config, user_id, %MediaServerUserLink{} = replaces) do
+    moving? = replaces.media_server_config_id == config.id and replaces.user_id != user_id
+
+    if moving? and not is_nil(Settings.get_media_server_user_link(config.id, user_id)) do
+      {:error, :user_already_mapped}
+    else
+      :ok
+    end
   end
 
   # Reassigning a mapping to a different Mydia user moves it rather than copying
