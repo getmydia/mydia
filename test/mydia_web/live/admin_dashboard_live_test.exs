@@ -67,4 +67,42 @@ defmodule MydiaWeb.AdminDashboardLiveTest do
 
     assert render(view) =~ "bandwidth-chart"
   end
+
+  test "the chart keeps updating after the window fills", %{conn: conn, token: token} do
+    # Regression: the trim was written as a positive Enum.take/2 over an
+    # oldest-first list, which keeps the OLDEST 360 and discards every new
+    # sample once the window is full. The chart froze after ~30 minutes and no
+    # test caught it, because the others only ever send two samples.
+    {:ok, view, _html} = live(authed(conn, token), ~p"/admin/dashboard")
+
+    base = ~U[2026-08-12 10:00:00Z]
+
+    broadcast = fn i, key ->
+      Phoenix.PubSub.broadcast(
+        Mydia.PubSub,
+        Mydia.Streaming.SessionSampler.topic(),
+        {:sample,
+         %Mydia.Streaming.SessionSampler.Sample{
+           at: DateTime.add(base, i * 5, :second),
+           sessions: %{key => 2.0},
+           unmeasured_count: 0
+         }}
+      )
+    end
+
+    # Overfill the 360-sample window.
+    for i <- 0..364, do: broadcast.(i, "old")
+
+    # A new session appearing after the window is full must reach the chart.
+    for i <- 365..370, do: broadcast.(i, "fresh")
+
+    html = render(view)
+
+    fresh_fill = MydiaWeb.AdminDashboardLive.Components.series_fill("fresh")
+
+    # Guard the guard: series_fill/1 hashes into 6 slots, so if these two keys
+    # ever collide this assertion would pass even with the trim broken.
+    refute fresh_fill == MydiaWeb.AdminDashboardLive.Components.series_fill("old")
+    assert html =~ fresh_fill
+  end
 end

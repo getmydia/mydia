@@ -11,6 +11,9 @@ defmodule MydiaWeb.AdminDashboardLive.Index do
   @history_refresh :timer.seconds(60)
   @history_days 30
 
+  # Matches SessionSampler's ring buffer: 30 minutes at one sample per 5s.
+  @window_size 360
+
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket) do
@@ -33,7 +36,12 @@ defmodule MydiaWeb.AdminDashboardLive.Index do
   def handle_info({:sample, sample}, socket) do
     # Append rather than re-reading the sampler: the broadcast already carries
     # the new point, and a call per tick per mounted dashboard is wasteful.
-    samples = Enum.take(socket.assigns.samples ++ [sample], 360)
+    #
+    # The negative count is load-bearing. `samples` is oldest-first, so a
+    # positive Enum.take/2 would keep the OLDEST 360 and silently drop every new
+    # sample once the window filled, freezing the chart after ~30 minutes on any
+    # long-lived dashboard session.
+    samples = Enum.take(socket.assigns.samples ++ [sample], -@window_size)
 
     {:noreply, assign(socket, :samples, samples)}
   end
