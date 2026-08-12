@@ -23,9 +23,26 @@ wit_bindgen::generate!({
 // Re-export the generated host-capability bindings and shared types so plugin
 // authors reach them through a stable `mydia_plugin_sdk::...` path rather than a
 // generated module name.
-pub use mydia::plugin::host;
-pub use mydia::plugin::types;
+pub mod host {
+    //! Host-implemented capabilities imported by plugin guests.
+    pub use super::mydia::plugin::host::*;
+
+    /// Register or update a connection. Requires `surfaces:write: ["connections"]`.
+    pub fn connection_upsert(
+        draft: &super::types::ConnectionDraft,
+    ) -> Result<super::types::Connection, super::types::HostError> {
+        super::mydia::plugin::host::connection_upsert(draft)
+    }
+}
+
 pub use exports::mydia::plugin::handler::Guest;
+pub use mydia::plugin::types;
+
+// New 1.3.0 connect / connection-draft types (also available on `types::`).
+pub use mydia::plugin::types::{
+    ConnectChoice, ConnectDone, ConnectField, ConnectPending, ConnectPrompt, ConnectRequest,
+    ConnectResponse, ConnectionDraft, ConnectionScope,
+};
 
 /// The `#[mydia_plugin_sdk::plugin]` attribute macro: write a plain typed handler, get a
 /// component. See `mydia-plugin-macros`.

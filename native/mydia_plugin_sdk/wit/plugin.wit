@@ -16,7 +16,12 @@
 // 1.2.0 (additive): `position-seconds` / `duration-seconds` on `playback-progress`,
 // and `set-watch-state` (unwatch + optional resume position). `ensure-watched`
 // remains for 1.1 guests.
-package mydia:plugin@1.2.0;
+// 1.3.0 (additive): instance-scoped connections. `connection-upsert` lets a
+// guest register an operator-configured service endpoint it discovered, and the
+// `on-connect` export drives interactive onboarding as a re-invoked state
+// machine. `connection` gains label + scope so a guest can tell an operator
+// endpoint from a user account.
+package mydia:plugin@1.3.0;
 
 /// Shared types for the plugin contract.
 interface types {
@@ -181,6 +186,13 @@ interface types {
     error,
   }
 
+  /// Whether a connection is an operator-configured service endpoint or a
+  /// per-user account link.
+  enum connection-scope {
+    user,
+    instance,
+  }
+
   /// A per-user connection the host holds on the plugin's behalf. Identity and
   /// status ONLY — never a bearer token (R22). Authenticated requests reference
   /// a connection by `id` through `connection-request`; the host attaches the
@@ -191,6 +203,9 @@ interface types {
     external-user-id: option<string>,
     external-username: option<string>,
     status: connection-status,
+    /// Operator-visible name. Empty for a connection that has none.
+    label: string,
+    scope: connection-scope,
   }
 
   /// Delivered to `on-schedule` (U4). `now` is Unix epoch seconds at invocation;
@@ -211,6 +226,78 @@ interface types {
     network(string),
     internal(string),
   }
+
+  /// A connection a guest asks the host to store. The host holds `secret`; no
+  /// read path ever returns it (R22).
+  record connection-draft {
+    label: string,
+    /// Ordered endpoint candidates. Empty for a user-scoped account link.
+    base-urls: list<string>,
+    secret: string,
+    /// "header" | "query" | "bearer".
+    auth-kind: string,
+    /// Header or query parameter name; absent for "bearer".
+    auth-key: option<string>,
+    /// Absent creates an instance-scoped connection; present creates or updates
+    /// a user-scoped one.
+    user-id: option<string>,
+    external-user-id: option<string>,
+    external-username: option<string>,
+  }
+
+  /// One turn of an onboarding conversation.
+  record connect-request {
+    /// "start" | "poll" | "submit".
+    step: string,
+    /// Opaque guest state, echoed from the previous response ("{}" at start).
+    state-json: string,
+    /// Operator input on "submit" as a JSON object string ("{}" otherwise).
+    input-json: string,
+    /// Operator settings as a JSON object string ("{}" when empty).
+    config-json: string,
+  }
+
+  record connect-pending {
+    message: string,
+    /// A code for the operator to enter at the provider.
+    code: option<string>,
+    verification-url: option<string>,
+    /// How long the host waits before re-invoking with step "poll".
+    interval-ms: u32,
+    state-json: string,
+  }
+
+  record connect-field {
+    key: string,
+    label: string,
+    secret: bool,
+  }
+
+  record connect-choice {
+    value: string,
+    label: string,
+    detail: option<string>,
+  }
+
+  /// Ask the operator for input. Exactly one of `fields` or `choices` is
+  /// non-empty; the host renders a form or a picker accordingly and re-invokes
+  /// with step "submit".
+  record connect-prompt {
+    message: string,
+    fields: list<connect-field>,
+    choices: list<connect-choice>,
+    state-json: string,
+  }
+
+  record connect-done {
+    message: string,
+  }
+
+  variant connect-response {
+    pending(connect-pending),
+    prompt(connect-prompt),
+    done(connect-done),
+  }
 }
 
 /// Host-implemented capabilities the guest may import. Each call is
@@ -219,7 +306,7 @@ interface types {
 interface host {
   use types.{outbound-request, outbound-response, data-request, read-result,
              list-request, list-result, watch-target, ensure-watched-result,
-             watch-state-target, connection, host-error};
+             watch-state-target, connection, connection-draft, host-error};
 
   /// Outbound HTTP request, subject to the plugin's net:http grant and the SSRF
   /// egress gate. Requires net:http.
@@ -276,12 +363,17 @@ interface host {
   /// users:connections. The guest never sees the token.
   connection-request: func(connection-id: string, req: outbound-request)
       -> result<outbound-response, host-error>;
+
+  /// Register or update a connection the guest discovered during onboarding.
+  /// Requires surfaces:write scoped to "connections". The host stores the
+  /// secret; no read path ever returns it (R22).
+  connection-upsert: func(draft: connection-draft) -> result<connection, host-error>;
 }
 
 /// The guest's handlers. The SDK's #[mydia_plugin_sdk::plugin] macro implements this from a
 /// plain author-written function (plus an optional schedule handler).
 interface handler {
-  use types.{event, schedule-tick};
+  use types.{event, schedule-tick, connect-request, connect-response};
 
   /// Handle one lifecycle event. Returns a small JSON result string the host
   /// reads (e.g. {"delivered":true,"status":204}); an Err string is surfaced as
@@ -293,6 +385,11 @@ interface handler {
   /// and the host's schedule call fails soft. Returns a small JSON result
   /// string; an Err string is surfaced as a plugin error.
   on-schedule: func(tick: schedule-tick) -> result<string, string>;
+
+  /// Drive interactive onboarding. Invoked when the operator clicks Connect,
+  /// then re-invoked per the returned interval or on operator submit. Optional
+  /// at runtime: a guest without it uses the manifest's static field form.
+  on-connect: func(req: connect-request) -> result<connect-response, string>;
 }
 
 /// The Mydia plugin world: a guest imports host capabilities and exports the

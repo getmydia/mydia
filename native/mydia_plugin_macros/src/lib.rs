@@ -13,28 +13,59 @@ use syn::{parse_macro_input, Ident, ItemFn, Path, Token};
 /// a second handler `fn(ScheduleTick) -> Result<String, String>`.
 struct PluginArgs {
     on_schedule: Option<Path>,
+    on_connect: Option<Path>,
 }
 
 impl Parse for PluginArgs {
     fn parse(input: ParseStream) -> syn::Result<Self> {
+        let mut on_schedule = None;
+        let mut on_connect = None;
+
         if input.is_empty() {
-            return Ok(PluginArgs { on_schedule: None });
+            return Ok(PluginArgs {
+                on_schedule,
+                on_connect,
+            });
         }
 
-        let key: Ident = input.parse()?;
+        while !input.is_empty() {
+            let key: Ident = input.parse()?;
 
-        if key != "on_schedule" {
-            return Err(syn::Error::new(
-                key.span(),
-                "expected `on_schedule = <handler fn>`",
-            ));
+            if key == "on_schedule" {
+                if on_schedule.is_some() {
+                    return Err(syn::Error::new(
+                        key.span(),
+                        "duplicate `on_schedule` argument",
+                    ));
+                }
+                input.parse::<Token![=]>()?;
+                on_schedule = Some(input.parse()?);
+            } else if key == "on_connect" {
+                if on_connect.is_some() {
+                    return Err(syn::Error::new(
+                        key.span(),
+                        "duplicate `on_connect` argument",
+                    ));
+                }
+                input.parse::<Token![=]>()?;
+                on_connect = Some(input.parse()?);
+            } else {
+                return Err(syn::Error::new(
+                    key.span(),
+                    "expected `on_schedule = <handler fn>` or `on_connect = <handler fn>`",
+                ));
+            }
+
+            if input.is_empty() {
+                break;
+            }
+
+            input.parse::<Token![,]>()?;
         }
-
-        input.parse::<Token![=]>()?;
-        let path: Path = input.parse()?;
 
         Ok(PluginArgs {
-            on_schedule: Some(path),
+            on_schedule,
+            on_connect,
         })
     }
 }
@@ -78,6 +109,15 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
         },
     };
 
+    let on_connect_body = match args.on_connect {
+        Some(path) => quote! { #path(req) },
+        None => quote! {
+            ::core::result::Result::Err(
+                ::std::string::String::from("this plugin has no interactive connect flow"),
+            )
+        },
+    };
+
     let expanded = quote! {
         #func
 
@@ -96,6 +136,16 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
             ) -> ::core::result::Result<::std::string::String, ::std::string::String> {
                 let _ = &tick;
                 #on_schedule_body
+            }
+
+            fn on_connect(
+                req: ::mydia_plugin_sdk::types::ConnectRequest,
+            ) -> ::core::result::Result<
+                ::mydia_plugin_sdk::types::ConnectResponse,
+                ::std::string::String,
+            > {
+                let _ = &req;
+                #on_connect_body
             }
         }
 
