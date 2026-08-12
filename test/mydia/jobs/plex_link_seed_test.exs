@@ -35,14 +35,17 @@ defmodule Mydia.Jobs.PlexLinkSeedTest do
     config = plex_config()
 
     Bypass.stub(bypass, "GET", "/api/v2/home/users", fn conn ->
-      body = Jason.encode!(%{"users" => [%{"id" => 7, "username" => user.username}]})
+      body =
+        Jason.encode!(%{
+          "users" => [%{"id" => 7, "uuid" => "uuid-7", "username" => user.username}]
+        })
 
       conn
       |> Plug.Conn.put_resp_content_type("application/json")
       |> Plug.Conn.resp(200, body)
     end)
 
-    Bypass.stub(bypass, "POST", "/api/v2/home/users/7/switch", fn conn ->
+    Bypass.stub(bypass, "POST", "/api/v2/home/users/uuid-7/switch", fn conn ->
       body = Jason.encode!(%{"authToken" => "per-user-token"})
 
       conn
@@ -73,7 +76,10 @@ defmodule Mydia.Jobs.PlexLinkSeedTest do
     # A Plex Home profile whose username matches no Mydia user. Enqueueing a
     # sync here would loop: server mode with no links enqueues this worker.
     Bypass.stub(bypass, "GET", "/api/v2/home/users", fn conn ->
-      body = Jason.encode!(%{"users" => [%{"id" => 9, "username" => "nobody-here"}]})
+      body =
+        Jason.encode!(%{
+          "users" => [%{"id" => 9, "uuid" => "uuid-9", "username" => "nobody-here"}]
+        })
 
       conn
       |> Plug.Conn.put_resp_content_type("application/json")

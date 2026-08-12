@@ -245,19 +245,22 @@ defmodule Mydia.MediaServer.Plex.Home do
   profile's own token, so seeding links with the admin token would give every
   Mydia user the admin's watch state and reproduce the merge bug in a new place.
 
+  `account_uuid` must be the account's `uuid`. The numeric `id` from the same
+  payload answers 404 here; see `parse_user/1`.
+
   Returns an error rather than falling back to the admin token when a switch
   fails or returns no token: no link is better than a link pointing at someone
   else's history.
   """
   @spec token_for(map(), String.t(), keyword()) :: {:ok, String.t()} | {:error, Error.t()}
-  def token_for(config, plex_account_id, opts \\ []) do
+  def token_for(config, account_uuid, opts \\ []) do
     base = Keyword.get(opts, :plex_tv_base, @plex_api_base)
 
-    (base <> "/home/users/#{plex_account_id}/switch")
+    (base <> "/home/users/#{account_uuid}/switch")
     |> Req.post(headers: headers(config), retry: false)
     |> case do
       {:ok, %{status: status, body: body}} when status in 200..299 ->
-        extract_token(body, plex_account_id)
+        extract_token(body, account_uuid)
 
       {:ok, %{status: s}} when s in [401, 403] ->
         {:error, Error.auth("HTTP #{s}")}
@@ -284,9 +287,22 @@ defmodule Mydia.MediaServer.Plex.Home do
   defp get_users(users) when is_list(users), do: users
   defp get_users(_), do: []
 
+  # `plex_account_id` carries the account's `uuid`, not its numeric `id`.
+  # /home/users returns both, but the v2 switch endpoint keys on the uuid and
+  # answers 404 for the numeric id, so minting a per-user token failed for every
+  # profile on every install and no matched link was ever created:
+  #
+  #   POST /api/v2/home/users/14861644/switch         -> 404
+  #   POST /api/v2/home/users/2ed8d606cadd57f0/switch -> 201 + authToken
+  #
+  # Nothing correlates this value with the media server's own account ids, so
+  # the uuid is the only identifier that has to be right.
+  #
+  # `username` is null for managed and guest profiles; only `title` is set, so
+  # the fallback is what names most of a household.
   defp parse_user(user) do
     %{
-      plex_account_id: to_string(user["id"]),
+      plex_account_id: to_string(user["uuid"]),
       username: user["username"] || user["title"],
       admin?: user["admin"] == true
     }
