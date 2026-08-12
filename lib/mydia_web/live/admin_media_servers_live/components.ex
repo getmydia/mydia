@@ -703,13 +703,17 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
           </div>
 
           <%!-- Modal Actions --%>
-          <div class="modal-action mt-6 pt-4 border-t border-base-300">
-            <button type="button" class="btn btn-ghost" phx-click="close_media_server_modal">
+          <div class="modal-action mt-6 grid grid-cols-2 gap-2 sticky bottom-0 bg-base-100 -mx-6 px-6 -mb-6 pb-6 pt-4 border-t border-base-300 sm:flex sm:gap-2">
+            <button
+              type="button"
+              class={["btn btn-ghost", modal_action_btn()]}
+              phx-click="close_media_server_modal"
+            >
               Cancel
             </button>
             <button
               type="button"
-              class="btn btn-outline btn-secondary gap-2"
+              class={["btn btn-outline btn-secondary gap-2", modal_action_btn()]}
               phx-click="test_media_server_connection"
               disabled={@testing_media_server_connection}
             >
@@ -719,7 +723,13 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                 <.icon name="hero-signal" class="w-4 h-4" /> Test Connection
               <% end %>
             </button>
-            <button type="submit" class="btn btn-primary gap-2">
+            <button
+              type="submit"
+              class={[
+                "btn btn-primary gap-2 col-span-2 order-first sm:order-none",
+                modal_action_btn()
+              ]}
+            >
               <.icon name="hero-check" class="w-4 h-4" />
               {if @media_server_mode == :new, do: "Add Server", else: "Save Changes"}
             </button>
@@ -782,6 +792,10 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   # DaisyUI's own cascade layer and is not reliable here.
   defp card_action_btn,
     do: "flex-1 basis-[45%] min-h-11 sm:flex-none sm:basis-auto sm:btn-sm sm:min-h-8"
+
+  # Modal footer buttons: full-width stacked rows on phones, today's inline
+  # row from `sm` up. Same 44px reasoning as card_action_btn/0.
+  defp modal_action_btn, do: "w-full min-h-11 sm:w-auto sm:min-h-8"
 
   defp run_label(%{status: :skipped, skip_reason: reason}) when is_binary(reason) do
     "Skipped: #{reason}"
