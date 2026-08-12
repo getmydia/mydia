@@ -284,4 +284,18 @@ defmodule Mydia.Subtitles.Provider do
   """
   @callback quota_info(provider()) ::
               {:ok, quota_info()} | {:error, term()}
+
+  @doc """
+  Describes what this provider can answer.
+
+  The chain uses this to skip providers that cannot serve a query at all, rather
+  than spending a request and a full timeout rediscovering it. Gestdown, for
+  example, serves episodes keyed on a TVDB id and nothing else.
+  """
+  @callback capabilities() :: %{
+              media_types: [:movie | :episode],
+              search_keys: [:file_hash | :imdb_id | :tmdb_id | :tvdb_id | :query],
+              requires_credentials: boolean(),
+              quota: :unlimited | :limited
+            }
 end
