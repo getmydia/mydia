@@ -61,6 +61,7 @@ import '../../../graphql/mutations/start_streaming_session.graphql.dart';
 import '../../../graphql/mutations/start_streaming_session_legacy.graphql.dart';
 import '../../../graphql/mutations/end_streaming_session.graphql.dart';
 import '../../../graphql/queries/streaming_candidates.graphql.dart';
+import '../../../graphql/queries/subtitle_content.graphql.dart';
 import '../../../graphql/schema.graphql.dart';
 import '../../../core/p2p/media_proxy.dart';
 import '../../../core/p2p/media_proxy_factory.dart';
@@ -68,6 +69,7 @@ import '../../../core/window/desktop_window.dart';
 import '../../../core/window/player_window_sizer.dart';
 import '../../../core/player/resume_plan.dart';
 import '../settings/settings_controller.dart';
+import 'subtitle_track_builder.dart';
 
 export '../../../core/player/resume_plan.dart'
     show
@@ -1752,7 +1754,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     final subtitleMap = <String, SubtitleTrack>{};
 
     if (_isDirectPlay) {
-      // For direct play, merge embedded subs from media_kit with external subs from GraphQL
+      // In direct play the engine already sees every embedded track in the
+      // container, including image-based ones it can render natively. These
+      // need no fetch: media_kit already has them.
       final embeddedSubs = <app_models.SubtitleTrack>[];
       for (final mkTrack in mkSubtitleTracks) {
         if (mkTrack == SubtitleTrack.auto() || mkTrack == SubtitleTrack.no()) {
@@ -1769,36 +1773,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         subtitleMap[appTrack.id] = mkTrack;
       }
 
-      // Add external subs from GraphQL (non-embedded ones with URLs)
-      final externalSubs =
-          _subtitleTracks.where((s) => !s.embedded && s.url != null).toList();
+      // Sidecars are not in the container, so they still come from the
+      // server. Their body is fetched lazily in
+      // [_resolveMediaKitSubtitleTrack], only if and when the viewer selects
+      // one, rather than built here for every sidecar up front.
+      final externalSubs = _subtitleTracks.where((s) => !s.embedded).toList();
 
-      // Build URI-based media_kit tracks for external subs
-      for (final extSub in externalSubs) {
-        final fullUrl = _buildSubtitleUrl(extSub.url!);
-        final mkTrack = SubtitleTrack.uri(
-          fullUrl,
-          title: extSub.title,
-          language: extSub.language,
-        );
-        subtitleMap[extSub.id] = mkTrack;
-      }
-
-      // Combine: embedded first, then external
       _subtitleTracks = [...embeddedSubs, ...externalSubs];
     } else {
-      // For HLS mode: use only GraphQL subtitle tracks loaded via URI
-      for (final sub in _subtitleTracks) {
-        if (sub.url != null) {
-          final fullUrl = _buildSubtitleUrl(sub.url!);
-          final mkTrack = SubtitleTrack.uri(
-            fullUrl,
-            title: sub.title,
-            language: sub.language,
-          );
-          subtitleMap[sub.id] = mkTrack;
-        }
-      }
+      // Streaming: every selectable track's body arrives as content over
+      // GraphQL, fetched lazily in [_resolveMediaKitSubtitleTrack] once the
+      // viewer actually picks a track. This is the one path that works
+      // identically on LAN, direct, p2p and web, because GraphQL is already
+      // tunnelled in every connection mode.
+      _subtitleTracks = selectableTracks(_subtitleTracks, isDirectPlay: false);
     }
 
     _audioTracks = audioDetection.tracks;
@@ -1845,48 +1833,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       _mediaKitAudioTrackMap = detection.byId;
       _syncSelectedAudioTrack();
     });
-  }
-
-  /// Build a full subtitle URL from a relative URL path.
-  String _buildSubtitleUrl(String relativeUrl) {
-    // If already absolute, return as-is
-    if (relativeUrl.startsWith('http://') ||
-        relativeUrl.startsWith('https://')) {
-      return relativeUrl;
-    }
-
-    // Check if using P2P proxy
-    final connectionState = ref.read(conn.connectionProvider);
-    if (connectionState.isP2PMode) {
-      // Built from the proxy's own base, like every other media URL. The
-      // hand-rolled `http://127.0.0.1:<port>` this replaced was wrong twice
-      // over: it dropped the `/g/<token>` prefix a LAN-exposed proxy demands,
-      // and in the browser there is no loopback server at all, so it produced
-      // `http://127.0.0.1:0/...`, an insecure URL fetched from an HTTPS page,
-      // which the browser blocks as mixed content.
-      //
-      // This still 404s, on both platforms, and that is not something this
-      // call site can fix: there is no subtitle route in the p2p protocol.
-      // `lib/mydia/p2p/server.ex` dispatches on the session id alone (an HLS
-      // session, `direct:`, or `download:`), and the subtitle URL GraphQL
-      // hands us is a plain Phoenix route with a load-bearing `?format=`
-      // query, which both proxies deliberately strip before matching. Adding
-      // one means a new session prefix, a server-side handler, and moving the
-      // format out of the query, none of which belongs at a URL builder.
-      // Until then this is an ordinary 404 with a body saying so, which is
-      // what native has always done here.
-      if (!_mediaProxy.isRunning) return relativeUrl;
-      return '${_mediaProxy.baseUrl}$relativeUrl';
-    }
-
-    // Direct server mode
-    final serverUrl =
-        ref.read(serverUrlProvider).whenOrNull(data: (url) => url);
-    if (serverUrl != null) {
-      return '$serverUrl$relativeUrl';
-    }
-
-    return relativeUrl;
   }
 
   Future<void> _fetchSeasonEpisodes(GraphQLClient client) async {
@@ -2635,30 +2581,88 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       _selectedSubtitleTrack,
     );
 
-    if (selected != _selectedSubtitleTrack && mounted) {
-      setState(() {
-        _selectedSubtitleTrack = selected;
-      });
+    if (selected == _selectedSubtitleTrack || !mounted) return;
 
-      final player = _player;
-      if (player == null) return;
+    setState(() {
+      _selectedSubtitleTrack = selected;
+    });
 
-      if (selected == null) {
-        // "Off" - disable subtitles
-        await player.setSubtitleTrack(SubtitleTrack.no());
-        debugPrint('[PlayerScreen] Subtitles turned off');
-      } else {
-        // Look up the corresponding media_kit track
-        final mkTrack = _mediaKitSubtitleTrackMap[selected.id];
-        if (mkTrack != null) {
-          await player.setSubtitleTrack(mkTrack);
-          debugPrint(
-              '[PlayerScreen] Set subtitle track: ${selected.displayName}');
-        } else {
-          debugPrint(
-              '[PlayerScreen] No media_kit track found for: ${selected.id}');
-        }
+    final player = _player;
+    if (player == null) return;
+
+    if (selected == null) {
+      // "Off" - disable subtitles
+      await player.setSubtitleTrack(SubtitleTrack.no());
+      debugPrint('[PlayerScreen] Subtitles turned off');
+      return;
+    }
+
+    final mkTrack = await _resolveMediaKitSubtitleTrack(selected);
+    if (mkTrack == null) {
+      debugPrint('[PlayerScreen] No media_kit track found for: ${selected.id}');
+      return;
+    }
+
+    await player.setSubtitleTrack(mkTrack);
+    debugPrint('[PlayerScreen] Set subtitle track: ${selected.displayName}');
+  }
+
+  /// Resolve the media_kit track for [track], fetching its body over
+  /// GraphQL the first time a content-backed track is selected.
+  ///
+  /// Embedded tracks the media_kit player already sees in the container (in
+  /// direct play) are already in [_mediaKitSubtitleTrackMap] once
+  /// [_detectTracks] runs, at no fetch cost. Everything else — sidecar
+  /// subtitles, and any track streaming delivers as text — has no body until
+  /// this fetches one. That fetch happens here, at selection time, rather
+  /// than eagerly in [_detectTracks] for every selectable track: most
+  /// tracks a file offers are never selected in a given playback, and
+  /// resolving `content` server-side runs an ffmpeg extraction per track.
+  ///
+  /// The result is cached in [_mediaKitSubtitleTrackMap] so re-selecting the
+  /// same track later in the same session (or the sync in
+  /// [_showSubtitleSelector] finding it already selected) does not refetch.
+  Future<SubtitleTrack?> _resolveMediaKitSubtitleTrack(
+    app_models.SubtitleTrack track,
+  ) async {
+    final cached = _mediaKitSubtitleTrackMap[track.id];
+    if (cached != null) return cached;
+
+    try {
+      final graphqlClient = await ref.read(asyncGraphqlClientProvider.future);
+      final result = await graphqlClient.query(
+        QueryOptions(
+          document: documentNodeQuerySubtitleContent,
+          variables: Variables$Query$SubtitleContent(
+            mediaFileId: widget.fileId,
+            trackId: track.id,
+          ).toJson(),
+        ),
+      );
+
+      if (result.hasException) {
+        debugPrint(
+            '[PlayerScreen] Failed to fetch subtitle content for ${track.id}: ${result.exception}');
+        return null;
       }
+
+      final content = Query$SubtitleContent.fromJson(result.data ?? const {})
+          .subtitleContent;
+      if (content == null || content.isEmpty) {
+        debugPrint('[PlayerScreen] No subtitle content for ${track.id}');
+        return null;
+      }
+
+      final mkTrack = SubtitleTrack.data(
+        content,
+        title: track.title,
+        language: track.language,
+      );
+      _mediaKitSubtitleTrackMap[track.id] = mkTrack;
+      return mkTrack;
+    } catch (e) {
+      debugPrint('[PlayerScreen] Error fetching subtitle content: $e');
+      return null;
     }
   }
 
