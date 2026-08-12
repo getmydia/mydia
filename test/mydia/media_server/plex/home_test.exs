@@ -12,13 +12,19 @@ defmodule Mydia.MediaServer.Plex.HomeTest do
     {:ok, bypass: bypass, config: config, base: "http://127.0.0.1:#{bypass.port}/api/v2"}
   end
 
-  test "lists Plex Home users", %{bypass: bypass, config: config, base: base} do
+  test "identifies a Home user by uuid, not by the numeric id", %{
+    bypass: bypass,
+    config: config,
+    base: base
+  } do
+    # The switch endpoint 404s on the numeric id, so taking `id` here meant no
+    # per-user token could ever be minted and no matched link was ever created.
     Bypass.stub(bypass, "GET", "/api/v2/home/users", fn conn ->
       body =
         Jason.encode!(%{
           "users" => [
-            %{"id" => 1, "username" => "owner", "admin" => true},
-            %{"id" => 2, "username" => "kid", "admin" => false}
+            %{"id" => 1, "uuid" => "uuid-owner", "username" => "owner", "admin" => true},
+            %{"id" => 2, "uuid" => "uuid-kid", "username" => "kid", "admin" => false}
           ]
         })
 
@@ -29,7 +35,38 @@ defmodule Mydia.MediaServer.Plex.HomeTest do
 
     assert {:ok, users} = Home.list_users(config, plex_tv_base: base)
     assert length(users) == 2
-    assert Enum.find(users, &(&1.username == "kid")).plex_account_id == "2"
+    assert Enum.find(users, &(&1.username == "kid")).plex_account_id == "uuid-kid"
+  end
+
+  test "names a managed profile by its title when it has no username", %{
+    bypass: bypass,
+    config: config,
+    base: base
+  } do
+    # Managed and guest profiles come back with a null username; only `title` is
+    # set, and that is most of a household.
+    Bypass.stub(bypass, "GET", "/api/v2/home/users", fn conn ->
+      body =
+        Jason.encode!(%{
+          "users" => [
+            %{
+              "id" => 2,
+              "uuid" => "uuid-camille",
+              "username" => nil,
+              "title" => "Camille",
+              "admin" => false
+            }
+          ]
+        })
+
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, body)
+    end)
+
+    assert {:ok, [user]} = Home.list_users(config, plex_tv_base: base)
+    assert user.username == "Camille"
+    assert user.plex_account_id == "uuid-camille"
   end
 
   test "an account without Plex Home returns an empty list, not an error",
@@ -44,13 +81,13 @@ defmodule Mydia.MediaServer.Plex.HomeTest do
   describe "token_for/3" do
     test "mints a per-user token by switching to the home user",
          %{bypass: bypass, config: config, base: base} do
-      Bypass.expect(bypass, "POST", "/api/v2/home/users/2/switch", fn conn ->
+      Bypass.expect(bypass, "POST", "/api/v2/home/users/uuid-kid/switch", fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.resp(200, Jason.encode!(%{"authToken" => "kid-token"}))
       end)
 
-      assert {:ok, "kid-token"} = Home.token_for(config, "2", plex_tv_base: base)
+      assert {:ok, "kid-token"} = Home.token_for(config, "uuid-kid", plex_tv_base: base)
     end
 
     test "a switch that returns no token is an error, never a silent fallback",
@@ -58,23 +95,23 @@ defmodule Mydia.MediaServer.Plex.HomeTest do
       # Falling back to the admin token here would hand one account's watch
       # state to a different user, which is the merge bug this whole task
       # exists to remove. No link is strictly better than a wrong link.
-      Bypass.stub(bypass, "POST", "/api/v2/home/users/2/switch", fn conn ->
+      Bypass.stub(bypass, "POST", "/api/v2/home/users/uuid-kid/switch", fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.resp(200, Jason.encode!(%{"id" => 2}))
       end)
 
-      assert {:error, _} = Home.token_for(config, "2", plex_tv_base: base)
+      assert {:error, _} = Home.token_for(config, "uuid-kid", plex_tv_base: base)
     end
 
     test "a rejected switch surfaces as an auth error",
          %{bypass: bypass, config: config, base: base} do
-      Bypass.stub(bypass, "POST", "/api/v2/home/users/2/switch", fn conn ->
+      Bypass.stub(bypass, "POST", "/api/v2/home/users/uuid-kid/switch", fn conn ->
         Plug.Conn.resp(conn, 401, "")
       end)
 
       assert {:error, %Mydia.MediaServer.Error{kind: :auth}} =
-               Home.token_for(config, "2", plex_tv_base: base)
+               Home.token_for(config, "uuid-kid", plex_tv_base: base)
     end
   end
 
@@ -86,11 +123,15 @@ defmodule Mydia.MediaServer.Plex.HomeTest do
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.resp(
           200,
-          Jason.encode!(%{"users" => [%{"id" => 2, "username" => "kid", "admin" => false}]})
+          Jason.encode!(%{
+            "users" => [
+              %{"id" => 2, "uuid" => "uuid-kid", "username" => "kid", "admin" => false}
+            ]
+          })
         )
       end)
 
-      Bypass.stub(bypass, "POST", "/api/v2/home/users/2/switch", fn conn ->
+      Bypass.stub(bypass, "POST", "/api/v2/home/users/uuid-kid/switch", fn conn ->
         Plug.Conn.resp(conn, 500, "")
       end)
 
@@ -109,8 +150,8 @@ defmodule Mydia.MediaServer.Plex.HomeTest do
         body =
           Jason.encode!(%{
             "users" => [
-              %{"id" => 1, "username" => "arsfeld", "admin" => true},
-              %{"id" => 2, "username" => "Camille", "admin" => false}
+              %{"id" => 1, "uuid" => "uuid-arsfeld", "username" => "arsfeld", "admin" => true},
+              %{"id" => 2, "uuid" => "uuid-camille", "title" => "Camille", "admin" => false}
             ]
           })
 
@@ -129,7 +170,7 @@ defmodule Mydia.MediaServer.Plex.HomeTest do
       # Auto-matching only fires when Plex and Mydia agree on a name. People
       # name Plex profiles after people and their Mydia account "admin", so on
       # most installs it matches nothing and there was no other way to link.
-      Bypass.expect(bypass, "POST", "/api/v2/home/users/2/switch", fn conn ->
+      Bypass.expect(bypass, "POST", "/api/v2/home/users/uuid-camille/switch", fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.resp(200, Jason.encode!(%{"authToken" => "camille-token"}))
@@ -137,17 +178,18 @@ defmodule Mydia.MediaServer.Plex.HomeTest do
 
       user = Mydia.AccountsFixtures.user_fixture(%{username: "alex"})
 
-      assert {:ok, [link]} = Home.apply_mapping(saved, %{"2" => user.id}, plex_tv_base: base)
+      assert {:ok, [link]} =
+               Home.apply_mapping(saved, %{"uuid-camille" => user.id}, plex_tv_base: base)
 
       assert link.user_id == user.id
-      assert link.plex_account_id == "2"
+      assert link.plex_account_id == "uuid-camille"
       assert link.plex_username == "Camille"
       assert link.access_token == "camille-token"
     end
 
     test "removes the link for a profile the operator unmapped",
          %{bypass: bypass, base: base, saved: saved} do
-      Bypass.stub(bypass, "POST", "/api/v2/home/users/2/switch", fn conn ->
+      Bypass.stub(bypass, "POST", "/api/v2/home/users/uuid-camille/switch", fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.resp(200, Jason.encode!(%{"authToken" => "camille-token"}))
@@ -155,8 +197,10 @@ defmodule Mydia.MediaServer.Plex.HomeTest do
 
       user = Mydia.AccountsFixtures.user_fixture(%{username: "alex"})
 
-      assert {:ok, [_link]} = Home.apply_mapping(saved, %{"2" => user.id}, plex_tv_base: base)
-      assert {:ok, []} = Home.apply_mapping(saved, %{"2" => nil}, plex_tv_base: base)
+      assert {:ok, [_link]} =
+               Home.apply_mapping(saved, %{"uuid-camille" => user.id}, plex_tv_base: base)
+
+      assert {:ok, []} = Home.apply_mapping(saved, %{"uuid-camille" => nil}, plex_tv_base: base)
       assert Mydia.Settings.list_media_server_user_links(saved.id) == []
     end
 
@@ -168,43 +212,48 @@ defmodule Mydia.MediaServer.Plex.HomeTest do
       user = Mydia.AccountsFixtures.user_fixture(%{username: "alex"})
 
       assert {:error, :duplicate_user} =
-               Home.apply_mapping(saved, %{"1" => user.id, "2" => user.id}, plex_tv_base: base)
+               Home.apply_mapping(saved, %{"uuid-arsfeld" => user.id, "uuid-camille" => user.id},
+                 plex_tv_base: base
+               )
     end
 
     test "a failed token mint leaves the existing mapping untouched",
          %{bypass: bypass, base: base, saved: saved} do
       # Deleting before minting meant a mint that failed had already unlinked
       # somebody who was syncing fine, and the operator saw only an error.
-      Bypass.stub(bypass, "POST", "/api/v2/home/users/2/switch", fn conn ->
+      Bypass.stub(bypass, "POST", "/api/v2/home/users/uuid-camille/switch", fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.resp(200, Jason.encode!(%{"authToken" => "camille-token"}))
       end)
 
-      Bypass.stub(bypass, "POST", "/api/v2/home/users/1/switch", fn conn ->
+      Bypass.stub(bypass, "POST", "/api/v2/home/users/uuid-arsfeld/switch", fn conn ->
         Plug.Conn.resp(conn, 500, "")
       end)
 
       camille = Mydia.AccountsFixtures.user_fixture(%{username: "alex"})
       owner = Mydia.AccountsFixtures.user_fixture(%{username: "arsfeld"})
 
-      assert {:ok, [_]} = Home.apply_mapping(saved, %{"2" => camille.id}, plex_tv_base: base)
+      assert {:ok, [_]} =
+               Home.apply_mapping(saved, %{"uuid-camille" => camille.id}, plex_tv_base: base)
 
       # Unmap Camille and map the owner in one save. The owner's mint fails, so
       # the save must not have unlinked Camille on its way there.
       assert {:error, _} =
-               Home.apply_mapping(saved, %{"1" => owner.id, "2" => nil}, plex_tv_base: base)
+               Home.apply_mapping(saved, %{"uuid-arsfeld" => owner.id, "uuid-camille" => nil},
+                 plex_tv_base: base
+               )
 
       assert [link] = Mydia.Settings.list_media_server_user_links(saved.id)
       assert link.user_id == camille.id
-      assert link.plex_account_id == "2"
+      assert link.plex_account_id == "uuid-camille"
     end
 
     test "re-saving an unchanged mapping does not mint a fresh token",
          %{bypass: bypass, base: base, saved: saved} do
       {:ok, switches} = Agent.start_link(fn -> 0 end)
 
-      Bypass.stub(bypass, "POST", "/api/v2/home/users/2/switch", fn conn ->
+      Bypass.stub(bypass, "POST", "/api/v2/home/users/uuid-camille/switch", fn conn ->
         Agent.update(switches, &(&1 + 1))
 
         conn
@@ -214,8 +263,11 @@ defmodule Mydia.MediaServer.Plex.HomeTest do
 
       user = Mydia.AccountsFixtures.user_fixture(%{username: "alex"})
 
-      assert {:ok, [_]} = Home.apply_mapping(saved, %{"2" => user.id}, plex_tv_base: base)
-      assert {:ok, [_]} = Home.apply_mapping(saved, %{"2" => user.id}, plex_tv_base: base)
+      assert {:ok, [_]} =
+               Home.apply_mapping(saved, %{"uuid-camille" => user.id}, plex_tv_base: base)
+
+      assert {:ok, [_]} =
+               Home.apply_mapping(saved, %{"uuid-camille" => user.id}, plex_tv_base: base)
 
       assert Agent.get(switches, & &1) == 1
     end
