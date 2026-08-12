@@ -292,7 +292,7 @@ defmodule Mydia.Settings.ServiceConfigs do
   def list_media_server_user_links(media_server_config_id) do
     MediaServerUserLink
     |> where([l], l.media_server_config_id == ^media_server_config_id)
-    |> order_by([l], asc: l.plex_username)
+    |> order_by([l], asc: l.remote_username)
     |> Repo.all()
   end
 
@@ -303,8 +303,8 @@ defmodule Mydia.Settings.ServiceConfigs do
       on_conflict:
         {:replace,
          [
-           :plex_account_id,
-           :plex_username,
+           :remote_user_id,
+           :remote_username,
            :access_token,
            :enabled,
            :updated_at

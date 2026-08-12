@@ -40,8 +40,8 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
         Settings.upsert_media_server_user_link(%{
           media_server_config_id: server.id,
           user_id: user.id,
-          plex_account_id: "1",
-          plex_username: user.username,
+          remote_user_id: "1",
+          remote_username: user.username,
           access_token: "user-token",
           enabled: true
         })
@@ -187,7 +187,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
         Settings.upsert_media_server_user_link(%{
           media_server_config_id: config.id,
           user_id: user.id,
-          plex_account_id: "2",
+          remote_user_id: "2",
           access_token: nil,
           enabled: true
         })
@@ -224,7 +224,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
         Settings.upsert_media_server_user_link(%{
           media_server_config_id: config.id,
           user_id: owner.id,
-          plex_account_id: "1",
+          remote_user_id: "1",
           access_token: "owner-token",
           enabled: true
         })

@@ -113,8 +113,8 @@ defmodule Mydia.MediaServer.Plex.Home do
               attrs = %{
                 media_server_config_id: config.id,
                 user_id: user.id,
-                plex_account_id: home_user.plex_account_id,
-                plex_username: home_user.username,
+                remote_user_id: home_user.plex_account_id,
+                remote_username: home_user.username,
                 access_token: token,
                 enabled: true
               }

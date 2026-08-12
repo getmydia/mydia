@@ -17,8 +17,8 @@ defmodule Mydia.Settings.MediaServerUserLink do
           id: binary(),
           media_server_config_id: binary(),
           user_id: binary(),
-          plex_account_id: String.t() | nil,
-          plex_username: String.t() | nil,
+          remote_user_id: String.t() | nil,
+          remote_username: String.t() | nil,
           access_token: String.t() | nil,
           enabled: boolean(),
           inserted_at: DateTime.t(),
@@ -26,8 +26,8 @@ defmodule Mydia.Settings.MediaServerUserLink do
         }
 
   schema "media_server_user_links" do
-    field :plex_account_id, :string
-    field :plex_username, :string
+    field :remote_user_id, :string
+    field :remote_username, :string
     field :access_token, :string, redact: true
     field :enabled, :boolean, default: true
 
@@ -42,8 +42,8 @@ defmodule Mydia.Settings.MediaServerUserLink do
     |> cast(attrs, [
       :media_server_config_id,
       :user_id,
-      :plex_account_id,
-      :plex_username,
+      :remote_user_id,
+      :remote_username,
       :access_token,
       :enabled
     ])
