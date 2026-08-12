@@ -1357,6 +1357,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                           phx-value-language={result.language}
                           phx-value-format={result.format}
                           phx-value-subtitle-hash={result.subtitle_hash}
+                          phx-value-provider-id={result[:provider_id]}
                           phx-value-rating={result[:rating]}
                           phx-value-download-count={result[:download_count]}
                           phx-value-hearing-impaired={result[:hearing_impaired] || false}

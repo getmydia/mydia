@@ -141,4 +141,60 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
       assert html =~ "Grabbing…"
     end
   end
+
+  describe "subtitle_search_modal/1" do
+    # Task 9, change (b): a download must be attributable to the provider
+    # that found it, so the search-results table has to carry each result's
+    # provider_id onto the download button. Without this attribute,
+    # SubtitleEvents.download_subtitle_result/2 has nothing to thread through
+    # to Downloader, and every download silently falls back to whatever the
+    # default resolves to regardless of which provider the search actually
+    # used.
+    defp subtitle_result(overrides \\ %{}) do
+      Map.merge(
+        %{
+          file_id: 12_345,
+          language: "en",
+          format: "srt",
+          subtitle_hash: "abc123",
+          rating: 8.0,
+          download_count: 10,
+          hearing_impaired: false,
+          score: 180,
+          provider_id: "relay-default",
+          provider_name: "Mydia Relay"
+        },
+        overrides
+      )
+    end
+
+    test "wires each result's provider id onto the download button" do
+      html =
+        render_component(&Modals.subtitle_search_modal/1,
+          media_file: %{id: "mf-1"},
+          searching: false,
+          subtitle_search_results: [subtitle_result()],
+          downloading_subtitle: false
+        )
+
+      assert html =~ ~s(phx-click="download_subtitle_result")
+      assert html =~ ~s(phx-value-file-id="12345")
+      assert html =~ ~s(phx-value-provider-id="relay-default")
+    end
+
+    test "a result from a user's own provider carries that provider's id, not the relay's" do
+      html =
+        render_component(&Modals.subtitle_search_modal/1,
+          media_file: %{id: "mf-1"},
+          searching: false,
+          subtitle_search_results: [
+            subtitle_result(%{provider_id: "11111111-1111-1111-1111-111111111111"})
+          ],
+          downloading_subtitle: false
+        )
+
+      assert html =~ ~s(phx-value-provider-id="11111111-1111-1111-1111-111111111111")
+      refute html =~ ~s(phx-value-provider-id="relay-default")
+    end
+  end
 end

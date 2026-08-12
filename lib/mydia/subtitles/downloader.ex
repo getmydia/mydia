@@ -3,11 +3,17 @@ defmodule Mydia.Subtitles.Downloader do
   Downloads and stores subtitle files.
 
   Handles the complete subtitle download workflow:
-  1. Fetches download URL from configured provider
-  2. Downloads subtitle file content
-  3. Validates subtitle format
-  4. Stores file with proper naming convention
-  5. Persists metadata to database
+  1. Resolves the requested provider (or the zero-config relay default) and
+     downloads the subtitle's content through it via `Mydia.Subtitles.ProviderChain`
+  2. Validates subtitle format
+  3. Stores file with proper naming convention
+  4. Persists metadata to database
+
+  Routing download through the resolved provider (rather than always the
+  relay) matters because download, not search, is what consumes an
+  OpenSubtitles account's quota: a user's own provider is only worth adding
+  if downloads actually use it instead of continuing to draw on the shared
+  relay account.
 
   ## Storage Convention
 
@@ -28,11 +34,8 @@ defmodule Mydia.Subtitles.Downloader do
   require Logger
   alias Mydia.Repo
   alias Mydia.Subtitles.Subtitle
-  alias Mydia.Subtitles.Client.MetadataRelay
+  alias Mydia.Subtitles.{ProviderChain, Providers}
   alias Mydia.Library.MediaFile
-
-  @download_timeout 30_000
-  @temp_dir System.tmp_dir!()
 
   @doc """
   Downloads a subtitle file and stores it locally.
@@ -49,8 +52,15 @@ defmodule Mydia.Subtitles.Downloader do
     - `:hearing_impaired` - Boolean indicating SDH/CC subtitles
   - `media_file_id` - Binary ID of the media file
   - `opts` - Keyword list of options:
-    - `:provider` - Provider type (default: "relay")
-    - `:timeout` - Download timeout in milliseconds (default: 30_000)
+    - `:provider_id` - The id of the provider to download through. This is
+      either a `Mydia.Subtitles.SubtitleProvider` UUID (a user's own
+      provider, looked up via `Mydia.Subtitles.Providers.get_provider/1`) or
+      `Mydia.Subtitles.ProviderChain.default_provider/0`'s synthetic
+      `"relay-default"` id. Omitted (or `nil`), it resolves to that same
+      zero-config relay default, which is the common path. A `provider_id`
+      that names neither -- a deleted provider, a typo, anything unresolved
+      -- fails the download outright rather than silently falling back to
+      the relay, which would recreate the bug this exists to fix.
 
   ## Returns
 
@@ -74,16 +84,13 @@ defmodule Mydia.Subtitles.Downloader do
   """
   @spec download(map(), binary(), keyword()) :: {:ok, Subtitle.t()} | {:error, term()}
   def download(subtitle_info, media_file_id, opts \\ []) do
-    provider = Keyword.get(opts, :provider, "relay")
-    timeout = Keyword.get(opts, :timeout, @download_timeout)
-
     with {:ok, media_file} <- fetch_media_file(media_file_id),
          :ok <- validate_subtitle_info(subtitle_info),
-         {:ok, _existing} <- check_duplicate(subtitle_info.subtitle_hash),
-         {:ok, download_url} <- fetch_download_url(subtitle_info.file_id, provider, timeout),
-         {:ok, temp_path} <- download_file(download_url, timeout),
-         :ok <- validate_format(temp_path, subtitle_info.format),
-         {:ok, final_path} <- store_subtitle_file(temp_path, media_file, subtitle_info),
+         {:ok, _existing} <- check_duplicate(media_file_id, subtitle_info.subtitle_hash),
+         {:ok, provider} <- resolve_provider(opts),
+         {:ok, content} <- fetch_subtitle_content(provider, subtitle_info),
+         :ok <- validate_format(content, subtitle_info.format),
+         {:ok, final_path} <- store_subtitle_file(content, media_file, subtitle_info),
          {:ok, subtitle} <- persist_subtitle(media_file, subtitle_info, final_path, provider) do
       Logger.info("Subtitle downloaded successfully",
         media_file_id: media_file_id,
@@ -144,82 +151,70 @@ defmodule Mydia.Subtitles.Downloader do
     end
   end
 
-  # Check if subtitle already exists in database
-  defp check_duplicate(subtitle_hash) do
-    case Repo.get_by(Subtitle, subtitle_hash: subtitle_hash) do
+  # Check if subtitle already exists in database. Scoped to the media file on
+  # purpose: two rips of the same movie (a 1080p and a 4K, say) can
+  # legitimately share a subtitle_hash when a provider matches them to the
+  # same underlying subtitle file, and a global lookup would hand back the
+  # other file's row -- producing a track the delivery layer rightly refuses
+  # to serve as :unauthorized.
+  defp check_duplicate(media_file_id, subtitle_hash) do
+    case Repo.get_by(Subtitle, media_file_id: media_file_id, subtitle_hash: subtitle_hash) do
       nil -> {:ok, nil}
       subtitle -> {:duplicate, subtitle}
     end
   end
 
-  # Fetch download URL from configured provider
-  defp fetch_download_url(file_id, "relay", timeout) do
-    case MetadataRelay.get_download_url(file_id, timeout: timeout) do
-      {:ok, %{"download_url" => url}} when is_binary(url) ->
-        {:ok, url}
+  # Resolves opts[:provider_id] to a provider map/struct. Omitted or nil
+  # resolves to ProviderChain.default_provider/0 (the zero-config relay,
+  # keyed by the synthetic, non-UUID "relay-default" id) -- the common path,
+  # since most installs never configure a provider of their own. Anything
+  # else must resolve to a real Mydia.Subtitles.SubtitleProvider row via
+  # Providers.get_provider/1; a deleted provider, or an id that is not even a
+  # valid identifier, fails the download outright rather than silently
+  # falling back to the relay (which would recreate the bug: a user's own
+  # account never getting used for the part that spends quota).
+  defp resolve_provider(opts) do
+    default = ProviderChain.default_provider()
 
-      {:ok, response} ->
-        Logger.error("Invalid download URL response", response: inspect(response))
-        {:error, :invalid_download_url_response}
-
-      {:error, reason} ->
-        {:error, {:download_url_fetch_failed, reason}}
+    case Keyword.get(opts, :provider_id) do
+      nil -> {:ok, default}
+      id when id == default.id -> {:ok, default}
+      id -> lookup_provider(id)
     end
   end
 
-  defp fetch_download_url(_file_id, provider, _timeout) do
-    {:error, {:unsupported_provider, provider}}
+  defp lookup_provider(id) do
+    case Providers.get_provider(id) do
+      nil -> {:error, {:unknown_provider, id}}
+      provider -> {:ok, provider}
+    end
+  rescue
+    # get_provider/1 casts `id` against the :binary_id primary key; a
+    # provider_id that is not even a well-formed UUID (never a real DB row
+    # to begin with) raises rather than returning nil. Treat it the same as
+    # "not found" instead of letting the exception escape as a 500.
+    Ecto.Query.CastError -> {:error, {:unknown_provider, id}}
   end
 
-  # Download subtitle file to temporary location
-  defp download_file(url, timeout) do
-    temp_path = Path.join(@temp_dir, "subtitle_#{:erlang.unique_integer([:positive])}.tmp")
-
-    Logger.debug("Downloading subtitle file", url: url, temp_path: temp_path)
-
-    try do
-      case Req.get(url, receive_timeout: timeout, into: File.stream!(temp_path)) do
-        {:ok, %{status: 200}} ->
-          {:ok, temp_path}
-
-        {:ok, %{status: status}} ->
-          File.rm(temp_path)
-          Logger.warning("Subtitle download failed", status: status, url: url)
-          {:error, {:http_error, status}}
-
-        {:error, %{reason: :timeout}} ->
-          File.rm(temp_path)
-          {:error, :download_timeout}
-
-        {:error, reason} ->
-          File.rm(temp_path)
-          {:error, {:download_failed, reason}}
-      end
-    rescue
-      error ->
-        File.rm(temp_path)
-
-        Logger.error("Subtitle download exception",
-          error: Exception.message(error),
-          stacktrace: __STACKTRACE__
-        )
-
-        {:error, {:exception, error}}
+  # Downloads the subtitle's content through the resolved provider's
+  # adapter. The Provider behaviour's download/2 callback returns the file's
+  # raw content directly (verified against two prior reviews), so this is a
+  # single call -- no separate "fetch a URL, then fetch the URL" hop and no
+  # temp file to manage on this side.
+  defp fetch_subtitle_content(provider, subtitle_info) do
+    case ProviderChain.adapter_for(provider).download(provider, subtitle_info) do
+      {:ok, content} when is_binary(content) -> {:ok, content}
+      {:ok, other} -> {:error, {:invalid_download_response, other}}
+      {:error, reason} -> {:error, reason}
     end
   end
 
-  # Validate subtitle file format by checking content
-  defp validate_format(file_path, expected_format) do
-    case File.read(file_path) do
-      {:ok, content} ->
-        if valid_subtitle_content?(content, expected_format) do
-          :ok
-        else
-          {:error, {:format_validation_failed, expected_format}}
-        end
-
-      {:error, reason} ->
-        {:error, {:file_read_error, reason}}
+  # Validate subtitle content matches the expected format
+  defp validate_format(content, expected_format) do
+    if valid_subtitle_content?(content, expected_format) do
+      :ok
+    else
+      {:error, {:format_validation_failed, expected_format}}
     end
   end
 
@@ -241,12 +236,14 @@ defmodule Mydia.Subtitles.Downloader do
 
   defp valid_subtitle_content?(_content, _format), do: false
 
-  # Move subtitle file to permanent location with proper naming
-  defp store_subtitle_file(temp_path, media_file, subtitle_info) do
+  # Write subtitle content to its permanent location with proper naming.
+  # Writes the content directly to its final destination -- with the
+  # provider handing back content rather than a URL, there is no temp file
+  # to rename/copy into place across devices, so this is just one write.
+  defp store_subtitle_file(content, media_file, subtitle_info) do
     absolute_path = MediaFile.absolute_path(media_file)
 
     if is_nil(absolute_path) do
-      File.rm(temp_path)
       {:error, :media_file_path_not_resolved}
     else
       # Extract base filename without extension
@@ -260,32 +257,13 @@ defmodule Mydia.Subtitles.Downloader do
       # Ensure directory exists
       File.mkdir_p!(media_dir)
 
-      # Move file to final location
-      case File.rename(temp_path, final_path) do
-        :ok ->
-          {:ok, final_path}
-
-        {:error, :exdev} ->
-          # Cross-device move, use copy + delete
-          case File.cp(temp_path, final_path) do
-            :ok ->
-              File.rm(temp_path)
-              {:ok, final_path}
-
-            {:error, reason} ->
-              File.rm(temp_path)
-              {:error, {:file_store_failed, reason}}
-          end
-
-        {:error, reason} ->
-          File.rm(temp_path)
-          {:error, {:file_store_failed, reason}}
+      case File.write(final_path, content) do
+        :ok -> {:ok, final_path}
+        {:error, reason} -> {:error, {:file_store_failed, reason}}
       end
     end
   rescue
     error ->
-      File.rm(temp_path)
-
       Logger.error("Subtitle storage exception",
         error: Exception.message(error),
         stacktrace: __STACKTRACE__
@@ -294,12 +272,18 @@ defmodule Mydia.Subtitles.Downloader do
       {:error, {:exception, error}}
   end
 
-  # Persist subtitle metadata to database
+  # Persist subtitle metadata to database. `provider` is the resolved
+  # provider map/struct (ProviderChain.default_provider/0's synthetic relay
+  # map, or a real Mydia.Subtitles.SubtitleProvider row); its id is what gets
+  # recorded, rather than a bare type string like "opensubtitles", so a user
+  # with several accounts of the same type can tell which one served a given
+  # file (useful groundwork for attributing quota usage later, even though
+  # actually refreshing quota after a download stays out of scope here).
   defp persist_subtitle(media_file, subtitle_info, file_path, provider) do
     attrs = %{
       media_file_id: media_file.id,
       language: subtitle_info.language,
-      provider: provider,
+      provider: provider.id,
       subtitle_hash: subtitle_info.subtitle_hash,
       file_path: file_path,
       format: subtitle_info.format,

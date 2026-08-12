@@ -107,7 +107,10 @@ defmodule Mydia.Subtitles do
     - `:subtitle_hash` - Unique hash identifying this subtitle
     - Plus optional fields: rating, download_count, hearing_impaired
   - `media_file_id` - Binary ID of the media file
-  - `opts` - Keyword list of options (passed to Downloader)
+  - `opts` - Keyword list of options (passed to `Downloader.download/3`):
+    - `:provider_id` - Id of the provider to download through (a
+      `SubtitleProvider` UUID, or `ProviderChain.default_provider/0`'s
+      `"relay-default"`). Omitted, resolves to that same relay default.
 
   ## Returns
 
@@ -373,7 +376,12 @@ defmodule Mydia.Subtitles do
         hearing_impaired: best.hearing_impaired || false
       }
 
-      case download_subtitle(subtitle_info, media_file_id) do
+      # best carries the provider_id ProviderChain.search/2 tagged it with
+      # (see ProviderChain.tag/2); thread it through so an auto-download hits
+      # the same provider the match came from, not always the relay.
+      case download_subtitle(subtitle_info, media_file_id,
+             provider_id: Map.get(best, :provider_id)
+           ) do
         {:ok, subtitle} ->
           Logger.info("Auto-downloaded high-confidence subtitle",
             media_file_id: media_file_id,

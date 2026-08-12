@@ -68,11 +68,18 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
       hearing_impaired: params["hearing-impaired"] == "true"
     }
 
+    # The search result this button was rendered from carries the provider
+    # that found it (see Modals.subtitle_search_modal/1's
+    # phx-value-provider-id); thread it through so the download spends that
+    # provider's quota instead of always the shared relay's. Same class of
+    # gap as the user_id fix Task 7's review found in this file.
+    provider_id = params["provider-id"]
+
     {:noreply,
      socket
      |> assign(:downloading_subtitle, true)
      |> start_async(:download_subtitle, fn ->
-       Mydia.Subtitles.download_subtitle(subtitle_info, media_file.id)
+       Mydia.Subtitles.download_subtitle(subtitle_info, media_file.id, provider_id: provider_id)
      end)}
   end
 
