@@ -1,0 +1,103 @@
+defmodule Mydia.Subtitles.ArchiveTest do
+  use ExUnit.Case, async: true
+
+  alias Mydia.Subtitles.Archive
+
+  defp zip(entries) do
+    charlist_entries =
+      Enum.map(entries, fn {name, content} -> {String.to_charlist(name), content} end)
+
+    {:ok, {_name, binary}} = :zip.create(~c"test.zip", charlist_entries, [:memory])
+    binary
+  end
+
+  # :zip.create sanitises absolute and parent-relative names, so path-traversal
+  # cases must be built by hand. Entry names here are written into the local and
+  # central headers exactly as given.
+  defp raw_zip(name, content) when is_binary(name) and is_binary(content) do
+    local = raw_local_entry(name, content)
+    central = raw_central_entry(name, content, 0)
+
+    local <>
+      central <>
+      <<0x50, 0x4B, 0x05, 0x06, 0::little-16, 0::little-16, 1::little-16, 1::little-16,
+        byte_size(central)::little-32, byte_size(local)::little-32, 0::little-16>>
+  end
+
+  defp raw_local_entry(name, content) do
+    n = byte_size(name)
+    c = byte_size(content)
+    crc = :erlang.crc32(content)
+
+    <<0x50, 0x4B, 0x03, 0x04, 20::little-16, 0::little-16, 0::little-16, 0::little-16,
+      0::little-16, crc::little-32, c::little-32, c::little-32, n::little-16, 0::little-16,
+      name::binary, content::binary>>
+  end
+
+  defp raw_central_entry(name, content, local_offset) do
+    n = byte_size(name)
+    c = byte_size(content)
+    crc = :erlang.crc32(content)
+
+    <<0x50, 0x4B, 0x01, 0x02, 20::little-16, 20::little-16, 0::little-16, 0::little-16,
+      0::little-16, 0::little-16, crc::little-32, c::little-32, c::little-32, n::little-16,
+      0::little-16, 0::little-16, 0::little-16, 0::little-16, 0::little-32,
+      local_offset::little-32, name::binary>>
+  end
+
+  test "recognises a zip by its magic bytes" do
+    assert Archive.zip?(zip([{"a.srt", "1\n"}]))
+    refute Archive.zip?("1\n00:00:01,000 --> 00:00:02,000\nhello\n")
+  end
+
+  test "extracts the only subtitle entry" do
+    binary = zip([{"Movie.2020.srt", "1\n00:00:01,000 --> 00:00:02,000\nhello\n"}])
+
+    assert {:ok, %{name: "Movie.2020.srt", content: content}} = Archive.extract_subtitle(binary)
+    assert content =~ "hello"
+  end
+
+  test "ignores non-subtitle entries and picks the subtitle" do
+    binary = zip([{"readme.txt", "ignore me"}, {"Movie.srt", "1\n"}])
+
+    assert {:ok, %{name: "Movie.srt"}} = Archive.extract_subtitle(binary)
+  end
+
+  test "accepts every supported subtitle extension" do
+    for ext <- ~w(srt ass ssa vtt sub) do
+      binary = zip([{"Movie.#{ext}", "content"}])
+      assert {:ok, %{name: name}} = Archive.extract_subtitle(binary)
+      assert String.ends_with?(name, ext)
+    end
+  end
+
+  test "rejects an archive holding no subtitle" do
+    binary = zip([{"readme.txt", "nothing useful"}, {"poster.jpg", "binary"}])
+
+    assert {:error, :no_subtitle_in_archive} = Archive.extract_subtitle(binary)
+  end
+
+  test "rejects an entry escaping via a parent path" do
+    binary = raw_zip("../../etc/passwd.srt", "malicious")
+
+    assert {:error, :unsafe_archive_entry} = Archive.extract_subtitle(binary)
+  end
+
+  test "rejects an entry with an absolute path" do
+    binary = raw_zip("/etc/passwd.srt", "malicious")
+
+    assert {:error, :unsafe_archive_entry} = Archive.extract_subtitle(binary)
+  end
+
+  test "rejects an archive that expands beyond the size cap" do
+    # A megabyte of zeroes compresses to almost nothing, which is the whole
+    # point of a zip bomb: cheap to send, expensive to open.
+    binary = zip([{"huge.srt", String.duplicate("0", 20_000_000)}])
+
+    assert {:error, :archive_too_large} = Archive.extract_subtitle(binary)
+  end
+
+  test "rejects a corrupt archive" do
+    assert {:error, :invalid_archive} = Archive.extract_subtitle("PK\x03\x04 not really a zip")
+  end
+end
