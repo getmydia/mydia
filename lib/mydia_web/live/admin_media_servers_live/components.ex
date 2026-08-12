@@ -19,7 +19,10 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
           <.icon name="hero-server-stack" class="w-5 h-5 opacity-60" /> Media Servers
           <span class="badge badge-ghost">{length(@media_servers)}</span>
         </h2>
-        <button class="btn btn-sm btn-primary" phx-click="new_media_server">
+        <button
+          class="btn btn-primary w-full min-h-11 sm:btn-sm sm:w-auto sm:min-h-8"
+          phx-click="new_media_server"
+        >
           <.icon name="hero-plus" class="w-4 h-4" /> New
         </button>
       </div>
@@ -51,12 +54,12 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                 <div class="flex items-start gap-3">
                   <%!-- Server Type Icon --%>
                   <div class={[
-                    "p-3 rounded-xl shrink-0",
+                    "p-2 sm:p-3 rounded-xl shrink-0",
                     media_server_type_bg_class(server.type)
                   ]}>
                     <.icon
                       name={media_server_type_icon(server.type)}
-                      class={"w-6 h-6 #{media_server_type_icon_class(server.type)}"}
+                      class={"w-5 h-5 sm:w-6 sm:h-6 #{media_server_type_icon_class(server.type)}"}
                     />
                   </div>
 
@@ -70,7 +73,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                         </span>
                       <% end %>
                     </div>
-                    <div class="text-xs text-base-content/50 mt-0.5 font-mono truncate">
+                    <div class="text-xs text-base-content/50 mt-0.5 font-mono break-all sm:truncate">
                       {server.url}
                     </div>
                   </div>
@@ -162,11 +165,11 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                 </p>
 
                 <%!-- Bottom Row: Actions --%>
-                <div class="flex items-center justify-end gap-1 pt-2 border-t border-base-200">
+                <div class="flex flex-wrap items-center gap-2 pt-3 border-t border-base-200 sm:justify-end sm:gap-1 sm:pt-2">
                   <button
                     :if={server.last_auth_error_at}
                     data-test="reconnect-plex"
-                    class="btn btn-sm btn-warning gap-1"
+                    class={["btn btn-warning gap-1", card_action_btn()]}
                     phx-click="reconnect_plex"
                     phx-value-id={server.id}
                   >
@@ -174,7 +177,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                   </button>
                   <%= if sync_enabled and server.type == :plex do %>
                     <button
-                      class="btn btn-sm btn-ghost gap-1"
+                      class={["btn btn-ghost gap-1", card_action_btn()]}
                       phx-click="sync_watched"
                       phx-value-id={server.id}
                     >
@@ -182,7 +185,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                     </button>
                   <% end %>
                   <button
-                    class="btn btn-sm btn-ghost gap-1"
+                    class={["btn btn-ghost gap-1", card_action_btn()]}
                     phx-click="test_media_server"
                     phx-value-id={server.id}
                   >
@@ -190,20 +193,22 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                   </button>
                   <button
                     :if={not is_runtime}
-                    class="btn btn-sm btn-ghost"
+                    class={["btn btn-ghost gap-1", card_action_btn()]}
                     phx-click="edit_media_server"
                     phx-value-id={server.id}
                   >
                     <.icon name="hero-pencil" class="w-4 h-4" />
+                    <span class="sm:hidden">Edit</span>
                   </button>
                   <button
                     :if={not is_runtime}
-                    class="btn btn-sm btn-ghost text-error hover:bg-error/10"
+                    class={["btn btn-ghost gap-1 text-error hover:bg-error/10", card_action_btn()]}
                     phx-click="delete_media_server"
                     phx-value-id={server.id}
                     data-confirm="Are you sure you want to delete this media server?"
                   >
                     <.icon name="hero-trash" class="w-4 h-4" />
+                    <span class="sm:hidden">Delete</span>
                   </button>
                 </div>
               </div>
@@ -763,6 +768,16 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   defp health_status_label(:healthy), do: "Healthy"
   defp health_status_label(:unhealthy), do: "Unhealthy"
   defp health_status_label(:unknown), do: "Unknown"
+
+  # Card action buttons: two per row on phones, with a lone trailing button
+  # stretching to fill, and today's compact right-aligned row from `sm` up.
+  #
+  # DaisyUI 5 .btn is 2.5rem and .btn-sm is 2rem, both under the 44px iOS and
+  # 48px Android touch-target guidance. `min-h-11` (2.75rem) clamps the
+  # component's own `height`; a Tailwind `h-*` utility would be competing with
+  # DaisyUI's own cascade layer and is not reliable here.
+  defp card_action_btn,
+    do: "flex-1 basis-[45%] min-h-11 sm:flex-none sm:basis-auto sm:btn-sm sm:min-h-8"
 
   defp run_label(%{status: :skipped, skip_reason: reason}) when is_binary(reason) do
     "Skipped: #{reason}"
