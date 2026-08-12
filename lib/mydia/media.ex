@@ -84,6 +84,63 @@ defmodule Mydia.Media do
   end
 
   @doc """
+  Pages media items with an ownership flag, for the plugin `library_item`
+  namespace.
+
+  Options and cursor semantics are exactly `list_items_page/1`'s — this
+  delegates to it rather than restating the keyset, so the two namespaces can
+  never drift. Ownership is resolved in a second pass over the returned page:
+  a movie is owned when it has an untrashed `media_files` row, a show when any
+  of its episodes does.
+
+  Two extra queries per page, both plain `IN` filters, so the whole thing stays
+  portable across SQLite and PostgreSQL.
+  """
+  @spec list_library_items_page(keyword()) :: [map()]
+  def list_library_items_page(opts \\ []) do
+    items = list_items_page(opts)
+    owned = owned_media_item_ids(Enum.map(items, & &1.id))
+
+    Enum.map(items, fn item ->
+      %{
+        id: item.id,
+        type: item.type,
+        title: item.title,
+        year: item.year,
+        tmdb_id: item.tmdb_id,
+        tvdb_id: item.tvdb_id,
+        imdb_id: item.imdb_id,
+        updated_at: item.updated_at,
+        owned: MapSet.member?(owned, item.id)
+      }
+    end)
+  end
+
+  defp owned_media_item_ids([]), do: MapSet.new()
+
+  defp owned_media_item_ids(ids) do
+    direct =
+      Repo.all(
+        from(f in Mydia.Library.MediaFile,
+          where: is_nil(f.trashed_at) and f.media_item_id in ^ids,
+          select: f.media_item_id
+        )
+      )
+
+    via_episodes =
+      Repo.all(
+        from(f in Mydia.Library.MediaFile,
+          join: e in Mydia.Media.Episode,
+          on: e.id == f.episode_id,
+          where: is_nil(f.trashed_at) and e.media_item_id in ^ids,
+          select: e.media_item_id
+        )
+      )
+
+    MapSet.new(direct ++ via_episodes)
+  end
+
+  @doc """
   Gets a single media item by TMDB ID.
   """
   @spec get_media_item_by_tmdb(integer(), keyword()) :: MediaItem.t() | nil

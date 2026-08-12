@@ -9,9 +9,9 @@ defmodule Mydia.Plugins.HostFunctions do
   revoked capability takes effect immediately (a plugin can never widen its own
   grant — KTD6).
 
-  ## Component import ABI (1.2)
+  ## Component import ABI (1.3)
 
-  Imports live under the `"mydia:plugin/host@1.2.0"` interface namespace and
+  Imports live under the `"mydia:plugin/host@1.3.0"` interface namespace and
   receive/return **typed WIT records** — no linear-memory marshalling. Wasmex
   hands each import closure the decoded record (atom-keyed map; `option<T>` as
   `{:some, v}` / `:none`; `list<tuple>` as `[{k, v}]`) and marshals the closure's
@@ -23,7 +23,8 @@ defmodule Mydia.Plugins.HostFunctions do
 
   are joined in 1.1 by `kv-get/set/delete`, `data-list`, `ensure-watched`,
   `connections-list`, and `connection-request` (each capability-gated), and in
-  1.2 by `set-watch-state` plus position fields on `playback-progress`.
+  1.2 by `set-watch-state` plus position fields on `playback-progress`, and in
+  1.3 by `ensure-favorite`.
 
   A closure must return exactly the WIT-declared shape: `{:ok, record}` /
   `{:error, host-error}` for the `result` functions. A wrong-typed return can
@@ -42,6 +43,8 @@ defmodule Mydia.Plugins.HostFunctions do
 
   require Logger
 
+  alias Mydia.Accounts
+  alias Mydia.Collections
   alias Mydia.Media
   alias Mydia.Playback
   alias Mydia.Plugins
@@ -57,11 +60,13 @@ defmodule Mydia.Plugins.HostFunctions do
   @data_list_page_cap 200
 
   # The WIT host interface namespace. The version suffix is the ABI version.
-  # wasmtime serves this 1.2 superset to a 1.1/1.0 guest (which imports
-  # `host@1.1.0` / `host@1.0.0`) via component semver matching, so older guests
-  # keep working. wasmex still needs exact namespace keys in the imports map
-  # (see `Mydia.Plugins.Host`), so 1.1 is also published under its own key.
-  @namespace "mydia:plugin/host@1.2.0"
+  # wasmtime serves this 1.3 superset to a 1.2/1.1/1.0 guest (which imports the
+  # correspondingly older `host@x.y.z`) via component semver matching, so older
+  # guests keep working. wasmex still needs exact namespace keys in the imports
+  # map (see `Mydia.Plugins.Host`), so every supported version is also published
+  # under its own key, each narrowed to the functions that version defined.
+  @namespace "mydia:plugin/host@1.3.0"
+  @v12_namespace "mydia:plugin/host@1.2.0"
   @v11_namespace "mydia:plugin/host@1.1.0"
 
   # Per-invocation guest log-line cap. `log` is ungated, so a buggy or hostile
@@ -96,14 +101,19 @@ defmodule Mydia.Plugins.HostFunctions do
         "connections-list" => {:fn, connections_list_import(slug)},
         "connection-request" => {:fn, connection_request_import(slug, gate_opts)},
         # ── 1.2.0 ──
-        "set-watch-state" => {:fn, set_watch_state_import(slug)}
+        "set-watch-state" => {:fn, set_watch_state_import(slug)},
+        # ── 1.3.0 ──
+        "ensure-favorite" => {:fn, ensure_favorite_import(slug)}
       }
 
-      # Publish under both 1.2 and 1.1 keys: wasmex matches the guest's exact
-      # imported package name, so a 1.1 guest still links against a 1.2 host.
+      # Publish under every supported key: wasmex matches the guest's exact
+      # imported package name, so an older guest still links against this host.
+      # Each older key is narrowed to what that version actually declared, or
+      # the guest would import a function its own contract never defined.
       %{
         @namespace => funcs,
-        @v11_namespace => Map.delete(funcs, "set-watch-state")
+        @v12_namespace => Map.delete(funcs, "ensure-favorite"),
+        @v11_namespace => funcs |> Map.delete("ensure-favorite") |> Map.delete("set-watch-state")
       }
     end
   end
@@ -161,6 +171,16 @@ defmodule Mydia.Plugins.HostFunctions do
       typed_result(fn ->
         with {:ok, plugin} <- Plugins.get_plugin(slug) do
           ensure_watched(plugin, target)
+        end
+      end)
+    end
+  end
+
+  defp ensure_favorite_import(slug) do
+    fn target ->
+      typed_result(fn ->
+        with {:ok, plugin} <- Plugins.get_plugin(slug) do
+          ensure_favorite(plugin, target)
         end
       end)
     end
@@ -584,6 +604,13 @@ defmodule Mydia.Plugins.HostFunctions do
     {:ok, %{items: items, "next-cursor": next_cursor(next)}}
   end
 
+  defp list_namespace(_plugin, "library_item", cursor, since, limit) do
+    rows = Media.list_library_items_page(after: cursor, updated_since: since, limit: limit + 1)
+    {page, next} = paginate(rows, limit)
+    items = Enum.map(page, fn row -> {:"library-item", to_library_item(row)} end)
+    {:ok, %{items: items, "next-cursor": next_cursor(next)}}
+  end
+
   defp list_namespace(plugin, "playback_progress", cursor, since, limit) do
     # Consent-scoped (R21): only users with an active connection to this plugin
     # are visible — a non-connected user's rows are absent entirely.
@@ -654,6 +681,24 @@ defmodule Mydia.Plugins.HostFunctions do
   defp clamp_list_limit(n) when is_integer(n) and n > 0, do: min(n, @data_list_page_cap)
   defp clamp_list_limit(_), do: @data_list_page_cap
 
+  # Library row -> the WIT library-item record. Ownership is the whole point of
+  # the namespace: `media-item` carries metadata but cannot answer "do we have
+  # the file", which is what a sync guest needs to distinguish a catalogued item
+  # from an owned one.
+  defp to_library_item(row) do
+    %{
+      id: row.id,
+      "item-type": row.type || "",
+      title: row.title || "",
+      year: to_option(row.year),
+      "tmdb-id": to_option(row.tmdb_id),
+      "tvdb-id": to_option(row.tvdb_id),
+      "imdb-id": to_option(row.imdb_id),
+      owned: row.owned == true,
+      "updated-at": DateTime.to_iso8601(row.updated_at)
+    }
+  end
+
   # Progress row -> the WIT playback-progress record. A movie carries the item's
   # own external ids; an episode carries its coordinates plus the show's ids.
   defp to_playback_progress(p) do
@@ -701,6 +746,65 @@ defmodule Mydia.Plugins.HostFunctions do
          :ok <- require_active_connection(plugin, user_id),
          {:ok, watched_at} <- parse_watched_at(from_option(Map.get(target, :"watched-at"))) do
       resolve_and_write(plugin, user_id, target, watched_at)
+    end
+  end
+
+  @doc false
+  @spec ensure_favorite(Plugin.t(), map()) :: {:ok, map()} | {:error, Error.t()}
+  def ensure_favorite(%Plugin{} = plugin, target) do
+    with :ok <- require_surface(plugin, "collections:favorite"),
+         {:ok, user_id} <- fetch_favorite_user(target),
+         :ok <- require_active_connection(plugin, user_id) do
+      resolve_and_favorite(user_id, target)
+    end
+  end
+
+  defp resolve_and_favorite(user_id, target) do
+    matcher_target = %{
+      imdb: from_option(Map.get(target, :"imdb-id")),
+      tmdb: from_option(Map.get(target, :"tmdb-id")),
+      tvdb: from_option(Map.get(target, :"tvdb-id"))
+    }
+
+    case Matcher.match_item(matcher_target) do
+      :not_found -> {:ok, %{status: :"not-found"}}
+      {:media_item, id} -> apply_favorite(user_id, id)
+    end
+  end
+
+  # Additive by contract: a remote list can add to a user's Favorites but never
+  # remove from it, so a service-side deletion can never destroy local curation.
+  defp apply_favorite(user_id, media_item_id) do
+    user = Accounts.get_user!(user_id)
+
+    if Collections.is_favorite?(user, media_item_id) do
+      {:ok, %{status: :"already-favorited"}}
+    else
+      with {:ok, favorites} <- Collections.get_or_create_favorites(user),
+           {:ok, _item} <- Collections.add_item(favorites, media_item_id) do
+        {:ok, %{status: :changed}}
+      else
+        # The check above is not atomic with the insert. A concurrent favorite
+        # (the user tapping the star while a sync tick runs) trips the
+        # `collection_items` unique index, which is the same outcome the check
+        # guards against, so report it as such rather than as a host failure.
+        {:error, %Ecto.Changeset{errors: errors}} ->
+          if Keyword.has_key?(errors, :collection_id) or Keyword.has_key?(errors, :media_item_id) do
+            {:ok, %{status: :"already-favorited"}}
+          else
+            {:error, Error.new(:internal, "could not add favorite")}
+          end
+
+        _ ->
+          {:error, Error.new(:internal, "could not add favorite")}
+      end
+    end
+  end
+
+  defp fetch_favorite_user(target) do
+    case Map.get(target, :"user-id") do
+      id when is_binary(id) and id != "" -> {:ok, id}
+      _ -> {:error, Error.new(:invalid_request, "ensure-favorite requires a user-id")}
     end
   end
 

@@ -23,6 +23,9 @@ The surfaces a sync plugin uses:
   account starts clean.
 - `data:read playback_progress` + `surfaces:write playback:watched`: read what
   the user watched locally; mark what the service says they watched.
+- `data:read library_item` + `surfaces:write collections:favorite`: read what
+  the user owns in their library; favorite what the service lists but they do
+  not own locally.
 
 ```rust
 fn on_schedule(tick: ScheduleTick) -> Result<String, String> {
@@ -61,9 +64,30 @@ write-backs are already suppressed) can push that single watch immediately; the
 scheduler's single-flight serializes it against a running sync so your KV state
 never interleaves.
 
+## List sync (Plan to Watch and Favorites)
+
+When a service exposes a "plan to watch" or wishlist alongside watch history, use
+the same set-difference guard as the history echo guard, without storing an echo
+set:
+
+- **D** is the set of unwatched, owned library items (`data-list library_item`
+  where `owned` is true and the item is not watched).
+- **P** is the set of plan-to-watch ids the service reports for the user.
+
+Push **D \\ P** to the service (items you own locally that the service does not
+yet list). Favorite **P \\ D** locally (items the service lists that you have
+catalogued but do not own). An item in **D ∩ P** was pushed on a prior run and
+echoed back by the stub or the live API: the intersection is excluded from both
+directions, so push-then-pull never favorites its own output and no durable echo
+state is needed.
+
+`ensure-favorite` is additive and idempotent: re-adding reports
+`already-favorited`. There is no remove counterpart, so a deletion on the
+service side cannot strip local Favorites.
+
 ## Next steps
 
 - [Test and iterate](test-and-iterate.md) - build, sideload, and reload without a full release cycle
 - [Read media and event data](media-data.md) - the `data:read` and `surfaces:write` calls this recipe leans on
 - [Manifest reference](../reference/manifest.md) - the `connection` descriptor, `schedule`, and every capability string
-- [Host API reference](../reference/host-api.md) - exact signatures for `connections-list`, `connection-request`, and `ensure-watched`
+- [Host API reference](../reference/host-api.md) - exact signatures for `connections-list`, `connection-request`, `ensure-watched`, and `ensure-favorite`

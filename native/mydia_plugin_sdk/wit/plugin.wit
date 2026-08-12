@@ -16,7 +16,14 @@
 // 1.2.0 (additive): `position-seconds` / `duration-seconds` on `playback-progress`,
 // and `set-watch-state` (unwatch + optional resume position). `ensure-watched`
 // remains for 1.1 guests.
-package mydia:plugin@1.2.0;
+//
+// 1.3.0 (additive): library-ownership reads (`library-item`, the `library_item`
+// namespace) and favorite write-back (`ensure-favorite`). Every 1.2 type and
+// function is byte-stable. This is a separate version rather than more of 1.2
+// because 1.2 is already public: a guest declaring `min_host_version` 1.2.0
+// would pass the manifest check and then fail wasmtime's import check on a
+// genuine 1.2 host, which is exactly what the version gate exists to prevent.
+package mydia:plugin@1.3.0;
 
 /// Shared types for the plugin contract.
 interface types {
@@ -126,6 +133,7 @@ interface types {
   variant list-item {
     media-item(media-item),
     playback-progress(playback-progress),
+    library-item(library-item),
   }
 
   record list-result {
@@ -211,6 +219,50 @@ interface types {
     network(string),
     internal(string),
   }
+
+  // ── 1.3.0 additions ──────────────────────────────────────────────────────
+
+  /// A library-ownership projection (the `library_item` namespace). Answers
+  /// "does this instance have files for this item", which `media-item`
+  /// deliberately does not carry, so a sync guest can tell a catalogued item
+  /// from an owned one without enumerating files.
+  record library-item {
+    id: string,
+    /// "movie" | "tv_show".
+    item-type: string,
+    title: string,
+    year: option<u32>,
+    tmdb-id: option<s64>,
+    tvdb-id: option<s64>,
+    imdb-id: option<string>,
+    /// True when at least one untrashed media file exists for the item.
+    /// Episode files count for shows.
+    owned: bool,
+    /// RFC3339; the row's update time, used as the keyset cursor anchor.
+    updated-at: string,
+  }
+
+  /// Target for `ensure-favorite`. External ids are resolved host-side through
+  /// the same ordered candidates `ensure-watched` uses. No episode
+  /// coordinates: favorites are always item-level.
+  record favorite-target {
+    user-id: string,
+    imdb-id: option<string>,
+    tmdb-id: option<s64>,
+    tvdb-id: option<s64>,
+  }
+
+  /// Outcome of `ensure-favorite`. Idempotent by contract: re-adding an
+  /// existing favorite reports `already-favorited` and writes nothing.
+  enum ensure-favorite-status {
+    changed,
+    already-favorited,
+    not-found,
+  }
+
+  record ensure-favorite-result {
+    status: ensure-favorite-status,
+  }
 }
 
 /// Host-implemented capabilities the guest may import. Each call is
@@ -219,7 +271,8 @@ interface types {
 interface host {
   use types.{outbound-request, outbound-response, data-request, read-result,
              list-request, list-result, watch-target, ensure-watched-result,
-             watch-state-target, connection, host-error};
+             watch-state-target, connection, host-error,
+             library-item, favorite-target, ensure-favorite-result};
 
   /// Outbound HTTP request, subject to the plugin's net:http grant and the SSRF
   /// egress gate. Requires net:http.
@@ -276,6 +329,15 @@ interface host {
   /// users:connections. The guest never sees the token.
   connection-request: func(connection-id: string, req: outbound-request)
       -> result<outbound-response, host-error>;
+
+  // ── 1.3.0 additions ──────────────────────────────────────────────────────
+
+  /// Add an item to a user's Favorites collection, idempotently, with
+  /// host-side external-id matching. Requires surfaces:write scoped to
+  /// "collections:favorite" and an active connection to the target user (R21).
+  /// Additive only: there is deliberately no remove counterpart, so a remote
+  /// service can never delete a user's local curation.
+  ensure-favorite: func(target: favorite-target) -> result<ensure-favorite-result, host-error>;
 }
 
 /// The guest's handlers. The SDK's #[mydia_plugin_sdk::plugin] macro implements this from a

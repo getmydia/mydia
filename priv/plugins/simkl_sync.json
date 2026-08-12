@@ -1,16 +1,16 @@
 {
   "slug": "simkl_sync",
   "name": "Simkl Sync",
-  "version": "1.0.0",
-  "description": "Two-way watched-state sync with Simkl: pulls your Simkl history into mydia and pushes what you watch in mydia back to Simkl.",
+  "version": "1.1.0",
+  "description": "Two-way watched-state and list sync with Simkl: pulls your Simkl history into mydia, pushes what you watch back, syncs unwatched library items to Plan to Watch, and adds Simkl Plan to Watch items to your Favorites.",
   "author": "Mydia",
-  "min_host_version": "1.2.0",
+  "min_host_version": "1.3.0",
   "capabilities": {
     "events:subscribe": ["playback.finished"],
     "net:http": ["api.simkl.com", "simkl.com"],
     "state:kv": [],
-    "data:read": ["playback_progress"],
-    "surfaces:write": ["playback:watched"],
+    "data:read": ["playback_progress", "library_item"],
+    "surfaces:write": ["playback:watched", "collections:favorite"],
     "users:connections": [],
     "schedule:interval": []
   },
@@ -34,6 +34,18 @@
       "key": "api_base",
       "type": "string",
       "label": "Simkl API base URL (advanced / testing)"
+    },
+    {
+      "key": "sync_plantowatch",
+      "type": "enum",
+      "options": ["on", "off"],
+      "label": "Send unwatched library items to Simkl as Plan to Watch"
+    },
+    {
+      "key": "sync_favorites",
+      "type": "enum",
+      "options": ["on", "off"],
+      "label": "Add Simkl Plan to Watch items to your Favorites"
     }
   ]
 }

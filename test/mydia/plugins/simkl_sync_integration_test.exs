@@ -5,7 +5,9 @@ defmodule Mydia.Plugins.SimklSyncIntegrationTest do
 
   import Ecto.Query
   import Mydia.AccountsFixtures
+  import Mydia.MediaFixtures
 
+  alias Mydia.Collections
   alias Mydia.Media
   alias Mydia.Playback
   alias Mydia.Plugins
@@ -26,8 +28,8 @@ defmodule Mydia.Plugins.SimklSyncIntegrationTest do
   @grants %{
     "net:http" => ["127.0.0.1"],
     "state:kv" => [],
-    "data:read" => ["playback_progress"],
-    "surfaces:write" => ["playback:watched"],
+    "data:read" => ["playback_progress", "library_item"],
+    "surfaces:write" => ["playback:watched", "collections:favorite"],
     "users:connections" => [],
     "schedule:interval" => []
   }
@@ -184,6 +186,18 @@ defmodule Mydia.Plugins.SimklSyncIntegrationTest do
       Plug.Conn.resp(conn, 200, ~s({"added":{"movies":1}}))
     end)
 
+    Bypass.stub(bypass, "GET", "/sync/all-items/movies/plantowatch", fn conn ->
+      Plug.Conn.resp(conn, 200, "{}")
+    end)
+
+    Bypass.stub(bypass, "GET", "/sync/all-items/shows/plantowatch", fn conn ->
+      Plug.Conn.resp(conn, 200, "{}")
+    end)
+
+    Bypass.stub(bypass, "POST", "/sync/add-to-list", fn conn ->
+      Plug.Conn.resp(conn, 200, ~s({"added":{"movies":0,"shows":0}}))
+    end)
+
     assert {:ok, result} = Plugins.invoke_plugin_schedule(@slug)
     # Movie + episode both pulled.
     assert result["pulled"] >= 2
@@ -216,6 +230,51 @@ defmodule Mydia.Plugins.SimklSyncIntegrationTest do
         where: k.plugin_slug == @slug and like(k.key, "conn/%/activities"),
         select: k.value
     )
+  end
+
+  test "a pushed library item never comes back as a favorite", %{
+    bypass: bypass,
+    user: user
+  } do
+    # Owned and unwatched: enters D, so it gets pushed and must NOT be favorited
+    # even though the stubbed Simkl list echoes it straight back.
+    owned = movie!("ttOWNED")
+    _file = media_file_fixture(%{media_item_id: owned.id})
+
+    # Catalogued but not owned: absent from D, so it SHOULD become a favorite.
+    wanted = movie!("ttWANTED")
+
+    Bypass.stub(bypass, "GET", "/sync/activities", fn conn ->
+      Plug.Conn.resp(conn, 200, ~s({"all":"2026-08-11T00:00:00Z"}))
+    end)
+
+    Bypass.stub(bypass, "GET", "/sync/all-items", fn conn ->
+      Plug.Conn.resp(conn, 200, "{}")
+    end)
+
+    # Simkl reports both items as plan-to-watch.
+    Bypass.stub(bypass, "GET", "/sync/all-items/movies/plantowatch", fn conn ->
+      Plug.Conn.resp(conn, 200, ~s({"movies":[
+        {"status":"plantowatch","movie":{"ids":{"imdb":"ttOWNED"}}},
+        {"status":"plantowatch","movie":{"ids":{"imdb":"ttWANTED"}}}
+      ]}))
+    end)
+
+    Bypass.stub(bypass, "GET", "/sync/all-items/shows/plantowatch", fn conn ->
+      Plug.Conn.resp(conn, 200, "{}")
+    end)
+
+    Bypass.stub(bypass, "POST", "/sync/add-to-list", fn conn ->
+      Plug.Conn.resp(conn, 200, ~s({"added":{"movies":0,"shows":0}}))
+    end)
+
+    assert {:ok, _result} = Plugins.invoke_plugin_schedule(@slug)
+
+    refute Collections.is_favorite?(user, owned.id),
+           "an item we pushed must never be favorited back"
+
+    assert Collections.is_favorite?(user, wanted.id),
+           "a catalogued-but-unowned plan-to-watch item should become a favorite"
   end
 
   test "a 401 from Simkl reports the connection as invalid", %{bypass: bypass, user: user} do

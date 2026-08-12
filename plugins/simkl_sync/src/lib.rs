@@ -20,8 +20,8 @@
 
 use mydia_plugin_sdk::host;
 use mydia_plugin_sdk::types::{
-    Connection, ConnectionStatus, Event, ListItem, ListRequest, OutboundRequest, PlaybackProgress,
-    ScheduleTick, WatchStateTarget,
+    Connection, ConnectionStatus, EnsureFavoriteStatus, Event, FavoriteTarget, LibraryItem,
+    ListItem, ListRequest, OutboundRequest, PlaybackProgress, ScheduleTick, WatchStateTarget,
 };
 use std::collections::{BTreeSet, HashMap};
 use tinyjson::JsonValue;
@@ -56,9 +56,32 @@ fn on_schedule(tick: ScheduleTick) -> Result<String, String> {
         Err(e) => return Err(format!("connections-list failed: {:?}", e)),
     };
 
+    let settings = list_settings_from(&tick.config_json);
+
+    // One full progress scan per tick, not per connection. `data-list` is
+    // consent-scoped host-side, so a single fetch covers every connected user,
+    // and `local_intent_set` already filters by user id. Skipped entirely when
+    // no connection will use it.
+    let progress = if conns
+        .iter()
+        .any(|c| !matches!(c.status, ConnectionStatus::Error))
+    {
+        match list_progress(None) {
+            Ok(rows) => rows,
+            Err(SyncError::Unauthorized) => Vec::new(),
+            Err(SyncError::Host(msg)) => {
+                return Err(format!("data-list playback_progress failed: {msg}"))
+            }
+        }
+    } else {
+        Vec::new()
+    };
+
     let mut invalid: Vec<String> = Vec::new();
     let mut pulled_total = 0usize;
     let mut pushed_total = 0usize;
+    let mut listed_total = 0usize;
+    let mut favorited_total = 0usize;
     let mut unmatched = 0usize;
 
     for conn in conns {
@@ -66,17 +89,24 @@ fn on_schedule(tick: ScheduleTick) -> Result<String, String> {
             continue;
         }
 
-        match sync_connection(&conn, &api_base) {
+        match sync_connection(&conn, &api_base, &settings, &progress) {
             Ok(counts) => {
                 host::log(
                     "info",
                     &format!(
-                        "simkl[{}]: pulled={} pushed={} unmatched={}",
-                        conn.user_id, counts.pulled, counts.pushed, counts.unmatched
+                        "simkl[{}]: pulled={} pushed={} listed={} favorited={} unmatched={}",
+                        conn.user_id,
+                        counts.pulled,
+                        counts.pushed,
+                        counts.listed,
+                        counts.favorited,
+                        counts.unmatched
                     ),
                 );
                 pulled_total += counts.pulled;
                 pushed_total += counts.pushed;
+                listed_total += counts.listed;
+                favorited_total += counts.favorited;
                 unmatched += counts.unmatched;
             }
             // A 401 invalidates just this connection; other users still sync.
@@ -98,7 +128,13 @@ fn on_schedule(tick: ScheduleTick) -> Result<String, String> {
         );
     }
 
-    Ok(result_json(pushed_total, pulled_total, &invalid))
+    Ok(result_json(
+        pushed_total,
+        pulled_total,
+        listed_total,
+        favorited_total,
+        &invalid,
+    ))
 }
 
 // ── Sync engine ─────────────────────────────────────────────────────────────
@@ -107,6 +143,32 @@ struct Counts {
     pulled: usize,
     pushed: usize,
     unmatched: usize,
+    listed: usize,
+    favorited: usize,
+}
+
+/// Operator toggles for the list leg. Both default on: connecting a Simkl
+/// account is itself the consent, and the plugin is opt-in per user.
+struct ListSettings {
+    push: bool,
+    pull: bool,
+}
+
+fn list_settings_from(config_json: &str) -> ListSettings {
+    let off = |key: &str| -> bool {
+        config_json
+            .parse::<JsonValue>()
+            .ok()
+            .and_then(|v| v.get::<HashMap<String, JsonValue>>().cloned())
+            .and_then(|m| m.get(key).and_then(|v| v.get::<String>().cloned()))
+            .map(|s| s == "off")
+            .unwrap_or(false)
+    };
+
+    ListSettings {
+        push: !off("sync_plantowatch"),
+        pull: !off("sync_favorites"),
+    }
 }
 
 enum SyncError {
@@ -114,14 +176,60 @@ enum SyncError {
     Host(String),
 }
 
-fn sync_connection(conn: &Connection, api_base: &str) -> Result<Counts, SyncError> {
-    let (pulled_keys, pulled, unmatched) = pull(conn, api_base)?;
-    let pushed = push(conn, api_base, &pulled_keys)?;
+fn sync_connection(
+    conn: &Connection,
+    api_base: &str,
+    settings: &ListSettings,
+    progress: &[PlaybackProgress],
+) -> Result<Counts, SyncError> {
+    // The history legs and the list leg are independent: a Simkl failure in one
+    // must not cost the other its run, since they share no state beyond the
+    // connection. A 401 is the exception — the token is dead for both, so it
+    // propagates and marks the connection invalid instead of silently syncing
+    // nothing on every tick.
+    let history = history_legs(conn, api_base);
+
+    if matches!(history, Err(SyncError::Unauthorized)) {
+        return Err(SyncError::Unauthorized);
+    }
+
+    let lists = sync_lists(conn, api_base, settings, progress);
+
+    if matches!(lists, Err(SyncError::Unauthorized)) {
+        return Err(SyncError::Unauthorized);
+    }
+
+    let (pulled, pushed, unmatched) = leg_or_default(history, "history", (0, 0, 0));
+    let (listed, favorited) = leg_or_default(lists, "list", (0, 0));
+
     Ok(Counts {
         pulled,
         pushed,
         unmatched,
+        listed,
+        favorited,
     })
+}
+
+// The watched-state legs, run as a unit: push consumes pull's echo guard, so
+// these two genuinely do depend on each other.
+fn history_legs(conn: &Connection, api_base: &str) -> Result<(usize, usize, usize), SyncError> {
+    let (pulled_keys, pulled, unmatched) = pull(conn, api_base)?;
+    let pushed = push(conn, api_base, &pulled_keys)?;
+    Ok((pulled, pushed, unmatched))
+}
+
+// Narrates a failed leg and yields zero counts for it, so one leg's outage
+// never suppresses the other's reporting.
+fn leg_or_default<T>(result: Result<T, SyncError>, leg: &str, fallback: T) -> T {
+    match result {
+        Ok(value) => value,
+        Err(SyncError::Host(msg)) => {
+            host::log("warn", &format!("simkl {leg} leg failed: {msg}"));
+            fallback
+        }
+        Err(SyncError::Unauthorized) => fallback,
+    }
 }
 
 // Pull leg — gated by the activities cursor. Returns the pulled-set (for the
@@ -218,7 +326,7 @@ fn push(
     }
 
     let watermark = kv_get(&watermark_key);
-    let rows = list_progress(conn, watermark.as_deref());
+    let rows = list_progress(watermark.as_deref())?;
 
     let to_push: Vec<PushItem> = rows
         .iter()
@@ -252,6 +360,132 @@ fn push(
     clear_pulled_set(conn);
 
     Ok(total)
+}
+
+/// Pages the whole `library_item` namespace. Deliberately unfiltered by
+/// `updated_since`: the guard needs the *full* owned-and-unwatched set, and
+/// attaching a media file to an existing item does not necessarily touch
+/// `media_items.updated_at`, so a delta window would miss items catalogued
+/// first and downloaded later.
+fn list_library() -> Result<Vec<LibraryItem>, SyncError> {
+    let mut out = Vec::new();
+    let mut cursor: Option<String> = None;
+
+    loop {
+        let req = ListRequest {
+            namespace: "library_item".to_string(),
+            cursor: cursor.clone(),
+            updated_since: None,
+            limit: Some(200),
+        };
+
+        let result = host::data_list(&req)
+            .map_err(|e| SyncError::Host(format!("data-list library_item: {:?}", e)))?;
+
+        for item in result.items {
+            if let ListItem::LibraryItem(l) = item {
+                out.push(l);
+            }
+        }
+
+        match result.next_cursor {
+            Some(c) => cursor = Some(c),
+            None => break,
+        }
+    }
+
+    Ok(out)
+}
+
+/// The list leg: one set difference in each direction.
+///
+/// D = owned and unwatched locally, P = Simkl's plan-to-watch list. Push
+/// `D \ P`, favorite `P \ D`. The two are complementary by construction, so
+/// the plugin can never favorite its own push and no KV set has to remember
+/// what was sent. Convergence falls out of the same property: once synced,
+/// both diffs are empty and this writes nothing.
+fn sync_lists(
+    conn: &Connection,
+    api_base: &str,
+    settings: &ListSettings,
+    progress: &[PlaybackProgress],
+) -> Result<(usize, usize), SyncError> {
+    let pending_key = key(conn, "lists_pending");
+
+    // At-least-once: re-send a batch interrupted mid-POST. A duplicate
+    // add-to-list is a no-op on Simkl.
+    if let Some(pending) = kv_get(&pending_key) {
+        simkl_post(conn, &format!("{api_base}/sync/add-to-list"), &pending)?;
+        let _ = host::kv_delete(&pending_key);
+    }
+
+    let library = list_library()?;
+    let intent = local_intent_set(&library, progress, &conn.user_id);
+
+    let mut remote: Vec<ListEntry> = Vec::new();
+    for (path, is_show) in [("movies", false), ("shows", true)] {
+        let url = format!("{api_base}/sync/all-items/{path}/plantowatch?extended=simkl_ids_only");
+        remote.extend(parse_mini_list(&simkl_get(conn, &url)?, is_show));
+    }
+
+    let remote_keys: BTreeSet<String> = remote.iter().map(|e| e.key.clone()).collect();
+
+    let mut pushed = 0usize;
+    if settings.push {
+        let by_key: HashMap<String, &LibraryItem> = library
+            .iter()
+            .map(|l| (intent_key(l.imdb_id.as_deref(), l.tmdb_id, l.tvdb_id), l))
+            .collect();
+
+        let to_push: Vec<ListEntry> = intent
+            .iter()
+            .filter(|k| !remote_keys.contains(*k))
+            .filter_map(|k| by_key.get(k).map(|l| entry_of(l, k)))
+            .collect();
+
+        for batch in to_push.chunks(100) {
+            let body = build_add_to_list_body(batch);
+            let _ = host::kv_set(&pending_key, &body);
+            simkl_post(conn, &format!("{api_base}/sync/add-to-list"), &body)?;
+            let _ = host::kv_delete(&pending_key);
+            pushed += batch.len();
+        }
+    }
+
+    let mut favorited = 0usize;
+    if settings.pull {
+        for entry in remote.iter().filter(|e| !intent.contains(&e.key)) {
+            let target = FavoriteTarget {
+                user_id: conn.user_id.clone(),
+                imdb_id: entry.imdb.clone(),
+                tmdb_id: entry.tmdb,
+                tvdb_id: entry.tvdb,
+            };
+
+            // `not-found` is the normal outcome for anything outside Mydia's
+            // catalog, so only a host error is worth surfacing.
+            match host::ensure_favorite(&target) {
+                Ok(res) => {
+                    if matches!(res.status, EnsureFavoriteStatus::Changed) {
+                        favorited += 1;
+                    }
+                }
+                Err(e) => host::log("warn", &format!("ensure-favorite failed: {:?}", e)),
+            }
+        }
+    }
+
+    Ok((pushed, favorited))
+}
+
+fn entry_of(item: &LibraryItem, key: &str) -> ListEntry {
+    ListEntry {
+        imdb: item.imdb_id.clone(),
+        tmdb: item.tmdb_id,
+        tvdb: item.tvdb_id,
+        is_show: item.item_type == "tv_show",
+        key: key.to_string(),
+    }
 }
 
 // ── Simkl HTTP (host-attached auth) ──────────────────────────────────────────
@@ -311,7 +545,11 @@ fn clear_pulled_set(conn: &Connection) {
 
 // ── data-list (paginated) ─────────────────────────────────────────────────────
 
-fn list_progress(conn: &Connection, updated_since: Option<&str>) -> Vec<PlaybackProgress> {
+// A truncated page here is not a smaller answer, it is a wrong one: the list
+// leg derives set differences from these rows, so a swallowed `Denied` (an
+// operator has not re-approved a widened grant yet) would read as "nothing is
+// watched" and push the whole library. Errors propagate.
+fn list_progress(updated_since: Option<&str>) -> Result<Vec<PlaybackProgress>, SyncError> {
     let mut out = Vec::new();
     let mut cursor: Option<String> = None;
 
@@ -323,10 +561,8 @@ fn list_progress(conn: &Connection, updated_since: Option<&str>) -> Vec<Playback
             limit: Some(200),
         };
 
-        let result = match host::data_list(&req) {
-            Ok(r) => r,
-            Err(_) => break,
-        };
+        let result = host::data_list(&req)
+            .map_err(|e| SyncError::Host(format!("data-list playback_progress: {:?}", e)))?;
 
         for item in result.items {
             if let ListItem::PlaybackProgress(p) = item {
@@ -340,8 +576,7 @@ fn list_progress(conn: &Connection, updated_since: Option<&str>) -> Vec<Playback
         }
     }
 
-    let _ = conn;
-    out
+    Ok(out)
 }
 
 // ── Pure helpers (unit-tested) ────────────────────────────────────────────────
@@ -441,6 +676,131 @@ fn item_key(
         (Some(s), Some(e)) => format!("{id}:s{s}e{e}"),
         _ => id,
     }
+}
+
+/// One entry on a Simkl list, or one local item destined for one. Movies and
+/// shows go into different arrays in every Simkl body, so the split is carried
+/// on the entry rather than recomputed at each call site.
+struct ListEntry {
+    imdb: Option<String>,
+    tmdb: Option<i64>,
+    tvdb: Option<i64>,
+    is_show: bool,
+    key: String,
+}
+
+/// An item-level key: the same shape `item_key` produces with no episode
+/// coordinates. Favorites and list membership address a show as a whole, so a
+/// single watched episode must collapse onto the show's key.
+fn intent_key(imdb: Option<&str>, tmdb: Option<i64>, tvdb: Option<i64>) -> String {
+    item_key(imdb, tmdb, tvdb, None, None)
+}
+
+/// The local intent set D: owned, and with nothing *watched* by this user.
+///
+/// Progress rows are keyed item-level on purpose. An episode row carries its
+/// *show's* external ids (the host's `progress_dimensions`), so one watched
+/// episode drops the whole show out of D, which is correct: Simkl already
+/// files a partly watched show under "watching" from the history leg.
+///
+/// Only `watched` rows count. An abandoned start is not a watch, and treating
+/// it as one would strand the item: the history leg pushes watched items only,
+/// so it would appear on neither Simkl list.
+fn local_intent_set(
+    library: &[LibraryItem],
+    progress: &[PlaybackProgress],
+    user_id: &str,
+) -> BTreeSet<String> {
+    let watched: BTreeSet<String> = progress
+        .iter()
+        .filter(|p| p.user_id == user_id && p.watched)
+        .map(|p| intent_key(p.imdb_id.as_deref(), p.tmdb_id, p.tvdb_id))
+        .collect();
+
+    library
+        .iter()
+        .filter(|l| l.owned)
+        .map(|l| intent_key(l.imdb_id.as_deref(), l.tmdb_id, l.tvdb_id))
+        // `k` is a `&String` here, so compare and look up through `as_str()`:
+        // `&String == &str` is not implemented.
+        .filter(|k| k.as_str() != "unknown" && !watched.contains(k.as_str()))
+        .collect()
+}
+
+/// Parses a `/sync/all-items/{type}/plantowatch?extended=simkl_ids_only` body.
+///
+/// Same nesting as the full shape the history leg parses: ids live under a
+/// `show`/`movie` sub-object, and `tvdb`/`tmdb` arrive as strings here but as
+/// numbers elsewhere, so `coerce_i64` stays bidirectional. A structural
+/// mismatch yields an empty list rather than an error, matching
+/// `parse_all_items`.
+fn parse_mini_list(body: &str, is_show: bool) -> Vec<ListEntry> {
+    let json: JsonValue = match body.parse() {
+        Ok(j) => j,
+        Err(_) => return Vec::new(),
+    };
+    let obj = match json.get::<HashMap<String, JsonValue>>() {
+        Some(o) => o,
+        None => return Vec::new(),
+    };
+
+    let (array_key, sub_key) = if is_show {
+        ("shows", "show")
+    } else {
+        ("movies", "movie")
+    };
+
+    let Some(JsonValue::Array(entries)) = obj.get(array_key) else {
+        return Vec::new();
+    };
+
+    entries
+        .iter()
+        .filter_map(|entry| {
+            let entry_obj = entry.get::<HashMap<String, JsonValue>>()?;
+            let ids = sub_ids(entry_obj, sub_key)?;
+            let (imdb, tmdb, tvdb) = extract_ids(ids);
+            let key = intent_key(imdb.as_deref(), tmdb, tvdb);
+
+            if key == "unknown" {
+                return None;
+            }
+
+            Some(ListEntry {
+                imdb,
+                tmdb,
+                tvdb,
+                is_show,
+                key,
+            })
+        })
+        .collect()
+}
+
+/// Builds a `/sync/add-to-list` body, splitting movies and shows and marking
+/// every entry `plantowatch`.
+fn build_add_to_list_body(items: &[ListEntry]) -> String {
+    let mut movies: Vec<String> = Vec::new();
+    let mut shows: Vec<String> = Vec::new();
+
+    for item in items {
+        let entry = format!(
+            "{{\"to\":\"plantowatch\",\"ids\":{}}}",
+            ids_json(item.imdb.as_deref(), item.tmdb, item.tvdb)
+        );
+
+        if item.is_show {
+            shows.push(entry);
+        } else {
+            movies.push(entry);
+        }
+    }
+
+    format!(
+        "{{\"movies\":[{}],\"shows\":[{}]}}",
+        movies.join(","),
+        shows.join(",")
+    )
 }
 
 /// Builds the Simkl `/sync/history` POST body from a batch of push items,
@@ -687,10 +1047,17 @@ fn string_array_json(set: &BTreeSet<String>) -> String {
     format!("[{}]", parts.join(","))
 }
 
-fn result_json(pushed: usize, pulled: usize, invalid: &[String]) -> String {
+fn result_json(
+    pushed: usize,
+    pulled: usize,
+    listed: usize,
+    favorited: usize,
+    invalid: &[String],
+) -> String {
     let ids: Vec<String> = invalid.iter().map(|s| format!("{:?}", s)).collect();
     format!(
-        "{{\"pushed\":{pushed},\"pulled\":{pulled},\"connections_invalid\":[{}]}}",
+        "{{\"pushed\":{pushed},\"pulled\":{pulled},\"listed\":{listed},\
+         \"favorited\":{favorited},\"connections_invalid\":[{}]}}",
         ids.join(",")
     )
 }
@@ -1043,5 +1410,218 @@ mod tests {
         let json = string_array_json(&set);
         let back: BTreeSet<String> = parse_string_array(&json).into_iter().collect();
         assert_eq!(set, back);
+    }
+
+    const MINI_MOVIES: &str = r#"{
+        "movies": [
+            { "status": "plantowatch", "movie": { "ids": { "imdb": "tt0111161", "tmdb": "278" } } },
+            { "status": "plantowatch", "movie": { "ids": { "simkl": 4242 } } }
+        ]
+    }"#;
+
+    const MINI_SHOWS: &str = r#"{
+        "shows": [
+            { "status": "plantowatch", "show": { "ids": { "tvdb": "320724", "tmdb": "67195" } } }
+        ]
+    }"#;
+
+    #[test]
+    fn parse_mini_list_reads_movie_ids() {
+        let entries = parse_mini_list(MINI_MOVIES, false);
+        assert_eq!(entries.len(), 1, "an entry with no usable id is skipped");
+        assert_eq!(entries[0].imdb.as_deref(), Some("tt0111161"));
+        assert_eq!(entries[0].key, "imdb:tt0111161");
+        assert!(!entries[0].is_show);
+    }
+
+    #[test]
+    fn parse_mini_list_reads_show_ids_as_strings() {
+        let entries = parse_mini_list(MINI_SHOWS, true);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].tvdb, Some(320_724));
+        assert!(entries[0].is_show);
+        assert_eq!(entries[0].key, "tmdb:67195");
+    }
+
+    #[test]
+    fn parse_mini_list_of_garbage_is_empty_not_an_error() {
+        assert!(parse_mini_list("not json", false).is_empty());
+        assert!(parse_mini_list("{}", true).is_empty());
+    }
+
+    #[test]
+    fn build_add_to_list_body_splits_movies_and_shows() {
+        let items = vec![
+            ListEntry {
+                imdb: Some("tt0111161".to_string()),
+                tmdb: None,
+                tvdb: None,
+                is_show: false,
+                key: "imdb:tt0111161".to_string(),
+            },
+            ListEntry {
+                imdb: None,
+                tmdb: Some(67195),
+                tvdb: Some(320_724),
+                is_show: true,
+                key: "tmdb:67195".to_string(),
+            },
+        ];
+
+        let body = build_add_to_list_body(&items);
+        assert!(body.contains("\"movies\""));
+        assert!(body.contains("\"shows\""));
+        assert!(body.contains("\"to\":\"plantowatch\""));
+        assert!(body.contains("tt0111161"));
+        assert!(body.contains("320724"));
+    }
+
+    #[test]
+    fn intent_key_matches_the_pulled_key_for_the_same_item() {
+        assert_eq!(
+            intent_key(Some("tt0111161"), Some(278), None),
+            item_key(Some("tt0111161"), Some(278), None, None, None)
+        );
+    }
+
+    #[test]
+    fn local_intent_set_holds_owned_and_unwatched_only() {
+        let library = vec![
+            lib_item("owned-unwatched", "movie", Some("tt1"), true),
+            lib_item("owned-watched", "movie", Some("tt2"), true),
+            lib_item("catalogued-only", "movie", Some("tt3"), false),
+        ];
+        let progress = vec![progress_row("u1", "movie", Some("tt2"))];
+
+        let set = local_intent_set(&library, &progress, "u1");
+
+        assert!(set.contains("imdb:tt1"));
+        assert!(!set.contains("imdb:tt2"), "a watched item is not intent");
+        assert!(!set.contains("imdb:tt3"), "not owned is not intent");
+    }
+
+    #[test]
+    fn local_intent_set_keeps_an_abandoned_start() {
+        // Started but never finished is not a watch. If this dropped out of D,
+        // the item would reach neither Simkl list: the history leg pushes only
+        // watched rows.
+        let library = vec![lib_item("owned", "movie", Some("tt1"), true)];
+        let mut row = progress_row("u1", "movie", Some("tt1"));
+        row.watched = false;
+
+        assert!(local_intent_set(&library, &[row], "u1").contains("imdb:tt1"));
+    }
+
+    #[test]
+    fn local_intent_set_ignores_another_users_progress() {
+        let library = vec![lib_item("owned-unwatched", "movie", Some("tt1"), true)];
+        let progress = vec![progress_row("someone-else", "movie", Some("tt1"))];
+
+        assert!(local_intent_set(&library, &progress, "u1").contains("imdb:tt1"));
+    }
+
+    #[test]
+    fn local_intent_set_drops_a_show_with_any_watched_episode() {
+        let library = vec![lib_item("show", "tv_show", Some("tt9"), true)];
+        // An episode progress row carries the *show's* external ids, which is
+        // why the intent key must ignore episode coordinates.
+        let mut row = progress_row("u1", "episode", Some("tt9"));
+        row.season_number = Some(1);
+        row.episode_number = Some(3);
+
+        assert!(local_intent_set(&library, &[row], "u1").is_empty());
+    }
+
+    #[test]
+    fn list_settings_default_to_on_when_unset() {
+        let s = list_settings_from("{}");
+        assert!(s.push);
+        assert!(s.pull);
+    }
+
+    #[test]
+    fn list_settings_read_off_from_config() {
+        let s = list_settings_from(r#"{"sync_plantowatch":"off","sync_favorites":"off"}"#);
+        assert!(!s.push);
+        assert!(!s.pull);
+    }
+
+    #[test]
+    fn the_two_diffs_are_complementary() {
+        // The whole echo guard: nothing in D can appear in the favorite set.
+        let d: BTreeSet<String> = ["imdb:tt1", "imdb:tt2"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+
+        let remote = vec![
+            ListEntry {
+                imdb: Some("tt1".into()),
+                tmdb: None,
+                tvdb: None,
+                is_show: false,
+                key: "imdb:tt1".into(),
+            },
+            ListEntry {
+                imdb: Some("tt9".into()),
+                tmdb: None,
+                tvdb: None,
+                is_show: false,
+                key: "imdb:tt9".into(),
+            },
+        ];
+
+        let p: BTreeSet<String> = remote.iter().map(|e| e.key.clone()).collect();
+
+        let to_push: Vec<&String> = d.iter().filter(|k| !p.contains(*k)).collect();
+        let to_favorite: Vec<&ListEntry> = remote.iter().filter(|e| !d.contains(&e.key)).collect();
+
+        assert_eq!(to_push, vec![&"imdb:tt2".to_string()]);
+        assert_eq!(to_favorite.len(), 1);
+        assert_eq!(to_favorite[0].key, "imdb:tt9");
+    }
+
+    #[test]
+    fn a_settled_library_writes_nothing() {
+        let d: BTreeSet<String> = ["imdb:tt1"].iter().map(|s| s.to_string()).collect();
+        let p: BTreeSet<String> = ["imdb:tt1"].iter().map(|s| s.to_string()).collect();
+
+        assert!(d.iter().filter(|k| !p.contains(*k)).next().is_none());
+        assert!(p.iter().filter(|k| !d.contains(*k)).next().is_none());
+    }
+
+    // ── test builders ────────────────────────────────────────────────────────
+
+    fn lib_item(id: &str, item_type: &str, imdb: Option<&str>, owned: bool) -> LibraryItem {
+        LibraryItem {
+            id: id.to_string(),
+            item_type: item_type.to_string(),
+            title: id.to_string(),
+            year: None,
+            tmdb_id: None,
+            tvdb_id: None,
+            imdb_id: imdb.map(|s| s.to_string()),
+            owned,
+            updated_at: "2026-08-11T00:00:00Z".to_string(),
+        }
+    }
+
+    fn progress_row(user: &str, item_type: &str, imdb: Option<&str>) -> PlaybackProgress {
+        PlaybackProgress {
+            user_id: user.to_string(),
+            item_type: item_type.to_string(),
+            media_item_id: None,
+            episode_id: None,
+            tmdb_id: None,
+            tvdb_id: None,
+            imdb_id: imdb.map(|s| s.to_string()),
+            season_number: None,
+            episode_number: None,
+            watched: true,
+            last_watched_at: None,
+            position_seconds: None,
+            duration_seconds: None,
+            updated_at: "2026-08-11T00:00:00Z".to_string(),
+        }
     }
 }

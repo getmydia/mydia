@@ -174,7 +174,7 @@ defmodule Mydia.Plugins.HostFunctionsTest do
 
       imports = builder.(%{slug: "tester", invocation_id: "x", test_run: false})
 
-      assert %{"mydia:plugin/host@1.1.0" => fns} = imports
+      assert %{"mydia:plugin/host@1.3.0" => fns} = imports
 
       assert %{"http-request" => {:fn, f1}, "data-read" => {:fn, f2}, "log" => {:fn, f3}} = fns
       assert is_function(f1, 1) and is_function(f2, 1) and is_function(f3, 2)
@@ -186,9 +186,32 @@ defmodule Mydia.Plugins.HostFunctionsTest do
                "kv-delete" => {:fn, _},
                "data-list" => {:fn, _},
                "ensure-watched" => {:fn, _},
+               "ensure-favorite" => {:fn, _},
                "connections-list" => {:fn, _},
                "connection-request" => {:fn, _}
              } = fns
+    end
+
+    test "narrows each older namespace to the functions that version declared" do
+      builder = HostFunctions.imports_for("tester")
+      imports = builder.(%{slug: "tester", invocation_id: "x", test_run: false})
+
+      v13 = Map.fetch!(imports, "mydia:plugin/host@1.3.0")
+      v12 = Map.fetch!(imports, "mydia:plugin/host@1.2.0")
+      v11 = Map.fetch!(imports, "mydia:plugin/host@1.1.0")
+
+      # Offering a newer function under an older key is not harmless: wasmtime
+      # links against the guest's exact imported interface, so an older guest
+      # must be handed exactly what its own contract declared.
+      assert Map.has_key?(v13, "ensure-favorite")
+      assert Map.has_key?(v13, "set-watch-state")
+
+      refute Map.has_key?(v12, "ensure-favorite")
+      assert Map.has_key?(v12, "set-watch-state")
+
+      refute Map.has_key?(v11, "ensure-favorite")
+      refute Map.has_key?(v11, "set-watch-state")
+      assert Map.has_key?(v11, "ensure-watched")
     end
   end
 
@@ -448,6 +471,32 @@ defmodule Mydia.Plugins.HostFunctionsTest do
     end
   end
 
+  describe "data_list/2 library_item namespace" do
+    test "denies a plugin without the library_item namespace" do
+      p = plugin(%{"data:read" => ["media_item"]})
+
+      assert {:error, %Error{type: :capability_denied}} =
+               HostFunctions.data_list(p, %{namespace: "library_item"})
+    end
+
+    test "projects the owned flag onto the WIT record" do
+      movie = media_item_fixture(%{type: "movie", title: "Owned"})
+      _file = media_file_fixture(%{media_item_id: movie.id})
+
+      p = plugin(%{"data:read" => ["library_item"]})
+
+      assert {:ok, %{items: items}} =
+               HostFunctions.data_list(p, %{namespace: "library_item"})
+
+      assert {:"library-item", record} =
+               Enum.find(items, fn {_tag, r} -> r.id == movie.id end)
+
+      assert record.owned == true
+      assert record[:"item-type"] == "movie"
+      assert is_binary(record[:"updated-at"])
+    end
+  end
+
   describe "connection_request/4 (host-attached auth)" do
     setup do
       {:ok, _} =
@@ -632,6 +681,88 @@ defmodule Mydia.Plugins.HostFunctionsTest do
       # A nonexistent episode of the same show is not-found.
       assert {:ok, %{status: :"not-found"}} =
                HostFunctions.ensure_watched(p, target(user.id, tvdb: 999, season: 9, episode: 9))
+    end
+  end
+
+  describe "ensure_favorite/2 capability gate" do
+    test "denies a plugin without the collections:favorite surface" do
+      p = plugin(%{"surfaces:write" => ["playback:watched"]})
+
+      assert {:error, %Error{type: :capability_denied}} =
+               HostFunctions.ensure_favorite(p, %{
+                 "user-id": "u1",
+                 "imdb-id": {:some, "tt0111161"},
+                 "tmdb-id": :none,
+                 "tvdb-id": :none
+               })
+    end
+  end
+
+  describe "ensure_favorite/2 (surfaces:write collections:favorite)" do
+    setup do
+      {:ok, _} =
+        Mydia.Settings.create_plugin_config(%{
+          slug: "tester",
+          name: "Tester",
+          version: "1.0.0",
+          source_url: "test",
+          manifest: %{
+            "slug" => "tester",
+            "name" => "Tester",
+            "version" => "1.0.0",
+            "capabilities" => %{"events:subscribe" => ["media_item.added"]}
+          },
+          granted_capabilities: %{},
+          enabled: false
+        })
+
+      user = user_fixture()
+      {:ok, _} = Connections.connect("tester", user.id, %{access_token: "t"})
+      %{user: user}
+    end
+
+    defp fav_target(user_id, opts) do
+      %{
+        "user-id": user_id,
+        "imdb-id": opt(opts[:imdb]),
+        "tmdb-id": opt(opts[:tmdb]),
+        "tvdb-id": opt(opts[:tvdb])
+      }
+    end
+
+    test "write is denied without surfaces:write collections:favorite", %{user: user} do
+      p = plugin(%{"surfaces:write" => ["playback:watched"]})
+
+      assert {:error, %Error{type: :capability_denied}} =
+               HostFunctions.ensure_favorite(p, fav_target(user.id, imdb: "tt600"))
+    end
+
+    test "a user with no active connection is denied" do
+      stranger = user_fixture()
+      p = plugin(%{"surfaces:write" => ["collections:favorite"]})
+
+      assert {:error, %Error{type: :capability_denied}} =
+               HostFunctions.ensure_favorite(p, fav_target(stranger.id, imdb: "tt601"))
+    end
+
+    test "a matched item is favorited; re-applying is an idempotent no-op", %{user: user} do
+      movie = movie_with(%{imdb_id: "tt602", tmdb_id: 602})
+      p = plugin(%{"surfaces:write" => ["collections:favorite"]})
+
+      assert {:ok, %{status: :changed}} =
+               HostFunctions.ensure_favorite(p, fav_target(user.id, imdb: "tt602"))
+
+      assert Mydia.Collections.is_favorite?(user, movie.id)
+
+      assert {:ok, %{status: :"already-favorited"}} =
+               HostFunctions.ensure_favorite(p, fav_target(user.id, imdb: "tt602"))
+    end
+
+    test "reports :not-found for ids with no local match", %{user: user} do
+      p = plugin(%{"surfaces:write" => ["collections:favorite"]})
+
+      assert {:ok, %{status: :"not-found"}} =
+               HostFunctions.ensure_favorite(p, fav_target(user.id, imdb: "tt999999"))
     end
   end
 end

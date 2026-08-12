@@ -79,6 +79,20 @@ defmodule Mydia.Plugins.ManifestTest do
       assert caps["data:read"] == ["media_item"]
     end
 
+    test "accepts library_item as a data:read namespace" do
+      manifest = %{
+        "slug" => "t",
+        "name" => "T",
+        "version" => "1.0.0",
+        "capabilities" => %{
+          "events:subscribe" => ["media_item.added"],
+          "data:read" => ["library_item"]
+        }
+      }
+
+      assert {:ok, _} = Mydia.Plugins.Manifest.parse(manifest)
+    end
+
     test "rejects a data:read namespace outside the v1 catalog" do
       map =
         valid_map(%{
@@ -103,6 +117,20 @@ defmodule Mydia.Plugins.ManifestTest do
 
       assert {:ok, %Manifest{capabilities: caps}} = Manifest.parse(map)
       assert caps["surfaces:write"] == ["playback:watched"]
+    end
+
+    test "accepts collections:favorite as a write surface" do
+      manifest = %{
+        "slug" => "t",
+        "name" => "T",
+        "version" => "1.0.0",
+        "capabilities" => %{
+          "events:subscribe" => ["media_item.added"],
+          "surfaces:write" => ["collections:favorite"]
+        }
+      }
+
+      assert {:ok, _} = Manifest.parse(manifest)
     end
 
     test "rejects an unknown surfaces:write surface" do
