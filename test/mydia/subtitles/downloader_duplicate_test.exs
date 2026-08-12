@@ -30,6 +30,18 @@ defmodule Mydia.Subtitles.DownloaderDuplicateTest do
     assert Repo.get_by(Subtitle, subtitle_hash: "shared-hash") != nil
   end
 
+  # Scoping the application check is only half the job. The database still has
+  # to allow the second row to exist.
+  test "the same subtitle hash can actually be stored against two media files" do
+    movie = MediaFixtures.media_item_fixture(%{type: "movie"})
+    file_1080 = MediaFixtures.media_file_fixture(%{media_item_id: movie.id})
+    file_2160 = MediaFixtures.media_file_fixture(%{media_item_id: movie.id})
+
+    insert_subtitle(file_1080.id, "shared-hash")
+
+    assert %Subtitle{} = insert_subtitle(file_2160.id, "shared-hash")
+  end
+
   test "the same subtitle hash on the same media file is a duplicate" do
     media_file = MediaFixtures.media_file_fixture()
     existing = insert_subtitle(media_file.id, "same-hash")
