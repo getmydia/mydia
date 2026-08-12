@@ -268,4 +268,44 @@ defmodule Mydia.Indexers.CardigannDownloadTest do
                CardigannDownload.resolve(definition, "https://plain.example/info/1")
     end
   end
+
+  # Phase 1 stores a probed active_link; without honouring it here, a definition
+  # that failed over to a mirror still resolves its download block against the
+  # dead primary in `links` head.
+  describe "resolve/3 with a configured base_url" do
+    test "resolves the download block against the configured base_url, not links head" do
+      dead = Bypass.open()
+      live = Bypass.open()
+      Bypass.down(dead)
+
+      Bypass.expect(live, "GET", "/dl/1", fn conn ->
+        Plug.Conn.resp(
+          conn,
+          200,
+          ~s|<html><body><a href="magnet:?xt=urn:btih:VIALIVE">m</a></body></html>|
+        )
+      end)
+
+      dead_url = "http://localhost:#{dead.port}"
+      live_url = "http://localhost:#{live.port}"
+
+      definition = %Parsed{
+        id: "base-url-test",
+        name: "Base URL Test",
+        type: "public",
+        encoding: "UTF-8",
+        links: [dead_url],
+        capabilities: %{modes: %{}},
+        search: %{paths: [%{path: "/search"}], rows: %{selector: "tr"}, fields: %{}},
+        download: %{
+          selectors: [%{selector: ~s|a[href^="magnet:"]|, attribute: "href"}]
+        }
+      }
+
+      assert {:ok, {:magnet, magnet}} =
+               CardigannDownload.resolve(definition, "/dl/1", %{base_url: live_url})
+
+      assert magnet =~ "VIALIVE"
+    end
+  end
 end

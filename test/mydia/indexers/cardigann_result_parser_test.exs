@@ -1113,4 +1113,524 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
       assert result.leechers == 0
     end
   end
+
+  describe "field default" do
+    defp default_definition(seeders_field) do
+      %Parsed{
+        id: "def-test",
+        name: "Def Test",
+        type: "public",
+        links: ["https://example.com"],
+        encoding: "UTF-8",
+        capabilities: %{},
+        settings: [],
+        search: %{
+          paths: [%{path: "/s"}],
+          inputs: %{},
+          headers: nil,
+          keywordsfilters: [],
+          rows: %{selector: "tr"},
+          fields: %{
+            "title" => %{selector: "td.title"},
+            "download" => %{selector: "a", attribute: "href"},
+            "seeders" => seeders_field
+          }
+        }
+      }
+    end
+
+    @html ~s|<html><body><table><tr><td class="title">Ubuntu</td><a href="magnet:?xt=urn:btih:AAA">d</a></tr></table></body></html>|
+
+    test "uses the default when an optional selector misses" do
+      definition = default_definition(%{selector: "td.seeders", optional: true, default: 5})
+
+      assert {:ok, [result]} =
+               CardigannResultParser.parse_results(
+                 definition,
+                 %{status: 200, body: @html},
+                 "Def Test",
+                 template_context: %{},
+                 base_url: "https://example.com"
+               )
+
+      assert result.seeders == 5
+    end
+
+    test "ignores the default when the selector matches" do
+      html =
+        "<html><body><table><tr><td class=\"title\">Ubuntu</td><td class=\"seeders\">42</td><a href=\"magnet:?xt=urn:btih:AAA\">d</a></tr></table></body></html>"
+
+      definition = default_definition(%{selector: "td.seeders", optional: true, default: 0})
+
+      assert {:ok, [result]} =
+               CardigannResultParser.parse_results(
+                 definition,
+                 %{status: 200, body: html},
+                 "Def Test",
+                 template_context: %{},
+                 base_url: "https://example.com"
+               )
+
+      assert result.seeders == 42
+    end
+
+    test "does not apply a default to a non-optional field" do
+      definition = default_definition(%{selector: "td.seeders", default: 7})
+
+      assert {:ok, results} =
+               CardigannResultParser.parse_results(
+                 definition,
+                 %{status: 200, body: @html},
+                 "Def Test",
+                 template_context: %{},
+                 base_url: "https://example.com"
+               )
+
+      # A required field that matches nothing drops the row rather than
+      # inheriting a default it was never given permission to use.
+      assert results == [] or hd(results).seeders != 7
+    end
+  end
+
+  describe "andmatch with filtered keywords" do
+    test "uses filtered keywords from template context" do
+      definition = %Parsed{
+        id: "andmatch-kw",
+        name: "Andmatch KW",
+        type: "public",
+        links: ["https://example.com"],
+        encoding: "UTF-8",
+        capabilities: %{},
+        settings: [],
+        search: %{
+          paths: [%{path: "/s"}],
+          inputs: %{},
+          headers: nil,
+          keywordsfilters: [],
+          rows: %{selector: "tr"},
+          fields: %{
+            "title" => %{selector: "td.title", filters: [%{name: "andmatch"}]},
+            "download" => %{selector: "a.dl", attribute: "href"}
+          }
+        }
+      }
+
+      html =
+        ~s|<html><body><table>| <>
+          ~s|<tr><td class="title">The Matrix 1999</td><a class="dl" href="magnet:?xt=urn:btih:AAA">d</a></tr>| <>
+          ~s|<tr><td class="title">The Matrix</td><a class="dl" href="magnet:?xt=urn:btih:BBB">d</a></tr>| <>
+          ~s|</table></body></html>|
+
+      assert {:ok, filtered_results} =
+               CardigannResultParser.parse_results(
+                 definition,
+                 %{status: 200, body: html},
+                 "Andmatch KW",
+                 template_context: %{keywords: "The Matrix"},
+                 base_url: "https://example.com"
+               )
+
+      assert length(filtered_results) == 2
+
+      assert {:ok, unfiltered_results} =
+               CardigannResultParser.parse_results(
+                 definition,
+                 %{status: 200, body: html},
+                 "Andmatch KW",
+                 template_context: %{keywords: "The Matrix 1999"},
+                 base_url: "https://example.com"
+               )
+
+      assert length(unfiltered_results) == 1
+      assert hd(unfiltered_results).title == "The Matrix 1999"
+    end
+  end
+
+  describe "field case" do
+    defp case_definition(category_field) do
+      %Parsed{
+        id: "case-test",
+        name: "Case Test",
+        type: "public",
+        links: ["https://example.com"],
+        encoding: "UTF-8",
+        capabilities: %{},
+        settings: [],
+        search: %{
+          paths: [%{path: "/s"}],
+          inputs: %{},
+          headers: nil,
+          keywordsfilters: [],
+          rows: %{selector: "tr"},
+          fields: %{
+            "title" => %{selector: "td.title"},
+            "download" => %{selector: "a.dl", attribute: "href"},
+            "category" => category_field
+          }
+        }
+      }
+    end
+
+    defp case_html(cat) do
+      ~s|<html><body><table><tr>| <>
+        ~s|<td class="title">Ubuntu</td>| <>
+        ~s|<td class="cat"><a href="/browse?cat=#{cat}">#{cat}</a></td>| <>
+        ~s|<a class="dl" href="magnet:?xt=urn:btih:AAA">d</a>| <>
+        ~s|</tr></table></body></html>|
+    end
+
+    test "resolves to the value of the first matching case selector" do
+      definition =
+        case_definition(%{
+          selector: "td.cat",
+          case: %{"a[href*=\"cat=tv\"]" => "5000", "a[href*=\"cat=movies\"]" => "2000"}
+        })
+
+      assert {:ok, [result]} =
+               CardigannResultParser.parse_results(
+                 definition,
+                 %{status: 200, body: case_html("movies")},
+                 "Case Test",
+                 template_context: %{},
+                 base_url: "https://example.com"
+               )
+
+      assert result.category == 2000
+    end
+
+    test "falls back to the * case key" do
+      definition =
+        case_definition(%{
+          selector: "td.cat",
+          case: %{"a[href*=\"cat=tv\"]" => "5000", "*" => "8000"}
+        })
+
+      assert {:ok, [result]} =
+               CardigannResultParser.parse_results(
+                 definition,
+                 %{status: 200, body: case_html("other")},
+                 "Case Test",
+                 template_context: %{},
+                 base_url: "https://example.com"
+               )
+
+      assert result.category == 8000
+    end
+
+    test "case combines with optional and default" do
+      definition =
+        case_definition(%{
+          selector: "td.cat",
+          case: %{"a[href*=\"cat=tv\"]" => "5000"},
+          optional: true,
+          default: "8000"
+        })
+
+      assert {:ok, [result]} =
+               CardigannResultParser.parse_results(
+                 definition,
+                 %{status: 200, body: case_html("other")},
+                 "Case Test",
+                 template_context: %{},
+                 base_url: "https://example.com"
+               )
+
+      assert result.category == 8000
+    end
+  end
+
+  describe "XML responses" do
+    test "parses an RSS-shaped response" do
+      xml = """
+      <?xml version="1.0" encoding="UTF-8"?>
+      <rss version="2.0">
+        <channel>
+          <item>
+            <title>Ubuntu 24.04</title>
+            <link>magnet:?xt=urn:btih:AAA</link>
+            <size>1500000000</size>
+          </item>
+          <item>
+            <title>Ubuntu 22.04</title>
+            <link>magnet:?xt=urn:btih:BBB</link>
+            <size>1400000000</size>
+          </item>
+        </channel>
+      </rss>
+      """
+
+      definition = %Parsed{
+        id: "xml-test",
+        name: "XML Test",
+        type: "public",
+        links: ["https://example.com"],
+        encoding: "UTF-8",
+        capabilities: %{},
+        settings: [],
+        search: %{
+          paths: [%{path: "/rss", response: %{type: "xml"}}],
+          inputs: %{},
+          headers: nil,
+          keywordsfilters: [],
+          rows: %{selector: "rss/channel/item"},
+          fields: %{
+            "title" => %{selector: "title"},
+            "download" => %{selector: "link"},
+            "size" => %{selector: "size"}
+          }
+        }
+      }
+
+      assert {:ok, results} =
+               CardigannResultParser.parse_results(
+                 definition,
+                 %{status: 200, body: xml},
+                 "XML Test",
+                 template_context: %{},
+                 base_url: "https://example.com"
+               )
+
+      assert length(results) == 2
+      assert hd(results).title == "Ubuntu 24.04"
+      assert hd(results).download_url == "magnet:?xt=urn:btih:AAA"
+    end
+
+    test "resolves field case selectors" do
+      xml = """
+      <?xml version="1.0"?>
+      <rss>
+        <channel>
+          <item>
+            <raw_title>Ubuntu 1080p WEB</raw_title>
+            <title>Ubuntu</title>
+            <link>magnet:?xt=urn:btih:DDD</link>
+          </item>
+        </channel>
+      </rss>
+      """
+
+      definition = %Parsed{
+        id: "xml-case",
+        name: "XML Case",
+        type: "public",
+        links: ["https://example.com"],
+        encoding: "UTF-8",
+        capabilities: %{},
+        settings: [],
+        search: %{
+          paths: [%{path: "/rss", response: %{type: "xml"}}],
+          inputs: %{},
+          headers: nil,
+          keywordsfilters: [],
+          rows: %{selector: "rss/channel/item"},
+          fields: %{
+            "title" => %{selector: "title"},
+            "download" => %{selector: "link"},
+            "category" => %{
+              selector: "raw_title",
+              case: %{":contains(\"1080p\")" => "2", "*" => "1"}
+            }
+          }
+        }
+      }
+
+      assert {:ok, [result]} =
+               CardigannResultParser.parse_results(
+                 definition,
+                 %{status: 200, body: xml},
+                 "XML Case",
+                 template_context: %{},
+                 base_url: "https://example.com"
+               )
+
+      assert result.category == 2
+    end
+
+    test "reads an XML attribute" do
+      xml = """
+      <?xml version="1.0"?>
+      <torrents>
+        <torrent name="Debian 12" magnet="magnet:?xt=urn:btih:CCC" />
+      </torrents>
+      """
+
+      definition = %Parsed{
+        id: "xml-attr",
+        name: "XML Attr",
+        type: "public",
+        links: ["https://example.com"],
+        encoding: "UTF-8",
+        capabilities: %{},
+        settings: [],
+        search: %{
+          paths: [%{path: "/x", response: %{type: "xml"}}],
+          inputs: %{},
+          headers: nil,
+          keywordsfilters: [],
+          rows: %{selector: "torrents/torrent"},
+          fields: %{
+            "title" => %{selector: ".", attribute: "name"},
+            "download" => %{selector: ".", attribute: "magnet"}
+          }
+        }
+      }
+
+      assert {:ok, [result]} =
+               CardigannResultParser.parse_results(
+                 definition,
+                 %{status: 200, body: xml},
+                 "XML Attr",
+                 template_context: %{},
+                 base_url: "https://example.com"
+               )
+
+      assert result.title == "Debian 12"
+    end
+
+    test "uses declared type from the selected search path" do
+      xml = """
+      <?xml version="1.0"?>
+      <torrents>
+        <torrent name="Debian 12" magnet="magnet:?xt=urn:btih:CCC" />
+      </torrents>
+      """
+
+      html_path = %{
+        path: "/html",
+        response: %{type: "html"},
+        categories: [5000]
+      }
+
+      xml_path = %{
+        path: "/xml",
+        response: %{type: "xml"},
+        categories: [2000]
+      }
+
+      definition = %Parsed{
+        id: "xml-path",
+        name: "XML Path",
+        type: "public",
+        links: ["https://example.com"],
+        encoding: "UTF-8",
+        capabilities: %{},
+        settings: [],
+        search: %{
+          paths: [html_path, xml_path],
+          inputs: %{},
+          headers: nil,
+          keywordsfilters: [],
+          rows: %{selector: "torrents/torrent"},
+          fields: %{
+            "title" => %{selector: ".", attribute: "name"},
+            "download" => %{selector: ".", attribute: "magnet"}
+          }
+        }
+      }
+
+      response = %{status: 200, body: xml}
+
+      assert {:ok, []} =
+               CardigannResultParser.parse_results(
+                 definition,
+                 response,
+                 "XML Path",
+                 categories: [5000],
+                 template_context: %{},
+                 base_url: "https://example.com"
+               )
+
+      assert {:ok, [result]} =
+               CardigannResultParser.parse_results(
+                 definition,
+                 response,
+                 "XML Path",
+                 categories: [2000],
+                 template_context: %{},
+                 base_url: "https://example.com"
+               )
+
+      assert result.title == "Debian 12"
+    end
+
+    test "text fields use extracted values as .Result context" do
+      xml = """
+      <?xml version="1.0"?>
+      <torrents>
+        <torrent name="Debian 12" magnet="magnet:?xt=urn:btih:CCC" />
+      </torrents>
+      """
+
+      definition = %Parsed{
+        id: "xml-text",
+        name: "XML Text",
+        type: "public",
+        links: ["https://example.com"],
+        encoding: "UTF-8",
+        capabilities: %{},
+        settings: [],
+        search: %{
+          paths: [%{path: "/x", response: %{type: "xml"}}],
+          inputs: %{},
+          headers: nil,
+          keywordsfilters: [],
+          rows: %{selector: "torrents/torrent"},
+          fields: %{
+            "_name" => %{selector: ".", attribute: "name"},
+            "title" => %{text: "{{ .Result._name }} ISO"},
+            "download" => %{selector: ".", attribute: "magnet"}
+          }
+        }
+      }
+
+      assert {:ok, [result]} =
+               CardigannResultParser.parse_results(
+                 definition,
+                 %{status: 200, body: xml},
+                 "XML Text",
+                 template_context: %{},
+                 base_url: "https://example.com"
+               )
+
+      assert result.title == "Debian 12 ISO"
+    end
+  end
+
+  describe "rows.missingAttributeEqualsNoResults" do
+    test "returns no rows instead of an error when the attribute is missing" do
+      html =
+        "<html><body><table><tr><td href=\"magnet:?xt=urn:btih:abc\">no attr here</td></tr></table></body></html>"
+
+      definition = %Parsed{
+        id: "manr",
+        name: "MANR",
+        type: "public",
+        links: ["https://example.com"],
+        encoding: "UTF-8",
+        capabilities: %{},
+        settings: [],
+        search: %{
+          paths: [%{path: "/s"}],
+          inputs: %{},
+          headers: nil,
+          keywordsfilters: [],
+          rows: %{
+            selector: "tr",
+            attribute: "data-id",
+            missing_attribute_equals_no_results: true
+          },
+          fields: %{
+            "title" => %{selector: "td"},
+            "download" => %{selector: "td", attribute: "href"}
+          }
+        }
+      }
+
+      assert {:ok, []} =
+               CardigannResultParser.parse_results(definition, %{status: 200, body: html}, "MANR",
+                 template_context: %{},
+                 base_url: "https://example.com"
+               )
+    end
+  end
 end

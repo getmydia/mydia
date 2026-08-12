@@ -3,7 +3,9 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
 
   alias Mydia.Indexers.Adapter.Cardigann
   alias Mydia.Indexers.Adapter.Error
+  alias Mydia.Indexers.Cardigann.TemplateContext
   alias Mydia.Indexers.CardigannDefinition
+  alias Mydia.Indexers.CardigannDefinition.Parsed
   alias Mydia.Indexers.CardigannSearchSession
   alias Mydia.Repo
 
@@ -361,6 +363,42 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
       after
         Application.put_env(:mydia, :features, original)
       end
+    end
+  end
+
+  describe "parsing template context" do
+    test "applies keywordsfilters to Keywords before result parsing" do
+      parsed = %Parsed{
+        id: "kw-parse",
+        name: "KW Parse",
+        type: "public",
+        links: ["https://example.com"],
+        legacylinks: [],
+        encoding: "UTF-8",
+        capabilities: %{},
+        settings: [],
+        search: %{
+          paths: [%{path: "/search"}],
+          inputs: %{},
+          headers: nil,
+          keywordsfilters: [
+            %{name: "re_replace", args: ["\\b(19|20)\\d{2}\\b", ""]},
+            %{name: "trim"}
+          ],
+          rows: %{selector: "tr"},
+          fields: %{}
+        }
+      }
+
+      context =
+        TemplateContext.build(parsed,
+          query: "The Matrix 1999",
+          config: %{"sort" => "seeders"}
+        )
+
+      assert context.keywords == "The Matrix"
+      assert context.query.series == "The Matrix"
+      assert context.config == %{"sort" => "seeders"}
     end
   end
 end

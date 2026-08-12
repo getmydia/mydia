@@ -14,7 +14,9 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   - Consecutive failure tracking
   """
 
+  alias Mydia.Indexers.Cardigann.Links
   alias Mydia.Indexers.CardigannDefinition
+  alias Mydia.Indexers.CardigannDefinition.Parsed
   alias Mydia.Indexers.CardigannParser
   alias Mydia.Repo
 
@@ -136,37 +138,59 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
     {:ok, results}
   end
 
+  @doc """
+  Probes each base URL candidate in order and returns the first that responds.
+
+  The returned map is suitable for storing in `CardigannDefinition.link_status`
+  and records every candidate tried, not only the winner, so the admin UI can
+  show why a mirror was skipped.
+  """
+  @spec probe_candidates(Parsed.t(), map()) ::
+          {:ok, String.t(), map()} | {:error, map()}
+  def probe_candidates(%Parsed{} = parsed, user_config) do
+    parsed
+    |> Links.candidates()
+    |> Enum.reduce_while({:error, %{}}, fn candidate, {:error, status} ->
+      case test_homepage(candidate, user_config) do
+        {:ok, http_status} ->
+          {:halt, {:ok, candidate, Map.put(status, candidate, ok_entry(http_status))}}
+
+        {:error, error} ->
+          {:cont, {:error, Map.put(status, candidate, error_entry(error))}}
+      end
+    end)
+  end
+
   # Private Functions
 
   defp perform_test_search(definition, parsed_definition) do
     start_time = System.monotonic_time(:millisecond)
-
-    # Test connectivity by hitting the homepage instead of doing a full search
-    # This avoids issues with complex Go template conditionals in search paths
-    base_url = get_base_url(parsed_definition)
+    user_config = definition.config || %{}
 
     result =
-      case test_homepage(base_url, definition.config || %{}) do
-        {:ok, status} ->
+      case probe_candidates(parsed_definition, user_config) do
+        {:ok, active_link, link_status} ->
           response_time = System.monotonic_time(:millisecond) - start_time
+          store_link_state(definition, active_link, link_status)
 
           %{
             success: true,
             status: determine_health_status(definition, true, response_time),
-            message: "Connection successful (HTTP #{status})",
+            message: "Connection successful via #{active_link}",
             response_time_ms: response_time,
             error: nil
           }
 
-        {:error, error} ->
+        {:error, link_status} ->
           response_time = System.monotonic_time(:millisecond) - start_time
+          store_link_state(definition, nil, link_status)
 
           %{
             success: false,
             status: determine_health_status(definition, false, response_time),
-            message: "Connection failed",
+            message: "No reachable base URL",
             response_time_ms: response_time,
-            error: format_error(error)
+            error: "All #{map_size(link_status)} candidate links failed"
           }
       end
 
@@ -174,8 +198,17 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
     {:ok, result}
   end
 
-  defp get_base_url(%{links: [base_url | _]}), do: String.trim_trailing(base_url, "/")
-  defp get_base_url(_), do: nil
+  defp store_link_state(definition, nil, link_status) do
+    definition
+    |> Ecto.Changeset.change(%{link_status: link_status})
+    |> Repo.update()
+  end
+
+  defp store_link_state(definition, active_link, link_status) do
+    definition
+    |> Ecto.Changeset.change(%{active_link: active_link, link_status: link_status})
+    |> Repo.update()
+  end
 
   defp test_homepage(nil, _user_config), do: {:error, "No base URL configured"}
 
@@ -262,4 +295,22 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
 
   defp format_error(error) when is_binary(error), do: error
   defp format_error(error), do: inspect(error)
+
+  defp ok_entry(http_status) do
+    %{
+      "ok" => true,
+      "status" => http_status,
+      "error" => nil,
+      "checked_at" => DateTime.utc_now() |> DateTime.to_iso8601()
+    }
+  end
+
+  defp error_entry(error) do
+    %{
+      "ok" => false,
+      "status" => nil,
+      "error" => format_error(error),
+      "checked_at" => DateTime.utc_now() |> DateTime.to_iso8601()
+    }
+  end
 end

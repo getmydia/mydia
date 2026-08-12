@@ -217,6 +217,46 @@ defmodule Mydia.Indexers.CardigannDefinitionTest do
     end
   end
 
+  describe "changeset/2" do
+    test "casts active_link and link_status" do
+      attrs = %{
+        indexer_id: "link-test",
+        name: "Link Test",
+        type: "public",
+        links: %{"0" => "https://a.example.com"},
+        capabilities: %{},
+        definition: "id: link-test",
+        schema_version: "v11",
+        active_link: "https://b.example.com",
+        link_status: %{
+          "https://a.example.com" => %{"ok" => false, "checked_at" => "2026-08-12T00:00:00Z"},
+          "https://b.example.com" => %{"ok" => true, "checked_at" => "2026-08-12T00:00:00Z"}
+        }
+      }
+
+      changeset = CardigannDefinition.changeset(%CardigannDefinition{}, attrs)
+
+      assert changeset.valid?
+      assert Ecto.Changeset.get_field(changeset, :active_link) == "https://b.example.com"
+      assert map_size(Ecto.Changeset.get_field(changeset, :link_status)) == 2
+    end
+
+    test "active_link and link_status are optional" do
+      attrs = %{
+        indexer_id: "link-test-2",
+        name: "Link Test 2",
+        type: "public",
+        links: %{"0" => "https://a.example.com"},
+        capabilities: %{},
+        definition: "id: link-test-2",
+        schema_version: "v11"
+      }
+
+      changeset = CardigannDefinition.changeset(%CardigannDefinition{}, attrs)
+      assert changeset.valid?
+    end
+  end
+
   # Helper function to insert a Cardigann definition
   defp insert_cardigann_definition(attrs) do
     %CardigannDefinition{}

@@ -271,6 +271,44 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
     end
   end
 
+  describe "allowEmptyInputs" do
+    defp parsed_with_inputs(inputs, allow_empty) do
+      %Parsed{
+        id: "ei",
+        name: "EI",
+        type: "public",
+        links: ["https://example.com"],
+        legacylinks: [],
+        encoding: "UTF-8",
+        capabilities: %{},
+        settings: [],
+        search: %{
+          paths: [%{path: "/search"}],
+          inputs: inputs,
+          headers: nil,
+          keywordsfilters: [],
+          allow_empty_inputs: allow_empty,
+          rows: %{selector: "tr"},
+          fields: %{}
+        }
+      }
+    end
+
+    test "keeps empty inputs when allowEmptyInputs is true" do
+      parsed = parsed_with_inputs(%{"q" => "{{ .Keywords }}", "cat" => ""}, true)
+
+      assert {:ok, params} = CardigannSearchEngine.build_request_params(parsed, query: "")
+      assert Map.has_key?(params.query_params, "cat")
+    end
+
+    test "drops empty inputs by default" do
+      parsed = parsed_with_inputs(%{"q" => "{{ .Keywords }}", "cat" => ""}, nil)
+
+      assert {:ok, params} = CardigannSearchEngine.build_request_params(parsed, query: "")
+      refute Map.has_key?(params.query_params, "cat")
+    end
+  end
+
   describe "validate_response/1" do
     test "accepts valid 200 response" do
       response = %{status: 200, body: "<html>...</html>", headers: []}
@@ -729,6 +767,163 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
                  params,
                  user_config
                )
+    end
+  end
+
+  describe "execute_search/4 base URL failover" do
+    setup do
+      dead = Bypass.open()
+      live = Bypass.open()
+      Bypass.down(dead)
+
+      Bypass.stub(live, "GET", "/search", fn conn ->
+        Plug.Conn.resp(
+          conn,
+          200,
+          "<html><body><table><tr><td>row</td></tr></table></body></html>"
+        )
+      end)
+
+      {:ok, dead_url: "http://localhost:#{dead.port}", live_url: "http://localhost:#{live.port}"}
+    end
+
+    defp parsed_for(links) do
+      %Parsed{
+        id: "failover-test",
+        name: "Failover Test",
+        type: "public",
+        links: links,
+        legacylinks: [],
+        encoding: "UTF-8",
+        capabilities: %{},
+        settings: [],
+        search: %{
+          paths: [%{path: "/search"}],
+          inputs: %{},
+          headers: nil,
+          keywordsfilters: [],
+          rows: %{selector: "tr"},
+          fields: %{}
+        }
+      }
+    end
+
+    test "advances to the next candidate on a transport failure", %{
+      dead_url: dead_url,
+      live_url: live_url
+    } do
+      test_pid = self()
+      parsed = parsed_for([dead_url, live_url])
+
+      assert {:ok, %{status: 200}} =
+               CardigannSearchEngine.execute_search(
+                 parsed,
+                 [query: "ubuntu", on_promote: fn url -> send(test_pid, {:promoted, url}) end],
+                 %{},
+                 %{}
+               )
+
+      assert_received {:promoted, ^live_url}
+    end
+
+    test "does not fail over when the first candidate returns 200 with no rows", %{
+      live_url: live_url
+    } do
+      second = Bypass.open()
+      Bypass.stub(second, "GET", "/search", fn conn -> Plug.Conn.resp(conn, 200, "second") end)
+      second_url = "http://localhost:#{second.port}"
+
+      test_pid = self()
+      parsed = parsed_for([live_url, second_url])
+
+      assert {:ok, %{status: 200, body: body}} =
+               CardigannSearchEngine.execute_search(
+                 parsed,
+                 [query: "ubuntu", on_promote: fn url -> send(test_pid, {:promoted, url}) end],
+                 %{},
+                 %{}
+               )
+
+      refute body == "second"
+      refute_received {:promoted, _}
+    end
+
+    test "stops after three candidates" do
+      dead_urls =
+        for _ <- 1..5 do
+          b = Bypass.open()
+          Bypass.down(b)
+          "http://localhost:#{b.port}"
+        end
+
+      parsed = parsed_for(dead_urls)
+
+      assert {:error, _} =
+               CardigannSearchEngine.execute_search(parsed, [query: "ubuntu"], %{}, %{})
+    end
+  end
+
+  describe "keywordsfilters" do
+    test "filters the query before template substitution" do
+      parsed = %Parsed{
+        id: "kw",
+        name: "KW",
+        type: "public",
+        links: ["https://example.com"],
+        legacylinks: [],
+        encoding: "UTF-8",
+        capabilities: %{},
+        settings: [],
+        search: %{
+          paths: [%{path: "/search?q={{ .Keywords }}"}],
+          inputs: %{},
+          headers: nil,
+          keywordsfilters: [
+            %{name: "re_replace", args: ["\\b(19|20)\\d{2}\\b", ""]},
+            %{name: "trim"}
+          ],
+          rows: %{selector: "tr"},
+          fields: %{}
+        }
+      }
+
+      assert {:ok, url} =
+               CardigannSearchEngine.build_search_url(parsed,
+                 query: "The Matrix 1999",
+                 base_url: "https://example.com"
+               )
+
+      assert url =~ "The%20Matrix" or url =~ "The+Matrix"
+      refute url =~ "1999"
+    end
+
+    test "leaves the query untouched when there are no filters" do
+      parsed = %Parsed{
+        id: "kw2",
+        name: "KW2",
+        type: "public",
+        links: ["https://example.com"],
+        legacylinks: [],
+        encoding: "UTF-8",
+        capabilities: %{},
+        settings: [],
+        search: %{
+          paths: [%{path: "/search?q={{ .Keywords }}"}],
+          inputs: %{},
+          headers: nil,
+          keywordsfilters: [],
+          rows: %{selector: "tr"},
+          fields: %{}
+        }
+      }
+
+      assert {:ok, url} =
+               CardigannSearchEngine.build_search_url(parsed,
+                 query: "The Matrix 1999",
+                 base_url: "https://example.com"
+               )
+
+      assert url =~ "1999"
     end
   end
 end

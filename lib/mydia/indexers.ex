@@ -741,7 +741,8 @@ defmodule Mydia.Indexers do
     with %CardigannDefinition{} = definition <- get_cardigann_definition_by_name(indexer_name),
          {:ok, parsed} <- CardigannParser.parse_definition(definition.definition) do
       CardigannDownload.resolve(parsed, download_url, %{
-        cookies: get_cardigann_auth_cookies(indexer_name)
+        cookies: get_cardigann_auth_cookies(indexer_name),
+        base_url: definition.active_link
       })
     else
       nil ->

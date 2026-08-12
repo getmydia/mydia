@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="lt-LT">
+<head>
+
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <title>Torrent.lt - Prisijungimas</title>
+    <link href="favicon.ico" rel="SHORTCUT ICON">
+    <link rel="stylesheet" href="https://leocdn.trl.lt/lt/css/login.css"/>
+    <link rel="stylesheet" type="text/css"
+          href="https://leocdn.trl.lt/lt/css/bright3/jquery-ui-1.8.15.custom.css"/>
+
+    <meta property="og:type" content="website"/>
+    <meta property="og:title" content="Torrent.lt - kasdien naujausių filmų ir serialų įgarsinimai"/>
+    <meta property="og:url" content="https://torrent.ai/lt"/>
+    <meta property="og:site_name" content="Torrent.lt"/>
+    <meta property="og:image" content="https://torrent.ai/lt/images/fb-cover.jpg"/>
+</head>
+
+<body>
+
+<div id="fb-root"></div>
+
+
+<div id="nocookies_alert"></div>
+<div class="horizon">
+        <div id='nocookies_alert'></div>
+    <form id="login" method="post" action="account-login.php">
+        <input type="hidden" name="returnto" value="/lt/torrents?search=ubuntu&amp;sort=0&amp;type=desc">
+        <input type="hidden" name="recaptcha_response" id="recaptchaResponse">
+        <p class="logo">
+            <a href="main"><img
+                        src="https://leocdn.trl.lt/lt/themes/bright3/images/logo.png"></a>
+        </p>
+
+
+        <h1>prisijungimas</h1>
+
+        <p class="faq_text" id="noreg" style="text-align: center">
+            Kad apeiti Torrent.lt blokavimą užtenka atnaujinti DNS adresą savo kompiuteryje.
+            Tai labai paprasta ir efektyvu!<br />
+            Lengva instrukciją rasite <a href="https://atblokuoti.lt" target="_blank"><b>atblokuoti.lt</b></a> puslapyje.<br />
+            Galite pasinaudoti "vieno-paspaudimo" DNS atnaujinimo programėle <a href="https://atblokuoti.lt/files/DNSChanger.exe" target="_blank"><b>DNSchanger</b></a>
+        </p>
+
+        
+                
+        <fieldset id="login_inputs">
+            <input name="username" id="username" type="text" placeholder="Slapyvardis arba el.paštas" title="Slapyvardis arba el.paštas" autofocus required="required">
+            <input name="password" id="password" type="password" placeholder="Slaptažodis" title="Slaptažodis"
+                   required="required">
+                    </fieldset>
+                <fieldset id="actions">
+
+            <input type="submit" id="submit" value="prisijungti">
+                        <a href="recovery">Pamiršai slaptažodį?</a>
+            
+
+        </fieldset>
+
+
+
+        <p class="bottom_menu">
+            <a href="/buy-invite" style="font-weight: bold">Gauti VIP pakvietimą</a> | <a href="support">Susisiekti su administracija</a>
+        </p>
+
+    </form>
+</div>
+
+
+
+<!--- Scripts  -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.0.0/jquery.min.js"></script>
+
+
+<script src="js/jquery-ui-1.8.14.custom.min.js"></script>
+<script>
+  $(function () {
+    if (navigator.cookieEnabled === false) {
+      var dialogBox = '<div id="cookies-alert" title="Cookies" hidden>';
+      dialogBox += '<p><span class="ui-icon ui-icon-alert" style="float:left; margin:0 7px 50px 0;"></span>' +
+        'Jūsų naršyklėje privalo būti įjungti slapukai ("Cookies")<br />';
+      dialogBox += '<br /><p><a href="http://www.wikihow.com/Enable-Cookies-in-Your-Internet-Web-Browser" target="_blank">"Kaip ijungti slapukus" (Angl.)</a></p>';
+      dialogBox += '</div>';
+      $('#nocookies_alert').append(dialogBox);
+
+      $("#cookies-alert").dialog({
+        modal: true,
+        minWidth: 420,
+        open: function (event, ui) {
+          $(".ui-dialog-titlebar-close").hide();
+        }
+      });
+
+
+    }
+    $("form#login").submit(function (e) {
+      $('input#submit').attr("disabled", true);
+    });
+  });
+
+  // Prevent double submission of forms
+  jQuery.fn.preventDoubleSubmission = function () {
+    $(this).on('submit', function (e) {
+      var $form = $(this);
+      if ($form.data('submitted') === true) {
+        e.preventDefault();
+      } else {
+        $form.data('submitted', true);
+      }
+    });
+    return this;
+  };
+  $('form').preventDoubleSubmission();
+</script>
+
+<!-- Global site tag (gtag.js) - Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=UA-3748518-1"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+
+  function gtag() {
+    dataLayer.push(arguments);
+  }
+
+  gtag('js', new Date());
+
+  gtag('config', 'UA-3748518-1');
+</script>
+<script>(function (d, s, id) {
+    var js, fjs = d.getElementsByTagName(s)[0];
+    if (d.getElementById(id)) return;
+    js = d.createElement(s);
+    js.id = id;
+    js.src = "//connect.facebook.net/lt_LT/all.js#xfbml=1&appId=160409724053302";
+    fjs.parentNode.insertBefore(js, fjs);
+  }(document, 'script', 'facebook-jssdk'));</script>
+</body>
+</html>

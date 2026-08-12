@@ -21,6 +21,9 @@ defmodule Mydia.CardigannSnapshotHelper do
 
   alias Mydia.Indexers.CardigannParser
   alias Mydia.Indexers.CardigannResultParser
+  alias Mydia.Downloads.TorrentHash
+
+  @whole_document_selectors [":root", "", nil]
 
   @doc """
   Runs a snapshot test for a fixture directory.
@@ -104,6 +107,182 @@ defmodule Mydia.CardigannSnapshotHelper do
           message: "Parsing failed for #{indexer_name}: #{inspect(error)}"
     end
   end
+
+  @doc """
+  Runs a download-block snapshot for a fixture directory.
+
+  Requires `definition.yml` and `download_response.html`. Asserts the
+  definition's download block resolves the captured page to a magnet or a
+  download URL.
+  """
+  def run_download_snapshot(fixture_dir, opts \\ []) do
+    yaml = File.read!(Path.join(fixture_dir, "definition.yml"))
+    {:ok, definition} = CardigannParser.parse_definition(yaml)
+    page = File.read!(Path.join(fixture_dir, "download_response.html"))
+
+    expect = Keyword.get(opts, :expect, :magnet)
+
+    block = definition.download
+
+    if is_nil(block) do
+      raise ExUnit.AssertionError,
+        message: "fixture #{fixture_dir} has no download block"
+    end
+
+    value =
+      case resolve_download_value(block, page) do
+        {:ok, value} -> value
+        :no_match -> nil
+      end
+
+    case expect do
+      :magnet ->
+        unless value && String.starts_with?(value, "magnet:") do
+          raise ExUnit.AssertionError,
+            message: "expected magnet link from #{fixture_dir}, got #{inspect(value)}"
+        end
+
+      :url ->
+        unless value && value != "" do
+          raise ExUnit.AssertionError,
+            message: "expected download URL from #{fixture_dir}, got #{inspect(value)}"
+        end
+    end
+
+    {:ok, value}
+  end
+
+  defp resolve_download_value(block, page) do
+    selectors = Map.get(block, :selectors) || []
+
+    cond do
+      selectors != [] ->
+        resolve_selector_value(selectors, page)
+
+      usable_infohash?(Map.get(block, :infohash)) ->
+        resolve_infohash_value(Map.get(block, :infohash), page)
+
+      true ->
+        :no_match
+    end
+  end
+
+  defp usable_infohash?(%{hash: hash}) when is_map(hash), do: true
+  defp usable_infohash?(_), do: false
+
+  defp resolve_selector_value(selectors, page) do
+    document = Floki.parse_document!(page)
+
+    selectors
+    |> List.wrap()
+    |> Enum.find_value(fn config ->
+      case extract_selector_value(document, config, %{}) do
+        {:ok, v} when is_binary(v) and v != "" -> v
+        _ -> nil
+      end
+    end)
+    |> case do
+      nil -> :no_match
+      value -> {:ok, value}
+    end
+  end
+
+  defp resolve_infohash_value(infohash, page) do
+    variables = %{}
+
+    with {:ok, hash} <- match_download_selector(page, Map.get(infohash, :hash), variables, "hash"),
+         {:ok, title} <- match_download_title(page, Map.get(infohash, :title), variables) do
+      case TorrentHash.build_magnet(hash, title) do
+        nil -> :no_match
+        magnet -> {:ok, magnet}
+      end
+    else
+      _ -> :no_match
+    end
+  end
+
+  defp match_download_title(_page, nil, _variables), do: {:ok, nil}
+
+  defp match_download_title(page, selector, variables) do
+    case match_download_selector(page, selector, variables, "title") do
+      {:ok, title} -> {:ok, title}
+      {:error, _} -> {:ok, nil}
+    end
+  end
+
+  defp match_download_selector(_page, nil, _variables, label) do
+    {:error, "no #{label} selector configured"}
+  end
+
+  defp match_download_selector(page, selector, variables, label) do
+    filters = Map.get(selector, :filters) || []
+
+    with {:ok, selector_text} <- render_template(Map.get(selector, :selector), variables),
+         {:ok, raw} <-
+           extract_from_page(page, selector_text, Map.get(selector, :attribute), label),
+         {:ok, value} <- CardigannResultParser.apply_filters(raw, filters, variables) do
+      case String.trim(value) do
+        "" -> {:error, "#{label} selector matched an empty value"}
+        trimmed -> {:ok, trimmed}
+      end
+    end
+  end
+
+  defp extract_selector_value(document, config, variables) do
+    filters = Map.get(config, :filters) || []
+
+    with {:ok, selector_text} <- render_template(Map.get(config, :selector), variables),
+         {:ok, raw} <- extract_from_document(document, selector_text, Map.get(config, :attribute)),
+         {:ok, value} <- CardigannResultParser.apply_filters(raw, filters, variables) do
+      trimmed = String.trim(value)
+      if trimmed == "", do: {:error, :empty}, else: {:ok, trimmed}
+    end
+  end
+
+  defp extract_from_page(page, selector_text, _attribute, _label)
+       when selector_text in @whole_document_selectors do
+    {:ok, page}
+  end
+
+  defp extract_from_page(page, selector_text, attribute, label) do
+    with {:ok, document} <- Floki.parse_document(page) do
+      extract_from_document(document, selector_text, attribute)
+    else
+      {:error, reason} -> {:error, "could not parse #{label} response: #{inspect(reason)}"}
+    end
+  end
+
+  defp extract_from_document(document, selector_text, _attribute)
+       when selector_text in @whole_document_selectors do
+    {:ok, Floki.raw_html(document)}
+  end
+
+  defp extract_from_document(document, selector_text, attribute) do
+    case Floki.find(document, selector_text) do
+      [] ->
+        {:error, :no_match}
+
+      elements ->
+        value =
+          case attribute do
+            nil ->
+              elements |> Floki.text() |> String.trim()
+
+            attr ->
+              elements |> Floki.attribute(attr) |> List.first() |> Kernel.||("") |> String.trim()
+          end
+
+        {:ok, value}
+    end
+  end
+
+  defp render_template(nil, _variables), do: {:ok, ""}
+
+  defp render_template(template, variables) when is_binary(template) do
+    Mydia.Indexers.CardigannTemplate.render(template, variables, url_encode: false)
+  end
+
+  defp render_template(value, _variables), do: {:ok, to_string(value)}
 
   @doc """
   Lists all available fixture directories.

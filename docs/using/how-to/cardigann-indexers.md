@@ -2,8 +2,12 @@
 
 Mydia includes built-in Cardigann indexer support, allowing direct indexer connections without Prowlarr or Jackett.
 
-!!! warning "Experimental Feature"
-    Cardigann support is highly experimental. Only a limited number of indexers have been tested. If you encounter issues, please report them on GitHub.
+!!! warning "Public indexers are covered, private ones are not"
+    Mydia's Cardigann engine is tested against public trackers, which are the
+    ones it handles well. Private and semi-private trackers need a login, and
+    several login mechanisms (CAPTCHA, selector-derived inputs, separate submit
+    paths) are not implemented. Expect those to fail. If you hit a problem,
+    please report it on GitHub.
 
 Cardigann is the community indexer definition format from Jackett, also used by
 Prowlarr. Mydia reads those definitions natively, so you can point it at trackers
@@ -30,16 +34,48 @@ ENABLE_CARDIGANN=false
 
 ## Supported Indexers
 
-Mydia includes definitions for many popular indexers. However, only a subset have been thoroughly tested.
+Mydia syncs the full upstream definition catalogue. Coverage is strongest for
+public trackers.
 
-**Tested Indexers:**
+**Covered by regression tests:**
+
+These indexers have captured responses in the test suite, so their parsing is
+verified on every build.
 
 - 1337x
+- blueroms
+- EZTV
+- KickassTorrents
+- LimeTorrents
+- MagnetDownload
+- Nyaa.si
+- ShowRSS
+- The Pirate Bay
+- TorrentGalaxy (clone)
+- TorrentLT
 - YTS
 
-**Untested but Included:**
+**Everything else:**
 
-Many more indexer definitions are included but haven't been verified. They may work, have issues, or not work at all.
+The remaining definitions are included and may well work, but nothing pins their
+behaviour, so an upstream site change can break them silently. Private trackers
+in particular are likely to fail at login.
+
+To see what the engine actually supports against the current upstream
+catalogue, run the compatibility report:
+
+```bash
+mix mydia.cardigann_compat --type public
+```
+
+It lists, per unsupported feature, how many definitions that feature blocks.
+
+### Dead and moved domains
+
+Public trackers rotate domains often. Mydia probes every link a definition
+ships, including its historical ones, picks the first that responds, and stores
+it. If that host later stops answering, a search transparently fails over to the
+next candidate and remembers the new one. No configuration is involved.
 
 ## Configuration
 

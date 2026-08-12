@@ -1,0 +1,8 @@
+{
+  "captured_at": "2026-08-12T05:00:44.571694Z",
+  "indexer_id": "torrentlt",
+  "query": "ubuntu",
+  "response_size": 4980,
+  "response_type": "html",
+  "search_url": "https://torrent.lt/lt/torrents?search=ubuntu&sort=0&type=desc"
+}

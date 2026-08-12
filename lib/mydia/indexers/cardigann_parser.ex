@@ -72,6 +72,7 @@ defmodule Mydia.Indexers.CardigannParser do
         inputs: Map.get(search, "inputs", %{}),
         headers: Map.get(search, "headers"),
         keywordsfilters: Map.get(search, "keywordsfilters", []),
+        allow_empty_inputs: Map.get(search, "allowEmptyInputs", false),
         rows: rows,
         fields: fields
       }
@@ -165,6 +166,7 @@ defmodule Mydia.Indexers.CardigannParser do
         type: Map.fetch!(yaml_data, "type"),
         encoding: Map.fetch!(yaml_data, "encoding"),
         links: Map.fetch!(yaml_data, "links"),
+        legacylinks: Map.get(yaml_data, "legacylinks", []),
         capabilities: capabilities,
         search: search,
         login: login,
@@ -261,7 +263,17 @@ defmodule Mydia.Indexers.CardigannParser do
       # text field - allows computed/templated field values using {{ .Result.fieldname }}
       text: Map.get(selector, "text"),
       # optional field - if true, field extraction failure doesn't fail the row
-      optional: Map.get(selector, "optional", false)
+      optional: Map.get(selector, "optional", false),
+      # default value for an optional field that matched nothing. The v11 schema
+      # declares `default` dependentRequired on `optional`.
+      default: Map.get(selector, "default"),
+      # rows-block keys. These are only meaningful on `search.rows`, but the
+      # rows block goes through this same normalizer, and dropping them here is
+      # what kept the working `after`/`count` code in the result parser dead.
+      after: Map.get(selector, "after"),
+      count: Map.get(selector, "count"),
+      multiple: Map.get(selector, "multiple"),
+      missing_attribute_equals_no_results: Map.get(selector, "missingAttributeEqualsNoResults")
     }
     |> Enum.reject(fn {_k, v} -> is_nil(v) end)
     |> Map.new()

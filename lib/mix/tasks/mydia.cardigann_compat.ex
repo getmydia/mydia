@@ -3,8 +3,8 @@ defmodule Mix.Tasks.Mydia.CardigannCompat do
   Analyzes Cardigann indexer compatibility with our native engine.
 
   Downloads all v11 definitions from Prowlarr/Indexers GitHub repository,
-  parses each one, and generates a compatibility report showing filter usage,
-  missing filters, and per-definition compatibility status.
+  scores each one against the feature registry, and generates a report showing
+  which unsupported features block the most definitions.
 
   ## Usage
 
@@ -13,6 +13,7 @@ defmodule Mix.Tasks.Mydia.CardigannCompat do
   ## Options
 
       --limit N       Analyze only the first N definitions (useful for testing)
+      --type TYPE     Filter by privacy type: public, private, semi-private, or all
       --cache         Cache downloaded definitions to speed up repeated runs
       --verbose       Show per-definition details
       --json          Output report as JSON
@@ -20,6 +21,7 @@ defmodule Mix.Tasks.Mydia.CardigannCompat do
   ## Examples
 
       mix mydia.cardigann_compat
+      mix mydia.cardigann_compat --type public
       mix mydia.cardigann_compat --limit 50
       mix mydia.cardigann_compat --cache --verbose
   """
@@ -32,12 +34,19 @@ defmodule Mix.Tasks.Mydia.CardigannCompat do
   def run(args) do
     {opts, _} =
       OptionParser.parse!(args,
-        strict: [limit: :integer, cache: :boolean, verbose: :boolean, json: :boolean]
+        strict: [
+          limit: :integer,
+          type: :string,
+          cache: :boolean,
+          verbose: :boolean,
+          json: :boolean
+        ]
       )
 
     Mix.Task.run("app.start")
 
     limit = opts[:limit]
+    type = opts[:type]
     verbose = opts[:verbose] || false
     json = opts[:json] || false
 
@@ -49,7 +58,7 @@ defmodule Mix.Tasks.Mydia.CardigannCompat do
       end
 
     analyze_opts =
-      [limit: limit, cache_dir: cache_dir]
+      [limit: limit, type: type, cache_dir: cache_dir]
       |> Enum.reject(fn {_k, v} -> is_nil(v) end)
 
     Mix.shell().info("Analyzing Cardigann definitions...")
@@ -73,13 +82,12 @@ defmodule Mix.Tasks.Mydia.CardigannCompat do
     Mix.shell().info("=== Cardigann Compatibility Report ===")
     Mix.shell().info("")
 
-    # Summary
     Mix.shell().info("Summary:")
     Mix.shell().info("  Total definitions:      #{report.total}")
-    Mix.shell().info("  Successfully parsed:    #{report.parsed}")
-    Mix.shell().info("  Parse failures:         #{report.parse_failed}")
-    Mix.shell().info("  Fully compatible:       #{report.fully_compatible}")
-    Mix.shell().info("  Partially compatible:   #{report.partially_compatible}")
+    Mix.shell().info("  Successfully analyzed:  #{report.parsed}")
+    Mix.shell().info("  Analysis failures:      #{report.parse_failed}")
+    Mix.shell().info("  Fully supported:        #{report.fully_supported}")
+    Mix.shell().info("  Partially supported:    #{report.partially_supported}")
     Mix.shell().info("")
 
     parse_rate =
@@ -87,49 +95,33 @@ defmodule Mix.Tasks.Mydia.CardigannCompat do
         do: Float.round(report.parsed / report.total * 100, 1),
         else: 0.0
 
-    compat_rate =
+    support_rate =
       if report.parsed > 0,
-        do: Float.round(report.fully_compatible / report.parsed * 100, 1),
+        do: Float.round(report.fully_supported / report.parsed * 100, 1),
         else: 0.0
 
-    Mix.shell().info("  Parse success rate:     #{parse_rate}%")
-    Mix.shell().info("  Compatibility rate:     #{compat_rate}% (of parsed)")
+    Mix.shell().info("  Analysis success rate:  #{parse_rate}%")
+    Mix.shell().info("  Full support rate:      #{support_rate}% (of analyzed)")
     Mix.shell().info("")
 
-    # Filter usage
-    Mix.shell().info("Filter Usage (all definitions):")
-    Mix.shell().info(String.duplicate("-", 50))
-
-    implemented = Mydia.Indexers.CardigannCompat.implemented_filters()
-
-    Enum.each(report.filter_usage, fn {name, count} ->
-      status = if name in implemented, do: "[OK]", else: "[MISSING]"
-
-      Mix.shell().info(
-        "  #{String.pad_trailing(name, 20)} #{String.pad_leading(to_string(count), 5)}  #{status}"
-      )
-    end)
-
-    Mix.shell().info("")
-
-    # Missing filters
-    if report.missing_filters != [] do
-      Mix.shell().info("Missing Filters (priority order by usage):")
+    if report.by_feature != [] do
+      Mix.shell().info("Unsupported Features (definitions blocked):")
       Mix.shell().info(String.duplicate("-", 50))
 
-      Enum.each(report.missing_filters, fn {name, count} ->
-        Mix.shell().info("  #{String.pad_trailing(name, 20)} used by #{count} definitions")
+      Enum.each(report.by_feature, fn {feature, count} ->
+        Mix.shell().info(
+          "  #{String.pad_trailing(to_string(feature), 35)} #{String.pad_leading(to_string(count), 5)}  [MISSING]"
+        )
       end)
 
       Mix.shell().info("")
     end
 
-    # Parse failures
     if report.parse_failures != [] do
       failures_to_show =
         if verbose, do: report.parse_failures, else: Enum.take(report.parse_failures, 10)
 
-      Mix.shell().info("Parse Failures#{unless verbose, do: " (top 10)"}:")
+      Mix.shell().info("Analysis Failures#{unless verbose, do: " (top 10)"}:")
       Mix.shell().info(String.duplicate("-", 50))
 
       Enum.each(failures_to_show, fn {name, reason} ->
@@ -145,7 +137,6 @@ defmodule Mix.Tasks.Mydia.CardigannCompat do
       Mix.shell().info("")
     end
 
-    # Per-definition details (verbose only)
     if verbose do
       Mix.shell().info("Per-Definition Details:")
       Mix.shell().info(String.duplicate("-", 80))
@@ -155,14 +146,14 @@ defmodule Mix.Tasks.Mydia.CardigannCompat do
       |> Enum.each(fn defn ->
         status_str =
           case defn.status do
-            :fully_compatible -> "OK"
-            :partially_compatible -> "PARTIAL"
+            :fully_supported -> "OK"
+            :partially_supported -> "PARTIAL"
             :parse_failed -> "FAILED"
           end
 
         missing_str =
-          if defn.missing_filters != [] do
-            " missing: #{Enum.join(defn.missing_filters, ", ")}"
+          if defn.missing_features != [] do
+            " missing: #{Enum.map_join(defn.missing_features, ", ", &to_string/1)}"
           else
             ""
           end
@@ -180,19 +171,19 @@ defmodule Mix.Tasks.Mydia.CardigannCompat do
         total: report.total,
         parsed: report.parsed,
         parse_failed: report.parse_failed,
-        fully_compatible: report.fully_compatible,
-        partially_compatible: report.partially_compatible
+        fully_supported: report.fully_supported,
+        partially_supported: report.partially_supported
       },
-      filter_usage: Map.new(report.filter_usage),
-      missing_filters: Map.new(report.missing_filters),
+      by_feature: Map.new(report.by_feature),
       definitions:
         Enum.map(report.definitions, fn defn ->
           %{
             name: defn.name,
             id: defn.id,
+            type: defn.type,
             status: defn.status,
-            filters_used: defn.filters_used,
-            missing_filters: defn.missing_filters,
+            required_features: defn.required_features,
+            missing_features: defn.missing_features,
             error: if(defn.error, do: format_error(defn.error))
           }
         end)
