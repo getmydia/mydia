@@ -77,4 +77,30 @@ defmodule Mydia.Subtitles.DeliveryTest do
       assert {:error, :image_subtitle} = Delivery.content(media_file, {:image, 0}, "vtt")
     end
   end
+
+  describe "content/3 format validation" do
+    # The REST controller reads `format` straight off the query string, and it
+    # ends up in a cache path and an ffmpeg argument. GraphQL constrains it via
+    # an enum; nothing constrains the REST caller.
+    test "refuses a format that is not supported", %{media_file: media_file} do
+      assert {:error, {:unsupported_format, "exe"}} =
+               Delivery.content(media_file, 1, "exe")
+    end
+
+    test "refuses a traversal attempt before it reaches a path", %{media_file: media_file} do
+      assert {:error, {:unsupported_format, _}} =
+               Delivery.content(media_file, 1, "../../etc/passwd")
+    end
+
+    # Asserts only that the guard admits them. What happens afterwards is the
+    # concern of the sidecar and embedded tests above.
+    test "admits every supported format", %{media_file: media_file} do
+      for format <- Mydia.Subtitles.Subtitle.supported_formats() do
+        refute match?(
+                 {:error, {:unsupported_format, _}},
+                 Delivery.content(media_file, 1, format)
+               )
+      end
+    end
+  end
 end

@@ -31,6 +31,23 @@ defmodule Mydia.Subtitles.ProviderRegistryTest do
     assert String.starts_with?(config.id, "registry::")
   end
 
+  # ProviderChain calls capabilities/0 on every registered adapter before it
+  # searches, so an adapter missing a callback raises at request time rather
+  # than at compile time. A default-disabled provider has no test enabling it,
+  # so the suite stays green while the provider is unusable. This ran red when a
+  # cherry-pick dropped capabilities/0 from the OpenSubtitles adapter.
+  test "every registered adapter implements the full provider behaviour" do
+    callbacks = [search: 2, download: 2, validate_config: 1, quota_info: 1, capabilities: 0]
+
+    for %{type: type, adapter: adapter} <- ProviderRegistry.builtins(),
+        {fun, arity} <- callbacks do
+      Code.ensure_loaded!(adapter)
+
+      assert function_exported?(adapter, fun, arity),
+             "#{inspect(adapter)} (#{type}) is missing #{fun}/#{arity}"
+    end
+  end
+
   test "adapter_for resolves from the config type" do
     config = %SubtitleProviderConfig{type: :relay}
 

@@ -67,8 +67,10 @@ defmodule Mydia.Subtitles.Provider.Relay do
   # Translates metadata-relay's OpenSubtitles wire format (see
   # MetadataRelay.OpenSubtitles.Handler.transform_subtitle/1 in the
   # metadata-relay service) into the keys SearchResult.from_map/1 expects.
-  # The relay emits "id", not "file_id"; "release", not "file_name"; and
-  # never emits "subtitle_hash" or "moviehash_match" at all. Each provider
+  # The relay emits "id", not "file_id", and "release", not "file_name". It
+  # does forward "moviehash_match" as of the handler fix, so SearchResult picks
+  # that up directly and the 100-point hash bonus can fire. It still never emits
+  # "subtitle_hash", which is why one is synthesized below. Each provider
   # adapter owns its own translation here rather than SearchResult growing
   # provider-specific clauses, since Task 6's direct OpenSubtitles adapter
   # has yet another wire format.

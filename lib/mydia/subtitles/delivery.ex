@@ -24,6 +24,10 @@ defmodule Mydia.Subtitles.Delivery do
   @cache_root "mydia-subtitles"
   @extract_timeout 60_000
 
+  # Resolved at compile time so the guard below stays a guard while
+  # `Subtitle.supported_formats/0` remains the single source of truth.
+  @supported_formats Subtitle.supported_formats()
+
   @doc """
   Returns the root of the extracted-subtitle cache.
   """
@@ -39,6 +43,15 @@ defmodule Mydia.Subtitles.Delivery do
   @spec content(MediaFile.t(), integer() | String.t() | {:image, integer()}, String.t()) ::
           {:ok, binary()} | {:error, term()}
   def content(media_file, track_id, format)
+
+  # `format` reaches a cache path and an ffmpeg argument, and the REST
+  # controller reads it as a free-form query parameter rather than through the
+  # GraphQL enum. Without this an unsupported value walks straight into
+  # `cache_path/4`, so `?format=../../x` writes outside the cache directory.
+  # `Subtitle.supported_formats/0` is the single source of truth.
+  def content(_media_file, _track_id, format)
+      when format not in @supported_formats,
+      do: {:error, {:unsupported_format, format}}
 
   def content(_media_file, {:image, _index}, _format), do: {:error, :image_subtitle}
 

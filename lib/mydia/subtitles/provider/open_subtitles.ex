@@ -79,6 +79,16 @@ defmodule Mydia.Subtitles.Provider.OpenSubtitles do
     end
   end
 
+  @impl true
+  def capabilities do
+    %{
+      media_types: [:movie, :episode],
+      search_keys: [:file_hash, :imdb_id, :tmdb_id, :query],
+      requires_credentials: true,
+      quota: :limited
+    }
+  end
+
   ## Private
 
   defp base_url(provider), do: Map.get(provider, :base_url) || @default_base_url
