@@ -79,7 +79,7 @@ defmodule Mydia.Subtitles.Downloader do
 
     with {:ok, media_file} <- fetch_media_file(media_file_id),
          :ok <- validate_subtitle_info(subtitle_info),
-         {:ok, _existing} <- check_duplicate(subtitle_info.subtitle_hash),
+         {:ok, _existing} <- check_duplicate(media_file_id, subtitle_info.subtitle_hash),
          {:ok, download_url} <- fetch_download_url(subtitle_info.file_id, provider, timeout),
          {:ok, temp_path} <- download_file(download_url, timeout),
          :ok <- validate_format(temp_path, subtitle_info.format),
@@ -144,9 +144,11 @@ defmodule Mydia.Subtitles.Downloader do
     end
   end
 
-  # Check if subtitle already exists in database
-  defp check_duplicate(subtitle_hash) do
-    case Repo.get_by(Subtitle, subtitle_hash: subtitle_hash) do
+  # Scoped to the media file on purpose. Two rips of the same movie share
+  # subtitle hashes, and a global lookup would hand back the other file's row,
+  # producing a track the delivery layer rightly refuses as unauthorized.
+  defp check_duplicate(media_file_id, subtitle_hash) do
+    case Repo.get_by(Subtitle, media_file_id: media_file_id, subtitle_hash: subtitle_hash) do
       nil -> {:ok, nil}
       subtitle -> {:duplicate, subtitle}
     end
