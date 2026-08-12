@@ -66,6 +66,7 @@ defmodule Mydia.Application do
         Mydia.Plugins.Dispatcher,
         {Registry, keys: :unique, name: Mydia.Streaming.HlsSessionRegistry},
         Mydia.Streaming.HlsSessionSupervisor,
+        Mydia.Streaming.SessionSampler,
         {Registry, keys: :unique, name: Mydia.Downloads.TranscodeRegistry},
         {Registry, keys: :unique, name: Mydia.Downloads.Client.Debrid.FetcherRegistry},
         {DynamicSupervisor,
