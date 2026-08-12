@@ -502,14 +502,6 @@ defmodule Mydia.Playback do
   end
 
   @doc """
-  Clears recent watch history for all users.
-  """
-  def clear_recent_history do
-    Repo.delete_all(Progress)
-    :ok
-  end
-
-  @doc """
   Lists recent watch history for all users.
   """
   def list_recent_history(opts \\ []) do

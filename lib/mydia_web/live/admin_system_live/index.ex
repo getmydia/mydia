@@ -90,8 +90,11 @@ defmodule MydiaWeb.AdminSystemLive.Index do
 
   @impl true
   def handle_event("clear_recent_activity", _params, socket) do
+    # Scoped deliberately to completed transcode jobs. This button used to also
+    # call Playback.clear_recent_history/0, which was Repo.delete_all(Progress):
+    # a control labelled "clear activity" silently destroyed every user's resume
+    # position and watched state across the whole library.
     Downloads.delete_all_completed_jobs()
-    Playback.clear_recent_history()
 
     job_preloads = [:user, media_file: [:media_item, episode: [:media_item]]]
     recent_activity = build_recent_activity(job_preloads)
@@ -99,7 +102,7 @@ defmodule MydiaWeb.AdminSystemLive.Index do
     {:noreply,
      socket
      |> assign(:recent_activity, recent_activity)
-     |> put_flash(:info, "Cleared recent activity")}
+     |> put_flash(:info, "Cleared completed transcodes")}
   end
 
   ## Private Helpers
