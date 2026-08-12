@@ -77,13 +77,25 @@ defmodule Mydia.MediaServer.UserLinks do
   accounts with no name match alone for the operator to map by hand, and leaves
   accounts another Mydia user is already mapped to alone as well, reporting them
   in the result rather than reassigning them.
+
+  It also leaves alone every Mydia user who already has a mapping here, which is
+  what `only_new: true` below forces and what no caller may turn off. Discovery
+  matches by username; a hand-made mapping exists precisely when the two names
+  differ, so a discovery pass allowed to write over one would repoint it at
+  whichever account merely shares the Mydia user's name, and that account is
+  someone else's. Re-pointing is the editor's job, and the editor mints a fresh
+  credential for the account being chosen.
   """
   @spec discover(config(), keyword()) :: {:ok, SeedResult.t()} | {:error, reason()}
   def discover(config, opts \\ [])
 
-  def discover(%{type: :jellyfin} = config, _opts), do: JellyfinUsers.seed_links(config)
-  def discover(%{type: :plex} = config, opts), do: PlexHome.seed_links(config, opts)
+  def discover(%{type: :jellyfin} = config, opts),
+    do: JellyfinUsers.seed_links(config, only_new(opts))
+
+  def discover(%{type: :plex} = config, opts), do: PlexHome.seed_links(config, only_new(opts))
   def discover(%{type: type}, _opts), do: {:error, {:unsupported_provider, type}}
+
+  defp only_new(opts), do: Keyword.put(opts, :only_new, true)
 
   @doc """
   Points one Mydia user at one remote account.

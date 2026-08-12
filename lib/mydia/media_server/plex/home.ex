@@ -10,7 +10,9 @@ defmodule Mydia.MediaServer.Plex.Home do
   seeding falls back to a single owner link when nothing is mapped yet. Once
   anything is mapped the fallback stands down, because it cannot tell a
   Home-less account from a bad minute at plex.tv and would overwrite the
-  operator's own mapping with the owner's.
+  operator's own mapping with the owner's. The fallback also stands down when
+  this install has more than one admin, because `config.token` belongs to
+  whoever ran OAuth and the first admin by query order need not be that person.
   """
 
   require Logger
@@ -60,7 +62,16 @@ defmodule Mydia.MediaServer.Plex.Home do
 
   Each Home profile is matched to a Mydia user by case-insensitive username.
   When the account has no Plex Home and nothing is mapped yet, a single link
-  binds the first admin user to this config using the config's own token.
+  binds the sole admin user to this config using the config's own token.
+
+  ## Options
+
+    * `:only_new` - never touch a Mydia user who already has a link on this
+      server, reporting them as already mapped instead. Both callers pass it:
+      matching by username is how a mapping the operator made by hand, pairing
+      a Mydia user with a differently named remote account, used to get
+      repointed at the account that merely shares the name.
+    * `:plex_tv_base` - see `token_for/3`.
   """
   @spec seed_links(map(), keyword()) :: {:ok, SeedResult.t()} | {:error, term()}
   def seed_links(config, opts \\ []) do
@@ -91,9 +102,14 @@ defmodule Mydia.MediaServer.Plex.Home do
     end
   end
 
+  # The fallback link carries `config.token`, which is the credential of
+  # whoever ran OAuth. With a single admin that is necessarily the same person.
+  # With two or more it is a guess, and a wrong guess binds admin A's Mydia
+  # account to admin B's Plex watch state, so nothing is written and the
+  # operator is told to pair the accounts in the editor instead.
   defp seed_owner_link(config) do
     case Accounts.list_users(role: "admin") do
-      [owner | _] ->
+      [owner] ->
         with {:ok, link} <-
                Settings.upsert_media_server_user_link(%{
                  media_server_config_id: config.id,
@@ -101,8 +117,11 @@ defmodule Mydia.MediaServer.Plex.Home do
                  access_token: config.token,
                  enabled: true
                }) do
-          {:ok, SeedResult.finish(%SeedResult{linked: [link]})}
+          {:ok, SeedResult.finish(%SeedResult{linked: [link], owner_fallback: :linked})}
         end
+
+      [_ | _] ->
+        {:ok, SeedResult.finish(%SeedResult{owner_fallback: :ambiguous})}
 
       [] ->
         {:error, :no_admin_user}
@@ -140,6 +159,24 @@ defmodule Mydia.MediaServer.Plex.Home do
   end
 
   defp link_home_user(config, user, home_user, result, opts) do
+    if already_linked?(config, user, opts) do
+      {:cont, {:ok, SeedResult.add_already_mapped(result, home_user.username)}}
+    else
+      mint_and_write(config, user, home_user, result, opts)
+    end
+  end
+
+  # Asked before minting rather than only at the write. Minting is a plex.tv
+  # round trip per profile, and a config save on a server whose mappings are all
+  # in place would otherwise spend one on every household member only to have
+  # each write refused. `Settings.upsert_media_server_user_link/2` refuses them
+  # anyway; this is the cheap path, not the guarantee.
+  defp already_linked?(config, user, opts) do
+    Keyword.get(opts, :only_new, false) and
+      not is_nil(Settings.get_media_server_user_link(config.id, user.id))
+  end
+
+  defp mint_and_write(config, user, home_user, result, opts) do
     # Skip rather than fall back to the admin token. A link carrying the wrong
     # account's token silently merges two people's watch history, which is
     # precisely what per-user mapping is meant to prevent.
@@ -154,7 +191,7 @@ defmodule Mydia.MediaServer.Plex.Home do
           enabled: true
         }
 
-        write_link(attrs, home_user, result)
+        write_link(attrs, home_user, result, opts)
 
       {:error, reason} ->
         Logger.warning(
@@ -166,14 +203,19 @@ defmodule Mydia.MediaServer.Plex.Home do
     end
   end
 
-  defp write_link(attrs, home_user, result) do
-    case Settings.upsert_media_server_user_link(attrs) do
+  defp write_link(attrs, home_user, result, opts) do
+    only_new = Keyword.get(opts, :only_new, false)
+
+    case Settings.upsert_media_server_user_link(attrs, only_new: only_new) do
       {:ok, link} ->
         {:cont, {:ok, SeedResult.add_link(result, link)}}
 
       # A mapping the operator made by hand outranks rediscovery, and one
       # claimed profile is no reason to abandon the rest of the run.
-      {:error, :account_already_mapped} ->
+      # `:account_already_mapped` is another Mydia user holding this profile;
+      # `:link_exists` is this Mydia user already holding some profile, which
+      # may well be a different one they picked on purpose.
+      {:error, reason} when reason in [:account_already_mapped, :link_exists] ->
         {:cont, {:ok, SeedResult.add_already_mapped(result, home_user.username)}}
 
       {:error, _reason} = error ->

@@ -6,9 +6,9 @@ defmodule Mydia.JobsTest do
   # Oban is disabled in the test environment (config/test.exs sets
   # plugins: false, engine: false, queues: false, deliberately, to keep its
   # pool off the SQL Sandbox), so the real, running production crontab can
-  # never be read from a test. cron_args/1 itself is therefore untested here;
-  # these tests cover cron_args_from/2, the pure lookup mechanism it delegates
-  # to, against explicit crontab fixtures instead.
+  # never be read from a test. These tests therefore cover cron_args_from/2,
+  # the pure lookup every caller goes through, against explicit crontab
+  # fixtures instead.
   describe "cron_args_from/2" do
     test "returns the args a matching three-tuple entry declares" do
       crontab = [
@@ -85,8 +85,8 @@ defmodule Mydia.JobsTest do
   # composition. This crontab is a fixture invented for this test, not a copy
   # of config/config.exs's real schedule: production crontab coverage is
   # impossible here because config/test.exs deliberately disables Oban's
-  # plugins to keep its pool off the SQL Sandbox, so cron_args/1 can never
-  # read the real crontab from a test. Every entry uses "0 0 1 1 *" (midnight
+  # plugins to keep its pool off the SQL Sandbox, so nothing can read the real
+  # crontab from a test. Every entry uses "0 0 1 1 *" (midnight
   # on January 1st) so it cannot fire and insert a stray job row during a
   # test run.
   describe "trigger_job/1" do

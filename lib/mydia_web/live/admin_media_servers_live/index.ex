@@ -101,32 +101,42 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
   def handle_event("reconnect_plex", %{"id" => id}, socket) do
     server = Settings.get_media_server_config!(id)
 
-    if Settings.runtime_config?(server) do
-      {:noreply,
-       socket
-       |> put_flash(
-         :error,
-         "Cannot reconnect a runtime-configured media server. This server is configured via environment variables and is read-only in the UI."
-       )}
-    else
-      changeset = Settings.change_media_server_config(server)
+    # The PIN modal writes Plex discovery attrs, `type` included, straight onto
+    # the row it was opened for. Reached with a Jellyfin server it would rewrite
+    # that server as a Plex one and strand its user links on a config whose type
+    # no longer matches the accounts they name. The button only renders for
+    # Plex, so this refuses a request that could only be forged.
+    cond do
+      server.type != :plex ->
+        {:noreply, put_flash(socket, :error, "Only Plex servers can be reconnected this way.")}
 
-      # Reuse the existing PIN modal bound to this config so reconnect
-      # updates the row in place and never creates a second config.
-      {:noreply,
-       socket
-       |> assign(:show_media_server_modal, true)
-       |> assign(:media_server_form, to_form(changeset))
-       |> assign(:media_server_mode, :edit)
-       |> assign(:editing_media_server, server)
-       |> assign(:testing_media_server_connection, false)
-       |> assign(:plex_oauth_state, :idle)
-       |> assign(:plex_oauth_pin_id, nil)
-       |> assign(:plex_oauth_servers, [])
-       |> assign(:plex_oauth_token, nil)
-       |> assign(:plex_manual_entry, false)
-       |> assign(:plex_discovery, nil)
-       |> assign(:plex_discovery_summary, nil)}
+      Settings.runtime_config?(server) ->
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           "Cannot reconnect a runtime-configured media server. This server is configured via environment variables and is read-only in the UI."
+         )}
+
+      true ->
+        changeset = Settings.change_media_server_config(server)
+
+        # Reuse the existing PIN modal bound to this config so reconnect
+        # updates the row in place and never creates a second config.
+        {:noreply,
+         socket
+         |> assign(:show_media_server_modal, true)
+         |> assign(:media_server_form, to_form(changeset))
+         |> assign(:media_server_mode, :edit)
+         |> assign(:editing_media_server, server)
+         |> assign(:testing_media_server_connection, false)
+         |> assign(:plex_oauth_state, :idle)
+         |> assign(:plex_oauth_pin_id, nil)
+         |> assign(:plex_oauth_servers, [])
+         |> assign(:plex_oauth_token, nil)
+         |> assign(:plex_manual_entry, false)
+         |> assign(:plex_discovery, nil)
+         |> assign(:plex_discovery_summary, nil)}
     end
   end
 
@@ -373,9 +383,10 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
   def handle_event("sync_watched", %{"id" => id}, socket) do
     server = Settings.get_media_server_config!(id)
 
-    # Server mode rather than a job for the clicking user. With per-user links in
-    # play, a job carrying no link_id falls back to the config token, which reads
-    # the admin's Plex watch state and writes it onto whoever clicked.
+    # Server mode rather than a job for the clicking user. A job carrying no
+    # link_id used to fall back to the config token, which read the admin's Plex
+    # watch state and wrote it onto whoever clicked. The worker refuses that
+    # shape now; server mode is what gives every job it fans out a link to name.
     changeset =
       Mydia.Jobs.MediaServerWatchedSync.new(%{
         "mode" => "server",
@@ -705,6 +716,19 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
     end
   end
 
+  # The owner fallback matched no name at all: it binds an admin to the config's
+  # own token because the account reported no Plex Home profiles. Counting it as
+  # a match told the operator a profile was found when none was.
+  defp discover_message(%SeedResult{owner_fallback: :linked}, server) do
+    "#{server.name} reported no Plex Home profiles, so the admin account was mapped to it " <>
+      "directly."
+  end
+
+  defp discover_message(%SeedResult{owner_fallback: :ambiguous}, server) do
+    "#{server.name} reported no Plex Home profiles, and this install has more than one admin, " <>
+      "so nothing was mapped. Use Add mapping to pair the right Mydia user with the account."
+  end
+
   defp discover_message(%SeedResult{linked: [], already_mapped: []}, server) do
     "No usernames matched on #{server.name}. Use Add mapping to pair accounts by hand."
   end
@@ -793,9 +817,15 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
   end
 
   # Seeds per-user Plex links after any Plex config is persisted. Fires on every
-  # Plex save, including one that only flips a sync direction: the job is cheap
+  # Plex save, including one that only flips a sync direction. The job is cheap
   # to enqueue, its 120-second uniqueness window collapses bursts, and the
   # alternative is dirty-field tracking that would silently miss a changed token.
+  #
+  # Firing this often is only safe because seeding runs with `only_new: true`
+  # and so adds Plex Home profiles that have no link yet without touching any
+  # link that exists. It used to write over them, which meant a save that
+  # changed nothing but a sync direction silently repointed a mapping the
+  # operator had made by hand at whichever profile shares the Mydia username.
   defp maybe_seed_plex_links(%MediaServerConfig{type: :plex, id: id}) when is_binary(id) do
     %{"config_id" => id}
     |> Mydia.Jobs.PlexLinkSeed.new()

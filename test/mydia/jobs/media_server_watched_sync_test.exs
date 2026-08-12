@@ -78,11 +78,18 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
         Settings.upsert_media_server_user_link(%{
           media_server_config_id: server.id,
           user_id: user.id,
-          plex_account_id: "1",
-          plex_username: user.username,
+          remote_user_id: "1",
+          remote_username: user.username,
           access_token: "user-token",
           enabled: true
         })
+
+      # The link is the thing being fanned out over, so it has to actually name
+      # an account. These fields were written as plex_account_id/plex_username,
+      # which `cast/3` drops in silence, and the row went in with a nil identity
+      # while the assertions below still passed.
+      assert link.remote_user_id == "1"
+      assert link.remote_username == user.username
 
       assert :ok =
                perform_job(MediaServerWatchedSync, %{
@@ -609,6 +616,71 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
 
       # Still no per-user job: defaulting to the admin token is the bug this
       # test has always guarded, and seeding must not reintroduce it.
+      assert [] = all_enqueued(worker: MediaServerWatchedSync) |> Enum.reject(& &1.args["mode"])
+    end
+
+    test "a server whose only mappings are paused records all_mappings_paused and seeds nothing" do
+      # A pause is the operator saying "stop syncing this person". Routing an
+      # empty fan-out to the seeder treated it as "nobody is mapped": the seed
+      # re-linked the paused row, reported links, re-entered server mode, and
+      # the badge read "Linking Plex Home profiles" forever while the pause did
+      # nothing at all.
+      user = user_fixture()
+
+      {:ok, config} =
+        Settings.create_media_server_config(%{
+          name: "Paused Plex",
+          type: :plex,
+          url: "http://localhost:32400",
+          token: "tok",
+          enabled: true,
+          connection_settings: %{"sync_watched" => "true"}
+        })
+
+      {:ok, paused} =
+        Settings.upsert_media_server_user_link(%{
+          media_server_config_id: config.id,
+          user_id: user.id,
+          remote_user_id: "1",
+          remote_username: user.username,
+          access_token: "user-token",
+          enabled: false
+        })
+
+      refute paused.enabled
+
+      assert :ok = perform_job(MediaServerWatchedSync, %{"mode" => "all_enabled"})
+
+      assert Sync.last_run("plex", config.id).skip_reason == "all_mappings_paused"
+      assert [] = all_enqueued(worker: Mydia.Jobs.PlexLinkSeed)
+      assert [] = all_enqueued(worker: MediaServerWatchedSync) |> Enum.reject(& &1.args["mode"])
+    end
+
+    test "a paused mapping on Jellyfin is recorded as paused, not as nobody mapped" do
+      user = user_fixture()
+
+      {:ok, config} =
+        Settings.create_media_server_config(%{
+          name: "Paused Jellyfin",
+          type: :jellyfin,
+          url: "http://localhost:8096",
+          token: "api-key",
+          enabled: true,
+          connection_settings: %{"sync_watched" => "true"}
+        })
+
+      {:ok, _paused} =
+        Settings.upsert_media_server_user_link(%{
+          media_server_config_id: config.id,
+          user_id: user.id,
+          remote_user_id: "jf1",
+          remote_username: user.username,
+          enabled: false
+        })
+
+      assert :ok = perform_job(MediaServerWatchedSync, %{"mode" => "all_enabled"})
+
+      assert Sync.last_run("jellyfin", config.id).skip_reason == "all_mappings_paused"
       assert [] = all_enqueued(worker: MediaServerWatchedSync) |> Enum.reject(& &1.args["mode"])
     end
 

@@ -327,10 +327,22 @@ defmodule Mydia.Settings.ServiceConfigs do
   # `enabled: true`, so replacing it would make rediscovery silently resume a
   # mapping the operator paused. A new row still starts enabled; only pausing is
   # the operator's to undo.
-  def upsert_media_server_user_link(attrs) do
+  #
+  # ## Options
+  #
+  #   * `:only_new` - refuse to touch a `(media_server_config_id, user_id)` row
+  #     that already exists, returning `{:error, :link_exists}`. Account
+  #     discovery and link seeding pass it, because they match by username and
+  #     an operator's hand-made mapping deliberately pairs names that differ.
+  #     Without it, an operator who mapped Mydia user `alex` to profile `alex-2`
+  #     because the profile named `alex` is someone else's had that mapping
+  #     repointed at the other person's account by the next config save. The
+  #     mapping editor does not pass it, because repointing is what it is for.
+  def upsert_media_server_user_link(attrs, opts \\ []) do
     changeset = MediaServerUserLink.changeset(%MediaServerUserLink{}, attrs)
 
-    with :ok <- ensure_account_unclaimed(changeset) do
+    with :ok <- ensure_link_new(changeset, Keyword.get(opts, :only_new, false)),
+         :ok <- ensure_account_unclaimed(changeset) do
       Repo.insert(changeset,
         on_conflict:
           {:replace,
@@ -342,6 +354,20 @@ defmodule Mydia.Settings.ServiceConfigs do
            ]},
         conflict_target: [:media_server_config_id, :user_id]
       )
+    end
+  end
+
+  defp ensure_link_new(_changeset, false), do: :ok
+
+  defp ensure_link_new(changeset, true) do
+    config_id = Ecto.Changeset.get_field(changeset, :media_server_config_id)
+    user_id = Ecto.Changeset.get_field(changeset, :user_id)
+
+    cond do
+      # An incomplete changeset has nothing to look up; let validation speak.
+      is_nil(config_id) or is_nil(user_id) -> :ok
+      is_nil(get_media_server_user_link(config_id, user_id)) -> :ok
+      true -> {:error, :link_exists}
     end
   end
 

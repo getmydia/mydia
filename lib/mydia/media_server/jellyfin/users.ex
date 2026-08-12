@@ -20,15 +20,22 @@ defmodule Mydia.MediaServer.Jellyfin.Users do
 
   @doc """
   Fetches the server's accounts and links each match to its Mydia user.
+
+  ## Options
+
+    * `:only_new` - never touch a Mydia user who already has a link on this
+      server, reporting them as already mapped instead. Discovery passes it so
+      a rerun cannot repoint a mapping the operator made by hand, which exists
+      precisely because the two names differ.
   """
-  @spec seed_links(map()) :: {:ok, SeedResult.t()} | {:error, term()}
-  def seed_links(config) do
+  @spec seed_links(map(), keyword()) :: {:ok, SeedResult.t()} | {:error, term()}
+  def seed_links(config, opts \\ []) do
     with {:ok, remote_users} <- JellyfinClient.list_users(config) do
-      seed_matched_links(config, remote_users)
+      seed_matched_links(config, remote_users, opts)
     end
   end
 
-  defp seed_matched_links(config, remote_users) do
+  defp seed_matched_links(config, remote_users, opts) do
     by_username =
       Map.new(Accounts.list_users(), fn user -> {String.downcase(user.username), user} end)
 
@@ -38,7 +45,7 @@ defmodule Mydia.MediaServer.Jellyfin.Users do
 
       case Map.get(by_username, String.downcase(name)) do
         nil -> {:cont, {:ok, result}}
-        user -> link_account(config, user, remote_user, result)
+        user -> link_account(config, user, remote_user, result, opts)
       end
     end)
     |> case do
@@ -47,7 +54,7 @@ defmodule Mydia.MediaServer.Jellyfin.Users do
     end
   end
 
-  defp link_account(config, user, remote_user, result) do
+  defp link_account(config, user, remote_user, result, opts) do
     attrs = %{
       media_server_config_id: config.id,
       user_id: user.id,
@@ -56,14 +63,18 @@ defmodule Mydia.MediaServer.Jellyfin.Users do
       enabled: true
     }
 
-    case Settings.upsert_media_server_user_link(attrs) do
+    case Settings.upsert_media_server_user_link(attrs,
+           only_new: Keyword.get(opts, :only_new, false)
+         ) do
       {:ok, link} ->
         {:cont, {:ok, SeedResult.add_link(result, link)}}
 
       # A mapping the operator made by hand outranks rediscovery. One account
       # already claimed is also no reason to abandon the rest of the run, which
-      # is what halting here used to do.
-      {:error, :account_already_mapped} ->
+      # is what halting here used to do. `:account_already_mapped` is another
+      # Mydia user holding this account; `:link_exists` is this Mydia user
+      # already holding some account, possibly a different one on purpose.
+      {:error, reason} when reason in [:account_already_mapped, :link_exists] ->
         {:cont, {:ok, SeedResult.add_already_mapped(result, remote_user.name)}}
 
       {:error, _reason} = error ->

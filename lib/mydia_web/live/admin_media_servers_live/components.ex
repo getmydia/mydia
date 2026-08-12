@@ -48,8 +48,8 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
               scheduled scan.
             </p>
             <p class="text-sm text-base-content/70 max-w-md">
-              Plex also syncs watched status in both directions, mapped separately for each
-              Plex Home profile.
+              Both also sync watched status in both directions, mapped separately for each
+              account on the server so nobody inherits anyone else's history.
             </p>
             <button
               id="media-servers-empty-cta"
@@ -873,8 +873,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   defp run_label(_), do: "Failed"
 
   # The short badge label. sync_runs rows outlive the code that wrote them, so
-  # every reason ever recorded needs a label here, including :no_user_mapping,
-  # which on Plex nothing writes any more but Jellyfin still does.
+  # every reason ever recorded needs a label here.
   #
   # Kept deliberately provider-neutral where the reason is: watched sync now
   # covers Jellyfin as well as Plex, so "Plex only" copy would be wrong on half
@@ -884,8 +883,10 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   defp skip_reason_label("sync_disabled"), do: "Watched sync is off"
   defp skip_reason_label("unsupported_provider"), do: "Watched sync not supported"
   defp skip_reason_label("no_user_mapping"), do: "No users linked yet"
+  defp skip_reason_label("all_mappings_paused"), do: "Every mapping is paused"
   defp skip_reason_label("seeding_links"), do: "Linking Plex Home profiles"
-  defp skip_reason_label("no_matching_users"), do: "No Plex profile matched a Mydia user"
+  defp skip_reason_label("no_matching_users"), do: "Nothing new to link"
+  defp skip_reason_label("owner_link_ambiguous"), do: "Could not tell which admin to map"
   defp skip_reason_label("link_seeding_failed"), do: "Could not reach plex.tv to link users"
   defp skip_reason_label("no_token"), do: "No API token configured"
   defp skip_reason_label("link_user_mismatch"), do: "A user mapping points at the wrong account"
@@ -911,12 +912,24 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
     do:
       "No Mydia users are mapped to accounts on this server. Add one in the User mapping section below."
 
+  defp humanize_skip("all_mappings_paused"),
+    do:
+      "Every user mapping on this server is paused, so there was nobody to sync. Resume one in the User mapping section below."
+
   defp humanize_skip("seeding_links"),
     do: "Linking Plex Home profiles to Mydia users. Sync runs again once that finishes."
 
+  # Reached whenever a discovery pass wrote no new link, which covers a profile
+  # matching nobody and a profile whose Mydia user is already mapped, paused
+  # mappings included. Telling the operator to map accounts by hand is wrong in
+  # the second case, where the mapping they want already exists.
   defp humanize_skip("no_matching_users"),
     do:
-      "No Plex Home profile matched a Mydia user, so nothing was linked. Map accounts by hand in the User mapping section below."
+      "Nothing new was linked. Either no Plex Home profile matched a Mydia user, or the ones that did are already mapped. Check the User mapping section below."
+
+  defp humanize_skip("owner_link_ambiguous"),
+    do:
+      "This Plex account has no Home profiles, and Mydia has more than one admin, so it could not tell whose account this is. Map it by hand in the User mapping section below."
 
   defp humanize_skip("link_seeding_failed"),
     do: "Could not reach plex.tv to link users. This retries on the next run."

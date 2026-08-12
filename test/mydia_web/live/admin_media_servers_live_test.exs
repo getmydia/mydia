@@ -505,6 +505,41 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
       assert kept.user_id == alex.id
     end
 
+    test "discovering never repoints a mapping at the account that shares the name",
+         %{conn: conn, bypass: bypass} do
+      # The other half of the rule above, seen from the mapped user's side. alex
+      # is on guid-2 on purpose, and the server also has an account actually
+      # named "alex". Matching by username would move alex onto guid-3, which is
+      # a different person, and the operator would be told only that discovery
+      # matched an account.
+      alex = Mydia.AccountsFixtures.user_fixture(%{username: "alex"})
+      server = jellyfin_server(bypass)
+
+      stub_jellyfin_users(bypass, [
+        %{"Id" => "guid-2", "Name" => "sarah"},
+        %{"Id" => "guid-3", "Name" => "alex"}
+      ])
+
+      {:ok, hand_made} =
+        Mydia.Settings.upsert_media_server_user_link(%{
+          media_server_config_id: server.id,
+          user_id: alex.id,
+          remote_user_id: "guid-2",
+          remote_username: "sarah",
+          enabled: true
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+
+      view
+      |> element(~s{[phx-click="user_link_discover"][phx-value-id="#{server.id}"]})
+      |> render_click()
+
+      assert [kept] = Mydia.Settings.list_media_server_user_links(server.id)
+      assert kept.id == hand_made.id
+      assert kept.remote_user_id == "guid-2"
+    end
+
     test "editing a mapping onto a different Mydia user moves it",
          %{conn: conn, bypass: bypass} do
       alex = Mydia.AccountsFixtures.user_fixture(%{username: "alex"})

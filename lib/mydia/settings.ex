@@ -575,7 +575,7 @@ defmodule Mydia.Settings do
   @doc """
   Updates a media server user link.
 
-  This is the pause/resume path: `upsert_media_server_user_link/1` never
+  This is the pause/resume path: `upsert_media_server_user_link/2` never
   replaces `:enabled`, so a mapping's enabled state only ever changes here.
   """
   @spec update_media_server_user_link(MediaServerUserLink.t(), map()) ::
@@ -587,11 +587,16 @@ defmodule Mydia.Settings do
 
   Refuses with `{:error, :account_already_mapped}` when a different Mydia user is
   already mapped to that remote account on the same server.
+
+  Pass `only_new: true` to refuse with `{:error, :link_exists}` rather than touch
+  a mapping that is already there. Account discovery and link seeding both do,
+  because they match by username and a hand-made mapping is exactly the case
+  where the two names deliberately differ.
   """
-  @spec upsert_media_server_user_link(map()) ::
+  @spec upsert_media_server_user_link(map(), keyword()) ::
           {:ok, MediaServerUserLink.t()}
-          | {:error, Ecto.Changeset.t() | :account_already_mapped}
-  defdelegate upsert_media_server_user_link(attrs), to: Mydia.Settings.ServiceConfigs
+          | {:error, Ecto.Changeset.t() | :account_already_mapped | :link_exists}
+  defdelegate upsert_media_server_user_link(attrs, opts \\ []), to: Mydia.Settings.ServiceConfigs
 
   @doc """
   Deletes a media server user link.

@@ -108,14 +108,20 @@ defmodule Mydia.MediaServer.Jellyfin.UsersTest do
     assert kept.user_id == alex.id
   end
 
-  test "one claimed account does not abandon the rest of the run", %{
+  test "a hand-made mapping survives discovery, and one skip does not abandon the run", %{
     bypass: bypass,
     config: config
   } do
+    # alex is deliberately mapped to the account named "sarah", because on this
+    # server the account named "alex" is somebody else. Matching by username
+    # would repoint alex at that other account, so `only_new: true` leaves every
+    # Mydia user who already has a mapping alone. Neither skip is a reason to
+    # stop: tonix, who has no mapping at all, is still linked.
     alex = user_fixture(%{username: "alex"})
-    sarah = user_fixture(%{username: "sarah"})
+    user_fixture(%{username: "sarah"})
+    tonix = user_fixture(%{username: "tonix"})
 
-    {:ok, _hand_made} =
+    {:ok, hand_made} =
       Settings.upsert_media_server_user_link(%{
         media_server_config_id: config.id,
         user_id: alex.id,
@@ -129,16 +135,19 @@ defmodule Mydia.MediaServer.Jellyfin.UsersTest do
       |> Plug.Conn.put_resp_content_type("application/json")
       |> Plug.Conn.resp(
         200,
-        ~s([{"Id":"guid-2","Name":"sarah"},{"Id":"guid-3","Name":"alex"}])
+        ~s([{"Id":"guid-2","Name":"sarah"},{"Id":"guid-3","Name":"alex"},{"Id":"guid-4","Name":"tonix"}])
       )
     end)
 
-    assert {:ok, %SeedResult{linked: [link], already_mapped: ["sarah"]}} =
-             Users.seed_links(config)
+    assert {:ok, %SeedResult{linked: [link], already_mapped: ["sarah", "alex"]}} =
+             Users.seed_links(config, only_new: true)
 
-    assert link.user_id == alex.id
-    assert link.remote_user_id == "guid-3"
-    refute Enum.any?(Settings.list_media_server_user_links(config.id), &(&1.user_id == sarah.id))
+    assert link.user_id == tonix.id
+    assert link.remote_user_id == "guid-4"
+
+    kept = Settings.get_media_server_user_link(config.id, alex.id)
+    assert kept.id == hand_made.id
+    assert kept.remote_user_id == "guid-2"
   end
 
   test "leaves a paused mapping paused instead of silently resuming it", %{
@@ -166,11 +175,17 @@ defmodule Mydia.MediaServer.Jellyfin.UsersTest do
       |> Plug.Conn.resp(200, ~s([{"Id":"jf1","Name":"tonix"}]))
     end)
 
-    assert {:ok, %SeedResult{}} = Users.seed_links(config)
+    # The loose `%SeedResult{}` this used to match hid which branch ran. A pass
+    # that rewrote the row and merely failed to re-enable it would satisfy it
+    # just as well as one that left the row alone, so the result is pinned:
+    # nothing was linked, and the account is reported as already mapped.
+    assert {:ok, %SeedResult{linked: [], already_mapped: ["tonix"]}} =
+             Users.seed_links(config, only_new: true)
 
     assert [kept] = Settings.list_media_server_user_links(config.id)
     assert kept.id == paused.id
     refute kept.enabled
+    assert kept.updated_at == paused.updated_at
   end
 
   test "propagates an error from list_users and creates no links", %{

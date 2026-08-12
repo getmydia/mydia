@@ -8,7 +8,9 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
     `link_id` says which remote account the user is; a job without one is
     recorded as a skip rather than run against the server owner's account.
   - **Server**: Fan out to an individual job for every enabled link on one
-    server, seeding Plex Home links first when none exist yet. This is what
+    server, seeding Plex Home links first when a Plex server has none and has
+    never been seeded. A server whose links are all paused is recorded and left
+    alone, because a pause is an instruction. This is what
     the "Sync Now" button triggers, and what `Mydia.Jobs.PlexLinkSeed`
     enqueues after a successful seed. Fanning out per link is also what keeps
     a manual sync off the server owner's account: every job it produces names
@@ -65,8 +67,9 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
       }
     end
 
-    # Anything else, notably the empty map the Jobs page used to enqueue, runs
-    # as the scheduler rather than crashing the worker to `discarded`.
+    # Anything else, an empty map included, runs as the scheduler rather than
+    # crashing the worker to `discarded`. Args this worker cannot read are a
+    # reason to do the scheduled thing, not to burn three attempts.
     def parse(_args), do: %__MODULE__{mode: "all_enabled"}
   end
 
@@ -230,8 +233,8 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
   # token isn't validate_required on MediaServerConfig. Without this, a Plex
   # config saved with sync on but a blank token would pass skip_reason/1,
   # record :seeding_links on every tick, and enqueue a seed job that can never
-  # produce a link (PlexLinkSeed.seedable?/1 also requires a token) — a job
-  # reporting healthy while doing nothing forever.
+  # produce a link (PlexLinkSeed.seedable?/1 also requires a token), which is a
+  # job reporting healthy while doing nothing forever.
   defp has_token?(%{token: token}), do: is_binary(token) and token != ""
 
   defp record_skip(config, reason, user_id \\ nil) do
@@ -259,25 +262,44 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
   end
 
   defp enqueue_linked_users(config) do
-    case Settings.list_media_server_user_links(config.id) |> Enum.filter(& &1.enabled) do
-      [] -> handle_no_links(config)
-      links -> Enum.each(links, fn link -> enqueue(config, link) end)
+    links = Settings.list_media_server_user_links(config.id)
+
+    case Enum.filter(links, & &1.enabled) do
+      [] -> handle_no_enabled_links(config, links)
+      enabled -> Enum.each(enabled, fn link -> enqueue(config, link) end)
     end
   end
 
-  # On Plex, links are created by Mydia.Jobs.PlexLinkSeed and nothing else.
-  # Recording :no_user_mapping and stopping is exactly what made this job report
-  # healthy while doing nothing: seed first, and the seed job re-enters sync
-  # once it has produced links.
+  # "Nobody is mapped" and "every mapping is paused" produce the same empty
+  # fan-out and mean opposite things. Collapsing them is what let a paused
+  # server seed on every tick: re-seeding a paused row succeeds, so the seed
+  # reported links, the seed re-entered server mode, and the badge read "Linking
+  # Plex Home profiles" forever while the operator's pause did nothing. A pause
+  # is an instruction, so it is recorded and obeyed.
+  defp handle_no_enabled_links(config, []), do: handle_no_links(config)
+  defp handle_no_enabled_links(config, [_ | _]), do: record_skip(config, :all_mappings_paused)
+
+  # Seeding is a first run, not a repair. Links are the operator's now: the
+  # mapping editor creates and repoints them, the pause toggle disables them,
+  # and the delete button removes them, promising that watched sync will skip
+  # the user until it is mapped again. So a Plex server that has already been
+  # through a seeding pass and now has nothing mapped is a decision, not a gap,
+  # and re-seeding it would put back the very rows the delete button removed.
+  # Only a server nobody has ever seeded is filled in automatically.
   defp handle_no_links(%{type: :plex} = config) do
-    enqueue_seed(config)
-    record_skip(config, :seeding_links)
+    if Mydia.Jobs.PlexLinkSeed.seeded_before?(config) do
+      record_skip(config, :no_user_mapping)
+    else
+      enqueue_seed(config)
+      record_skip(config, :seeding_links)
+    end
   end
 
-  # Jellyfin has no seed job: its links come from the user mapping editor, which
-  # an operator drives by hand. Enqueuing a Plex seed here would no-op and leave
-  # a Jellyfin server reporting "Linking Plex Home profiles" forever, so the skip
-  # says what is actually true and points at the editor.
+  # Jellyfin has no seed job: its links come from the user mapping editor and
+  # the Discover button, which an operator drives by hand. Enqueuing a Plex seed
+  # here would no-op and leave a Jellyfin server reporting "Linking Plex Home
+  # profiles" forever, so the skip says what is actually true and points at the
+  # editor.
   defp handle_no_links(config), do: record_skip(config, :no_user_mapping)
 
   defp enqueue_seed(config) do
@@ -303,9 +325,10 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
   #
   # A job carrying no link at all is refused rather than falling back to the
   # server's own config.token. That fallback made whoever pressed "Sync now"
-  # read and write the server owner's watch state. Both producers name a link:
-  # `enqueue/2` reads it from the scheduler's own list, and the admin page
-  # resolves the pressing user's link before it enqueues anything.
+  # read and write the server owner's watch state. Nothing produces that shape
+  # any more: `enqueue/2` is the only producer of a per-user job and it reads
+  # the user and the link off one row, while "Sync now" enqueues server mode and
+  # lets that fan-out name the links.
   defp resolve_user_scope(_config, nil, _user_id), do: {:error, :link_not_found}
 
   defp resolve_user_scope(_config, link_id, user_id) do

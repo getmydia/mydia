@@ -157,19 +157,11 @@ defmodule Mydia.Jobs do
   end
 
   @doc """
-  Returns the args a worker's crontab entry declares, or `%{}` when the worker
-  is not scheduled or its entry declares none.
-  """
-  @spec cron_args(module()) :: map()
-  def cron_args(worker) when is_atom(worker) do
-    crontab() |> cron_args_from(worker)
-  end
-
-  @doc """
   Returns the args a crontab entry declares for `worker`, or `%{}`.
 
-  Split out from `cron_args/1` so it can be tested without a running Oban,
-  which the test environment disables to keep its pool off the SQL Sandbox.
+  Takes the crontab rather than reading it, so it can be tested without a
+  running Oban, which the test environment disables to keep its pool off the
+  SQL Sandbox. `crontab/0` supplies it in production.
   """
   @spec cron_args_from(list(), module()) :: map()
   def cron_args_from(crontab, worker) when is_list(crontab) and is_atom(worker) do
@@ -300,8 +292,8 @@ defmodule Mydia.Jobs do
 
   # Private helpers
 
-  # Shared by cron_args/1 and trigger_job/1 so there is exactly one place that
-  # reads the running Cron plugin's crontab, rather than each re-deriving it.
+  # The one place that reads the running Cron plugin's crontab, so callers that
+  # need a worker's scheduled args do not each re-derive it.
   defp crontab do
     case find_cron_plugin(Oban.config().plugins) do
       {Oban.Plugins.Cron, opts} -> Keyword.get(opts, :crontab, [])

@@ -146,12 +146,33 @@ defmodule Mydia.MediaServer.Plex.HomeTest do
       admin = Mydia.AccountsFixtures.admin_user_fixture(%{username: "owner"})
       {:ok, saved} = Mydia.Settings.create_media_server_config(persistable(config))
 
-      assert {:ok, %SeedResult{linked: [link], already_mapped: []}} =
+      assert {:ok, %SeedResult{linked: [link], already_mapped: [], owner_fallback: :linked}} =
                Home.seed_links(saved, plex_tv_base: base)
 
       assert link.user_id == admin.id
       assert link.remote_user_id == nil
       assert link.access_token == saved.token
+    end
+
+    test "refuses to pick an owner when this install has more than one admin",
+         %{bypass: bypass, config: config, base: base} do
+      # The fallback link carries config.token, the credential of whoever ran
+      # OAuth. With one admin that is necessarily them. With two, taking the
+      # first by query order binds admin A's Mydia account to admin B's Plex
+      # watch state, which is the cross-account merge this mapping exists to
+      # prevent, so nothing is written and the operator maps it by hand.
+      Bypass.stub(bypass, "GET", "/api/v2/home/users", fn conn ->
+        Plug.Conn.resp(conn, 404, "")
+      end)
+
+      Mydia.AccountsFixtures.admin_user_fixture(%{username: "first-admin"})
+      Mydia.AccountsFixtures.admin_user_fixture(%{username: "second-admin"})
+      {:ok, saved} = Mydia.Settings.create_media_server_config(persistable(config))
+
+      assert {:ok, %SeedResult{linked: [], owner_fallback: :ambiguous}} =
+               Home.seed_links(saved, plex_tv_base: base)
+
+      assert Mydia.Settings.list_media_server_user_links(saved.id) == []
     end
   end
 

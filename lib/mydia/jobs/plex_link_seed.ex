@@ -2,10 +2,15 @@ defmodule Mydia.Jobs.PlexLinkSeed do
   @moduledoc """
   Seeds `media_server_user_links` for a Plex config from its Plex Home profiles.
 
-  `Mydia.MediaServer.Plex.Home.seed_links/2` is the only code that creates those
-  links, and it had no caller at all. Without links the watched-sync scheduler
-  skipped every config with `:no_user_mapping` on every tick, forever, so
-  scheduled sync had never run for anyone. This worker is the missing caller.
+  Links used to have no producer at all: the scheduler skipped every config with
+  `:no_user_mapping` on every tick, forever, so scheduled sync had never run for
+  anyone. This worker is the missing producer, running on a Plex config save and
+  from the scheduler's first look at a server that has never been seeded.
+
+  It is not the only writer any more. The mapping editor creates, repoints,
+  pauses and deletes links by hand, so seeding runs with `only_new: true` and
+  can add a Mydia user who has no link yet but never touch one who has. Rows
+  here are the operator's; this worker only fills in the blanks.
 
   Seeding makes 1 + N plex.tv round trips (list Home users, then one profile
   switch per matched user), which is why it is a job rather than an inline call
@@ -18,6 +23,8 @@ defmodule Mydia.Jobs.PlexLinkSeed do
     unique: [period: 120, keys: [:config_id]]
 
   require Logger
+
+  @seeded_at_key "plex_links_seeded_at"
 
   alias Mydia.Jobs.MediaServerWatchedSync
   alias Mydia.MediaServer.Error
@@ -71,26 +78,69 @@ defmodule Mydia.Jobs.PlexLinkSeed do
 
   defp seed(config, opts) do
     case Home.seed_links(config, opts) do
-      {:ok, %SeedResult{linked: [_ | _] = links}} ->
-        Logger.info("Seeded #{length(links)} Plex user link(s) for #{config.name}")
-        enqueue_sync(config)
-        :ok
+      {:ok, %SeedResult{} = result} ->
+        mark_seeded(config)
+        record_outcome(config, result)
 
-      # Deliberately enqueues nothing. Server mode with no links enqueues this
-      # worker, and this worker enqueues server mode, so only a run that
-      # actually produced links may re-enter that cycle.
-      #
-      # `already_mapped` is not a reason to re-enter it either. Server mode only
-      # enqueues a seed when it found no *enabled* links, so a pass that linked
-      # nothing and merely left disabled mappings alone would fan out to nothing
-      # and enqueue this worker straight back.
-      {:ok, %SeedResult{linked: []}} ->
-        record_skip(config, :no_matching_users)
-        :ok
-
+      # No stamp on failure: plex.tv having a bad minute is not the operator
+      # deciding anything, and the next save or scheduler tick should try again.
       {:error, reason} ->
         record_skip(config, :link_seeding_failed)
         {:error, describe(reason)}
+    end
+  end
+
+  defp record_outcome(config, %SeedResult{linked: [_ | _] = links}) do
+    Logger.info("Seeded #{length(links)} Plex user link(s) for #{config.name}")
+    enqueue_sync(config)
+    :ok
+  end
+
+  # The no-Home fallback refused to guess which admin owns config.token. Nothing
+  # was written, and no amount of retrying will change that, so it is recorded
+  # and the operator is pointed at the editor.
+  defp record_outcome(config, %SeedResult{owner_fallback: :ambiguous}) do
+    record_skip(config, :owner_link_ambiguous)
+    :ok
+  end
+
+  # Deliberately enqueues nothing. Server mode with no links enqueues this
+  # worker, and this worker enqueues server mode, so only a run that actually
+  # produced links may re-enter that cycle.
+  #
+  # `already_mapped` is not a reason to re-enter it either: a pass that linked
+  # nothing and merely left existing mappings alone would fan out to nothing and
+  # enqueue this worker straight back.
+  defp record_outcome(config, %SeedResult{linked: []}) do
+    record_skip(config, :no_matching_users)
+    :ok
+  end
+
+  # Records that this config has been through a seeding pass. The scheduler
+  # reads it to tell a server nobody has ever seeded from one whose mappings the
+  # operator paused or deleted, and re-seeds only the first. Without it, deleting
+  # every mapping put them all back on the next tick, against a delete button
+  # that promises watched sync will skip the user until it is mapped again.
+  #
+  # Stamped on every completed pass, including one that linked nothing, so a
+  # server whose Plex Home matches no Mydia username stops re-running 1 + N
+  # plex.tv round trips on every tick.
+  defp mark_seeded(config) do
+    settings =
+      Map.put(
+        config.connection_settings || %{},
+        @seeded_at_key,
+        DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.to_iso8601()
+      )
+
+    case Settings.update_media_server_config(config, %{connection_settings: settings}) do
+      {:ok, _config} ->
+        :ok
+
+      # Bookkeeping, so losing it costs a redundant seed rather than the run.
+      {:error, reason} ->
+        Logger.warning("Could not stamp Plex link seeding for #{config.name}: #{inspect(reason)}")
+        :ok
     end
   end
 
@@ -119,11 +169,32 @@ defmodule Mydia.Jobs.PlexLinkSeed do
     )
   end
 
-  # A test seam so Bypass can stand in for plex.tv. Production jobs never carry
-  # it, and it is deliberately not read from application env, which would leak
-  # across concurrent tests.
-  defp seed_opts(%{"plex_tv_base" => base}) when is_binary(base), do: [plex_tv_base: base]
-  defp seed_opts(_), do: []
+  @doc """
+  Whether a seeding pass has already completed for this config.
+
+  `Mydia.Jobs.MediaServerWatchedSync` asks before seeding a server that has no
+  mappings, because "never seeded" and "the operator removed them all" look
+  identical from the links table alone and only the first should be filled in.
+  """
+  @spec seeded_before?(map()) :: boolean()
+  def seeded_before?(%{connection_settings: %{} = settings}),
+    do: is_binary(Map.get(settings, @seeded_at_key))
+
+  def seeded_before?(_config), do: false
+
+  # `only_new: true` is not optional and no arg can turn it off: seeding matches
+  # by username, and a hand-made mapping is exactly the case where the Mydia
+  # username and the profile name deliberately disagree. Writing over one would
+  # repoint it at the profile that merely shares the name, which belongs to
+  # somebody else.
+  #
+  # `plex_tv_base` is a test seam so Bypass can stand in for plex.tv. Production
+  # jobs never carry it, and it is deliberately not read from application env,
+  # which would leak across concurrent tests.
+  defp seed_opts(%{"plex_tv_base" => base}) when is_binary(base),
+    do: [only_new: true, plex_tv_base: base]
+
+  defp seed_opts(_), do: [only_new: true]
 
   defp describe(%Error{} = error), do: Error.message(error)
   defp describe(reason), do: inspect(reason)
