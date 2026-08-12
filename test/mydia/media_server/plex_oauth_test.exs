@@ -36,8 +36,8 @@ defmodule Mydia.MediaServer.PlexOAuthTest do
 
       assert server.machine_identifier == "cf3ab3f4"
       assert server.access_token == "resource-token"
-      # The whole list survives. Previously only best_connection_url/1's single
-      # pick was kept, which froze an address that later became unroutable.
+      # The whole list survives. An earlier revision kept only one ranked pick,
+      # which froze an address that later became unroutable.
       assert length(server.connections) == 2
     end
   end
