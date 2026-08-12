@@ -16,6 +16,8 @@ defmodule Mydia.Indexers.Cardigann.FeaturesTest do
           :field_case,
           :rows_after,
           :rows_count,
+          :rows_multiple,
+          :rows_missing_attribute_equals_no_results,
           :response_html,
           :response_json,
           :response_xml,
