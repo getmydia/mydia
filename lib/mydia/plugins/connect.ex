@@ -134,6 +134,10 @@ defmodule Mydia.Plugins.Connect do
       {:ok, response} ->
         session |> apply_response(response) |> store()
 
+      {:error, %Error{} = err} ->
+        :ets.delete(@table, session.id)
+        {:error, err}
+
       {:error, reason} ->
         :ets.delete(@table, session.id)
         {:error, Error.new(:internal, to_string(reason))}

@@ -1,0 +1,19 @@
+# End-to-end fixture for service endpoints, relative connection-request, and
+# on-connect (Task 11). Built to wasm32-wasip2 and checked in at
+# ../endpoint_fixture.wasm.
+[package]
+name = "endpoint_fixture"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+mydia-plugin-sdk = { path = "../../../../../native/mydia_plugin_sdk" }
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true

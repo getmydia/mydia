@@ -56,6 +56,11 @@
         lockFile = ../../plugins/simkl_sync/Cargo.lock;
       };
 
+      # Same for the endpoint_fixture test guest (wasm32-wasip2).
+      endpointFixtureCargoDeps = pkgs.rustPlatform.importCargoLock {
+        lockFile = ../../test/support/fixtures/plugins/endpoint_fixture/Cargo.lock;
+      };
+
       # Precompiled wasmex NIF (rustler_precompiled downloads this at compile
       # time, which the Nix sandbox forbids). Pre-fetch the release tarball and
       # point RUSTLER_PRECOMPILED_GLOBAL_CACHE_PATH at it so the wasmex build
@@ -373,6 +378,16 @@
 
             [source.vendored-sources]
             directory = "${simklSyncCargoDeps}"
+            CARGO_EOF
+
+            # Same for the endpoint_fixture test guest.
+            mkdir -p test/support/fixtures/plugins/endpoint_fixture/.cargo
+            cat > test/support/fixtures/plugins/endpoint_fixture/.cargo/config.toml <<CARGO_EOF
+            [source.crates-io]
+            replace-with = "vendored-sources"
+
+            [source.vendored-sources]
+            directory = "${endpointFixtureCargoDeps}"
             CARGO_EOF
           '';
 
