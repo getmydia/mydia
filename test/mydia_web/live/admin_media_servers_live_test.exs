@@ -140,6 +140,75 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
     end
   end
 
+  # Characterization test, not a regression test: pre-branch, edit-mode save
+  # already used `editing_media_server` as the changeset base, so
+  # `machine_identifier` and `connections` already survived a form-params-only
+  # save. What actually blocked editing a wizard-created server was the
+  # browser-level `required` attribute on the URL input, which `render_submit/1`
+  # does not enforce; that blockage is pinned separately in
+  # `components_test.exs` ("media server modal, Server URL requirement").
+  describe "discovery data on a Plex wizard config survives a form-params-only save" do
+    setup %{conn: conn, token: token} do
+      start_supervised!(Mydia.Indexers.Health)
+
+      conn =
+        conn
+        |> init_test_session(%{})
+        |> put_session(:guardian_default_token, token)
+        |> put_req_header("authorization", "Bearer #{token}")
+
+      # A wizard-created config: no url, addressable only through discovery.
+      {:ok, config} =
+        Mydia.Settings.create_media_server_config(%{
+          name: "Storage",
+          type: :plex,
+          url: nil,
+          token: "acct-token",
+          machine_identifier: "machine-abc",
+          connections: [%{"uri" => "http://127.0.0.1:32400", "local" => true}]
+        })
+
+      %{conn: conn, config: config}
+    end
+
+    test "renaming via form params alone preserves machine_identifier and connections",
+         %{conn: conn, config: config} do
+      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+
+      view |> element("[phx-click='edit_media_server']") |> render_click()
+
+      view
+      |> form("#media-server-form", %{
+        "media_server_config" => %{
+          "name" => "Renamed",
+          "type" => "plex",
+          "url" => "",
+          "token" => "acct-token"
+        }
+      })
+      |> render_submit()
+
+      updated = Mydia.Settings.get_media_server_config!(config.id)
+
+      assert updated.name == "Renamed"
+      # Discovery data must survive a save driven purely by form params.
+      assert updated.machine_identifier == "machine-abc"
+      assert [%{"uri" => "http://127.0.0.1:32400"}] = updated.connections
+    end
+  end
+
+  # A LiveView integration test for the Enabled toggle fix (form="media-server-form"
+  # on the Enabled toggle inputs) was attempted here and deleted. Phoenix.LiveViewTest's
+  # form/3 collects inputs by walking descendants of the located <form> node; it does
+  # not implement HTML5 form-attribute association the way a real browser does, so a
+  # submit driven through form/3 never picks up the hidden sentinel or checkbox at all
+  # regardless of whether the form="media-server-form" attribute is present. Confirmed
+  # empirically: submitting via form/3 against a seeded enabled: true config left
+  # updated.enabled == true even with the fix in place, because no "enabled" key ever
+  # reached the params. That is a limitation of the test helper, not the fix. The
+  # honest pin for this fix lives in components_test.exs ("media server modal, Enabled
+  # toggle form association"), which asserts the form= attribute on the rendered markup.
+
   describe "Empty state and skip reasons" do
     setup %{conn: conn, token: token} do
       start_supervised!(Mydia.Indexers.Health)

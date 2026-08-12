@@ -3,6 +3,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   use MydiaWeb, :html
 
   alias Mydia.Settings
+  alias Mydia.Settings.MediaServerConfig
 
   @doc """
   Renders the Media Servers tab content.
@@ -252,6 +253,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   attr :plex_oauth_servers, :list, default: []
   attr :plex_manual_entry, :boolean, default: false
   attr :plex_reachability, :any, default: :checking
+  attr :plex_discovery, :map, default: nil
 
   def media_server_modal(assigns) do
     # Get the current type from the form
@@ -263,7 +265,13 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
         type when is_binary(type) -> String.to_existing_atom(type)
       end
 
-    assigns = assign(assigns, :current_type, current_type)
+    assigns =
+      assigns
+      |> assign(:current_type, current_type)
+      |> assign(
+        :plex_addressable,
+        MediaServerConfig.addressable_by_discovery?(assigns.media_server_form.source)
+      )
 
     ~H"""
     <div
@@ -301,13 +309,19 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
           </div>
           <label class="label cursor-pointer gap-2 w-full justify-between sm:w-auto sm:justify-end">
             <span class="label-text text-sm">Enabled</span>
-            <input type="hidden" name={@media_server_form[:enabled].name} value="false" />
+            <input
+              type="hidden"
+              name={@media_server_form[:enabled].name}
+              value="false"
+              form="media-server-form"
+            />
             <input
               type="checkbox"
               name={@media_server_form[:enabled].name}
               value="true"
               checked={Phoenix.HTML.Form.input_value(@media_server_form, :enabled) in [true, "true"]}
               class="toggle toggle-success toggle-sm"
+              form="media-server-form"
             />
           </label>
         </div>
@@ -464,33 +478,86 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                         </button>
                       </div>
                     <% :complete -> %>
-                      <div class="text-center py-2">
-                        <div class="bg-success/10 inline-flex p-3 rounded-full mb-3">
-                          <.icon name="hero-check-circle" class="w-8 h-8 text-success" />
+                      <div class="space-y-3">
+                        <div class="text-center py-2">
+                          <div class="bg-success/10 inline-flex p-3 rounded-full mb-3">
+                            <.icon name="hero-check-circle" class="w-8 h-8 text-success" />
+                          </div>
+                          <p class="font-medium text-success">Configuration complete!</p>
+                          <p class="text-sm text-base-content/60">
+                            Review the details below and save.
+                          </p>
+                          <div class="mt-3 text-xs">
+                            <%= case @plex_reachability do %>
+                              <% :checking -> %>
+                                <span class="inline-flex items-center gap-2 text-base-content/60">
+                                  <span class="loading loading-spinner loading-xs"></span>
+                                  Checking connectivity...
+                                </span>
+                              <% {:ok, uri} -> %>
+                                <span class="inline-flex items-center gap-1 text-success">
+                                  <.icon name="hero-check-circle" class="w-3 h-3" /> Reachable at
+                                  <span class="font-mono">{simplify_plex_url(uri)}</span>
+                                </span>
+                              <% {:error, _error} -> %>
+                                <span class="inline-flex items-center gap-1 text-warning">
+                                  <.icon name="hero-exclamation-triangle" class="w-3 h-3" />
+                                  No address responded yet. You can still save; Mydia will keep looking.
+                                </span>
+                            <% end %>
+                          </div>
                         </div>
-                        <p class="font-medium text-success">Configuration complete!</p>
-                        <p class="text-sm text-base-content/60">
-                          Review the details below and save.
-                        </p>
-                        <div class="mt-3 text-xs">
-                          <%= case @plex_reachability do %>
-                            <% :checking -> %>
-                              <span class="inline-flex items-center gap-2 text-base-content/60">
-                                <span class="loading loading-spinner loading-xs"></span>
-                                Checking connectivity...
-                              </span>
-                            <% {:ok, uri} -> %>
-                              <span class="inline-flex items-center gap-1 text-success">
-                                <.icon name="hero-check-circle" class="w-3 h-3" /> Reachable at
-                                <span class="font-mono">{simplify_plex_url(uri)}</span>
-                              </span>
-                            <% {:error, _error} -> %>
-                              <span class="inline-flex items-center gap-1 text-warning">
-                                <.icon name="hero-exclamation-triangle" class="w-3 h-3" />
-                                No address responded yet. You can still save; Mydia will keep looking.
-                              </span>
-                          <% end %>
-                        </div>
+
+                        <%= if @plex_discovery do %>
+                          <div
+                            class="bg-base-100 rounded-lg p-3 space-y-2"
+                            data-test="plex-discovery-summary"
+                          >
+                            <div class="flex items-center gap-2">
+                              <div class="bg-primary/10 p-2 rounded-lg">
+                                <.icon name="hero-server" class="w-5 h-5 text-primary" />
+                              </div>
+                              <div class="min-w-0">
+                                <p class="font-medium truncate">{@plex_discovery[:name]}</p>
+                                <p class="font-mono text-xs text-base-content/50 truncate">
+                                  {@plex_discovery[:machine_identifier]}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div class="space-y-1">
+                              <%!-- These connections come straight from PlexOAuth.parse_connections/1
+                                    and are always atom-keyed. A future change that feeds this panel
+                                    from a persisted MediaServerConfig (string-keyed after a DB round
+                                    trip through JsonListType) would need to normalize first. --%>
+                              <%= for conn <- @plex_discovery[:connections] || [] do %>
+                                <div class="flex items-center gap-2 text-xs">
+                                  <span class="font-mono truncate flex-1">
+                                    {simplify_plex_url(conn[:uri])}
+                                  </span>
+                                  <%= if conn[:local] do %>
+                                    <span class="badge badge-xs badge-info gap-1">
+                                      <.icon name="hero-home" class="w-3 h-3" /> local
+                                    </span>
+                                  <% end %>
+                                  <%= if conn[:relay] do %>
+                                    <span class="badge badge-xs badge-warning gap-1">
+                                      <.icon name="hero-cloud" class="w-3 h-3" /> relay
+                                    </span>
+                                  <% end %>
+                                </div>
+                              <% end %>
+                            </div>
+                          </div>
+                        <% end %>
+
+                        <button
+                          type="button"
+                          class="btn btn-ghost btn-sm gap-1"
+                          phx-click="cancel_plex_oauth"
+                        >
+                          <.icon name="hero-arrow-left" class="w-4 h-4" /> Start over
+                        </button>
                       </div>
                     <% :error -> %>
                       <div class="text-center space-y-4 py-2">
@@ -515,8 +582,10 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
               </div>
             <% end %>
 
-            <%!-- Manual entry fields - shown for Jellyfin, or Plex in manual mode, or after OAuth complete --%>
-            <%= if @current_type != :plex or @plex_manual_entry or @plex_oauth_state == :complete do %>
+            <%!-- Manual entry fields - shown for Jellyfin, or Plex in manual mode.
+                  The discovery path renders its own read-only review panel instead,
+                  because it has no url to collect and its token is not operator-editable. --%>
+            <%= if @current_type != :plex or @plex_manual_entry do %>
               <div class="card bg-base-200/50 border border-base-300">
                 <div class="card-body p-4 gap-4">
                   <div class="flex items-center gap-2 text-sm font-medium text-base-content/70">
@@ -534,13 +603,16 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                             do: "http://192.168.1.100:32400",
                             else: "http://192.168.1.100:8096"
                         }
-                        required
+                        required={@current_type != :plex or not @plex_addressable}
                       />
                       <p class="text-xs text-base-content/50 mt-1 ml-1">
-                        <%= if @current_type == :plex do %>
-                          Full URL including port (default: 32400)
-                        <% else %>
-                          Full URL including port (default: 8096)
+                        <%= cond do %>
+                          <% @current_type == :plex and @plex_addressable -> %>
+                            Optional manual override. Leave blank to use the addresses discovered from your Plex account.
+                          <% @current_type == :plex -> %>
+                            Full URL including port (default: 32400)
+                          <% true -> %>
+                            Full URL including port (default: 8096)
                         <% end %>
                       </p>
                     </div>
@@ -648,12 +720,17 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
           <div class="modal-action mt-6 grid grid-cols-2 gap-2 sticky bottom-0 bg-base-100 -mx-6 px-6 -mb-6 pb-6 pt-4 border-t border-base-300 sm:flex sm:gap-2">
             <button
               type="button"
-              class={["btn btn-ghost", modal_action_btn()]}
+              class={[
+                "btn btn-ghost",
+                @plex_oauth_state == :complete && "col-span-2 sm:col-span-1",
+                modal_action_btn()
+              ]}
               phx-click="close_media_server_modal"
             >
               Cancel
             </button>
             <button
+              :if={@plex_oauth_state != :complete}
               type="button"
               class={["btn btn-outline btn-secondary gap-2", modal_action_btn()]}
               phx-click="test_media_server_connection"
@@ -667,10 +744,15 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
             </button>
             <button
               type="submit"
+              id="media-server-submit"
               class={[
                 "btn btn-primary gap-2 col-span-2 order-first sm:order-none",
                 modal_action_btn()
               ]}
+              disabled={
+                @media_server_mode == :new and @current_type == :plex and
+                  not @plex_manual_entry and @plex_oauth_state != :complete
+              }
             >
               <.icon name="hero-check" class="w-4 h-4" />
               {if @media_server_mode == :new, do: "Add Server", else: "Save Changes"}

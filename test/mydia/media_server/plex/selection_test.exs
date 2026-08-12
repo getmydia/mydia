@@ -2,6 +2,7 @@ defmodule Mydia.MediaServer.Plex.SelectionTest do
   use ExUnit.Case, async: true
 
   alias Mydia.MediaServer.Plex.Selection
+  alias Mydia.Settings.MediaServerConfig
 
   defp server(name, opts \\ []) do
     %{
@@ -102,6 +103,72 @@ defmodule Mydia.MediaServer.Plex.SelectionTest do
       attrs = Selection.config_attrs(server("Storage"), "tok", now)
 
       assert attrs.connections_refreshed_at == ~U[2026-08-11 12:00:00Z]
+    end
+  end
+
+  describe "merge_discovery/2" do
+    defp discovery do
+      Selection.config_attrs(
+        server("Storage", owned: true),
+        "acct-token",
+        ~U[2026-08-12 00:00:00Z]
+      )
+    end
+
+    defp form_params(overrides \\ %{}) do
+      Map.merge(%{"name" => "Storage", "type" => "plex", "url" => ""}, overrides)
+    end
+
+    test "nil discovery leaves params untouched" do
+      params = form_params()
+      assert Selection.merge_discovery(params, nil) == params
+    end
+
+    test "discovery-owned fields are restored onto form params" do
+      merged = Selection.merge_discovery(form_params(), discovery())
+
+      assert merged["machine_identifier"] == "Storage"
+      assert merged["server_access_token"] == "srv-Storage"
+      assert merged["token"] == "acct-token"
+      assert merged["connections_refreshed_at"] == ~U[2026-08-12 00:00:00Z]
+      assert [%{uri: "http://127.0.0.1:32400"}] = merged["connections"]
+    end
+
+    test "operator edits to form fields win over discovery" do
+      merged = Selection.merge_discovery(form_params(%{"name" => "Renamed"}), discovery())
+
+      assert merged["name"] == "Renamed"
+    end
+
+    test "the merged map stays entirely string-keyed, because cast/3 rejects mixed keys" do
+      merged = Selection.merge_discovery(form_params(), discovery())
+
+      assert Enum.all?(Map.keys(merged), &is_binary/1)
+    end
+
+    test "switching the type away from Plex drops discovery entirely" do
+      params = form_params(%{"type" => "jellyfin", "url" => "http://box:8096"})
+
+      assert Selection.merge_discovery(params, discovery()) == params
+    end
+
+    # The regression this whole change exists to prevent: the wizard leaves url
+    # nil on purpose, so without the merge there is nothing left to address the
+    # server by and the changeset rejects a config the operator just authorised.
+    test "merged params build a valid changeset even with a blank url" do
+      merged = Selection.merge_discovery(form_params(), discovery())
+      changeset = MediaServerConfig.changeset(%MediaServerConfig{}, merged)
+
+      assert changeset.valid?
+    end
+
+    test "the same params without the merge are rejected" do
+      changeset = MediaServerConfig.changeset(%MediaServerConfig{}, form_params())
+
+      refute changeset.valid?
+
+      assert {"is required until a Plex server is discovered", _} =
+               changeset.errors[:url]
     end
   end
 end
