@@ -14,6 +14,8 @@ defmodule MydiaWeb.DashboardLive.Index do
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
 
+  @unsupported_media_type "That media type is not supported."
+
   @impl true
   def mount(_params, _session, socket) do
     socket =
@@ -117,15 +119,22 @@ defmodule MydiaWeb.DashboardLive.Index do
         %{"tmdb_id" => provider_id, "media_type" => media_type} = params,
         socket
       ) do
-    media_type_atom = String.to_existing_atom(media_type)
+    case parse_event_media_type(media_type) do
+      {:ok, media_type_atom} ->
+        # Set the adding state
+        socket = assign(socket, :adding_item_id, provider_id)
 
-    # Set the adding state
-    socket = assign(socket, :adding_item_id, provider_id)
+        # Start async task to add media
+        send(
+          self(),
+          {:add_media_to_library, provider_id, media_type_atom, params["library_path_id"]}
+        )
 
-    # Start async task to add media
-    send(self(), {:add_media_to_library, provider_id, media_type_atom, params["library_path_id"]})
+        {:noreply, socket}
 
-    {:noreply, socket}
+      :error ->
+        {:noreply, put_flash(socket, :error, @unsupported_media_type)}
+    end
   end
 
   def handle_event(
@@ -133,38 +142,30 @@ defmodule MydiaWeb.DashboardLive.Index do
         %{"tmdb_id" => provider_id, "media_type" => media_type},
         socket
       ) do
-    media_type_atom = String.to_existing_atom(media_type)
-    socket = assign(socket, :requesting_item_id, provider_id)
-    send(self(), {:request_media, provider_id, media_type_atom})
-    {:noreply, socket}
+    case parse_event_media_type(media_type) do
+      {:ok, media_type_atom} ->
+        socket = assign(socket, :requesting_item_id, provider_id)
+        send(self(), {:request_media, provider_id, media_type_atom})
+        {:noreply, socket}
+
+      :error ->
+        {:noreply, put_flash(socket, :error, @unsupported_media_type)}
+    end
   end
 
   def handle_event("show_details", %{"id" => id, "type" => type}, socket) do
-    # Find the item from trending lists
-    media_type = String.to_existing_atom(type)
+    with {:ok, media_type} <- parse_event_media_type(type),
+         item when not is_nil(item) <- find_trending_item(socket, id, media_type) do
+      # Show modal with loading state and trigger metadata fetch
+      send(self(), {:fetch_detail_metadata, id, media_type})
 
-    item =
-      case media_type do
-        :movie ->
-          Enum.find(socket.assigns.trending_movies, &(&1.provider_id == id))
-
-        :tv_show ->
-          Enum.find(socket.assigns.trending_tv, &(&1.provider_id == id))
-      end
-
-    case item do
-      nil ->
-        {:noreply, socket}
-
-      item ->
-        # Show modal with loading state and trigger metadata fetch
-        send(self(), {:fetch_detail_metadata, id, media_type})
-
-        {:noreply,
-         socket
-         |> assign(:selected_item, item)
-         |> assign(:selected_metadata, nil)
-         |> assign(:detail_loading, true)}
+      {:noreply,
+       socket
+       |> assign(:selected_item, item)
+       |> assign(:selected_metadata, nil)
+       |> assign(:detail_loading, true)}
+    else
+      _ -> {:noreply, socket}
     end
   end
 
@@ -386,4 +387,17 @@ defmodule MydiaWeb.DashboardLive.Index do
     do: "Could not submit the request: #{MediaAddHelpers.format_changeset_errors(changeset)}"
 
   defp request_error_message(_), do: "Could not submit the request. Please try again."
+
+  # phx-value payloads are client-controlled, and String.to_existing_atom/1
+  # would raise on anything unexpected and take the LiveView down with it.
+  # Match the two known types explicitly instead.
+  defp parse_event_media_type("movie"), do: {:ok, :movie}
+  defp parse_event_media_type("tv_show"), do: {:ok, :tv_show}
+  defp parse_event_media_type(_), do: :error
+
+  defp find_trending_item(socket, id, :movie),
+    do: Enum.find(socket.assigns.trending_movies, &(&1.provider_id == id))
+
+  defp find_trending_item(socket, id, :tv_show),
+    do: Enum.find(socket.assigns.trending_tv, &(&1.provider_id == id))
 end

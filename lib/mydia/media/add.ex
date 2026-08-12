@@ -245,11 +245,13 @@ defmodule Mydia.Media.Add do
   end
 
   defp resolve_tv_show_attrs_from_tmdb(provider_id, provider_id_int, config, opts) do
-    # Derive the provider from the configured libraries. `derived` may be nil
-    # (libraries disagree); the fetch still needs a provider, so fall back to
-    # TVDB for content while leaving provenance unstamped.
+    # The initial fetch below is always TMDB, because that is the id we hold.
+    # `primary_provider` selects which provider's metadata ends up as the
+    # item's primary content, not which one is fetched first. `derived` may be
+    # nil when the configured libraries disagree; TVDB is the richer source, so
+    # it wins the content while provenance stays unstamped.
     derived = Settings.derive_tv_metadata_source()
-    fetch_provider = derived || :tvdb
+    primary_provider = derived || :tvdb
 
     case Metadata.fetch_by_id(config, provider_id, media_type: :tv_show, provider: :tmdb) do
       {:ok, tmdb_metadata} ->
@@ -258,7 +260,7 @@ defmodule Mydia.Media.Add do
            tmdb_metadata,
            provider_id_int,
            derived,
-           fetch_provider,
+           primary_provider,
            config,
            opts
          )}
