@@ -10,10 +10,7 @@ defmodule Mydia.Subtitles.Format do
   rejected rather than silently mangled.
   """
 
-  require Logger
-
   @image_formats ~w(pgs vobsub dvd_subtitle hdmv_pgs_subtitle)
-  @ffmpeg_timeout 30_000
 
   @doc """
   Returns true when the format carries bitmaps rather than text.
@@ -98,9 +95,10 @@ defmodule Mydia.Subtitles.Format do
     try do
       File.write!(input, content)
 
+      # System.cmd/3 has no :timeout option and raises ArgumentError on unknown
+      # options, so a timeout cannot be passed here.
       case System.cmd("ffmpeg", ["-v", "error", "-y", "-i", input, output],
-             stderr_to_stdout: true,
-             timeout: @ffmpeg_timeout
+             stderr_to_stdout: true
            ) do
         {_out, 0} -> {:ok, File.read!(output)}
         {out, _code} -> {:error, {:ffmpeg_failed, String.slice(out, 0, 500)}}

@@ -100,6 +100,49 @@ defmodule Mydia.Subtitles.FormatTest do
     end
   end
 
+  describe "the ffmpeg fallback" do
+    @ass """
+    [Script Info]
+    Title: Test
+    ScriptType: v4.00+
+
+    [Events]
+    Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+    Dialogue: 0,0:00:01.00,0:00:04.00,Default,,0,0,0,,Hello there.
+    """
+
+    # Every format outside the SRT and VTT pair falls through to ffmpeg, and no
+    # other test in this file reaches that branch. Without this, an invalid
+    # option to System.cmd/3 sat undetected behind a fully green suite: the
+    # pure-Elixir paths never spawn a process, so nothing raised.
+    test "returns a tuple rather than raising for a format needing ffmpeg" do
+      result = Format.convert(@ass, "ass", "srt")
+
+      assert is_tuple(result)
+
+      case result do
+        {:ok, content} -> assert is_binary(content)
+        {:error, :ffmpeg_not_found} -> :ok
+        {:error, {:ffmpeg_failed, message}} -> assert is_binary(message)
+      end
+    end
+
+    test "leaves no temporary files behind" do
+      before = tmp_conversion_files()
+
+      Format.convert(@ass, "ass", "srt")
+
+      assert tmp_conversion_files() == before
+    end
+
+    defp tmp_conversion_files do
+      System.tmp_dir!()
+      |> Path.join("mydia-subconv-*")
+      |> Path.wildcard()
+      |> Enum.sort()
+    end
+  end
+
   describe "image_format?/1" do
     test "classifies formats" do
       assert Format.image_format?("pgs")
