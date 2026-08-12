@@ -992,15 +992,6 @@ defmodule Mydia.Jobs.DownloadMonitor do
       error: error_message
     )
 
-    # Emitted before the reject deletes the row: this event is the operator's
-    # only lasting record, same as the client-failure path at the top of this
-    # module.
-    Events.download_failed(download, error_message,
-      media_item: download.media_item,
-      failure_category: "stalled",
-      failure_detail: download.download_client
-    )
-
     case Queue.reject_release(download,
            actor_type: :system,
            actor_id: "download_monitor",
@@ -1009,23 +1000,45 @@ defmodule Mydia.Jobs.DownloadMonitor do
            event: :none
          ) do
       {:ok, :rejected} ->
+        # Emitted only once the reject actually happened. The in-memory struct
+        # outlives the deleted row, so the event loses nothing by waiting, and
+        # a reject that failed must not leave a terminal "failed" record behind
+        # for a download still sitting in the queue — the next poll would
+        # re-enter this branch and emit a second one.
+        Events.download_failed(download, error_message,
+          media_item: download.media_item,
+          failure_category: "stalled",
+          failure_detail: download.download_client
+        )
+
         if download.media_item_id do
           Mydia.Search.record_failure("auto_reject", download.media_item_id, "stalled")
         end
+
+        1
 
       {:error, reason} ->
         Logger.warning("Could not clear stalled download",
           download_id: download.id,
           reason: inspect(reason)
         )
-    end
 
-    1
+        # Nothing changed, so nothing newly stalled.
+        0
+    end
   end
 
   # Same reasoning as suppress_auto_reject/2: when the cap trips, the likeliest
   # truth is that our detector is wrong, so the right outcome is that this
-  # download finishes and imports. Touch nothing.
+  # download finishes and imports.
+  #
+  # Unlike that one, this resets the stall clock rather than touching nothing.
+  # A suppressed download stays past the escalation threshold, so every poll
+  # re-enters this branch and re-emits the event — a burst every 15s while the
+  # fast-followup chain is running, until the observation-gap reset happens to
+  # clear `stalled_since` as a side effect. Leaning on that accident is fragile;
+  # resetting the clock explicitly gives one event per full grace+escalation
+  # cycle. This is the same reset the operator's "Keep waiting" performs.
   defp suppress_stall_reject(download, error_message) do
     Logger.warning("Auto-reject limit reached, leaving stalled download alone",
       download_id: download.id,
@@ -1037,7 +1050,24 @@ defmodule Mydia.Jobs.DownloadMonitor do
 
     Events.download_auto_reject_suppressed(download, media_item: download.media_item)
 
-    1
+    now = DateTime.utc_now()
+
+    case Downloads.update_download(download, %{
+           stalled_since: nil,
+           last_progress_at: now,
+           last_observed_at: now
+         }) do
+      {:ok, _updated} ->
+        :ok
+
+      {:error, changeset} ->
+        Logger.error("Failed to reset the stall clock on a suppressed download",
+          download_id: download.id,
+          errors: inspect(changeset.errors)
+        )
+    end
+
+    0
   end
 
   # Persist a progress/reset decision that clears any in-flight soft-stall,

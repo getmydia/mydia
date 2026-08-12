@@ -1996,12 +1996,59 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
 
       # When the cap trips, the likeliest truth is that our detector is wrong,
       # so the download is left to finish rather than destroyed.
-      assert Repo.get(Download, download.id)
+      suppressed = Repo.get(Download, download.id)
+      assert suppressed
       refute Blacklists.blacklisted?("1337x", "ae6b-guid")
+
+      # The stall clock is reset so the decision is not re-announced on every
+      # poll. Without this the download stays past the escalation threshold and
+      # each poll re-emits the suppression event.
+      assert is_nil(suppressed.stalled_since)
+      assert suppressed.last_progress_at
 
       Process.sleep(100)
       assert Events.list_events(type: "download.failed") == []
-      assert Events.list_events(type: "download.auto_reject_suppressed") != []
+      assert length(Events.list_events(type: "download.auto_reject_suppressed")) == 1
+    end
+
+    test "AE6d: a suppressed stall is not re-announced on the next poll" do
+      {bypass, client_config} = start_sabnzbd_bypass(incomplete_grace_minutes: 60)
+      same_bytes = round(50.0 * 1024 * 1024)
+
+      mock_sabnzbd_queue(bypass, [
+        sabnzbd_queue_item("nzo-ae6d", "show.nzb", size_mb: 100.0, mb_left: 50.0)
+      ])
+
+      media_item = media_item_fixture(%{type: "movie"})
+
+      for _ <- 1..3 do
+        Mydia.Search.record_failure("auto_reject", media_item.id, "stalled")
+      end
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          download_client: client_config.name,
+          download_client_id: "nzo-ae6d",
+          indexer: "1337x",
+          metadata: %{"guid" => "ae6d-guid"},
+          last_progress_at: ~U[2026-06-16 00:00:00.000000Z],
+          last_known_bytes: same_bytes,
+          last_observed_at: ~U[2026-06-16 03:58:00.000000Z],
+          stalled_since: ~U[2026-06-16 00:58:00.000000Z]
+        })
+
+      first = ~U[2026-06-16 04:00:00.000000Z]
+      assert :ok = perform_job(DownloadMonitor, %{"now" => DateTime.to_iso8601(first)})
+
+      # One poll later, well inside the fresh grace window the reset bought.
+      second = DateTime.add(first, 120, :second)
+      assert :ok = perform_job(DownloadMonitor, %{"now" => DateTime.to_iso8601(second)})
+
+      assert Repo.get(Download, download.id)
+
+      Process.sleep(100)
+      assert length(Events.list_events(type: "download.auto_reject_suppressed")) == 1
     end
 
     test "AE6c: a stalled download with no blacklist key is still cleared" do

@@ -175,8 +175,21 @@ defmodule Mydia.Downloads.Queue do
            ) do
       :ok
     else
+      # Having no release key is an ordinary shape, not a problem: externally
+      # adopted torrents and manual grabs never had one. Logging it at warning
+      # would make routine operator rejections look like faults.
+      {:error, reason} when reason in [:no_indexer, :no_guid] ->
+        Logger.debug("Rejecting a release with no blacklist key",
+          download_id: download.id,
+          reason: inspect(reason)
+        )
+
+        :ok
+
+      # A write that actually failed is worth surfacing: the release will not be
+      # filtered out of the next search.
       {:error, reason} ->
-        Logger.warning("Rejecting release without a blacklist entry",
+        Logger.warning("Rejecting release but the blacklist write failed",
           download_id: download.id,
           reason: inspect(reason)
         )
