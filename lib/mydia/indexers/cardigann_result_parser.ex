@@ -423,15 +423,9 @@ defmodule Mydia.Indexers.CardigannResultParser do
       Logger.info("Debug: HTML preview: #{html_preview}")
     end
 
-    rows =
-      if Map.get(row_config, :multiple) == true do
-        # `multiple` means the selector's comma-separated alternatives are one
-        # combined row set rather than a first-match-wins choice.
-        rows
-      else
-        rows
-      end
-
+    # `rows.multiple` needs no handling here: it declares that the selector's
+    # comma-separated alternatives form one combined row set rather than a
+    # first-match-wins choice, and floki_find_enhanced/2 already unions them.
     missing_attr_no_results = Map.get(row_config, :missing_attribute_equals_no_results) == true
     row_attribute = Map.get(row_config, :attribute)
 

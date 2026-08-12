@@ -156,9 +156,14 @@ defmodule Mix.Tasks.Mydia.CardigannCapture do
         _ -> "/search/{keywords}/"
       end
 
+    # Match runtime, which filters the query through search.keywordsfilters
+    # before substituting {{ .Keywords }}. Capturing with the raw query would
+    # request a different URL than the running app does.
+    filtered_query = Mydia.Indexers.CardigannFilters.apply_keywords_filters(query, definition)
+
     # Build template context
     context = %{
-      keywords: query,
+      keywords: filtered_query,
       config: build_default_config(definition),
       categories: [],
       settings: definition.settings || [],
@@ -168,8 +173,11 @@ defmodule Mix.Tasks.Mydia.CardigannCapture do
     # Render the path template
     rendered_path =
       case Mydia.Indexers.CardigannTemplate.render(path_template, context) do
-        {:ok, rendered} -> rendered
-        {:error, _} -> String.replace(path_template, "{{ .Keywords }}", URI.encode(query))
+        {:ok, rendered} ->
+          rendered
+
+        {:error, _} ->
+          String.replace(path_template, "{{ .Keywords }}", URI.encode(filtered_query))
       end
 
     # Add query parameters from inputs
@@ -218,8 +226,11 @@ defmodule Mix.Tasks.Mydia.CardigannCapture do
       if is_nil(base_url) do
         {:error, :no_base_url}
       else
+        # Runtime filters the query through search.keywordsfilters before any
+        # {{ .Keywords }} substitution, so capturing with the raw query would
+        # pin a fixture to a context the running app never produces.
         template_context = %{
-          keywords: query,
+          keywords: Mydia.Indexers.CardigannFilters.apply_keywords_filters(query, definition),
           config: build_default_config(definition),
           categories: [],
           settings: definition.settings || [],
