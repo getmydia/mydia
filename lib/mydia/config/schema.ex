@@ -241,6 +241,15 @@ defmodule Mydia.Config.Schema do
       field :integrity_hash, :string
       field :settings, :map, default: %{}
       field :granted_capabilities, :map, default: %{}
+
+      # Operator-configured service endpoints for this plugin. Always
+      # instance-scoped: a user-scoped connection is identity, not
+      # configuration, and is never expressible in YAML.
+      embeds_many :connections, PluginConnection, on_replace: :delete, primary_key: false do
+        field :label, :string
+        field :url, :string
+        field :token, :string
+      end
     end
 
     embeds_many :path_mappings, PathMapping, on_replace: :delete, primary_key: false do
@@ -616,9 +625,131 @@ defmodule Mydia.Config.Schema do
       :settings,
       :granted_capabilities
     ])
+    |> cast_embed(:connections, with: &plugin_connection_changeset/2)
     |> validate_required([:slug, :name])
     |> validate_number(:priority, greater_than: 0)
   end
+
+  defp plugin_connection_changeset(schema, attrs) do
+    cast(schema, attrs, [:label, :url, :token])
+  end
+
+  @doc """
+  Parses `PLUGIN_<N>_*` install entries (and nested `PLUGIN_<N>_CONNECTION_<M>_*`)
+  from an env map. Used by the config loader and tests without mutating global env.
+  """
+  def parse_plugin_installs_from_env(env) when is_map(env) do
+    indices =
+      env
+      |> Enum.filter(fn {key, _value} ->
+        String.starts_with?(key, "PLUGIN_") and String.ends_with?(key, "_SLUG")
+      end)
+      |> Enum.map(fn {key, _value} ->
+        key
+        |> String.replace_prefix("PLUGIN_", "")
+        |> String.replace_suffix("_SLUG", "")
+      end)
+      |> Enum.uniq()
+
+    Enum.map(indices, fn index ->
+      prefix = "PLUGIN_#{index}_"
+
+      %{}
+      |> put_env_present(env, :slug, "#{prefix}SLUG")
+      |> put_env_present(env, :name, "#{prefix}NAME")
+      |> put_env_present(env, :version, "#{prefix}VERSION")
+      |> put_env_present(env, :enabled, "#{prefix}ENABLED", &parse_env_boolean/1)
+      |> put_env_present(env, :priority, "#{prefix}PRIORITY", &parse_env_integer/1)
+      |> put_env_present(env, :source_url, "#{prefix}SOURCE_URL")
+      |> put_env_present(env, :integrity_hash, "#{prefix}INTEGRITY_HASH")
+      |> put_env_present(env, :settings, "#{prefix}SETTINGS", &parse_env_json/1)
+      |> put_env_present(
+        env,
+        :granted_capabilities,
+        "#{prefix}GRANTED_CAPABILITIES",
+        &parse_env_json/1
+      )
+      |> Map.put(:connections, parse_plugin_connections_from_env(env, index))
+      |> then(fn map -> Map.put_new(map, :name, map[:slug]) end)
+    end)
+    |> Enum.reject(&(&1 == %{} or is_nil(&1[:slug])))
+  end
+
+  defp parse_plugin_connections_from_env(env, plugin_index) when is_map(env) do
+    connection_prefix = "PLUGIN_#{plugin_index}_CONNECTION_"
+
+    indices =
+      env
+      |> Enum.filter(fn {key, _value} ->
+        String.starts_with?(key, connection_prefix) and String.ends_with?(key, "_LABEL")
+      end)
+      |> Enum.map(fn {key, _value} ->
+        key
+        |> String.replace_prefix(connection_prefix, "")
+        |> String.replace_suffix("_LABEL", "")
+      end)
+      |> Enum.uniq()
+
+    Enum.map(indices, fn connection_index ->
+      prefix = "#{connection_prefix}#{connection_index}_"
+
+      %{}
+      |> put_env_present(env, :label, "#{prefix}LABEL")
+      |> put_env_present(env, :url, "#{prefix}URL")
+      |> put_env_present(env, :token, "#{prefix}TOKEN")
+    end)
+    |> Enum.reject(&(&1 == %{} or is_nil(&1[:label])))
+  end
+
+  defp put_env_present(map, _env, _key, env_key, parser \\ nil)
+
+  defp put_env_present(map, env, key, env_key, nil) do
+    case Map.get(env, env_key) do
+      nil -> map
+      "" -> map
+      value -> Map.put(map, key, value)
+    end
+  end
+
+  defp put_env_present(map, env, key, env_key, parser) do
+    case Map.get(env, env_key) do
+      nil ->
+        map
+
+      "" ->
+        map
+
+      value ->
+        case parser.(value) do
+          {:ok, parsed} -> Map.put(map, key, parsed)
+          :error -> map
+        end
+    end
+  end
+
+  defp parse_env_boolean("true"), do: {:ok, true}
+  defp parse_env_boolean("false"), do: {:ok, false}
+  defp parse_env_boolean("1"), do: {:ok, true}
+  defp parse_env_boolean("0"), do: {:ok, false}
+  defp parse_env_boolean(_), do: :error
+
+  defp parse_env_integer(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {int, ""} -> {:ok, int}
+      _ -> :error
+    end
+  end
+
+  defp parse_env_integer(_), do: :error
+
+  defp parse_env_json(value) when is_binary(value) do
+    case Jason.decode(value) do
+      {:ok, decoded} -> {:ok, decoded}
+      _ -> :error
+    end
+  end
+
+  defp parse_env_json(_), do: :error
 
   defp path_mapping_changeset(schema, attrs) do
     schema

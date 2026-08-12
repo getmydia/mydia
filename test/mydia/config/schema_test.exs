@@ -460,6 +460,59 @@ defmodule Mydia.Config.SchemaTest do
     end
   end
 
+  describe "plugin install connections" do
+    test "parses a connections list from YAML" do
+      changeset =
+        Schema.changeset(%Schema{}, %{
+          plugin_installs: [
+            %{
+              slug: "jellyfin",
+              name: "Jellyfin",
+              version: "1.0.0",
+              connections: [
+                %{label: "Living room", url: "http://10.0.0.6:8096", token: "t"}
+              ]
+            }
+          ]
+        })
+
+      assert changeset.valid?
+      config = Ecto.Changeset.apply_changes(changeset)
+      assert [install] = config.plugin_installs
+      assert [connection] = install.connections
+      assert connection.label == "Living room"
+      assert connection.url == "http://10.0.0.6:8096"
+      assert connection.token == "t"
+    end
+
+    test "parses connections from env vars" do
+      env = %{
+        "PLUGIN_1_SLUG" => "jellyfin",
+        "PLUGIN_1_NAME" => "Jellyfin",
+        "PLUGIN_1_VERSION" => "1.0.0",
+        "PLUGIN_1_CONNECTION_1_LABEL" => "Living room",
+        "PLUGIN_1_CONNECTION_1_URL" => "http://10.0.0.6:8096",
+        "PLUGIN_1_CONNECTION_1_TOKEN" => "t"
+      }
+
+      assert [install] = Schema.parse_plugin_installs_from_env(env)
+      assert [connection] = install.connections
+      assert connection.label == "Living room"
+    end
+
+    test "an install with no connections parses to an empty list" do
+      changeset =
+        Schema.changeset(%Schema{}, %{
+          plugin_installs: [%{slug: "webhook", name: "Webhook", version: "1.0.0"}]
+        })
+
+      assert changeset.valid?
+      config = Ecto.Changeset.apply_changes(changeset)
+      assert [install] = config.plugin_installs
+      assert install.connections == []
+    end
+  end
+
   defp library_path_attrs(extra) do
     %{library_paths: [Map.merge(%{path: "/media/movies", type: :movies}, extra)]}
   end

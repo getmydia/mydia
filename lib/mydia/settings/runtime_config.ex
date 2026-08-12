@@ -5,6 +5,7 @@ defmodule Mydia.Settings.RuntimeConfig do
   import Mydia.QueryHelpers
 
   alias Mydia.Repo
+  alias Mydia.Settings
 
   alias Mydia.Settings.{
     ConfigSetting,
@@ -15,6 +16,8 @@ defmodule Mydia.Settings.RuntimeConfig do
     PathMappingConfig,
     PluginConfig
   }
+
+  alias Mydia.Plugins.Connections
 
   ## Configuration Settings (Database)
 
@@ -341,6 +344,92 @@ defmodule Mydia.Settings.RuntimeConfig do
     end
   end
 
+  @doc """
+  Lists instance-scoped connections for a plugin, merging DB rows with
+  config-sourced endpoints and marking config rows read-only.
+  """
+  def instance_connections_for_plugin(slug) when is_binary(slug) do
+    config_connections = config_connections_for_slug(slug)
+    config_labels = MapSet.new(config_connections, & &1.label)
+
+    db_connections =
+      Connections.list_instance_for_plugin(slug)
+      |> Enum.map(fn
+        %Connections{} = conn ->
+          if MapSet.member?(config_labels, conn.label) do
+            %Connections{conn | from_config?: true}
+          else
+            conn
+          end
+      end)
+
+    db_labels = MapSet.new(db_connections, & &1.label)
+
+    virtual =
+      config_connections
+      |> Enum.reject(&MapSet.member?(db_labels, &1.label))
+      |> Enum.map(&virtual_config_connection/1)
+
+    db_connections ++ virtual
+  end
+
+  @doc """
+  Upserts config-declared instance connections into the database when the
+  plugin has a DB row. Idempotent and safe to call on boot or config reload.
+  """
+  def sync_plugin_connections_from_config do
+    get_runtime_config()
+    |> Map.get(:plugin_installs, [])
+    |> Enum.reduce(0, fn install, count ->
+      slug = Map.get(install, :slug)
+
+      if is_binary(slug) and Settings.get_plugin_config_by_slug(slug) do
+        install
+        |> Map.get(:connections, [])
+        |> Enum.reduce(count, fn conn, inner ->
+          case upsert_config_connection(slug, conn) do
+            {:ok, _} -> inner + 1
+            {:error, _} -> inner
+          end
+        end)
+      else
+        count
+      end
+    end)
+  end
+
+  defp config_connections_for_slug(slug) do
+    case Enum.find(get_runtime_plugins(), &(&1.slug == slug)) do
+      %{connections: connections} when is_list(connections) -> connections
+      _ -> []
+    end
+  end
+
+  defp upsert_config_connection(slug, conn) do
+    url = Map.get(conn, :url)
+    token = Map.get(conn, :token)
+
+    Connections.upsert(slug, %{
+      scope: "instance",
+      label: Map.get(conn, :label, ""),
+      base_urls: if(is_binary(url), do: [url], else: []),
+      access_token: token || "",
+      auth_kind: "bearer"
+    })
+  end
+
+  defp virtual_config_connection(conn) do
+    url = Map.get(conn, :url)
+
+    %{
+      label: Map.get(conn, :label, ""),
+      base_urls: if(is_binary(url), do: [url], else: []),
+      status: "connected",
+      scope: "instance",
+      from_config?: true
+    }
+  end
+
   ## Runtime ID Helpers (public, used by other sub-modules)
 
   def runtime_config?(%{id: id}) when is_binary(id) do
@@ -435,9 +524,29 @@ defmodule Mydia.Settings.RuntimeConfig do
       granted_capabilities: Map.get(map, :granted_capabilities, %{}),
       source_url: Map.get(map, :source_url),
       integrity_hash: Map.get(map, :integrity_hash),
+      connections: map_runtime_plugin_connections(map),
       updated_by_id: nil,
       inserted_at: nil,
       updated_at: nil
+    }
+  end
+
+  defp map_runtime_plugin_connections(map) do
+    map
+    |> Map.get(:connections, [])
+    |> Enum.map(&map_to_runtime_plugin_connection/1)
+  end
+
+  defp map_to_runtime_plugin_connection(%_{} = conn) do
+    map_to_runtime_plugin_connection(Map.from_struct(conn))
+  end
+
+  defp map_to_runtime_plugin_connection(conn) when is_map(conn) do
+    %{
+      label: Map.get(conn, :label),
+      url: Map.get(conn, :url),
+      token: Map.get(conn, :token),
+      from_config?: true
     }
   end
 

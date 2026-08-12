@@ -10,6 +10,7 @@ defmodule MydiaWeb.AdminPluginsLive.Show do
   alias Mydia.Plugins.Kv
   alias Mydia.Repo
   alias Mydia.Settings
+  alias Mydia.Settings.RuntimeConfig
 
   @impl true
   def mount(%{"slug" => slug}, _session, socket) do
@@ -208,7 +209,7 @@ defmodule MydiaWeb.AdminPluginsLive.Show do
 
   defp load_connections(socket) do
     slug = socket.assigns.plugin.slug
-    connections = Connections.list_instance_for_plugin(slug)
+    connections = RuntimeConfig.instance_connections_for_plugin(slug)
     assign(socket, :connections, connections)
   end
 

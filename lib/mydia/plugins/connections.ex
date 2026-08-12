@@ -47,6 +47,7 @@ defmodule Mydia.Plugins.Connections do
     field :resolved_base_url, :string
     field :auth_kind, :string, default: "bearer"
     field :auth_key, :string
+    field :from_config?, :boolean, virtual: true, default: false
 
     belongs_to :user, Mydia.Accounts.User
 

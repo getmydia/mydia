@@ -399,45 +399,8 @@ defmodule Mydia.Config.Loader do
   end
 
   defp load_plugins_env do
-    # Support environment variables for installed plugins in the format:
-    # PLUGIN_<N>_SLUG, PLUGIN_<N>_NAME, PLUGIN_<N>_SOURCE_URL, etc.
-    # Capabilities/settings are JSON strings:
-    # PLUGIN_<N>_GRANTED_CAPABILITIES='{"net:http":["discord.com"]}'
-    env_vars = System.get_env()
-
-    indices =
-      env_vars
-      |> Enum.filter(fn {key, _value} ->
-        String.starts_with?(key, "PLUGIN_") and String.ends_with?(key, "_SLUG")
-      end)
-      |> Enum.map(fn {key, _value} ->
-        key
-        |> String.replace_prefix("PLUGIN_", "")
-        |> String.replace_suffix("_SLUG", "")
-      end)
-      |> Enum.uniq()
-
-    Enum.map(indices, fn index ->
-      prefix = "PLUGIN_#{index}_"
-
-      %{}
-      |> put_if_present(:slug, System.get_env("#{prefix}SLUG"))
-      |> put_if_present(:name, System.get_env("#{prefix}NAME"))
-      |> put_if_present(:version, System.get_env("#{prefix}VERSION"))
-      |> put_if_present(:enabled, System.get_env("#{prefix}ENABLED"), &parse_boolean/1)
-      |> put_if_present(:priority, System.get_env("#{prefix}PRIORITY"), &parse_integer/1)
-      |> put_if_present(:source_url, System.get_env("#{prefix}SOURCE_URL"))
-      |> put_if_present(:integrity_hash, System.get_env("#{prefix}INTEGRITY_HASH"))
-      |> put_if_present(:settings, System.get_env("#{prefix}SETTINGS"), &parse_json/1)
-      |> put_if_present(
-        :granted_capabilities,
-        System.get_env("#{prefix}GRANTED_CAPABILITIES"),
-        &parse_json/1
-      )
-      # A plugin install with no name falls back to its slug.
-      |> then(fn map -> Map.put_new(map, :name, map[:slug]) end)
-    end)
-    |> Enum.reject(&(&1 == %{} or is_nil(&1[:slug])))
+    System.get_env()
+    |> Mydia.Config.Schema.parse_plugin_installs_from_env()
   end
 
   defp load_media_servers_env do
