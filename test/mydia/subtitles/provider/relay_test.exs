@@ -17,7 +17,13 @@ defmodule Mydia.Subtitles.Provider.RelayTest do
   @provider %{id: "relay-default", name: "Mydia Relay", type: :relay}
 
   describe "search/2" do
-    test "normalizes provider results", %{bypass: bypass} do
+    # This fixture mirrors the actual output of
+    # MetadataRelay.OpenSubtitles.Handler.transform_subtitle/1
+    # (metadata-relay/lib/metadata_relay/opensubtitles/handler.ex:144-167),
+    # not the field names SearchResult.from_map/1 reads. The relay emits
+    # "id" (not "file_id"), "release" (not "file_name"), and never emits
+    # "subtitle_hash" or "moviehash_match" at all.
+    test "normalizes provider results from the relay's real wire format", %{bypass: bypass} do
       Bypass.expect_once(bypass, "POST", "/api/v1/subtitles/search", fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
@@ -26,13 +32,20 @@ defmodule Mydia.Subtitles.Provider.RelayTest do
           Jason.encode!(%{
             "subtitles" => [
               %{
-                "file_id" => 12_345,
+                "id" => 12_345,
                 "language" => "en",
-                "file_name" => "Movie.2020.1080p.srt",
+                "format" => "srt",
                 "rating" => 8.5,
                 "download_count" => 4200,
+                "release" => "Movie.2020.1080p.BluRay.x264",
+                "uploader" => "someuser",
                 "hearing_impaired" => false,
-                "moviehash_match" => true
+                "foreign_parts_only" => false,
+                "feature_type" => "Movie",
+                "title" => "Movie",
+                "year" => 2020,
+                "imdb_id" => "0133093",
+                "tmdb_id" => nil
               }
             ]
           })
@@ -40,9 +53,25 @@ defmodule Mydia.Subtitles.Provider.RelayTest do
       end)
 
       assert {:ok, [result]} = Relay.search(@provider, %{languages: "en", imdb_id: "0133093"})
+
       assert result.file_id == 12_345
       assert result.language == "en"
-      assert result.moviehash_match
+      assert result.format == "srt"
+      assert result.file_name == "Movie.2020.1080p.BluRay.x264"
+      assert result.rating == 8.5
+      assert result.download_count == 4200
+      refute result.hearing_impaired
+
+      # The relay never emits moviehash_match; from_map/1 defaults it false.
+      refute result.moviehash_match
+
+      # The relay never emits subtitle_hash either, so it must be
+      # synthesized deterministically from (file_id, language) -- same
+      # formula as Mydia.Subtitles.generate_subtitle_hash/1.
+      expected_hash =
+        :crypto.hash(:sha256, "12345-en") |> Base.encode16(case: :lower)
+
+      assert result.subtitle_hash == expected_hash
     end
 
     test "surfaces the relay's error reason without collapsing it", %{bypass: bypass} do
@@ -89,6 +118,21 @@ defmodule Mydia.Subtitles.Provider.RelayTest do
       end)
 
       assert {:error, :not_found} = Relay.download(@provider, %{file_id: 99_999})
+    end
+
+    # OpenSubtitles returns HTTP 406 when the shared relay account's daily
+    # download quota is exhausted, distinct from 429 rate limiting. The
+    # relay (metadata-relay/lib/metadata_relay/router.ex:938-946) propagates
+    # that status verbatim, so MetadataRelay.get_download_url/2 surfaces it
+    # as {:error, {:http_error, 406, body}}.
+    test "maps a 406 download-quota response to :quota_exceeded", %{bypass: bypass} do
+      Bypass.expect_once(bypass, "GET", "/api/v1/subtitles/download-url/12345", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(406, Jason.encode!(%{"error" => "Download quota exceeded"}))
+      end)
+
+      assert {:error, :quota_exceeded} = Relay.download(@provider, %{file_id: 12_345})
     end
   end
 
