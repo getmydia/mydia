@@ -100,6 +100,51 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
                  "user_id" => user.id
                })
     end
+
+    test "runs a real Jellyfin sync to completion instead of skipping it as unsupported" do
+      # Regression test for the reported bug: this used to fall through
+      # provider_for/1's catch-all and record :unsupported_provider, badging
+      # Completed while syncing nothing. A Bypass-backed server proves the
+      # job actually drives Mydia.WatchSync end-to-end for Jellyfin, not just
+      # that provider_for/1 resolves.
+      bypass = Bypass.open()
+
+      Bypass.expect(bypass, "GET", "/Items", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(%{"Items" => [], "TotalRecordCount" => 0}))
+      end)
+
+      user = user_fixture()
+
+      {:ok, server} =
+        Settings.create_media_server_config(%{
+          name: "Jellyfin",
+          type: :jellyfin,
+          url: "http://localhost:#{bypass.port}",
+          token: "api-key",
+          enabled: true,
+          connection_settings: %{"sync_watched" => true}
+        })
+
+      {:ok, link} =
+        Settings.upsert_media_server_user_link(%{
+          media_server_config_id: server.id,
+          user_id: user.id,
+          remote_user_id: "jf1",
+          remote_username: user.username,
+          enabled: true
+        })
+
+      assert :ok =
+               perform_job(MediaServerWatchedSync, %{
+                 "config_id" => server.id,
+                 "user_id" => user.id,
+                 "link_id" => link.id
+               })
+
+      assert %{status: :ok, skip_reason: nil} = Sync.last_run("jellyfin", server.id)
+    end
   end
 
   describe "skip visibility" do
@@ -370,33 +415,6 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
 
       assert Sync.last_run("plex", config.id).skip_reason == "no_user_mapping"
       assert [] = all_enqueued(worker: MediaServerWatchedSync) |> Enum.reject(& &1.args["mode"])
-    end
-
-    test "does not skip a Jellyfin server as an unsupported provider" do
-      user = user_fixture()
-
-      {:ok, server} =
-        Settings.create_media_server_config(%{
-          name: "Jellyfin",
-          type: :jellyfin,
-          url: "http://localhost:8096",
-          token: "api-key",
-          enabled: true,
-          connection_settings: %{"sync_watched" => true}
-        })
-
-      {:ok, _link} =
-        Settings.upsert_media_server_user_link(%{
-          media_server_config_id: server.id,
-          user_id: user.id,
-          remote_user_id: "jf1",
-          remote_username: user.username,
-          enabled: true
-        })
-
-      assert :ok = perform_job(MediaServerWatchedSync, %{"mode" => "all_enabled"})
-
-      refute match?(%{skip_reason: "unsupported_provider"}, Sync.last_run("jellyfin", server.id))
     end
   end
 end

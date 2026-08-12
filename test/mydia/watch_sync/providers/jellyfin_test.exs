@@ -63,15 +63,40 @@ defmodule Mydia.WatchSync.Providers.JellyfinTest do
       assert episode.episode_number == 5
       assert episode.external_ids == %{tvdb: "12345"}
     end
+
+    test "maps lowercase provider id keys and drops unknown ones", %{
+      bypass: bypass,
+      config: config
+    } do
+      Bypass.expect_once(bypass, "GET", "/Items", fn conn ->
+        json(
+          conn,
+          200,
+          items_response([
+            %{
+              "Id" => "m1",
+              "Type" => "Movie",
+              "ProviderIds" => %{"tmdb" => "603", "Imdb" => "tt0137523", "Anidb" => "999"}
+            }
+          ])
+        )
+      end)
+
+      assert {:ok, [movie]} = Jellyfin.refresh_mappings(config, [])
+      assert movie.external_ids == %{tmdb: "603", imdb: "tt0137523"}
+    end
   end
 
   describe "list_changes/3" do
-    test "reads watch state and converts ticks to seconds", %{
+    test "reads watch state, converts ticks to seconds, and scopes the request to the user", %{
       bypass: bypass,
       config: config,
       scope: scope
     } do
       Bypass.expect_once(bypass, "GET", "/Items", fn conn ->
+        conn = Plug.Conn.fetch_query_params(conn)
+        assert conn.query_params["userId"] == "jf1"
+
         json(
           conn,
           200,
@@ -93,7 +118,9 @@ defmodule Mydia.WatchSync.Providers.JellyfinTest do
       assert state.remote_id == "m1"
       assert state.watched == true
       assert state.position_seconds == 9000
-      assert %DateTime{} = state.at
+      # Confirms the seven-fractional-digit format Jellyfin sends parses
+      # cleanly and truncates to Elixir's microsecond (6-digit) precision.
+      assert state.at == ~U[2026-08-12 10:00:00.000000Z]
     end
 
     test "drops items last played before the cursor", %{
@@ -102,6 +129,9 @@ defmodule Mydia.WatchSync.Providers.JellyfinTest do
       scope: scope
     } do
       Bypass.expect_once(bypass, "GET", "/Items", fn conn ->
+        conn = Plug.Conn.fetch_query_params(conn)
+        assert conn.query_params["userId"] == "jf1"
+
         json(
           conn,
           200,
@@ -138,6 +168,9 @@ defmodule Mydia.WatchSync.Providers.JellyfinTest do
       scope: scope
     } do
       Bypass.expect_once(bypass, "GET", "/Items", fn conn ->
+        conn = Plug.Conn.fetch_query_params(conn)
+        assert conn.query_params["userId"] == "jf1"
+
         json(conn, 200, items_response([%{"Id" => "m1", "Type" => "Movie"}]))
       end)
 
@@ -145,15 +178,56 @@ defmodule Mydia.WatchSync.Providers.JellyfinTest do
       assert state.watched == false
       assert state.position_seconds == nil
     end
+
+    # Regression guard: Jellyfin's UpdatePlayState never stamps LastPlayedDate
+    # (and MarkUnplayed explicitly nulls it), so a nil date on an incremental
+    # run must not be treated as "unchanged" when the item actually carries
+    # watched state or a resume position. This must fail against a bare
+    # `changed_since?(%{at: nil}, _), do: false` clause.
+    test "includes a played item with no LastPlayedDate even on an incremental run", %{
+      bypass: bypass,
+      config: config,
+      scope: scope
+    } do
+      Bypass.expect_once(bypass, "GET", "/Items", fn conn ->
+        json(
+          conn,
+          200,
+          items_response([
+            %{"Id" => "no-date", "Type" => "Movie", "UserData" => %{"Played" => true}}
+          ])
+        )
+      end)
+
+      since = ~U[2026-08-10 00:00:00Z]
+
+      assert {:ok, [state]} = Jellyfin.list_changes(config, scope, since)
+      assert state.remote_id == "no-date"
+      assert state.watched == true
+    end
+
+    test "errors when the scope carries no remote user id", %{config: config} do
+      scope = %{user_id: "u1", remote_user_id: nil, access_token: nil}
+
+      assert {:error, :missing_remote_user_id} = Jellyfin.list_changes(config, scope, nil)
+    end
   end
 
   describe "apply_change/4" do
-    test "marks played then writes position", %{bypass: bypass, config: config, scope: scope} do
+    test "marks played then writes position, scoped to the user", %{
+      bypass: bypass,
+      config: config,
+      scope: scope
+    } do
       Bypass.expect_once(bypass, "POST", "/UserPlayedItems/m1", fn conn ->
+        conn = Plug.Conn.fetch_query_params(conn)
+        assert conn.query_params["userId"] == "jf1"
         json(conn, 200, "{}")
       end)
 
       Bypass.expect_once(bypass, "POST", "/UserItems/m1/UserData", fn conn ->
+        conn = Plug.Conn.fetch_query_params(conn)
+        assert conn.query_params["userId"] == "jf1"
         json(conn, 200, "{}")
       end)
 
