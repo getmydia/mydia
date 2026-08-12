@@ -505,4 +505,103 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
                })
     end
   end
+
+  describe "soft-stall row" do
+    setup do
+      bypass = Bypass.open()
+
+      client_config = ensure_test_client_bypass(bypass)
+
+      Bypass.stub(bypass, "POST", "/api/v2/auth/login", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("set-cookie", "SID=test-sid; HttpOnly")
+        |> Plug.Conn.resp(200, "Ok.")
+      end)
+
+      Bypass.stub(bypass, "GET", "/api/v2/torrents/info", fn conn ->
+        torrents =
+          Downloads.list_downloads()
+          |> Enum.filter(
+            &(&1.download_client == "test-client" and not is_nil(&1.download_client_id))
+          )
+          |> Enum.map(fn d ->
+            %{
+              "hash" => d.download_client_id,
+              "name" => d.title,
+              "state" => "downloading",
+              "progress" => 0.42,
+              "save_path" => "/downloads",
+              "content_path" => "/downloads/#{d.title}"
+            }
+          end)
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(torrents))
+      end)
+
+      %{bypass: bypass, client_config: client_config}
+    end
+
+    test "names the deadline and offers both ways out", %{conn: conn} do
+      media_item = media_item_fixture(%{title: "Stalling Show"})
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          title: "Stalling.S01E01",
+          status: "downloading",
+          last_progress_at: DateTime.add(DateTime.utc_now(), -90 * 60, :second),
+          stalled_since: DateTime.add(DateTime.utc_now(), -30 * 60, :second)
+        })
+
+      {:ok, view, html} = live(conn, ~p"/downloads")
+
+      assert html =~ "No progress for"
+      assert html =~ "search for a different release"
+      assert has_element?(view, "#stall-keep-waiting-#{download.id}")
+      assert has_element?(view, "#stall-reject-#{download.id}")
+    end
+
+    test "keep waiting resets the stall clock", %{conn: conn} do
+      media_item = media_item_fixture(%{title: "Patient Show"})
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          status: "downloading",
+          last_progress_at: DateTime.add(DateTime.utc_now(), -90 * 60, :second),
+          stalled_since: DateTime.add(DateTime.utc_now(), -30 * 60, :second)
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+
+      view
+      |> element("#stall-keep-waiting-#{download.id}")
+      |> render_click()
+
+      updated = Mydia.Downloads.get_download!(download.id)
+      assert is_nil(updated.stalled_since)
+      assert DateTime.diff(DateTime.utc_now(), updated.last_progress_at, :second) < 60
+    end
+  end
+
+  defp ensure_test_client_bypass(bypass) do
+    attrs = %{
+      name: "test-client",
+      type: "qbittorrent",
+      host: "localhost",
+      port: bypass.port,
+      enabled: true
+    }
+
+    case Enum.find(Mydia.Settings.list_download_client_configs(), &(&1.name == "test-client")) do
+      nil ->
+        download_client_config_fixture(attrs)
+
+      cfg ->
+        {:ok, updated} = Mydia.Settings.update_download_client_config(cfg, attrs)
+        updated
+    end
+  end
 end

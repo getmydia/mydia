@@ -3,10 +3,12 @@ defmodule MydiaWeb.DownloadsLive.Index do
   alias Mydia.Downloads
   alias Mydia.Downloads.ExternalTorrents
   alias Mydia.Downloads.ImportCandidates
+  alias Mydia.Downloads.StallDetector
   alias Mydia.Downloads.Structs.DownloadMetadata
   alias Mydia.Library.Structs.Quality
   alias Mydia.Library
   alias Mydia.Media
+  alias Mydia.Settings
   alias Phoenix.PubSub
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.DownloadsLive.Components
@@ -108,6 +110,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
      |> assign(:library_search_results, [])
      # Match / re-match modal state (in-flight correction + post-import re-match)
      |> assign(:match_modal, nil)
+     |> assign(:stall_grace_map, Settings.download_client_grace_map())
      # Initialize all streams
      |> stream(:downloads, [])
      |> stream(:needs_matching, [])
@@ -890,6 +893,31 @@ defmodule MydiaWeb.DownloadsLive.Index do
     end
   end
 
+  # Snooze, not opt-out: clearing stalled_since and advancing last_progress_at
+  # buys a full fresh grace-then-escalation window. If it stalls again the
+  # operator gets warned again.
+  def handle_event("keep_waiting", %{"id" => id}, socket) do
+    with :ok <- Authorization.authorize_manage_downloads(socket) do
+      download = Downloads.get_download!(id)
+
+      case Downloads.update_download(download, %{
+             stalled_since: nil,
+             last_progress_at: DateTime.utc_now()
+           }) do
+        {:ok, _updated} ->
+          {:noreply,
+           socket
+           |> put_flash(:info, "Stall timer reset. Mydia will keep waiting on this download.")
+           |> load_downloads()}
+
+        {:error, _changeset} ->
+          {:noreply, put_flash(socket, :error, "Could not reset the stall timer")}
+      end
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
   def handle_event("dismiss_download", %{"id" => id}, socket) do
     with :ok <- Authorization.authorize_manage_downloads(socket) do
       download = Downloads.get_download!(id)
@@ -1598,6 +1626,25 @@ defmodule MydiaWeb.DownloadsLive.Index do
   defp soft_stalled?(download) do
     download.status == "downloading" and
       not is_nil(download.stalled_since) and is_nil(download.import_failed_at)
+  end
+
+  # Seconds since this download last moved a byte. Falls back to stalled_since
+  # for a row whose last_progress_at predates stall tracking.
+  defp stall_elapsed_seconds(download) do
+    reference = download.last_progress_at || download.stalled_since
+    DateTime.diff(DateTime.utc_now(), reference, :second)
+  end
+
+  # Seconds left before DownloadMonitor gives up on this download. Derived from
+  # the same StallDetector rule the monitor applies, so the number the operator
+  # reads is the number that will actually fire.
+  defp stall_remaining_seconds(download, grace_map) do
+    grace = Map.get(grace_map, download.download_client, Settings.default_grace_minutes())
+
+    deadline =
+      DateTime.add(download.stalled_since, StallDetector.escalation_minutes(grace) * 60, :second)
+
+    max(DateTime.diff(deadline, DateTime.utc_now(), :second), 0)
   end
 
   defp format_ratio(nil), do: "0.00"

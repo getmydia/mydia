@@ -64,10 +64,6 @@ defmodule Mydia.Jobs.DownloadMonitor do
   alias Mydia.Events
   alias Mydia.Settings
 
-  # Fallback grace window (minutes) when a download has no resolvable client
-  # config. The DB schema's default is also 60; this just guards against a nil.
-  @default_grace_minutes 60
-
   # How long a give-up blocklists the release. Deliberately far shorter than
   # the 30-day default: a torrent with no seeds today may have seeds tomorrow,
   # so a stall earns a cooldown, not the near-permanent ban a corrupt release
@@ -203,7 +199,7 @@ defmodule Mydia.Jobs.DownloadMonitor do
 
     # Track progress / flag stalled downloads. Grace minutes are read from each
     # download's configured client (DB or runtime config) — cached per poll.
-    grace_map = build_grace_map()
+    grace_map = Settings.download_client_grace_map()
     stalled_count = check_progress(active_for_stall_check, grace_map, now)
 
     # Find and match untracked torrents (manually added to clients)
@@ -843,18 +839,8 @@ defmodule Mydia.Jobs.DownloadMonitor do
 
   # --- Stall detection ----------------------------------------------------
 
-  # Build a `%{client_name => grace_minutes}` map once per poll. Both DB-backed
-  # and runtime-config clients flow through `Settings.list_download_client_configs/0`,
-  # so a single source is enough.
-  defp build_grace_map do
-    Settings.list_download_client_configs()
-    |> Enum.into(%{}, fn config ->
-      {config.name, config.incomplete_grace_minutes || @default_grace_minutes}
-    end)
-  end
-
   defp grace_minutes_for(client_name, grace_map) do
-    Map.get(grace_map, client_name, @default_grace_minutes)
+    Map.get(grace_map, client_name, Settings.default_grace_minutes())
   end
 
   # Iterate active downloads and apply the StallDetector decision. Returns the
