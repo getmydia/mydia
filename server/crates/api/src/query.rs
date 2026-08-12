@@ -357,6 +357,9 @@ impl RootQueryType {
     }
 
     /// Get next episodes to watch across all TV shows
+    #[graphql(
+        deprecation = "Merged into continueWatching, which now carries next episodes as well"
+    )]
     async fn up_next(
         &self,
         _ctx: &Context<'_>,

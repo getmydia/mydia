@@ -24,6 +24,9 @@ pub struct ContinueWatchingItem {
     pub show_title: Option<String>,
     pub season_number: Option<i32>,
     pub episode_number: Option<i32>,
+    /// Why this item is on the rail: continue for a resume point, next for the
+    /// successor of a finished episode.
+    pub state: Option<String>,
 }
 
 #[derive(SimpleObject)]
