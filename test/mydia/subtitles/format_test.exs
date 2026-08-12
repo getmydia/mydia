@@ -85,6 +85,18 @@ defmodule Mydia.Subtitles.FormatTest do
       refute srt =~ "STYLE"
       assert srt =~ "Hello there."
     end
+
+    test "defaults a missing hours segment to 00" do
+      vtt = """
+      WEBVTT
+
+      01:02.500 --> 01:05.000
+      Hello there.
+      """
+
+      {:ok, srt} = Format.convert(vtt, "vtt", "srt")
+      assert srt =~ "00:01:02,500 --> 00:01:05,000"
+    end
   end
 
   describe "convert/3 identity and rejection" do

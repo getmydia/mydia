@@ -23,7 +23,9 @@ defmodule Mydia.Subtitles.Format do
   @doc """
   Converts subtitle content from one format to another.
   """
-  @spec convert(binary(), String.t(), String.t()) :: {:ok, binary()} | {:error, term()}
+  @spec convert(binary(), String.t(), String.t()) ::
+          {:ok, binary()}
+          | {:error, :image_subtitle | {:ffmpeg_failed, String.t()} | :ffmpeg_not_found}
   def convert(content, from, to)
 
   def convert(_content, from, _to) when from in @image_formats, do: {:error, :image_subtitle}
@@ -62,9 +64,34 @@ defmodule Mydia.Subtitles.Format do
     |> Enum.map(&strip_cue_identifier/1)
     |> Enum.with_index(1)
     |> Enum.map_join("\n\n", fn {cue, index} ->
-      "#{index}\n" <> String.replace(cue, ~r/(\d{2}:\d{2}:\d{2})\.(\d{3})/, "\\1,\\2")
+      "#{index}\n" <> rewrite_timing_line(cue)
     end)
     |> Kernel.<>("\n")
+  end
+
+  # The timing line is the only line where a VTT timestamp appears, so scope
+  # the rewrite to it: cue text may otherwise contain a timestamp-shaped
+  # substring that would get mangled by accident. WebVTT also makes the hours
+  # segment optional (MM:SS.mmm is valid), while SRT always requires it, so a
+  # missing hours group defaults to "00" rather than passing the timestamp
+  # through unconverted.
+  defp rewrite_timing_line(cue) do
+    cue
+    |> String.split("\n")
+    |> Enum.map(fn line ->
+      if String.contains?(line, "-->") do
+        Regex.replace(~r/(?:(\d{2}):)?(\d{2}:\d{2})\.(\d{3})/, line, fn _match,
+                                                                        hours,
+                                                                        rest,
+                                                                        millis ->
+          hours = if hours == "", do: "00", else: hours
+          "#{hours}:#{rest},#{millis}"
+        end)
+      else
+        line
+      end
+    end)
+    |> Enum.join("\n")
   end
 
   # WEBVTT header, NOTE comments and STYLE/REGION blocks carry no cue.
