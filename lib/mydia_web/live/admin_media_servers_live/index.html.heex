@@ -19,5 +19,17 @@
         plex_discovery={assigns[:plex_discovery_summary]}
       />
     <% end %>
+
+    <%!-- Plex Home Profile Mapping Modal --%>
+    <%= if assigns[:plex_profiles_config] do %>
+      <MydiaWeb.AdminMediaServersLive.Components.plex_profiles_modal
+        config={@plex_profiles_config}
+        state={@plex_profiles_state}
+        profiles={assigns[:plex_profiles] || []}
+        users={assigns[:plex_profiles_users] || []}
+        mapping={assigns[:plex_profiles_mapping] || %{}}
+        saving={assigns[:plex_profiles_saving] || false}
+      />
+    <% end %>
   </.admin_page>
 </Layouts.app>

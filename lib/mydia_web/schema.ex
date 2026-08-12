@@ -34,6 +34,7 @@ defmodule MydiaWeb.Schema do
     import_fields(:remote_access_queries)
     import_fields(:streaming_queries)
     import_fields(:collection_queries)
+    import_fields(:subtitle_queries)
   end
 
   mutation do
@@ -44,6 +45,7 @@ defmodule MydiaWeb.Schema do
     import_fields(:device_mutations)
     import_fields(:streaming_mutations)
     import_fields(:download_mutations)
+    import_fields(:subtitle_mutations)
   end
 
   subscription do

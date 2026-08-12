@@ -10,6 +10,9 @@ defmodule Mydia.Subtitles.Extractor do
 
   require Logger
 
+  alias Mydia.Library.Structs.FileMetadata
+  alias Mydia.Subtitles.Format
+
   @doc """
   Lists all available subtitle tracks for a media file.
 
@@ -40,23 +43,47 @@ defmodule Mydia.Subtitles.Extractor do
       ]
   """
   def list_subtitle_tracks(media_file, _opts \\ []) do
-    absolute_path = Mydia.Library.MediaFile.absolute_path(media_file)
-
-    # Get embedded subtitles from media file
-    embedded_tracks =
-      if absolute_path && File.exists?(absolute_path) do
-        case get_embedded_subtitles(absolute_path) do
-          {:ok, tracks} -> tracks
-          {:error, _reason} -> []
-        end
-      else
-        []
-      end
-
-    # Get external subtitles from database
+    embedded_tracks = embedded_tracks(media_file)
     external_tracks = get_external_subtitles(media_file.id)
 
     embedded_tracks ++ external_tracks
+  end
+
+  # Prefer the stored stream capture. ffprobe on every GraphQL query is a hot
+  # path the player hits for every file in a list.
+  defp embedded_tracks(%{metadata: %FileMetadata{streams: streams}}) when is_list(streams) do
+    streams
+    |> Enum.filter(&(&1.type == :subtitle))
+    |> Enum.map(&build_embedded_track_from_stream/1)
+  end
+
+  defp embedded_tracks(media_file), do: embedded_tracks_via_ffprobe(media_file)
+
+  defp embedded_tracks_via_ffprobe(media_file) do
+    absolute_path = Mydia.Library.MediaFile.absolute_path(media_file)
+
+    if absolute_path && File.exists?(absolute_path) do
+      case get_embedded_subtitles(absolute_path) do
+        {:ok, tracks} -> tracks
+        {:error, _reason} -> []
+      end
+    else
+      []
+    end
+  end
+
+  defp build_embedded_track_from_stream(%{index: index, codec: codec} = stream) do
+    language = stream.language || "und"
+    format = normalize_subtitle_format(codec)
+
+    %{
+      track_id: index,
+      language: language,
+      title: stream.title || format_language_name(language),
+      format: format,
+      embedded: true,
+      deliverable: not Format.image_format?(format)
+    }
   end
 
   @doc """
@@ -173,7 +200,8 @@ defmodule Mydia.Subtitles.Extractor do
       language: language,
       title: title,
       format: normalize_subtitle_format(codec_name),
-      embedded: true
+      embedded: true,
+      deliverable: not Format.image_format?(normalize_subtitle_format(codec_name))
     }
   end
 
@@ -201,7 +229,8 @@ defmodule Mydia.Subtitles.Extractor do
         language: subtitle.language,
         title: format_external_title(subtitle),
         format: subtitle.format,
-        embedded: false
+        embedded: false,
+        deliverable: true
       }
     end)
   end

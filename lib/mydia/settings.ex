@@ -339,6 +339,31 @@ defmodule Mydia.Settings do
   @spec list_download_client_configs(keyword()) :: [DownloadClientConfig.t()]
   defdelegate list_download_client_configs(opts \\ []), to: Mydia.Settings.ServiceConfigs
 
+  @default_grace_minutes 60
+
+  @doc """
+  The fallback stall grace window (minutes) for a client with no resolvable
+  config. Matches the `incomplete_grace_minutes` column default.
+  """
+  @spec default_grace_minutes() :: pos_integer()
+  def default_grace_minutes, do: @default_grace_minutes
+
+  @doc """
+  Builds a `%{client_name => grace_minutes}` map for stall detection.
+
+  Both DB-backed and runtime-config clients flow through
+  `list_download_client_configs/0`, so a single source is enough. Shared by
+  `Mydia.Jobs.DownloadMonitor` (which acts on the deadline) and the Downloads
+  LiveView (which shows it), so the two can never disagree.
+  """
+  @spec download_client_grace_map() :: %{String.t() => pos_integer()}
+  def download_client_grace_map do
+    list_download_client_configs()
+    |> Enum.into(%{}, fn config ->
+      {config.name, config.incomplete_grace_minutes || @default_grace_minutes}
+    end)
+  end
+
   @doc """
   Gets a download client configuration by ID.
 
@@ -572,6 +597,16 @@ defmodule Mydia.Settings do
   @spec delete_media_server_user_link(MediaServerUserLink.t()) ::
           {:ok, MediaServerUserLink.t()} | {:error, Ecto.Changeset.t()}
   defdelegate delete_media_server_user_link(link), to: Mydia.Settings.ServiceConfigs
+
+  @doc """
+  Replaces a config's user links with `entries` in one transaction, deleting any
+  link whose user is not named by `entries`. Callers must do all network work
+  first; see `Mydia.Settings.ServiceConfigs.replace_media_server_user_links/2`.
+  """
+  @spec replace_media_server_user_links(binary(), [map()]) ::
+          {:ok, [MediaServerUserLink.t()]} | {:error, Ecto.Changeset.t()}
+  defdelegate replace_media_server_user_links(media_server_config_id, entries),
+    to: Mydia.Settings.ServiceConfigs
 
   # ── Plugin Configs ───────────────────────────────────────────────────
 

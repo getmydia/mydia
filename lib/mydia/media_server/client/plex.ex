@@ -11,21 +11,42 @@ defmodule Mydia.MediaServer.Client.Plex do
   require Logger
 
   @impl true
-  def test_connection(%{url: nil}), do: {:error, Error.unexpected("URL is required")}
-  def test_connection(%{url: ""}), do: {:error, Error.unexpected("URL is required")}
   def test_connection(%{token: nil}), do: {:error, Error.auth("Token is required")}
   def test_connection(%{token: ""}), do: {:error, Error.auth("Token is required")}
 
-  def test_connection(config) do
-    # `/library/sections` requires a valid token. `/identity` does NOT: it
-    # answers 200 with a garbage token or with no token header at all, which is
-    # why it must never be used to validate credentials.
-    # Probe directly; do not recurse through Endpoint.resolve/1.
+  # An explicit `url` is a manual operator override and is probed exactly as
+  # typed, matching the precedence Endpoint.resolve/1 already applies. The two
+  # have to agree, or the test button checks a different address than the one
+  # every other call goes to.
+  #
+  # `/library/sections` requires a valid token. `/identity` does NOT: it
+  # answers 200 with a garbage token or with no token header at all, which is
+  # why it must never be used to validate credentials.
+  def test_connection(%{url: url} = config) when is_binary(url) and url != "" do
     config
     |> build_url("/library/sections")
     |> Req.get(headers: headers(config), retry: false)
     |> classify()
   end
+
+  # A Plex server connected through OAuth stores no `url` at all: it addresses
+  # itself through the connections plex.tv advertises, which is why
+  # MediaServerConfig.validate_addressable/1 stopped requiring one. Rejecting
+  # that config as "URL is required" failed the test button for every
+  # OAuth-connected server while the server itself answered fine.
+  #
+  # probe_connections/2 rather than Endpoint.resolve/1 on purpose: resolve
+  # caches its winner for ten minutes, so a test click could report success for
+  # a server that died right after the previous one. A test has to be live.
+  def test_connection(%{connections: [_ | _] = connections, token: token}) do
+    case Endpoint.probe_connections(connections, token) do
+      {:ok, _uri} -> :ok
+      {:error, _} = error -> error
+    end
+  end
+
+  # No url and nothing discovered: there is genuinely no address to test.
+  def test_connection(_config), do: {:error, Error.unexpected("URL is required")}
 
   @impl true
   def update_library(config, opts \\ []) do

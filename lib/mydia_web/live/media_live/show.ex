@@ -145,7 +145,6 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:media_file_subtitles, load_media_file_subtitles(media_item))
      # Feature flags
      |> assign(:playback_enabled, playback_enabled?())
-     |> assign(:subtitle_feature_enabled, subtitle_feature_enabled?())
      # Franchise section state
      |> assign(:franchise, nil)
      |> assign(:adding_franchise_tmdb_ids, MapSet.new())

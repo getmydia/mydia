@@ -12,10 +12,12 @@ defmodule Mydia.Settings.ServiceConfigs do
     MediaServerConfig,
     MediaServerUserLink,
     PathMappingConfig,
-    PluginConfig
+    PluginConfig,
+    SubtitleProviderConfig
   }
 
   alias Mydia.Settings.RuntimeConfig, as: RC
+  alias Mydia.Subtitles.ProviderRegistry
 
   ## Download Client Configs
 
@@ -172,6 +174,46 @@ defmodule Mydia.Settings.ServiceConfigs do
     Repo.delete(config)
   end
 
+  ## Subtitle Provider Configs
+
+  def list_subtitle_provider_configs(opts \\ []) do
+    db_configs =
+      SubtitleProviderConfig
+      |> maybe_preload(opts[:preload])
+      |> Repo.all()
+
+    db_configs
+    |> RC.merge_with_runtime_config(&RC.get_runtime_subtitle_providers/0, :name)
+    |> RC.merge_with_runtime_config(&ProviderRegistry.default_configs/0, :type)
+    |> maybe_filter_enabled(opts[:enabled])
+    # Highest priority first, then alphabetical. Negating the priority keeps the
+    # name ascending, which a plain :desc on the whole tuple would reverse.
+    |> Enum.sort_by(&{-(&1.priority || 0), &1.name})
+  end
+
+  defp maybe_filter_enabled(configs, true), do: Enum.filter(configs, & &1.enabled)
+  defp maybe_filter_enabled(configs, _), do: configs
+
+  def get_subtitle_provider_config!(id) do
+    Repo.get!(SubtitleProviderConfig, id)
+  end
+
+  def create_subtitle_provider_config(attrs) do
+    %SubtitleProviderConfig{}
+    |> SubtitleProviderConfig.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  def update_subtitle_provider_config(%SubtitleProviderConfig{} = config, attrs) do
+    config
+    |> SubtitleProviderConfig.changeset(attrs)
+    |> Repo.update()
+  end
+
+  def delete_subtitle_provider_config(%SubtitleProviderConfig{} = config) do
+    Repo.delete(config)
+  end
+
   def resolve_env_inheritance(%IndexerConfig{env_name: nil} = config), do: config
   def resolve_env_inheritance(%IndexerConfig{env_name: ""} = config), do: config
 
@@ -315,6 +357,37 @@ defmodule Mydia.Settings.ServiceConfigs do
 
   def delete_media_server_user_link(%MediaServerUserLink{} = link) do
     Repo.delete(link)
+  end
+
+  @doc """
+  Replaces a config's user links with `entries` in one transaction.
+
+  Any existing link for the config whose user is not named by `entries` is
+  deleted. Applying a mapping as separate deletes and upserts left a partial
+  mapping behind whenever one of them failed, which can unlink people who were
+  syncing fine.
+
+  Callers must resolve everything an entry needs, per-user Plex tokens
+  included, before calling. Nothing in here may make a network call: on SQLite a
+  write transaction locks the entire database, so a plex.tv round trip inside
+  one stalls every other writer for its duration.
+  """
+  def replace_media_server_user_links(media_server_config_id, entries) do
+    keep = MapSet.new(entries, & &1.user_id)
+
+    Repo.transaction(fn ->
+      media_server_config_id
+      |> list_media_server_user_links()
+      |> Enum.reject(&MapSet.member?(keep, &1.user_id))
+      |> Enum.each(&delete_media_server_user_link/1)
+
+      Enum.map(entries, fn attrs ->
+        case upsert_media_server_user_link(attrs) do
+          {:ok, link} -> link
+          {:error, changeset} -> Repo.rollback(changeset)
+        end
+      end)
+    end)
   end
 
   ## Plugin Configs

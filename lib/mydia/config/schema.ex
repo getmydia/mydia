@@ -211,6 +211,16 @@ defmodule Mydia.Config.Schema do
       field :timeout, :integer, default: 30000
     end
 
+    embeds_many :subtitle_providers, SubtitleProvider, on_replace: :delete, primary_key: false do
+      field :name, :string
+      field :type, :string
+      field :enabled, :boolean, default: true
+      field :priority, :integer, default: 0
+      field :username, :string
+      field :password, :string
+      field :api_key, :string
+    end
+
     embeds_many :media_servers, MediaServer, on_replace: :delete, primary_key: false do
       field :name, :string
       field :type, Ecto.Enum, values: [:plex, :jellyfin]
@@ -270,6 +280,7 @@ defmodule Mydia.Config.Schema do
     |> cast_embed(:flaresolverr, with: &flaresolverr_changeset/2)
     |> cast_embed(:download_clients, with: &download_client_changeset/2)
     |> cast_embed(:indexers, with: &indexer_changeset/2)
+    |> cast_embed(:subtitle_providers, with: &subtitle_provider_changeset/2)
     |> cast_embed(:media_servers, with: &media_server_changeset/2)
     |> cast_embed(:library_paths, with: &library_path_changeset/2)
     |> cast_embed(:plugin_installs, with: &plugin_install_changeset/2)
@@ -553,6 +564,22 @@ defmodule Mydia.Config.Schema do
     |> validate_number(:priority, greater_than: 0)
     |> validate_number(:rate_limit, greater_than: 0)
     |> validate_number(:timeout, greater_than: 0)
+  end
+
+  defp subtitle_provider_changeset(schema, attrs) do
+    schema
+    |> cast(attrs, [
+      :name,
+      :type,
+      :enabled,
+      :priority,
+      :username,
+      :password,
+      :api_key
+    ])
+    |> validate_required([:name, :type])
+    |> validate_inclusion(:type, ["relay", "opensubtitles", "gestdown", "subdl"])
+    |> validate_number(:priority, greater_than_or_equal_to: 0)
   end
 
   defp media_server_changeset(schema, attrs) do

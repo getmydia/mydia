@@ -353,6 +353,62 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
       # test has always guarded, and seeding must not reintroduce it.
       assert [] = all_enqueued(worker: MediaServerWatchedSync) |> Enum.reject(& &1.args["mode"])
     end
+
+    test "stops announcing seeding once seeding has reported nothing to link" do
+      # :no_matching_users is terminal: no Plex profile shares a name with a
+      # Mydia user, and that does not change on its own. Re-recording
+      # :seeding_links every tick buried that verdict under a newer row, so the
+      # UI read "Linking Plex Home profiles" indefinitely while nothing was
+      # being linked and nothing ever would be.
+      {:ok, config} =
+        Settings.create_media_server_config(%{
+          name: "Storage",
+          type: :plex,
+          url: "http://localhost:32400",
+          token: "tok",
+          enabled: true,
+          connection_settings: %{"sync_watched" => "true"}
+        })
+
+      Sync.record_skip(
+        %{provider: "plex", provider_instance_id: config.id, user_id: nil},
+        :no_matching_users
+      )
+
+      assert :ok = perform_job(MediaServerWatchedSync, %{"mode" => "all_enabled"})
+
+      runs = Mydia.Repo.all(Mydia.Sync.Run)
+      refute Enum.any?(runs, &(&1.skip_reason == "seeding_links"))
+      assert Enum.count(runs, &(&1.skip_reason == "no_matching_users")) == 2
+
+      # Re-seeding would only reach the same verdict; the operator has to map
+      # the profiles by hand from here.
+      assert [] = all_enqueued(worker: Mydia.Jobs.PlexLinkSeed)
+    end
+
+    test "a transient seeding failure is retried rather than treated as terminal" do
+      # link_seeding_failed means plex.tv was unreachable, which is exactly the
+      # kind of thing that fixes itself. Only :no_matching_users is terminal.
+      {:ok, config} =
+        Settings.create_media_server_config(%{
+          name: "Storage",
+          type: :plex,
+          url: "http://localhost:32400",
+          token: "tok",
+          enabled: true,
+          connection_settings: %{"sync_watched" => "true"}
+        })
+
+      Sync.record_skip(
+        %{provider: "plex", provider_instance_id: config.id, user_id: nil},
+        :link_seeding_failed
+      )
+
+      assert :ok = perform_job(MediaServerWatchedSync, %{"mode" => "all_enabled"})
+
+      assert Sync.last_run("plex", config.id).skip_reason == "seeding_links"
+      assert_enqueued(worker: Mydia.Jobs.PlexLinkSeed, args: %{"config_id" => config.id})
+    end
   end
 
   describe "a config deleted between enqueue and execution" do

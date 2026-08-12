@@ -301,6 +301,20 @@ defmodule MydiaWeb.AdminDownloadClientsLiveTest do
       refute Map.has_key?(saved.categories, "music")
     end
 
+    test "the stalled timeout field spells out both thresholds", %{view: view} do
+      view
+      |> element(~s{button[phx-click="new_download_client"]})
+      |> render_click()
+
+      html = render(view)
+
+      # The default of 60 means flagged at 1h and given up on at 4h total. The
+      # second number is the one that destroys something, and it was previously
+      # invisible everywhere in the UI.
+      assert html =~ "Flagged as stalled after 1h"
+      assert html =~ "4h total"
+    end
+
     test "blackhole client does not render category inputs", %{view: view} do
       view
       |> element(~s{button[phx-click="new_download_client"]})

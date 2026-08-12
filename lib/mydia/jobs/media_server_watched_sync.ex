@@ -213,11 +213,34 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
       # healthy while doing nothing: seed first, and the seed job re-enters sync
       # once it has produced links.
       [] ->
-        enqueue_seed(config)
-        record_skip(config, :seeding_links)
+        report_no_links(config)
 
       links ->
         Enum.each(links, fn link -> enqueue(config, link) end)
+    end
+  end
+
+  # Seeding is only worth announcing while it can still produce something. Once
+  # PlexLinkSeed reports :no_matching_users — no Plex profile shares a name with
+  # a Mydia user — that verdict does not change on its own, and re-recording
+  # :seeding_links on the next tick buried it under a newer row. The UI then read
+  # "Linking Plex Home profiles" indefinitely for a state that was already dead,
+  # hiding the one message that tells the operator to map the profiles by hand.
+  defp report_no_links(config) do
+    if seeding_exhausted?(config) do
+      record_skip(config, :no_matching_users)
+    else
+      enqueue_seed(config)
+      record_skip(config, :seeding_links)
+    end
+  end
+
+  # Only :no_matching_users is terminal. :link_seeding_failed means plex.tv was
+  # unreachable, which is worth another attempt.
+  defp seeding_exhausted?(config) do
+    case Mydia.Sync.last_run(to_string(config.type), config.id) do
+      %{status: :skipped, skip_reason: "no_matching_users"} -> true
+      _ -> false
     end
   end
 
