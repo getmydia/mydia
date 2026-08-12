@@ -29,9 +29,8 @@ defmodule Mydia.WatchSync.Providers.Plex do
 
   @impl true
   def list_changes(config, user_scope, since) do
-    config = with_scope_token(config, user_scope)
-
-    with {:ok, sections} <- PlexClient.list_sections(config) do
+    with {:ok, config} <- with_scope_token(config, user_scope),
+         {:ok, sections} <- PlexClient.list_sections(config) do
       changes =
         sections
         |> Enum.flat_map(fn section -> changes_from_section(config, section, since) end)
@@ -42,22 +41,24 @@ defmodule Mydia.WatchSync.Providers.Plex do
 
   @impl true
   def apply_change(config, user_scope, remote_id, change) do
-    config = with_scope_token(config, user_scope)
-
-    # Watched flag first, then position: an unscrobble must not clear a resume
-    # point we are about to write for an in-progress unwatched item.
-    with :ok <- maybe_push_watched(config, remote_id, change) do
-      maybe_push_position(config, remote_id, change)
+    with {:ok, config} <- with_scope_token(config, user_scope) do
+      # Watched flag first, then position: an unscrobble must not clear a resume
+      # point we are about to write for an in-progress unwatched item.
+      with :ok <- maybe_push_watched(config, remote_id, change) do
+        maybe_push_position(config, remote_id, change)
+      end
     end
   end
 
-  # The per-user token belongs to the caller's scope, not to the server config.
-  # Applying it here keeps the credential swap inside the provider that
-  # understands Plex auth instead of mutating a shared struct upstream.
+  # Plex identity IS the per-user token: there is no other field on the scope
+  # that names a Plex account. A scope without one must refuse rather than
+  # run the request under whatever token `config` happens to carry (the
+  # server's own admin token), which would silently merge this user's watch
+  # history into the admin's.
   defp with_scope_token(config, %{access_token: token}) when is_binary(token) and token != "",
-    do: %{config | token: token}
+    do: {:ok, %{config | token: token}}
 
-  defp with_scope_token(config, _user_scope), do: config
+  defp with_scope_token(_config, _user_scope), do: {:error, :missing_user_token}
 
   defp maybe_push_position(config, remote_id, %{position_seconds: position})
        when is_integer(position) do

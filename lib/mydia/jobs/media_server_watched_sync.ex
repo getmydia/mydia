@@ -195,33 +195,34 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
   # scope carries whichever the link holds and each provider reads the field
   # its auth model uses. Only a link holding neither is refused.
   #
+  # A link's access_token is carried as-is, nil included: it must never fall
+  # back to the server's own config.token, because that IS the admin account
+  # for token-based providers. A link with a GUID but no token is a valid
+  # Jellyfin-shaped scope and a refused Plex-shaped one; each provider decides
+  # which fields it needs, not this function.
+  #
   # The link must also belong to the user being synced, so a stale or malformed
   # job cannot pair user A with user B's identity.
   defp resolve_user_scope(config, nil, user_id) do
-    {:ok, %{user_id: user_id, remote_user_id: nil, access_token: config.token}}
+    {:ok, %{user_id: user_id, remote_user_id: nil, access_token: presence(config.token)}}
   end
 
-  defp resolve_user_scope(config, link_id, user_id) do
+  defp resolve_user_scope(_config, link_id, user_id) do
     case Repo.get(MediaServerUserLink, link_id) do
-      %MediaServerUserLink{user_id: ^user_id} = link -> scope_from_link(config, link, user_id)
+      %MediaServerUserLink{user_id: ^user_id} = link -> scope_from_link(link, user_id)
       %MediaServerUserLink{} -> {:error, :link_user_mismatch}
-      nil -> {:error, :link_identity_missing}
+      nil -> {:error, :link_not_found}
     end
   end
 
-  defp scope_from_link(config, link, user_id) do
+  defp scope_from_link(link, user_id) do
     token = presence(link.access_token)
     remote_user_id = presence(link.remote_user_id)
 
     if is_nil(token) and is_nil(remote_user_id) do
       {:error, :link_identity_missing}
     else
-      {:ok,
-       %{
-         user_id: user_id,
-         remote_user_id: remote_user_id,
-         access_token: token || config.token
-       }}
+      {:ok, %{user_id: user_id, remote_user_id: remote_user_id, access_token: token}}
     end
   end
 

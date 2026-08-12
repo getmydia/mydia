@@ -5,6 +5,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
   alias Mydia.Jobs.MediaServerWatchedSync
   alias Mydia.Settings
   alias Mydia.Sync
+  alias Mydia.WatchSync.Mapping
 
   import Mydia.AccountsFixtures
 
@@ -202,6 +203,85 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
       run = Sync.last_run("plex", config.id)
       assert run.status == :skipped
       assert run.skip_reason == "link_identity_missing"
+    end
+
+    test "a job whose link has a remote user id but no Plex token never runs under the admin token" do
+      # A GUID-only link is a valid Jellyfin-shaped identity, but Plex identity
+      # IS the per-user token: this scope must be refused by the provider
+      # rather than silently proceeding on config.token, the admin's own
+      # credential. That silent fallback is exactly the merge bug per-user
+      # links exist to prevent.
+      #
+      # A mapping row is seeded so the sync skips its (legitimately
+      # admin-token-scoped) refresh crawl and calls straight into
+      # `list_changes/3`, which is the call this test is guarding. Without it,
+      # the assertion below could not tell a correct refusal apart from an
+      # unrelated connection failure against a URL with no real server.
+      user = user_fixture()
+      media_item = insert(:media_item)
+
+      {:ok, config} =
+        Settings.create_media_server_config(%{
+          name: "Storage",
+          type: :plex,
+          url: "http://localhost:32400",
+          token: "admin-token",
+          enabled: true,
+          connection_settings: %{"sync_watched" => "true"}
+        })
+
+      {:ok, link} =
+        Settings.upsert_media_server_user_link(%{
+          media_server_config_id: config.id,
+          user_id: user.id,
+          remote_user_id: "2",
+          access_token: nil,
+          enabled: true
+        })
+
+      {:ok, _mapping} =
+        %Mapping{}
+        |> Mapping.changeset(%{
+          provider: "plex",
+          provider_instance_id: config.id,
+          media_item_id: media_item.id,
+          remote_id: "rk1"
+        })
+        |> Repo.insert()
+
+      assert {:error, :missing_user_token} =
+               perform_job(MediaServerWatchedSync, %{
+                 "config_id" => config.id,
+                 "user_id" => user.id,
+                 "link_id" => link.id
+               })
+
+      run = Sync.last_run("plex", config.id)
+      assert run.status == :error
+      assert run.error =~ "missing_user_token"
+    end
+
+    test "a job whose link id does not resolve to any link is refused, distinctly from a missing identity" do
+      user = user_fixture()
+
+      {:ok, config} =
+        Settings.create_media_server_config(%{
+          name: "Storage",
+          type: :plex,
+          url: "http://localhost:32400",
+          token: "admin-token",
+          enabled: true,
+          connection_settings: %{"sync_watched" => "true"}
+        })
+
+      assert {:ok, :skipped} =
+               perform_job(MediaServerWatchedSync, %{
+                 "config_id" => config.id,
+                 "user_id" => user.id,
+                 "link_id" => Ecto.UUID.generate()
+               })
+
+      assert Sync.last_run("plex", config.id).skip_reason == "link_not_found"
     end
 
     test "a job whose link belongs to another user is refused" do
