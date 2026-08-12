@@ -13,7 +13,7 @@ defmodule MydiaWeb.Schema.SubtitleContentQueryTest do
   # The root `subtitleContent` field exists so the player can fetch exactly
   # one track's body without routing through `movie { files { subtitles {
   # content } } }`, which resolves `content` for every track of every file on
-  # the title. See docs/superpowers/specs/2026-08-12-player-subtitle-download-design.md.
+  # the title. See `MydiaWeb.Schema.Resolvers.SubtitleResolver.subtitle_content/3`.
   @query """
   query SubtitleContent($mediaFileId: ID!, $trackId: String!) {
     subtitleContent(mediaFileId: $mediaFileId, trackId: $trackId)
@@ -150,7 +150,16 @@ defmodule MydiaWeb.Schema.SubtitleContentQueryTest do
       relative_path = "movie.mkv"
       video_path = Path.join(dir, relative_path)
 
-      muxed? = mux_two_subtitle_tracks(srt_a_path, srt_b_path, video_path)
+      # Distinguish "no ffmpeg on PATH" (a legitimate, environment-dependent
+      # skip) from "ffmpeg is present but the mux failed" (a broken test,
+      # since a broken fixture would otherwise let the discriminating
+      # assertion below pass by never running).
+      mux_result =
+        cond do
+          is_nil(System.find_executable("ffmpeg")) -> :ffmpeg_missing
+          mux_two_subtitle_tracks(srt_a_path, srt_b_path, video_path) -> :ok
+          true -> :mux_failed
+        end
 
       library_path = SettingsFixtures.library_path_fixture(%{path: dir, type: "movies"})
 
@@ -171,31 +180,47 @@ defmodule MydiaWeb.Schema.SubtitleContentQueryTest do
 
       on_exit(fn -> File.rm_rf(Path.join(Delivery.cache_dir(), media_file.id)) end)
 
-      {:ok, conn: log_in_user(conn, user), media_file: media_file, muxed?: muxed?}
+      {:ok, conn: log_in_user(conn, user), media_file: media_file, mux_result: mux_result}
     end
 
     test "resolves the requested track only", %{
       conn: conn,
       media_file: media_file,
-      muxed?: muxed?
+      mux_result: mux_result
     } do
-      if muxed? do
-        conn = query(conn, media_file.id, "1")
+      case mux_result do
+        :ffmpeg_missing ->
+          # No ffmpeg on this machine to build the fixture with; the same
+          # limitation the sibling embedded-track test in
+          # subtitle_content_test.exs accepts.
+          :ok
 
-        assert %{"data" => %{"subtitleContent" => content}} = json_response(conn, 200)
-        assert String.starts_with?(content, "WEBVTT")
-        assert content =~ "Hello there."
+        :mux_failed ->
+          flunk(
+            "ffmpeg is on PATH but muxing the two-subtitle-track fixture failed. " <>
+              "This is the only test proving subtitleContent resolves a single " <>
+              "track rather than every track on the file, so it must fail loudly " <>
+              "rather than silently skip. See mux_two_subtitle_tracks/3 " <>
+              "(likely missing the libx264 encoder)."
+          )
 
-        cache_files =
-          Delivery.cache_dir()
-          |> Path.join(media_file.id)
-          |> list_cache_files()
+        :ok ->
+          conn = query(conn, media_file.id, "1")
 
-        assert Enum.any?(cache_files, &String.starts_with?(&1, "1-")),
-               "expected a cache entry for the requested track (1), got: #{inspect(cache_files)}"
+          assert %{"data" => %{"subtitleContent" => content}} = json_response(conn, 200)
+          assert String.starts_with?(content, "WEBVTT")
+          assert content =~ "Hello there."
 
-        refute Enum.any?(cache_files, &String.starts_with?(&1, "2-")),
-               "the untouched track (2) was extracted too: #{inspect(cache_files)}"
+          cache_files =
+            Delivery.cache_dir()
+            |> Path.join(media_file.id)
+            |> list_cache_files()
+
+          assert Enum.any?(cache_files, &String.starts_with?(&1, "1-")),
+                 "expected a cache entry for the requested track (1), got: #{inspect(cache_files)}"
+
+          refute Enum.any?(cache_files, &String.starts_with?(&1, "2-")),
+                 "the untouched track (2) was extracted too: #{inspect(cache_files)}"
       end
     end
   end
@@ -205,8 +230,10 @@ defmodule MydiaWeb.Schema.SubtitleContentQueryTest do
   end
 
   # Builds a container with two real subrip subtitle streams, at indices 1 and
-  # 2, distinguishable by their cue text. Returns false when ffmpeg is absent
-  # or refuses, so the suite still runs on a machine without it.
+  # 2, distinguishable by their cue text. Returns false if ffmpeg refuses,
+  # for instance a build missing the libx264 encoder this needs. Callers
+  # check ffmpeg's presence on PATH separately, since that failure mode
+  # deserves a different response (skip, not flunk) than this one.
   defp mux_two_subtitle_tracks(srt_a_path, srt_b_path, output_path) do
     args = [
       "-v",

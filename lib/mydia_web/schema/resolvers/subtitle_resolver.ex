@@ -59,20 +59,7 @@ defmodule MydiaWeb.Schema.Resolvers.SubtitleResolver do
 
       true ->
         media_file = Library.get_media_file!(media_file_id, preload: [:library_path])
-
-        case Delivery.content(media_file, denormalize_track_id(track.track_id), format) do
-          {:ok, body} ->
-            {:ok, body}
-
-          {:error, reason} ->
-            Logger.warning("Subtitle content unavailable",
-              media_file_id: media_file_id,
-              track_id: track.track_id,
-              reason: inspect(reason)
-            )
-
-            {:ok, nil}
-        end
+        deliver(media_file, track.track_id, format)
     end
   rescue
     Ecto.NoResultsError -> {:ok, nil}
@@ -105,22 +92,32 @@ defmodule MydiaWeb.Schema.Resolvers.SubtitleResolver do
         {:ok, nil}
 
       true ->
-        case Delivery.content(media_file, denormalize_track_id(track_id), format) do
-          {:ok, body} ->
-            {:ok, body}
-
-          {:error, reason} ->
-            Logger.warning("Subtitle content unavailable",
-              media_file_id: media_file_id,
-              track_id: track_id,
-              reason: inspect(reason)
-            )
-
-            {:ok, nil}
-        end
+        deliver(media_file, track_id, format)
     end
   rescue
     Ecto.NoResultsError -> {:ok, nil}
+  end
+
+  # Shared tail of both `content/3` and `subtitle_content/3`: extracts and
+  # formats a track's body once the media file is loaded and the track is
+  # known to be deliverable, mapping every delivery failure to `nil` with a
+  # warning. The spec requires the same track behave identically through
+  # both fields; keeping this in one place makes that true by construction
+  # rather than by both callers happening to stay in sync.
+  defp deliver(media_file, track_id, format) do
+    case Delivery.content(media_file, denormalize_track_id(track_id), format) do
+      {:ok, body} ->
+        {:ok, body}
+
+      {:error, reason} ->
+        Logger.warning("Subtitle content unavailable",
+          media_file_id: media_file.id,
+          track_id: track_id,
+          reason: inspect(reason)
+        )
+
+        {:ok, nil}
+    end
   end
 
   # Normalize track_id to always be a string for consistency
