@@ -91,4 +91,22 @@ defmodule Mydia.Plugins.MatcherTest do
       assert :not_found = Matcher.match_item(%{tvdb: 999_999_999})
     end
   end
+
+  test "match_item resolves a show as well as a movie" do
+    s = show(%{tvdb_id: 4242})
+
+    assert {:media_item, id} = Matcher.match_item(%{tvdb: 4242})
+    assert id == s.id
+  end
+
+  test "an episode target does not resolve to a like-numbered movie" do
+    # The movie owns the imdb id the show's target also carries. Without a type
+    # filter the cascade stops on the movie and the episode is never found.
+    _decoy = movie(%{imdb_id: "tt5150"})
+    s = show(%{tvdb_id: 5150})
+    ep = episode(s, 2, 3)
+
+    assert {:episode, id} = Matcher.match(%{imdb: "tt5150", tvdb: 5150, season: 2, episode: 3})
+    assert id == ep.id
+  end
 end
