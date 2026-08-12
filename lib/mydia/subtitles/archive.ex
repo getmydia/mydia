@@ -38,7 +38,9 @@ defmodule Mydia.Subtitles.Archive do
   @spec extract_subtitle(binary()) ::
           {:ok, %{name: String.t(), content: binary()}} | {:error, term()}
   def extract_subtitle(binary) do
-    with :ok <- check_entry_names(binary),
+    with {:ok, listing} <- list_entries(binary),
+         :ok <- check_entry_names(listing),
+         :ok <- check_declared_size(listing),
          {:ok, entries} <- unzip(binary),
          :ok <- check_total_size(entries),
          {:ok, entry} <- find_subtitle(entries) do
@@ -63,35 +65,45 @@ defmodule Mydia.Subtitles.Archive do
   # Names are read from the central directory before OTP unzip sanitises them.
   # :zip.unzip/2 rewrites absolute and parent-relative paths, so checking the
   # expanded entry list would never see a traversal attempt.
-  defp check_entry_names(binary) do
-    case list_raw_names(binary) do
-      {:ok, names} ->
-        unsafe? =
-          Enum.any?(names, fn name ->
-            String.starts_with?(name, "/") or
-              Path.type(name) == :absolute or
-              ".." in Path.split(name)
-          end)
+  defp check_entry_names(listing) do
+    unsafe? =
+      Enum.any?(listing, fn {name, _size} ->
+        String.starts_with?(name, "/") or
+          Path.type(name) == :absolute or
+          ".." in Path.split(name)
+      end)
 
-        if unsafe?, do: {:error, :unsafe_archive_entry}, else: :ok
+    if unsafe?, do: {:error, :unsafe_archive_entry}, else: :ok
+  end
 
-      {:error, reason} ->
-        {:error, reason}
+  # Rejects a bomb before expanding it. `check_total_size/1` measures what came
+  # out, which is too late to protect memory: by then the archive has already
+  # been fully expanded. The declared sizes in the central directory can lie, so
+  # both checks stay, this one to bound the allocation and the other to catch a
+  # header that understated itself.
+  defp check_declared_size(listing) do
+    declared = Enum.reduce(listing, 0, fn {_name, size}, acc -> acc + size end)
+
+    if declared >= @max_total_bytes do
+      Logger.warning("Rejected subtitle archive on declared size", bytes: declared)
+      {:error, :archive_too_large}
+    else
+      :ok
     end
   end
 
-  defp list_raw_names(binary) do
+  defp list_entries(binary) do
     case :zip.zip_open(binary, [:memory]) do
       {:ok, handle} ->
         try do
           case :zip.zip_list_dir(handle) do
             {:ok, entries} ->
-              names =
-                for {:zip_file, name, _info, _comment, _offset, _comp_size} <- entries do
-                  to_string(name)
+              listing =
+                for {:zip_file, name, info, _comment, _offset, _comp_size} <- entries do
+                  {to_string(name), uncompressed_size(info)}
                 end
 
-              {:ok, names}
+              {:ok, listing}
 
             {:error, _reason} ->
               {:error, :invalid_archive}
@@ -108,6 +120,18 @@ defmodule Mydia.Subtitles.Archive do
   catch
     _, _ -> {:error, :invalid_archive}
   end
+
+  # `info` is an Erlang :file_info record, whose second element is the
+  # uncompressed size. Anything unexpected counts as zero and falls through to
+  # the post-extraction check rather than failing the whole archive.
+  defp uncompressed_size(info) when is_tuple(info) and tuple_size(info) > 1 do
+    case elem(info, 1) do
+      size when is_integer(size) and size >= 0 -> size
+      _ -> 0
+    end
+  end
+
+  defp uncompressed_size(_info), do: 0
 
   defp check_total_size(entries) do
     total = Enum.reduce(entries, 0, fn {_name, content}, acc -> acc + byte_size(content) end)
