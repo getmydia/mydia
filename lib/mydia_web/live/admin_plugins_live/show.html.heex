@@ -1,0 +1,24 @@
+<Layouts.app {assigns}>
+  <.admin_page active_tab={@active_tab}>
+    <div class="p-4 sm:p-6 space-y-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <.link navigate={~p"/admin/config/plugins"} class="link link-hover text-sm mb-1">
+            Back to plugins
+          </.link>
+          <h1 class="text-2xl font-bold">{@plugin.name}</h1>
+          <p class="text-sm opacity-60 font-mono">{@plugin.slug} · {@plugin.version}</p>
+        </div>
+      </div>
+
+      <%= if @connection_descriptor do %>
+        <MydiaWeb.AdminPluginsLive.ConnectionsComponents.connections_section
+          connections={@connections}
+          descriptor={@connection_descriptor}
+          connection_form={@connection_form}
+          connect_session={@connect_session}
+        />
+      <% end %>
+    </div>
+  </.admin_page>
+</Layouts.app>
