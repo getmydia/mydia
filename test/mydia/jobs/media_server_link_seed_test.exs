@@ -35,14 +35,17 @@ defmodule Mydia.Jobs.MediaServerLinkSeedTest do
     config = plex_config()
 
     Bypass.stub(bypass, "GET", "/api/v2/home/users", fn conn ->
-      body = Jason.encode!(%{"users" => [%{"id" => 7, "username" => user.username}]})
+      body =
+        Jason.encode!(%{
+          "users" => [%{"id" => 7, "uuid" => "uuid-7", "username" => user.username}]
+        })
 
       conn
       |> Plug.Conn.put_resp_content_type("application/json")
       |> Plug.Conn.resp(200, body)
     end)
 
-    Bypass.stub(bypass, "POST", "/api/v2/home/users/7/switch", fn conn ->
+    Bypass.stub(bypass, "POST", "/api/v2/home/users/uuid-7/switch", fn conn ->
       body = Jason.encode!(%{"authToken" => "per-user-token"})
 
       conn
@@ -70,9 +73,9 @@ defmodule Mydia.Jobs.MediaServerLinkSeedTest do
        %{bypass: bypass, base: base} do
     # This worker is what every Plex config save enqueues, a save that only
     # flips a sync direction included. The operator mapped Mydia user alex to
-    # profile 8 by hand, precisely because the profile named "alex" is somebody
+    # profile uuid-8 by hand, precisely because the profile named "alex" is somebody
     # else in this household. Matching by username would repoint the mapping at
-    # profile 7 and file the other person's watch history under alex.
+    # profile uuid-7 and file the other person's watch history under alex.
     alex = user_fixture(%{username: "alex"})
     config = plex_config()
 
@@ -80,7 +83,7 @@ defmodule Mydia.Jobs.MediaServerLinkSeedTest do
       Settings.upsert_media_server_user_link(%{
         media_server_config_id: config.id,
         user_id: alex.id,
-        remote_user_id: "8",
+        remote_user_id: "uuid-8",
         remote_username: "alex-2",
         access_token: "alex-2-token",
         enabled: true
@@ -90,8 +93,8 @@ defmodule Mydia.Jobs.MediaServerLinkSeedTest do
       body =
         Jason.encode!(%{
           "users" => [
-            %{"id" => 7, "username" => "alex"},
-            %{"id" => 8, "username" => "alex-2"}
+            %{"id" => 7, "uuid" => "uuid-7", "username" => "alex"},
+            %{"id" => 8, "uuid" => "uuid-8", "username" => "alex-2"}
           ]
         })
 
@@ -104,7 +107,7 @@ defmodule Mydia.Jobs.MediaServerLinkSeedTest do
     # a working token and really does it. Without this the run would fail on the
     # missing endpoint and the assertions below could not tell "left alone" from
     # "tried and could not reach plex.tv". A correct run never calls it.
-    Bypass.stub(bypass, "POST", "/api/v2/home/users/7/switch", fn conn ->
+    Bypass.stub(bypass, "POST", "/api/v2/home/users/uuid-7/switch", fn conn ->
       conn
       |> Plug.Conn.put_resp_content_type("application/json")
       |> Plug.Conn.resp(200, Jason.encode!(%{"authToken" => "other-alex-token"}))
@@ -118,7 +121,7 @@ defmodule Mydia.Jobs.MediaServerLinkSeedTest do
 
     assert [kept] = Settings.list_media_server_user_links(config.id)
     assert kept.id == hand_made.id
-    assert kept.remote_user_id == "8"
+    assert kept.remote_user_id == "uuid-8"
     assert kept.remote_username == "alex-2"
     assert kept.access_token == "alex-2-token"
     assert kept.updated_at == hand_made.updated_at
@@ -140,7 +143,7 @@ defmodule Mydia.Jobs.MediaServerLinkSeedTest do
       Settings.upsert_media_server_user_link(%{
         media_server_config_id: config.id,
         user_id: alex.id,
-        remote_user_id: "8",
+        remote_user_id: "uuid-8",
         remote_username: "alex-2",
         access_token: "alex-2-token",
         enabled: true
@@ -150,8 +153,8 @@ defmodule Mydia.Jobs.MediaServerLinkSeedTest do
       body =
         Jason.encode!(%{
           "users" => [
-            %{"id" => 7, "username" => "alex"},
-            %{"id" => 9, "username" => "kid"}
+            %{"id" => 7, "uuid" => "uuid-7", "username" => "alex"},
+            %{"id" => 9, "uuid" => "uuid-9", "username" => "kid"}
           ]
         })
 
@@ -160,14 +163,14 @@ defmodule Mydia.Jobs.MediaServerLinkSeedTest do
       |> Plug.Conn.resp(200, body)
     end)
 
-    Bypass.stub(bypass, "POST", "/api/v2/home/users/9/switch", fn conn ->
+    Bypass.stub(bypass, "POST", "/api/v2/home/users/uuid-9/switch", fn conn ->
       conn
       |> Plug.Conn.put_resp_content_type("application/json")
       |> Plug.Conn.resp(200, Jason.encode!(%{"authToken" => "kid-token"}))
     end)
 
     # Same reason as above: a pass that decides to repoint alex must be able to.
-    Bypass.stub(bypass, "POST", "/api/v2/home/users/7/switch", fn conn ->
+    Bypass.stub(bypass, "POST", "/api/v2/home/users/uuid-7/switch", fn conn ->
       conn
       |> Plug.Conn.put_resp_content_type("application/json")
       |> Plug.Conn.resp(200, Jason.encode!(%{"authToken" => "other-alex-token"}))
@@ -179,10 +182,10 @@ defmodule Mydia.Jobs.MediaServerLinkSeedTest do
                "plex_tv_base" => base
              })
 
-    assert %{remote_user_id: "8", access_token: "alex-2-token"} =
+    assert %{remote_user_id: "uuid-8", access_token: "alex-2-token"} =
              Settings.get_media_server_user_link(config.id, alex.id)
 
-    assert %{remote_user_id: "9", access_token: "kid-token"} =
+    assert %{remote_user_id: "uuid-9", access_token: "kid-token"} =
              Settings.get_media_server_user_link(config.id, kid.id)
 
     assert Settings.get_media_server_user_link(config.id, alex.id).id == hand_made.id
@@ -198,14 +201,17 @@ defmodule Mydia.Jobs.MediaServerLinkSeedTest do
     config = plex_config()
 
     Bypass.stub(bypass, "GET", "/api/v2/home/users", fn conn ->
-      body = Jason.encode!(%{"users" => [%{"id" => 7, "username" => user.username}]})
+      body =
+        Jason.encode!(%{
+          "users" => [%{"id" => 7, "uuid" => "uuid-7", "username" => user.username}]
+        })
 
       conn
       |> Plug.Conn.put_resp_content_type("application/json")
       |> Plug.Conn.resp(200, body)
     end)
 
-    Bypass.stub(bypass, "POST", "/api/v2/home/users/7/switch", fn conn ->
+    Bypass.stub(bypass, "POST", "/api/v2/home/users/uuid-7/switch", fn conn ->
       Plug.Conn.resp(conn, 503, "")
     end)
 
@@ -227,7 +233,7 @@ defmodule Mydia.Jobs.MediaServerLinkSeedTest do
     assert_enqueued(worker: MediaServerLinkSeed, args: %{"config_id" => config.id})
 
     # And once plex.tv is back, the profile is linked for real.
-    Bypass.stub(bypass, "POST", "/api/v2/home/users/7/switch", fn conn ->
+    Bypass.stub(bypass, "POST", "/api/v2/home/users/uuid-7/switch", fn conn ->
       conn
       |> Plug.Conn.put_resp_content_type("application/json")
       |> Plug.Conn.resp(200, Jason.encode!(%{"authToken" => "per-user-token"}))
@@ -278,14 +284,17 @@ defmodule Mydia.Jobs.MediaServerLinkSeedTest do
     config = plex_config()
 
     Bypass.stub(bypass, "GET", "/api/v2/home/users", fn conn ->
-      body = Jason.encode!(%{"users" => [%{"id" => 7, "username" => user.username}]})
+      body =
+        Jason.encode!(%{
+          "users" => [%{"id" => 7, "uuid" => "uuid-7", "username" => user.username}]
+        })
 
       conn
       |> Plug.Conn.put_resp_content_type("application/json")
       |> Plug.Conn.resp(200, body)
     end)
 
-    Bypass.stub(bypass, "POST", "/api/v2/home/users/7/switch", fn conn ->
+    Bypass.stub(bypass, "POST", "/api/v2/home/users/uuid-7/switch", fn conn ->
       conn
       |> Plug.Conn.put_resp_content_type("application/json")
       |> Plug.Conn.resp(200, Jason.encode!(%{"authToken" => "per-user-token"}))
@@ -315,7 +324,10 @@ defmodule Mydia.Jobs.MediaServerLinkSeedTest do
     # A Plex Home profile whose username matches no Mydia user. Enqueueing a
     # sync here would loop: server mode with no links enqueues this worker.
     Bypass.stub(bypass, "GET", "/api/v2/home/users", fn conn ->
-      body = Jason.encode!(%{"users" => [%{"id" => 9, "username" => "nobody-here"}]})
+      body =
+        Jason.encode!(%{
+          "users" => [%{"id" => 9, "uuid" => "uuid-9", "username" => "nobody-here"}]
+        })
 
       conn
       |> Plug.Conn.put_resp_content_type("application/json")

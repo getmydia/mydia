@@ -14,7 +14,7 @@ use crate::types::auth::{
     LoginResult, MediaToken, RevokeDeviceResult, ToggleFavoriteResult, User,
 };
 use crate::types::common::StreamingStrategy;
-use crate::types::media::{Episode, Movie, Progress, TvShow};
+use crate::types::media::{Episode, Movie, Progress, SubtitleTrack, TvShow};
 use crate::types::streaming::{
     CancelDownloadResult, DownloadJobStatus, DownloadOption, PrepareDownloadResult,
     StreamingSessionResult,
@@ -63,6 +63,23 @@ impl RootMutationType {
         _duration_seconds: Option<i32>,
     ) -> Result<Option<Progress>> {
         Ok(None)
+    }
+
+    /// Download a subtitle candidate returned by subtitleSearch.
+    ///
+    /// mutation_types.ex:`:download_subtitle`. This server acquires no media,
+    /// and `subtitleSearch` here never returns a candidate, so any token
+    /// reaching this field came from somewhere else. The return type is
+    /// non-null, so an explicit error is the only honest answer available.
+    async fn download_subtitle(
+        &self,
+        ctx: &Context<'_>,
+        _media_file_id: ID,
+        _token: String,
+    ) -> Result<SubtitleTrack> {
+        authenticated_user(ctx).await?;
+
+        Err(not_implemented("downloadSubtitle"))
     }
 
     /// Mark a movie as watched

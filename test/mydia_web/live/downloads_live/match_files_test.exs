@@ -364,7 +364,10 @@ defmodule MydiaWeb.DownloadsLive.MatchFilesTest do
     refute Mydia.Repo.get(Mydia.Downloads.Download, download.id)
   end
 
-  test "the reject button is disabled without a guid", %{conn: conn, tmp_dir: tmp_dir} do
+  test "rejecting without a guid still removes the download but does not blacklist", %{
+    conn: conn,
+    tmp_dir: tmp_dir
+  } do
     dir = Path.join(tmp_dir, "noguid")
     File.mkdir_p!(dir)
     File.write!(Path.join(dir, "payload.exe"), "x")
@@ -404,8 +407,12 @@ defmodule MydiaWeb.DownloadsLive.MatchFilesTest do
     render_click(view, "switch_tab", %{"tab" => "issues"})
 
     view |> element("#match-files-#{download.id}") |> render_click()
+    refute has_element?(view, "#match-files-reject[disabled]")
 
-    assert has_element?(view, "#match-files-reject[disabled]")
+    view |> element("#match-files-reject") |> render_click()
+
+    refute Mydia.Downloads.Blacklists.blacklisted?("1337x", "missing-guid")
+    refute Mydia.Repo.get(Mydia.Downloads.Download, download.id)
   end
 
   test "unresolved-file downloads open the same modal", %{conn: conn, tmp_dir: tmp_dir} do

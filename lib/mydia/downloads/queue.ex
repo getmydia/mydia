@@ -136,48 +136,110 @@ defmodule Mydia.Downloads.Queue do
   @doc """
   Rejects a release the operator has judged unusable.
 
-  Blacklists `(indexer, guid)` so future searches filter it out, removes the
-  torrent and its data from the client, deletes the download row, and queues a
-  fresh search for the bound episode or movie.
+  Best-effort blacklists `(indexer, guid)` when a key can be extracted, removes
+  the torrent and its data from the client (best effort), deletes the download
+  row, and queues a fresh search for the bound episode or movie.
 
-  The blacklist write happens first: if a later step fails, the release must
-  still not be re-grabbed. Client removal is best effort, since the torrent may
-  already be gone.
+  A download with no blacklist key, or whose blacklist write fails, is still
+  cleared — it is simply not recorded. The torrent is dead either way.
 
-  Accepts `:failure_reason` (default `"rejected_by_user"`) so a system-initiated
-  rejection is distinguishable from an operator's in `release_blacklist`.
+  ## Options
+    - `:actor_type` - The type of actor (:user, :system, :job) - defaults to :user
+    - `:actor_id` - The ID of the actor (user_id, job name, etc.)
+    - `:failure_reason` - Blacklist reason slug - defaults to "rejected_by_user"
+    - `:ttl_days` - Days until the blacklist entry expires - defaults to the
+      configured `release_blacklist_default_ttl_days` (30)
+    - `:event` - `:cancelled` (default) emits `download.cancelled`; `:none`
+      emits nothing, for callers that emit their own more specific event
   """
-  @spec reject_release(Download.t(), keyword()) ::
-          {:ok, :rejected} | {:error, :no_indexer | :no_guid | term()}
+  @spec reject_release(Download.t(), keyword()) :: {:ok, :rejected} | {:error, term()}
   def reject_release(%Download{} = download, opts \\ []) do
+    blacklist_release(download, opts)
+    finish_reject(download, opts)
+  end
+
+  # Best effort, and deliberately so. A release we cannot key (no indexer or
+  # guid — externally-adopted torrents, manual grabs) or whose blacklist write
+  # fails is still a dead download: clearing it matters more than recording
+  # why. Leaving the torrent running because the bookkeeping failed is the
+  # exact bug this path exists to fix.
+  defp blacklist_release(%Download{} = download, opts) do
     with {:ok, indexer, guid} <- Blacklists.extract_key(download),
          {:ok, _row} <-
            Blacklists.add(
              indexer,
              guid,
              download.title || "Unknown release",
-             Keyword.get(opts, :failure_reason, "rejected_by_user")
+             Keyword.get(opts, :failure_reason, "rejected_by_user"),
+             blacklist_opts(opts)
            ) do
-      # Computed before deletion: it reads through the media_item association.
-      search = replacement_search(download)
+      :ok
+    else
+      # Having no release key is an ordinary shape, not a problem: externally
+      # adopted torrents and manual grabs never had one. Logging it at warning
+      # would make routine operator rejections look like faults.
+      {:error, reason} when reason in [:no_indexer, :no_guid] ->
+        Logger.debug("Rejecting a release with no blacklist key",
+          download_id: download.id,
+          reason: inspect(reason)
+        )
 
-      remove_from_client(download)
+        :ok
 
-      case History.delete_download(download) do
-        {:ok, _deleted} ->
-          enqueue_search(search)
+      # A write that actually failed is worth surfacing: the release will not be
+      # filtered out of the next search.
+      {:error, reason} ->
+        Logger.warning("Rejecting release but the blacklist write failed",
+          download_id: download.id,
+          reason: inspect(reason)
+        )
 
-          Events.download_cancelled(
-            download,
-            Keyword.get(opts, :actor_type, :user),
-            Keyword.get(opts, :actor_id, "unknown")
-          )
+        :ok
+    end
+  end
 
-          {:ok, :rejected}
+  # Only forward :ttl_days when the caller set it, so Blacklists.add/5 keeps
+  # applying its own configured default for every existing caller.
+  defp blacklist_opts(opts) do
+    case Keyword.get(opts, :ttl_days) do
+      nil -> []
+      days -> [ttl_days: days]
+    end
+  end
 
-        {:error, reason} ->
-          {:error, reason}
-      end
+  # Everything after the blacklist decision: clear the torrent, drop the row,
+  # queue a replacement, and (optionally) announce it.
+  defp finish_reject(%Download{} = download, opts) do
+    # Computed before deletion: it reads through the media_item association.
+    search = replacement_search(download)
+
+    remove_from_client(download)
+
+    case History.delete_download(download) do
+      {:ok, _deleted} ->
+        enqueue_search(search)
+        emit_reject_event(download, opts)
+
+        {:ok, :rejected}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  # A caller that emits its own, more specific event passes `event: :none` so
+  # one give-up does not produce two entries in the activity feed.
+  defp emit_reject_event(download, opts) do
+    case Keyword.get(opts, :event, :cancelled) do
+      :none ->
+        :ok
+
+      :cancelled ->
+        Events.download_cancelled(
+          download,
+          Keyword.get(opts, :actor_type, :user),
+          Keyword.get(opts, :actor_id, "unknown")
+        )
     end
   end
 

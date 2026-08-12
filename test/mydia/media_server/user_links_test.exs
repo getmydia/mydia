@@ -23,12 +23,15 @@ defmodule Mydia.MediaServer.UserLinksTest do
     end
 
     test "normalises Plex Home profiles, keeping the owner flag", %{bypass: bypass} do
+      # The account id a link stores is the profile's uuid, never the numeric id
+      # beside it: the switch endpoint that mints a per-profile token answers 404
+      # for the numeric one, so a link built on it could never sync at all.
       stub_home_users(bypass)
 
       assert {:ok, accounts} =
                UserLinks.list_remote_accounts(plex_config(bypass), plex_opts(bypass))
 
-      assert Enum.map(accounts, & &1.id) == ["1", "2"]
+      assert Enum.map(accounts, & &1.id) == ["uuid-owner", "uuid-kid"]
       assert Enum.map(accounts, & &1.admin?) == [true, false]
     end
   end
@@ -96,15 +99,15 @@ defmodule Mydia.MediaServer.UserLinksTest do
       # Auto-matching only fires when Plex and Mydia agree on a name. People
       # name Plex profiles after people and their Mydia account "admin", so on
       # most installs it matches nothing and there was no other way to link.
-      Bypass.expect(bypass, "POST", "/api/v2/home/users/2/switch", fn conn ->
+      Bypass.expect(bypass, "POST", "/api/v2/home/users/uuid-kid/switch", fn conn ->
         json(conn, %{"authToken" => "kid-token"})
       end)
 
       assert {:ok, [link]} =
-               UserLinks.apply_mapping(config, %{"2" => user.id}, plex_opts(bypass))
+               UserLinks.apply_mapping(config, %{"uuid-kid" => user.id}, plex_opts(bypass))
 
       assert link.user_id == user.id
-      assert link.remote_user_id == "2"
+      assert link.remote_user_id == "uuid-kid"
       assert link.remote_username == "kid"
       # The token names the same account as remote_user_id. A link claiming one
       # account while holding another's credential syncs the wrong history.
@@ -113,12 +116,12 @@ defmodule Mydia.MediaServer.UserLinksTest do
 
     test "removes the link for a profile the operator unmapped",
          %{bypass: bypass, config: config, user: user} do
-      stub_switch(bypass, "2", "kid-token")
+      stub_switch(bypass, "uuid-kid", "kid-token")
 
       assert {:ok, [_link]} =
-               UserLinks.apply_mapping(config, %{"2" => user.id}, plex_opts(bypass))
+               UserLinks.apply_mapping(config, %{"uuid-kid" => user.id}, plex_opts(bypass))
 
-      assert {:ok, []} = UserLinks.apply_mapping(config, %{"2" => nil}, plex_opts(bypass))
+      assert {:ok, []} = UserLinks.apply_mapping(config, %{"uuid-kid" => nil}, plex_opts(bypass))
       assert Settings.list_media_server_user_links(config.id) == []
     end
 
@@ -130,7 +133,7 @@ defmodule Mydia.MediaServer.UserLinksTest do
       assert {:error, :duplicate_user} =
                UserLinks.apply_mapping(
                  config,
-                 %{"1" => user.id, "2" => user.id},
+                 %{"uuid-owner" => user.id, "uuid-kid" => user.id},
                  plex_opts(bypass)
                )
     end
@@ -139,25 +142,32 @@ defmodule Mydia.MediaServer.UserLinksTest do
          %{bypass: bypass, config: config, user: user} do
       # Deleting before minting meant a mint that failed had already unlinked
       # somebody who was syncing fine, and the operator saw only an error.
-      stub_switch(bypass, "2", "kid-token")
-      Bypass.stub(bypass, "POST", "/api/v2/home/users/1/switch", &Plug.Conn.resp(&1, 500, ""))
+      stub_switch(bypass, "uuid-kid", "kid-token")
+
+      Bypass.stub(
+        bypass,
+        "POST",
+        "/api/v2/home/users/uuid-owner/switch",
+        &Plug.Conn.resp(&1, 500, "")
+      )
 
       owner = Mydia.AccountsFixtures.user_fixture(%{username: "owner"})
 
-      assert {:ok, [_]} = UserLinks.apply_mapping(config, %{"2" => user.id}, plex_opts(bypass))
+      assert {:ok, [_]} =
+               UserLinks.apply_mapping(config, %{"uuid-kid" => user.id}, plex_opts(bypass))
 
       # Unmap the kid and map the owner in one save. The owner's mint fails, so
       # the save must not have unlinked the kid on its way there.
       assert {:error, _} =
                UserLinks.apply_mapping(
                  config,
-                 %{"1" => owner.id, "2" => nil},
+                 %{"uuid-owner" => owner.id, "uuid-kid" => nil},
                  plex_opts(bypass)
                )
 
       assert [link] = Settings.list_media_server_user_links(config.id)
       assert link.user_id == user.id
-      assert link.remote_user_id == "2"
+      assert link.remote_user_id == "uuid-kid"
       assert link.access_token == "kid-token"
     end
 
@@ -165,13 +175,16 @@ defmodule Mydia.MediaServer.UserLinksTest do
          %{bypass: bypass, config: config, user: user} do
       {:ok, switches} = Agent.start_link(fn -> 0 end)
 
-      Bypass.stub(bypass, "POST", "/api/v2/home/users/2/switch", fn conn ->
+      Bypass.stub(bypass, "POST", "/api/v2/home/users/uuid-kid/switch", fn conn ->
         Agent.update(switches, &(&1 + 1))
         json(conn, %{"authToken" => "kid-token"})
       end)
 
-      assert {:ok, [_]} = UserLinks.apply_mapping(config, %{"2" => user.id}, plex_opts(bypass))
-      assert {:ok, [_]} = UserLinks.apply_mapping(config, %{"2" => user.id}, plex_opts(bypass))
+      assert {:ok, [_]} =
+               UserLinks.apply_mapping(config, %{"uuid-kid" => user.id}, plex_opts(bypass))
+
+      assert {:ok, [_]} =
+               UserLinks.apply_mapping(config, %{"uuid-kid" => user.id}, plex_opts(bypass))
 
       assert Agent.get(switches, & &1) == 1
     end
@@ -180,19 +193,19 @@ defmodule Mydia.MediaServer.UserLinksTest do
          %{bypass: bypass, config: config, user: user} do
       # The reuse path matches on the account *and* the user, so a repoint never
       # carries the previous holder's credential onto the new row.
-      stub_switch(bypass, "2", "kid-token")
+      stub_switch(bypass, "uuid-kid", "kid-token")
       other = Mydia.AccountsFixtures.user_fixture(%{username: "sarah"})
 
       assert {:ok, [first]} =
-               UserLinks.apply_mapping(config, %{"2" => user.id}, plex_opts(bypass))
+               UserLinks.apply_mapping(config, %{"uuid-kid" => user.id}, plex_opts(bypass))
 
       assert first.access_token == "kid-token"
 
       assert {:ok, [moved]} =
-               UserLinks.apply_mapping(config, %{"2" => other.id}, plex_opts(bypass))
+               UserLinks.apply_mapping(config, %{"uuid-kid" => other.id}, plex_opts(bypass))
 
       assert moved.user_id == other.id
-      assert moved.remote_user_id == "2"
+      assert moved.remote_user_id == "uuid-kid"
       assert moved.access_token == "kid-token"
       assert [^moved] = Settings.list_media_server_user_links(config.id)
     end
@@ -237,8 +250,8 @@ defmodule Mydia.MediaServer.UserLinksTest do
   defp stub_home_users(bypass) do
     stub_json(bypass, "GET", "/api/v2/home/users", %{
       "users" => [
-        %{"id" => 1, "username" => "owner", "admin" => true},
-        %{"id" => 2, "username" => "kid", "admin" => false}
+        %{"id" => 1, "uuid" => "uuid-owner", "username" => "owner", "admin" => true},
+        %{"id" => 2, "uuid" => "uuid-kid", "username" => "kid", "admin" => false}
       ]
     })
   end

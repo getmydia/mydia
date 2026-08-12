@@ -4,7 +4,8 @@
 //! tests/types_media.rs): Movie, TvShow, Season, Episode, ShowNextUp,
 //! MovieEdge, MovieConnection, TvShowEdge, TvShowConnection, Artwork,
 //! CastMember, MediaFile, MediaStream, MediaSegment, Progress, LibraryPath,
-//! RecentlyAddedItem, SubtitleTrack.
+//! RecentlyAddedItem, SubtitleTrack, SubtitleCandidate, SubtitleProviderStatus,
+//! SubtitleSearchPayload.
 
 use async_graphql::{
     ComplexObject, InputValueError, InputValueResult, Scalar, ScalarType, SimpleObject, Value, ID,
@@ -100,6 +101,67 @@ impl SubtitleTrack {
             self.media_file_id, self.track_id, format
         ))
     }
+
+    /// common_types.ex:496-500. Image-based tracks carry bitmaps, so there is
+    /// no text to hand a client. Same rule as
+    /// `Mydia.Subtitles.Format.image_format?/1`.
+    async fn deliverable(&self) -> bool {
+        !matches!(
+            self.format.as_str(),
+            "pgs" | "vobsub" | "dvd_subtitle" | "hdmv_pgs_subtitle"
+        )
+    }
+
+    /// common_types.ex:502-506. Present for contract parity; this server does
+    /// not yet convert or extract subtitle bodies, and answers null rather than
+    /// guessing. Clients that need the body here use `url` above, which this
+    /// server does serve. Returning null is a valid contract response: the
+    /// Elixir field is nullable precisely because an undeliverable track has no
+    /// body to give.
+    async fn content(&self, _format: Option<SubtitleFormat>) -> Option<String> {
+        None
+    }
+}
+
+/// One subtitle a provider is offering, before it has been downloaded.
+///
+/// common_types.ex:`:subtitle_candidate`. Acquisition is not this server's
+/// job (it grabs no media), so nothing here is ever constructed. The type
+/// exists because the player talks to both servers and GraphQL rejects an
+/// entire query containing an unknown field, so the shape has to match even
+/// where the behaviour does not.
+#[derive(SimpleObject)]
+pub struct SubtitleCandidate {
+    pub token: String,
+    pub language: String,
+    pub release_name: Option<String>,
+    pub format: String,
+    pub rating: Option<f64>,
+    pub download_count: Option<i32>,
+    pub hearing_impaired: bool,
+    pub hash_match: bool,
+    pub score: i32,
+    pub provider_name: String,
+}
+
+/// What one provider had to say about a search.
+///
+/// common_types.ex:`:subtitle_provider_status`.
+#[derive(SimpleObject)]
+pub struct SubtitleProviderStatus {
+    pub name: String,
+    pub quota_remaining: Option<i32>,
+    pub quota_total: Option<i32>,
+    pub error: Option<String>,
+}
+
+/// Results of a subtitle search across every enabled provider.
+///
+/// common_types.ex:`:subtitle_search_payload`.
+#[derive(SimpleObject)]
+pub struct SubtitleSearchPayload {
+    pub results: Vec<SubtitleCandidate>,
+    pub providers: Vec<SubtitleProviderStatus>,
 }
 
 /// One elementary stream of a media file, as reported by ffprobe.

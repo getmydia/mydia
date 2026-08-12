@@ -1208,12 +1208,11 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   Subtitles section showing available and downloaded subtitles for media files.
   """
   attr :media_item, :map, required: true
-  attr :subtitle_feature_enabled, :boolean, required: true
   attr :media_file_subtitles, :map, default: %{}
 
   def subtitles_section(assigns) do
     ~H"""
-    <%= if @subtitle_feature_enabled && length(@media_item.media_files) > 0 do %>
+    <%= if length(@media_item.media_files) > 0 do %>
       <div class="card bg-base-200 shadow-lg mb-4 md:mb-6">
         <div class="card-body p-4 md:p-6">
           <h2 class="card-title text-lg md:text-xl mb-3 md:mb-4">Subtitles</h2>

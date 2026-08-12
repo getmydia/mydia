@@ -419,11 +419,6 @@ defmodule MydiaWeb.MediaLive.Show.Helpers do
   defp resolution_priority("4K"), do: 4
   defp resolution_priority(_), do: 0
 
-  # Check if subtitle feature is enabled
-  def subtitle_feature_enabled? do
-    Mydia.Subtitles.FeatureFlags.enabled?()
-  end
-
   def download_for_media?(download, media_item) do
     download.media_item_id == media_item.id or
       (download.episode_id &&

@@ -13,7 +13,8 @@ defmodule Mydia.Settings.RuntimeConfig do
     MediaServerConfig,
     LibraryPath,
     PathMappingConfig,
-    PluginConfig
+    PluginConfig,
+    SubtitleProviderConfig
   }
 
   ## Configuration Settings (Database)
@@ -194,6 +195,17 @@ defmodule Mydia.Settings.RuntimeConfig do
     if is_struct(runtime_config) and Map.has_key?(runtime_config, :indexers) do
       runtime_config.indexers
       |> Enum.map(&map_to_indexer_config/1)
+    else
+      []
+    end
+  end
+
+  def get_runtime_subtitle_providers do
+    runtime_config = get_runtime_config()
+
+    if is_struct(runtime_config) and Map.has_key?(runtime_config, :subtitle_providers) do
+      runtime_config.subtitle_providers
+      |> Enum.map(&map_to_subtitle_provider_config/1)
     else
       []
     end
@@ -461,6 +473,30 @@ defmodule Mydia.Settings.RuntimeConfig do
       updated_at: nil
     }
   end
+
+  defp map_to_subtitle_provider_config(map) when is_map(map) do
+    name = Map.get(map, :name)
+
+    %SubtitleProviderConfig{
+      id: build_runtime_id(:subtitle_provider, name),
+      name: name,
+      type: to_provider_type(Map.get(map, :type)),
+      enabled: Map.get(map, :enabled, true),
+      priority: Map.get(map, :priority, 0),
+      username: Map.get(map, :username),
+      password: Map.get(map, :password),
+      api_key: Map.get(map, :api_key),
+      connection_settings: %{}
+    }
+  end
+
+  defp to_provider_type(type) when is_atom(type), do: type
+
+  defp to_provider_type(type) when is_binary(type) do
+    Enum.find(Mydia.Settings.SubtitleProviderConfig.provider_types(), &(to_string(&1) == type))
+  end
+
+  defp to_provider_type(_), do: nil
 
   defp map_to_media_server_config(map) when is_map(map) do
     name = Map.get(map, :name)

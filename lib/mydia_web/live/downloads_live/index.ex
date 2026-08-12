@@ -1,12 +1,15 @@
 defmodule MydiaWeb.DownloadsLive.Index do
   use MydiaWeb, :live_view
   alias Mydia.Downloads
+  alias Mydia.Downloads.Blacklists
   alias Mydia.Downloads.ExternalTorrents
   alias Mydia.Downloads.ImportCandidates
+  alias Mydia.Downloads.StallDetector
   alias Mydia.Downloads.Structs.DownloadMetadata
   alias Mydia.Library.Structs.Quality
   alias Mydia.Library
   alias Mydia.Media
+  alias Mydia.Settings
   alias Phoenix.PubSub
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.DownloadsLive.Components
@@ -108,6 +111,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
      |> assign(:library_search_results, [])
      # Match / re-match modal state (in-flight correction + post-import re-match)
      |> assign(:match_modal, nil)
+     |> assign(:stall_grace_map, Settings.download_client_grace_map())
      # Initialize all streams
      |> stream(:downloads, [])
      |> stream(:needs_matching, [])
@@ -875,23 +879,49 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
       case Downloads.reject_release(download) do
         {:ok, :rejected} ->
+          flash =
+            case Blacklists.extract_key(download) do
+              {:ok, _indexer, _guid} ->
+                "Release blacklisted and a new search was queued"
+
+              {:error, _} ->
+                "Download removed and a new search was queued"
+            end
+
           {:noreply,
            socket
            |> assign(:match_files_modal, nil)
            |> assign(:match_files_error, nil)
-           |> put_flash(:info, "Release blacklisted and a new search was queued")
+           |> put_flash(:info, flash)
            |> load_downloads()}
-
-        {:error, reason} when reason in [:no_indexer, :no_guid] ->
-          {:noreply,
-           assign(
-             socket,
-             :match_files_error,
-             "This download has no indexer or release id recorded, so it cannot be blacklisted."
-           )}
 
         {:error, _reason} ->
           {:noreply, assign(socket, :match_files_error, "Failed to reject the release.")}
+      end
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
+  # Snooze, not opt-out: clearing stalled_since and advancing last_progress_at
+  # buys a full fresh grace-then-escalation window. If it stalls again the
+  # operator gets warned again.
+  def handle_event("keep_waiting", %{"id" => id}, socket) do
+    with :ok <- Authorization.authorize_manage_downloads(socket) do
+      download = Downloads.get_download!(id)
+
+      case Downloads.update_download(download, %{
+             stalled_since: nil,
+             last_progress_at: DateTime.utc_now()
+           }) do
+        {:ok, _updated} ->
+          {:noreply,
+           socket
+           |> put_flash(:info, "Stall timer reset. Mydia will keep waiting on this download.")
+           |> load_downloads()}
+
+        {:error, _changeset} ->
+          {:noreply, put_flash(socket, :error, "Could not reset the stall timer")}
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
@@ -1422,11 +1452,11 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
   defp status_rank(download) do
     # Stall state overrides the client status for sorting: a soft-stall groups
-    # with warnings, a terminal stall failure groups with errors.
-    cond do
-      soft_stalled?(download) -> Map.fetch!(@status_rank, "stalled")
-      stalled?(download) -> Map.fetch!(@status_rank, "failed")
-      true -> Map.get(@status_rank, download.status, 99)
+    # with warnings.
+    if soft_stalled?(download) do
+      Map.fetch!(@status_rank, "stalled")
+    else
+      Map.get(@status_rank, download.status, 99)
     end
   end
 
@@ -1532,7 +1562,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
       "queued" -> "badge-info"
       "paused" -> "badge-warning"
       "stalled" -> "badge-warning"
-      "stall_failed" -> "badge-error"
       _ -> "badge-ghost"
     end
   end
@@ -1585,23 +1614,15 @@ defmodule MydiaWeb.DownloadsLive.Index do
   defp import_issue_label(:retrying), do: "Import retrying"
 
   @doc false
-  # Returns `{class, label}` for the download's status badge. A stall has two
-  # distinct states (see DownloadMonitor stall-resilience rework):
-  #
-  #   * soft-stall — recoverable warning; progress has stopped but the download
-  #     still occupies its episode and may auto-clear. Yellow "Stalled" badge.
-  #   * terminal stall failure — escalated past the longer threshold; the
-  #     episode has been released for re-search. Red "Stall failed" badge.
+  # Returns `{class, label}` for the download's status badge. A soft-stall is a
+  # recoverable warning: progress has stopped but the download still occupies
+  # its episode and may auto-clear. There is no terminal stall badge — an
+  # escalated stall is rejected outright and the row no longer exists.
   def status_badge(download) do
-    cond do
-      soft_stalled?(download) ->
-        {status_badge_class("stalled"), "Stalled"}
-
-      stalled?(download) ->
-        {status_badge_class("stall_failed"), "Stall failed"}
-
-      true ->
-        {status_badge_class(download.status), String.capitalize(download.status)}
+    if soft_stalled?(download) do
+      {status_badge_class("stalled"), "Stalled"}
+    else
+      {status_badge_class(download.status), String.capitalize(download.status)}
     end
   end
 
@@ -1616,11 +1637,23 @@ defmodule MydiaWeb.DownloadsLive.Index do
       not is_nil(download.stalled_since) and is_nil(download.import_failed_at)
   end
 
-  # A terminal stall failure: escalated to `import_failed_at` with a stalled
-  # message.
-  defp stalled?(download) do
-    not is_nil(download.import_failed_at) and
-      Mydia.Downloads.StallDetector.stalled?(download.import_last_error)
+  # Seconds since this download last moved a byte. Falls back to stalled_since
+  # for a row whose last_progress_at predates stall tracking.
+  defp stall_elapsed_seconds(download) do
+    reference = download.last_progress_at || download.stalled_since
+    DateTime.diff(DateTime.utc_now(), reference, :second)
+  end
+
+  # Seconds left before DownloadMonitor gives up on this download. Derived from
+  # the same StallDetector rule the monitor applies, so the number the operator
+  # reads is the number that will actually fire.
+  defp stall_remaining_seconds(download, grace_map) do
+    grace = Map.get(grace_map, download.download_client, Settings.default_grace_minutes())
+
+    deadline =
+      DateTime.add(download.stalled_since, StallDetector.escalation_minutes(grace) * 60, :second)
+
+    max(DateTime.diff(deadline, DateTime.utc_now(), :second), 0)
   end
 
   defp format_ratio(nil), do: "0.00"

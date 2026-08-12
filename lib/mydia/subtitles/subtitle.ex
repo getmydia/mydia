@@ -79,7 +79,11 @@ defmodule Mydia.Subtitles.Subtitle do
     |> validate_inclusion(:format, @supported_formats)
     |> validate_number(:rating, greater_than_or_equal_to: 0.0, less_than_or_equal_to: 10.0)
     |> validate_number(:download_count, greater_than_or_equal_to: 0)
-    |> unique_constraint(:subtitle_hash)
+    # Uniqueness is scoped to the media file, because two rips of the same movie
+    # share a subtitle hash and each needs its own row.
+    |> unique_constraint([:media_file_id, :subtitle_hash],
+      name: :subtitles_media_file_id_subtitle_hash_index
+    )
     |> foreign_key_constraint(:media_file_id)
   end
 end
