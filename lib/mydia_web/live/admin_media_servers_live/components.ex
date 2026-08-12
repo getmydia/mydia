@@ -150,17 +150,32 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                 <div
                   :if={last_run}
                   data-test="last-sync-run"
-                  class="flex items-center gap-2 text-xs"
+                  class="flex flex-col gap-1 text-xs"
                 >
-                  <span class={[
-                    "badge badge-xs",
-                    last_run.status == :ok && "badge-success",
-                    last_run.status == :error && "badge-error",
-                    last_run.status == :skipped && "badge-warning"
-                  ]}>
-                    {run_label(last_run)}
-                  </span>
-                  <span :if={last_run.error} class="text-error/80">{last_run.error}</span>
+                  <div class="flex items-center gap-2">
+                    <span class={[
+                      "badge badge-xs",
+                      last_run.status == :ok && "badge-success",
+                      last_run.status == :error && "badge-error",
+                      last_run.status == :skipped && "badge-warning"
+                    ]}>
+                      {run_label(last_run)}
+                    </span>
+                  </div>
+                  <div
+                    :if={last_run.status == :skipped}
+                    id={"sync-skip-#{server.id}"}
+                    class="text-warning"
+                  >
+                    {humanize_skip(last_run.skip_reason)}
+                  </div>
+                  <div
+                    :if={last_run.status == :error && last_run.error}
+                    id={"sync-error-#{server.id}"}
+                    class="text-error/80 break-words"
+                  >
+                    {last_run.error}
+                  </div>
                 </div>
 
                 <p
@@ -735,9 +750,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   # row from `sm` up. Same 44px reasoning as card_action_btn/0.
   defp modal_action_btn, do: "w-full min-h-11 sm:w-auto sm:min-h-8"
 
-  defp run_label(%{status: :skipped, skip_reason: reason}) when is_binary(reason) do
-    "Skipped: #{reason}"
-  end
+  defp run_label(%{status: :skipped}), do: "Skipped"
 
   defp run_label(%{status: :ok, counts: counts}) when is_map(counts) do
     imported = Map.get(counts, "imported") || Map.get(counts, :imported) || 0
@@ -747,6 +760,34 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
 
   defp run_label(%{status: :error}), do: "Failed"
   defp run_label(_), do: "Failed"
+
+  # The badge above just says "Skipped"; this is the operator-facing detail
+  # line. It is what tells someone "watched sync is turned off" apart from
+  # "nobody is mapped yet", which the badge alone cannot. New reasons should
+  # get their own clause here rather than falling through, but the fallback
+  # keeps a future reason from crashing or rendering blank.
+  defp humanize_skip("server_disabled"), do: "This server is disabled, so sync did not run."
+  defp humanize_skip("sync_disabled"), do: "Watched sync is turned off for this server."
+
+  defp humanize_skip("unsupported_provider"),
+    do: "This server type does not support watched sync."
+
+  defp humanize_skip("no_user_mapping"),
+    do:
+      "No Mydia users are mapped to accounts on this server. Add one in the User mapping section below."
+
+  defp humanize_skip("link_user_mismatch"),
+    do: "A user mapping points at the wrong account. Fix it in the User mapping section below."
+
+  defp humanize_skip("link_identity_missing"),
+    do:
+      "A user mapping is missing its account on this server. Fix it in the User mapping section below."
+
+  defp humanize_skip("link_not_found"),
+    do:
+      "The user mapping used for this run was deleted. Add or fix it in the User mapping section below."
+
+  defp humanize_skip(other), do: other
 
   # Simplify plex.direct URLs to show just the IP/host and port
   # e.g., "https://10-1-1-5.abc123.plex.direct:32400" -> "(ssl) 10.1.1.5:32400"

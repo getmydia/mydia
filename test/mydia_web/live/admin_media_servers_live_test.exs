@@ -100,6 +100,104 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
       assert has_element?(view, "[data-test=last-sync-run]")
     end
 
+    test "a skipped run shows a human readable reason, not the raw run status",
+         %{conn: conn} do
+      {:ok, config} =
+        Mydia.Settings.create_media_server_config(%{
+          name: "Jellyfin",
+          type: :jellyfin,
+          url: "http://localhost:8096",
+          token: "api-key",
+          connection_settings: %{}
+        })
+
+      {:ok, _run} =
+        Mydia.Sync.record_skip(
+          %{provider: "jellyfin", provider_instance_id: config.id, user_id: nil},
+          :no_user_mapping
+        )
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+
+      assert has_element?(view, "#sync-skip-#{config.id}")
+      assert render(view) =~ "User mapping section below"
+      refute has_element?(view, "#sync-error-#{config.id}")
+    end
+
+    test "an errored run shows its error message, distinct from a skip",
+         %{conn: conn} do
+      {:ok, config} =
+        Mydia.Settings.create_media_server_config(%{
+          name: "Jellyfin",
+          type: :jellyfin,
+          url: "http://localhost:8096",
+          token: "api-key"
+        })
+
+      {:ok, run} =
+        Mydia.Sync.start_run(%{
+          provider: "jellyfin",
+          provider_instance_id: config.id,
+          user_id: nil,
+          direction: :bidirectional
+        })
+
+      {:ok, _run} = Mydia.Sync.finish_run(run, :error, %{}, "connection refused")
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+
+      assert has_element?(view, "#sync-error-#{config.id}")
+      assert render(view) =~ "connection refused"
+      refute has_element?(view, "#sync-skip-#{config.id}")
+    end
+
+    test "a successful run shows neither a skip nor an error line", %{conn: conn} do
+      {:ok, config} =
+        Mydia.Settings.create_media_server_config(%{
+          name: "Jellyfin",
+          type: :jellyfin,
+          url: "http://localhost:8096",
+          token: "api-key"
+        })
+
+      {:ok, run} =
+        Mydia.Sync.start_run(%{
+          provider: "jellyfin",
+          provider_instance_id: config.id,
+          user_id: nil,
+          direction: :bidirectional
+        })
+
+      {:ok, _run} = Mydia.Sync.finish_run(run, :ok, %{imported: 2, exported: 1}, nil)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+
+      refute has_element?(view, "#sync-skip-#{config.id}")
+      refute has_element?(view, "#sync-error-#{config.id}")
+    end
+
+    test "an unrecognised skip reason falls back to the raw string instead of crashing",
+         %{conn: conn} do
+      {:ok, config} =
+        Mydia.Settings.create_media_server_config(%{
+          name: "Jellyfin",
+          type: :jellyfin,
+          url: "http://localhost:8096",
+          token: "api-key"
+        })
+
+      {:ok, _run} =
+        Mydia.Sync.record_skip(
+          %{provider: "jellyfin", provider_instance_id: config.id, user_id: nil},
+          :some_future_reason
+        )
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+
+      assert has_element?(view, "#sync-skip-#{config.id}")
+      assert render(view) =~ "some_future_reason"
+    end
+
     test "an auth error surfaces a reconnect action", %{conn: conn} do
       {:ok, _config} =
         Mydia.Settings.create_media_server_config(%{
