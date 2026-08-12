@@ -8,6 +8,7 @@ class ContinueWatchingItem {
   final String title;
   final Artwork? artwork;
   final Progress? progress;
+  final String? state;
   final String? showId;
   final String? showTitle;
   final int? seasonNumber;
@@ -20,6 +21,7 @@ class ContinueWatchingItem {
     required this.title,
     this.artwork,
     this.progress,
+    this.state,
     this.showId,
     this.showTitle,
     this.seasonNumber,
@@ -38,6 +40,7 @@ class ContinueWatchingItem {
       progress: json['progress'] != null
           ? Progress.fromJson(json['progress'] as Map<String, dynamic>)
           : null,
+      state: json['state'] as String?,
       showId: json['showId'] as String?,
       showTitle: json['showTitle'] as String?,
       seasonNumber: json['seasonNumber'] as int?,
@@ -67,6 +70,40 @@ class ContinueWatchingItem {
       return '$show - $code';
     }
     return title;
+  }
+
+  /// The zero-padded season and episode code, or null for a movie.
+  String? get episodeCode {
+    final season = seasonNumber;
+    final episode = episodeNumber;
+    if (!isEpisode || season == null || episode == null) return null;
+
+    return 'S${season.toString().padLeft(2, '0')}'
+        'E${episode.toString().padLeft(2, '0')}';
+  }
+
+  /// Whether this card is the next episode rather than a resume point.
+  ///
+  /// Falls back to inferring from a zero saved position because a server older
+  /// than the merged rail does not send `state` at all, and the player reaches
+  /// those through the legacy query document.
+  bool get isNext {
+    final state = this.state;
+    if (state != null) return state == 'next';
+
+    return (progress?.positionSeconds ?? 0) == 0;
+  }
+
+  /// The rail card's second line. Null for movies, which carry their title
+  /// alone.
+  String? get railSubtitle {
+    final code = episodeCode;
+    if (code == null) return null;
+
+    if (isNext) return 'Next up · $code';
+
+    final show = showTitle;
+    return show == null ? code : '$show · $code';
   }
 
   String? get posterUrl => artwork?.posterUrl;
