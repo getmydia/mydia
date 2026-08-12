@@ -28,7 +28,9 @@ defmodule Mydia.WatchSync.Providers.Plex do
   end
 
   @impl true
-  def list_changes(config, _user_scope, since) do
+  def list_changes(config, user_scope, since) do
+    config = with_scope_token(config, user_scope)
+
     with {:ok, sections} <- PlexClient.list_sections(config) do
       changes =
         sections
@@ -39,13 +41,23 @@ defmodule Mydia.WatchSync.Providers.Plex do
   end
 
   @impl true
-  def apply_change(config, _user_scope, remote_id, change) do
+  def apply_change(config, user_scope, remote_id, change) do
+    config = with_scope_token(config, user_scope)
+
     # Watched flag first, then position: an unscrobble must not clear a resume
     # point we are about to write for an in-progress unwatched item.
     with :ok <- maybe_push_watched(config, remote_id, change) do
       maybe_push_position(config, remote_id, change)
     end
   end
+
+  # The per-user token belongs to the caller's scope, not to the server config.
+  # Applying it here keeps the credential swap inside the provider that
+  # understands Plex auth instead of mutating a shared struct upstream.
+  defp with_scope_token(config, %{access_token: token}) when is_binary(token) and token != "",
+    do: %{config | token: token}
+
+  defp with_scope_token(config, _user_scope), do: config
 
   defp maybe_push_position(config, remote_id, %{position_seconds: position})
        when is_integer(position) do

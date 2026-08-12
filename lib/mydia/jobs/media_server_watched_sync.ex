@@ -73,28 +73,27 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
   defp perform_individual(%Args{config_id: config_id, user_id: user_id} = args) do
     config = Settings.get_media_server_config!(config_id)
 
-    case apply_link_token(config, args.link_id, user_id) do
-      {:ok, config} -> run_sync(config, user_id)
+    case resolve_user_scope(config, args.link_id, user_id) do
+      {:ok, scope} -> run_sync(config, scope)
       {:error, reason} -> skip(config, reason, user_id)
     end
   end
 
-  defp run_sync(config, user_id) do
+  defp run_sync(config, scope) do
     if config.enabled && watched_sync_enabled?(config) do
       direction = get_sync_direction(config)
 
-      Logger.info("Starting watched sync (#{direction}) for #{config.name}, user #{user_id}")
+      Logger.info(
+        "Starting watched sync (#{direction}) for #{config.name}, user #{scope.user_id}"
+      )
 
       with {:ok, provider} <- provider_for(config) do
         # A failed run insert must not take the sync down with it. Bookkeeping is
         # there to explain what happened, so losing it degrades observability
         # rather than the feature.
-        run = start_run(config, user_id, direction)
+        run = start_run(config, scope.user_id, direction)
 
-        case WatchSync.sync(
-               provider,
-               config,
-               %{user_id: user_id, access_token: config.token},
+        case WatchSync.sync(provider, config, scope,
                provider: to_string(config.type),
                direction: direction
              ) do
@@ -114,7 +113,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
       # Reachable when a config is disabled between enqueue and execution.
       # Rare, but returning {:ok, :skipped} with no trace is the exact pattern
       # this change exists to remove, so it is recorded like any other skip.
-      skip(config, skip_reason(config) || :sync_disabled, user_id)
+      skip(config, skip_reason(config) || :sync_disabled, scope.user_id)
     end
   end
 
@@ -190,33 +189,44 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
     |> safe_insert()
   end
 
-  # Per-user Plex tokens live on the link. Without swapping them onto the
-  # config, every synced user would still read and write the admin account.
+  # A link must say *which* remote account a user is, or the sync would run
+  # against the admin account and merge two people's watch history. That
+  # identity is a per-user token on Plex and a user GUID on Jellyfin, so the
+  # scope carries whichever the link holds and each provider reads the field
+  # its auth model uses. Only a link holding neither is refused.
   #
-  # A job with no link_id predates per-user mapping (or is the single-user
-  # fallback), where the config token is the right one. But a job that names a
-  # link whose token cannot be resolved must NOT quietly fall back to the config
-  # token: that would sync one user against another account's watch state, which
-  # is exactly the merge bug links exist to prevent.
-  #
-  # The link must also belong to the user being synced. Resolving by link id
-  # alone would let a malformed or stale job pair user A with user B's token,
-  # reintroducing the same merge from the other direction.
-  defp apply_link_token(config, nil, _user_id), do: {:ok, config}
+  # The link must also belong to the user being synced, so a stale or malformed
+  # job cannot pair user A with user B's identity.
+  defp resolve_user_scope(config, nil, user_id) do
+    {:ok, %{user_id: user_id, remote_user_id: nil, access_token: config.token}}
+  end
 
-  defp apply_link_token(config, link_id, user_id) do
+  defp resolve_user_scope(config, link_id, user_id) do
     case Repo.get(MediaServerUserLink, link_id) do
-      %MediaServerUserLink{user_id: ^user_id, access_token: token}
-      when is_binary(token) and token != "" ->
-        {:ok, %{config | token: token}}
-
-      %MediaServerUserLink{user_id: other} when other != user_id ->
-        {:error, :link_user_mismatch}
-
-      _ ->
-        {:error, :link_token_missing}
+      %MediaServerUserLink{user_id: ^user_id} = link -> scope_from_link(config, link, user_id)
+      %MediaServerUserLink{} -> {:error, :link_user_mismatch}
+      nil -> {:error, :link_identity_missing}
     end
   end
+
+  defp scope_from_link(config, link, user_id) do
+    token = presence(link.access_token)
+    remote_user_id = presence(link.remote_user_id)
+
+    if is_nil(token) and is_nil(remote_user_id) do
+      {:error, :link_identity_missing}
+    else
+      {:ok,
+       %{
+         user_id: user_id,
+         remote_user_id: remote_user_id,
+         access_token: token || config.token
+       }}
+    end
+  end
+
+  defp presence(value) when is_binary(value) and value != "", do: value
+  defp presence(_value), do: nil
 
   defp describe_error(%Error{} = error), do: Error.message(error)
   defp describe_error(reason), do: inspect(reason)

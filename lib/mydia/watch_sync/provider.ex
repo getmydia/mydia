@@ -7,7 +7,11 @@ defmodule Mydia.WatchSync.Provider do
   """
 
   @type instance :: map()
-  @type user_scope :: %{user_id: binary(), access_token: String.t() | nil}
+  @type user_scope :: %{
+          user_id: binary(),
+          remote_user_id: String.t() | nil,
+          access_token: String.t() | nil
+        }
   @type change :: %{watched: boolean(), position_seconds: integer() | nil}
 
   @type mapping :: %{
