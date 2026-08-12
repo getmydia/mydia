@@ -2224,4 +2224,91 @@ defmodule Mydia.MediaTest do
       assert is_binary(row.id)
     end
   end
+
+  describe "find_by_external_ids/2" do
+    test "falls through to tvdb when the imdb id matches nothing" do
+      {:ok, show} =
+        Media.create_media_item(
+          %{title: "Cascade Show", type: "tv_show", tvdb_id: 378_982},
+          skip_episode_refresh: true
+        )
+
+      # A Plex episode carries all three ids on its show; only tvdb is local.
+      # Strings are what Plex GUIDs parse to, and Ecto casts them for the
+      # integer column.
+      assert %{id: id} = Media.find_by_external_ids(%{imdb: "tt-absent", tvdb: "378982"})
+      assert id == show.id
+    end
+
+    test "falls through to tmdb when imdb and tvdb both miss" do
+      {:ok, show} =
+        Media.create_media_item(
+          %{title: "Tmdb Show", type: "tv_show", tmdb_id: 108_255},
+          skip_episode_refresh: true
+        )
+
+      assert %{id: id} =
+               Media.find_by_external_ids(%{
+                 imdb: "tt-absent",
+                 tvdb: "999999",
+                 tmdb: "108255"
+               })
+
+      assert id == show.id
+    end
+
+    test "returns nil when no ids are given" do
+      assert Media.find_by_external_ids(%{}) == nil
+    end
+
+    test "returns nil when nothing matches" do
+      assert Media.find_by_external_ids(%{imdb: "tt-nope", tvdb: "424242", tmdb: "424243"}) == nil
+    end
+
+    test "a wrong-type match does not short-circuit the cascade" do
+      {:ok, _decoy} =
+        Media.create_media_item(%{
+          title: "Decoy Movie",
+          type: "movie",
+          year: 2024,
+          imdb_id: "tt777"
+        })
+
+      {:ok, show} =
+        Media.create_media_item(
+          %{title: "Real Show", type: "tv_show", tvdb_id: 777},
+          skip_episode_refresh: true
+        )
+
+      assert %{id: id} =
+               Media.find_by_external_ids(%{imdb: "tt777", tvdb: "777"}, type: "tv_show")
+
+      assert id == show.id
+    end
+
+    test "returns nil when the only match is the wrong type" do
+      {:ok, _movie} =
+        Media.create_media_item(%{
+          title: "Only Movie",
+          type: "movie",
+          year: 2024,
+          imdb_id: "tt888"
+        })
+
+      assert Media.find_by_external_ids(%{imdb: "tt888"}, type: "tv_show") == nil
+    end
+
+    test "arity-1 calls still resolve" do
+      {:ok, movie} =
+        Media.create_media_item(%{
+          title: "Legacy Caller",
+          type: "movie",
+          year: 2024,
+          imdb_id: "tt999"
+        })
+
+      assert %{id: id} = Media.find_by_external_ids(%{imdb: "tt999"})
+      assert id == movie.id
+    end
+  end
 end

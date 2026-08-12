@@ -166,21 +166,55 @@ defmodule Mydia.Media do
   Finds a media item by external IDs using cascading lookup: IMDB → TVDB → TMDB.
 
   Accepts a map with atom keys: `%{imdb: id, tvdb: id, tmdb: id}`.
+
+  The cascade advances on a lookup *miss*, not on a missing id. Branching on
+  mere presence is what left every Plex episode unmapped: Plex supplies an imdb
+  id for every show, while Mydia stores tvdb and tmdb for shows and no imdb at
+  all, so the imdb branch was always taken and always missed.
+
+  ## Options
+
+    * `:type` - `"movie"` or `"tv_show"`. When set, a row of a different type is
+      not a match and the cascade continues to the next id. Callers that address
+      a movie or a show specifically should pass it. Callers that legitimately
+      accept either, such as `Mydia.Plugins.Matcher.match_item/1`, should not.
+
   Returns nil if no match is found.
   """
-  @spec find_by_external_ids(map()) :: MediaItem.t() | nil
-  def find_by_external_ids(ids) when is_map(ids) do
-    imdb = Map.get(ids, :imdb)
-    tvdb = Map.get(ids, :tvdb)
-    tmdb = Map.get(ids, :tmdb)
+  @spec find_by_external_ids(map(), keyword()) :: MediaItem.t() | nil
+  def find_by_external_ids(ids, opts \\ []) when is_map(ids) do
+    type = Keyword.get(opts, :type)
 
-    cond do
-      imdb -> Repo.get_by(MediaItem, imdb_id: imdb)
-      tvdb -> Repo.get_by(MediaItem, tvdb_id: tvdb)
-      tmdb -> Repo.get_by(MediaItem, tmdb_id: tmdb)
-      true -> nil
-    end
+    find_by_imdb(Map.get(ids, :imdb), type) ||
+      find_by_tvdb(Map.get(ids, :tvdb), type) ||
+      find_by_tmdb(Map.get(ids, :tmdb), type)
   end
+
+  defp find_by_imdb(nil, _type), do: nil
+
+  defp find_by_imdb(imdb, type) do
+    MediaItem |> where([m], m.imdb_id == ^imdb) |> external_id_match(type)
+  end
+
+  defp find_by_tvdb(nil, _type), do: nil
+
+  defp find_by_tvdb(tvdb, type) do
+    MediaItem |> where([m], m.tvdb_id == ^tvdb) |> external_id_match(type)
+  end
+
+  defp find_by_tmdb(nil, _type), do: nil
+
+  defp find_by_tmdb(tmdb, type) do
+    MediaItem |> where([m], m.tmdb_id == ^tmdb) |> external_id_match(type)
+  end
+
+  # `limit(1)` rather than a bare `Repo.one/1`: imdb_id carries no unique index,
+  # so a duplicate would raise Ecto.MultipleResultsError partway through a crawl
+  # and abort every remaining item.
+  defp external_id_match(query, nil), do: query |> limit(1) |> Repo.one()
+
+  defp external_id_match(query, type),
+    do: query |> where([m], m.type == ^type) |> limit(1) |> Repo.one()
 
   @doc """
   Finds an episode by show ID, season number, and episode number.
