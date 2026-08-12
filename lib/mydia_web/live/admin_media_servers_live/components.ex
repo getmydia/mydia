@@ -504,17 +504,21 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                             </div>
 
                             <div class="space-y-1">
+                              <%!-- These connections come straight from PlexOAuth.parse_connections/1
+                                    and are always atom-keyed. A future change that feeds this panel
+                                    from a persisted MediaServerConfig (string-keyed after a DB round
+                                    trip through JsonListType) would need to normalize first. --%>
                               <%= for conn <- @plex_discovery[:connections] || [] do %>
                                 <div class="flex items-center gap-2 text-xs">
                                   <span class="font-mono truncate flex-1">
-                                    {simplify_plex_url(conn[:uri] || conn["uri"])}
+                                    {simplify_plex_url(conn[:uri])}
                                   </span>
-                                  <%= if conn[:local] || conn["local"] do %>
+                                  <%= if conn[:local] do %>
                                     <span class="badge badge-xs badge-info gap-1">
                                       <.icon name="hero-home" class="w-3 h-3" /> local
                                     </span>
                                   <% end %>
-                                  <%= if conn[:relay] || conn["relay"] do %>
+                                  <%= if conn[:relay] do %>
                                     <span class="badge badge-xs badge-warning gap-1">
                                       <.icon name="hero-cloud" class="w-3 h-3" /> relay
                                     </span>
