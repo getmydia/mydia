@@ -5,9 +5,6 @@ defmodule MydiaWeb.AdminSystemLive.Index do
   alias Mydia.Health
   alias Mydia.Repo
   alias Mydia.Settings
-  alias Mydia.Streaming
-  alias Mydia.Playback
-  alias Mydia.Downloads
   alias Mydia.System
 
   # Capture Mix.env at compile time since Mix is not available in releases
@@ -18,8 +15,6 @@ defmodule MydiaWeb.AdminSystemLive.Index do
     if connected?(socket) do
       refresh_interval = Application.get_env(:mydia, :admin_refresh_interval, 5000)
       :timer.send_interval(refresh_interval, self(), :refresh_system_data)
-      Phoenix.PubSub.subscribe(Mydia.PubSub, "hls_sessions")
-      Phoenix.PubSub.subscribe(Mydia.PubSub, "transcodes")
     end
 
     {:ok,
@@ -27,8 +22,7 @@ defmodule MydiaWeb.AdminSystemLive.Index do
      |> assign(:page_title, "Configuration - Status")
      |> assign(:active_tab, :status)
      |> load_data()
-     |> load_system_data()
-     |> load_player_data()}
+     |> load_system_data()}
   end
 
   @impl true
@@ -51,60 +45,6 @@ defmodule MydiaWeb.AdminSystemLive.Index do
     {:noreply, load_system_data(socket)}
   end
 
-  @impl true
-  def handle_info(:session_started, socket) do
-    {:noreply, update(socket, :active_sessions, fn _ -> Streaming.list_active_sessions() end)}
-  end
-
-  @impl true
-  def handle_info({:job_updated, _id}, socket) do
-    job_preloads = [:user, media_file: [:media_item, episode: [:media_item]]]
-
-    active_jobs =
-      Downloads.list_transcode_jobs(
-        status: ["pending", "transcoding", "playing"],
-        preload: job_preloads
-      )
-
-    recent_activity = build_recent_activity(job_preloads)
-
-    {:noreply,
-     socket
-     |> assign(:active_jobs, active_jobs)
-     |> assign(:recent_activity, recent_activity)}
-  end
-
-  ## Status Tab Events
-
-  @impl true
-  def handle_event("delete_transcode_job", %{"id" => job_id}, socket) do
-    case Repo.get(Downloads.TranscodeJob, job_id) do
-      nil ->
-        {:noreply, put_flash(socket, :error, "Job not found")}
-
-      job ->
-        {:ok, _} = Downloads.cancel_transcode_job(job)
-        {:noreply, put_flash(socket, :info, "Transcode job deleted")}
-    end
-  end
-
-  @impl true
-  def handle_event("clear_recent_activity", _params, socket) do
-    # Scoped deliberately to completed transcode jobs. This button used to also
-    # call Playback.clear_recent_history/0, which was Repo.delete_all(Progress):
-    # a control labelled "clear activity" silently destroyed every user's resume
-    # position and watched state across the whole library.
-    Downloads.delete_all_completed_jobs()
-
-    job_preloads = [:user, media_file: [:media_item, episode: [:media_item]]]
-    recent_activity = build_recent_activity(job_preloads)
-
-    {:noreply,
-     socket
-     |> assign(:recent_activity, recent_activity)
-     |> put_flash(:info, "Cleared completed transcodes")}
-  end
-
   ## Private Helpers
 
   defp load_data(socket) do
@@ -125,48 +65,6 @@ defmodule MydiaWeb.AdminSystemLive.Index do
     socket
     |> assign(:database_info, get_database_info())
     |> assign(:system_info, get_system_info())
-  end
-
-  defp load_player_data(socket) do
-    job_preloads = [:user, media_file: [:media_item, episode: [:media_item]]]
-
-    active_jobs =
-      Downloads.list_transcode_jobs(
-        status: ["pending", "transcoding", "playing"],
-        preload: job_preloads
-      )
-
-    recent_activity = build_recent_activity(job_preloads)
-
-    socket
-    |> assign(:active_sessions, Streaming.list_active_sessions())
-    |> assign(:active_jobs, active_jobs)
-    |> assign(:recent_activity, recent_activity)
-  end
-
-  defp build_recent_activity(job_preloads) do
-    completed_jobs =
-      Downloads.list_transcode_jobs(
-        status: ["ready", "failed"],
-        limit: 15,
-        preload: job_preloads
-      )
-
-    watch_history = Playback.list_recent_history(limit: 15)
-
-    job_items =
-      Enum.map(completed_jobs, fn job ->
-        %{type: :transcode_job, data: job, timestamp: job.updated_at}
-      end)
-
-    history_items =
-      Enum.map(watch_history, fn progress ->
-        %{type: :watch_history, data: progress, timestamp: progress.last_watched_at}
-      end)
-
-    (job_items ++ history_items)
-    |> Enum.sort_by(& &1.timestamp, {:desc, DateTime})
-    |> Enum.take(20)
   end
 
   defp get_database_info do

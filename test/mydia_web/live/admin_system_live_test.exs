@@ -203,125 +203,13 @@ defmodule MydiaWeb.AdminSystemLiveTest do
     end
   end
 
-  describe "Activity panel with usernameless users" do
-    # OIDC-created users have a nil username (see User.role_changeset/2), so every
-    # activity card must fall back rather than assume a binary is present.
-    defp status_tab_assigns(overrides) do
-      Map.merge(
-        %{
-          system_info: %{
-            app_version: "1.2.3",
-            dev_mode: false,
-            elixir_version: "1.19.5",
-            memory_used: "128.0 MB",
-            uptime: "1h 2m"
-          },
-          database_info: %{
-            adapter: :sqlite,
-            path: "/config/mydia.db",
-            size: "4.0 MB",
-            exists: true,
-            health: :healthy
-          },
-          library_paths_count: 0,
-          download_clients_count: 0,
-          indexers_count: 0,
-          stuck_upgrades: 0,
-          active_sessions: [],
-          active_jobs: [],
-          recent_activity: []
-        },
-        overrides
-      )
-    end
-
-    test "renders an active streaming session for an OIDC user with no username" do
-      oidc_user = %Mydia.Accounts.User{
-        id: Ecto.UUID.generate(),
-        username: nil,
-        email: "oidc@example.com",
-        role: "admin"
-      }
-
-      session = %Mydia.Streaming.ActiveSession{
-        session_id: "sess-1",
-        user: oidc_user,
-        media_title: "Some Movie",
-        media_type: :movie,
-        episode_info: nil,
-        mode: :direct,
-        started_at: DateTime.utc_now(),
-        ready: true
-      }
-
-      html =
-        render_component(
-          &MydiaWeb.AdminSystemLive.Components.status_tab/1,
-          status_tab_assigns(%{active_sessions: [session]})
-        )
-
-      assert html =~ "Some Movie"
-
-      # Avatar initials fall back to the email rather than crashing on nil.
-      assert html =~ ~r{class="avatar placeholder".*?<span[^>]*>\s*oi\s*</span>}s
-    end
-
-    test "renders an active transcode job for an OIDC user with no username" do
-      oidc_user = %Mydia.Accounts.User{
-        id: Ecto.UUID.generate(),
-        username: nil,
-        email: "oidc@example.com",
-        role: "admin"
-      }
-
-      job = %{
-        id: Ecto.UUID.generate(),
-        type: "stream",
-        status: "transcoding",
-        progress: 0.42,
-        error: nil,
-        resolution: "1080p",
-        file_size: nil,
-        started_at: DateTime.utc_now(),
-        user_id: oidc_user.id,
-        user: oidc_user,
-        media_file: %{
-          episode: nil,
-          media_item: %{title: "Some Movie"},
-          relative_path: "Movies/some-movie.mkv",
-          path: nil
-        }
-      }
-
-      html =
-        render_component(
-          &MydiaWeb.AdminSystemLive.Components.status_tab/1,
-          status_tab_assigns(%{active_jobs: [job]})
-        )
-
-      assert html =~ "oidc@example.com"
-    end
-  end
-
-  describe "clear_recent_activity" do
+  describe "activity has moved to the dashboard" do
     setup do
       start_supervised!(Mydia.Indexers.Health)
       :ok
     end
 
-    test "clearing activity does not destroy playback progress", %{
-      conn: conn,
-      token: token,
-      user: user
-    } do
-      movie = Mydia.MediaFixtures.media_item_fixture(%{type: "movie", title: "Arrival"})
-
-      {:ok, _} =
-        Mydia.Playback.save_progress(user.id, [media_item_id: movie.id], %{
-          position_seconds: 300,
-          duration_seconds: 6900
-        })
-
+    test "the status tab no longer renders the activity panels", %{conn: conn, token: token} do
       conn =
         conn
         |> Plug.Test.init_test_session(%{})
@@ -330,11 +218,15 @@ defmodule MydiaWeb.AdminSystemLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/admin/config/status")
 
-      view
-      |> element("button[phx-click='clear_recent_activity']")
-      |> render_click()
+      refute has_element?(view, "button[phx-click='clear_recent_activity']")
+      refute has_element?(view, "button[phx-click='delete_transcode_job']")
 
-      assert Mydia.Playback.get_progress(user.id, media_item_id: movie.id)
+      # Empty-state Activity panels omit the buttons above, so also assert the
+      # section itself is gone (always rendered today via the Activity divider).
+      refute has_element?(view, "div.divider", "Activity")
+
+      # The tab itself must still render; only the activity section is gone.
+      assert has_element?(view, "a[href='/admin/dashboard']")
     end
   end
 
