@@ -54,4 +54,18 @@ defmodule Mydia.Settings.SubtitleProviderConfigsTest do
 
     assert priorities == Enum.sort(priorities, :desc)
   end
+
+  test "providers of equal priority are ordered alphabetically" do
+    for name <- ["Zeta", "Alpha", "Mid"] do
+      SubtitleProviderFixtures.config_fixture(%{name: name, type: :relay, priority: 5})
+    end
+
+    names =
+      [enabled: true]
+      |> ServiceConfigs.list_subtitle_provider_configs()
+      |> Enum.filter(&(&1.priority == 5))
+      |> Enum.map(& &1.name)
+
+    assert names == ["Alpha", "Mid", "Zeta"]
+  end
 end

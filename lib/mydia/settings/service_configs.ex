@@ -186,7 +186,9 @@ defmodule Mydia.Settings.ServiceConfigs do
     |> RC.merge_with_runtime_config(&RC.get_runtime_subtitle_providers/0, :name)
     |> RC.merge_with_runtime_config(&ProviderRegistry.default_configs/0, :type)
     |> maybe_filter_enabled(opts[:enabled])
-    |> Enum.sort_by(&{&1.priority, &1.name}, :desc)
+    # Highest priority first, then alphabetical. Negating the priority keeps the
+    # name ascending, which a plain :desc on the whole tuple would reverse.
+    |> Enum.sort_by(&{-(&1.priority || 0), &1.name})
   end
 
   defp maybe_filter_enabled(configs, true), do: Enum.filter(configs, & &1.enabled)
