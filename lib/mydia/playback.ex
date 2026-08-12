@@ -457,6 +457,14 @@ defmodule Mydia.Playback do
   end
 
   @doc """
+  Returns the user's Continue Watching entries, most recent first.
+
+  See `Mydia.Playback.OnDeck.list/2` for the rule set and options.
+  """
+  @spec on_deck(binary(), keyword()) :: [Mydia.Playback.OnDeckEntry.t()]
+  defdelegate on_deck(user_id, opts \\ []), to: Mydia.Playback.OnDeck, as: :list
+
+  @doc """
   Clears recent watch history for all users.
   """
   def clear_recent_history do
