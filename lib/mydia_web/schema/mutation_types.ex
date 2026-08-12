@@ -10,6 +10,7 @@ defmodule MydiaWeb.Schema.MutationTypes do
   alias MydiaWeb.Schema.Resolvers.ApiKeyResolver
   alias MydiaWeb.Schema.Resolvers.StreamingResolver
   alias MydiaWeb.Schema.Resolvers.DownloadResolver
+  alias MydiaWeb.Schema.Resolvers.SubtitleSearchResolver
 
   object :playback_mutations do
     @desc "Update playback progress for a movie"
@@ -197,6 +198,15 @@ defmodule MydiaWeb.Schema.MutationTypes do
     field :cancel_download_job, :cancel_download_result do
       arg(:job_id, non_null(:id), description: "The transcode job ID")
       resolve(&DownloadResolver.cancel_job/3)
+    end
+  end
+
+  object :subtitle_mutations do
+    @desc "Download a subtitle candidate returned by subtitleSearch"
+    field :download_subtitle, non_null(:subtitle_track) do
+      arg(:media_file_id, non_null(:id))
+      arg(:token, non_null(:string))
+      resolve(&SubtitleSearchResolver.download/3)
     end
   end
 end

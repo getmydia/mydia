@@ -75,6 +75,24 @@ defmodule Mydia.Subtitles do
   end
 
   @doc """
+  Searches providers for a media file and returns scored candidates plus
+  per-provider status.
+
+  Unlike `search_subtitles/2` this never downloads and always reports which
+  providers answered, which is what the player's results header shows.
+  """
+  @spec search_candidates(binary(), String.t()) ::
+          {:ok, %{results: [map()], providers: [map()]}} | {:error, term()}
+  def search_candidates(media_file_id, languages) do
+    with {:ok, media_file} <- fetch_media_file_with_associations(media_file_id),
+         {:ok, search_params} <- build_search_params(media_file, languages),
+         {:ok, %{results: results, providers: providers}} <-
+           Mydia.Subtitles.ProviderChain.search(search_params) do
+      {:ok, %{results: score_results(results, search_params), providers: providers}}
+    end
+  end
+
+  @doc """
   Downloads a subtitle file.
 
   ## Parameters

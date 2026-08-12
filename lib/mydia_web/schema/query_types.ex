@@ -11,6 +11,7 @@ defmodule MydiaWeb.Schema.QueryTypes do
   alias MydiaWeb.Schema.Resolvers.ApiKeyResolver
   alias MydiaWeb.Schema.Resolvers.StreamingResolver
   alias MydiaWeb.Schema.Resolvers.CollectionResolver
+  alias MydiaWeb.Schema.Resolvers.SubtitleSearchResolver
 
   # Node interface for global node resolution with hierarchical navigation
   interface :node do
@@ -273,6 +274,18 @@ defmodule MydiaWeb.Schema.QueryTypes do
       arg(:collection_id, non_null(:id))
       arg(:first, :integer, default_value: 50)
       resolve(&CollectionResolver.collection_items/3)
+    end
+  end
+
+  object :subtitle_queries do
+    @desc "Search every enabled subtitle provider for a media file"
+    field :subtitle_search, non_null(:subtitle_search_payload) do
+      arg(:media_file_id, non_null(:id))
+
+      @desc "ISO 639-1 codes, for example [\"en\", \"es\"]"
+      arg(:languages, non_null(list_of(non_null(:string))))
+
+      resolve(&SubtitleSearchResolver.search/3)
     end
   end
 end

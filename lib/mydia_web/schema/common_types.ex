@@ -520,6 +520,45 @@ defmodule MydiaWeb.Schema.CommonTypes do
     end
   end
 
+  @desc "A subtitle available from a provider, not yet downloaded"
+  object :subtitle_candidate do
+    @desc "Opaque signed handle. Pass to downloadSubtitle. Valid for 15 minutes"
+    field :token, non_null(:string)
+
+    @desc "ISO 639-1 language code"
+    field :language, non_null(:string)
+
+    @desc "Provider's file name for this subtitle, usually the release it matches"
+    field :release_name, :string
+
+    field :format, non_null(:string)
+    field :rating, :float
+    field :download_count, :integer
+    field :hearing_impaired, non_null(:boolean)
+
+    @desc "Whether the provider matched this subtitle by media file hash, the strongest signal"
+    field :hash_match, non_null(:boolean)
+
+    field :score, non_null(:integer)
+    field :provider_name, non_null(:string)
+  end
+
+  @desc "Outcome of consulting one subtitle provider"
+  object :subtitle_provider_status do
+    field :name, non_null(:string)
+    field :quota_remaining, :integer
+    field :quota_total, :integer
+
+    @desc "Null when the provider answered. A message when it did not"
+    field :error, :string
+  end
+
+  @desc "Results of a subtitle search across every enabled provider"
+  object :subtitle_search_payload do
+    field :results, non_null(list_of(non_null(:subtitle_candidate)))
+    field :providers, non_null(list_of(non_null(:subtitle_provider_status)))
+  end
+
   defp metadata_field(%{metadata: %Mydia.Library.Structs.FileMetadata{} = metadata}, key),
     do: Map.get(metadata, key)
 
