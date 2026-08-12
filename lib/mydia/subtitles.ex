@@ -68,11 +68,33 @@ defmodule Mydia.Subtitles do
 
     with {:ok, media_file} <- fetch_media_file_with_associations(media_file_id),
          {:ok, search_params} <- build_search_params(media_file, languages),
-         {:ok, raw_results, _providers} <- perform_search(search_params),
+         {:ok, raw_results, providers} <- perform_search(search_params),
+         :ok <- ensure_a_provider_answered(raw_results, providers),
          scored_results <- score_results(raw_results, search_params) do
       handle_search_results(scored_results, media_file_id, auto_download)
     end
   end
+
+  # A search where every provider failed is not the same as a search that found
+  # nothing, and the difference used to be visible: before the provider chain,
+  # a failure returned {:error, {:search_failed, reason}} and the LiveView
+  # flashed it. Returning {:ok, []} instead renders an empty results table,
+  # telling the user no subtitles exist for their file when the truth is that
+  # nothing was reachable, or that a quota ran out and they could fix it by
+  # configuring their own provider.
+  #
+  # A partial failure stays a success on purpose: results that did arrive are
+  # worth more than the failure notice, and the per-provider statuses remain
+  # available through `search_candidates/2` for a surface that wants both.
+  defp ensure_a_provider_answered([], [_ | _] = providers) do
+    if Enum.all?(providers, & &1.error) do
+      {:error, {:all_providers_failed, Enum.map(providers, &{&1.name, &1.error})}}
+    else
+      :ok
+    end
+  end
+
+  defp ensure_a_provider_answered(_results, _providers), do: :ok
 
   @doc """
   Searches providers for a media file and returns scored candidates plus
