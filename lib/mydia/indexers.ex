@@ -29,6 +29,8 @@ defmodule Mydia.Indexers do
   alias Mydia.Indexers.ReleaseRanker
   alias Mydia.Indexers.CardigannDefinition
   alias Mydia.Indexers.CardigannAuth
+  alias Mydia.Indexers.CardigannDownload
+  alias Mydia.Indexers.CardigannParser
   alias Mydia.Settings
   alias Mydia.Repo
   import Ecto.Query
@@ -710,6 +712,51 @@ defmodule Mydia.Indexers do
         }
     end
   end
+
+  @doc """
+  Resolves a download URL through a Cardigann indexer's `download:` block.
+
+  Definitions for sites that do not serve a `.torrent` at the row's link
+  describe how to derive the real download instead - a metadata request, an
+  infohash to build a magnet from, or a selector pointing at the true link.
+  Grabbing such an indexer without this step fetches a landing page and fails.
+
+  Returns `:not_applicable` when the indexer is unknown, is not a Cardigann
+  definition, or has no `download:` block to act on, in which case the caller
+  should fetch the URL directly as before.
+
+  ## Examples
+
+      iex> resolve_cardigann_download("MagnetDownload", "https://site/info/123")
+      {:ok, {:magnet, "magnet:?xt=urn:btih:..."}}
+
+      iex> resolve_cardigann_download("SomeTorrentSite", "https://site/dl/123")
+      :not_applicable
+  """
+  @spec resolve_cardigann_download(binary() | nil, binary()) ::
+          {:ok, {:magnet, binary()} | {:link, binary()}} | {:error, term()} | :not_applicable
+  def resolve_cardigann_download(nil, _download_url), do: :not_applicable
+
+  def resolve_cardigann_download(indexer_name, download_url) when is_binary(indexer_name) do
+    with %CardigannDefinition{} = definition <- get_cardigann_definition_by_name(indexer_name),
+         {:ok, parsed} <- CardigannParser.parse_definition(definition.definition) do
+      CardigannDownload.resolve(parsed, download_url, %{
+        cookies: get_cardigann_auth_cookies(indexer_name)
+      })
+    else
+      nil ->
+        :not_applicable
+
+      {:error, reason} ->
+        Logger.warning(
+          "Could not parse Cardigann definition for #{indexer_name}: #{inspect(reason)}"
+        )
+
+        :not_applicable
+    end
+  end
+
+  def resolve_cardigann_download(_indexer_name, _download_url), do: :not_applicable
 
   @doc """
   Enables a Cardigann indexer definition.

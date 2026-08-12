@@ -14,6 +14,7 @@ defmodule Mydia.Downloads.Queue do
   alias Mydia.Downloads.Structs.DownloadMetadata
   alias Mydia.Downloads.Structs.ExternalTorrent
   alias Mydia.Downloads.TorrentHash
+  alias Mydia.Indexers
   alias Mydia.Indexers.SearchResult
   alias Mydia.Indexers.Structs.SearchResultMetadata
   alias Mydia.Settings
@@ -1294,7 +1295,7 @@ defmodule Mydia.Downloads.Queue do
         # For HTTP(S) URLs, download the torrent file content
         # This avoids redirect issues that download clients can't handle
         String.starts_with?(url, "http://") or String.starts_with?(url, "https://") ->
-          download_torrent_file(url, indexer_name)
+          resolve_through_indexer_definition(url, indexer_name)
 
         # Unknown format, try as URL
         true ->
@@ -1309,6 +1310,38 @@ defmodule Mydia.Downloads.Queue do
     case result do
       {:ok, {:magnet, magnet}} -> {:ok, {:magnet, TorrentHash.ensure_trackers(magnet)}}
       other -> other
+    end
+  end
+
+  # A Cardigann definition can describe how to *derive* a download rather than
+  # serve one. Public DHT crawlers in particular hand out a landing page as the
+  # row's link and assemble the magnet in client-side JavaScript, so fetching
+  # that link returns HTML with no magnet in it to scrape. Consulting the
+  # definition's `download:` block first is the only way to grab such an
+  # indexer at all.
+  #
+  # A definition that has no block, or whose block fails, falls back to fetching
+  # the link directly, which is what every other indexer needs.
+  defp resolve_through_indexer_definition(url, indexer_name) do
+    case Indexers.resolve_cardigann_download(indexer_name, url) do
+      {:ok, {:magnet, magnet}} ->
+        Logger.info("Resolved magnet via #{indexer_name} download block")
+        {:ok, {:magnet, magnet}}
+
+      {:ok, {:link, link}} ->
+        Logger.info("Resolved download link via #{indexer_name} download block")
+        download_torrent_file(link, indexer_name)
+
+      :not_applicable ->
+        download_torrent_file(url, indexer_name)
+
+      {:error, reason} ->
+        Logger.warning(
+          "Download block for #{indexer_name} failed (#{inspect(reason)}), " <>
+            "falling back to fetching the link directly"
+        )
+
+        download_torrent_file(url, indexer_name)
     end
   end
 

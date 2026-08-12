@@ -301,12 +301,46 @@ defmodule Mydia.Indexers.CardigannParser do
       download ->
         %{
           selectors: parse_download_selectors(download),
-          before: Map.get(download, "before"),
+          before: parse_download_before(download),
           method: Map.get(download, "method", "get"),
-          infohash: normalize_selector(Map.get(download, "infohash", ""))
+          infohash: parse_download_infohash(download)
         }
     end
   end
+
+  # `infohash` holds two nested selectors rather than being one itself, so
+  # running it through normalize_selector/1 silently drops `hash` and `title` -
+  # exactly the fields the grab path needs to build a magnet.
+  defp parse_download_infohash(download) do
+    case Map.get(download, "infohash") do
+      infohash when is_map(infohash) ->
+        %{
+          usebeforeresponse: Map.get(infohash, "usebeforeresponse", false) == true,
+          hash: parse_optional_selector(Map.get(infohash, "hash")),
+          title: parse_optional_selector(Map.get(infohash, "title"))
+        }
+
+      _ ->
+        nil
+    end
+  end
+
+  defp parse_download_before(download) do
+    case Map.get(download, "before") do
+      before when is_map(before) ->
+        %{
+          path: Map.get(before, "path", ""),
+          method: Map.get(before, "method", "get"),
+          inputs: Map.get(before, "inputs", %{})
+        }
+
+      _ ->
+        nil
+    end
+  end
+
+  defp parse_optional_selector(nil), do: nil
+  defp parse_optional_selector(selector), do: normalize_selector(selector)
 
   defp parse_download_selectors(download) do
     case Map.get(download, "selectors") do

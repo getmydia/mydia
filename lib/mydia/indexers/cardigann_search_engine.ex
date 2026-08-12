@@ -672,6 +672,16 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       retry: false
     ]
 
+    # Cardigann selectors run against the response *text*, so a caller working
+    # with raw selectors (the `download:` block) has to opt out of Req's
+    # automatic JSON decoding - otherwise a JSON content-type silently turns the
+    # body into a map and every selector matches nothing.
+    base_opts =
+      case Map.get(request_params, :decode_body) do
+        false -> Keyword.put(base_opts, :decode_body, false)
+        _ -> base_opts
+      end
+
     # Add query params for GET, body for POST
     opts_with_params =
       case request_params.method do
