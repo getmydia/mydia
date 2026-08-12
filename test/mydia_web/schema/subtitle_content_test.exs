@@ -24,6 +24,22 @@ defmodule MydiaWeb.Schema.SubtitleContentTest do
   }
   """
 
+  # `externalSubtitles` is a separate field from `subtitles` and resolves through
+  # its own path, so a track that works in one can be broken in the other.
+  @external_subtitles_query """
+  query Movie($id: ID!) {
+    movie(id: $id) {
+      files {
+        externalSubtitles {
+          trackId
+          deliverable
+          content(format: VTT)
+        }
+      }
+    }
+  }
+  """
+
   @srt """
   1
   00:00:01,000 --> 00:00:04,000
@@ -72,6 +88,24 @@ defmodule MydiaWeb.Schema.SubtitleContentTest do
       assert track["deliverable"] == true
       assert String.starts_with?(track["content"], "WEBVTT")
       assert track["content"] =~ "00:00:01.000 --> 00:00:04.000"
+    end
+
+    test "returns converted content via the externalSubtitles field too", %{
+      conn: conn,
+      movie: movie
+    } do
+      conn =
+        post(conn, "/api/graphql", %{
+          "query" => @external_subtitles_query,
+          "variables" => %{"id" => movie.id}
+        })
+
+      %{"data" => %{"movie" => %{"files" => files}}} = json_response(conn, 200)
+      tracks = Enum.flat_map(files, & &1["externalSubtitles"])
+      assert [track] = tracks
+
+      assert track["deliverable"] == true
+      assert String.starts_with?(track["content"], "WEBVTT")
     end
   end
 
