@@ -141,6 +141,35 @@ defmodule Mydia.Subtitles.Provider.OpenSubtitlesTest do
       assert result.file_id == "9988"
     end
 
+    # Regression test for build_query/1: a moviehash search without its
+    # companion moviebytesize is the exact bug a prior fix round found and
+    # closed on the relay adapter's hash matching (see
+    # MetadataRelay.OpenSubtitles.Handler.build_search_params/1,
+    # handler.ex:129-136), so this adapter must send both together, plus the
+    # media_type -> type rename for episode/movie filtering.
+    test "sends moviebytesize alongside moviehash, and maps media_type to type",
+         %{bypass: bypass, provider: provider} do
+      stub_login(bypass)
+
+      Bypass.expect_once(bypass, "GET", "/api/v1/subtitles", fn conn ->
+        assert conn.query_params["moviehash"] == "8e245d9679d31e12"
+        assert conn.query_params["moviebytesize"] == "742086656"
+        assert conn.query_params["type"] == "episode"
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(%{"data" => []}))
+      end)
+
+      assert {:ok, []} =
+               OpenSubtitles.search(provider, %{
+                 languages: "en",
+                 file_hash: "8e245d9679d31e12",
+                 file_size: 742_086_656,
+                 media_type: "episode"
+               })
+    end
+
     test "surfaces a failed login as :authentication_failed", %{
       bypass: bypass,
       provider: provider
@@ -229,29 +258,78 @@ defmodule Mydia.Subtitles.Provider.OpenSubtitlesTest do
     end
   end
 
-  test "quota_info reads the user endpoint", %{bypass: bypass, provider: provider} do
-    stub_login(bypass)
+  describe "quota_info/1" do
+    test "reads the user endpoint", %{bypass: bypass, provider: provider} do
+      stub_login(bypass)
 
-    Bypass.expect_once(bypass, "GET", "/api/v1/infos/user", fn conn ->
-      assert ["Bearer jwt-token"] = Plug.Conn.get_req_header(conn, "authorization")
+      Bypass.expect_once(bypass, "GET", "/api/v1/infos/user", fn conn ->
+        assert ["Bearer jwt-token"] = Plug.Conn.get_req_header(conn, "authorization")
 
-      conn
-      |> Plug.Conn.put_resp_content_type("application/json")
-      |> Plug.Conn.resp(
-        200,
-        Jason.encode!(%{
-          "data" => %{
-            "downloads_count" => 8,
-            "allowed_downloads" => 200,
-            "remaining_downloads" => 192,
-            "vip" => false
-          }
-        })
-      )
-    end)
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          200,
+          Jason.encode!(%{
+            "data" => %{
+              "downloads_count" => 8,
+              "allowed_downloads" => 200,
+              "remaining_downloads" => 192,
+              "vip" => false
+            }
+          })
+        )
+      end)
 
-    assert {:ok, %QuotaInfo{remaining: 192, total: 200, vip: false}} =
-             OpenSubtitles.quota_info(provider)
+      assert {:ok, %QuotaInfo{remaining: 192, total: 200, vip: false}} =
+               OpenSubtitles.quota_info(provider)
+    end
+
+    # GET /api/v1/infos/user has no reference implementation anywhere in
+    # metadata-relay/, so its shape is unverified. This test proves an
+    # unwrapped response (missing the assumed "data" envelope) fails loudly
+    # instead of the bare `with` (no `else`) returning the unmatched
+    # {:ok, raw_body} verbatim, which would violate the
+    # {:ok, quota_info()} | {:error, term()} contract in provider.ex:285-286.
+    test "fails loudly instead of returning the raw body when the \"data\" envelope is missing",
+         %{bypass: bypass, provider: provider} do
+      stub_login(bypass)
+
+      Bypass.expect_once(bypass, "GET", "/api/v1/infos/user", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          200,
+          Jason.encode!(%{"downloads_count" => 8, "allowed_downloads" => 200})
+        )
+      end)
+
+      assert {:error, {:invalid_quota_response, _unexpected}} =
+               OpenSubtitles.quota_info(provider)
+    end
+
+    # This is the failure mode that actually matters: a wrong-but-plausible
+    # field name (or wrong type) must not silently degrade into a
+    # well-formed %QuotaInfo{remaining: 0, total: 0}, which Task 7 would
+    # display to a user as an exhausted or broken account when the truth is
+    # simply "the shape is unknown".
+    test "fails loudly instead of reporting a false 0-of-0 quota on a malformed data map",
+         %{bypass: bypass, provider: provider} do
+      stub_login(bypass)
+
+      Bypass.expect_once(bypass, "GET", "/api/v1/infos/user", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          200,
+          Jason.encode!(%{
+            "data" => %{"used" => 8, "allowed_downloads" => "200", "vip" => false}
+          })
+        )
+      end)
+
+      assert {:error, {:invalid_quota_response, _unexpected}} =
+               OpenSubtitles.quota_info(provider)
+    end
   end
 
   test "validate_config rejects missing credentials" do

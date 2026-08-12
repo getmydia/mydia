@@ -70,20 +70,12 @@ defmodule Mydia.Subtitles.Provider.OpenSubtitles do
   @impl true
   def quota_info(provider) do
     with {:ok, token} <- login(provider),
-         {:ok, %{"data" => data}} <- request(provider, token, :get, "/api/v1/infos/user") do
-      used = data["downloads_count"] || 0
-      total = data["allowed_downloads"] || 0
-      remaining = data["remaining_downloads"] || max(total - used, 0)
-
-      {:ok,
-       %QuotaInfo{
-         type: :limited,
-         provider_type: :opensubtitles,
-         remaining: remaining,
-         total: total,
-         reset_at: nil,
-         vip: data["vip"] || false
-       }}
+         {:ok, %{"data" => data}} <- request(provider, token, :get, "/api/v1/infos/user"),
+         {:ok, quota} <- extract_quota(data) do
+      {:ok, quota}
+    else
+      {:ok, unexpected} -> {:error, {:invalid_quota_response, unexpected}}
+      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -175,17 +167,66 @@ defmodule Mydia.Subtitles.Provider.OpenSubtitles do
 
   defp user_agent, do: Mydia.Metadata.Provider.HTTP.user_agent()
 
+  # GET /api/v1/infos/user has no reference implementation anywhere in
+  # metadata-relay/ (client.ex, handler.ex, and auth.ex never call it), so
+  # its wire format is unverified against this repo's known-working code,
+  # unlike search/download/login above. Requiring downloads_count and
+  # allowed_downloads to both be present *and* integers means a wrong
+  # guess fails loudly as {:error, {:invalid_quota_response, data}} instead
+  # of silently reporting a well-formed but meaningless
+  # %QuotaInfo{remaining: 0, total: 0} -- which would read to a user as an
+  # exhausted or broken account when the truth is just "unknown". vip is
+  # the only genuinely optional field here, so it alone keeps a default.
+  defp extract_quota(%{"downloads_count" => used, "allowed_downloads" => total} = data)
+       when is_integer(used) and is_integer(total) do
+    remaining =
+      case data["remaining_downloads"] do
+        remaining when is_integer(remaining) -> remaining
+        _ -> max(total - used, 0)
+      end
+
+    {:ok,
+     %QuotaInfo{
+       type: :limited,
+       provider_type: :opensubtitles,
+       remaining: remaining,
+       total: total,
+       reset_at: nil,
+       vip: data["vip"] || false
+     }}
+  end
+
+  defp extract_quota(data), do: {:error, {:invalid_quota_response, data}}
+
   defp build_query(params) do
     params
     |> Map.take([:languages, :imdb_id, :tmdb_id, :season_number, :episode_number, :query])
     |> Map.new(fn {key, value} -> {Atom.to_string(key), value} end)
-    |> then(fn query ->
-      case params do
-        %{file_hash: hash} when is_binary(hash) -> Map.put(query, "moviehash", hash)
-        _ -> query
-      end
-    end)
+    |> maybe_put_query(params, :file_hash, "moviehash")
+    |> maybe_put_query(params, :file_size, "moviebytesize")
+    |> maybe_put_media_type(params)
   end
+
+  # Mirrors MetadataRelay.OpenSubtitles.Handler.build_search_params/1's
+  # file_hash -> moviehash and file_size -> moviebytesize renames. A
+  # moviehash search without its companion moviebytesize is the exact bug a
+  # prior fix round found and closed on the relay adapter's hash matching,
+  # so both must travel together here too.
+  defp maybe_put_query(query, params, key, param_name) do
+    case Map.get(params, key) do
+      nil -> query
+      "" -> query
+      value -> Map.put(query, param_name, value)
+    end
+  end
+
+  # handler.ex only forwards media_type when it is exactly "movie" or
+  # "episode" -- any other value is silently dropped rather than passed
+  # through as-is, so mirror that instead of forwarding arbitrary strings.
+  defp maybe_put_media_type(query, %{media_type: type}) when type in ["movie", "episode"],
+    do: Map.put(query, "type", type)
+
+  defp maybe_put_media_type(query, _params), do: query
 
   # OpenSubtitles nests the downloadable file inside each search entry's
   # attributes. Mirrors MetadataRelay.OpenSubtitles.Handler.transform_subtitle/1
