@@ -24,7 +24,9 @@ defmodule Mydia.Plugins.Connections do
   alias Mydia.Repo
   alias Mydia.Settings
 
-  @statuses ~w(connected error)
+  @statuses ~w(connected error disabled)
+  @scopes ~w(user instance)
+  @auth_kinds ~w(header query bearer)
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
@@ -39,6 +41,12 @@ defmodule Mydia.Plugins.Connections do
     field :external_user_id, :string
     field :external_username, :string
     field :meta, Mydia.Settings.JsonMapType, default: %{}
+    field :scope, :string, default: "user"
+    field :label, :string, default: ""
+    field :base_urls, Mydia.Settings.JsonListType, default: []
+    field :resolved_base_url, :string
+    field :auth_kind, :string, default: "bearer"
+    field :auth_key, :string
 
     belongs_to :user, Mydia.Accounts.User
 
@@ -56,13 +64,114 @@ defmodule Mydia.Plugins.Connections do
       :access_token,
       :external_user_id,
       :external_username,
-      :meta
+      :meta,
+      :scope,
+      :label,
+      :base_urls,
+      :resolved_base_url,
+      :auth_kind,
+      :auth_key
     ])
-    |> validate_required([:plugin_config_id, :plugin_slug, :user_id, :access_token])
+    |> validate_required([:plugin_config_id, :plugin_slug, :access_token])
     |> validate_inclusion(:status, @statuses)
-    |> unique_constraint([:plugin_slug, :user_id])
+    |> validate_inclusion(:scope, @scopes)
+    |> validate_inclusion(:auth_kind, @auth_kinds)
+    |> validate_scope()
+    |> unique_constraint([:plugin_slug, :user_id, :label],
+      name: :plugin_user_connections_user_label_index
+    )
+    |> unique_constraint([:plugin_slug, :label],
+      name: :plugin_user_connections_instance_label_index
+    )
     |> foreign_key_constraint(:plugin_config_id)
     |> foreign_key_constraint(:user_id)
+  end
+
+  # `user_id` is required for a user-scoped connection and forbidden for an
+  # instance-scoped one. Enforcing both directions is what keeps the two partial
+  # unique indexes meaningful: a stray user_id on an instance row would move it
+  # into the other index and let a duplicate label through.
+  defp validate_scope(changeset) do
+    case get_field(changeset, :scope) do
+      "instance" ->
+        if get_field(changeset, :user_id) do
+          add_error(changeset, :user_id, "must be nil for an instance-scoped connection")
+        else
+          changeset
+        end
+
+      _ ->
+        validate_required(changeset, [:user_id])
+    end
+  end
+
+  @doc """
+  Creates or updates a connection, keyed by `{slug, user_id, label}`.
+
+  An instance-scoped connection passes no `:user_id`. This is the write path for
+  both the admin form and the guest's `connection-upsert`.
+  """
+  @spec upsert(String.t(), map()) :: {:ok, t()} | {:error, term()}
+  def upsert(slug, attrs) when is_binary(slug) and is_map(attrs) do
+    case Settings.get_plugin_config_by_slug(slug) do
+      nil ->
+        {:error, :not_installed}
+
+      %{id: config_id} ->
+        scope = Map.get(attrs, :scope, "user")
+        label = Map.get(attrs, :label, "")
+        user_id = Map.get(attrs, :user_id)
+
+        base =
+          attrs
+          |> Map.merge(%{
+            plugin_slug: slug,
+            plugin_config_id: config_id,
+            scope: scope,
+            label: label
+          })
+
+        (get_by_label(slug, user_id, label) || %Connections{})
+        |> changeset(base)
+        |> Repo.insert_or_update()
+    end
+  end
+
+  @doc "Fetches the connection keyed by `{slug, user_id, label}`, or nil."
+  @spec get_by_label(String.t(), binary() | nil, String.t()) :: t() | nil
+  def get_by_label(slug, nil, label) when is_binary(slug) do
+    Repo.one(
+      from c in Connections,
+        where: c.plugin_slug == ^slug and is_nil(c.user_id) and c.label == ^label
+    )
+  end
+
+  def get_by_label(slug, user_id, label) when is_binary(slug) do
+    Repo.one(
+      from c in Connections,
+        where: c.plugin_slug == ^slug and c.user_id == ^user_id and c.label == ^label
+    )
+  end
+
+  @doc "Lists a plugin's instance-scoped connections, oldest first."
+  @spec list_instance_for_plugin(String.t()) :: [t()]
+  def list_instance_for_plugin(slug) when is_binary(slug) do
+    Repo.all(
+      from c in Connections,
+        where: c.plugin_slug == ^slug and c.scope == "instance",
+        order_by: c.inserted_at
+    )
+  end
+
+  @doc """
+  Caches the endpoint candidate that last worked, or clears it with `nil` so the
+  next request re-probes.
+  """
+  @spec set_resolved_base_url(t(), String.t() | nil) :: {:ok, t()} | {:error, term()}
+  def set_resolved_base_url(%Connections{} = conn, url) do
+    conn
+    |> Ecto.Changeset.change(resolved_base_url: url)
+    |> Repo.update()
   end
 
   @doc """
@@ -123,7 +232,7 @@ defmodule Mydia.Plugins.Connections do
   def connected_user_ids(slug) when is_binary(slug) do
     Repo.all(
       from c in Connections,
-        where: c.plugin_slug == ^slug and c.status == "connected",
+        where: c.plugin_slug == ^slug and c.status == "connected" and not is_nil(c.user_id),
         select: c.user_id
     )
   end
