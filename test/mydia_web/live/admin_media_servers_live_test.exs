@@ -172,6 +172,8 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
 
+      assert has_element?(view, "[data-test=last-sync-run]")
+      assert render(view) =~ "Synced 2 in, 1 out"
       refute has_element?(view, "#sync-skip-#{config.id}")
       refute has_element?(view, "#sync-error-#{config.id}")
     end
