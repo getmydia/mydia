@@ -220,6 +220,14 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
             {if(@plugin.enabled, do: "Disable", else: "Enable")}
           </.button>
           <.settings_button plugin={@plugin} />
+          <.link
+            :if={Map.get(@plugin, :has_endpoints, false)}
+            id={"connections-#{@plugin.slug}"}
+            navigate={~p"/admin/plugins/#{@plugin.slug}"}
+            class="btn btn-ghost btn-sm join-item"
+          >
+            Connections
+          </.link>
           <.button
             id={"details-#{@plugin.slug}"}
             class="btn btn-ghost btn-sm join-item"

@@ -153,4 +153,35 @@ defmodule MydiaWeb.AdminPluginsLive.ConnectionsTest do
     assert render(view) =~ "http://10.0.0.6:8096"
     refute render(view) =~ "http://old.test"
   end
+
+  describe "reaching the page from the plugin index" do
+    test "an endpoint plugin's row links to its detail page", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/config/plugins")
+
+      assert has_element?(view, ~s{#connections-srv[href="/admin/plugins/srv"]})
+    end
+
+    test "a plugin with no service endpoint gets no link", %{conn: conn} do
+      {:ok, _} =
+        Settings.create_plugin_config(%{
+          slug: "plain",
+          name: "Plain",
+          version: "1.0.0",
+          source_url: "test",
+          manifest: %{
+            "slug" => "plain",
+            "name" => "Plain",
+            "version" => "1.0.0",
+            "capabilities" => %{"events:subscribe" => ["media_item.added"]}
+          },
+          granted_capabilities: %{"events:subscribe" => ["media_item.added"]},
+          enabled: true
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/plugins")
+
+      assert has_element?(view, "#connections-srv")
+      refute has_element?(view, "#connections-plain")
+    end
+  end
 end

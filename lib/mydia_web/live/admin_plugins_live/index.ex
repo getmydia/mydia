@@ -379,10 +379,20 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
       needs_reapproval: Plugins.needs_reapproval?(config),
       pending_approval: not config.enabled and capabilities != %{},
       has_settings: settings_schema != [],
+      has_endpoints: endpoint_plugin?(config),
       # Once approved, the granted net:http reflects the operator-configured host.
       network_hosts: Map.get(granted, "net:http", Map.get(capabilities, "net:http", []))
     }
   end
+
+  # Only a plugin declaring an operator-configured endpoint has anything to show
+  # on the detail page, so the link is gated rather than rendered for every row.
+  defp endpoint_plugin?(%{manifest: %{"connection" => %{"type" => "service_endpoint"} = conn}})
+       when is_map(conn) do
+    Map.get(conn, "scope", "instance") == "instance"
+  end
+
+  defp endpoint_plugin?(_config), do: false
 
   defp capabilities_of(%{manifest: %{"capabilities" => caps}}) when is_map(caps), do: caps
   defp capabilities_of(%{granted_capabilities: caps}) when is_map(caps), do: caps
