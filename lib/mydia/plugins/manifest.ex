@@ -132,9 +132,9 @@ defmodule Mydia.Plugins.Manifest do
   @available_classes ~w(events:subscribe net:http data:read state:kv users:connections schedule:interval surfaces:write)
 
   # The value vocabulary for `surfaces:write` — the curated write surfaces a
-  # plugin may target. Only `playback:watched` (the ensure-watched host function)
-  # is honored in this version.
-  @write_surfaces ~w(playback:watched)
+  # plugin may target. `playback:watched` (ensure-watched) and `connections`
+  # (connection-upsert) are honored in this version.
+  @write_surfaces ~w(playback:watched connections)
 
   # The lowest interval (minutes) a scheduled plugin may request — a floor so a
   # misconfigured manifest can't tick the host to death.

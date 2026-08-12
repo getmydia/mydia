@@ -634,4 +634,116 @@ defmodule Mydia.Plugins.HostFunctionsTest do
                HostFunctions.ensure_watched(p, target(user.id, tvdb: 999, season: 9, episode: 9))
     end
   end
+
+  describe "connection_upsert/2 (surfaces:write connections)" do
+    setup do
+      {:ok, _} =
+        Mydia.Settings.create_plugin_config(%{
+          slug: "tester",
+          name: "Tester",
+          version: "1.0.0",
+          source_url: "test",
+          manifest: %{
+            "slug" => "tester",
+            "name" => "Tester",
+            "version" => "1.0.0",
+            "capabilities" => %{"surfaces:write" => ["connections"]}
+          },
+          granted_capabilities: %{"surfaces:write" => ["connections"]},
+          enabled: false
+        })
+
+      :ok
+    end
+
+    test "creates an instance connection from a draft" do
+      p = plugin(%{"surfaces:write" => ["connections"]})
+
+      assert {:ok, record} =
+               HostFunctions.connection_upsert(p, %{
+                 "label" => "Living room",
+                 "base-urls" => ["http://10.0.0.5:32400"],
+                 "secret" => "plex-token",
+                 "auth-kind" => "header",
+                 "auth-key" => "X-Plex-Token"
+               })
+
+      assert record.label == "Living room"
+      assert record.scope == :instance
+      refute Map.has_key?(record, :secret)
+
+      conn = Connections.get_by_label("tester", nil, "Living room")
+      assert conn.access_token == "plex-token"
+      assert conn.base_urls == ["http://10.0.0.5:32400"]
+    end
+
+    test "creates a user connection when user-id is present" do
+      user = user_fixture()
+      p = plugin(%{"surfaces:write" => ["connections"]})
+
+      assert {:ok, record} =
+               HostFunctions.connection_upsert(p, %{
+                 "label" => "Living room",
+                 "base-urls" => [],
+                 "secret" => "profile-token",
+                 "auth-kind" => "header",
+                 "auth-key" => "X-Plex-Token",
+                 "user-id" => user.id
+               })
+
+      assert record.scope == :user
+      assert record[:"user-id"] == user.id
+    end
+
+    test "R22: the returned record never carries the secret" do
+      p = plugin(%{"surfaces:write" => ["connections"]})
+
+      {:ok, record} =
+        HostFunctions.connection_upsert(p, %{
+          "label" => "A",
+          "base-urls" => ["http://a.test"],
+          "secret" => "s3cret",
+          "auth-kind" => "bearer"
+        })
+
+      refute record |> Map.values() |> Enum.any?(&(&1 == "s3cret"))
+    end
+
+    test "denies a plugin without the connections surface" do
+      p = plugin(%{"surfaces:write" => ["playback:watched"]})
+
+      assert {:error, %Error{type: :capability_denied}} =
+               HostFunctions.connection_upsert(p, %{
+                 "label" => "A",
+                 "base-urls" => ["http://a.test"],
+                 "secret" => "s",
+                 "auth-kind" => "bearer"
+               })
+    end
+
+    test "rejects an unknown user id" do
+      p = plugin(%{"surfaces:write" => ["connections"]})
+
+      assert {:error, %Error{type: :invalid_request}} =
+               HostFunctions.connection_upsert(p, %{
+                 "label" => "A",
+                 "base-urls" => [],
+                 "secret" => "s",
+                 "auth-kind" => "bearer",
+                 "user-id" => Ecto.UUID.generate()
+               })
+    end
+
+    test "rejects an unknown auth kind" do
+      p = plugin(%{"surfaces:write" => ["connections"]})
+
+      assert {:error, %Error{type: :invalid_request}} =
+               HostFunctions.connection_upsert(p, %{
+                 "label" => "A",
+                 "base-urls" => ["http://a.test"],
+                 "secret" => "s",
+                 "auth-kind" => "magic"
+               })
+    end
+  end
 end

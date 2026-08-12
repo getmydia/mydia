@@ -42,6 +42,7 @@ defmodule Mydia.Plugins.HostFunctions do
 
   require Logger
 
+  alias Mydia.Accounts.User
   alias Mydia.Media
   alias Mydia.Playback
   alias Mydia.Plugins
@@ -52,6 +53,7 @@ defmodule Mydia.Plugins.HostFunctions do
   alias Mydia.Plugins.Matcher
   alias Mydia.Plugins.Net.Gate
   alias Mydia.Plugins.Plugin
+  alias Mydia.Repo
 
   # Hard page cap for data-list — a guest may request fewer but never more.
   @data_list_page_cap 200
@@ -95,6 +97,7 @@ defmodule Mydia.Plugins.HostFunctions do
         "ensure-watched" => {:fn, ensure_watched_import(slug)},
         "connections-list" => {:fn, connections_list_import(slug)},
         "connection-request" => {:fn, connection_request_import(slug, gate_opts)},
+        "connection-upsert" => {:fn, connection_upsert_import(slug)},
         # ── 1.2.0 ──
         "set-watch-state" => {:fn, set_watch_state_import(slug)}
       }
@@ -198,6 +201,16 @@ defmodule Mydia.Plugins.HostFunctions do
     end
   end
 
+  defp connection_upsert_import(slug) do
+    fn draft ->
+      typed_result(fn ->
+        with_plugin(slug, fn plugin ->
+          connection_upsert(plugin, from_connection_draft(draft))
+        end)
+      end)
+    end
+  end
+
   # ── http-request import ────────────────────────────────────────────────────
 
   defp http_import(slug, gate_opts) do
@@ -219,6 +232,19 @@ defmodule Mydia.Plugins.HostFunctions do
       "method" => Map.get(req, :method, "GET"),
       "headers" => req |> Map.get(:headers, []) |> Map.new(),
       "body" => from_option(Map.get(req, :body))
+    }
+  end
+
+  defp from_connection_draft(draft) do
+    %{
+      "label" => Map.get(draft, :label, ""),
+      "base-urls" => Map.get(draft, :"base-urls", []),
+      "secret" => Map.get(draft, :secret, ""),
+      "auth-kind" => Map.get(draft, :"auth-kind", ""),
+      "auth-key" => from_option(Map.get(draft, :"auth-key")),
+      "user-id" => from_option(Map.get(draft, :"user-id")),
+      "external-user-id" => from_option(Map.get(draft, :"external-user-id")),
+      "external-username" => from_option(Map.get(draft, :"external-username"))
     }
   end
 
@@ -848,20 +874,111 @@ defmodule Mydia.Plugins.HostFunctions do
     end
   end
 
+  @doc false
+  @spec connection_upsert(Plugin.t(), map()) :: {:ok, map()} | {:error, Error.t()}
+  def connection_upsert(%Plugin{} = plugin, draft) do
+    with :ok <- require_surface(plugin, "connections"),
+         {:ok, label} <- fetch_string(draft, "label"),
+         {:ok, secret} <- fetch_string(draft, "secret"),
+         {:ok, auth_kind} <- fetch_auth_kind(draft),
+         {:ok, user_id} <- fetch_draft_user(draft),
+         attrs = draft_attrs(draft, label, secret, auth_kind, user_id),
+         {:ok, conn} <- upsert_connection(plugin.slug, attrs) do
+      {:ok, to_connection_record(conn)}
+    end
+  end
+
+  defp draft_attrs(draft, label, secret, auth_kind, user_id) do
+    %{
+      scope: if(user_id, do: "user", else: "instance"),
+      user_id: user_id,
+      label: label,
+      access_token: secret,
+      auth_kind: auth_kind,
+      auth_key: Map.get(draft, "auth-key"),
+      base_urls: Map.get(draft, "base-urls", []),
+      external_user_id: Map.get(draft, "external-user-id"),
+      external_username: Map.get(draft, "external-username"),
+      status: "connected"
+    }
+  end
+
+  defp upsert_connection(slug, attrs) do
+    case Connections.upsert(slug, attrs) do
+      {:ok, conn} ->
+        {:ok, conn}
+
+      {:error, :not_installed} ->
+        {:error, Error.new(:internal, "plugin #{slug} is not installed")}
+
+      {:error, %Ecto.Changeset{} = cs} ->
+        {:error, Error.new(:invalid_request, changeset_message(cs))}
+    end
+  end
+
+  defp fetch_auth_kind(draft) do
+    case Map.get(draft, "auth-kind") do
+      kind when kind in ~w(header query bearer) ->
+        {:ok, kind}
+
+      other ->
+        {:error,
+         Error.new(
+           :invalid_request,
+           "auth-kind must be header, query, or bearer, got: #{inspect(other)}"
+         )}
+    end
+  end
+
+  # A guest cannot invent users: an id it supplies must already exist. Malformed
+  # ids are rejected before the query, because a non-UUID raises a CastError
+  # against the binary_id column on Postgres while SQLite silently misses.
+  defp fetch_draft_user(draft) do
+    case Map.get(draft, "user-id") do
+      nil ->
+        {:ok, nil}
+
+      "" ->
+        {:ok, nil}
+
+      id when is_binary(id) ->
+        with {:ok, _} <- Ecto.UUID.cast(id),
+             %User{} <- Repo.get(User, id) do
+          {:ok, id}
+        else
+          _ -> {:error, Error.new(:invalid_request, "unknown user #{id}")}
+        end
+
+      _ ->
+        {:error, Error.new(:invalid_request, "user-id must be a string")}
+    end
+  end
+
+  defp changeset_message(changeset) do
+    changeset
+    |> Ecto.Changeset.traverse_errors(fn {msg, _opts} -> msg end)
+    |> Enum.map_join(", ", fn {field, msgs} -> "#{field} #{Enum.join(msgs, "/")}" end)
+  end
+
   # Identity + status ONLY — the WIT `connection` record has no token field, so
   # the token cannot cross the boundary by construction (R22).
   defp to_connection_record(conn) do
     %{
       id: conn.id,
-      "user-id": conn.user_id,
+      "user-id": conn.user_id || "",
       "external-user-id": to_option(conn.external_user_id),
       "external-username": to_option(conn.external_username),
-      status: connection_status_atom(conn.status)
+      status: connection_status_atom(conn.status),
+      label: conn.label || "",
+      scope: connection_scope_atom(conn.scope)
     }
   end
 
   defp connection_status_atom("error"), do: :error
   defp connection_status_atom(_), do: :connected
+
+  defp connection_scope_atom("instance"), do: :instance
+  defp connection_scope_atom(_), do: :user
 
   @doc false
   @spec connection_request(Plugin.t(), String.t(), map(), keyword()) ::
@@ -963,6 +1080,13 @@ defmodule Mydia.Plugins.HostFunctions do
     case Map.get(map, key) do
       value when is_binary(value) and value != "" -> {:ok, value}
       _ -> {:error, Error.new(:invalid_request, "missing or invalid #{key}")}
+    end
+  end
+
+  defp with_plugin(slug, fun) when is_function(fun, 1) do
+    case Plugins.get_plugin(slug) do
+      {:ok, plugin} -> fun.(plugin)
+      {:error, _} = err -> err
     end
   end
 end
