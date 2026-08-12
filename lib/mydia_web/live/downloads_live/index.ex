@@ -1,6 +1,7 @@
 defmodule MydiaWeb.DownloadsLive.Index do
   use MydiaWeb, :live_view
   alias Mydia.Downloads
+  alias Mydia.Downloads.Blacklists
   alias Mydia.Downloads.ExternalTorrents
   alias Mydia.Downloads.ImportCandidates
   alias Mydia.Downloads.StallDetector
@@ -878,11 +879,20 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
       case Downloads.reject_release(download) do
         {:ok, :rejected} ->
+          flash =
+            case Blacklists.extract_key(download) do
+              {:ok, _indexer, _guid} ->
+                "Release blacklisted and a new search was queued"
+
+              {:error, _} ->
+                "Download removed and a new search was queued"
+            end
+
           {:noreply,
            socket
            |> assign(:match_files_modal, nil)
            |> assign(:match_files_error, nil)
-           |> put_flash(:info, "Release blacklisted and a new search was queued")
+           |> put_flash(:info, flash)
            |> load_downloads()}
 
         {:error, _reason} ->
@@ -1443,9 +1453,10 @@ defmodule MydiaWeb.DownloadsLive.Index do
   defp status_rank(download) do
     # Stall state overrides the client status for sorting: a soft-stall groups
     # with warnings.
-    cond do
-      soft_stalled?(download) -> Map.fetch!(@status_rank, "stalled")
-      true -> Map.get(@status_rank, download.status, 99)
+    if soft_stalled?(download) do
+      Map.fetch!(@status_rank, "stalled")
+    else
+      Map.get(@status_rank, download.status, 99)
     end
   end
 
@@ -1608,12 +1619,10 @@ defmodule MydiaWeb.DownloadsLive.Index do
   # its episode and may auto-clear. There is no terminal stall badge — an
   # escalated stall is rejected outright and the row no longer exists.
   def status_badge(download) do
-    cond do
-      soft_stalled?(download) ->
-        {status_badge_class("stalled"), "Stalled"}
-
-      true ->
-        {status_badge_class(download.status), String.capitalize(download.status)}
+    if soft_stalled?(download) do
+      {status_badge_class("stalled"), "Stalled"}
+    else
+      {status_badge_class(download.status), String.capitalize(download.status)}
     end
   end
 

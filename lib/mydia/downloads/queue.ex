@@ -136,16 +136,21 @@ defmodule Mydia.Downloads.Queue do
   @doc """
   Rejects a release the operator has judged unusable.
 
-  Blacklists `(indexer, guid)` so future searches filter it out, removes the
-  torrent and its data from the client, deletes the download row, and queues a
-  fresh search for the bound episode or movie.
+  Best-effort blacklists `(indexer, guid)` when a key can be extracted, removes
+  the torrent and its data from the client (best effort), deletes the download
+  row, and queues a fresh search for the bound episode or movie.
 
-  The blacklist write happens first: if a later step fails, the release must
-  still not be re-grabbed. Client removal is best effort, since the torrent may
-  already be gone.
+  A download with no blacklist key, or whose blacklist write fails, is still
+  cleared — it is simply not recorded. The torrent is dead either way.
 
-  Accepts `:failure_reason` (default `"rejected_by_user"`) so a system-initiated
-  rejection is distinguishable from an operator's in `release_blacklist`.
+  ## Options
+    - `:actor_type` - The type of actor (:user, :system, :job) - defaults to :user
+    - `:actor_id` - The ID of the actor (user_id, job name, etc.)
+    - `:failure_reason` - Blacklist reason slug - defaults to "rejected_by_user"
+    - `:ttl_days` - Days until the blacklist entry expires - defaults to the
+      configured `release_blacklist_default_ttl_days` (30)
+    - `:event` - `:cancelled` (default) emits `download.cancelled`; `:none`
+      emits nothing, for callers that emit their own more specific event
   """
   @spec reject_release(Download.t(), keyword()) :: {:ok, :rejected} | {:error, term()}
   def reject_release(%Download{} = download, opts \\ []) do
