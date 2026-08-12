@@ -122,7 +122,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
       {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
 
       assert has_element?(view, "#sync-skip-#{config.id}")
-      assert render(view) =~ "User mapping section below"
+      assert render(view) =~ "Press Accounts to map them."
       refute has_element?(view, "#sync-error-#{config.id}")
     end
 
@@ -340,7 +340,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
     end
   end
 
-  describe "User mapping" do
+  describe "Account mapping" do
     setup %{conn: conn, token: token} do
       start_supervised!(Mydia.Indexers.Health)
 
@@ -353,312 +353,144 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
       %{conn: conn, bypass: Bypass.open()}
     end
 
-    test "lists the mappings for a server", %{conn: conn, bypass: bypass} do
+    test "the modal lists the server's accounts and suggests the username match",
+         %{conn: conn, bypass: bypass} do
       user = Mydia.AccountsFixtures.user_fixture(%{username: "tonix"})
-      server = jellyfin_server(bypass)
+      server = sync_enabled_server(bypass)
 
-      {:ok, link} =
-        Mydia.Settings.upsert_media_server_user_link(%{
-          media_server_config_id: server.id,
-          user_id: user.id,
-          remote_user_id: "guid-1",
-          remote_username: "Tonix",
-          enabled: true
-        })
+      stub_jellyfin_users(bypass, [
+        %{"Id" => "guid-1", "Name" => "Tonix"},
+        %{"Id" => "guid-2", "Name" => "Nobody"}
+      ])
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+      view = open_account_mapping(conn, server)
 
-      assert has_element?(view, "#user-link-#{link.id}")
-    end
+      assert has_element?(view, "#account-guid-1")
+      assert has_element?(view, "#account-guid-2")
 
-    test "removing a mapping deletes it", %{conn: conn, bypass: bypass} do
-      user = Mydia.AccountsFixtures.user_fixture(%{username: "tonix"})
-      server = jellyfin_server(bypass)
-
-      {:ok, link} =
-        Mydia.Settings.upsert_media_server_user_link(%{
-          media_server_config_id: server.id,
-          user_id: user.id,
-          remote_user_id: "guid-1",
-          remote_username: "Tonix",
-          enabled: true
-        })
-
-      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
-
-      view
-      |> element("#user-link-#{link.id} button[phx-click='user_link_delete']")
-      |> render_click()
-
-      refute has_element?(view, "#user-link-#{link.id}")
+      # A name match is a suggestion, not a link: nothing is written until Save.
+      assert has_element?(view, ~s{#account-select-guid-1 option[value="#{user.id}"][selected]})
       assert Mydia.Settings.list_media_server_user_links(server.id) == []
     end
 
     test "saving a Jellyfin mapping stores the account GUID and no token",
          %{conn: conn, bypass: bypass} do
       user = Mydia.AccountsFixtures.user_fixture(%{username: "tonix"})
-      server = jellyfin_server(bypass)
-      stub_jellyfin_users(bypass, [%{"Id" => "guid-1", "Name" => "JellyfinTonix"}])
+      server = sync_enabled_server(bypass)
 
-      view = open_mapping_editor(conn, server)
+      stub_jellyfin_users(bypass, [%{"Id" => "guid-1", "Name" => "Tonix"}])
 
-      view
-      |> form("#user-link-form", user_link: %{user_id: user.id, remote_user_id: "guid-1"})
+      conn
+      |> open_account_mapping(server)
+      |> form("#account-mapping-form", mapping: %{"guid-1" => user.id})
       |> render_submit()
 
-      assert [link] = Mydia.Settings.list_media_server_user_links(server.id)
+      assert [link] = wait_for_links(server)
       assert link.user_id == user.id
       assert link.remote_user_id == "guid-1"
-      assert link.remote_username == "JellyfinTonix"
-      assert link.access_token == nil
-    end
-
-    test "an access_token in the submitted form cannot reach the link",
-         %{conn: conn, bypass: bypass} do
-      user = Mydia.AccountsFixtures.user_fixture(%{username: "tonix"})
-      server = jellyfin_server(bypass)
-      stub_jellyfin_users(bypass, [%{"Id" => "guid-1", "Name" => "JellyfinTonix"}])
-
-      view = open_mapping_editor(conn, server)
-
-      view
-      |> element("#user-link-form")
-      |> render_submit(%{
-        "user_link" => %{
-          "user_id" => user.id,
-          "remote_user_id" => "guid-1",
-          "access_token" => "injected-credential"
-        }
-      })
-
-      assert [link] = Mydia.Settings.list_media_server_user_links(server.id)
-      assert link.access_token == nil
+      assert link.remote_username == "Tonix"
+      # Jellyfin issues no per-user tokens; a token here could only be another
+      # account's, and the sync would then read the wrong history.
+      assert is_nil(link.access_token)
     end
 
     test "a mapping cannot name an account the server did not report",
          %{conn: conn, bypass: bypass} do
+      # The picker's own list is the whitelist. A crafted submit naming an
+      # account this server never listed writes nothing at all.
       user = Mydia.AccountsFixtures.user_fixture(%{username: "tonix"})
-      server = jellyfin_server(bypass)
-      stub_jellyfin_users(bypass, [%{"Id" => "guid-1", "Name" => "JellyfinTonix"}])
+      server = sync_enabled_server(bypass)
 
-      view = open_mapping_editor(conn, server)
+      stub_jellyfin_users(bypass, [%{"Id" => "guid-1", "Name" => "Tonix"}])
 
-      html =
-        view
-        |> element("#user-link-form")
-        |> render_submit(%{
-          "user_link" => %{"user_id" => user.id, "remote_user_id" => "guid-made-up"}
-        })
+      view = open_account_mapping(conn, server)
 
-      assert html =~ "no longer lists that account"
+      view
+      |> element("#account-mapping-form")
+      |> render_submit(%{"mapping" => %{"guid-1" => "", "guid-forged" => user.id}})
+
+      assert eventually(fn -> render(view) =~ "No accounts are linked" end)
       assert Mydia.Settings.list_media_server_user_links(server.id) == []
     end
 
-    test "discovering accounts links the ones whose username already matches",
-         %{conn: conn, bypass: bypass, user: user} do
-      server = jellyfin_server(bypass)
-      stub_jellyfin_users(bypass, [%{"Id" => "guid-1", "Name" => user.username}])
-
-      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
-
-      html =
-        view
-        |> element(~s{[phx-click="user_link_discover"][phx-value-id="#{server.id}"]})
-        |> render_click()
-
-      assert html =~ "Matched 1 account"
-      assert [link] = Mydia.Settings.list_media_server_user_links(server.id)
-      assert link.remote_user_id == "guid-1"
-    end
-
-    test "discovering leaves a hand-made mapping alone and says so",
+    test "an access_token in the submitted form cannot reach the link",
          %{conn: conn, bypass: bypass} do
-      # The operator mapped alex to guid-2 because the usernames differ. Jellyfin
-      # also has an account named after another Mydia user, sarah. Discovering
-      # must not write sarah -> guid-2 on top of it: both users would then import
-      # guid-2's watch history.
-      alex = Mydia.AccountsFixtures.user_fixture(%{username: "alex"})
-      Mydia.AccountsFixtures.user_fixture(%{username: "sarah"})
-      server = jellyfin_server(bypass)
-      stub_jellyfin_users(bypass, [%{"Id" => "guid-2", "Name" => "sarah"}])
+      # Nothing in the payload is cast onto the row: every column comes from the
+      # config, the picked user, and the account the server itself reported.
+      user = Mydia.AccountsFixtures.user_fixture(%{username: "tonix"})
+      server = sync_enabled_server(bypass)
 
-      {:ok, hand_made} =
-        Mydia.Settings.upsert_media_server_user_link(%{
-          media_server_config_id: server.id,
-          user_id: alex.id,
-          remote_user_id: "guid-2",
-          remote_username: "sarah",
-          enabled: true
-        })
-
-      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
-
-      html =
-        view
-        |> element(~s{[phx-click="user_link_discover"][phx-value-id="#{server.id}"]})
-        |> render_click()
-
-      assert html =~ "Left 1 existing mapping alone"
-
-      assert [kept] = Mydia.Settings.list_media_server_user_links(server.id)
-      assert kept.id == hand_made.id
-      assert kept.user_id == alex.id
-    end
-
-    test "discovering never repoints a mapping at the account that shares the name",
-         %{conn: conn, bypass: bypass} do
-      # The other half of the rule above, seen from the mapped user's side. alex
-      # is on guid-2 on purpose, and the server also has an account actually
-      # named "alex". Matching by username would move alex onto guid-3, which is
-      # a different person, and the operator would be told only that discovery
-      # matched an account.
-      alex = Mydia.AccountsFixtures.user_fixture(%{username: "alex"})
-      server = jellyfin_server(bypass)
-
-      stub_jellyfin_users(bypass, [
-        %{"Id" => "guid-2", "Name" => "sarah"},
-        %{"Id" => "guid-3", "Name" => "alex"}
-      ])
-
-      {:ok, hand_made} =
-        Mydia.Settings.upsert_media_server_user_link(%{
-          media_server_config_id: server.id,
-          user_id: alex.id,
-          remote_user_id: "guid-2",
-          remote_username: "sarah",
-          enabled: true
-        })
-
-      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
-
-      view
-      |> element(~s{[phx-click="user_link_discover"][phx-value-id="#{server.id}"]})
-      |> render_click()
-
-      assert [kept] = Mydia.Settings.list_media_server_user_links(server.id)
-      assert kept.id == hand_made.id
-      assert kept.remote_user_id == "guid-2"
-    end
-
-    test "editing a mapping onto a different Mydia user moves it",
-         %{conn: conn, bypass: bypass} do
-      alex = Mydia.AccountsFixtures.user_fixture(%{username: "alex"})
-      sarah = Mydia.AccountsFixtures.user_fixture(%{username: "sarah"})
-      server = jellyfin_server(bypass)
       stub_jellyfin_users(bypass, [%{"Id" => "guid-1", "Name" => "Tonix"}])
 
-      {:ok, link} =
+      view = open_account_mapping(conn, server)
+
+      view
+      |> element("#account-mapping-form")
+      |> render_submit(%{
+        "mapping" => %{"guid-1" => user.id},
+        "access_token" => "stolen-token"
+      })
+
+      assert [link] = wait_for_links(server)
+      assert is_nil(link.access_token)
+    end
+
+    test "unmapping an account removes its link", %{conn: conn, bypass: bypass} do
+      user = Mydia.AccountsFixtures.user_fixture(%{username: "tonix"})
+      server = sync_enabled_server(bypass)
+
+      stub_jellyfin_users(bypass, [%{"Id" => "guid-1", "Name" => "Tonix"}])
+
+      {:ok, _link} =
         Mydia.Settings.upsert_media_server_user_link(%{
           media_server_config_id: server.id,
-          user_id: alex.id,
+          user_id: user.id,
           remote_user_id: "guid-1",
           remote_username: "Tonix",
           enabled: true
         })
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
-
-      view
-      |> element("#user-link-#{link.id} button[phx-click='user_link_edit']")
-      |> render_click()
-
-      view
-      |> form("#user-link-form", user_link: %{user_id: sarah.id, remote_user_id: "guid-1"})
+      conn
+      |> open_account_mapping(server)
+      |> form("#account-mapping-form", mapping: %{"guid-1" => ""})
       |> render_submit()
 
-      assert [moved] = Mydia.Settings.list_media_server_user_links(server.id)
-      assert moved.user_id == sarah.id
-      assert moved.remote_user_id == "guid-1"
-      refute moved.user_id == alex.id
+      assert eventually(fn -> Mydia.Settings.list_media_server_user_links(server.id) == [] end)
     end
 
-    test "editing a mapping onto a user who already has one is refused, not collapsed",
+    test "two accounts on one Mydia user is refused and writes nothing",
          %{conn: conn, bypass: bypass} do
-      # alex -> guid-1 edited onto sarah, who already holds sarah -> guid-2.
-      # This used to delete alex's row and overwrite sarah's, leaving one
-      # mapping where there had been two and saying nothing about it.
-      alex = Mydia.AccountsFixtures.user_fixture(%{username: "alex"})
-      sarah = Mydia.AccountsFixtures.user_fixture(%{username: "sarah"})
-      server = jellyfin_server(bypass)
+      user = Mydia.AccountsFixtures.user_fixture(%{username: "tonix"})
+      server = sync_enabled_server(bypass)
 
       stub_jellyfin_users(bypass, [
-        %{"Id" => "guid-1", "Name" => "One"},
-        %{"Id" => "guid-2", "Name" => "Two"}
+        %{"Id" => "guid-1", "Name" => "Tonix"},
+        %{"Id" => "guid-2", "Name" => "Other"}
       ])
 
-      {:ok, alex_link} =
-        Mydia.Settings.upsert_media_server_user_link(%{
-          media_server_config_id: server.id,
-          user_id: alex.id,
-          remote_user_id: "guid-1",
-          remote_username: "One",
-          enabled: true
-        })
+      view = open_account_mapping(conn, server)
 
-      {:ok, sarah_link} =
-        Mydia.Settings.upsert_media_server_user_link(%{
-          media_server_config_id: server.id,
-          user_id: sarah.id,
-          remote_user_id: "guid-2",
-          remote_username: "Two",
-          enabled: true
-        })
+      view
+      |> form("#account-mapping-form", mapping: %{"guid-1" => user.id, "guid-2" => user.id})
+      |> render_submit()
+
+      assert eventually(fn -> render(view) =~ "only one" end)
+      assert Mydia.Settings.list_media_server_user_links(server.id) == []
+    end
+
+    test "a server that cannot be read surfaces the reason instead of a form",
+         %{conn: conn, bypass: bypass} do
+      server = sync_enabled_server(bypass)
+      Bypass.down(bypass)
 
       {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
 
       view
-      |> element("#user-link-#{alex_link.id} button[phx-click='user_link_edit']")
+      |> element(~s{[phx-click="open_account_mapping"][phx-value-id="#{server.id}"]})
       |> render_click()
 
-      html =
-        view
-        |> form("#user-link-form", user_link: %{user_id: sarah.id, remote_user_id: "guid-1"})
-        |> render_submit()
-
-      assert html =~ "already has a mapping"
-
-      links = Mydia.Settings.list_media_server_user_links(server.id)
-      assert length(links) == 2
-      assert Enum.find(links, &(&1.id == alex_link.id)).user_id == alex.id
-      assert Enum.find(links, &(&1.id == sarah_link.id)).remote_user_id == "guid-2"
-    end
-
-    test "a failed save keeps what was already chosen", %{conn: conn, bypass: bypass} do
-      user = Mydia.AccountsFixtures.user_fixture(%{username: "zzz-last"})
-      server = jellyfin_server(bypass)
-      stub_jellyfin_users(bypass, [%{"Id" => "guid-1", "Name" => "JellyfinTonix"}])
-
-      view = open_mapping_editor(conn, server)
-
-      view
-      |> element("#user-link-form")
-      |> render_submit(%{
-        "user_link" => %{"user_id" => user.id, "remote_user_id" => "guid-made-up"}
-      })
-
-      assert has_element?(
-               view,
-               ~s{select#user_link_user_id option[value="#{user.id}"][selected]}
-             )
-    end
-
-    test "a server that cannot be read surfaces the reason instead of an editor",
-         %{conn: conn, bypass: bypass} do
-      server = jellyfin_server(bypass)
-
-      Bypass.stub(bypass, "GET", "/Users", fn conn ->
-        Plug.Conn.resp(conn, 401, "")
-      end)
-
-      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
-
-      html =
-        view
-        |> element(~s{[phx-click="user_link_new"][phx-value-id="#{server.id}"]})
-        |> render_click()
-
-      assert html =~ "Could not read accounts from"
-      refute has_element?(view, "#user-link-form")
+      assert eventually(fn -> has_element?(view, "#account-mapping-error") end, 600)
+      refute has_element?(view, "#account-mapping-form")
     end
   end
 
@@ -693,7 +525,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
                })
 
       assert per_user_jobs() == []
-      assert Mydia.Sync.last_run("jellyfin", server.id).skip_reason == "no_user_mapping"
+      assert Mydia.Sync.last_run("jellyfin", server.id).skip_reason == "seeding_links"
     end
 
     test "a mapped user gets exactly one job carrying their own link",
@@ -721,75 +553,6 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
       assert job.args["config_id"] == server.id
       assert job.args["user_id"] == user.id
       assert job.args["link_id"] == link.id
-    end
-
-    test "a paused mapping produces no per-user job",
-         %{conn: conn, bypass: bypass, user: user} do
-      server = sync_enabled_server(bypass)
-
-      {:ok, _link} =
-        Mydia.Settings.upsert_media_server_user_link(%{
-          media_server_config_id: server.id,
-          user_id: user.id,
-          remote_user_id: "guid-1",
-          remote_username: "Tonix",
-          enabled: false
-        })
-
-      click_sync_now(conn, server)
-
-      assert :ok =
-               perform_job(MediaServerWatchedSync, %{
-                 "mode" => "server",
-                 "config_id" => server.id
-               })
-
-      assert per_user_jobs() == []
-    end
-  end
-
-  describe "Pausing a mapping" do
-    setup %{conn: conn, token: token} do
-      start_supervised!(Mydia.Indexers.Health)
-
-      conn =
-        conn
-        |> init_test_session(%{})
-        |> put_session(:guardian_default_token, token)
-        |> put_req_header("authorization", "Bearer #{token}")
-
-      %{conn: conn, bypass: Bypass.open()}
-    end
-
-    test "the toggle pauses a mapping and resumes it again", %{conn: conn, bypass: bypass} do
-      # Nothing in the UI could set enabled to false, so the Paused badge the
-      # row already rendered was a branch no operator could reach.
-      user = Mydia.AccountsFixtures.user_fixture(%{username: "tonix"})
-      server = jellyfin_server(bypass)
-
-      {:ok, link} =
-        Mydia.Settings.upsert_media_server_user_link(%{
-          media_server_config_id: server.id,
-          user_id: user.id,
-          remote_user_id: "guid-1",
-          remote_username: "Tonix",
-          enabled: true
-        })
-
-      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
-
-      view
-      |> element("#user-link-#{link.id} button[phx-click='user_link_toggle']")
-      |> render_click()
-
-      refute Mydia.Settings.get_media_server_user_link!(link.id).enabled
-      assert has_element?(view, "#user-link-#{link.id}", "Paused")
-
-      view
-      |> element("#user-link-#{link.id} button[phx-click='user_link_toggle']")
-      |> render_click()
-
-      assert Mydia.Settings.get_media_server_user_link!(link.id).enabled
     end
   end
 
@@ -968,7 +731,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
 
       config = Mydia.Settings.list_media_server_configs() |> List.first()
 
-      assert_enqueued(worker: Mydia.Jobs.PlexLinkSeed, args: %{"config_id" => config.id})
+      assert_enqueued(worker: Mydia.Jobs.MediaServerLinkSeed, args: %{"config_id" => config.id})
     end
 
     test "saving a server whose mappings were all deleted does not seed them back",
@@ -1007,7 +770,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
       })
       |> render_submit()
 
-      assert [] = all_enqueued(worker: Mydia.Jobs.PlexLinkSeed)
+      assert [] = all_enqueued(worker: Mydia.Jobs.MediaServerLinkSeed)
       assert Mydia.Settings.list_media_server_user_links(config.id) == []
     end
 
@@ -1039,10 +802,10 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
       })
       |> render_submit()
 
-      assert_enqueued(worker: Mydia.Jobs.PlexLinkSeed, args: %{"config_id" => config.id})
+      assert_enqueued(worker: Mydia.Jobs.MediaServerLinkSeed, args: %{"config_id" => config.id})
     end
 
-    test "saving a Jellyfin config does not enqueue a link seed", %{conn: conn} do
+    test "saving a Jellyfin config enqueues a link seed too", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
 
       view
@@ -1067,7 +830,10 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
       })
       |> render_submit()
 
-      assert [] = all_enqueued(worker: Mydia.Jobs.PlexLinkSeed)
+      # Jellyfin seeds by username match the same way Plex does. The worker
+      # itself is the gate on watched sync being on, so the save enqueues it
+      # either way and a server that never opted in is a cheap no-op.
+      assert [_seed] = all_enqueued(worker: Mydia.Jobs.MediaServerLinkSeed)
       assert Mydia.Settings.list_media_server_configs() |> List.first()
     end
 
@@ -1092,6 +858,50 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
         worker: Mydia.Jobs.MediaServerWatchedSync,
         args: %{"mode" => "server", "config_id" => config.id}
       )
+    end
+
+    test "a Plex server syncing watched status offers profile mapping", %{conn: conn} do
+      # Auto-matching links a profile only when its name equals a Mydia
+      # username, which on most installs is never, and until this button there
+      # was no way for the operator to make the mapping themselves.
+      {:ok, config} =
+        Mydia.Settings.create_media_server_config(%{
+          name: "Map Me",
+          type: :plex,
+          url: "http://localhost:32400",
+          token: "tok",
+          enabled: true,
+          connection_settings: %{"sync_watched" => true}
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+
+      assert has_element?(
+               view,
+               "button[phx-click='open_account_mapping'][phx-value-id='#{config.id}']"
+             )
+    end
+
+    test "a Plex server not syncing watched status does not offer profile mapping",
+         %{conn: conn} do
+      # Links exist only to keep per-user watch history apart. With sync off
+      # there is nothing to keep apart, and offering the mapping would imply a
+      # feature the operator never turned on.
+      {:ok, config} =
+        Mydia.Settings.create_media_server_config(%{
+          name: "No Sync",
+          type: :plex,
+          url: "http://localhost:32400",
+          token: "tok",
+          enabled: true
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+
+      refute has_element?(
+               view,
+               "button[phx-click='open_account_mapping'][phx-value-id='#{config.id}']"
+             )
     end
   end
 
@@ -1161,15 +971,38 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
     end)
   end
 
-  defp open_mapping_editor(conn, server) do
+  # The account list is fetched off the LiveView process, so the modal renders
+  # its loading state first and the form only once the answer lands.
+  defp open_account_mapping(conn, server) do
     {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
 
     view
-    |> element(~s{[phx-click="user_link_new"][phx-value-id="#{server.id}"]})
+    |> element(~s{[phx-click="open_account_mapping"][phx-value-id="#{server.id}"]})
     |> render_click()
 
-    assert has_element?(view, "#user-link-form")
+    assert eventually(fn -> has_element?(view, "#account-mapping-form") end)
 
     view
+  end
+
+  # Saving also runs off the LiveView process, so the row lands a moment after
+  # render_submit/1 returns.
+  defp wait_for_links(server) do
+    assert eventually(fn -> Mydia.Settings.list_media_server_user_links(server.id) != [] end)
+    Mydia.Settings.list_media_server_user_links(server.id)
+  end
+
+  defp eventually(fun, attempts \\ 100) do
+    cond do
+      fun.() ->
+        true
+
+      attempts == 0 ->
+        false
+
+      true ->
+        Process.sleep(20)
+        eventually(fun, attempts - 1)
+    end
   end
 end

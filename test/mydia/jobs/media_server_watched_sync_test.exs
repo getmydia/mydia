@@ -572,7 +572,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
       # token isn't validate_required on MediaServerConfig, so a Plex config
       # saved with sync on but no token would otherwise reach enqueue_linked_users,
       # record :seeding_links every tick, and enqueue a seed job that can never
-      # produce a link (PlexLinkSeed.seedable?/1 also requires a token). That is
+      # produce a link (MediaServerLinkSeed.seedable?/1 also requires a token). That is
       # a job reporting healthy while doing nothing forever.
       {:ok, config} =
         Settings.create_media_server_config(%{
@@ -588,7 +588,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
 
       assert Sync.last_run("plex", config.id).skip_reason == "no_token"
       assert [] = all_enqueued(worker: MediaServerWatchedSync) |> Enum.reject(& &1.args["mode"])
-      assert [] = all_enqueued(worker: Mydia.Jobs.PlexLinkSeed)
+      assert [] = all_enqueued(worker: Mydia.Jobs.MediaServerLinkSeed)
     end
 
     test "a config with no links seeds them instead of skipping forever" do
@@ -612,24 +612,46 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
       assert :ok = perform_job(MediaServerWatchedSync, %{"mode" => "all_enabled"})
 
       assert Sync.last_run("plex", config.id).skip_reason == "seeding_links"
-      assert_enqueued(worker: Mydia.Jobs.PlexLinkSeed, args: %{"config_id" => config.id})
+      assert_enqueued(worker: Mydia.Jobs.MediaServerLinkSeed, args: %{"config_id" => config.id})
 
       # Still no per-user job: defaulting to the admin token is the bug this
       # test has always guarded, and seeding must not reintroduce it.
       assert [] = all_enqueued(worker: MediaServerWatchedSync) |> Enum.reject(& &1.args["mode"])
     end
 
-    test "a server whose only mappings are paused records all_mappings_paused and seeds nothing" do
-      # A pause is the operator saying "stop syncing this person". Routing an
-      # empty fan-out to the seeder treated it as "nobody is mapped": the seed
-      # re-linked the paused row, reported links, re-entered server mode, and
-      # the badge read "Linking Plex Home profiles" forever while the pause did
-      # nothing at all.
-      user = user_fixture()
-
+    test "a server that has already been seeded and now has no links is left alone" do
+      # Seeding is a first run, not a repair. The mapping modal promises that
+      # clearing a mapping stops watched sync for that user; re-seeding on the
+      # next tick would put every one of them back.
       {:ok, config} =
         Settings.create_media_server_config(%{
-          name: "Paused Plex",
+          name: "Seeded Plex",
+          type: :plex,
+          url: "http://localhost:32400",
+          token: "tok",
+          enabled: true,
+          connection_settings: %{
+            "sync_watched" => "true",
+            "plex_links_seeded_at" => "2026-08-12T00:00:00Z"
+          }
+        })
+
+      _user = user_fixture()
+
+      assert :ok = perform_job(MediaServerWatchedSync, %{"mode" => "all_enabled"})
+
+      assert Sync.last_run("plex", config.id).skip_reason == "no_user_mapping"
+      assert [] = all_enqueued(worker: Mydia.Jobs.MediaServerLinkSeed)
+      assert [] = all_enqueued(worker: MediaServerWatchedSync) |> Enum.reject(& &1.args["mode"])
+    end
+
+    test "a transient seeding failure is retried rather than treated as terminal" do
+      # link_seeding_failed means the server was unreachable, which is exactly
+      # the kind of thing that fixes itself. Only a completed pass stamps the
+      # config, so an unstamped one is always worth another try.
+      {:ok, config} =
+        Settings.create_media_server_config(%{
+          name: "Storage",
           type: :plex,
           url: "http://localhost:32400",
           token: "tok",
@@ -637,59 +659,23 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
           connection_settings: %{"sync_watched" => "true"}
         })
 
-      {:ok, paused} =
-        Settings.upsert_media_server_user_link(%{
-          media_server_config_id: config.id,
-          user_id: user.id,
-          remote_user_id: "1",
-          remote_username: user.username,
-          access_token: "user-token",
-          enabled: false
-        })
-
-      refute paused.enabled
+      Sync.record_skip(
+        %{provider: "plex", provider_instance_id: config.id, user_id: nil},
+        :link_seeding_failed
+      )
 
       assert :ok = perform_job(MediaServerWatchedSync, %{"mode" => "all_enabled"})
 
-      assert Sync.last_run("plex", config.id).skip_reason == "all_mappings_paused"
-      assert [] = all_enqueued(worker: Mydia.Jobs.PlexLinkSeed)
-      assert [] = all_enqueued(worker: MediaServerWatchedSync) |> Enum.reject(& &1.args["mode"])
+      assert Sync.last_run("plex", config.id).skip_reason == "seeding_links"
+      assert_enqueued(worker: Mydia.Jobs.MediaServerLinkSeed, args: %{"config_id" => config.id})
     end
 
-    test "a paused mapping on Jellyfin is recorded as paused, not as nobody mapped" do
-      user = user_fixture()
-
-      {:ok, config} =
-        Settings.create_media_server_config(%{
-          name: "Paused Jellyfin",
-          type: :jellyfin,
-          url: "http://localhost:8096",
-          token: "api-key",
-          enabled: true,
-          connection_settings: %{"sync_watched" => "true"}
-        })
-
-      {:ok, _paused} =
-        Settings.upsert_media_server_user_link(%{
-          media_server_config_id: config.id,
-          user_id: user.id,
-          remote_user_id: "jf1",
-          remote_username: user.username,
-          enabled: false
-        })
-
-      assert :ok = perform_job(MediaServerWatchedSync, %{"mode" => "all_enabled"})
-
-      assert Sync.last_run("jellyfin", config.id).skip_reason == "all_mappings_paused"
-      assert [] = all_enqueued(worker: MediaServerWatchedSync) |> Enum.reject(& &1.args["mode"])
-    end
-
-    # Jellyfin has no seed job: its links come from the user mapping editor. So a
-    # link-less Jellyfin server records :no_user_mapping rather than the Plex-only
-    # :seeding_links, which would leave it claiming to link Plex Home profiles
-    # forever. The invariant both cases share is the one that matters: no link,
-    # no per-user job, so nothing ever runs against the server's own credential.
-    test "a Jellyfin config with no links records no_user_mapping and enqueues nothing" do
+    # Jellyfin seeds by username match the same way Plex does, so a link-less
+    # Jellyfin server queues a seed rather than sitting on :no_user_mapping
+    # forever. The invariant both providers share is the one that matters: no
+    # link, no per-user job, so nothing ever runs against the server's own
+    # credential.
+    test "a Jellyfin config with no links seeds them and enqueues no per-user job" do
       {:ok, config} =
         Settings.create_media_server_config(%{
           name: "Jellyfin",
@@ -705,9 +691,32 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
 
       assert :ok = perform_job(MediaServerWatchedSync, %{"mode" => "all_enabled"})
 
-      assert Sync.last_run("jellyfin", config.id).skip_reason == "no_user_mapping"
+      assert Sync.last_run("jellyfin", config.id).skip_reason == "seeding_links"
+      assert_enqueued(worker: Mydia.Jobs.MediaServerLinkSeed, args: %{"config_id" => config.id})
       assert [] = all_enqueued(worker: MediaServerWatchedSync) |> Enum.reject(& &1.args["mode"])
-      assert [] = all_enqueued(worker: Mydia.Jobs.PlexLinkSeed)
+    end
+
+    test "a seeded Jellyfin server with no links is left alone too" do
+      {:ok, config} =
+        Settings.create_media_server_config(%{
+          name: "Jellyfin",
+          type: :jellyfin,
+          url: "http://localhost:8096",
+          token: "api-key",
+          enabled: true,
+          connection_settings: %{
+            "sync_watched" => "true",
+            "plex_links_seeded_at" => "2026-08-12T00:00:00Z"
+          }
+        })
+
+      _u1 = user_fixture()
+
+      assert :ok = perform_job(MediaServerWatchedSync, %{"mode" => "all_enabled"})
+
+      assert Sync.last_run("jellyfin", config.id).skip_reason == "no_user_mapping"
+      assert [] = all_enqueued(worker: Mydia.Jobs.MediaServerLinkSeed)
+      assert [] = all_enqueued(worker: MediaServerWatchedSync) |> Enum.reject(& &1.args["mode"])
     end
   end
 

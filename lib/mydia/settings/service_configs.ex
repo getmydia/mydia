@@ -296,10 +296,6 @@ defmodule Mydia.Settings.ServiceConfigs do
     |> Repo.all()
   end
 
-  def get_media_server_user_link!(id) do
-    Repo.get!(MediaServerUserLink, id)
-  end
-
   def get_media_server_user_link(media_server_config_id, user_id) do
     Repo.get_by(MediaServerUserLink,
       media_server_config_id: media_server_config_id,
@@ -307,17 +303,11 @@ defmodule Mydia.Settings.ServiceConfigs do
     )
   end
 
-  def update_media_server_user_link(%MediaServerUserLink{} = link, attrs) do
-    link
-    |> MediaServerUserLink.changeset(attrs)
-    |> Repo.update()
-  end
-
   # One remote account belongs to at most one Mydia user per server. Two links
   # naming the same account would each import that account's watch history under
   # a different person's name, which is the merge this whole mapping exists to
   # prevent. The check lives here, in the single write path, because a check any
-  # caller can forget is one a caller will forget: discovery, the admin editor,
+  # caller can forget is one a caller will forget: discovery, the mapping modal,
   # and the seeders all funnel through this function.
   #
   # A link with no remote_user_id claims nothing (Plex's owner fallback writes
@@ -337,12 +327,19 @@ defmodule Mydia.Settings.ServiceConfigs do
   #     Without it, an operator who mapped Mydia user `alex` to profile `alex-2`
   #     because the profile named `alex` is someone else's had that mapping
   #     repointed at the other person's account by the next config save. The
-  #     mapping editor does not pass it, because repointing is what it is for.
+  #     mapping modal does not pass it, because repointing is what it is for.
+  #
+  #   * `:claim_check` - defaults to true and only
+  #     `replace_media_server_user_links/2` may pass false, having already proved
+  #     the same property against the whole set it is about to write. This is not
+  #     an escape hatch: turning it off without that proof reopens the double
+  #     claim, and the partial unique index would then be all that stands
+  #     between two people and one account's watch history.
   def upsert_media_server_user_link(attrs, opts \\ []) do
     changeset = MediaServerUserLink.changeset(%MediaServerUserLink{}, attrs)
 
     with :ok <- ensure_link_new(changeset, Keyword.get(opts, :only_new, false)),
-         :ok <- ensure_account_unclaimed(changeset) do
+         :ok <- ensure_account_unclaimed(changeset, Keyword.get(opts, :claim_check, true)) do
       Repo.insert(changeset,
         on_conflict:
           {:replace,
@@ -371,7 +368,9 @@ defmodule Mydia.Settings.ServiceConfigs do
     end
   end
 
-  defp ensure_account_unclaimed(changeset) do
+  defp ensure_account_unclaimed(_changeset, false), do: :ok
+
+  defp ensure_account_unclaimed(changeset, true) do
     config_id = Ecto.Changeset.get_field(changeset, :media_server_config_id)
     user_id = Ecto.Changeset.get_field(changeset, :user_id)
     remote_user_id = Ecto.Changeset.get_field(changeset, :remote_user_id)
@@ -397,6 +396,83 @@ defmodule Mydia.Settings.ServiceConfigs do
 
   def delete_media_server_user_link(%MediaServerUserLink{} = link) do
     Repo.delete(link)
+  end
+
+  @doc """
+  Replaces a config's user links with `entries` in one transaction.
+
+  Any existing link for the config whose user is not named by `entries` is
+  deleted. Applying a mapping as separate deletes and upserts left a partial
+  mapping behind whenever one of them failed, which can unlink people who were
+  syncing fine.
+
+  Callers must resolve everything an entry needs, per-user Plex tokens
+  included, before calling. Nothing in here may make a network call: on SQLite a
+  write transaction locks the entire database, so a plex.tv round trip inside
+  one stalls every other writer for its duration.
+
+  Two remote accounts on one Mydia user is impossible by construction, because
+  `entries` is deduplicated on `(config, user)` by the upsert's conflict target.
+  Two Mydia users on one remote account is not, and is refused with
+  `{:error, :duplicate_remote_account}`: the sync scheduler enqueues one job per
+  link, so a pair of links naming one account would import that account's watch
+  history under two different people. This is the same guarantee
+  `upsert_media_server_user_link/2` enforces row by row, restated for the whole
+  incoming set because a bulk replace legitimately trips the row-by-row form:
+  swapping two users' accounts conflicts with rows this call is about to
+  overwrite. The partial unique index on
+  `(media_server_config_id, remote_user_id)` is the backstop underneath both.
+  """
+  @spec replace_media_server_user_links(binary(), [map()]) ::
+          {:ok, [MediaServerUserLink.t()]}
+          | {:error, :duplicate_remote_account | Ecto.Changeset.t() | term()}
+  def replace_media_server_user_links(media_server_config_id, entries) do
+    with :ok <- ensure_one_user_per_account(entries) do
+      Repo.transaction(fn ->
+        keep = MapSet.new(entries, & &1.user_id)
+        existing = list_media_server_user_links(media_server_config_id)
+
+        existing
+        |> Enum.reject(&MapSet.member?(keep, &1.user_id))
+        |> Enum.each(&delete_media_server_user_link/1)
+
+        release_accounts(media_server_config_id, keep)
+
+        Enum.map(entries, fn attrs ->
+          # `claim_check: false` because the check has already been made against
+          # the final state above, and every surviving row is one of `entries`.
+          # Re-checking row by row would refuse a legitimate swap.
+          case upsert_media_server_user_link(attrs, claim_check: false) do
+            {:ok, link} -> link
+            {:error, reason} -> Repo.rollback(reason)
+          end
+        end)
+      end)
+    end
+  end
+
+  # Clears `remote_user_id` on the rows about to be rewritten, so the unique
+  # index cannot fire mid-transaction on a swap: with A on account 1 and B on
+  # account 2, rewriting A to account 2 collides with B until B's own rewrite
+  # lands. The index skips NULL rows, so emptying the column first makes the
+  # order the upserts happen in stop mattering. `enabled` is deliberately not
+  # touched, so a paused mapping stays paused across a save.
+  defp release_accounts(media_server_config_id, keep) do
+    MediaServerUserLink
+    |> where([l], l.media_server_config_id == ^media_server_config_id)
+    |> where([l], l.user_id in ^MapSet.to_list(keep))
+    |> Repo.update_all(set: [remote_user_id: nil])
+  end
+
+  defp ensure_one_user_per_account(entries) do
+    account_ids =
+      entries
+      |> Enum.map(&Map.get(&1, :remote_user_id))
+      |> Enum.reject(&(&1 in [nil, ""]))
+
+    if length(account_ids) == length(Enum.uniq(account_ids)),
+      do: :ok,
+      else: {:error, :duplicate_remote_account}
   end
 
   ## Plugin Configs

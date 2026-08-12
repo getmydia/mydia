@@ -1,9 +1,9 @@
-defmodule Mydia.Jobs.PlexLinkSeedTest do
+defmodule Mydia.Jobs.MediaServerLinkSeedTest do
   use Mydia.DataCase
   use Oban.Testing, repo: Mydia.Repo
 
   alias Mydia.Jobs.MediaServerWatchedSync
-  alias Mydia.Jobs.PlexLinkSeed
+  alias Mydia.Jobs.MediaServerLinkSeed
   alias Mydia.Settings
   alias Mydia.Sync
 
@@ -51,7 +51,7 @@ defmodule Mydia.Jobs.PlexLinkSeedTest do
     end)
 
     assert :ok =
-             perform_job(PlexLinkSeed, %{
+             perform_job(MediaServerLinkSeed, %{
                "config_id" => config.id,
                "plex_tv_base" => base
              })
@@ -111,7 +111,7 @@ defmodule Mydia.Jobs.PlexLinkSeedTest do
     end)
 
     assert :ok =
-             perform_job(PlexLinkSeed, %{
+             perform_job(MediaServerLinkSeed, %{
                "config_id" => config.id,
                "plex_tv_base" => base
              })
@@ -174,7 +174,7 @@ defmodule Mydia.Jobs.PlexLinkSeedTest do
     end)
 
     assert :ok =
-             perform_job(PlexLinkSeed, %{
+             perform_job(MediaServerLinkSeed, %{
                "config_id" => config.id,
                "plex_tv_base" => base
              })
@@ -210,21 +210,21 @@ defmodule Mydia.Jobs.PlexLinkSeedTest do
     end)
 
     assert :ok =
-             perform_job(PlexLinkSeed, %{
+             perform_job(MediaServerLinkSeed, %{
                "config_id" => config.id,
                "plex_tv_base" => base
              })
 
     assert [] = Settings.list_media_server_user_links(config.id)
     assert Sync.last_run("plex", config.id).skip_reason == "token_mint_failed"
-    refute PlexLinkSeed.seeded_before?(Settings.get_media_server_config!(config.id))
+    refute MediaServerLinkSeed.seeded_before?(Settings.get_media_server_config!(config.id))
 
     # The scheduler must still be willing to seed this server.
     assert :ok =
              perform_job(MediaServerWatchedSync, %{"mode" => "server", "config_id" => config.id})
 
     assert Sync.last_run("plex", config.id).skip_reason == "seeding_links"
-    assert_enqueued(worker: PlexLinkSeed, args: %{"config_id" => config.id})
+    assert_enqueued(worker: MediaServerLinkSeed, args: %{"config_id" => config.id})
 
     # And once plex.tv is back, the profile is linked for real.
     Bypass.stub(bypass, "POST", "/api/v2/home/users/7/switch", fn conn ->
@@ -234,7 +234,7 @@ defmodule Mydia.Jobs.PlexLinkSeedTest do
     end)
 
     assert :ok =
-             perform_job(PlexLinkSeed, %{
+             perform_job(MediaServerLinkSeed, %{
                "config_id" => config.id,
                "plex_tv_base" => base
              })
@@ -242,7 +242,7 @@ defmodule Mydia.Jobs.PlexLinkSeedTest do
     assert [link] = Settings.list_media_server_user_links(config.id)
     assert link.user_id == user.id
     assert link.access_token == "per-user-token"
-    assert PlexLinkSeed.seeded_before?(Settings.get_media_server_config!(config.id))
+    assert MediaServerLinkSeed.seeded_before?(Settings.get_media_server_config!(config.id))
   end
 
   test "records owner_link_ambiguous and writes nothing when two admins could own the token",
@@ -259,7 +259,7 @@ defmodule Mydia.Jobs.PlexLinkSeedTest do
     end)
 
     assert :ok =
-             perform_job(PlexLinkSeed, %{
+             perform_job(MediaServerLinkSeed, %{
                "config_id" => config.id,
                "plex_tv_base" => base
              })
@@ -292,7 +292,7 @@ defmodule Mydia.Jobs.PlexLinkSeedTest do
     end)
 
     assert :ok =
-             perform_job(PlexLinkSeed, %{
+             perform_job(MediaServerLinkSeed, %{
                "config_id" => config.id,
                "plex_tv_base" => base
              })
@@ -305,7 +305,7 @@ defmodule Mydia.Jobs.PlexLinkSeedTest do
 
     assert [] = Settings.list_media_server_user_links(config.id)
     assert Sync.last_run("plex", config.id).skip_reason == "no_user_mapping"
-    assert [] = all_enqueued(worker: PlexLinkSeed)
+    assert [] = all_enqueued(worker: MediaServerLinkSeed)
   end
 
   test "records no_matching_users and enqueues nothing when no profile matches",
@@ -323,7 +323,7 @@ defmodule Mydia.Jobs.PlexLinkSeedTest do
     end)
 
     assert :ok =
-             perform_job(PlexLinkSeed, %{
+             perform_job(MediaServerLinkSeed, %{
                "config_id" => config.id,
                "plex_tv_base" => base
              })
@@ -342,7 +342,7 @@ defmodule Mydia.Jobs.PlexLinkSeedTest do
     end)
 
     assert {:error, _reason} =
-             perform_job(PlexLinkSeed, %{
+             perform_job(MediaServerLinkSeed, %{
                "config_id" => config.id,
                "plex_tv_base" => base
              })
@@ -360,7 +360,7 @@ defmodule Mydia.Jobs.PlexLinkSeedTest do
     config = plex_config(%{connection_settings: %{"sync_watched" => false}})
 
     assert :ok =
-             perform_job(PlexLinkSeed, %{
+             perform_job(MediaServerLinkSeed, %{
                "config_id" => config.id,
                "plex_tv_base" => base
              })
@@ -379,7 +379,7 @@ defmodule Mydia.Jobs.PlexLinkSeedTest do
         enabled: true
       })
 
-    assert :ok = perform_job(PlexLinkSeed, %{"config_id" => config.id})
+    assert :ok = perform_job(MediaServerLinkSeed, %{"config_id" => config.id})
     assert [] = Settings.list_media_server_user_links(config.id)
     assert [] = all_enqueued(worker: MediaServerWatchedSync)
   end
@@ -388,6 +388,6 @@ defmodule Mydia.Jobs.PlexLinkSeedTest do
     config = plex_config()
     {:ok, _} = Settings.delete_media_server_config(config)
 
-    assert :ok = perform_job(PlexLinkSeed, %{"config_id" => config.id})
+    assert :ok = perform_job(MediaServerLinkSeed, %{"config_id" => config.id})
   end
 end

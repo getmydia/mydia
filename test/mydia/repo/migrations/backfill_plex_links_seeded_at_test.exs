@@ -3,7 +3,7 @@ defmodule Mydia.Repo.Migrations.BackfillPlexLinksSeededAtTest do
 
   import Mydia.AccountsFixtures
 
-  alias Mydia.Jobs.PlexLinkSeed
+  alias Mydia.Jobs.MediaServerLinkSeed
   alias Mydia.Settings
 
   # Migration modules are not compiled into the app (priv/repo/migrations is not
@@ -58,12 +58,12 @@ defmodule Mydia.Repo.Migrations.BackfillPlexLinksSeededAtTest do
     config = plex_config("Seeded Before Upgrade")
     _link = link(config)
 
-    refute PlexLinkSeed.seeded_before?(config)
+    refute MediaServerLinkSeed.seeded_before?(config)
 
     assert :ok = BackfillPlexLinksSeededAt.backfill()
 
     stamped = reload(config)
-    assert PlexLinkSeed.seeded_before?(stamped)
+    assert MediaServerLinkSeed.seeded_before?(stamped)
     # Everything else in the map survives the read-modify-write.
     assert stamped.connection_settings["sync_watched"] == true
   end
@@ -75,7 +75,7 @@ defmodule Mydia.Repo.Migrations.BackfillPlexLinksSeededAtTest do
 
     assert :ok = BackfillPlexLinksSeededAt.backfill()
 
-    refute PlexLinkSeed.seeded_before?(reload(config))
+    refute MediaServerLinkSeed.seeded_before?(reload(config))
   end
 
   test "leaves a Jellyfin server alone even when it has mappings" do
@@ -93,7 +93,7 @@ defmodule Mydia.Repo.Migrations.BackfillPlexLinksSeededAtTest do
 
     assert :ok = BackfillPlexLinksSeededAt.backfill()
 
-    refute PlexLinkSeed.seeded_before?(reload(config))
+    refute MediaServerLinkSeed.seeded_before?(reload(config))
   end
 
   test "does not overwrite a stamp a real seeding pass already wrote" do

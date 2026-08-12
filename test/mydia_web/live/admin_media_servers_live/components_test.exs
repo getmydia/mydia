@@ -281,9 +281,11 @@ defmodule MydiaWeb.AdminMediaServersLive.ComponentsTest do
       refute html =~ ~s(id="media_server_config_url")
     end
 
-    # Test Connection builds its probe config from url and token alone, with no
-    # connections, so on the discovery path it always fails. The reachability
-    # line already on this screen reports the same thing honestly.
+    # The review step already reports reachability on its own, so a second
+    # button asking the same question is noise. (It used to be worse than noise:
+    # the probe config was built from url and token alone, so on the discovery
+    # path it answered "URL is required" every time. It now carries the
+    # discovered connections, but the panel still says it better.)
     test "Test Connection is hidden on the review step" do
       html = render_modal(oauth_state: :complete, discovery: discovery_map())
 
@@ -294,6 +296,136 @@ defmodule MydiaWeb.AdminMediaServersLive.ComponentsTest do
       html = render_modal(manual_entry: true)
 
       assert html =~ "test_media_server_connection"
+    end
+  end
+
+  describe "Account mapping modal" do
+    defp render_mapping(opts) do
+      render_component(&Components.account_mapping_modal/1, %{
+        config: Keyword.get(opts, :config, %MediaServerConfig{name: "Galactica", type: :plex}),
+        state: Keyword.get(opts, :state, :ready),
+        accounts: Keyword.get(opts, :accounts, []),
+        users: Keyword.get(opts, :users, []),
+        mapping: Keyword.get(opts, :mapping, %{}),
+        saving: Keyword.get(opts, :saving, false)
+      })
+    end
+
+    defp account(id, name, admin? \\ false) do
+      %Mydia.MediaServer.RemoteAccount{id: id, name: name, admin?: admin?}
+    end
+
+    defp users, do: [%{id: "u-admin", username: "admin"}, %{id: "u-alex", username: "alex"}]
+
+    defp jellyfin, do: %MediaServerConfig{name: "Jellyfin", type: :jellyfin}
+
+    defp selected_option(html, account_id) do
+      html
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query(~s(select[name="mapping[#{account_id}]"] option[selected]))
+      |> LazyHTML.attribute("value")
+      |> List.first()
+    end
+
+    test "shows a row and a user select for every account" do
+      html =
+        render_mapping(
+          accounts: [account("1", "arsfeld", true), account("2", "Camille")],
+          users: users()
+        )
+
+      assert html =~ ~s(id="account-1")
+      assert html =~ ~s(id="account-2")
+      assert html =~ "arsfeld"
+      assert html =~ "Camille"
+      assert html =~ ~s(name="mapping[1]")
+      assert html =~ ~s(name="mapping[2]")
+    end
+
+    test "every select offers Don't sync plus each Mydia user" do
+      html = render_mapping(accounts: [account("2", "Camille")], users: users())
+
+      assert html =~ "Don&#39;t sync"
+      assert html =~ ~s(value="u-admin")
+      assert html =~ ~s(value="u-alex")
+    end
+
+    test "preselects the user the mapping names" do
+      # Without this the operator's saved links would render as unmapped and a
+      # blind re-save would silently unlink everyone.
+      html =
+        render_mapping(
+          accounts: [account("1", "arsfeld"), account("2", "Camille")],
+          users: users(),
+          mapping: %{"1" => "u-alex", "2" => nil}
+        )
+
+      assert selected_option(html, "1") == "u-alex"
+      assert selected_option(html, "2") in [nil, ""]
+    end
+
+    test "marks the Plex account owner" do
+      html = render_mapping(accounts: [account("1", "arsfeld", true)], users: users())
+
+      assert html =~ "owner"
+    end
+
+    test "reports that plex.tv is still being asked" do
+      html = render_mapping(state: :loading)
+
+      assert html =~ ~s(id="account-mapping-loading")
+      assert html =~ "plex.tv"
+      refute html =~ ~s(id="account-mapping-form")
+    end
+
+    test "surfaces a load failure instead of an empty list" do
+      # An empty list and a failed request look identical on screen otherwise,
+      # and "this account has no profiles" is the wrong thing to tell someone
+      # whose token just expired.
+      html = render_mapping(state: {:error, "Could not read accounts from Galactica: HTTP 401"})
+
+      assert html =~ ~s(id="account-mapping-error")
+      assert html =~ "HTTP 401"
+      refute html =~ ~s(id="account-mapping-form")
+    end
+
+    test "explains an account with no Home profiles" do
+      html = render_mapping(state: :ready, accounts: [])
+
+      assert html =~ ~s(id="account-mapping-empty")
+      refute html =~ ~s(id="account-mapping-form")
+    end
+
+    test "disables the save button while a save is in flight" do
+      html = render_mapping(accounts: [account("2", "Camille")], users: users(), saving: true)
+
+      assert html =~ "Saving..."
+
+      assert html
+             |> LazyHTML.from_fragment()
+             |> LazyHTML.query("#account-mapping-save")
+             |> LazyHTML.attribute("disabled") != []
+    end
+
+    test "a Jellyfin server is never described as having Plex profiles" do
+      # The same modal renders for both providers. Plex Home copy over a list of
+      # Jellyfin accounts sends the operator looking for a screen their server
+      # does not have, and tells them each account has its own token when
+      # Jellyfin issues none.
+      html =
+        render_mapping(config: jellyfin(), accounts: [account("guid-1", "Tonix")], users: users())
+
+      assert html =~ "Jellyfin accounts"
+      assert html =~ "account found"
+      refute html =~ "Plex"
+    end
+
+    test "a Jellyfin load and empty state say what is actually being asked" do
+      assert render_mapping(config: jellyfin(), state: :loading) =~ "this server for its accounts"
+
+      empty = render_mapping(config: jellyfin(), state: :ready, accounts: [])
+      assert empty =~ ~s(id="account-mapping-empty")
+      refute empty =~ "Plex"
     end
   end
 end

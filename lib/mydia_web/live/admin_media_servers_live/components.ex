@@ -2,9 +2,9 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   @moduledoc false
   use MydiaWeb, :html
 
+  alias Mydia.MediaServer.RemoteAccount
   alias Mydia.Settings
   alias Mydia.Settings.MediaServerConfig
-  alias MydiaWeb.AdminMediaServersLive.UserLinkComponents
 
   @doc """
   Renders the Media Servers tab content.
@@ -12,8 +12,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   attr :media_servers, :list, required: true
   attr :media_server_health, :map, required: true
   attr :last_runs, :map, default: %{}
-  attr :user_links, :map, default: %{}
-  attr :mydia_users, :list, default: []
+  attr :link_counts, :map, default: %{}
 
   def media_servers_tab(assigns) do
     ~H"""
@@ -209,13 +208,6 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                   Configured via environment variables, read-only
                 </p>
 
-                <%!-- Per-user account mapping --%>
-                <UserLinkComponents.user_links_section
-                  server={server}
-                  user_links={@user_links}
-                  mydia_users={@mydia_users}
-                />
-
                 <%!-- Bottom Row: Actions --%>
                 <div class="flex flex-wrap items-center gap-2 pt-3 border-t border-base-200 sm:justify-end sm:gap-1 sm:pt-2">
                   <button
@@ -228,6 +220,17 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                     <.icon name="hero-arrow-path" class="w-4 h-4" /> Reconnect Plex
                   </button>
                   <%= if sync_enabled and server.type in [:plex, :jellyfin] do %>
+                    <button
+                      data-test="map-accounts"
+                      class={["btn btn-ghost gap-1", card_action_btn()]}
+                      phx-click="open_account_mapping"
+                      phx-value-id={server.id}
+                    >
+                      <.icon name="hero-user-group" class="w-4 h-4" /> Accounts
+                      <span :if={Map.get(@link_counts, server.id, 0) > 0} class="badge badge-sm">
+                        {Map.get(@link_counts, server.id, 0)}
+                      </span>
+                    </button>
                     <button
                       class={["btn btn-ghost gap-1", card_action_btn()]}
                       phx-click="sync_watched"
@@ -794,6 +797,178 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
     """
   end
 
+  @doc """
+  Renders the account mapping modal.
+
+  Auto-matching links an account only when its name equals a Mydia username.
+  People name Plex profiles and Jellyfin accounts after people and their Mydia
+  account `admin`, so on most installs nothing matches and watched sync sits
+  skipped with no way out. This is the way out.
+  """
+  attr :config, :map, required: true
+  attr :state, :any, required: true
+  attr :accounts, :list, default: []
+  attr :users, :list, default: []
+  attr :mapping, :map, default: %{}
+  attr :saving, :boolean, default: false
+
+  def account_mapping_modal(assigns) do
+    ~H"""
+    <div class="modal modal-open" id="account-mapping-modal">
+      <div class="modal-box max-w-2xl">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <h3 class="font-bold text-lg">{account_heading(@config)}</h3>
+            <p class="text-sm text-base-content/60 mt-1">
+              {account_intro(@config)}
+            </p>
+          </div>
+          <button
+            type="button"
+            class="btn btn-sm btn-circle btn-ghost"
+            phx-click="close_account_mapping"
+            aria-label="Close"
+          >
+            <.icon name="hero-x-mark" class="w-4 h-4" />
+          </button>
+        </div>
+
+        <div class="mt-5">
+          <%= case @state do %>
+            <% :loading -> %>
+              <div
+                id="account-mapping-loading"
+                class="flex items-center justify-center gap-3 py-10 text-sm text-base-content/70"
+              >
+                <span class="loading loading-spinner loading-sm"></span>
+                {account_loading_message(@config)}
+              </div>
+            <% {:error, message} -> %>
+              <div id="account-mapping-error" class="alert alert-error">
+                <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
+                <span>{message}</span>
+              </div>
+            <% :ready -> %>
+              <%= if @accounts == [] do %>
+                <div id="account-mapping-empty" class="text-center py-10">
+                  <p class="text-sm text-base-content/70">
+                    {account_empty_message(@config)}
+                  </p>
+                </div>
+              <% else %>
+                <form id="account-mapping-form" phx-submit="save_account_mapping">
+                  <div class="flex items-center justify-between mb-2">
+                    <span class="text-sm font-medium">
+                      {length(@accounts)} {found_label(@config, @accounts)}
+                    </span>
+                    <span class="text-xs text-base-content/50">Mydia user</span>
+                  </div>
+
+                  <div class="flex flex-col gap-2">
+                    <div
+                      :for={account <- @accounts}
+                      id={"account-#{account.id}"}
+                      class="flex flex-col gap-2 rounded-lg bg-base-200 px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div class="flex items-center gap-2 min-w-0">
+                        <.icon name="hero-user-circle" class="w-4 h-4 text-base-content/50" />
+                        <%!-- Falls back to the account id: both servers allow a
+                        nameless account, and an unlabelled row is worse than a
+                        raw id when the operator has to pick one. --%>
+                        <span class="truncate text-sm font-medium">
+                          {RemoteAccount.label(account)}
+                        </span>
+                        <span :if={account.admin?} class="badge badge-xs badge-warning">owner</span>
+                      </div>
+                      <div class="sm:w-56">
+                        <.input
+                          type="select"
+                          id={"account-select-#{account.id}"}
+                          name={"mapping[#{account.id}]"}
+                          value={Map.get(@mapping, account.id)}
+                          options={user_options(@users)}
+                          class="select select-sm select-bordered w-full"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="modal-action mt-6">
+                    <button
+                      type="button"
+                      class={["btn btn-ghost", modal_action_btn()]}
+                      phx-click="close_account_mapping"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      id="account-mapping-save"
+                      class={["btn btn-primary gap-2", modal_action_btn()]}
+                      disabled={@saving}
+                    >
+                      <%= if @saving do %>
+                        <span class="loading loading-spinner loading-sm"></span> Saving...
+                      <% else %>
+                        <.icon name="hero-check" class="w-4 h-4" /> Save links
+                      <% end %>
+                    </button>
+                  </div>
+                </form>
+              <% end %>
+          <% end %>
+        </div>
+      </div>
+      <div class="modal-backdrop bg-black/50" phx-click="close_account_mapping"></div>
+    </div>
+    """
+  end
+
+  # "Don't sync" carries the empty string so an unmapped account round-trips as
+  # a present-but-blank param rather than vanishing from the form payload, which
+  # is what lets the save path tell "unlink this" apart from "never asked".
+  defp user_options(users) do
+    [{"Don't sync", ""} | Enum.map(users, &{&1.username, &1.id})]
+  end
+
+  # Each server calls these something different, and a modal that says "Plex
+  # profiles" over a list of Jellyfin accounts sends the operator looking for a
+  # screen their server does not have. The copy also has to explain a real
+  # difference: Plex gives every profile its own token, while Jellyfin has no
+  # per-user tokens and the server API key reads each account's state.
+  defp account_heading(%{type: :jellyfin}), do: "Jellyfin accounts"
+  defp account_heading(_config), do: "Plex profiles"
+
+  defp account_intro(%{type: :jellyfin}) do
+    "Choose which Mydia user each Jellyfin account syncs watched status with. " <>
+      "Jellyfin issues no per-user tokens, so the server API key reads each account " <>
+      "and the mapping is what keeps histories apart."
+  end
+
+  defp account_intro(_config) do
+    "Choose which Mydia user each Plex Home profile syncs watched status with. " <>
+      "Each profile syncs through its own Plex token, so histories stay separate."
+  end
+
+  defp account_loading_message(%{type: :jellyfin}), do: "Asking this server for its accounts..."
+
+  defp account_loading_message(_config),
+    do: "Asking plex.tv for this account's Home profiles..."
+
+  defp account_empty_message(%{type: :jellyfin}) do
+    "This Jellyfin server reported no accounts, so there is nothing to map yet."
+  end
+
+  defp account_empty_message(_config) do
+    "This Plex account has no Home profiles, so there is nothing to map. " <>
+      "Watched sync uses the account owner directly."
+  end
+
+  defp found_label(%{type: :jellyfin}, [_]), do: "account found"
+  defp found_label(%{type: :jellyfin}, _accounts), do: "accounts found"
+  defp found_label(_config, [_]), do: "profile found"
+  defp found_label(_config, _accounts), do: "profiles found"
+
   # Media server type helpers
   defp media_server_type_icon(:plex), do: "hero-play-circle"
   defp media_server_type_icon(:jellyfin), do: "hero-tv"
@@ -878,17 +1053,19 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   # Kept deliberately provider-neutral where the reason is: watched sync now
   # covers Jellyfin as well as Plex, so "Plex only" copy would be wrong on half
   # the servers this renders for. Only genuinely Plex-specific reasons, the ones
-  # Mydia.Jobs.PlexLinkSeed records, still name Plex.
+  # only Plex link seeding can record, still name Plex.
   defp skip_reason_label("server_disabled"), do: "Server is disabled"
   defp skip_reason_label("sync_disabled"), do: "Watched sync is off"
   defp skip_reason_label("unsupported_provider"), do: "Watched sync not supported"
   defp skip_reason_label("no_user_mapping"), do: "No users linked yet"
-  defp skip_reason_label("all_mappings_paused"), do: "Every mapping is paused"
-  defp skip_reason_label("seeding_links"), do: "Linking Plex Home profiles"
+  defp skip_reason_label("seeding_links"), do: "Linking accounts to Mydia users"
   defp skip_reason_label("no_matching_users"), do: "Nothing new to link"
   defp skip_reason_label("token_mint_failed"), do: "plex.tv would not issue a token"
   defp skip_reason_label("owner_link_ambiguous"), do: "Could not tell which admin to map"
-  defp skip_reason_label("link_seeding_failed"), do: "Could not reach plex.tv to link users"
+  defp skip_reason_label("link_seeding_failed"), do: "Could not reach the server to link users"
+  # Recorded by an earlier release that could pause a single mapping. Kept
+  # because sync_runs rows outlive the code that wrote them.
+  defp skip_reason_label("all_mappings_paused"), do: "Every mapping is paused"
   defp skip_reason_label("no_token"), do: "No API token configured"
   defp skip_reason_label("link_user_mismatch"), do: "A user mapping points at the wrong account"
   defp skip_reason_label("link_identity_missing"), do: "A user mapping is incomplete"
@@ -910,59 +1087,55 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
     do: "This server type does not support watched sync."
 
   defp humanize_skip("no_user_mapping"),
-    do:
-      "No Mydia users are mapped to accounts on this server. Add one in the User mapping section below."
+    do: "No Mydia users are mapped to accounts on this server. Press Accounts to map them."
 
   defp humanize_skip("all_mappings_paused"),
     do:
-      "Every user mapping on this server is paused, so there was nobody to sync. Resume one in the User mapping section below."
+      "Every user mapping on this server was paused, so there was nobody to sync. Press Accounts to review them."
 
   defp humanize_skip("seeding_links"),
-    do: "Linking Plex Home profiles to Mydia users. Sync runs again once that finishes."
+    do: "Linking this server's accounts to Mydia users. Sync runs again once that finishes."
 
-  # Reached whenever a discovery pass wrote no new link, which covers a profile
-  # matching nobody and a profile whose Mydia user is already mapped, paused
-  # mappings included. Telling the operator to map accounts by hand is wrong in
-  # the second case, where the mapping they want already exists.
+  # Reached whenever a seeding pass wrote no new link, which covers an account
+  # matching nobody and an account whose Mydia user is already mapped. Telling
+  # the operator to map accounts by hand is wrong in the second case, where the
+  # mapping they want already exists.
   defp humanize_skip("no_matching_users"),
     do:
-      "Nothing new was linked. Either no Plex Home profile matched a Mydia user, or the ones that did are already mapped. Check the User mapping section below."
+      "Nothing new was linked. Either no account matched a Mydia username, or the ones that did are already mapped. Press Accounts to check."
 
   # Deliberately not folded into "nothing new to link". A profile matched and
   # should have been linked, so there is nothing for the operator to fix and
-  # nothing to do but wait for the retry.
+  # nothing to do but wait for the retry. Plex only: Jellyfin mints no tokens.
   defp humanize_skip("token_mint_failed"),
     do:
       "A Plex Home profile matched a Mydia user, but plex.tv would not issue a token for it, so the mapping was not created. This retries on the next run."
 
   defp humanize_skip("owner_link_ambiguous"),
     do:
-      "This Plex account has no Home profiles, and Mydia has more than one admin, so it could not tell whose account this is. Map it by hand in the User mapping section below."
+      "This Plex account has no Home profiles, and Mydia has more than one admin, so it could not tell whose account this is. Press Accounts to map it by hand."
 
   defp humanize_skip("link_seeding_failed"),
-    do: "Could not reach plex.tv to link users. This retries on the next run."
+    do: "Could not reach the server to link users. This retries on the next run."
 
   defp humanize_skip("no_token"),
     do: "This server has no API token, so sync could not authenticate. Add one and save."
 
   defp humanize_skip("link_user_mismatch"),
-    do: "A user mapping points at the wrong account. Fix it in the User mapping section below."
+    do: "A user mapping points at the wrong account. Press Accounts to fix it."
 
   defp humanize_skip("link_identity_missing"),
-    do:
-      "A user mapping is missing its account on this server. Fix it in the User mapping section below."
+    do: "A user mapping is missing its account on this server. Press Accounts to fix it."
 
   defp humanize_skip("link_not_found"),
-    do:
-      "The user mapping used for this run was deleted. Add or fix it in the User mapping section below."
+    do: "The user mapping used for this run was deleted. Press Accounts to map the user again."
 
   defp humanize_skip("missing_user_token"),
     do:
-      "A user mapping has no token of its own, so the sync would have read the server owner's account. Re-save it in the User mapping section below to mint one."
+      "A user mapping has no token of its own, so the sync would have read the server owner's account. Press Accounts and save the mapping again to mint one."
 
   defp humanize_skip("missing_remote_user_id"),
-    do:
-      "A user mapping does not name an account on this server. Fix it in the User mapping section below."
+    do: "A user mapping does not name an account on this server. Press Accounts to fix it."
 
   defp humanize_skip(other), do: other
 

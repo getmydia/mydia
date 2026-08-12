@@ -7,14 +7,13 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
     Args: `%{"config_id" => id, "user_id" => uid, "link_id" => lid}`.
     `link_id` says which remote account the user is; a job without one is
     recorded as a skip rather than run against the server owner's account.
-  - **Server**: Fan out to an individual job for every enabled link on one
-    server, seeding Plex Home links first when a Plex server has none and has
-    never been seeded. A server whose links are all paused is recorded and left
-    alone, because a pause is an instruction. This is what
-    the "Sync Now" button triggers, and what `Mydia.Jobs.PlexLinkSeed`
-    enqueues after a successful seed. Fanning out per link is also what keeps
-    a manual sync off the server owner's account: every job it produces names
-    a link, so none of them can fall through to the config's own token.
+  - **Server**: Fan out to an individual job for every link on one server,
+    seeding links first when a server has none and has never been seeded. This
+    is what the "Sync Now" button triggers, and what
+    `Mydia.Jobs.MediaServerLinkSeed` enqueues after a successful seed. Fanning
+    out per link is also what keeps a manual sync off the server owner's
+    account: every job it produces names a link, so none of them can fall
+    through to the config's own token.
     Args: `%{"mode" => "server", "config_id" => id}`
   - **Scheduler**: Find every enabled server with watched sync enabled and
     fan out the same way, one server at a time.
@@ -114,7 +113,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
   rescue
     # Deleting a media server while its jobs are still queued is ordinary
     # operator behaviour, and a deleted config is a terminal state rather than a
-    # failure worth three retries. Mirrors Mydia.Jobs.PlexLinkSeed.
+    # failure worth three retries. Mirrors Mydia.Jobs.MediaServerLinkSeed.
     Ecto.NoResultsError -> :ok
   end
 
@@ -233,7 +232,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
   # token isn't validate_required on MediaServerConfig. Without this, a Plex
   # config saved with sync on but a blank token would pass skip_reason/1,
   # record :seeding_links on every tick, and enqueue a seed job that can never
-  # produce a link (PlexLinkSeed.seedable?/1 also requires a token), which is a
+  # produce a link (MediaServerLinkSeed.seedable?/1 also requires a token), which is a
   # job reporting healthy while doing nothing forever.
   defp has_token?(%{token: token}), do: is_binary(token) and token != ""
 
@@ -262,32 +261,26 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
   end
 
   defp enqueue_linked_users(config) do
-    links = Settings.list_media_server_user_links(config.id)
-
-    case Enum.filter(links, & &1.enabled) do
-      [] -> handle_no_enabled_links(config, links)
-      enabled -> Enum.each(enabled, fn link -> enqueue(config, link) end)
+    case Settings.list_media_server_user_links(config.id) do
+      [] -> handle_no_links(config)
+      links -> Enum.each(links, fn link -> enqueue(config, link) end)
     end
   end
 
-  # "Nobody is mapped" and "every mapping is paused" produce the same empty
-  # fan-out and mean opposite things. Collapsing them is what let a paused
-  # server seed on every tick: re-seeding a paused row succeeds, so the seed
-  # reported links, the seed re-entered server mode, and the badge read "Linking
-  # Plex Home profiles" forever while the operator's pause did nothing. A pause
-  # is an instruction, so it is recorded and obeyed.
-  defp handle_no_enabled_links(config, []), do: handle_no_links(config)
-  defp handle_no_enabled_links(config, [_ | _]), do: record_skip(config, :all_mappings_paused)
-
   # Seeding is a first run, not a repair. Links are the operator's now: the
-  # mapping editor creates and repoints them, the pause toggle disables them,
-  # and the delete button removes them, promising that watched sync will skip
-  # the user until it is mapped again. So a Plex server that has already been
-  # through a seeding pass and now has nothing mapped is a decision, not a gap,
-  # and re-seeding it would put back the very rows the delete button removed.
-  # Only a server nobody has ever seeded is filled in automatically.
-  defp handle_no_links(%{type: :plex} = config) do
-    if Mydia.Jobs.PlexLinkSeed.seeded_before?(config) do
+  # account mapping modal creates, repoints and removes them, promising that
+  # watched sync will skip a user until they are mapped again. So a server that
+  # has already been through a seeding pass and now has nothing mapped is a
+  # decision, not a gap, and re-seeding it would put back the very rows the
+  # operator cleared. Only a server nobody has ever seeded is filled in
+  # automatically.
+  #
+  # This also stops :seeding_links being re-recorded on every tick. A seeding
+  # pass that matched no account stamps the config all the same, so its
+  # :no_matching_users verdict is no longer buried under a newer "Linking
+  # accounts" row that describes a state already dead.
+  defp handle_no_links(config) do
+    if Mydia.Jobs.MediaServerLinkSeed.seeded_before?(config) do
       record_skip(config, :no_user_mapping)
     else
       enqueue_seed(config)
@@ -295,16 +288,9 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
     end
   end
 
-  # Jellyfin has no seed job: its links come from the user mapping editor and
-  # the Discover button, which an operator drives by hand. Enqueuing a Plex seed
-  # here would no-op and leave a Jellyfin server reporting "Linking Plex Home
-  # profiles" forever, so the skip says what is actually true and points at the
-  # editor.
-  defp handle_no_links(config), do: record_skip(config, :no_user_mapping)
-
   defp enqueue_seed(config) do
     %{"config_id" => config.id}
-    |> Mydia.Jobs.PlexLinkSeed.new()
+    |> Mydia.Jobs.MediaServerLinkSeed.new()
     |> safe_insert()
   end
 
