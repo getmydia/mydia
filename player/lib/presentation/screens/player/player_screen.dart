@@ -308,6 +308,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   List<app_models_audio.AudioTrack> _audioTracks = [];
   app_models_audio.AudioTrack? _selectedAudioTrack;
 
+  /// Bumped on every non-no-op call into [_showSubtitleSelector].
+  ///
+  /// A subtitle selection now does real async work (an "Off" call to
+  /// media_kit, or a content fetch in [_resolveMediaKitSubtitleTrack]), and
+  /// the tap that starts it is fire-and-forget from a sheet that has
+  /// already closed, so nothing stops the viewer from picking again before
+  /// the first pick resolves. Each call captures the generation it was
+  /// issued under and re-checks it after every await; whichever call the
+  /// viewer made *last* is the one whose generation is still current when
+  /// its work finishes, so it is the only one allowed to commit
+  /// [_selectedSubtitleTrack] or touch the player. An earlier call that
+  /// resolves later — a slow network response losing a race to a fast
+  /// "Off" tap, for instance — recognises it has been superseded and backs
+  /// off instead of fighting the newer choice for control of the player.
+  int _subtitleSelectionGeneration = 0;
+
   // Mapping from app model track IDs to media_kit track objects
   Map<String, AudioTrack> _mediaKitAudioTrackMap = {};
   Map<String, SubtitleTrack> _mediaKitSubtitleTrackMap = {};
@@ -1776,8 +1792,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       // Sidecars are not in the container, so they still come from the
       // server. Their body is fetched lazily in
       // [_resolveMediaKitSubtitleTrack], only if and when the viewer selects
-      // one, rather than built here for every sidecar up front.
-      final externalSubs = _subtitleTracks.where((s) => !s.embedded).toList();
+      // one, rather than built here for every sidecar up front. `deliverable`
+      // is redundant with every sidecar today (they are hardcoded true
+      // server-side, unlike an embedded image track), but this keeps the
+      // client's own filtering honest rather than leaning on that server
+      // invariant silently.
+      final externalSubs =
+          _subtitleTracks.where((s) => !s.embedded && s.deliverable).toList();
 
       _subtitleTracks = [...embeddedSubs, ...externalSubs];
     } else {
@@ -2574,6 +2595,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   // The _loadSubtitleTracks method has been removed.
 
   /// Show subtitle track selector and apply selection via media_kit
+  ///
+  /// Deliberately does not set [_selectedSubtitleTrack] until the choice has
+  /// actually taken effect on the player. An earlier version committed it
+  /// eagerly, before the (now-async, network-bound) work that applies it;
+  /// on a failed fetch that left the sheet's checkmark pointing at a track
+  /// that was not actually playing, and — because the no-op guard above
+  /// compares against [_selectedSubtitleTrack] — permanently wedged that
+  /// track until the viewer picked something else. Committing only on
+  /// success means a retry is just picking the same track again.
   Future<void> _showSubtitleSelector() async {
     final selected = await showSubtitleTrackSelector(
       context,
@@ -2583,27 +2613,59 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
     if (selected == _selectedSubtitleTrack || !mounted) return;
 
-    setState(() {
-      _selectedSubtitleTrack = selected;
-    });
+    // Cheap upfront bailout, same as before this method grew an async
+    // fetch: no point starting a network round trip for a screen that has
+    // no player at all right now. Not a substitute for the re-checks below
+    // — `_player` can still change out from under a fetch already in
+    // flight — just avoids the obviously wasted case.
+    if (_player == null) return;
 
-    final player = _player;
-    if (player == null) return;
+    // See [_subtitleSelectionGeneration]'s dartdoc: this call's work is all
+    // async from here on, so it needs a way to recognise a newer call
+    // (including "Off") has already won before it touches shared state.
+    final generation = ++_subtitleSelectionGeneration;
 
     if (selected == null) {
+      final player = _player;
+      if (player == null) return;
+
       // "Off" - disable subtitles
       await player.setSubtitleTrack(SubtitleTrack.no());
+      if (!mounted || generation != _subtitleSelectionGeneration) return;
+      setState(() => _selectedSubtitleTrack = null);
       debugPrint('[PlayerScreen] Subtitles turned off');
       return;
     }
 
     final mkTrack = await _resolveMediaKitSubtitleTrack(selected);
+
+    // Superseded while the fetch was in flight (a re-tap, "Off", or the
+    // screen went away): drop this result silently rather than applying a
+    // choice the viewer has already moved past, or touching a player that
+    // may since have been disposed or replaced.
+    if (!mounted || generation != _subtitleSelectionGeneration) return;
+
     if (mkTrack == null) {
       debugPrint('[PlayerScreen] No media_kit track found for: ${selected.id}');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not load that subtitle track. Try again.'),
+        ),
+      );
       return;
     }
 
+    // Re-read `_player` rather than reusing a value captured before the
+    // await above: `_restartLocalPlayback` nils this field out (without
+    // unmounting the screen, so the `mounted` check above would not have
+    // caught it) while a fetch could still be in flight, and a value
+    // captured earlier would be a media_kit `Player` nothing else holds a
+    // reference to.
+    final player = _player;
+    if (player == null) return;
+
     await player.setSubtitleTrack(mkTrack);
+    setState(() => _selectedSubtitleTrack = selected);
     debugPrint('[PlayerScreen] Set subtitle track: ${selected.displayName}');
   }
 
@@ -2646,8 +2708,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         return null;
       }
 
-      final content = Query$SubtitleContent.fromJson(result.data ?? const {})
-          .subtitleContent;
+      // `result.data` is only ever null alongside `hasException` in this
+      // client, so this branch is not expected to run in practice — but it
+      // is checked explicitly rather than papered over with `?? const {}`,
+      // which looked like it handled a missing response gracefully while
+      // actually just deferring the same failure into the generated
+      // `fromJson`'s non-nullable `__typename` cast, one line down.
+      final data = result.data;
+      if (data == null) {
+        debugPrint(
+            '[PlayerScreen] No data returned for subtitle content ${track.id}');
+        return null;
+      }
+
+      final content = Query$SubtitleContent.fromJson(data).subtitleContent;
       if (content == null || content.isEmpty) {
         debugPrint('[PlayerScreen] No subtitle content for ${track.id}');
         return null;
