@@ -19,6 +19,7 @@ defmodule Mydia.Subtitles.ProviderChain do
   require Logger
 
   alias Mydia.Settings.ServiceConfigs
+  alias Mydia.Subtitles.Health
   alias Mydia.Subtitles.ProviderRegistry
 
   @default_timeout 8_000
@@ -35,6 +36,7 @@ defmodule Mydia.Subtitles.ProviderChain do
     configs =
       [enabled: true]
       |> ServiceConfigs.list_subtitle_provider_configs()
+      |> Enum.filter(&Health.available?(&1.type))
       |> Enum.filter(&eligible?(ProviderRegistry.adapter_for(&1).capabilities(), params))
 
     outcomes = run_all(configs, params)
@@ -49,8 +51,13 @@ defmodule Mydia.Subtitles.ProviderChain do
 
     statuses =
       Enum.map(outcomes, fn
-        {config, {:ok, _}} -> status(config, nil)
-        {config, {:error, reason}} -> status(config, describe(reason))
+        {config, {:ok, _}} ->
+          Health.record_success(config.type)
+          status(config, nil)
+
+        {config, {:error, reason}} ->
+          Health.record_failure(config.type)
+          status(config, describe(reason))
       end)
 
     {:ok, %{results: results, providers: statuses}}

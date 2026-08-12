@@ -43,6 +43,9 @@ defmodule Mydia.Application do
         Mydia.Downloads.ExternalTorrents,
         Mydia.Indexers.Adapter.Registry,
         Mydia.Indexers.RateLimiter,
+        # Passive circuit breaker for subtitle providers. In-memory only, no DB,
+        # so it is safe to start in every environment including tests.
+        Mydia.Subtitles.Health,
         Mydia.Metadata.Provider.Registry,
         Mydia.Metadata.Cache,
         Mydia.Metadata.ProviderIDRegistry,
