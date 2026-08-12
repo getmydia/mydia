@@ -116,4 +116,26 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
       assert has_element?(view, "[data-test=reconnect-plex]")
     end
   end
+
+  describe "Plex wizard auto-connect" do
+    setup %{conn: conn, token: token} do
+      start_supervised!(Mydia.Indexers.Health)
+
+      conn =
+        conn
+        |> init_test_session(%{})
+        |> put_session(:guardian_default_token, token)
+        |> put_req_header("authorization", "Bearer #{token}")
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+      %{view: view}
+    end
+
+    test "the modal no longer offers a Connection step", %{view: view} do
+      view |> element("[phx-click='new_media_server']") |> render_click()
+
+      refute has_element?(view, "li.step", "Connection")
+      assert has_element?(view, "li.step", "Server")
+    end
+  end
 end
