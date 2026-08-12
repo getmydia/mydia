@@ -111,11 +111,15 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                     <.icon name={health_status_icon(health.status)} class="w-3 h-3" />
                     {health_status_label(health.status)}
                   </span>
+                  <span :if={health[:checked_at]} class="text-xs text-base-content/50">
+                    Checked {Calendar.strftime(health.checked_at, "%H:%M")}
+                  </span>
                 </div>
 
                 <p
-                  :if={health.status == :unhealthy and health[:error]}
+                  :if={health[:error]}
                   data-test="health-error"
+                  title={health.error}
                   class="text-xs text-error/80 break-words"
                 >
                   {health.error}
@@ -689,19 +693,23 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   defp health_status_dot_class(:healthy), do: "bg-success animate-pulse"
   defp health_status_dot_class(:unhealthy), do: "bg-error"
   defp health_status_dot_class(:unknown), do: "bg-warning"
+  defp health_status_dot_class(:disabled), do: "bg-base-content/30"
   defp health_status_dot_class(_), do: "bg-base-content/30"
 
   defp health_status_badge_class(:healthy), do: "badge-success"
   defp health_status_badge_class(:unhealthy), do: "badge-error"
   defp health_status_badge_class(:unknown), do: "badge-ghost"
+  defp health_status_badge_class(:disabled), do: "badge-ghost"
 
   defp health_status_icon(:healthy), do: "hero-check-circle"
   defp health_status_icon(:unhealthy), do: "hero-x-circle"
   defp health_status_icon(:unknown), do: "hero-question-mark-circle"
+  defp health_status_icon(:disabled), do: "hero-pause-circle"
 
   defp health_status_label(:healthy), do: "Healthy"
   defp health_status_label(:unhealthy), do: "Unhealthy"
   defp health_status_label(:unknown), do: "Unknown"
+  defp health_status_label(:disabled), do: "Disabled"
 
   # Card action buttons: two per row on phones, with a lone trailing button
   # stretching to fill, and today's compact right-aligned row from `sm` up.

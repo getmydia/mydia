@@ -5,6 +5,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
   alias Mydia.Settings.MediaServerConfig
   alias Mydia.MediaServer.Client, as: MediaServerClient
   alias Mydia.MediaServer.Error
+  alias Mydia.MediaServer.Health, as: MediaServerHealth
   alias Mydia.MediaServer.PlexOAuth
   alias Mydia.MediaServer.Plex.Endpoint, as: PlexEndpoint
   alias Mydia.MediaServer.Plex.Selection
@@ -317,6 +318,8 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
 
     case adapter.test_connection(server) do
       :ok ->
+        MediaServerHealth.check_health(server.id, force: true)
+
         {:noreply,
          socket
          |> put_flash(:info, "Connection to #{server.name} successful!")
@@ -330,6 +333,8 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
           error: Error.message(error),
           user_id: socket.assigns.current_user.id
         )
+
+        MediaServerHealth.check_health(server.id, force: true)
 
         {:noreply,
          socket
@@ -476,7 +481,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
 
   defp load_data(socket) do
     media_servers = Settings.list_media_server_configs()
-    media_server_health = get_media_server_health_status(media_servers)
+    media_server_health = MediaServerHealth.status_map(media_servers)
 
     last_runs =
       Map.new(media_servers, fn server ->
@@ -493,11 +498,5 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
     |> assign(:plex_oauth_servers, [])
     |> assign(:plex_reachability, :checking)
     |> assign(:plex_manual_entry, false)
-  end
-
-  defp get_media_server_health_status(media_servers) do
-    media_servers
-    |> Enum.map(fn server -> {server.id, %{status: :unknown}} end)
-    |> Map.new()
   end
 end

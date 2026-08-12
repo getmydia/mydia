@@ -117,6 +117,53 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
     end
   end
 
+  describe "Health status badge" do
+    setup %{conn: conn, token: token} do
+      start_supervised!(Mydia.Indexers.Health)
+
+      conn =
+        conn
+        |> init_test_session(%{})
+        |> put_session(:guardian_default_token, token)
+        |> put_req_header("authorization", "Bearer #{token}")
+
+      %{conn: conn}
+    end
+
+    test "renders a disabled badge for a disabled server", %{conn: conn} do
+      {:ok, _config} =
+        Mydia.Settings.create_media_server_config(%{
+          name: "Off Jellyfin",
+          type: :jellyfin,
+          url: "http://localhost:8096",
+          token: "api-key",
+          enabled: false,
+          connection_settings: %{}
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+
+      assert has_element?(view, "[aria-label='Disabled']")
+    end
+
+    test "renders an unknown badge for an enabled server that has never been checked",
+         %{conn: conn} do
+      {:ok, _config} =
+        Mydia.Settings.create_media_server_config(%{
+          name: "New Jellyfin",
+          type: :jellyfin,
+          url: "http://localhost:8096",
+          token: "api-key",
+          enabled: true,
+          connection_settings: %{}
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+
+      assert has_element?(view, "[aria-label='Unknown']")
+    end
+  end
+
   describe "Plex wizard auto-connect" do
     setup %{conn: conn, token: token} do
       start_supervised!(Mydia.Indexers.Health)
