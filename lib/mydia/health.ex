@@ -30,7 +30,8 @@ defmodule Mydia.Health do
   alias Mydia.Repo
 
   @type health_status :: :healthy | :unhealthy | :unknown
-  @type service_type :: :download_client | :metadata_provider | :indexer | :database
+  @type service_type ::
+          :download_client | :metadata_provider | :indexer | :database | :media_server
   @type service_id :: String.t()
 
   @type health_result :: %{
