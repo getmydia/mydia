@@ -66,4 +66,38 @@ defmodule Mydia.MediaServer.Plex.Selection do
       enabled: true
     }
   end
+
+  @doc """
+  Re-applies discovery-owned attrs onto form params.
+
+  The wizard's discovered fields are deliberately absent from the modal's form:
+  `connections` is a list rather than an input, the two tokens are secrets that
+  should not be rendered into the page, and none of them are operator-editable.
+  Without this merge the LiveView's change and submit handlers rebuild the
+  changeset from browser params alone and silently drop every one of them,
+  leaving a config with no `url` and no discovery data, which
+  `MediaServerConfig.changeset/2` then rejects.
+
+  `params` arrive string-keyed from the browser and `cast/3` rejects a map that
+  mixes atom and string keys, so the atom keys from `config_attrs/3` are
+  converted here. The `connections` value itself stays as-is: `JsonListType`
+  passes lists through untouched and Jason stringifies their keys on dump.
+  """
+  @spec merge_discovery(map(), map() | nil) :: map()
+  def merge_discovery(params, nil), do: params
+
+  def merge_discovery(%{"type" => "plex"} = params, discovery) when is_map(discovery) do
+    Map.merge(params, %{
+      "machine_identifier" => discovery[:machine_identifier],
+      "connections" => discovery[:connections],
+      "server_access_token" => discovery[:server_access_token],
+      "connections_refreshed_at" => discovery[:connections_refreshed_at],
+      "token" => discovery[:token]
+    })
+  end
+
+  # Any other type means the operator moved the Type select off Plex. Discovery
+  # no longer describes what is being saved, so it is dropped rather than
+  # smuggled into a Jellyfin config.
+  def merge_discovery(params, _discovery), do: params
 end
