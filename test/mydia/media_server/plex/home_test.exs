@@ -3,6 +3,7 @@ defmodule Mydia.MediaServer.Plex.HomeTest do
   use Mydia.DataCase, async: true
 
   alias Mydia.MediaServer.Plex.Home
+  alias Mydia.MediaServer.SeedResult
   alias Mydia.Settings.MediaServerConfig
 
   setup do
@@ -97,9 +98,60 @@ defmodule Mydia.MediaServer.Plex.HomeTest do
       user = Mydia.AccountsFixtures.user_fixture(%{username: "kid"})
       {:ok, saved} = Mydia.Settings.create_media_server_config(persistable(config))
 
-      assert {:ok, links} = Home.seed_links(saved, plex_tv_base: base)
+      assert {:ok, %SeedResult{linked: links}} = Home.seed_links(saved, plex_tv_base: base)
 
       refute Enum.any?(links, &(&1.user_id == user.id))
+    end
+  end
+
+  describe "seed_links/2 owner fallback" do
+    test "leaves an existing mapping alone instead of reverting it to the owner",
+         %{bypass: bypass, config: config, base: base} do
+      # A 404 means the account has no Plex Home, and a bad minute at plex.tv
+      # reads the same way here. The fallback link carries no remote_user_id and
+      # the upsert replaces that column, so writing it would quietly undo the
+      # profile the operator picked by hand.
+      Bypass.stub(bypass, "GET", "/api/v2/home/users", fn conn ->
+        Plug.Conn.resp(conn, 404, "")
+      end)
+
+      admin = Mydia.AccountsFixtures.admin_user_fixture(%{username: "owner"})
+      {:ok, saved} = Mydia.Settings.create_media_server_config(persistable(config))
+
+      {:ok, hand_made} =
+        Mydia.Settings.upsert_media_server_user_link(%{
+          media_server_config_id: saved.id,
+          user_id: admin.id,
+          remote_user_id: "9",
+          remote_username: "kid",
+          access_token: "kid-token",
+          enabled: true
+        })
+
+      assert {:ok, %SeedResult{linked: [], already_mapped: ["kid"]}} =
+               Home.seed_links(saved, plex_tv_base: base)
+
+      assert [kept] = Mydia.Settings.list_media_server_user_links(saved.id)
+      assert kept.id == hand_made.id
+      assert kept.remote_user_id == "9"
+      assert kept.access_token == "kid-token"
+    end
+
+    test "still creates the owner link when nothing is mapped yet",
+         %{bypass: bypass, config: config, base: base} do
+      Bypass.stub(bypass, "GET", "/api/v2/home/users", fn conn ->
+        Plug.Conn.resp(conn, 404, "")
+      end)
+
+      admin = Mydia.AccountsFixtures.admin_user_fixture(%{username: "owner"})
+      {:ok, saved} = Mydia.Settings.create_media_server_config(persistable(config))
+
+      assert {:ok, %SeedResult{linked: [link], already_mapped: []}} =
+               Home.seed_links(saved, plex_tv_base: base)
+
+      assert link.user_id == admin.id
+      assert link.remote_user_id == nil
+      assert link.access_token == saved.token
     end
   end
 

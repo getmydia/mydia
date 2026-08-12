@@ -300,21 +300,56 @@ defmodule Mydia.Settings.ServiceConfigs do
     Repo.get!(MediaServerUserLink, id)
   end
 
+  # One remote account belongs to at most one Mydia user per server. Two links
+  # naming the same account would each import that account's watch history under
+  # a different person's name, which is the merge this whole mapping exists to
+  # prevent. The check lives here, in the single write path, because a check any
+  # caller can forget is one a caller will forget: discovery, the admin editor,
+  # and the seeders all funnel through this function.
+  #
+  # A link with no remote_user_id claims nothing (Plex's owner fallback writes
+  # one), so it is never refused.
   def upsert_media_server_user_link(attrs) do
-    %MediaServerUserLink{}
-    |> MediaServerUserLink.changeset(attrs)
-    |> Repo.insert(
-      on_conflict:
-        {:replace,
-         [
-           :remote_user_id,
-           :remote_username,
-           :access_token,
-           :enabled,
-           :updated_at
-         ]},
-      conflict_target: [:media_server_config_id, :user_id]
+    changeset = MediaServerUserLink.changeset(%MediaServerUserLink{}, attrs)
+
+    with :ok <- ensure_account_unclaimed(changeset) do
+      Repo.insert(changeset,
+        on_conflict:
+          {:replace,
+           [
+             :remote_user_id,
+             :remote_username,
+             :access_token,
+             :enabled,
+             :updated_at
+           ]},
+        conflict_target: [:media_server_config_id, :user_id]
+      )
+    end
+  end
+
+  defp ensure_account_unclaimed(changeset) do
+    config_id = Ecto.Changeset.get_field(changeset, :media_server_config_id)
+    user_id = Ecto.Changeset.get_field(changeset, :user_id)
+    remote_user_id = Ecto.Changeset.get_field(changeset, :remote_user_id)
+
+    cond do
+      remote_user_id in [nil, ""] -> :ok
+      # An incomplete changeset has nothing to compare; let validation speak.
+      is_nil(config_id) or is_nil(user_id) -> :ok
+      account_claimed?(config_id, user_id, remote_user_id) -> {:error, :account_already_mapped}
+      true -> :ok
+    end
+  end
+
+  defp account_claimed?(config_id, user_id, remote_user_id) do
+    MediaServerUserLink
+    |> where(
+      [l],
+      l.media_server_config_id == ^config_id and l.remote_user_id == ^remote_user_id and
+        l.user_id != ^user_id
     )
+    |> Repo.exists?()
   end
 
   def delete_media_server_user_link(%MediaServerUserLink{} = link) do

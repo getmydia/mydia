@@ -162,6 +162,53 @@ defmodule Mydia.MediaServer.UserLinksTest do
     end
   end
 
+  describe "link_user/4 with :replaces" do
+    test "reassigning a mapping to another Mydia user moves it, never claims twice",
+         %{bypass: bypass, user: user} do
+      config = jellyfin_config(bypass)
+      other = Mydia.AccountsFixtures.user_fixture(%{username: "sarah"})
+      account = %RemoteAccount{id: "guid-1", name: "Tonix"}
+
+      assert {:ok, original} = UserLinks.link_user(config, user.id, account)
+
+      assert {:ok, moved} = UserLinks.link_user(config, other.id, account, replaces: original)
+
+      assert [only] = Settings.list_media_server_user_links(config.id)
+      assert only.id == moved.id
+      assert only.user_id == other.id
+      assert only.remote_user_id == "guid-1"
+    end
+
+    test "a failed mint leaves the mapping it would have replaced in place",
+         %{bypass: bypass, user: user} do
+      config = plex_config(bypass)
+      other = Mydia.AccountsFixtures.user_fixture(%{username: "sarah"})
+
+      Bypass.stub(bypass, "POST", "/api/v2/home/users/2/switch", fn conn ->
+        Plug.Conn.resp(conn, 500, "")
+      end)
+
+      {:ok, original} =
+        Settings.upsert_media_server_user_link(%{
+          media_server_config_id: config.id,
+          user_id: user.id,
+          remote_user_id: "1",
+          remote_username: "owner",
+          access_token: "owner-token",
+          enabled: true
+        })
+
+      opts = Keyword.put(plex_opts(bypass), :replaces, original)
+
+      assert {:error, _reason} =
+               UserLinks.link_user(config, other.id, %RemoteAccount{id: "2", name: "kid"}, opts)
+
+      assert [kept] = Settings.list_media_server_user_links(config.id)
+      assert kept.id == original.id
+      assert kept.access_token == "owner-token"
+    end
+  end
+
   test "an account already mapped to another user is refused, not reassigned",
        %{bypass: bypass, user: user} do
     config = jellyfin_config(bypass)

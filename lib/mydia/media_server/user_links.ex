@@ -22,6 +22,10 @@ defmodule Mydia.MediaServer.UserLinks do
       Jellyfin has no per-user tokens, so the GUID is the identity and the token
       is explicitly nil. On Plex the token *is* the identity, so it is minted for
       the chosen account and a failed mint means no write at all.
+
+  A third rule, that one remote account belongs to at most one Mydia user, is
+  enforced by `Settings.upsert_media_server_user_link/1` itself rather than here,
+  because discovery writes links without going through this module.
   """
 
   alias Mydia.MediaServer.Client.Jellyfin, as: JellyfinClient
@@ -29,6 +33,8 @@ defmodule Mydia.MediaServer.UserLinks do
   alias Mydia.MediaServer.Jellyfin.Users, as: JellyfinUsers
   alias Mydia.MediaServer.Plex.Home, as: PlexHome
   alias Mydia.MediaServer.RemoteAccount
+  alias Mydia.MediaServer.SeedResult
+  alias Mydia.Repo
   alias Mydia.Settings
   alias Mydia.Settings.MediaServerUserLink
 
@@ -67,10 +73,12 @@ defmodule Mydia.MediaServer.UserLinks do
   @doc """
   Links every account whose name matches a Mydia username.
 
-  This is the automatic pass, offered in the UI as "Discover accounts". It
-  leaves accounts with no name match alone for the operator to map by hand.
+  This is the automatic pass, offered in the UI as "Discover accounts". It leaves
+  accounts with no name match alone for the operator to map by hand, and leaves
+  accounts another Mydia user is already mapped to alone as well, reporting them
+  in the result rather than reassigning them.
   """
-  @spec discover(config(), keyword()) :: {:ok, [MediaServerUserLink.t()]} | {:error, reason()}
+  @spec discover(config(), keyword()) :: {:ok, SeedResult.t()} | {:error, reason()}
   def discover(config, opts \\ [])
 
   def discover(%{type: :jellyfin} = config, _opts), do: JellyfinUsers.seed_links(config)
@@ -83,6 +91,13 @@ defmodule Mydia.MediaServer.UserLinks do
   Every column is written from a value the caller controls: the config, the
   Mydia user id, and the account the server reported. Nothing is cast from
   submitted params, so no request can set or clear the link's credential.
+
+  ## Options
+
+    * `:replaces` - the link the editor is rewriting. When it belongs to a
+      different Mydia user, the save is a *move*: that row is deleted in the same
+      transaction, so its account is never claimed twice.
+    * any option `Plex.Home.token_for/3` accepts.
   """
   @spec link_user(config(), binary(), RemoteAccount.t(), keyword()) ::
           {:ok, MediaServerUserLink.t()} | {:error, reason()}
@@ -93,9 +108,37 @@ defmodule Mydia.MediaServer.UserLinks do
     # written. That is what keeps `remote_user_id` and `access_token` naming the
     # same account: there is no path that reaches the upsert carrying a token
     # the previous row happened to hold.
-    with :ok <- ensure_unclaimed(config, user_id, account),
-         {:ok, access_token} <- token_for(config, account, opts) do
-      upsert(config, user_id, account, access_token)
+    #
+    # The token is minted before the transaction opens, because it is an HTTP
+    # round trip to plex.tv and nothing should hold a write lock through that.
+    with {:ok, access_token} <- token_for(config, account, opts) do
+      write_link(config, user_id, account, access_token, Keyword.get(opts, :replaces))
+    end
+  end
+
+  defp write_link(config, user_id, account, access_token, replaces) do
+    Repo.transaction(fn ->
+      with :ok <- release_claim(config, user_id, replaces),
+           {:ok, link} <- upsert(config, user_id, account, access_token) do
+        link
+      else
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
+  end
+
+  # Reassigning a mapping to a different Mydia user moves it rather than copying
+  # it: the row that held the account goes away in the same transaction that
+  # writes the new one. That keeps the claim check in
+  # `Settings.upsert_media_server_user_link/1` absolute, with no "except when the
+  # editor says so" hole for a caller to lean on.
+  defp release_claim(_config, _user_id, nil), do: :ok
+
+  defp release_claim(config, user_id, %MediaServerUserLink{} = replaces) do
+    if replaces.media_server_config_id == config.id and replaces.user_id != user_id do
+      with {:ok, _deleted} <- Settings.delete_media_server_user_link(replaces), do: :ok
+    else
+      :ok
     end
   end
 
@@ -117,19 +160,6 @@ defmodule Mydia.MediaServer.UserLinks do
   end
 
   defp token_for(%{type: type}, _account, _opts), do: {:error, {:unsupported_provider, type}}
-
-  # Two Mydia users pointed at one remote account would both import that
-  # account's history, which is the same merge from the other direction. The
-  # operator removes the old mapping rather than having it silently reassigned.
-  defp ensure_unclaimed(config, user_id, %RemoteAccount{} = account) do
-    config.id
-    |> Settings.list_media_server_user_links()
-    |> Enum.find(&(&1.remote_user_id == account.id and &1.user_id != user_id))
-    |> case do
-      nil -> :ok
-      _claimed -> {:error, :account_already_mapped}
-    end
-  end
 
   defp upsert(config, user_id, %RemoteAccount{} = account, access_token) do
     Settings.upsert_media_server_user_link(%{

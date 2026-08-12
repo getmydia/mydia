@@ -49,6 +49,12 @@ defmodule Mydia.Settings.MediaServerUserLink do
     ])
     |> validate_required([:media_server_config_id, :user_id])
     |> unique_constraint([:media_server_config_id, :user_id])
+    # The mirror of the above: one account per Mydia user, and one Mydia user per
+    # account. `Settings.upsert_media_server_user_link/1` refuses the second case
+    # before the insert, so this only catches a race.
+    |> unique_constraint([:media_server_config_id, :remote_user_id],
+      name: :media_server_user_links_config_remote_user_index
+    )
     |> foreign_key_constraint(:media_server_config_id)
     |> foreign_key_constraint(:user_id)
   end

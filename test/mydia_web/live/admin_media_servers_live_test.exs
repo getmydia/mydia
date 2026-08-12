@@ -369,6 +369,91 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
       assert link.remote_user_id == "guid-1"
     end
 
+    test "discovering leaves a hand-made mapping alone and says so",
+         %{conn: conn, bypass: bypass} do
+      # The operator mapped alex to guid-2 because the usernames differ. Jellyfin
+      # also has an account named after another Mydia user, sarah. Discovering
+      # must not write sarah -> guid-2 on top of it: both users would then import
+      # guid-2's watch history.
+      alex = Mydia.AccountsFixtures.user_fixture(%{username: "alex"})
+      Mydia.AccountsFixtures.user_fixture(%{username: "sarah"})
+      server = jellyfin_server(bypass)
+      stub_jellyfin_users(bypass, [%{"Id" => "guid-2", "Name" => "sarah"}])
+
+      {:ok, hand_made} =
+        Mydia.Settings.upsert_media_server_user_link(%{
+          media_server_config_id: server.id,
+          user_id: alex.id,
+          remote_user_id: "guid-2",
+          remote_username: "sarah",
+          enabled: true
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+
+      html =
+        view
+        |> element(~s{[phx-click="user_link_discover"][phx-value-id="#{server.id}"]})
+        |> render_click()
+
+      assert html =~ "Left 1 existing mapping alone"
+
+      assert [kept] = Mydia.Settings.list_media_server_user_links(server.id)
+      assert kept.id == hand_made.id
+      assert kept.user_id == alex.id
+    end
+
+    test "editing a mapping onto a different Mydia user moves it",
+         %{conn: conn, bypass: bypass} do
+      alex = Mydia.AccountsFixtures.user_fixture(%{username: "alex"})
+      sarah = Mydia.AccountsFixtures.user_fixture(%{username: "sarah"})
+      server = jellyfin_server(bypass)
+      stub_jellyfin_users(bypass, [%{"Id" => "guid-1", "Name" => "Tonix"}])
+
+      {:ok, link} =
+        Mydia.Settings.upsert_media_server_user_link(%{
+          media_server_config_id: server.id,
+          user_id: alex.id,
+          remote_user_id: "guid-1",
+          remote_username: "Tonix",
+          enabled: true
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+
+      view
+      |> element("#user-link-#{link.id} button[phx-click='user_link_edit']")
+      |> render_click()
+
+      view
+      |> form("#user-link-form", user_link: %{user_id: sarah.id, remote_user_id: "guid-1"})
+      |> render_submit()
+
+      assert [moved] = Mydia.Settings.list_media_server_user_links(server.id)
+      assert moved.user_id == sarah.id
+      assert moved.remote_user_id == "guid-1"
+      refute moved.user_id == alex.id
+    end
+
+    test "a failed save keeps what was already chosen", %{conn: conn, bypass: bypass} do
+      user = Mydia.AccountsFixtures.user_fixture(%{username: "zzz-last"})
+      server = jellyfin_server(bypass)
+      stub_jellyfin_users(bypass, [%{"Id" => "guid-1", "Name" => "JellyfinTonix"}])
+
+      view = open_mapping_editor(conn, server)
+
+      view
+      |> element("#user-link-form")
+      |> render_submit(%{
+        "user_link" => %{"user_id" => user.id, "remote_user_id" => "guid-made-up"}
+      })
+
+      assert has_element?(
+               view,
+               ~s{select#user_link_user_id option[value="#{user.id}"][selected]}
+             )
+    end
+
     test "a server that cannot be read surfaces the reason instead of an editor",
          %{conn: conn, bypass: bypass} do
       server = jellyfin_server(bypass)

@@ -567,9 +567,13 @@ defmodule Mydia.Settings do
 
   @doc """
   Upserts a media server user link, keyed by (config, user).
+
+  Refuses with `{:error, :account_already_mapped}` when a different Mydia user is
+  already mapped to that remote account on the same server.
   """
   @spec upsert_media_server_user_link(map()) ::
-          {:ok, MediaServerUserLink.t()} | {:error, Ecto.Changeset.t()}
+          {:ok, MediaServerUserLink.t()}
+          | {:error, Ecto.Changeset.t() | :account_already_mapped}
   defdelegate upsert_media_server_user_link(attrs), to: Mydia.Settings.ServiceConfigs
 
   @doc """

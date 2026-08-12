@@ -15,13 +15,13 @@ defmodule Mydia.MediaServer.Jellyfin.Users do
 
   alias Mydia.Accounts
   alias Mydia.MediaServer.Client.Jellyfin, as: JellyfinClient
+  alias Mydia.MediaServer.SeedResult
   alias Mydia.Settings
-  alias Mydia.Settings.MediaServerUserLink
 
   @doc """
   Fetches the server's accounts and links each match to its Mydia user.
   """
-  @spec seed_links(map()) :: {:ok, [MediaServerUserLink.t()]} | {:error, term()}
+  @spec seed_links(map()) :: {:ok, SeedResult.t()} | {:error, term()}
   def seed_links(config) do
     with {:ok, remote_users} <- JellyfinClient.list_users(config) do
       seed_matched_links(config, remote_users)
@@ -33,31 +33,41 @@ defmodule Mydia.MediaServer.Jellyfin.Users do
       Map.new(Accounts.list_users(), fn user -> {String.downcase(user.username), user} end)
 
     remote_users
-    |> Enum.reduce_while({:ok, []}, fn remote_user, {:ok, acc} ->
+    |> Enum.reduce_while({:ok, %SeedResult{}}, fn remote_user, {:ok, result} ->
       name = remote_user.name || ""
 
       case Map.get(by_username, String.downcase(name)) do
-        nil ->
-          {:cont, {:ok, acc}}
-
-        user ->
-          attrs = %{
-            media_server_config_id: config.id,
-            user_id: user.id,
-            remote_user_id: remote_user.id,
-            remote_username: remote_user.name,
-            enabled: true
-          }
-
-          case Settings.upsert_media_server_user_link(attrs) do
-            {:ok, link} -> {:cont, {:ok, [link | acc]}}
-            {:error, _reason} = error -> {:halt, error}
-          end
+        nil -> {:cont, {:ok, result}}
+        user -> link_account(config, user, remote_user, result)
       end
     end)
     |> case do
-      {:ok, links} -> {:ok, Enum.reverse(links)}
+      {:ok, result} -> {:ok, SeedResult.finish(result)}
       other -> other
+    end
+  end
+
+  defp link_account(config, user, remote_user, result) do
+    attrs = %{
+      media_server_config_id: config.id,
+      user_id: user.id,
+      remote_user_id: remote_user.id,
+      remote_username: remote_user.name,
+      enabled: true
+    }
+
+    case Settings.upsert_media_server_user_link(attrs) do
+      {:ok, link} ->
+        {:cont, {:ok, SeedResult.add_link(result, link)}}
+
+      # A mapping the operator made by hand outranks rediscovery. One account
+      # already claimed is also no reason to abandon the rest of the run, which
+      # is what halting here used to do.
+      {:error, :account_already_mapped} ->
+        {:cont, {:ok, SeedResult.add_already_mapped(result, remote_user.name)}}
+
+      {:error, _reason} = error ->
+        {:halt, error}
     end
   end
 end

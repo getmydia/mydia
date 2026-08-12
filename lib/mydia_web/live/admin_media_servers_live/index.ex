@@ -11,6 +11,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
   alias Mydia.MediaServer.Plex.Endpoint, as: PlexEndpoint
   alias Mydia.MediaServer.Plex.Selection
   alias Mydia.MediaServer.RemoteAccount
+  alias Mydia.MediaServer.SeedResult
   alias Mydia.MediaServer.UserLinks
   alias Mydia.Sync
 
@@ -379,10 +380,10 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
     server = Settings.get_media_server_config!(id)
 
     case UserLinks.discover(server) do
-      {:ok, links} ->
+      {:ok, %SeedResult{} = result} ->
         {:noreply,
          socket
-         |> put_flash(:info, discover_message(links, server))
+         |> put_flash(:info, discover_message(result, server))
          |> load_data()}
 
       {:error, reason} ->
@@ -565,6 +566,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
          |> assign(:user_link_mode, mode)
          |> assign(:user_link_server, server)
          |> assign(:user_link_accounts, accounts)
+         |> assign(:editing_user_link, link)
          |> assign(:user_link_form, user_link_form(socket, link))}
 
       {:error, reason} ->
@@ -578,9 +580,13 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
   # form cannot set or clear the link's access_token, and cannot name an account
   # the server does not have.
   defp save_user_link(socket, server, params) do
+    # `:replaces` is what makes editing a row and choosing a different Mydia user
+    # a move instead of a second claim on the same account.
+    opts = [replaces: socket.assigns[:editing_user_link]]
+
     with {:ok, user} <- fetch_mydia_user(socket, params["user_id"]),
          {:ok, account} <- fetch_remote_account(socket, params["remote_user_id"]),
-         {:ok, _link} <- UserLinks.link_user(server, user.id, account) do
+         {:ok, _link} <- UserLinks.link_user(server, user.id, account, opts) do
       {:noreply,
        socket
        |> assign(:show_user_link_modal, false)
@@ -591,8 +597,23 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
        |> load_data()}
     else
       {:error, reason} ->
-        {:noreply, put_flash(socket, :error, save_link_error(server, reason))}
+        # Keep what was chosen. Rebuilding the form from its defaults would make
+        # the operator redo both selections to correct one of them.
+        {:noreply,
+         socket
+         |> assign(:user_link_form, submitted_user_link_form(params))
+         |> put_flash(:error, save_link_error(server, reason))}
     end
+  end
+
+  defp submitted_user_link_form(params) do
+    to_form(
+      %{
+        "user_id" => params["user_id"] || "",
+        "remote_user_id" => params["remote_user_id"] || ""
+      },
+      as: :user_link
+    )
   end
 
   defp user_link_form(socket, nil) do
@@ -627,15 +648,28 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
     end
   end
 
-  defp discover_message([], server) do
+  defp discover_message(%SeedResult{linked: [], already_mapped: []}, server) do
     "No usernames matched on #{server.name}. Use Add mapping to pair accounts by hand."
   end
 
-  defp discover_message([_link], server), do: "Matched 1 account on #{server.name}"
-
-  defp discover_message(links, server) do
-    "Matched #{length(links)} accounts on #{server.name}"
+  defp discover_message(%SeedResult{} = result, server) do
+    [matched_sentence(result.linked, server), kept_sentence(result.already_mapped)]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join(" ")
   end
+
+  defp matched_sentence([], _server), do: nil
+  defp matched_sentence([_link], server), do: "Matched 1 account on #{server.name}."
+
+  defp matched_sentence(links, server) do
+    "Matched #{length(links)} accounts on #{server.name}."
+  end
+
+  # Discovery leaving an account alone looks like discovery ignoring it, so the
+  # operator is told their own mapping is what held it.
+  defp kept_sentence([]), do: nil
+  defp kept_sentence([_name]), do: "Left 1 existing mapping alone."
+  defp kept_sentence(names), do: "Left #{length(names)} existing mappings alone."
 
   defp read_accounts_error(server, reason) do
     "Could not read accounts from #{server.name}: #{describe_reason(reason)}"
@@ -701,6 +735,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
     |> assign(:mydia_users, Enum.sort_by(Accounts.list_users(), & &1.username))
     |> assign(:show_media_server_modal, false)
     |> assign(:show_user_link_modal, false)
+    |> assign(:editing_user_link, nil)
     |> assign(:testing_media_server_connection, false)
     |> assign(:plex_oauth_state, :idle)
     |> assign(:plex_oauth_servers, [])
