@@ -15,8 +15,8 @@ use crate::types::discovery::{
     Collection, ContinueWatchingItem, RemoteAccessStatus, SearchResults, UpNextItem,
 };
 use crate::types::media::{
-    Episode, LibraryPath, Movie, MovieConnection, MovieEdge, RecentlyAddedItem, TvShow,
-    TvShowConnection, TvShowEdge,
+    Episode, LibraryPath, Movie, MovieConnection, MovieEdge, RecentlyAddedItem,
+    SubtitleProviderStatus, SubtitleSearchPayload, TvShow, TvShowConnection, TvShowEdge,
 };
 use crate::types::streaming::StreamingCandidatesResult;
 use mydia_db::media_files::MediaFileRow;
@@ -440,6 +440,36 @@ impl RootQueryType {
     }
 
     /// Get streaming candidates for a media item
+    /// Search every enabled subtitle provider for a media file.
+    ///
+    /// query_types.ex:`:subtitle_search`. This server acquires no media, which
+    /// includes not fetching subtitles from providers, so the search is always
+    /// empty. It reports that as a provider status rather than an empty result
+    /// list with no explanation, so a client can tell "nothing found" apart
+    /// from "this backend does not do that".
+    ///
+    /// The field exists at all because the player talks to both servers and
+    /// GraphQL rejects an entire query containing an unknown field. Omitting it
+    /// here would break every query that mentions it, not just this field.
+    async fn subtitle_search(
+        &self,
+        ctx: &Context<'_>,
+        _media_file_id: ID,
+        _languages: Vec<String>,
+    ) -> Result<SubtitleSearchPayload> {
+        authenticated_user(ctx).await?;
+
+        Ok(SubtitleSearchPayload {
+            results: vec![],
+            providers: vec![SubtitleProviderStatus {
+                name: "Mydia Server".to_string(),
+                quota_remaining: None,
+                quota_total: None,
+                error: Some("This server does not download subtitles from providers.".to_string()),
+            }],
+        })
+    }
+
     async fn streaming_candidates(
         &self,
         ctx: &Context<'_>,

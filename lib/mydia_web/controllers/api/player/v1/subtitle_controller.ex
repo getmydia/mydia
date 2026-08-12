@@ -100,32 +100,47 @@ defmodule MydiaWeb.Api.Player.V1.SubtitleController do
 
     case resolve_media_file(type, id) do
       {:ok, media_file} ->
-        case Extractor.extract_subtitle_track(media_file, track_id, format: format) do
-          {:ok, file_path} ->
-            stream_subtitle_file(conn, file_path, format, track_id)
+        case Mydia.Subtitles.Delivery.content(media_file, track_id, format) do
+          {:ok, body} ->
+            conn
+            |> put_resp_header("content-type", get_subtitle_mime_type(format))
+            |> put_resp_header(
+              "content-disposition",
+              "inline; filename=\"subtitle-#{track_id}.#{format}\""
+            )
+            |> send_resp(200, body)
+
+          {:error, :image_subtitle} ->
+            conn
+            |> put_status(:unsupported_media_type)
+            |> json(%{error: "Image-based subtitles cannot be converted to text"})
 
           {:error, :subtitle_not_found} ->
-            conn
-            |> put_status(:not_found)
-            |> json(%{error: "Subtitle track not found"})
+            conn |> put_status(:not_found) |> json(%{error: "Subtitle track not found"})
 
           {:error, :file_not_found} ->
-            conn
-            |> put_status(:not_found)
-            |> json(%{error: "Subtitle file not found on disk"})
+            conn |> put_status(:not_found) |> json(%{error: "Subtitle file not found on disk"})
 
           {:error, :unauthorized} ->
-            conn
-            |> put_status(:forbidden)
-            |> json(%{error: "Unauthorized access to subtitle"})
+            conn |> put_status(:forbidden) |> json(%{error: "Unauthorized access to subtitle"})
 
           {:error, :media_file_not_found} ->
+            conn |> put_status(:not_found) |> json(%{error: "Media file not found on disk"})
+
+          # An unsupported `format` is the caller asking for something that does
+          # not exist, not the server failing. It arrives from a query
+          # parameter, so it is entirely client-controlled.
+          {:error, {:unsupported_format, requested}} ->
             conn
-            |> put_status(:not_found)
-            |> json(%{error: "Media file not found on disk"})
+            |> put_status(:bad_request)
+            |> json(%{
+              error: "Unsupported subtitle format",
+              requested: to_string(requested),
+              supported: Mydia.Subtitles.Subtitle.supported_formats()
+            })
 
           {:error, reason} ->
-            Logger.error("Failed to extract subtitle",
+            Logger.error("Failed to deliver subtitle",
               media_file_id: media_file.id,
               track_id: track_id,
               reason: inspect(reason)
@@ -216,34 +231,6 @@ defmodule MydiaWeb.Api.Player.V1.SubtitleController do
         track_param
     end
   end
-
-  # Stream subtitle file to client
-  defp stream_subtitle_file(conn, file_path, format, track_id) do
-    mime_type = get_subtitle_mime_type(format)
-    filename = "subtitle-#{track_id}.#{format}"
-
-    # For embedded subtitles (temporary files), we need to clean up after sending
-    is_temp_file = String.starts_with?(file_path, System.tmp_dir!())
-
-    conn
-    |> put_resp_header("content-type", mime_type)
-    |> put_resp_header("content-disposition", "inline; filename=\"#{filename}\"")
-    |> send_file(200, file_path)
-    |> maybe_cleanup_temp_file(file_path, is_temp_file)
-  end
-
-  # Clean up temporary files after sending
-  defp maybe_cleanup_temp_file(conn, file_path, true = _is_temp) do
-    # Schedule cleanup in a separate process to avoid blocking
-    spawn(fn ->
-      Process.sleep(1000)
-      File.rm(file_path)
-    end)
-
-    conn
-  end
-
-  defp maybe_cleanup_temp_file(conn, _file_path, false = _is_temp), do: conn
 
   # Get MIME type for subtitle format
   defp get_subtitle_mime_type("srt"), do: "text/plain; charset=utf-8"

@@ -116,7 +116,14 @@ defmodule MydiaWeb.Schema.CommonTypes do
     @desc "Subtitle files stored alongside the media file. Unlike `subtitles`, this never probes the file."
     field :external_subtitles, list_of(:subtitle_track) do
       resolve(fn file, _args, _info ->
-        {:ok, Mydia.Subtitles.Extractor.list_external_subtitle_tracks(file.id)}
+        # The `url` and `content` fields both read `_media_file_id` off the
+        # track map, mirroring what the `subtitles` field does.
+        tracks =
+          file.id
+          |> Mydia.Subtitles.Extractor.list_external_subtitle_tracks()
+          |> Enum.map(&Map.put(&1, :_media_file_id, file.id))
+
+        {:ok, tracks}
       end)
     end
 
@@ -491,6 +498,17 @@ defmodule MydiaWeb.Schema.CommonTypes do
     @desc "Whether the subtitle is embedded in the media file"
     field :embedded, non_null(:boolean)
 
+    @desc "Whether this track can be delivered as text. False for image-based subtitles (PGS, VobSub), which play only in direct mode"
+    field :deliverable, non_null(:boolean) do
+      resolve(fn track, _args, _info -> {:ok, Map.get(track, :deliverable, true)} end)
+    end
+
+    @desc "Subtitle body in the requested format. Null when the track is not deliverable"
+    field :content, :string do
+      arg(:format, :subtitle_format, default_value: :vtt)
+      resolve(&MydiaWeb.Schema.Resolvers.SubtitleResolver.content/3)
+    end
+
     @desc "URL to download this subtitle in the requested format"
     field :url, :string do
       arg(:format, :subtitle_format, default_value: :vtt)
@@ -507,6 +525,45 @@ defmodule MydiaWeb.Schema.CommonTypes do
         {:ok, url}
       end)
     end
+  end
+
+  @desc "A subtitle available from a provider, not yet downloaded"
+  object :subtitle_candidate do
+    @desc "Opaque signed handle. Pass to downloadSubtitle. Valid for 15 minutes"
+    field :token, non_null(:string)
+
+    @desc "ISO 639-1 language code"
+    field :language, non_null(:string)
+
+    @desc "Provider's file name for this subtitle, usually the release it matches"
+    field :release_name, :string
+
+    field :format, non_null(:string)
+    field :rating, :float
+    field :download_count, :integer
+    field :hearing_impaired, non_null(:boolean)
+
+    @desc "Whether the provider matched this subtitle by media file hash, the strongest signal"
+    field :hash_match, non_null(:boolean)
+
+    field :score, non_null(:integer)
+    field :provider_name, non_null(:string)
+  end
+
+  @desc "Outcome of consulting one subtitle provider"
+  object :subtitle_provider_status do
+    field :name, non_null(:string)
+    field :quota_remaining, :integer
+    field :quota_total, :integer
+
+    @desc "Null when the provider answered. A message when it did not"
+    field :error, :string
+  end
+
+  @desc "Results of a subtitle search across every enabled provider"
+  object :subtitle_search_payload do
+    field :results, non_null(list_of(non_null(:subtitle_candidate)))
+    field :providers, non_null(list_of(non_null(:subtitle_provider_status)))
   end
 
   defp metadata_field(%{metadata: %Mydia.Library.Structs.FileMetadata{} = metadata}, key),

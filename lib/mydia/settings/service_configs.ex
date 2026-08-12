@@ -12,10 +12,12 @@ defmodule Mydia.Settings.ServiceConfigs do
     MediaServerConfig,
     MediaServerUserLink,
     PathMappingConfig,
-    PluginConfig
+    PluginConfig,
+    SubtitleProviderConfig
   }
 
   alias Mydia.Settings.RuntimeConfig, as: RC
+  alias Mydia.Subtitles.ProviderRegistry
 
   ## Download Client Configs
 
@@ -169,6 +171,46 @@ defmodule Mydia.Settings.ServiceConfigs do
   end
 
   def delete_indexer_config(%IndexerConfig{} = config) do
+    Repo.delete(config)
+  end
+
+  ## Subtitle Provider Configs
+
+  def list_subtitle_provider_configs(opts \\ []) do
+    db_configs =
+      SubtitleProviderConfig
+      |> maybe_preload(opts[:preload])
+      |> Repo.all()
+
+    db_configs
+    |> RC.merge_with_runtime_config(&RC.get_runtime_subtitle_providers/0, :name)
+    |> RC.merge_with_runtime_config(&ProviderRegistry.default_configs/0, :type)
+    |> maybe_filter_enabled(opts[:enabled])
+    # Highest priority first, then alphabetical. Negating the priority keeps the
+    # name ascending, which a plain :desc on the whole tuple would reverse.
+    |> Enum.sort_by(&{-(&1.priority || 0), &1.name})
+  end
+
+  defp maybe_filter_enabled(configs, true), do: Enum.filter(configs, & &1.enabled)
+  defp maybe_filter_enabled(configs, _), do: configs
+
+  def get_subtitle_provider_config!(id) do
+    Repo.get!(SubtitleProviderConfig, id)
+  end
+
+  def create_subtitle_provider_config(attrs) do
+    %SubtitleProviderConfig{}
+    |> SubtitleProviderConfig.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  def update_subtitle_provider_config(%SubtitleProviderConfig{} = config, attrs) do
+    config
+    |> SubtitleProviderConfig.changeset(attrs)
+    |> Repo.update()
+  end
+
+  def delete_subtitle_provider_config(%SubtitleProviderConfig{} = config) do
     Repo.delete(config)
   end
 
