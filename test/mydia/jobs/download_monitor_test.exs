@@ -4,6 +4,8 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
 
   import Ecto.Query
 
+  alias Mydia.Downloads.Blacklists
+  alias Mydia.Downloads.ReleaseBlacklist
   alias Mydia.Jobs.DownloadMonitor
   alias Mydia.Downloads
   alias Mydia.Downloads.Download
@@ -1906,7 +1908,7 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
       assert updated.last_observed_at == stale_observed
     end
 
-    test "AE6: a soft-stall past the escalation threshold becomes terminal; episode released" do
+    test "AE6: a soft-stall past the escalation threshold is given up on entirely" do
       {bypass, client_config} = start_sabnzbd_bypass(incomplete_grace_minutes: 60)
       same_bytes = round(50.0 * 1024 * 1024)
 
@@ -1914,7 +1916,7 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
         sabnzbd_queue_item("nzo-ae6", "show.nzb", size_mb: 100.0, mb_left: 50.0)
       ])
 
-      media_item = media_item_fixture()
+      media_item = media_item_fixture(%{type: "movie"})
 
       # Escalation threshold = grace × 3 = 180 min. stalled_since is 182 min old,
       # observed continuously (recent last_observed_at), bytes unchanged.
@@ -1923,6 +1925,8 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
           media_item_id: media_item.id,
           download_client: client_config.name,
           download_client_id: "nzo-ae6",
+          indexer: "1337x",
+          metadata: %{"guid" => "ae6-guid"},
           last_progress_at: ~U[2026-06-16 00:00:00.000000Z],
           last_known_bytes: same_bytes,
           last_observed_at: ~U[2026-06-16 03:58:00.000000Z],
@@ -1932,14 +1936,102 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
       now = ~U[2026-06-16 04:00:00.000000Z]
       assert :ok = perform_job(DownloadMonitor, %{"now" => DateTime.to_iso8601(now)})
 
-      updated = Downloads.get_download!(download.id)
-      refute is_nil(updated.import_failed_at)
-      assert updated.import_last_error =~ "stalled"
-      # Terminal failure releases the episode for re-search.
+      # The row is gone, not annotated. That is the whole point: a give-up that
+      # leaves the download sitting in the queue is what confused operators.
+      refute Repo.get(Download, download.id)
       refute download.id in occupying_ids()
 
+      # Blacklisted briefly, so the replacement search cannot re-grab the same
+      # dead release, but a swarm that recovers overnight becomes available again.
+      assert Blacklists.blacklisted?("1337x", "ae6-guid")
+      row = Repo.get_by!(ReleaseBlacklist, indexer: "1337x", guid: "ae6-guid")
+      assert row.failure_reason == "stalled"
+      expected_expiry = DateTime.add(DateTime.utc_now(), 24 * 60 * 60, :second)
+      assert abs(DateTime.diff(row.expires_at, expected_expiry, :second)) < 60
+
+      assert_enqueued(
+        worker: Mydia.Jobs.MovieSearch,
+        args: %{"mode" => "specific", "media_item_id" => media_item.id}
+      )
+
       Process.sleep(100)
-      assert Events.list_events(type: "download.failed") != []
+      # One event, not two: the stall path owns its own download.failed and
+      # suppresses reject_release/2's download.cancelled.
+      assert [event] = Events.list_events(type: "download.failed")
+      assert event.metadata["failure_category"] == "stalled"
+      assert event.metadata["error_message"] =~ "no progress for 4h"
+      assert Events.list_events(type: "download.cancelled") == []
+    end
+
+    test "AE6b: an exhausted auto-reject cap leaves the stalled download alone" do
+      {bypass, client_config} = start_sabnzbd_bypass(incomplete_grace_minutes: 60)
+      same_bytes = round(50.0 * 1024 * 1024)
+
+      mock_sabnzbd_queue(bypass, [
+        sabnzbd_queue_item("nzo-ae6b", "show.nzb", size_mb: 100.0, mb_left: 50.0)
+      ])
+
+      media_item = media_item_fixture(%{type: "movie"})
+
+      # Burn the cap (default limit is 3) before the poll runs.
+      for _ <- 1..3 do
+        Mydia.Search.record_failure("auto_reject", media_item.id, "stalled")
+      end
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          download_client: client_config.name,
+          download_client_id: "nzo-ae6b",
+          indexer: "1337x",
+          metadata: %{"guid" => "ae6b-guid"},
+          last_progress_at: ~U[2026-06-16 00:00:00.000000Z],
+          last_known_bytes: same_bytes,
+          last_observed_at: ~U[2026-06-16 03:58:00.000000Z],
+          stalled_since: ~U[2026-06-16 00:58:00.000000Z]
+        })
+
+      now = ~U[2026-06-16 04:00:00.000000Z]
+      assert :ok = perform_job(DownloadMonitor, %{"now" => DateTime.to_iso8601(now)})
+
+      # When the cap trips, the likeliest truth is that our detector is wrong,
+      # so the download is left to finish rather than destroyed.
+      assert Repo.get(Download, download.id)
+      refute Blacklists.blacklisted?("1337x", "ae6b-guid")
+
+      Process.sleep(100)
+      assert Events.list_events(type: "download.failed") == []
+      assert Events.list_events(type: "download.auto_reject_suppressed") != []
+    end
+
+    test "AE6c: a stalled download with no blacklist key is still cleared" do
+      {bypass, client_config} = start_sabnzbd_bypass(incomplete_grace_minutes: 60)
+      same_bytes = round(50.0 * 1024 * 1024)
+
+      mock_sabnzbd_queue(bypass, [
+        sabnzbd_queue_item("nzo-ae6c", "show.nzb", size_mb: 100.0, mb_left: 50.0)
+      ])
+
+      media_item = media_item_fixture(%{type: "movie"})
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          download_client: client_config.name,
+          download_client_id: "nzo-ae6c",
+          indexer: nil,
+          metadata: %{},
+          last_progress_at: ~U[2026-06-16 00:00:00.000000Z],
+          last_known_bytes: same_bytes,
+          last_observed_at: ~U[2026-06-16 03:58:00.000000Z],
+          stalled_since: ~U[2026-06-16 00:58:00.000000Z]
+        })
+
+      now = ~U[2026-06-16 04:00:00.000000Z]
+      assert :ok = perform_job(DownloadMonitor, %{"now" => DateTime.to_iso8601(now)})
+
+      refute Repo.get(Download, download.id)
+      assert Repo.aggregate(ReleaseBlacklist, :count) == 0
     end
   end
 

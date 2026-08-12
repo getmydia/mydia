@@ -24,8 +24,9 @@ defmodule Mydia.Downloads.StallDetector do
       NOT a terminal `import_failed_at` failure — and auto-clears on resumed
       progress or a gap reset.
     * **Escalate.** A download that stays continuously soft-stalled past a
-      separate, longer escalation threshold escalates to a terminal failure
-      (the monitor sets `import_failed_at`, releasing the episode for re-search).
+      separate, longer escalation threshold is one we give up on: the monitor
+      rejects the release outright (blocklists it briefly, removes the torrent
+      from the client, deletes the row, and queues a replacement search).
     * **Initialize.** First time we see a download (`last_progress_at` nil) we
       set the baseline and never flag stalled on first sight.
 
@@ -35,6 +36,10 @@ defmodule Mydia.Downloads.StallDetector do
   """
 
   alias Mydia.Downloads.StallDetector.Thresholds
+
+  # A soft-stall escalates to a give-up after grace × this. A dedicated
+  # per-client knob is deliberately deferred (see the stall give-up spec).
+  @escalation_multiplier 3
 
   @type decision ::
           :no_change
@@ -79,7 +84,8 @@ defmodule Mydia.Downloads.StallDetector do
     * `{:soft_stall, message, now}` — bytes unchanged past the grace window. Set
       `stalled_since = now`; leave `import_failed_at` nil (episode retained).
     * `{:escalate, message, now}` — soft-stalled past the escalation threshold.
-      Set `import_failed_at = now` + `import_last_error = message` (terminal).
+      The monitor rejects the release; `message` is recorded on the emitted
+      `download.failed` event.
 
   Boundary semantics: a download whose baseline is EXACTLY `grace_minutes` old is
   *not yet* soft-stalled, and one stalled EXACTLY `escalation_minutes` is *not
@@ -134,7 +140,7 @@ defmodule Mydia.Downloads.StallDetector do
       # the longer threshold) or hold the soft-stall.
       not is_nil(stalled_since) ->
         if DateTime.diff(now, stalled_since, :second) > escalation_minutes * 60 do
-          {:escalate, escalation_message(escalation_minutes), now}
+          {:escalate, escalation_message(grace_minutes, escalation_minutes), now}
         else
           :no_change
         end
@@ -158,13 +164,42 @@ defmodule Mydia.Downloads.StallDetector do
   end
 
   @doc """
-  Build the terminal-escalation error message. Kept with a leading `"stalled"`
-  prefix so `stalled?/1` and the LiveView badge continue to recognise it.
+  How long a soft-stall may persist before we give up, derived from the
+  per-client grace window.
+
+  Single-sourced here rather than in `DownloadMonitor` so the Downloads
+  LiveView can show the operator the same deadline the monitor will act on,
+  with no chance of the two drifting apart.
   """
-  @spec escalation_message(pos_integer()) :: String.t()
-  def escalation_message(escalation_minutes)
-      when is_integer(escalation_minutes) and escalation_minutes > 0 do
-    "stalled after #{escalation_minutes}m without progress — escalated to failure"
+  @spec escalation_minutes(pos_integer()) :: pos_integer()
+  def escalation_minutes(grace_minutes)
+      when is_integer(grace_minutes) and grace_minutes > 0 do
+    grace_minutes * @escalation_multiplier
+  end
+
+  @doc """
+  Build the give-up message recorded on the `download.failed` event.
+
+  Reports the *total* time without progress (grace + escalation). The previous
+  message reported only the escalation window, understating the stall by the
+  whole grace window, and asserted "escalated to failure" while leaving the
+  torrent running. The consequence now lives on the event's `failure_category`
+  and in what actually happens to the download.
+  """
+  @spec escalation_message(pos_integer(), pos_integer()) :: String.t()
+  def escalation_message(grace_minutes, escalation_minutes)
+      when is_integer(grace_minutes) and grace_minutes > 0 and
+             is_integer(escalation_minutes) and escalation_minutes > 0 do
+    "no progress for #{format_window(grace_minutes + escalation_minutes)}"
+  end
+
+  defp format_window(minutes) when minutes < 60, do: "#{minutes}m"
+
+  defp format_window(minutes) do
+    case {div(minutes, 60), rem(minutes, 60)} do
+      {hours, 0} -> "#{hours}h"
+      {hours, rest} -> "#{hours}h #{rest}m"
+    end
   end
 
   @doc """
