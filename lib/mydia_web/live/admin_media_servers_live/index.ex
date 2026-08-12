@@ -826,15 +826,31 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
   # link that exists. It used to write over them, which meant a save that
   # changed nothing but a sync direction silently repointed a mapping the
   # operator had made by hand at whichever profile shares the Mydia username.
-  defp maybe_seed_plex_links(%MediaServerConfig{type: :plex, id: id}) when is_binary(id) do
-    %{"config_id" => id}
-    |> Mydia.Jobs.PlexLinkSeed.new()
-    |> safe_insert()
+  defp maybe_seed_plex_links(%MediaServerConfig{type: :plex, id: id} = config)
+       when is_binary(id) do
+    unless mappings_deliberately_cleared?(config) do
+      %{"config_id" => id}
+      |> Mydia.Jobs.PlexLinkSeed.new()
+      |> safe_insert()
+    end
 
     :ok
   end
 
   defp maybe_seed_plex_links(_config), do: :ok
+
+  # A server that has been seeded before and now has nothing mapped is an
+  # operator who removed the mappings, and the delete button told them watched
+  # sync would skip those users until they were mapped again. Seeding on the
+  # next save would put them all back, and flipping a sync direction is enough
+  # to trigger a save. The scheduler makes the same distinction; this is the
+  # other producer, and leaving it ungated left the promise broken by a
+  # different route. Discover stays the way back, because that is an operator
+  # asking for it.
+  defp mappings_deliberately_cleared?(config) do
+    Mydia.Jobs.PlexLinkSeed.seeded_before?(config) and
+      Settings.list_media_server_user_links(config.id) == []
+  end
 
   # Oban's supervisor isn't started under `testing: :manual` (see
   # `Mydia.Application.oban_children/0`), so a bare `Oban.insert/1` raises a

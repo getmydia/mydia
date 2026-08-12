@@ -188,6 +188,63 @@ defmodule Mydia.Jobs.PlexLinkSeedTest do
     assert Settings.get_media_server_user_link(config.id, alex.id).id == hand_made.id
   end
 
+  test "a failed token mint leaves the config unstamped, so a later pass still seeds",
+       %{bypass: bypass, base: base} do
+    # A profile matched but plex.tv would not mint its token. The pass returns
+    # {:ok, _} with nothing linked, which looks exactly like a finished pass that
+    # found nothing to do. Stamping it would tell the scheduler this server has
+    # been dealt with, and one bad minute at plex.tv would wedge it for good.
+    user = user_fixture()
+    config = plex_config()
+
+    Bypass.stub(bypass, "GET", "/api/v2/home/users", fn conn ->
+      body = Jason.encode!(%{"users" => [%{"id" => 7, "username" => user.username}]})
+
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, body)
+    end)
+
+    Bypass.stub(bypass, "POST", "/api/v2/home/users/7/switch", fn conn ->
+      Plug.Conn.resp(conn, 503, "")
+    end)
+
+    assert :ok =
+             perform_job(PlexLinkSeed, %{
+               "config_id" => config.id,
+               "plex_tv_base" => base
+             })
+
+    assert [] = Settings.list_media_server_user_links(config.id)
+    assert Sync.last_run("plex", config.id).skip_reason == "token_mint_failed"
+    refute PlexLinkSeed.seeded_before?(Settings.get_media_server_config!(config.id))
+
+    # The scheduler must still be willing to seed this server.
+    assert :ok =
+             perform_job(MediaServerWatchedSync, %{"mode" => "server", "config_id" => config.id})
+
+    assert Sync.last_run("plex", config.id).skip_reason == "seeding_links"
+    assert_enqueued(worker: PlexLinkSeed, args: %{"config_id" => config.id})
+
+    # And once plex.tv is back, the profile is linked for real.
+    Bypass.stub(bypass, "POST", "/api/v2/home/users/7/switch", fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, Jason.encode!(%{"authToken" => "per-user-token"}))
+    end)
+
+    assert :ok =
+             perform_job(PlexLinkSeed, %{
+               "config_id" => config.id,
+               "plex_tv_base" => base
+             })
+
+    assert [link] = Settings.list_media_server_user_links(config.id)
+    assert link.user_id == user.id
+    assert link.access_token == "per-user-token"
+    assert PlexLinkSeed.seeded_before?(Settings.get_media_server_config!(config.id))
+  end
+
   test "records owner_link_ambiguous and writes nothing when two admins could own the token",
        %{bypass: bypass, base: base} do
     # config.token belongs to whoever ran OAuth. With more than one admin,

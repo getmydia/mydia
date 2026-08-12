@@ -15,6 +15,12 @@ defmodule Mydia.MediaServer.SeedResult do
 
   `owner_fallback` records what Plex's no-Home fallback did, which is neither a
   name match nor a mapping left alone and must not be reported as either.
+
+  `mint_failures` records profiles that matched a Mydia user but could not be
+  linked because the provider would not issue a credential for them. That is a
+  transient failure wearing the same shape as a finished pass, and telling the
+  two apart is what stops a plex.tv outage from being recorded as "there was
+  nothing to do here".
   """
 
   alias Mydia.Settings.MediaServerUserLink
@@ -36,10 +42,11 @@ defmodule Mydia.MediaServer.SeedResult do
   @type t :: %__MODULE__{
           linked: [MediaServerUserLink.t()],
           already_mapped: [String.t()],
+          mint_failures: [String.t()],
           owner_fallback: owner_fallback()
         }
 
-  defstruct linked: [], already_mapped: [], owner_fallback: nil
+  defstruct linked: [], already_mapped: [], mint_failures: [], owner_fallback: nil
 
   @spec add_link(t(), MediaServerUserLink.t()) :: t()
   def add_link(%__MODULE__{} = result, link), do: %{result | linked: [link | result.linked]}
@@ -49,13 +56,19 @@ defmodule Mydia.MediaServer.SeedResult do
     %{result | already_mapped: [name || "an account" | result.already_mapped]}
   end
 
-  @doc "Puts both accumulated lists back into the order they were seen."
+  @spec add_mint_failure(t(), String.t() | nil) :: t()
+  def add_mint_failure(%__MODULE__{} = result, name) do
+    %{result | mint_failures: [name || "an account" | result.mint_failures]}
+  end
+
+  @doc "Puts every accumulated list back into the order it was seen."
   @spec finish(t()) :: t()
   def finish(%__MODULE__{} = result) do
     %{
       result
       | linked: Enum.reverse(result.linked),
-        already_mapped: Enum.reverse(result.already_mapped)
+        already_mapped: Enum.reverse(result.already_mapped),
+        mint_failures: Enum.reverse(result.mint_failures)
     }
   end
 end

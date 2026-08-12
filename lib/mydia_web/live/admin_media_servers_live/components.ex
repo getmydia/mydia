@@ -886,6 +886,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   defp skip_reason_label("all_mappings_paused"), do: "Every mapping is paused"
   defp skip_reason_label("seeding_links"), do: "Linking Plex Home profiles"
   defp skip_reason_label("no_matching_users"), do: "Nothing new to link"
+  defp skip_reason_label("token_mint_failed"), do: "plex.tv would not issue a token"
   defp skip_reason_label("owner_link_ambiguous"), do: "Could not tell which admin to map"
   defp skip_reason_label("link_seeding_failed"), do: "Could not reach plex.tv to link users"
   defp skip_reason_label("no_token"), do: "No API token configured"
@@ -926,6 +927,13 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   defp humanize_skip("no_matching_users"),
     do:
       "Nothing new was linked. Either no Plex Home profile matched a Mydia user, or the ones that did are already mapped. Check the User mapping section below."
+
+  # Deliberately not folded into "nothing new to link". A profile matched and
+  # should have been linked, so there is nothing for the operator to fix and
+  # nothing to do but wait for the retry.
+  defp humanize_skip("token_mint_failed"),
+    do:
+      "A Plex Home profile matched a Mydia user, but plex.tv would not issue a token for it, so the mapping was not created. This retries on the next run."
 
   defp humanize_skip("owner_link_ambiguous"),
     do:

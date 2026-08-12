@@ -112,13 +112,17 @@ defmodule Mydia.MediaServer.Jellyfin.UsersTest do
     bypass: bypass,
     config: config
   } do
-    # alex is deliberately mapped to the account named "sarah", because on this
+    # alex is deliberately mapped to the account named "alex-2", because on this
     # server the account named "alex" is somebody else. Matching by username
     # would repoint alex at that other account, so `only_new: true` leaves every
-    # Mydia user who already has a mapping alone. Neither skip is a reason to
-    # stop: tonix, who has no mapping at all, is still linked.
+    # Mydia user who already has a mapping alone. The skip is no reason to stop:
+    # tonix, who has no mapping at all, is still linked.
+    #
+    # The skip is also reported as "alex-2", the account alex is actually on.
+    # Reporting "alex", the account that merely shares their Mydia username,
+    # would tell the operator a mapping was kept for an account nobody is
+    # mapped to.
     alex = user_fixture(%{username: "alex"})
-    user_fixture(%{username: "sarah"})
     tonix = user_fixture(%{username: "tonix"})
 
     {:ok, hand_made} =
@@ -126,7 +130,7 @@ defmodule Mydia.MediaServer.Jellyfin.UsersTest do
         media_server_config_id: config.id,
         user_id: alex.id,
         remote_user_id: "guid-2",
-        remote_username: "sarah",
+        remote_username: "alex-2",
         enabled: true
       })
 
@@ -135,11 +139,11 @@ defmodule Mydia.MediaServer.Jellyfin.UsersTest do
       |> Plug.Conn.put_resp_content_type("application/json")
       |> Plug.Conn.resp(
         200,
-        ~s([{"Id":"guid-2","Name":"sarah"},{"Id":"guid-3","Name":"alex"},{"Id":"guid-4","Name":"tonix"}])
+        ~s([{"Id":"guid-3","Name":"alex"},{"Id":"guid-4","Name":"tonix"}])
       )
     end)
 
-    assert {:ok, %SeedResult{linked: [link], already_mapped: ["sarah", "alex"]}} =
+    assert {:ok, %SeedResult{linked: [link], already_mapped: ["alex-2"]}} =
              Users.seed_links(config, only_new: true)
 
     assert link.user_id == tonix.id

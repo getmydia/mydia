@@ -79,7 +79,7 @@ defmodule Mydia.Jobs.PlexLinkSeed do
   defp seed(config, opts) do
     case Home.seed_links(config, opts) do
       {:ok, %SeedResult{} = result} ->
-        mark_seeded(config)
+        maybe_mark_seeded(config, result)
         record_outcome(config, result)
 
       # No stamp on failure: plex.tv having a bad minute is not the operator
@@ -90,9 +90,26 @@ defmodule Mydia.Jobs.PlexLinkSeed do
     end
   end
 
+  # A pass that could not mint a token for a profile it matched is unfinished,
+  # even though it returned `{:ok, _}`. Stamping it would tell the scheduler this
+  # server has been dealt with and stop it seeding again, so one plex.tv outage
+  # would wedge the server for good while the badge claimed there was nothing to
+  # link. Only a pass that reached a conclusion about every matched profile
+  # counts, which still covers the genuine no-match case the stamp exists for.
+  defp maybe_mark_seeded(_config, %SeedResult{mint_failures: [_ | _]}), do: :ok
+  defp maybe_mark_seeded(config, %SeedResult{}), do: mark_seeded(config)
+
   defp record_outcome(config, %SeedResult{linked: [_ | _] = links}) do
     Logger.info("Seeded #{length(links)} Plex user link(s) for #{config.name}")
     enqueue_sync(config)
+    :ok
+  end
+
+  # Every matched profile failed to mint. Distinct from :no_matching_users
+  # because it is worth retrying and the operator has nothing to fix, which the
+  # "nothing new to link" copy would have told them the opposite of.
+  defp record_outcome(config, %SeedResult{mint_failures: [_ | _]}) do
+    record_skip(config, :token_mint_failed)
     :ok
   end
 
@@ -122,9 +139,9 @@ defmodule Mydia.Jobs.PlexLinkSeed do
   # every mapping put them all back on the next tick, against a delete button
   # that promises watched sync will skip the user until it is mapped again.
   #
-  # Stamped on every completed pass, including one that linked nothing, so a
-  # server whose Plex Home matches no Mydia username stops re-running 1 + N
-  # plex.tv round trips on every tick.
+  # Stamped on a pass that linked nothing as well, so a server whose Plex Home
+  # matches no Mydia username stops re-running 1 + N plex.tv round trips on
+  # every tick. `maybe_mark_seeded/2` decides which passes count.
   defp mark_seeded(config) do
     settings =
       Map.put(

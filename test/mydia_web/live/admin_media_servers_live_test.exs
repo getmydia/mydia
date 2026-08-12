@@ -971,6 +971,77 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
       assert_enqueued(worker: Mydia.Jobs.PlexLinkSeed, args: %{"config_id" => config.id})
     end
 
+    test "saving a server whose mappings were all deleted does not seed them back",
+         %{conn: conn} do
+      # Deleting a mapping promises watched sync will skip that user until it is
+      # mapped again. Every Plex save enqueues a seed, and flipping a sync
+      # direction is a save, so an ungated seed-on-save put the mappings back by
+      # a different route than the scheduler tick already guarded.
+      {:ok, config} =
+        Mydia.Settings.create_media_server_config(%{
+          name: "Seeded Already",
+          type: :plex,
+          url: "http://localhost:32400",
+          token: "tok",
+          enabled: true,
+          connection_settings: %{
+            "sync_watched" => true,
+            "plex_links_seeded_at" => "2026-08-01T00:00:00Z"
+          }
+        })
+
+      assert Mydia.Settings.list_media_server_user_links(config.id) == []
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+
+      view |> element("[phx-click='edit_media_server']") |> render_click()
+
+      view
+      |> form("#media-server-form", %{
+        "media_server_config" => %{
+          "name" => "Seeded Already",
+          "type" => "plex",
+          "url" => "http://localhost:32400",
+          "token" => "tok"
+        }
+      })
+      |> render_submit()
+
+      assert [] = all_enqueued(worker: Mydia.Jobs.PlexLinkSeed)
+      assert Mydia.Settings.list_media_server_user_links(config.id) == []
+    end
+
+    test "saving a server that has never been seeded still enqueues a seed", %{conn: conn} do
+      # The other side of the gate: a Plex server with no stamp and no mappings
+      # is a first run, and must still be filled in automatically.
+      {:ok, config} =
+        Mydia.Settings.create_media_server_config(%{
+          name: "Never Seeded",
+          type: :plex,
+          url: "http://localhost:32400",
+          token: "tok",
+          enabled: true,
+          connection_settings: %{"sync_watched" => true}
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+
+      view |> element("[phx-click='edit_media_server']") |> render_click()
+
+      view
+      |> form("#media-server-form", %{
+        "media_server_config" => %{
+          "name" => "Never Seeded",
+          "type" => "plex",
+          "url" => "http://localhost:32400",
+          "token" => "tok"
+        }
+      })
+      |> render_submit()
+
+      assert_enqueued(worker: Mydia.Jobs.PlexLinkSeed, args: %{"config_id" => config.id})
+    end
+
     test "saving a Jellyfin config does not enqueue a link seed", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
 

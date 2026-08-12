@@ -37,6 +37,22 @@ defmodule Mydia.Settings.MediaServerUserLink do
     timestamps(type: :utc_datetime)
   end
 
+  @doc """
+  The name to show an operator for the remote account this link names.
+
+  Discovery reports the mappings it left alone, and a mapping is only meaningful
+  to the operator under the account it actually points at. Falls back to the
+  account id, then to a placeholder, because a link is allowed to carry neither
+  (Plex's owner fallback writes one that carries only a token).
+  """
+  @spec display_name(t()) :: String.t()
+  def display_name(%__MODULE__{remote_username: name}) when is_binary(name) and name != "",
+    do: name
+
+  def display_name(%__MODULE__{remote_user_id: id}) when is_binary(id) and id != "", do: id
+
+  def display_name(%__MODULE__{}), do: "an existing mapping"
+
   def changeset(link, attrs) do
     link
     |> cast(attrs, [

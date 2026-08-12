@@ -128,14 +128,17 @@ defmodule Mydia.MediaServer.Plex.Home do
     end
   end
 
-  defp link_label(%MediaServerUserLink{remote_username: name})
-       when is_binary(name) and name != "",
-       do: name
+  defp link_label(%MediaServerUserLink{} = link), do: MediaServerUserLink.display_name(link)
 
-  defp link_label(%MediaServerUserLink{remote_user_id: id}) when is_binary(id) and id != "",
-    do: id
-
-  defp link_label(_link), do: "an existing mapping"
+  # Same label, for the race where the write is refused rather than the
+  # pre-check catching it. `attrs` is the row we tried to write, so it names the
+  # pair whose existing link we want to report.
+  defp existing_label(%{media_server_config_id: config_id, user_id: user_id}) do
+    case Settings.get_media_server_user_link(config_id, user_id) do
+      %MediaServerUserLink{} = link -> link_label(link)
+      nil -> "an existing mapping"
+    end
+  end
 
   defp seed_matched_links(config, home_users, opts) do
     by_username =
@@ -159,21 +162,27 @@ defmodule Mydia.MediaServer.Plex.Home do
   end
 
   defp link_home_user(config, user, home_user, result, opts) do
-    if already_linked?(config, user, opts) do
-      {:cont, {:ok, SeedResult.add_already_mapped(result, home_user.username)}}
-    else
-      mint_and_write(config, user, home_user, result, opts)
+    case existing_link(config, user, opts) do
+      # Reported under the account the operator actually mapped, not under the
+      # profile that merely shares this Mydia user's name. Naming the latter
+      # would tell them a mapping was kept for an account nobody is mapped to.
+      %MediaServerUserLink{} = link ->
+        {:cont, {:ok, SeedResult.add_already_mapped(result, link_label(link))}}
+
+      nil ->
+        mint_and_write(config, user, home_user, result, opts)
     end
   end
 
-  # Asked before minting rather than only at the write. Minting is a plex.tv
+  # Looked up before minting rather than only at the write. Minting is a plex.tv
   # round trip per profile, and a config save on a server whose mappings are all
   # in place would otherwise spend one on every household member only to have
   # each write refused. `Settings.upsert_media_server_user_link/2` refuses them
   # anyway; this is the cheap path, not the guarantee.
-  defp already_linked?(config, user, opts) do
-    Keyword.get(opts, :only_new, false) and
-      not is_nil(Settings.get_media_server_user_link(config.id, user.id))
+  defp existing_link(config, user, opts) do
+    if Keyword.get(opts, :only_new, false) do
+      Settings.get_media_server_user_link(config.id, user.id)
+    end
   end
 
   defp mint_and_write(config, user, home_user, result, opts) do
@@ -193,13 +202,18 @@ defmodule Mydia.MediaServer.Plex.Home do
 
         write_link(attrs, home_user, result, opts)
 
+      # Recorded, not merely logged. A failed mint is plex.tv having a bad
+      # minute, and a pass that ends this way is unfinished: reporting it as an
+      # ordinary empty result made it indistinguishable from "every profile is
+      # already mapped", which is the difference between retrying later and
+      # never trying again.
       {:error, reason} ->
         Logger.warning(
           "Skipping Plex Home link for #{home_user.username}: " <>
             "could not mint a per-user token (#{inspect(reason)})"
         )
 
-        {:cont, {:ok, result}}
+        {:cont, {:ok, SeedResult.add_mint_failure(result, home_user.username)}}
     end
   end
 
@@ -212,11 +226,17 @@ defmodule Mydia.MediaServer.Plex.Home do
 
       # A mapping the operator made by hand outranks rediscovery, and one
       # claimed profile is no reason to abandon the rest of the run.
-      # `:account_already_mapped` is another Mydia user holding this profile;
-      # `:link_exists` is this Mydia user already holding some profile, which
-      # may well be a different one they picked on purpose.
-      {:error, reason} when reason in [:account_already_mapped, :link_exists] ->
+      # `:account_already_mapped` is another Mydia user holding this profile, so
+      # the profile's own name is the right thing to report.
+      {:error, :account_already_mapped} ->
         {:cont, {:ok, SeedResult.add_already_mapped(result, home_user.username)}}
+
+      # `:link_exists` is this Mydia user already holding some profile, possibly
+      # a different one they picked on purpose. Only reachable as a race, since
+      # `existing_link/3` catches it before the mint. Reported under the account
+      # they are actually on.
+      {:error, :link_exists} ->
+        {:cont, {:ok, SeedResult.add_already_mapped(result, existing_label(attrs))}}
 
       {:error, _reason} = error ->
         {:halt, error}
