@@ -60,7 +60,9 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
      |> assign(:plex_oauth_servers, [])
      |> assign(:plex_oauth_token, nil)
      |> assign(:plex_reachability, :checking)
-     |> assign(:plex_manual_entry, false)}
+     |> assign(:plex_manual_entry, false)
+     |> assign(:plex_discovery, nil)
+     |> assign(:plex_discovery_summary, nil)}
   end
 
   @impl true
@@ -89,7 +91,9 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
        |> assign(:plex_oauth_servers, [])
        |> assign(:plex_oauth_token, nil)
        |> assign(:plex_reachability, :checking)
-       |> assign(:plex_manual_entry, true)}
+       |> assign(:plex_manual_entry, true)
+       |> assign(:plex_discovery, nil)
+       |> assign(:plex_discovery_summary, nil)}
     end
   end
 
@@ -120,12 +124,16 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
        |> assign(:plex_oauth_pin_id, nil)
        |> assign(:plex_oauth_servers, [])
        |> assign(:plex_oauth_token, nil)
-       |> assign(:plex_manual_entry, false)}
+       |> assign(:plex_manual_entry, false)
+       |> assign(:plex_discovery, nil)
+       |> assign(:plex_discovery_summary, nil)}
     end
   end
 
   @impl true
   def handle_event("validate_media_server", %{"media_server_config" => params}, socket) do
+    params = Selection.merge_discovery(params, socket.assigns[:plex_discovery])
+
     server =
       case socket.assigns.media_server_mode do
         :new -> %MediaServerConfig{}
@@ -137,11 +145,16 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
       |> Settings.change_media_server_config(params)
       |> Map.put(:action, :validate)
 
-    {:noreply, assign(socket, :media_server_form, to_form(changeset))}
+    {:noreply,
+     socket
+     |> assign(:media_server_form, to_form(changeset))
+     |> reset_wizard_if_type_changed(params)}
   end
 
   @impl true
   def handle_event("save_media_server", %{"media_server_config" => params}, socket) do
+    params = Selection.merge_discovery(params, socket.assigns[:plex_discovery])
+
     params =
       case socket.assigns.media_server_mode do
         :edit ->
@@ -161,7 +174,9 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
       end
 
     case result do
-      {:ok, _server} ->
+      {:ok, server} ->
+        maybe_seed_plex_links(server)
+
         {:noreply,
          socket
          |> assign(:show_media_server_modal, false)
@@ -300,6 +315,8 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
      |> assign(:plex_oauth_servers, [])
      |> assign(:plex_oauth_token, nil)
      |> assign(:plex_reachability, :checking)
+     |> assign(:plex_discovery, nil)
+     |> assign(:plex_discovery_summary, nil)
      |> push_event("plex_auth_cancelled", %{})}
   end
 
@@ -312,7 +329,9 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
      |> assign(:plex_oauth_pin_id, nil)
      |> assign(:plex_oauth_servers, [])
      |> assign(:plex_oauth_token, nil)
-     |> assign(:plex_reachability, :checking)}
+     |> assign(:plex_reachability, :checking)
+     |> assign(:plex_discovery, nil)
+     |> assign(:plex_discovery_summary, nil)}
   end
 
   @impl true
@@ -350,18 +369,28 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
     end
   end
 
-  # A manual run is still a per-user run. Enqueueing without a link resolved
-  # the scope to the server's own token, so whoever pressed this imported the
-  # server owner's history into their account and exported into the owner's.
-  # No link means no job, and the operator is told where to make one.
   @impl true
   def handle_event("sync_watched", %{"id" => id}, socket) do
     server = Settings.get_media_server_config!(id)
-    user_id = socket.assigns.current_user.id
 
-    case Settings.get_media_server_user_link(server.id, user_id) do
-      %{enabled: true} = link -> enqueue_watched_sync(socket, server, link)
-      link -> {:noreply, put_flash(socket, :error, unmapped_sync_error(server, link))}
+    # Server mode rather than a job for the clicking user. With per-user links in
+    # play, a job carrying no link_id falls back to the config token, which reads
+    # the admin's Plex watch state and writes it onto whoever clicked.
+    changeset =
+      Mydia.Jobs.MediaServerWatchedSync.new(%{
+        "mode" => "server",
+        "config_id" => server.id
+      })
+
+    case safe_insert(changeset) do
+      {:ok, _job} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Watched sync queued for #{server.name}")
+         |> load_data()}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to start watched sync for #{server.name}")}
     end
   end
 
@@ -485,31 +514,6 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
 
   ## Private Helpers
 
-  # The worker owns the args shape, so a manual run and a scheduled one cannot
-  # drift apart. Drift is what let this button enqueue a job with no link.
-  defp enqueue_watched_sync(socket, server, link) do
-    case Mydia.Jobs.MediaServerWatchedSync.enqueue(server, link) do
-      {:ok, _job} ->
-        {:noreply,
-         socket
-         |> put_flash(:info, "Watched sync started for #{server.name}")
-         |> load_data()}
-
-      {:error, _reason} ->
-        {:noreply, put_flash(socket, :error, "Failed to start watched sync for #{server.name}")}
-    end
-  end
-
-  defp unmapped_sync_error(server, nil) do
-    "Your Mydia account is not mapped to an account on #{server.name}, so there is nothing " <>
-      "to sync. Map it in the User mapping section on this page, then try again."
-  end
-
-  defp unmapped_sync_error(server, _paused_link) do
-    "Your mapping on #{server.name} is paused. Resume it in the User mapping section on " <>
-      "this page, then try again."
-  end
-
   defp toggle_link_message(%{enabled: true}) do
     "Mapping resumed. Watched sync will include this user again."
   end
@@ -548,7 +552,9 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
         attrs = Map.merge(attrs, %{last_auth_error: nil, last_auth_error_at: nil})
 
         case Settings.update_media_server_config(socket.assigns.editing_media_server, attrs) do
-          {:ok, _updated} ->
+          {:ok, updated} ->
+            maybe_seed_plex_links(updated)
+
             socket
             |> put_flash(:info, "Plex reconnected successfully")
             |> load_data()
@@ -566,6 +572,16 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
         socket
         |> assign(:plex_oauth_state, :complete)
         |> assign(:plex_reachability, :checking)
+        # `plex_discovery` keeps the full attrs (including `token` and
+        # `server_access_token`) so `Selection.merge_discovery/2` still has
+        # what it needs on submit. `plex_discovery_summary` is the
+        # template-facing view: only the fields the review panel actually
+        # renders, so the two secrets never reach template scope.
+        |> assign(:plex_discovery, attrs)
+        |> assign(
+          :plex_discovery_summary,
+          Map.take(attrs, [:name, :machine_identifier, :connections])
+        )
         |> start_reachability_probe(server)
         |> assign(:media_server_form, to_form(changeset))
     end
@@ -759,6 +775,48 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
 
   defp describe_reason(reason), do: inspect(reason)
 
+  # Moving the Type select off Plex makes the discovered data describe something
+  # other than what is being saved. Resetting the wizard is what stops a stale
+  # "Configuration complete!" panel from sitting above a Jellyfin form.
+  defp reset_wizard_if_type_changed(socket, %{"type" => "plex"}), do: socket
+
+  defp reset_wizard_if_type_changed(socket, _params) do
+    if socket.assigns[:plex_discovery] do
+      socket
+      |> assign(:plex_discovery, nil)
+      |> assign(:plex_discovery_summary, nil)
+      |> assign(:plex_oauth_state, :idle)
+      |> assign(:plex_reachability, :checking)
+    else
+      socket
+    end
+  end
+
+  # Seeds per-user Plex links after any Plex config is persisted. Fires on every
+  # Plex save, including one that only flips a sync direction: the job is cheap
+  # to enqueue, its 120-second uniqueness window collapses bursts, and the
+  # alternative is dirty-field tracking that would silently miss a changed token.
+  defp maybe_seed_plex_links(%MediaServerConfig{type: :plex, id: id}) when is_binary(id) do
+    %{"config_id" => id}
+    |> Mydia.Jobs.PlexLinkSeed.new()
+    |> safe_insert()
+
+    :ok
+  end
+
+  defp maybe_seed_plex_links(_config), do: :ok
+
+  # Oban's supervisor isn't started under `testing: :manual` (see
+  # `Mydia.Application.oban_children/0`), so a bare `Oban.insert/1` raises a
+  # RuntimeError there. Falling back to a plain repo insert keeps this working
+  # both in that mode and in production, matching the pattern already used by
+  # `Mydia.Jobs.MediaServerWatchedSync.safe_insert/1`.
+  defp safe_insert(changeset) do
+    Oban.insert(changeset)
+  rescue
+    RuntimeError -> Mydia.Repo.insert(changeset)
+  end
+
   defp load_data(socket) do
     media_servers = Settings.list_media_server_configs()
     media_server_health = MediaServerHealth.status_map(media_servers)
@@ -787,5 +845,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
     |> assign(:plex_oauth_servers, [])
     |> assign(:plex_reachability, :checking)
     |> assign(:plex_manual_entry, false)
+    |> assign(:plex_discovery, nil)
+    |> assign(:plex_discovery_summary, nil)
   end
 end

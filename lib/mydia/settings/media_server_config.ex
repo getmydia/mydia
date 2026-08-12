@@ -98,7 +98,15 @@ defmodule Mydia.Settings.MediaServerConfig do
     end
   end
 
-  defp addressable_by_discovery?(changeset) do
+  @doc """
+  Returns true when a Plex config can address itself through discovery.
+
+  Public because the media server modal needs exactly this rule to decide
+  whether the Server URL field is a requirement or an optional manual override.
+  Two copies of the rule would drift.
+  """
+  @spec addressable_by_discovery?(Ecto.Changeset.t()) :: boolean()
+  def addressable_by_discovery?(changeset) do
     present?(get_field(changeset, :machine_identifier)) or
       get_field(changeset, :connections) not in [nil, []]
   end

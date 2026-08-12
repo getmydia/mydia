@@ -2,14 +2,23 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
   @moduledoc """
   Oban worker for syncing watched status between Mydia and media servers.
 
-  Two modes:
+  Three modes:
   - **Individual**: Sync a specific server for a specific user.
     Args: `%{"config_id" => id, "user_id" => uid, "link_id" => lid}`.
     `link_id` says which remote account the user is; a job without one is
     recorded as a skip rather than run against the server owner's account.
-  - **Scheduler**: Find all enabled servers with watched sync enabled
-    and enqueue individual jobs for each linked user.
+  - **Server**: Fan out to an individual job for every enabled link on one
+    server, seeding Plex Home links first when none exist yet. This is what
+    the "Sync Now" button triggers, and what `Mydia.Jobs.PlexLinkSeed`
+    enqueues after a successful seed. Fanning out per link is also what keeps
+    a manual sync off the server owner's account: every job it produces names
+    a link, so none of them can fall through to the config's own token.
+    Args: `%{"mode" => "server", "config_id" => id}`
+  - **Scheduler**: Find every enabled server with watched sync enabled and
+    fan out the same way, one server at a time.
     Args: `%{"mode" => "all_enabled"}`
+
+  Unrecognised args parse as the scheduler rather than crashing the worker.
   """
 
   use Oban.Worker, queue: :integrations, max_attempts: 3
@@ -44,6 +53,10 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
       %__MODULE__{mode: "all_enabled"}
     end
 
+    def parse(%{"mode" => "server", "config_id" => config_id}) do
+      %__MODULE__{mode: "server", config_id: config_id}
+    end
+
     def parse(%{"config_id" => config_id, "user_id" => user_id} = args) do
       %__MODULE__{
         config_id: config_id,
@@ -62,6 +75,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
   def perform(%Oban.Job{args: raw_args}) do
     case Args.parse(raw_args) do
       %Args{mode: "all_enabled"} -> perform_all_enabled()
+      %Args{mode: "server"} = args -> perform_server(args)
       %Args{} = args -> perform_individual(args)
     end
   end
@@ -78,6 +92,29 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
     :ok
   end
 
+  # Syncs one server across every linked user. This is what the "Sync Now"
+  # button and a successful link seed both trigger, so manual and scheduled
+  # runs share one fan-out rather than drifting apart.
+  #
+  # It is also why "Sync now" no longer needs to resolve the pressing user's
+  # own link: this fans out to every linked user on the server, and each job it
+  # produces carries a link id, so none of them can reach the config's token.
+  defp perform_server(%Args{config_id: config_id}) do
+    config = Settings.get_media_server_config!(config_id)
+
+    case skip_reason(config) do
+      nil -> enqueue_linked_users(config)
+      reason -> record_skip(config, reason)
+    end
+
+    :ok
+  rescue
+    # Deleting a media server while its jobs are still queued is ordinary
+    # operator behaviour, and a deleted config is a terminal state rather than a
+    # failure worth three retries. Mirrors Mydia.Jobs.PlexLinkSeed.
+    Ecto.NoResultsError -> :ok
+  end
+
   defp perform_individual(%Args{config_id: config_id, user_id: user_id} = args) do
     config = Settings.get_media_server_config!(config_id)
 
@@ -85,6 +122,9 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
       {:ok, scope} -> run_sync(config, scope)
       {:error, reason} -> skip(config, reason, user_id)
     end
+  rescue
+    # Same window, reached more often now that server mode fans these out.
+    Ecto.NoResultsError -> :ok
   end
 
   defp run_sync(config, scope) do
@@ -178,6 +218,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
     cond do
       not watched_sync_enabled?(config) -> :sync_disabled
       match?({:error, _}, provider_for(config)) -> :unsupported_provider
+      not has_token?(config) -> :no_token
       true -> nil
     end
   end
@@ -185,6 +226,13 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
   defp provider_for(%{type: :plex}), do: {:ok, Plex}
   defp provider_for(%{type: :jellyfin}), do: {:ok, Jellyfin}
   defp provider_for(_), do: {:error, :unsupported_provider}
+
+  # token isn't validate_required on MediaServerConfig. Without this, a Plex
+  # config saved with sync on but a blank token would pass skip_reason/1,
+  # record :seeding_links on every tick, and enqueue a seed job that can never
+  # produce a link (PlexLinkSeed.seedable?/1 also requires a token) — a job
+  # reporting healthy while doing nothing forever.
+  defp has_token?(%{token: token}), do: is_binary(token) and token != ""
 
   defp record_skip(config, reason, user_id \\ nil) do
     Mydia.Sync.record_skip(
@@ -197,17 +245,14 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
     )
   end
 
-  @doc """
-  Enqueues one individual sync for the user a link names.
-
-  Public because the admin page's "Sync now" is the other producer of these
-  jobs, and the three args have to agree: `user_id` and `link_id` are read off
-  the same row here, so no caller can pair a user with someone else's identity
-  by building the map itself.
-  """
+  # Enqueues one individual sync for the user a link names. Every producer of a
+  # per-user job goes through here, and the match on `%MediaServerUserLink{}` is
+  # what makes that worth something: `user_id` and `link_id` are read off the
+  # same row, so no caller can pair a user with someone else's identity by
+  # building the args map itself.
   @spec enqueue(map(), MediaServerUserLink.t()) ::
           {:ok, Oban.Job.t()} | {:error, Ecto.Changeset.t()}
-  def enqueue(config, %MediaServerUserLink{} = link) do
+  defp enqueue(config, %MediaServerUserLink{} = link) do
     %{"config_id" => config.id, "user_id" => link.user_id, "link_id" => link.id}
     |> __MODULE__.new()
     |> safe_insert()
@@ -215,12 +260,30 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
 
   defp enqueue_linked_users(config) do
     case Settings.list_media_server_user_links(config.id) |> Enum.filter(& &1.enabled) do
-      [] ->
-        record_skip(config, :no_user_mapping)
-
-      links ->
-        Enum.each(links, fn link -> enqueue(config, link) end)
+      [] -> handle_no_links(config)
+      links -> Enum.each(links, fn link -> enqueue(config, link) end)
     end
+  end
+
+  # On Plex, links are created by Mydia.Jobs.PlexLinkSeed and nothing else.
+  # Recording :no_user_mapping and stopping is exactly what made this job report
+  # healthy while doing nothing: seed first, and the seed job re-enters sync
+  # once it has produced links.
+  defp handle_no_links(%{type: :plex} = config) do
+    enqueue_seed(config)
+    record_skip(config, :seeding_links)
+  end
+
+  # Jellyfin has no seed job: its links come from the user mapping editor, which
+  # an operator drives by hand. Enqueuing a Plex seed here would no-op and leave
+  # a Jellyfin server reporting "Linking Plex Home profiles" forever, so the skip
+  # says what is actually true and points at the editor.
+  defp handle_no_links(config), do: record_skip(config, :no_user_mapping)
+
+  defp enqueue_seed(config) do
+    %{"config_id" => config.id}
+    |> Mydia.Jobs.PlexLinkSeed.new()
+    |> safe_insert()
   end
 
   # A link must say *which* remote account a user is, or the sync would run
