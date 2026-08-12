@@ -450,33 +450,82 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                         </button>
                       </div>
                     <% :complete -> %>
-                      <div class="text-center py-2">
-                        <div class="bg-success/10 inline-flex p-3 rounded-full mb-3">
-                          <.icon name="hero-check-circle" class="w-8 h-8 text-success" />
+                      <div class="space-y-3">
+                        <div class="text-center py-2">
+                          <div class="bg-success/10 inline-flex p-3 rounded-full mb-3">
+                            <.icon name="hero-check-circle" class="w-8 h-8 text-success" />
+                          </div>
+                          <p class="font-medium text-success">Configuration complete!</p>
+                          <p class="text-sm text-base-content/60">
+                            Review the details below and save.
+                          </p>
+                          <div class="mt-3 text-xs">
+                            <%= case @plex_reachability do %>
+                              <% :checking -> %>
+                                <span class="inline-flex items-center gap-2 text-base-content/60">
+                                  <span class="loading loading-spinner loading-xs"></span>
+                                  Checking connectivity...
+                                </span>
+                              <% {:ok, uri} -> %>
+                                <span class="inline-flex items-center gap-1 text-success">
+                                  <.icon name="hero-check-circle" class="w-3 h-3" /> Reachable at
+                                  <span class="font-mono">{simplify_plex_url(uri)}</span>
+                                </span>
+                              <% {:error, _error} -> %>
+                                <span class="inline-flex items-center gap-1 text-warning">
+                                  <.icon name="hero-exclamation-triangle" class="w-3 h-3" />
+                                  No address responded yet. You can still save; Mydia will keep looking.
+                                </span>
+                            <% end %>
+                          </div>
                         </div>
-                        <p class="font-medium text-success">Configuration complete!</p>
-                        <p class="text-sm text-base-content/60">
-                          Review the details below and save.
-                        </p>
-                        <div class="mt-3 text-xs">
-                          <%= case @plex_reachability do %>
-                            <% :checking -> %>
-                              <span class="inline-flex items-center gap-2 text-base-content/60">
-                                <span class="loading loading-spinner loading-xs"></span>
-                                Checking connectivity...
-                              </span>
-                            <% {:ok, uri} -> %>
-                              <span class="inline-flex items-center gap-1 text-success">
-                                <.icon name="hero-check-circle" class="w-3 h-3" /> Reachable at
-                                <span class="font-mono">{simplify_plex_url(uri)}</span>
-                              </span>
-                            <% {:error, _error} -> %>
-                              <span class="inline-flex items-center gap-1 text-warning">
-                                <.icon name="hero-exclamation-triangle" class="w-3 h-3" />
-                                No address responded yet. You can still save; Mydia will keep looking.
-                              </span>
-                          <% end %>
-                        </div>
+
+                        <%= if @plex_discovery do %>
+                          <div
+                            class="bg-base-100 rounded-lg p-3 space-y-2"
+                            data-test="plex-discovery-summary"
+                          >
+                            <div class="flex items-center gap-2">
+                              <div class="bg-primary/10 p-2 rounded-lg">
+                                <.icon name="hero-server" class="w-5 h-5 text-primary" />
+                              </div>
+                              <div class="min-w-0">
+                                <p class="font-medium truncate">{@plex_discovery[:name]}</p>
+                                <p class="font-mono text-xs text-base-content/50 truncate">
+                                  {@plex_discovery[:machine_identifier]}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div class="space-y-1">
+                              <%= for conn <- @plex_discovery[:connections] || [] do %>
+                                <div class="flex items-center gap-2 text-xs">
+                                  <span class="font-mono truncate flex-1">
+                                    {simplify_plex_url(conn[:uri] || conn["uri"])}
+                                  </span>
+                                  <%= if conn[:local] || conn["local"] do %>
+                                    <span class="badge badge-xs badge-info gap-1">
+                                      <.icon name="hero-home" class="w-3 h-3" /> local
+                                    </span>
+                                  <% end %>
+                                  <%= if conn[:relay] || conn["relay"] do %>
+                                    <span class="badge badge-xs badge-warning gap-1">
+                                      <.icon name="hero-cloud" class="w-3 h-3" /> relay
+                                    </span>
+                                  <% end %>
+                                </div>
+                              <% end %>
+                            </div>
+                          </div>
+                        <% end %>
+
+                        <button
+                          type="button"
+                          class="btn btn-ghost btn-sm gap-1"
+                          phx-click="cancel_plex_oauth"
+                        >
+                          <.icon name="hero-arrow-left" class="w-4 h-4" /> Start over
+                        </button>
                       </div>
                     <% :error -> %>
                       <div class="text-center space-y-4 py-2">
@@ -639,12 +688,17 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
           <div class="modal-action mt-6 grid grid-cols-2 gap-2 sticky bottom-0 bg-base-100 -mx-6 px-6 -mb-6 pb-6 pt-4 border-t border-base-300 sm:flex sm:gap-2">
             <button
               type="button"
-              class={["btn btn-ghost", modal_action_btn()]}
+              class={[
+                "btn btn-ghost",
+                @plex_oauth_state == :complete && "col-span-2 sm:col-span-1",
+                modal_action_btn()
+              ]}
               phx-click="close_media_server_modal"
             >
               Cancel
             </button>
             <button
+              :if={@plex_oauth_state != :complete}
               type="button"
               class={["btn btn-outline btn-secondary gap-2", modal_action_btn()]}
               phx-click="test_media_server_connection"

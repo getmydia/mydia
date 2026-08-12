@@ -167,4 +167,54 @@ defmodule MydiaWeb.AdminMediaServersLive.ComponentsTest do
       refute html =~ ~s(id="media_server_config_token")
     end
   end
+
+  describe "media server modal, discovery review panel" do
+    defp discovery_map do
+      %{
+        name: "Storage",
+        machine_identifier: "machine-abc",
+        connections: [
+          %{uri: "https://10-0-0-4.abc.plex.direct:32400", local: true, relay: false},
+          %{uri: "https://relay.plex.direct:443", local: false, relay: true}
+        ]
+      }
+    end
+
+    test "the review panel names the server and its machine identifier" do
+      html = render_modal(oauth_state: :complete, discovery: discovery_map())
+
+      assert html =~ ~s(data-test="plex-discovery-summary")
+      assert html =~ "Storage"
+      assert html =~ "machine-abc"
+    end
+
+    test "the review panel lists the discovered addresses with their badges" do
+      html = render_modal(oauth_state: :complete, discovery: discovery_map())
+
+      assert html =~ "local"
+      assert html =~ "relay"
+    end
+
+    test "the review panel offers a way back but collects no input" do
+      html = render_modal(oauth_state: :complete, discovery: discovery_map())
+
+      assert html =~ "cancel_plex_oauth"
+      refute html =~ ~s(id="media_server_config_url")
+    end
+
+    # Test Connection builds its probe config from url and token alone, with no
+    # connections, so on the discovery path it always fails. The reachability
+    # line already on this screen reports the same thing honestly.
+    test "Test Connection is hidden on the review step" do
+      html = render_modal(oauth_state: :complete, discovery: discovery_map())
+
+      refute html =~ "test_media_server_connection"
+    end
+
+    test "Test Connection is still offered everywhere else" do
+      html = render_modal(manual_entry: true)
+
+      assert html =~ "test_media_server_connection"
+    end
+  end
 end
