@@ -109,6 +109,24 @@ defmodule Mydia.Jobs.PlexLinkSeedTest do
     assert [] = all_enqueued(worker: MediaServerWatchedSync)
   end
 
+  test "does nothing when watched sync is disabled", %{base: base} do
+    # maybe_seed_plex_links/1 fires on every Plex config save, including one
+    # where the operator only wants library refresh and never opted into
+    # watched-status sync. Seeding here would enumerate Plex Home and mint a
+    # long-lived per-profile token for every household member for a feature
+    # they never asked for.
+    config = plex_config(%{connection_settings: %{"sync_watched" => false}})
+
+    assert :ok =
+             perform_job(PlexLinkSeed, %{
+               "config_id" => config.id,
+               "plex_tv_base" => base
+             })
+
+    assert [] = Settings.list_media_server_user_links(config.id)
+    assert [] = all_enqueued(worker: MediaServerWatchedSync)
+  end
+
   test "is a no-op for a Jellyfin config" do
     {:ok, config} =
       Settings.create_media_server_config(%{

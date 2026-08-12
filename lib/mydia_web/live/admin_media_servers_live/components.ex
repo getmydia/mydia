@@ -761,6 +761,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   defp skip_reason_label("seeding_links"), do: "Linking Plex Home profiles"
   defp skip_reason_label("no_matching_users"), do: "No Plex profile matched a Mydia user"
   defp skip_reason_label("link_seeding_failed"), do: "Could not reach plex.tv to link users"
+  defp skip_reason_label("no_token"), do: "No API token configured"
   defp skip_reason_label(other), do: "Skipped: #{other}"
 
   # Simplify plex.direct URLs to show just the IP/host and port

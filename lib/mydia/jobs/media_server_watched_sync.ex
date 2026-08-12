@@ -2,11 +2,17 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
   @moduledoc """
   Oban worker for syncing watched status between Mydia and media servers.
 
-  Two modes:
+  Three modes:
   - **Individual**: Sync a specific server for a specific user.
-    Args: `%{"config_id" => id, "user_id" => uid, "link_id" => lid}`
-  - **Scheduler**: Find all enabled servers with watched sync enabled
-    and enqueue individual jobs for each linked user.
+    Args: `%{"config_id" => id, "user_id" => uid, "link_id" => lid}` (`link_id`
+    is optional; without it the config's own token is used).
+  - **Server**: Fan out to an individual job for every enabled link on one
+    server, seeding Plex Home links first when none exist yet. This is what
+    the "Sync Now" button triggers, and what `Mydia.Jobs.PlexLinkSeed`
+    enqueues after a successful seed.
+    Args: `%{"mode" => "server", "config_id" => id}`
+  - **Scheduler**: Find every enabled server with watched sync enabled and
+    fan out the same way, one server at a time.
     Args: `%{"mode" => "all_enabled"}`
   """
 
@@ -166,12 +172,20 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
     cond do
       not watched_sync_enabled?(config) -> :sync_disabled
       match?({:error, _}, provider_for(config)) -> :unsupported_provider
+      not has_token?(config) -> :no_token
       true -> nil
     end
   end
 
   defp provider_for(%{type: :plex}), do: {:ok, Plex}
   defp provider_for(_), do: {:error, :unsupported_provider}
+
+  # token isn't validate_required on MediaServerConfig. Without this, a Plex
+  # config saved with sync on but a blank token would pass skip_reason/1,
+  # record :seeding_links on every tick, and enqueue a seed job that can never
+  # produce a link (PlexLinkSeed.seedable?/1 also requires a token) — a job
+  # reporting healthy while doing nothing forever.
+  defp has_token?(%{token: token}), do: is_binary(token) and token != ""
 
   defp record_skip(config, reason, user_id \\ nil) do
     Mydia.Sync.record_skip(

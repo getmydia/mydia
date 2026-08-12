@@ -45,11 +45,28 @@ defmodule Mydia.Jobs.PlexLinkSeed do
   # A non-Plex or unconfigured server is a no-op rather than an error. The
   # scheduler enqueues this for any config missing links, and a Jellyfin server
   # with no Plex links is the expected state.
-  defp seedable?(%{type: :plex, enabled: true, token: token})
-       when is_binary(token) and token != "",
-       do: true
+  #
+  # Also requires watched sync itself to be on. `maybe_seed_plex_links/1` fires
+  # on every Plex config save, including one that only wants library refresh
+  # and never opted into watched-status sync. Without this check, seeding
+  # would enumerate Plex Home and mint a long-lived per-profile token for
+  # every household member for a feature the operator never asked for.
+  # Nothing is lost: the scheduler path only enqueues a seed once sync is on,
+  # and turning sync on later is itself a config save that re-triggers
+  # `maybe_seed_plex_links/1`.
+  defp seedable?(%{type: :plex, enabled: true, token: token} = config)
+       when is_binary(token) and token != "" do
+    watched_sync_enabled?(config)
+  end
 
   defp seedable?(_), do: false
+
+  defp watched_sync_enabled?(config) do
+    case config.connection_settings do
+      %{} = settings -> Map.get(settings, "sync_watched") in [true, "true"]
+      _ -> false
+    end
+  end
 
   defp seed(config, opts) do
     case Home.seed_links(config, opts) do

@@ -303,6 +303,29 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
       assert Sync.last_run("plex", config.id).skip_reason == "link_user_mismatch"
     end
 
+    test "a Plex config with watched sync on and a blank token records no_token and enqueues nothing" do
+      # token isn't validate_required on MediaServerConfig, so a Plex config
+      # saved with sync on but no token would otherwise reach enqueue_linked_users,
+      # record :seeding_links every tick, and enqueue a seed job that can never
+      # produce a link (PlexLinkSeed.seedable?/1 also requires a token). That is
+      # a job reporting healthy while doing nothing forever.
+      {:ok, config} =
+        Settings.create_media_server_config(%{
+          name: "Tokenless Plex",
+          type: :plex,
+          url: "http://localhost:32400",
+          token: "",
+          enabled: true,
+          connection_settings: %{"sync_watched" => true}
+        })
+
+      assert :ok = perform_job(MediaServerWatchedSync, %{"mode" => "all_enabled"})
+
+      assert Sync.last_run("plex", config.id).skip_reason == "no_token"
+      assert [] = all_enqueued(worker: MediaServerWatchedSync) |> Enum.reject(& &1.args["mode"])
+      assert [] = all_enqueued(worker: Mydia.Jobs.PlexLinkSeed)
+    end
+
     test "a config with no links seeds them instead of skipping forever" do
       {:ok, config} =
         Settings.create_media_server_config(%{
