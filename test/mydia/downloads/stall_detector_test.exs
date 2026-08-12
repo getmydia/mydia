@@ -225,25 +225,6 @@ defmodule Mydia.Downloads.StallDetectorTest do
     end
   end
 
-  describe "stalled?/1" do
-    test "true for the canonical soft-stall message" do
-      assert StallDetector.stalled?("stalled after 60m without progress")
-    end
-
-    test "false for the escalation message" do
-      refute StallDetector.stalled?(StallDetector.escalation_message(60, 180))
-    end
-
-    test "false for unrelated error messages" do
-      refute StallDetector.stalled?("Import failed: bad path")
-      refute StallDetector.stalled?("Removed from download client 'qBit'")
-    end
-
-    test "false for nil" do
-      refute StallDetector.stalled?(nil)
-    end
-  end
-
   describe "stalled_message/1" do
     test "interpolates the grace minutes" do
       assert StallDetector.stalled_message(60) == "stalled after 60m without progress"

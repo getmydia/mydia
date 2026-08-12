@@ -480,18 +480,6 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
                })
     end
 
-    test "a terminal stall failure renders an error 'Stall failed' badge" do
-      now = DateTime.utc_now()
-
-      assert {"badge-error", "Stall failed"} =
-               Index.status_badge(%{
-                 status: "downloading",
-                 stalled_since: now,
-                 import_failed_at: now,
-                 import_last_error: "stalled after 180m without progress — escalated to failure"
-               })
-    end
-
     test "a normal download falls through to its client-status badge" do
       assert {_class, "Downloading"} =
                Index.status_badge(%{

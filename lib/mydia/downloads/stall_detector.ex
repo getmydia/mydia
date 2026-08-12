@@ -201,14 +201,4 @@ defmodule Mydia.Downloads.StallDetector do
       {hours, rest} -> "#{hours}h #{rest}m"
     end
   end
-
-  @doc """
-  Test whether a download's `import_last_error` indicates a stalled state.
-  Used by the LiveView badge helper.
-  """
-  @spec stalled?(String.t() | nil) :: boolean()
-  def stalled?(nil), do: false
-
-  def stalled?(error_message) when is_binary(error_message),
-    do: String.starts_with?(error_message, "stalled")
 end
