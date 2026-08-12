@@ -249,8 +249,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// play affordance over it rather than torn down for an error screen. See
   /// [_onPlaybackError].
   ///
-  /// Only ever true on web. Every browser requires a live user activation to
-  /// start an unmuted video, and on a cold start nothing here can promise one:
+  /// Only ever true on web, and [_onPlaybackError] gates on `kIsWeb` to keep
+  /// that true by construction rather than by trusting mpv never to phrase an
+  /// error the way a browser does. Every browser requires a live user
+  /// activation to start an unmuted video, and on a cold start nothing here
+  /// can promise one:
   /// the tap that asked for playback is separated from [Player.play] by a
   /// route change, the candidates and progress queries, `StartStreamingSession`
   /// and the open itself. Over a remote server that routinely outlasts the
@@ -1987,10 +1990,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       return;
     }
 
-    if (autoplayBlocked(message)) {
+    if (kIsWeb && autoplayBlocked(message)) {
       setState(() {
         _autoplayBlocked = true;
         _isLoading = false;
+        // These are two mutually exclusive views of one screen and
+        // `_buildBody` reads `_error` first, so a stale one left set here
+        // would draw the error page over a video that only wants a tap.
+        // `_initializePlayer`'s catch can set it after `play()` has already
+        // been called — a throw while wiring up progress tracking, say — and
+        // the refusal then arrives behind it on the error stream. The refusal
+        // is the newer and better news of the two: a stream broken badly
+        // enough to fail never gets as far as being declined a start. If it
+        // is broken anyway, the tap raises a fresh error and the error screen
+        // comes straight back.
+        _error = null;
       });
       return;
     }

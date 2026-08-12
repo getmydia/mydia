@@ -44,8 +44,10 @@ const List<String> _autoplayRefusals = [
 /// it like every other error is what put a "Failed to load video" screen in
 /// front of a video that was already sitting there ready to play.
 ///
-/// Always false off the web, where playback never passes through an autoplay
-/// policy; the phrases below are browser strings that mpv does not produce.
+/// Matches on wording alone and knows nothing about the platform. These are
+/// browser strings that mpv has no reason to produce, but the caller gates on
+/// `kIsWeb` anyway rather than leave a native build's error text to be judged
+/// against a browser's vocabulary.
 bool autoplayBlocked(String raw) {
   final lower = raw.toLowerCase();
   return _autoplayRefusals.any(lower.contains);
