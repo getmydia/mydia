@@ -76,7 +76,7 @@ defmodule Mydia.Subtitles.Format do
   defp rewrite_timing_line(cue) do
     cue
     |> String.split("\n")
-    |> Enum.map(fn line ->
+    |> Enum.map_join("\n", fn line ->
       if String.contains?(line, "-->") do
         Regex.replace(~r/(?:(\d{2}):)?(\d{2}:\d{2})\.(\d{3})/, line, fn _match,
                                                                         hours,
@@ -89,7 +89,6 @@ defmodule Mydia.Subtitles.Format do
         line
       end
     end)
-    |> Enum.join("\n")
   end
 
   # WEBVTT header, NOTE comments and STYLE/REGION blocks carry no cue.
