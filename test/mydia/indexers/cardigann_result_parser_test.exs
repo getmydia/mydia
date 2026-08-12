@@ -1191,4 +1191,97 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
       assert results == [] or hd(results).seeders != 7
     end
   end
+
+  describe "field case" do
+    defp case_definition(category_field) do
+      %Parsed{
+        id: "case-test",
+        name: "Case Test",
+        type: "public",
+        links: ["https://example.com"],
+        encoding: "UTF-8",
+        capabilities: %{},
+        settings: [],
+        search: %{
+          paths: [%{path: "/s"}],
+          inputs: %{},
+          headers: nil,
+          keywordsfilters: [],
+          rows: %{selector: "tr"},
+          fields: %{
+            "title" => %{selector: "td.title"},
+            "download" => %{selector: "a.dl", attribute: "href"},
+            "category" => category_field
+          }
+        }
+      }
+    end
+
+    defp case_html(cat) do
+      "<html><body><table><tr>" <>
+        "<td class=\"title\">Ubuntu</td>" <>
+        "<td class=\"cat\"><a href=\"/browse?cat=#{cat}\">#{cat}</a></td>" <>
+        "<a class=\"dl\" href=\"magnet:?xt=urn:btih:AAA\">d</a>" <>
+        "</tr></table></body></html>"
+    end
+
+    test "resolves to the value of the first matching case selector" do
+      definition =
+        case_definition(%{
+          selector: "td.cat",
+          case: %{"a[href*=\"cat=tv\"]" => "5000", "a[href*=\"cat=movies\"]" => "2000"}
+        })
+
+      assert {:ok, [result]} =
+               CardigannResultParser.parse_results(
+                 definition,
+                 %{status: 200, body: case_html("movies")},
+                 "Case Test",
+                 template_context: %{},
+                 base_url: "https://example.com"
+               )
+
+      assert result.category == 2000
+    end
+
+    test "falls back to the * case key" do
+      definition =
+        case_definition(%{
+          selector: "td.cat",
+          case: %{"a[href*=\"cat=tv\"]" => "5000", "*" => "8000"}
+        })
+
+      assert {:ok, [result]} =
+               CardigannResultParser.parse_results(
+                 definition,
+                 %{status: 200, body: case_html("other")},
+                 "Case Test",
+                 template_context: %{},
+                 base_url: "https://example.com"
+               )
+
+      assert result.category == 8000
+    end
+
+    test "case combines with optional and default" do
+      definition =
+        case_definition(%{
+          selector: "td.cat",
+          case: %{"a[href*=\"cat=tv\"]" => "5000"},
+          optional: true,
+          default: "8000"
+        })
+
+      assert {:ok, [result]} =
+               CardigannResultParser.parse_results(
+                 definition,
+                 %{status: 200, body: case_html("other")},
+                 "Case Test",
+                 template_context: %{},
+                 base_url: "https://example.com"
+               )
+
+      assert result.category == 8000
+    end
+  end
 end

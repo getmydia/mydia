@@ -807,7 +807,16 @@ defmodule Mydia.Indexers.CardigannResultParser do
         row
       end
 
-    case extract_raw_value(effective_row, selector, attribute) do
+    case_map = Map.get(field_config, :case) || Map.get(field_config, "case")
+
+    raw_result =
+      if is_map(case_map) and map_size(case_map) > 0 do
+        extract_case_value(effective_row, selector, case_map)
+      else
+        extract_raw_value(effective_row, selector, attribute)
+      end
+
+    case raw_result do
       {:ok, raw_value} ->
         apply_filters(raw_value, filters, template_context)
 
@@ -829,6 +838,35 @@ defmodule Mydia.Indexers.CardigannResultParser do
   # Fallback for non-map field configs
   defp extract_field_value(_row, _field_config, _template_context) do
     {:error, :invalid_field_config}
+  end
+
+  # `case` maps a CSS selector to a literal output value, scoped to whatever the
+  # field's own selector matched. `*` matches unconditionally and is the
+  # fallback, so it is checked last regardless of the map's iteration order.
+  defp extract_case_value(row, selector, case_map) do
+    scope =
+      case selector do
+        nil -> row
+        "" -> row
+        sel -> floki_find_enhanced(row, sel)
+      end
+
+    if scope == [] do
+      {:error, :not_found}
+    else
+      {wildcard, specific} = Map.split(case_map, ["*"])
+
+      match =
+        Enum.find_value(specific, fn {case_selector, value} ->
+          if floki_find_enhanced(scope, to_string(case_selector)) != [], do: to_string(value)
+        end)
+
+      cond do
+        match -> {:ok, match}
+        map_size(wildcard) > 0 -> {:ok, to_string(Map.fetch!(wildcard, "*"))}
+        true -> {:error, :not_found}
+      end
+    end
   end
 
   # Removes child elements matching the given selector(s) from the HTML tree.
