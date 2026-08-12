@@ -46,11 +46,55 @@ defmodule Mydia.Indexers.CardigannDownloadTest do
         selector: td.seeds
   """
 
+  # Plenty of definitions (torrentgalaxyclone, 1337x, eztv, nyaasi) point their
+  # download selector straight at a magnet on the details page.
+  @magnet_selector_definition """
+  ---
+  id: magnetselectortest
+  name: Magnet Selector Test
+  description: "Points its download selector straight at a magnet"
+  language: en-US
+  type: public
+  encoding: UTF-8
+  links:
+    - https://magnetselector.example/
+
+  caps:
+    modes:
+      search: [q]
+
+  download:
+    selectors:
+      - selector: a[href^="magnet:?xt="]
+        attribute: href
+
+  search:
+    paths:
+      - path: search
+    rows:
+      selector: tr
+    fields:
+      title:
+        selector: a
+      size:
+        selector: td.size
+      seeders:
+        selector: td.seeds
+  """
+
   @landing_page """
   <html><body>
     <h1>#{@title}</h1>
     <a class="other" href="/info/1">details</a>
     <a class="download-link" href="/get/24845983.torrent">download</a>
+  </body></html>
+  """
+
+  @magnet_landing_page """
+  <html><body>
+    <h1>#{@title}</h1>
+    <a class="other" href="/info/1">details</a>
+    <a href="magnet:?xt=urn:btih:#{@info_hash}&amp;dn=Ted.Lasso">magnet</a>
   </body></html>
   """
 
@@ -65,6 +109,11 @@ defmodule Mydia.Indexers.CardigannDownloadTest do
 
   defp selector_definition(port) do
     {:ok, parsed} = CardigannParser.parse_definition(@selector_definition)
+    %{parsed | links: ["http://localhost:#{port}/"]}
+  end
+
+  defp magnet_selector_definition(port) do
+    {:ok, parsed} = CardigannParser.parse_definition(@magnet_selector_definition)
     %{parsed | links: ["http://localhost:#{port}/"]}
   end
 
@@ -184,6 +233,22 @@ defmodule Mydia.Indexers.CardigannDownloadTest do
 
       assert {:ok, {:link, link}} = CardigannDownload.resolve(definition, url)
       assert link == "http://localhost:#{bypass.port}/get/24845983.torrent"
+    end
+
+    # A magnet handed back as {:link, ...} would be fetched over HTTP by the
+    # grab path, which cannot speak the magnet scheme.
+    test "returns a magnet, not a link, when the selector points at one" do
+      bypass = Bypass.open()
+
+      Bypass.expect_once(bypass, "GET", "/info/24845983", fn conn ->
+        Plug.Conn.resp(conn, 200, @magnet_landing_page)
+      end)
+
+      definition = magnet_selector_definition(bypass.port)
+      url = "http://localhost:#{bypass.port}/info/24845983"
+
+      assert {:ok, {:magnet, magnet}} = CardigannDownload.resolve(definition, url)
+      assert magnet =~ "xt=urn:btih:#{@info_hash}"
     end
   end
 

@@ -179,8 +179,17 @@ defmodule Mydia.Indexers.CardigannDownload do
         end
       end)
       |> case do
-        nil -> {:error, {:cardigann_download, "no download selector matched the response"}}
-        link -> {:ok, {:link, absolute_link(definition, download_url, link)}}
+        nil ->
+          {:error, {:cardigann_download, "no download selector matched the response"}}
+
+        link ->
+          # Many definitions point their download selector straight at a magnet.
+          # Handing that back as a link would send the grab path off to fetch a
+          # `magnet:` URL over HTTP, which it cannot do.
+          case absolute_link(definition, download_url, link) do
+            "magnet:" <> _ = magnet -> {:ok, {:magnet, magnet}}
+            resolved -> {:ok, {:link, resolved}}
+          end
       end
     end
   end
