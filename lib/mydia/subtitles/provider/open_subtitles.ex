@@ -37,10 +37,14 @@ defmodule Mydia.Subtitles.Provider.OpenSubtitles do
   end
 
   @impl true
+  # OpenSubtitles answers with a temporary link, but the behaviour's contract is
+  # subtitle content, which `Provider.Relay` also honours. Returning the link
+  # would type-check and pass the downloader's is_binary guard, then land a URL
+  # string on disk named like a subtitle.
   def download(provider, %{file_id: file_id}) do
     with {:ok, token} <- login(provider) do
       case request(provider, token, :post, "/api/v1/download", json: %{file_id: file_id}) do
-        {:ok, %{"link" => link}} -> {:ok, link}
+        {:ok, %{"link" => link}} -> fetch_subtitle_body(link)
         {:ok, _unexpected} -> {:error, :invalid_download_response}
         {:error, reason} -> {:error, reason}
       end
@@ -89,6 +93,16 @@ defmodule Mydia.Subtitles.Provider.OpenSubtitles do
   ## Private
 
   defp base_url(provider), do: Map.get(provider, :base_url) || @default_base_url
+
+  # The download link is a plain file on a CDN, so it takes no auth headers and
+  # must not be JSON-decoded.
+  defp fetch_subtitle_body(url) do
+    case Req.get(url, decode_body: false, receive_timeout: @timeout) do
+      {:ok, %{status: 200, body: body}} when is_binary(body) -> {:ok, body}
+      {:ok, %{status: status}} -> {:error, {:http_error, status}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
 
   defp login(provider) do
     body = %{username: provider.username, password: provider.password}

@@ -61,20 +61,31 @@ defmodule Mydia.Subtitles.Provider.OpenSubtitlesTest do
     assert result.language == "en"
   end
 
-  test "download returns the file link", %{bypass: bypass, provider: provider} do
+  # The behaviour's contract is subtitle content, not the temporary link
+  # OpenSubtitles hands back. Both are binaries, so returning the link would
+  # satisfy every type check and quietly write a URL to disk as the subtitle.
+  test "download follows the link and returns the subtitle body", %{
+    bypass: bypass,
+    provider: provider
+  } do
     stub_login(bypass)
+
+    Bypass.expect_once(bypass, "GET", "/files/abc.srt", fn conn ->
+      Plug.Conn.resp(conn, 200, "1\n00:00:01,000 --> 00:00:02,000\nhello\n")
+    end)
+
+    link = "http://localhost:#{bypass.port}/files/abc.srt"
 
     Bypass.expect_once(bypass, "POST", "/api/v1/download", fn conn ->
       conn
       |> Plug.Conn.put_resp_content_type("application/json")
-      |> Plug.Conn.resp(
-        200,
-        Jason.encode!(%{"link" => "https://dl.example.com/abc.srt", "remaining" => 42})
-      )
+      |> Plug.Conn.resp(200, Jason.encode!(%{"link" => link, "remaining" => 42}))
     end)
 
-    assert {:ok, "https://dl.example.com/abc.srt"} =
-             OpenSubtitles.download(provider, %{file_id: 777})
+    assert {:ok, content} = OpenSubtitles.download(provider, %{file_id: 777})
+
+    assert content =~ "hello"
+    refute content =~ "http"
   end
 
   test "reports quota exhaustion distinctly", %{bypass: bypass, provider: provider} do
