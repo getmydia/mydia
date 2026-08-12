@@ -60,6 +60,8 @@ defmodule Mydia.Indexers.CardigannResultParser do
   alias Mydia.Indexers.Adapter.Error
   alias Mydia.Indexers.CardigannTemplate
 
+  import SweetXml, only: [xpath: 2]
+
   require Logger
 
   @type parse_result :: {:ok, [SearchResult.t()]} | {:error, Error.t()}
@@ -124,7 +126,9 @@ defmodule Mydia.Indexers.CardigannResultParser do
         {:ok, []}
 
       true ->
-        case detect_response_type(body) do
+        declared_type = get_declared_response_type(definition.search)
+
+        case detect_response_type(body, declared_type) do
           :html ->
             parse_html_results(
               definition,
@@ -137,6 +141,16 @@ defmodule Mydia.Indexers.CardigannResultParser do
 
           :json ->
             parse_json_results(
+              definition,
+              body,
+              indexer_name,
+              template_context,
+              base_url,
+              category_mappings
+            )
+
+          :xml ->
+            parse_xml_results(
               definition,
               body,
               indexer_name,
@@ -310,6 +324,42 @@ defmodule Mydia.Indexers.CardigannResultParser do
     error ->
       Logger.error("JSON map parsing error: #{inspect(error)}")
       {:error, Error.search_failed("Failed to parse JSON response: #{inspect(error)}")}
+  end
+
+  @spec parse_xml_results(Parsed.t(), String.t(), String.t(), map(), String.t(), list()) ::
+          parse_result()
+  def parse_xml_results(
+        %Parsed{} = definition,
+        xml_body,
+        indexer_name,
+        template_context \\ %{},
+        base_url \\ "",
+        category_mappings \\ []
+      ) do
+    converted_body = maybe_convert_encoding(xml_body, definition.encoding)
+
+    with {:ok, doc} <- parse_xml_document(converted_body),
+         {:ok, rows} <- extract_xml_rows(doc, definition.search, template_context) do
+      Logger.info("[#{indexer_name}] Extracted #{length(rows)} rows from XML")
+
+      case parse_xml_row_fields(rows, definition.search, template_context) do
+        {:ok, parsed_rows} ->
+          Logger.info("[#{indexer_name}] Parsed #{length(parsed_rows)} XML rows successfully")
+
+          results =
+            transform_to_search_results(parsed_rows, indexer_name, base_url, category_mappings)
+
+          Logger.info("[#{indexer_name}] Transformed to #{length(results)} search results")
+          {:ok, results}
+
+        error ->
+          error
+      end
+    end
+  rescue
+    error ->
+      Logger.error("XML parsing error for #{indexer_name}: #{inspect(error)}")
+      {:error, Error.search_failed("Failed to parse XML response: #{inspect(error)}")}
   end
 
   # HTML Parsing Functions
@@ -1314,6 +1364,156 @@ defmodule Mydia.Indexers.CardigannResultParser do
   defp ensure_string(nil), do: {:error, :not_found}
   defp ensure_string(_), do: {:error, :invalid_type}
 
+  # XML Parsing Functions
+
+  defp parse_xml_document(xml_body) do
+    {:ok, SweetXml.parse(xml_body)}
+  rescue
+    error -> {:error, Error.search_failed("XML parse error: #{inspect(error)}")}
+  end
+
+  defp extract_xml_rows(doc, %{rows: %{selector: selector} = row_config}, template_context) do
+    rendered_selector = render_selector_template(selector, template_context)
+    Logger.info("Extracting XML rows with selector: #{inspect(rendered_selector)}")
+    rows = xpath(doc, xml_rows_spec(rendered_selector))
+    Logger.info("Found #{length(rows)} XML rows before filtering")
+
+    rows_after_skip =
+      case Map.get(row_config, :after) do
+        nil -> rows
+        skip_count when is_integer(skip_count) -> Enum.drop(rows, skip_count)
+      end
+
+    rows_limited =
+      case Map.get(row_config, :count) do
+        nil -> rows_after_skip
+        count when is_integer(count) and count > 0 -> Enum.take(rows_after_skip, count)
+        _ -> rows_after_skip
+      end
+
+    {:ok, rows_limited}
+  end
+
+  defp extract_xml_rows(_doc, _search_config, _template_context) do
+    {:error, Error.search_failed("Missing rows selector in definition")}
+  end
+
+  defp parse_xml_row_fields(rows, %{fields: fields}, template_context) do
+    parsed_rows =
+      rows
+      |> Enum.map(fn row ->
+        parse_single_xml_row(row, fields, template_context)
+      end)
+      |> Enum.filter(&(&1 != nil))
+
+    {:ok, parsed_rows}
+  end
+
+  defp parse_single_xml_row(row, fields, template_context) do
+    field_values =
+      Enum.reduce(fields, %{}, fn {field_name, field_config}, acc ->
+        case extract_xml_field_value(row, field_config, template_context) do
+          {:ok, value} ->
+            Map.put(acc, field_name, value)
+
+          {:error, _reason} ->
+            acc
+        end
+      end)
+
+    field_values = combine_compound_fields(field_values)
+
+    has_title = Map.has_key?(field_values, :title) || Map.has_key?(field_values, "title")
+
+    has_download =
+      Map.has_key?(field_values, :download) || Map.has_key?(field_values, "download") ||
+        Map.has_key?(field_values, :infohash) || Map.has_key?(field_values, "infohash")
+
+    if has_title && has_download do
+      field_values
+    else
+      nil
+    end
+  end
+
+  defp extract_xml_field_value(row, field_config, template_context) when is_map(field_config) do
+    selector = Map.get(field_config, :selector) || Map.get(field_config, "selector")
+    attribute = Map.get(field_config, :attribute) || Map.get(field_config, "attribute")
+    filters = Map.get(field_config, :filters) || Map.get(field_config, "filters", [])
+    text_template = Map.get(field_config, :text) || Map.get(field_config, "text")
+
+    if is_binary(text_template) and text_template != "" do
+      compute_text_field(field_config, %{}, template_context)
+    else
+      case extract_xml_raw_value(row, selector, attribute) do
+        {:ok, raw_value} ->
+          apply_filters(raw_value, filters, template_context)
+
+        {:error, :not_found} = error ->
+          optional = Map.get(field_config, :optional) || Map.get(field_config, "optional", false)
+          default = Map.get(field_config, :default) || Map.get(field_config, "default")
+
+          if optional && not is_nil(default) do
+            apply_filters(to_string(default), filters, template_context)
+          else
+            error
+          end
+      end
+    end
+  end
+
+  defp extract_xml_raw_value(row, selector, attribute) do
+    spec = xml_field_spec(selector, attribute)
+    value = xpath(row, spec)
+
+    case value do
+      nil -> {:error, :not_found}
+      "" -> {:error, :not_found}
+      value when is_binary(value) -> {:ok, String.trim(value)}
+      value when is_list(value) -> {:ok, value |> List.first() |> to_string() |> String.trim()}
+      value -> {:ok, to_string(value) |> String.trim()}
+    end
+  end
+
+  defp xml_rows_spec(selector) when is_binary(selector) do
+    %SweetXpath{
+      path: String.to_charlist("//" <> selector),
+      is_value: false,
+      is_list: true,
+      is_keyword: false,
+      is_optional: false,
+      cast_to: false
+    }
+  end
+
+  defp xml_field_spec(".", attribute) when is_binary(attribute) and attribute != "" do
+    xml_string_spec("./@#{attribute}")
+  end
+
+  defp xml_field_spec(".", _attribute) do
+    xml_string_spec("./text()")
+  end
+
+  defp xml_field_spec(selector, attribute)
+       when is_binary(selector) and is_binary(attribute) and attribute != "" do
+    xml_string_spec("./#{selector}/@#{attribute}")
+  end
+
+  defp xml_field_spec(selector, _attribute) when is_binary(selector) do
+    xml_string_spec("./#{selector}/text()")
+  end
+
+  defp xml_string_spec(path) do
+    %SweetXpath{
+      path: String.to_charlist(path),
+      is_value: true,
+      is_list: false,
+      is_keyword: false,
+      is_optional: false,
+      cast_to: :string
+    }
+  end
+
   # Result Transformation
 
   defp transform_to_search_results(parsed_rows, indexer_name, base_url, category_mappings) do
@@ -1655,6 +1855,25 @@ defmodule Mydia.Indexers.CardigannResultParser do
 
   # Response Type Detection
 
+  defp get_declared_response_type(%{paths: paths}) when is_list(paths) do
+    Enum.find_value(paths, fn path ->
+      get_in(path, [:response, :type]) || get_in(path, ["response", "type"])
+    end)
+  end
+
+  defp get_declared_response_type(_), do: nil
+
+  # A path-declared `response.type` is authoritative. Sniffing only decides when
+  # the definition says nothing, because RSS and HTML both start with `<`.
+  defp detect_response_type(body, declared) do
+    case declared do
+      "xml" -> :xml
+      "json" -> :json
+      "html" -> :html
+      _ -> detect_response_type(body)
+    end
+  end
+
   defp detect_response_type(body) when is_binary(body) do
     trimmed = String.trim(body)
 
@@ -1668,7 +1887,12 @@ defmodule Mydia.Indexers.CardigannResultParser do
         end
 
       String.starts_with?(trimmed, "<") ->
-        :html
+        cond do
+          String.starts_with?(trimmed, "<?xml") -> :xml
+          String.match?(trimmed, ~r/^<rss[\s>]/i) -> :xml
+          String.match?(trimmed, ~r/^<torrents[\s>]/i) -> :xml
+          true -> :html
+        end
 
       true ->
         # Default to HTML for ambiguous cases

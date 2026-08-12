@@ -1284,4 +1284,102 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
       assert result.category == 8000
     end
   end
+
+  describe "XML responses" do
+    test "parses an RSS-shaped response" do
+      xml = """
+      <?xml version="1.0" encoding="UTF-8"?>
+      <rss version="2.0">
+        <channel>
+          <item>
+            <title>Ubuntu 24.04</title>
+            <link>magnet:?xt=urn:btih:AAA</link>
+            <size>1500000000</size>
+          </item>
+          <item>
+            <title>Ubuntu 22.04</title>
+            <link>magnet:?xt=urn:btih:BBB</link>
+            <size>1400000000</size>
+          </item>
+        </channel>
+      </rss>
+      """
+
+      definition = %Parsed{
+        id: "xml-test",
+        name: "XML Test",
+        type: "public",
+        links: ["https://example.com"],
+        encoding: "UTF-8",
+        capabilities: %{},
+        settings: [],
+        search: %{
+          paths: [%{path: "/rss", response: %{type: "xml"}}],
+          inputs: %{},
+          headers: nil,
+          keywordsfilters: [],
+          rows: %{selector: "rss/channel/item"},
+          fields: %{
+            "title" => %{selector: "title"},
+            "download" => %{selector: "link"},
+            "size" => %{selector: "size"}
+          }
+        }
+      }
+
+      assert {:ok, results} =
+               CardigannResultParser.parse_results(
+                 definition,
+                 %{status: 200, body: xml},
+                 "XML Test",
+                 template_context: %{},
+                 base_url: "https://example.com"
+               )
+
+      assert length(results) == 2
+      assert hd(results).title == "Ubuntu 24.04"
+      assert hd(results).download_url == "magnet:?xt=urn:btih:AAA"
+    end
+
+    test "reads an XML attribute" do
+      xml = """
+      <?xml version="1.0"?>
+      <torrents>
+        <torrent name="Debian 12" magnet="magnet:?xt=urn:btih:CCC" />
+      </torrents>
+      """
+
+      definition = %Parsed{
+        id: "xml-attr",
+        name: "XML Attr",
+        type: "public",
+        links: ["https://example.com"],
+        encoding: "UTF-8",
+        capabilities: %{},
+        settings: [],
+        search: %{
+          paths: [%{path: "/x", response: %{type: "xml"}}],
+          inputs: %{},
+          headers: nil,
+          keywordsfilters: [],
+          rows: %{selector: "torrents/torrent"},
+          fields: %{
+            "title" => %{selector: ".", attribute: "name"},
+            "download" => %{selector: ".", attribute: "magnet"}
+          }
+        }
+      }
+
+      assert {:ok, [result]} =
+               CardigannResultParser.parse_results(
+                 definition,
+                 %{status: 200, body: xml},
+                 "XML Attr",
+                 template_context: %{},
+                 base_url: "https://example.com"
+               )
+
+      assert result.title == "Debian 12"
+    end
+  end
 end
