@@ -1203,6 +1203,12 @@ type SubtitleTrack {
   "Whether the subtitle is embedded in the media file"
   embedded: Boolean!
 
+  "Whether this track can be delivered as text. False for image-based subtitles (PGS, VobSub), which play only in direct mode"
+  deliverable: Boolean!
+
+  "Subtitle body in the requested format. Null when the track is not deliverable"
+  content(format: SubtitleFormat): String
+
   "URL to download this subtitle in the requested format"
   url(format: SubtitleFormat): String
 }
