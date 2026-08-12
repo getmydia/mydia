@@ -36,7 +36,7 @@ type RootQueryType {
   recentlyAdded(first: Int, after: String, types: [MediaType]): [RecentlyAddedItem]
 
   "Get next episodes to watch across all TV shows"
-  upNext(first: Int, after: String): [UpNextItem]
+  upNext(first: Int, after: String): [UpNextItem] @deprecated(reason: "Merged into continueWatching, which now carries next episodes as well")
 
   "Get the user's favorite items"
   favorites(first: Int, after: String, types: [MediaType], category: MediaCategory, sort: SortInput): [RecentlyAddedItem]
@@ -282,6 +282,9 @@ type ContinueWatchingItem {
   artwork: Artwork
 
   progress: Progress!
+
+  "Why this item is on the rail: continue for a resume point, next for the successor of a finished episode"
+  state: String
 
   "Playable files for this item, used to start playback straight from the rail"
   files: [MediaFile]

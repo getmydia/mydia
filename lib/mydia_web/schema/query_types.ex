@@ -146,6 +146,7 @@ defmodule MydiaWeb.Schema.QueryTypes do
 
     @desc "Get next episodes to watch across all TV shows"
     field :up_next, list_of(:up_next_item) do
+      deprecate("Merged into continueWatching, which now carries next episodes as well")
       arg(:first, :integer, default_value: 10)
       arg(:after, :string)
       resolve(&DiscoveryResolver.up_next/3)
@@ -207,6 +208,9 @@ defmodule MydiaWeb.Schema.QueryTypes do
     field :title, non_null(:string)
     field :artwork, :artwork
     field :progress, non_null(:progress)
+
+    @desc "Why this item is on the rail: continue for a resume point, next for the successor of a finished episode"
+    field :state, :string
     @desc "Playable files for this item, used to start playback straight from the rail"
     field :files, list_of(:media_file)
 

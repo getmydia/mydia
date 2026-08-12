@@ -3,11 +3,12 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
   Resolvers for discovery-related GraphQL queries (home screen rails).
   """
 
-  alias Mydia.{Library, Media, Playback}
+  alias Mydia.{Media, Playback}
 
   alias Mydia.Media.RecentlyAdded
   alias Mydia.Metadata.Access, as: MetadataAccess
   alias Mydia.Metadata.ImageUrl
+  alias Mydia.Playback.OnDeckEntry
   alias MydiaWeb.Schema.Resolvers.ItemBuilder
   alias MydiaWeb.Schema.Resolvers.MediaSort
 
@@ -22,20 +23,12 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
         {:ok, []}
 
       user ->
-        # Get in-progress items (watched = false, has position)
-        progress_list =
-          Playback.list_user_progress(user.id, watched: false, limit: first * 3)
-          |> Enum.filter(&(&1.position_seconds > 0 && (&1.completion_percentage || 0) < 90))
+        items =
+          user.id
+          |> Playback.on_deck(limit: pagination_limit(first, after_cursor))
+          |> Enum.map(&build_on_deck_item/1)
 
-        all_items =
-          progress_list
-          |> Enum.map(&build_continue_watching_item(&1, user.id))
-          |> Enum.reject(&is_nil/1)
-
-        # Apply cursor pagination
-        items = paginate_simple(all_items, first, after_cursor)
-
-        {:ok, items}
+        {:ok, paginate_simple(items, first, after_cursor)}
     end
   end
 
@@ -85,33 +78,19 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
         {:ok, []}
 
       user ->
-        # Get all TV shows with in-progress episodes
-        tv_shows = Media.list_media_items(type: "tv_show", has_files: true)
-
-        all_items =
-          tv_shows
-          |> Enum.map(fn show ->
-            case Playback.get_next_episode(show.id, user.id) do
-              nil ->
-                nil
-
-              :all_watched ->
-                nil
-
-              {state, episode} ->
-                %{
-                  episode: episode,
-                  show: Map.put(show, :added_at, show.inserted_at),
-                  progress_state: Atom.to_string(state)
-                }
-            end
+        items =
+          user.id
+          |> Playback.on_deck(limit: pagination_limit(first, after_cursor))
+          |> Enum.filter(&(&1.kind == :episode))
+          |> Enum.map(fn entry ->
+            %{
+              episode: entry.episode,
+              show: Map.put(entry.show, :added_at, entry.show.inserted_at),
+              progress_state: Atom.to_string(entry.state)
+            }
           end)
-          |> Enum.reject(&is_nil/1)
 
-        # Apply cursor pagination
-        items = paginate_simple(all_items, first, after_cursor)
-
-        {:ok, items}
+        {:ok, paginate_simple(items, first, after_cursor)}
     end
   end
 
@@ -285,60 +264,37 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
   defp pagination_limit(first, nil), do: first
   defp pagination_limit(first, after_cursor), do: decode_cursor(after_cursor) + 1 + first
 
-  defp build_continue_watching_item(%{media_item_id: media_item_id} = progress, _user_id)
-       when not is_nil(media_item_id) do
-    media_item = Media.get_media_item!(media_item_id)
-
-    case Library.get_media_files_for_item(media_item_id) do
-      [] ->
-        nil
-
-      files ->
-        %{
-          id: media_item.id,
-          type: String.to_existing_atom(media_item.type),
-          title: media_item.title,
-          artwork: ItemBuilder.artwork(media_item),
-          progress: format_progress(progress),
-          files: files,
-          show_title: nil,
-          season_number: nil,
-          episode_number: nil
-        }
-    end
-  rescue
-    Ecto.NoResultsError -> nil
+  defp build_on_deck_item(%OnDeckEntry{kind: :movie} = entry) do
+    %{
+      id: entry.media_item.id,
+      type: String.to_existing_atom(entry.media_item.type),
+      title: entry.media_item.title,
+      artwork: ItemBuilder.artwork(entry.media_item),
+      progress: format_progress(entry.progress),
+      state: Atom.to_string(entry.state),
+      files: entry.files,
+      show_id: nil,
+      show_title: nil,
+      season_number: nil,
+      episode_number: nil
+    }
   end
 
-  defp build_continue_watching_item(%{episode_id: episode_id} = progress, _user_id)
-       when not is_nil(episode_id) do
-    episode = Media.get_episode!(episode_id)
-
-    case Library.get_media_files_for_episode(episode_id) do
-      [] ->
-        nil
-
-      files ->
-        show = Media.get_media_item!(episode.media_item_id)
-
-        %{
-          id: episode.id,
-          type: :episode,
-          title: episode.title || "Episode #{episode.episode_number}",
-          artwork: build_episode_artwork(episode, show),
-          progress: format_progress(progress),
-          files: files,
-          show_id: show.id,
-          show_title: show.title,
-          season_number: episode.season_number,
-          episode_number: episode.episode_number
-        }
-    end
-  rescue
-    Ecto.NoResultsError -> nil
+  defp build_on_deck_item(%OnDeckEntry{kind: :episode} = entry) do
+    %{
+      id: entry.episode.id,
+      type: :episode,
+      title: entry.episode.title || "Episode #{entry.episode.episode_number}",
+      artwork: build_episode_artwork(entry.episode, entry.show),
+      progress: format_progress(entry.progress),
+      state: Atom.to_string(entry.state),
+      files: entry.files,
+      show_id: entry.show.id,
+      show_title: entry.show.title,
+      season_number: entry.episode.season_number,
+      episode_number: entry.episode.episode_number
+    }
   end
-
-  defp build_continue_watching_item(_, _), do: nil
 
   defp build_episode_artwork(%{metadata: metadata} = episode, show) when not is_nil(metadata) do
     still_path = MetadataAccess.get(episode.metadata, :still_path)
@@ -352,6 +308,16 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
   end
 
   defp build_episode_artwork(_episode, show), do: ItemBuilder.artwork(show)
+
+  defp format_progress(nil) do
+    %{
+      position_seconds: 0,
+      duration_seconds: nil,
+      percentage: 0.0,
+      watched: false,
+      last_watched_at: nil
+    }
+  end
 
   defp format_progress(progress) do
     %{

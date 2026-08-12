@@ -1,55 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/models/continue_watching_item.dart';
-import 'package:player/domain/models/up_next_item.dart';
 import 'package:player/presentation/screens/home_screen.dart';
 
 void main() {
   group('playerRouteFor', () {
-    test('builds an episode route with resume for a continue item', () {
-      final item = UpNextItem.fromJson({
-        'progressState': 'continue',
-        'episode': {
-          'id': 'e1',
-          'seasonNumber': 2,
-          'episodeNumber': 5,
-          'title': 'Woe\'s Hollow',
-          'hasFile': true,
-          'progress': {
-            'positionSeconds': 600,
-            'durationSeconds': 2700,
-            'percentage': 22.2,
-            'watched': false,
-          },
-        },
-        'show': {'id': 's1', 'title': 'Severance'},
-      });
-
-      final route = playerRouteForUpNext(item, fileId: 'f1');
-
-      expect(route, startsWith('/player/episode/e1?'));
-      expect(route, contains('fileId=f1'));
-      expect(route, contains('showId=s1'));
-      expect(route, contains('seasonNumber=2'));
-      expect(route, contains('resume=600'));
-    });
-
-    test('omits resume for a start item', () {
-      final item = UpNextItem.fromJson({
-        'progressState': 'start',
-        'episode': {
-          'id': 'e1',
-          'seasonNumber': 1,
-          'episodeNumber': 1,
-          'title': 'Good News About Hell',
-          'hasFile': true,
-        },
-        'show': {'id': 's1', 'title': 'Severance'},
-      });
-
-      expect(
-          playerRouteForUpNext(item, fileId: 'f1'), isNot(contains('resume=')));
-    });
-
     test('routes a continue-watching movie to the movie player', () {
       final item = ContinueWatchingItem.fromJson({
         'id': 'm1',
@@ -93,6 +47,34 @@ void main() {
       expect(route, contains('showId=s1'));
       expect(route, contains('seasonNumber=2'));
       expect(route, contains('resume=120'));
+    });
+
+    testWidgets('a next-episode card starts from the beginning',
+        (tester) async {
+      final item = ContinueWatchingItem.fromJson({
+        'id': 'ep-1',
+        'type': 'episode',
+        'title': 'Rhaenyra Triumphant',
+        'state': 'next',
+        'showId': 'show-1',
+        'showTitle': 'House of the Dragon',
+        'seasonNumber': 3,
+        'episodeNumber': 3,
+        'progress': {
+          'positionSeconds': 0,
+          'durationSeconds': 3600,
+          'percentage': 0.0,
+          'watched': false,
+          'lastWatchedAt': null,
+        },
+        'files': <dynamic>[],
+      });
+
+      final route = playerRouteForContinueWatching(item, fileId: 'file-1');
+
+      expect(route, isNot(contains('resume=')));
+      expect(route, contains('/player/episode/ep-1'));
+      expect(route, contains('showId=show-1'));
     });
   });
 }

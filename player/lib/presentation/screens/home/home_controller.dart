@@ -8,11 +8,12 @@ import '../../../domain/models/home_data.dart';
 part 'home_controller.g.dart';
 
 const String homeScreenQuery = r'''
-query HomeScreen($continueWatchingLimit: Int, $recentlyAddedLimit: Int, $upNextLimit: Int, $favoritesLimit: Int) {
+query HomeScreen($continueWatchingLimit: Int, $recentlyAddedLimit: Int, $favoritesLimit: Int) {
   continueWatching(first: $continueWatchingLimit) {
     id
     type
     title
+    state
     artwork {
       posterUrl
       backdropUrl
@@ -59,47 +60,6 @@ query HomeScreen($continueWatchingLimit: Int, $recentlyAddedLimit: Int, $upNextL
     latestEpisodeNumber
   }
 
-  upNext(first: $upNextLimit) {
-    progressState
-    episode {
-      id
-      seasonNumber
-      episodeNumber
-      title
-      airDate
-      thumbnailUrl
-      hasFile
-      files {
-        id
-        resolution
-        codec
-        audioCodec
-        hdrFormat
-        size
-        bitrate
-        directPlaySupported
-        streamUrl
-        directPlayUrl
-      }
-      progress {
-        positionSeconds
-        durationSeconds
-        percentage
-        watched
-        lastWatchedAt
-      }
-    }
-    show {
-      id
-      title
-      artwork {
-        posterUrl
-        backdropUrl
-        thumbnailUrl
-      }
-    }
-  }
-
   favorites(first: $favoritesLimit) {
     id
     type
@@ -117,7 +77,7 @@ query HomeScreen($continueWatchingLimit: Int, $recentlyAddedLimit: Int, $upNextL
 
 /// The pre-episode-context shape, for a server older than this build.
 const String homeScreenQueryLegacy = r'''
-query HomeScreen($continueWatchingLimit: Int, $recentlyAddedLimit: Int, $upNextLimit: Int, $favoritesLimit: Int) {
+query HomeScreen($continueWatchingLimit: Int, $recentlyAddedLimit: Int, $favoritesLimit: Int) {
   continueWatching(first: $continueWatchingLimit) {
     id
     type
@@ -165,47 +125,6 @@ query HomeScreen($continueWatchingLimit: Int, $recentlyAddedLimit: Int, $upNextL
     addedAt
   }
 
-  upNext(first: $upNextLimit) {
-    progressState
-    episode {
-      id
-      seasonNumber
-      episodeNumber
-      title
-      airDate
-      thumbnailUrl
-      hasFile
-      files {
-        id
-        resolution
-        codec
-        audioCodec
-        hdrFormat
-        size
-        bitrate
-        directPlaySupported
-        streamUrl
-        directPlayUrl
-      }
-      progress {
-        positionSeconds
-        durationSeconds
-        percentage
-        watched
-        lastWatchedAt
-      }
-    }
-    show {
-      id
-      title
-      artwork {
-        posterUrl
-        backdropUrl
-        thumbnailUrl
-      }
-    }
-  }
-
   favorites(first: $favoritesLimit) {
     id
     type
@@ -224,7 +143,6 @@ query HomeScreen($continueWatchingLimit: Int, $recentlyAddedLimit: Int, $upNextL
 const Map<String, dynamic> homeScreenVariables = {
   'continueWatchingLimit': 10,
   'recentlyAddedLimit': 20,
-  'upNextLimit': 10,
   'favoritesLimit': 10,
 };
 
