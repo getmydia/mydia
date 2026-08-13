@@ -3,8 +3,9 @@ defmodule Mydia.Subtitles.Provider.Relay do
   Subtitle provider backed by the Mydia metadata-relay service.
 
   This is the zero-configuration default: it needs no credentials because the
-  relay holds the OpenSubtitles account. That account is shared across every
-  Mydia install, so a heavy user is better served adding their own via
+  relay holds the SubDL API key. SubDL matches on title and episode rather than
+  on a file hash, so a user who wants hash-accurate matching for unusual
+  releases is better served adding their own account through
   `Mydia.Subtitles.Provider.OpenSubtitles`.
   """
 
@@ -58,7 +59,7 @@ defmodule Mydia.Subtitles.Provider.Relay do
   def capabilities do
     %{
       media_types: [:movie, :episode],
-      search_keys: [:file_hash, :imdb_id, :tmdb_id, :query],
+      search_keys: [:imdb_id, :tmdb_id, :query],
       requires_credentials: false,
       quota: :unlimited
     }

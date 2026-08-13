@@ -144,4 +144,24 @@ defmodule Mydia.Subtitles.Provider.RelayTest do
   test "validate_config accepts a relay with no credentials" do
     assert {:ok, _config} = Relay.validate_config(%{type: :relay})
   end
+
+  describe "capabilities/0" do
+    # The relay is backed by SubDL, which has no hash search. Advertising
+    # :file_hash would route hash-only searches to a provider that ignores them.
+    test "does not advertise hash search" do
+      capabilities = Relay.capabilities()
+
+      refute :file_hash in capabilities.search_keys
+      assert :imdb_id in capabilities.search_keys
+      assert :tmdb_id in capabilities.search_keys
+      assert :query in capabilities.search_keys
+    end
+
+    test "still serves both movies and episodes" do
+      capabilities = Relay.capabilities()
+
+      assert :movie in capabilities.media_types
+      assert :episode in capabilities.media_types
+    end
+  end
 end
