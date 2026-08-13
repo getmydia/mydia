@@ -31,7 +31,33 @@ defmodule MydiaWeb.MediaLive.Show.MonitoringControlsTest do
 
     assert has_element?(view, "#show-monitored-toggle")
     assert has_element?(view, "#episode-monitoring-menu")
-    assert has_element?(view, "#monitor-new-seasons-all")
+  end
+
+  test "the monitoring menu label reads the episodes back", %{conn: conn} do
+    media_item = media_item_fixture(%{type: "tv_show", monitored: true})
+
+    episode_fixture(
+      media_item_id: media_item.id,
+      season_number: 1,
+      episode_number: 1,
+      monitored: true
+    )
+
+    episode_fixture(
+      media_item_id: media_item.id,
+      season_number: 2,
+      episode_number: 1,
+      monitored: true
+    )
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+    assert render(view) =~ "All Episodes"
+
+    # Toggling a season by hand is what used to leave the label stale.
+    {:ok, _} = Mydia.Media.update_season_monitoring(media_item.id, 2, false)
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+    assert render(view) =~ "Custom"
   end
 
   test "applying a preset rewrites episode monitoring", %{conn: conn} do
@@ -53,7 +79,7 @@ defmodule MydiaWeb.MediaLive.Show.MonitoringControlsTest do
     refute Mydia.Media.get_episode_by_number(media_item.id, 1, 1).monitored
   end
 
-  test "the new seasons toggle persists", %{conn: conn} do
+  test "applying a preset also sets the new-season verdict", %{conn: conn} do
     media_item = media_item_fixture(%{type: "tv_show", monitored: true})
 
     episode_fixture(
@@ -65,7 +91,7 @@ defmodule MydiaWeb.MediaLive.Show.MonitoringControlsTest do
 
     {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
 
-    view |> element("#monitor-new-seasons-none") |> render_click()
+    view |> element("#episode-monitoring-menu-preset-none") |> render_click()
 
     assert Mydia.Media.get_media_item!(media_item.id).monitor_new_seasons == :none
   end

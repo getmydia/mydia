@@ -969,13 +969,36 @@ defmodule Mydia.Media do
     end)
   end
 
-  @monitoring_presets [:all, :future, :missing, :existing, :first_season, :latest_season, :none]
+  @monitoring_presets [:all, :missing, :future, :none]
 
   @doc """
   Returns the list of valid monitoring presets.
   """
   @spec monitoring_presets() :: [atom()]
   def monitoring_presets, do: @monitoring_presets
+
+  @doc """
+  Reads the current episode rows back as whichever preset describes them, or
+  `:custom` when none does.
+
+  Derived rather than stored on purpose. Storing the last preset applied is
+  what made the old label go stale the moment someone toggled a season by
+  hand, since nothing wrote it back. Computing it from the rows means the
+  label is either true or says `:custom`.
+
+  Episodes must have `media_files` preloaded, which the show page already does.
+  """
+  @spec derive_monitoring_preset([Episode.t()]) :: atom()
+  def derive_monitoring_preset([]), do: :none
+
+  def derive_monitoring_preset(episodes) do
+    monitored = MapSet.new(Enum.filter(episodes, & &1.monitored), & &1.id)
+
+    Enum.find(@monitoring_presets, :custom, fn preset ->
+      {to_monitor, _} = partition_episodes_by_preset(episodes, preset)
+      MapSet.new(to_monitor, & &1.id) == monitored
+    end)
+  end
 
   @doc """
   Applies a monitoring preset to the episodes of a TV show.
@@ -1016,8 +1039,23 @@ defmodule Mydia.Media do
       written =
         set_episodes_monitored(to_monitor, true) + set_episodes_monitored(to_unmonitor, false)
 
+      # Every preset already implies a verdict on a season that does not exist
+      # yet, so applying one answers that question too rather than making the
+      # user say it twice in a separate control.
+      #
+      # update_all rather than a changeset: the caller's struct may be stale,
+      # and a changeset whose value matches the stale struct produces no change,
+      # so the write would silently skip while the row still held the old value.
+      MediaItem
+      |> where([m], m.id == ^media_item.id)
+      |> Repo.update_all(
+        set: [monitor_new_seasons: new_season_default(preset), updated_at: DateTime.utc_now()]
+      )
+
+      updated = get_media_item!(media_item.id)
+
       Events.media_item_updated(
-        media_item,
+        updated,
         :user,
         "media_context",
         "Applied '#{preset}' monitoring to episodes"
@@ -1049,29 +1087,16 @@ defmodule Mydia.Media do
   end
 
   @doc """
-  Sets whether seasons that do not exist yet should arrive monitored.
+  The verdict a preset implies for a season that does not exist yet.
+
+  This is not a separate decision the user makes. "Future Episodes" and
+  "Latest Season" mean new seasons are wanted; "Existing Episodes" and
+  "First Season" mean they are not. Reading it off the preset keeps that
+  intent in one place instead of asking for it twice.
   """
-  @spec set_monitor_new_seasons(MediaItem.t(), :all | :none) ::
-          {:ok, MediaItem.t()} | {:error, Ecto.Changeset.t()}
-  def set_monitor_new_seasons(%MediaItem{} = media_item, mode) when mode in [:all, :none] do
-    media_item
-    |> MediaItem.changeset(%{monitor_new_seasons: mode})
-    |> Repo.update()
-    |> case do
-      {:ok, updated} ->
-        Events.media_item_updated(
-          updated,
-          :user,
-          "media_context",
-          "New season monitoring set to #{mode}"
-        )
-
-        {:ok, updated}
-
-      {:error, changeset} ->
-        {:error, changeset}
-    end
-  end
+  @spec new_season_default(atom()) :: :all | :none
+  def new_season_default(preset) when preset in [:all, :missing, :future], do: :all
+  def new_season_default(:none), do: :none
 
   # Partition episodes into those to monitor and those to unmonitor based on preset
   defp partition_episodes_by_preset(episodes, :all) do
@@ -1102,31 +1127,6 @@ defmodule Mydia.Media do
       has_no_files = Enum.empty?(ep.media_files)
       is_future = ep.air_date && Date.compare(ep.air_date, today) == :gt
       has_no_files || is_future
-    end)
-  end
-
-  defp partition_episodes_by_preset(episodes, :existing) do
-    Enum.split_with(episodes, fn ep ->
-      not Enum.empty?(ep.media_files)
-    end)
-  end
-
-  defp partition_episodes_by_preset(episodes, :first_season) do
-    Enum.split_with(episodes, fn ep ->
-      ep.season_number == 1
-    end)
-  end
-
-  defp partition_episodes_by_preset(episodes, :latest_season) do
-    # Find the latest season number (excluding specials)
-    latest_season =
-      episodes
-      |> Enum.filter(&(&1.season_number > 0))
-      |> Enum.map(& &1.season_number)
-      |> Enum.max(fn -> 0 end)
-
-    Enum.split_with(episodes, fn ep ->
-      ep.season_number >= latest_season && ep.season_number > 0
     end)
   end
 

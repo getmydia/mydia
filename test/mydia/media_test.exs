@@ -198,13 +198,39 @@ defmodule Mydia.MediaTest do
       assert {:error, {:invalid_type, _}} = Media.apply_episode_monitoring(media_item, :all)
     end
 
-    test "set_monitor_new_seasons/2 persists the mode" do
-      media_item = media_item_fixture(%{type: "tv_show"})
+    test "applying a preset carries its verdict on new seasons" do
+      # The user says what they want once. :none means new seasons are not
+      # wanted either, and :all means they are, so there is no second control.
+      media_item = media_item_fixture(%{type: "tv_show", monitored: true})
+      episode_fixture(media_item_id: media_item.id, season_number: 1, episode_number: 1)
 
-      {:ok, updated} = Media.set_monitor_new_seasons(media_item, :none)
-
-      assert updated.monitor_new_seasons == :none
+      {:ok, _} = Media.apply_episode_monitoring(media_item, :none)
       assert Media.get_media_item!(media_item.id).monitor_new_seasons == :none
+
+      {:ok, _} = Media.apply_episode_monitoring(media_item, :all)
+      assert Media.get_media_item!(media_item.id).monitor_new_seasons == :all
+    end
+
+    test "new_season_default/1 maps every preset" do
+      assert Media.new_season_default(:all) == :all
+      assert Media.new_season_default(:missing) == :all
+      assert Media.new_season_default(:future) == :all
+      assert Media.new_season_default(:none) == :none
+    end
+
+    test "derive_monitoring_preset/1 reads the rows back, or says :custom" do
+      media_item = media_item_fixture(%{type: "tv_show", monitored: true})
+      episode_fixture(media_item_id: media_item.id, season_number: 1, episode_number: 1)
+      episode_fixture(media_item_id: media_item.id, season_number: 2, episode_number: 1)
+
+      {:ok, _} = Media.apply_episode_monitoring(media_item, :all)
+      episodes = Media.list_episodes(media_item.id, preload: [:media_files])
+      assert Media.derive_monitoring_preset(episodes) == :all
+
+      # A manual season toggle is exactly what used to leave the label lying.
+      {:ok, _} = Media.update_season_monitoring(media_item.id, 2, false)
+      episodes = Media.list_episodes(media_item.id, preload: [:media_files])
+      assert Media.derive_monitoring_preset(episodes) == :custom
     end
   end
 
@@ -747,13 +773,10 @@ defmodule Mydia.MediaTest do
     test "monitoring_presets/0 returns all valid presets" do
       presets = Media.monitoring_presets()
       assert :all in presets
-      assert :future in presets
       assert :missing in presets
-      assert :existing in presets
-      assert :first_season in presets
-      assert :latest_season in presets
+      assert :future in presets
       assert :none in presets
-      assert length(presets) == 7
+      assert length(presets) == 4
     end
 
     # Movie invalid-type covered by media_items "apply_episode_monitoring/2 returns an error for movies"
@@ -867,133 +890,6 @@ defmodule Mydia.MediaTest do
 
       refute past_ep.monitored
       assert future_ep.monitored
-    end
-
-    test "apply_episode_monitoring/2 with :first_season monitors only season 1" do
-      media_item = media_item_fixture(%{type: "tv_show", monitored: true})
-
-      # Create episodes in multiple seasons
-      episode_fixture(
-        media_item_id: media_item.id,
-        season_number: 1,
-        episode_number: 1,
-        monitored: false
-      )
-
-      episode_fixture(
-        media_item_id: media_item.id,
-        season_number: 1,
-        episode_number: 2,
-        monitored: false
-      )
-
-      episode_fixture(
-        media_item_id: media_item.id,
-        season_number: 2,
-        episode_number: 1,
-        monitored: true
-      )
-
-      episode_fixture(
-        media_item_id: media_item.id,
-        season_number: 3,
-        episode_number: 1,
-        monitored: true
-      )
-
-      {:ok, _count} = Media.apply_episode_monitoring(media_item, :first_season)
-
-      # Verify episode states
-      episodes = Media.list_episodes(media_item.id)
-
-      s1_episodes = Enum.filter(episodes, &(&1.season_number == 1))
-      s2_episodes = Enum.filter(episodes, &(&1.season_number == 2))
-      s3_episodes = Enum.filter(episodes, &(&1.season_number == 3))
-
-      assert Enum.all?(s1_episodes, & &1.monitored)
-      refute Enum.any?(s2_episodes, & &1.monitored)
-      refute Enum.any?(s3_episodes, & &1.monitored)
-    end
-
-    test "apply_episode_monitoring/2 with :latest_season monitors only the latest season" do
-      media_item = media_item_fixture(%{type: "tv_show", monitored: true})
-
-      # Create episodes in multiple seasons
-      episode_fixture(
-        media_item_id: media_item.id,
-        season_number: 1,
-        episode_number: 1,
-        monitored: true
-      )
-
-      episode_fixture(
-        media_item_id: media_item.id,
-        season_number: 2,
-        episode_number: 1,
-        monitored: false
-      )
-
-      episode_fixture(
-        media_item_id: media_item.id,
-        season_number: 3,
-        episode_number: 1,
-        monitored: false
-      )
-
-      episode_fixture(
-        media_item_id: media_item.id,
-        season_number: 3,
-        episode_number: 2,
-        monitored: false
-      )
-
-      {:ok, _count} = Media.apply_episode_monitoring(media_item, :latest_season)
-
-      # Verify episode states
-      episodes = Media.list_episodes(media_item.id)
-
-      s1_episodes = Enum.filter(episodes, &(&1.season_number == 1))
-      s2_episodes = Enum.filter(episodes, &(&1.season_number == 2))
-      s3_episodes = Enum.filter(episodes, &(&1.season_number == 3))
-
-      refute Enum.any?(s1_episodes, & &1.monitored)
-      refute Enum.any?(s2_episodes, & &1.monitored)
-      assert Enum.all?(s3_episodes, & &1.monitored)
-    end
-
-    test "apply_episode_monitoring/2 with :existing monitors only episodes with files" do
-      media_item = media_item_fixture(%{type: "tv_show", monitored: true})
-
-      # Create episodes
-      ep_with_file =
-        episode_fixture(
-          media_item_id: media_item.id,
-          season_number: 1,
-          episode_number: 1,
-          monitored: false
-        )
-
-      _ep_without_file =
-        episode_fixture(
-          media_item_id: media_item.id,
-          season_number: 1,
-          episode_number: 2,
-          monitored: true
-        )
-
-      # Add a media file to the first episode
-      media_file_fixture(episode_id: ep_with_file.id)
-
-      {:ok, _count} = Media.apply_episode_monitoring(media_item, :existing)
-
-      # Verify episode states
-      episodes = Media.list_episodes(media_item.id, preload: [:media_files])
-
-      ep_with = Enum.find(episodes, &(&1.episode_number == 1))
-      ep_without = Enum.find(episodes, &(&1.episode_number == 2))
-
-      assert ep_with.monitored
-      refute ep_without.monitored
     end
 
     test "apply_episode_monitoring/2 with :missing monitors episodes without files or future" do

@@ -23,24 +23,21 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :target_library, :map, default: nil
   attr :target_reason, :atom, default: nil
   attr :target_library_candidates, :list, default: []
-  attr :applying_episode_monitoring, :boolean, default: false
   attr :is_favorite, :boolean, default: false
   attr :item_collections, :list, default: []
   attr :user_collections, :list, default: []
 
+  # First Season and Latest Season were bulk shortcuts for something the season
+  # header toggle now does in one click, and Existing Episodes duplicated the
+  # Upgrades system. What is left is the four things a user actually asks for.
   @monitoring_presets [
-    {:all, "All Episodes", "Monitor all episodes"},
-    {:future, "Future Episodes", "Only unaired episodes"},
-    {:missing, "Missing Episodes", "Episodes without files"},
-    {:existing, "Existing Episodes", "Only episodes with files"},
-    {:first_season, "First Season", "Only season 1"},
-    {:latest_season, "Latest Season", "Latest + future seasons"},
-    {:none, "None", "Don't monitor any episodes"}
+    {:all, "All Episodes"},
+    {:missing, "Missing Episodes"},
+    {:future, "Future Episodes"},
+    {:none, "No Episodes"}
   ]
 
   def hero_section(assigns) do
-    assigns = assign(assigns, :monitoring_presets, @monitoring_presets)
-
     ~H"""
     <%!-- Left Column: Poster and Quick Actions --%>
     <div class="w-full md:w-64 lg:w-80 flex-shrink-0">
@@ -200,75 +197,10 @@ defmodule MydiaWeb.MediaLive.Show.Components do
 
         <%!-- Secondary actions --%>
         <div class="flex flex-col gap-2">
+          <%!-- Show-level on/off only. The bulk episode actions live in the
+                Seasons & Episodes header, next to what they act on. --%>
           <%= if @media_item.type == "tv_show" do %>
             <.monitored_toggle id="show-monitored-toggle" media_item={@media_item} />
-
-            <%!-- One-shot actions. The label is static on purpose: it describes
-                  what the menu does, never what the episodes currently are. --%>
-            <div class="dropdown dropdown-end w-full">
-              <div
-                tabindex="0"
-                role="button"
-                id="episode-monitoring-menu"
-                class="btn btn-ghost w-full"
-                disabled={@applying_episode_monitoring}
-              >
-                <%= if @applying_episode_monitoring do %>
-                  <span class="loading loading-spinner loading-xs"></span>
-                <% else %>
-                  <.icon name="hero-adjustments-horizontal" class="w-5 h-5" />
-                <% end %>
-                <span>Episode Monitoring</span>
-                <.icon name="hero-chevron-down" class="w-3 h-3 opacity-70" />
-              </div>
-              <ul
-                tabindex="0"
-                class="dropdown-content z-[1] menu p-2 shadow-lg bg-base-100 rounded-box w-64 border border-base-300"
-              >
-                <li class="menu-title text-xs">Apply to episodes</li>
-                <li :for={{preset, label, description} <- @monitoring_presets}>
-                  <button
-                    type="button"
-                    id={"episode-monitoring-menu-preset-#{preset}"}
-                    phx-click="apply_episode_monitoring"
-                    phx-value-preset={preset}
-                    class="flex flex-col items-start"
-                  >
-                    <span class="font-medium">{label}</span>
-                    <span class="text-xs text-base-content/60">{description}</span>
-                  </button>
-                </li>
-                <li class="menu-title text-xs">New seasons</li>
-                <li>
-                  <div class="join w-full p-0">
-                    <button
-                      type="button"
-                      id="monitor-new-seasons-all"
-                      phx-click="set_monitor_new_seasons"
-                      phx-value-mode="all"
-                      class={[
-                        "btn btn-xs join-item flex-1",
-                        @media_item.monitor_new_seasons == :all && "btn-active"
-                      ]}
-                    >
-                      All
-                    </button>
-                    <button
-                      type="button"
-                      id="monitor-new-seasons-none"
-                      phx-click="set_monitor_new_seasons"
-                      phx-value-mode="none"
-                      class={[
-                        "btn btn-xs join-item flex-1",
-                        @media_item.monitor_new_seasons == :none && "btn-active"
-                      ]}
-                    >
-                      None
-                    </button>
-                  </div>
-                </li>
-              </ul>
-            </div>
           <% else %>
             <.monitored_toggle id="movie-monitored-toggle" media_item={@media_item} />
           <% end %>
@@ -510,11 +442,15 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :transcode_jobs, :map, default: %{}
   attr :segment_statuses, :map, default: %{}
   attr :segment_detection_available, :boolean, default: true
+  attr :applying_episode_monitoring, :boolean, default: false
 
   def episodes_section(assigns) do
+    assigns = assign(assigns, :monitoring_presets, @monitoring_presets)
+
     ~H"""
     <%= if @media_item.type == "tv_show" && length(@media_item.episodes) > 0 do %>
-      <% grouped_seasons = group_episodes_by_season(@media_item.episodes) %>
+      <% grouped_seasons = group_episodes_by_season(@media_item.episodes)
+      derived_preset = Mydia.Media.derive_monitoring_preset(@media_item.episodes) %>
 
       <div class="card bg-base-200 shadow-lg">
         <%!-- Card header with stats --%>
@@ -531,6 +467,41 @@ defmodule MydiaWeb.MediaLive.Show.Components do
               </span>
               <span class="text-base-content/60">/</span>
               <span>{length(@media_item.episodes)} total</span>
+
+              <%!-- Bulk actions, one-shot. The label is static on purpose: it
+                    says what the menu does, never what the episodes are. --%>
+              <div class="dropdown dropdown-end">
+                <div
+                  tabindex="0"
+                  role="button"
+                  id="episode-monitoring-menu"
+                  class="btn btn-sm btn-ghost gap-1"
+                  disabled={@applying_episode_monitoring}
+                >
+                  <%= if @applying_episode_monitoring do %>
+                    <span class="loading loading-spinner loading-xs"></span>
+                  <% else %>
+                    <.icon name="hero-adjustments-horizontal" class="w-4 h-4" />
+                  <% end %>
+                  <span>{monitoring_preset_label(derived_preset)}</span>
+                  <.icon name="hero-chevron-down" class="w-3 h-3 opacity-70" />
+                </div>
+                <ul
+                  tabindex="0"
+                  class="dropdown-content z-[1] menu p-2 shadow-lg bg-base-100 rounded-box w-56 border border-base-300"
+                >
+                  <li :for={{preset, label} <- @monitoring_presets}>
+                    <button
+                      type="button"
+                      id={"episode-monitoring-menu-preset-#{preset}"}
+                      phx-click="apply_episode_monitoring"
+                      phx-value-preset={preset}
+                    >
+                      {label}
+                    </button>
+                  </li>
+                </ul>
+              </div>
             </div>
           </div>
           <SegmentComponents.segment_unavailable_note :if={!@segment_detection_available} />

@@ -12,8 +12,7 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeEvents do
 
   require Logger
 
-  @valid_monitoring_presets ~w(all future missing existing first_season latest_season none)
-  @valid_new_season_modes ~w(all none)
+  @valid_monitoring_presets ~w(all missing future none)
 
   def toggle_monitored(_params, socket) do
     with :ok <- Authorization.authorize_update_media(socket) do
@@ -69,35 +68,6 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeEvents do
 
       false ->
         {:noreply, put_flash(socket, :error, "Invalid monitoring preset")}
-    end
-  end
-
-  def set_monitor_new_seasons(%{"mode" => mode_str}, socket) do
-    with :ok <- Authorization.authorize_update_media(socket),
-         true <- mode_str in @valid_new_season_modes do
-      mode = String.to_existing_atom(mode_str)
-
-      case Media.set_monitor_new_seasons(socket.assigns.media_item, mode) do
-        {:ok, updated} ->
-          message =
-            if mode == :all,
-              do: "New seasons will be monitored",
-              else: "New seasons will not be monitored"
-
-          {:noreply,
-           socket
-           |> assign(:media_item, load_media_item(updated.id))
-           |> put_flash(:info, message)}
-
-        {:error, _changeset} ->
-          {:noreply, put_flash(socket, :error, "Failed to update new season monitoring")}
-      end
-    else
-      {:unauthorized, socket} ->
-        {:noreply, socket}
-
-      false ->
-        {:noreply, put_flash(socket, :error, "Invalid mode")}
     end
   end
 

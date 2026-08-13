@@ -183,9 +183,6 @@ defmodule MydiaWeb.MediaLive.Show do
   def handle_event("apply_episode_monitoring", params, socket),
     do: EpisodeEvents.apply_episode_monitoring(params, socket)
 
-  def handle_event("set_monitor_new_seasons", params, socket),
-    do: EpisodeEvents.set_monitor_new_seasons(params, socket)
-
   def handle_event("manual_search", params, socket),
     do: SearchEvents.manual_search(params, socket)
 
