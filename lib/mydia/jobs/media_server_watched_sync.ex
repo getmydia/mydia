@@ -410,8 +410,12 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
 
   defp claim_mapping_refresh(config, :force) do
     case put_connection_setting(config, "last_mapping_refresh_at", iso_now()) do
-      {:ok, updated} -> updated
-      {:error, _reason} -> config
+      {:ok, updated} ->
+        updated
+
+      {:error, reason} ->
+        Logger.warning("Could not claim mapping refresh for #{config.name}: #{inspect(reason)}")
+        config
     end
   end
 
