@@ -5,8 +5,10 @@ import '../../core/cache/poster_cache_manager.dart';
 import '../../core/layout/breakpoints.dart';
 import '../../core/theme/colors.dart';
 import '../../domain/models/episode.dart';
+import '../../domain/models/watch_status.dart';
 import '../screens/show/season_episodes_controller.dart';
 import 'episode_download_button.dart';
+import 'watch_indicator.dart';
 
 /// A self-contained landscape (16:9) episode card for the horizontal episodes
 /// rail: a thumbnail with inline progress/watched overlays, the episode code +
@@ -107,6 +109,12 @@ class _EpisodeRailCardState extends ConsumerState<EpisodeRailCard> {
   }
 
   Widget _buildThumbnail(BuildContext context, CardSize cardSize) {
+    // Derived rather than fetched: this card already has the episode's own
+    // progress row, and an episode is a leaf, so there is no count to roll up.
+    final watchStatus = _episode.progress == null
+        ? const WatchStatus(watched: false)
+        : WatchStatus.fromProgress(_episode.progress!);
+
     return Container(
       key: const ValueKey('episode-card-border'),
       decoration: BoxDecoration(
@@ -228,6 +236,12 @@ class _EpisodeRailCardState extends ConsumerState<EpisodeRailCard> {
                     ),
                   ),
                 ),
+
+              Positioned(
+                top: 6,
+                left: 6,
+                child: WatchIndicator(status: watchStatus),
+              ),
 
               // Action overlay (top-right): download + watched-status menu, on a
               // dark scrim pill for contrast against the thumbnail.

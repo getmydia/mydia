@@ -6,6 +6,7 @@ import 'package:player/core/theme/colors.dart';
 import 'package:player/domain/models/episode.dart';
 import 'package:player/domain/models/progress.dart';
 import 'package:player/presentation/widgets/episode_rail_card.dart';
+import 'package:player/presentation/widgets/watch_indicator.dart';
 
 import '../../test_utils/hover_affordance.dart';
 import '../../test_utils/mock_network_images.dart';
@@ -223,5 +224,47 @@ void main() {
 
     // The card already draws its real ring; a preview of it would be noise.
     expect(find.byKey(EpisodeRailCard.selectionPreviewKey), findsNothing);
+  });
+
+  group('EpisodeRailCard watch state', () {
+    testWidgets('draws an unwatched dot on an episode never played',
+        (tester) async {
+      await _pump(tester, _episode(progress: null));
+
+      expect(find.byKey(WatchIndicator.dotKey), findsOneWidget);
+    });
+
+    testWidgets('draws no dot once the episode is watched', (tester) async {
+      await _pump(
+        tester,
+        _episode(
+          progress: const Progress(
+            positionSeconds: 100,
+            durationSeconds: 100,
+            percentage: 100,
+            watched: true,
+          ),
+        ),
+      );
+
+      expect(find.byKey(WatchIndicator.dotKey), findsNothing);
+    });
+
+    testWidgets('draws no dot while the episode is part-played',
+        (tester) async {
+      await _pump(
+        tester,
+        _episode(
+          progress: const Progress(
+            positionSeconds: 40,
+            durationSeconds: 100,
+            percentage: 40,
+            watched: false,
+          ),
+        ),
+      );
+
+      expect(find.byKey(WatchIndicator.dotKey), findsNothing);
+    });
   });
 }
