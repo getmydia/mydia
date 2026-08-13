@@ -228,6 +228,7 @@ class CollectionDetailScreen extends ConsumerWidget {
               key: ValueKey(item.id),
               posterUrl: item.posterUrl,
               title: item.title,
+              watchStatus: item.watchStatus,
               onTap: () => _handleItemTap(context, item.id, item.type),
             );
           },

@@ -24,6 +24,14 @@ MediaFilter _tvShowsFilter([LibrarySort sort = LibrarySort.defaultSort]) =>
       sort: sort,
     );
 
+MediaFilter _unwatchedFilter([LibrarySort sort = LibrarySort.defaultSort]) =>
+    MediaFilter(
+      kind: MediaKind.movies,
+      category: null,
+      watch: WatchScope.unwatched,
+      sort: sort,
+    );
+
 Map<String, dynamic> _moviesPage(
   List<String> ids, {
   required bool hasNextPage,
@@ -552,5 +560,47 @@ void main() {
     );
 
     expect(data.items.single.watchStatus, isNull);
+  });
+
+  test('carries an unwatched episode count through the unwatched list',
+      () async {
+    final container = ProviderContainer(
+      overrides: [
+        asyncGraphqlClientProvider.overrideWith(
+          (ref) async => stubClient(
+            StubLink.responses([
+              {
+                '__typename': 'Query',
+                'unwatched': [
+                  {
+                    '__typename': 'RecentlyAddedItem',
+                    'id': 'i1',
+                    'title': 'Item',
+                    'year': 2021,
+                    'type': 'tv_show',
+                    'artwork': null,
+                    'watchStatus': {
+                      '__typename': 'WatchStatus',
+                      'watched': false,
+                      'percentage': null,
+                      'unwatchedEpisodeCount': 3,
+                    },
+                  },
+                ],
+              },
+            ]),
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final data = await waitForValue(
+      container,
+      libraryControllerProvider(_unwatchedFilter()),
+      (value) => value.items.isNotEmpty,
+    );
+
+    expect(data.items.single.watchStatus!.unwatchedEpisodeCount, 3);
   });
 }

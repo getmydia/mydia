@@ -1,4 +1,5 @@
 import 'artwork.dart';
+import 'watch_status.dart';
 
 class RecentlyAddedItem {
   final String id;
@@ -10,6 +11,7 @@ class RecentlyAddedItem {
   final int? newEpisodeCount;
   final int? latestSeasonNumber;
   final int? latestEpisodeNumber;
+  final WatchStatus? watchStatus;
 
   const RecentlyAddedItem({
     required this.id,
@@ -21,6 +23,7 @@ class RecentlyAddedItem {
     this.newEpisodeCount,
     this.latestSeasonNumber,
     this.latestEpisodeNumber,
+    this.watchStatus,
   });
 
   factory RecentlyAddedItem.fromJson(Map<String, dynamic> json) {
@@ -36,6 +39,9 @@ class RecentlyAddedItem {
       newEpisodeCount: json['newEpisodeCount'] as int?,
       latestSeasonNumber: json['latestSeasonNumber'] as int?,
       latestEpisodeNumber: json['latestEpisodeNumber'] as int?,
+      watchStatus: json['watchStatus'] == null
+          ? null
+          : WatchStatus.fromJson(json['watchStatus'] as Map<String, dynamic>),
     );
   }
 

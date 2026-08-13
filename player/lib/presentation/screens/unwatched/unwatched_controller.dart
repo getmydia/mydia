@@ -21,6 +21,7 @@ query Unwatched($first: Int, $sort: SortInput) {
       thumbnailUrl
     }
     addedAt
+    watchStatus { watched percentage unwatchedEpisodeCount }
   }
 }
 ''';

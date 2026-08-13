@@ -125,6 +125,7 @@ query UnwatchedList($first: Int, $after: String, $types: [MediaType], $category:
       backdropUrl
       thumbnailUrl
     }
+    watchStatus { watched percentage unwatchedEpisodeCount }
   }
 }
 ''';
@@ -141,6 +142,7 @@ query FavoritesList($first: Int, $after: String, $types: [MediaType], $category:
       backdropUrl
       thumbnailUrl
     }
+    watchStatus { watched percentage unwatchedEpisodeCount }
   }
 }
 ''';
@@ -228,6 +230,10 @@ LibraryData _parseFlatList(
             posterUrl: (node['artwork'] as Map<String, dynamic>?)?['posterUrl']
                 as String?,
             progressPercentage: null,
+            watchStatus: node['watchStatus'] == null
+                ? null
+                : WatchStatus.fromJson(
+                    node['watchStatus'] as Map<String, dynamic>),
             rating: null,
             isFavorite: isFavorite,
             type: node['type'] as String? ?? 'movie',
