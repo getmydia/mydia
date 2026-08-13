@@ -150,6 +150,8 @@ defmodule Mydia.Downloads.TorrentHash do
   Magnets that already advertise a tracker are returned untouched, as is any
   non-magnet input. The info hash is never altered, so client-side deduplication
   keeps matching.
+
+  `ensure_torrent_trackers/1` is the equivalent for a `.torrent` file body.
   """
   @spec ensure_trackers(String.t() | nil) :: String.t() | nil
   def ensure_trackers("magnet:" <> _ = magnet) do
@@ -158,7 +160,91 @@ defmodule Mydia.Downloads.TorrentHash do
 
   def ensure_trackers(other), do: other
 
+  @doc """
+  Splices the public tracker list into a `.torrent` file body that carries none.
+
+  A trackerless magnet is not the only shape an indexer can hand us with no way
+  to find peers. Prowlarr's `/download` sometimes serves a real `.torrent`
+  instead of redirecting to a magnet, and machine-generated metainfo (go.torrent
+  in the case observed in production) can carry neither `announce` nor
+  `announce-list`. The download client then starts with an empty tracker list
+  and DHT as its only peer source, which is exactly the stall
+  `ensure_trackers/1` was written to prevent for magnets.
+
+  `announce` and `announce-list` are inserted at the front of the *top-level*
+  dictionary, where they also sort first under bencode's lexicographic key
+  order. The `info` dictionary is never touched, so its SHA-1 (the info hash the
+  client dedupes and reports on) is unchanged. `announce-list` is a list of
+  single-tracker tiers, per BEP-12.
+
+  Returned untouched: a body that already has `announce` or `announce-list`, and
+  anything that is not a walkable bencoded dictionary (an NZB payload, an error
+  page, a truncated download).
+  """
+  @spec ensure_torrent_trackers(binary() | nil) :: binary() | nil
+  def ensure_torrent_trackers(<<?d, rest::binary>> = body) do
+    case top_level_keys(body) do
+      {:ok, keys} ->
+        if Enum.any?(keys, &(&1 in ["announce", "announce-list"])) do
+          body
+        else
+          "d" <> announce_entries() <> rest
+        end
+
+      :error ->
+        body
+    end
+  end
+
+  def ensure_torrent_trackers(other), do: other
+
   ## Private Functions
+
+  # The `announce` + `announce-list` key/value pairs, bencoded.
+  defp announce_entries do
+    tiers = Enum.map_join(@public_trackers, &("l" <> bencode_string(&1) <> "e"))
+
+    "8:announce" <>
+      bencode_string(hd(@public_trackers)) <>
+      "13:announce-listl" <> tiers <> "e"
+  end
+
+  defp bencode_string(value), do: "#{byte_size(value)}:#{value}"
+
+  # Walks the keys of the top-level dictionary, reusing the same scanner that
+  # locates the info dict. Returns `:error` for anything that does not parse, so
+  # callers can leave a body they do not understand alone.
+  defp top_level_keys(<<?d, _rest::binary>> = data), do: collect_dict_keys(data, 1, [])
+  defp top_level_keys(_data), do: :error
+
+  defp collect_dict_keys(data, pos, acc) when pos < byte_size(data) do
+    case :binary.at(data, pos) do
+      ?e ->
+        {:ok, Enum.reverse(acc)}
+
+      c when c >= ?0 and c <= ?9 ->
+        with {:ok, key_end} <- find_string_end(data, pos),
+             {:ok, key} <- bencoded_string_value(data, pos, key_end),
+             {:ok, value_end} <- find_bencode_value_end(data, key_end) do
+          collect_dict_keys(data, value_end, [key | acc])
+        else
+          _ -> :error
+        end
+
+      _ ->
+        :error
+    end
+  end
+
+  defp collect_dict_keys(_data, _pos, _acc), do: :error
+
+  # Strips the `<len>:` prefix off the bencoded string spanning [pos, end_pos).
+  defp bencoded_string_value(data, pos, end_pos) do
+    case :binary.match(data, ":", scope: {pos, end_pos - pos}) do
+      {colon_pos, 1} -> {:ok, binary_part(data, colon_pos + 1, end_pos - colon_pos - 1)}
+      :nomatch -> :error
+    end
+  end
 
   defp tracker_params do
     Enum.map_join(@public_trackers, fn tracker ->

@@ -1364,14 +1364,23 @@ defmodule Mydia.Downloads.Queue do
           {:ok, {:url, url}}
       end
 
-    # Every magnet-producing path funnels back through here: the direct link
-    # above, a redirect to a magnet, a response body that *is* a magnet, and a
-    # magnet scraped out of an HTML page. Enriching once at the exit keeps a
-    # trackerless magnet from reaching the client with DHT as its only peer
-    # source. See `TorrentHash.ensure_trackers/1`.
+    # Every torrent-producing path funnels back through here: the direct magnet
+    # link above, a redirect to a magnet, a response body that *is* a magnet, a
+    # magnet scraped out of an HTML page, and a `.torrent` file served by the
+    # indexer. Enriching once at the exit keeps a trackerless release from
+    # reaching the client with DHT as its only peer source, whether it arrived
+    # as a magnet or as a file. NZB payloads carry no trackers and are left
+    # alone. See `TorrentHash.ensure_trackers/1` and
+    # `TorrentHash.ensure_torrent_trackers/1`.
     case result do
-      {:ok, {:magnet, magnet}} -> {:ok, {:magnet, TorrentHash.ensure_trackers(magnet)}}
-      other -> other
+      {:ok, {:magnet, magnet}} ->
+        {:ok, {:magnet, TorrentHash.ensure_trackers(magnet)}}
+
+      {:ok, {:file, body, :torrent}} ->
+        {:ok, {:file, TorrentHash.ensure_torrent_trackers(body), :torrent}}
+
+      other ->
+        other
     end
   end
 
