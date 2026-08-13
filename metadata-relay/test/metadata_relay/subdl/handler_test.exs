@@ -233,4 +233,41 @@ defmodule MetadataRelay.SubDL.HandlerTest do
     assert is_nil(subtitle["imdb_id"])
     assert is_nil(subtitle["tmdb_id"])
   end
+
+  test "handles non-map response bodies without crashing" do
+    stub(fn request ->
+      {request,
+       Req.Response.new(
+         status: 200,
+         body: "<html>Captcha challenge api_key=secret_key_value</html>"
+       )}
+    end)
+
+    log =
+      ExUnit.CaptureLog.capture_log(fn ->
+        assert {:ok, %{"subtitles" => []}} = Handler.search(%{imdb_id: "0133093"})
+      end)
+
+    refute log =~ "secret_key_value"
+  end
+
+  test "handles malformed results array without crashing" do
+    stub(fn request ->
+      {request,
+       Req.Response.new(
+         status: 200,
+         body: %{
+           "status" => true,
+           "subtitles" => [subtitle_fixture()],
+           "results" => ["not", "a", "map"]
+         }
+       )}
+    end)
+
+    assert {:ok, %{"subtitles" => [subtitle]}} =
+             Handler.search(%{imdb_id: "0133093"})
+
+    assert is_nil(subtitle["feature_type"])
+    assert is_nil(subtitle["title"])
+  end
 end

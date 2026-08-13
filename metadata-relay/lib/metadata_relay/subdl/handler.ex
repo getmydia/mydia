@@ -19,20 +19,28 @@ defmodule MetadataRelay.SubDL.Handler do
   def search(params) do
     with {:ok, query} <- build_query(params) do
       case Client.search(query) do
-        {:ok, response} when is_map(response) ->
+        {:ok, response} ->
           case response do
-            %{"subtitles" => subtitles} when is_list(subtitles) ->
+            %{"subtitles" => subtitles} when is_map(response) and is_list(subtitles) ->
               feature = feature_context(Map.get(response, "results", []))
               {:ok, %{"subtitles" => Enum.map(subtitles, &transform_subtitle(&1, feature))}}
 
             # SubDL answers a miss with status false and an error string rather than
             # an empty list.
-            %{"status" => false} ->
+            %{"status" => false} when is_map(response) ->
               {:ok, %{"subtitles" => []}}
 
-            _ ->
+            _ when is_map(response) ->
               Logger.warning(
                 "Unexpected SubDL search response: top-level keys: #{Enum.map_join(Map.keys(response), ", ", & &1)}"
+              )
+
+              {:ok, %{"subtitles" => []}}
+
+            # Non-map response (e.g. HTML error page, binary body from captcha or CDN block)
+            _ ->
+              Logger.warning(
+                "Unexpected non-JSON SubDL response: #{inspect_type_and_size(response)}"
               )
 
               {:ok, %{"subtitles" => []}}
@@ -144,6 +152,8 @@ defmodule MetadataRelay.SubDL.Handler do
     }
   end
 
+  defp feature_context(_), do: empty_feature()
+
   defp empty_feature do
     %{
       "feature_type" => nil,
@@ -152,6 +162,14 @@ defmodule MetadataRelay.SubDL.Handler do
       "imdb_id" => nil,
       "tmdb_id" => nil
     }
+  end
+
+  defp inspect_type_and_size(response) when is_binary(response) do
+    "binary (#{byte_size(response)} bytes)"
+  end
+
+  defp inspect_type_and_size(response) do
+    "#{inspect(response, limit: 20)}"
   end
 
   defp normalize_language(nil), do: "en"
