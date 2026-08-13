@@ -88,14 +88,14 @@ defmodule Mydia.WatchSync.Engine do
   end
 
   defp resolve_local(%{type: :movie} = mapping) do
-    case Media.find_by_external_ids(mapping.external_ids) do
+    case Media.find_by_external_ids(mapping.external_ids, type: "movie") do
       nil -> nil
       item -> [media_item_id: item.id]
     end
   end
 
   defp resolve_local(%{type: :episode} = mapping) do
-    with %{id: show_id} <- Media.find_by_external_ids(mapping.external_ids),
+    with %{id: show_id} <- Media.find_by_external_ids(mapping.external_ids, type: "tv_show"),
          %{id: ep_id} <-
            Media.find_episode(show_id, mapping.season_number, mapping.episode_number) do
       [episode_id: ep_id]

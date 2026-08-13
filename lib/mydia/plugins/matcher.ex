@@ -17,8 +17,10 @@ defmodule Mydia.Plugins.Matcher do
       anti-pattern).
     * No coordinates → the external ids identify a movie.
 
-  External ids are resolved through `Mydia.Media.find_by_external_ids/1`, which
-  cascades imdb → tvdb → tmdb.
+  External ids are resolved through `Mydia.Media.find_by_external_ids/2`, which
+  cascades imdb → tvdb → tmdb, advancing on a lookup miss rather than a missing
+  id. `match/1` pins the expected type so a movie id cannot resolve to a show,
+  while `match_item/1` deliberately accepts either.
   """
 
   alias Mydia.Media
@@ -63,14 +65,14 @@ defmodule Mydia.Plugins.Matcher do
   end
 
   defp match_movie(ids) do
-    case Media.find_by_external_ids(ids) do
+    case Media.find_by_external_ids(ids, type: "movie") do
       %{id: id} -> {:movie, id}
       _ -> :not_found
     end
   end
 
   defp match_episode(ids, season, number) do
-    with %{id: show_id} <- Media.find_by_external_ids(ids),
+    with %{id: show_id} <- Media.find_by_external_ids(ids, type: "tv_show"),
          %{id: episode_id} <- Media.find_episode(show_id, season, number) do
       {:episode, episode_id}
     else

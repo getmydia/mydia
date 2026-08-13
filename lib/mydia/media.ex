@@ -166,20 +166,113 @@ defmodule Mydia.Media do
   Finds a media item by external IDs using cascading lookup: IMDB → TVDB → TMDB.
 
   Accepts a map with atom keys: `%{imdb: id, tvdb: id, tmdb: id}`.
+
+  The cascade advances on a lookup *miss*, not on a missing id. Branching on
+  mere presence is what left every Plex episode unmapped: Plex supplies an imdb
+  id for every show, while Mydia stores tvdb and tmdb for shows and no imdb at
+  all, so the imdb branch was always taken and always missed.
+
+  ## Options
+
+    * `:type` - `"movie"` or `"tv_show"`. When set, a row of a different type is
+      not a match and the cascade continues to the next id. Callers that address
+      a movie or a show specifically should pass it. Callers that legitimately
+      accept either, such as `Mydia.Plugins.Matcher.match_item/1`, should not.
+
   Returns nil if no match is found.
   """
-  @spec find_by_external_ids(map()) :: MediaItem.t() | nil
-  def find_by_external_ids(ids) when is_map(ids) do
-    imdb = Map.get(ids, :imdb)
-    tvdb = Map.get(ids, :tvdb)
-    tmdb = Map.get(ids, :tmdb)
+  @spec find_by_external_ids(map(), keyword()) :: MediaItem.t() | nil
+  def find_by_external_ids(ids, opts \\ []) when is_map(ids) do
+    type = Keyword.get(opts, :type)
+    validate_external_id_type!(type)
 
-    cond do
-      imdb -> Repo.get_by(MediaItem, imdb_id: imdb)
-      tvdb -> Repo.get_by(MediaItem, tvdb_id: tvdb)
-      tmdb -> Repo.get_by(MediaItem, tmdb_id: tmdb)
-      true -> nil
+    find_by_imdb(Map.get(ids, :imdb), type) ||
+      find_by_tvdb(Map.get(ids, :tvdb), type) ||
+      find_by_tmdb(Map.get(ids, :tmdb), type)
+  end
+
+  # `nil` means "no filter" and is always valid. Anything else must be one of
+  # MediaItem's own valid types. An unrecognised value such as `"tvshow"`
+  # (missing the underscore) would otherwise silently make every lookup
+  # return nil via a `where` clause that matches nothing, which reads exactly
+  # like a total mapping failure rather than the typo it is.
+  defp validate_external_id_type!(nil), do: :ok
+
+  defp validate_external_id_type!(type) do
+    if type in MediaItem.valid_types() do
+      :ok
+    else
+      raise ArgumentError,
+            "invalid :type #{inspect(type)} for find_by_external_ids/2, " <>
+              "expected nil or one of #{inspect(MediaItem.valid_types())}"
     end
+  end
+
+  defp find_by_imdb(nil, _type), do: nil
+
+  defp find_by_imdb(imdb, type) do
+    MediaItem |> where([m], m.imdb_id == ^imdb) |> external_id_match(type)
+  end
+
+  defp find_by_tvdb(nil, _type), do: nil
+
+  defp find_by_tvdb(tvdb, type) do
+    case parse_external_id(tvdb) do
+      nil -> nil
+      id -> MediaItem |> where([m], m.tvdb_id == ^id) |> external_id_match(type)
+    end
+  end
+
+  defp find_by_tmdb(nil, _type), do: nil
+
+  defp find_by_tmdb(tmdb, type) do
+    case parse_external_id(tmdb) do
+      nil -> nil
+      id -> MediaItem |> where([m], m.tmdb_id == ^id) |> external_id_match(type)
+    end
+  end
+
+  # tvdb_id and tmdb_id are :integer columns, so Ecto's query planner raises
+  # Ecto.Query.CastError when an interpolated param cannot be cast, rather
+  # than returning nil. The crawl feeds these columns raw provider strings --
+  # whatever follows `tvdb://` in a Plex GUID, or a Jellyfin `ProviderIds`
+  # value, passed through untouched -- so a malformed id must fail closed
+  # here (returning nil so the cascade continues to the next id) instead of
+  # raising inside Engine.do_refresh/4's bare Enum.each and aborting every
+  # remaining item in the crawl.
+  #
+  # Integer.parse/1 is used deliberately over String.to_integer/1, which
+  # raises on non-numeric input rather than returning an error value.
+  # Trailing garbage is rejected outright: Integer.parse/1 returns
+  # `{123, "abc"}` for "123abc", and that partial parse is not the same id as
+  # 123, so anything left over after the digits is treated as a non-match.
+  defp parse_external_id(id) when is_integer(id), do: id
+
+  defp parse_external_id(id) when is_binary(id) do
+    case Integer.parse(id) do
+      {value, ""} -> value
+      _ -> nil
+    end
+  end
+
+  defp parse_external_id(_id), do: nil
+
+  # `limit(1)` rather than a bare `Repo.one/1`: imdb_id carries no unique index,
+  # so a duplicate would raise Ecto.MultipleResultsError partway through a crawl
+  # and abort every remaining item. `order_by` makes the pick among duplicates
+  # deterministic (oldest first) rather than left to whatever order the
+  # database happens to return, which on PostgreSQL is not guaranteed to be
+  # insertion order -- and the crawl now repeats daily, so a nondeterministic
+  # pick could flip the stored mapping between runs.
+  defp external_id_match(query, nil),
+    do: query |> order_by([m], asc: m.inserted_at) |> limit(1) |> Repo.one()
+
+  defp external_id_match(query, type) do
+    query
+    |> where([m], m.type == ^type)
+    |> order_by([m], asc: m.inserted_at)
+    |> limit(1)
+    |> Repo.one()
   end
 
   @doc """

@@ -2224,4 +2224,181 @@ defmodule Mydia.MediaTest do
       assert is_binary(row.id)
     end
   end
+
+  describe "find_by_external_ids/2" do
+    test "falls through to tvdb when the imdb id matches nothing" do
+      {:ok, show} =
+        Media.create_media_item(
+          %{title: "Cascade Show", type: "tv_show", tvdb_id: 378_982},
+          skip_episode_refresh: true
+        )
+
+      # A Plex episode carries all three ids on its show; only tvdb is local.
+      # Strings are what Plex GUIDs parse to, and Ecto casts them for the
+      # integer column.
+      assert %{id: id} = Media.find_by_external_ids(%{imdb: "tt-absent", tvdb: "378982"})
+      assert id == show.id
+    end
+
+    test "falls through to tmdb when imdb and tvdb both miss" do
+      {:ok, show} =
+        Media.create_media_item(
+          %{title: "Tmdb Show", type: "tv_show", tmdb_id: 108_255},
+          skip_episode_refresh: true
+        )
+
+      assert %{id: id} =
+               Media.find_by_external_ids(%{
+                 imdb: "tt-absent",
+                 tvdb: "999999",
+                 tmdb: "108255"
+               })
+
+      assert id == show.id
+    end
+
+    test "returns nil when no ids are given" do
+      assert Media.find_by_external_ids(%{}) == nil
+    end
+
+    test "returns nil when nothing matches" do
+      assert Media.find_by_external_ids(%{imdb: "tt-nope", tvdb: "424242", tmdb: "424243"}) == nil
+    end
+
+    test "a wrong-type match does not short-circuit the cascade" do
+      {:ok, _decoy} =
+        Media.create_media_item(%{
+          title: "Decoy Movie",
+          type: "movie",
+          year: 2024,
+          imdb_id: "tt777"
+        })
+
+      {:ok, show} =
+        Media.create_media_item(
+          %{title: "Real Show", type: "tv_show", tvdb_id: 777},
+          skip_episode_refresh: true
+        )
+
+      assert %{id: id} =
+               Media.find_by_external_ids(%{imdb: "tt777", tvdb: "777"}, type: "tv_show")
+
+      assert id == show.id
+    end
+
+    test "returns nil when the only match is the wrong type" do
+      {:ok, _movie} =
+        Media.create_media_item(%{
+          title: "Only Movie",
+          type: "movie",
+          year: 2024,
+          imdb_id: "tt888"
+        })
+
+      assert Media.find_by_external_ids(%{imdb: "tt888"}, type: "tv_show") == nil
+    end
+
+    test "arity-1 calls still resolve" do
+      {:ok, movie} =
+        Media.create_media_item(%{
+          title: "Legacy Caller",
+          type: "movie",
+          year: 2024,
+          imdb_id: "tt999"
+        })
+
+      assert %{id: id} = Media.find_by_external_ids(%{imdb: "tt999"})
+      assert id == movie.id
+    end
+
+    test "raises ArgumentError on an unrecognised :type" do
+      assert_raise ArgumentError, fn ->
+        Media.find_by_external_ids(%{imdb: "tt1"}, type: "tvshow")
+      end
+    end
+
+    test "type: nil applies no filter" do
+      {:ok, movie} =
+        Media.create_media_item(%{
+          title: "Untyped Filter",
+          type: "movie",
+          year: 2024,
+          imdb_id: "tt-untyped"
+        })
+
+      assert %{id: id} = Media.find_by_external_ids(%{imdb: "tt-untyped"}, type: nil)
+      assert id == movie.id
+    end
+
+    test "a duplicate match deterministically picks the earliest inserted row" do
+      # imdb_id carries no unique index (unlike tvdb_id/tmdb_id), so this is
+      # the id that can actually collide. Without an order_by, PostgreSQL does
+      # not guarantee LIMIT 1 returns insertion order, and since the crawl now
+      # repeats daily a nondeterministic pick could flip the stored mapping
+      # between runs.
+      {:ok, older} =
+        Media.create_media_item(%{
+          title: "Older Duplicate",
+          type: "tv_show",
+          imdb_id: "tt-dup-order"
+        })
+
+      {:ok, _newer} =
+        Media.create_media_item(%{
+          title: "Newer Duplicate",
+          type: "tv_show",
+          imdb_id: "tt-dup-order"
+        })
+
+      assert %{id: id} = Media.find_by_external_ids(%{imdb: "tt-dup-order"})
+      assert id == older.id
+    end
+
+    test "a non-numeric tvdb id falls through to tmdb instead of raising" do
+      {:ok, show} =
+        Media.create_media_item(
+          %{title: "Tmdb Fallback Show", type: "tv_show", tmdb_id: 555_555},
+          skip_episode_refresh: true
+        )
+
+      assert %{id: id} = Media.find_by_external_ids(%{tvdb: "not-a-number", tmdb: "555555"})
+      assert id == show.id
+    end
+
+    test "a non-numeric tmdb id does not raise and returns nil" do
+      assert Media.find_by_external_ids(%{tmdb: "not-a-number"}) == nil
+    end
+
+    test "a tvdb id with trailing garbage does not match" do
+      {:ok, _show} =
+        Media.create_media_item(
+          %{title: "Trailing Garbage Show", type: "tv_show", tvdb_id: 123},
+          skip_episode_refresh: true
+        )
+
+      assert Media.find_by_external_ids(%{tvdb: "123abc"}) == nil
+    end
+
+    test "a numeric tvdb string still matches" do
+      {:ok, show} =
+        Media.create_media_item(
+          %{title: "Numeric String Show", type: "tv_show", tvdb_id: 42},
+          skip_episode_refresh: true
+        )
+
+      assert %{id: id} = Media.find_by_external_ids(%{tvdb: "42"})
+      assert id == show.id
+    end
+
+    test "an integer tvdb id still matches" do
+      {:ok, show} =
+        Media.create_media_item(
+          %{title: "Integer Id Show", type: "tv_show", tvdb_id: 43},
+          skip_episode_refresh: true
+        )
+
+      assert %{id: id} = Media.find_by_external_ids(%{tvdb: 43})
+      assert id == show.id
+    end
+  end
 end

@@ -175,4 +175,48 @@ defmodule Mydia.WatchSync.EngineTest do
       refute_received {:applied, _, _}
     end
   end
+
+  test "an episode maps when its show carries no local imdb id" do
+    user = user_fixture()
+
+    {:ok, show} =
+      Mydia.Media.create_media_item(
+        %{title: "Tvdb Only Show", type: "tv_show", tvdb_id: 378_982},
+        skip_episode_refresh: true
+      )
+
+    {:ok, episode} =
+      Mydia.Media.create_episode(%{
+        media_item_id: show.id,
+        season_number: 1,
+        episode_number: 1,
+        title: "Pilot"
+      })
+
+    instance = %{
+      id: "inst-ep",
+      test_pid: self(),
+      mappings: [
+        %{
+          remote_id: "ep1",
+          type: :episode,
+          # Exactly what Plex returns: all three ids on the show, none of them
+          # imdb-resolvable locally.
+          external_ids: %{imdb: "tt10590066", tmdb: "108255", tvdb: "378982"},
+          season_number: 1,
+          episode_number: 1
+        }
+      ],
+      changes: [%{remote_id: "ep1", watched: true, position_seconds: 0, at: DateTime.utc_now()}]
+    }
+
+    assert {:ok, counts} =
+             WatchSync.sync(StubProvider, instance, %{user_id: user.id, access_token: nil},
+               provider: "stub"
+             )
+
+    assert counts.not_found == 0
+    assert counts.imported == 1
+    assert %{watched: true} = Playback.get_progress(user.id, episode_id: episode.id)
+  end
 end
