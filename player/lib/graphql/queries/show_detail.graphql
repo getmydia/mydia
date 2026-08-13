@@ -1,0 +1,93 @@
+#import '../fragments/watch_status_fragment.graphql'
+
+query TvShowDetail($id: ID!) {
+  tvShow(id: $id) {
+    id
+    title
+    originalTitle
+    year
+    overview
+    status
+    genres
+    contentRating
+    rating
+    tmdbId
+    imdbId
+    category
+    monitored
+    addedAt
+    seasonCount
+    episodeCount
+    artwork {
+      posterUrl
+      backdropUrl
+      thumbnailUrl
+    }
+    seasons {
+      seasonNumber
+      episodeCount
+      airedEpisodeCount
+      hasFiles
+      watchStatus {
+        ...WatchStatusFragment
+      }
+    }
+    nextEpisode {
+      id
+      seasonNumber
+      episodeNumber
+      title
+      airDate
+    }
+    nextUp {
+      progressState
+      episode {
+        id
+        seasonNumber
+        episodeNumber
+        title
+        runtime
+        files {
+          id
+          resolution
+          codec
+          audioCodec
+          hdrFormat
+          size
+          bitrate
+          directPlaySupported
+          streamUrl
+          directPlayUrl
+        }
+        progress {
+          positionSeconds
+          durationSeconds
+          percentage
+          watched
+          lastWatchedAt
+        }
+      }
+    }
+    isFavorite
+    cast {
+      name
+      character
+      profileUrl
+    }
+    trailerUrl
+    similar {
+      id
+      type
+      title
+      year
+      artwork {
+        posterUrl
+        backdropUrl
+        thumbnailUrl
+      }
+    }
+    watchStatus {
+      ...WatchStatusFragment
+    }
+  }
+}

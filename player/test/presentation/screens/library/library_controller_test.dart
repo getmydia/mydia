@@ -24,10 +24,19 @@ MediaFilter _tvShowsFilter([LibrarySort sort = LibrarySort.defaultSort]) =>
       sort: sort,
     );
 
+MediaFilter _unwatchedFilter([LibrarySort sort = LibrarySort.defaultSort]) =>
+    MediaFilter(
+      kind: MediaKind.movies,
+      category: null,
+      watch: WatchScope.unwatched,
+      sort: sort,
+    );
+
 Map<String, dynamic> _moviesPage(
   List<String> ids, {
   required bool hasNextPage,
   double? rating,
+  bool withWatchStatus = true,
 }) {
   return {
     '__typename': 'Query',
@@ -56,6 +65,13 @@ Map<String, dynamic> _moviesPage(
               },
               'progress': null,
               'isFavorite': false,
+              if (withWatchStatus)
+                'watchStatus': {
+                  '__typename': 'WatchStatus',
+                  'watched': false,
+                  'percentage': null,
+                  'unwatchedEpisodeCount': null,
+                },
             },
           }
       ],
@@ -78,6 +94,7 @@ Map<String, dynamic> _tvShowsPage(
   List<String> ids, {
   required bool hasNextPage,
   double? rating,
+  int? unwatchedEpisodeCount,
 }) {
   return {
     '__typename': 'Query',
@@ -108,6 +125,14 @@ Map<String, dynamic> _tvShowsPage(
               },
               'isFavorite': false,
               'nextEpisode': null,
+              'watchStatus': unwatchedEpisodeCount == null
+                  ? null
+                  : {
+                      '__typename': 'WatchStatus',
+                      'watched': false,
+                      'percentage': null,
+                      'unwatchedEpisodeCount': unwatchedEpisodeCount,
+                    },
             },
           }
       ],
@@ -437,5 +462,145 @@ void main() {
       link.requests.first.variables['sort'],
       {'field': 'RANDOM', 'seed': 777},
     );
+  });
+
+  test('carries watchStatus through to library items', () async {
+    final container = ProviderContainer(
+      overrides: [
+        asyncGraphqlClientProvider.overrideWith(
+          (ref) async => stubClient(
+            StubLink.responses([
+              _moviesPage(['1'], hasNextPage: false),
+            ]),
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final data = await waitForValue(
+      container,
+      libraryControllerProvider(_moviesFilter()),
+      (value) => value.items.isNotEmpty,
+    );
+
+    expect(data.items.single.watchStatus, isNotNull);
+    expect(data.items.single.watchStatus!.watched, isFalse);
+  });
+
+  test('leaves watchStatus null when the server omits it', () async {
+    // An older server that predates the field. The whole query still
+    // resolves, and the grid simply draws no indicator.
+    final container = ProviderContainer(
+      overrides: [
+        asyncGraphqlClientProvider.overrideWith(
+          (ref) async => stubClient(
+            StubLink.responses([
+              _moviesPage(['1'], hasNextPage: false, withWatchStatus: false),
+            ]),
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final data = await waitForValue(
+      container,
+      libraryControllerProvider(_moviesFilter()),
+      (value) => value.items.isNotEmpty,
+    );
+
+    expect(data.items.single.watchStatus, isNull);
+  });
+
+  test('carries a show unwatched count through to library items', () async {
+    // The show badge is the headline of this feature and it runs through
+    // `_parseTvShows`, a different function from the movie path above.
+    final container = ProviderContainer(
+      overrides: [
+        asyncGraphqlClientProvider.overrideWith(
+          (ref) async => stubClient(
+            StubLink.responses([
+              _tvShowsPage(['1'], hasNextPage: false, unwatchedEpisodeCount: 7),
+            ]),
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final data = await waitForValue(
+      container,
+      libraryControllerProvider(_tvShowsFilter()),
+      (value) => value.items.isNotEmpty,
+    );
+
+    expect(data.items.single.watchStatus!.unwatchedEpisodeCount, 7);
+    expect(data.items.single.watchStatus!.watched, isFalse);
+  });
+
+  test('leaves a show watch status null when the server omits it', () async {
+    final container = ProviderContainer(
+      overrides: [
+        asyncGraphqlClientProvider.overrideWith(
+          (ref) async => stubClient(
+            StubLink.responses([
+              _tvShowsPage(['1'], hasNextPage: false),
+            ]),
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final data = await waitForValue(
+      container,
+      libraryControllerProvider(_tvShowsFilter()),
+      (value) => value.items.isNotEmpty,
+    );
+
+    expect(data.items.single.watchStatus, isNull);
+  });
+
+  test('carries an unwatched episode count through the unwatched list',
+      () async {
+    final container = ProviderContainer(
+      overrides: [
+        asyncGraphqlClientProvider.overrideWith(
+          (ref) async => stubClient(
+            StubLink.responses([
+              {
+                '__typename': 'Query',
+                'unwatched': [
+                  {
+                    '__typename': 'RecentlyAddedItem',
+                    'id': 'i1',
+                    'title': 'Item',
+                    'year': 2021,
+                    'type': 'tv_show',
+                    'artwork': null,
+                    'watchStatus': {
+                      '__typename': 'WatchStatus',
+                      'watched': false,
+                      'percentage': null,
+                      'unwatchedEpisodeCount': 3,
+                    },
+                  },
+                ],
+              },
+            ]),
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final data = await waitForValue(
+      container,
+      libraryControllerProvider(_unwatchedFilter()),
+      (value) => value.items.isNotEmpty,
+    );
+
+    expect(data.items.single.watchStatus!.unwatchedEpisodeCount, 3);
   });
 }

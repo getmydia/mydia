@@ -8,6 +8,7 @@ import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/presentation/screens/unwatched/unwatched_screen.dart';
 import 'package:player/presentation/widgets/browse_grid.dart';
 import 'package:player/presentation/widgets/media_poster.dart';
+import 'package:player/presentation/widgets/watch_indicator.dart';
 
 import '../../../test_utils/mock_network_images.dart';
 import '../../../test_utils/stub_graphql_client.dart';
@@ -27,6 +28,8 @@ Map<String, dynamic> _unwatchedItem({
   required String id,
   required String title,
   String type = 'movie',
+  int? unwatchedEpisodeCount,
+  bool withWatchStatus = false,
 }) =>
     {
       '__typename': 'MediaItem',
@@ -41,6 +44,13 @@ Map<String, dynamic> _unwatchedItem({
         'thumbnailUrl': null,
       },
       'addedAt': '2026-07-01T00:00:00Z',
+      if (withWatchStatus)
+        'watchStatus': {
+          '__typename': 'WatchStatus',
+          'watched': false,
+          'percentage': null,
+          'unwatchedEpisodeCount': unwatchedEpisodeCount,
+        },
     };
 
 Future<void> pumpUnwatchedScreen(
@@ -103,5 +113,42 @@ void main() {
     );
 
     expect(find.text('All caught up!'), findsOneWidget);
+  });
+
+  testWidgets('draws an unwatched dot on a movie', (tester) async {
+    // The whole chain in one assertion: the query asks for `watchStatus`, the
+    // flat-list parser reads it, the screen hands it to `MediaPoster`, and the
+    // indicator renders. This screen showed no watch state at all before this
+    // work, which is what made it the clearest example of the gap.
+    await pumpUnwatchedScreen(
+      tester,
+      link: StubLink.responses([
+        _unwatchedResponse([
+          _unwatchedItem(
+              id: 'u-1', title: 'Unseen Movie', withWatchStatus: true),
+        ]),
+      ]),
+    );
+
+    expect(find.byKey(WatchIndicator.dotKey), findsOneWidget);
+  });
+
+  testWidgets('draws an unwatched count on a show', (tester) async {
+    await pumpUnwatchedScreen(
+      tester,
+      link: StubLink.responses([
+        _unwatchedResponse([
+          _unwatchedItem(
+            id: 'u-2',
+            title: 'Unseen Show',
+            type: 'tv_show',
+            withWatchStatus: true,
+            unwatchedEpisodeCount: 6,
+          ),
+        ]),
+      ]),
+    );
+
+    expect(find.text('6'), findsOneWidget);
   });
 }

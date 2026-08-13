@@ -4,11 +4,14 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/domain/models/watch_status.dart';
 import 'package:player/presentation/widgets/media_poster.dart';
 import 'package:player/presentation/widgets/rating_badge.dart';
+import 'package:player/presentation/widgets/watch_indicator.dart';
 
 import '../../test_utils/hover_affordance.dart';
 import '../../test_utils/poster_contract.dart';
+import '../../test_utils/watch_indicator_contract.dart';
 
 const _posterHost = Size(140, 230);
 
@@ -141,6 +144,32 @@ void main() {
       final heart = tester.getRect(find.byIcon(Icons.favorite));
 
       expect(chip.right, lessThan(heart.left));
+    });
+  });
+
+  runWatchIndicatorContract(
+    description: 'MediaPoster',
+    build: (status) => MediaPoster(title: 'Show', watchStatus: status),
+    size: _posterHost,
+  );
+
+  group('MediaPoster watch indicators', () {
+    testWidgets('keeps the favourite heart alongside the indicator',
+        (tester) async {
+      await tester.pumpWidget(
+        posterHost(
+          const MediaPoster(
+            title: 'Show',
+            isFavorite: true,
+            watchStatus: WatchStatus(watched: false),
+          ),
+          size: _posterHost,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(WatchIndicator.dotKey), findsOneWidget);
+      expect(find.byIcon(Icons.favorite), findsOneWidget);
     });
   });
 }

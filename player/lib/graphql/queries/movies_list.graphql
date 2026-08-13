@@ -1,5 +1,6 @@
 #import '../fragments/artwork_fragment.graphql'
 #import '../fragments/progress_fragment.graphql'
+#import '../fragments/watch_status_fragment.graphql'
 
 query MoviesList($first: Int, $after: String, $category: MediaCategory) {
   movies(first: $first, after: $after, category: $category) {
@@ -18,6 +19,9 @@ query MoviesList($first: Int, $after: String, $category: MediaCategory) {
         }
         progress {
           ...ProgressFragment
+        }
+        watchStatus {
+          ...WatchStatusFragment
         }
         isFavorite
       }

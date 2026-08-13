@@ -4,11 +4,16 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/domain/models/media_file.dart';
+import 'package:player/domain/models/watch_status.dart';
 import 'package:player/presentation/widgets/media_card.dart';
 import 'package:player/presentation/widgets/progress_overlay.dart';
+import 'package:player/presentation/widgets/quality_badge.dart';
+import 'package:player/presentation/widgets/watch_indicator.dart';
 
 import '../../test_utils/hover_affordance.dart';
 import '../../test_utils/poster_contract.dart';
+import '../../test_utils/watch_indicator_contract.dart';
 
 // Tall enough for the 195px poster plus its gap and a two-line title, short
 // enough that the card's center still lands on the poster. Without this the
@@ -182,5 +187,40 @@ void main() {
 
       expect(tester.takeException(), isNull);
     });
+  });
+
+  runWatchIndicatorContract(
+    description: 'MediaCard',
+    build: (status) => MediaCard(
+      title: 'Movie',
+      action: MediaCardAction.open,
+      watchStatus: status,
+    ),
+    size: _cardHost,
+  );
+
+  testWidgets('keeps quality badges alongside the watch indicator',
+      (tester) async {
+    // Quality badges used to be their own hand-positioned overlay and now
+    // share PosterBadgeCorner with the watch mark. This is the only case that
+    // puts two visible children in that corner, so it is the only one that
+    // exercises the spacing between them.
+    await tester.pumpWidget(
+      posterHost(
+        const MediaCard(
+          title: 'Movie',
+          action: MediaCardAction.open,
+          watchStatus: WatchStatus(watched: false),
+          files: [
+            MediaFile(id: 'f1', resolution: '4K', directPlaySupported: true),
+          ],
+        ),
+        size: _cardHost,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(WatchIndicator.dotKey), findsOneWidget);
+    expect(find.byType(QualityBadgeRow), findsOneWidget);
   });
 }

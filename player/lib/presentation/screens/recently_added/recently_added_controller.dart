@@ -23,6 +23,7 @@ query RecentlyAddedFull($first: Int) {
     newEpisodeCount
     latestSeasonNumber
     latestEpisodeNumber
+    watchStatus { watched percentage unwatchedEpisodeCount }
   }
 }
 ''';

@@ -20,6 +20,7 @@ query CollectionItems($collectionId: ID!, $first: Int) {
       thumbnailUrl
     }
     addedAt
+    watchStatus { watched percentage unwatchedEpisodeCount }
   }
 }
 ''';

@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/colors.dart';
+import '../../domain/models/watch_status.dart';
+import 'poster_badge_corner.dart';
 import 'poster_frame.dart';
 import 'progress_overlay.dart';
 import 'rating_badge.dart';
+import 'watch_indicator.dart';
 
 /// A portrait poster for the library grid and list.
 ///
@@ -15,6 +18,10 @@ class MediaPoster extends StatelessWidget {
   final String title;
   final String? subtitle;
   final double? progressPercentage;
+
+  /// Rolled-up watch state. Null renders no indicator at all, which is what
+  /// an unauthenticated viewer and an un-migrated caller both get.
+  final WatchStatus? watchStatus;
 
   /// TMDB's score on a 0 to 10 scale. Null, or `0.0` for a title nobody has
   /// voted on, renders no chip at all.
@@ -29,6 +36,7 @@ class MediaPoster extends StatelessWidget {
     required this.title,
     this.subtitle,
     this.progressPercentage,
+    this.watchStatus,
     this.rating,
     this.isFavorite = false,
     this.onTap,
@@ -76,6 +84,7 @@ class MediaPoster extends StatelessWidget {
                 overlays: [
                   if (progress != null && progress > 0)
                     ProgressOverlay(percentage: progress),
+                  WatchProgressOverlay(status: watchStatus),
                   // TMDB reports 0.0 for a title nobody has voted on, so 0 and
                   // null both mean "no rating" and the overlay is omitted
                   // rather than rendered empty. RatingBadge's doc explains why
@@ -86,16 +95,17 @@ class MediaPoster extends StatelessWidget {
                       left: 8,
                       child: RatingBadge(rating: rating),
                     ),
-                  if (isFavorite)
-                    const Positioned(
-                      top: 8,
-                      right: 8,
-                      child: Icon(
-                        Icons.favorite,
-                        color: Colors.red,
-                        size: 20,
-                      ),
-                    ),
+                  PosterBadgeCorner(
+                    children: [
+                      WatchIndicator(status: watchStatus),
+                      if (isFavorite)
+                        const Icon(
+                          Icons.favorite,
+                          color: Colors.red,
+                          size: 20,
+                        ),
+                    ],
+                  ),
                 ],
               ),
             ),

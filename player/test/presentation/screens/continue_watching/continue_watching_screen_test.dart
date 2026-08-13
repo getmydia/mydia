@@ -8,6 +8,8 @@ import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/presentation/screens/continue_watching/continue_watching_screen.dart';
 import 'package:player/presentation/widgets/browse_grid.dart';
 import 'package:player/presentation/widgets/media_poster.dart';
+import 'package:player/presentation/widgets/progress_overlay.dart';
+import 'package:player/presentation/widgets/watch_indicator.dart';
 
 import '../../../test_utils/mock_network_images.dart';
 import '../../../test_utils/stub_graphql_client.dart';
@@ -30,6 +32,7 @@ Map<String, dynamic> _continueWatchingItem({
   required String title,
   String type = 'movie',
   double? progressPercentage,
+  bool watched = false,
 }) =>
     {
       '__typename': 'ContinueWatchingItem',
@@ -48,7 +51,7 @@ Map<String, dynamic> _continueWatchingItem({
               'positionSeconds': 600,
               'durationSeconds': 3600,
               'percentage': progressPercentage,
-              'watched': false,
+              'watched': watched,
               'lastWatchedAt': '2026-07-01T00:00:00Z',
             }
           : null,
@@ -142,5 +145,62 @@ void main() {
     );
 
     expect(find.byType(BrowseGrid), findsOneWidget);
+  });
+
+  testWidgets('draws a progress bar and no dot for a part-played item',
+      (tester) async {
+    // Every item on this rail is part-played by definition, so the bar is the
+    // only mark it should ever carry.
+    await pumpContinueWatchingScreen(
+      tester,
+      link: StubLink.responses([
+        _continueWatchingResponse([
+          _continueWatchingItem(
+            id: 'cw-1',
+            title: 'In Progress Movie',
+            progressPercentage: 42,
+          ),
+        ]),
+      ]),
+    );
+
+    expect(find.byType(ProgressOverlay), findsOneWidget);
+    expect(find.byKey(WatchIndicator.dotKey), findsNothing);
+  });
+
+  testWidgets('draws nothing when an item carries no progress', (tester) async {
+    await pumpContinueWatchingScreen(
+      tester,
+      link: StubLink.responses([
+        _continueWatchingResponse([
+          _continueWatchingItem(id: 'cw-2', title: 'No Progress'),
+        ]),
+      ]),
+    );
+
+    expect(find.byKey(WatchIndicator.dotKey), findsNothing);
+  });
+
+  testWidgets('draws no bar for an item already marked watched',
+      (tester) async {
+    // This is what the adapter buys. The legacy `progressPercentage` prop
+    // draws a full bar for anything at 100%, watched or not. Routing through
+    // `WatchStatus` applies the shared rule instead, so a watched item draws
+    // nothing here exactly as it does on every other surface.
+    await pumpContinueWatchingScreen(
+      tester,
+      link: StubLink.responses([
+        _continueWatchingResponse([
+          _continueWatchingItem(
+            id: 'cw-3',
+            title: 'Finished Movie',
+            progressPercentage: 100,
+            watched: true,
+          ),
+        ]),
+      ]),
+    );
+
+    expect(find.byType(ProgressOverlay), findsNothing);
   });
 }

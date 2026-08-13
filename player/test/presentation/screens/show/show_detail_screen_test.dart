@@ -111,6 +111,7 @@ Map<String, dynamic> _showJson({
       'backdropUrl': null,
       'thumbnailUrl': null,
     },
+    'watchStatus': null,
     'seasons': seasons ??
         [
           {
@@ -119,6 +120,7 @@ Map<String, dynamic> _showJson({
             'episodeCount': 3,
             'airedEpisodeCount': 3,
             'hasFiles': true,
+            'watchStatus': null,
           },
         ],
     'nextEpisode': null,

@@ -251,6 +251,7 @@ pub fn movie_from(
         files: files_of(files, externals),
         // Progress and favorites land in Slice 4.
         progress: None,
+        watch_status: None,
         is_favorite: false,
     }
 }
@@ -276,6 +277,7 @@ pub fn episode_from(
         thumbnail_url: row.thumbnail_url.clone(),
         files: files_of(files, externals),
         progress: None,
+        watch_status: None,
         has_file: !files.is_empty(),
         show,
     }
@@ -309,6 +311,7 @@ pub fn tv_show_from(
                 episode_count: count,
                 aired_episode_count: Some(count),
                 has_files: in_season.iter().any(|(_, files)| !files.is_empty()),
+                watch_status: None,
                 episodes: Some(
                     in_season
                         .iter()
@@ -353,6 +356,7 @@ pub fn tv_show_from(
         seasons: Some(seasons),
         season_count: Some(i32::try_from(numbered_seasons).unwrap_or(i32::MAX)),
         episode_count: Some(i32::try_from(episodes.len()).unwrap_or(i32::MAX)),
+        watch_status: None,
         next_episode: next,
         // next_up needs watch state, which is Slice 4.
         next_up: None,

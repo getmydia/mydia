@@ -54,6 +54,20 @@ pub struct Progress {
     pub last_watched_at: Option<DateTime<Utc>>,
 }
 
+/// Rolled-up watch state for a browsable item.
+///
+/// This server does not compute playback state yet, so every construction
+/// site sets `watch_status: None`, exactly as it already does for `progress`.
+/// The type exists to satisfy the structural contract in `sdl_parity.rs`:
+/// GraphQL rejects a whole document when it names an unknown field, so a
+/// missing field here breaks every player query that asks for it.
+#[derive(SimpleObject)]
+pub struct WatchStatus {
+    pub watched: bool,
+    pub percentage: Option<f64>,
+    pub unwatched_episode_count: Option<i32>,
+}
+
 #[derive(SimpleObject)]
 pub struct MediaSegment {
     #[graphql(name = "type")]
@@ -255,6 +269,7 @@ pub struct RecentlyAddedItem {
     pub new_episode_count: Option<i32>,
     pub latest_season_number: Option<i32>,
     pub latest_episode_number: Option<i32>,
+    pub watch_status: Option<WatchStatus>,
 }
 
 #[derive(SimpleObject)]
@@ -286,6 +301,7 @@ pub struct Movie {
     pub artwork: Option<Artwork>,
     pub files: Option<Vec<Option<MediaFile>>>,
     pub progress: Option<Progress>,
+    pub watch_status: Option<WatchStatus>,
     pub is_favorite: bool,
 }
 
@@ -344,6 +360,7 @@ pub struct TvShow {
     pub seasons: Option<Vec<Option<Season>>>,
     pub season_count: Option<i32>,
     pub episode_count: Option<i32>,
+    pub watch_status: Option<WatchStatus>,
     pub next_episode: Option<Episode>,
     pub next_up: Option<ShowNextUp>,
     pub is_favorite: bool,
@@ -382,6 +399,7 @@ pub struct Season {
     pub episode_count: i32,
     pub aired_episode_count: Option<i32>,
     pub has_files: bool,
+    pub watch_status: Option<WatchStatus>,
     pub episodes: Option<Vec<Option<Episode>>>,
 }
 
@@ -423,6 +441,7 @@ pub struct Episode {
     pub thumbnail_url: Option<String>,
     pub files: Option<Vec<Option<MediaFile>>>,
     pub progress: Option<Progress>,
+    pub watch_status: Option<WatchStatus>,
     pub has_file: bool,
     pub show: Option<Box<TvShow>>,
 }

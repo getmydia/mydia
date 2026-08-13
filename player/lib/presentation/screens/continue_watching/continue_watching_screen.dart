@@ -6,6 +6,7 @@ import '../../../core/graphql/watch/query_key.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/models/continue_watching_item.dart';
+import '../../../domain/models/watch_status.dart';
 import '../../widgets/browse_grid.dart';
 import '../../widgets/browse_scaffold.dart';
 import '../../widgets/media_poster.dart';
@@ -95,7 +96,15 @@ class _ContinueWatchingScreenState
                 posterUrl: item.posterUrl,
                 title: item.title,
                 subtitle: item.showTitle,
-                progressPercentage: item.progress?.percentage,
+                // Continue Watching keeps `ProgressFragment` and adapts it
+                // here rather than asking the server for a `watchStatus` it
+                // would have to compute for a rail where every item is
+                // part-played by definition. Going through `WatchStatus` is
+                // what puts this rail on the same rendering rule as every
+                // other surface, instead of the legacy percentage prop.
+                watchStatus: item.progress == null
+                    ? null
+                    : WatchStatus.fromProgress(item.progress!),
                 onTap: () => _handleItemTap(context, item),
               );
             },

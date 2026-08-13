@@ -1,4 +1,5 @@
 #import '../fragments/artwork_fragment.graphql'
+#import '../fragments/watch_status_fragment.graphql'
 
 query TvShowsList($first: Int, $after: String, $category: MediaCategory) {
   tvShows(first: $first, after: $after, category: $category) {
@@ -16,6 +17,9 @@ query TvShowsList($first: Int, $after: String, $category: MediaCategory) {
         episodeCount
         artwork {
           ...ArtworkFragment
+        }
+        watchStatus {
+          ...WatchStatusFragment
         }
         isFavorite
         nextEpisode {

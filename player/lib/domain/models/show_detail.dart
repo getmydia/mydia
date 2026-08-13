@@ -4,6 +4,7 @@ import 'next_episode.dart';
 import 'show_next_up.dart';
 import 'cast_member.dart';
 import 'recently_added_item.dart';
+import 'watch_status.dart';
 
 class ShowDetail {
   final String id;
@@ -30,6 +31,7 @@ class ShowDetail {
   final List<CastMember> cast;
   final String? trailerUrl;
   final List<RecentlyAddedItem> similar;
+  final WatchStatus? watchStatus;
 
   const ShowDetail({
     required this.id,
@@ -56,6 +58,7 @@ class ShowDetail {
     this.cast = const [],
     this.trailerUrl,
     this.similar = const [],
+    this.watchStatus,
   });
 
   factory ShowDetail.fromJson(Map<String, dynamic> json) {
@@ -103,6 +106,9 @@ class ShowDetail {
                   (e) => RecentlyAddedItem.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
+      watchStatus: json['watchStatus'] == null
+          ? null
+          : WatchStatus.fromJson(json['watchStatus'] as Map<String, dynamic>),
     );
   }
 

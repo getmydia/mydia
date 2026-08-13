@@ -63,6 +63,7 @@ class RecentlyAddedScreen extends ConsumerWidget {
                 posterUrl: item.posterUrl,
                 title: item.title,
                 subtitle: item.newContentLabel,
+                watchStatus: item.watchStatus,
                 onTap: () => _handleItemTap(context, item.id, item.type),
               );
             },

@@ -21,6 +21,7 @@ query Favorites($first: Int, $sort: SortInput) {
       thumbnailUrl
     }
     addedAt
+    watchStatus { watched percentage unwatchedEpisodeCount }
   }
 }
 ''';

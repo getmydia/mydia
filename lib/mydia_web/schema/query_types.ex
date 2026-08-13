@@ -239,6 +239,11 @@ defmodule MydiaWeb.Schema.QueryTypes do
 
     @desc "Number of the newest arrived episode. Null for movies and for unmatched files."
     field :latest_episode_number, :integer
+
+    @desc "Rolled-up watch state"
+    field :watch_status, :watch_status do
+      resolve(&MydiaWeb.Schema.Resolvers.MediaResolver.resolve_recently_added_watch_status/3)
+    end
   end
 
   @desc "An item in the up next rail (next episode to watch)"
