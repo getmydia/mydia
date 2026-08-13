@@ -1,9 +1,12 @@
 defmodule Mydia.Playback.WatchStatusTest do
-  use ExUnit.Case, async: true
+  use Mydia.DataCase, async: true
 
   alias Mydia.Media.Episode
   alias Mydia.Playback.Progress
   alias Mydia.Playback.WatchStatus
+  alias Mydia.AccountsFixtures
+  alias Mydia.MediaFixtures
+  alias Mydia.Playback
 
   defp episode(id, season_number), do: %Episode{id: id, season_number: season_number}
 
@@ -107,6 +110,115 @@ defmodule Mydia.Playback.WatchStatusTest do
 
       assert %WatchStatus{percentage: nil} =
                WatchStatus.from_episodes(episodes, MapSet.new(["e1"]), %{})
+    end
+  end
+
+  describe "load_shows/2" do
+    setup do
+      user = AccountsFixtures.user_fixture()
+      show = MediaFixtures.media_item_fixture(%{type: "tv_show", title: "Bundled"})
+
+      e1 =
+        MediaFixtures.episode_fixture(%{
+          media_item_id: show.id,
+          season_number: 1,
+          episode_number: 1
+        })
+
+      e2 =
+        MediaFixtures.episode_fixture(%{
+          media_item_id: show.id,
+          season_number: 2,
+          episode_number: 1
+        })
+
+      special =
+        MediaFixtures.episode_fixture(%{
+          media_item_id: show.id,
+          season_number: 0,
+          episode_number: 1
+        })
+
+      MediaFixtures.media_file_fixture(%{episode_id: e1.id})
+      MediaFixtures.media_file_fixture(%{episode_id: e2.id})
+      MediaFixtures.media_file_fixture(%{episode_id: special.id})
+
+      %{user: user, show: show, e1: e1, e2: e2, special: special}
+    end
+
+    test "bundles every episode of the requested shows", ctx do
+      bundles = WatchStatus.load_shows(ctx.user.id, [ctx.show.id])
+      bundle = Map.fetch!(bundles, ctx.show.id)
+
+      assert length(WatchStatus.episodes(bundle)) == 3
+    end
+
+    test "for_show/1 applies the counting rule across all seasons", ctx do
+      bundles = WatchStatus.load_shows(ctx.user.id, [ctx.show.id])
+
+      assert %WatchStatus{watched: false, unwatched_episode_count: 2} =
+               WatchStatus.for_show(Map.fetch!(bundles, ctx.show.id))
+    end
+
+    test "for_season/2 scopes the count to one season", ctx do
+      bundles = WatchStatus.load_shows(ctx.user.id, [ctx.show.id])
+      bundle = Map.fetch!(bundles, ctx.show.id)
+
+      assert %WatchStatus{unwatched_episode_count: 1} = WatchStatus.for_season(bundle, 1)
+      assert %WatchStatus{unwatched_episode_count: 1} = WatchStatus.for_season(bundle, 2)
+      assert %WatchStatus{unwatched_episode_count: 0} = WatchStatus.for_season(bundle, 0)
+    end
+
+    test "watching every non-special episode marks the show watched", ctx do
+      for episode <- [ctx.e1, ctx.e2] do
+        {:ok, _} =
+          Playback.save_progress(
+            ctx.user.id,
+            [episode_id: episode.id],
+            %{position_seconds: 100, duration_seconds: 100, watched: true}
+          )
+      end
+
+      bundles = WatchStatus.load_shows(ctx.user.id, [ctx.show.id])
+
+      assert %WatchStatus{watched: true, unwatched_episode_count: 0} =
+               WatchStatus.for_show(Map.fetch!(bundles, ctx.show.id))
+    end
+
+    test "another user's progress never leaks into this user's count", ctx do
+      other = AccountsFixtures.user_fixture()
+
+      {:ok, _} =
+        Playback.save_progress(
+          other.id,
+          [episode_id: ctx.e1.id],
+          %{position_seconds: 100, duration_seconds: 100, watched: true}
+        )
+
+      bundles = WatchStatus.load_shows(ctx.user.id, [ctx.show.id])
+
+      assert %WatchStatus{unwatched_episode_count: 2} =
+               WatchStatus.for_show(Map.fetch!(bundles, ctx.show.id))
+    end
+
+    test "a nil user id yields counts with no progress applied", ctx do
+      bundles = WatchStatus.load_shows(nil, [ctx.show.id])
+
+      assert %WatchStatus{unwatched_episode_count: 2} =
+               WatchStatus.for_show(Map.fetch!(bundles, ctx.show.id))
+    end
+
+    test "a show id with no episodes still gets a bundle", ctx do
+      empty = MediaFixtures.media_item_fixture(%{type: "tv_show", title: "Empty"})
+      bundles = WatchStatus.load_shows(ctx.user.id, [ctx.show.id, empty.id])
+
+      assert %WatchStatus{watched: false, unwatched_episode_count: 0} =
+               WatchStatus.for_show(Map.fetch!(bundles, empty.id))
+    end
+
+    test "for_show/1 tolerates a missing bundle", _ctx do
+      assert %WatchStatus{watched: false, unwatched_episode_count: 0} =
+               WatchStatus.for_show(nil)
     end
   end
 end
