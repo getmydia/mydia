@@ -311,6 +311,7 @@ class _LibraryMediaBodyState extends ConsumerState<LibraryMediaBody> {
               progressPercentage: item.progressPercentage,
               rating: item.rating,
               isFavorite: item.isFavorite,
+              watchStatus: item.watchStatus,
               onTap: () => _handleItemTap(item.id, item.type),
             );
           },
@@ -373,6 +374,7 @@ class LibraryListItem extends StatelessWidget {
                       title: item.title,
                       progressPercentage: item.progressPercentage,
                       isFavorite: item.isFavorite,
+                      watchStatus: item.watchStatus,
                       showTitle: false,
                       onTap: onTap,
                     ),

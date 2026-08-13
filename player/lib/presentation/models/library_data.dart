@@ -1,3 +1,5 @@
+import '../../domain/models/watch_status.dart';
+
 class LibraryData {
   final List<LibraryItem> items;
   final bool hasMore;
@@ -34,6 +36,9 @@ class LibraryItem {
   final int? seasonCount;
   final int? episodeCount;
 
+  /// Rolled-up watch state, null when the server did not send one.
+  final WatchStatus? watchStatus;
+
   const LibraryItem({
     required this.id,
     required this.title,
@@ -46,5 +51,6 @@ class LibraryItem {
     this.subtitle,
     this.seasonCount,
     this.episodeCount,
+    this.watchStatus,
   });
 }

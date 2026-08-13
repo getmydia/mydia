@@ -7,6 +7,7 @@ import '../../../core/graphql/watch/connection_merge.dart';
 import '../../../core/graphql/watch/controller_watcher.dart';
 import '../../../core/graphql/watch/query_key.dart';
 import '../../../core/graphql/watch/query_watcher.dart';
+import '../../../domain/models/watch_status.dart';
 import '../../../domain/navigation/media_filter.dart';
 import '../../models/library_data.dart';
 
@@ -46,6 +47,11 @@ query MoviesList($first: Int, $after: String, $sort: SortInput, $category: Media
           watched
           lastWatchedAt
         }
+        watchStatus {
+          watched
+          percentage
+          unwatchedEpisodeCount
+        }
         isFavorite
       }
       cursor
@@ -80,6 +86,11 @@ query TvShowsList($first: Int, $after: String, $sort: SortInput, $category: Medi
           posterUrl
           backdropUrl
           thumbnailUrl
+        }
+        watchStatus {
+          watched
+          percentage
+          unwatchedEpisodeCount
         }
         isFavorite
         nextEpisode {
@@ -153,6 +164,9 @@ LibraryData _parseMovies(Map<String, dynamic> data) {
       isFavorite: node['isFavorite'] as bool,
       type: 'movie',
       subtitle: node['year']?.toString(),
+      watchStatus: node['watchStatus'] == null
+          ? null
+          : WatchStatus.fromJson(node['watchStatus'] as Map<String, dynamic>),
     ),
   );
 }
@@ -167,7 +181,6 @@ LibraryData _parseTvShows(Map<String, dynamic> data) {
       year: node['year'] as int?,
       posterUrl:
           (node['artwork'] as Map<String, dynamic>?)?['posterUrl'] as String?,
-      // TV shows have no overall progress.
       progressPercentage: null,
       rating: (node['rating'] as num?)?.toDouble(),
       isFavorite: node['isFavorite'] as bool,
@@ -175,6 +188,9 @@ LibraryData _parseTvShows(Map<String, dynamic> data) {
       subtitle: node['year'] != null ? '${node['year']}' : null,
       seasonCount: node['seasonCount'] as int?,
       episodeCount: node['episodeCount'] as int?,
+      watchStatus: node['watchStatus'] == null
+          ? null
+          : WatchStatus.fromJson(node['watchStatus'] as Map<String, dynamic>),
     ),
   );
 }

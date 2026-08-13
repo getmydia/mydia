@@ -28,6 +28,7 @@ Map<String, dynamic> _moviesPage(
   List<String> ids, {
   required bool hasNextPage,
   double? rating,
+  bool withWatchStatus = true,
 }) {
   return {
     '__typename': 'Query',
@@ -56,6 +57,13 @@ Map<String, dynamic> _moviesPage(
               },
               'progress': null,
               'isFavorite': false,
+              if (withWatchStatus)
+                'watchStatus': {
+                  '__typename': 'WatchStatus',
+                  'watched': false,
+                  'percentage': null,
+                  'unwatchedEpisodeCount': null,
+                },
             },
           }
       ],
@@ -437,5 +445,54 @@ void main() {
       link.requests.first.variables['sort'],
       {'field': 'RANDOM', 'seed': 777},
     );
+  });
+
+  test('carries watchStatus through to library items', () async {
+    final container = ProviderContainer(
+      overrides: [
+        asyncGraphqlClientProvider.overrideWith(
+          (ref) async => stubClient(
+            StubLink.responses([
+              _moviesPage(['1'], hasNextPage: false),
+            ]),
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final data = await waitForValue(
+      container,
+      libraryControllerProvider(_moviesFilter()),
+      (value) => value.items.isNotEmpty,
+    );
+
+    expect(data.items.single.watchStatus, isNotNull);
+    expect(data.items.single.watchStatus!.watched, isFalse);
+  });
+
+  test('leaves watchStatus null when the server omits it', () async {
+    // An older server that predates the field. The whole query still
+    // resolves, and the grid simply draws no indicator.
+    final container = ProviderContainer(
+      overrides: [
+        asyncGraphqlClientProvider.overrideWith(
+          (ref) async => stubClient(
+            StubLink.responses([
+              _moviesPage(['1'], hasNextPage: false, withWatchStatus: false),
+            ]),
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final data = await waitForValue(
+      container,
+      libraryControllerProvider(_moviesFilter()),
+      (value) => value.items.isNotEmpty,
+    );
+
+    expect(data.items.single.watchStatus, isNull);
   });
 }
