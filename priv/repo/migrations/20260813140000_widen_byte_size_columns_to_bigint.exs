@@ -19,6 +19,14 @@ defmodule Mydia.Repo.Migrations.WidenByteSizeColumnsToBigint do
   `down` narrows back to `integer` and will fail if any row exceeds int4. That
   is deliberate: a rollback must not silently truncate byte counts.
 
+  `Helpers.modify_column_type/4` exists and builds the same ALTER statement, but
+  it is not used here for two reasons: it hard-codes `"SELECT 1"` as its
+  rollback, which would silently make this migration irreversible, and it
+  `raise`s on SQLite rather than no-opping. Widening the helper to take a `:down`
+  option is the right fix if a third call site ever appears; duplicating a
+  two-line SQL string once is cheaper than reshaping a shared helper for a
+  single caller.
+
   PostgreSQL rewrites each table for an int4 to int8 change and holds an ACCESS
   EXCLUSIVE lock for the duration. Both tables are small on a self-hosted
   install, so this is a brief boot-time pause.

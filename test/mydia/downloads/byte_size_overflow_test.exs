@@ -36,9 +36,14 @@ defmodule Mydia.Downloads.ByteSizeOverflowTest do
       library = insert(:library_path, type: :movies)
       media_item = insert(:media_item, type: "movie")
 
+      # `episode: nil` is explicit: media_file_factory defaults to
+      # `episode: build(:episode)`, which builds a tv_show too. Without this the
+      # insert cascades two unrelated rows and yields a media_file bound to both
+      # a movie media_item and an episode, a state production never creates.
       media_file =
         insert(:media_file,
           media_item: media_item,
+          episode: nil,
           library_path: library,
           relative_path: "big-movie.mkv",
           size: @over_int4_file_size

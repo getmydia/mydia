@@ -933,6 +933,56 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
       # Pre-existing failure_at must remain — we don't re-flag every poll.
       assert DateTime.diff(updated.import_failed_at, previous_failure_at, :second) == 0
     end
+
+    # Regression for the containment added alongside #278. SABnzbd derives
+    # progress as `mb - mbleft` (sabnzbd.ex:534) and parse_size_mb_to_bytes/1
+    # does not clamp, so a queue item reporting more left than total — which
+    # happens transiently during par2 repair — yields a negative `downloaded`.
+    # `StallDetector.evaluate/7` guards on `observed_bytes >= 0`, so that
+    # download raises FunctionClauseError before any write is attempted.
+    #
+    # This is the portable reproduction of the #278 failure shape: one bad
+    # download must not abort the reduce and stop stall detection for every
+    # other download on the instance.
+    test "a download reporting negative bytes doesn't abort the poll for the others" do
+      {bypass, client_config} = start_sabnzbd_bypass()
+
+      mock_sabnzbd_queue(bypass, [
+        sabnzbd_queue_item("nzo-negative", "repairing.nzb", size_mb: 100.0, mb_left: 150.0),
+        sabnzbd_queue_item("nzo-healthy", "fine.nzb", size_mb: 100.0, mb_left: 40.0)
+      ])
+
+      media_item = media_item_fixture()
+
+      download_fixture(%{
+        media_item_id: media_item.id,
+        download_client: client_config.name,
+        download_client_id: "nzo-negative",
+        last_progress_at: nil,
+        last_known_bytes: 0
+      })
+
+      healthy =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          download_client: client_config.name,
+          download_client_id: "nzo-healthy",
+          last_progress_at: nil,
+          last_known_bytes: 0
+        })
+
+      now = ~U[2026-05-14 12:00:00.000000Z]
+
+      # Uncontained, the negative download propagates out of Enum.reduce and
+      # takes perform/1 with it, so this assertion is what actually fails.
+      assert :ok = perform_job(DownloadMonitor, %{"now" => DateTime.to_iso8601(now)})
+
+      # And the healthy download alongside it is still processed, which is the
+      # entire point of containing the failure rather than aborting the pass.
+      updated = Downloads.get_download!(healthy.id)
+      assert updated.last_progress_at == now
+      assert updated.last_known_bytes == round(60.0 * 1024 * 1024)
+    end
   end
 
   describe "release blacklist on failure (#123)" do

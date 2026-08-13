@@ -21,20 +21,37 @@ defmodule Mydia.Repo.ByteColumnTypesTest do
                not Mydia.DB.postgres?() and
                  "SQLite cannot distinguish :integer from :bigint; guard is PostgreSQL-only"
 
-  # '%byte%' subsumes '%bytes%'. Restricting to int2/int4 rather than
-  # `<> 'bigint'` keeps non-integer columns that happen to match the name
-  # pattern from producing false positives.
-  @query """
+  # Columns whose name matches the byte-size pattern but which legitimately hold
+  # a bounded count rather than a byte total. Empty today. Adding an entry here
+  # is a one-line reviewable exception, which is the point: without it the only
+  # remedy this test offers for a perfectly reasonable `pool_size` or
+  # `batch_size` column is renaming the schema to satisfy a lint.
+  @allowed []
+
+  # '%byte%' subsumes '%bytes%'. `current_schema()` rather than a hard-coded
+  # 'public' so the guard still sees the tables under a non-default search_path.
+  @candidates """
   SELECT table_name, column_name, data_type
   FROM information_schema.columns
-  WHERE table_schema = 'public'
+  WHERE table_schema = current_schema()
     AND (column_name LIKE '%size%' OR column_name LIKE '%byte%')
-    AND data_type IN ('integer', 'smallint')
   ORDER BY table_name, column_name
   """
 
   test "no byte-size column is narrower than 64-bit" do
-    offenders = Repo.query!(@query).rows
+    candidates = Repo.query!(@candidates).rows
+
+    # A schema filter that matches nothing would make the assertion below pass
+    # against an empty set, and a vacuous guard is indistinguishable from a
+    # working one. Fail loudly instead.
+    refute candidates == [],
+           "the byte-size column query matched nothing at all, so this guard is " <>
+             "protecting nothing. The schema filter is probably wrong."
+
+    offenders =
+      candidates
+      |> Enum.filter(fn [_table, _column, type] -> type in ["integer", "smallint"] end)
+      |> Enum.reject(fn [table, column, _type] -> {table, column} in @allowed end)
 
     assert offenders == [], """
     These columns look like byte sizes but are narrower than 64-bit:
@@ -48,8 +65,8 @@ defmodule Mydia.Repo.ByteColumnTypesTest do
     `ALTER TABLE <table> ALTER COLUMN <column> TYPE bigint`; see
     priv/repo/migrations/20260813140000_widen_byte_size_columns_to_bigint.exs.
 
-    If this column genuinely cannot hold a byte count, rename it so it does not
-    read as one.
+    If the column genuinely holds a bounded count rather than a byte total, add
+    it to @allowed in this file with a comment saying why.
     """
   end
 end
