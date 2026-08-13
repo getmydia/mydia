@@ -8,7 +8,8 @@ defmodule Mydia.Subtitles do
   ## Usage
 
       # Search for subtitles
-      {:ok, results} = Subtitles.search_subtitles(media_file_id, languages: "en,es")
+      {:ok, %{results: results, providers: providers}} =
+        Subtitles.search_candidates(media_file_id, "en,es")
 
       # Download a specific subtitle
       {:ok, subtitle} = Subtitles.download_subtitle(subtitle_info, media_file_id)
@@ -100,8 +101,9 @@ defmodule Mydia.Subtitles do
   Searches providers for a media file and returns scored candidates plus
   per-provider status.
 
-  Unlike `search_subtitles/2` this never downloads and always reports which
-  providers answered, which is what the player's results header shows.
+  This is what the subtitle search modal and the player's results header
+  call. Unlike `search_subtitles/2` it never downloads and always reports
+  which providers answered.
   """
   @spec search_candidates(binary(), String.t()) ::
           {:ok, %{results: [map()], providers: [map()]}} | {:error, term()}

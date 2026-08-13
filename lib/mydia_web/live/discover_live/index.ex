@@ -10,29 +10,6 @@ defmodule MydiaWeb.DiscoverLive.Index do
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
 
-  @languages [
-    {"en", "English"},
-    {"ja", "Japanese"},
-    {"ko", "Korean"},
-    {"es", "Spanish"},
-    {"fr", "French"},
-    {"de", "German"},
-    {"it", "Italian"},
-    {"pt", "Portuguese"},
-    {"zh", "Chinese"},
-    {"hi", "Hindi"},
-    {"ru", "Russian"},
-    {"ar", "Arabic"},
-    {"th", "Thai"},
-    {"tr", "Turkish"},
-    {"pl", "Polish"},
-    {"nl", "Dutch"},
-    {"sv", "Swedish"},
-    {"da", "Danish"},
-    {"no", "Norwegian"},
-    {"fi", "Finnish"}
-  ]
-
   @movie_categories [
     {:trending, "Trending"},
     {:popular, "Popular"},
@@ -61,7 +38,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
     socket =
       socket
       |> assign(:page_title, "Discover")
-      |> assign(:languages, @languages)
+      |> assign(:languages, MydiaWeb.Languages.all())
       |> assign(:sort_options, @sort_options)
       |> assign(:items, [])
       |> assign(:loading, true)

@@ -204,5 +204,13 @@ defmodule Mydia.Subtitles.ProviderChain do
   defp describe(:timeout), do: "The provider did not respond in time"
   defp describe({:crashed, _reason}), do: "The provider failed unexpectedly"
   defp describe({:transport, _reason}), do: "Could not reach the provider"
+
+  defp describe(:metadata_relay_not_configured),
+    do: "Subtitle search is not configured. Set a metadata relay URL or add a provider."
+
+  defp describe(:service_unavailable),
+    do:
+      "The subtitle provider is unavailable. A self-hosted relay needs OpenSubtitles credentials."
+
   defp describe(reason), do: "Search failed: #{inspect(reason)}"
 end

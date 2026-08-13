@@ -16,7 +16,9 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
      socket
      |> assign(:show_subtitle_search_modal, true)
      |> assign(:selected_media_file, media_file)
-     |> assign(:subtitle_search_results, [])}
+     |> assign(:subtitle_search_state, :idle)
+     |> assign(:subtitle_search_results, [])
+     |> assign(:subtitle_providers, [])}
   end
 
   def close_subtitle_search_modal(_params, socket) do
@@ -24,12 +26,23 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
      socket
      |> assign(:show_subtitle_search_modal, false)
      |> assign(:selected_media_file, nil)
+     |> assign(:subtitle_search_state, :idle)
      |> assign(:subtitle_search_results, [])
-     |> assign(:searching_subtitles, false)}
+     |> assign(:subtitle_providers, [])}
   end
 
   def update_subtitle_languages(%{"languages" => languages}, socket) do
     {:noreply, assign(socket, :selected_languages, languages)}
+  end
+
+  # Unchecking every chip drops the key from the change payload rather than
+  # sending an empty list.
+  def update_subtitle_languages(_params, socket) do
+    {:noreply, assign(socket, :selected_languages, [])}
+  end
+
+  def clear_subtitle_languages(_params, socket) do
+    {:noreply, assign(socket, :selected_languages, [])}
   end
 
   def perform_subtitle_search(_params, socket) do
@@ -38,9 +51,9 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
 
     {:noreply,
      socket
-     |> assign(:searching_subtitles, true)
+     |> assign(:subtitle_search_state, :searching)
      |> start_async(:subtitle_search, fn ->
-       Mydia.Subtitles.search_subtitles(media_file.id, languages: languages)
+       Mydia.Subtitles.search_candidates(media_file.id, languages)
      end)}
   end
 
@@ -67,7 +80,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
 
     {:noreply,
      socket
-     |> assign(:downloading_subtitle, true)
+     |> assign(:downloading_subtitle_id, subtitle_info.file_id)
      |> start_async(:download_subtitle, fn ->
        Mydia.Subtitles.download_subtitle(subtitle_info, media_file.id)
      end)}
@@ -92,31 +105,32 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
 
   # handle_async dispatches
 
-  def handle_subtitle_search_async({:ok, {:ok, results}}, socket) do
-    Logger.info("Subtitle search completed", result_count: length(results))
+  def handle_subtitle_search_async(
+        {:ok, {:ok, %{results: results, providers: providers}}},
+        socket
+      ) do
+    Logger.info("Subtitle search completed",
+      result_count: length(results),
+      provider_count: length(providers)
+    )
 
     {:noreply,
      socket
-     |> assign(:searching_subtitles, false)
-     |> assign(:subtitle_search_results, results)}
+     |> assign(:subtitle_search_state, :loaded)
+     |> assign(:subtitle_search_results, results)
+     |> assign(:subtitle_providers, providers)}
   end
 
   def handle_subtitle_search_async({:ok, {:error, reason}}, socket) do
     Logger.error("Subtitle search failed: #{inspect(reason)}")
 
-    {:noreply,
-     socket
-     |> assign(:searching_subtitles, false)
-     |> put_flash(:error, "Subtitle search failed: #{inspect(reason)}")}
+    {:noreply, assign(socket, :subtitle_search_state, {:error, reason})}
   end
 
   def handle_subtitle_search_async({:exit, reason}, socket) do
     Logger.error("Subtitle search task crashed: #{inspect(reason)}")
 
-    {:noreply,
-     socket
-     |> assign(:searching_subtitles, false)
-     |> put_flash(:error, "Subtitle search failed unexpectedly")}
+    {:noreply, assign(socket, :subtitle_search_state, {:error, :crashed})}
   end
 
   def handle_download_subtitle_async({:ok, {:ok, _subtitle}}, socket) do
@@ -124,10 +138,12 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
 
     {:noreply,
      socket
-     |> assign(:downloading_subtitle, false)
+     |> assign(:downloading_subtitle_id, nil)
      |> assign(:show_subtitle_search_modal, false)
      |> assign(:selected_media_file, nil)
+     |> assign(:subtitle_search_state, :idle)
      |> assign(:subtitle_search_results, [])
+     |> assign(:subtitle_providers, [])
      |> assign(:media_file_subtitles, load_media_file_subtitles(socket.assigns.media_item))
      |> put_flash(:info, "Subtitle downloaded successfully")}
   end
@@ -137,8 +153,8 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
 
     {:noreply,
      socket
-     |> assign(:downloading_subtitle, false)
-     |> put_flash(:error, "Subtitle download failed: #{inspect(reason)}")}
+     |> assign(:downloading_subtitle_id, nil)
+     |> put_flash(:error, "Subtitle download failed: #{download_error_message(reason)}")}
   end
 
   def handle_download_subtitle_async({:exit, reason}, socket) do
@@ -146,7 +162,37 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
 
     {:noreply,
      socket
-     |> assign(:downloading_subtitle, false)
-     |> put_flash(:error, "Subtitle download failed unexpectedly")}
+     |> assign(:downloading_subtitle_id, nil)
+     |> put_flash(:error, "Subtitle download failed: #{download_error_message(reason)}")}
   end
+
+  # Every clause here matches a class of failure `Mydia.Subtitles.download_subtitle/3`
+  # (or the provider it delegates to) can return. Anything unmatched still logs the
+  # raw reason above but never puts it in front of an operator.
+  defp download_error_message(:media_file_not_found),
+    do: "that file is no longer in the library."
+
+  defp download_error_message(:media_file_path_not_resolved),
+    do: "the file's location on disk could not be resolved."
+
+  defp download_error_message({:unsupported_format, _format}),
+    do: "that subtitle format is not supported."
+
+  defp download_error_message({:missing_required_fields, _fields}),
+    do: "the provider did not return everything needed to download it."
+
+  defp download_error_message(:not_found),
+    do: "that subtitle is no longer available from the provider."
+
+  defp download_error_message(:rate_limited),
+    do: "the provider rate limited the request. Try again shortly."
+
+  defp download_error_message(:service_unavailable),
+    do: "the subtitle provider is unavailable right now."
+
+  defp download_error_message(:unauthorized),
+    do: "the provider rejected the request. Check its credentials."
+
+  defp download_error_message(_reason),
+    do: "check the server logs for details."
 end

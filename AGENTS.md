@@ -277,7 +277,7 @@ git commit -m "message"
 
 - **Always use and maintain this import syntax** in the app.css file for projects generated with `phx.new`
 - **Never** use `@apply` when writing raw css
-- **Use DaisyUI 4.x components** for consistent, accessible UI elements:
+- **Use DaisyUI 5.x components** for consistent, accessible UI elements:
   - DaisyUI provides semantic component classes (btn, card, modal, etc.)
   - Combine DaisyUI components with custom Tailwind classes for specific styling
   - Use DaisyUI's built-in theming system for dark/light modes
@@ -307,6 +307,10 @@ git commit -m "message"
   - Configure custom theme in tailwind config if needed
   - Use semantic color names (`primary`, `secondary`, `accent`, `base-100`, etc.)
 - **Reference DaisyUI documentation** for complete component APIs and variants
+- **Prefer real form inputs styled as components** where daisyUI supports it. A
+  multi-select chip row is `<div class="filter">` holding
+  `<input type="checkbox" class="btn">` elements, which daisyUI renders as
+  primary-filled chips when checked. Do not hand-roll chips out of raw Tailwind.
 
 ### Component Organization
 
