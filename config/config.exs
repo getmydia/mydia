@@ -383,14 +383,14 @@ config :mydia, :episode_monitor,
   # With 200 items × 3s delay = ~10 min per run, well within the 30-min interval
   search_delay_ms: 3000
 
-# Auto-search seeder requirements
-# Controls the minimum seeder count for automatic searches
+# Auto-search release filtering
+#
+# NOTE: the minimum seeder count for automatic searches moved out of this
+# compile-time block and into the layered runtime config as
+# `downloads.min_seeders` (config.yml), settable at runtime from the admin
+# settings UI or with the AUTO_SEARCH_MIN_SEEDERS environment variable. It
+# still defaults to 0. See Mydia.Config.Schema.
 config :mydia, :auto_search,
-  # Minimum seeders required for auto-search results (movies and TV shows)
-  # Set to 0 for Usenet compatibility (Usenet indexers report 0 seeders)
-  # Set to 3-5 for torrent-only setups to filter out dead torrents
-  # This setting only affects automatic background searches, not manual searches
-  min_seeders: 0,
   # Case-insensitive substring tokens that disqualify a release title.
   # Default is empty — opt in by overriding in runtime.exs or releases.exs.
   # Examples for English-only libraries:

@@ -108,9 +108,24 @@ defmodule Mydia.Jobs.MovieSearch do
     end
   end
 
-  # Get min_seeders from config (defaults to 0 for Usenet compatibility)
+  # Minimum seeders an automatic search result must report, resolved through
+  # the layered runtime config (schema default < YAML < settings UI/DB <
+  # AUTO_SEARCH_MIN_SEEDERS).
+  #
+  # See DownloadMonitor.auto_reject_limit/0 for why this reads
+  # `Mydia.Config.get()` rather than a flat
+  # `Application.get_env(:mydia, :auto_search)[:min_seeders]` key: nothing
+  # explodes the resolved Config.Schema struct back out to flat top-level
+  # keys, so a flat read would silently ignore both the env var and the
+  # settings UI.
+  #
+  # Defaults to 0, which filters nothing — Usenet results carry no seeder
+  # count at all.
   defp get_min_seeders do
-    Application.get_env(:mydia, :auto_search, [])[:min_seeders] || 0
+    case Mydia.Config.get() do
+      %{downloads: %{min_seeders: min}} when is_integer(min) and min >= 0 -> min
+      _ -> 0
+    end
   end
 
   # Merge user-supplied job-arg blocked_tags with the globally configured

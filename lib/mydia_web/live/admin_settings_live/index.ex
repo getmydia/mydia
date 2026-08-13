@@ -423,6 +423,26 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
               "downloads.monitor_interval_minutes",
               all_db_settings
             )
+        },
+        %{
+          key: "downloads.min_seeders",
+          label: "Minimum Seeders (automatic search)",
+          description:
+            "Minimum seeders a result must report for automatic searches to consider it. " <>
+              "This is a hard filter applied before ranking, so a torrent below it is " <>
+              "removed rather than demoted. Manual searches have their own control, and " <>
+              "Usenet results report no seeders at all and are exempt. 0, the default, " <>
+              "filters nothing. Careful above 0: some indexers report 0 when they mean " <>
+              "\"unknown\" rather than \"dead\", so a floor can silently empty their results.",
+          type: :integer,
+          value: config.downloads.min_seeders,
+          placeholder: "0",
+          source:
+            Settings.config_source(
+              "AUTO_SEARCH_MIN_SEEDERS",
+              "downloads.min_seeders",
+              all_db_settings
+            )
         }
       ],
       "Streaming" => [

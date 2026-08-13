@@ -446,6 +446,36 @@ defmodule Mydia.Config.SchemaTest do
     end
   end
 
+  describe "downloads min_seeders (AUTO_SEARCH_MIN_SEEDERS)" do
+    test "round-trips a configured seeder floor" do
+      changeset = Schema.changeset(%Schema{}, %{downloads: %{min_seeders: 5}})
+      assert changeset.valid?
+
+      config = Ecto.Changeset.apply_changes(changeset)
+      assert config.downloads.min_seeders == 5
+    end
+
+    test "defaults to 0, which filters nothing" do
+      assert Schema.defaults().downloads.min_seeders == 0
+    end
+
+    test "accepts 0 explicitly rather than treating it as unset" do
+      changeset = Schema.changeset(%Schema{}, %{downloads: %{min_seeders: 0}})
+
+      assert changeset.valid?
+      assert Ecto.Changeset.apply_changes(changeset).downloads.min_seeders == 0
+    end
+
+    test "rejects a negative floor" do
+      changeset = Schema.changeset(%Schema{}, %{downloads: %{min_seeders: -1}})
+
+      refute changeset.valid?
+
+      errors = errors_on(changeset).downloads.min_seeders
+      assert "must be greater than or equal to 0" in errors
+    end
+  end
+
   describe "plugins override_dir (PLUGINS_OVERRIDE_DIR)" do
     test "round-trips a configured override directory" do
       changeset = Schema.changeset(%Schema{}, %{plugins: %{override_dir: "/data/plugins"}})

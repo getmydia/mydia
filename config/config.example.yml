@@ -177,6 +177,24 @@ downloads:
   # How often to monitor downloads for completion (in minutes)
   monitor_interval_minutes: 2
 
+  # Minimum seeders an automatic (background) search result must report.
+  # Environment variable: AUTO_SEARCH_MIN_SEEDERS
+  #
+  # This is a hard filter applied before ranking, so a torrent below the
+  # threshold is removed from the results, not merely demoted. It applies only
+  # to automatic searches; manual searches have their own control in the search
+  # interface. Usenet results report no seeder count at all and are exempt.
+  #
+  # The default of 0 filters nothing. Raising it to 3-5 on a torrent-only setup
+  # keeps automatic searches from grabbing a release that can never complete.
+  #
+  # Read this before raising it: some torrent indexers report 0 when they mean
+  # "unknown" rather than "dead". Cardigann reports 0 when its seeders selector
+  # does not match the site, and Jackett reports 0 for an empty field. Any
+  # nonzero floor discards everything those indexers return without a parsed
+  # seeder count, which looks a lot like an indexer that stopped working.
+  min_seeders: 0
+
 # FlareSolverr Configuration
 # ---------------------------
 # FlareSolverr is a proxy server to bypass Cloudflare and DDoS-GUARD protection.

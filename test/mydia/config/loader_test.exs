@@ -43,7 +43,8 @@ defmodule Mydia.Config.LoaderTest do
         "METADATA_LANGUAGE",
         "LOG_LEVEL",
         "OBAN_POLL_INTERVAL",
-        "MAX_TRANSCODE_HEIGHT"
+        "MAX_TRANSCODE_HEIGHT",
+        "AUTO_SEARCH_MIN_SEEDERS"
       ] ++ download_client_vars ++ library_path_vars
 
     # Store original values
@@ -659,6 +660,84 @@ defmodule Mydia.Config.LoaderTest do
       {:ok, config} = Loader.load(config_file: "nonexistent.yml")
 
       assert config.streaming.max_transcode_height == nil
+    end
+
+    test "the automatic-search seeder floor is reachable from every layer" do
+      # Like the transcode ceiling above, this shipped as a bare compile-time
+      # key (config :mydia, :auto_search, min_seeders: ...) that no operator
+      # could reach without rebuilding the image, while the docs described it
+      # as the one filter you are likely to set.
+      File.mkdir_p!("test/fixtures")
+
+      File.write!(@test_yaml_path, """
+      downloads:
+        min_seeders: 3
+      """)
+
+      {:ok, from_yaml} = Loader.load(config_file: @test_yaml_path)
+      assert from_yaml.downloads.min_seeders == 3
+
+      {:ok, _} =
+        Repo.insert(%ConfigSetting{
+          key: "downloads.min_seeders",
+          value: "5",
+          category: :downloads
+        })
+
+      {:ok, from_db} = Loader.load(config_file: @test_yaml_path)
+      assert from_db.downloads.min_seeders == 5
+
+      System.put_env("AUTO_SEARCH_MIN_SEEDERS", "10")
+
+      {:ok, from_env} = Loader.load(config_file: @test_yaml_path)
+      assert from_env.downloads.min_seeders == 10
+    end
+
+    test "the automatic-search seeder floor defaults to 0, filtering nothing" do
+      {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+
+      assert config.downloads.min_seeders == 0
+    end
+
+    test "AUTO_SEARCH_MIN_SEEDERS=0 is honoured rather than treated as unset" do
+      File.mkdir_p!("test/fixtures")
+
+      File.write!(@test_yaml_path, """
+      downloads:
+        min_seeders: 7
+      """)
+
+      System.put_env("AUTO_SEARCH_MIN_SEEDERS", "0")
+
+      {:ok, config} = Loader.load(config_file: @test_yaml_path)
+
+      assert config.downloads.min_seeders == 0
+    end
+
+    test "an unparseable AUTO_SEARCH_MIN_SEEDERS is ignored, not applied" do
+      File.mkdir_p!("test/fixtures")
+
+      File.write!(@test_yaml_path, """
+      downloads:
+        min_seeders: 3
+      """)
+
+      System.put_env("AUTO_SEARCH_MIN_SEEDERS", "lots")
+
+      {:ok, config} = Loader.load(config_file: @test_yaml_path)
+
+      # The lower layer stands rather than the whole config failing to load,
+      # which would take the app down over one bad variable.
+      assert config.downloads.min_seeders == 3
+    end
+
+    test "a negative AUTO_SEARCH_MIN_SEEDERS fails validation" do
+      System.put_env("AUTO_SEARCH_MIN_SEEDERS", "-1")
+
+      assert {:error, %Ecto.Changeset{} = changeset} =
+               Loader.load(config_file: "nonexistent.yml")
+
+      refute changeset.valid?
     end
 
     test "environment variables override database settings" do
