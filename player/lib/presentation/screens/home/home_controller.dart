@@ -58,6 +58,7 @@ query HomeScreen($continueWatchingLimit: Int, $recentlyAddedLimit: Int, $favorit
     newEpisodeCount
     latestSeasonNumber
     latestEpisodeNumber
+    watchStatus { watched percentage unwatchedEpisodeCount }
   }
 
   favorites(first: $favoritesLimit) {
@@ -71,6 +72,7 @@ query HomeScreen($continueWatchingLimit: Int, $recentlyAddedLimit: Int, $favorit
       thumbnailUrl
     }
     addedAt
+    watchStatus { watched percentage unwatchedEpisodeCount }
   }
 }
 ''';

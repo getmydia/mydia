@@ -11,11 +11,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/models/continue_watching_item.dart';
 import 'package:player/domain/models/media_file.dart';
+import 'package:player/domain/models/progress.dart';
 import 'package:player/domain/models/recently_added_item.dart';
 import 'package:player/domain/models/up_next_item.dart';
+import 'package:player/domain/models/watch_status.dart';
 import 'package:player/presentation/widgets/content_rail.dart';
 import 'package:player/presentation/widgets/media_card.dart';
 import 'package:player/presentation/widgets/media_context_menu.dart';
+import 'package:player/presentation/widgets/progress_overlay.dart';
+import 'package:player/presentation/widgets/watch_indicator.dart';
 
 List<RecentlyAddedItem> _items(int n) => List.generate(
       n,
@@ -248,6 +252,67 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(PopupMenuItem<MediaContextAction>), findsNothing);
+    });
+  });
+
+  group('ContentRail watch indicators', () {
+    testWidgets('draws an unwatched dot on a recently added movie',
+        (tester) async {
+      const item = RecentlyAddedItem(
+        id: 'ra-1',
+        type: 'movie',
+        title: 'Fresh Movie',
+        watchStatus: WatchStatus(watched: false),
+      );
+
+      await tester.pumpWidget(
+        _host(const ContentRail(title: 'Recently Added', items: [item])),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(WatchIndicator.dotKey), findsOneWidget);
+    });
+
+    testWidgets('draws an unwatched count on a recently added show',
+        (tester) async {
+      const item = RecentlyAddedItem(
+        id: 'ra-2',
+        type: 'tv_show',
+        title: 'Fresh Show',
+        watchStatus: WatchStatus(watched: false, unwatchedEpisodeCount: 4),
+      );
+
+      await tester.pumpWidget(
+        _host(const ContentRail(title: 'Recently Added', items: [item])),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('4'), findsOneWidget);
+    });
+
+    testWidgets('draws no bar for a watched continue-watching item',
+        (tester) async {
+      // The rail carried the legacy `progressPercentage` and no status, so a
+      // finished item drew a full bar here while every other surface drew
+      // nothing.
+      const item = ContinueWatchingItem(
+        id: 'cw-2',
+        type: 'movie',
+        title: 'Finished',
+        progress: Progress(
+          positionSeconds: 100,
+          durationSeconds: 100,
+          percentage: 100,
+          watched: true,
+        ),
+      );
+
+      await tester.pumpWidget(
+        _host(const ContentRail(title: 'Continue Watching', items: [item])),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ProgressOverlay), findsNothing);
     });
   });
 }

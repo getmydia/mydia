@@ -149,7 +149,11 @@ void main() {
 
   runWatchIndicatorContract(
     description: 'MediaPoster',
-    build: (status) => MediaPoster(title: 'Show', watchStatus: status),
+    build: (status, legacyProgress) => MediaPoster(
+      title: 'Show',
+      watchStatus: status,
+      progressPercentage: legacyProgress,
+    ),
     size: _posterHost,
   );
 

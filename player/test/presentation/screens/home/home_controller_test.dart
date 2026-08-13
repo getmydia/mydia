@@ -29,6 +29,10 @@ Map<String, dynamic> _homeData(String title) => {
           'newEpisodeCount': null,
           'latestSeasonNumber': null,
           'latestEpisodeNumber': null,
+          // Required because the query selects it. A stub missing a selected
+          // field does not error: the normalized cache returns partial data,
+          // and the failure surfaces somewhere unrelated.
+          'watchStatus': null,
         }
       ],
       'upNext': <dynamic>[],

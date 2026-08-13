@@ -191,10 +191,11 @@ void main() {
 
   runWatchIndicatorContract(
     description: 'MediaCard',
-    build: (status) => MediaCard(
+    build: (status, legacyProgress) => MediaCard(
       title: 'Movie',
       action: MediaCardAction.open,
       watchStatus: status,
+      progressPercentage: legacyProgress,
     ),
     size: _cardHost,
   );
