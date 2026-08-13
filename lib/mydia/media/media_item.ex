@@ -20,7 +20,6 @@ defmodule Mydia.Media.MediaItem do
           metadata_source: atom() | nil,
           metadata: Mydia.Metadata.Structs.MediaMetadata.t() | nil,
           monitored: boolean(),
-          monitoring_preset: atom(),
           monitor_new_seasons: :all | :none,
           category: String.t() | nil,
           category_override: boolean(),
@@ -54,10 +53,6 @@ defmodule Mydia.Media.MediaItem do
     field :metadata_source, Ecto.Enum, values: [:tvdb, :tmdb]
     field :metadata, Mydia.Media.MetadataType
     field :monitored, :boolean, default: true
-
-    field :monitoring_preset, Ecto.Enum,
-      values: [:all, :future, :missing, :existing, :first_season, :latest_season, :none],
-      default: :all
 
     # Governs only seasons that do not exist yet. Whether a new episode in an
     # *existing* season is monitored is derived from that season's episodes.
@@ -96,7 +91,6 @@ defmodule Mydia.Media.MediaItem do
       :metadata_source,
       :metadata,
       :monitored,
-      :monitoring_preset,
       :monitor_new_seasons,
       :quality_profile_id,
       :library_path_id

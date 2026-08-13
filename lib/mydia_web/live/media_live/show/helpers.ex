@@ -518,7 +518,6 @@ defmodule MydiaWeb.MediaLive.Show.Helpers do
   def media_type_path(_), do: "/"
 
   # Monitoring preset labels (shared between events and components)
-  def monitoring_preset_label(nil), do: "All Episodes"
   def monitoring_preset_label(:all), do: "All Episodes"
   def monitoring_preset_label(:future), do: "Future Episodes"
   def monitoring_preset_label(:missing), do: "Missing Episodes"
