@@ -147,10 +147,20 @@ defmodule Mydia.Streaming.Compatibility do
     end
   end
 
-  # Audio codecs that browsers support natively
-  defp compatible_audio_codec?(nil), do: false
+  @doc """
+  Whether a browser can decode this audio codec natively.
 
-  defp compatible_audio_codec?(codec) do
+  Public because the remuxer has to ask it about the *specific* stream it
+  maps, not about `media_file.audio_codec`. That column describes the first
+  audio stream, which is what chose the REMUX strategy in the first place; if
+  language selection then maps a different stream, `-c copy` would put a codec
+  in the fMP4 that the client's `canPlayType` check never approved and the
+  advertised MIME no longer describes.
+  """
+  @spec compatible_audio_codec?(String.t() | nil) :: boolean()
+  def compatible_audio_codec?(nil), do: false
+
+  def compatible_audio_codec?(codec) do
     normalized = String.downcase(codec)
 
     # Check for compatible codecs - handle formatted strings like "AAC 5.1" or "MP3 Stereo"

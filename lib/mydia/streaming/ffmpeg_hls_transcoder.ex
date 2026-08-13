@@ -34,6 +34,9 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
   use GenServer
   require Logger
 
+  alias Mydia.Library.Structs.StreamInfo
+  alias Mydia.Streaming.AudioTrackSelector
+
   @type transcode_opts :: [
           input_path: String.t(),
           output_dir: String.t(),
@@ -445,20 +448,33 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
           "libx264"
       end
 
+    # Which audio stream this playback carries, resolved before the codec
+    # decision because that decision has to be about the stream actually being
+    # mapped. `media_file.audio_codec` describes the *first* audio stream
+    # (see Mydia.Library.FileAnalyzer), so on a file whose first track is
+    # stereo AAC and whose second is 5.1 DTS, deciding "aac, so copy" from the
+    # first and then mapping the second puts a DTS stream in an HLS segment no
+    # browser can decode. Silent audio, no error.
+    selected_audio = AudioTrackSelector.select_for_playback(media_file, opts)
+
+    audio_source_codec =
+      case selected_audio do
+        %StreamInfo{codec: codec} when is_binary(codec) -> codec
+        _ -> media_file && media_file.audio_codec
+      end
+
     # Determine audio codec - use copy if compatible and policy allows, otherwise transcode
     audio_codec =
       case Keyword.get(opts, :audio_codec) do
         nil when not is_nil(media_file) and transcode_policy == :copy_when_compatible ->
-          if should_copy_audio?(media_file.audio_codec) do
+          if should_copy_audio?(audio_source_codec) do
             Logger.info(
-              "Audio codec #{media_file.audio_codec} is compatible, using stream copy (fast, no quality loss)"
+              "Audio codec #{audio_source_codec} is compatible, using stream copy (fast, no quality loss)"
             )
 
             "copy"
           else
-            Logger.info(
-              "Audio codec #{media_file.audio_codec || "unknown"} needs transcoding to AAC"
-            )
+            Logger.info("Audio codec #{audio_source_codec || "unknown"} needs transcoding to AAC")
 
             "aac"
           end
@@ -586,8 +602,11 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
       playlist_path
     ]
 
-    # Combine all args
-    base_args ++ video_args ++ audio_args ++ hls_args
+    # Combine all args. The maps sit directly after the input and before the
+    # codec flags, which is where ffmpeg expects output stream selection.
+    base_args ++
+      AudioTrackSelector.ffmpeg_map_args(selected_audio) ++
+      video_args ++ audio_args ++ hls_args
   end
 
   # Start FFmpeg process using Port

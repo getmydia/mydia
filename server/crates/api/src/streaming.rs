@@ -77,5 +77,6 @@ fn metadata_for(row: &MediaFileRow) -> StreamingMetadata {
         original_codec: row.codec.clone(),
         original_audio_codec: row.audio_codec.clone(),
         container: row.container.clone(),
+        preferred_audio_languages: None,
     }
 }

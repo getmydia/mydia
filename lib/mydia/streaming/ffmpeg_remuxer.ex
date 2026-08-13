@@ -44,9 +44,20 @@ defmodule Mydia.Streaming.FfmpegRemuxer do
 
   require Logger
 
+  alias Mydia.Library.Structs.StreamInfo
+  alias Mydia.Streaming.AudioTrackSelector
+  alias Mydia.Streaming.Compatibility
+
+  # Matches FfmpegHlsTranscoder's budget, so a stream that has to be encoded
+  # on either path lands at the same bitrate.
+  @audio_bitrate_kbps 128
+
   @type remux_opts :: [
           seek_seconds: number() | nil,
-          duration: number() | nil
+          duration: number() | nil,
+          media_file: Mydia.Library.MediaFile.t() | nil,
+          audio_language: [String.t()] | nil,
+          show_audio_language: [String.t()] | nil
         ]
 
   @doc """
@@ -74,9 +85,8 @@ defmodule Mydia.Streaming.FfmpegRemuxer do
   @spec start_remux(String.t(), remux_opts()) :: {:ok, port(), integer()} | {:error, term()}
   def start_remux(input_path, opts \\ []) do
     seek_seconds = Keyword.get(opts, :seek_seconds)
-    duration = Keyword.get(opts, :duration)
 
-    args = build_ffmpeg_args(input_path, seek_seconds, duration)
+    args = build_ffmpeg_args(input_path, opts)
 
     Logger.info(
       "Starting fMP4 remux: #{input_path}" <>
@@ -146,7 +156,14 @@ defmodule Mydia.Streaming.FfmpegRemuxer do
   ## Private Functions
 
   # Build FFmpeg command arguments for fMP4 remuxing
-  defp build_ffmpeg_args(input_path, seek_seconds, duration) do
+  @doc false
+  # Public only so the argument construction can be unit-tested directly,
+  # matching FfmpegHlsTranscoder.build_ffmpeg_args/3; nothing outside this
+  # module should call it.
+  def build_ffmpeg_args(input_path, opts) do
+    seek_seconds = Keyword.get(opts, :seek_seconds)
+    duration = Keyword.get(opts, :duration)
+
     # Base args - seek first for efficiency (input seeking)
     seek_args =
       if seek_seconds && seek_seconds > 0 do
@@ -157,8 +174,29 @@ defmodule Mydia.Streaming.FfmpegRemuxer do
 
     input_args = ["-i", input_path]
 
-    # Stream copy (no transcoding)
-    codec_args = ["-c", "copy"]
+    # Which audio stream survives the remux. `-c copy` copies the codec, not
+    # every stream: without an explicit -map ffmpeg still reduces to one
+    # stream per type and picks the audio track with the most channels, so a
+    # dual-language file silently loses its original-language track here just
+    # as it does on the transcode path.
+    selected_audio =
+      opts
+      |> Keyword.get(:media_file)
+      |> AudioTrackSelector.select_for_playback(opts)
+
+    map_args = AudioTrackSelector.ffmpeg_map_args(selected_audio)
+
+    # Video is always copied: it is the expensive stream and the REMUX
+    # strategy was offered precisely because the client can decode it.
+    #
+    # Audio is copied only when the *mapped* stream is one the client can
+    # decode. The strategy was chosen from `media_file.audio_codec`, which
+    # describes the first audio stream; when language selection maps a
+    # different one, a blanket `-c copy` would put e.g. AC3 into the fMP4
+    # while the advertised MIME still said `mp4a.40.2`. Encoding that one
+    # stream to AAC keeps the promise the candidate made, and still avoids
+    # touching the video.
+    codec_args = remux_codec_args(selected_audio)
 
     # Duration args - tell FFmpeg the total duration so it writes correct metadata
     # This prevents the browser from showing progressively increasing duration
@@ -191,7 +229,22 @@ defmodule Mydia.Streaming.FfmpegRemuxer do
       "pipe:1"
     ]
 
-    seek_args ++ input_args ++ codec_args ++ duration_args ++ output_args
+    seek_args ++ input_args ++ map_args ++ codec_args ++ duration_args ++ output_args
+  end
+
+  # No stream was selected, so no -map was emitted and ffmpeg's implicit
+  # selection stands. That is the pre-existing behaviour for an unanalysed
+  # file, and the codec the strategy was chosen from is the one it will pick.
+  defp remux_codec_args(nil), do: ["-c", "copy"]
+
+  defp remux_codec_args(%StreamInfo{codec: codec}) do
+    if Compatibility.compatible_audio_codec?(codec) do
+      ["-c", "copy"]
+    else
+      Logger.info("Remux: mapped audio stream is #{codec}, encoding to AAC for playability")
+
+      ["-c:v", "copy", "-c:a", "aac", "-b:a", "#{@audio_bitrate_kbps}k", "-ac", "2"]
+    end
   end
 
   # Start FFmpeg process using Port

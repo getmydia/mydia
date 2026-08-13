@@ -157,6 +157,23 @@ defmodule MydiaWeb.Schema.MutationTypes do
       resolve(&StreamingResolver.start_streaming_session/3)
     end
 
+    @desc "Remember which audio language this viewer wants for a show or film"
+    field :set_audio_language_preference, :audio_language_preference_result do
+      arg(:file_id, non_null(:id),
+        description:
+          "Any file of the show or film. The preference is stored against the " <>
+            "item it belongs to, so a choice made on one episode applies to the rest."
+      )
+
+      arg(:language, :string,
+        description:
+          "Language code to remember, e.g. \"eng\". Null forgets the choice and " <>
+            "returns this item to the device and server defaults."
+      )
+
+      resolve(&StreamingResolver.set_audio_language_preference/3)
+    end
+
     @desc "End an HLS streaming session"
     field :end_streaming_session, :boolean do
       arg(:session_id, non_null(:string))

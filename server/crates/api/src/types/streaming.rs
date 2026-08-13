@@ -36,6 +36,28 @@ pub struct StreamingMetadata {
     pub original_codec: Option<String>,
     pub original_audio_codec: Option<String>,
     pub container: Option<String>,
+    /// Audio languages the playback should prefer, most preferred first.
+    ///
+    /// Always `None` here for now, which the player reads as "this server has
+    /// no opinion" and leaves mpv's own track selection alone — the behaviour
+    /// this server already had. Answering properly needs two things it does
+    /// not yet carry: the per-stream language tags (`MediaFileRow` stops at
+    /// one flat `audio_codec`) and the layered `streaming.audio_language`
+    /// config. The field exists regardless because `sdl_parity` gates on
+    /// structure, and a query naming a field this schema lacks fails whole.
+    pub preferred_audio_languages: Option<Vec<String>>,
+}
+
+/// Outcome of remembering a viewer's audio language choice.
+///
+/// Declared but never constructed here: `setAudioLanguagePreference` returns
+/// `not_implemented`, the same as the other streaming mutations this server
+/// does not serve. The type exists because `sdl_parity` gates on structure.
+#[derive(SimpleObject)]
+pub struct AudioLanguagePreferenceResult {
+    pub media_item_id: ID,
+    pub language: Option<String>,
+    pub preferred_audio_languages: Option<Vec<String>>,
 }
 
 #[derive(SimpleObject)]

@@ -1,7 +1,8 @@
 defmodule Mydia.Metadata.LanguageCode do
   @moduledoc """
-  Maps configured language codes to the form TVDB uses, and selects a
-  translation from a TVDB translation bundle by an ordered preference list.
+  Maps configured language codes to the form TVDB uses, selects a translation
+  from a TVDB translation bundle by an ordered preference list, and decides
+  whether two language tags name the same language.
 
   The configured metadata language arrives as a BCP-47 / ISO 639-1 value
   (e.g. `"en-US"`, `"de"`, `"ja-JP"`), while TVDB extended endpoints key
@@ -9,6 +10,14 @@ defmodule Mydia.Metadata.LanguageCode do
   `"jpn"`). This module bridges the two and centralizes the selection logic
   that was previously duplicated (and hardcoded to English) across the relay
   transform and the season/episode structs.
+
+  `matches?/2` serves a different consumer: matching a configured audio
+  language against the tag ffprobe read off a media file. That needs a wider
+  table than TVDB does, and specifically needs ISO 639-2/B (bibliographic)
+  codes, because Matroska writes `"ger"` and `"fre"` where the /T variants
+  are `"deu"` and `"fra"`. Keeping both tables here means one place to look
+  when a language does not match; `@iso_639_1_to_639_2` stays narrow so TVDB
+  lookups keep their existing behaviour.
   """
 
   # ISO 639-1 (primary subtag) -> ISO 639-2/T, covering the metadata config's
@@ -126,4 +135,195 @@ defmodule Mydia.Metadata.LanguageCode do
   end
 
   def select_translation(_translations, _field, _preferred_codes), do: nil
+
+  # ISO 639-1 -> every 3-letter form that names the same language. Where a
+  # language has both a terminological (/T) and a bibliographic (/B) code,
+  # both are listed, /T first. Matroska and ffprobe overwhelmingly write /B,
+  # so omitting those would leave German and French tracks unmatchable.
+  #
+  # Wider than @iso_639_1_to_639_2 because that map answers "what does TVDB
+  # call this", bounded by the languages mydia offers for metadata, while this
+  # one answers "is this the same language as that", bounded only by what
+  # someone might have muxed into a file.
+  @equivalents %{
+    "af" => ["afr"],
+    "am" => ["amh"],
+    "ar" => ["ara"],
+    "az" => ["aze"],
+    "be" => ["bel"],
+    "bg" => ["bul"],
+    "bn" => ["ben"],
+    "bs" => ["bos"],
+    "ca" => ["cat"],
+    "cs" => ["ces", "cze"],
+    "cy" => ["cym", "wel"],
+    "da" => ["dan"],
+    "de" => ["deu", "ger"],
+    "el" => ["ell", "gre"],
+    "en" => ["eng"],
+    "eo" => ["epo"],
+    "es" => ["spa"],
+    "et" => ["est"],
+    "eu" => ["eus", "baq"],
+    "fa" => ["fas", "per"],
+    "fi" => ["fin"],
+    "fr" => ["fra", "fre"],
+    "ga" => ["gle"],
+    "gl" => ["glg"],
+    "gu" => ["guj"],
+    "ha" => ["hau"],
+    "he" => ["heb"],
+    "hi" => ["hin"],
+    "hr" => ["hrv"],
+    "hu" => ["hun"],
+    "hy" => ["hye", "arm"],
+    "id" => ["ind"],
+    "ig" => ["ibo"],
+    "is" => ["isl", "ice"],
+    "it" => ["ita"],
+    "ja" => ["jpn"],
+    "ka" => ["kat", "geo"],
+    "kk" => ["kaz"],
+    "km" => ["khm"],
+    "kn" => ["kan"],
+    "ko" => ["kor"],
+    "la" => ["lat"],
+    "lo" => ["lao"],
+    "lt" => ["lit"],
+    "lv" => ["lav"],
+    "mi" => ["mri", "mao"],
+    "mk" => ["mkd", "mac"],
+    "ml" => ["mal"],
+    "mn" => ["mon"],
+    "mr" => ["mar"],
+    "ms" => ["msa", "may"],
+    "my" => ["mya", "bur"],
+    "ne" => ["nep"],
+    "nl" => ["nld", "dut"],
+    "no" => ["nor"],
+    "pa" => ["pan"],
+    "pl" => ["pol"],
+    "pt" => ["por"],
+    "ro" => ["ron", "rum"],
+    "ru" => ["rus"],
+    "si" => ["sin"],
+    "sk" => ["slk", "slo"],
+    "sl" => ["slv"],
+    "sq" => ["sqi", "alb"],
+    "sr" => ["srp"],
+    "sv" => ["swe"],
+    "sw" => ["swa"],
+    "ta" => ["tam"],
+    "te" => ["tel"],
+    "th" => ["tha"],
+    "tl" => ["tgl"],
+    "tr" => ["tur"],
+    "uk" => ["ukr"],
+    "ur" => ["urd"],
+    "uz" => ["uzb"],
+    "vi" => ["vie"],
+    "xh" => ["xho"],
+    "yi" => ["yid"],
+    "yo" => ["yor"],
+    "zh" => ["zho", "chi"],
+    "zu" => ["zul"]
+  }
+
+  # Reverse index, so a 3-letter tag resolves back to its 2-letter form
+  # without scanning the map on every comparison.
+  @three_to_two Map.new(
+                  for {two, threes} <- @equivalents, three <- threes do
+                    {three, two}
+                  end
+                )
+
+  @doc """
+  Every code naming the same language as `code`, including `code` itself,
+  lowercased and with any region suffix stripped.
+
+  Accepts ISO 639-1 (`"de"`), BCP-47 (`"pt-BR"`), ISO 639-2/T (`"deu"`) or
+  ISO 639-2/B (`"ger"`). Unknown codes return just themselves, so an
+  unrecognised tag still matches an identical one.
+
+  ## Examples
+
+      iex> Mydia.Metadata.LanguageCode.equivalents("de")
+      ["de", "deu", "ger"]
+
+      iex> Mydia.Metadata.LanguageCode.equivalents("ger")
+      ["de", "deu", "ger"]
+
+      iex> Mydia.Metadata.LanguageCode.equivalents("pt-BR")
+      ["pt", "por"]
+
+      iex> Mydia.Metadata.LanguageCode.equivalents("kling")
+      ["kling"]
+  """
+  @spec equivalents(String.t() | nil) :: [String.t()]
+  def equivalents(code) when is_binary(code) do
+    primary =
+      code
+      |> String.downcase()
+      |> String.trim()
+      |> String.split(["-", "_"], parts: 2)
+      |> List.first()
+
+    equivalents_for_primary(primary)
+  end
+
+  def equivalents(_), do: []
+
+  # "und" is ffprobe's explicit "undetermined" tag, and a bare "" is what a
+  # file with no language tag at all yields. Neither names a language, so
+  # neither may satisfy a request for one.
+  defp equivalents_for_primary(primary) when primary in ["", "und"], do: []
+
+  defp equivalents_for_primary(primary) do
+    case Map.get(@equivalents, primary) do
+      nil ->
+        # Either a 3-letter tag, or something not in the table at all.
+        case Map.get(@three_to_two, primary) do
+          nil -> [primary]
+          two -> [two | Map.fetch!(@equivalents, two)]
+        end
+
+      threes ->
+        [primary | threes]
+    end
+  end
+
+  @doc """
+  Whether two language tags name the same language, across ISO 639-1,
+  639-2/T, 639-2/B and BCP-47 region suffixes.
+
+  Blank or `nil` on either side is never a match: an untagged audio track must
+  not satisfy a viewer's request for a specific language.
+
+  ## Examples
+
+      iex> Mydia.Metadata.LanguageCode.matches?("en", "eng")
+      true
+
+      iex> Mydia.Metadata.LanguageCode.matches?("de", "ger")
+      true
+
+      iex> Mydia.Metadata.LanguageCode.matches?("pt-BR", "por")
+      true
+
+      iex> Mydia.Metadata.LanguageCode.matches?("en", "rus")
+      false
+
+      iex> Mydia.Metadata.LanguageCode.matches?("en", nil)
+      false
+  """
+  @spec matches?(String.t() | nil, String.t() | nil) :: boolean()
+  def matches?(a, b) when is_binary(a) and is_binary(b) do
+    case {equivalents(a), equivalents(b)} do
+      {[], _} -> false
+      {_, []} -> false
+      {left, right} -> Enum.any?(left, &(&1 in right))
+    end
+  end
+
+  def matches?(_, _), do: false
 end

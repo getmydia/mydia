@@ -6,6 +6,7 @@ defmodule Mydia.Downloads.Transcoding do
 
   alias Mydia.Repo
   alias Mydia.Downloads.TranscodeJob
+  alias Mydia.Library.MediaFile
   alias Phoenix.PubSub
   require Logger
 
@@ -202,9 +203,7 @@ defmodule Mydia.Downloads.Transcoding do
     Repo.delete(job)
 
     # Clean up output file if it exists (only for downloads)
-    if job.output_path && File.exists?(job.output_path) do
-      File.rm(job.output_path)
-    end
+    maybe_remove_output_file(job)
 
     broadcast_job_update(job.id)
     {:ok, job}
@@ -224,6 +223,41 @@ defmodule Mydia.Downloads.Transcoding do
   end
 
   ## Private Functions
+
+  # An "original" download transcodes nothing, so complete_job/3 records the
+  # library file itself as the output path. Unlinking that would delete the
+  # user's media, so only artifacts we produced are removed.
+  defp maybe_remove_output_file(%TranscodeJob{output_path: nil}), do: :ok
+
+  defp maybe_remove_output_file(%TranscodeJob{output_path: output_path} = job) do
+    cond do
+      output_path in source_file_paths(job) ->
+        Logger.debug("Keeping #{output_path} on cancel: it is the source file, not a transcode")
+
+      File.exists?(output_path) ->
+        File.rm(output_path)
+
+      true ->
+        :ok
+    end
+
+    :ok
+  end
+
+  defp source_file_paths(%TranscodeJob{media_file_id: nil}), do: []
+
+  defp source_file_paths(%TranscodeJob{media_file_id: media_file_id}) do
+    case Repo.get(MediaFile, media_file_id) do
+      nil ->
+        []
+
+      media_file ->
+        media_file = Repo.preload(media_file, :library_path)
+
+        [MediaFile.absolute_path(media_file), media_file.path]
+        |> Enum.reject(&is_nil/1)
+    end
+  end
 
   defp maybe_filter_status(query, nil), do: query
 

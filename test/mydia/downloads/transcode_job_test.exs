@@ -345,6 +345,60 @@ defmodule Mydia.Downloads.TranscodeJobTest do
     end
   end
 
+  describe "Downloads.cancel_transcode_job/1 output file cleanup" do
+    setup do
+      tmp_dir = Path.join(System.tmp_dir!(), "mydia-cancel-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(tmp_dir)
+      on_exit(fn -> File.rm_rf!(tmp_dir) end)
+
+      library = insert(:library_path, type: :movies, path: tmp_dir)
+      media_item = insert(:media_item, type: "movie")
+
+      media_file =
+        insert(:media_file,
+          media_item: media_item,
+          library_path: library,
+          relative_path: "movie.mkv",
+          size: 1_000_000_000
+        )
+
+      source_path = Path.join(tmp_dir, "movie.mkv")
+      File.write!(source_path, "source bytes")
+
+      %{media_file: media_file, source_path: source_path, tmp_dir: tmp_dir}
+    end
+
+    test "keeps the source file when the job output is the media file itself", %{
+      media_file: media_file,
+      source_path: source_path
+    } do
+      # An "original" download transcodes nothing, so complete_job/3 records the
+      # library file itself as the output.
+      {:ok, job} = Downloads.get_or_create_job(media_file.id, "original")
+      {:ok, job} = Downloads.complete_job(job, source_path, 12)
+
+      {:ok, _cancelled} = Downloads.cancel_transcode_job(job)
+
+      assert File.exists?(source_path)
+      assert Repo.get(TranscodeJob, job.id) == nil
+    end
+
+    test "removes a transcoded artifact that is not the source file", %{
+      media_file: media_file,
+      tmp_dir: tmp_dir
+    } do
+      artifact_path = Path.join(tmp_dir, "transcode-720p.mp4")
+      File.write!(artifact_path, "transcoded bytes")
+
+      {:ok, job} = Downloads.get_or_create_job(media_file.id, "720p")
+      {:ok, job} = Downloads.complete_job(job, artifact_path, 12)
+
+      {:ok, _cancelled} = Downloads.cancel_transcode_job(job)
+
+      refute File.exists?(artifact_path)
+    end
+  end
+
   describe "unique constraint" do
     setup do
       library = insert(:library_path, type: :movies)

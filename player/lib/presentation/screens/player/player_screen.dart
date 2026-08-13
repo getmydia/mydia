@@ -15,6 +15,7 @@ import '../../../core/connection/connection_provider.dart' as conn;
 import '../../../core/graphql/graphql_provider.dart';
 import '../../../core/graphql/watch/invalidation_rules.dart';
 import '../../../core/graphql/watch/watcher_registry.dart';
+import '../../../core/player/audio_language.dart';
 import '../../../core/player/codec_support.dart';
 import '../../../core/player/progress_service.dart';
 import '../../../core/playback/playback_progress_providers.dart';
@@ -61,6 +62,7 @@ import '../../../graphql/queries/season_episodes.graphql.dart';
 import '../../../graphql/mutations/start_streaming_session.graphql.dart';
 import '../../../graphql/mutations/start_streaming_session_legacy.graphql.dart';
 import '../../../graphql/mutations/end_streaming_session.graphql.dart';
+import '../../../graphql/mutations/set_audio_language_preference.graphql.dart';
 import '../../../graphql/queries/streaming_candidates.graphql.dart';
 import '../../../graphql/queries/subtitle_content.graphql.dart';
 import '../../../graphql/queries/subtitle_search.graphql.dart';
@@ -310,6 +312,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   app_models.SubtitleTrack? _selectedSubtitleTrack;
   List<app_models_audio.AudioTrack> _audioTracks = [];
   app_models_audio.AudioTrack? _selectedAudioTrack;
+
+  /// Audio languages this playback should open on, most preferred first, as
+  /// resolved by the server from the operator's config and the item's own
+  /// original language.
+  ///
+  /// Populated from the streaming-candidates response and applied to mpv
+  /// before the media opens. Empty means no opinion — a server that predates
+  /// the field, a failed candidates call, or an operator who asked for the
+  /// container's `default` flag to win — and mpv keeps its own selection.
+  List<String> _preferredAudioLanguages = const [];
 
   /// The target of the subtitle selection attempt currently in flight, or
   /// most recently concluded — as opposed to [_selectedSubtitleTrack],
@@ -960,6 +972,23 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
       final candidatesResult = candidatesFetch.candidates;
 
+      // Held for _openPlayerAndStart, which builds the media_kit Player and
+      // has to set mpv's alang before opening the media.
+      //
+      // Only overwritten when the server actually answered. A null here is
+      // either a failed candidates call (offline fall-through, transient
+      // error) or a server too old to carry the field, and neither is a
+      // statement that the viewer has no preference. Assigning `const []`
+      // unconditionally would discard what `_rememberAudioLanguage` stored on
+      // the previous episode, which is exactly the case where a season
+      // playing through must keep it: go_router reuses this screen state, so
+      // this field is the only thing carrying the choice forward.
+      final serverPreference =
+          candidatesResult?.metadata.preferredAudioLanguages;
+      if (serverPreference != null) {
+        _preferredAudioLanguages = serverPreference;
+      }
+
       // The file actually being played. Normally the user's choice; on the
       // offline fall-through, or when the selected file was rejected by the
       // server and re-asked above, it is whatever the server ranked highest
@@ -1420,6 +1449,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       player.stream.tracks,
       _onAudioTracksDetected,
     );
+
+    // Before `open`, deliberately: mpv chooses its audio track while loading
+    // the file, so a preference applied afterwards does not reselect and the
+    // viewer still starts on the wrong language. Without this, mpv falls
+    // through to whatever the container flagged `default`, which on a
+    // dual-language release is routinely the dub — the reason an English show
+    // could open in Russian.
+    await AudioLanguage.apply(player, _preferredAudioLanguages);
 
     // Open media
     await player.open(
@@ -3226,6 +3263,65 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         debugPrint(
             '[PlayerScreen] No media_kit track found for: ${selected.id}');
       }
+
+      // Applied to this playback above; remembered here so the next episode
+      // opens on it too. Every other media server treats a pick as a one-off
+      // and makes the viewer repeat it, which is the complaint this removes.
+      await _rememberAudioLanguage(selected.language);
+    }
+  }
+
+  /// Stores the picked language against the show or film, so later episodes
+  /// open on it without another pick.
+  ///
+  /// Deliberately fire-and-forget from the viewer's perspective: the track
+  /// has already changed by the time this runs, so a failure here costs the
+  /// preference and not the playback the person is watching. It is awaited
+  /// only so the debug line reports the real outcome.
+  ///
+  /// Skips an untagged track. `'und'` is ffprobe's "undetermined", and
+  /// storing it would pin the show to a preference that can never match
+  /// anything on the next file.
+  Future<void> _rememberAudioLanguage(String language) async {
+    if (language.isEmpty || language == 'und') return;
+    if (widget.fileId == 'offline') return;
+
+    final graphqlClient = _graphqlClient;
+    if (graphqlClient == null) return;
+
+    try {
+      final result = await graphqlClient.mutate(
+        MutationOptions(
+          document: documentNodeMutationSetAudioLanguagePreference,
+          variables: Variables$Mutation$SetAudioLanguagePreference(
+            fileId: widget.fileId,
+            language: language,
+          ).toJson(),
+        ),
+      );
+
+      if (result.hasException) {
+        // A server too old to know this mutation answers with a GraphQL
+        // validation error. That is a version gap, not a fault, and it stays
+        // silent for the viewer: the track they picked has already changed.
+        debugPrint(
+            '[PlayerScreen] Could not remember audio language: ${result.exception}');
+        return;
+      }
+
+      // Kept for the next media this screen opens without remounting, which
+      // is what a season playing through does: go_router keys the page by
+      // route pattern, so `initState` does not run again for the next
+      // episode and the fresh Player built there reads this field.
+      final data = result.data?['setAudioLanguagePreference'];
+      final updated = data?['preferredAudioLanguages'];
+      if (updated is List) {
+        _preferredAudioLanguages = updated.cast<String>();
+      }
+
+      debugPrint('[PlayerScreen] Remembered audio language: $language');
+    } catch (e) {
+      debugPrint('[PlayerScreen] Could not remember audio language: $e');
     }
   }
 

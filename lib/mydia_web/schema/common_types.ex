@@ -469,6 +469,31 @@ defmodule MydiaWeb.Schema.CommonTypes do
     field :original_codec, :string, description: "Original video codec"
     field :original_audio_codec, :string, description: "Original audio codec"
     field :container, :string, description: "Original container format"
+
+    field :preferred_audio_languages, list_of(non_null(:string)),
+      description:
+        "Audio languages this playback should prefer, most preferred first, " <>
+          "already resolved against the item's original language. Direct play " <>
+          "never reaches the server's transcoder, so a client must apply this " <>
+          "itself (mpv's `alang`) to avoid opening on whichever track the " <>
+          "container happened to flag default. Empty means the operator asked " <>
+          "for the container's own flag to win, so the client should not " <>
+          "override its player's selection."
+  end
+
+  @desc "Outcome of remembering a viewer's audio language choice"
+  object :audio_language_preference_result do
+    field :media_item_id, non_null(:id),
+      description: "The show or film the preference was stored against"
+
+    field :language, :string,
+      description: "The remembered language, or null if the choice was forgotten"
+
+    field :preferred_audio_languages, list_of(non_null(:string)),
+      description:
+        "The full preference list now in effect for this item, most preferred " <>
+          "first, with the new choice already folded in. A client can apply this " <>
+          "directly rather than re-querying streamingCandidates."
   end
 
   @desc "Result of streaming candidates query"
