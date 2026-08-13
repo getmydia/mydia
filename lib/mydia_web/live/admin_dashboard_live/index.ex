@@ -92,13 +92,16 @@ defmodule MydiaWeb.AdminDashboardLive.Index do
     completed_jobs =
       Downloads.list_transcode_jobs(status: ["ready", "failed"], limit: 15, preload: job_preloads)
 
-    watch_history = Playback.list_recent_history(limit: 15)
+    # Plays, not progress rows: a media-server sync writes progress for watches
+    # that happened elsewhere and stamps it with the sync time, which flooded
+    # this list with imported Plex history the moment a sync ran.
+    plays = Playback.Stats.recent_plays(15)
 
     job_items =
       Enum.map(completed_jobs, &%{type: :transcode_job, data: &1, timestamp: &1.updated_at})
 
     history_items =
-      Enum.map(watch_history, &%{type: :watch_history, data: &1, timestamp: &1.last_watched_at})
+      Enum.map(plays, &%{type: :watch_history, data: &1, timestamp: &1.last_watched_at})
 
     (job_items ++ history_items)
     |> Enum.sort_by(& &1.timestamp, {:desc, DateTime})

@@ -468,6 +468,12 @@ defmodule Mydia.Playback do
 
   @doc """
   Lists recent watch history for all users.
+
+  This is progress rows ordered by `last_watched_at`, which is not the same as
+  "recently watched here": a media-server sync writes progress for watches that
+  happened on somebody else's box, and stamps that column with the sync time
+  whenever the remote carries no timestamp. For plays that happened on this
+  server, use `Mydia.Playback.Stats.recent_plays/1`.
   """
   def list_recent_history(opts \\ []) do
     limit = Keyword.get(opts, :limit, 20)

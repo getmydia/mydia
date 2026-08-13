@@ -150,4 +150,35 @@ defmodule MydiaWeb.AdminDashboardLiveTest do
     refute fresh_fill == MydiaWeb.AdminDashboardLive.Components.series_fill("old")
     assert html =~ fresh_fill
   end
+
+  # Regression: on a TV library the dashboard reported nobody watching while a
+  # stream was running, because an episode's media file carries `episode_id`
+  # with `media_item_id` NULL and the session list required the latter.
+  test "an episode stream appears in now playing", %{conn: conn, token: token} do
+    show =
+      Mydia.MediaFixtures.media_item_fixture(%{type: "tv_show", title: "House of the Dragon"})
+
+    episode = Mydia.MediaFixtures.episode_fixture(%{media_item_id: show.id})
+    media_file = Mydia.MediaFixtures.media_file_fixture(%{episode_id: episode.id})
+    viewer = Mydia.AccountsFixtures.user_fixture()
+
+    {:ok, _pid, :started} =
+      Mydia.Streaming.HlsSessionSupervisor.start_direct_session(media_file.id, viewer.id)
+
+    on_exit(fn ->
+      Mydia.Streaming.HlsSessionSupervisor.stop_direct_session(media_file.id, viewer.id)
+    end)
+
+    {:ok, view, _html} = live(authed(conn, token), ~p"/admin/dashboard")
+
+    refute has_element?(view, "#now-playing-empty")
+    assert has_element?(view, "#now-playing-#{media_file.id}")
+    assert render(view) =~ "House of the Dragon"
+  end
+
+  test "the bandwidth KPI carries its unit", %{conn: conn, token: token} do
+    {:ok, view, _html} = live(authed(conn, token), ~p"/admin/dashboard")
+
+    assert view |> element("#kpi-bandwidth") |> render() =~ "Mbps"
+  end
 end

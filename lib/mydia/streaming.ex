@@ -69,40 +69,37 @@ defmodule Mydia.Streaming do
       # Fetch User
       user = Repo.get(User, user_id)
 
-      # Fetch Media Info - use non-raising query to handle deleted files gracefully
-      media_file = Library.get_media_file(media_file_id, preload: [:media_item, :episode])
+      # Fetch Media Info - use non-raising query to handle deleted files gracefully.
+      # A TV file's show hangs off `episode.media_item`, so that association has
+      # to come along or every episode session renders without a title.
+      media_file =
+        Library.get_media_file(media_file_id, preload: [:media_item, episode: :media_item])
 
-      # Return nil if media file or media_item doesn't exist (will be filtered out below)
-      if media_file && media_file.media_item do
-        # Derive title/type
-        {title, type, episode_info} =
-          case media_file do
-            %{episode: %{season_number: s, episode_number: e, title: ep_title}, media_item: show} ->
-              {show.title, :tv_show, "S#{pad(s)}E#{pad(e)} - #{ep_title}"}
+      # Return nil when the file has been deleted, or carries neither an episode
+      # nor a media item (filtered out below)
+      case session_media(media_file) do
+        nil ->
+          nil
 
-            %{media_item: movie} ->
-              {movie.title, :movie, nil}
-          end
+        {title, type, episode_info, artwork_item} ->
+          progress =
+            user && Mydia.Playback.get_progress(user.id, progress_content_id(media_file))
 
-        progress = user && Mydia.Playback.get_progress(user.id, progress_content_id(media_file))
-
-        %ActiveSession{
-          session_id: session_id,
-          user: user,
-          media_title: title,
-          media_type: type,
-          episode_info: episode_info,
-          mode: mode,
-          started_at: started_at,
-          ready: ready,
-          media_file_id: media_file_id,
-          bitrate_bps: media_file.bitrate,
-          position_seconds: progress && progress.position_seconds,
-          duration_seconds: progress && progress.duration_seconds,
-          poster_path: poster_path(media_file.media_item)
-        }
-      else
-        nil
+          %ActiveSession{
+            session_id: session_id,
+            user: user,
+            media_title: title,
+            media_type: type,
+            episode_info: episode_info,
+            mode: mode,
+            started_at: started_at,
+            ready: ready,
+            media_file_id: media_file_id,
+            bitrate_bps: media_file.bitrate,
+            position_seconds: progress && progress.position_seconds,
+            duration_seconds: progress && progress.duration_seconds,
+            poster_path: poster_path(artwork_item)
+          }
       end
     end)
     # Filter out sessions where user or media might be missing (deleted)
@@ -167,6 +164,31 @@ defmodule Mydia.Streaming do
   # An episode's media_file carries its show as media_item, so a TV session gets
   # the show poster rather than an episode still, which is what the now-playing
   # card wants.
+  # Title, type, episode line, and the item artwork comes from, or nil when the
+  # session has nothing left to render.
+  #
+  # A TV file carries `episode_id` with `media_item_id` NULL, so its show hangs
+  # off `episode.media_item` and reading the show from `media_item` always finds
+  # nil. Gating this on `media_item` therefore dropped every episode session,
+  # which on a TV library is nearly all of them, and left the dashboard
+  # reporting nobody watching while a stream was running. The episode clause has
+  # to come first: a movie file has no episode, but nothing stops a future TV
+  # file from carrying both keys.
+  defp session_media(%{episode: %{season_number: s, episode_number: e, title: ep_title}} = file) do
+    episode_info = "S#{pad(s)}E#{pad(e)} - #{ep_title}"
+
+    case file.episode do
+      %{media_item: %{title: show_title} = show} -> {show_title, :tv_show, episode_info, show}
+      # An episode whose show has been deleted still names itself. Rendering the
+      # episode beats vanishing from the dashboard mid-stream.
+      _ -> {ep_title, :tv_show, episode_info, nil}
+    end
+  end
+
+  defp session_media(%{media_item: %{title: title} = movie}), do: {title, :movie, nil, movie}
+
+  defp session_media(_), do: nil
+
   defp poster_path(%{metadata: %{poster_path: path}}), do: path
   defp poster_path(_), do: nil
 
