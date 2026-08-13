@@ -1050,6 +1050,14 @@ jobs:
 
           # The destination is a local directory, which rclone treats like any
           # other backend. Nothing leaves the runner.
+          #
+          # It has to exist first. publish.sh opens with `rclone sync $DEST
+          # $LIVE` to read the live repo down, and rclone's local backend fails
+          # that with "directory not found" when the source root is missing,
+          # where the S3 backend the real publish uses returns an empty listing
+          # for a prefix that holds no objects. So the real first publish is
+          # fine and only the rehearsal needs this.
+          mkdir -p "$PWD/dryrun-dest"
           GPG_KEY_ID="$KEYID" LIVE_REPO_DIR="$PWD/dryrun-live" \
             ./player/flatpak/publish.sh \
               "${{ steps.channel.outputs.channel }}" \
