@@ -82,7 +82,13 @@ class MediaPoster extends StatelessWidget {
                 placeholder: _placeholder,
                 loadingPlaceholder: _loadingPlaceholder,
                 overlays: [
-                  if (progress != null && progress > 0)
+                  // `watchStatus` supersedes `progressPercentage` when both
+                  // arrive. They coexisted during the rollout, and rendering
+                  // both drew a full bar on watched titles, since the legacy
+                  // prop knows a percentage but not that the title is
+                  // finished. A surface that has not migrated still passes
+                  // only the legacy prop and is unaffected.
+                  if (watchStatus == null && progress != null && progress > 0)
                     ProgressOverlay(percentage: progress),
                   WatchProgressOverlay(status: watchStatus),
                   // TMDB reports 0.0 for a title nobody has voted on, so 0 and

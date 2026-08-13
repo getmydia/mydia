@@ -19,16 +19,29 @@ import 'poster_contract.dart';
 /// Asserts that [build] renders the four watch states the same way every
 /// other surface does.
 ///
-/// [build] receives a status and must return the surface under test wired to
-/// it. Pass the same [size] the surface's other tests use.
+/// [build] receives a status and the surface's legacy `progressPercentage`,
+/// and must return the surface under test wired to both. Pass the same [size]
+/// the surface's other tests use.
+///
+/// The legacy argument exists because the two props coexisted during the
+/// rollout, and a surface passing both is what shipped a full progress bar on
+/// watched titles in the library grid: `watchStatus` correctly drew nothing
+/// while `progressPercentage: 100` drew a bar right beside it. The last two
+/// cases below pin that.
 void runWatchIndicatorContract({
   required String description,
-  required Widget Function(WatchStatus? status) build,
+  required Widget Function(WatchStatus? status, double? legacyProgress) build,
   Size? size,
 }) {
-  Future<void> pump(WidgetTester tester, WatchStatus? status) async {
+  Future<void> pump(
+    WidgetTester tester,
+    WatchStatus? status, [
+    double? legacyProgress,
+  ]) async {
     await mockNetworkImages(() async {
-      await tester.pumpWidget(posterHost(build(status), size: size));
+      await tester.pumpWidget(
+        posterHost(build(status, legacyProgress), size: size),
+      );
       await tester.pumpAndSettle();
     });
   }
@@ -69,6 +82,36 @@ void runWatchIndicatorContract({
 
       expect(find.byKey(WatchIndicator.dotKey), findsNothing);
       expect(find.byType(ProgressOverlay), findsNothing);
+    });
+
+    testWidgets('lets a watched status override the legacy progress prop',
+        (tester) async {
+      await pump(
+        tester,
+        const WatchStatus(watched: true, percentage: 100),
+        100,
+      );
+
+      expect(find.byType(ProgressOverlay), findsNothing);
+    });
+
+    testWidgets('draws one bar, not two, when both sources are supplied',
+        (tester) async {
+      await pump(
+        tester,
+        const WatchStatus(watched: false, percentage: 40),
+        40,
+      );
+
+      expect(find.byType(ProgressOverlay), findsOneWidget);
+    });
+
+    testWidgets('still honours the legacy prop when there is no status',
+        (tester) async {
+      // Surfaces that have not migrated keep working unchanged.
+      await pump(tester, null, 40);
+
+      expect(find.byType(ProgressOverlay), findsOneWidget);
     });
   });
 }

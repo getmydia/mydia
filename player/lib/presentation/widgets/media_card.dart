@@ -140,7 +140,9 @@ class MediaCard extends StatelessWidget {
                   imageUrl: posterUrl,
                   placeholder: _buildPlaceholder(),
                   overlays: [
-                    if (progress != null && progress > 0)
+                    // `watchStatus` supersedes `progressPercentage` when both
+                    // arrive. See the same guard in `MediaPoster` for why.
+                    if (watchStatus == null && progress != null && progress > 0)
                       ProgressOverlay(percentage: progress),
                     WatchProgressOverlay(status: watchStatus),
                     if (action == MediaCardAction.play) const _PlayBadge(),

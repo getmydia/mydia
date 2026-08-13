@@ -4,6 +4,7 @@ import '../../core/theme/colors.dart';
 import '../../domain/models/continue_watching_item.dart';
 import '../../domain/models/recently_added_item.dart';
 import '../../domain/models/up_next_item.dart';
+import '../../domain/models/watch_status.dart';
 import 'media_card.dart';
 import 'media_context_menu.dart';
 
@@ -208,7 +209,13 @@ class _ContentRailState extends State<ContentRail> {
         posterUrl: item.posterUrl,
         title: item.title,
         subtitle: item.railSubtitle,
-        progressPercentage: item.progress?.percentage,
+        // Derived here for the same reason the Continue Watching screen
+        // derives it: `ContinueWatchingItem` carries a `Progress` row and no
+        // `watchStatus`, and adapting it puts this rail on the shared
+        // rendering rule instead of the legacy percentage prop.
+        watchStatus: item.progress == null
+            ? null
+            : WatchStatus.fromProgress(item.progress!),
         width: cardSize.width,
         height: cardSize.height,
         action: _actionFor(target),
@@ -223,6 +230,7 @@ class _ContentRailState extends State<ContentRail> {
         posterUrl: item.posterUrl,
         title: item.title,
         subtitle: item.newContentLabel ?? item.year?.toString(),
+        watchStatus: item.watchStatus,
         width: cardSize.width,
         height: cardSize.height,
         action: _actionFor(target),
@@ -241,6 +249,9 @@ class _ContentRailState extends State<ContentRail> {
         posterUrl: item.posterUrl,
         title: item.show.title,
         subtitle: item.episode.episodeCode,
+        watchStatus: item.episode.progress == null
+            ? null
+            : WatchStatus.fromProgress(item.episode.progress!),
         width: cardSize.width,
         height: cardSize.height,
         action: _actionFor(target),
