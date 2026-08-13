@@ -1,0 +1,5 @@
+fragment WatchStatusFragment on WatchStatus {
+  watched
+  percentage
+  unwatchedEpisodeCount
+}
