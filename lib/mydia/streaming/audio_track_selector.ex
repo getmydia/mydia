@@ -276,6 +276,41 @@ defmodule Mydia.Streaming.AudioTrackSelector do
   end
 
   @doc """
+  The concrete, ordered language codes a client should hand to its own player,
+  with `"original"` already resolved against this item's metadata.
+
+  Direct play never reaches ffmpeg, so the server cannot pick the track for it;
+  mpv does, and mpv needs a plain list. Resolving here rather than in the
+  client keeps one implementation of the precedence rules and means the client
+  needs no access to the item's original language.
+
+  Returns `[]` when `prefer_default_audio_track` is set, which is the honest
+  answer for "what language should the player insist on": none. The client
+  then leaves its own selection alone and the container's flag decides, which
+  is what that setting asks for.
+  """
+  @spec resolved_languages(struct() | nil, keyword()) :: [String.t()]
+  def resolved_languages(media_file, opts \\ []) do
+    case configured() do
+      {_configured, true} ->
+        []
+
+      {configured, false} ->
+        preferences =
+          resolve_preferences(
+            show: Keyword.get(opts, :show_audio_language) || [],
+            device: Keyword.get(opts, :audio_language) || [],
+            config: configured
+          )
+
+        original =
+          Keyword.get(opts, :original_language) || original_language_of(media_file)
+
+        expand(preferences, original)
+    end
+  end
+
+  @doc """
   The ffmpeg arguments that pin output stream selection to `stream`.
 
   Given no `-map` at all, ffmpeg applies its own implicit selection and takes

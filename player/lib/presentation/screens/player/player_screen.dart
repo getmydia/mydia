@@ -15,6 +15,7 @@ import '../../../core/connection/connection_provider.dart' as conn;
 import '../../../core/graphql/graphql_provider.dart';
 import '../../../core/graphql/watch/invalidation_rules.dart';
 import '../../../core/graphql/watch/watcher_registry.dart';
+import '../../../core/player/audio_language.dart';
 import '../../../core/player/codec_support.dart';
 import '../../../core/player/progress_service.dart';
 import '../../../core/playback/playback_progress_providers.dart';
@@ -310,6 +311,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   app_models.SubtitleTrack? _selectedSubtitleTrack;
   List<app_models_audio.AudioTrack> _audioTracks = [];
   app_models_audio.AudioTrack? _selectedAudioTrack;
+
+  /// Audio languages this playback should open on, most preferred first, as
+  /// resolved by the server from the operator's config and the item's own
+  /// original language.
+  ///
+  /// Populated from the streaming-candidates response and applied to mpv
+  /// before the media opens. Empty means no opinion — a server that predates
+  /// the field, a failed candidates call, or an operator who asked for the
+  /// container's `default` flag to win — and mpv keeps its own selection.
+  List<String> _preferredAudioLanguages = const [];
 
   /// The target of the subtitle selection attempt currently in flight, or
   /// most recently concluded — as opposed to [_selectedSubtitleTrack],
@@ -960,6 +971,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
       final candidatesResult = candidatesFetch.candidates;
 
+      // Held for _openPlayerAndStart, which builds the media_kit Player and
+      // has to set mpv's alang before opening the media. Null covers both a
+      // failed candidates call and a server too old to carry the field; both
+      // mean "no opinion", and mpv keeps its own selection.
+      _preferredAudioLanguages =
+          candidatesResult?.metadata.preferredAudioLanguages ?? const [];
+
       // The file actually being played. Normally the user's choice; on the
       // offline fall-through, or when the selected file was rejected by the
       // server and re-asked above, it is whatever the server ranked highest
@@ -1420,6 +1438,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       player.stream.tracks,
       _onAudioTracksDetected,
     );
+
+    // Before `open`, deliberately: mpv chooses its audio track while loading
+    // the file, so a preference applied afterwards does not reselect and the
+    // viewer still starts on the wrong language. Without this, mpv falls
+    // through to whatever the container flagged `default`, which on a
+    // dual-language release is routinely the dub — the reason an English show
+    // could open in Russian.
+    await AudioLanguage.apply(player, _preferredAudioLanguages);
 
     // Open media
     await player.open(

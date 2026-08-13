@@ -469,6 +469,16 @@ defmodule MydiaWeb.Schema.CommonTypes do
     field :original_codec, :string, description: "Original video codec"
     field :original_audio_codec, :string, description: "Original audio codec"
     field :container, :string, description: "Original container format"
+
+    field :preferred_audio_languages, list_of(non_null(:string)),
+      description:
+        "Audio languages this playback should prefer, most preferred first, " <>
+          "already resolved against the item's original language. Direct play " <>
+          "never reaches the server's transcoder, so a client must apply this " <>
+          "itself (mpv's `alang`) to avoid opening on whichever track the " <>
+          "container happened to flag default. Empty means the operator asked " <>
+          "for the container's own flag to win, so the client should not " <>
+          "override its player's selection."
   end
 
   @desc "Result of streaming candidates query"

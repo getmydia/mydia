@@ -375,6 +375,7 @@ Map<String, dynamic> streamingCandidatesResponse({
   bool directPlay = false,
   int? height,
   String fileId = 'file-1',
+  List<String>? preferredAudioLanguages,
 }) {
   return {
     '__typename': 'Query',
@@ -392,11 +393,16 @@ Map<String, dynamic> streamingCandidatesResponse({
             'audioCodec': 'mp4a.40.2',
           },
       ],
+      // Every field the StreamingCandidates document selects has to be here.
+      // graphql's normalizer rejects a partial object outright — the whole
+      // query fails with PartialDataException, not just the missing field —
+      // so omitting one breaks tests that never mention it.
       'metadata': {
         '__typename': 'StreamingMetadata',
         'duration': duration,
         'width': null,
         'height': height,
+        'preferredAudioLanguages': preferredAudioLanguages,
       },
     },
   };

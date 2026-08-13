@@ -1221,6 +1221,9 @@ type StreamingMetadata {
 
   "Original container format"
   container: String
+
+  "Audio languages this playback should prefer, most preferred first, already resolved against the item's original language. Direct play never reaches the server's transcoder, so a client must apply this itself (mpv's `alang`) to avoid opening on whichever track the container happened to flag default. Empty means the operator asked for the container's own flag to win, so the client should not override its player's selection."
+  preferredAudioLanguages: [String!]
 }
 
 "Result of streaming candidates query"
