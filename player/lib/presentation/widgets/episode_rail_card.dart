@@ -111,9 +111,17 @@ class _EpisodeRailCardState extends ConsumerState<EpisodeRailCard> {
   Widget _buildThumbnail(BuildContext context, CardSize cardSize) {
     // Derived rather than fetched: this card already has the episode's own
     // progress row, and an episode is a leaf, so there is no count to roll up.
-    final watchStatus = _episode.progress == null
-        ? const WatchStatus(watched: false)
-        : WatchStatus.fromProgress(_episode.progress!);
+    //
+    // A file-less episode gets no status at all, and so no dot. The rollup
+    // behind a show's badge counts only episodes that have a file, so marking
+    // an unplayable episode "unwatched" here would contradict the number on
+    // the poster one screen up: a show reading "3 unwatched" would sit above a
+    // season list showing ten dots.
+    final watchStatus = !_episode.hasFile
+        ? null
+        : _episode.progress == null
+            ? const WatchStatus(watched: false)
+            : WatchStatus.fromProgress(_episode.progress!);
 
     return Container(
       key: const ValueKey('episode-card-border'),

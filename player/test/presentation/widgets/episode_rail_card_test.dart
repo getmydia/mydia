@@ -250,6 +250,14 @@ void main() {
       expect(find.byKey(WatchIndicator.dotKey), findsNothing);
     });
 
+    testWidgets('draws no dot on an episode with no file', (tester) async {
+      // The show badge counts only has-file episodes, so a dot here would
+      // contradict the number on the poster one screen up.
+      await _pump(tester, _episode(hasFile: false, progress: null));
+
+      expect(find.byKey(WatchIndicator.dotKey), findsNothing);
+    });
+
     testWidgets('draws no dot while the episode is part-played',
         (tester) async {
       await _pump(
