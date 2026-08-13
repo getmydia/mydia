@@ -48,8 +48,8 @@ defmodule MetadataRelay.Subtitles.ArchiveTest do
   # but the local header is correct. This tests check_total_size/1 specifically:
   # check_declared_size/1 reads the central directory (sees the lie, passes),
   # but check_total_size/1 reads the actual expanded content (sees 20MB, fails).
-  defp lying_size_zip(name, actual_content, declared_size_in_central) when
-       is_binary(name) and is_binary(actual_content) and is_integer(declared_size_in_central) do
+  defp lying_size_zip(name, actual_content, declared_size_in_central)
+       when is_binary(name) and is_binary(actual_content) and is_integer(declared_size_in_central) do
     n = byte_size(name)
     c = byte_size(actual_content)
     crc = :erlang.crc32(actual_content)
@@ -63,9 +63,9 @@ defmodule MetadataRelay.Subtitles.ArchiveTest do
     # Central directory with lying uncompressed size, correct compressed size
     central =
       <<0x50, 0x4B, 0x01, 0x02, 20::little-16, 20::little-16, 0::little-16, 0::little-16,
-        0::little-16, 0::little-16, crc::little-32, c::little-32, declared_size_in_central::little-32, n::little-16,
-        0::little-16, 0::little-16, 0::little-16, 0::little-16, 0::little-32,
-        0::little-32, name::binary>>
+        0::little-16, 0::little-16, crc::little-32, c::little-32,
+        declared_size_in_central::little-32, n::little-16, 0::little-16, 0::little-16,
+        0::little-16, 0::little-16, 0::little-32, 0::little-32, name::binary>>
 
     local <>
       central <>
@@ -74,7 +74,8 @@ defmodule MetadataRelay.Subtitles.ArchiveTest do
   end
 
   test "extracts the first subtitle entry" do
-    archive = zip([{"readme.txt", "ignore me"}, {"movie.srt", "1\n00:00:01,000 --> 00:00:02,000\nhi\n"}])
+    archive =
+      zip([{"readme.txt", "ignore me"}, {"movie.srt", "1\n00:00:01,000 --> 00:00:02,000\nhi\n"}])
 
     assert {:ok, %{name: "movie.srt", content: content}} = Archive.extract_subtitle(archive)
     assert content =~ "hi"
