@@ -12,7 +12,7 @@ defmodule MetadataRelay.Application do
     # Store the selected adapter in application env
     Application.put_env(:metadata_relay, :cache_adapter, cache_adapter)
 
-    # Build children list with optional OpenSubtitles support
+    # Build children list
     children =
       [
         # Database repository
@@ -31,7 +31,6 @@ defmodule MetadataRelay.Application do
         MetadataRelay.Metrics
       ] ++
         maybe_tvdb_auth() ++
-        maybe_opensubtitles_auth() ++
         [
           # Phoenix endpoint (serves both API and ErrorTracker dashboard)
           MetadataRelayWeb.Endpoint
@@ -100,20 +99,6 @@ defmodule MetadataRelay.Application do
       [MetadataRelay.TVDB.Auth]
     else
       Logger.warning("TVDB API key not configured or invalid, TVDB support disabled")
-      []
-    end
-  end
-
-  defp maybe_opensubtitles_auth do
-    api_key = System.get_env("OPENSUBTITLES_API_KEY")
-    username = System.get_env("OPENSUBTITLES_USERNAME")
-    password = System.get_env("OPENSUBTITLES_PASSWORD")
-
-    if api_key && username && password do
-      Logger.info("OpenSubtitles credentials detected, enabling subtitle support")
-      [MetadataRelay.OpenSubtitles.Auth]
-    else
-      Logger.info("OpenSubtitles credentials not configured, subtitle support disabled")
       []
     end
   end
