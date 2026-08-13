@@ -162,4 +162,44 @@ defmodule MydiaWeb.PlayerControllerTest do
       assert response(conn, 404)
     end
   end
+
+  describe "player bundle caching" do
+    setup do
+      player_dir = Path.join([:code.priv_dir(:mydia), "static", "player"])
+      File.mkdir_p!(player_dir)
+      bundle = Path.join(player_dir, "main.dart.js")
+      File.write!(bundle, "console.log('bundle');")
+      on_exit(fn -> File.rm(bundle) end)
+
+      :ok
+    end
+
+    test "the bundle must be revalidated rather than reused on heuristic freshness",
+         %{conn: conn} do
+      # Flutter reuses the same URL for every build, so a cached copy that a
+      # browser may serve without asking is a client pinned to whichever build
+      # it happened to fetch. "public" alone permits exactly that.
+      conn = get(conn, "/player/main.dart.js")
+
+      assert response(conn, 200)
+      assert get_resp_header(conn, "cache-control") == ["no-cache"]
+    end
+
+    test "an unchanged bundle still revalidates to a bodiless 304", %{conn: conn} do
+      etag =
+        build_conn()
+        |> get("/player/main.dart.js")
+        |> get_resp_header("etag")
+        |> List.first()
+
+      assert etag
+
+      conn =
+        conn
+        |> put_req_header("if-none-match", etag)
+        |> get("/player/main.dart.js")
+
+      assert response(conn, 304) == ""
+    end
+  end
 end

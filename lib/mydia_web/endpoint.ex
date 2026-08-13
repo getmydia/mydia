@@ -38,6 +38,28 @@ defmodule MydiaWeb.Endpoint do
     websocket: true,
     longpoll: false
 
+  # The Flutter web player, ahead of the catch-all below so its cache policy
+  # wins for "/player/*".
+  #
+  # Flutter does not content-hash its web output: every build overwrites
+  # `main.dart.js` at the same URL. Plug.Static's default `cache_control_for_etags`
+  # is "public", which carries no `max-age` and no `Last-Modified`, so a browser
+  # is free to reuse its copy on heuristic freshness alone and never ask whether
+  # a newer one exists. An operator upgrading the container then keeps serving
+  # the new bundle to clients that go on running the previous one, with no error
+  # anywhere: the server answers every query correctly, the old app just never
+  # asks for the fields it does not know about. That is how the watch indicators
+  # shipped to a browser that kept rendering a build from before them.
+  #
+  # "no-cache" still stores the entity, it only forbids reusing it without
+  # revalidating, which the etag settles with a bodiless 304.
+  plug Plug.Static,
+    at: "/player",
+    from: {:mydia, "priv/static/player"},
+    gzip: not code_reloading?,
+    cache_control_for_etags: "no-cache",
+    cache_control_for_vsn_requests: "no-cache"
+
   # Serve at "/" the static files from "priv/static" directory.
   #
   # When code reloading is disabled (e.g., in production),
