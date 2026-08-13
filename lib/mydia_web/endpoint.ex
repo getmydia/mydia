@@ -52,13 +52,25 @@ defmodule MydiaWeb.Endpoint do
   # shipped to a browser that kept rendering a build from before them.
   #
   # "no-cache" still stores the entity, it only forbids reusing it without
-  # revalidating, which the etag settles with a bodiless 304.
+  # revalidating, which the etag settles with a bodiless 304. The bundle stays
+  # in the browser's cache; all it loses is the right to serve it unasked.
+  #
+  # That revalidation is only cheap because `:etag_generation` hashes the bytes.
+  # Plug.Static's default validator is phash2({size, mtime}), and a container
+  # image stamps a fresh mtime on every file it ships, so the default would
+  # re-download the whole tree on each deploy to discover that canvaskit and
+  # the fonts had not changed. See `MydiaWeb.PlayerAssets`.
+  #
+  # `cache_control_for_vsn_requests` stays "no-cache" on purpose: these URLs
+  # carry no version, so the immutable default would be a promise this tree
+  # cannot keep.
   plug Plug.Static,
     at: "/player",
     from: {:mydia, "priv/static/player"},
     gzip: not code_reloading?,
     cache_control_for_etags: "no-cache",
-    cache_control_for_vsn_requests: "no-cache"
+    cache_control_for_vsn_requests: "no-cache",
+    etag_generation: {MydiaWeb.PlayerAssets, :etag, []}
 
   # Serve at "/" the static files from "priv/static" directory.
   #

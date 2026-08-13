@@ -186,13 +186,7 @@ defmodule MydiaWeb.PlayerControllerTest do
     end
 
     test "an unchanged bundle still revalidates to a bodiless 304", %{conn: conn} do
-      etag =
-        build_conn()
-        |> get("/player/main.dart.js")
-        |> get_resp_header("etag")
-        |> List.first()
-
-      assert etag
+      etag = fetch_etag()
 
       conn =
         conn
@@ -200,6 +194,49 @@ defmodule MydiaWeb.PlayerControllerTest do
         |> get("/player/main.dart.js")
 
       assert response(conn, 304) == ""
+    end
+
+    test "a redeploy that only restamps mtimes does not re-send the bundle", %{conn: conn} do
+      etag = fetch_etag()
+
+      # A container image gives every file it ships a fresh mtime, so the
+      # default phash2({size, mtime}) validator would miss here and push the
+      # whole bundle again to prove nothing changed.
+      bundle = Path.join([:code.priv_dir(:mydia), "static", "player", "main.dart.js"])
+      File.touch!(bundle, System.os_time(:second) + 60)
+
+      conn =
+        conn
+        |> put_req_header("if-none-match", etag)
+        |> get("/player/main.dart.js")
+
+      assert response(conn, 304) == ""
+    end
+
+    test "a genuinely new build does re-send", %{conn: conn} do
+      etag = fetch_etag()
+
+      bundle = Path.join([:code.priv_dir(:mydia), "static", "player", "main.dart.js"])
+      File.write!(bundle, "console.log('next build');")
+      File.touch!(bundle, System.os_time(:second) + 60)
+
+      conn =
+        conn
+        |> put_req_header("if-none-match", etag)
+        |> get("/player/main.dart.js")
+
+      assert response(conn, 200) =~ "next build"
+    end
+
+    defp fetch_etag do
+      etag =
+        build_conn()
+        |> get("/player/main.dart.js")
+        |> get_resp_header("etag")
+        |> List.first()
+
+      assert etag
+      etag
     end
   end
 end
