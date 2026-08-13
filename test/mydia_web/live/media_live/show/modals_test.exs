@@ -297,5 +297,33 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
       assert html =~ "Podnapisi"
       assert html =~ "The.Matrix.1999.1080p.BluRay.srt"
     end
+
+    test "a partial provider failure with zero results still warns about the failure" do
+      html =
+        subtitle_modal_html(
+          subtitle_search_state: :loaded,
+          subtitle_providers: [
+            %{name: "OpenSubtitles", quota_remaining: nil, quota_total: nil, error: nil},
+            %{
+              name: "Podnapisi",
+              quota_remaining: nil,
+              quota_total: nil,
+              error: "Rate limited, try again shortly"
+            }
+          ],
+          subtitle_search_results: []
+        )
+
+      assert html =~ "alert-warning"
+      assert html =~ "Podnapisi"
+      assert html =~ "No subtitles found"
+    end
+
+    test "an unidentified file's search failure names the missing criteria, not the atom" do
+      html = subtitle_modal_html(subtitle_search_state: {:error, :insufficient_search_criteria})
+
+      assert html =~ "no hash or metadata IDs"
+      refute html =~ "insufficient_search_criteria"
+    end
   end
 end

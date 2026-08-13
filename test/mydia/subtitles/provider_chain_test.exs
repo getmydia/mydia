@@ -24,6 +24,11 @@ defmodule Mydia.Subtitles.ProviderChainTest do
     def search(%{name: "exhausted"}, _params), do: {:error, :quota_exceeded}
     def search(%{name: "broken"}, _params), do: {:error, {:transport, :nxdomain}}
 
+    def search(%{name: "relay-unconfigured"}, _params),
+      do: {:error, :metadata_relay_not_configured}
+
+    def search(%{name: "relay-down"}, _params), do: {:error, :service_unavailable}
+
     def search(%{name: "slow"}, _params) do
       Process.sleep(5_000)
       {:ok, []}
@@ -172,5 +177,25 @@ defmodule Mydia.Subtitles.ProviderChainTest do
              ProviderChain.search(%{languages: "en", media_type: "movie"})
 
     assert broken.error != nil
+  end
+
+  test "humanizes a relay-not-configured error instead of leaking the raw atom" do
+    SubtitleProviderFixtures.config_fixture(%{name: "relay-unconfigured", adapter: StubAdapter})
+
+    assert {:ok, %{providers: [provider]}} =
+             ProviderChain.search(%{languages: "en", media_type: "movie"})
+
+    assert provider.error =~ "not configured"
+    refute provider.error =~ "metadata_relay_not_configured"
+  end
+
+  test "humanizes a service-unavailable error instead of leaking the raw atom" do
+    SubtitleProviderFixtures.config_fixture(%{name: "relay-down", adapter: StubAdapter})
+
+    assert {:ok, %{providers: [provider]}} =
+             ProviderChain.search(%{languages: "en", media_type: "movie"})
+
+    assert provider.error =~ "unavailable"
+    refute provider.error =~ "service_unavailable"
   end
 end

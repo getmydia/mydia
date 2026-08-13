@@ -1307,6 +1307,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                 </button>
               </div>
             <% :loaded -> %>
+              <% failed = Enum.filter(@subtitle_providers, & &1.error) %>
               <%= cond do %>
                 <% @subtitle_providers == [] -> %>
                   <div class="flex flex-col items-center justify-center py-16 text-center">
@@ -1337,6 +1338,10 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                     </button>
                   </div>
                 <% @subtitle_search_results == [] -> %>
+                  <.subtitle_provider_failure_banner
+                    failed={failed}
+                    total={length(@subtitle_providers)}
+                  />
                   <div class="flex flex-col items-center justify-center py-16 text-center">
                     <.icon
                       name="hero-magnifying-glass"
@@ -1350,18 +1355,10 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                     </p>
                   </div>
                 <% true -> %>
-                  <% failed = Enum.filter(@subtitle_providers, & &1.error) %>
-                  <div :if={failed != []} class="alert alert-warning mb-4">
-                    <.icon name="hero-exclamation-triangle" class="w-5 h-5 shrink-0" />
-                    <div class="flex-1">
-                      <div class="text-sm font-medium">
-                        {length(failed)} of {length(@subtitle_providers)} providers failed
-                      </div>
-                      <ul class="text-xs opacity-80 mt-1">
-                        <li :for={provider <- failed}>{provider.name}: {provider.error}</li>
-                      </ul>
-                    </div>
-                  </div>
+                  <.subtitle_provider_failure_banner
+                    failed={failed}
+                    total={length(@subtitle_providers)}
+                  />
                   <%!-- Result rows are replaced in Task 5. --%>
                   <div class="overflow-x-auto">
                     <table class="table table-sm">
@@ -1377,6 +1374,28 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
         </div>
       </div>
       <div class="modal-backdrop" phx-click="close_subtitle_search_modal"></div>
+    </div>
+    """
+  end
+
+  # Partial-failure warning banner shared by the "results found" and "healthy
+  # zero-hit" branches of the loaded subtitle search state, so a provider that
+  # failed alongside others that answered is never silently dropped.
+  attr :failed, :list, required: true
+  attr :total, :integer, required: true
+
+  defp subtitle_provider_failure_banner(assigns) do
+    ~H"""
+    <div :if={@failed != []} class="alert alert-warning mb-4">
+      <.icon name="hero-exclamation-triangle" class="w-5 h-5 shrink-0" />
+      <div class="flex-1">
+        <div class="text-sm font-medium">
+          {length(@failed)} of {@total} providers failed
+        </div>
+        <ul class="text-xs opacity-80 mt-1">
+          <li :for={provider <- @failed}>{provider.name}: {provider.error}</li>
+        </ul>
+      </div>
     </div>
     """
   end
@@ -1478,16 +1497,13 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   defp score_color(_score), do: "text-error"
 
   # Provider-level failures arrive already humanized from ProviderChain. These
-  # are the top-level ones, which would otherwise reach the user as raw atoms.
+  # are the top-level ones search_candidates/2 can actually return, which
+  # would otherwise reach the user as raw atoms.
   defp search_error_message(:media_file_not_found),
     do: "That file is no longer in the library."
 
-  defp search_error_message(:metadata_relay_not_configured),
-    do: "Subtitle search is not configured. Set a metadata relay URL or add a provider."
-
-  defp search_error_message(:service_unavailable),
-    do:
-      "The subtitle provider is unavailable. A self-hosted relay needs OpenSubtitles credentials."
+  defp search_error_message(:insufficient_search_criteria),
+    do: "This file has no hash or metadata IDs to search with."
 
   defp search_error_message(:crashed),
     do: "The search failed unexpectedly. Check the server logs for details."
