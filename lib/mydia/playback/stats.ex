@@ -9,8 +9,18 @@ defmodule Mydia.Playback.Stats do
 
   import Ecto.Query
 
+  alias Mydia.Accounts.User
   alias Mydia.Events.Event
+  alias Mydia.Media.Episode
+  alias Mydia.Media.MediaItem
+  alias Mydia.Playback.Progress
   alias Mydia.Repo
+
+  # Filtering and de-duplication both shrink the scanned set, so read more rows
+  # than asked for. Bounded so a server with a long history does not load its
+  # whole play log to render twenty lines.
+  @scan_factor 5
+  @scan_ceiling 200
 
   @doc """
   Plays per local day, split into movies and episodes.
@@ -113,5 +123,113 @@ defmodule Mydia.Playback.Stats do
 
   defp within?(date, first_day, today) do
     Date.compare(date, first_day) != :lt and Date.compare(date, today) != :gt
+  end
+
+  @doc """
+  Recent plays that happened on this server, newest first.
+
+  Sourced from `playback.started` events, which only a real streaming session
+  emits, rather than from playback progress rows. A media-server sync writes
+  progress for watches that happened on somebody else's box, and stamps
+  `last_watched_at` with the sync time whenever the remote carries no timestamp
+  (`Mydia.WatchSync.Engine.apply_local/5`), so ordering progress by that column
+  buried every local play under a wall of imported history. This is the same
+  rule `Mydia.Streaming.emit_playback_started/2` already documents for the
+  plays-per-day chart.
+
+  Returns unsaved `Progress` structs used purely as a view model: they carry the
+  viewer and the resolved episode or media item, so `progress_title/1` and
+  `progress_poster_path/1` render a play exactly as they render a history row.
+  `last_watched_at` is the moment playback started.
+
+  Plays whose content has since been deleted are dropped rather than rendered
+  as "Unknown Media".
+  """
+  @spec recent_plays(pos_integer()) :: [Progress.t()]
+  def recent_plays(limit \\ 20) when is_integer(limit) and limit > 0 do
+    limit
+    |> fetch_recent_starts()
+    |> Enum.uniq_by(&{&1.actor_id, &1.resource_type, &1.resource_id})
+    |> Enum.take(limit)
+    |> resolve_plays()
+  end
+
+  defp fetch_recent_starts(limit) do
+    scan = min(limit * @scan_factor, @scan_ceiling)
+
+    Event
+    |> where([e], e.type == "playback.started")
+    # `inserted_at` is second-granularity, so a stable tiebreak is needed or two
+    # plays in the same second could swap places between renders.
+    |> order_by([e], desc: e.inserted_at, desc: e.id)
+    |> limit(^scan)
+    |> Repo.all()
+  end
+
+  defp resolve_plays([]), do: []
+
+  defp resolve_plays(events) do
+    episodes = load_by_id(Episode, events, "episode", preload: :media_item)
+    items = load_by_id(MediaItem, events, "media_item")
+    users = load_users(events)
+
+    Enum.flat_map(events, fn event ->
+      case play_content(event, episodes, items) do
+        nil ->
+          []
+
+        content ->
+          play = %Progress{
+            user: Map.get(users, event.actor_id),
+            last_watched_at: event.inserted_at
+          }
+
+          [struct(play, content)]
+      end
+    end)
+  end
+
+  defp play_content(%{resource_type: "episode", resource_id: id}, episodes, _items) do
+    case Map.fetch(episodes, id) do
+      {:ok, episode} -> %{episode: episode, episode_id: id}
+      :error -> nil
+    end
+  end
+
+  defp play_content(%{resource_type: "media_item", resource_id: id}, _episodes, items) do
+    case Map.fetch(items, id) do
+      {:ok, item} -> %{media_item: item, media_item_id: id}
+      :error -> nil
+    end
+  end
+
+  defp play_content(_event, _episodes, _items), do: nil
+
+  defp load_by_id(schema, events, resource_type, opts \\ []) do
+    ids =
+      for event <- events, event.resource_type == resource_type, do: event.resource_id
+
+    case Enum.uniq(ids) do
+      [] ->
+        %{}
+
+      ids ->
+        schema
+        |> where([r], r.id in ^ids)
+        |> preload(^Keyword.get(opts, :preload, []))
+        |> Repo.all()
+        |> Map.new(&{&1.id, &1})
+    end
+  end
+
+  # `actor_id` is a string column, since system actors are not UUIDs. Anything
+  # that is not a user id simply finds no row and renders without a name.
+  defp load_users(events) do
+    ids = events |> Enum.map(& &1.actor_id) |> Enum.uniq() |> Enum.reject(&is_nil/1)
+
+    case ids do
+      [] -> %{}
+      ids -> User |> where([u], u.id in ^ids) |> Repo.all() |> Map.new(&{&1.id, &1})
+    end
   end
 end

@@ -34,7 +34,9 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
       </div>
       <div id="kpi-bandwidth" class="stat bg-base-200 rounded-box shadow-sm">
         <div class="stat-title">Bandwidth</div>
-        <div class="stat-value text-2xl">{format_mbps(@total_mbps)}</div>
+        <div class="stat-value text-2xl">
+          {format_mbps(@total_mbps)}<span class="text-sm font-normal opacity-60 ml-1">Mbps</span>
+        </div>
         <div class="stat-desc">
           Estimated{if @unmeasured_count > 0, do: ", #{@unmeasured_count} unmeasured", else: ""}
         </div>
@@ -229,7 +231,10 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
       )
 
     ~H"""
-    <div class="card bg-base-100 shadow-sm border border-base-300">
+    <div
+      id={"now-playing-#{@session.media_file_id}"}
+      class="card bg-base-100 shadow-sm border border-base-300"
+    >
       <div class="card-body p-3 gap-2">
         <div class="flex items-center gap-3">
           <%= if @session.poster_path do %>
