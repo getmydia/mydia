@@ -98,6 +98,28 @@ nothing, and it only applies to automatic background searches unless you set it
 yourself in the manual search interface. And Usenet results, which report no
 seeder count at all, are exempt rather than being filtered out wholesale.
 
+#### Setting it
+
+The floor for automatic searches lives in the layered configuration as
+`downloads.min_seeders`, so you can set it three ways, in increasing order of
+precedence:
+
+- **Settings > Configuration > Downloads** in the web UI, as *Minimum Seeders
+  (automatic search)*. This is the usual way and takes effect without a restart.
+- `downloads.min_seeders` in `config.yml`.
+- The `AUTO_SEARCH_MIN_SEEDERS` environment variable, which wins over both.
+
+The manual search interface keeps its own separate control, which is only ever
+applied to the search you are running at the time.
+
+Something to know before you raise it above zero: a few torrent indexers report
+zero seeders when they mean "I could not read the seeder count", not "this
+torrent is dead". Cardigann definitions do this when their seeders selector does
+not match the site's markup, and Jackett does it for an empty field. Any nonzero
+floor discards every result from those indexers that has no parsed seeder count,
+which looks a lot like an indexer that quietly stopped working. If you set a
+floor, check that your indexers still return results.
+
 The practical warning: this is the one setting that can genuinely empty a result
 list. If you raised it to filter out dead torrents and searches stopped finding
 anything, lower it before investigating anything else.

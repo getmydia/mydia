@@ -102,6 +102,23 @@ defmodule Mydia.Config.Schema do
       # stops auto-rejecting it. Bounds a systematic false positive to this
       # many releases instead of the item's entire search result set.
       field :auto_reject_limit, :integer, default: 3
+      # Minimum seeder count an automatic (background) search result must
+      # report before Mydia will consider it. `Mydia.Indexers.search_all/2`
+      # applies it as a hard filter, before deduplication and ranking, so a
+      # release below the floor is dropped rather than demoted. Manual search
+      # has its own control in the search UI and does not read this.
+      #
+      # The default of 0 filters nothing, which is also what Usenet needs:
+      # NZB results carry no seeder count and are exempt from the filter.
+      #
+      # Read this before raising it. Some torrent adapters report 0 to mean
+      # "unknown" rather than "dead": Cardigann coerces a missing seeders
+      # selector to 0 (`Mydia.Indexers.CardigannResultParser`) and Jackett
+      # maps an empty field to 0 (`Mydia.Indexers.Adapter.Jackett`). Any
+      # nonzero floor therefore discards every result those indexers return
+      # without a parsed seeder count, which can look like an indexer that
+      # stopped working.
+      field :min_seeders, :integer, default: 0
     end
 
     embeds_one :upgrades, Upgrades, on_replace: :update, primary_key: false do
@@ -371,11 +388,16 @@ defmodule Mydia.Config.Schema do
     |> cast(attrs, [
       :monitor_interval_minutes,
       :release_blacklist_default_ttl_days,
-      :auto_reject_limit
+      :auto_reject_limit,
+      :min_seeders
     ])
     |> validate_number(:monitor_interval_minutes, greater_than: 0)
     |> validate_number(:release_blacklist_default_ttl_days, greater_than: 0)
     |> validate_number(:auto_reject_limit, greater_than: 0)
+    # Not greater_than: 0 — 0 is the default and means "filter nothing".
+    # A negative floor is meaningless, so it is rejected at config time
+    # rather than silently behaving like 0.
+    |> validate_number(:min_seeders, greater_than_or_equal_to: 0)
   end
 
   defp upgrades_changeset(schema, attrs) do

@@ -248,6 +248,16 @@ INDEXER_3_BASE_URL=http://nzbhydra2:5076
 INDEXER_3_API_KEY=your-nzbhydra2-api-key
 ```
 
+## Automatic Search
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `AUTO_SEARCH_MIN_SEEDERS` | Minimum seeders a result must report for an automatic search to consider it. A hard filter applied before ranking, so a torrent below it is removed rather than demoted. Manual searches have their own control, and Usenet results report no seeders and are exempt | `0` (filters nothing) |
+
+Some indexers report zero seeders when they could not read the count rather than when a torrent is dead, so any nonzero floor can silently empty their
+results. See [How Mydia decides which release to grab](../explanation/quality-decisions.md#minimum-seeders-is-a-filter-and-the-only-one-you-are-likely-to-set)
+before raising it. Also settable under **Admin > Configuration > Settings > Downloads**.
+
 ## PostgreSQL Configuration
 
 For PostgreSQL deployments (using `latest-pg` image):

@@ -1770,4 +1770,89 @@ defmodule Mydia.Jobs.TVShowSearchTest do
       assert Mydia.Downloads.list_downloads() == []
     end
   end
+
+  # The seeder floor for automatic searches is a layered runtime setting
+  # (downloads.min_seeders / AUTO_SEARCH_MIN_SEEDERS / the admin settings UI),
+  # not the flat compile-time `config :mydia, :auto_search` key it used to be.
+  # Nothing explodes the resolved Config.Schema struct back out into flat
+  # top-level keys, so a flat read would silently ignore both the env var and
+  # the settings UI. See get_min_seeders/0 in lib/mydia/jobs/tv_show_search.ex.
+  describe "minimum seeders for automatic search" do
+    setup do
+      original = Application.get_env(:mydia, :runtime_config)
+
+      on_exit(fn ->
+        if original do
+          Application.put_env(:mydia, :runtime_config, original)
+        else
+          Application.delete_env(:mydia, :runtime_config)
+        end
+      end)
+
+      tv_show = media_item_fixture(%{type: "tv_show", title: "Breaking Bad"})
+
+      _episode =
+        episode_fixture(%{
+          media_item_id: tv_show.id,
+          season_number: 1,
+          episode_number: 1,
+          air_date: ~D[2020-01-01]
+        })
+
+      %{tv_show: tv_show}
+    end
+
+    test "considers every mocked result at the default floor of 0", %{tv_show: tv_show} do
+      assert Mydia.Config.Schema.defaults().downloads.min_seeders == 0
+
+      put_min_seeders(0)
+      Phoenix.PubSub.subscribe(Mydia.PubSub, "downloads")
+
+      assert :ok = perform_job(TVShowSearch, %{"mode" => "show", "media_item_id" => tv_show.id})
+
+      assert_receive {:search_completed, _id, %{results_found: found}}
+      assert found > 0
+    end
+
+    test "drops every result below a configured floor", %{tv_show: tv_show} do
+      # The mocked indexer's best result reports 150 seeders.
+      put_min_seeders(500)
+      Phoenix.PubSub.subscribe(Mydia.PubSub, "downloads")
+
+      assert :ok = perform_job(TVShowSearch, %{"mode" => "show", "media_item_id" => tv_show.id})
+
+      assert_receive {:search_completed, _id, %{results_found: 0}}
+      assert Mydia.Downloads.list_downloads() == []
+    end
+
+    test "reads the layered config, not the flat :auto_search app env key", %{tv_show: tv_show} do
+      # A floor high enough to empty the result set, set the old way. It must
+      # have no effect now.
+      original_auto_search = Application.get_env(:mydia, :auto_search, [])
+      on_exit(fn -> Application.put_env(:mydia, :auto_search, original_auto_search) end)
+
+      Application.put_env(
+        :mydia,
+        :auto_search,
+        Keyword.put(original_auto_search, :min_seeders, 500)
+      )
+
+      put_min_seeders(0)
+      Phoenix.PubSub.subscribe(Mydia.PubSub, "downloads")
+
+      assert :ok = perform_job(TVShowSearch, %{"mode" => "show", "media_item_id" => tv_show.id})
+
+      assert_receive {:search_completed, _id, %{results_found: found}}
+      assert found > 0
+    end
+  end
+
+  # Overrides only the :downloads embed of the layered runtime config
+  # (Mydia.Config.get().downloads), leaving the rest of the resolved config
+  # (indexers, media, and so on) exactly as this suite's setup left it.
+  defp put_min_seeders(min) do
+    config = Mydia.Config.get()
+    downloads = struct(config.downloads, min_seeders: min)
+    Application.put_env(:mydia, :runtime_config, %{config | downloads: downloads})
+  end
 end

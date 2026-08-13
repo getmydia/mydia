@@ -255,6 +255,11 @@ defmodule Mydia.Config.Loader do
       System.get_env("DOWNLOAD_MONITOR_INTERVAL_MINUTES"),
       &parse_integer/1
     )
+    |> put_if_present(
+      :min_seeders,
+      System.get_env("AUTO_SEARCH_MIN_SEEDERS"),
+      &parse_integer/1
+    )
   end
 
   defp load_upgrades_env do
