@@ -101,4 +101,31 @@ defmodule MydiaWeb.MediaLive.Show.MonitoringControlsTest do
     assert has_element?(view, "#season-1-monitor-toggle[phx-click='unmonitor_season']")
     assert has_element?(view, "#season-2-monitor-toggle[phx-click='monitor_season']")
   end
+
+  test "a fully unmonitored season is de-emphasised and offers to monitor", %{conn: conn} do
+    # The :none branch of season_monitoring_state/1 and monitoring_icon/1. It is
+    # the state a user lands in right after unmonitoring a whole season, which
+    # is the case this whole change exists to fix, so it should not be the one
+    # state nothing renders in a test.
+    media_item = media_item_fixture(%{type: "tv_show", monitored: true})
+
+    episode_fixture(
+      media_item_id: media_item.id,
+      season_number: 3,
+      episode_number: 1,
+      monitored: false
+    )
+
+    episode_fixture(
+      media_item_id: media_item.id,
+      season_number: 3,
+      episode_number: 2,
+      monitored: false
+    )
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+
+    assert has_element?(view, "#season-3-monitor-toggle[phx-click='monitor_season']")
+    assert has_element?(view, "#season-3-monitor-toggle.opacity-60")
+  end
 end
