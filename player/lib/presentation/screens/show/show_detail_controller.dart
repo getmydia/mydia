@@ -8,96 +8,9 @@ import '../../../core/graphql/watch/query_watcher.dart';
 import '../../../core/graphql/watch/watcher_registry.dart';
 import '../../../domain/models/show_detail.dart';
 import '../../../graphql/mutations/toggle_favorite.graphql.dart';
+import '../../../graphql/queries/show_detail.graphql.dart';
 
 part 'show_detail_controller.g.dart';
-
-const String tvShowDetailQuery = r'''
-query TvShowDetail($id: ID!) {
-  tvShow(id: $id) {
-    id
-    title
-    originalTitle
-    year
-    overview
-    status
-    genres
-    contentRating
-    rating
-    tmdbId
-    imdbId
-    category
-    monitored
-    addedAt
-    seasonCount
-    episodeCount
-    artwork {
-      posterUrl
-      backdropUrl
-      thumbnailUrl
-    }
-    seasons {
-      seasonNumber
-      episodeCount
-      airedEpisodeCount
-      hasFiles
-    }
-    nextEpisode {
-      id
-      seasonNumber
-      episodeNumber
-      title
-      airDate
-    }
-    nextUp {
-      progressState
-      episode {
-        id
-        seasonNumber
-        episodeNumber
-        title
-        runtime
-        files {
-          id
-          resolution
-          codec
-          audioCodec
-          hdrFormat
-          size
-          bitrate
-          directPlaySupported
-          streamUrl
-          directPlayUrl
-        }
-        progress {
-          positionSeconds
-          durationSeconds
-          percentage
-          watched
-          lastWatchedAt
-        }
-      }
-    }
-    isFavorite
-    cast {
-      name
-      character
-      profileUrl
-    }
-    trailerUrl
-    similar {
-      id
-      type
-      title
-      year
-      artwork {
-        posterUrl
-        backdropUrl
-        thumbnailUrl
-      }
-    }
-  }
-}
-''';
 
 ShowDetail _parseShow(Map<String, dynamic> data) {
   final show = data['tvShow'];
@@ -114,7 +27,7 @@ class ShowDetailController extends _$ShowDetailController {
     _watcher = createWatcher<ShowDetail>(
       ref,
       key: QueryKeys.showDetail(id),
-      document: gql(tvShowDetailQuery),
+      document: documentNodeQueryTvShowDetail,
       variables: {'id': id},
       parse: _parseShow,
     );
@@ -160,6 +73,7 @@ class ShowDetailController extends _$ShowDetailController {
         cast: currentState.cast,
         trailerUrl: currentState.trailerUrl,
         similar: currentState.similar,
+        watchStatus: currentState.watchStatus,
       ),
     );
 

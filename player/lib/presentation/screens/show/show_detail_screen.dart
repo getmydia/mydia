@@ -14,6 +14,7 @@ import '../../../domain/models/show_detail.dart';
 import '../../../domain/models/season_info.dart';
 import '../../../domain/models/download.dart';
 import '../../../domain/models/episode.dart';
+import '../../../domain/models/watch_status.dart';
 import '../../widgets/episode_rail.dart';
 import '../../widgets/freshness_header.dart';
 import '../../widgets/quality_download_dialog.dart';
@@ -27,6 +28,7 @@ import '../../widgets/content_rail.dart';
 import '../../widgets/detail_action_row.dart';
 import '../../widgets/hero_play_control.dart';
 import '../../widgets/media_info/media_info_sheet.dart';
+import '../../widgets/watch_indicator.dart';
 
 /// Below this width the hero's action column and tag column stack instead
 /// of sitting side by side. Matches the movie detail hero's breakpoint — see
@@ -930,12 +932,15 @@ class ShowDetailScreen extends ConsumerWidget {
             itemCount: availableSeasons.length,
             itemBuilder: (context, index) {
               final season = availableSeasons[index];
+              final unwatched = season.watchStatus?.unwatchedEpisodeCount ?? 0;
               final isSelected = season.seasonNumber == selectedSeason;
 
               return Padding(
                 padding: const EdgeInsets.only(right: 10),
                 child: _SeasonChip(
                   label: 'Season ${season.seasonNumber}',
+                  unwatched: unwatched,
+                  watchStatus: season.watchStatus,
                   isSelected: isSelected,
                   onTap: () {
                     ref
@@ -1393,11 +1398,15 @@ class _SeasonActionsButton extends ConsumerWidget {
 
 class _SeasonChip extends StatefulWidget {
   final String label;
+  final int unwatched;
+  final WatchStatus? watchStatus;
   final bool isSelected;
   final VoidCallback onTap;
 
   const _SeasonChip({
     required this.label,
+    required this.unwatched,
+    required this.watchStatus,
     required this.isSelected,
     required this.onTap,
   });
@@ -1452,13 +1461,23 @@ class _SeasonChipState extends State<_SeasonChip>
                   : AppColors.divider.withValues(alpha: 0.3),
             ),
           ),
-          child: Text(
-            widget.label,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: widget.isSelected ? Colors.white : AppColors.textPrimary,
-            ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                widget.label,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color:
+                      widget.isSelected ? Colors.white : AppColors.textPrimary,
+                ),
+              ),
+              if (widget.unwatched > 0) ...[
+                const SizedBox(width: 6),
+                WatchIndicator(status: widget.watchStatus),
+              ],
+            ],
           ),
         ),
       ),
