@@ -36,13 +36,25 @@ void main() {
 
     testWidgets('drops empty children so spacing does not accumulate',
         (tester) async {
+      // Measure the Row, not the text.
+      //
+      // Asserting the text exists passes whether or not the filter works, and
+      // so does asserting the text's position: the Row is anchored at
+      // `right: 8` and the text is its last child, so the text's own edges
+      // never move no matter what precedes it. The Row's width is what grows
+      // when a dropped child leaves its `spacing` gap behind.
+      await tester.pumpWidget(
+        _host(const PosterBadgeCorner(children: [Text('only')])),
+      );
+      final alone = tester.getSize(find.byType(Row));
+
       await tester.pumpWidget(
         _host(const PosterBadgeCorner(
           children: [SizedBox.shrink(), Text('only')],
         )),
       );
 
-      expect(find.text('only'), findsOneWidget);
+      expect(tester.getSize(find.byType(Row)), alone);
     });
 
     testWidgets('sits in the top-right of its stack', (tester) async {
