@@ -168,10 +168,24 @@ defmodule MydiaWeb.PlayerControllerTest do
       player_dir = Path.join([:code.priv_dir(:mydia), "static", "player"])
       File.mkdir_p!(player_dir)
       bundle = Path.join(player_dir, "main.dart.js")
-      File.write!(bundle, "console.log('bundle');")
-      on_exit(fn -> File.rm(bundle) end)
 
-      :ok
+      # In a dev checkout this is a real Flutter build that costs a full
+      # `flutter build web` to replace, so put back whatever was here.
+      previous = File.read(bundle)
+
+      File.write!(bundle, "console.log('bundle');")
+      # Dated, so the etag memo is exercised rather than bypassed by the
+      # settle window the way a just-written file would be.
+      File.touch!(bundle, System.os_time(:second) - 3600)
+
+      on_exit(fn ->
+        case previous do
+          {:ok, content} -> File.write!(bundle, content)
+          {:error, _} -> File.rm(bundle)
+        end
+      end)
+
+      {:ok, bundle: bundle}
     end
 
     test "the bundle must be revalidated rather than reused on heuristic freshness",
@@ -196,14 +210,14 @@ defmodule MydiaWeb.PlayerControllerTest do
       assert response(conn, 304) == ""
     end
 
-    test "a redeploy that only restamps mtimes does not re-send the bundle", %{conn: conn} do
+    test "a redeploy that only restamps mtimes does not re-send the bundle",
+         %{conn: conn, bundle: bundle} do
       etag = fetch_etag()
 
       # A container image gives every file it ships a fresh mtime, so the
       # default phash2({size, mtime}) validator would miss here and push the
       # whole bundle again to prove nothing changed.
-      bundle = Path.join([:code.priv_dir(:mydia), "static", "player", "main.dart.js"])
-      File.touch!(bundle, System.os_time(:second) + 60)
+      File.touch!(bundle, System.os_time(:second) - 60)
 
       conn =
         conn
@@ -213,12 +227,25 @@ defmodule MydiaWeb.PlayerControllerTest do
       assert response(conn, 304) == ""
     end
 
-    test "a genuinely new build does re-send", %{conn: conn} do
+    test "a build whose clock ran ahead of this host is still cacheable",
+         %{conn: conn, bundle: bundle} do
       etag = fetch_etag()
 
-      bundle = Path.join([:code.priv_dir(:mydia), "static", "player", "main.dart.js"])
+      File.touch!(bundle, System.os_time(:second) + 3600)
+
+      conn =
+        conn
+        |> put_req_header("if-none-match", etag)
+        |> get("/player/main.dart.js")
+
+      assert response(conn, 304) == ""
+    end
+
+    test "a genuinely new build does re-send", %{conn: conn, bundle: bundle} do
+      etag = fetch_etag()
+
       File.write!(bundle, "console.log('next build');")
-      File.touch!(bundle, System.os_time(:second) + 60)
+      File.touch!(bundle, System.os_time(:second) - 60)
 
       conn =
         conn
@@ -226,6 +253,31 @@ defmodule MydiaWeb.PlayerControllerTest do
         |> get("/player/main.dart.js")
 
       assert response(conn, 200) =~ "next build"
+    end
+
+    test "a deep link still falls through to the player shell", %{conn: conn} do
+      # The new static mount sits in front of the router's "/player/*path"
+      # glob. A miss must pass through rather than 404, or every Flutter
+      # route stops resolving on a cold load.
+      {conn, _user} = register_and_log_in_user(conn)
+
+      index = Path.join([:code.priv_dir(:mydia), "static", "player", "index.html"])
+      File.mkdir_p!(Path.dirname(index))
+      previous = File.read(index)
+
+      File.write!(
+        index,
+        "<html><body><script src=\"flutter_bootstrap.js\"></script></body></html>"
+      )
+
+      on_exit(fn ->
+        case previous do
+          {:ok, content} -> File.write!(index, content)
+          {:error, _} -> File.rm(index)
+        end
+      end)
+
+      assert conn |> get("/player/movies/123") |> response(200) =~ "flutter_bootstrap.js"
     end
 
     defp fetch_etag do

@@ -28,7 +28,7 @@ defmodule MydiaWeb.PlayerAssets do
   @doc """
   Builds the etag `Plug.Static` sends for `path`.
 
-  Wired in as `:et_generation`, which is why this returns the header value
+  Wired in as `:etag_generation`, which is why this returns the header value
   complete with its quotes rather than a bare digest.
   """
   @spec etag(Path.t()) :: binary()
@@ -38,10 +38,10 @@ defmodule MydiaWeb.PlayerAssets do
         cached_or_hash(path, size, mtime)
 
       {:error, reason} ->
-        # Plug.Static has already stat'd this file to decide it is servable,
-        # so a failure here means it moved underneath us mid-request. Return a
-        # validator that cannot match, which costs one re-transfer and never
-        # pins a client to bytes we can no longer read.
+        # Plug.Static only calls this after its own stat has decided the file
+        # is servable, so a failure here means it moved underneath us and the
+        # send that follows is going to fail regardless of what we return.
+        # A validator that cannot match is simply the honest answer.
         Logger.warning(
           "Player asset vanished while building its etag: #{path} (#{inspect(reason)})"
         )
@@ -50,7 +50,7 @@ defmodule MydiaWeb.PlayerAssets do
     end
   end
 
-  # A file whose mtime is not yet @settle_seconds old may be rewritten again
+  # A file whose mtime is younger than @settle_seconds may be rewritten again
   # inside the same second at the same byte count, which {size, mtime} cannot
   # tell apart from no change at all. Hash those outright and only memoize a
   # file that has stopped moving. Anything shipped in a container image is
@@ -59,7 +59,15 @@ defmodule MydiaWeb.PlayerAssets do
   @settle_seconds 2
 
   defp cached_or_hash(path, size, mtime) do
-    if System.os_time(:second) - mtime < @settle_seconds do
+    age = System.os_time(:second) - mtime
+
+    # `age >= 0` matters as much as the upper bound. A file dated in the future
+    # is not unsettled, it is a clock disagreement: a NAS whose RTC has not
+    # caught up with NTP, or an image built minutes ahead of the host pulling
+    # it. Testing only the upper bound would put every asset on that host in
+    # the re-hash branch permanently, turning each anonymous GET of a 4.5MB
+    # bundle into a full read and sha256.
+    if age >= 0 and age < @settle_seconds do
       hash(path)
     else
       memoized(path, size, mtime)

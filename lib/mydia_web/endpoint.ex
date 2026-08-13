@@ -61,9 +61,12 @@ defmodule MydiaWeb.Endpoint do
   # re-download the whole tree on each deploy to discover that canvaskit and
   # the fonts had not changed. See `MydiaWeb.PlayerAssets`.
   #
-  # `cache_control_for_vsn_requests` stays "no-cache" on purpose: these URLs
-  # carry no version, so the immutable default would be a promise this tree
-  # cannot keep.
+  # `cache_control_for_vsn_requests` stays "no-cache" because nothing Flutter
+  # emits appends "?vsn=", so the immutable default would be a year-long
+  # promise made on behalf of a URL that carries no version. Plug.Static skips
+  # the etag entirely on that branch, so a stray versioned request costs a full
+  # transfer either way; this at least keeps it from being cached under a
+  # version that means nothing.
   plug Plug.Static,
     at: "/player",
     from: {:mydia, "priv/static/player"},
