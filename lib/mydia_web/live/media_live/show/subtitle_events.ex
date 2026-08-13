@@ -16,7 +16,9 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
      socket
      |> assign(:show_subtitle_search_modal, true)
      |> assign(:selected_media_file, media_file)
-     |> assign(:subtitle_search_results, [])}
+     |> assign(:subtitle_search_state, :idle)
+     |> assign(:subtitle_search_results, [])
+     |> assign(:subtitle_providers, [])}
   end
 
   def close_subtitle_search_modal(_params, socket) do
@@ -24,8 +26,9 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
      socket
      |> assign(:show_subtitle_search_modal, false)
      |> assign(:selected_media_file, nil)
+     |> assign(:subtitle_search_state, :idle)
      |> assign(:subtitle_search_results, [])
-     |> assign(:searching_subtitles, false)}
+     |> assign(:subtitle_providers, [])}
   end
 
   def update_subtitle_languages(%{"languages" => languages}, socket) do
@@ -48,9 +51,9 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
 
     {:noreply,
      socket
-     |> assign(:searching_subtitles, true)
+     |> assign(:subtitle_search_state, :searching)
      |> start_async(:subtitle_search, fn ->
-       Mydia.Subtitles.search_subtitles(media_file.id, languages: languages)
+       Mydia.Subtitles.search_candidates(media_file.id, languages)
      end)}
   end
 
@@ -77,7 +80,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
 
     {:noreply,
      socket
-     |> assign(:downloading_subtitle, true)
+     |> assign(:downloading_subtitle_id, subtitle_info.file_id)
      |> start_async(:download_subtitle, fn ->
        Mydia.Subtitles.download_subtitle(subtitle_info, media_file.id)
      end)}
@@ -102,31 +105,32 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
 
   # handle_async dispatches
 
-  def handle_subtitle_search_async({:ok, {:ok, results}}, socket) do
-    Logger.info("Subtitle search completed", result_count: length(results))
+  def handle_subtitle_search_async(
+        {:ok, {:ok, %{results: results, providers: providers}}},
+        socket
+      ) do
+    Logger.info("Subtitle search completed",
+      result_count: length(results),
+      provider_count: length(providers)
+    )
 
     {:noreply,
      socket
-     |> assign(:searching_subtitles, false)
-     |> assign(:subtitle_search_results, results)}
+     |> assign(:subtitle_search_state, :loaded)
+     |> assign(:subtitle_search_results, results)
+     |> assign(:subtitle_providers, providers)}
   end
 
   def handle_subtitle_search_async({:ok, {:error, reason}}, socket) do
     Logger.error("Subtitle search failed: #{inspect(reason)}")
 
-    {:noreply,
-     socket
-     |> assign(:searching_subtitles, false)
-     |> put_flash(:error, "Subtitle search failed: #{inspect(reason)}")}
+    {:noreply, assign(socket, :subtitle_search_state, {:error, reason})}
   end
 
   def handle_subtitle_search_async({:exit, reason}, socket) do
     Logger.error("Subtitle search task crashed: #{inspect(reason)}")
 
-    {:noreply,
-     socket
-     |> assign(:searching_subtitles, false)
-     |> put_flash(:error, "Subtitle search failed unexpectedly")}
+    {:noreply, assign(socket, :subtitle_search_state, {:error, :crashed})}
   end
 
   def handle_download_subtitle_async({:ok, {:ok, _subtitle}}, socket) do
@@ -134,10 +138,12 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
 
     {:noreply,
      socket
-     |> assign(:downloading_subtitle, false)
+     |> assign(:downloading_subtitle_id, nil)
      |> assign(:show_subtitle_search_modal, false)
      |> assign(:selected_media_file, nil)
+     |> assign(:subtitle_search_state, :idle)
      |> assign(:subtitle_search_results, [])
+     |> assign(:subtitle_providers, [])
      |> assign(:media_file_subtitles, load_media_file_subtitles(socket.assigns.media_item))
      |> put_flash(:info, "Subtitle downloaded successfully")}
   end
@@ -147,7 +153,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
 
     {:noreply,
      socket
-     |> assign(:downloading_subtitle, false)
+     |> assign(:downloading_subtitle_id, nil)
      |> put_flash(:error, "Subtitle download failed: #{inspect(reason)}")}
   end
 
@@ -156,7 +162,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
 
     {:noreply,
      socket
-     |> assign(:downloading_subtitle, false)
+     |> assign(:downloading_subtitle_id, nil)
      |> put_flash(:error, "Subtitle download failed unexpectedly")}
   end
 end

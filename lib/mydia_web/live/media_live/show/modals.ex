@@ -1165,9 +1165,10 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   Subtitle search modal for searching and downloading subtitles.
   """
   attr :media_file, :map, required: true
-  attr :searching, :boolean, required: true
+  attr :subtitle_search_state, :any, default: :idle
   attr :subtitle_search_results, :list, required: true
-  attr :downloading_subtitle, :boolean, default: false
+  attr :subtitle_providers, :list, default: []
+  attr :downloading_subtitle_id, :any, default: nil
   attr :selected_languages, :list, default: ["en"]
 
   def subtitle_search_modal(assigns) do
@@ -1268,9 +1269,9 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
               type="button"
               phx-click="perform_subtitle_search"
               class="btn btn-primary btn-sm"
-              disabled={@searching or @selected_languages == []}
+              disabled={@subtitle_search_state == :searching or @selected_languages == []}
             >
-              <%= if @searching do %>
+              <%= if @subtitle_search_state == :searching do %>
                 <span class="loading loading-spinner loading-sm"></span> Searching
               <% else %>
                 <.icon name="hero-magnifying-glass" class="w-4 h-4" /> Search
@@ -1279,99 +1280,99 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
           </form>
         </div>
         <div id="subtitle-search-body" class="flex-1 overflow-y-auto p-4 sm:p-6">
-          <%!-- Search results --%>
-          <%= if @searching do %>
-            <div class="flex items-center justify-center py-8">
-              <span class="loading loading-spinner loading-lg"></span>
-            </div>
-          <% else %>
-            <%= if length(@subtitle_search_results) > 0 do %>
-              <div class="overflow-x-auto">
-                <table class="table table-sm">
-                  <thead>
-                    <tr>
-                      <th>Language</th>
-                      <th>Format</th>
-                      <th>Rating</th>
-                      <th>Downloads</th>
-                      <th>HI</th>
-                      <th>Score</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <%= for result <- @subtitle_search_results do %>
-                      <tr>
-                        <td>{result.language}</td>
-                        <td>
-                          <span class="badge badge-ghost badge-sm">{result.format}</span>
-                        </td>
-                        <td>
-                          <%= if result[:rating] do %>
-                            <div class="flex items-center gap-1">
-                              <.icon name="hero-star-solid" class="w-3 h-3 text-warning" />
-                              <span class="text-xs">{result.rating}/10</span>
-                            </div>
-                          <% else %>
-                            <span class="text-base-content/50">—</span>
-                          <% end %>
-                        </td>
-                        <td>
-                          <%= if result[:download_count] do %>
-                            <span class="text-xs">{result.download_count}</span>
-                          <% else %>
-                            <span class="text-base-content/50">—</span>
-                          <% end %>
-                        </td>
-                        <td>
-                          <%= if result[:hearing_impaired] do %>
-                            <.icon name="hero-check-circle-solid" class="w-4 h-4 text-success" />
-                          <% else %>
-                            <span class="text-base-content/50">—</span>
-                          <% end %>
-                        </td>
-                        <td>
-                          <span class={[
-                            "badge badge-sm",
-                            result.score >= 150 && "badge-success",
-                            result.score >= 100 && result.score < 150 && "badge-warning",
-                            result.score < 100 && "badge-ghost"
-                          ]}>
-                            {result.score}
-                          </span>
-                        </td>
-                        <td>
-                          <button
-                            type="button"
-                            phx-click="download_subtitle_result"
-                            phx-value-file-id={result.file_id}
-                            phx-value-language={result.language}
-                            phx-value-format={result.format}
-                            phx-value-subtitle-hash={result.subtitle_hash}
-                            phx-value-rating={result[:rating]}
-                            phx-value-download-count={result[:download_count]}
-                            phx-value-hearing-impaired={result[:hearing_impaired] || false}
-                            class="btn btn-primary btn-xs"
-                            disabled={@downloading_subtitle}
-                          >
-                            <%= if @downloading_subtitle do %>
-                              <span class="loading loading-spinner loading-xs"></span>
-                            <% else %>
-                              <.icon name="hero-arrow-down-tray" class="w-3 h-3" /> Download
-                            <% end %>
-                          </button>
-                        </td>
-                      </tr>
-                    <% end %>
-                  </tbody>
-                </table>
+          <%= case @subtitle_search_state do %>
+            <% :idle -> %>
+              <div class="flex flex-col items-center justify-center py-16 text-center">
+                <.icon name="hero-language" class="w-16 h-16 text-base-content/20 mb-4" />
+                <h3 class="text-xl font-semibold text-base-content/70 mb-2">
+                  Choose one or more languages
+                </h3>
+                <p class="text-base-content/50 max-w-sm">
+                  Then run a search to see what your providers have for this file.
+                </p>
               </div>
-            <% else %>
-              <div class="alert alert-info">
-                <.icon name="hero-information-circle" class="w-5 h-5" />
-                <span>No subtitles found. Try searching with different languages.</span>
+            <% :searching -> %>
+              <div class="flex flex-col gap-3">
+                <div :for={_ <- 1..5} class="skeleton h-16 w-full"></div>
               </div>
-            <% end %>
+            <% {:error, reason} -> %>
+              <div class="alert alert-error">
+                <.icon name="hero-exclamation-circle" class="w-5 h-5 shrink-0" />
+                <div class="flex-1">
+                  <div class="font-medium">Search failed</div>
+                  <div class="text-sm opacity-80">{search_error_message(reason)}</div>
+                </div>
+                <button type="button" phx-click="perform_subtitle_search" class="btn btn-sm">
+                  Retry
+                </button>
+              </div>
+            <% :loaded -> %>
+              <%= cond do %>
+                <% @subtitle_providers == [] -> %>
+                  <div class="flex flex-col items-center justify-center py-16 text-center">
+                    <.icon name="hero-cog-6-tooth" class="w-16 h-16 text-base-content/20 mb-4" />
+                    <h3 class="text-xl font-semibold text-base-content/70 mb-2">
+                      No subtitle providers configured
+                    </h3>
+                    <p class="text-base-content/50 max-w-sm mb-4">
+                      Add a provider before searching. Nothing is enabled and healthy right now.
+                    </p>
+                    <.link navigate="/admin/subtitle-providers" class="btn btn-primary btn-sm">
+                      Configure providers
+                    </.link>
+                  </div>
+                <% @subtitle_search_results == [] and Enum.all?(@subtitle_providers, & &1.error) -> %>
+                  <div class="alert alert-error">
+                    <.icon name="hero-exclamation-circle" class="w-5 h-5 shrink-0" />
+                    <div class="flex-1">
+                      <div class="font-medium">Every provider failed</div>
+                      <ul class="text-sm opacity-80 mt-1">
+                        <li :for={provider <- @subtitle_providers}>
+                          {provider.name}: {provider.error}
+                        </li>
+                      </ul>
+                    </div>
+                    <button type="button" phx-click="perform_subtitle_search" class="btn btn-sm">
+                      Retry
+                    </button>
+                  </div>
+                <% @subtitle_search_results == [] -> %>
+                  <div class="flex flex-col items-center justify-center py-16 text-center">
+                    <.icon
+                      name="hero-magnifying-glass"
+                      class="w-16 h-16 text-base-content/20 mb-4"
+                    />
+                    <h3 class="text-xl font-semibold text-base-content/70 mb-2">
+                      No subtitles found
+                    </h3>
+                    <p class="text-base-content/50 max-w-sm">
+                      Your providers answered but had nothing for this file. Try more languages.
+                    </p>
+                  </div>
+                <% true -> %>
+                  <% failed = Enum.filter(@subtitle_providers, & &1.error) %>
+                  <div :if={failed != []} class="alert alert-warning mb-4">
+                    <.icon name="hero-exclamation-triangle" class="w-5 h-5 shrink-0" />
+                    <div class="flex-1">
+                      <div class="text-sm font-medium">
+                        {length(failed)} of {length(@subtitle_providers)} providers failed
+                      </div>
+                      <ul class="text-xs opacity-80 mt-1">
+                        <li :for={provider <- failed}>{provider.name}: {provider.error}</li>
+                      </ul>
+                    </div>
+                  </div>
+                  <%!-- Result rows are replaced in Task 5. --%>
+                  <div class="overflow-x-auto">
+                    <table class="table table-sm">
+                      <tbody>
+                        <tr :for={result <- @subtitle_search_results}>
+                          <td>{result.file_name || MydiaWeb.Languages.name(result.language)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+              <% end %>
           <% end %>
         </div>
       </div>
@@ -1475,4 +1476,22 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   defp score_color(score) when score >= 80, do: "text-success"
   defp score_color(score) when score >= 50, do: "text-warning"
   defp score_color(_score), do: "text-error"
+
+  # Provider-level failures arrive already humanized from ProviderChain. These
+  # are the top-level ones, which would otherwise reach the user as raw atoms.
+  defp search_error_message(:media_file_not_found),
+    do: "That file is no longer in the library."
+
+  defp search_error_message(:metadata_relay_not_configured),
+    do: "Subtitle search is not configured. Set a metadata relay URL or add a provider."
+
+  defp search_error_message(:service_unavailable),
+    do:
+      "The subtitle provider is unavailable. A self-hosted relay needs OpenSubtitles credentials."
+
+  defp search_error_message(:crashed),
+    do: "The search failed unexpectedly. Check the server logs for details."
+
+  defp search_error_message(_reason),
+    do: "The search could not be completed. Check the server logs for details."
 end

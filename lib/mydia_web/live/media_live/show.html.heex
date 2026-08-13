@@ -281,9 +281,10 @@
   <%= if @show_subtitle_search_modal && @selected_media_file do %>
     <Modals.subtitle_search_modal
       media_file={@selected_media_file}
-      searching={@searching_subtitles}
+      subtitle_search_state={@subtitle_search_state}
       subtitle_search_results={@subtitle_search_results}
-      downloading_subtitle={@downloading_subtitle}
+      subtitle_providers={@subtitle_providers}
+      downloading_subtitle_id={@downloading_subtitle_id}
       selected_languages={@selected_languages}
     />
   <% end %>

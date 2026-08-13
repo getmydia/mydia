@@ -24,9 +24,10 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
   defp subtitle_modal_html(overrides \\ []) do
     defaults = [
       media_file: @subtitle_media_file,
-      searching: false,
+      subtitle_search_state: :idle,
       subtitle_search_results: [],
-      downloading_subtitle: false,
+      subtitle_providers: [],
+      downloading_subtitle_id: nil,
       selected_languages: ["en"]
     ]
 
@@ -197,6 +198,104 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
 
       assert html =~ ~s(phx-click="perform_subtitle_search")
       assert html =~ "disabled"
+    end
+  end
+
+  describe "subtitle_search_modal/1 states" do
+    test "idle never claims nothing was found" do
+      html = subtitle_modal_html(subtitle_search_state: :idle)
+
+      refute html =~ "No subtitles found"
+      assert html =~ "Choose one or more languages"
+    end
+
+    test "searching shows skeletons and no results" do
+      html = subtitle_modal_html(subtitle_search_state: :searching)
+
+      assert html =~ "skeleton"
+      refute html =~ "No subtitles found"
+    end
+
+    test "a failed search reports the failure instead of blaming the language choice" do
+      html = subtitle_modal_html(subtitle_search_state: {:error, :media_file_not_found})
+
+      assert html =~ "alert-error"
+      refute html =~ "No subtitles found"
+      refute html =~ "media_file_not_found"
+      assert html =~ ~s(phx-click="perform_subtitle_search")
+    end
+
+    test "with no providers configured it points at the admin page" do
+      html = subtitle_modal_html(subtitle_search_state: :loaded, subtitle_providers: [])
+
+      assert html =~ "/admin/subtitle-providers"
+      refute html =~ "No subtitles found"
+    end
+
+    test "when every provider errored it names them and their reasons" do
+      html =
+        subtitle_modal_html(
+          subtitle_search_state: :loaded,
+          subtitle_providers: [
+            %{
+              name: "OpenSubtitles",
+              quota_remaining: nil,
+              quota_total: nil,
+              error: "Daily quota exhausted"
+            }
+          ]
+        )
+
+      assert html =~ "OpenSubtitles"
+      assert html =~ "Daily quota exhausted"
+      refute html =~ "No subtitles found"
+    end
+
+    test "a healthy search with zero hits is the only case that says nothing was found" do
+      html =
+        subtitle_modal_html(
+          subtitle_search_state: :loaded,
+          subtitle_providers: [
+            %{name: "OpenSubtitles", quota_remaining: nil, quota_total: nil, error: nil}
+          ]
+        )
+
+      assert html =~ "No subtitles found"
+    end
+
+    test "a partial provider failure warns but still shows results" do
+      html =
+        subtitle_modal_html(
+          subtitle_search_state: :loaded,
+          subtitle_providers: [
+            %{name: "OpenSubtitles", quota_remaining: nil, quota_total: nil, error: nil},
+            %{
+              name: "Podnapisi",
+              quota_remaining: nil,
+              quota_total: nil,
+              error: "Rate limited, try again shortly"
+            }
+          ],
+          subtitle_search_results: [
+            %{
+              file_id: 1,
+              language: "en",
+              format: "srt",
+              subtitle_hash: "abc",
+              file_name: "The.Matrix.1999.1080p.BluRay.srt",
+              rating: 8.5,
+              download_count: 1200,
+              hearing_impaired: false,
+              moviehash_match: true,
+              provider_name: "OpenSubtitles",
+              score: 160
+            }
+          ]
+        )
+
+      assert html =~ "alert-warning"
+      assert html =~ "Podnapisi"
+      assert html =~ "The.Matrix.1999.1080p.BluRay.srt"
     end
   end
 end

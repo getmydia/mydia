@@ -137,9 +137,10 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:applying_monitoring_preset, false)
      # Subtitle state
      |> assign(:show_subtitle_search_modal, false)
-     |> assign(:searching_subtitles, false)
-     |> assign(:downloading_subtitle, false)
+     |> assign(:subtitle_search_state, :idle)
+     |> assign(:downloading_subtitle_id, nil)
      |> assign(:subtitle_search_results, [])
+     |> assign(:subtitle_providers, [])
      |> assign(:selected_media_file, nil)
      |> assign(:selected_languages, ["en"])
      |> assign(:media_file_subtitles, load_media_file_subtitles(media_item))
