@@ -201,6 +201,33 @@ defmodule Mydia.Playback.WatchStatusTest do
                WatchStatus.for_show(Map.fetch!(bundles, ctx.show.id))
     end
 
+    test "an episode whose only file is trashed does not count", ctx do
+      # The `is_nil(trashed_at)` filter is what keeps this rollup agreeing with
+      # `hasFile` on the same screen: `Mydia.Library.list_media_files/1`
+      # excludes trashed rows by default and `resolve_has_file/3` goes through
+      # it. Without this test, dropping that filter passes the whole suite.
+      trashed_only =
+        MediaFixtures.episode_fixture(%{
+          media_item_id: ctx.show.id,
+          season_number: 1,
+          episode_number: 2
+        })
+
+      file = MediaFixtures.media_file_fixture(%{episode_id: trashed_only.id})
+
+      {:ok, _} =
+        file
+        |> Ecto.Changeset.change(trashed_at: DateTime.utc_now() |> DateTime.truncate(:second))
+        |> Mydia.Repo.update()
+
+      bundles = WatchStatus.load_shows(ctx.user.id, [ctx.show.id])
+
+      # e1 and e2 still count. The trashed-only episode does not, so this stays
+      # 2 rather than rising to 3.
+      assert %WatchStatus{unwatched_episode_count: 2} =
+               WatchStatus.for_show(Map.fetch!(bundles, ctx.show.id))
+    end
+
     test "a nil user id yields counts with no progress applied", ctx do
       bundles = WatchStatus.load_shows(nil, [ctx.show.id])
 
