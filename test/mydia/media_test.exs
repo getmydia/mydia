@@ -174,9 +174,12 @@ defmodule Mydia.MediaTest do
       refute new_episode.monitored
     end
 
-    test "apply_episode_monitoring/2 does not persist anything on the show" do
+    test "apply_episode_monitoring/2 leaves the show row alone" do
+      # Starts at :none so an accidental write to :all would be visible. The
+      # earlier version of this test started at :all and asserted :all, which
+      # passed no matter what the function did.
       media_item =
-        media_item_fixture(%{type: "tv_show", monitored: true, monitor_new_seasons: :all})
+        media_item_fixture(%{type: "tv_show", monitored: true, monitor_new_seasons: :none})
 
       episode_fixture(
         media_item_id: media_item.id,
@@ -188,8 +191,7 @@ defmodule Mydia.MediaTest do
       {:ok, count} = Media.apply_episode_monitoring(media_item, :all)
 
       assert count == 1
-      reloaded = Media.get_media_item!(media_item.id)
-      assert reloaded.monitor_new_seasons == :all
+      assert Media.get_media_item!(media_item.id).monitor_new_seasons == :none
     end
 
     test "apply_episode_monitoring/2 returns an error for movies" do
@@ -198,24 +200,72 @@ defmodule Mydia.MediaTest do
       assert {:error, {:invalid_type, _}} = Media.apply_episode_monitoring(media_item, :all)
     end
 
-    test "applying a preset carries its verdict on new seasons" do
-      # The user says what they want once. :none means new seasons are not
-      # wanted either, and :all means they are, so there is no second control.
+    test "set_monitor_new_seasons/2 is independent of the presets" do
+      # The state the folded-in version could not express: keep everything I
+      # have monitored, but do not chase seasons that show up later.
       media_item = media_item_fixture(%{type: "tv_show", monitored: true})
       episode_fixture(media_item_id: media_item.id, season_number: 1, episode_number: 1)
 
-      {:ok, _} = Media.apply_episode_monitoring(media_item, :none)
-      assert Media.get_media_item!(media_item.id).monitor_new_seasons == :none
-
       {:ok, _} = Media.apply_episode_monitoring(media_item, :all)
+      {:ok, updated} = Media.set_monitor_new_seasons(media_item, :none)
+
+      assert updated.monitor_new_seasons == :none
+      assert Enum.all?(Media.list_episodes(media_item.id), & &1.monitored)
+      refute Media.should_monitor_new_episode?(updated, 9)
+      assert Media.should_monitor_new_episode?(updated, 1)
+    end
+
+    test "set_monitor_new_seasons/2 writes through a stale struct" do
+      media_item = media_item_fixture(%{type: "tv_show", monitor_new_seasons: :all})
+
+      {:ok, _} = Media.set_monitor_new_seasons(media_item, :none)
+      # media_item is now stale, still holding :all. A changeset would see no
+      # change and skip the write.
+      {:ok, _} = Media.set_monitor_new_seasons(media_item, :all)
+
       assert Media.get_media_item!(media_item.id).monitor_new_seasons == :all
     end
 
-    test "new_season_default/1 maps every preset" do
-      assert Media.new_season_default(:all) == :all
-      assert Media.new_season_default(:missing) == :all
-      assert Media.new_season_default(:future) == :all
-      assert Media.new_season_default(:none) == :none
+    test "derive_monitoring_preset/1 says :none when nothing is monitored" do
+      # Regression: :none was checked last and several partitions produce the
+      # empty set, so a fully-aired show with nothing monitored read back as
+      # "Future Episodes" and clicking "No Episodes" never showed "No Episodes".
+      media_item = media_item_fixture(%{type: "tv_show", monitored: true})
+
+      episode_fixture(
+        media_item_id: media_item.id,
+        season_number: 1,
+        episode_number: 1,
+        air_date: ~D[2020-01-01]
+      )
+
+      {:ok, _} = Media.apply_episode_monitoring(media_item, :none)
+      episodes = Media.list_episodes(media_item.id, preload: [:media_files])
+
+      assert Media.derive_monitoring_preset(episodes) == :none
+    end
+
+    test "no preset sweeps in specials" do
+      # Regression: :missing and :future had no season 0 guard, so a bulk apply
+      # monitored fileless specials, which then left should_monitor_new_episode?
+      # admitting every future special forever.
+      media_item = media_item_fixture(%{type: "tv_show", monitored: true})
+      episode_fixture(media_item_id: media_item.id, season_number: 0, episode_number: 1)
+      episode_fixture(media_item_id: media_item.id, season_number: 1, episode_number: 1)
+
+      for preset <- Media.monitoring_presets() do
+        {:ok, _} = Media.apply_episode_monitoring(media_item, preset)
+        special = Media.get_episode_by_number(media_item.id, 0, 1)
+
+        refute special.monitored, "#{preset} monitored a special"
+      end
+    end
+
+    test "a TV show with an unknown preset reports the preset, not the type" do
+      media_item = media_item_fixture(%{type: "tv_show"})
+
+      assert {:error, {:invalid_preset, _}} =
+               Media.apply_episode_monitoring(media_item, :first_season)
     end
 
     test "derive_monitoring_preset/1 reads the rows back, or says :custom" do
@@ -774,9 +824,11 @@ defmodule Mydia.MediaTest do
       presets = Media.monitoring_presets()
       assert :all in presets
       assert :missing in presets
+      # :existing is what leaves the Upgrades sweep something to act on.
+      assert :existing in presets
       assert :future in presets
       assert :none in presets
-      assert length(presets) == 4
+      assert length(presets) == 5
     end
 
     # Movie invalid-type covered by media_items "apply_episode_monitoring/2 returns an error for movies"

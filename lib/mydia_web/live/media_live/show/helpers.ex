@@ -520,6 +520,7 @@ defmodule MydiaWeb.MediaLive.Show.Helpers do
   # Monitoring preset labels (shared between events and components)
   def monitoring_preset_label(:all), do: "All Episodes"
   def monitoring_preset_label(:missing), do: "Missing Episodes"
+  def monitoring_preset_label(:existing), do: "Existing Episodes"
   def monitoring_preset_label(:future), do: "Future Episodes"
   def monitoring_preset_label(:none), do: "No Episodes"
   # Not a preset anyone can pick: what the episodes read as once they no longer

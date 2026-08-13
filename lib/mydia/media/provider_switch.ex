@@ -224,6 +224,21 @@ defmodule Mydia.Media.ProviderSwitch do
         Repo.transaction(fn ->
           file_ids = linked_media_file_ids(item)
 
+          # Season monitoring lives in the episode rows, so the wipe below
+          # erases it. Capture the per-season verdict first and replay it, or
+          # every season the user deliberately unmonitored comes back monitored
+          # under the show's new-season default.
+          monitored_by_season =
+            from(e in Episode,
+              where: e.media_item_id == ^item.id,
+              group_by: e.season_number,
+              select: {e.season_number, max(type(e.monitored, :integer))}
+            )
+            |> Repo.all()
+            |> Map.new(fn {season_number, any_monitored} ->
+              {season_number, any_monitored == 1}
+            end)
+
           Repo.delete_all(from(e in Episode, where: e.media_item_id == ^item.id))
 
           # Roll back (preserving the just-deleted episodes) instead of raising a
@@ -240,9 +255,15 @@ defmodule Mydia.Media.ProviderSwitch do
             end
 
           Enum.each(season_datas, fn season_data ->
-            Media.upsert_episodes_from_season(updated, season_data,
-              monitor_new?: Media.should_monitor_new_episode?(updated, season_data.season_number)
-            )
+            monitor_new? =
+              case Map.fetch(monitored_by_season, season_data.season_number) do
+                # A season the show already had keeps whatever the user decided.
+                {:ok, was_monitored?} -> was_monitored?
+                # Genuinely new to this provider, so the normal rule applies.
+                :error -> Media.should_monitor_new_episode?(updated, season_data.season_number)
+              end
+
+            Media.upsert_episodes_from_season(updated, season_data, monitor_new?: monitor_new?)
           end)
 
           # `upsert_episodes_from_season/3` swallows per-episode insert errors

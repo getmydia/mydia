@@ -27,15 +27,20 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :item_collections, :list, default: []
   attr :user_collections, :list, default: []
 
-  # First Season and Latest Season were bulk shortcuts for something the season
-  # header toggle now does in one click, and Existing Episodes duplicated the
-  # Upgrades system. What is left is the four things a user actually asks for.
-  @monitoring_presets [
-    {:all, "All Episodes"},
-    {:missing, "Missing Episodes"},
-    {:future, "Future Episodes"},
-    {:none, "No Episodes"}
-  ]
+  # Labels only. The list of valid presets is Media.monitoring_presets/0, and
+  # this is checked against it at compile time so the two cannot drift.
+  @preset_labels %{
+    all: "All Episodes",
+    missing: "Missing Episodes",
+    existing: "Existing Episodes",
+    future: "Future Episodes",
+    none: "No Episodes"
+  }
+
+  @monitoring_presets Enum.map(
+                        Mydia.Media.monitoring_presets(),
+                        &{&1, Map.fetch!(@preset_labels, &1)}
+                      )
 
   def hero_section(assigns) do
     ~H"""
@@ -442,7 +447,6 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :transcode_jobs, :map, default: %{}
   attr :segment_statuses, :map, default: %{}
   attr :segment_detection_available, :boolean, default: true
-  attr :applying_episode_monitoring, :boolean, default: false
 
   def episodes_section(assigns) do
     assigns = assign(assigns, :monitoring_presets, @monitoring_presets)
@@ -468,21 +472,35 @@ defmodule MydiaWeb.MediaLive.Show.Components do
               <span class="text-base-content/60">/</span>
               <span>{length(@media_item.episodes)} total</span>
 
-              <%!-- Bulk actions, one-shot. The label is static on purpose: it
-                    says what the menu does, never what the episodes are. --%>
+              <%!-- Standing rule, not an action. Independent of the presets
+                    on purpose: "everything I have, but do not chase new
+                    seasons" is a real thing to want, and inferring this from
+                    the preset made it unsayable. --%>
+              <label
+                class="flex items-center gap-1.5 cursor-pointer text-base-content/70"
+                title="Whether a season added later arrives monitored. Episodes added to a season you already have follow that season instead."
+              >
+                <input
+                  type="checkbox"
+                  id="monitor-new-seasons-toggle"
+                  class="checkbox checkbox-xs"
+                  checked={@media_item.monitor_new_seasons == :all}
+                  phx-click="toggle_monitor_new_seasons"
+                />
+                <span>New seasons</span>
+              </label>
+
+              <%!-- One-shot bulk actions. The label reads the episode rows
+                    back rather than storing what was picked, so a manual
+                    season toggle shows as Custom instead of going stale. --%>
               <div class="dropdown dropdown-end">
                 <div
                   tabindex="0"
                   role="button"
                   id="episode-monitoring-menu"
                   class="btn btn-sm btn-ghost gap-1"
-                  disabled={@applying_episode_monitoring}
                 >
-                  <%= if @applying_episode_monitoring do %>
-                    <span class="loading loading-spinner loading-xs"></span>
-                  <% else %>
-                    <.icon name="hero-adjustments-horizontal" class="w-4 h-4" />
-                  <% end %>
+                  <.icon name="hero-adjustments-horizontal" class="w-4 h-4" />
                   <span>{monitoring_preset_label(derived_preset)}</span>
                   <.icon name="hero-chevron-down" class="w-3 h-3 opacity-70" />
                 </div>

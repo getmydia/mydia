@@ -133,8 +133,6 @@ defmodule MydiaWeb.MediaLive.Show do
      # Next episode for TV shows
      |> assign(:next_episode, next_episode)
      |> assign(:next_episode_state, next_episode_state)
-     # Monitoring preset state
-     |> assign(:applying_episode_monitoring, false)
      # Subtitle state
      |> assign(:show_subtitle_search_modal, false)
      |> assign(:subtitle_search_state, :idle)
@@ -182,6 +180,9 @@ defmodule MydiaWeb.MediaLive.Show do
   @impl true
   def handle_event("apply_episode_monitoring", params, socket),
     do: EpisodeEvents.apply_episode_monitoring(params, socket)
+
+  def handle_event("toggle_monitor_new_seasons", params, socket),
+    do: EpisodeEvents.toggle_monitor_new_seasons(params, socket)
 
   def handle_event("manual_search", params, socket),
     do: SearchEvents.manual_search(params, socket)

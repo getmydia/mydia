@@ -79,8 +79,9 @@ defmodule MydiaWeb.MediaLive.Show.MonitoringControlsTest do
     refute Mydia.Media.get_episode_by_number(media_item.id, 1, 1).monitored
   end
 
-  test "applying a preset also sets the new-season verdict", %{conn: conn} do
-    media_item = media_item_fixture(%{type: "tv_show", monitored: true})
+  test "the new seasons checkbox is visible and toggles independently", %{conn: conn} do
+    media_item =
+      media_item_fixture(%{type: "tv_show", monitored: true, monitor_new_seasons: :all})
 
     episode_fixture(
       media_item_id: media_item.id,
@@ -91,8 +92,12 @@ defmodule MydiaWeb.MediaLive.Show.MonitoringControlsTest do
 
     {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
 
-    view |> element("#episode-monitoring-menu-preset-none") |> render_click()
+    assert has_element?(view, "#monitor-new-seasons-toggle")
+    view |> element("#monitor-new-seasons-toggle") |> render_click()
 
+    assert Mydia.Media.get_media_item!(media_item.id).monitor_new_seasons == :none
+    # Applying a preset must not silently move it back.
+    view |> element("#episode-monitoring-menu-preset-all") |> render_click()
     assert Mydia.Media.get_media_item!(media_item.id).monitor_new_seasons == :none
   end
 
