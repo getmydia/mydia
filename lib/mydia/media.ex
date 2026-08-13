@@ -978,12 +978,12 @@ defmodule Mydia.Media do
   def monitoring_presets, do: @monitoring_presets
 
   @doc """
-  Applies a monitoring preset to all episodes of a TV show.
+  Applies a monitoring preset to the episodes of a TV show.
 
-  This function:
-  1. Determines which episodes should be monitored based on the preset
-  2. Updates all episode monitored states accordingly
-  3. Saves the preset to the media_item record
+  This is a one-shot bulk rewrite of `episodes.monitored`. Nothing is persisted
+  on the show, because the preset describes an action taken once rather than a
+  standing rule. What happens to episodes discovered later is decided by
+  `should_monitor_new_episode?/2`.
 
   ## Presets
 
@@ -997,82 +997,80 @@ defmodule Mydia.Media do
 
   ## Returns
 
-  - `{:ok, media_item, count}` - Success with updated media_item and count of episodes changed
-  - `{:error, reason}` - Error with reason
+  - `{:ok, count}` - Number of episodes whose monitored flag was written
+  - `{:error, reason}`
 
   ## Examples
 
-      iex> apply_monitoring_preset(media_item, :all)
-      {:ok, %MediaItem{monitoring_preset: :all}, 24}
-
-      iex> apply_monitoring_preset(media_item, :future)
-      {:ok, %MediaItem{monitoring_preset: :future}, 8}
+      iex> apply_episode_monitoring(media_item, :all)
+      {:ok, 24}
   """
-  @spec apply_monitoring_preset(MediaItem.t(), atom()) ::
-          {:ok, MediaItem.t(), non_neg_integer()} | {:error, term()}
-  def apply_monitoring_preset(%MediaItem{type: "tv_show"} = media_item, preset)
+  @spec apply_episode_monitoring(MediaItem.t(), atom()) ::
+          {:ok, non_neg_integer()} | {:error, term()}
+  def apply_episode_monitoring(%MediaItem{type: "tv_show"} = media_item, preset)
       when preset in @monitoring_presets do
     Repo.transaction(fn ->
-      # Get all episodes for this media item with media_files preloaded
       episodes = list_episodes(media_item.id, preload: [:media_files])
-
-      # Determine which episodes should be monitored based on the preset
       {to_monitor, to_unmonitor} = partition_episodes_by_preset(episodes, preset)
 
-      # Update episodes that should be monitored
-      monitored_count =
-        if to_monitor != [] do
-          monitored_ids = Enum.map(to_monitor, & &1.id)
+      written =
+        set_episodes_monitored(to_monitor, true) + set_episodes_monitored(to_unmonitor, false)
 
-          Episode
-          |> where([e], e.id in ^monitored_ids)
-          |> Repo.update_all(set: [monitored: true, updated_at: DateTime.utc_now()])
-          |> elem(0)
-        else
-          0
-        end
-
-      # Update episodes that should not be monitored
-      unmonitored_count =
-        if to_unmonitor != [] do
-          unmonitored_ids = Enum.map(to_unmonitor, & &1.id)
-
-          Episode
-          |> where([e], e.id in ^unmonitored_ids)
-          |> Repo.update_all(set: [monitored: false, updated_at: DateTime.utc_now()])
-          |> elem(0)
-        else
-          0
-        end
-
-      # Save the preset to the media item
-      {:ok, updated_media_item} =
-        media_item
-        |> MediaItem.changeset(%{monitoring_preset: preset})
-        |> Repo.update()
-
-      # Track the monitoring preset change
       Events.media_item_updated(
-        updated_media_item,
+        media_item,
         :user,
         "media_context",
-        "Monitoring preset changed to #{preset}"
+        "Applied '#{preset}' monitoring to episodes"
       )
 
-      {updated_media_item, monitored_count + unmonitored_count}
+      written
     end)
-    |> case do
-      {:ok, {media_item, count}} -> {:ok, media_item, count}
-      {:error, reason} -> {:error, reason}
-    end
   end
 
-  def apply_monitoring_preset(%MediaItem{type: type}, _preset) do
-    {:error, {:invalid_type, "apply_monitoring_preset only works for TV shows, got #{type}"}}
+  def apply_episode_monitoring(%MediaItem{type: type}, _preset) do
+    {:error, {:invalid_type, "apply_episode_monitoring only works for TV shows, got #{type}"}}
   end
 
-  def apply_monitoring_preset(_media_item, preset) when preset not in @monitoring_presets do
+  def apply_episode_monitoring(_media_item, preset) when preset not in @monitoring_presets do
     {:error, {:invalid_preset, "Unknown preset: #{preset}"}}
+  end
+
+  # Both branches of the bulk apply wrote the same update_all with a different
+  # boolean, so it lives in one place.
+  defp set_episodes_monitored([], _monitored), do: 0
+
+  defp set_episodes_monitored(episodes, monitored) do
+    ids = Enum.map(episodes, & &1.id)
+
+    Episode
+    |> where([e], e.id in ^ids)
+    |> Repo.update_all(set: [monitored: monitored, updated_at: DateTime.utc_now()])
+    |> elem(0)
+  end
+
+  @doc """
+  Sets whether seasons that do not exist yet should arrive monitored.
+  """
+  @spec set_monitor_new_seasons(MediaItem.t(), :all | :none) ::
+          {:ok, MediaItem.t()} | {:error, Ecto.Changeset.t()}
+  def set_monitor_new_seasons(%MediaItem{} = media_item, mode) when mode in [:all, :none] do
+    media_item
+    |> MediaItem.changeset(%{monitor_new_seasons: mode})
+    |> Repo.update()
+    |> case do
+      {:ok, updated} ->
+        Events.media_item_updated(
+          updated,
+          :user,
+          "media_context",
+          "New season monitoring set to #{mode}"
+        )
+
+        {:ok, updated}
+
+      {:error, changeset} ->
+        {:error, changeset}
+    end
   end
 
   # Partition episodes into those to monitor and those to unmonitor based on preset
