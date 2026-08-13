@@ -213,6 +213,13 @@ config :logger, :default_formatter,
     :max_searches_per_show,
     :invalid_paths_removed,
     :untracked_matched,
+    # The DownloadMonitor poll summary. These three travel together: a bare
+    # `stall_update_failures=3` with no `stalled_count` beside it is a numerator
+    # with no denominator, and cannot be read as 3-of-3 or 3-of-300.
+    :stall_update_failures,
+    :stalled_count,
+    :stuck_count,
+    :active_checked,
     :total_count,
     :media_item,
     :type_mismatches_detected,

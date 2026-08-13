@@ -273,6 +273,13 @@ config :logger, :default_formatter,
     :max_searches_per_show,
     :invalid_paths_removed,
     :untracked_matched,
+    # Keep in sync with config/config.exs; this list duplicates it wholesale and
+    # only adds :category, :operation and :user_id. A key added to one and not
+    # the other vanishes from that environment's logs with no error.
+    :stall_update_failures,
+    :stalled_count,
+    :stuck_count,
+    :active_checked,
     :total_count,
     :media_item,
     :type_mismatches_detected,

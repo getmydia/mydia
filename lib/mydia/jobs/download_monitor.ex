@@ -200,7 +200,9 @@ defmodule Mydia.Jobs.DownloadMonitor do
     # Track progress / flag stalled downloads. Grace minutes are read from each
     # download's configured client (DB or runtime config) — cached per poll.
     grace_map = Settings.download_client_grace_map()
-    stalled_count = check_progress(active_for_stall_check, grace_map, now)
+
+    {stalled_count, stall_update_failures} =
+      check_progress(active_for_stall_check, grace_map, now)
 
     # Find and match untracked torrents (manually added to clients)
     untracked_downloads = UntrackedMatcher.find_and_match_untracked()
@@ -225,11 +227,25 @@ defmodule Mydia.Jobs.DownloadMonitor do
       missing_count: length(missing),
       stale_grabs_cleaned: length(stale_grabs),
       stalled_count: stalled_count,
+      stall_update_failures: stall_update_failures,
       stuck_count: length(stuck),
       untracked_matched: length(untracked_downloads),
       external_needs_matching: length(external_scan.needs_matching),
       external_other: length(external_scan.external)
     )
+
+    # A contained failure must not read as a healthy poll. `perform/1` still
+    # returns `:ok` (one bad download is not a reason to retry the whole pass),
+    # so without this a persistent write failure would look identical to
+    # success: Oban records it green, and the only trace is an info-level
+    # counter nobody is watching. Before #278 was contained the failure was at
+    # least deafening; this keeps it audible.
+    if stall_update_failures > 0 do
+      Logger.warning("Stall updates failed this poll",
+        stall_update_failures: stall_update_failures,
+        active_checked: length(active_for_stall_check)
+      )
+    end
 
     maybe_schedule_fast_followup(active_for_stall_check, args)
 
@@ -843,48 +859,97 @@ defmodule Mydia.Jobs.DownloadMonitor do
     Map.get(grace_map, client_name, Settings.default_grace_minutes())
   end
 
-  # Iterate active downloads and apply the StallDetector decision. Returns the
-  # number of downloads newly entering a stalled state (soft-stall or escalation)
-  # this poll. Every observed download has `last_observed_at` refreshed to `now`
-  # (throttled — see `apply_progress_decision/3` for `:no_change`) so the gap
-  # reset doesn't fire on the next poll.
+  # Iterate active downloads and apply the StallDetector decision. Returns
+  # `{stalled_count, stall_update_failures}`: how many downloads newly entered a
+  # stalled state (soft-stall or escalation) this poll, and how many had their
+  # update raise. Every observed download has `last_observed_at` refreshed to
+  # `now` (throttled — see `apply_progress_decision/3` for `:no_change`) so the
+  # gap reset doesn't fire on the next poll.
   defp check_progress(active_downloads, grace_map, now) do
-    Enum.reduce(active_downloads, 0, fn download, stalled_acc ->
-      grace = grace_minutes_for(download.download_client, grace_map)
-      escalation = StallDetector.escalation_minutes(grace)
+    Enum.reduce(active_downloads, {0, 0}, fn download, {stalled_acc, failed_acc} ->
+      {increment, failure} = evaluate_and_apply(download, grace_map, now)
 
-      decision =
-        StallDetector.evaluate(
-          download.last_progress_at,
-          download.last_known_bytes,
-          download.last_observed_at,
-          download.stalled_since,
-          download.downloaded || 0,
-          %StallDetector.Thresholds{
-            grace_minutes: grace,
-            escalation_minutes: escalation,
-            gap_threshold_seconds: @observation_gap_seconds
-          },
-          now
-        )
-
-      increment =
-        try do
-          apply_progress_decision(download, decision, now)
-        rescue
-          # The row was deleted between the poll's status snapshot and this
-          # write (e.g. a concurrent import that deletes the download, or a
-          # manual delete). Skip it — the rest of the poll must still run.
-          Ecto.NoResultsError ->
-            Logger.debug("Download disappeared mid-poll; skipping stall update",
-              download_id: download.id
-            )
-
-            0
-        end
-
-      increment + stalled_acc
+      {increment + stalled_acc, failure + failed_acc}
     end)
+  end
+
+  # Everything that can fail for one download lives inside this containment, not
+  # just the write. `StallDetector.escalation_minutes/1` and `evaluate/7` are
+  # guard-only functions with no fallback clause, and `evaluate/7` requires
+  # `observed_bytes >= 0`. SABnzbd derives progress as `size_mb - mb_left`
+  # (sabnzbd.ex:534) and `parse_size_mb_to_bytes/1` does not clamp, so a queue
+  # item reporting more left than total — which happens transiently during par2
+  # repair — yields a negative `downloaded` and raises FunctionClauseError
+  # *before* any write is attempted. With those calls outside the try, that one
+  # download would abort the whole reduce and stop stall detection for every
+  # download on the instance: byte-for-byte the #278 amplification this exists
+  # to prevent.
+  defp evaluate_and_apply(download, grace_map, now) do
+    grace = grace_minutes_for(download.download_client, grace_map)
+    escalation = StallDetector.escalation_minutes(grace)
+
+    decision =
+      StallDetector.evaluate(
+        download.last_progress_at,
+        download.last_known_bytes,
+        download.last_observed_at,
+        download.stalled_since,
+        download.downloaded || 0,
+        %StallDetector.Thresholds{
+          grace_minutes: grace,
+          escalation_minutes: escalation,
+          gap_threshold_seconds: @observation_gap_seconds
+        },
+        now
+      )
+
+    {apply_progress_decision(download, decision, now), 0}
+  rescue
+    # The row was deleted between the poll's status snapshot and this write
+    # (e.g. a concurrent import that deletes the download, or a manual delete).
+    # Skip it — the rest of the poll must still run. This is an expected race
+    # rather than a failure, so it deliberately does not count toward
+    # `stall_update_failures`; counting it would fill the summary with noise.
+    Ecto.NoResultsError ->
+      Logger.debug("Download disappeared mid-poll; skipping stall update",
+        download_id: download.id
+      )
+
+      {0, 0}
+
+    # Any other failure is contained to this one download. Issue #278 is the
+    # cautionary case: one un-encodable byte count aborted the whole reduce, so
+    # stall detection stopped for every download on the instance and the Oban
+    # job retried forever.
+    #
+    # The stacktrace is kept deliberately. This clause is broad on purpose, so
+    # it will also swallow genuine programming errors (a new decision shape with
+    # no matching `apply_progress_decision/3` clause, a renamed field); without
+    # a stacktrace those degrade into a silently dead subsystem that no test
+    # catches and nobody can locate.
+    #
+    # Stays local: Tower runs `log_level: :none`, so Logger.error never reaches
+    # the relay. The operator sees it in their own logs and /errors dashboard
+    # without a crash-report flood.
+    exception ->
+      Logger.error("Stall update failed for download; continuing poll",
+        download_id: download.id,
+        error: Exception.format(:error, exception, __STACKTRACE__)
+      )
+
+      {0, 1}
+  catch
+    # `rescue` matches raises only, and two of the likeliest per-download faults
+    # are exits rather than raises: a saturated Ecto pool checkout, and a
+    # `GenServer.call` timeout inside the event broadcast on the recovery path.
+    # Without this clause those still abort the whole poll.
+    :exit, reason ->
+      Logger.error("Stall update exited for download; continuing poll",
+        download_id: download.id,
+        error: inspect(reason)
+      )
+
+      {0, 1}
   end
 
   # No stall transition, but record that we observed this download so the gap
