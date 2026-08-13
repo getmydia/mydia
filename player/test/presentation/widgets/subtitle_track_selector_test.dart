@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -445,30 +445,30 @@ void main() {
   testWidgets(
       'a language outside the curated chip roster still gets a chip and '
       'can be adjusted', (tester) async {
-    // `testWidgets` runs its body in a fake-async zone that `pump()`
-    // fast-forwards through timers, but does not resolve genuine async I/O
-    // -- `Directory.systemTemp.createTemp`, `Hive.openBox`, `box.put` all do
-    // real file-system work, which just hangs (eventually hitting the
-    // per-test timeout) unless it runs inside `tester.runAsync()`. This bit
-    // exactly that way the first time this test was written: it passed in
-    // isolation by coincidence and hung for ten minutes in the full suite.
-    late Directory tempDir;
-    late Box<List> box;
-    await tester.runAsync(() async {
-      tempDir = await Directory.systemTemp
-          .createTemp('subtitle_language_prefs_widget_test');
-      Hive.init(tempDir.path);
-      box = await Hive.openBox<List>(SubtitleLanguagePrefs.boxName);
-      // Written directly, bypassing `save`, to seed a language the curated
-      // roster in `subtitle_track_selector.dart` does not include -- the
-      // scenario a device locale outside that fixed list produces.
-      await box.put('languages', ['th', 'en']);
-    });
-    addTearDown(() => tester.runAsync(() async {
-          await box.close();
-          await Hive.deleteBoxFromDisk(SubtitleLanguagePrefs.boxName);
-          await tempDir.delete(recursive: true);
-        }));
+    // Opened with `bytes:`, which puts Hive on its in-memory storage
+    // backend: every read and write becomes a completed `Future.value()`
+    // with no file touched, and no `Hive.init` path to point anywhere.
+    //
+    // That is load-bearing, not tidiness. `testWidgets` runs its body in a
+    // fake-async zone, and toggling a chip below fires
+    // `SubtitleLanguagePrefs.save` -- so a disk-backed box leaves a real
+    // file write outstanding that the zone never drives. An earlier version
+    // of this test opened one under `Directory.systemTemp` and did exactly
+    // that: it hung until the ten minute per-test timeout, and then failed
+    // the next two tests in this file with `'!inTest': is not true`,
+    // because a test that times out never releases the binding.
+    final box = await Hive.openBox<List>(
+      SubtitleLanguagePrefs.boxName,
+      bytes: Uint8List(0),
+    );
+    // Written directly, bypassing `save`, to seed a language the curated
+    // roster in `subtitle_track_selector.dart` does not include -- the
+    // scenario a device locale outside that fixed list produces.
+    await box.put('languages', ['th', 'en']);
+    // `deleteFromDisk` is unsupported on a memory box and there is nothing
+    // on disk to clean up; closing is what unregisters the name so a later
+    // test does not inherit this box.
+    addTearDown(box.close);
 
     await tester.pumpWidget(_host(
       onSearch: (_) async =>
