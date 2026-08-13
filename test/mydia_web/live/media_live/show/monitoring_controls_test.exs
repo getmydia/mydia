@@ -69,4 +69,36 @@ defmodule MydiaWeb.MediaLive.Show.MonitoringControlsTest do
 
     assert Mydia.Media.get_media_item!(media_item.id).monitor_new_seasons == :none
   end
+
+  test "a fully monitored season offers to unmonitor, a partial one offers to monitor", %{
+    conn: conn
+  } do
+    media_item = media_item_fixture(%{type: "tv_show", monitored: true})
+
+    episode_fixture(
+      media_item_id: media_item.id,
+      season_number: 1,
+      episode_number: 1,
+      monitored: true
+    )
+
+    episode_fixture(
+      media_item_id: media_item.id,
+      season_number: 2,
+      episode_number: 1,
+      monitored: true
+    )
+
+    episode_fixture(
+      media_item_id: media_item.id,
+      season_number: 2,
+      episode_number: 2,
+      monitored: false
+    )
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+
+    assert has_element?(view, "#season-1-monitor-toggle[phx-click='unmonitor_season']")
+    assert has_element?(view, "#season-2-monitor-toggle[phx-click='monitor_season']")
+  end
 end

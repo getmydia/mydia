@@ -597,24 +597,24 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                       <% end %>
                     </button>
                   </div>
-                  <div class="tooltip tooltip-bottom" data-tip="Monitor all">
+                  <% season_state = Mydia.Media.season_monitoring_state(episodes) %>
+                  <div
+                    class="tooltip tooltip-bottom"
+                    data-tip={season_monitoring_tooltip(season_state)}
+                  >
                     <button
                       type="button"
-                      phx-click="monitor_season"
+                      id={"season-#{season_num}-monitor-toggle"}
+                      phx-click={
+                        if season_state == :all, do: "unmonitor_season", else: "monitor_season"
+                      }
                       phx-value-season-number={season_num}
-                      class="btn btn-sm btn-ghost"
+                      class={[
+                        "btn btn-sm btn-ghost",
+                        season_state == :none && "opacity-60"
+                      ]}
                     >
-                      <.icon name="hero-bookmark-solid" class="w-4 h-4" />
-                    </button>
-                  </div>
-                  <div class="tooltip tooltip-bottom" data-tip="Unmonitor all">
-                    <button
-                      type="button"
-                      phx-click="unmonitor_season"
-                      phx-value-season-number={season_num}
-                      class="btn btn-sm btn-ghost"
-                    >
-                      <.icon name="hero-bookmark" class="w-4 h-4" />
+                      <.monitoring_icon state={season_state} class="w-4 h-4" />
                     </button>
                   </div>
                 </div>
@@ -1330,28 +1330,28 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   end
 
   @doc """
-  Monitoring icon that shows different states:
-  - All: solid bookmark (fully monitored)
-  - None: outline bookmark (not monitored)
-  - Partial presets: half-filled bookmark effect
+  Bookmark icon for a season's derived monitoring state.
+
+  - `:all` - solid bookmark
+  - `:partial` - half-filled, built from two stacked icons
+  - `:none` - outline bookmark
   """
-  attr :preset, :atom, required: true
+  attr :state, :atom, required: true
   attr :class, :string, default: "w-5 h-5"
 
-  def monitoring_icon(%{preset: preset} = assigns) when preset in [nil, :all] do
+  def monitoring_icon(%{state: :all} = assigns) do
     ~H"""
     <.icon name="hero-bookmark-solid" class={@class} />
     """
   end
 
-  def monitoring_icon(%{preset: :none} = assigns) do
+  def monitoring_icon(%{state: :none} = assigns) do
     ~H"""
     <.icon name="hero-bookmark" class={@class} />
     """
   end
 
   def monitoring_icon(assigns) do
-    # Partial monitoring: show a half-filled effect using stacked icons
     ~H"""
     <span class="relative inline-flex">
       <.icon name="hero-bookmark" class={@class} />

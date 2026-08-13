@@ -526,4 +526,9 @@ defmodule MydiaWeb.MediaLive.Show.Helpers do
   def monitoring_preset_label(:first_season), do: "First Season"
   def monitoring_preset_label(:latest_season), do: "Latest Season"
   def monitoring_preset_label(:none), do: "None"
+
+  # Season monitoring toggle tooltips, keyed on the season's derived state
+  def season_monitoring_tooltip(:all), do: "Unmonitor season"
+  def season_monitoring_tooltip(:partial), do: "Monitor all episodes"
+  def season_monitoring_tooltip(:none), do: "Monitor season"
 end
