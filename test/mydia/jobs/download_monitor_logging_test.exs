@@ -61,6 +61,22 @@ defmodule Mydia.Jobs.DownloadMonitorLoggingTest do
     end
   end
 
+  describe "poll summary with info logging enabled" do
+    test "reports the stall-update failure counter" do
+      setup_runtime_config([build_test_client_config()])
+      media_item = media_item_fixture()
+      download_fixture(%{media_item_id: media_item.id})
+
+      log =
+        capture_log(fn ->
+          assert :ok = perform_job(DownloadMonitor, %{})
+        end)
+
+      assert log =~ "Download monitoring completed"
+      assert log =~ "stall_update_failures"
+    end
+  end
+
   defp setup_runtime_config(download_clients) do
     config = %Mydia.Config.Schema{
       server: %Mydia.Config.Schema.Server{},

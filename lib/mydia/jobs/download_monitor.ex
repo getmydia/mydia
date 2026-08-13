@@ -200,7 +200,9 @@ defmodule Mydia.Jobs.DownloadMonitor do
     # Track progress / flag stalled downloads. Grace minutes are read from each
     # download's configured client (DB or runtime config) — cached per poll.
     grace_map = Settings.download_client_grace_map()
-    stalled_count = check_progress(active_for_stall_check, grace_map, now)
+
+    {stalled_count, stall_update_failures} =
+      check_progress(active_for_stall_check, grace_map, now)
 
     # Find and match untracked torrents (manually added to clients)
     untracked_downloads = UntrackedMatcher.find_and_match_untracked()
@@ -225,6 +227,7 @@ defmodule Mydia.Jobs.DownloadMonitor do
       missing_count: length(missing),
       stale_grabs_cleaned: length(stale_grabs),
       stalled_count: stalled_count,
+      stall_update_failures: stall_update_failures,
       stuck_count: length(stuck),
       untracked_matched: length(untracked_downloads),
       external_needs_matching: length(external_scan.needs_matching),
@@ -843,13 +846,14 @@ defmodule Mydia.Jobs.DownloadMonitor do
     Map.get(grace_map, client_name, Settings.default_grace_minutes())
   end
 
-  # Iterate active downloads and apply the StallDetector decision. Returns the
-  # number of downloads newly entering a stalled state (soft-stall or escalation)
-  # this poll. Every observed download has `last_observed_at` refreshed to `now`
-  # (throttled — see `apply_progress_decision/3` for `:no_change`) so the gap
-  # reset doesn't fire on the next poll.
+  # Iterate active downloads and apply the StallDetector decision. Returns
+  # `{stalled_count, stall_update_failures}`: how many downloads newly entered a
+  # stalled state (soft-stall or escalation) this poll, and how many had their
+  # update raise. Every observed download has `last_observed_at` refreshed to
+  # `now` (throttled — see `apply_progress_decision/3` for `:no_change`) so the
+  # gap reset doesn't fire on the next poll.
   defp check_progress(active_downloads, grace_map, now) do
-    Enum.reduce(active_downloads, 0, fn download, stalled_acc ->
+    Enum.reduce(active_downloads, {0, 0}, fn download, {stalled_acc, failed_acc} ->
       grace = grace_minutes_for(download.download_client, grace_map)
       escalation = StallDetector.escalation_minutes(grace)
 
@@ -868,22 +872,41 @@ defmodule Mydia.Jobs.DownloadMonitor do
           now
         )
 
-      increment =
+      {increment, failure} =
         try do
-          apply_progress_decision(download, decision, now)
+          {apply_progress_decision(download, decision, now), 0}
         rescue
           # The row was deleted between the poll's status snapshot and this
           # write (e.g. a concurrent import that deletes the download, or a
-          # manual delete). Skip it — the rest of the poll must still run.
+          # manual delete). Skip it — the rest of the poll must still run. This
+          # is an expected race rather than a failure, so it deliberately does
+          # not count toward `stall_update_failures`; counting it would fill the
+          # summary with routine noise.
           Ecto.NoResultsError ->
             Logger.debug("Download disappeared mid-poll; skipping stall update",
               download_id: download.id
             )
 
-            0
+            {0, 0}
+
+          # Any other write failure is contained to this one download. Issue
+          # #278 is the cautionary case: one un-encodable byte count aborted the
+          # whole reduce, so stall detection stopped for every download on the
+          # instance and the Oban job retried forever.
+          #
+          # Deliberately local. Tower runs `log_level: :none`, so Logger.error
+          # never reaches the relay; the operator sees this in their own logs
+          # and /errors dashboard without a crash-report flood.
+          exception ->
+            Logger.error("Stall update failed for download; continuing poll",
+              download_id: download.id,
+              error: Exception.message(exception)
+            )
+
+            {0, 1}
         end
 
-      increment + stalled_acc
+      {increment + stalled_acc, failure + failed_acc}
     end)
   end
 
