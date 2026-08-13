@@ -23,7 +23,10 @@ defmodule Mydia.Subtitles.Client.MetadataRelay do
         base_url: "http://localhost:4001",
         timeout: 10_000
 
-  The base URL can also be configured via the `METADATA_RELAY_URL` environment variable.
+  The base URL can also be configured via the `METADATA_RELAY_URL` environment
+  variable. When nothing is configured the client uses the shared default from
+  `Mydia.Metadata.metadata_relay_url/0`, so the relay provider works on an
+  install that sets none of this. See `base_url/0` for the full precedence.
 
   ## Caching
 
@@ -85,7 +88,7 @@ defmodule Mydia.Subtitles.Client.MetadataRelay do
       {:ok, %{"subtitles" => [%{"id" => 12345, "language" => "en", ...}]}}
 
       iex> search(%{file_hash: "abc123", file_size: 123456})
-      {:error, :metadata_relay_not_configured}
+      {:ok, %{"subtitles" => []}}
 
   """
   @spec search(map(), keyword()) :: {:ok, map()} | {:error, term()}
@@ -124,13 +127,13 @@ defmodule Mydia.Subtitles.Client.MetadataRelay do
   """
   @spec get_download_url(integer() | String.t(), keyword()) :: {:ok, map()} | {:error, term()}
   def get_download_url(file_id, opts \\ []) do
-    base_url = get_base_url()
+    base = base_url()
     timeout = Keyword.get(opts, :timeout, @timeout)
 
-    if base_url == "" do
+    if base == "" do
       {:error, :metadata_relay_not_configured}
     else
-      url = "#{base_url}/api/v1/subtitles/download-url/#{file_id}"
+      url = "#{base}/api/v1/subtitles/download-url/#{file_id}"
 
       Logger.debug("Fetching subtitle download URL",
         file_id: file_id,
@@ -144,13 +147,13 @@ defmodule Mydia.Subtitles.Client.MetadataRelay do
   ## Private Functions
 
   defp perform_search(params, opts) do
-    base_url = get_base_url()
+    base = base_url()
     timeout = Keyword.get(opts, :timeout, @timeout)
 
-    if base_url == "" do
+    if base == "" do
       {:error, :metadata_relay_not_configured}
     else
-      url = "#{base_url}/api/v1/subtitles/search"
+      url = "#{base}/api/v1/subtitles/search"
 
       Logger.debug("Searching metadata-relay for subtitles",
         params: inspect(params),
@@ -423,13 +426,31 @@ defmodule Mydia.Subtitles.Client.MetadataRelay do
     (@initial_backoff * :math.pow(2, retry_count)) |> round()
   end
 
-  # Configuration helpers
-  defp get_base_url do
-    # Try subtitle-specific URL first, then fall back to general metadata relay URL
+  @doc """
+  Returns the metadata-relay base URL this client talks to.
+
+  Subtitle-specific configuration wins, then general relay configuration, then
+  the environment. When none of those are set the shared default from
+  `Mydia.Metadata.metadata_relay_url/0` applies, which is what makes the relay
+  provider work on an install that configures nothing.
+  """
+  @spec base_url() :: String.t()
+  def base_url do
+    # The final clause is the same resolver every other relay consumer uses, and
+    # it carries the https://relay.mydia.dev default. This chain used to end in
+    # "" instead, so an install that never sets METADATA_RELAY_URL -- the normal
+    # self-hosted case -- failed every subtitle search with
+    # :metadata_relay_not_configured while metadata lookups on that same install
+    # worked, because they went through the shared resolver and got the default.
+    #
+    # METADATA_RELAY_URL stays listed explicitly rather than being left to the
+    # final clause: it has always outranked SUBTITLE_RELAY_URL here, and folding
+    # it into the fallback would silently invert that for an operator setting
+    # both.
     Application.get_env(:mydia, :subtitle_relay_url) ||
       Application.get_env(:mydia, :metadata_relay_url) ||
       System.get_env("METADATA_RELAY_URL") ||
       System.get_env("SUBTITLE_RELAY_URL") ||
-      ""
+      Mydia.Metadata.metadata_relay_url()
   end
 end

@@ -96,6 +96,12 @@ class Config:
     relay_tmdb_api_key: str = ""
     relay_smtp_password: str = ""
 
+    # OpenSubtitles, which backs the relay's subtitle endpoints (optional; leave
+    # blank and the relay answers /api/v1/subtitles/* with 503 not-configured)
+    relay_opensubtitles_api_key: str = ""
+    relay_opensubtitles_username: str = ""
+    relay_opensubtitles_password: str = ""
+
     # Feedback email notifications (optional; leave blank to disable)
     relay_smtp_host: str = ""
     relay_smtp_port: str = ""
@@ -182,6 +188,9 @@ class Config:
             "relay_tvdb_api_key": self.relay_tvdb_api_key,
             "relay_tmdb_api_key": self.relay_tmdb_api_key,
             "relay_smtp_password": self.relay_smtp_password,
+            "relay_opensubtitles_api_key": self.relay_opensubtitles_api_key,
+            "relay_opensubtitles_username": self.relay_opensubtitles_username,
+            "relay_opensubtitles_password": self.relay_opensubtitles_password,
             "relay_smtp_host": self.relay_smtp_host,
             "relay_smtp_port": self.relay_smtp_port,
             "relay_smtp_username": self.relay_smtp_username,
@@ -1022,6 +1031,18 @@ def metadata_relay_secret_data(config: Config) -> dict[str, str]:
 
     if config.relay_smtp_password:
         data["SMTP_PASSWORD"] = config.relay_smtp_password
+
+    # All three are required together: MetadataRelay.Application treats a partial
+    # set as unconfigured, so shipping one or two would leave the subtitle
+    # endpoints answering 503 while looking configured from here.
+    opensubtitles = {
+        "OPENSUBTITLES_API_KEY": config.relay_opensubtitles_api_key,
+        "OPENSUBTITLES_USERNAME": config.relay_opensubtitles_username,
+        "OPENSUBTITLES_PASSWORD": config.relay_opensubtitles_password,
+    }
+
+    if all(opensubtitles.values()):
+        data.update(opensubtitles)
 
     return data
 
