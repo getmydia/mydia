@@ -3,22 +3,20 @@ defmodule Mydia.Streaming.HlsSessionOffsetTest do
 
   alias Mydia.Streaming.HlsSessionSupervisor
 
-  describe "session_matches?/4" do
+  describe "session_matches?/2" do
+    defp request(opts \\ []), do: HlsSessionSupervisor.session_request(opts)
+
     test "matches when offset and both quality values are equal" do
       assert HlsSessionSupervisor.session_matches?(
                %{start_position: 600, max_bitrate: 4000, max_height: 720},
-               600,
-               4000,
-               720
+               request(start_position: 600, max_bitrate: 4000, max_height: 720)
              )
     end
 
     test "does not match a different offset" do
       refute HlsSessionSupervisor.session_matches?(
                %{start_position: 0, max_bitrate: nil, max_height: nil},
-               4200,
-               nil,
-               nil
+               request(start_position: 4200)
              )
     end
 
@@ -27,18 +25,14 @@ defmodule Mydia.Streaming.HlsSessionOffsetTest do
       # new rung hands back the session already running at the old one.
       refute HlsSessionSupervisor.session_matches?(
                %{start_position: 600, max_bitrate: 4000, max_height: 720},
-               600,
-               1500,
-               720
+               request(start_position: 600, max_bitrate: 1500, max_height: 720)
              )
     end
 
     test "does not match a different height at the same offset and bitrate" do
       refute HlsSessionSupervisor.session_matches?(
                %{start_position: 600, max_bitrate: 4000, max_height: 720},
-               600,
-               4000,
-               480
+               request(start_position: 600, max_bitrate: 4000, max_height: 480)
              )
     end
 
@@ -46,18 +40,58 @@ defmodule Mydia.Streaming.HlsSessionOffsetTest do
       # Registry metadata is in-memory, but a session registered before these
       # fields existed must not be mistaken for a capped one, nor treated as
       # a wildcard that matches every request.
-      assert HlsSessionSupervisor.session_matches?(%{mode: :transcode}, 0, nil, nil)
-      refute HlsSessionSupervisor.session_matches?(%{mode: :transcode}, 0, 4000, 720)
-      refute HlsSessionSupervisor.session_matches?(%{mode: :transcode}, 4200, nil, nil)
+      assert HlsSessionSupervisor.session_matches?(%{mode: :transcode}, request())
+
+      refute HlsSessionSupervisor.session_matches?(
+               %{mode: :transcode},
+               request(max_bitrate: 4000, max_height: 720)
+             )
+
+      refute HlsSessionSupervisor.session_matches?(
+               %{mode: :transcode},
+               request(start_position: 4200)
+             )
     end
 
     test "matches an explicitly uncapped session against an uncapped request" do
       # Original quality: no cap on either side.
       assert HlsSessionSupervisor.session_matches?(
                %{start_position: 0, max_bitrate: nil, max_height: nil},
-               0,
-               nil,
-               nil
+               request()
+             )
+    end
+
+    test "does not match a different audio language" do
+      # The mapped audio track is already baked into the segments the running
+      # session has written, so a viewer switching to English cannot be handed
+      # the session still encoding Russian.
+      refute HlsSessionSupervisor.session_matches?(
+               %{start_position: 0, audio_language: ["ru"]},
+               request(audio_language: ["en"])
+             )
+    end
+
+    test "matches the same audio language" do
+      assert HlsSessionSupervisor.session_matches?(
+               %{start_position: 0, max_bitrate: nil, max_height: nil, audio_language: ["en"]},
+               request(audio_language: ["en"])
+             )
+    end
+
+    test "treats an absent and an empty audio language as the same request" do
+      # A client too old to send the field and a new one sending [] both mean
+      # "no preference of my own". Reading those as different requests would
+      # tear down and rebuild a perfectly good session on every poll.
+      assert HlsSessionSupervisor.session_matches?(
+               %{start_position: 0},
+               request(audio_language: [])
+             )
+    end
+
+    test "does not hand a language-specific request a session that had none" do
+      refute HlsSessionSupervisor.session_matches?(
+               %{start_position: 0},
+               request(audio_language: ["en"])
              )
     end
   end

@@ -14,7 +14,7 @@ defmodule Mydia.Streaming.Candidates do
   alias Mydia.Library.{FileAnalyzer, FileRanking, MediaFile}
   alias Mydia.Library.Structs.FileMetadata
   alias Mydia.Repo
-  alias Mydia.Streaming.{CodecString, Compatibility}
+  alias Mydia.Streaming.{AudioPreferences, AudioTrackSelector, CodecString, Compatibility}
 
   @default_max_attempts 3
 
@@ -130,8 +130,16 @@ defmodule Mydia.Streaming.Candidates do
   @doc """
   Builds metadata response for a media file.
   """
-  def build_metadata_response(media_file) do
+  def build_metadata_response(media_file, opts \\ []) do
     metadata = media_file.metadata || FileMetadata.empty()
+    with_item = with_item_metadata(media_file)
+
+    # The viewer's own choice for this show, if they made one. Passed as the
+    # strongest preference level so a picked language survives to the next
+    # episode, including on direct play, where the server never sees the
+    # track selection itself.
+    show_preference =
+      AudioPreferences.for_media_file(Keyword.get(opts, :user_id), with_item)
 
     %{
       duration: metadata.duration,
@@ -142,8 +150,24 @@ defmodule Mydia.Streaming.Candidates do
       hdr_format: media_file.hdr_format,
       original_codec: media_file.codec,
       original_audio_codec: media_file.audio_codec,
-      container: metadata.container
+      container: metadata.container,
+      preferred_audio_languages:
+        AudioTrackSelector.resolved_languages(with_item,
+          show_audio_language: show_preference
+        )
     }
+  end
+
+  # resolve_media_file/2 preloads only :library_path, so the item this file
+  # belongs to is absent here and the "original" audio preference would
+  # silently resolve to nothing. Preloading is a no-op for the associations
+  # already loaded, and this runs once per candidates request on a path that
+  # already makes several queries.
+  #
+  # `episode: :media_item` is the half that matters: a TV media_file carries a
+  # null media_item_id and reaches its item only through the episode.
+  defp with_item_metadata(media_file) do
+    Repo.preload(media_file, [:media_item, episode: :media_item])
   end
 
   defp build_candidate(strategy, container, video_codec, audio_codec) do

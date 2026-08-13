@@ -10,6 +10,9 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
 
   alias Mydia.Library
   alias Mydia.Library.MediaFile
+  alias Mydia.Repo
+  alias Mydia.Streaming.AudioPreferences
+  alias Mydia.Streaming.AudioTrackSelector
   alias Mydia.Streaming.Candidates
   alias Mydia.Streaming.FfmpegHlsTranscoder
   alias Mydia.Streaming.HlsSessionSupervisor
@@ -28,12 +31,12 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
       nil ->
         {:error, "Authentication required"}
 
-      _user ->
+      user ->
         case Candidates.resolve_media_file(content_type, id) do
           {:ok, media_file} ->
             media_file = Candidates.ensure_codec_info(media_file)
             candidates = Candidates.build_streaming_candidates(media_file)
-            metadata = Candidates.build_metadata_response(media_file)
+            metadata = Candidates.build_metadata_response(media_file, user_id: user.id)
 
             # For relay connections, only allow TRANSCODE (direct play won't work
             # within relay bandwidth limits)
@@ -185,6 +188,78 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
   defp positive_or_nil(value) when is_integer(value) and value > 0, do: value
   defp positive_or_nil(_), do: nil
 
+  @doc """
+  Remembers, or forgets, this viewer's audio language for a show or film.
+
+  Takes a file id rather than an item id because that is what the player holds
+  during playback, and resolves the item from it. A choice made on one episode
+  is therefore stored against the series and applies to every later episode,
+  which is the whole point of storing it at all.
+  """
+  @spec set_audio_language_preference(map(), map(), Absinthe.Resolution.t()) ::
+          {:ok, map()} | {:error, term()}
+  def set_audio_language_preference(_parent, %{file_id: file_id} = args, %{context: context}) do
+    case context[:current_user] do
+      nil ->
+        {:error, "Authentication required"}
+
+      user ->
+        with {:ok, media_file} <- load_media_file(file_id),
+             media_item_id when is_binary(media_item_id) <-
+               AudioPreferences.media_item_id_of(media_file) do
+          apply_audio_language_preference(user.id, media_item_id, media_file, args[:language])
+        else
+          {:error, :not_found} ->
+            {:error, "File not found"}
+
+          # A file that belongs to neither an item nor an episode has nothing
+          # to hang a per-show preference on. Rare, but reachable for an
+          # orphaned row, and worth saying plainly rather than storing the
+          # preference somewhere it can never be read back.
+          nil ->
+            {:error, "File is not attached to a show or film"}
+        end
+    end
+  end
+
+  defp apply_audio_language_preference(user_id, media_item_id, media_file, nil) do
+    AudioPreferences.delete(user_id, media_item_id)
+    {:ok, audio_language_preference_result(user_id, media_item_id, media_file, nil)}
+  end
+
+  defp apply_audio_language_preference(user_id, media_item_id, media_file, language) do
+    case AudioPreferences.put(user_id, media_item_id, language) do
+      {:ok, preference} ->
+        {:ok,
+         audio_language_preference_result(
+           user_id,
+           media_item_id,
+           media_file,
+           preference.language
+         )}
+
+      {:error, changeset} ->
+        Logger.warning("Rejected audio language preference: #{inspect(changeset.errors)}")
+        {:error, "Invalid audio language"}
+    end
+  end
+
+  # Echoes the list now in effect, not just the stored code, so a client can
+  # apply the result directly. The stored choice is only the strongest of
+  # three levels, and the operator's list still supplies the fallbacks behind
+  # it.
+  defp audio_language_preference_result(user_id, media_item_id, media_file, language) do
+    %{
+      media_item_id: media_item_id,
+      language: language,
+      preferred_audio_languages:
+        AudioTrackSelector.resolved_languages(
+          Repo.preload(media_file, [:media_item, episode: :media_item]),
+          show_audio_language: AudioPreferences.for_media_file(user_id, media_file)
+        )
+    }
+  end
+
   defp start_session_for_user(
          file_id,
          user_id,
@@ -199,7 +274,9 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
          media_file <- ensure_duration_known(media_file),
          duration <- get_duration_from_metadata(media_file),
          start_position <- clamp_start_position(requested_position, duration),
-         session_opts <- build_session_opts(max_bitrate, max_height, start_position),
+         show_audio_language <- AudioPreferences.for_media_file(user_id, media_file),
+         session_opts <-
+           build_session_opts(max_bitrate, max_height, start_position, show_audio_language),
          {:ok, pid} <-
            HlsSessionSupervisor.start_session(media_file.id, user_id, mode, session_opts),
          {:ok, info} <- HlsSession.get_info(pid) do
@@ -239,9 +316,18 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
     end
   end
 
-  defp build_session_opts(max_bitrate, max_height, start_position) do
+  defp build_session_opts(max_bitrate, max_height, start_position, show_audio_language) do
     opts = if max_bitrate, do: [max_bitrate: max_bitrate], else: []
     opts = if max_height, do: [{:max_height, max_height} | opts], else: opts
+
+    # Reaches HlsSessionSupervisor.session_matches?/2 as well as the
+    # transcoder, so switching language on a running session replaces it
+    # rather than returning segments with the old track already encoded in.
+    opts =
+      if show_audio_language != [],
+        do: [{:show_audio_language, show_audio_language} | opts],
+        else: opts
+
     if start_position > 0, do: [{:start_position, start_position} | opts], else: opts
   end
 
@@ -301,7 +387,11 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
   def ensure_duration_known(media_file, _budget_ms), do: media_file
 
   defp load_media_file(file_id) do
-    {:ok, Library.get_media_file!(file_id, preload: [:library_path])}
+    # `:episode` is loaded for the per-show audio preference, not for the
+    # session itself: a TV media_file has a null media_item_id and names its
+    # show only through the episode, so without this every episode looks like
+    # it belongs to no show and the preference never applies to TV.
+    {:ok, Library.get_media_file!(file_id, preload: [:library_path, :episode])}
   rescue
     Ecto.NoResultsError ->
       {:error, :not_found}

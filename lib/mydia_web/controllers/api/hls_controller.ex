@@ -3,7 +3,7 @@ defmodule MydiaWeb.Api.HlsController do
 
   require Logger
 
-  alias Mydia.Streaming.{HlsSessionSupervisor, HlsSession}
+  alias Mydia.Streaming.{AudioPreferences, HlsSessionSupervisor, HlsSession}
 
   @doc """
   Serves the HLS master playlist for a session.
@@ -295,7 +295,9 @@ defmodule MydiaWeb.Api.HlsController do
   def start_session(conn, %{"media_file_id" => media_file_id}) do
     with {:ok, user_id} <- get_user_id(conn),
          {media_file_id, ""} <- Integer.parse(to_string(media_file_id)),
-         {:ok, _pid} <- HlsSessionSupervisor.start_session(media_file_id, user_id),
+         session_opts <- audio_session_opts(user_id, media_file_id),
+         {:ok, _pid} <-
+           HlsSessionSupervisor.start_session(media_file_id, user_id, :transcode, session_opts),
          {:ok, session_info} <- get_session_info(media_file_id, user_id) do
       # Construct master playlist URL
       master_playlist_url = url(~p"/api/v1/hls/#{session_info.session_id}/index.m3u8")
@@ -346,6 +348,24 @@ defmodule MydiaWeb.Api.HlsController do
       nil -> {:error, :no_user}
       user -> {:ok, user.id}
     end
+  end
+
+  # The viewer's per-show audio language, in the shape start_session/4 wants.
+  #
+  # Passing this is not optional politeness. `show_audio_language` is one of
+  # the values `HlsSessionSupervisor.session_matches?/2` compares, so a caller
+  # that omits it fails to match a session already running with a preference
+  # and tears that live encode down to start an identical one without it.
+  #
+  # A file that cannot be loaded yields no preference rather than an error:
+  # start_session/4 is about to fail on the same id anyway, and with a clearer
+  # message than this could give.
+  defp audio_session_opts(user_id, media_file_id) do
+    media_file = Mydia.Library.get_media_file!(media_file_id, preload: [:episode])
+    AudioPreferences.session_opts(user_id, media_file)
+  rescue
+    Ecto.NoResultsError -> []
+    Ecto.Query.CastError -> []
   end
 
   defp get_session_temp_dir(session_id, user_id) do

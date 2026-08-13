@@ -16,8 +16,8 @@ use crate::types::auth::{
 use crate::types::common::StreamingStrategy;
 use crate::types::media::{Episode, Movie, Progress, SubtitleTrack, TvShow};
 use crate::types::streaming::{
-    CancelDownloadResult, DownloadJobStatus, DownloadOption, PrepareDownloadResult,
-    StreamingSessionResult,
+    AudioLanguagePreferenceResult, CancelDownloadResult, DownloadJobStatus, DownloadOption,
+    PrepareDownloadResult, StreamingSessionResult,
 };
 
 /// A wrong username and a wrong password produce the same message, so the
@@ -313,6 +313,19 @@ impl RootMutationType {
         _start_position: Option<i32>,
     ) -> Result<Option<StreamingSessionResult>> {
         Err(not_implemented("startStreamingSession"))
+    }
+
+    /// Remember which audio language this viewer wants for a show or film
+    async fn set_audio_language_preference(
+        &self,
+        _ctx: &Context<'_>,
+        // Any file of the show or film; the preference is stored against the
+        // item it belongs to.
+        _file_id: ID,
+        // Language code to remember. Null forgets the choice.
+        _language: Option<String>,
+    ) -> Result<Option<AudioLanguagePreferenceResult>> {
+        Err(not_implemented("setAudioLanguagePreference"))
     }
 
     /// End an HLS streaming session

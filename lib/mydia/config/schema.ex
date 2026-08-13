@@ -142,6 +142,32 @@ defmodule Mydia.Config.Schema do
       # taking whichever is lower. See
       # Mydia.Streaming.FfmpegHlsTranscoder.effective_max_height/1.
       field :max_transcode_height, :integer
+
+      # Which audio language a playback picks when a file carries several, most
+      # preferred first. Codes are matched loosely, so "en" matches a track
+      # tagged "eng" or "en-US" (see Mydia.Metadata.LanguageCode).
+      #
+      # The literal "original" resolves per item to the show's or film's
+      # original language from TMDB metadata, which is why it leads the
+      # default: a US series then plays English, and anime plays Japanese
+      # rather than an English dub. Set ["en"] for English wherever it exists,
+      # or ["de", "original"] to prefer a German dub and fall back to the
+      # original.
+      #
+      # Composes with the per-device preference a player sends and with the
+      # per-show preference a viewer sets by picking a track; see
+      # Mydia.Streaming.AudioTrackSelector.resolve_preferences/2 for the
+      # precedence.
+      field :audio_language, {:array, :string}, default: ["original", "en"]
+
+      # Honour the container's own "default" disposition flag ahead of
+      # audio_language. Off, because a flag that says Russian on an English
+      # show is exactly the thing audio_language exists to override. An
+      # operator who tags their own files and trusts those flags turns this on
+      # to get the muxer's choice back. Jellyfin ships the same escape hatch
+      # ("Play default audio track regardless of language") for the same
+      # reason.
+      field :prefer_default_audio_track, :boolean, default: false
     end
 
     embeds_one :logging, Logging, on_replace: :update, primary_key: false do
@@ -409,11 +435,37 @@ defmodule Mydia.Config.Schema do
 
   defp streaming_changeset(schema, attrs) do
     schema
-    |> cast(attrs, [:max_transcode_height])
+    |> cast(attrs, [:max_transcode_height, :audio_language, :prefer_default_audio_track])
     # Not validate_required: nil is the default and means "no ceiling". A
     # zero or negative ceiling would scale every transcode to nothing, so it
     # is rejected here rather than discovered as a dead encoder later.
     |> validate_number(:max_transcode_height, greater_than: 0)
+    |> validate_audio_language()
+  end
+
+  # An empty list is allowed and means "no language preference": selection
+  # falls through to the container's default flag, which is the behaviour
+  # every mydia before this field had.
+  #
+  # Blank entries are rejected rather than dropped. Not reachable from
+  # AUDIO_LANGUAGE, whose parser already strips them, but very much reachable
+  # from a YAML list or a DB/UI value, where a stray empty string would
+  # otherwise become a preference that silently matches nothing.
+  defp validate_audio_language(changeset) do
+    case get_field(changeset, :audio_language) do
+      nil ->
+        changeset
+
+      codes when is_list(codes) ->
+        if Enum.all?(codes, &(is_binary(&1) and String.trim(&1) != "")) do
+          changeset
+        else
+          add_error(changeset, :audio_language, "must contain only non-empty language codes")
+        end
+
+      _ ->
+        add_error(changeset, :audio_language, "must be a list of language codes")
+    end
   end
 
   defp logging_changeset(schema, attrs) do

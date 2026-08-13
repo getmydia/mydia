@@ -1,0 +1,12 @@
+# Remembers the audio language the viewer just picked, against the show or
+# film the file belongs to, so the next episode opens on it without a second
+# pick. Plex, Jellyfin and Infuse all treat a manual pick as a one-off
+# override and make the viewer repeat it every episode; this is the whole
+# reason the mutation exists.
+mutation SetAudioLanguagePreference($fileId: ID!, $language: String) {
+  setAudioLanguagePreference(fileId: $fileId, language: $language) {
+    mediaItemId
+    language
+    preferredAudioLanguages
+  }
+}

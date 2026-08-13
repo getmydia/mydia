@@ -185,10 +185,29 @@ defmodule Mydia.Streaming.HlsSession do
     max_height = Keyword.get(opts, :max_height)
     start_position = Keyword.get(opts, :start_position, 0)
 
+    # Everything that shapes the encoded output, carried as one map rather
+    # than as a growing positional list. Registered in the Registry too, so
+    # HlsSessionSupervisor.session_matches?/2 can tell whether a running
+    # session can serve the next request.
+    playback = %{
+      max_bitrate: max_bitrate,
+      max_height: max_height,
+      start_position: start_position,
+      audio_language: Keyword.get(opts, :audio_language),
+      show_audio_language: Keyword.get(opts, :show_audio_language)
+    }
+
     # Load media file with metadata
     try do
+      # `episode: :media_item` is not decoration: a TV media_file carries a
+      # null media_item_id and reaches its item through the episode, so
+      # without this nested preload every episode looks like it has no
+      # original language and the "original" audio preference silently does
+      # nothing for the entire TV library.
       media_file =
-        Library.get_media_file!(media_file_id, preload: [:media_item, :episode, :library_path])
+        Library.get_media_file!(media_file_id,
+          preload: [:media_item, :library_path, episode: :media_item]
+        )
 
       # Register this session in the Registry. This is a `:unique` key, so two
       # concurrent callers can race here (e.g. HlsSessionSupervisor replacing a
@@ -211,19 +230,13 @@ defmodule Mydia.Streaming.HlsSession do
                start_position: start_position,
                max_bitrate: max_bitrate,
                max_height: max_height,
+               audio_language: playback.audio_language,
+               show_audio_language: playback.show_audio_language,
                started_at: DateTime.utc_now()
              }
            ) do
         {:ok, _owner} ->
-          start_registered_session(
-            media_file_id,
-            user_id,
-            mode,
-            max_bitrate,
-            max_height,
-            start_position,
-            media_file
-          )
+          start_registered_session(media_file_id, user_id, mode, media_file, playback)
 
         {:error, {:already_registered, pid}} ->
           {:stop, {:already_registered, pid}}
@@ -238,15 +251,9 @@ defmodule Mydia.Streaming.HlsSession do
   # Continues session setup once this process has won the registration race
   # for its (media_file_id, user_id) key. Creates the temp dir, the DB job
   # record, and starts the FFmpeg backend.
-  defp start_registered_session(
-         media_file_id,
-         user_id,
-         mode,
-         max_bitrate,
-         max_height,
-         start_position,
-         media_file
-       ) do
+  defp start_registered_session(media_file_id, user_id, mode, media_file, playback) do
+    %{max_bitrate: max_bitrate, max_height: max_height, start_position: start_position} = playback
+
     # Generate session ID and create temp directory
     session_id = generate_session_id()
     temp_dir = Path.join(@temp_base_dir, session_id)
@@ -298,7 +305,9 @@ defmodule Mydia.Streaming.HlsSession do
         case start_backend(:ffmpeg, media_file, temp_dir, job.id,
                max_bitrate: max_bitrate,
                max_height: max_height,
-               start_position: start_position
+               start_position: start_position,
+               audio_language: playback.audio_language,
+               show_audio_language: playback.show_audio_language
              ) do
           {:ok, backend_pid} ->
             # Link to backend process so we terminate if it crashes
@@ -496,7 +505,12 @@ defmodule Mydia.Streaming.HlsSession do
         start_position: Keyword.get(opts, :start_position, 0)
       ] ++
         if(opts[:max_bitrate], do: [max_bitrate: opts[:max_bitrate]], else: []) ++
-        if(opts[:max_height], do: [max_height: opts[:max_height]], else: [])
+        if(opts[:max_height], do: [max_height: opts[:max_height]], else: []) ++
+        if(opts[:audio_language], do: [audio_language: opts[:audio_language]], else: []) ++
+        if(opts[:show_audio_language],
+          do: [show_audio_language: opts[:show_audio_language]],
+          else: []
+        )
 
     transcoder_opts =
       base_opts ++

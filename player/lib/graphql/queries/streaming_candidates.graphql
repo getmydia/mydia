@@ -12,6 +12,7 @@ query StreamingCandidates($contentType: String!, $id: ID!) {
       duration
       width
       height
+      preferredAudioLanguages
     }
   }
 }

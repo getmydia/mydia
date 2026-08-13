@@ -109,4 +109,74 @@ defmodule Mydia.Metadata.LanguageCodeTest do
       assert LanguageCode.select_translation(%{}, "name", ["eng"]) == nil
     end
   end
+
+  describe "equivalents/1" do
+    test "expands a two-letter code to its three-letter forms" do
+      assert LanguageCode.equivalents("en") == ["en", "eng"]
+      assert LanguageCode.equivalents("de") == ["de", "deu", "ger"]
+    end
+
+    test "resolves a three-letter code back to the same set" do
+      assert LanguageCode.equivalents("ger") == ["de", "deu", "ger"]
+      assert LanguageCode.equivalents("deu") == ["de", "deu", "ger"]
+    end
+
+    test "strips region suffixes and normalises case" do
+      assert LanguageCode.equivalents("pt-BR") == ["pt", "por"]
+      assert LanguageCode.equivalents("EN_us") == ["en", "eng"]
+    end
+
+    test "returns an unknown code unchanged so it can still match itself" do
+      assert LanguageCode.equivalents("kling") == ["kling"]
+    end
+
+    test "returns nothing for blank, undetermined, and non-string input" do
+      assert LanguageCode.equivalents("") == []
+      assert LanguageCode.equivalents("   ") == []
+      assert LanguageCode.equivalents("und") == []
+      assert LanguageCode.equivalents(nil) == []
+      assert LanguageCode.equivalents(123) == []
+    end
+  end
+
+  describe "matches?/2" do
+    test "matches across ISO 639-1 and 639-2/T" do
+      assert LanguageCode.matches?("en", "eng")
+      assert LanguageCode.matches?("ja", "jpn")
+    end
+
+    test "matches ISO 639-2/B, which is what Matroska writes" do
+      # The reason this function exists rather than reusing tvdb_candidates/1:
+      # a German track in an .mkv is tagged "ger", not "deu".
+      assert LanguageCode.matches?("de", "ger")
+      assert LanguageCode.matches?("fr", "fre")
+      assert LanguageCode.matches?("cs", "cze")
+      assert LanguageCode.matches?("nl", "dut")
+    end
+
+    test "matches across region suffixes in either position" do
+      assert LanguageCode.matches?("pt-BR", "por")
+      assert LanguageCode.matches?("por", "pt-PT")
+    end
+
+    test "is symmetric" do
+      assert LanguageCode.matches?("ger", "de")
+      assert LanguageCode.matches?("eng", "en")
+    end
+
+    test "does not match different languages" do
+      refute LanguageCode.matches?("en", "rus")
+      refute LanguageCode.matches?("de", "nl")
+    end
+
+    test "never matches an untagged or undetermined track" do
+      # An audio track with no language tag must not satisfy a request for a
+      # specific language, or every unlabelled file would answer every query.
+      refute LanguageCode.matches?("en", nil)
+      refute LanguageCode.matches?("en", "")
+      refute LanguageCode.matches?("en", "und")
+      refute LanguageCode.matches?(nil, "eng")
+      refute LanguageCode.matches?("und", "und")
+    end
+  end
 end
