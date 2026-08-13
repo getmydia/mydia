@@ -86,6 +86,7 @@ Map<String, dynamic> _tvShowsPage(
   List<String> ids, {
   required bool hasNextPage,
   double? rating,
+  int? unwatchedEpisodeCount,
 }) {
   return {
     '__typename': 'Query',
@@ -116,6 +117,14 @@ Map<String, dynamic> _tvShowsPage(
               },
               'isFavorite': false,
               'nextEpisode': null,
+              'watchStatus': unwatchedEpisodeCount == null
+                  ? null
+                  : {
+                      '__typename': 'WatchStatus',
+                      'watched': false,
+                      'percentage': null,
+                      'unwatchedEpisodeCount': unwatchedEpisodeCount,
+                    },
             },
           }
       ],
@@ -490,6 +499,55 @@ void main() {
     final data = await waitForValue(
       container,
       libraryControllerProvider(_moviesFilter()),
+      (value) => value.items.isNotEmpty,
+    );
+
+    expect(data.items.single.watchStatus, isNull);
+  });
+
+  test('carries a show unwatched count through to library items', () async {
+    // The show badge is the headline of this feature and it runs through
+    // `_parseTvShows`, a different function from the movie path above.
+    final container = ProviderContainer(
+      overrides: [
+        asyncGraphqlClientProvider.overrideWith(
+          (ref) async => stubClient(
+            StubLink.responses([
+              _tvShowsPage(['1'], hasNextPage: false, unwatchedEpisodeCount: 7),
+            ]),
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final data = await waitForValue(
+      container,
+      libraryControllerProvider(_tvShowsFilter()),
+      (value) => value.items.isNotEmpty,
+    );
+
+    expect(data.items.single.watchStatus!.unwatchedEpisodeCount, 7);
+    expect(data.items.single.watchStatus!.watched, isFalse);
+  });
+
+  test('leaves a show watch status null when the server omits it', () async {
+    final container = ProviderContainer(
+      overrides: [
+        asyncGraphqlClientProvider.overrideWith(
+          (ref) async => stubClient(
+            StubLink.responses([
+              _tvShowsPage(['1'], hasNextPage: false),
+            ]),
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final data = await waitForValue(
+      container,
+      libraryControllerProvider(_tvShowsFilter()),
       (value) => value.items.isNotEmpty,
     );
 
