@@ -123,6 +123,20 @@ defmodule Mydia.MediaTest do
       media_item = media_item_fixture()
       assert %Ecto.Changeset{} = Media.change_media_item(media_item)
     end
+
+    test "media items default to monitoring new seasons" do
+      media_item = media_item_fixture(%{type: "tv_show"})
+
+      assert media_item.monitor_new_seasons == :all
+    end
+
+    test "monitor_new_seasons is castable through the changeset" do
+      media_item = media_item_fixture(%{type: "tv_show"})
+
+      changeset = Mydia.Media.MediaItem.changeset(media_item, %{monitor_new_seasons: :none})
+
+      assert Ecto.Changeset.get_change(changeset, :monitor_new_seasons) == :none
+    end
   end
 
   describe "episodes" do
