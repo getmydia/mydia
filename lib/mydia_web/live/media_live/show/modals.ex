@@ -1172,175 +1172,179 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
 
   def subtitle_search_modal(assigns) do
     ~H"""
-    <div class="modal modal-open">
-      <div class="modal-box max-w-4xl">
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="font-bold text-lg">Search Subtitles</h3>
+    <div class="modal modal-open" id="subtitle-search-modal">
+      <div class="modal-box max-w-3xl max-h-[85vh] flex flex-col p-0">
+        <%!-- Header --%>
+        <div class="sticky top-0 z-10 bg-base-100 border-b border-base-300 p-4 sm:p-6">
+          <div class="flex items-start justify-between gap-4">
+            <div class="min-w-0">
+              <h3 class="text-xl sm:text-2xl font-bold">Search Subtitles</h3>
+              <p class="text-sm text-base-content/70 truncate mt-1" title={@media_file.path}>
+                {Path.basename(@media_file.path)}
+              </p>
+            </div>
+            <button
+              type="button"
+              phx-click="close_subtitle_search_modal"
+              class="btn btn-ghost btn-sm btn-circle shrink-0"
+              aria-label="Close"
+            >
+              <.icon name="hero-x-mark" class="w-6 h-6" />
+            </button>
+          </div>
+        </div>
+        <div id="subtitle-search-body" class="flex-1 overflow-y-auto p-4 sm:p-6">
+          <%!-- Language selection --%>
+          <div class="form-control mb-4">
+            <label class="label">
+              <span class="label-text">Select Languages</span>
+            </label>
+            <select
+              class="select select-bordered"
+              multiple
+              phx-change="update_subtitle_languages"
+              name="languages[]"
+            >
+              <option value="en" selected={Enum.member?(@selected_languages, "en")}>
+                English
+              </option>
+              <option value="es" selected={Enum.member?(@selected_languages, "es")}>
+                Spanish
+              </option>
+              <option value="fr" selected={Enum.member?(@selected_languages, "fr")}>
+                French
+              </option>
+              <option value="de" selected={Enum.member?(@selected_languages, "de")}>
+                German
+              </option>
+              <option value="it" selected={Enum.member?(@selected_languages, "it")}>
+                Italian
+              </option>
+              <option value="pt" selected={Enum.member?(@selected_languages, "pt")}>
+                Portuguese
+              </option>
+              <option value="ru" selected={Enum.member?(@selected_languages, "ru")}>
+                Russian
+              </option>
+              <option value="ja" selected={Enum.member?(@selected_languages, "ja")}>
+                Japanese
+              </option>
+              <option value="zh" selected={Enum.member?(@selected_languages, "zh")}>
+                Chinese
+              </option>
+              <option value="ar" selected={Enum.member?(@selected_languages, "ar")}>
+                Arabic
+              </option>
+            </select>
+          </div>
+
           <button
             type="button"
-            phx-click="close_subtitle_search_modal"
-            class="btn btn-ghost btn-sm btn-circle"
+            phx-click="perform_subtitle_search"
+            class="btn btn-primary btn-block mb-4"
+            disabled={@searching}
           >
-            <.icon name="hero-x-mark" class="w-5 h-5" />
+            <%= if @searching do %>
+              <span class="loading loading-spinner loading-sm"></span> Searching...
+            <% else %>
+              <.icon name="hero-magnifying-glass" class="w-5 h-5" /> Search Subtitles
+            <% end %>
           </button>
-        </div>
 
-        <%!-- Language selection --%>
-        <div class="form-control mb-4">
-          <label class="label">
-            <span class="label-text">Select Languages</span>
-          </label>
-          <select
-            class="select select-bordered"
-            multiple
-            phx-change="update_subtitle_languages"
-            name="languages[]"
-          >
-            <option value="en" selected={Enum.member?(@selected_languages, "en")}>
-              English
-            </option>
-            <option value="es" selected={Enum.member?(@selected_languages, "es")}>
-              Spanish
-            </option>
-            <option value="fr" selected={Enum.member?(@selected_languages, "fr")}>
-              French
-            </option>
-            <option value="de" selected={Enum.member?(@selected_languages, "de")}>
-              German
-            </option>
-            <option value="it" selected={Enum.member?(@selected_languages, "it")}>
-              Italian
-            </option>
-            <option value="pt" selected={Enum.member?(@selected_languages, "pt")}>
-              Portuguese
-            </option>
-            <option value="ru" selected={Enum.member?(@selected_languages, "ru")}>
-              Russian
-            </option>
-            <option value="ja" selected={Enum.member?(@selected_languages, "ja")}>
-              Japanese
-            </option>
-            <option value="zh" selected={Enum.member?(@selected_languages, "zh")}>
-              Chinese
-            </option>
-            <option value="ar" selected={Enum.member?(@selected_languages, "ar")}>
-              Arabic
-            </option>
-          </select>
-        </div>
-
-        <button
-          type="button"
-          phx-click="perform_subtitle_search"
-          class="btn btn-primary btn-block mb-4"
-          disabled={@searching}
-        >
+          <%!-- Search results --%>
           <%= if @searching do %>
-            <span class="loading loading-spinner loading-sm"></span> Searching...
+            <div class="flex items-center justify-center py-8">
+              <span class="loading loading-spinner loading-lg"></span>
+            </div>
           <% else %>
-            <.icon name="hero-magnifying-glass" class="w-5 h-5" /> Search Subtitles
-          <% end %>
-        </button>
-
-        <%!-- Search results --%>
-        <%= if @searching do %>
-          <div class="flex items-center justify-center py-8">
-            <span class="loading loading-spinner loading-lg"></span>
-          </div>
-        <% else %>
-          <%= if length(@subtitle_search_results) > 0 do %>
-            <div class="overflow-x-auto">
-              <table class="table table-sm">
-                <thead>
-                  <tr>
-                    <th>Language</th>
-                    <th>Format</th>
-                    <th>Rating</th>
-                    <th>Downloads</th>
-                    <th>HI</th>
-                    <th>Score</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <%= for result <- @subtitle_search_results do %>
+            <%= if length(@subtitle_search_results) > 0 do %>
+              <div class="overflow-x-auto">
+                <table class="table table-sm">
+                  <thead>
                     <tr>
-                      <td>{result.language}</td>
-                      <td>
-                        <span class="badge badge-ghost badge-sm">{result.format}</span>
-                      </td>
-                      <td>
-                        <%= if result[:rating] do %>
-                          <div class="flex items-center gap-1">
-                            <.icon name="hero-star-solid" class="w-3 h-3 text-warning" />
-                            <span class="text-xs">{result.rating}/10</span>
-                          </div>
-                        <% else %>
-                          <span class="text-base-content/50">—</span>
-                        <% end %>
-                      </td>
-                      <td>
-                        <%= if result[:download_count] do %>
-                          <span class="text-xs">{result.download_count}</span>
-                        <% else %>
-                          <span class="text-base-content/50">—</span>
-                        <% end %>
-                      </td>
-                      <td>
-                        <%= if result[:hearing_impaired] do %>
-                          <.icon name="hero-check-circle-solid" class="w-4 h-4 text-success" />
-                        <% else %>
-                          <span class="text-base-content/50">—</span>
-                        <% end %>
-                      </td>
-                      <td>
-                        <span class={[
-                          "badge badge-sm",
-                          result.score >= 150 && "badge-success",
-                          result.score >= 100 && result.score < 150 && "badge-warning",
-                          result.score < 100 && "badge-ghost"
-                        ]}>
-                          {result.score}
-                        </span>
-                      </td>
-                      <td>
-                        <button
-                          type="button"
-                          phx-click="download_subtitle_result"
-                          phx-value-file-id={result.file_id}
-                          phx-value-language={result.language}
-                          phx-value-format={result.format}
-                          phx-value-subtitle-hash={result.subtitle_hash}
-                          phx-value-rating={result[:rating]}
-                          phx-value-download-count={result[:download_count]}
-                          phx-value-hearing-impaired={result[:hearing_impaired] || false}
-                          class="btn btn-primary btn-xs"
-                          disabled={@downloading_subtitle}
-                        >
-                          <%= if @downloading_subtitle do %>
-                            <span class="loading loading-spinner loading-xs"></span>
-                          <% else %>
-                            <.icon name="hero-arrow-down-tray" class="w-3 h-3" /> Download
-                          <% end %>
-                        </button>
-                      </td>
+                      <th>Language</th>
+                      <th>Format</th>
+                      <th>Rating</th>
+                      <th>Downloads</th>
+                      <th>HI</th>
+                      <th>Score</th>
+                      <th>Action</th>
                     </tr>
-                  <% end %>
-                </tbody>
-              </table>
-            </div>
-          <% else %>
-            <div class="alert alert-info">
-              <.icon name="hero-information-circle" class="w-5 h-5" />
-              <span>No subtitles found. Try searching with different languages.</span>
-            </div>
+                  </thead>
+                  <tbody>
+                    <%= for result <- @subtitle_search_results do %>
+                      <tr>
+                        <td>{result.language}</td>
+                        <td>
+                          <span class="badge badge-ghost badge-sm">{result.format}</span>
+                        </td>
+                        <td>
+                          <%= if result[:rating] do %>
+                            <div class="flex items-center gap-1">
+                              <.icon name="hero-star-solid" class="w-3 h-3 text-warning" />
+                              <span class="text-xs">{result.rating}/10</span>
+                            </div>
+                          <% else %>
+                            <span class="text-base-content/50">—</span>
+                          <% end %>
+                        </td>
+                        <td>
+                          <%= if result[:download_count] do %>
+                            <span class="text-xs">{result.download_count}</span>
+                          <% else %>
+                            <span class="text-base-content/50">—</span>
+                          <% end %>
+                        </td>
+                        <td>
+                          <%= if result[:hearing_impaired] do %>
+                            <.icon name="hero-check-circle-solid" class="w-4 h-4 text-success" />
+                          <% else %>
+                            <span class="text-base-content/50">—</span>
+                          <% end %>
+                        </td>
+                        <td>
+                          <span class={[
+                            "badge badge-sm",
+                            result.score >= 150 && "badge-success",
+                            result.score >= 100 && result.score < 150 && "badge-warning",
+                            result.score < 100 && "badge-ghost"
+                          ]}>
+                            {result.score}
+                          </span>
+                        </td>
+                        <td>
+                          <button
+                            type="button"
+                            phx-click="download_subtitle_result"
+                            phx-value-file-id={result.file_id}
+                            phx-value-language={result.language}
+                            phx-value-format={result.format}
+                            phx-value-subtitle-hash={result.subtitle_hash}
+                            phx-value-rating={result[:rating]}
+                            phx-value-download-count={result[:download_count]}
+                            phx-value-hearing-impaired={result[:hearing_impaired] || false}
+                            class="btn btn-primary btn-xs"
+                            disabled={@downloading_subtitle}
+                          >
+                            <%= if @downloading_subtitle do %>
+                              <span class="loading loading-spinner loading-xs"></span>
+                            <% else %>
+                              <.icon name="hero-arrow-down-tray" class="w-3 h-3" /> Download
+                            <% end %>
+                          </button>
+                        </td>
+                      </tr>
+                    <% end %>
+                  </tbody>
+                </table>
+              </div>
+            <% else %>
+              <div class="alert alert-info">
+                <.icon name="hero-information-circle" class="w-5 h-5" />
+                <span>No subtitles found. Try searching with different languages.</span>
+              </div>
+            <% end %>
           <% end %>
-        <% end %>
-
-        <div class="modal-action">
-          <button type="button" phx-click="close_subtitle_search_modal" class="btn btn-ghost">
-            Close
-          </button>
         </div>
       </div>
       <div class="modal-backdrop" phx-click="close_subtitle_search_modal"></div>

@@ -16,6 +16,23 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
     }
   end
 
+  @subtitle_media_file %{
+    id: "mf-1",
+    path: "/media/movies/The Matrix (1999)/The.Matrix.1999.1080p.BluRay.mkv"
+  }
+
+  defp subtitle_modal_html(overrides \\ []) do
+    defaults = [
+      media_file: @subtitle_media_file,
+      searching: false,
+      subtitle_search_results: [],
+      downloading_subtitle: false,
+      selected_languages: ["en"]
+    ]
+
+    render_component(&Modals.subtitle_search_modal/1, Keyword.merge(defaults, overrides))
+  end
+
   describe "reidentify_modal/1" do
     test "renders candidates with selectable buttons wired to the select event" do
       html =
@@ -139,6 +156,21 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
       html = modal_html(%{downloading: true})
 
       assert html =~ "Grabbing…"
+    end
+  end
+
+  describe "subtitle_search_modal/1 shell" do
+    test "names the file being searched and has no redundant footer close button" do
+      html = subtitle_modal_html()
+
+      # The header tells you which file this is for.
+      assert html =~ "The.Matrix.1999.1080p.BluRay.mkv"
+      # The full path is not dumped into the header text.
+      refute html =~ ">/media/movies/"
+      # Header X only; the footer Close button is gone.
+      refute html =~ "modal-action"
+      # The body is a dedicated scroll region.
+      assert html =~ ~s(id="subtitle-search-body")
     end
   end
 end
