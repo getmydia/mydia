@@ -1359,16 +1359,69 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                     failed={failed}
                     total={length(@subtitle_providers)}
                   />
-                  <%!-- Result rows are replaced in Task 5. --%>
-                  <div class="overflow-x-auto">
-                    <table class="table table-sm">
-                      <tbody>
-                        <tr :for={result <- @subtitle_search_results}>
-                          <td>{result.file_name || MydiaWeb.Languages.name(result.language)}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
+                  <ul class="list bg-base-100 rounded-box">
+                    <li
+                      :for={result <- @subtitle_search_results}
+                      class="list-row hover:bg-base-200/50 transition-colors"
+                    >
+                      <div class="min-w-0">
+                        <div class="font-medium truncate">
+                          {result.file_name || MydiaWeb.Languages.name(result.language)}
+                        </div>
+                        <div class="flex flex-wrap items-center gap-1.5 mt-1">
+                          <span class="badge badge-sm">
+                            {MydiaWeb.Languages.name(result.language)}
+                          </span>
+                          <span class="badge badge-ghost badge-sm">{result.format}</span>
+                          <span :if={result.provider_name} class="badge badge-ghost badge-sm">
+                            {result.provider_name}
+                          </span>
+                          <span :if={result.moviehash_match} class="badge badge-success badge-sm">
+                            Exact match
+                          </span>
+                          <span
+                            :if={result.hearing_impaired}
+                            class="badge badge-outline badge-sm tooltip"
+                            data-tip="Includes hearing impaired captions"
+                          >
+                            HI
+                          </span>
+                          <span class={[
+                            "badge badge-sm",
+                            score_badge_class(result.score)
+                          ]}>
+                            Score {result.score}
+                          </span>
+                        </div>
+                        <div class="text-xs text-base-content/60 mt-1 flex gap-3">
+                          <span :if={result.rating}>★ {result.rating}/10</span>
+                          <span :if={result.download_count}>
+                            {result.download_count} downloads
+                          </span>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        phx-click="download_subtitle_result"
+                        phx-value-file-id={result.file_id}
+                        phx-value-language={result.language}
+                        phx-value-format={result.format}
+                        phx-value-subtitle-hash={result.subtitle_hash}
+                        phx-value-rating={result.rating}
+                        phx-value-download-count={result.download_count}
+                        phx-value-hearing-impaired={result.hearing_impaired}
+                        class="btn btn-primary btn-sm"
+                        disabled={@downloading_subtitle_id != nil}
+                      >
+                        <%= if @downloading_subtitle_id == result.file_id do %>
+                          <span class="loading loading-spinner loading-xs"></span>
+                        <% else %>
+                          <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> Download
+                        <% end %>
+                      </button>
+                    </li>
+                  </ul>
               <% end %>
           <% end %>
         </div>
@@ -1510,4 +1563,9 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
 
   defp search_error_message(_reason),
     do: "The search could not be completed. Check the server logs for details."
+
+  # Thresholds carried over from the previous table so ranking reads the same.
+  defp score_badge_class(score) when score >= 150, do: "badge-success"
+  defp score_badge_class(score) when score >= 100, do: "badge-warning"
+  defp score_badge_class(_score), do: "badge-ghost"
 end

@@ -34,6 +34,40 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
     render_component(&Modals.subtitle_search_modal/1, Keyword.merge(defaults, overrides))
   end
 
+  defp result_fixture(overrides \\ %{}) do
+    Map.merge(
+      %{
+        file_id: 1,
+        language: "en",
+        format: "srt",
+        subtitle_hash: "abc",
+        file_name: "The.Matrix.1999.1080p.BluRay.srt",
+        rating: 8.5,
+        download_count: 1200,
+        hearing_impaired: false,
+        moviehash_match: true,
+        provider_name: "OpenSubtitles",
+        score: 160
+      },
+      overrides
+    )
+  end
+
+  defp loaded_html(results, overrides \\ []) do
+    subtitle_modal_html(
+      Keyword.merge(
+        [
+          subtitle_search_state: :loaded,
+          subtitle_providers: [
+            %{name: "OpenSubtitles", quota_remaining: nil, quota_total: nil, error: nil}
+          ],
+          subtitle_search_results: results
+        ],
+        overrides
+      )
+    )
+  end
+
   describe "reidentify_modal/1" do
     test "renders candidates with selectable buttons wired to the select event" do
       html =
@@ -324,6 +358,41 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
 
       assert html =~ "no hash or metadata IDs"
       refute html =~ "insufficient_search_criteria"
+    end
+
+    test "rows show the release name, a language name, and the exact-match signal" do
+      html = loaded_html([result_fixture()])
+
+      assert html =~ "list-row"
+      assert html =~ "The.Matrix.1999.1080p.BluRay.srt"
+      # Language name, not the raw code.
+      assert html =~ "English"
+      # moviehash_match is surfaced rather than discarded.
+      assert html =~ "Exact match"
+      assert html =~ "OpenSubtitles"
+    end
+
+    test "a row without a release name falls back to the language name" do
+      html = loaded_html([result_fixture(%{file_name: nil, moviehash_match: false})])
+
+      assert html =~ "English"
+      refute html =~ "Exact match"
+    end
+
+    test "only the downloading row spins" do
+      html =
+        loaded_html(
+          [result_fixture(%{file_id: 1}), result_fixture(%{file_id: 2, subtitle_hash: "def"})],
+          downloading_subtitle_id: 1
+        )
+
+      # One spinner, not one per row.
+      assert length(String.split(html, "loading-spinner")) - 1 == 1
+    end
+
+    test "hearing impaired is flagged only when true" do
+      assert loaded_html([result_fixture(%{hearing_impaired: true})]) =~ "hearing impaired"
+      refute loaded_html([result_fixture(%{hearing_impaired: false})]) =~ "hearing impaired"
     end
   end
 end
