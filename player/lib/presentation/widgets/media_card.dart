@@ -3,9 +3,12 @@ import 'package:flutter/material.dart';
 import '../../core/layout/breakpoints.dart';
 import '../../core/theme/colors.dart';
 import '../../domain/models/media_file.dart';
+import '../../domain/models/watch_status.dart';
+import 'poster_badge_corner.dart';
 import 'poster_frame.dart';
 import 'progress_overlay.dart';
 import 'quality_badge.dart';
+import 'watch_indicator.dart';
 
 /// What tapping a [MediaCard] does.
 ///
@@ -28,6 +31,9 @@ class MediaCard extends StatelessWidget {
   final String title;
   final String? subtitle;
   final double? progressPercentage;
+
+  /// Rolled-up watch state. Null renders no indicator.
+  final WatchStatus? watchStatus;
   final VoidCallback? onTap;
   final double? width;
   final double? height;
@@ -49,6 +55,7 @@ class MediaCard extends StatelessWidget {
     required this.title,
     this.subtitle,
     this.progressPercentage,
+    this.watchStatus,
     this.onTap,
     this.width,
     this.height,
@@ -135,16 +142,18 @@ class MediaCard extends StatelessWidget {
                   overlays: [
                     if (progress != null && progress > 0)
                       ProgressOverlay(percentage: progress),
+                    WatchProgressOverlay(status: watchStatus),
                     if (action == MediaCardAction.play) const _PlayBadge(),
-                    if (quality.hasQuality)
-                      Positioned(
-                        top: 8,
-                        right: 8,
-                        child: QualityBadgeRow(
-                          badges: quality.toBadges(),
-                          spacing: 4.0,
-                        ),
-                      ),
+                    PosterBadgeCorner(
+                      children: [
+                        WatchIndicator(status: watchStatus),
+                        if (quality.hasQuality)
+                          QualityBadgeRow(
+                            badges: quality.toBadges(),
+                            spacing: 4.0,
+                          ),
+                      ],
+                    ),
                   ],
                 ),
               ),

@@ -9,6 +9,7 @@ import 'package:player/presentation/widgets/progress_overlay.dart';
 
 import '../../test_utils/hover_affordance.dart';
 import '../../test_utils/poster_contract.dart';
+import '../../test_utils/watch_indicator_contract.dart';
 
 // Tall enough for the 195px poster plus its gap and a two-line title, short
 // enough that the card's center still lands on the poster. Without this the
@@ -183,4 +184,14 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   });
+
+  runWatchIndicatorContract(
+    description: 'MediaCard',
+    build: (status) => MediaCard(
+      title: 'Movie',
+      action: MediaCardAction.open,
+      watchStatus: status,
+    ),
+    size: _cardHost,
+  );
 }
