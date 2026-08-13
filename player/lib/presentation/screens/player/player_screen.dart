@@ -2675,8 +2675,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       _subtitleTracks,
       _selectedSubtitleTrack,
       // TODO: wire to the real subtitle search/download GraphQL operations.
-      // Neither placeholder runs unless the viewer taps "Search online"
-      // inside the sheet, which nothing before that point does.
+      // These placeholders ARE reachable today: "Search online" renders
+      // unconditionally in the sheet's track list, so any viewer can tap it
+      // right now and hit the `UnimplementedError` below (caught by the
+      // sheet and shown as a plain "try again" message, not a crash -- but
+      // still inert). Do not treat this as done on the strength of this
+      // comment; Task 16 has to land before `:master` picks this up, since
+      // `:master` is a rolling tag that ships on every merge.
       onSearch: (_) async =>
           throw UnimplementedError('Subtitle search is not available yet.'),
       onDownload: (_) async =>
@@ -2775,9 +2780,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         _resetPendingSubtitleSelection(generation);
         return;
       }
+      // The controller this specific call gets back is captured and closed
+      // by itself below -- never `removeCurrentSnackBar()`/
+      // `hideCurrentSnackBar()` after the await, which act on whatever
+      // snackbar is current *at that later point*, not the one shown here.
+      // A second pick (B) started while this one (A) is still in flight
+      // passes `shouldStartSubtitleSelection` (different target) and shows
+      // its own indicator on top of A's; when A's fetch then resolves,
+      // `removeCurrentSnackBar()` would strip B's indicator while B is
+      // still running, leaving the viewer mid-fetch with nothing on
+      // screen -- precisely the blank-screen condition that invites the
+      // re-tap `_canApplySubtitleSelection` exists to guard against.
       final loadingMessenger = ScaffoldMessenger.of(context);
       loadingMessenger.hideCurrentSnackBar();
-      loadingMessenger.showSnackBar(
+      final loadingSnack = loadingMessenger.showSnackBar(
         const SnackBar(
           duration: Duration(seconds: 30),
           content: Row(
@@ -2796,7 +2812,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       );
 
       final mkTrack = await _resolveMediaKitSubtitleTrack(selected);
-      if (mounted) loadingMessenger.removeCurrentSnackBar();
+      // `close()` is a no-op if this snackbar was already dismissed (its
+      // own 30 second timeout, or a later pick's `hideCurrentSnackBar()`
+      // above), so this is safe on every path.
+      if (mounted) loadingSnack.close();
 
       // Superseded while the fetch was in flight (a re-tap, "Off", or the
       // screen/player went away): drop this result silently rather than

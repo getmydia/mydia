@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart';
 
 import '../../core/player/subtitle_language_prefs.dart';
@@ -141,10 +142,16 @@ class _SubtitleTrackSelectorSheetState
         _mode = _SheetMode.results;
       });
     } catch (e) {
+      // The exception's own text is never shown to a viewer: today it is
+      // an `UnimplementedError` message, and once Task 16 wires the real
+      // GraphQL operation it will be an `OperationException` dump. Logged
+      // instead, the same split `player_screen.dart`'s own subtitle-fetch
+      // failure uses.
+      debugPrint('[SubtitleTrackSelectorSheet] Search failed: $e');
       if (!mounted) return;
       setState(() {
         _outcome = const SubtitleSearchOutcome(results: [], providers: []);
-        _error = 'Subtitle search failed: $e';
+        _error = 'Subtitle search failed. Try again.';
         _mode = _SheetMode.results;
       });
     }
@@ -155,7 +162,12 @@ class _SubtitleTrackSelectorSheetState
     // changing them here would not affect that request.
     if (_mode == _SheetMode.searching) return;
 
-    final languages = _languages.contains(code)
+    final isRemoving = _languages.contains(code);
+    // At least one language has to stay selected -- an empty list would
+    // silently re-run the search against nothing rather than refuse the tap.
+    if (isRemoving && _languages.length == 1) return;
+
+    final languages = isRemoving
         ? _languages.where((l) => l != code).toList()
         : [..._languages, code];
     setState(() => _languages = languages);
@@ -169,6 +181,12 @@ class _SubtitleTrackSelectorSheetState
   }
 
   Future<void> _download(SubtitleCandidate candidate) async {
+    // A second tap -- another result, or the same one twice -- while the
+    // first is still in flight must not issue a second download. `_mode` is
+    // set synchronously below, before anything is awaited, so this is safe
+    // even against two taps landing in the same frame.
+    if (_mode == _SheetMode.downloading) return;
+
     setState(() {
       _mode = _SheetMode.downloading;
       _error = null;
@@ -178,10 +196,11 @@ class _SubtitleTrackSelectorSheetState
       if (!mounted) return;
       Navigator.of(context).pop(SubtitleTrackPicked(track));
     } catch (e) {
+      debugPrint('[SubtitleTrackSelectorSheet] Download failed: $e');
       if (!mounted) return;
       setState(() {
         _mode = _SheetMode.results;
-        _error = 'Could not download that subtitle: $e';
+        _error = 'Could not download that subtitle. Try again.';
       });
     }
   }
@@ -290,6 +309,15 @@ class _SubtitleTrackSelectorSheetState
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: TextButton.icon(
+            onPressed: () => setState(() => _mode = _SheetMode.tracks),
+            icon: const Icon(Icons.arrow_back, size: 18),
+            label: const Text('Back to tracks'),
+            style: TextButton.styleFrom(foregroundColor: Colors.grey),
+          ),
+        ),
         _buildLanguageChips(),
         if (_error != null)
           Padding(
@@ -313,13 +341,19 @@ class _SubtitleTrackSelectorSheetState
   }
 
   Widget _buildLanguageChips() {
+    // The curated roster plus whatever is actually selected: a device
+    // locale outside the roster (rarer languages the curated list omits)
+    // must still get a chip, or it would be silently unremovable. Built as
+    // a set so the extra language does not appear twice when it is already
+    // in the roster.
+    final codes = {..._chipLanguages, ..._languages};
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Wrap(
         spacing: 8,
         runSpacing: 8,
         children: [
-          for (final code in _chipLanguages)
+          for (final code in codes)
             _LanguageChip(
               key: ValueKey('language-chip-$code'),
               code: code,

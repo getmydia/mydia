@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hive_ce_flutter/hive_flutter.dart';
+import 'package:player/core/player/subtitle_language_prefs.dart';
 import 'package:player/domain/models/subtitle_candidate.dart';
 import 'package:player/domain/models/subtitle_track.dart';
 import 'package:player/presentation/widgets/subtitle_track_selector.dart';
@@ -324,8 +327,9 @@ void main() {
     expect((result as SubtitleTrackPicked).track.id, 'uuid-new');
   });
 
-  testWidgets('surfaces a search exception as an error message',
-      (tester) async {
+  testWidgets(
+      'surfaces a search failure with a plain message, not the raw '
+      'exception', (tester) async {
     await tester.pumpWidget(_host(
       onSearch: (_) async => throw Exception('relay unreachable'),
       onDownload: (_) async => _downloaded,
@@ -336,12 +340,16 @@ void main() {
     await tester.tap(find.text('Search online'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('relay unreachable'), findsOneWidget);
+    // The exception's own text must never reach the viewer: today it is a
+    // developer-facing placeholder message, and after Task 16 it will be a
+    // GraphQL client's `OperationException` dump.
+    expect(find.textContaining('relay unreachable'), findsNothing);
+    expect(find.textContaining('Subtitle search failed'), findsOneWidget);
   });
 
   testWidgets(
-      'surfaces a download exception as an error message without closing '
-      'the sheet', (tester) async {
+      'surfaces a download failure with a plain message, not the raw '
+      'exception, and does not close the sheet', (tester) async {
     SubtitleTrackSelection? result;
 
     await tester.pumpWidget(_host(
@@ -360,13 +368,14 @@ void main() {
     await tester.tap(find.text('Movie.2020.1080p.BluRay.srt'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('download failed'), findsOneWidget);
+    expect(find.textContaining('download failed'), findsNothing);
+    expect(find.textContaining('Could not download'), findsOneWidget);
     expect(result, isNull);
   });
 
   testWidgets(
-      'adjusting a language chip re-runs the search with the updated '
-      'languages', (tester) async {
+      'adjusting a language chip re-runs the search with a different '
+      'language set', (tester) async {
     final calls = <List<String>>[];
 
     await tester.pumpWidget(_host(
@@ -388,7 +397,162 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(calls, hasLength(2));
-    expect(calls[1], contains('es'));
-    expect(calls[1], isNot(equals(calls[0])));
+    // Asserts the delta rather than assuming 'es' was *added*: under a
+    // Spanish test locale it would already be selected by default, and the
+    // tap would remove it instead. Either direction, the set must actually
+    // change, and specifically on 'es'.
+    expect(calls[1].toSet(), isNot(equals(calls[0].toSet())));
+    expect(calls[1].contains('es'), isNot(calls[0].contains('es')));
+  });
+
+  testWidgets('refuses to deselect the last remaining language',
+      (tester) async {
+    final calls = <List<String>>[];
+
+    await tester.pumpWidget(_host(
+      onSearch: (languages) async {
+        calls.add(languages);
+        return const SubtitleSearchOutcome(results: [], providers: []);
+      },
+      onDownload: (_) async => _downloaded,
+    ));
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Search online'));
+    await tester.pumpAndSettle();
+
+    // Strip down to exactly one selected language, deselecting every other
+    // one the test's device locale happened to start with, so this test
+    // does not assume a specific default list.
+    var current = calls.single;
+    for (final code in current.skip(1).toList()) {
+      await tester.tap(find.byKey(ValueKey('language-chip-$code')));
+      await tester.pumpAndSettle();
+      current = calls.last;
+    }
+    expect(current, hasLength(1));
+    final callsBeforeLastToggle = calls.length;
+
+    // Attempting to deselect the one remaining language must be refused --
+    // otherwise every future search would silently run against nothing.
+    await tester.tap(find.byKey(ValueKey('language-chip-${current.single}')));
+    await tester.pumpAndSettle();
+
+    expect(calls, hasLength(callsBeforeLastToggle));
+  });
+
+  testWidgets(
+      'a language outside the curated chip roster still gets a chip and '
+      'can be adjusted', (tester) async {
+    // `testWidgets` runs its body in a fake-async zone that `pump()`
+    // fast-forwards through timers, but does not resolve genuine async I/O
+    // -- `Directory.systemTemp.createTemp`, `Hive.openBox`, `box.put` all do
+    // real file-system work, which just hangs (eventually hitting the
+    // per-test timeout) unless it runs inside `tester.runAsync()`. This bit
+    // exactly that way the first time this test was written: it passed in
+    // isolation by coincidence and hung for ten minutes in the full suite.
+    late Directory tempDir;
+    late Box<List> box;
+    await tester.runAsync(() async {
+      tempDir = await Directory.systemTemp
+          .createTemp('subtitle_language_prefs_widget_test');
+      Hive.init(tempDir.path);
+      box = await Hive.openBox<List>(SubtitleLanguagePrefs.boxName);
+      // Written directly, bypassing `save`, to seed a language the curated
+      // roster in `subtitle_track_selector.dart` does not include -- the
+      // scenario a device locale outside that fixed list produces.
+      await box.put('languages', ['th', 'en']);
+    });
+    addTearDown(() => tester.runAsync(() async {
+          await box.close();
+          await Hive.deleteBoxFromDisk(SubtitleLanguagePrefs.boxName);
+          await tempDir.delete(recursive: true);
+        }));
+
+    await tester.pumpWidget(_host(
+      onSearch: (_) async =>
+          const SubtitleSearchOutcome(results: [], providers: []),
+      onDownload: (_) async => _downloaded,
+    ));
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Search online'));
+    await tester.pumpAndSettle();
+
+    // 'th' is not in the curated roster (`SubtitleCandidate.languageNames`
+    // has no Thai entry), so without unioning the roster with whatever is
+    // actually selected, this chip would never render and 'th' could never
+    // be seen or removed.
+    expect(find.text('TH'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('language-chip-th')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('TH'), findsNothing);
+  });
+
+  testWidgets('tapping "Back to tracks" returns to the track list',
+      (tester) async {
+    await tester.pumpWidget(_host(
+      onSearch: (_) async => const SubtitleSearchOutcome(
+        results: [_candidate],
+        providers: [SubtitleProviderStatus(name: 'Mydia Relay')],
+      ),
+      onDownload: (_) async => _downloaded,
+    ));
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Search online'));
+    await tester.pumpAndSettle();
+    expect(find.text('Movie.2020.1080p.BluRay.srt'), findsOneWidget);
+
+    await tester.tap(find.text('Back to tracks'));
+    await tester.pumpAndSettle();
+
+    // Back on the track list: "Off" and the existing track are reachable
+    // again, and the search result is no longer on screen.
+    expect(find.text('Off'), findsOneWidget);
+    expect(find.text('English'), findsOneWidget);
+    expect(find.text('Movie.2020.1080p.BluRay.srt'), findsNothing);
+  });
+
+  testWidgets(
+      'a second tap on a result while the first download is still in '
+      'flight is ignored', (tester) async {
+    var downloadCalls = 0;
+    final completer = Completer<SubtitleTrack>();
+
+    await tester.pumpWidget(_host(
+      onSearch: (_) async => const SubtitleSearchOutcome(
+        results: [_candidate],
+        providers: [SubtitleProviderStatus(name: 'Mydia Relay')],
+      ),
+      onDownload: (_) {
+        downloadCalls++;
+        return completer.future;
+      },
+    ));
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Search online'));
+    await tester.pumpAndSettle();
+
+    // Two taps before either has a chance to rebuild the sheet out of
+    // `results` mode -- the scenario a fast double-tap produces. `_mode`
+    // flips to `downloading` synchronously inside the first tap's
+    // `setState`, so the second tap, landing on the same still-rendered
+    // tile, must see that and refuse to issue a second download.
+    await tester.tap(find.text('Movie.2020.1080p.BluRay.srt'));
+    await tester.tap(find.text('Movie.2020.1080p.BluRay.srt'));
+    await tester.pump();
+
+    expect(downloadCalls, 1);
+
+    completer.complete(_downloaded);
+    await tester.pumpAndSettle();
   });
 }
