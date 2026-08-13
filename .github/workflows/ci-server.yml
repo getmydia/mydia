@@ -5,12 +5,18 @@ on:
     branches: [master]
     paths:
       - "server/**"
+      # player/lib/graphql/schema.graphql is a symlink to priv/graphql/schema.graphql,
+      # so it never fires on its own: GitHub Actions path filters match the
+      # recorded path of the changed file, and editing the target leaves the
+      # symlink's blob untouched. The priv/ entry below is the one doing the work.
       - "player/lib/graphql/schema.graphql"
       - "priv/graphql/schema.graphql"
       - ".github/workflows/ci-server.yml"
   pull_request:
     paths:
       - "server/**"
+      # See the push.paths comment above: this entry is inert for the same
+      # symlink reason, and priv/graphql/schema.graphql is what actually triggers.
       - "player/lib/graphql/schema.graphql"
       - "priv/graphql/schema.graphql"
       - ".github/workflows/ci-server.yml"

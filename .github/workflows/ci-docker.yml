@@ -1,9 +1,12 @@
 name: CI / Docker
 
 on:
+  # Push only. PR runs already set `push: false` on the build-push action, so
+  # they only ever proved the image builds, at 25 minutes per PR. release.yml
+  # rebuilds from ./Dockerfile across its db and arch matrix rather than
+  # retagging :master, so release is an independent second net.
   push:
     branches: [master, main]
-  pull_request:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

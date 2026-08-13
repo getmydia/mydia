@@ -10,26 +10,6 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  build:
-    name: Build / Packages
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@main
-
-      - name: Setup Nix cache
-        uses: DeterminateSystems/magic-nix-cache-action@main
-
-      - name: Build SQLite package
-        run: nix build .#checks.x86_64-linux.package -L
-
-      - name: Build PostgreSQL package
-        run: nix build .#checks.x86_64-linux.package-postgres -L
-
   flutter-pin:
     name: Check / Flutter Pin
     runs-on: ubuntu-latest
@@ -113,17 +93,19 @@ jobs:
       - name: Assert every Apple deployment target agrees
         run: ./scripts/check-apple-deployment-targets.sh
 
-  # No `needs: build`, intentionally. Nix builds are content-addressed and
-  # reproducible, so `nix build .#checks...nixos-module` below transitively
-  # rebuilds the same package on its own -- there is no correctness reason to
-  # wait for the `build` job. A `needs: build` dependency was tried so this
-  # job could reuse the build job's cache instead of rebuilding (~7 min), but
-  # the build job's own cache-upload step costs ~12 min on its own, more than
-  # the rebuild it was meant to avoid. Running in parallel instead cuts the
-  # workflow's wall-clock critical path roughly in half.
+  # Both NixOS VM tests run on push only. They are the slowest and least
+  # reliable jobs in CI, combining a QEMU boot with a full Nix build on top of
+  # the FlakeHub cache 503s that can hit any Nix job, and breaking the NixOS
+  # module is rare enough that catching it on master costs less than paying for
+  # it on every PR.
+  #
+  # They also build packages.default and packages.postgres as inputs, via
+  # nix/checks/flake-module.nix, which is why the former `Build / Packages` job
+  # was deleted as redundant rather than kept alongside them.
   test-sqlite-module:
     name: Test / NixOS Module (SQLite)
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
 
     steps:
       - name: Checkout
@@ -147,6 +129,7 @@ jobs:
   test-postgres-module:
     name: Test / NixOS Module (PostgreSQL)
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
 
     steps:
       - name: Checkout

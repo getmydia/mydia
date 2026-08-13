@@ -1,9 +1,16 @@
 name: CI / Player E2E
 
 on:
+  # Push only. This job's internal dorny/paths-filter treats lib/**, config/**,
+  # priv/**, mix.exs and Dockerfile as relevant on purpose, so backend PRs pulled
+  # the full 20-minute run. Narrowing that list was rejected: the filter block
+  # documents an invariant that `relevant` must be a superset of `server`,
+  # `toolbox` and `relay`, and records two past bugs from violating it. Dropping
+  # the PR trigger sidesteps the filter entirely. The filter itself is guarded
+  # on `github.event_name == 'pull_request'`, so it goes inert on its own and is
+  # left in place to keep a revert to a one-line change.
   push:
     branches: [master, main]
-  pull_request:
   workflow_dispatch:
 
 concurrency:
