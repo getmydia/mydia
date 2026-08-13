@@ -111,6 +111,15 @@ void main() {
       expect(find.byType(ProgressOverlay), findsNothing);
     });
 
+    testWidgets('draws no bar when the server sent no status', (tester) async {
+      // The degradation path for a player talking to a server that predates
+      // `watchStatus`: the field comes back absent, the status is null, and
+      // every surface must render as it did before rather than throw.
+      await tester.pumpWidget(_host(const WatchProgressOverlay(status: null)));
+
+      expect(find.byType(ProgressOverlay), findsNothing);
+    });
+
     testWidgets('draws no bar for a show', (tester) async {
       await tester.pumpWidget(
         _host(const WatchProgressOverlay(
