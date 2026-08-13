@@ -2670,11 +2670,28 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// nothing awaits this method's future to catch it; see the comment on
   /// the `try` below.
   Future<void> _showSubtitleSelector() async {
-    final selected = await showSubtitleTrackSelector(
+    final outcome = await showSubtitleTrackSelector(
       context,
       _subtitleTracks,
       _selectedSubtitleTrack,
+      // TODO: wire to the real subtitle search/download GraphQL operations.
+      // Neither placeholder runs unless the viewer taps "Search online"
+      // inside the sheet, which nothing before that point does.
+      onSearch: (_) async =>
+          throw UnimplementedError('Subtitle search is not available yet.'),
+      onDownload: (_) async =>
+          throw UnimplementedError('Subtitle download is not available yet.'),
     );
+
+    // A dismissed sheet (barrier tap, back gesture) must leave every
+    // subtitle field alone. Before [SubtitleTrackSelection] existed, the
+    // sheet returned a bare `SubtitleTrack?` and a dismissal was
+    // indistinguishable from choosing "Off" -- with a pick already in
+    // flight, that silently cancelled it. See that sealed class for the
+    // full account.
+    if (outcome is SubtitleTrackSelectionCancelled) return;
+
+    final selected = outcome is SubtitleTrackPicked ? outcome.track : null;
 
     if (!shouldStartSubtitleSelection(
       requested: selected,
@@ -2740,7 +2757,46 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         return;
       }
 
+      // Feedback while the extraction runs server-side: closing the sheet
+      // and showing nothing further while that fetch is in flight is
+      // exactly what let a viewer re-tap and reach the concurrency guard
+      // [_canApplySubtitleSelection] exists to enforce. Shown for every
+      // pick, existing or freshly downloaded -- both reach this same fetch.
+      //
+      // No await has run since the `mounted` check inside
+      // `shouldStartSubtitleSelection` above, so this is still guaranteed
+      // true -- but spelled out again directly in front of the `context`
+      // use below anyway, which is what `use_build_context_synchronously`
+      // requires to see it rather than trusting a call to a helper it
+      // cannot look inside. Unreachable today, but routed through the same
+      // reset as every other exit in this method rather than a bare
+      // `return`, so it stays correct if that ever stops being true.
+      if (!mounted) {
+        _resetPendingSubtitleSelection(generation);
+        return;
+      }
+      final loadingMessenger = ScaffoldMessenger.of(context);
+      loadingMessenger.hideCurrentSnackBar();
+      loadingMessenger.showSnackBar(
+        const SnackBar(
+          duration: Duration(seconds: 30),
+          content: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              SizedBox(width: 12),
+              Text('Loading subtitle...'),
+            ],
+          ),
+        ),
+      );
+
       final mkTrack = await _resolveMediaKitSubtitleTrack(selected);
+      if (mounted) loadingMessenger.removeCurrentSnackBar();
 
       // Superseded while the fetch was in flight (a re-tap, "Off", or the
       // screen/player went away): drop this result silently rather than

@@ -34,9 +34,14 @@ class SubtitleCandidate {
   });
 
   String get displayLanguage =>
-      _languageNames[language] ?? language.toUpperCase();
+      languageNames[language] ?? language.toUpperCase();
 
-  static const _languageNames = {
+  /// Code-to-name map for the languages a provider is likely to offer.
+  ///
+  /// Public so the subtitle search sheet can build its language chips from
+  /// the same source [displayLanguage] uses, rather than keeping a second,
+  /// independent list in sync by hand.
+  static const languageNames = {
     'en': 'English',
     'es': 'Spanish',
     'fr': 'French',
