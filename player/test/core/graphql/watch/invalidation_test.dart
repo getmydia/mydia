@@ -138,6 +138,9 @@ void main() {
       expect(keys, {
         QueryKeys.home,
         QueryKeys.unwatched,
+        QueryKeys.tvShowsList,
+        QueryKeys.favoritesList,
+        QueryKeys.unwatchedList,
         QueryKeys.showDetail('7'),
       });
     });
@@ -156,6 +159,8 @@ void main() {
         QueryKeys.home,
         QueryKeys.unwatched,
         QueryKeys.moviesList,
+        QueryKeys.favoritesList,
+        QueryKeys.unwatchedList,
         QueryKeys.movieDetail('m1'),
       });
     });
@@ -182,6 +187,10 @@ void main() {
       expect(keys, {
         QueryKeys.home,
         QueryKeys.unwatched,
+        QueryKeys.tvShowsList,
+        QueryKeys.moviesList,
+        QueryKeys.favoritesList,
+        QueryKeys.unwatchedList,
         QueryKeys.movieDetail('m1'),
       });
     });

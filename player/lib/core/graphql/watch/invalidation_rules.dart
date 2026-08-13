@@ -25,6 +25,11 @@ abstract final class InvalidationRules {
   /// [seasonNumber] is the season the mutating screen is scoped to. Passing
   /// it adds that season's episode-list key to the set, for the same
   /// self-convergence reason as [favoriteToggled]'s [id].
+  ///
+  /// `tvShowsList`, `favoritesList`, and `unwatchedList` are here because
+  /// those grids render unwatched counts. `QueryKeys.unwatched` and
+  /// `QueryKeys.unwatchedList` are different keys, and the library grid uses
+  /// the latter, so listing only the former left the grid stale.
   static Set<QueryKey> watchedChanged({
     required String showId,
     int? seasonNumber,
@@ -32,6 +37,9 @@ abstract final class InvalidationRules {
       {
         QueryKeys.home,
         QueryKeys.unwatched,
+        QueryKeys.tvShowsList,
+        QueryKeys.favoritesList,
+        QueryKeys.unwatchedList,
         QueryKeys.showDetail(showId),
         if (seasonNumber != null)
           QueryKeys.seasonEpisodes(showId, seasonNumber),
@@ -49,6 +57,8 @@ abstract final class InvalidationRules {
         QueryKeys.home,
         QueryKeys.unwatched,
         QueryKeys.moviesList,
+        QueryKeys.favoritesList,
+        QueryKeys.unwatchedList,
         QueryKeys.movieDetail(movieId),
       };
 
@@ -64,6 +74,10 @@ abstract final class InvalidationRules {
       {
         QueryKeys.home,
         QueryKeys.unwatched,
+        QueryKeys.tvShowsList,
+        QueryKeys.moviesList,
+        QueryKeys.favoritesList,
+        QueryKeys.unwatchedList,
         if (mediaType == 'movie') QueryKeys.movieDetail(mediaId),
         if (mediaType == 'episode') QueryKeys.episodeDetail(mediaId),
         if (mediaType == 'episode' && showId != null)
