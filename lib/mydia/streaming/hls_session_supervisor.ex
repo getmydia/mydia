@@ -85,7 +85,8 @@ defmodule Mydia.Streaming.HlsSessionSupervisor do
     start_position: 0,
     max_bitrate: nil,
     max_height: nil,
-    audio_language: nil
+    audio_language: nil,
+    show_audio_language: nil
   }
 
   @doc false
@@ -107,7 +108,8 @@ defmodule Mydia.Streaming.HlsSessionSupervisor do
       start_position: Keyword.get(opts, :start_position, 0),
       max_bitrate: Keyword.get(opts, :max_bitrate),
       max_height: Keyword.get(opts, :max_height),
-      audio_language: normalize_audio_language(Keyword.get(opts, :audio_language))
+      audio_language: normalize_audio_language(Keyword.get(opts, :audio_language)),
+      show_audio_language: normalize_audio_language(Keyword.get(opts, :show_audio_language))
     }
   end
 

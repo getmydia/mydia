@@ -156,6 +156,15 @@ type RootMutationType {
     startPosition: Int
   ): StreamingSessionResult
 
+  "Remember which audio language this viewer wants for a show or film"
+  setAudioLanguagePreference(
+    "Any file of the show or film. The preference is stored against the item it belongs to, so a choice made on one episode applies to the rest."
+    fileId: ID!
+
+    "Language code to remember, e.g. \"eng\". Null forgets the choice and returns this item to the device and server defaults."
+    language: String
+  ): AudioLanguagePreferenceResult
+
   "End an HLS streaming session"
   endStreamingSession(sessionId: String!): Boolean
 
@@ -1223,6 +1232,18 @@ type StreamingMetadata {
   container: String
 
   "Audio languages this playback should prefer, most preferred first, already resolved against the item's original language. Direct play never reaches the server's transcoder, so a client must apply this itself (mpv's `alang`) to avoid opening on whichever track the container happened to flag default. Empty means the operator asked for the container's own flag to win, so the client should not override its player's selection."
+  preferredAudioLanguages: [String!]
+}
+
+"Outcome of remembering a viewer's audio language choice"
+type AudioLanguagePreferenceResult {
+  "The show or film the preference was stored against"
+  mediaItemId: ID!
+
+  "The remembered language, or null if the choice was forgotten"
+  language: String
+
+  "The full preference list now in effect for this item, most preferred first, with the new choice already folded in. A client can apply this directly rather than re-querying streamingCandidates."
   preferredAudioLanguages: [String!]
 }
 

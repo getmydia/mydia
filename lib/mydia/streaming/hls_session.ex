@@ -231,6 +231,7 @@ defmodule Mydia.Streaming.HlsSession do
                max_bitrate: max_bitrate,
                max_height: max_height,
                audio_language: playback.audio_language,
+               show_audio_language: playback.show_audio_language,
                started_at: DateTime.utc_now()
              }
            ) do

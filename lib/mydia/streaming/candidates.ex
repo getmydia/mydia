@@ -14,7 +14,7 @@ defmodule Mydia.Streaming.Candidates do
   alias Mydia.Library.{FileAnalyzer, FileRanking, MediaFile}
   alias Mydia.Library.Structs.FileMetadata
   alias Mydia.Repo
-  alias Mydia.Streaming.{AudioTrackSelector, CodecString, Compatibility}
+  alias Mydia.Streaming.{AudioPreferences, AudioTrackSelector, CodecString, Compatibility}
 
   @default_max_attempts 3
 
@@ -130,8 +130,16 @@ defmodule Mydia.Streaming.Candidates do
   @doc """
   Builds metadata response for a media file.
   """
-  def build_metadata_response(media_file) do
+  def build_metadata_response(media_file, opts \\ []) do
     metadata = media_file.metadata || FileMetadata.empty()
+    with_item = with_item_metadata(media_file)
+
+    # The viewer's own choice for this show, if they made one. Passed as the
+    # strongest preference level so a picked language survives to the next
+    # episode, including on direct play, where the server never sees the
+    # track selection itself.
+    show_preference =
+      AudioPreferences.for_media_file(Keyword.get(opts, :user_id), with_item)
 
     %{
       duration: metadata.duration,
@@ -144,7 +152,9 @@ defmodule Mydia.Streaming.Candidates do
       original_audio_codec: media_file.audio_codec,
       container: metadata.container,
       preferred_audio_languages:
-        AudioTrackSelector.resolved_languages(with_item_metadata(media_file))
+        AudioTrackSelector.resolved_languages(with_item,
+          show_audio_language: show_preference
+        )
     }
   end
 

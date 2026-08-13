@@ -48,6 +48,18 @@ pub struct StreamingMetadata {
     pub preferred_audio_languages: Option<Vec<String>>,
 }
 
+/// Outcome of remembering a viewer's audio language choice.
+///
+/// Declared but never constructed here: `setAudioLanguagePreference` returns
+/// `not_implemented`, the same as the other streaming mutations this server
+/// does not serve. The type exists because `sdl_parity` gates on structure.
+#[derive(SimpleObject)]
+pub struct AudioLanguagePreferenceResult {
+    pub media_item_id: ID,
+    pub language: Option<String>,
+    pub preferred_audio_languages: Option<Vec<String>>,
+}
+
 #[derive(SimpleObject)]
 pub struct StreamingSessionResult {
     pub session_id: String,

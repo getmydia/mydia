@@ -62,6 +62,7 @@ import '../../../graphql/queries/season_episodes.graphql.dart';
 import '../../../graphql/mutations/start_streaming_session.graphql.dart';
 import '../../../graphql/mutations/start_streaming_session_legacy.graphql.dart';
 import '../../../graphql/mutations/end_streaming_session.graphql.dart';
+import '../../../graphql/mutations/set_audio_language_preference.graphql.dart';
 import '../../../graphql/queries/streaming_candidates.graphql.dart';
 import '../../../graphql/queries/subtitle_content.graphql.dart';
 import '../../../graphql/queries/subtitle_search.graphql.dart';
@@ -3252,6 +3253,65 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         debugPrint(
             '[PlayerScreen] No media_kit track found for: ${selected.id}');
       }
+
+      // Applied to this playback above; remembered here so the next episode
+      // opens on it too. Every other media server treats a pick as a one-off
+      // and makes the viewer repeat it, which is the complaint this removes.
+      await _rememberAudioLanguage(selected.language);
+    }
+  }
+
+  /// Stores the picked language against the show or film, so later episodes
+  /// open on it without another pick.
+  ///
+  /// Deliberately fire-and-forget from the viewer's perspective: the track
+  /// has already changed by the time this runs, so a failure here costs the
+  /// preference and not the playback the person is watching. It is awaited
+  /// only so the debug line reports the real outcome.
+  ///
+  /// Skips an untagged track. `'und'` is ffprobe's "undetermined", and
+  /// storing it would pin the show to a preference that can never match
+  /// anything on the next file.
+  Future<void> _rememberAudioLanguage(String language) async {
+    if (language.isEmpty || language == 'und') return;
+    if (widget.fileId == 'offline') return;
+
+    final graphqlClient = _graphqlClient;
+    if (graphqlClient == null) return;
+
+    try {
+      final result = await graphqlClient.mutate(
+        MutationOptions(
+          document: documentNodeMutationSetAudioLanguagePreference,
+          variables: Variables$Mutation$SetAudioLanguagePreference(
+            fileId: widget.fileId,
+            language: language,
+          ).toJson(),
+        ),
+      );
+
+      if (result.hasException) {
+        // A server too old to know this mutation answers with a GraphQL
+        // validation error. That is a version gap, not a fault, and it stays
+        // silent for the viewer: the track they picked has already changed.
+        debugPrint(
+            '[PlayerScreen] Could not remember audio language: ${result.exception}');
+        return;
+      }
+
+      // Kept for the next media this screen opens without remounting, which
+      // is what a season playing through does: go_router keys the page by
+      // route pattern, so `initState` does not run again for the next
+      // episode and the fresh Player built there reads this field.
+      final data = result.data?['setAudioLanguagePreference'];
+      final updated = data?['preferredAudioLanguages'];
+      if (updated is List) {
+        _preferredAudioLanguages = updated.cast<String>();
+      }
+
+      debugPrint('[PlayerScreen] Remembered audio language: $language');
+    } catch (e) {
+      debugPrint('[PlayerScreen] Could not remember audio language: $e');
     }
   }
 

@@ -481,6 +481,21 @@ defmodule MydiaWeb.Schema.CommonTypes do
           "override its player's selection."
   end
 
+  @desc "Outcome of remembering a viewer's audio language choice"
+  object :audio_language_preference_result do
+    field :media_item_id, non_null(:id),
+      description: "The show or film the preference was stored against"
+
+    field :language, :string,
+      description: "The remembered language, or null if the choice was forgotten"
+
+    field :preferred_audio_languages, list_of(non_null(:string)),
+      description:
+        "The full preference list now in effect for this item, most preferred " <>
+          "first, with the new choice already folded in. A client can apply this " <>
+          "directly rather than re-querying streamingCandidates."
+  end
+
   @desc "Result of streaming candidates query"
   object :streaming_candidates_result do
     field :file_id, non_null(:id), description: "The resolved media file ID"
