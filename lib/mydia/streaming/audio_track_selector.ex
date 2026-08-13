@@ -288,6 +288,16 @@ defmodule Mydia.Streaming.AudioTrackSelector do
   answer for "what language should the player insist on": none. The client
   then leaves its own selection alone and the container's flag decides, which
   is what that setting asks for.
+
+  Every code is expanded through `LanguageCode.equivalents/1`, so `["ja"]`
+  goes out as `["ja", "jpn"]`. This is not cosmetic. The list is handed
+  straight to mpv's `alang`, TMDB reports original languages as ISO 639-1,
+  and Matroska tags its tracks with the 3-letter forms; mpv only gained
+  lenient matching between the two in 0.36, so on an older bundled libmpv a
+  bare `ja` matches nothing and mpv falls back to the container's `default`
+  flag, which is the dub this whole feature exists to stop selecting.
+  Expanding here means the behaviour does not depend on which libmpv the
+  player happens to ship.
   """
   @spec resolved_languages(struct() | nil, keyword()) :: [String.t()]
   def resolved_languages(media_file, opts \\ []) do
@@ -306,7 +316,10 @@ defmodule Mydia.Streaming.AudioTrackSelector do
         original =
           Keyword.get(opts, :original_language) || original_language_of(media_file)
 
-        expand(preferences, original)
+        preferences
+        |> expand(original)
+        |> Enum.flat_map(&LanguageCode.equivalents/1)
+        |> Enum.uniq()
     end
   end
 
@@ -327,10 +340,19 @@ defmodule Mydia.Streaming.AudioTrackSelector do
   metadata existed yields. Emitting no `-map` leaves ffmpeg's implicit
   selection in place, so such a file keeps playing exactly as it did before
   rather than failing.
+
+  Both maps carry ffmpeg's trailing `?`, which makes them optional. The index
+  comes from `metadata.streams`, recorded when the file was analysed, and a
+  file replaced on disk without re-analysis can leave it pointing past the end
+  of the real stream list. Without the `?` ffmpeg aborts with
+  `Stream map '0:N' matches no streams` and the playback is simply dead, where
+  before this change the same file played under implicit selection. With it,
+  the worst case degrades to a stream that is missing rather than a session
+  that will not start.
   """
   @spec ffmpeg_map_args(StreamInfo.t() | nil) :: [String.t()]
   def ffmpeg_map_args(%StreamInfo{index: index}) when is_integer(index) do
-    ["-map", "0:V:0", "-map", "0:#{index}"]
+    ["-map", "0:V:0?", "-map", "0:#{index}?"]
   end
 
   def ffmpeg_map_args(_), do: []

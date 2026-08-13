@@ -9,6 +9,7 @@ defmodule MydiaWeb.Api.StreamController do
   alias Mydia.Repo
 
   alias Mydia.Streaming.{
+    AudioPreferences,
     Candidates,
     Compatibility,
     FfmpegRemuxer,
@@ -96,7 +97,13 @@ defmodule MydiaWeb.Api.StreamController do
       media_file =
         from(mf in MediaFile,
           where: is_nil(mf.trashed_at),
-          preload: [:media_item, :episode, :library_path]
+          # `episode: :media_item` rather than a bare `:episode`: a TV
+          # media_file has a null media_item_id and reaches its show only
+          # through the episode, so the flat preload leaves
+          # AudioTrackSelector with no original language and silently drops
+          # the "original" audio preference for the whole TV library on this
+          # path while the HLS path honours it.
+          preload: [:media_item, :library_path, episode: :media_item]
         )
         |> Repo.get!(media_file_id)
 
@@ -150,7 +157,16 @@ defmodule MydiaWeb.Api.StreamController do
       {:ok, media_file} ->
         media_file = Candidates.ensure_codec_info(media_file)
         candidates = Candidates.build_streaming_candidates(media_file)
-        metadata = Candidates.build_metadata_response(media_file)
+        # Carries the viewer through, so this endpoint's
+        # preferred_audio_languages reflects a stored per-show choice the same
+        # way the GraphQL resolver's does. Without it a web client doing
+        # direct play gets the config-only list while the Flutter client gets
+        # the personalised one, from the same server, for the same file.
+        metadata =
+          case get_user_id(conn) do
+            {:ok, user_id} -> Candidates.build_metadata_response(media_file, user_id: user_id)
+            _ -> Candidates.build_metadata_response(media_file)
+          end
 
         json(conn, %{
           candidates: candidates,
@@ -301,7 +317,9 @@ defmodule MydiaWeb.Api.StreamController do
           "Starting HLS session for media_file_id=#{media_file.id}, user_id=#{user_id}, mode=#{hls_mode}"
         )
 
-        case HlsSessionSupervisor.start_session(media_file.id, user_id, hls_mode) do
+        session_opts = AudioPreferences.session_opts(user_id, media_file)
+
+        case HlsSessionSupervisor.start_session(media_file.id, user_id, hls_mode, session_opts) do
           {:ok, _pid} ->
             # Get session info to retrieve session_id
             case HlsSessionSupervisor.get_session(media_file.id, user_id) do
@@ -475,7 +493,18 @@ defmodule MydiaWeb.Api.StreamController do
 
     Logger.info("Starting remux for #{file_path} with duration: #{inspect(duration)}")
 
-    case FfmpegRemuxer.start_remux(file_path, duration: duration, media_file: media_file) do
+    # Same per-show language the HLS path applies. Without it a viewer who
+    # picked English on one episode gets the operator default on the next
+    # whenever the client happens to choose REMUX, which is precisely the
+    # stickiness this is meant to provide.
+    remux_opts =
+      [duration: duration, media_file: media_file] ++
+        case get_user_id(conn) do
+          {:ok, user_id} -> AudioPreferences.session_opts(user_id, media_file)
+          _ -> []
+        end
+
+    case FfmpegRemuxer.start_remux(file_path, remux_opts) do
       {:ok, port, os_pid} ->
         # Stream the remuxed content to the client
         FfmpegRemuxer.stream_to_conn(conn, port, os_pid)

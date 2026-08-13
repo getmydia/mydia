@@ -973,11 +973,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       final candidatesResult = candidatesFetch.candidates;
 
       // Held for _openPlayerAndStart, which builds the media_kit Player and
-      // has to set mpv's alang before opening the media. Null covers both a
-      // failed candidates call and a server too old to carry the field; both
-      // mean "no opinion", and mpv keeps its own selection.
-      _preferredAudioLanguages =
-          candidatesResult?.metadata.preferredAudioLanguages ?? const [];
+      // has to set mpv's alang before opening the media.
+      //
+      // Only overwritten when the server actually answered. A null here is
+      // either a failed candidates call (offline fall-through, transient
+      // error) or a server too old to carry the field, and neither is a
+      // statement that the viewer has no preference. Assigning `const []`
+      // unconditionally would discard what `_rememberAudioLanguage` stored on
+      // the previous episode, which is exactly the case where a season
+      // playing through must keep it: go_router reuses this screen state, so
+      // this field is the only thing carrying the choice forward.
+      final serverPreference =
+          candidatesResult?.metadata.preferredAudioLanguages;
+      if (serverPreference != null) {
+        _preferredAudioLanguages = serverPreference;
+      }
 
       // The file actually being played. Normally the user's choice; on the
       // offline fall-through, or when the selected file was rejected by the

@@ -445,9 +445,12 @@ defmodule Mydia.Config.Schema do
 
   # An empty list is allowed and means "no language preference": selection
   # falls through to the container's default flag, which is the behaviour
-  # every mydia before this field had. Blank entries are rejected rather than
-  # dropped, because a stray comma in AUDIO_LANGUAGE should be a startup error
-  # an operator can see, not a silently shortened preference list.
+  # every mydia before this field had.
+  #
+  # Blank entries are rejected rather than dropped. Not reachable from
+  # AUDIO_LANGUAGE, whose parser already strips them, but very much reachable
+  # from a YAML list or a DB/UI value, where a stray empty string would
+  # otherwise become a preference that silently matches nothing.
   defp validate_audio_language(changeset) do
     case get_field(changeset, :audio_language) do
       nil ->

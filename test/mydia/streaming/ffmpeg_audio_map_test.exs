@@ -62,7 +62,7 @@ defmodule Mydia.Streaming.FfmpegAudioMapTest do
           audio(2, "eng", channels: 2)
         ])
 
-      assert maps(args(media_file: file, audio_language: ["en"])) == ["0:V:0", "0:2"]
+      assert maps(args(media_file: file, audio_language: ["en"])) == ["0:V:0?", "0:2?"]
     end
 
     test "maps the video stream as 0:V:0 so embedded cover art cannot win" do
@@ -71,7 +71,7 @@ defmodule Mydia.Streaming.FfmpegAudioMapTest do
       # track under 0:v:0.
       file = media_file([video_stream(), audio(1, "eng")])
 
-      assert value_after(args(media_file: file, audio_language: ["en"]), "-map") == "0:V:0"
+      assert value_after(args(media_file: file, audio_language: ["en"]), "-map") == "0:V:0?"
     end
 
     test "maps by absolute container index, not audio-relative position" do
@@ -85,21 +85,36 @@ defmodule Mydia.Streaming.FfmpegAudioMapTest do
           audio(3, "eng")
         ])
 
-      assert maps(args(media_file: file, audio_language: ["en"])) == ["0:V:0", "0:3"]
+      assert maps(args(media_file: file, audio_language: ["en"])) == ["0:V:0?", "0:3?"]
     end
 
     test "honours the configured preference order through the device override" do
       file = media_file([video_stream(), audio(1, "eng"), audio(2, "jpn")])
 
-      assert maps(args(media_file: file, audio_language: ["ja"])) == ["0:V:0", "0:2"]
-      assert maps(args(media_file: file, audio_language: ["en"])) == ["0:V:0", "0:1"]
+      assert maps(args(media_file: file, audio_language: ["ja"])) == ["0:V:0?", "0:2?"]
+      assert maps(args(media_file: file, audio_language: ["en"])) == ["0:V:0?", "0:1?"]
     end
 
     test "the per-show preference outranks the per-device one" do
       file = media_file([video_stream(), audio(1, "eng"), audio(2, "jpn")])
 
       assert maps(args(media_file: file, audio_language: ["en"], show_audio_language: ["ja"])) ==
-               ["0:V:0", "0:2"]
+               ["0:V:0?", "0:2?"]
+    end
+
+    test "both maps are optional so a stale index degrades instead of aborting" do
+      # The index comes from metadata.streams, written at analysis time. A
+      # file replaced on disk without re-analysis can leave it pointing past
+      # the real stream list, and a mandatory map makes ffmpeg exit with
+      # "Stream map '0:N' matches no streams" rather than play. That is a
+      # regression against the implicit selection this replaced, so both maps
+      # carry ffmpeg's trailing `?`.
+      file = media_file([video_stream(), audio(1, "eng")])
+
+      assert Enum.all?(
+               maps(args(media_file: file, audio_language: ["en"])),
+               &String.ends_with?(&1, "?")
+             )
     end
   end
 
@@ -140,7 +155,7 @@ defmodule Mydia.Streaming.FfmpegAudioMapTest do
           audio(2, "eng", channels: 2)
         ])
 
-      assert maps(remux_args(media_file: file, audio_language: ["en"])) == ["0:V:0", "0:2"]
+      assert maps(remux_args(media_file: file, audio_language: ["en"])) == ["0:V:0?", "0:2?"]
     end
 
     test "still stream-copies rather than re-encoding" do
@@ -148,6 +163,44 @@ defmodule Mydia.Streaming.FfmpegAudioMapTest do
       args = remux_args(media_file: file, audio_language: ["en"])
 
       assert value_after(args, "-c") == "copy"
+    end
+
+    test "encodes the audio when the mapped stream is one the client cannot decode" do
+      # REMUX is offered on the strength of media_file.audio_codec, the FIRST
+      # audio stream. Here that is AAC, so the candidate advertised
+      # mp4a.40.2 — and then language selection maps the AC3 track. A blanket
+      # `-c copy` would put AC3 in the fMP4 under an MIME promising AAC, which
+      # the client's canPlayType check never approved.
+      file =
+        media_file(
+          [
+            video_stream(),
+            audio(1, "eng", codec: "aac", channels: 2),
+            audio(2, "jpn", codec: "ac3", channels: 6)
+          ],
+          audio_codec: "aac"
+        )
+
+      args = remux_args(media_file: file, audio_language: ["ja"])
+
+      assert value_after(args, "-c:a") == "aac"
+      # The video is why REMUX was chosen; it must not start re-encoding.
+      assert value_after(args, "-c:v") == "copy"
+      refute value_after(args, "-c") == "copy"
+    end
+
+    test "keeps the blanket copy when the mapped stream is already compatible" do
+      file =
+        media_file(
+          [
+            video_stream(),
+            audio(1, "jpn", codec: "ac3", channels: 6),
+            audio(2, "eng", codec: "aac", channels: 2)
+          ],
+          audio_codec: "ac3"
+        )
+
+      assert value_after(remux_args(media_file: file, audio_language: ["en"]), "-c") == "copy"
     end
 
     test "emits no -map for an unanalysed file, preserving the old behaviour" do

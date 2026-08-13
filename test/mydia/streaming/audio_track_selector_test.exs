@@ -224,6 +224,62 @@ defmodule Mydia.Streaming.AudioTrackSelectorTest do
     end
   end
 
+  describe "resolved_languages/2" do
+    # What the server hands a client to feed straight into mpv's `alang`.
+    defp file_with(original_language) do
+      %{
+        metadata: %{streams: []},
+        media_item: %{metadata: %{original_language: original_language}}
+      }
+    end
+
+    test "expands every code to its three-letter forms" do
+      # This is the finding that mattered: TMDB reports original languages as
+      # ISO 639-1 while Matroska tags tracks with the 3-letter forms, and mpv
+      # only gained lenient matching between them in 0.36. Sending a bare
+      # "ja" to an older libmpv matches nothing, so mpv falls back to the
+      # container's default flag — the dub this feature exists to avoid.
+      languages = AudioTrackSelector.resolved_languages(file_with("ja"))
+
+      assert "ja" in languages
+      assert "jpn" in languages
+      assert "en" in languages
+      assert "eng" in languages
+    end
+
+    test "keeps the preference order across the expansion" do
+      # jpn must still outrank eng, or the expansion would have silently
+      # reordered the very thing it exists to preserve.
+      languages = AudioTrackSelector.resolved_languages(file_with("ja"))
+
+      assert Enum.find_index(languages, &(&1 == "jpn")) <
+               Enum.find_index(languages, &(&1 == "eng"))
+    end
+
+    test "expands to the bibliographic form Matroska actually writes" do
+      languages = AudioTrackSelector.resolved_languages(file_with("de"))
+
+      assert "ger" in languages
+      assert "deu" in languages
+    end
+
+    test "collapses to English when the item has no original language" do
+      languages = AudioTrackSelector.resolved_languages(file_with(nil))
+
+      assert languages == ["en", "eng"]
+    end
+
+    test "emits no duplicates when original and fallback are the same language" do
+      # A US series resolves "original" to English, which is also the
+      # fallback. mpv would tolerate the repeat, but a duplicated list is a
+      # sign the sentinel was not resolved before expansion.
+      languages = AudioTrackSelector.resolved_languages(file_with("en"))
+
+      assert languages == Enum.uniq(languages)
+      assert languages == ["en", "eng"]
+    end
+  end
+
   describe "resolve_preferences/2" do
     test "per-show preference outranks every other source" do
       assert ["de"] =

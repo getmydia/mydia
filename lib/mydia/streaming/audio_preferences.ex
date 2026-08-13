@@ -86,6 +86,25 @@ defmodule Mydia.Streaming.AudioPreferences do
   end
 
   @doc """
+  The session and remux options carrying this viewer's per-show language, or
+  `[]` when they have no preference for this item.
+
+  Exists so every entry point that starts a session spells this the same way.
+  There are four (the GraphQL resolver, both REST controllers, and the
+  remuxer), and `show_audio_language` is a `session_matches?/2` discriminator:
+  a caller that omits it does not merely lose the preference, it fails to
+  match a running session that has one and tears down a live encode to start
+  an identical replacement without it.
+  """
+  @spec session_opts(binary() | nil, struct() | nil) :: keyword()
+  def session_opts(user_id, media_file) do
+    case for_media_file(user_id, media_file) do
+      [] -> []
+      languages -> [show_audio_language: languages]
+    end
+  end
+
+  @doc """
   The media item a file belongs to.
 
   A TV media_file carries a null `media_item_id` and reaches its show only
