@@ -44,6 +44,8 @@ defmodule Mydia.Streaming.FfmpegRemuxer do
 
   require Logger
 
+  alias Mydia.Streaming.AudioTrackSelector
+
   @type remux_opts :: [
           seek_seconds: number() | nil,
           duration: number() | nil
@@ -74,9 +76,8 @@ defmodule Mydia.Streaming.FfmpegRemuxer do
   @spec start_remux(String.t(), remux_opts()) :: {:ok, port(), integer()} | {:error, term()}
   def start_remux(input_path, opts \\ []) do
     seek_seconds = Keyword.get(opts, :seek_seconds)
-    duration = Keyword.get(opts, :duration)
 
-    args = build_ffmpeg_args(input_path, seek_seconds, duration)
+    args = build_ffmpeg_args(input_path, opts)
 
     Logger.info(
       "Starting fMP4 remux: #{input_path}" <>
@@ -146,7 +147,14 @@ defmodule Mydia.Streaming.FfmpegRemuxer do
   ## Private Functions
 
   # Build FFmpeg command arguments for fMP4 remuxing
-  defp build_ffmpeg_args(input_path, seek_seconds, duration) do
+  @doc false
+  # Public only so the argument construction can be unit-tested directly,
+  # matching FfmpegHlsTranscoder.build_ffmpeg_args/3; nothing outside this
+  # module should call it.
+  def build_ffmpeg_args(input_path, opts) do
+    seek_seconds = Keyword.get(opts, :seek_seconds)
+    duration = Keyword.get(opts, :duration)
+
     # Base args - seek first for efficiency (input seeking)
     seek_args =
       if seek_seconds && seek_seconds > 0 do
@@ -156,6 +164,17 @@ defmodule Mydia.Streaming.FfmpegRemuxer do
       end
 
     input_args = ["-i", input_path]
+
+    # Which audio stream survives the remux. `-c copy` copies the codec, not
+    # every stream: without an explicit -map ffmpeg still reduces to one
+    # stream per type and picks the audio track with the most channels, so a
+    # dual-language file silently loses its original-language track here just
+    # as it does on the transcode path.
+    map_args =
+      opts
+      |> Keyword.get(:media_file)
+      |> AudioTrackSelector.select_for_playback(opts)
+      |> AudioTrackSelector.ffmpeg_map_args()
 
     # Stream copy (no transcoding)
     codec_args = ["-c", "copy"]
@@ -191,7 +210,7 @@ defmodule Mydia.Streaming.FfmpegRemuxer do
       "pipe:1"
     ]
 
-    seek_args ++ input_args ++ codec_args ++ duration_args ++ output_args
+    seek_args ++ input_args ++ map_args ++ codec_args ++ duration_args ++ output_args
   end
 
   # Start FFmpeg process using Port

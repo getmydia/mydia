@@ -53,22 +53,22 @@ defmodule Mydia.Streaming.HlsSessionSupervisor do
   """
   def start_session(media_file_id, user_id, mode \\ :transcode, opts \\ []) do
     session_key = session_key(media_file_id, user_id)
-    start_position = Keyword.get(opts, :start_position, 0)
-    max_bitrate = Keyword.get(opts, :max_bitrate)
-    max_height = Keyword.get(opts, :max_height)
 
     case Registry.lookup(@registry_name, session_key) do
       [{pid, metadata}] ->
-        if session_matches?(metadata, start_position, max_bitrate, max_height) do
+        if session_matches?(metadata, session_request(opts)) do
           {:ok, pid}
         else
           # A session transcoding from a different offset cannot serve this
           # request: its playlist simply does not contain the wanted range. A
           # session running at a different quality cannot serve it either: its
-          # segments are already encoded at the old rung. Replace it rather
-          # than keying sessions by offset and quality, so a user scrubbing
-          # around or flipping rungs does not accumulate concurrent FFmpeg
-          # processes.
+          # segments are already encoded at the old rung. Nor can one running
+          # a different audio language: the track it mapped is already baked
+          # into those segments, so a viewer switching language needs a fresh
+          # encode rather than the running one. Replace it rather than keying
+          # sessions by every one of those, so a user scrubbing around,
+          # flipping rungs or changing language does not accumulate concurrent
+          # FFmpeg processes.
           stop_gracefully(pid)
           start_new_session(media_file_id, user_id, mode, opts, session_key)
         end
@@ -78,15 +78,41 @@ defmodule Mydia.Streaming.HlsSessionSupervisor do
     end
   end
 
+  # Every request option that shapes the transcode output, mapped to the value
+  # a Registry entry predating that option is assumed to have carried. A
+  # session is reusable only when all of them agree.
+  @session_discriminators %{
+    start_position: 0,
+    max_bitrate: nil,
+    max_height: nil,
+    audio_language: nil
+  }
+
   @doc false
-  # Public for unit testing. Metadata registered before the quality fields
-  # existed is treated as an uncapped session at offset zero rather than as a
-  # wildcard that matches any request.
-  def session_matches?(metadata, start_position, max_bitrate, max_height) do
-    Map.get(metadata, :start_position, 0) == start_position and
-      Map.get(metadata, :max_bitrate) == max_bitrate and
-      Map.get(metadata, :max_height) == max_height
+  # Public for unit testing. Metadata registered before one of these fields
+  # existed is treated as carrying that field's default rather than as a
+  # wildcard that matches every request.
+  def session_matches?(metadata, request) do
+    Enum.all?(@session_discriminators, fn {key, default} ->
+      Map.get(metadata, key, default) == Map.get(request, key, default)
+    end)
   end
+
+  @doc false
+  # The discriminating slice of a request's options, normalised so the two
+  # ways of saying "no audio preference" compare equal: a client too old to
+  # send the field at all, and a new one sending an empty list.
+  def session_request(opts) do
+    %{
+      start_position: Keyword.get(opts, :start_position, 0),
+      max_bitrate: Keyword.get(opts, :max_bitrate),
+      max_height: Keyword.get(opts, :max_height),
+      audio_language: normalize_audio_language(Keyword.get(opts, :audio_language))
+    }
+  end
+
+  defp normalize_audio_language([]), do: nil
+  defp normalize_audio_language(value), do: value
 
   # Stops a session the way `endStreamingSession` does, rather than through
   # `DynamicSupervisor.terminate_child/2`. `HlsSession` does not trap exits,

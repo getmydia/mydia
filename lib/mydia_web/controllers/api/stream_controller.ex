@@ -475,7 +475,7 @@ defmodule MydiaWeb.Api.StreamController do
 
     Logger.info("Starting remux for #{file_path} with duration: #{inspect(duration)}")
 
-    case FfmpegRemuxer.start_remux(file_path, duration: duration) do
+    case FfmpegRemuxer.start_remux(file_path, duration: duration, media_file: media_file) do
       {:ok, port, os_pid} ->
         # Stream the remuxed content to the client
         FfmpegRemuxer.stream_to_conn(conn, port, os_pid)

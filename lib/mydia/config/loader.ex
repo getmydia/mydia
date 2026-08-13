@@ -279,6 +279,16 @@ defmodule Mydia.Config.Loader do
       System.get_env("MAX_TRANSCODE_HEIGHT"),
       &parse_integer/1
     )
+    |> put_if_present(
+      :audio_language,
+      System.get_env("AUDIO_LANGUAGE"),
+      &parse_string_list/1
+    )
+    |> put_if_present(
+      :prefer_default_audio_track,
+      System.get_env("PREFER_DEFAULT_AUDIO_TRACK"),
+      &parse_boolean/1
+    )
   end
 
   defp load_logging_env do
