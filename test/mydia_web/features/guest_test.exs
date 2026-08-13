@@ -1,18 +1,28 @@
 defmodule MydiaWeb.Features.GuestTest do
   @moduledoc """
-  Feature tests for the guest system: navigation, request pages,
-  My Requests page, and admin request management.
+  Browser coverage for the guest request system.
 
-  Search on request pages hits the external metadata-relay API,
-  so we bypass search and pre-create request data directly via
-  `MediaRequests.create_request/1`.
+  Scope is deliberately narrow. The full lifecycle is covered far faster by
+  `MydiaWeb.GuestRequestFlowTest`; what only a real browser can prove is that
+  the request and approve modals, and their phx-click wiring, actually work.
+
+  Metadata is served by `Mydia.MetadataStubProvider`, so approval genuinely
+  succeeds. An earlier version of this file let approval fail against the live
+  relay and asserted on a `page_source` substring that `/admin/requests` always
+  contains, so it passed regardless.
   """
 
   use MydiaWeb.FeatureCase, async: false
 
-  alias Mydia.MediaRequests
+  import Mydia.MetadataStub
+
+  alias Mydia.Media.MediaRequest
+  alias Mydia.MetadataStubProvider
+  alias Mydia.Repo
 
   @moduletag :feature
+
+  setup :setup_metadata_stub
 
   describe "Guest Navigation & Access Control" do
     @tag :feature
@@ -26,30 +36,6 @@ defmodule MydiaWeb.Features.GuestTest do
     end
 
     @tag :feature
-    test "guest sees request links in sidebar", %{session: session} do
-      login_as_guest(session)
-
-      session
-      |> wait_for_liveview()
-      |> assert_path("/")
-
-      assert Wallaby.Browser.has_text?(session, "Request Movie")
-      assert Wallaby.Browser.has_text?(session, "Request Series")
-      assert Wallaby.Browser.has_text?(session, "My Requests")
-    end
-
-    @tag :feature
-    test "guest can browse movies page", %{session: session} do
-      login_as_guest(session)
-      session |> wait_for_liveview()
-
-      session
-      |> visit("/movies")
-      |> wait_for_liveview()
-      |> assert_path("/movies")
-    end
-
-    @tag :feature
     test "guest cannot access admin pages", %{session: session} do
       login_as_guest(session)
       session |> wait_for_liveview()
@@ -58,247 +44,99 @@ defmodule MydiaWeb.Features.GuestTest do
       |> visit("/admin/requests")
       |> wait_for_liveview()
 
-      # Guest should be redirected away from admin page
       refute Wallaby.Browser.current_path(session) == "/admin/requests"
     end
   end
 
-  describe "Request Media Pages" do
+  describe "End-to-end request and approval in a real browser" do
     @tag :feature
-    test "guest can access request movie page", %{session: session} do
-      login_as_guest(session)
-      session |> wait_for_liveview()
-
-      session
-      |> visit("/request/movie")
-      |> wait_for_liveview()
-      |> assert_path("/request/movie")
-      |> assert_has_text("Request Movie")
-      |> assert_has_text("Guest Request System")
-
-      assert Wallaby.Browser.has_css?(session, "#search-form")
-    end
-
-    @tag :feature
-    test "guest can access request series page", %{session: session} do
-      login_as_guest(session)
-      session |> wait_for_liveview()
-
-      session
-      |> visit("/request/series")
-      |> wait_for_liveview()
-      |> assert_path("/request/series")
-      |> assert_has_text("Request Series")
-
-      assert Wallaby.Browser.has_css?(session, "#search-form")
-    end
-  end
-
-  describe "My Requests Page" do
-    @tag :feature
-    test "shows empty state when no requests", %{session: session} do
-      login_as_guest(session)
-      session |> wait_for_liveview()
-
-      session
-      |> visit("/requests")
-      |> wait_for_liveview()
-      |> assert_path("/requests")
-      |> assert_has_text("No requests found")
-    end
-
-    @tag :feature
-    test "shows pending request when one exists", %{session: session} do
-      guest = create_guest_user()
-      login(session, guest.username, "password123")
-      session |> wait_for_liveview()
-
-      {:ok, _request} =
-        MediaRequests.create_request(%{
-          media_type: "movie",
-          title: "Test Movie Alpha",
-          tmdb_id: 99001,
-          requester_id: guest.id
-        })
-
-      session
-      |> visit("/requests")
-      |> wait_for_liveview()
-      |> assert_path("/requests")
-      |> assert_has_text("Test Movie Alpha")
-      |> assert_has_text("Pending")
-    end
-
-    @tag :feature
-    test "filter tabs show correct requests", %{session: session} do
+    @tag timeout: 180_000
+    test "guest requests a movie through the modal and an admin approves it",
+         %{session: session} do
       guest = create_guest_user()
       admin = create_admin_user()
 
+      # --- Guest submits through the modal ---
       login(session, guest.username, "password123")
       session |> wait_for_liveview()
 
-      # Create a pending request
-      {:ok, _pending} =
-        MediaRequests.create_request(%{
-          media_type: "movie",
-          title: "Pending Film",
-          tmdb_id: 99010,
-          requester_id: guest.id
-        })
-
-      # Create and reject a request
-      {:ok, rejected_req} =
-        MediaRequests.create_request(%{
-          media_type: "movie",
-          title: "Rejected Film",
-          tmdb_id: 99011,
-          requester_id: guest.id
-        })
-
-      {:ok, _} =
-        MediaRequests.reject_request(rejected_req, %{
-          rejection_reason: "Not available",
-          approved_by_id: admin.id
-        })
-
-      # Visit My Requests (default is "all")
       session
-      |> visit("/requests")
+      |> visit("/request/movie?q=stub")
       |> wait_for_liveview()
+      |> assert_has_text(MetadataStubProvider.movie_title())
 
-      # All tab should show both
-      assert_has_text(session, "Pending Film")
-      assert_has_text(session, "Rejected Film")
-
-      # Click Pending tab
       session
-      |> js_click("[phx-click='filter'][phx-value-status='pending']")
+      |> js_click(~s(button[phx-click="open_request_modal"][phx-value-index="0"]))
 
-      assert_has_text(session, "Pending Film")
-      refute Wallaby.Browser.has_text?(session, "Rejected Film")
+      assert Wallaby.Browser.has_css?(session, "#request-modal-form")
 
-      # Click Rejected tab
-      session
-      |> js_click("[phx-click='filter'][phx-value-status='rejected']")
+      Wallaby.Browser.execute_script(session, """
+        var form = document.getElementById('request-modal-form');
+        if (form) { form.requestSubmit(); }
+      """)
 
-      assert_has_text(session, "Rejected Film")
-      refute Wallaby.Browser.has_text?(session, "Pending Film")
-    end
-  end
+      request = wait_for_request(MetadataStubProvider.movie_tmdb_id())
 
-  describe "Admin Request Management" do
-    @tag :feature
-    test "admin can see pending guest requests", %{session: session} do
-      guest = create_guest_user()
-      admin = create_admin_user()
+      assert request.status == "pending"
+      assert request.requester_id == guest.id
 
-      {:ok, _request} =
-        MediaRequests.create_request(%{
-          media_type: "movie",
-          title: "Guest Movie Request",
-          tmdb_id: 99020,
-          requester_id: guest.id
-        })
-
+      # --- Admin approves through the modal ---
       login(session, admin.username, "password123")
       session |> wait_for_liveview()
 
       session
       |> visit("/admin/requests")
       |> wait_for_liveview()
-      |> assert_path("/admin/requests")
-      |> assert_has_text("Guest Movie Request")
-      |> assert_has_text("Pending")
-    end
-
-    @tag :feature
-    @tag timeout: 120_000
-    test "admin can approve a request", %{session: session} do
-      guest = create_guest_user()
-      admin = create_admin_user()
-
-      {:ok, _request} =
-        MediaRequests.create_request(%{
-          media_type: "movie",
-          title: "Approvable Movie",
-          tmdb_id: 99030,
-          requester_id: guest.id
-        })
-
-      login(session, admin.username, "password123")
-      session |> wait_for_liveview()
+      |> assert_has_text(MetadataStubProvider.movie_title())
 
       session
-      |> visit("/admin/requests")
-      |> wait_for_liveview()
-      |> assert_has_text("Approvable Movie")
-
-      # Click Approve button to open modal
-      session |> js_click("[phx-click='open_approve_modal']")
+      |> js_click(~s(button[phx-click="open_approve_modal"][phx-value-id="#{request.id}"]))
 
       assert Wallaby.Browser.has_css?(session, "#approve-form")
 
-      # Submit the approve form via requestSubmit (triggers LiveView phx-submit)
       Wallaby.Browser.execute_script(session, """
         var form = document.getElementById('approve-form');
         if (form) { form.requestSubmit(); }
       """)
 
-      :timer.sleep(3000)
+      # Assert database state. Never assert on a page_source substring here:
+      # the filter tabs render phx-value-status="approved" unconditionally.
+      approved = wait_for_status(request.id, "approved")
 
-      # Use page_source assertion to avoid chromedriver log endpoint hang
-      assert_page_contains(session, "approved")
+      assert approved.approved_by_id == admin.id
+      refute is_nil(approved.media_item_id)
     end
+  end
 
-    @tag :feature
-    @tag timeout: 120_000
-    test "admin can reject a request with reason", %{session: session} do
-      guest = create_guest_user()
-      admin = create_admin_user()
+  # Wallaby has no built-in wait on database state, and the LiveView write
+  # happens after the browser returns from requestSubmit.
+  defp wait_for_request(tmdb_id, attempts \\ 40) do
+    case Repo.get_by(MediaRequest, tmdb_id: tmdb_id) do
+      nil when attempts > 0 ->
+        :timer.sleep(250)
+        wait_for_request(tmdb_id, attempts - 1)
 
-      {:ok, _request} =
-        MediaRequests.create_request(%{
-          media_type: "movie",
-          title: "Rejectable Movie",
-          tmdb_id: 99040,
-          requester_id: guest.id
-        })
+      nil ->
+        raise "no media request with tmdb_id #{tmdb_id} was created after waiting"
 
-      login(session, admin.username, "password123")
-      session |> wait_for_liveview()
+      request ->
+        request
+    end
+  end
 
-      session
-      |> visit("/admin/requests")
-      |> wait_for_liveview()
-      |> assert_has_text("Rejectable Movie")
+  defp wait_for_status(id, status, attempts \\ 40) do
+    request = Repo.get!(MediaRequest, id)
 
-      # Click Reject button to open modal
-      session |> js_click("[phx-click='open_reject_modal']")
+    cond do
+      request.status == status ->
+        request
 
-      assert Wallaby.Browser.has_css?(session, "#reject-form")
+      attempts > 0 ->
+        :timer.sleep(250)
+        wait_for_status(id, status, attempts - 1)
 
-      # Fill in rejection reason and submit via JS
-      Wallaby.Browser.execute_script(session, """
-        var textarea = document.querySelector("#reject-form textarea[name='reject[rejection_reason]']");
-        if (textarea) {
-          var nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
-          nativeInputValueSetter.call(textarea, 'Not suitable for library');
-          textarea.dispatchEvent(new Event('input', { bubbles: true }));
-        }
-      """)
-
-      :timer.sleep(1000)
-
-      # Submit the reject form via requestSubmit (triggers LiveView phx-submit)
-      Wallaby.Browser.execute_script(session, """
-        var form = document.getElementById('reject-form');
-        if (form) { form.requestSubmit(); }
-      """)
-
-      :timer.sleep(3000)
-
-      # Use page_source assertion to avoid chromedriver log endpoint hang
-      assert_page_contains(session, "rejected")
+      true ->
+        raise "request #{id} never reached status #{status}, last saw #{request.status}"
     end
   end
 end
