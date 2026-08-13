@@ -19,17 +19,24 @@ defmodule MetadataRelay.SubDL.Handler do
   def search(params) do
     with {:ok, query} <- build_query(params) do
       case Client.search(query) do
-        {:ok, %{"subtitles" => subtitles}} when is_list(subtitles) ->
-          {:ok, %{"subtitles" => Enum.map(subtitles, &transform_subtitle/1)}}
+        {:ok, response} when is_map(response) ->
+          case response do
+            %{"subtitles" => subtitles} when is_list(subtitles) ->
+              feature = feature_context(Map.get(response, "results", []))
+              {:ok, %{"subtitles" => Enum.map(subtitles, &transform_subtitle(&1, feature))}}
 
-        # SubDL answers a miss with status false and an error string rather than
-        # an empty list.
-        {:ok, %{"status" => false}} ->
-          {:ok, %{"subtitles" => []}}
+            # SubDL answers a miss with status false and an error string rather than
+            # an empty list.
+            %{"status" => false} ->
+              {:ok, %{"subtitles" => []}}
 
-        {:ok, unexpected} ->
-          Logger.warning("Unexpected SubDL search response: #{inspect(unexpected)}")
-          {:ok, %{"subtitles" => []}}
+            _ ->
+              Logger.warning(
+                "Unexpected SubDL search response: top-level keys: #{Enum.map_join(Map.keys(response), ", ", & &1)}"
+              )
+
+              {:ok, %{"subtitles" => []}}
+          end
 
         {:error, reason} ->
           {:error, reason}
@@ -101,10 +108,10 @@ defmodule MetadataRelay.SubDL.Handler do
   # two requests later. Mydia already treats this field as a default.
   # `rating` and `download_count` have no SubDL equivalent; emitting 0 keeps
   # them out of the client's scoring rather than inventing a ranking.
-  defp transform_subtitle(subtitle) do
+  defp transform_subtitle(subtitle, feature) do
     %{
       "id" => FileId.encode(subtitle["url"] || ""),
-      "language" => subtitle |> Map.get("language", "") |> to_string() |> String.downcase(),
+      "language" => normalize_language(subtitle["language"] || subtitle["lang"]),
       "format" => "srt",
       "rating" => 0,
       "download_count" => 0,
@@ -114,7 +121,45 @@ defmodule MetadataRelay.SubDL.Handler do
       "foreign_parts_only" => false,
       "moviehash_match" => false,
       "season" => subtitle["season"],
-      "episode" => subtitle["episode"]
+      "episode" => subtitle["episode"],
+      "feature_type" => feature["feature_type"],
+      "title" => feature["title"],
+      "year" => feature["year"],
+      "imdb_id" => feature["imdb_id"],
+      "tmdb_id" => feature["tmdb_id"]
     }
+  end
+
+  defp feature_context([]), do: empty_feature()
+
+  defp feature_context(nil), do: empty_feature()
+
+  defp feature_context([result | _]) when is_map(result) do
+    %{
+      "feature_type" => result["type"],
+      "title" => result["name"],
+      "year" => result["year"],
+      "imdb_id" => result["imdb_id"],
+      "tmdb_id" => result["tmdb_id"]
+    }
+  end
+
+  defp empty_feature do
+    %{
+      "feature_type" => nil,
+      "title" => nil,
+      "year" => nil,
+      "imdb_id" => nil,
+      "tmdb_id" => nil
+    }
+  end
+
+  defp normalize_language(nil), do: "en"
+
+  defp normalize_language(language) do
+    language
+    |> to_string()
+    |> String.slice(0, 2)
+    |> String.downcase()
   end
 end

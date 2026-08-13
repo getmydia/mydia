@@ -125,4 +125,112 @@ defmodule MetadataRelay.SubDL.HandlerTest do
 
     assert {:error, :not_configured} = Handler.search(%{imdb_id: "0133093"})
   end
+
+  test "does not leak api key when logging unexpected response" do
+    stub(fn request ->
+      {request,
+       Req.Response.new(
+         status: 200,
+         body: %{
+           "status" => true,
+           "subtitles" => "not a list",
+           "url" => "/subtitle/test.zip?api_key=secret_key_value"
+         }
+       )}
+    end)
+
+    log =
+      ExUnit.CaptureLog.capture_log(fn ->
+        {:ok, %{"subtitles" => []}} = Handler.search(%{imdb_id: "0133093"})
+      end)
+
+    refute log =~ "secret_key_value"
+  end
+
+  test "normalizes language from lang field when language is absent" do
+    stub(fn request ->
+      subtitle = subtitle_fixture() |> Map.delete("language")
+
+      {request,
+       Req.Response.new(
+         status: 200,
+         body: %{"status" => true, "subtitles" => [subtitle], "results" => []}
+       )}
+    end)
+
+    assert {:ok, %{"subtitles" => [subtitle]}} =
+             Handler.search(%{imdb_id: "0133093"})
+
+    assert subtitle["language"] == "en"
+  end
+
+  test "defaults to en language when both language and lang are absent" do
+    stub(fn request ->
+      subtitle =
+        subtitle_fixture()
+        |> Map.delete("language")
+        |> Map.delete("lang")
+
+      {request,
+       Req.Response.new(
+         status: 200,
+         body: %{"status" => true, "subtitles" => [subtitle], "results" => []}
+       )}
+    end)
+
+    assert {:ok, %{"subtitles" => [subtitle]}} =
+             Handler.search(%{imdb_id: "0133093"})
+
+    assert subtitle["language"] == "en"
+  end
+
+  test "populates feature context keys from results array" do
+    stub(fn request ->
+      {request,
+       Req.Response.new(
+         status: 200,
+         body: %{
+           "status" => true,
+           "subtitles" => [subtitle_fixture()],
+           "results" => [
+             %{
+               "type" => "movie",
+               "name" => "The Matrix",
+               "year" => 1999,
+               "imdb_id" => "tt0133093",
+               "tmdb_id" => 603
+             }
+           ]
+         }
+       )}
+    end)
+
+    assert {:ok, %{"subtitles" => [subtitle]}} =
+             Handler.search(%{imdb_id: "0133093"})
+
+    assert subtitle["feature_type"] == "movie"
+    assert subtitle["title"] == "The Matrix"
+    assert subtitle["year"] == 1999
+    assert subtitle["imdb_id"] == "tt0133093"
+    assert subtitle["tmdb_id"] == 603
+  end
+
+  test "emits nil for feature context keys when results is empty" do
+    stub(fn request ->
+      {request,
+       Req.Response.new(
+         status: 200,
+         body: %{"status" => true, "subtitles" => [subtitle_fixture()], "results" => []}
+       )}
+    end)
+
+    assert {:ok, %{"subtitles" => [subtitle]}} =
+             Handler.search(%{imdb_id: "0133093"})
+
+    assert is_nil(subtitle["feature_type"])
+    assert is_nil(subtitle["title"])
+    assert is_nil(subtitle["year"])
+    assert is_nil(subtitle["imdb_id"])
+    assert is_nil(subtitle["tmdb_id"])
+  end
 end
