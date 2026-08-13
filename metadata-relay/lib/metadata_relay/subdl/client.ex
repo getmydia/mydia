@@ -35,6 +35,16 @@ defmodule MetadataRelay.SubDL.Client do
   end
 
   @doc """
+  Whether a SubDL API key is configured.
+
+  Searches need the key, so without one the relay serves no subtitles at all.
+  Reported at boot and over `/health` so a relay in that state is visible from
+  outside rather than only when a search fails.
+  """
+  @spec configured?() :: boolean()
+  def configured?, do: match?({:ok, _key}, api_key())
+
+  @doc """
   Fetches a subtitle archive. `path` must already have been validated by
   `MetadataRelay.SubDL.FileId.decode/1`.
   """
@@ -50,6 +60,10 @@ defmodule MetadataRelay.SubDL.Client do
     base_opts = [
       base_url: base_url,
       headers: [{"User-Agent", "metadata-relay v#{MetadataRelay.version()}"}],
+      # Unlike the sibling clients: Req's default retry sleeps for the
+      # upstream's retry-after inside this request, which blocks the Plug
+      # process serving a client and hammers an endpoint already rate-limiting
+      # the one shared key.
       retry: false
     ]
 
@@ -76,14 +90,16 @@ defmodule MetadataRelay.SubDL.Client do
     end
   end
 
-  # An empty value is treated as absent. A blank env var is a common deployment
-  # accident, and failing as "not configured" is clearer than sending an empty
-  # key and getting an opaque rejection back from SubDL.
+  # A blank value is treated as absent, whitespace included. A blank env var is
+  # a common deployment accident, and failing as "not configured" is clearer
+  # than sending an empty key and getting an opaque rejection back from SubDL.
   defp api_key do
     case System.get_env("SUBDL_API_KEY") do
-      nil -> {:error, :not_configured}
-      "" -> {:error, :not_configured}
-      key -> {:ok, key}
+      nil ->
+        {:error, :not_configured}
+
+      key ->
+        if String.trim(key) == "", do: {:error, :not_configured}, else: {:ok, key}
     end
   end
 end

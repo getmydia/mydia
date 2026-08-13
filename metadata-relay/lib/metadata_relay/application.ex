@@ -12,6 +12,8 @@ defmodule MetadataRelay.Application do
     # Store the selected adapter in application env
     Application.put_env(:metadata_relay, :cache_adapter, cache_adapter)
 
+    log_subtitle_support()
+
     # Build children list
     children =
       [
@@ -38,6 +40,24 @@ defmodule MetadataRelay.Application do
 
     opts = [strategy: :one_for_one, name: MetadataRelay.Supervisor]
     Supervisor.start_link(children, opts)
+  end
+
+  @doc """
+  Announces at boot whether subtitle support has a SubDL key behind it.
+
+  The key is read lazily per request, so without this a relay missing it boots
+  clean, reports healthy, and only fails when someone searches for a subtitle.
+  That is how the previous subtitle backend stayed broken for months. Public so
+  it can be exercised directly in tests.
+  """
+  def log_subtitle_support do
+    if MetadataRelay.SubDL.Client.configured?() do
+      Logger.info("SUBDL_API_KEY detected, subtitle support enabled")
+    else
+      Logger.warning("SUBDL_API_KEY not configured, subtitle support disabled")
+    end
+
+    :ok
   end
 
   defp configure_cache do

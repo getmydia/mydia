@@ -142,6 +142,63 @@ defmodule MetadataRelay.SubDL.RouterTest do
     end
   end
 
+  defp search(body \\ %{imdb_id: "0133093"}) do
+    :post
+    |> conn("/api/v1/subtitles/search", Jason.encode!(body))
+    |> put_req_header("content-type", "application/json")
+    |> Router.call(@opts)
+  end
+
+  test "search never forwards an upstream error body" do
+    stub(fn request ->
+      {request,
+       Req.Response.new(
+         status: 500,
+         body: %{"error" => "invalid api_key: secret_key_value"}
+       )}
+    end)
+
+    conn = search()
+
+    # The status still says the upstream failed, but the text came from
+    # api.subdl.com, the one host the relay's shared key is sent to.
+    assert conn.status == 500
+    refute conn.resp_body =~ "secret_key_value"
+    assert %{"error" => "Subtitle provider error"} = Jason.decode!(conn.resp_body)
+  end
+
+  test "search survives an upstream body that is not valid UTF-8" do
+    stub(fn request ->
+      {request, Req.Response.new(status: 500, body: <<0xFF, 0xFE, 0x00>>)}
+    end)
+
+    conn = search()
+
+    assert conn.status == 500
+    assert %{"error" => "Subtitle provider error"} = Jason.decode!(conn.resp_body)
+  end
+
+  test "a SubDL key rejection is not reported to the client as its own auth failure" do
+    stub(fn request ->
+      {request, Req.Response.new(status: 401, body: %{"error" => "bad key secret_key_value"})}
+    end)
+
+    conn = search()
+
+    assert conn.status == 502
+    refute conn.resp_body =~ "secret_key_value"
+  end
+
+  test "download of a subtitle removed upstream is a 404, not a 502" do
+    stub(fn request -> {request, Req.Response.new(status: 404, body: "not found")} end)
+
+    id = MetadataRelay.SubDL.FileId.encode("/subtitle/1-2.zip")
+    conn = Router.call(conn(:get, "/api/v1/subtitles/download/#{id}"), @opts)
+
+    assert conn.status == 404
+    assert %{"error" => "Subtitle not found"} = Jason.decode!(conn.resp_body)
+  end
+
   test "search reports not-configured when the key is absent" do
     System.delete_env("SUBDL_API_KEY")
 
