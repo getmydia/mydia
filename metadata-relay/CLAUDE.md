@@ -26,7 +26,7 @@ mix test
 mix format
 ```
 
-Environment variables: `PORT` (default 4001), `DASHBOARD_USERNAME` and `DASHBOARD_PASSWORD` (required in production for `/errors` and `/feedback` dashboards), `TMDB_API_KEY`, `TVDB_API_KEY`, `REDIS_URL` (optional).
+Environment variables: `PORT` (default 4001), `DASHBOARD_USERNAME` and `DASHBOARD_PASSWORD` (required in production for `/errors` and `/feedback` dashboards), `TMDB_API_KEY`, `TVDB_API_KEY`, `SUBDL_API_KEY`, `REDIS_URL` (optional).
 
 ## Deploying a New Version
 

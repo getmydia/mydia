@@ -83,9 +83,7 @@ Required secrets:
 - `TVDB_API_KEY`: TheTVDB API key
 
 Optional secrets:
-- `OPENSUBTITLES_API_KEY`: OpenSubtitles API key
-- `OPENSUBTITLES_USERNAME`: OpenSubtitles username
-- `OPENSUBTITLES_PASSWORD`: OpenSubtitles password
+- `SUBDL_API_KEY`: SubDL API key
 
 ### Storage
 
