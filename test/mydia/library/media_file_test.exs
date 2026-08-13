@@ -1,5 +1,6 @@
 defmodule Mydia.Library.MediaFileTest do
   use Mydia.DataCase
+  import ExUnit.CaptureLog
 
   alias Mydia.Library.MediaFile
   alias Mydia.Settings.LibraryPath
@@ -17,13 +18,32 @@ defmodule Mydia.Library.MediaFileTest do
                "/media/movies/The Matrix (1999)/The Matrix (1999) [1080p].mkv"
     end
 
-    test "returns nil when library_path is not preloaded" do
+    test "returns nil when library_path is nil" do
       media_file = %MediaFile{
         relative_path: "Movie.mkv",
         library_path: nil
       }
 
       assert MediaFile.absolute_path(media_file) == nil
+    end
+
+    test "returns nil and warns when library_path is not loaded" do
+      media_file = %MediaFile{
+        id: "11111111-1111-1111-1111-111111111111",
+        relative_path: "Movie.mkv",
+        library_path: %Ecto.Association.NotLoaded{
+          __field__: :library_path,
+          __owner__: MediaFile,
+          __cardinality__: :one
+        }
+      }
+
+      log =
+        capture_log(fn ->
+          assert MediaFile.absolute_path(media_file) == nil
+        end)
+
+      assert log =~ "unloaded library_path"
     end
 
     test "returns nil when relative_path is nil" do

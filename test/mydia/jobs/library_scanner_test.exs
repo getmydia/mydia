@@ -55,5 +55,67 @@ defmodule Mydia.Jobs.LibraryScannerTest do
       # Verify monitored item still exists (job doesn't modify items)
       assert Mydia.Media.get_media_item!(monitored.id).monitored == true
     end
+
+    setup do
+      original_level = Logger.level()
+      Logger.configure(level: :info)
+      on_exit(fn -> Logger.configure(level: original_level) end)
+      :ok
+    end
+
+    test "completes a scan of a music library path" do
+      {:ok, library_path} =
+        Settings.create_library_path(%{
+          path: empty_library_dir(),
+          type: "music",
+          monitored: true
+        })
+
+      assert :ok = perform_job(LibraryScanner, %{"library_path_id" => library_path.id})
+      assert Settings.get_library_path!(library_path.id).last_scan_status == :success
+    end
+
+    test "completes a scan of a books library path" do
+      {:ok, library_path} =
+        Settings.create_library_path(%{
+          path: empty_library_dir(),
+          type: "books",
+          monitored: true
+        })
+
+      assert :ok = perform_job(LibraryScanner, %{"library_path_id" => library_path.id})
+      assert Settings.get_library_path!(library_path.id).last_scan_status == :success
+    end
+
+    test "completes a scan of an adult library path" do
+      {:ok, library_path} =
+        Settings.create_library_path(%{
+          path: empty_library_dir(),
+          type: "adult",
+          monitored: true
+        })
+
+      assert :ok = perform_job(LibraryScanner, %{"library_path_id" => library_path.id})
+      assert Settings.get_library_path!(library_path.id).last_scan_status == :success
+    end
+
+    test "completes a scan of a movies library path" do
+      {:ok, library_path} =
+        Settings.create_library_path(%{
+          path: empty_library_dir(),
+          type: "movies",
+          monitored: true
+        })
+
+      assert :ok = perform_job(LibraryScanner, %{"library_path_id" => library_path.id})
+      assert Settings.get_library_path!(library_path.id).last_scan_status == :success
+    end
+  end
+
+  defp empty_library_dir do
+    path = Path.join(System.tmp_dir!(), "mydia_scan_#{System.unique_integer([:positive])}")
+    File.mkdir_p!(path)
+    on_exit(fn -> File.rm_rf(path) end)
+    path
   end
 end

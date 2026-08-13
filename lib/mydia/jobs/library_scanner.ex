@@ -35,7 +35,8 @@ defmodule Mydia.Jobs.LibraryScanner do
     MusicScanner,
     BookScanner,
     AdultScanner,
-    SampleDetector
+    SampleDetector,
+    ScanSummary
   }
 
   alias Mydia.Library.ReleaseParser, as: FileParser
@@ -175,12 +176,12 @@ defmodule Mydia.Jobs.LibraryScanner do
     library_path = Settings.get_library_path!(library_path_id)
 
     case scan_library_path(library_path) do
-      {:ok, result} ->
+      {:ok, %ScanSummary{} = summary} ->
         Logger.info("Library scan completed successfully",
           library_path_id: library_path_id,
-          new_files: length(result.changes.new_files),
-          modified_files: length(result.changes.modified_files),
-          deleted_files: length(result.changes.deleted_files)
+          new_files: summary.new_files,
+          modified_files: summary.modified_files,
+          deleted_files: summary.deleted_files
         )
 
         :ok
@@ -279,25 +280,57 @@ defmodule Mydia.Jobs.LibraryScanner do
 
   # Dispatch to appropriate scanner based on library type
   defp process_scan_result_by_type(library_path, scan_result) do
-    case library_path.type do
-      :music ->
-        process_music_scan_result(library_path, scan_result)
+    result =
+      case library_path.type do
+        :music ->
+          process_music_scan_result(library_path, scan_result)
 
-      :books ->
-        process_books_scan_result(library_path, scan_result)
+        :books ->
+          process_books_scan_result(library_path, scan_result)
 
-      :adult ->
-        process_adult_scan_result(library_path, scan_result)
+        :adult ->
+          process_adult_scan_result(library_path, scan_result)
 
-      # Video-based library types use the standard video processing
-      type when type in [:movies, :series, :mixed] ->
-        process_scan_result(library_path, scan_result)
+        # Video-based library types use the standard video processing
+        type when type in [:movies, :series, :mixed] ->
+          process_scan_result(library_path, scan_result)
 
-      # Default to video processing for unknown types
-      _ ->
-        process_scan_result(library_path, scan_result)
-    end
+        # Default to video processing for unknown types
+        _ ->
+          process_scan_result(library_path, scan_result)
+      end
+
+    summarize(result)
   end
+
+  # The per-type processors return two different shapes: the video processor
+  # returns lists under :changes, the others return integer counts. Normalize
+  # both into a ScanSummary so callers have a single contract.
+  defp summarize({:ok, %{changes: changes} = details}) do
+    {:ok,
+     %ScanSummary{
+       new_files: length(changes.new_files),
+       modified_files: length(changes.modified_files),
+       deleted_files: length(changes.deleted_files),
+       details: details
+     }}
+  end
+
+  defp summarize(
+         {:ok, %{new_files: new, modified_files: modified, deleted_files: deleted} = details}
+       )
+       when is_integer(new) and is_integer(modified) and is_integer(deleted) do
+    {:ok,
+     %ScanSummary{
+       new_files: new,
+       modified_files: modified,
+       deleted_files: deleted,
+       details: details
+     }}
+  end
+
+  # Errors from handle_scan_error/2 pass through unchanged.
+  defp summarize(other), do: other
 
   defp process_music_scan_result(library_path, scan_result) do
     Logger.info("Processing music library scan",
