@@ -23,7 +23,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :target_library, :map, default: nil
   attr :target_reason, :atom, default: nil
   attr :target_library_candidates, :list, default: []
-  attr :applying_monitoring_preset, :boolean, default: false
+  attr :applying_episode_monitoring, :boolean, default: false
   attr :is_favorite, :boolean, default: false
   attr :item_collections, :list, default: []
   attr :user_collections, :list, default: []
@@ -201,70 +201,76 @@ defmodule MydiaWeb.MediaLive.Show.Components do
         <%!-- Secondary actions --%>
         <div class="flex flex-col gap-2">
           <%= if @media_item.type == "tv_show" do %>
-            <%!-- Monitoring Preset Dropdown (TV shows only) --%>
+            <.monitored_toggle id="show-monitored-toggle" media_item={@media_item} />
+
+            <%!-- One-shot actions. The label is static on purpose: it describes
+                  what the menu does, never what the episodes currently are. --%>
             <div class="dropdown dropdown-end w-full">
               <div
                 tabindex="0"
                 role="button"
-                class={[
-                  "btn w-full",
-                  @media_item.monitored && "btn-success",
-                  !@media_item.monitored && "btn-ghost"
-                ]}
-                disabled={@applying_monitoring_preset}
+                id="episode-monitoring-menu"
+                class="btn btn-ghost w-full"
+                disabled={@applying_episode_monitoring}
               >
-                <%= if @applying_monitoring_preset do %>
+                <%= if @applying_episode_monitoring do %>
                   <span class="loading loading-spinner loading-xs"></span>
                 <% else %>
-                  <.monitoring_icon
-                    preset={@media_item.monitoring_preset}
-                    class="w-5 h-5"
-                  />
+                  <.icon name="hero-adjustments-horizontal" class="w-5 h-5" />
                 <% end %>
-                <span>
-                  {monitoring_preset_label(@media_item.monitoring_preset)}
-                </span>
+                <span>Episode Monitoring</span>
                 <.icon name="hero-chevron-down" class="w-3 h-3 opacity-70" />
               </div>
               <ul
                 tabindex="0"
                 class="dropdown-content z-[1] menu p-2 shadow-lg bg-base-100 rounded-box w-64 border border-base-300"
               >
+                <li class="menu-title text-xs">Apply to episodes</li>
                 <li :for={{preset, label, description} <- @monitoring_presets}>
                   <button
                     type="button"
-                    phx-click="apply_monitoring_preset"
+                    id={"episode-monitoring-menu-preset-#{preset}"}
+                    phx-click="apply_episode_monitoring"
                     phx-value-preset={preset}
-                    class={[
-                      "flex flex-col items-start",
-                      @media_item.monitoring_preset == preset && "active"
-                    ]}
+                    class="flex flex-col items-start"
                   >
                     <span class="font-medium">{label}</span>
                     <span class="text-xs text-base-content/60">{description}</span>
                   </button>
                 </li>
+                <li class="menu-title text-xs">New seasons</li>
+                <li>
+                  <div class="join w-full p-0">
+                    <button
+                      type="button"
+                      id="monitor-new-seasons-all"
+                      phx-click="set_monitor_new_seasons"
+                      phx-value-mode="all"
+                      class={[
+                        "btn btn-xs join-item flex-1",
+                        @media_item.monitor_new_seasons == :all && "btn-active"
+                      ]}
+                    >
+                      All
+                    </button>
+                    <button
+                      type="button"
+                      id="monitor-new-seasons-none"
+                      phx-click="set_monitor_new_seasons"
+                      phx-value-mode="none"
+                      class={[
+                        "btn btn-xs join-item flex-1",
+                        @media_item.monitor_new_seasons == :none && "btn-active"
+                      ]}
+                    >
+                      None
+                    </button>
+                  </div>
+                </li>
               </ul>
             </div>
           <% else %>
-            <%!-- Simple monitored toggle for movies --%>
-            <button
-              type="button"
-              phx-click="toggle_monitored"
-              class={[
-                "btn w-full",
-                @media_item.monitored && "btn-success",
-                !@media_item.monitored && "btn-ghost"
-              ]}
-            >
-              <.icon
-                name={if @media_item.monitored, do: "hero-bookmark-solid", else: "hero-bookmark"}
-                class="w-5 h-5"
-              />
-              <span>
-                {if @media_item.monitored, do: "Monitored", else: "Not Monitored"}
-              </span>
-            </button>
+            <.monitored_toggle id="movie-monitored-toggle" media_item={@media_item} />
           <% end %>
         </div>
 
@@ -1298,6 +1304,30 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   # Helper functions for monitoring preset labels
 
   # monitoring_preset_label/1 is provided by MydiaWeb.MediaLive.Show.Helpers (imported above)
+
+  attr :id, :string, required: true
+  attr :media_item, :map, required: true
+
+  def monitored_toggle(assigns) do
+    ~H"""
+    <button
+      type="button"
+      id={@id}
+      phx-click="toggle_monitored"
+      class={[
+        "btn w-full",
+        @media_item.monitored && "btn-success",
+        !@media_item.monitored && "btn-ghost"
+      ]}
+    >
+      <.icon
+        name={if @media_item.monitored, do: "hero-bookmark-solid", else: "hero-bookmark"}
+        class="w-5 h-5"
+      />
+      <span>{if @media_item.monitored, do: "Monitored", else: "Not Monitored"}</span>
+    </button>
+    """
+  end
 
   @doc """
   Monitoring icon that shows different states:
