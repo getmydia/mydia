@@ -1171,6 +1171,25 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   attr :selected_languages, :list, default: ["en"]
 
   def subtitle_search_modal(assigns) do
+    common = MydiaWeb.Languages.common()
+    common_codes = Enum.map(common, &elem(&1, 0))
+
+    # A selected language always gets a chip, even an uncommon one, so the
+    # current selection is never hidden behind the dropdown.
+    extra_chips =
+      assigns.selected_languages
+      |> Enum.reject(&(&1 in common_codes))
+      |> Enum.map(&{&1, MydiaWeb.Languages.name(&1)})
+
+    chips = common ++ extra_chips
+    chip_codes = Enum.map(chips, &elem(&1, 0))
+    more = Enum.reject(MydiaWeb.Languages.all(), fn {code, _} -> code in chip_codes end)
+
+    assigns =
+      assigns
+      |> assign(:language_chips, chips)
+      |> assign(:more_languages, more)
+
     ~H"""
     <div class="modal modal-open" id="subtitle-search-modal">
       <div class="modal-box max-w-3xl max-h-[85vh] flex flex-col p-0">
@@ -1193,64 +1212,73 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
             </button>
           </div>
         </div>
-        <div id="subtitle-search-body" class="flex-1 overflow-y-auto p-4 sm:p-6">
-          <%!-- Language selection --%>
-          <div class="form-control mb-4">
-            <label class="label">
-              <span class="label-text">Select Languages</span>
-            </label>
-            <select
-              class="select select-bordered"
-              multiple
-              phx-change="update_subtitle_languages"
-              name="languages[]"
-            >
-              <option value="en" selected={Enum.member?(@selected_languages, "en")}>
-                English
-              </option>
-              <option value="es" selected={Enum.member?(@selected_languages, "es")}>
-                Spanish
-              </option>
-              <option value="fr" selected={Enum.member?(@selected_languages, "fr")}>
-                French
-              </option>
-              <option value="de" selected={Enum.member?(@selected_languages, "de")}>
-                German
-              </option>
-              <option value="it" selected={Enum.member?(@selected_languages, "it")}>
-                Italian
-              </option>
-              <option value="pt" selected={Enum.member?(@selected_languages, "pt")}>
-                Portuguese
-              </option>
-              <option value="ru" selected={Enum.member?(@selected_languages, "ru")}>
-                Russian
-              </option>
-              <option value="ja" selected={Enum.member?(@selected_languages, "ja")}>
-                Japanese
-              </option>
-              <option value="zh" selected={Enum.member?(@selected_languages, "zh")}>
-                Chinese
-              </option>
-              <option value="ar" selected={Enum.member?(@selected_languages, "ar")}>
-                Arabic
-              </option>
-            </select>
-          </div>
-
-          <button
-            type="button"
-            phx-click="perform_subtitle_search"
-            class="btn btn-primary btn-block mb-4"
-            disabled={@searching}
+        <%!-- Control band --%>
+        <div class="bg-base-200/50 border-b border-base-300 px-4 py-3 sm:px-6">
+          <form
+            id="subtitle-language-form"
+            phx-change="update_subtitle_languages"
+            class="flex flex-wrap items-center gap-2"
           >
-            <%= if @searching do %>
-              <span class="loading loading-spinner loading-sm"></span> Searching...
-            <% else %>
-              <.icon name="hero-magnifying-glass" class="w-5 h-5" /> Search Subtitles
-            <% end %>
-          </button>
+            <div class="filter">
+              <button
+                type="button"
+                class="btn btn-sm btn-square filter-reset"
+                phx-click="clear_subtitle_languages"
+                aria-label="Clear selected languages"
+              >
+                ×
+              </button>
+              <input
+                :for={{code, label} <- @language_chips}
+                class="btn btn-sm"
+                type="checkbox"
+                name="languages[]"
+                value={code}
+                aria-label={label}
+                checked={code in @selected_languages}
+              />
+            </div>
 
+            <div class="dropdown dropdown-end">
+              <div tabindex="0" role="button" class="btn btn-sm btn-ghost">
+                +{length(@more_languages)} more <.icon name="hero-chevron-down" class="w-4 h-4" />
+              </div>
+              <ul
+                tabindex="0"
+                class="dropdown-content menu bg-base-100 rounded-box z-10 w-52 p-2 shadow-sm max-h-64 flex-nowrap overflow-y-auto"
+              >
+                <li :for={{code, label} <- @more_languages}>
+                  <label class="label cursor-pointer justify-start gap-2">
+                    <input
+                      type="checkbox"
+                      class="checkbox checkbox-sm"
+                      name="languages[]"
+                      value={code}
+                      checked={code in @selected_languages}
+                    />
+                    <span class="label-text">{label}</span>
+                  </label>
+                </li>
+              </ul>
+            </div>
+
+            <div class="flex-1"></div>
+
+            <button
+              type="button"
+              phx-click="perform_subtitle_search"
+              class="btn btn-primary btn-sm"
+              disabled={@searching or @selected_languages == []}
+            >
+              <%= if @searching do %>
+                <span class="loading loading-spinner loading-sm"></span> Searching
+              <% else %>
+                <.icon name="hero-magnifying-glass" class="w-4 h-4" /> Search
+              <% end %>
+            </button>
+          </form>
+        </div>
+        <div id="subtitle-search-body" class="flex-1 overflow-y-auto p-4 sm:p-6">
           <%!-- Search results --%>
           <%= if @searching do %>
             <div class="flex items-center justify-center py-8">

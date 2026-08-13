@@ -172,5 +172,31 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
       # The body is a dedicated scroll region.
       assert html =~ ~s(id="subtitle-search-body")
     end
+
+    test "renders language chips as daisyUI checkbox buttons with the selection checked" do
+      html = subtitle_modal_html(selected_languages: ["en", "fr"])
+
+      assert html =~ ~s(class="filter")
+      assert html =~ ~s(phx-click="clear_subtitle_languages")
+      # Real checkbox inputs, not a <select multiple>.
+      refute html =~ "select-bordered"
+      refute html =~ "multiple"
+      assert html =~ ~s(name="languages[]")
+      assert html =~ ~s(aria-label="English")
+      assert html =~ ~s(aria-label="Japanese")
+    end
+
+    test "promotes a selected uncommon language out of the dropdown into a chip" do
+      # Finnish is not one of the eight common chips, but selecting it must not
+      # bury it inside the dropdown.
+      assert subtitle_modal_html(selected_languages: ["fi"]) =~ ~s(aria-label="Finnish")
+    end
+
+    test "disables search when no language is selected" do
+      html = subtitle_modal_html(selected_languages: [])
+
+      assert html =~ ~s(phx-click="perform_subtitle_search")
+      assert html =~ "disabled"
+    end
   end
 end

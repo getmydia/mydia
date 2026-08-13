@@ -32,6 +32,16 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
     {:noreply, assign(socket, :selected_languages, languages)}
   end
 
+  # Unchecking every chip drops the key from the change payload rather than
+  # sending an empty list.
+  def update_subtitle_languages(_params, socket) do
+    {:noreply, assign(socket, :selected_languages, [])}
+  end
+
+  def clear_subtitle_languages(_params, socket) do
+    {:noreply, assign(socket, :selected_languages, [])}
+  end
+
   def perform_subtitle_search(_params, socket) do
     media_file = socket.assigns.selected_media_file
     languages = Enum.join(socket.assigns.selected_languages, ",")
