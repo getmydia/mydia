@@ -1,4 +1,5 @@
 import '../../graphql/fragments/media_file_fragment.graphql.dart';
+import '../../graphql/mutations/download_subtitle.graphql.dart';
 
 /// Represents a subtitle track available for a media file.
 class SubtitleTrack {
@@ -58,6 +59,26 @@ class SubtitleTrack {
       format: sub.format,
       embedded: sub.embedded,
       deliverable: sub.deliverable,
+    );
+  }
+
+  /// Create from the track a `downloadSubtitle` mutation just wrote.
+  ///
+  /// [content] stays null on purpose. The mutation reports the new track's
+  /// identity, not its body; the body is fetched once, lazily, by the
+  /// `SubtitleContent` query when the viewer selects it -- the same path
+  /// every other sidecar takes, rather than a second way in that only
+  /// freshly downloaded tracks would use.
+  factory SubtitleTrack.fromDownload(
+    Mutation$DownloadSubtitle$downloadSubtitle track,
+  ) {
+    return SubtitleTrack(
+      id: track.trackId,
+      language: track.language,
+      title: track.title,
+      format: track.format,
+      embedded: track.embedded,
+      deliverable: track.deliverable,
     );
   }
 

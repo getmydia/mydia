@@ -374,6 +374,62 @@ void main() {
   });
 
   testWidgets(
+      'shows a SubtitleActionException message verbatim instead of the '
+      'generic download copy', (tester) async {
+    await tester.pumpWidget(_host(
+      onSearch: (_) async => const SubtitleSearchOutcome(
+        results: [_candidate],
+        providers: [SubtitleProviderStatus(name: 'Mydia Relay')],
+      ),
+      onDownload: (_) async => throw const SubtitleActionException(
+        'These search results expired. Search again.',
+      ),
+    ));
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Search online'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Movie.2020.1080p.BluRay.srt'));
+    await tester.pumpAndSettle();
+
+    // A candidate's token expires after fifteen minutes, and the generic
+    // "Could not download that subtitle. Try again." invites re-tapping the
+    // same stale token forever. Catches an implementation that renders the
+    // fallback for every failure alike.
+    expect(
+      find.text('These search results expired. Search again.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Could not download'), findsNothing);
+    // And catches one that reaches for `toString()`, which would prefix the
+    // class name onto a line written for a viewer.
+    expect(find.textContaining('SubtitleActionException'), findsNothing);
+  });
+
+  testWidgets(
+      'shows a SubtitleActionException message verbatim instead of the '
+      'generic search copy', (tester) async {
+    await tester.pumpWidget(_host(
+      onSearch: (_) async => throw const SubtitleActionException(
+        'Subtitle search needs a connection to your server.',
+      ),
+      onDownload: (_) async => _downloaded,
+    ));
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Search online'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Subtitle search needs a connection to your server.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Subtitle search failed'), findsNothing);
+  });
+
+  testWidgets(
       'adjusting a language chip re-runs the search with a different '
       'language set', (tester) async {
     final calls = <List<String>>[];

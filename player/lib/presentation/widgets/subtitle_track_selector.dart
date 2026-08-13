@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart';
 
 import '../../core/player/subtitle_language_prefs.dart';
@@ -54,11 +53,37 @@ class SubtitleSearchOutcome {
   });
 }
 
+/// An error whose message was written for a viewer and may be shown as-is.
+///
+/// The sheet never renders a raw exception object: a transport failure
+/// stringifies to an `OperationException` dump, and a wiring bug to
+/// whatever the framework named it. But some failures carry advice only the
+/// server can give, and dropping it strands the viewer. The concrete case
+/// is a candidate token expiring after fifteen minutes: the generic "try
+/// again" invites re-tapping the same stale token forever, where the
+/// server's own "search again" is the one instruction that works. A
+/// callback throws this to opt a specific message in; everything else it
+/// throws still lands on the generic copy.
+class SubtitleActionException implements Exception {
+  /// Shown to the viewer verbatim, so it must read as plain guidance.
+  final String message;
+
+  const SubtitleActionException(this.message);
+
+  @override
+  String toString() => 'SubtitleActionException: $message';
+}
+
 enum _SheetMode { tracks, searching, results, downloading }
 
 /// Languages offered as chips, in the same order [SubtitleCandidate]
 /// displays them.
 final _chipLanguages = SubtitleCandidate.languageNames.keys.toList();
+
+/// The line to show a viewer for [error]: its own message when it was
+/// written for one, and [fallback] for everything else.
+String _viewerMessage(Object error, String fallback) =>
+    error is SubtitleActionException ? error.message : fallback;
 
 /// Shows a bottom sheet for selecting a subtitle track, or for searching for
 /// and downloading one that is not already on the file.
@@ -142,16 +167,16 @@ class _SubtitleTrackSelectorSheetState
         _mode = _SheetMode.results;
       });
     } catch (e) {
-      // The exception's own text is never shown to a viewer: today it is
-      // an `UnimplementedError` message, and once Task 16 wires the real
-      // GraphQL operation it will be an `OperationException` dump. Logged
-      // instead, the same split `player_screen.dart`'s own subtitle-fetch
-      // failure uses.
+      // An arbitrary exception's own text is never shown to a viewer -- a
+      // transport failure stringifies to an `OperationException` dump.
+      // Logged instead, the same split `player_screen.dart`'s own
+      // subtitle-fetch failure uses. Only a [SubtitleActionException],
+      // whose message was written for a viewer, is rendered as-is.
       debugPrint('[SubtitleTrackSelectorSheet] Search failed: $e');
       if (!mounted) return;
       setState(() {
         _outcome = const SubtitleSearchOutcome(results: [], providers: []);
-        _error = 'Subtitle search failed. Try again.';
+        _error = _viewerMessage(e, 'Subtitle search failed. Try again.');
         _mode = _SheetMode.results;
       });
     }
@@ -200,7 +225,10 @@ class _SubtitleTrackSelectorSheetState
       if (!mounted) return;
       setState(() {
         _mode = _SheetMode.results;
-        _error = 'Could not download that subtitle. Try again.';
+        _error = _viewerMessage(
+            e,
+            'Could not download that subtitle. '
+            'Try again.');
       });
     }
   }

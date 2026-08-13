@@ -1,3 +1,5 @@
+import '../../graphql/queries/subtitle_search.graphql.dart';
+
 /// A subtitle offered by a provider, not yet downloaded.
 class SubtitleCandidate {
   /// Opaque signed handle. Pass back to downloadSubtitle. Valid 15 minutes.
@@ -32,6 +34,29 @@ class SubtitleCandidate {
     required this.score,
     required this.providerName,
   });
+
+  /// Build from one `subtitleSearch` result.
+  ///
+  /// Every field is carried across rather than recomputed client-side:
+  /// [score] in particular is the server's ranking, which weighs a hash
+  /// match and the provider's own rating together, and re-deriving it here
+  /// would let the two drift apart silently.
+  factory SubtitleCandidate.fromGraphQL(
+    Query$SubtitleSearch$subtitleSearch$results result,
+  ) {
+    return SubtitleCandidate(
+      token: result.token,
+      language: result.language,
+      releaseName: result.releaseName,
+      format: result.format,
+      rating: result.rating,
+      downloadCount: result.downloadCount,
+      hearingImpaired: result.hearingImpaired,
+      hashMatch: result.hashMatch,
+      score: result.score,
+      providerName: result.providerName,
+    );
+  }
 
   String get displayLanguage =>
       languageNames[language] ?? language.toUpperCase();
@@ -102,6 +127,23 @@ class SubtitleProviderStatus {
     this.quotaTotal,
     this.error,
   });
+
+  /// Build from one `subtitleSearch` provider entry.
+  ///
+  /// A provider that failed still arrives in the payload, carrying its
+  /// reason in [error] -- that is the whole point of reporting statuses
+  /// alongside results, so a viewer seeing nothing can tell "the provider
+  /// is out of quota" from "there are no subtitles for this file".
+  factory SubtitleProviderStatus.fromGraphQL(
+    Query$SubtitleSearch$subtitleSearch$providers provider,
+  ) {
+    return SubtitleProviderStatus(
+      name: provider.name,
+      quotaRemaining: provider.quotaRemaining,
+      quotaTotal: provider.quotaTotal,
+      error: provider.error,
+    );
+  }
 
   bool get failed => error != null;
 
