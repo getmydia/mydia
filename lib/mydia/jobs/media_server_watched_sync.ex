@@ -150,6 +150,10 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
         # rather than the feature.
         run = start_run(config, scope.user_id, direction)
         refresh = refresh_mode(config)
+        # Captured before the claim overwrites it, so a failed sync can put it
+        # back. See restore_mapping_refresh/3.
+        previous_mapping_refresh_at =
+          get_in_connection_settings(config, "last_mapping_refresh_at")
 
         # Rebound deliberately: the claim writes connection_settings, and the
         # later update_last_sync_timestamp/1 merges into whatever config it is
@@ -174,11 +178,21 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
           # the UI could say why. Recorded as a skip it reads like every other
           # credential problem on the page, and the operator gets told which
           # mapping to fix.
+          #
+          # Deliberately does NOT restore the mapping-refresh stamp (contrast
+          # the general clause below). These reasons surface only from
+          # list_changes/3, which runs after maybe_refresh/5 -- the crawl --
+          # already completed, so the crawl this claim was for did happen. A
+          # misconfigured link also persists across ticks rather than clearing
+          # itself, so restoring here would force a full library re-crawl on
+          # every 30-minute tick for as long as the credential stays broken,
+          # exactly the cost the 24h interval exists to avoid.
           {:error, reason} when reason in @misconfigured ->
             skip(config, reason, scope.user_id, run)
 
           {:error, reason} ->
             finish_run(run, :error, %{}, describe_error(reason))
+            restore_mapping_refresh(config, refresh, previous_mapping_refresh_at)
             {:error, reason}
         end
       end
@@ -385,12 +399,18 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
   end
 
   # `:force` when no crawl has ever been recorded, when the stamp cannot be
-  # read, or when it has aged past the interval.
+  # read, when it has aged past the interval, or when it is in the future.
+  # A future stamp only happens from clock skew or a hand-edited
+  # connection_settings value, but left alone it would make the diff negative
+  # and pin the mode at :auto until the wall clock caught up to it, silently
+  # withholding the crawl for however long that takes.
   defp refresh_mode(config) do
     with value when is_binary(value) <-
            get_in_connection_settings(config, "last_mapping_refresh_at"),
          {:ok, at, _offset} <- DateTime.from_iso8601(value) do
-      if DateTime.diff(DateTime.utc_now(), at, :second) >= @mapping_refresh_interval_seconds,
+      age_seconds = DateTime.diff(DateTime.utc_now(), at, :second)
+
+      if age_seconds < 0 or age_seconds >= @mapping_refresh_interval_seconds,
         do: :force,
         else: :auto
     else
@@ -400,8 +420,12 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
 
   # Stamped before the sync runs, not after it succeeds. A server with several
   # linked users fans out one job per user on the same tick, and stamping on
-  # success would have every one of them crawl the whole library. Claiming it up
-  # front means the first job crawls and the rest read a fresh stamp.
+  # success would have every one of them crawl the whole library. Claiming it
+  # up front cuts that down, though not to exactly one: the `integrations`
+  # queue runs with concurrency 2, so up to two same-tick workers for one
+  # config can both read the stale stamp before either writes theirs, and both
+  # crawl. What claiming guarantees is at most one crawl per concurrent
+  # worker; any job beyond that reads the fresh stamp and skips it.
   #
   # The cost is that a run failing after a forced crawl waits for the next
   # interval instead of retrying immediately. That is acceptable: the crawl is
@@ -416,6 +440,41 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
       {:error, reason} ->
         Logger.warning("Could not claim mapping refresh for #{config.name}: #{inspect(reason)}")
         config
+    end
+  end
+
+  # Undoes claim_mapping_refresh/2's stamp on a general sync failure.
+  # WatchSync.sync/4 (Engine.sync/4) crawls before it does anything else --
+  # maybe_refresh/5 runs first -- so a failure reaching this branch most
+  # likely happened during or before the crawl, not after it. Left standing,
+  # the stamp would claim a crawl that never finished, and the next tick's
+  # refresh_mode/1 would read it as fresh and silently stay on :auto. Putting
+  # the previous value back (or clearing the key when there was none) makes
+  # refresh_mode/1 force again on the next attempt.
+  #
+  # A no-op when refresh was :auto: claim_mapping_refresh/2 never wrote
+  # anything in that case, so there is nothing to restore.
+  defp restore_mapping_refresh(_config, :auto, _previous_value), do: :ok
+
+  defp restore_mapping_refresh(config, :force, nil) do
+    settings = Map.delete(config.connection_settings || %{}, "last_mapping_refresh_at")
+
+    case Settings.update_media_server_config(config, %{connection_settings: settings}) do
+      {:ok, _updated} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning("Could not restore mapping refresh for #{config.name}: #{inspect(reason)}")
+    end
+  end
+
+  defp restore_mapping_refresh(config, :force, previous_value) do
+    case put_connection_setting(config, "last_mapping_refresh_at", previous_value) do
+      {:ok, _updated} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning("Could not restore mapping refresh for #{config.name}: #{inspect(reason)}")
     end
   end
 

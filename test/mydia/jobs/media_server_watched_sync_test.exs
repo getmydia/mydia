@@ -850,7 +850,11 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
 
       config = run(config, ctx.user, ctx.link)
 
-      assert config.connection_settings["last_mapping_refresh_at"] != stale
+      stamp = config.connection_settings["last_mapping_refresh_at"]
+      assert stamp != stale
+      # A bug writing a garbage string would still change the value and pass
+      # the inequality check above; this proves the new value actually parses.
+      assert {:ok, _, _} = DateTime.from_iso8601(stamp)
     end
 
     test "an unreadable stamp is treated as never crawled", ctx do
@@ -862,7 +866,31 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
 
       config = run(config, ctx.user, ctx.link)
 
-      assert config.connection_settings["last_mapping_refresh_at"] != "not-a-timestamp"
+      stamp = config.connection_settings["last_mapping_refresh_at"]
+      assert stamp != "not-a-timestamp"
+      # A bug writing a garbage string would still change the value and pass
+      # the inequality check above; this proves the new value actually parses.
+      assert {:ok, _, _} = DateTime.from_iso8601(stamp)
+    end
+
+    test "a future stamp (clock skew) forces a crawl instead of pinning to auto", ctx do
+      future =
+        DateTime.utc_now()
+        |> DateTime.add(60 * 60, :second)
+        |> DateTime.truncate(:second)
+        |> DateTime.to_iso8601()
+
+      {:ok, config} =
+        Settings.update_media_server_config(ctx.config, %{
+          connection_settings:
+            Map.put(ctx.config.connection_settings, "last_mapping_refresh_at", future)
+        })
+
+      config = run(config, ctx.user, ctx.link)
+
+      stamp = config.connection_settings["last_mapping_refresh_at"]
+      assert stamp != future
+      assert {:ok, _, _} = DateTime.from_iso8601(stamp)
     end
 
     test "claiming a refresh does not clobber the last sync timestamp", ctx do
@@ -943,6 +971,148 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
 
       run(forced_config, user, link)
       assert Agent.get(counter, & &1) == 3
+    end
+  end
+
+  describe "mapping refresh claim is undone on a general failure" do
+    test "a crawl failure restores the pre-claim stamp instead of burning the 24h window" do
+      # No last_mapping_refresh_at at all, so refresh_mode/1 returns :force and
+      # claim_mapping_refresh/2 stamps it before WatchSync.sync/4 runs. The
+      # crawl (Engine.maybe_refresh/5, the first thing sync/4 does) then fails
+      # against a 500, landing in run_sync/2's general {:error, reason} clause.
+      # Without the fix, the claimed stamp would stay written, and the next
+      # tick's refresh_mode/1 would read it as fresh and silently skip the
+      # crawl it still owes.
+      bypass = Bypass.open()
+
+      Bypass.expect(bypass, "GET", "/Items", fn conn ->
+        Plug.Conn.resp(conn, 500, "boom")
+      end)
+
+      user = user_fixture()
+
+      {:ok, config} =
+        Settings.create_media_server_config(%{
+          name: "Jellyfin",
+          type: :jellyfin,
+          url: "http://localhost:#{bypass.port}",
+          token: "api-key",
+          enabled: true,
+          connection_settings: %{"sync_watched" => true}
+        })
+
+      link = link_fixture(config, user)
+
+      refute Map.has_key?(config.connection_settings, "last_mapping_refresh_at")
+
+      assert {:error, _reason} =
+               perform_job(MediaServerWatchedSync, %{
+                 "config_id" => config.id,
+                 "user_id" => user.id,
+                 "link_id" => link.id
+               })
+
+      reloaded = Settings.get_media_server_config!(config.id)
+
+      refute Map.has_key?(reloaded.connection_settings, "last_mapping_refresh_at")
+
+      # The run itself is still recorded as a failure, same as before the fix.
+      run = Sync.last_run("jellyfin", config.id)
+      assert run.status == :error
+    end
+
+    test "a stale stamp is restored to its previous value, not merely cleared" do
+      stale =
+        DateTime.utc_now()
+        |> DateTime.add(-25 * 60 * 60, :second)
+        |> DateTime.truncate(:second)
+        |> DateTime.to_iso8601()
+
+      bypass = Bypass.open()
+
+      Bypass.expect(bypass, "GET", "/Items", fn conn ->
+        Plug.Conn.resp(conn, 500, "boom")
+      end)
+
+      user = user_fixture()
+
+      {:ok, config} =
+        Settings.create_media_server_config(%{
+          name: "Jellyfin",
+          type: :jellyfin,
+          url: "http://localhost:#{bypass.port}",
+          token: "api-key",
+          enabled: true,
+          connection_settings: %{"sync_watched" => true, "last_mapping_refresh_at" => stale}
+        })
+
+      link = link_fixture(config, user)
+
+      assert {:error, _reason} =
+               perform_job(MediaServerWatchedSync, %{
+                 "config_id" => config.id,
+                 "user_id" => user.id,
+                 "link_id" => link.id
+               })
+
+      reloaded = Settings.get_media_server_config!(config.id)
+
+      assert reloaded.connection_settings["last_mapping_refresh_at"] == stale
+    end
+
+    test "a @misconfigured error keeps the claimed stamp, since the crawl already succeeded" do
+      # missing_remote_user_id surfaces from list_changes/3, which only runs
+      # after maybe_refresh/5 (the crawl) already completed. Restoring the
+      # stamp here would force a full re-crawl on every 30-minute tick for as
+      # long as the link stays unmapped, which is exactly the cost the 24h
+      # interval exists to avoid.
+      bypass = Bypass.open()
+
+      Bypass.expect(bypass, "GET", "/Items", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(%{"Items" => [], "TotalRecordCount" => 0}))
+      end)
+
+      user = user_fixture()
+
+      {:ok, config} =
+        Settings.create_media_server_config(%{
+          name: "Jellyfin",
+          type: :jellyfin,
+          url: "http://localhost:#{bypass.port}",
+          token: "api-key",
+          enabled: true,
+          connection_settings: %{"sync_watched" => true}
+        })
+
+      # No remote_user_id: list_changes/3 fails with :missing_remote_user_id,
+      # but only after the crawl (forced because no stamp exists yet) runs.
+      {:ok, link} =
+        Settings.upsert_media_server_user_link(%{
+          media_server_config_id: config.id,
+          user_id: user.id,
+          remote_user_id: nil,
+          access_token: "leftover-token",
+          enabled: true
+        })
+
+      refute Map.has_key?(config.connection_settings, "last_mapping_refresh_at")
+
+      assert {:ok, :skipped} =
+               perform_job(MediaServerWatchedSync, %{
+                 "config_id" => config.id,
+                 "user_id" => user.id,
+                 "link_id" => link.id
+               })
+
+      reloaded = Settings.get_media_server_config!(config.id)
+
+      assert is_binary(reloaded.connection_settings["last_mapping_refresh_at"])
+
+      run = Sync.last_run("jellyfin", config.id)
+      assert run.status == :skipped
+      assert run.skip_reason == "missing_remote_user_id"
     end
   end
 
