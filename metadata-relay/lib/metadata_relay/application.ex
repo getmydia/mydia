@@ -12,7 +12,9 @@ defmodule MetadataRelay.Application do
     # Store the selected adapter in application env
     Application.put_env(:metadata_relay, :cache_adapter, cache_adapter)
 
-    # Build children list with optional OpenSubtitles support
+    log_subtitle_support()
+
+    # Build children list
     children =
       [
         # Database repository
@@ -31,7 +33,6 @@ defmodule MetadataRelay.Application do
         MetadataRelay.Metrics
       ] ++
         maybe_tvdb_auth() ++
-        maybe_opensubtitles_auth() ++
         [
           # Phoenix endpoint (serves both API and ErrorTracker dashboard)
           MetadataRelayWeb.Endpoint
@@ -39,6 +40,24 @@ defmodule MetadataRelay.Application do
 
     opts = [strategy: :one_for_one, name: MetadataRelay.Supervisor]
     Supervisor.start_link(children, opts)
+  end
+
+  @doc """
+  Announces at boot whether subtitle support has a SubDL key behind it.
+
+  The key is read lazily per request, so without this a relay missing it boots
+  clean, reports healthy, and only fails when someone searches for a subtitle.
+  That is how the previous subtitle backend stayed broken for months. Public so
+  it can be exercised directly in tests.
+  """
+  def log_subtitle_support do
+    if MetadataRelay.SubDL.Client.configured?() do
+      Logger.info("SUBDL_API_KEY detected, subtitle support enabled")
+    else
+      Logger.warning("SUBDL_API_KEY not configured, subtitle support disabled")
+    end
+
+    :ok
   end
 
   defp configure_cache do
@@ -100,20 +119,6 @@ defmodule MetadataRelay.Application do
       [MetadataRelay.TVDB.Auth]
     else
       Logger.warning("TVDB API key not configured or invalid, TVDB support disabled")
-      []
-    end
-  end
-
-  defp maybe_opensubtitles_auth do
-    api_key = System.get_env("OPENSUBTITLES_API_KEY")
-    username = System.get_env("OPENSUBTITLES_USERNAME")
-    password = System.get_env("OPENSUBTITLES_PASSWORD")
-
-    if api_key && username && password do
-      Logger.info("OpenSubtitles credentials detected, enabling subtitle support")
-      [MetadataRelay.OpenSubtitles.Auth]
-    else
-      Logger.info("OpenSubtitles credentials not configured, subtitle support disabled")
       []
     end
   end

@@ -4,11 +4,13 @@ defmodule Mydia.Subtitles.Client.MetadataRelay do
 
   Communicates with the metadata-relay service to search for and download subtitles
   when running in relay mode. The relay service abstracts the underlying subtitle
-  provider (OpenSubtitles, etc.) behind a standardized API.
+  provider (SubDL today) behind a standardized API.
 
   ## Features
 
-  - Search for subtitles by file hash, IMDB ID, TMDB ID, or query text
+  - Search for subtitles by IMDB ID, TMDB ID, or query text. Hash search is not
+    available: the relay's provider matches on title and episode only, and a
+    `file_hash` in the params is ignored rather than honoured.
   - Fetch temporary download URLs for subtitle files
   - Automatic retry with exponential backoff for transient failures
   - Rate limiting handling with Retry-After header support
@@ -31,17 +33,11 @@ defmodule Mydia.Subtitles.Client.MetadataRelay do
   ## Caching
 
   Caching is handled by the metadata-relay service itself, so the client does not
-  need to implement its own caching layer. The relay service caches search results
-  for 24 hours to minimize API calls to the underlying subtitle providers.
+  need to implement its own caching layer. Searches are cached for 7 days, keyed
+  on the search criteria, which is what keeps the relay's single shared provider
+  key viable across every install. Errors are not cached.
 
   ## Usage
-
-      # Search by file hash (most accurate)
-      {:ok, results} = MetadataRelay.search(%{
-        file_hash: "8e245d9679d31e12",
-        file_size: 742086656,
-        languages: "en"
-      })
 
       # Search by IMDB ID
       {:ok, results} = MetadataRelay.search(%{
@@ -66,13 +62,15 @@ defmodule Mydia.Subtitles.Client.MetadataRelay do
   ## Parameters
 
   - `params` - Map with search criteria:
-    - `:file_hash` - Video file hash (moviehash) for precise matching
-    - `:file_size` - File size in bytes (required when using file_hash)
     - `:imdb_id` - IMDB identifier (without "tt" prefix)
     - `:tmdb_id` - TMDB identifier
     - `:languages` - Comma-separated language codes (e.g., "en,es,fr")
     - `:query` - Text search query (fallback option)
     - `:media_type` - "movie" or "episode"
+    - `:season_number`, `:episode_number` - Episode coordinates
+
+  A `:file_hash` is accepted for call-site compatibility but the relay ignores
+  it; nothing behind the relay can search by hash.
 
   - `opts` - Keyword list of options:
     - `:timeout` - Request timeout in milliseconds (default: 10_000)
@@ -87,7 +85,7 @@ defmodule Mydia.Subtitles.Client.MetadataRelay do
       iex> search(%{imdb_id: "816692", languages: "en"})
       {:ok, %{"subtitles" => [%{"id" => 12345, "language" => "en", ...}]}}
 
-      iex> search(%{file_hash: "abc123", file_size: 123456})
+      iex> search(%{query: "no such film", languages: "en"})
       {:ok, %{"subtitles" => []}}
 
   """

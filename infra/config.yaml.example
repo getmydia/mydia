@@ -23,15 +23,11 @@ relay_tvdb_api_key: "your-tvdb-api-key"
 # TMDB API key from: https://www.themoviedb.org/settings/api
 relay_tmdb_api_key: "your-tmdb-api-key"
 
-# OpenSubtitles account backing the relay's subtitle endpoints.
-# All three must be set together, or the relay disables subtitle support and
-# answers /api/v1/subtitles/* with 503. Mydia enables its "Mydia Relay" subtitle
-# provider by default, so leaving these blank means every install that has not
-# configured its own provider gets no subtitle results.
-# API key from: https://www.opensubtitles.com/en/consumers
-relay_opensubtitles_api_key: ""
-relay_opensubtitles_username: ""
-relay_opensubtitles_password: ""
+# SubDL API key backing the relay's subtitle endpoints.
+# Free from the SubDL account panel, 2000 search requests/day shared across all
+# installs. Leave blank and the relay answers /api/v1/subtitles/* with 503.
+# Key from: https://subdl.com/panel/api
+relay_subdl_api_key: ""
 
 # Feedback email notifications (optional)
 # All six fields below must be set together for the relay to send feedback emails.

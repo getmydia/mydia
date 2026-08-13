@@ -3,8 +3,9 @@ defmodule Mydia.Subtitles.Provider.Relay do
   Subtitle provider backed by the Mydia metadata-relay service.
 
   This is the zero-configuration default: it needs no credentials because the
-  relay holds the OpenSubtitles account. That account is shared across every
-  Mydia install, so a heavy user is better served adding their own via
+  relay holds the SubDL API key. SubDL matches on title and episode rather than
+  on a file hash, so a user who wants hash-accurate matching for unusual
+  releases is better served adding their own account through
   `Mydia.Subtitles.Provider.OpenSubtitles`.
   """
 
@@ -34,9 +35,12 @@ defmodule Mydia.Subtitles.Provider.Relay do
       {:ok, %{"download_url" => url}} when is_binary(url) ->
         fetch_content(url)
 
-      # OpenSubtitles answers an exhausted download allowance with 406, which the
-      # relay forwards verbatim. That is a different condition from 429 rate
-      # limiting and the chain reports it differently.
+      # Unreachable since the relay moved to SubDL: 406 was OpenSubtitles'
+      # answer to an exhausted download allowance, forwarded verbatim, and no
+      # relay path produces it now. Kept because it is the correct reading of a
+      # 406 should the relay ever front a quota-bearing provider again, and
+      # because it is a different condition from 429 rate limiting, which the
+      # chain reports differently.
       {:error, {:http_error, 406, _body}} ->
         {:error, :quota_exceeded}
 
@@ -58,18 +62,19 @@ defmodule Mydia.Subtitles.Provider.Relay do
   def capabilities do
     %{
       media_types: [:movie, :episode],
-      search_keys: [:file_hash, :imdb_id, :tmdb_id, :query],
+      search_keys: [:imdb_id, :tmdb_id, :query],
       requires_credentials: false,
       quota: :unlimited
     }
   end
 
-  # Translates metadata-relay's OpenSubtitles wire format (see
-  # MetadataRelay.OpenSubtitles.Handler.transform_subtitle/1 in the
-  # metadata-relay service) into the keys SearchResult.from_map/1 expects.
+  # Translates the relay's subtitle wire format (see
+  # MetadataRelay.SubDL.Handler.transform_subtitle/2 in the metadata-relay
+  # service) into the keys SearchResult.from_map/1 expects. The shape predates
+  # SubDL and was kept so deployed installs did not need an upgrade.
   # The relay emits "id", not "file_id", and "release", not "file_name". It
-  # does forward "moviehash_match" as of the handler fix, so SearchResult picks
-  # that up directly and the 100-point hash bonus can fire. It still never emits
+  # forwards "moviehash_match", so SearchResult picks that up directly, though
+  # SubDL has no hash search and always reports false. It never emits
   # "subtitle_hash", which is why one is synthesized below. Each provider
   # adapter owns its own translation here rather than SearchResult growing
   # provider-specific clauses, since Task 6's direct OpenSubtitles adapter

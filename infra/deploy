@@ -96,11 +96,9 @@ class Config:
     relay_tmdb_api_key: str = ""
     relay_smtp_password: str = ""
 
-    # OpenSubtitles, which backs the relay's subtitle endpoints (optional; leave
-    # blank and the relay answers /api/v1/subtitles/* with 503 not-configured)
-    relay_opensubtitles_api_key: str = ""
-    relay_opensubtitles_username: str = ""
-    relay_opensubtitles_password: str = ""
+    # SubDL backs the relay's subtitle endpoints (optional; leave blank and the
+    # relay answers /api/v1/subtitles/* with 503 not-configured)
+    relay_subdl_api_key: str = ""
 
     # Feedback email notifications (optional; leave blank to disable)
     relay_smtp_host: str = ""
@@ -171,7 +169,13 @@ class Config:
             data = yaml.safe_load(f)
 
         # Remove deprecated fields from older configs
-        for old_field in ["grafana_github_client_id", "grafana_github_client_secret"]:
+        for old_field in [
+            "grafana_github_client_id",
+            "grafana_github_client_secret",
+            "relay_opensubtitles_api_key",
+            "relay_opensubtitles_username",
+            "relay_opensubtitles_password",
+        ]:
             data.pop(old_field, None)
 
         return cls(**data)
@@ -188,9 +192,7 @@ class Config:
             "relay_tvdb_api_key": self.relay_tvdb_api_key,
             "relay_tmdb_api_key": self.relay_tmdb_api_key,
             "relay_smtp_password": self.relay_smtp_password,
-            "relay_opensubtitles_api_key": self.relay_opensubtitles_api_key,
-            "relay_opensubtitles_username": self.relay_opensubtitles_username,
-            "relay_opensubtitles_password": self.relay_opensubtitles_password,
+            "relay_subdl_api_key": self.relay_subdl_api_key,
             "relay_smtp_host": self.relay_smtp_host,
             "relay_smtp_port": self.relay_smtp_port,
             "relay_smtp_username": self.relay_smtp_username,
@@ -1032,17 +1034,8 @@ def metadata_relay_secret_data(config: Config) -> dict[str, str]:
     if config.relay_smtp_password:
         data["SMTP_PASSWORD"] = config.relay_smtp_password
 
-    # All three are required together: MetadataRelay.Application treats a partial
-    # set as unconfigured, so shipping one or two would leave the subtitle
-    # endpoints answering 503 while looking configured from here.
-    opensubtitles = {
-        "OPENSUBTITLES_API_KEY": config.relay_opensubtitles_api_key,
-        "OPENSUBTITLES_USERNAME": config.relay_opensubtitles_username,
-        "OPENSUBTITLES_PASSWORD": config.relay_opensubtitles_password,
-    }
-
-    if all(opensubtitles.values()):
-        data.update(opensubtitles)
+    if config.relay_subdl_api_key:
+        data["SUBDL_API_KEY"] = config.relay_subdl_api_key
 
     return data
 
