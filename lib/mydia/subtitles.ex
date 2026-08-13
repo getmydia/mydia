@@ -28,7 +28,11 @@ defmodule Mydia.Subtitles do
   alias Mydia.Library.MediaFile
   alias Mydia.Media.{MediaItem, Episode}
 
-  @high_confidence_threshold 150
+  # Hash matching is worth 100 of this on its own, but the relay is backed by
+  # SubDL, which cannot report a hash match. At 150 no metadata-only result
+  # could ever qualify and auto-download would be dead code, so the bar is set
+  # where a metadata match plus a real rating or download count clears it.
+  @high_confidence_threshold 100
   @scoring_weights %{
     hash_match: 100,
     metadata_match: 50,
@@ -113,6 +117,12 @@ defmodule Mydia.Subtitles do
       {:ok, %{results: score_results(results, search_params), providers: providers}}
     end
   end
+
+  @doc """
+  Returns the score at or above which a result is auto-downloaded.
+  """
+  @spec high_confidence_threshold() :: integer()
+  def high_confidence_threshold, do: @high_confidence_threshold
 
   @doc """
   Downloads a subtitle file.
@@ -313,8 +323,9 @@ defmodule Mydia.Subtitles do
     end
   end
 
+  @doc false
   # Score subtitle results based on matching criteria
-  defp score_results(results, search_params) do
+  def score_results(results, search_params) do
     results
     |> Enum.map(fn result ->
       score = calculate_score(result, search_params)
