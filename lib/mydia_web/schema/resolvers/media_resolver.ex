@@ -167,11 +167,17 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
 
   # Watch status resolvers
   #
-  # All five go through one batch key, `{WatchStatus, :load_shows, user_id}`,
+  # The container resolvers (show, season, and the tv_show branch of
+  # recently-added) share one batch key, `{WatchStatus, :load_shows, user_id}`,
   # so a grid of shows resolves in a fixed number of queries no matter how many
   # cards are on screen. `resolve_season_count/3` and `resolve_episode_count/3`
-  # were rewritten onto the same key, which is what removes the pre-existing
+  # were rewritten onto that same key, which is what removes the pre-existing
   # N+1 rather than adding a third one beside it.
+  #
+  # The leaf resolvers (movie, episode, and the movie branch of
+  # recently-added) do not batch. They read a single `Progress` row through
+  # `Playback.get_progress/2`, exactly as `resolve_progress/3` beside them
+  # already does, because there is no set of children to roll up.
 
   @spec resolve_movie_watch_status(map(), map(), Absinthe.Resolution.t()) ::
           {:ok, term()} | {:error, term()}

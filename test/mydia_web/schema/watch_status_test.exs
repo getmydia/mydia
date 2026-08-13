@@ -4,6 +4,8 @@ defmodule MydiaWeb.Schema.WatchStatusTest do
   alias Mydia.AccountsFixtures
   alias Mydia.MediaFixtures
   alias Mydia.Playback
+  alias Mydia.Playback.WatchStatus
+  alias MydiaWeb.Schema.Resolvers.MediaResolver
 
   defp run(query, user) do
     Absinthe.run(query, MydiaWeb.Schema, context: %{current_user: user})
@@ -147,6 +149,87 @@ defmodule MydiaWeb.Schema.WatchStatusTest do
 
       assert {:ok, %{data: %{"movie" => %{"watchStatus" => status}}}} = run(query, ctx.user)
       assert status == %{"watched" => false, "percentage" => nil}
+    end
+  end
+
+  describe "Episode.watchStatus" do
+    setup do
+      %{user: AccountsFixtures.user_fixture()}
+    end
+
+    test "carries the episode's own progress", ctx do
+      {_show, [episode | _]} = show_with_two_episodes()
+
+      {:ok, _} =
+        Playback.save_progress(
+          ctx.user.id,
+          [episode_id: episode.id],
+          %{position_seconds: 100, duration_seconds: 100, watched: true}
+        )
+
+      assert {:ok, %WatchStatus{watched: true, unwatched_episode_count: nil}} =
+               MediaResolver.resolve_episode_watch_status(
+                 %{id: episode.id},
+                 %{},
+                 %{context: %{current_user: ctx.user}}
+               )
+    end
+
+    test "resolves to nil without a current user" do
+      {_show, [episode | _]} = show_with_two_episodes()
+
+      assert {:ok, nil} =
+               MediaResolver.resolve_episode_watch_status(
+                 %{id: episode.id},
+                 %{},
+                 %{context: %{}}
+               )
+    end
+  end
+
+  describe "RecentlyAddedItem.watchStatus" do
+    setup do
+      %{user: AccountsFixtures.user_fixture()}
+    end
+
+    test "rolls a show up through the batch path", ctx do
+      # RecentlyAddedItem is the type behind Favorites, Recently Added, and
+      # Unwatched, and its resolver is the only polymorphic one here. The show
+      # branch has to go through a real query rather than a direct call,
+      # because `batch/3` returns middleware rather than a value and only
+      # Absinthe resolves it.
+      {show, _episodes} = show_with_two_episodes()
+
+      query = """
+      query { recentlyAdded(first: 20) { id watchStatus { watched unwatchedEpisodeCount } } }
+      """
+
+      assert {:ok, %{data: %{"recentlyAdded" => items}}} = run(query, ctx.user)
+
+      item = Enum.find(items, &(&1["id"] == show.id))
+      refute is_nil(item), "expected the seeded show on the recently-added list"
+
+      assert item["watchStatus"] == %{"watched" => false, "unwatchedEpisodeCount" => 2}
+    end
+
+    test "takes the movie branch for a movie", ctx do
+      movie = MediaFixtures.media_item_fixture(%{type: "movie", title: "Recently Added Movie"})
+
+      assert {:ok, %WatchStatus{watched: false, unwatched_episode_count: nil}} =
+               MediaResolver.resolve_recently_added_watch_status(
+                 %{id: movie.id, type: :movie},
+                 %{},
+                 %{context: %{current_user: ctx.user}}
+               )
+    end
+
+    test "resolves to nil without a current user" do
+      assert {:ok, nil} =
+               MediaResolver.resolve_recently_added_watch_status(
+                 %{id: "anything", type: :tv_show},
+                 %{},
+                 %{context: %{}}
+               )
     end
   end
 end
