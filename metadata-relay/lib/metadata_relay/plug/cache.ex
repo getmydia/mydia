@@ -2,9 +2,9 @@ defmodule MetadataRelay.Plug.Cache do
   @moduledoc """
   Plug middleware for caching HTTP responses.
 
-  This middleware intercepts GET requests, checks if a cached response exists,
-  and serves it without making external API calls. If no cache exists, it allows
-  the request to proceed and caches the response for future requests.
+  This middleware intercepts cacheable requests, checks if a cached response
+  exists, and serves it without making external API calls. If no cache exists,
+  it allows the request to proceed and caches the response for future requests.
 
   ## Usage
 
@@ -14,15 +14,26 @@ defmodule MetadataRelay.Plug.Cache do
 
   The middleware automatically:
   - Caches all successful GET responses (200-299 status)
-  - Uses method:path:query_string as cache key
+  - Caches the subtitle search POST, and no other POST (see `@cacheable_post`)
+  - Uses method:path:query_string as cache key, where a cached POST's body
+    fingerprint stands in for the query string
   - Applies appropriate TTL based on endpoint type
-  - Skips caching for non-GET requests and errors
+  - Skips caching for every other request and for errors
   """
 
   import Plug.Conn
   require Logger
 
   alias MetadataRelay.Cache
+
+  # The only POST the relay caches. Search is the single request that spends the
+  # shared SubDL key -- one key, 2000 searches a day, every install behind it --
+  # and popular titles repeat heavily between users, so caching it is what makes
+  # that allowance viable. Every other POST this service answers either stores
+  # something (crash reports, feedback) or mints something new (pairing claims);
+  # serving any of those from cache would silently swallow requests. Hence an
+  # exact path match rather than a prefix.
+  @cacheable_post "/api/v1/subtitles/search"
 
   @behaviour Plug
 
@@ -49,37 +60,51 @@ defmodule MetadataRelay.Plug.Cache do
       ) do
     # Skip caching for subtitle archive downloads. These hit dl.subdl.com,
     # which is unauthenticated and does not draw on the daily search key
-    # quota this cache exists to protect, so caching buys nothing. Worse, the
-    # response's content-disposition header isn't in filter_headers/1's
-    # allow-list, so a cache hit would silently drop it; and with no matching
-    # rule in auto_ttl/1 these binary blobs would fall back to the 30-day
-    # default and compete with small JSON responses for the same
+    # quota this cache exists to protect, so caching buys nothing. And with no
+    # matching rule in auto_ttl/1 these binary blobs would fall back to the
+    # 30-day default and compete with small JSON responses for the same
     # count-capped entry pool.
     conn
   end
 
   @impl true
   def call(%Plug.Conn{method: "GET"} = conn, _opts) do
-    cache_key = build_cache_key(conn)
+    serve_or_cache(conn, build_cache_key(conn))
+  end
 
+  @impl true
+  def call(%Plug.Conn{method: "POST", request_path: @cacheable_post} = conn, _opts) do
+    # The search criteria live in the body, so the body stands in for the query
+    # string in the cache key. Without a fingerprint every search would collide
+    # on one entry; without a parsed body there is nothing to fingerprint, so
+    # that request goes upstream uncached rather than sharing a key.
+    case body_fingerprint(conn) do
+      {:ok, fingerprint} ->
+        serve_or_cache(conn, Cache.build_key(conn.method, conn.request_path, fingerprint))
+
+      :error ->
+        conn
+    end
+  end
+
+  @impl true
+  def call(conn, _opts) do
+    # Skip caching for every other request
+    conn
+  end
+
+  ## Private Functions
+
+  defp serve_or_cache(conn, cache_key) do
     case Cache.get(cache_key) do
       {:ok, cached_response} ->
         serve_cached_response(conn, cached_response)
 
       {:error, :not_found} ->
         # Continue with request and cache the response
-        conn
-        |> register_before_send(&cache_response(&1, cache_key))
+        register_before_send(conn, &cache_response(&1, cache_key))
     end
   end
-
-  @impl true
-  def call(conn, _opts) do
-    # Skip caching for non-GET requests
-    conn
-  end
-
-  ## Private Functions
 
   defp build_cache_key(conn) do
     method = conn.method
@@ -88,6 +113,35 @@ defmodule MetadataRelay.Plug.Cache do
 
     Cache.build_key(method, path, query_string)
   end
+
+  # Fingerprints the parsed body rather than the raw bytes: two installs asking
+  # the same question then share an entry even when their JSON serializers
+  # differ in key order or whitespace. Keys are stringified and sorted, list
+  # order is preserved because it is meaningful in JSON.
+  defp body_fingerprint(%Plug.Conn{body_params: %Plug.Conn.Unfetched{}}), do: :error
+
+  defp body_fingerprint(%Plug.Conn{body_params: params}) when is_map(params) do
+    digest =
+      params
+      |> canonicalize()
+      |> :erlang.term_to_binary()
+
+    {:ok, :sha256 |> :crypto.hash(digest) |> Base.encode16(case: :lower)}
+  end
+
+  defp body_fingerprint(_conn), do: :error
+
+  defp canonicalize(value) when is_struct(value), do: value
+
+  defp canonicalize(value) when is_map(value) do
+    value
+    |> Enum.map(fn {key, inner} -> {to_string(key), canonicalize(inner)} end)
+    |> Enum.sort()
+  end
+
+  defp canonicalize(value) when is_list(value), do: Enum.map(value, &canonicalize/1)
+
+  defp canonicalize(value), do: value
 
   defp serve_cached_response(conn, cached_response) do
     MetadataRelay.Metrics.inc("metadata_relay_cache_hits_total")
@@ -133,9 +187,12 @@ defmodule MetadataRelay.Plug.Cache do
   end
 
   defp filter_headers(headers) do
-    # Keep only relevant headers for cached responses
+    # Keep only relevant headers for cached responses. content-disposition is
+    # here because a cached response that drops it changes how the client
+    # handles the body: nothing cached carries one today, and this keeps it
+    # that way if a file-serving route is ever made cacheable.
     Enum.filter(headers, fn {name, _value} ->
-      name in ["content-type", "cache-control", "etag"]
+      name in ["content-type", "content-disposition", "cache-control", "etag"]
     end)
   end
 
