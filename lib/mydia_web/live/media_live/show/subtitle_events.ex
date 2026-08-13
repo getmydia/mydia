@@ -154,7 +154,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
     {:noreply,
      socket
      |> assign(:downloading_subtitle_id, nil)
-     |> put_flash(:error, "Subtitle download failed: #{inspect(reason)}")}
+     |> put_flash(:error, "Subtitle download failed: #{download_error_message(reason)}")}
   end
 
   def handle_download_subtitle_async({:exit, reason}, socket) do
@@ -163,6 +163,36 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
     {:noreply,
      socket
      |> assign(:downloading_subtitle_id, nil)
-     |> put_flash(:error, "Subtitle download failed unexpectedly")}
+     |> put_flash(:error, "Subtitle download failed: #{download_error_message(reason)}")}
   end
+
+  # Every clause here matches a class of failure `Mydia.Subtitles.download_subtitle/3`
+  # (or the provider it delegates to) can return. Anything unmatched still logs the
+  # raw reason above but never puts it in front of an operator.
+  defp download_error_message(:media_file_not_found),
+    do: "that file is no longer in the library."
+
+  defp download_error_message(:media_file_path_not_resolved),
+    do: "the file's location on disk could not be resolved."
+
+  defp download_error_message({:unsupported_format, _format}),
+    do: "that subtitle format is not supported."
+
+  defp download_error_message({:missing_required_fields, _fields}),
+    do: "the provider did not return everything needed to download it."
+
+  defp download_error_message(:not_found),
+    do: "that subtitle is no longer available from the provider."
+
+  defp download_error_message(:rate_limited),
+    do: "the provider rate limited the request. Try again shortly."
+
+  defp download_error_message(:service_unavailable),
+    do: "the subtitle provider is unavailable right now."
+
+  defp download_error_message(:unauthorized),
+    do: "the provider rejected the request. Check its credentials."
+
+  defp download_error_message(_reason),
+    do: "check the server logs for details."
 end

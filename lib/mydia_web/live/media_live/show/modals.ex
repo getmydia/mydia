@@ -1220,7 +1220,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
             phx-change="update_subtitle_languages"
             class="flex flex-wrap items-center gap-2"
           >
-            <div class="filter">
+            <div class="filter" role="group" aria-label="Subtitle languages">
               <button
                 type="button"
                 class="btn btn-sm btn-square filter-reset"
@@ -1255,7 +1255,6 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                       class="checkbox checkbox-sm"
                       name="languages[]"
                       value={code}
-                      checked={code in @selected_languages}
                     />
                     <span class="label-text">{label}</span>
                   </label>
@@ -1302,7 +1301,12 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                   <div class="font-medium">Search failed</div>
                   <div class="text-sm opacity-80">{search_error_message(reason)}</div>
                 </div>
-                <button type="button" phx-click="perform_subtitle_search" class="btn btn-sm">
+                <button
+                  type="button"
+                  phx-click="perform_subtitle_search"
+                  class="btn btn-sm"
+                  disabled={@selected_languages == []}
+                >
                   Retry
                 </button>
               </div>
@@ -1333,7 +1337,12 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                         </li>
                       </ul>
                     </div>
-                    <button type="button" phx-click="perform_subtitle_search" class="btn btn-sm">
+                    <button
+                      type="button"
+                      phx-click="perform_subtitle_search"
+                      class="btn btn-sm"
+                      disabled={@selected_languages == []}
+                    >
                       Retry
                     </button>
                   </div>
@@ -1364,7 +1373,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                       :for={result <- @subtitle_search_results}
                       class="list-row hover:bg-base-200/50 transition-colors"
                     >
-                      <div class="min-w-0">
+                      <div class="list-col-grow min-w-0">
                         <div class="font-medium truncate">
                           {result.file_name || MydiaWeb.Languages.name(result.language)}
                         </div>
@@ -1379,13 +1388,13 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                           <span :if={result.moviehash_match} class="badge badge-success badge-sm">
                             Exact match
                           </span>
-                          <span
+                          <div
                             :if={result.hearing_impaired}
-                            class="badge badge-outline badge-sm tooltip"
+                            class="tooltip"
                             data-tip="Includes hearing impaired captions"
                           >
-                            HI
-                          </span>
+                            <span class="badge badge-outline badge-sm">HI</span>
+                          </div>
                           <span class={[
                             "badge badge-sm",
                             score_badge_class(result.score)

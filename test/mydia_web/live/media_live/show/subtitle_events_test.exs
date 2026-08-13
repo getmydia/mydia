@@ -89,18 +89,33 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEventsTest do
       assert socket.assigns.downloading_subtitle_id == nil
     end
 
-    test "a failed download clears the downloading id" do
+    test "a failed download clears the downloading id and humanizes a known reason" do
       {:noreply, socket} =
         SubtitleEvents.handle_download_subtitle_async({:ok, {:error, :not_found}}, socket())
 
       assert socket.assigns.downloading_subtitle_id == nil
+      assert flash(socket)["error"] =~ "no longer available from the provider"
+      refute flash(socket)["error"] =~ "not_found"
     end
 
-    test "a crashed download task clears the downloading id" do
+    test "a failed download with an unrecognized reason never flashes the raw term" do
+      {:noreply, socket} =
+        SubtitleEvents.handle_download_subtitle_async(
+          {:ok, {:error, {:database_insert_failed, %{}}}},
+          socket()
+        )
+
+      assert flash(socket)["error"] =~ "check the server logs"
+      refute flash(socket)["error"] =~ "database_insert_failed"
+    end
+
+    test "a crashed download task clears the downloading id and never flashes the raw reason" do
       {:noreply, socket} =
         SubtitleEvents.handle_download_subtitle_async({:exit, :boom}, socket())
 
       assert socket.assigns.downloading_subtitle_id == nil
+      assert flash(socket)["error"] =~ "check the server logs"
+      refute flash(socket)["error"] =~ "boom"
     end
   end
 end
