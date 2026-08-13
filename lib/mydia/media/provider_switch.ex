@@ -228,16 +228,18 @@ defmodule Mydia.Media.ProviderSwitch do
           # erases it. Capture the per-season verdict first and replay it, or
           # every season the user deliberately unmonitored comes back monitored
           # under the show's new-season default.
+          # Folded in Elixir rather than aggregated in SQL: PostgreSQL has a
+          # real boolean type and refuses `max(cast(bool as int))`, while SQLite
+          # stores booleans as integers and accepts it. One portable query beats
+          # branching on the adapter.
           monitored_by_season =
             from(e in Episode,
               where: e.media_item_id == ^item.id,
-              group_by: e.season_number,
-              select: {e.season_number, max(type(e.monitored, :integer))}
+              select: {e.season_number, e.monitored}
             )
             |> Repo.all()
-            |> Map.new(fn {season_number, any_monitored} ->
-              {season_number, any_monitored == 1}
-            end)
+            |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+            |> Map.new(fn {season_number, flags} -> {season_number, Enum.any?(flags)} end)
 
           Repo.delete_all(from(e in Episode, where: e.media_item_id == ^item.id))
 
