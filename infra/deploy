@@ -169,7 +169,13 @@ class Config:
             data = yaml.safe_load(f)
 
         # Remove deprecated fields from older configs
-        for old_field in ["grafana_github_client_id", "grafana_github_client_secret"]:
+        for old_field in [
+            "grafana_github_client_id",
+            "grafana_github_client_secret",
+            "relay_opensubtitles_api_key",
+            "relay_opensubtitles_username",
+            "relay_opensubtitles_password",
+        ]:
             data.pop(old_field, None)
 
         return cls(**data)

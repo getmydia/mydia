@@ -83,7 +83,10 @@ Required secrets:
 - `TVDB_API_KEY`: TheTVDB API key
 
 Optional secrets:
-- `SUBDL_API_KEY`: SubDL API key
+- `SUBDL_API_KEY`: SubDL API key. The relay runs fine without it, but every
+  `/api/v1/subtitles/*` endpoint returns 503 until it is set, so it is
+  required for subtitle functionality specifically, not for the service to
+  boot.
 
 ### Storage
 
