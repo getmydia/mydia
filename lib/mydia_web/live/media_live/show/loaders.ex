@@ -86,6 +86,10 @@ defmodule MydiaWeb.MediaLive.Show.Loaders do
 
   # Load transcode jobs for all media files in a media item
   # Returns a map of media_file_id => list of transcode jobs
+  #
+  # "original" jobs are dropped: they carry no transcoded rendition (the source
+  # file is served as-is), so surfacing them would only report that someone once
+  # downloaded the file.
   def load_transcode_jobs(media_item) do
     episode_files = Enum.flat_map(media_item.episodes || [], & &1.media_files)
     all_files = media_item.media_files ++ episode_files
@@ -94,6 +98,7 @@ defmodule MydiaWeb.MediaLive.Show.Loaders do
     |> Enum.flat_map(fn media_file ->
       Downloads.list_transcode_jobs_for_media_file(media_file.id)
     end)
+    |> Enum.reject(&(&1.resolution == "original"))
     |> Enum.group_by(& &1.media_file_id)
   end
 
