@@ -10,7 +10,7 @@ defmodule MetadataRelay.Router do
   alias MetadataRelay.TVDB.Handler, as: TVDBHandler
   alias MetadataRelay.Music.Handler, as: MusicHandler
   alias MetadataRelay.OpenLibrary.Handler, as: OpenLibraryHandler
-  alias MetadataRelay.OpenSubtitles.Handler, as: SubtitlesHandler
+  alias MetadataRelay.SubDL.Handler, as: SubtitlesHandler
   alias MetadataRelay.Pairing.Handler, as: PairingHandler
 
   @feedback_param_atoms %{
@@ -267,7 +267,47 @@ defmodule MetadataRelay.Router do
 
   # Subtitle Download URL
   get "/api/v1/subtitles/download-url/:id" do
-    handle_subtitles_request(conn, fn -> SubtitlesHandler.get_download_url(id) end)
+    handle_subtitles_request(conn, fn ->
+      SubtitlesHandler.get_download_url(id, relay_base_url(conn))
+    end)
+  end
+
+  # Subtitle content. SubDL ships ZIP archives and the clients on the other end
+  # of this contract expect plain subtitle bytes, so the relay unwraps and
+  # serves the file itself rather than redirecting to SubDL.
+  get "/api/v1/subtitles/download/:id" do
+    case SubtitlesHandler.download(id) do
+      {:ok, %{name: name, content: content}} ->
+        MetadataRelay.Metrics.inc("metadata_relay_requests_total", service: "subdl", status: "ok")
+
+        conn
+        |> put_resp_content_type("application/octet-stream")
+        |> put_resp_header("content-disposition", ~s(attachment; filename="#{name}"))
+        |> send_resp(200, content)
+
+      {:error, :invalid_file_id} ->
+        MetadataRelay.Metrics.inc("metadata_relay_requests_total",
+          service: "subdl",
+          status: "error"
+        )
+
+        conn
+        |> put_resp_content_type("application/json")
+        |> send_resp(400, Jason.encode!(%{error: "Invalid subtitle id"}))
+
+      {:error, reason} ->
+        MetadataRelay.Metrics.inc("metadata_relay_requests_total",
+          service: "subdl",
+          status: "error"
+        )
+
+        conn
+        |> put_resp_content_type("application/json")
+        |> send_resp(
+          502,
+          Jason.encode!(%{error: "Subtitle unavailable", message: inspect(reason)})
+        )
+    end
   end
 
   # Music Search
@@ -479,6 +519,17 @@ defmodule MetadataRelay.Router do
     conn.body_params
     |> Enum.map(fn {k, v} -> {String.to_atom(k), v} end)
     |> Map.new()
+  end
+
+  # The download URL handed to clients has to be absolute and reachable from
+  # outside. PHX_HOST is already set in the deployment for exactly this kind of
+  # question; the request-derived fallback is for local dev, where the ingress
+  # that would set forwarded headers is absent.
+  defp relay_base_url(conn) do
+    case System.get_env("PHX_HOST") do
+      host when is_binary(host) and host != "" -> "https://#{host}"
+      _ -> "#{conn.scheme}://#{conn.host}:#{conn.port}"
+    end
   end
 
   defp handle_crash_report(conn) do
@@ -895,7 +946,7 @@ defmodule MetadataRelay.Router do
     case handler_fn.() do
       {:ok, body} ->
         MetadataRelay.Metrics.inc("metadata_relay_requests_total",
-          service: "opensubtitles",
+          service: "subdl",
           status: "ok"
         )
 
@@ -905,23 +956,43 @@ defmodule MetadataRelay.Router do
 
       {:error, :not_configured} ->
         MetadataRelay.Metrics.inc("metadata_relay_requests_total",
-          service: "opensubtitles",
+          service: "subdl",
           status: "error"
         )
 
         error_response = %{
           error: "Service not configured",
           message:
-            "OpenSubtitles integration is not configured. Please set OPENSUBTITLES_API_KEY, OPENSUBTITLES_USERNAME, and OPENSUBTITLES_PASSWORD environment variables."
+            "SubDL integration is not configured. Please set the SUBDL_API_KEY environment variable."
         }
 
         conn
         |> put_resp_content_type("application/json")
         |> send_resp(503, Jason.encode!(error_response))
 
+      {:error, :invalid_file_id} ->
+        MetadataRelay.Metrics.inc("metadata_relay_requests_total",
+          service: "subdl",
+          status: "error"
+        )
+
+        conn
+        |> put_resp_content_type("application/json")
+        |> send_resp(400, Jason.encode!(%{error: "Invalid subtitle id"}))
+
+      {:error, :insufficient_search_criteria} ->
+        MetadataRelay.Metrics.inc("metadata_relay_requests_total",
+          service: "subdl",
+          status: "error"
+        )
+
+        conn
+        |> put_resp_content_type("application/json")
+        |> send_resp(400, Jason.encode!(%{error: "Insufficient search criteria"}))
+
       {:error, {:rate_limited, retry_after}} ->
         MetadataRelay.Metrics.inc("metadata_relay_requests_total",
-          service: "opensubtitles",
+          service: "subdl",
           status: "error"
         )
 
@@ -937,7 +1008,7 @@ defmodule MetadataRelay.Router do
 
       {:error, {:http_error, status, body}} ->
         MetadataRelay.Metrics.inc("metadata_relay_requests_total",
-          service: "opensubtitles",
+          service: "subdl",
           status: "error"
         )
 
@@ -947,7 +1018,7 @@ defmodule MetadataRelay.Router do
 
       {:error, {:authentication_failed, reason}} ->
         MetadataRelay.Metrics.inc("metadata_relay_requests_total",
-          service: "opensubtitles",
+          service: "subdl",
           status: "error"
         )
 
@@ -962,7 +1033,7 @@ defmodule MetadataRelay.Router do
 
       {:error, reason} ->
         MetadataRelay.Metrics.inc("metadata_relay_requests_total",
-          service: "opensubtitles",
+          service: "subdl",
           status: "error"
         )
 

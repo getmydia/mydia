@@ -96,7 +96,7 @@ defmodule MetadataRelay.Plug.Cache do
   defp service_from_path("/tvdb/" <> _), do: "tvdb"
   defp service_from_path("/music/" <> _), do: "music"
   defp service_from_path("/openlibrary/" <> _), do: "openlibrary"
-  defp service_from_path("/api/v1/subtitles/" <> _), do: "opensubtitles"
+  defp service_from_path("/api/v1/subtitles/" <> _), do: "subdl"
   defp service_from_path(_), do: nil
 
   defp cache_response(conn, cache_key) do
