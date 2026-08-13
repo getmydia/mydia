@@ -66,6 +66,19 @@ defmodule Mydia.Playback.WatchStatusTest do
                WatchStatus.from_episodes(episodes, files, Map.new([unwatched("e1")]))
     end
 
+    test "a progress row with a nil watched flag counts as unwatched" do
+      # `watched != true` rather than `watched == false` on purpose: the column
+      # defaults to false, but a row that predates the default, or one built in
+      # memory, can carry nil. Counting nil as watched would silently shrink
+      # every badge it touched.
+      episodes = [episode("e1", 1)]
+      files = MapSet.new(["e1"])
+      progress = %{"e1" => %Progress{episode_id: "e1", watched: nil}}
+
+      assert %WatchStatus{watched: false, unwatched_episode_count: 1} =
+               WatchStatus.from_episodes(episodes, files, progress)
+    end
+
     test "every countable episode watched reads as watched with a zero count" do
       episodes = [episode("e1", 1), episode("e2", 1)]
       files = MapSet.new(["e1", "e2"])
