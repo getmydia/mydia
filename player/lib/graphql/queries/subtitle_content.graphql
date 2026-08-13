@@ -1,0 +1,18 @@
+# Fetches a subtitle track's text body on demand, when the user selects it in
+# the subtitle picker.
+#
+# Deliberately kept out of MediaFileFragment: resolving `content` for an
+# embedded track runs an ffmpeg extraction server-side. Folding it into the
+# shared fragment would run that extraction for every embedded track on every
+# movie, episode, season, and library query that touches MediaFileFragment,
+# serially, inside a single GraphQL resolution.
+#
+# A root `mediaFile(id:)` query would let this go straight to the file, but
+# the schema has none (MediaFile does not implement Node either), so this
+# uses the targeted `subtitleContent` field instead: it takes the media file
+# id and track id directly and resolves only that one track, unlike routing
+# through `movie`/`episode` -> `files` -> `subtitles` -> `content`, which
+# would resolve every track of every file the query selects.
+query SubtitleContent($mediaFileId: ID!, $trackId: String!) {
+  subtitleContent(mediaFileId: $mediaFileId, trackId: $trackId)
+}

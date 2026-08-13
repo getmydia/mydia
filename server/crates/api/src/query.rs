@@ -10,7 +10,9 @@ use async_graphql::{Context, Error, Object, Result, ID};
 use crate::context::{authenticated_user, ApiContext};
 use crate::mapping::ExternalsByFile;
 use crate::types::auth::{remote_device_from, ApiKey, RemoteDevice};
-use crate::types::common::{MediaCategory, MediaType, Node, PageInfo, SearchResultType, SortInput};
+use crate::types::common::{
+    MediaCategory, MediaType, Node, PageInfo, SearchResultType, SortInput, SubtitleFormat,
+};
 use crate::types::discovery::{
     Collection, ContinueWatchingItem, RemoteAccessStatus, SearchResults, UpNextItem,
 };
@@ -471,6 +473,26 @@ impl RootQueryType {
                 error: Some("This server does not download subtitles from providers.".to_string()),
             }],
         })
+    }
+
+    /// Fetch one subtitle track's body directly, without resolving every
+    /// track on the media file.
+    ///
+    /// query_types.ex:`:subtitle_content`. Mirrors `SubtitleTrack::content`
+    /// above: this server acquires no media and does not extract subtitle
+    /// bodies, so it answers null rather than guessing. Present for contract
+    /// parity, since the player selects this field regardless of which
+    /// server answered the query.
+    async fn subtitle_content(
+        &self,
+        ctx: &Context<'_>,
+        _media_file_id: ID,
+        _track_id: String,
+        _format: Option<SubtitleFormat>,
+    ) -> Result<Option<String>> {
+        authenticated_user(ctx).await?;
+
+        Ok(None)
     }
 
     async fn streaming_candidates(

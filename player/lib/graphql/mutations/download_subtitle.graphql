@@ -1,0 +1,10 @@
+mutation DownloadSubtitle($mediaFileId: ID!, $token: String!) {
+  downloadSubtitle(mediaFileId: $mediaFileId, token: $token) {
+    trackId
+    language
+    title
+    format
+    embedded
+    deliverable
+  }
+}

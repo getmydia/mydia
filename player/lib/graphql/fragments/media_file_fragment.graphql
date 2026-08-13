@@ -15,6 +15,7 @@ fragment MediaFileFragment on MediaFile {
     title
     format
     embedded
+    deliverable
     url(format: VTT)
   }
 }

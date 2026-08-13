@@ -1,0 +1,22 @@
+query SubtitleSearch($mediaFileId: ID!, $languages: [String!]!) {
+  subtitleSearch(mediaFileId: $mediaFileId, languages: $languages) {
+    results {
+      token
+      language
+      releaseName
+      format
+      rating
+      downloadCount
+      hearingImpaired
+      hashMatch
+      score
+      providerName
+    }
+    providers {
+      name
+      quotaRemaining
+      quotaTotal
+      error
+    }
+  }
+}

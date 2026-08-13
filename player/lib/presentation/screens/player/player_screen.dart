@@ -49,6 +49,7 @@ import '../../../domain/models/audio_track.dart' as app_models_audio;
 import '../../../domain/models/media_segment.dart';
 import '../../../domain/models/quality_delivery_subtitle.dart';
 import '../../../domain/models/quality_rung.dart';
+import '../../../domain/models/subtitle_candidate.dart';
 import '../../../domain/models/subtitle_track.dart' as app_models;
 import '../../../domain/models/cast_device.dart';
 import '../../../domain/models/download.dart';
@@ -61,6 +62,9 @@ import '../../../graphql/mutations/start_streaming_session.graphql.dart';
 import '../../../graphql/mutations/start_streaming_session_legacy.graphql.dart';
 import '../../../graphql/mutations/end_streaming_session.graphql.dart';
 import '../../../graphql/queries/streaming_candidates.graphql.dart';
+import '../../../graphql/queries/subtitle_content.graphql.dart';
+import '../../../graphql/queries/subtitle_search.graphql.dart';
+import '../../../graphql/mutations/download_subtitle.graphql.dart';
 import '../../../graphql/schema.graphql.dart';
 import '../../../core/p2p/media_proxy.dart';
 import '../../../core/p2p/media_proxy_factory.dart';
@@ -68,6 +72,7 @@ import '../../../core/window/desktop_window.dart';
 import '../../../core/window/player_window_sizer.dart';
 import '../../../core/player/resume_plan.dart';
 import '../settings/settings_controller.dart';
+import 'subtitle_track_builder.dart';
 
 export '../../../core/player/resume_plan.dart'
     show
@@ -305,6 +310,59 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   app_models.SubtitleTrack? _selectedSubtitleTrack;
   List<app_models_audio.AudioTrack> _audioTracks = [];
   app_models_audio.AudioTrack? _selectedAudioTrack;
+
+  /// The target of the subtitle selection attempt currently in flight, or
+  /// most recently concluded — as opposed to [_selectedSubtitleTrack],
+  /// which only reflects what has actually taken effect on the player.
+  ///
+  /// The no-op guard at the top of [_showSubtitleSelector] compares the
+  /// sheet's result against this, not against [_selectedSubtitleTrack] (see
+  /// [shouldStartSubtitleSelection]). Comparing against the applied value
+  /// would mean a tap matching whatever is still displayed as current —
+  /// because its own request hasn't resolved yet — is invisible to the
+  /// guard and gets silently dropped instead of registering as a retry or
+  /// a cancel. `null` means "Off is the most recently requested state",
+  /// same as [_selectedSubtitleTrack]'s `null`; both start `null` because
+  /// nothing has been requested yet.
+  ///
+  /// Written once, up front, to whatever a call is requesting, and — this
+  /// is the part a second review round found missing — reverted by
+  /// [_resetPendingSubtitleSelection] on every exit that concludes without
+  /// applying. Left un-reverted, a failed fetch stuck this at the track
+  /// that had just failed, so re-tapping that exact track (the natural
+  /// response to a "could not load, try again" snackbar) matched this
+  /// field and was silently swallowed by the no-op guard rather than
+  /// starting a genuine retry. See [pendingSubtitleSelectionAfterFailure].
+  ///
+  /// [_selectedSubtitleTrack] and this field are allowed to disagree while
+  /// a request is in flight — that's the whole point of tracking them
+  /// separately — and the sheet still displays [_selectedSubtitleTrack] as
+  /// checked, not this. Showing the viewer that a selection is pending is
+  /// a UI concern for whichever task rebuilds this sheet with real
+  /// loading states; this field only exists to make the *comparison*
+  /// correct in the meantime.
+  app_models.SubtitleTrack? _pendingSubtitleSelection;
+
+  /// Bumped on every non-no-op call into [_showSubtitleSelector].
+  ///
+  /// A subtitle selection now does real async work (an "Off" call to
+  /// media_kit, or a content fetch in [_resolveMediaKitSubtitleTrack]), and
+  /// the tap that starts it is fire-and-forget from a sheet that has
+  /// already closed, so nothing stops the viewer from picking again before
+  /// the first pick resolves. Each call captures the generation it was
+  /// issued under; [_canApplySubtitleSelection] re-checks it (together with
+  /// `mounted` and whether a player still exists) after every await before
+  /// that call is allowed to commit [_selectedSubtitleTrack] or touch the
+  /// player. Whichever call the viewer made *last* is the one whose
+  /// generation is still current when its work finishes, so it is the only
+  /// one that can win; an earlier call that resolves later — a slow
+  /// network response losing a race to a fast "Off" tap, for instance —
+  /// recognises it has been superseded and backs off instead of fighting
+  /// the newer choice for control of the player. Bumped before the
+  /// no-player bailout in [_showSubtitleSelector], not after: an in-flight
+  /// call from *before* this tap must count as superseded even when this
+  /// tap itself has no player to act on.
+  int _subtitleSelectionGeneration = 0;
 
   // Mapping from app model track IDs to media_kit track objects
   Map<String, AudioTrack> _mediaKitAudioTrackMap = {};
@@ -1752,7 +1810,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     final subtitleMap = <String, SubtitleTrack>{};
 
     if (_isDirectPlay) {
-      // For direct play, merge embedded subs from media_kit with external subs from GraphQL
+      // In direct play the engine already sees every embedded track in the
+      // container, including image-based ones it can render natively. These
+      // need no fetch: media_kit already has them.
       final embeddedSubs = <app_models.SubtitleTrack>[];
       for (final mkTrack in mkSubtitleTracks) {
         if (mkTrack == SubtitleTrack.auto() || mkTrack == SubtitleTrack.no()) {
@@ -1769,36 +1829,25 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         subtitleMap[appTrack.id] = mkTrack;
       }
 
-      // Add external subs from GraphQL (non-embedded ones with URLs)
+      // Sidecars are not in the container, so they still come from the
+      // server. Their body is fetched lazily in
+      // [_resolveMediaKitSubtitleTrack], only if and when the viewer selects
+      // one, rather than built here for every sidecar up front. `deliverable`
+      // is redundant with every sidecar today (they are hardcoded true
+      // server-side, unlike an embedded image track), but this keeps the
+      // client's own filtering honest rather than leaning on that server
+      // invariant silently.
       final externalSubs =
-          _subtitleTracks.where((s) => !s.embedded && s.url != null).toList();
+          _subtitleTracks.where((s) => !s.embedded && s.deliverable).toList();
 
-      // Build URI-based media_kit tracks for external subs
-      for (final extSub in externalSubs) {
-        final fullUrl = _buildSubtitleUrl(extSub.url!);
-        final mkTrack = SubtitleTrack.uri(
-          fullUrl,
-          title: extSub.title,
-          language: extSub.language,
-        );
-        subtitleMap[extSub.id] = mkTrack;
-      }
-
-      // Combine: embedded first, then external
       _subtitleTracks = [...embeddedSubs, ...externalSubs];
     } else {
-      // For HLS mode: use only GraphQL subtitle tracks loaded via URI
-      for (final sub in _subtitleTracks) {
-        if (sub.url != null) {
-          final fullUrl = _buildSubtitleUrl(sub.url!);
-          final mkTrack = SubtitleTrack.uri(
-            fullUrl,
-            title: sub.title,
-            language: sub.language,
-          );
-          subtitleMap[sub.id] = mkTrack;
-        }
-      }
+      // Streaming: every selectable track's body arrives as content over
+      // GraphQL, fetched lazily in [_resolveMediaKitSubtitleTrack] once the
+      // viewer actually picks a track. This is the one path that works
+      // identically on LAN, direct, p2p and web, because GraphQL is already
+      // tunnelled in every connection mode.
+      _subtitleTracks = selectableTracks(_subtitleTracks, isDirectPlay: false);
     }
 
     _audioTracks = audioDetection.tracks;
@@ -1806,6 +1855,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _mediaKitSubtitleTrackMap = subtitleMap;
 
     _syncSelectedAudioTrack();
+    _syncSelectedSubtitleTrack();
 
     debugPrint('[PlayerScreen] Detected ${_audioTracks.length} audio tracks, '
         '${_subtitleTracks.length} subtitle tracks '
@@ -1832,6 +1882,53 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
   }
 
+  /// Point [_selectedSubtitleTrack] at whatever the player is actually
+  /// showing after [_detectTracks] rebuilt the track list, and re-arm the
+  /// selection state around it.
+  ///
+  /// [_detectTracks] runs once per [_initializePlayer], and that includes
+  /// the restarts a seek past the transcoded end or a quality change
+  /// triggers. Those hand back a *new* player with no subtitle applied and
+  /// an empty [_mediaKitSubtitleTrackMap], while both selection fields
+  /// still pointed at the previous player's choice. The sheet then showed
+  /// a track checked with nothing on screen, and re-tapping it was
+  /// swallowed by [shouldStartSubtitleSelection] as a no-op against the
+  /// stale [_pendingSubtitleSelection] -- the viewer's subtitles were gone
+  /// with no way to get them back short of picking a different track.
+  ///
+  /// Resolved from the player rather than blanked to null, because in
+  /// direct play mpv may have auto-enabled a default or forced track of
+  /// its own, and reporting "Off" over a track that is genuinely rendering
+  /// is the same lie in the other direction. Streaming has no embedded
+  /// tracks in the map at all, so it lands on null either way.
+  ///
+  /// Bumps [_subtitleSelectionGeneration] so any selection still in flight
+  /// against the player being replaced backs off instead of applying its
+  /// result to the new one; [pendingSubtitleSelectionAfterFailure] leaves
+  /// the values set here alone when that superseded attempt unwinds.
+  void _syncSelectedSubtitleTrack() {
+    final player = _player;
+    if (player == null) return;
+
+    final currentMkSubtitle = player.state.track.subtitle;
+    app_models.SubtitleTrack? applied;
+
+    if (currentMkSubtitle != SubtitleTrack.auto() &&
+        currentMkSubtitle != SubtitleTrack.no()) {
+      for (final appTrack in _subtitleTracks) {
+        if (_mediaKitSubtitleTrackMap[appTrack.id]?.id ==
+            currentMkSubtitle.id) {
+          applied = appTrack;
+          break;
+        }
+      }
+    }
+
+    _selectedSubtitleTrack = applied;
+    _pendingSubtitleSelection = applied;
+    _subtitleSelectionGeneration++;
+  }
+
   /// Adopt a track list media_kit published after playback opened.
   ///
   /// The audio button is gated on `audioTrackCount > 0`, so until this lands
@@ -1845,48 +1942,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       _mediaKitAudioTrackMap = detection.byId;
       _syncSelectedAudioTrack();
     });
-  }
-
-  /// Build a full subtitle URL from a relative URL path.
-  String _buildSubtitleUrl(String relativeUrl) {
-    // If already absolute, return as-is
-    if (relativeUrl.startsWith('http://') ||
-        relativeUrl.startsWith('https://')) {
-      return relativeUrl;
-    }
-
-    // Check if using P2P proxy
-    final connectionState = ref.read(conn.connectionProvider);
-    if (connectionState.isP2PMode) {
-      // Built from the proxy's own base, like every other media URL. The
-      // hand-rolled `http://127.0.0.1:<port>` this replaced was wrong twice
-      // over: it dropped the `/g/<token>` prefix a LAN-exposed proxy demands,
-      // and in the browser there is no loopback server at all, so it produced
-      // `http://127.0.0.1:0/...`, an insecure URL fetched from an HTTPS page,
-      // which the browser blocks as mixed content.
-      //
-      // This still 404s, on both platforms, and that is not something this
-      // call site can fix: there is no subtitle route in the p2p protocol.
-      // `lib/mydia/p2p/server.ex` dispatches on the session id alone (an HLS
-      // session, `direct:`, or `download:`), and the subtitle URL GraphQL
-      // hands us is a plain Phoenix route with a load-bearing `?format=`
-      // query, which both proxies deliberately strip before matching. Adding
-      // one means a new session prefix, a server-side handler, and moving the
-      // format out of the query, none of which belongs at a URL builder.
-      // Until then this is an ordinary 404 with a body saying so, which is
-      // what native has always done here.
-      if (!_mediaProxy.isRunning) return relativeUrl;
-      return '${_mediaProxy.baseUrl}$relativeUrl';
-    }
-
-    // Direct server mode
-    final serverUrl =
-        ref.read(serverUrlProvider).whenOrNull(data: (url) => url);
-    if (serverUrl != null) {
-      return '$serverUrl$relativeUrl';
-    }
-
-    return relativeUrl;
   }
 
   Future<void> _fetchSeasonEpisodes(GraphQLClient client) async {
@@ -2628,37 +2683,522 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   // The _loadSubtitleTracks method has been removed.
 
   /// Show subtitle track selector and apply selection via media_kit
+  ///
+  /// Deliberately does not set [_selectedSubtitleTrack] until the choice has
+  /// actually taken effect on the player. An earlier version committed it
+  /// eagerly, before the (now-async, network-bound) work that applies it;
+  /// on a failed fetch that left the sheet's checkmark pointing at a track
+  /// that was not actually playing, and — because the no-op guard below
+  /// used to compare against [_selectedSubtitleTrack] — permanently wedged
+  /// that track until the viewer picked something else. Committing only on
+  /// success means a retry is just picking the same track again.
+  ///
+  /// Every point past the no-op guard where this method resumes from an
+  /// `await` calls [_canApplySubtitleSelection] before doing anything
+  /// further — touching `_player`, calling `setState` — rather than each
+  /// checking its own subset of "is this still current". An earlier
+  /// revision did the latter: the check after the content fetch verified
+  /// generation and `mounted` but not the player, the check after the
+  /// "Off" call verified generation and `mounted` too, and the final
+  /// `setState` after actually applying a resolved track had no check at
+  /// all — surfacing as `setState` after `dispose()`, or media_kit's
+  /// `AssertionError` on a disposed `Player`, if the viewer navigated away
+  /// during that specific `await`. See the Task 14 fix reports for the
+  /// history; [shouldApplySubtitleSelection] and its tests are what
+  /// replaced re-deriving this by hand at each site.
+  ///
+  /// Every one of those same exits, when it isn't a successful apply, also
+  /// calls [_resetPendingSubtitleSelection]. [_pendingSubtitleSelection] is
+  /// written once, up front, to whatever this call is requesting — and a
+  /// version of this method that only ever wrote it and never reverted it
+  /// left a failed attempt's target stuck there forever, so re-tapping the
+  /// very track a "could not load" snackbar had just told the viewer to
+  /// retry was silently swallowed by the no-op guard at the top of this
+  /// method. See [pendingSubtitleSelectionAfterFailure] and the Task 14 fix
+  /// reports for that regression's history. Those calls are backstopped by
+  /// a `finally` around the whole body, which is what also covers the two
+  /// `setSubtitleTrack` awaits — they can *throw* rather than return, and
+  /// nothing awaits this method's future to catch it; see the comment on
+  /// the `try` below.
   Future<void> _showSubtitleSelector() async {
-    final selected = await showSubtitleTrackSelector(
+    final outcome = await showSubtitleTrackSelector(
       context,
       _subtitleTracks,
       _selectedSubtitleTrack,
+      onSearch: _searchSubtitles,
+      onDownload: _downloadSubtitle,
     );
 
-    if (selected != _selectedSubtitleTrack && mounted) {
-      setState(() {
-        _selectedSubtitleTrack = selected;
-      });
+    // A dismissed sheet (barrier tap, back gesture) must leave every
+    // subtitle field alone. Before [SubtitleTrackSelection] existed, the
+    // sheet returned a bare `SubtitleTrack?` and a dismissal was
+    // indistinguishable from choosing "Off" -- with a pick already in
+    // flight, that silently cancelled it. See that sealed class for the
+    // full account.
+    if (outcome is SubtitleTrackSelectionCancelled) return;
 
+    final selected = outcome is SubtitleTrackPicked ? outcome.track : null;
+
+    if (!shouldStartSubtitleSelection(
+      requested: selected,
+      pending: _pendingSubtitleSelection,
+      mounted: mounted,
+    )) {
+      return;
+    }
+
+    // Recorded before anything else below, including the no-player bailout
+    // right after: this is what makes a tap whose target matches an
+    // in-flight request's own target (a retry, or a cancel back to
+    // whatever's still displayed as current) register as a real tap
+    // instead of silently matching stale state. See
+    // [_pendingSubtitleSelection]'s dartdoc for why the comparison above
+    // uses this field and not [_selectedSubtitleTrack].
+    _pendingSubtitleSelection = selected;
+
+    // See [_subtitleSelectionGeneration]'s dartdoc for why this is bumped
+    // unconditionally, before the no-player bailout below, rather than
+    // after it.
+    final generation = ++_subtitleSelectionGeneration;
+
+    // Everything past this point runs under a `finally` that resets the
+    // pending target, because two of the exits below are not `return`s.
+    // Both `setSubtitleTrack` calls can *throw*: media_kit 1.2.6 raises
+    // `AssertionError('[Player] has been disposed')` from both its native
+    // and web backends when the player is disposed during the await, which
+    // is exactly what the viewer leaving playback mid-selection does. This
+    // method is fire-and-forget from `onSubtitleTap`, so such a throw
+    // escapes into a future nothing awaits and every explicit reset below
+    // is skipped — leaving [_pendingSubtitleSelection] pointed at a track
+    // that was never applied (so re-tapping it is swallowed by the no-op
+    // guard at the top of this method), or pointed at `null` while a track
+    // is still applied (so re-tapping "Off" is swallowed). The `finally`
+    // covers the six `return`s and both throw sites together, so "which
+    // exits reset" stops being a list a later change can get wrong.
+    //
+    // It is a no-op on both success paths. After the content path's
+    // `setState`, [_selectedSubtitleTrack] is `selected` and the request is
+    // still the current generation (nothing else could have written the
+    // pending target without bumping it), so the reset recomputes
+    // `pending = applied = selected` — the value already there. After the
+    // "Off" path's `setState` both are `null`. The reset is idempotent
+    // besides, recomputing the same value from the same inputs, so running
+    // it a second time on an exit that already called it changes nothing.
+    try {
       final player = _player;
-      if (player == null) return;
+      if (player == null) {
+        _resetPendingSubtitleSelection(generation);
+        return;
+      }
 
       if (selected == null) {
         // "Off" - disable subtitles
         await player.setSubtitleTrack(SubtitleTrack.no());
-        debugPrint('[PlayerScreen] Subtitles turned off');
-      } else {
-        // Look up the corresponding media_kit track
-        final mkTrack = _mediaKitSubtitleTrackMap[selected.id];
-        if (mkTrack != null) {
-          await player.setSubtitleTrack(mkTrack);
-          debugPrint(
-              '[PlayerScreen] Set subtitle track: ${selected.displayName}');
-        } else {
-          debugPrint(
-              '[PlayerScreen] No media_kit track found for: ${selected.id}');
+        if (!_canApplySubtitleSelection(generation)) {
+          _resetPendingSubtitleSelection(generation);
+          return;
         }
+        setState(() => _selectedSubtitleTrack = null);
+        debugPrint('[PlayerScreen] Subtitles turned off');
+        return;
       }
+
+      // Feedback while the extraction runs server-side: closing the sheet
+      // and showing nothing further while that fetch is in flight is
+      // exactly what let a viewer re-tap and reach the concurrency guard
+      // [_canApplySubtitleSelection] exists to enforce. Shown for every
+      // pick, existing or freshly downloaded -- both reach this same fetch.
+      //
+      // No await has run since the `mounted` check inside
+      // `shouldStartSubtitleSelection` above, so this is still guaranteed
+      // true -- but spelled out again directly in front of the `context`
+      // use below anyway, which is what `use_build_context_synchronously`
+      // requires to see it rather than trusting a call to a helper it
+      // cannot look inside. Unreachable today, but routed through the same
+      // reset as every other exit in this method rather than a bare
+      // `return`, so it stays correct if that ever stops being true.
+      if (!mounted) {
+        _resetPendingSubtitleSelection(generation);
+        return;
+      }
+      // The controller this specific call gets back is captured and closed
+      // by itself below -- never `removeCurrentSnackBar()`/
+      // `hideCurrentSnackBar()` after the await, which act on whatever
+      // snackbar is current *at that later point*, not the one shown here.
+      // A second pick (B) started while this one (A) is still in flight
+      // passes `shouldStartSubtitleSelection` (different target) and shows
+      // its own indicator on top of A's; when A's fetch then resolves,
+      // `removeCurrentSnackBar()` would strip B's indicator while B is
+      // still running, leaving the viewer mid-fetch with nothing on
+      // screen -- precisely the blank-screen condition that invites the
+      // re-tap `_canApplySubtitleSelection` exists to guard against.
+      final loadingMessenger = ScaffoldMessenger.of(context);
+      loadingMessenger.hideCurrentSnackBar();
+      final loadingSnack = loadingMessenger.showSnackBar(
+        const SnackBar(
+          duration: Duration(seconds: 30),
+          content: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              SizedBox(width: 12),
+              Text('Loading subtitle...'),
+            ],
+          ),
+        ),
+      );
+
+      final mkTrack = await _resolveMediaKitSubtitleTrack(selected);
+      // `close()` is a no-op if this snackbar was already dismissed (its
+      // own 30 second timeout, or a later pick's `hideCurrentSnackBar()`
+      // above), so this is safe on every path.
+      if (mounted) loadingSnack.close();
+
+      // Superseded while the fetch was in flight (a re-tap, "Off", or the
+      // screen/player went away): drop this result silently rather than
+      // reporting a failure — or applying a success — for a choice the
+      // viewer has already moved past.
+      if (!_canApplySubtitleSelection(generation)) {
+        _resetPendingSubtitleSelection(generation);
+        return;
+      }
+
+      if (mkTrack == null) {
+        debugPrint(
+            '[PlayerScreen] No media_kit track found for: ${selected.id}');
+        // The ordinary failure path — a dropped connection, a server error,
+        // an empty extraction — and it must leave a retry possible: reset
+        // the pending target back to whatever's actually applied so a
+        // second tap on this same track starts a fresh attempt instead of
+        // matching this one's own, now-abandoned target.
+        _resetPendingSubtitleSelection(generation);
+        // `_canApplySubtitleSelection` above already confirmed `mounted`,
+        // but that check is behind a helper the analyzer can't see through,
+        // so it cannot itself prove `context` is safe to use here. This
+        // repeats the same check directly so it can.
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not load that subtitle track. Try again.'),
+          ),
+        );
+        return;
+      }
+
+      // Captured fresh here, not reused from `player` above: that capture
+      // happened before the fetch's `await`, and `_restartLocalPlayback`
+      // clears `_player` (without unmounting the screen) while a fetch can
+      // still be in flight, so `player` could be stale by now.
+      //
+      // `_canApplySubtitleSelection` just confirmed `_player != null` and
+      // nothing async has run since, so this cannot actually be null — but
+      // `_player` is a mutable field, and Dart's flow analysis does not
+      // promote non-null across a helper call the way it would a local
+      // variable, so the null check still has to be spelled out here rather
+      // than written as `_player!`.
+      final currentPlayer = _player;
+      if (currentPlayer == null) {
+        _resetPendingSubtitleSelection(generation);
+        return;
+      }
+
+      await currentPlayer.setSubtitleTrack(mkTrack);
+
+      // Re-checked again, not only before this await: dispose() or
+      // _restartLocalPlayback landing during *this specific* call is exactly
+      // as possible as during the fetch above, and `setState` after unmount
+      // throws just as surely as calling into a disposed `Player` does. This
+      // is the check that was missing entirely before this fix — see the
+      // dartdoc above.
+      if (!_canApplySubtitleSelection(generation)) {
+        _resetPendingSubtitleSelection(generation);
+        return;
+      }
+      setState(() => _selectedSubtitleTrack = selected);
+      debugPrint('[PlayerScreen] Set subtitle track: ${selected.displayName}');
+    } finally {
+      _resetPendingSubtitleSelection(generation);
+    }
+  }
+
+  /// Search every subtitle provider the server has enabled for subtitles
+  /// matching this file, in [languages].
+  ///
+  /// Never throws. The sheet renders [SubtitleSearchOutcome.error] inline,
+  /// above the (empty) result list and below the language chips that
+  /// produced it, so adjusting a language and retrying stays one tap away.
+  /// Throwing instead would drop the viewer onto the sheet's generic
+  /// "search failed" copy and lose the server's own reason, which is
+  /// usually the actionable half ("this file has no hash or metadata IDs
+  /// to search with" is not a retry).
+  Future<SubtitleSearchOutcome> _searchSubtitles(
+    List<String> languages,
+  ) async {
+    // The `'offline'` sentinel means this is a downloaded file playing with
+    // no server file id behind it, so there is nothing to search *for*.
+    // Caught here rather than left to the server, which would answer a
+    // flat "media file not found" for what is really "you are offline".
+    if (widget.fileId == 'offline') {
+      return const SubtitleSearchOutcome(
+        results: [],
+        providers: [],
+        error: 'Subtitle search needs a connection to your server.',
+      );
+    }
+
+    try {
+      final graphqlClient = await ref.read(asyncGraphqlClientProvider.future);
+      final result = await graphqlClient.query(
+        QueryOptions(
+          document: documentNodeQuerySubtitleSearch,
+          variables: Variables$Query$SubtitleSearch(
+            mediaFileId: widget.fileId,
+            languages: languages,
+          ).toJson(),
+          // Never cached: each result carries a token the server signed for
+          // a fifteen minute window, so a cache hit would hand back
+          // candidates whose download is already guaranteed to fail.
+          fetchPolicy: FetchPolicy.networkOnly,
+        ),
+      );
+
+      if (result.hasException) {
+        debugPrint(
+            '[PlayerScreen] Subtitle search failed: ${result.exception}');
+        return SubtitleSearchOutcome(
+          results: const [],
+          providers: const [],
+          error: _friendlyGraphQLError(
+            result.exception,
+            'Could not reach the server. Try again.',
+          ),
+        );
+      }
+
+      // Same reasoning as [_resolveMediaKitSubtitleTrack]'s null check:
+      // `data` is only ever null alongside `hasException` in this client,
+      // but papering over it with `?? const {}` would defer the failure
+      // one line into the generated `fromJson`'s non-nullable cast.
+      final data = result.data;
+      if (data == null) {
+        debugPrint('[PlayerScreen] Subtitle search returned no data');
+        return const SubtitleSearchOutcome(
+          results: [],
+          providers: [],
+          error: 'The server returned no results. Try again.',
+        );
+      }
+
+      final payload = Query$SubtitleSearch.fromJson(data).subtitleSearch;
+      return SubtitleSearchOutcome(
+        results: payload.results.map(SubtitleCandidate.fromGraphQL).toList(),
+        providers:
+            payload.providers.map(SubtitleProviderStatus.fromGraphQL).toList(),
+      );
+    } catch (e) {
+      debugPrint('[PlayerScreen] Error searching subtitles: $e');
+      return const SubtitleSearchOutcome(
+        results: [],
+        providers: [],
+        error: 'Subtitle search failed. Try again.',
+      );
+    }
+  }
+
+  /// Download [candidate] into this file's library entry and return the
+  /// track the server created for it.
+  ///
+  /// Throws on failure, which is what the sheet's contract asks for: it
+  /// stays open on the results list so the viewer can pick a different
+  /// release. A [SubtitleActionException] is shown verbatim, which is what
+  /// carries the server's "search again" through on an expired token --
+  /// the generic copy would invite re-tapping the same stale token forever.
+  ///
+  /// The returned track has no `content`: the body is fetched lazily by
+  /// [_resolveMediaKitSubtitleTrack] when the selection is applied, the
+  /// same path every other sidecar takes.
+  Future<app_models.SubtitleTrack> _downloadSubtitle(
+    SubtitleCandidate candidate,
+  ) async {
+    if (widget.fileId == 'offline') {
+      throw const SubtitleActionException(
+        'Downloading subtitles needs a connection to your server.',
+      );
+    }
+
+    final graphqlClient = await ref.read(asyncGraphqlClientProvider.future);
+    final result = await graphqlClient.mutate(
+      MutationOptions(
+        document: documentNodeMutationDownloadSubtitle,
+        variables: Variables$Mutation$DownloadSubtitle(
+          mediaFileId: widget.fileId,
+          token: candidate.token,
+        ).toJson(),
+      ),
+    );
+
+    if (result.hasException) {
+      debugPrint(
+          '[PlayerScreen] Subtitle download failed: ${result.exception}');
+      throw SubtitleActionException(
+        _friendlyGraphQLError(
+          result.exception,
+          'Could not download that subtitle. Try again.',
+        ),
+      );
+    }
+
+    final data = result.data;
+    if (data == null) {
+      throw const SubtitleActionException(
+        'The subtitle downloaded but the server returned nothing.',
+      );
+    }
+
+    final track = app_models.SubtitleTrack.fromDownload(
+      Mutation$DownloadSubtitle.fromJson(data).downloadSubtitle,
+    );
+
+    // Added to the list the sheet was opened with so it survives the sheet
+    // closing: the pick that follows is applied against `_subtitleTracks`,
+    // and the controls' track count and the next open of the sheet both
+    // read from it. Guarded on identity because the server returns the
+    // existing row when the same subtitle is downloaded twice, and a
+    // duplicate entry would render the track twice in the list.
+    if (mounted && !_subtitleTracks.any((t) => t.id == track.id)) {
+      setState(() => _subtitleTracks = [..._subtitleTracks, track]);
+    }
+
+    return track;
+  }
+
+  /// The line to show a viewer for a failed GraphQL operation.
+  ///
+  /// A resolver's own message is written for one -- "These search results
+  /// expired. Search again.", "This file has no hash or metadata IDs to
+  /// search with" -- and is the only part of the failure worth reading. A
+  /// transport failure carries no such message, only a `linkException`
+  /// whose `toString` is a socket dump, so those fall back to [fallback].
+  String _friendlyGraphQLError(OperationException? exception, String fallback) {
+    final message = exception?.graphqlErrors.firstOrNull?.message;
+    if (message != null && message.isNotEmpty) return message;
+    return fallback;
+  }
+
+  /// Whether a subtitle selection issued under [generation] is still the
+  /// live one and safe to apply, right now.
+  ///
+  /// A thin adapter over the pure [shouldApplySubtitleSelection], reading
+  /// this state's current values — see that function for what each input
+  /// guards against and why the check has to be all of them together, not
+  /// a subset re-derived per call site.
+  bool _canApplySubtitleSelection(int generation) {
+    return shouldApplySubtitleSelection(
+      requestGeneration: generation,
+      currentGeneration: _subtitleSelectionGeneration,
+      mounted: mounted,
+      hasPlayer: _player != null,
+    );
+  }
+
+  /// Falls [_pendingSubtitleSelection] back to whatever is actually
+  /// applied — unless a newer selection has since been requested, in which
+  /// case that newer request already owns the pending value and this must
+  /// not touch it.
+  ///
+  /// Called from a `finally` covering [_showSubtitleSelector]'s body, so it
+  /// runs on every exit past the point [_pendingSubtitleSelection] was
+  /// written, including the throwing ones and the two successful applies.
+  /// On a successful apply it is a no-op: the apply has just made
+  /// [_selectedSubtitleTrack] equal to the pending target, so this
+  /// recomputes the value already there. It is idempotent for the same
+  /// reason — same inputs, same result — so the explicit calls that remain
+  /// at the individual failure exits are harmless alongside it.
+  ///
+  /// A thin adapter over the pure [pendingSubtitleSelectionAfterFailure];
+  /// see that function's dartdoc for why leaving this unset was the
+  /// regression a second review round caught.
+  void _resetPendingSubtitleSelection(int generation) {
+    _pendingSubtitleSelection = pendingSubtitleSelectionAfterFailure(
+      requestGeneration: generation,
+      currentGeneration: _subtitleSelectionGeneration,
+      currentPending: _pendingSubtitleSelection,
+      appliedSelection: _selectedSubtitleTrack,
+    );
+  }
+
+  /// Resolve the media_kit track for [track], fetching its body over
+  /// GraphQL the first time a content-backed track is selected.
+  ///
+  /// Embedded tracks the media_kit player already sees in the container (in
+  /// direct play) are already in [_mediaKitSubtitleTrackMap] once
+  /// [_detectTracks] runs, at no fetch cost. Everything else — sidecar
+  /// subtitles, and any track streaming delivers as text — has no body until
+  /// this fetches one. That fetch happens here, at selection time, rather
+  /// than eagerly in [_detectTracks] for every selectable track: most
+  /// tracks a file offers are never selected in a given playback, and
+  /// resolving `content` server-side runs an ffmpeg extraction per track.
+  ///
+  /// The result is cached in [_mediaKitSubtitleTrackMap] so re-selecting the
+  /// same track later in the same session (or the sync in
+  /// [_showSubtitleSelector] finding it already selected) does not refetch.
+  Future<SubtitleTrack?> _resolveMediaKitSubtitleTrack(
+    app_models.SubtitleTrack track,
+  ) async {
+    final cached = _mediaKitSubtitleTrackMap[track.id];
+    if (cached != null) return cached;
+
+    try {
+      final graphqlClient = await ref.read(asyncGraphqlClientProvider.future);
+      final result = await graphqlClient.query(
+        QueryOptions(
+          document: documentNodeQuerySubtitleContent,
+          variables: Variables$Query$SubtitleContent(
+            mediaFileId: widget.fileId,
+            trackId: track.id,
+          ).toJson(),
+        ),
+      );
+
+      if (result.hasException) {
+        debugPrint(
+            '[PlayerScreen] Failed to fetch subtitle content for ${track.id}: ${result.exception}');
+        return null;
+      }
+
+      // `result.data` is only ever null alongside `hasException` in this
+      // client, so this branch is not expected to run in practice — but it
+      // is checked explicitly rather than papered over with `?? const {}`,
+      // which looked like it handled a missing response gracefully while
+      // actually just deferring the same failure into the generated
+      // `fromJson`'s non-nullable `__typename` cast, one line down.
+      final data = result.data;
+      if (data == null) {
+        debugPrint(
+            '[PlayerScreen] No data returned for subtitle content ${track.id}');
+        return null;
+      }
+
+      final content = Query$SubtitleContent.fromJson(data).subtitleContent;
+      if (content == null || content.isEmpty) {
+        debugPrint('[PlayerScreen] No subtitle content for ${track.id}');
+        return null;
+      }
+
+      final mkTrack = SubtitleTrack.data(
+        content,
+        title: track.title,
+        language: track.language,
+      );
+      _mediaKitSubtitleTrackMap[track.id] = mkTrack;
+      return mkTrack;
+    } catch (e) {
+      debugPrint('[PlayerScreen] Error fetching subtitle content: $e');
+      return null;
     }
   }
 

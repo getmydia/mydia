@@ -1,0 +1,116 @@
+import '../../../domain/models/subtitle_track.dart';
+
+/// Which subtitle tracks the user may pick from, given the delivery mode.
+///
+/// Image-based tracks (PGS, VobSub) are bitmaps. In direct play the media
+/// engine reads them straight from the container and renders them natively,
+/// so they stay selectable. When streaming, the server can only hand back
+/// text, so only [SubtitleTrack.deliverable] tracks are offered.
+///
+/// This filter runs before any subtitle body has been fetched: [content] is
+/// resolved lazily, once, when the viewer actually selects a track (see
+/// `_resolveMediaKitSubtitleTrack` in `player_screen.dart`), never here. A
+/// filter that inspected `content` at this stage would drop every
+/// streaming-eligible track before the viewer got a chance to pick one.
+List<SubtitleTrack> selectableTracks(
+  List<SubtitleTrack> tracks, {
+  required bool isDirectPlay,
+}) {
+  if (isDirectPlay) return tracks;
+
+  return tracks.where((t) => t.deliverable).toList();
+}
+
+/// Whether an in-flight subtitle selection's result should still be applied
+/// to the player, once its async work (a media_kit "Off" call, or a
+/// `SubtitleContent` fetch) finishes.
+///
+/// `player_screen.dart`'s `_showSubtitleSelector` does real async work per
+/// selection, and the tap that starts it is fire-and-forget from a sheet
+/// that has already closed, so a second selection (including "Off") can
+/// start before an earlier one's async work resolves. Whichever one's work
+/// happens to finish last must not automatically win — only the most
+/// *recently requested* selection may ever reach the player or
+/// `_selectedSubtitleTrack`. This predicate is the single decision that
+/// enforces that, called after every await in `_showSubtitleSelector`
+/// rather than reimplemented at each one with a different subset of these
+/// checks (which is what let the third check point in that function go
+/// missing entirely in an earlier revision — see the Task 14 fix report).
+///
+/// Pure and independent of `Player`/`GraphQLClient`/`State` on purpose: the
+/// race itself is fully described by these four values, so testing it
+/// needs none of the infrastructure the surrounding async code does.
+///
+/// Discards (returns `false`) whenever:
+///  - [requestGeneration] no longer equals [currentGeneration]: a later
+///    selection has already been requested, and this one has been
+///    superseded by it;
+///  - [mounted] is false: the screen was disposed while this selection's
+///    async work was in flight;
+///  - [hasPlayer] is false: there is no player left to apply the result to
+///    (e.g. mid-`_restartLocalPlayback`, which clears the player without
+///    unmounting the screen, so [mounted] alone would not catch it).
+bool shouldApplySubtitleSelection({
+  required int requestGeneration,
+  required int currentGeneration,
+  required bool mounted,
+  required bool hasPlayer,
+}) {
+  return requestGeneration == currentGeneration && mounted && hasPlayer;
+}
+
+/// Whether a tap on the subtitle sheet should start a new selection
+/// attempt, or be treated as a no-op.
+///
+/// Compared against [pending] — the target of whichever selection attempt
+/// is already in flight, tracked separately from what has actually been
+/// applied to the player (`_selectedSubtitleTrack` in `player_screen.dart`)
+/// — not against the applied value itself. A tap repeating an in-flight
+/// attempt's own target (a retry, or a cancel back to whatever's still
+/// displayed as current while that attempt resolves) is a no-op; a tap
+/// naming anything else, including a target that matches what's *already
+/// applied*, starts a fresh attempt.
+///
+/// This is the other half of the fix [pendingSubtitleSelectionAfterFailure]
+/// is for: comparing against a pending value that a failed attempt never
+/// clears would make every retry of that attempt read as a no-op forever.
+bool shouldStartSubtitleSelection({
+  required SubtitleTrack? requested,
+  required SubtitleTrack? pending,
+  required bool mounted,
+}) {
+  if (!mounted) return false;
+  return requested != pending;
+}
+
+/// What the pending selection target should become when an attempt
+/// concludes without applying — a failed fetch, the player disappearing
+/// mid-attempt, or the attempt having been superseded before it got that
+/// far.
+///
+/// If [requestGeneration] no longer matches [currentGeneration], a newer
+/// attempt has already been requested and now owns the pending value: this
+/// returns [currentPending] unchanged, because overwriting it here would
+/// clobber that newer attempt's own target with this, older one's.
+/// Otherwise this attempt is the one that set [currentPending] in the
+/// first place — nothing else could have without also bumping the
+/// generation — so this falls the tracker back to [appliedSelection],
+/// what is actually true on the player right now, rather than leaving it
+/// pointed at a target this attempt never reached.
+///
+/// Without this, a tap repeating that unreached target reads as a no-op
+/// forever (see [shouldStartSubtitleSelection]), and a genuine retry
+/// becomes impossible without picking something else first — exactly the
+/// regression this function exists to close: a failed `SubtitleContent`
+/// fetch (a dropped connection, a server error) left the pending target
+/// stuck at the track that just failed, so re-tapping it after the
+/// "could not load" snackbar was a silent no-op.
+SubtitleTrack? pendingSubtitleSelectionAfterFailure({
+  required int requestGeneration,
+  required int currentGeneration,
+  required SubtitleTrack? currentPending,
+  required SubtitleTrack? appliedSelection,
+}) {
+  if (requestGeneration != currentGeneration) return currentPending;
+  return appliedSelection;
+}

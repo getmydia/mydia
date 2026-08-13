@@ -1,4 +1,5 @@
 import '../../graphql/fragments/media_file_fragment.graphql.dart';
+import '../../graphql/mutations/download_subtitle.graphql.dart';
 
 /// Represents a subtitle track available for a media file.
 class SubtitleTrack {
@@ -23,6 +24,19 @@ class SubtitleTrack {
   /// Whether the subtitle is embedded in the video file
   final bool embedded;
 
+  /// Subtitle body already converted to WebVTT. Null for image-based tracks
+  /// and for tracks the server could not read.
+  ///
+  /// Deliberately absent from `MediaFileFragment`: resolving `content` for
+  /// an embedded track runs an ffmpeg extraction server-side, so it is
+  /// populated lazily via the targeted `SubtitleContent` query rather than
+  /// here in `fromGraphQL`.
+  final String? content;
+
+  /// False for image-based tracks (PGS, VobSub), which render only in direct
+  /// play where the client reads them from the container itself.
+  final bool deliverable;
+
   const SubtitleTrack({
     required this.id,
     required this.language,
@@ -31,6 +45,8 @@ class SubtitleTrack {
     this.isDefault = false,
     this.format = 'srt',
     this.embedded = false,
+    this.content,
+    this.deliverable = true,
   });
 
   /// Create from GraphQL fragment
@@ -42,6 +58,27 @@ class SubtitleTrack {
       url: sub.url,
       format: sub.format,
       embedded: sub.embedded,
+      deliverable: sub.deliverable,
+    );
+  }
+
+  /// Create from the track a `downloadSubtitle` mutation just wrote.
+  ///
+  /// [content] stays null on purpose. The mutation reports the new track's
+  /// identity, not its body; the body is fetched once, lazily, by the
+  /// `SubtitleContent` query when the viewer selects it -- the same path
+  /// every other sidecar takes, rather than a second way in that only
+  /// freshly downloaded tracks would use.
+  factory SubtitleTrack.fromDownload(
+    Mutation$DownloadSubtitle$downloadSubtitle track,
+  ) {
+    return SubtitleTrack(
+      id: track.trackId,
+      language: track.language,
+      title: track.title,
+      format: track.format,
+      embedded: track.embedded,
+      deliverable: track.deliverable,
     );
   }
 
