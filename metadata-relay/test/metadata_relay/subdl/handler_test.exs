@@ -56,6 +56,23 @@ defmodule MetadataRelay.SubDL.HandlerTest do
     assert {:ok, "/subtitle/3602674-8520054.zip"} = FileId.decode(subtitle["id"])
   end
 
+  test "reports rating and download count as unknown rather than zero" do
+    stub(fn request ->
+      {request,
+       Req.Response.new(
+         status: 200,
+         body: %{"status" => true, "subtitles" => [subtitle_fixture()]}
+       )}
+    end)
+
+    assert {:ok, %{"subtitles" => [subtitle]}} = Handler.search(%{imdb_id: "0133093"})
+
+    # SubDL reports neither. A 0 would read as "rated zero, never downloaded",
+    # which is a claim about the subtitle rather than about SubDL.
+    assert Map.fetch!(subtitle, "rating") == nil
+    assert Map.fetch!(subtitle, "download_count") == nil
+  end
+
   test "never leaks the api key into the emitted id" do
     stub(fn request ->
       {request,

@@ -77,6 +77,8 @@ metadata-relay/
 │   │   ├── release.ex         # Release tasks (migrations)
 │   │   ├── router.ex          # HTTP router (Plug)
 │   │   ├── plug/              # Cache, metrics, and other plugs
+│   │   ├── subdl/             # SubDL client, subtitle handler, file id codec
+│   │   ├── subtitles/         # Subtitle archive unwrapping
 │   │   ├── tmdb/              # TMDB proxy handlers
 │   │   └── tvdb/              # TVDB proxy handlers + auth
 │   └── metadata_relay_web/    # Phoenix router for error dashboard

@@ -161,15 +161,18 @@ defmodule MetadataRelay.SubDL.Handler do
   # `format` is emitted as srt because SubDL does not state it in search results
   # and the real extension only becomes visible when the archive is unwrapped,
   # two requests later. Mydia already treats this field as a default.
-  # `rating` and `download_count` have no SubDL equivalent; emitting 0 keeps
-  # them out of the client's scoring rather than inventing a ranking.
+  # `rating` and `download_count` have no SubDL equivalent, so they are null:
+  # "not reported" rather than "reported as zero", which is what a 0 claims.
+  # Both read the same way in Mydia's scoring, whose rating and popularity
+  # branches are guarded by is_number/is_integer and skip a null, so a
+  # relay-backed result carries neither bonus either way.
   defp transform_subtitle(subtitle, feature) do
     %{
       "id" => FileId.encode(subtitle["url"] || ""),
       "language" => normalize_language(subtitle["language"] || subtitle["lang"]),
       "format" => "srt",
-      "rating" => 0,
-      "download_count" => 0,
+      "rating" => nil,
+      "download_count" => nil,
       "release" => subtitle["release_name"] || "",
       "uploader" => subtitle["author"] || "",
       "hearing_impaired" => subtitle["hi"] || false,
