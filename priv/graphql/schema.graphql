@@ -329,6 +329,9 @@ type RecentlyAddedItem {
 
   "Number of the newest arrived episode. Null for movies and for unmatched files."
   latestEpisodeNumber: Int
+
+  "Rolled-up watch state"
+  watchStatus: WatchStatus
 }
 
 "An item in the up next rail (next episode to watch)"
@@ -350,6 +353,18 @@ type Collection {
   visibility: String!
   itemCount: Int!
   posterPaths: [String]
+}
+
+"Rolled-up watch state for a browsable item"
+type WatchStatus {
+  "Movie or episode watched, or every has-file non-special episode watched"
+  watched: Boolean!
+
+  "Resume point, 0-100. Null for shows and seasons."
+  percentage: Float
+
+  "Unwatched episodes that have a file, excluding season 0. Null for movies."
+  unwatchedEpisodeCount: Int
 }
 
 "A cast member (actor) on a movie or TV show"
@@ -421,6 +436,9 @@ type Movie implements Node {
 
   "User playback progress"
   progress: Progress
+
+  "Rolled-up watch state"
+  watchStatus: WatchStatus
 
   "Whether this item is in user favorites"
   isFavorite: Boolean!
@@ -500,6 +518,9 @@ type TvShow implements Node {
   "Total number of episodes"
   episodeCount: Int
 
+  "Rolled-up watch state"
+  watchStatus: WatchStatus
+
   "Next episode to watch for the current user"
   nextEpisode: Episode
 
@@ -533,6 +554,9 @@ type Season implements Node {
   airedEpisodeCount: Int
 
   hasFiles: Boolean!
+
+  "Rolled-up watch state"
+  watchStatus: WatchStatus
 
   "Episodes in this season"
   episodes: [Episode]
@@ -574,6 +598,9 @@ type Episode implements Node {
 
   "User playback progress"
   progress: Progress
+
+  "Rolled-up watch state"
+  watchStatus: WatchStatus
 
   "Whether this episode has at least one file"
   hasFile: Boolean!

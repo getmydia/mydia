@@ -3,7 +3,10 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
   Resolvers for media-related GraphQL fields.
   """
 
+  import Absinthe.Resolution.Helpers, only: [batch: 3]
+
   alias Mydia.{Media, Library, Playback}
+  alias Mydia.Playback.WatchStatus
 
   alias Mydia.Metadata.Access, as: MetadataAccess
   alias Mydia.Metadata.ImageUrl
@@ -162,6 +165,89 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
     end
   end
 
+  # Watch status resolvers
+  #
+  # All five go through one batch key, `{WatchStatus, :load_shows, user_id}`,
+  # so a grid of shows resolves in a fixed number of queries no matter how many
+  # cards are on screen. `resolve_season_count/3` and `resolve_episode_count/3`
+  # were rewritten onto the same key, which is what removes the pre-existing
+  # N+1 rather than adding a third one beside it.
+
+  @spec resolve_movie_watch_status(map(), map(), Absinthe.Resolution.t()) ::
+          {:ok, term()} | {:error, term()}
+  def resolve_movie_watch_status(%{id: media_item_id}, _args, %{context: context}) do
+    case context[:current_user] do
+      nil ->
+        {:ok, nil}
+
+      user ->
+        progress = Playback.get_progress(user.id, media_item_id: media_item_id)
+        {:ok, WatchStatus.from_progress(progress)}
+    end
+  end
+
+  @spec resolve_episode_watch_status(map(), map(), Absinthe.Resolution.t()) ::
+          {:ok, term()} | {:error, term()}
+  def resolve_episode_watch_status(%{id: episode_id}, _args, %{context: context}) do
+    case context[:current_user] do
+      nil ->
+        {:ok, nil}
+
+      user ->
+        progress = Playback.get_progress(user.id, episode_id: episode_id)
+        {:ok, WatchStatus.from_progress(progress)}
+    end
+  end
+
+  @spec resolve_show_watch_status(map(), map(), Absinthe.Resolution.t()) ::
+          {:ok, term()} | {:error, term()}
+  def resolve_show_watch_status(%{id: show_id}, _args, %{context: context}) do
+    case context[:current_user] do
+      nil ->
+        {:ok, nil}
+
+      user ->
+        batch({WatchStatus, :load_shows, user.id}, show_id, fn bundles ->
+          {:ok, WatchStatus.for_show(Map.get(bundles, show_id))}
+        end)
+    end
+  end
+
+  @spec resolve_season_watch_status(map(), map(), Absinthe.Resolution.t()) ::
+          {:ok, term()} | {:error, term()}
+  def resolve_season_watch_status(season, _args, %{context: context}) do
+    show_id = season[:_media_item_id]
+    season_number = season.season_number
+
+    case context[:current_user] do
+      nil ->
+        {:ok, nil}
+
+      user ->
+        batch({WatchStatus, :load_shows, user.id}, show_id, fn bundles ->
+          {:ok, WatchStatus.for_season(Map.get(bundles, show_id), season_number)}
+        end)
+    end
+  end
+
+  @spec resolve_recently_added_watch_status(map(), map(), Absinthe.Resolution.t()) ::
+          {:ok, term()} | {:error, term()}
+  def resolve_recently_added_watch_status(%{id: id, type: type}, _args, %{context: context}) do
+    case context[:current_user] do
+      nil ->
+        {:ok, nil}
+
+      user ->
+        if type in [:tv_show, "tv_show"] do
+          batch({WatchStatus, :load_shows, user.id}, id, fn bundles ->
+            {:ok, WatchStatus.for_show(Map.get(bundles, id))}
+          end)
+        else
+          {:ok, WatchStatus.from_progress(Playback.get_progress(user.id, media_item_id: id))}
+        end
+    end
+  end
+
   # TV Show-specific resolvers
 
   @spec resolve_seasons(map(), map(), Absinthe.Resolution.t()) :: {:ok, term()} | {:error, term()}
@@ -205,23 +291,36 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
 
   @spec resolve_season_count(map(), map(), Absinthe.Resolution.t()) ::
           {:ok, term()} | {:error, term()}
-  def resolve_season_count(%{id: media_item_id}, _args, _info) do
-    episodes = Media.list_episodes(media_item_id)
+  def resolve_season_count(%{id: media_item_id}, _args, %{context: context}) do
+    user_id = context[:current_user] && context[:current_user].id
 
-    season_count =
-      episodes
-      |> Enum.map(& &1.season_number)
-      |> Enum.uniq()
-      |> length()
+    batch({WatchStatus, :load_shows, user_id}, media_item_id, fn bundles ->
+      count =
+        bundles
+        |> Map.get(media_item_id)
+        |> WatchStatus.episodes()
+        |> Enum.map(& &1.season_number)
+        |> Enum.uniq()
+        |> length()
 
-    {:ok, season_count}
+      {:ok, count}
+    end)
   end
 
   @spec resolve_episode_count(map(), map(), Absinthe.Resolution.t()) ::
           {:ok, term()} | {:error, term()}
-  def resolve_episode_count(%{id: media_item_id}, _args, _info) do
-    episodes = Media.list_episodes(media_item_id)
-    {:ok, length(episodes)}
+  def resolve_episode_count(%{id: media_item_id}, _args, %{context: context}) do
+    user_id = context[:current_user] && context[:current_user].id
+
+    batch({WatchStatus, :load_shows, user_id}, media_item_id, fn bundles ->
+      count =
+        bundles
+        |> Map.get(media_item_id)
+        |> WatchStatus.episodes()
+        |> length()
+
+      {:ok, count}
+    end)
   end
 
   @spec resolve_next_episode(map(), map(), Absinthe.Resolution.t()) ::

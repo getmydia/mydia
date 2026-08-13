@@ -7,6 +7,18 @@ defmodule MydiaWeb.Schema.MediaTypes do
 
   alias MydiaWeb.Schema.Resolvers.MediaResolver
 
+  @desc "Rolled-up watch state for a browsable item"
+  object :watch_status do
+    @desc "Movie or episode watched, or every has-file non-special episode watched"
+    field :watched, non_null(:boolean)
+
+    @desc "Resume point, 0-100. Null for shows and seasons."
+    field :percentage, :float
+
+    @desc "Unwatched episodes that have a file, excluding season 0. Null for movies."
+    field :unwatched_episode_count, :integer
+  end
+
   @desc "A cast member (actor) on a movie or TV show"
   object :cast_member do
     field :name, non_null(:string)
@@ -106,6 +118,11 @@ defmodule MydiaWeb.Schema.MediaTypes do
     @desc "User playback progress"
     field :progress, :progress do
       resolve(&MediaResolver.resolve_progress/3)
+    end
+
+    @desc "Rolled-up watch state"
+    field :watch_status, :watch_status do
+      resolve(&MediaResolver.resolve_movie_watch_status/3)
     end
 
     @desc "Whether this item is in user favorites"
@@ -221,6 +238,11 @@ defmodule MydiaWeb.Schema.MediaTypes do
       resolve(&MediaResolver.resolve_episode_count/3)
     end
 
+    @desc "Rolled-up watch state"
+    field :watch_status, :watch_status do
+      resolve(&MediaResolver.resolve_show_watch_status/3)
+    end
+
     @desc "Next episode to watch for the current user"
     field :next_episode, :episode do
       resolve(&MediaResolver.resolve_next_episode/3)
@@ -283,6 +305,11 @@ defmodule MydiaWeb.Schema.MediaTypes do
     field :aired_episode_count, :integer
     field :has_files, non_null(:boolean)
 
+    @desc "Rolled-up watch state"
+    field :watch_status, :watch_status do
+      resolve(&MediaResolver.resolve_season_watch_status/3)
+    end
+
     @desc "Episodes in this season"
     field :episodes, list_of(:episode) do
       resolve(&MediaResolver.resolve_season_episodes/3)
@@ -343,6 +370,11 @@ defmodule MydiaWeb.Schema.MediaTypes do
     @desc "User playback progress"
     field :progress, :progress do
       resolve(&MediaResolver.resolve_episode_progress/3)
+    end
+
+    @desc "Rolled-up watch state"
+    field :watch_status, :watch_status do
+      resolve(&MediaResolver.resolve_episode_watch_status/3)
     end
 
     @desc "Whether this episode has at least one file"
