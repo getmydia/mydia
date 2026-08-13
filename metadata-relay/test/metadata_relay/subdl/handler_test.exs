@@ -143,6 +143,21 @@ defmodule MetadataRelay.SubDL.HandlerTest do
     assert {:error, :not_configured} = Handler.search(%{imdb_id: "0133093"})
   end
 
+  # An unexpected shape is an upstream anomaly, not a search that found nothing.
+  # Reporting it as an empty success would let the relay's response cache pin
+  # "this title has no subtitles" for the whole search TTL.
+  test "reports an unexpected response shape as an upstream error" do
+    stub(fn request ->
+      {request,
+       Req.Response.new(
+         status: 200,
+         body: %{"status" => true, "subtitles" => "not a list"}
+       )}
+    end)
+
+    assert {:error, :unexpected_upstream_response} = Handler.search(%{imdb_id: "0133093"})
+  end
+
   test "does not leak api key when logging unexpected response" do
     stub(fn request ->
       {request,
@@ -158,7 +173,7 @@ defmodule MetadataRelay.SubDL.HandlerTest do
 
     log =
       ExUnit.CaptureLog.capture_log(fn ->
-        {:ok, %{"subtitles" => []}} = Handler.search(%{imdb_id: "0133093"})
+        {:error, :unexpected_upstream_response} = Handler.search(%{imdb_id: "0133093"})
       end)
 
     refute log =~ "secret_key_value"
@@ -251,7 +266,9 @@ defmodule MetadataRelay.SubDL.HandlerTest do
     assert is_nil(subtitle["tmdb_id"])
   end
 
-  test "handles non-map response bodies without crashing" do
+  # A captcha interstitial or CDN block page arrives as a binary. It must
+  # neither crash nor be laundered into an empty result.
+  test "reports a non-map response body as an upstream error without crashing" do
     stub(fn request ->
       {request,
        Req.Response.new(
@@ -262,10 +279,11 @@ defmodule MetadataRelay.SubDL.HandlerTest do
 
     log =
       ExUnit.CaptureLog.capture_log(fn ->
-        assert {:ok, %{"subtitles" => []}} = Handler.search(%{imdb_id: "0133093"})
+        assert {:error, :unexpected_upstream_response} = Handler.search(%{imdb_id: "0133093"})
       end)
 
     refute log =~ "secret_key_value"
+    refute log =~ "Captcha challenge"
   end
 
   test "handles malformed results array without crashing" do

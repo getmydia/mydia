@@ -28,22 +28,25 @@ defmodule Mydia.Subtitles do
   alias Mydia.Library.MediaFile
   alias Mydia.Media.{MediaItem, Episode}
 
-  # Which providers this bar can actually gate:
+  # The 50-point metadata bonus needs an imdb, tmdb or tvdb id in the search
+  # params; a title-only search starts every result at 0. What each provider
+  # can add on top of that:
   #
-  #   * Relay and direct SubDL score exactly 50 on every result and cannot move.
-  #     SubDL reports no rating and no download count, so both bonuses are
-  #     skipped, and it has no hash search, so the 100-point hash bonus never
-  #     fires. Auto-download is off for them at any threshold above 50, which is
-  #     the honest outcome: nothing in a SubDL result separates a good match
-  #     from a bad one.
-  #   * Gestdown reports a download count but no rating, so it tops out around
-  #     50 + log10(count) * 10.
+  #   * Relay and direct SubDL add nothing at all. SubDL reports no rating and
+  #     no download count, so both bonuses are skipped, and it has no hash
+  #     search, so the 100-point hash bonus never fires. Auto-download is off
+  #     for them at any threshold above 50, which is the honest outcome:
+  #     nothing in a SubDL result separates a good match from a bad one.
+  #   * Gestdown reports a download count but no rating, so it adds
+  #     log10(count) * 10.
   #   * OpenSubtitles reports both, and is the only provider that can also
   #     claim a hash match.
   #
   # At 150 only a hash match could ever qualify, making auto-download an
-  # OpenSubtitles-with-hash feature. At 100 a metadata match plus a real rating
-  # or a popular subtitle clears it, which is what this is for.
+  # OpenSubtitles-with-hash feature. At 100 the popularity term is what carries
+  # a result over: metadata plus a perfect rating is 70, so clearing the bar
+  # takes roughly 1000 downloads alongside that rating, or about 100k on their
+  # own.
   @high_confidence_threshold 100
   @scoring_weights %{
     hash_match: 100,

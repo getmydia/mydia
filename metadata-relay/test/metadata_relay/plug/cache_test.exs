@@ -65,7 +65,32 @@ defmodule MetadataRelay.Plug.CacheTest do
     counter
   end
 
+  # As above, but answering with a caller-supplied body, so a test can count the
+  # upstream calls made while SubDL is misbehaving.
+  defp counting_subdl_stub(body) do
+    {:ok, counter} = Agent.start_link(fn -> 0 end)
+
+    Application.put_env(:metadata_relay, :subdl_http_adapter, fn request ->
+      Agent.update(counter, &(&1 + 1))
+      {request, Req.Response.new(status: 200, body: body)}
+    end)
+
+    counter
+  end
+
   defp calls(counter), do: Agent.get(counter, & &1)
+
+  # The TTL the plug chose is not visible in the response, so read the expiry
+  # the in-memory adapter recorded for the stored search entry.
+  defp search_entry_ttl_ms do
+    :metadata_relay_cache
+    |> :ets.tab2list()
+    |> Enum.find_value(fn {key, _value, expires_at} ->
+      if String.starts_with?(key, "POST:/api/v1/subtitles/search:") do
+        DateTime.diff(expires_at, DateTime.utc_now(), :millisecond)
+      end
+    end)
+  end
 
   defp search(json_body) do
     :post
@@ -136,6 +161,42 @@ defmodule MetadataRelay.Plug.CacheTest do
 
       assert search(Jason.encode!(%{imdb_id: "0133093"})).status == 200
       assert calls(counter) == 1
+    end
+
+    # A captcha interstitial or CDN block page is an upstream anomaly, not a
+    # title with no subtitles. Storing it would answer "nothing found" for the
+    # whole search TTL, for every install, with nothing to invalidate it.
+    test "an anomalous upstream response is not cached" do
+      counter = counting_subdl_stub("<html>Just a moment...</html>")
+      body = Jason.encode!(%{imdb_id: "0133093", languages: "en"})
+
+      first = search(body)
+      second = search(body)
+
+      refute first.status in 200..299
+      refute second.status in 200..299
+      assert calls(counter) == 2
+
+      # And once SubDL recovers, the next search still reaches it.
+      recovered = counting_subdl_stub()
+
+      assert search(body).status == 200
+      assert calls(recovered) == 1
+    end
+
+    test "an empty result expires within the hour, a non-empty one keeps the search TTL" do
+      Application.put_env(:metadata_relay, :subdl_http_adapter, fn request ->
+        {request, Req.Response.new(status: 200, body: %{"status" => false, "error" => "no"})}
+      end)
+
+      assert search(Jason.encode!(%{imdb_id: "0133093"})).status == 200
+      assert search_entry_ttl_ms() <= :timer.hours(1)
+
+      MetadataRelay.Cache.clear()
+      counting_subdl_stub()
+
+      assert search(Jason.encode!(%{imdb_id: "0133093"})).status == 200
+      assert search_entry_ttl_ms() > :timer.hours(24)
     end
   end
 

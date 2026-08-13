@@ -31,12 +31,18 @@ defmodule MetadataRelay.SubDL.Handler do
             %{"status" => false} when is_map(response) ->
               {:ok, %{"subtitles" => []}}
 
+            # Anything else is an upstream anomaly, not a search that found
+            # nothing, and the two must not answer alike. The relay caches
+            # successful searches for days, so reporting an anomaly as an empty
+            # result would pin "this title has no subtitles" on every install
+            # for as long as the entry lives, with nothing to invalidate it. An
+            # error tuple leaves as a 5xx, which the cache skips.
             _ when is_map(response) ->
               Logger.warning(
                 "Unexpected SubDL search response: top-level keys: #{Enum.map_join(Map.keys(response), ", ", & &1)}"
               )
 
-              {:ok, %{"subtitles" => []}}
+              {:error, :unexpected_upstream_response}
 
             # Non-map response (e.g. HTML error page, binary body from captcha or CDN block)
             _ ->
@@ -44,7 +50,7 @@ defmodule MetadataRelay.SubDL.Handler do
                 "Unexpected non-JSON SubDL response: #{inspect_type_and_size(response)}"
               )
 
-              {:ok, %{"subtitles" => []}}
+              {:error, :unexpected_upstream_response}
           end
 
         {:error, reason} ->

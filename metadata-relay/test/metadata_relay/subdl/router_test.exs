@@ -199,6 +199,33 @@ defmodule MetadataRelay.SubDL.RouterTest do
     assert %{"error" => "Subtitle not found"} = Jason.decode!(conn.resp_body)
   end
 
+  # An anomalous 200 (captcha interstitial, CDN block page, a shape SubDL has
+  # never sent before) has to leave the relay as a failure. A 2xx would be
+  # stored by the response cache and pin "no subtitles for this title" for the
+  # whole search TTL, for every install, with nothing to invalidate it.
+  test "search answers a non-2xx when the upstream body is anomalous" do
+    stub(fn request ->
+      {request, Req.Response.new(status: 200, body: "<html>Just a moment...</html>")}
+    end)
+
+    conn = search()
+
+    assert conn.status == 500
+    refute conn.status in 200..299
+  end
+
+  test "search answers a non-2xx when the upstream shape is unexpected" do
+    stub(fn request ->
+      {request,
+       Req.Response.new(status: 200, body: %{"status" => true, "subtitles" => "not a list"})}
+    end)
+
+    conn = search()
+
+    assert conn.status == 500
+    refute conn.status in 200..299
+  end
+
   test "search reports not-configured when the key is absent" do
     System.delete_env("SUBDL_API_KEY")
 
