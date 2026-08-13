@@ -140,4 +140,121 @@ defmodule MydiaWeb.GuestRequestFlowTest do
       assert media_item.tvdb_id == MetadataStubProvider.series_tvdb_id()
     end
   end
+
+  describe "rejection" do
+    test "admin rejects with a reason and the guest sees it", %{
+      conn: conn,
+      guest: guest,
+      admin: admin
+    } do
+      {:ok, request} =
+        MediaRequests.create_request(%{
+          media_type: "movie",
+          title: MetadataStubProvider.movie_title(),
+          tmdb_id: MetadataStubProvider.movie_tmdb_id(),
+          requester_id: guest.id
+        })
+
+      {:ok, admin_view, _html} = live(admin_conn(conn, admin), ~p"/admin/requests")
+
+      admin_view
+      |> element(~s(button[phx-click="open_reject_modal"][phx-value-id="#{request.id}"]))
+      |> render_click()
+
+      admin_view
+      |> form("#reject-form", reject: %{rejection_reason: "Not suitable for this library"})
+      |> render_submit()
+
+      rejected = Repo.get!(MediaRequest, request.id)
+
+      assert rejected.status == "rejected"
+      assert rejected.rejection_reason == "Not suitable for this library"
+      assert rejected.approved_by_id == admin.id
+      assert is_nil(rejected.media_item_id)
+
+      {:ok, my_requests, _html} = live(guest_conn(conn, guest), ~p"/requests")
+      assert render(my_requests) =~ "Not suitable for this library"
+    end
+  end
+
+  describe "duplicate detection" do
+    test "a second pending request for the same media is refused", %{guest: guest} do
+      attrs = %{
+        media_type: "movie",
+        title: MetadataStubProvider.movie_title(),
+        tmdb_id: MetadataStubProvider.movie_tmdb_id(),
+        requester_id: guest.id
+      }
+
+      {:ok, _first} = MediaRequests.create_request(attrs)
+
+      assert {:error, :duplicate_request} = MediaRequests.create_request(attrs)
+      assert Repo.aggregate(MediaRequest, :count) == 1
+    end
+
+    test "requesting media already in the library is refused", %{guest: guest, admin: admin} do
+      # Approve one request so the media item exists in the library.
+      {:ok, request} =
+        MediaRequests.create_request(%{
+          media_type: "movie",
+          title: MetadataStubProvider.movie_title(),
+          tmdb_id: MetadataStubProvider.movie_tmdb_id(),
+          requester_id: guest.id
+        })
+
+      {:ok, _} =
+        MediaRequests.approve_request(request, %{approved_by_id: admin.id})
+
+      assert {:error, :duplicate_media} =
+               MediaRequests.create_request(%{
+                 media_type: "movie",
+                 title: MetadataStubProvider.movie_title(),
+                 tmdb_id: MetadataStubProvider.movie_tmdb_id(),
+                 requester_id: guest.id
+               })
+    end
+  end
+
+  describe "metadata failure" do
+    test "an unreachable provider leaves the request pending", %{
+      conn: conn,
+      guest: guest,
+      admin: admin
+    } do
+      {:ok, request} =
+        MediaRequests.create_request(%{
+          media_type: "movie",
+          title: "Unresolvable Movie",
+          tmdb_id: MetadataStubProvider.missing_id(),
+          requester_id: guest.id
+        })
+
+      {:ok, admin_view, _html} = live(admin_conn(conn, admin), ~p"/admin/requests")
+
+      admin_view
+      |> element(~s(button[phx-click="open_approve_modal"][phx-value-id="#{request.id}"]))
+      |> render_click()
+
+      html =
+        admin_view
+        |> form("#approve-form", approve: %{admin_notes: ""})
+        |> render_submit()
+
+      assert html =~ "Could not reach the metadata service"
+
+      untouched = Repo.get!(MediaRequest, request.id)
+
+      assert untouched.status == "pending"
+      assert is_nil(untouched.media_item_id)
+    end
+  end
+
+  describe "guardrails" do
+    test "a guest cannot reach the admin requests page", %{conn: conn, guest: guest} do
+      # UserAuth.on_mount({:ensure_role, :admin}) halts with redirect(to: "/")
+      # (lib/mydia_web/live/user_auth.ex:70), so live/2 returns this tuple.
+      assert {:error, {:redirect, %{to: "/"}}} =
+               live(guest_conn(conn, guest), ~p"/admin/requests")
+    end
+  end
 end
