@@ -4,6 +4,7 @@ defmodule Mydia.Library.MediaFile do
   """
   use Ecto.Schema
   import Ecto.Changeset
+  require Logger
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
@@ -106,9 +107,21 @@ defmodule Mydia.Library.MediaFile do
       iex> MediaFile.absolute_path(file)
       nil
   """
-  def absolute_path(%__MODULE__{relative_path: relative_path, library_path: library_path})
-      when not is_nil(relative_path) and not is_nil(library_path) do
-    Path.join(library_path.path, relative_path)
+  def absolute_path(%__MODULE__{
+        relative_path: relative_path,
+        library_path: %Mydia.Settings.LibraryPath{path: path}
+      })
+      when not is_nil(relative_path) and not is_nil(path) do
+    Path.join(path, relative_path)
+  end
+
+  def absolute_path(%__MODULE__{id: id, library_path: %Ecto.Association.NotLoaded{}}) do
+    Logger.warning(
+      "MediaFile.absolute_path/1 called with an unloaded library_path association",
+      media_file_id: id
+    )
+
+    nil
   end
 
   def absolute_path(%__MODULE__{}), do: nil
