@@ -224,6 +224,23 @@ defmodule Mydia.Media.ProviderSwitch do
         Repo.transaction(fn ->
           file_ids = linked_media_file_ids(item)
 
+          # Season monitoring lives in the episode rows, so the wipe below
+          # erases it. Capture the per-season verdict first and replay it, or
+          # every season the user deliberately unmonitored comes back monitored
+          # under the show's new-season default.
+          # Folded in Elixir rather than aggregated in SQL: PostgreSQL has a
+          # real boolean type and refuses `max(cast(bool as int))`, while SQLite
+          # stores booleans as integers and accepts it. One portable query beats
+          # branching on the adapter.
+          monitored_by_season =
+            from(e in Episode,
+              where: e.media_item_id == ^item.id,
+              select: {e.season_number, e.monitored}
+            )
+            |> Repo.all()
+            |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+            |> Map.new(fn {season_number, flags} -> {season_number, Enum.any?(flags)} end)
+
           Repo.delete_all(from(e in Episode, where: e.media_item_id == ^item.id))
 
           # Roll back (preserving the just-deleted episodes) instead of raising a
@@ -240,11 +257,15 @@ defmodule Mydia.Media.ProviderSwitch do
             end
 
           Enum.each(season_datas, fn season_data ->
-            Media.upsert_episodes_from_season(updated, season_data,
-              monitor_fn: fn season_num, air_date ->
-                Media.should_monitor_new_episode?(updated, season_num, air_date)
+            monitor_new? =
+              case Map.fetch(monitored_by_season, season_data.season_number) do
+                # A season the show already had keeps whatever the user decided.
+                {:ok, was_monitored?} -> was_monitored?
+                # Genuinely new to this provider, so the normal rule applies.
+                :error -> Media.should_monitor_new_episode?(updated, season_data.season_number)
               end
-            )
+
+            Media.upsert_episodes_from_season(updated, season_data, monitor_new?: monitor_new?)
           end)
 
           # `upsert_episodes_from_season/3` swallows per-episode insert errors

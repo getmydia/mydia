@@ -969,7 +969,12 @@ defmodule Mydia.Media do
     end)
   end
 
-  @monitoring_presets [:all, :future, :missing, :existing, :first_season, :latest_season, :none]
+  # :existing is not redundant with the Upgrades sweep, it is what enables it:
+  # `Mydia.Upgrades` only considers episodes with `monitored == true`, so this
+  # is the one way to say "upgrade the files I have, stop chasing the ones I
+  # never found". :first_season and :latest_season are gone because the season
+  # header toggle does each in one click.
+  @monitoring_presets [:all, :missing, :existing, :future, :none]
 
   @doc """
   Returns the list of valid monitoring presets.
@@ -978,101 +983,141 @@ defmodule Mydia.Media do
   def monitoring_presets, do: @monitoring_presets
 
   @doc """
-  Applies a monitoring preset to all episodes of a TV show.
+  Reads the current episode rows back as whichever preset describes them, or
+  `:custom` when none does.
 
-  This function:
-  1. Determines which episodes should be monitored based on the preset
-  2. Updates all episode monitored states accordingly
-  3. Saves the preset to the media_item record
+  Derived rather than stored on purpose. Storing the last preset applied is
+  what made the old label go stale the moment someone toggled a season by
+  hand, since nothing wrote it back. Computing it from the rows means the
+  label is either true or says `:custom`.
 
-  ## Presets
-
-  - `:all` - Monitor all episodes (except specials)
-  - `:future` - Only episodes where air_date > today
-  - `:missing` - Episodes without files OR air_date > today
-  - `:existing` - Only episodes that have associated media files
-  - `:first_season` - Only season 1 episodes
-  - `:latest_season` - Latest season number + any future seasons
-  - `:none` - No episodes monitored
-
-  ## Returns
-
-  - `{:ok, media_item, count}` - Success with updated media_item and count of episodes changed
-  - `{:error, reason}` - Error with reason
-
-  ## Examples
-
-      iex> apply_monitoring_preset(media_item, :all)
-      {:ok, %MediaItem{monitoring_preset: :all}, 24}
-
-      iex> apply_monitoring_preset(media_item, :future)
-      {:ok, %MediaItem{monitoring_preset: :future}, 8}
+  Episodes must have `media_files` preloaded, which the show page already does.
   """
-  @spec apply_monitoring_preset(MediaItem.t(), atom()) ::
-          {:ok, MediaItem.t(), non_neg_integer()} | {:error, term()}
-  def apply_monitoring_preset(%MediaItem{type: "tv_show"} = media_item, preset)
-      when preset in @monitoring_presets do
-    Repo.transaction(fn ->
-      # Get all episodes for this media item with media_files preloaded
-      episodes = list_episodes(media_item.id, preload: [:media_files])
+  @spec derive_monitoring_preset([Episode.t()]) :: atom()
+  def derive_monitoring_preset([]), do: :none
 
-      # Determine which episodes should be monitored based on the preset
-      {to_monitor, to_unmonitor} = partition_episodes_by_preset(episodes, preset)
+  def derive_monitoring_preset(episodes) do
+    monitored = MapSet.new(Enum.filter(episodes, & &1.monitored), & &1.id)
 
-      # Update episodes that should be monitored
-      monitored_count =
-        if to_monitor != [] do
-          monitored_ids = Enum.map(to_monitor, & &1.id)
-
-          Episode
-          |> where([e], e.id in ^monitored_ids)
-          |> Repo.update_all(set: [monitored: true, updated_at: DateTime.utc_now()])
-          |> elem(0)
-        else
-          0
-        end
-
-      # Update episodes that should not be monitored
-      unmonitored_count =
-        if to_unmonitor != [] do
-          unmonitored_ids = Enum.map(to_unmonitor, & &1.id)
-
-          Episode
-          |> where([e], e.id in ^unmonitored_ids)
-          |> Repo.update_all(set: [monitored: false, updated_at: DateTime.utc_now()])
-          |> elem(0)
-        else
-          0
-        end
-
-      # Save the preset to the media item
-      {:ok, updated_media_item} =
-        media_item
-        |> MediaItem.changeset(%{monitoring_preset: preset})
-        |> Repo.update()
-
-      # Track the monitoring preset change
-      Events.media_item_updated(
-        updated_media_item,
-        :user,
-        "media_context",
-        "Monitoring preset changed to #{preset}"
-      )
-
-      {updated_media_item, monitored_count + unmonitored_count}
-    end)
-    |> case do
-      {:ok, {media_item, count}} -> {:ok, media_item, count}
-      {:error, reason} -> {:error, reason}
+    # Nothing monitored is :none, decided before the search rather than during
+    # it. Several partitions can produce the empty set (:future on a show whose
+    # episodes have all aired, :existing on a show with no files), so a
+    # first-match walk would answer "Future Episodes" for a show the user just
+    # set to "No Episodes".
+    if MapSet.size(monitored) == 0 do
+      :none
+    else
+      Enum.find(@monitoring_presets, :custom, fn preset ->
+        {to_monitor, _} = partition_episodes_by_preset(episodes, preset)
+        MapSet.new(to_monitor, & &1.id) == monitored
+      end)
     end
   end
 
-  def apply_monitoring_preset(%MediaItem{type: type}, _preset) do
-    {:error, {:invalid_type, "apply_monitoring_preset only works for TV shows, got #{type}"}}
+  @doc """
+  Applies a monitoring preset to the episodes of a TV show.
+
+  A one-shot bulk rewrite of `episodes.monitored`, and nothing else. The show
+  row is untouched, because the preset describes an action taken once rather
+  than a standing rule. What happens to episodes discovered later is decided by
+  `should_monitor_new_episode?/2`, reading the season they land in and, for a
+  season that does not exist yet, `monitor_new_seasons`.
+
+  ## Presets
+
+  All of them exclude season 0; specials are opt-in.
+
+  - `:all` - Every episode
+  - `:missing` - Episodes without files, or not yet aired
+  - `:existing` - Only episodes that have files, which is what leaves the
+    Upgrades sweep something to work on without searching for what is absent
+  - `:future` - Only episodes that have not aired
+  - `:none` - Nothing
+
+  ## Returns
+
+  - `{:ok, count}` - Number of episodes whose monitored flag was written
+  - `{:error, reason}`
+
+  ## Examples
+
+      iex> apply_episode_monitoring(media_item, :all)
+      {:ok, 24}
+  """
+  @spec apply_episode_monitoring(MediaItem.t(), atom()) ::
+          {:ok, non_neg_integer()} | {:error, term()}
+  def apply_episode_monitoring(%MediaItem{type: "tv_show"} = media_item, preset)
+      when preset in @monitoring_presets do
+    Repo.transaction(fn ->
+      episodes = list_episodes(media_item.id, preload: [:media_files])
+      {to_monitor, to_unmonitor} = partition_episodes_by_preset(episodes, preset)
+
+      written =
+        set_episodes_monitored(to_monitor, true) + set_episodes_monitored(to_unmonitor, false)
+
+      Events.media_item_updated(
+        media_item,
+        :user,
+        "media_context",
+        "Applied '#{preset}' monitoring to episodes"
+      )
+
+      written
+    end)
   end
 
-  def apply_monitoring_preset(_media_item, preset) when preset not in @monitoring_presets do
+  def apply_episode_monitoring(%MediaItem{type: type}, preset)
+      when preset in @monitoring_presets do
+    {:error, {:invalid_type, "apply_episode_monitoring only works for TV shows, got #{type}"}}
+  end
+
+  def apply_episode_monitoring(_media_item, preset) when preset not in @monitoring_presets do
     {:error, {:invalid_preset, "Unknown preset: #{preset}"}}
+  end
+
+  # Both branches of the bulk apply wrote the same update_all with a different
+  # boolean, so it lives in one place.
+  defp set_episodes_monitored([], _monitored), do: 0
+
+  defp set_episodes_monitored(episodes, monitored) do
+    ids = Enum.map(episodes, & &1.id)
+
+    Episode
+    |> where([e], e.id in ^ids)
+    |> Repo.update_all(set: [monitored: monitored, updated_at: DateTime.utc_now()])
+    |> elem(0)
+  end
+
+  @doc """
+  Sets whether seasons that do not exist yet arrive monitored.
+
+  Deliberately independent of the presets. Inferring it from the preset made
+  two states unreachable: "monitor everything I have but do not chase new
+  seasons", and setting the flag at all without a bulk rewrite that destroys
+  hand-curated per-season monitoring. It also let a preset contradict itself,
+  since :future unmonitors every aired episode while implying new seasons are
+  wanted.
+  """
+  @spec set_monitor_new_seasons(MediaItem.t(), :all | :none) ::
+          {:ok, MediaItem.t()} | {:error, term()}
+  def set_monitor_new_seasons(%MediaItem{} = media_item, mode) when mode in [:all, :none] do
+    # update_all rather than a changeset: the caller's struct may be stale, and
+    # a changeset whose value matches the stale struct produces no change, so
+    # the write would silently skip while the row still held the old value.
+    MediaItem
+    |> where([m], m.id == ^media_item.id)
+    |> Repo.update_all(set: [monitor_new_seasons: mode, updated_at: DateTime.utc_now()])
+
+    updated = get_media_item!(media_item.id)
+
+    Events.media_item_updated(
+      updated,
+      :user,
+      "media_context",
+      "New season monitoring set to #{mode}"
+    )
+
+    {:ok, updated}
   end
 
   # Partition episodes into those to monitor and those to unmonitor based on preset
@@ -1089,11 +1134,16 @@ defmodule Mydia.Media do
     {[], episodes}
   end
 
+  # Every preset below excludes season 0. Specials are opt-in through the
+  # season header or the per-episode toggle, never swept in by a bulk action.
+  # Without this guard :missing monitored fileless specials, which then left
+  # `should_monitor_new_episode?/2` admitting every future special forever,
+  # because its season-0 guard only covers the empty-season branch.
   defp partition_episodes_by_preset(episodes, :future) do
     today = Date.utc_today()
 
     Enum.split_with(episodes, fn ep ->
-      ep.air_date && Date.compare(ep.air_date, today) == :gt
+      ep.season_number > 0 && ep.air_date && Date.compare(ep.air_date, today) == :gt
     end)
   end
 
@@ -1103,32 +1153,13 @@ defmodule Mydia.Media do
     Enum.split_with(episodes, fn ep ->
       has_no_files = Enum.empty?(ep.media_files)
       is_future = ep.air_date && Date.compare(ep.air_date, today) == :gt
-      has_no_files || is_future
+      ep.season_number > 0 && (has_no_files || is_future)
     end)
   end
 
   defp partition_episodes_by_preset(episodes, :existing) do
     Enum.split_with(episodes, fn ep ->
-      not Enum.empty?(ep.media_files)
-    end)
-  end
-
-  defp partition_episodes_by_preset(episodes, :first_season) do
-    Enum.split_with(episodes, fn ep ->
-      ep.season_number == 1
-    end)
-  end
-
-  defp partition_episodes_by_preset(episodes, :latest_season) do
-    # Find the latest season number (excluding specials)
-    latest_season =
-      episodes
-      |> Enum.filter(&(&1.season_number > 0))
-      |> Enum.map(& &1.season_number)
-      |> Enum.max(fn -> 0 end)
-
-    Enum.split_with(episodes, fn ep ->
-      ep.season_number >= latest_season && ep.season_number > 0
+      ep.season_number > 0 && not Enum.empty?(ep.media_files)
     end)
   end
 
@@ -1563,16 +1594,17 @@ defmodule Mydia.Media do
   from season data — all callers should use this instead of duplicating logic.
 
   ## Options
-    - `:monitor_fn` - Function `(season_number, air_date) -> boolean` to determine
-      if a new episode should be monitored. Defaults to monitoring all non-special episodes.
+    - `:monitor_new?` - Required boolean. Whether newly created episodes arrive
+      monitored. Compute it once per season with `should_monitor_new_episode?/2`.
   ## Returns
     - `{:ok, count}` - Number of episodes processed (created + updated)
   """
   @spec upsert_episodes_from_season(MediaItem.t(), struct(), keyword()) ::
           {:ok, non_neg_integer()}
   def upsert_episodes_from_season(media_item, season_data, opts \\ []) do
-    default_monitor = fn season_num, _air_date -> season_num > 0 end
-    monitor_fn = Keyword.get(opts, :monitor_fn, default_monitor)
+    # Required on purpose. A default here is what let the scanner and enricher
+    # drift into monitoring everything regardless of the show's intent.
+    monitor_new? = Keyword.fetch!(opts, :monitor_new?)
 
     episodes = season_data.episodes || []
 
@@ -1590,8 +1622,6 @@ defmodule Mydia.Media do
           air_date = parse_air_date(episode.air_date)
 
           if is_nil(existing) do
-            should_monitor = monitor_fn.(season_num, air_date)
-
             case create_episode(%{
                    media_item_id: media_item.id,
                    season_number: season_num,
@@ -1599,7 +1629,7 @@ defmodule Mydia.Media do
                    title: episode.name,
                    air_date: air_date,
                    metadata: Map.from_struct(episode),
-                   monitored: should_monitor
+                   monitored: monitor_new?
                  }) do
               {:ok, _episode} -> acc + 1
               {:error, _changeset} -> acc
@@ -1667,9 +1697,7 @@ defmodule Mydia.Media do
          ) do
       {:ok, season_data} ->
         upsert_episodes_from_season(media_item, season_data,
-          monitor_fn: fn season_num, air_date ->
-            should_monitor_new_episode?(media_item, season_num, air_date)
-          end
+          monitor_new?: should_monitor_new_episode?(media_item, season.season_number)
         )
 
       {:error, reason} ->
@@ -1689,58 +1717,48 @@ defmodule Mydia.Media do
 
   defp parse_air_date(_), do: nil
 
-  # Determines if a new episode should be monitored based on the media_item's monitoring preset.
-  # This is used when creating new episodes during metadata refresh.
-  def should_monitor_new_episode?(media_item, season_number, air_date) do
-    # If the media_item itself isn't monitored, don't monitor episodes
-    if media_item.monitored do
-      preset = media_item.monitoring_preset || :all
-      today = Date.utc_today()
+  @doc """
+  Classifies a season's monitoring state from its already-loaded episodes.
 
-      case preset do
-        :all ->
-          # Monitor all episodes except specials (season 0)
-          season_number > 0
+  Pure, so the UI can call it on episodes it already has in memory rather than
+  issuing another query.
+  """
+  @spec season_monitoring_state([Episode.t()]) :: :none | :partial | :all
+  def season_monitoring_state([]), do: :none
 
-        :none ->
-          false
-
-        :future ->
-          # Monitor if air_date is in the future or not set
-          is_nil(air_date) || Date.compare(air_date, today) == :gt
-
-        :missing ->
-          # New episodes have no files, so always monitor
-          # (unless it's a special)
-          season_number > 0
-
-        :existing ->
-          # Only monitor episodes with files - new episodes have none
-          false
-
-        :first_season ->
-          season_number == 1
-
-        :latest_season ->
-          # For new episodes, we need to determine if this is the latest season
-          # Query existing episodes to find the current latest season
-          latest_season = get_latest_season_number(media_item.id)
-          # Monitor if this episode's season is >= the latest known season
-          # This handles the case where a new season is being added
-          season_number >= latest_season && season_number > 0
-      end
-    else
-      false
+  def season_monitoring_state(episodes) do
+    cond do
+      Enum.all?(episodes, & &1.monitored) -> :all
+      Enum.any?(episodes, & &1.monitored) -> :partial
+      true -> :none
     end
   end
 
-  # Gets the highest season number for a media item
-  defp get_latest_season_number(media_item_id) do
-    Episode
-    |> where([e], e.media_item_id == ^media_item_id)
-    |> where([e], e.season_number > 0)
-    |> select([e], max(e.season_number))
-    |> Repo.one() || 1
+  @doc """
+  Decides whether an episode discovered by a refresh, scan, or provider switch
+  should arrive monitored.
+
+  A new episode inherits the season it lands in, so unmonitoring a season also
+  stops that season's future episodes. A season that does not exist yet has
+  nothing to inherit, so it falls back to the show's `monitor_new_seasons`
+  setting. Specials are opt-in: a brand-new season 0 is never admitted, but an
+  existing season 0 that the user has monitored is.
+  """
+  @spec should_monitor_new_episode?(MediaItem.t(), integer()) :: boolean()
+  def should_monitor_new_episode?(%MediaItem{monitored: false}, _season_number), do: false
+
+  def should_monitor_new_episode?(%MediaItem{} = media_item, season_number) do
+    monitored_flags =
+      Episode
+      |> where([e], e.media_item_id == ^media_item.id)
+      |> where([e], e.season_number == ^season_number)
+      |> select([e], e.monitored)
+      |> Repo.all()
+
+    case monitored_flags do
+      [] -> season_number > 0 and media_item.monitor_new_seasons == :all
+      flags -> Enum.any?(flags)
+    end
   end
 
   defp apply_media_item_filters(query, opts) do

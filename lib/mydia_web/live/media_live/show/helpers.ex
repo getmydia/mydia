@@ -518,12 +518,17 @@ defmodule MydiaWeb.MediaLive.Show.Helpers do
   def media_type_path(_), do: "/"
 
   # Monitoring preset labels (shared between events and components)
-  def monitoring_preset_label(nil), do: "All Episodes"
   def monitoring_preset_label(:all), do: "All Episodes"
-  def monitoring_preset_label(:future), do: "Future Episodes"
   def monitoring_preset_label(:missing), do: "Missing Episodes"
   def monitoring_preset_label(:existing), do: "Existing Episodes"
-  def monitoring_preset_label(:first_season), do: "First Season"
-  def monitoring_preset_label(:latest_season), do: "Latest Season"
-  def monitoring_preset_label(:none), do: "None"
+  def monitoring_preset_label(:future), do: "Future Episodes"
+  def monitoring_preset_label(:none), do: "No Episodes"
+  # Not a preset anyone can pick: what the episodes read as once they no longer
+  # match any of them, usually because a season or episode was toggled by hand.
+  def monitoring_preset_label(:custom), do: "Custom"
+
+  # Season monitoring toggle tooltips, keyed on the season's derived state
+  def season_monitoring_tooltip(:all), do: "Unmonitor season"
+  def season_monitoring_tooltip(:partial), do: "Monitor all episodes"
+  def season_monitoring_tooltip(:none), do: "Monitor season"
 end

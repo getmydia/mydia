@@ -1505,7 +1505,11 @@ defmodule Mydia.Jobs.LibraryScanner do
 
   # Creates/updates episodes from season data using the consolidated function
   defp create_episodes_from_season(media_item, season_data) do
-    {:ok, count} = Mydia.Media.upsert_episodes_from_season(media_item, season_data)
+    {:ok, count} =
+      Mydia.Media.upsert_episodes_from_season(media_item, season_data,
+        monitor_new?:
+          Mydia.Media.should_monitor_new_episode?(media_item, season_data.season_number)
+      )
 
     Logger.debug("Upserted #{count} episodes from season data",
       media_item_id: media_item.id,

@@ -12,7 +12,8 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeEvents do
 
   require Logger
 
-  @valid_monitoring_presets ~w(all future missing existing first_season latest_season none)
+  # Derived from the context so the two lists cannot drift apart.
+  @valid_monitoring_presets Enum.map(Media.monitoring_presets(), &Atom.to_string/1)
 
   def toggle_monitored(_params, socket) do
     with :ok <- Authorization.authorize_update_media(socket) do
@@ -36,32 +37,25 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeEvents do
     end
   end
 
-  def apply_monitoring_preset(%{"preset" => preset_str}, socket) do
+  def apply_episode_monitoring(%{"preset" => preset_str}, socket) do
     with :ok <- Authorization.authorize_update_media(socket),
          true <- preset_str in @valid_monitoring_presets do
       media_item = socket.assigns.media_item
       preset = String.to_existing_atom(preset_str)
 
-      socket = assign(socket, :applying_monitoring_preset, true)
-
-      case Media.apply_monitoring_preset(media_item, preset) do
-        {:ok, updated_item, count} ->
-          reloaded_item = load_media_item(updated_item.id)
+      case Media.apply_episode_monitoring(media_item, preset) do
+        {:ok, count} ->
           preset_label = monitoring_preset_label(preset)
 
           {:noreply,
            socket
-           |> assign(:media_item, reloaded_item)
-           |> assign(:applying_monitoring_preset, false)
+           |> assign(:media_item, load_media_item(media_item.id))
            |> put_flash(:info, "Applied '#{preset_label}' monitoring to #{count} episodes")}
 
         {:error, reason} ->
-          Logger.error("Failed to apply monitoring preset: #{inspect(reason)}")
+          Logger.error("Failed to apply episode monitoring: #{inspect(reason)}")
 
-          {:noreply,
-           socket
-           |> assign(:applying_monitoring_preset, false)
-           |> put_flash(:error, "Failed to apply monitoring preset")}
+          {:noreply, put_flash(socket, :error, "Failed to apply episode monitoring")}
       end
     else
       {:unauthorized, socket} ->
@@ -69,6 +63,27 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeEvents do
 
       false ->
         {:noreply, put_flash(socket, :error, "Invalid monitoring preset")}
+    end
+  end
+
+  def toggle_monitor_new_seasons(_params, socket) do
+    with :ok <- Authorization.authorize_update_media(socket) do
+      media_item = socket.assigns.media_item
+      mode = if media_item.monitor_new_seasons == :all, do: :none, else: :all
+
+      {:ok, updated} = Media.set_monitor_new_seasons(media_item, mode)
+
+      message =
+        if mode == :all,
+          do: "New seasons will be monitored",
+          else: "New seasons will not be monitored"
+
+      {:noreply,
+       socket
+       |> assign(:media_item, load_media_item(updated.id))
+       |> put_flash(:info, message)}
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
     end
   end
 
