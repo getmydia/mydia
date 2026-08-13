@@ -270,4 +270,75 @@ defmodule MetadataRelay.SubDL.HandlerTest do
     assert is_nil(subtitle["feature_type"])
     assert is_nil(subtitle["title"])
   end
+
+  describe "get_download_url/2" do
+    test "points back at the relay rather than at SubDL" do
+      id = FileId.encode("/subtitle/3602674-8520054.zip")
+
+      assert {:ok, result} = Handler.get_download_url(id, "https://relay.mydia.dev")
+
+      assert result["download_url"] == "https://relay.mydia.dev/api/v1/subtitles/download/#{id}"
+      assert result["file_name"] == "3602674-8520054.srt"
+      assert result["requests_used"] == nil
+      assert result["requests_remaining"] == nil
+    end
+
+    test "refuses an id that is not a SubDL archive" do
+      id = Base.url_encode64("https://evil.example.com/x.zip", padding: false)
+
+      assert {:error, :invalid_file_id} = Handler.get_download_url(id, "https://relay.mydia.dev")
+    end
+  end
+
+  describe "download/1" do
+    defp zip(entries) do
+      {:ok, {_name, binary}} =
+        :zip.create(~c"s.zip", Enum.map(entries, fn {n, c} -> {to_charlist(n), c} end), [:memory])
+
+      binary
+    end
+
+    test "returns the subtitle from inside the archive" do
+      stub(fn request ->
+        assert request.url.host == "dl.subdl.com"
+        assert request.url.path == "/subtitle/3602674-8520054.zip"
+        {request, Req.Response.new(status: 200, body: zip([{"movie.srt", "subtitle body"}]))}
+      end)
+
+      id = FileId.encode("/subtitle/3602674-8520054.zip")
+
+      assert {:ok, %{name: "movie.srt", content: "subtitle body"}} = Handler.download(id)
+    end
+
+    test "refuses to fetch an id that is not a SubDL archive" do
+      stub(fn _request -> flunk("must not fetch an unvalidated id") end)
+
+      id = Base.url_encode64("https://evil.example.com/x.zip", padding: false)
+
+      assert {:error, :invalid_file_id} = Handler.download(id)
+    end
+
+    test "reports an archive holding no subtitle" do
+      stub(fn request ->
+        {request, Req.Response.new(status: 200, body: zip([{"readme.txt", "nope"}]))}
+      end)
+
+      id = FileId.encode("/subtitle/3602674-8520054.zip")
+
+      assert {:error, :no_subtitle_in_archive} = Handler.download(id)
+    end
+
+    # The entry name comes from a third party and ends up in a response header.
+    test "sanitises an entry name carrying a header injection" do
+      stub(fn request ->
+        {request, Req.Response.new(status: 200, body: zip([{"a\r\nX-Evil: 1.srt", "body"}]))}
+      end)
+
+      id = FileId.encode("/subtitle/3602674-8520054.zip")
+
+      assert {:ok, %{name: name}} = Handler.download(id)
+      refute name =~ "\r"
+      refute name =~ "\n"
+    end
+  end
 end

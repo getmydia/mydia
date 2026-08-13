@@ -12,6 +12,7 @@ defmodule MetadataRelay.SubDL.Handler do
 
   alias MetadataRelay.SubDL.Client
   alias MetadataRelay.SubDL.FileId
+  alias MetadataRelay.Subtitles.Archive
 
   @subs_per_page 30
 
@@ -52,7 +53,53 @@ defmodule MetadataRelay.SubDL.Handler do
     end
   end
 
+  @doc """
+  Returns a download URL for an id from a search result.
+
+  The URL points back at this relay, not at SubDL. SubDL serves ZIP archives and
+  the clients on the other end of this contract expect plain subtitle bytes,
+  with no archive handling of their own, so the unwrapping has to happen here.
+  """
+  @spec get_download_url(String.t(), String.t()) :: {:ok, map()} | {:error, term()}
+  def get_download_url(id, relay_base_url) do
+    with {:ok, path} <- FileId.decode(id) do
+      {:ok,
+       %{
+         "download_url" => "#{relay_base_url}/api/v1/subtitles/download/#{id}",
+         "file_name" => path |> Path.basename() |> String.replace_suffix(".zip", ".srt"),
+         # SubDL publishes no quota headers. Reporting null is honest; reporting
+         # a number would be invention.
+         "requests_used" => nil,
+         "requests_remaining" => nil
+       }}
+    end
+  end
+
+  @doc """
+  Fetches a SubDL archive and returns the subtitle inside it.
+  """
+  @spec download(String.t()) :: {:ok, %{name: String.t(), content: binary()}} | {:error, term()}
+  def download(id) do
+    with {:ok, path} <- FileId.decode(id),
+         {:ok, archive} <- Client.fetch_archive(path),
+         {:ok, %{name: name, content: content}} <- Archive.extract_subtitle(archive) do
+      {:ok, %{name: safe_name(name), content: content}}
+    end
+  end
+
   ## Private
+
+  # The entry name comes from an archive built by a stranger and is echoed in a
+  # content-disposition header, so anything outside this set is dropped rather
+  # than escaped. Dropping cannot go wrong; escaping can.
+  defp safe_name(name) do
+    cleaned =
+      name
+      |> Path.basename()
+      |> String.replace(~r/[^A-Za-z0-9._-]/, "_")
+
+    if cleaned == "", do: "subtitle.srt", else: cleaned
+  end
 
   defp build_query(params) do
     case identity(params) do
