@@ -1563,16 +1563,17 @@ defmodule Mydia.Media do
   from season data — all callers should use this instead of duplicating logic.
 
   ## Options
-    - `:monitor_fn` - Function `(season_number, air_date) -> boolean` to determine
-      if a new episode should be monitored. Defaults to monitoring all non-special episodes.
+    - `:monitor_new?` - Required boolean. Whether newly created episodes arrive
+      monitored. Compute it once per season with `should_monitor_new_episode?/2`.
   ## Returns
     - `{:ok, count}` - Number of episodes processed (created + updated)
   """
   @spec upsert_episodes_from_season(MediaItem.t(), struct(), keyword()) ::
           {:ok, non_neg_integer()}
   def upsert_episodes_from_season(media_item, season_data, opts \\ []) do
-    default_monitor = fn season_num, _air_date -> season_num > 0 end
-    monitor_fn = Keyword.get(opts, :monitor_fn, default_monitor)
+    # Required on purpose. A default here is what let the scanner and enricher
+    # drift into monitoring everything regardless of the show's intent.
+    monitor_new? = Keyword.fetch!(opts, :monitor_new?)
 
     episodes = season_data.episodes || []
 
@@ -1590,8 +1591,6 @@ defmodule Mydia.Media do
           air_date = parse_air_date(episode.air_date)
 
           if is_nil(existing) do
-            should_monitor = monitor_fn.(season_num, air_date)
-
             case create_episode(%{
                    media_item_id: media_item.id,
                    season_number: season_num,
@@ -1599,7 +1598,7 @@ defmodule Mydia.Media do
                    title: episode.name,
                    air_date: air_date,
                    metadata: Map.from_struct(episode),
-                   monitored: should_monitor
+                   monitored: monitor_new?
                  }) do
               {:ok, _episode} -> acc + 1
               {:error, _changeset} -> acc
@@ -1667,9 +1666,7 @@ defmodule Mydia.Media do
          ) do
       {:ok, season_data} ->
         upsert_episodes_from_season(media_item, season_data,
-          monitor_fn: fn season_num, air_date ->
-            should_monitor_new_episode?(media_item, season_num, air_date)
-          end
+          monitor_new?: should_monitor_new_episode?(media_item, season.season_number)
         )
 
       {:error, reason} ->
@@ -1689,58 +1686,48 @@ defmodule Mydia.Media do
 
   defp parse_air_date(_), do: nil
 
-  # Determines if a new episode should be monitored based on the media_item's monitoring preset.
-  # This is used when creating new episodes during metadata refresh.
-  def should_monitor_new_episode?(media_item, season_number, air_date) do
-    # If the media_item itself isn't monitored, don't monitor episodes
-    if media_item.monitored do
-      preset = media_item.monitoring_preset || :all
-      today = Date.utc_today()
+  @doc """
+  Classifies a season's monitoring state from its already-loaded episodes.
 
-      case preset do
-        :all ->
-          # Monitor all episodes except specials (season 0)
-          season_number > 0
+  Pure, so the UI can call it on episodes it already has in memory rather than
+  issuing another query.
+  """
+  @spec season_monitoring_state([Episode.t()]) :: :none | :partial | :all
+  def season_monitoring_state([]), do: :none
 
-        :none ->
-          false
-
-        :future ->
-          # Monitor if air_date is in the future or not set
-          is_nil(air_date) || Date.compare(air_date, today) == :gt
-
-        :missing ->
-          # New episodes have no files, so always monitor
-          # (unless it's a special)
-          season_number > 0
-
-        :existing ->
-          # Only monitor episodes with files - new episodes have none
-          false
-
-        :first_season ->
-          season_number == 1
-
-        :latest_season ->
-          # For new episodes, we need to determine if this is the latest season
-          # Query existing episodes to find the current latest season
-          latest_season = get_latest_season_number(media_item.id)
-          # Monitor if this episode's season is >= the latest known season
-          # This handles the case where a new season is being added
-          season_number >= latest_season && season_number > 0
-      end
-    else
-      false
+  def season_monitoring_state(episodes) do
+    cond do
+      Enum.all?(episodes, & &1.monitored) -> :all
+      Enum.any?(episodes, & &1.monitored) -> :partial
+      true -> :none
     end
   end
 
-  # Gets the highest season number for a media item
-  defp get_latest_season_number(media_item_id) do
-    Episode
-    |> where([e], e.media_item_id == ^media_item_id)
-    |> where([e], e.season_number > 0)
-    |> select([e], max(e.season_number))
-    |> Repo.one() || 1
+  @doc """
+  Decides whether an episode discovered by a refresh, scan, or provider switch
+  should arrive monitored.
+
+  A new episode inherits the season it lands in, so unmonitoring a season also
+  stops that season's future episodes. A season that does not exist yet has
+  nothing to inherit, so it falls back to the show's `monitor_new_seasons`
+  setting. Specials are opt-in: a brand-new season 0 is never admitted, but an
+  existing season 0 that the user has monitored is.
+  """
+  @spec should_monitor_new_episode?(MediaItem.t(), integer()) :: boolean()
+  def should_monitor_new_episode?(%MediaItem{monitored: false}, _season_number), do: false
+
+  def should_monitor_new_episode?(%MediaItem{} = media_item, season_number) do
+    monitored_flags =
+      Episode
+      |> where([e], e.media_item_id == ^media_item.id)
+      |> where([e], e.season_number == ^season_number)
+      |> select([e], e.monitored)
+      |> Repo.all()
+
+    case monitored_flags do
+      [] -> season_number > 0 and media_item.monitor_new_seasons == :all
+      flags -> Enum.any?(flags)
+    end
   end
 
   defp apply_media_item_filters(query, opts) do

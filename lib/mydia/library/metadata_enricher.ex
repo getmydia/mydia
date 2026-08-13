@@ -443,7 +443,10 @@ defmodule Mydia.Library.MetadataEnricher do
   defp get_seasons_list(_), do: []
 
   defp create_episodes_for_season(media_item, season_data) do
-    {:ok, count} = Media.upsert_episodes_from_season(media_item, season_data)
+    {:ok, count} =
+      Media.upsert_episodes_from_season(media_item, season_data,
+        monitor_new?: Media.should_monitor_new_episode?(media_item, season_data.season_number)
+      )
 
     Logger.debug("Upserted #{count} episodes",
       media_item_id: media_item.id,

@@ -241,9 +241,7 @@ defmodule Mydia.Media.ProviderSwitch do
 
           Enum.each(season_datas, fn season_data ->
             Media.upsert_episodes_from_season(updated, season_data,
-              monitor_fn: fn season_num, air_date ->
-                Media.should_monitor_new_episode?(updated, season_num, air_date)
-              end
+              monitor_new?: Media.should_monitor_new_episode?(updated, season_data.season_number)
             )
           end)
 
