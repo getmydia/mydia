@@ -43,6 +43,12 @@ defmodule MydiaWeb.PlayerController do
 
         conn
         |> put_resp_content_type("text/html")
+        # This document is per-user and carries a Guardian JWT in
+        # `window.mydiaConfig`, so it must not be written to any cache. It is
+        # also the only thing pointing at the asset URLs, which is the other
+        # reason it can never be served from one: a stale shell would reinstate
+        # exactly the pinned-old-client problem the static mount below fixes.
+        |> put_resp_header("cache-control", "no-store")
         |> send_resp(200, modified_html)
 
       {:error, :not_found} ->
