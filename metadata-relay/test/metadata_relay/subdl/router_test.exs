@@ -111,6 +111,37 @@ defmodule MetadataRelay.SubDL.RouterTest do
     assert conn.status == 502
   end
 
+  test "download surfaces a SubDL rate limit as 429 with retry-after" do
+    stub(fn request ->
+      {request, Req.Response.new(status: 429, headers: %{"retry-after" => ["42"]}, body: "")}
+    end)
+
+    id = MetadataRelay.SubDL.FileId.encode("/subtitle/1-2.zip")
+    conn = Router.call(conn(:get, "/api/v1/subtitles/download/#{id}"), @opts)
+
+    assert conn.status == 429
+    assert Plug.Conn.get_resp_header(conn, "retry-after") == ["42"]
+  end
+
+  test "download is never cached, so content-disposition survives every request" do
+    stub(fn request ->
+      {request, Req.Response.new(status: 200, body: zip([{"m.srt", "plain text"}]))}
+    end)
+
+    id = MetadataRelay.SubDL.FileId.encode("/subtitle/1-2.zip")
+
+    for _ <- 1..2 do
+      conn = Router.call(conn(:get, "/api/v1/subtitles/download/#{id}"), @opts)
+
+      assert conn.status == 200
+      assert conn.resp_body == "plain text"
+
+      assert Plug.Conn.get_resp_header(conn, "content-disposition") == [
+               ~s(attachment; filename="m.srt")
+             ]
+    end
+  end
+
   test "search reports not-configured when the key is absent" do
     System.delete_env("SUBDL_API_KEY")
 

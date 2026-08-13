@@ -43,6 +43,22 @@ defmodule MetadataRelay.Plug.Cache do
   end
 
   @impl true
+  def call(
+        %Plug.Conn{method: "GET", request_path: "/api/v1/subtitles/download/" <> _rest} = conn,
+        _opts
+      ) do
+    # Skip caching for subtitle archive downloads. These hit dl.subdl.com,
+    # which is unauthenticated and does not draw on the daily search key
+    # quota this cache exists to protect, so caching buys nothing. Worse, the
+    # response's content-disposition header isn't in filter_headers/1's
+    # allow-list, so a cache hit would silently drop it; and with no matching
+    # rule in auto_ttl/1 these binary blobs would fall back to the 30-day
+    # default and compete with small JSON responses for the same
+    # count-capped entry pool.
+    conn
+  end
+
+  @impl true
   def call(%Plug.Conn{method: "GET"} = conn, _opts) do
     cache_key = build_cache_key(conn)
 

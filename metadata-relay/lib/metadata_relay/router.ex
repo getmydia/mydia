@@ -295,6 +295,22 @@ defmodule MetadataRelay.Router do
         |> put_resp_content_type("application/json")
         |> send_resp(400, Jason.encode!(%{error: "Invalid subtitle id"}))
 
+      {:error, {:rate_limited, retry_after}} ->
+        MetadataRelay.Metrics.inc("metadata_relay_requests_total",
+          service: "subdl",
+          status: "error"
+        )
+
+        error_response = %{
+          error: "Too many requests",
+          message: "Rate limit exceeded. Please try again later."
+        }
+
+        conn
+        |> put_resp_header("retry-after", to_string(retry_after))
+        |> put_resp_content_type("application/json")
+        |> send_resp(429, Jason.encode!(error_response))
+
       {:error, reason} ->
         MetadataRelay.Metrics.inc("metadata_relay_requests_total",
           service: "subdl",
@@ -1024,7 +1040,7 @@ defmodule MetadataRelay.Router do
 
         error_response = %{
           error: "Authentication failed",
-          message: "Failed to authenticate with OpenSubtitles: #{inspect(reason)}"
+          message: "Failed to authenticate with SubDL: #{inspect(reason)}"
         }
 
         conn
