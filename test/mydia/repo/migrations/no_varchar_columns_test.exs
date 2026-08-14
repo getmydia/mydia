@@ -109,7 +109,7 @@ defmodule Mydia.Repo.Migrations.NoVarcharColumnsTest do
   @declarations [
     ~r/^\s*(?:add|add_if_not_exists|modify|remove)\(?\s*:(\w+),\s*:string\b/m,
     ~r/^\s*(?:add|add_if_not_exists|modify|remove)\(?\s*:(\w+),\s*:varchar\b/m,
-    ~r/^\s*(?:add|add_if_not_exists|modify)\(?\s*:(\w+),\s*\{:array,\s*:string\}/m,
+    ~r/^\s*(?:add|add_if_not_exists|modify|remove)\(?\s*:(\w+),\s*\{:array,\s*:string\}/m,
     ~r/^\s*(?:add|add_if_not_exists|modify)\(?\s*:(\w+),\s*references\([^)]*type:\s*:string/m,
     ~r/modify_column_type\([^,]+,\s*:?(\w+),\s*:string\b/
   ]
