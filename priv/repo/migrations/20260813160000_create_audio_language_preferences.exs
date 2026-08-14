@@ -19,7 +19,7 @@ defmodule Mydia.Repo.Migrations.CreateAudioLanguagePreferences do
       # A single code, not a list. This records one deliberate choice a person
       # made about one show; the ordered fallback list is the operator's
       # setting and stays in streaming.audio_language.
-      add :language, :string, null: false
+      add :language, :text, null: false
 
       timestamps(type: :utc_datetime)
     end
