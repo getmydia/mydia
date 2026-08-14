@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://www.coderabbit.ai/integrations/schema.v2.json
+#
+# Anything not set here keeps CodeRabbit's defaults: chill profile, drafts
+# skipped, findings advisory rather than merge-blocking.
+reviews:
+  auto_review:
+    enabled: true
+
+    # PRs targeting master were silently skipped with "auto reviews are disabled
+    # on base/target branches other than the default branch" (PR #451), even
+    # though master is this repo's default branch. Pinning it here keeps review
+    # coverage in the repo instead of a dashboard setting nobody can diff.
+    base_branches: [".*"]
+
+    # Default is 5, which pauses incremental review after five reviewed commits.
+    # PRs here routinely iterate past that, and those later commits are exactly
+    # the ones that would otherwise go unreviewed.
+    auto_pause_after_reviewed_commits: 0
