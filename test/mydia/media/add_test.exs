@@ -1,6 +1,8 @@
 defmodule Mydia.Media.AddTest do
   use Mydia.DataCase, async: false
 
+  import Mydia.SettingsFixtures
+
   alias Mydia.Media.Add
 
   defp relay_config(bypass) do
@@ -156,6 +158,54 @@ defmodule Mydia.Media.AddTest do
 
       assert attrs.tvdb_id == tvdb_id
       refute_receive :searched
+    end
+
+    test "lookup_and_add_tvdb_id does not overwrite an exact external_ids tvdb_id" do
+      library_path_fixture(%{type: "series", tv_metadata_source: :tmdb})
+
+      bypass = Bypass.open()
+      tmdb_id = System.unique_integer([:positive])
+      exact_tvdb_id = System.unique_integer([:positive])
+      fuzzy_tvdb_id = System.unique_integer([:positive])
+
+      Bypass.stub(bypass, "GET", "/tmdb/tv/shows/#{tmdb_id}", fn conn ->
+        body = %{
+          "id" => tmdb_id,
+          "name" => "Guarded Show",
+          "first_air_date" => "2011-04-17",
+          "credits" => %{"cast" => [], "crew" => []},
+          "seasons" => [],
+          "external_ids" => %{"tvdb_id" => exact_tvdb_id}
+        }
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(body))
+      end)
+
+      # The title search must return a DIFFERENT tvdb id than the exact one
+      # TMDB cross-references. If `lookup_and_add_tvdb_id/2`'s guard clause is
+      # ever removed, this fuzzy result silently overwrites the exact id and
+      # the assertion below flips.
+      Bypass.stub(bypass, "GET", "/tvdb/search", fn conn ->
+        body = %{
+          "data" => [
+            %{"tvdb_id" => fuzzy_tvdb_id, "name" => "Guarded Show", "year" => "2011"}
+          ]
+        }
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(body))
+      end)
+
+      # A configured :tmdb TV library routes through build_tv_show_attrs/6's
+      # :tmdb-primary clause, which pipes build_media_item_attrs/3's output
+      # through lookup_and_add_tvdb_id/2 -- the only path that reaches the
+      # guard clause under test.
+      assert {:ok, attrs} = Add.resolve_attrs(tmdb_id, :tv_show, relay_config(bypass))
+
+      assert attrs.tvdb_id == exact_tvdb_id
     end
   end
 end
