@@ -28,7 +28,7 @@ defmodule MydiaWeb.Components.TrendingDetailModalTest do
     })
   end
 
-  defp metadata(attrs \\ %{}) do
+  defp metadata(attrs) do
     struct(MediaMetadata, Enum.into(attrs, %{title: "The Eternal Daughter", year: 2022}))
   end
 
