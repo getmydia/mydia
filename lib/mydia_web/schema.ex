@@ -35,6 +35,7 @@ defmodule MydiaWeb.Schema do
     import_fields(:streaming_queries)
     import_fields(:collection_queries)
     import_fields(:subtitle_queries)
+    import_fields(:server_queries)
   end
 
   mutation do
@@ -57,7 +58,14 @@ defmodule MydiaWeb.Schema do
   # in, and trading an existing credential for a fresh one. Everything else is
   # denied by default. Introspection is left open so GraphiQL keeps working; it
   # exposes the schema shape only, never data.
-  @public_fields [:login, :refresh_media_token, :refresh_access_token]
+  @public_fields [
+    :login,
+    :refresh_media_token,
+    :refresh_access_token,
+    # Version floors only. A player that cannot authenticate against this
+    # server is exactly the one that may need to be told why.
+    :server_compatibility
+  ]
   @introspection_fields [:__schema, :__type, :__typename]
 
   @doc """
