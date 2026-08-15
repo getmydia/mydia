@@ -171,13 +171,11 @@ defmodule MydiaWeb.Api.HlsController do
   """
   def segment(conn, %{"session_id" => session_id, "track_id" => track_id, "segment" => segment}) do
     with {:ok, user_id} <- get_user_id(conn),
-         {:ok, temp_dir} <- get_session_temp_dir(session_id, user_id) do
-      # Try Membrane-style path first (track subdirectory)
-      membrane_path = Path.join([temp_dir, track_id, segment])
-
-      # Fall back to FFmpeg-style path (root directory) if track doesn't exist
-      ffmpeg_path = Path.join(temp_dir, segment)
-
+         {:ok, temp_dir} <- get_session_temp_dir(session_id, user_id),
+         # Try Membrane-style path first (track subdirectory)
+         {:ok, membrane_path} <- SessionFiles.safe_path(temp_dir, Path.join(track_id, segment)),
+         # Fall back to FFmpeg-style path (root directory) if track doesn't exist
+         {:ok, ffmpeg_path} <- SessionFiles.safe_path(temp_dir, segment) do
       segment_path =
         cond do
           File.exists?(membrane_path) -> membrane_path
@@ -211,6 +209,11 @@ defmodule MydiaWeb.Api.HlsController do
         conn
         |> put_status(:not_found)
         |> json(%{error: "HLS session not found"})
+
+      {:error, :path_traversal} ->
+        conn
+        |> put_status(:forbidden)
+        |> json(%{error: "Forbidden"})
     end
   end
 

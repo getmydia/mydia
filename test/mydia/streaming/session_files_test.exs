@@ -42,5 +42,14 @@ defmodule Mydia.Streaming.SessionFilesTest do
       assert {:error, :path_traversal} =
                SessionFiles.safe_path("/tmp/hls/abc", "../abcdef/secret.ts")
     end
+
+    # segment/2's Membrane-style candidate joins two user-controlled params
+    # (track_id and segment) into a single relative name before validating.
+    # Neither component alone escapes the base, only their join does.
+    test "rejects a two-component relative name that escapes only once joined" do
+      joined = Path.join("track_0", "../../etc")
+
+      assert {:error, :path_traversal} = SessionFiles.safe_path("/tmp/hls/abc", joined)
+    end
   end
 end
