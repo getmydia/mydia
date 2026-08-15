@@ -128,6 +128,29 @@ defmodule MydiaWeb.Live.Authorization do
   end
 
   @doc """
+  Checks if the current user can submit media requests.
+
+  Only guests can submit requests; higher-level users are expected to create
+  media directly. Returns `:ok` if authorized, or `{:unauthorized, socket}`
+  with an error flash. Raises if current_user is not present in socket
+  assigns.
+  """
+  def authorize_submit_request(socket) do
+    case Map.fetch(socket.assigns, :current_user) do
+      {:ok, user} when not is_nil(user) ->
+        if Authorization.can_submit_request?(user) do
+          :ok
+        else
+          socket = put_flash(socket, :error, "You do not have permission to request media")
+          {:unauthorized, socket}
+        end
+
+      _ ->
+        raise "current_user is required in socket assigns for authorization"
+    end
+  end
+
+  @doc """
   Generic authorization check with custom permission function and error message.
   Raises if current_user is not present in socket assigns.
 

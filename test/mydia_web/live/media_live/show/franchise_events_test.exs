@@ -328,6 +328,29 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEventsTest do
                  guest_socket(nil, user)
                )
     end
+
+    # Regression: can_submit_request?/1 returns true only for a guest, but
+    # nothing enforced that on this handler, so any authenticated user could
+    # push the event over the socket and create a request row even though the
+    # UI renders them no button.
+    test "a non-guest user creates no request and leaves the franchise untouched" do
+      user = user_fixture(%{role: "user"})
+
+      franchise =
+        small_franchise([
+          entry(%{tmdb_id: 671, in_library?: true, current?: true, media_item_id: "a"}),
+          entry(%{tmdb_id: 672, title: "Chamber of Secrets", year: 2002})
+        ])
+
+      {:noreply, updated} =
+        FranchiseEvents.request_franchise_movie(
+          %{"tmdb_id" => "672"},
+          guest_socket(franchise, user)
+        )
+
+      assert updated.assigns.franchise == franchise
+      assert Mydia.MediaRequests.list_requests(status: "pending") == []
+    end
   end
 
   describe "handle_add_result/3" do

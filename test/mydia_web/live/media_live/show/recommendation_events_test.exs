@@ -86,4 +86,36 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEventsTest do
       assert untouched.request_status == nil
     end
   end
+
+  describe "request_recommendation/2" do
+    # Regression: can_submit_request?/1 returns true only for a guest, but
+    # nothing enforced that on this handler, so any authenticated user could
+    # push the event over the socket and create a request row even though the
+    # UI renders them no button.
+    test "a non-guest user creates no request and leaves recommendations untouched" do
+      current =
+        media_item_fixture(%{
+          type: "movie",
+          title: "Current",
+          tmdb_id: System.unique_integer([:positive])
+        })
+
+      tmdb_id = System.unique_integer([:positive])
+      recommendations = [result(%{provider_id: to_string(tmdb_id), title: "Blocked"})]
+
+      socket =
+        stub_socket(%{
+          media_item: current,
+          recommendations: recommendations,
+          current_user: user_fixture(%{role: "user"})
+        })
+
+      {:noreply, updated} =
+        RecommendationEvents.request_recommendation(%{"tmdb_id" => to_string(tmdb_id)}, socket)
+
+      assert updated.assigns.recommendations == recommendations
+      assert updated.assigns.requesting_recommendation_id == nil
+      assert MediaRequests.list_requests(status: "pending") == []
+    end
+  end
 end

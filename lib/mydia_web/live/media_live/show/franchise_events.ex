@@ -126,10 +126,12 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
   detail page down.
   """
   def request_franchise_movie(%{"tmdb_id" => tmdb_id}, socket) do
-    with {parsed, ""} <- Integer.parse(tmdb_id),
+    with :ok <- Authorization.authorize_submit_request(socket),
+         {parsed, ""} <- Integer.parse(tmdb_id),
          %FranchiseEntry{} = entry <- find_entry(socket.assigns.franchise, parsed) do
       submit_request(entry, socket)
     else
+      {:unauthorized, socket} -> {:noreply, socket}
       _ -> {:noreply, socket}
     end
   end

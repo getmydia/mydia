@@ -105,43 +105,46 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   otherwise has no `request_media` clause at all.
   """
   def request_recommendation(%{"tmdb_id" => tmdb_id}, socket) do
-    case Enum.find(socket.assigns.recommendations, &(to_string(&1.provider_id) == tmdb_id)) do
-      nil ->
-        {:noreply, socket}
+    with :ok <- Authorization.authorize_submit_request(socket) do
+      case Enum.find(socket.assigns.recommendations, &(to_string(&1.provider_id) == tmdb_id)) do
+        nil -> {:noreply, socket}
+        item -> submit_request(item, tmdb_id, socket)
+      end
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
 
-      item ->
-        media_type = if socket.assigns.media_item.type == "tv_show", do: :tv_show, else: :movie
+  defp submit_request(item, tmdb_id, socket) do
+    media_type = if socket.assigns.media_item.type == "tv_show", do: :tv_show, else: :movie
 
-        socket = assign(socket, :requesting_recommendation_id, tmdb_id)
+    socket = assign(socket, :requesting_recommendation_id, tmdb_id)
 
-        case MediaRequestHelpers.handle_request_media(
-               item,
-               media_type,
-               socket.assigns.current_user.id
-             ) do
-          {:ok, request, status_updates} ->
-            {:noreply,
-             socket
-             |> assign(:requesting_recommendation_id, nil)
-             |> assign(
-               :recommendations,
-               MediaRequestHelpers.enrich_with_request_status(
-                 socket.assigns.recommendations,
-                 status_updates
-               )
-             )
-             |> put_flash(:info, "#{request.title} requested. An admin will review it soon.")}
+    case MediaRequestHelpers.handle_request_media(
+           item,
+           media_type,
+           socket.assigns.current_user.id
+         ) do
+      {:ok, request, status_updates} ->
+        {:noreply,
+         socket
+         |> assign(:requesting_recommendation_id, nil)
+         |> assign(
+           :recommendations,
+           MediaRequestHelpers.enrich_with_request_status(
+             socket.assigns.recommendations,
+             status_updates
+           )
+         )
+         |> put_flash(:info, "#{request.title} requested. An admin will review it soon.")}
 
-          {:error, reason} ->
-            Logger.warning(
-              "Recommendation request failed for tmdb #{tmdb_id}: #{inspect(reason)}"
-            )
+      {:error, reason} ->
+        Logger.warning("Recommendation request failed for tmdb #{tmdb_id}: #{inspect(reason)}")
 
-            {:noreply,
-             socket
-             |> assign(:requesting_recommendation_id, nil)
-             |> put_flash(:error, "Could not request that title")}
-        end
+        {:noreply,
+         socket
+         |> assign(:requesting_recommendation_id, nil)
+         |> put_flash(:error, "Could not request that title")}
     end
   end
 
