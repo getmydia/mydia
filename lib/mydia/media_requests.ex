@@ -155,8 +155,10 @@ defmodule Mydia.MediaRequests do
     |> Repo.transaction()
     |> case do
       {:ok, %{request: updated_request, media_item: media_item}} ->
+        # "linked to", not "created": approval also lands here when the item
+        # was already in the library and the request was pointed at it.
         Logger.info(
-          "Request #{request.id} approved by user #{attrs[:approved_by_id]}, created media #{media_item.id}"
+          "Request #{request.id} approved by user #{attrs[:approved_by_id]}, linked to media #{media_item.id}"
         )
 
         {:ok, %{request: updated_request, media_item: media_item}}
