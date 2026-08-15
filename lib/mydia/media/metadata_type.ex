@@ -118,6 +118,7 @@ defmodule Mydia.Media.MetadataType do
       vote_average: data[:vote_average],
       vote_count: data[:vote_count],
       imdb_id: data[:imdb_id],
+      external_ids: parse_external_ids(data[:external_ids]),
       production_companies: data[:production_companies],
       production_countries: data[:production_countries],
       spoken_languages: data[:spoken_languages],
@@ -237,6 +238,20 @@ defmodule Mydia.Media.MetadataType do
       }
     end)
   end
+
+  # `external_ids` is nil when the metadata was written before cross-provider
+  # id storage existed, or when the provider response carried no such block.
+  # `Mydia.Jobs.MetadataBackfill` reads that nil as "never checked" versus a
+  # populated map as "checked, here's what we found". This must round-trip
+  # through the database exactly as it was written, nil or not.
+  defp parse_external_ids(nil), do: nil
+
+  defp parse_external_ids(ids) when is_map(ids) do
+    ids = atomize_keys(ids)
+    %{tmdb: ids[:tmdb], tvdb: ids[:tvdb], imdb: ids[:imdb]}
+  end
+
+  defp parse_external_ids(_), do: nil
 
   # Parse date strings to Date structs
   defp parse_date(nil), do: nil

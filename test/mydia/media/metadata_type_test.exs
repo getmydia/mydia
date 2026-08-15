@@ -230,6 +230,47 @@ defmodule Mydia.Media.MetadataTypeTest do
 
       assert reloaded.metadata.recommended_tmdb_ids == [604, 605, 606]
     end
+
+    test "external_ids survive a database round trip" do
+      {:ok, media_item} =
+        Media.create_media_item(%{
+          type: "tv_show",
+          title: "Game of Thrones",
+          year: 2011,
+          tvdb_id: 121_361,
+          metadata: %{
+            "provider_id" => "121361",
+            "provider" => "tvdb",
+            "media_type" => "tv_show",
+            "title" => "Game of Thrones",
+            "external_ids" => %{"tmdb" => 1399, "tvdb" => nil, "imdb" => "tt0944947"}
+          }
+        })
+
+      reloaded = Media.get_media_item!(media_item.id)
+
+      assert reloaded.metadata.external_ids == %{tmdb: 1399, tvdb: nil, imdb: "tt0944947"}
+    end
+
+    test "external_ids stays nil across a database round trip when never asked" do
+      {:ok, media_item} =
+        Media.create_media_item(%{
+          type: "movie",
+          title: "Standalone Movie",
+          year: 1999,
+          tmdb_id: 603,
+          metadata: %{
+            "provider_id" => "603",
+            "provider" => "metadata_relay",
+            "media_type" => "movie",
+            "title" => "Standalone Movie"
+          }
+        })
+
+      reloaded = Media.get_media_item!(media_item.id)
+
+      assert reloaded.metadata.external_ids == nil
+    end
   end
 
   describe "Ecto.Type callbacks" do
