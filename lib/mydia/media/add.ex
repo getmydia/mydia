@@ -145,10 +145,24 @@ defmodule Mydia.Media.Add do
 
   # The existing row is usually the one missing an id, which is exactly why it
   # was not recognised. Fill what is free so the gap closes for good.
+  #
+  # The two providers are read from different places on purpose. `tmdb_id` in
+  # the attrs is the id the user actually picked on Discover, or the exact
+  # cross-reference TVDB published under `remoteIds`; either way it is not a
+  # guess. `tvdb_id` can be one: when TMDB carries no cross-reference,
+  # `lookup_and_add_tvdb_id/2` fills the slot from a TVDB title-and-year search
+  # that takes the first hit on faith. Guessing is acceptable for the row we
+  # are about to create -- nothing else claims it -- and not for a row that
+  # already exists, where a wrong tvdb_id sends every later refresh to the
+  # wrong series. So only the id `metadata.external_ids` cross-references is
+  # persisted here. A row left without one is picked up by
+  # `Mydia.Jobs.MetadataBackfill`, which refreshes it from its own provider.
   defp backfill_ids(item, attrs) do
+    xrefs = metadata_external_ids(attrs)
+
     merged =
       %{tmdb_id: item.tmdb_id, tvdb_id: item.tvdb_id}
-      |> ExternalIds.put_free_ids(%{tmdb: attrs[:tmdb_id], tvdb: attrs[:tvdb_id]},
+      |> ExternalIds.put_free_ids(%{tmdb: attrs[:tmdb_id], tvdb: xrefs[:tvdb]},
         exclude_id: item.id,
         title: item.title
       )

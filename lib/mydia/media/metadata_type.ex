@@ -254,16 +254,23 @@ defmodule Mydia.Media.MetadataType do
   defp parse_external_ids(nil), do: nil
 
   defp parse_external_ids(ids) when is_map(ids) do
-    ids = atomize_keys(ids)
-
     %{
-      tmdb: parse_external_integer(ids[:tmdb]),
-      tvdb: parse_external_integer(ids[:tvdb]),
-      imdb: parse_external_string(ids[:imdb])
+      tmdb: parse_external_integer(external_id_value(ids, :tmdb)),
+      tvdb: parse_external_integer(external_id_value(ids, :tvdb)),
+      imdb: parse_external_string(external_id_value(ids, :imdb))
     }
   end
 
   defp parse_external_ids(_), do: nil
+
+  # Read the three keys directly in both forms rather than atomizing the map.
+  # It arrives from persisted JSON, so its keys are whatever was written, and
+  # `atomize_keys/1` falls back to `String.to_atom/1` for a key it has never
+  # seen -- one permanently held VM atom per distinct key. Nothing else in this
+  # map is meaningful.
+  defp external_id_value(ids, key) do
+    Map.get(ids, key) || Map.get(ids, Atom.to_string(key))
+  end
 
   defp parse_external_integer(id) when is_integer(id) and id > 0, do: id
 

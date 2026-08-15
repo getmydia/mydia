@@ -376,5 +376,74 @@ defmodule Mydia.Media.AddTest do
       assert found.tmdb_id == tmdb_id
       assert Repo.aggregate(MediaItem, :count) == before_count
     end
+
+    # `lookup_and_add_tvdb_id/2` takes the first title-search hit on faith. That
+    # guess is acceptable on the row we were about to create and wrong on a row
+    # that already exists: a mis-stamped tvdb_id sends every later refresh to
+    # the wrong series.
+    test "does not stamp a title-search tvdb id onto the incumbent row" do
+      library_path_fixture(%{type: "series", tv_metadata_source: :tmdb})
+
+      bypass = Bypass.open()
+      tmdb_id = System.unique_integer([:positive])
+      fuzzy_tvdb_id = System.unique_integer([:positive])
+
+      existing =
+        Mydia.MediaFixtures.media_item_fixture(%{
+          type: "tv_show",
+          title: "Missing Its Tvdb Id",
+          tmdb_id: tmdb_id
+        })
+
+      assert is_nil(existing.tvdb_id)
+
+      # TMDB cross-references nothing, so the title search is the only source
+      # of a tvdb_id -- and it answers with an unrelated series.
+      stub_tmdb_tv_show(bypass, tmdb_id, "Missing Its Tvdb Id", nil)
+
+      stub_tvdb_search(bypass, [
+        %{"tvdb_id" => fuzzy_tvdb_id, "name" => "Missing Its Tvdb Id", "year" => "2011"}
+      ])
+
+      assert {:ok, attrs} = Add.resolve_attrs(tmdb_id, :tv_show, relay_config(bypass))
+
+      assert attrs.tvdb_id == fuzzy_tvdb_id
+      assert is_nil(attrs.metadata.external_ids.tvdb)
+
+      assert {:error, {:already_in_library, found}} = Add.from_attrs(attrs, relay_config(bypass))
+
+      assert found.id == existing.id
+      assert is_nil(found.tvdb_id)
+      assert is_nil(Mydia.Media.get_media_item!(existing.id).tvdb_id)
+    end
+
+    # The other half of the rule above: an id the provider itself
+    # cross-references is exact, so it still closes the gap on the incumbent.
+    test "backfills a tvdb id the provider actually cross-references" do
+      library_path_fixture(%{type: "series", tv_metadata_source: :tmdb})
+
+      bypass = Bypass.open()
+      tmdb_id = System.unique_integer([:positive])
+      exact_tvdb_id = System.unique_integer([:positive])
+
+      existing =
+        Mydia.MediaFixtures.media_item_fixture(%{
+          type: "tv_show",
+          title: "Exact Xref",
+          tmdb_id: tmdb_id
+        })
+
+      stub_tmdb_tv_show(bypass, tmdb_id, "Exact Xref", exact_tvdb_id)
+      stub_tvdb_search(bypass, [])
+
+      assert {:ok, attrs} = Add.resolve_attrs(tmdb_id, :tv_show, relay_config(bypass))
+
+      assert attrs.metadata.external_ids.tvdb == exact_tvdb_id
+
+      assert {:error, {:already_in_library, found}} = Add.from_attrs(attrs, relay_config(bypass))
+
+      assert found.id == existing.id
+      assert found.tvdb_id == exact_tvdb_id
+    end
   end
 end

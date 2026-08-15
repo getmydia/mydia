@@ -1,12 +1,13 @@
 defmodule Mydia.Library.MetadataEnricherTest do
   use Mydia.DataCase, async: true
 
+  import ExUnit.CaptureLog
   import Mydia.MediaFixtures
   import Mydia.SettingsFixtures
 
   alias Mydia.Indexers.QualityProfileResolver
   alias Mydia.Library.MetadataEnricher
-  alias Mydia.{Library, Media, Settings}
+  alias Mydia.{Events, Library, Media, Settings}
   alias Mydia.Media.MediaItem
 
   describe "enrich/2 with invalid input" do
@@ -689,6 +690,99 @@ defmodule Mydia.Library.MetadataEnricherTest do
 
       assert updated.id == item.id
       assert is_nil(updated.metadata_source)
+    end
+  end
+
+  describe "cross-provider ids on the update path" do
+    setup do
+      bypass = Bypass.open()
+
+      config = %{
+        type: :metadata_relay,
+        base_url: "http://localhost:#{bypass.port}",
+        options: %{language: "en-US", include_adult: false}
+      }
+
+      %{bypass: bypass, config: config}
+    end
+
+    test "a show that already owns both ids is not reported as its own duplicate",
+         %{bypass: bypass, config: config} do
+      tmdb_id = System.unique_integer([:positive])
+      tvdb_id = System.unique_integer([:positive])
+
+      item =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "Dual Id Show",
+          tmdb_id: tmdb_id,
+          tvdb_id: tvdb_id,
+          metadata_source: :tmdb
+        })
+        |> backdate()
+
+      # TMDB cross-references the tvdb_id this very row already holds.
+      body = Map.put(tv_body(tmdb_id, "Dual Id Show"), "external_ids", %{"tvdb_id" => tvdb_id})
+
+      Bypass.stub(bypass, "GET", "/tmdb/tv/shows/#{tmdb_id}", &respond_json(&1, body))
+
+      match = tv_match(tmdb_id, :tmdb, "Dual Id Show")
+
+      assert {:ok, updated} =
+               MetadataEnricher.enrich(match, config: config, fetch_episodes: false)
+
+      assert updated.id == item.id
+      assert updated.tmdb_id == tmdb_id
+      assert updated.tvdb_id == tvdb_id
+
+      # The retained id alone proves little: it is already on the row, and an
+      # update that skips the column leaves it there either way. The absent
+      # warning is what discriminates. Without `exclude_id` the enricher finds
+      # the item as the owner of its own tvdb_id and drops a duplicate warning
+      # on the operator's timeline during an ordinary scan.
+      assert Events.list_events(type: "media_item.duplicate_provider_id") == []
+    end
+
+    test "a genuine collision on the update path is still reported",
+         %{bypass: bypass, config: config} do
+      tmdb_id = System.unique_integer([:positive])
+      taken_tvdb_id = System.unique_integer([:positive])
+
+      incumbent =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "Tvdb Incumbent",
+          tvdb_id: taken_tvdb_id
+        })
+
+      item =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "Duplicate Row",
+          tmdb_id: tmdb_id,
+          metadata_source: :tmdb
+        })
+        |> backdate()
+
+      body =
+        Map.put(tv_body(tmdb_id, "Duplicate Row"), "external_ids", %{"tvdb_id" => taken_tvdb_id})
+
+      Bypass.stub(bypass, "GET", "/tmdb/tv/shows/#{tmdb_id}", &respond_json(&1, body))
+
+      match = tv_match(tmdb_id, :tmdb, "Duplicate Row")
+
+      {result, log} =
+        with_log(fn ->
+          MetadataEnricher.enrich(match, config: config, fetch_episodes: false)
+        end)
+
+      assert {:ok, updated} = result
+      assert log =~ "is already owned by another media item"
+      assert updated.id == item.id
+      assert is_nil(updated.tvdb_id)
+
+      assert [event] = Events.list_events(type: "media_item.duplicate_provider_id")
+      assert event.resource_id == incumbent.id
     end
   end
 
