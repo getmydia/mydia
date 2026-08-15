@@ -11,6 +11,9 @@ defmodule Mydia.Library.FileIngestTest do
 
   alias Mydia.Library
   alias Mydia.Library.FileIngest
+  alias Mydia.Library.ReleaseParser
+  alias Mydia.Library.Structs.ParsedFileInfo
+  alias Mydia.Library.Structs.Quality
 
   defp match(overrides) do
     Map.merge(
@@ -118,6 +121,36 @@ defmodule Mydia.Library.FileIngestTest do
       assert reloaded.parsed_info["type"] == "tv_show"
       assert reloaded.parsed_info["season"] == 2
       assert reloaded.parsed_info["episodes"] == [5, 6]
+    end
+
+    test "a real %ParsedFileInfo{} with a nested %Quality{} struct survives ingest and the database round trip" do
+      file = orphaned_media_file_fixture()
+
+      # This is what production actually hands `ingest/3`: `MetadataMatcher`
+      # sets `match_result.parsed_info` from `ReleaseParser.parse_with_path/2`,
+      # never from a hand-built map. The struct carries a nested `%Quality{}`
+      # (no `Jason.Encoder`) plus parser internals that have no business in
+      # this column, which is exactly the shape the synthetic-map test above
+      # cannot exercise.
+      parsed = ReleaseParser.parse_with_path("/downloads/The.Mandalorian.S02E05.1080p.mkv")
+      assert %ParsedFileInfo{quality: %Quality{}} = parsed
+
+      assert {:candidate, _candidate} =
+               FileIngest.ingest(
+                 file,
+                 match(match_confidence: 0.4, parsed_info: parsed),
+                 policy: :create_items
+               )
+
+      # Re-read from the database, not the struct `ingest/3` returned.
+      assert [reloaded] = Library.list_match_candidates(file.id)
+
+      assert reloaded.parsed_info["type"] == "tv_show"
+      assert reloaded.parsed_info["season"] == 2
+      assert reloaded.parsed_info["episodes"] == [5]
+      assert reloaded.parsed_info["is_sample"] == false
+      assert reloaded.parsed_info["is_trailer"] == false
+      assert reloaded.parsed_info["is_extra"] == false
     end
   end
 end

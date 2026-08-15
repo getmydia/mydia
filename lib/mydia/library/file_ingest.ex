@@ -145,20 +145,35 @@ defmodule Mydia.Library.FileIngest do
   defp to_string_or_nil(nil), do: nil
   defp to_string_or_nil(value), do: to_string(value)
 
-  # parsed_info arrives with atom keys and atom values from ReleaseParser.
-  # JsonMapType round-trips through JSON, so atoms must be stringified on the
-  # way in or they come back as strings and silently fail later comparisons.
-  defp storable_parsed_info(parsed) when is_map(parsed) do
-    Map.new(parsed, fn
-      {k, v} when is_atom(v) and not is_boolean(v) and not is_nil(v) ->
-        {to_string(k), to_string(v)}
+  # In production `parsed` is a %ParsedFileInfo{} (set by MetadataMatcher from
+  # ReleaseParser.parse_with_path/2), not a plain map, so this cannot walk the
+  # struct generically: it carries a nested %Quality{} struct (no
+  # Jason.Encoder) and a dozen parser internals that have no business in this
+  # column, and dumping the whole thing would fail to encode. Store an
+  # explicit projection of only the fields the inbox and Tasks 10/13 read
+  # back. Every value below is already JSON-native (integers, booleans, a
+  # list of integers) except :type, which is stringified explicitly here to
+  # document the on-disk contract even though Jason would stringify a bare
+  # atom on its own.
+  defp storable_parsed_info(nil), do: %{}
 
-      {k, v} ->
-        {to_string(k), v}
-    end)
+  defp storable_parsed_info(parsed) when is_map(parsed) do
+    %{
+      "type" => to_string_or_nil(get_parsed(parsed, :type)),
+      "season" => get_parsed(parsed, :season),
+      "episodes" => get_parsed(parsed, :episodes) || [],
+      "is_sample" => get_parsed(parsed, :is_sample) || false,
+      "is_trailer" => get_parsed(parsed, :is_trailer) || false,
+      "is_extra" => get_parsed(parsed, :is_extra) || false
+    }
   end
 
   defp storable_parsed_info(_), do: %{}
+
+  # Accepts both a %ParsedFileInfo{} and a plain map: tests build the latter,
+  # production always hands ingest/3 the former. Map.get/2 works on both
+  # without requiring the Enumerable protocol a bare struct doesn't implement.
+  defp get_parsed(parsed, key) when is_map(parsed), do: Map.get(parsed, key)
 
   defp format_error({:invalid_match_result, message}), do: message
   defp format_error(reason) when is_binary(reason), do: reason
