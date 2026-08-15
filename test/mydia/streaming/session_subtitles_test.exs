@@ -231,5 +231,128 @@ defmodule Mydia.Streaming.SessionSubtitlesTest do
       assert String.starts_with?(content, "WEBVTT")
       assert content =~ "Hello there."
     end
+
+    # These two tests establish the pieces of the atomic-write property that
+    # can honestly be observed from outside `materialize/3` without
+    # instrumenting production code to make an in-flight write visible:
+    # a write that fails leaves nothing at the final path (so `ensure/2`'s
+    # File.exists?/1 fast path can never find a broken file), and a write
+    # that succeeds always leaves complete content there. What this does
+    # *not* prove is the actual interleaving described in the finding — a
+    # concurrent reader observing a half-written file mid-`File.write/2` —
+    # because that race is a timing property of the old code, not something
+    # a deterministic test can force without changing production code to be
+    # instrumentable. The "two concurrent callers" test above covers the
+    # only interleaving that unit tests can exercise (both through the lock).
+    test "a write that fails to reach disk leaves no file at the final path", %{
+      temp_dir: _dir
+    } do
+      media_file =
+        MediaFixtures.media_file_fixture(%{metadata: %FileMetadata{streams: []}})
+        |> Repo.preload(:library_path)
+
+      sub_dir =
+        Path.join(
+          System.tmp_dir!(),
+          "session_subs_sidecar_writefail_#{System.unique_integer([:positive])}"
+        )
+
+      File.mkdir_p!(sub_dir)
+      on_exit(fn -> File.rm_rf(sub_dir) end)
+
+      srt_path = Path.join(sub_dir, "sub.en.srt")
+
+      File.write!(srt_path, """
+      1
+      00:00:01,000 --> 00:00:04,000
+      Hello there.
+      """)
+
+      {:ok, subtitle} =
+        %Subtitle{}
+        |> Subtitle.changeset(%{
+          media_file_id: media_file.id,
+          language: "en",
+          format: "srt",
+          subtitle_hash: "hash-#{System.unique_integer([:positive])}",
+          file_path: srt_path,
+          provider: "relay"
+        })
+        |> Repo.insert()
+
+      # A temp_dir that does not exist on disk makes the temp-file write
+      # itself fail with :enoent, deterministically and without touching
+      # `atomic_write/2` or `materialize/3` — `SessionFiles.safe_path/2` only
+      # does string/path-expansion work, so it never requires the directory
+      # to exist.
+      missing_dir =
+        Path.join(
+          System.tmp_dir!(),
+          "session_subs_missing_#{System.unique_integer([:positive])}"
+        )
+
+      info = %{temp_dir: missing_dir, media_file_id: media_file.id}
+      name = SessionSubtitles.filename(subtitle.id)
+      expected_path = Path.join(missing_dir, name)
+
+      assert {:error, _reason} = SessionSubtitles.ensure(info, name)
+      refute File.exists?(expected_path)
+    end
+
+    test "a completed write is never partial: the final file is complete WebVTT",
+         %{temp_dir: dir} do
+      media_file =
+        MediaFixtures.media_file_fixture(%{metadata: %FileMetadata{streams: []}})
+        |> Repo.preload(:library_path)
+
+      sub_dir =
+        Path.join(
+          System.tmp_dir!(),
+          "session_subs_sidecar_complete_#{System.unique_integer([:positive])}"
+        )
+
+      File.mkdir_p!(sub_dir)
+      on_exit(fn -> File.rm_rf(sub_dir) end)
+
+      srt_path = Path.join(sub_dir, "sub.en.srt")
+
+      File.write!(srt_path, """
+      1
+      00:00:01,000 --> 00:00:04,000
+      Hello there.
+
+      2
+      00:00:05,000 --> 00:00:08,000
+      Goodbye.
+      """)
+
+      {:ok, subtitle} =
+        %Subtitle{}
+        |> Subtitle.changeset(%{
+          media_file_id: media_file.id,
+          language: "en",
+          format: "srt",
+          subtitle_hash: "hash-#{System.unique_integer([:positive])}",
+          file_path: srt_path,
+          provider: "relay"
+        })
+        |> Repo.insert()
+
+      info = %{temp_dir: dir, media_file_id: media_file.id}
+      name = SessionSubtitles.filename(subtitle.id)
+      expected_path = Path.join(dir, name)
+
+      assert {:ok, ^expected_path} = SessionSubtitles.ensure(info, name)
+
+      content = File.read!(expected_path)
+      assert String.starts_with?(content, "WEBVTT")
+      assert content =~ "Hello there."
+      assert content =~ "Goodbye."
+
+      # No orphaned temp file left behind alongside the final one.
+      refute dir
+             |> File.ls!()
+             |> Enum.any?(&String.contains?(&1, ".tmp-"))
+    end
   end
 end

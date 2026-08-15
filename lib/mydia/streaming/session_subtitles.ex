@@ -117,7 +117,7 @@ defmodule Mydia.Streaming.SessionSubtitles do
 
     with :ok <- check_deliverable(media_file, track_id),
          {:ok, body} <- Delivery.content(media_file, track_id, @format),
-         :ok <- File.write(path, body) do
+         :ok <- atomic_write(path, body) do
       {:ok, path}
     else
       {:error, reason} = error ->
@@ -132,6 +132,29 @@ defmodule Mydia.Streaming.SessionSubtitles do
   rescue
     Ecto.NoResultsError -> {:error, :media_file_not_found}
     Ecto.Query.CastError -> {:error, :media_file_not_found}
+  end
+
+  # `ensure/2`'s fast path (`File.exists?(path)`, checked before the lock is
+  # even acquired) trusts a directory entry at `path` as proof of a complete
+  # file. Writing straight to `path` would break that: the entry appears the
+  # moment the write starts, so a reader outside the lock could observe a
+  # truncated body mid-write, and a crash or disk-full error mid-write would
+  # leave a broken file behind that the fast path never revalidates. Writing
+  # to a unique temp name in the same directory and renaming into place
+  # avoids both — a rename within one filesystem is atomic, so `path` either
+  # does not exist yet or already holds the complete body. Either failure
+  # step cleans up the temp file so it never lingers as an orphan.
+  defp atomic_write(path, body) do
+    tmp_path = "#{path}.tmp-#{System.unique_integer([:positive])}"
+
+    with :ok <- File.write(tmp_path, body),
+         :ok <- File.rename(tmp_path, path) do
+      :ok
+    else
+      error ->
+        File.rm(tmp_path)
+        error
+    end
   end
 
   defp check_deliverable(media_file, track_id) do
