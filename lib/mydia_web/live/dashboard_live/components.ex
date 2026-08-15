@@ -27,11 +27,8 @@ defmodule MydiaWeb.DashboardLive.Components do
   def recently_added_rail(assigns) do
     ~H"""
     <div :if={@entries != []} id={@id} class="mb-6 md:mb-8">
-      <div class="flex items-center justify-between gap-3 mb-3">
+      <div class="flex items-center gap-3 mb-3">
         <h2 class="text-2xl font-bold truncate">{@title}</h2>
-        <.link navigate={~p"/movies"} class="btn btn-ghost btn-sm">
-          View library
-        </.link>
       </div>
 
       <div class="flex gap-3 overflow-x-auto snap-x scroll-smooth pb-2">

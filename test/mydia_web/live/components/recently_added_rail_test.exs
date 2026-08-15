@@ -40,7 +40,10 @@ defmodule MydiaWeb.Components.RecentlyAddedRailTest do
   test "renders nothing when there are no entries" do
     html = render_component(&Components.recently_added_rail/1, entries: [])
 
-    refute html =~ "recently-added-rail"
+    # Asserts true emptiness rather than the absence of one substring. The
+    # requirement is that a fresh install sees no trace of the rail, so a
+    # differently-worded empty-state placeholder must fail this too.
+    assert String.trim(html) == ""
   end
 
   test "renders one linked card per entry" do
