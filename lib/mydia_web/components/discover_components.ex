@@ -55,6 +55,15 @@ defmodule MydiaWeb.DiscoverComponents do
   # Discover and Dashboard rely on. A host that can have several adds in flight
   # at once passes a boolean per card instead.
   attr :adding, :boolean, default: nil
+  # "lazy" is the safe default: eagerly fetching every card, including the
+  # ones below the fold, is what starved the Dashboard's actual LCP poster
+  # under 40 competing requests. A caller with a poster above the fold
+  # (roughly the first grid row on Dashboard and Discover) opts out with
+  # loading={nil}, which renders no loading attribute at all.
+  attr :loading, :string, default: "lazy"
+  # w500 is the right size for a grid card; a rail card is w-36 (144px), which
+  # wants the smaller w342 step.
+  attr :poster_size, :string, default: "w500"
 
   def trending_card(assigns) do
     assigns = assign(assigns, :adding?, adding?(assigns))
@@ -89,7 +98,12 @@ defmodule MydiaWeb.DiscoverComponents do
         <% @navigate -> %>
           <.link navigate={@navigate} class="block">
             <figure class="aspect-[2/3] bg-base-300 cursor-pointer">
-              <.card_poster item={@item} media_type={@media_type} />
+              <.card_poster
+                item={@item}
+                media_type={@media_type}
+                loading={@loading}
+                poster_size={@poster_size}
+              />
             </figure>
           </.link>
         <% @on_select -> %>
@@ -99,11 +113,21 @@ defmodule MydiaWeb.DiscoverComponents do
             phx-value-id={@item.provider_id}
             phx-value-type={@media_type}
           >
-            <.card_poster item={@item} media_type={@media_type} />
+            <.card_poster
+              item={@item}
+              media_type={@media_type}
+              loading={@loading}
+              poster_size={@poster_size}
+            />
           </figure>
         <% true -> %>
           <figure class="aspect-[2/3] bg-base-300">
-            <.card_poster item={@item} media_type={@media_type} />
+            <.card_poster
+              item={@item}
+              media_type={@media_type}
+              loading={@loading}
+              poster_size={@poster_size}
+            />
           </figure>
       <% end %>
       <div class="card-body p-3">
@@ -205,6 +229,7 @@ defmodule MydiaWeb.DiscoverComponents do
             add_event={@add_event}
             request_event={@request_event}
             can_add={@can_add}
+            poster_size="w342"
           />
         </div>
       </div>
@@ -291,14 +316,18 @@ defmodule MydiaWeb.DiscoverComponents do
 
   attr :item, :map, required: true
   attr :media_type, :atom, required: true
+  # nil renders no loading attribute at all. See the note on trending_card/1's
+  # :loading attr for why that matters for an above-the-fold grid.
+  attr :loading, :string, default: nil
+  attr :poster_size, :string, default: "w500"
 
   defp card_poster(assigns) do
     ~H"""
     <%= if @item.poster_path do %>
       <img
-        src={ImageUrl.poster_url(@item.poster_path)}
+        src={ImageUrl.poster_url(@item.poster_path, @poster_size)}
         alt={@item.title}
-        loading="lazy"
+        loading={@loading}
         class="w-full h-full object-cover"
       />
     <% else %>

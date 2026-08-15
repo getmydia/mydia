@@ -70,4 +70,25 @@ defmodule MydiaWeb.DiscoverComponentsTest do
       refute html =~ ~s(phx-click="request_media")
     end
   end
+
+  describe "poster loading and size" do
+    # Regression: PR #461 made loading="lazy" opt-in to protect the LCP element
+    # in the first grid row, but that also removed it from every card below the
+    # fold, which made the Dashboard's two 20-card grids eagerly fetch roughly
+    # 40 w500 posters. Lazy is the safe default; a caller that needs eager
+    # loading for an above-the-fold card now opts out with loading={nil}.
+    test "a bare card defaults to lazy loading and the w500 poster size" do
+      html = card(%{})
+
+      assert html =~ ~s(loading="lazy")
+      assert html =~ "/w500/dune.jpg"
+    end
+
+    test "loading={nil} opts a card out of lazy loading" do
+      html = card(%{loading: nil})
+
+      refute html =~ "loading="
+      assert html =~ "/w500/dune.jpg"
+    end
+  end
 end

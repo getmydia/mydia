@@ -55,6 +55,21 @@ defmodule MydiaWeb.Components.MediaRailComponentTest do
     assert html =~ "Janet Planet"
   end
 
+  # Regression: card_poster/1 used to hardcode loading="lazy" and w500 for
+  # every caller, which regressed LCP on the Dashboard and Discover grids
+  # (whose first row is above the fold) and oversized a 144px rail card.
+  test "a rail card is lazy-loaded at the w342 size" do
+    html =
+      render_component(&DiscoverComponents.media_rail/1,
+        items: [item()],
+        media_type: :movie,
+        current_user: user()
+      )
+
+    assert html =~ ~s(loading="lazy")
+    assert html =~ "/w342/poster.jpg"
+  end
+
   test "an unowned card fires the configured select event" do
     html =
       render_component(&DiscoverComponents.media_rail/1,

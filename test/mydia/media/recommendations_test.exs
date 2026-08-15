@@ -243,6 +243,26 @@ defmodule Mydia.Media.RecommendationsTest do
       assert titles(ranked) == ["Zeta", "Yankee", "Xray"]
     end
 
+    # Regression: this entry used to contribute 0.0 to the set mean and then
+    # sink to last, because the mean selected on votes but averaged a rating
+    # that defaults to 0.0 when nil.
+    test "an entry with votes but no rating lands mid-pack and does not drag the mean" do
+      ranked =
+        Recommendations.rank([
+          result(%{
+            provider_id: "1",
+            title: "Crowd Pleaser",
+            vote_average: 8.2,
+            vote_count: 5_000
+          }),
+          result(%{provider_id: "2", title: "Solid", vote_average: 7.5, vote_count: 1_200}),
+          result(%{provider_id: "3", title: "Voted Unrated", vote_average: nil, vote_count: 800}),
+          result(%{provider_id: "4", title: "Mediocre", vote_average: 6.0, vote_count: 800})
+        ])
+
+      assert titles(ranked) == ["Crowd Pleaser", "Solid", "Voted Unrated", "Mediocre"]
+    end
+
     test "caps the list at twelve" do
       results =
         for n <- 1..20 do
@@ -259,6 +279,20 @@ defmodule Mydia.Media.RecommendationsTest do
 
     test "an empty list stays empty" do
       assert Recommendations.rank([]) == []
+    end
+
+    # Regression: rated?/1 read result.vote_average with the dot operator,
+    # which raises KeyError on a map lacking that key entirely. Its siblings
+    # rating/1 and votes/1 both pattern-match with a catch-all precisely so a
+    # loose map cannot crash the ranking.
+    test "an entry map with no vote_average key at all does not raise" do
+      ranked =
+        Recommendations.rank([
+          result(%{provider_id: "1", title: "Rated", vote_average: 8.0, vote_count: 100}),
+          %{provider_id: "2", title: "Loose Entry", vote_count: 10}
+        ])
+
+      assert titles(ranked) == ["Rated", "Loose Entry"]
     end
   end
 end
