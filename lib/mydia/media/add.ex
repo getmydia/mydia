@@ -154,7 +154,13 @@ defmodule Mydia.Media.Add do
 
   @doc """
   Looks up a TVDB ID for a TV show by searching TVDB by title and year.
+
+  A `tvdb_id` already present in the attrs was resolved exactly, from TMDB's
+  `external_ids`, so it wins over anything this title search would find.
   """
+  def lookup_and_add_tvdb_id(%{tvdb_id: tvdb_id} = attrs, _config) when not is_nil(tvdb_id),
+    do: attrs
+
   def lookup_and_add_tvdb_id(attrs, config) do
     search_opts =
       if attrs[:year] do
@@ -177,8 +183,32 @@ defmodule Mydia.Media.Add do
 
   @doc """
   Resolves richer TVDB metadata for a show discovered on TMDB.
+
+  TMDB publishes the TVDB id under `external_ids`, so prefer that exact
+  mapping. The title and year search below is the fallback for the shows TMDB
+  does not cross-reference; it takes the first hit on faith, which is how a
+  show can be resolved onto an id another row already owns.
   """
   def resolve_tvdb_metadata(tmdb_metadata, config) do
+    case tvdb_id_from_metadata(tmdb_metadata) do
+      nil -> resolve_tvdb_metadata_by_search(tmdb_metadata, config)
+      tvdb_id -> fetch_tvdb_series(tvdb_id, config)
+    end
+  end
+
+  defp tvdb_id_from_metadata(%{external_ids: %{tvdb: tvdb_id}}) when is_integer(tvdb_id),
+    do: tvdb_id
+
+  defp tvdb_id_from_metadata(_), do: nil
+
+  defp fetch_tvdb_series(tvdb_id, config) do
+    case Metadata.fetch_by_id(config, to_string(tvdb_id), media_type: :tv_show, provider: :tvdb) do
+      {:ok, tvdb_metadata} -> {:ok, tvdb_metadata, tvdb_id}
+      {:error, _reason} -> {:error, :tvdb_not_found}
+    end
+  end
+
+  defp resolve_tvdb_metadata_by_search(tmdb_metadata, config) do
     year = extract_year(tmdb_metadata)
 
     search_opts =

@@ -106,5 +106,56 @@ defmodule Mydia.Media.AddTest do
       assert attrs.tvdb_id == tvdb_id
       assert attrs.tmdb_id == tmdb_id
     end
+
+    test "uses the TMDB external_ids tvdb_id instead of searching by title" do
+      bypass = Bypass.open()
+      tmdb_id = System.unique_integer([:positive])
+      tvdb_id = System.unique_integer([:positive])
+      test_pid = self()
+
+      Bypass.stub(bypass, "GET", "/tmdb/tv/shows/#{tmdb_id}", fn conn ->
+        body = %{
+          "id" => tmdb_id,
+          "name" => "Exactly Resolved",
+          "first_air_date" => "2011-04-17",
+          "credits" => %{"cast" => [], "crew" => []},
+          "external_ids" => %{"tvdb_id" => tvdb_id}
+        }
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(body))
+      end)
+
+      Bypass.stub(bypass, "GET", "/tvdb/series/#{tvdb_id}/extended", fn conn ->
+        body = %{
+          "data" => %{
+            "id" => tvdb_id,
+            "name" => "Exactly Resolved",
+            "firstAired" => "2011-04-17",
+            "seasons" => [],
+            "trailers" => [%{"url" => "https://youtube.com/watch?v=q", "language" => "eng"}],
+            "remoteIds" => []
+          }
+        }
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(body))
+      end)
+
+      Bypass.stub(bypass, "GET", "/tvdb/search", fn conn ->
+        send(test_pid, :searched)
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(%{"data" => []}))
+      end)
+
+      assert {:ok, attrs} = Add.resolve_attrs(tmdb_id, :tv_show, relay_config(bypass))
+
+      assert attrs.tvdb_id == tvdb_id
+      refute_receive :searched
+    end
   end
 end
