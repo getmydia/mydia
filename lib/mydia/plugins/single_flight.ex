@@ -23,6 +23,12 @@ defmodule Mydia.Plugins.SingleFlight do
   without releasing, the lock is freed and granted to the next waiter. There is
   no persistent flag to get stuck — on host restart the GenServer starts empty,
   so a tick always fires (no schedule deadlock).
+
+  Despite the namespace this GenServer is a plain named-lock server with no
+  plugin-specific behaviour. `Mydia.Streaming.SessionSubtitles` runs a second
+  instance under `Mydia.Streaming.SubtitleLock` to serialize subtitle
+  extraction. Keep it generic; anything plugin-specific belongs in
+  `Mydia.Plugins.Host`.
   """
 
   use GenServer
