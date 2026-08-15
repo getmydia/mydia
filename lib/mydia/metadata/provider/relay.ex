@@ -407,14 +407,19 @@ defmodule Mydia.Metadata.Provider.Relay do
   # `ProviderIDRegistry.record_id_type/3`, whose `is_binary(provider_id)` guard
   # would raise FunctionClauseError from inside the TVDB fetch — turning a
   # missing trailer into a failed TV show fetch.
-  defp tmdb_id_from_remote_ids(remote_ids) when is_list(remote_ids) do
+  defp tmdb_id_from_remote_ids(remote_ids) when is_list(remote_ids),
+    do: find_remote_id(remote_ids, "TheMovieDB.com")
+
+  defp tmdb_id_from_remote_ids(_), do: nil
+
+  defp find_remote_id(remote_ids, source) when is_list(remote_ids) do
     Enum.find_value(remote_ids, fn
-      %{"sourceName" => "TheMovieDB.com", "id" => id} when is_binary(id) and id != "" -> id
+      %{"sourceName" => ^source, "id" => id} when is_binary(id) and id != "" -> id
       _ -> nil
     end)
   end
 
-  defp tmdb_id_from_remote_ids(_), do: nil
+  defp find_remote_id(_remote_ids, _source), do: nil
 
   # Transform TVDB API response to match TMDB format for consistent parsing
   defp transform_tvdb_to_tmdb_format(data, _media_type, language) when is_map(data) do
@@ -438,6 +443,8 @@ defmodule Mydia.Metadata.Provider.Relay do
     localized_overview =
       LanguageCode.select_translation(translations["overviewTranslations"], "overview", preferred)
 
+    remote_ids = List.wrap(data["remoteIds"])
+
     # Build TMDB-like response
     %{
       "id" => data["id"],
@@ -460,7 +467,15 @@ defmodule Mydia.Metadata.Provider.Relay do
       "year" => year,
       # Classification fields for category auto-detection
       "origin_country" => transform_tvdb_origin_country(data["originalCountry"]),
-      "original_language" => data["originalLanguage"]
+      "original_language" => data["originalLanguage"],
+      # TVDB publishes the TMDB and IMDB cross-references here. Emitting them
+      # under the TMDB response's own key means MediaMetadata has one parser
+      # for both providers. `tvdb_id` is deliberately absent: this map holds
+      # the ids of *other* providers, and the TVDB id is the one we queried by.
+      "external_ids" => %{
+        "tmdb_id" => find_remote_id(remote_ids, "TheMovieDB.com"),
+        "imdb_id" => find_remote_id(remote_ids, "IMDB")
+      }
     }
   end
 
