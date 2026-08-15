@@ -14,7 +14,7 @@ defmodule Mydia.Metadata do
 
   To search for media:
 
-      config = %{type: :metadata_relay, base_url: "https://metadata-relay.dorninger.co/tmdb"}
+      config = %{type: :metadata_relay, base_url: "https://relay.mydia.dev"}
       Mydia.Metadata.search(config, "The Matrix", media_type: :movie)
 
   ## Fetching Metadata
@@ -51,7 +51,7 @@ defmodule Mydia.Metadata do
   ## Registered Providers
 
   Currently supported providers:
-    - `:metadata_relay` - metadata-relay.dorninger.co proxy service (recommended)
+    - `:metadata_relay` - metadata-relay proxy service (recommended)
     - `:tmdb` - The Movie Database API (when implemented)
     - `:tvdb` - The TV Database API (when implemented)
   """
@@ -79,7 +79,7 @@ defmodule Mydia.Metadata do
 
   ## Examples
 
-      iex> config = %{type: :metadata_relay, base_url: "https://metadata-relay.dorninger.co/tmdb"}
+      iex> config = %{type: :metadata_relay, base_url: "https://relay.mydia.dev"}
       iex> Mydia.Metadata.test_connection(config)
       {:ok, %{status: "ok", provider: "metadata_relay"}}
   """
@@ -105,7 +105,7 @@ defmodule Mydia.Metadata do
 
   ## Examples
 
-      iex> config = %{type: :metadata_relay, base_url: "https://metadata-relay.dorninger.co/tmdb"}
+      iex> config = %{type: :metadata_relay, base_url: "https://relay.mydia.dev"}
       iex> Mydia.Metadata.search(config, "The Matrix", media_type: :movie, year: 1999)
       {:ok, [%{provider_id: "603", title: "The Matrix", ...}]}
   """
@@ -136,7 +136,7 @@ defmodule Mydia.Metadata do
 
   ## Examples
 
-      iex> config = %{type: :metadata_relay, base_url: "https://metadata-relay.dorninger.co/tmdb"}
+      iex> config = %{type: :metadata_relay, base_url: "https://relay.mydia.dev"}
       iex> Mydia.Metadata.search_cached(config, "The Matrix", media_type: :movie, year: 1999)
       {:ok, [%{provider_id: "603", title: "The Matrix", ...}]}
   """
@@ -183,7 +183,7 @@ defmodule Mydia.Metadata do
 
   ## Examples
 
-      iex> config = %{type: :metadata_relay, base_url: "https://metadata-relay.dorninger.co/tmdb"}
+      iex> config = %{type: :metadata_relay, base_url: "https://relay.mydia.dev"}
       iex> Mydia.Metadata.fetch_by_id(config, "603", media_type: :movie)
       {:ok, %{provider_id: "603", title: "The Matrix", runtime: 136, ...}}
   """
@@ -342,7 +342,7 @@ defmodule Mydia.Metadata do
 
   ## Examples
 
-      iex> config = %{type: :metadata_relay, base_url: "https://metadata-relay.dorninger.co/tmdb"}
+      iex> config = %{type: :metadata_relay, base_url: "https://relay.mydia.dev"}
       iex> Mydia.Metadata.fetch_images(config, "603", media_type: :movie)
       {:ok, %{posters: [...], backdrops: [...], logos: [...]}}
   """
@@ -366,7 +366,7 @@ defmodule Mydia.Metadata do
 
   ## Examples
 
-      iex> config = %{type: :metadata_relay, base_url: "https://metadata-relay.dorninger.co/tmdb"}
+      iex> config = %{type: :metadata_relay, base_url: "https://relay.mydia.dev"}
       iex> Mydia.Metadata.fetch_season(config, "1396", 1)
       {:ok, %{season_number: 1, episodes: [...], ...}}
   """
@@ -396,7 +396,7 @@ defmodule Mydia.Metadata do
 
   ## Examples
 
-      iex> config = %{type: :metadata_relay, base_url: "https://metadata-relay.dorninger.co/tmdb"}
+      iex> config = %{type: :metadata_relay, base_url: "https://relay.mydia.dev"}
       iex> Mydia.Metadata.fetch_season_cached(config, "1396", 1)
       {:ok, %{season_number: 1, episodes: [...], ...}}
   """
@@ -581,7 +581,7 @@ defmodule Mydia.Metadata do
 
   ## Examples
 
-      iex> config = %{type: :metadata_relay, base_url: "https://metadata-relay.dorninger.co"}
+      iex> config = %{type: :metadata_relay, base_url: "https://relay.mydia.dev"}
       iex> Mydia.Metadata.fetch_trending(config, media_type: :movie)
       {:ok, [%{provider_id: "603", title: "Trending Movie", ...}]}
   """
