@@ -285,6 +285,27 @@ class CastSessionManager {
     }
   }
 
+  /// Moves whatever is playing to [device], keeping the live request.
+  ///
+  /// [_lastRequest] is the only thing that carries subtitle tracks, artwork
+  /// and the subtitle label; `PersistedCastSession` deliberately carries only
+  /// what a cold restore can act on. Rebuilding a request from the persisted
+  /// record, which is what the cast picker used to do, silently dropped all
+  /// three for the rest of the session.
+  Future<void> retargetTo(CastDevice device) async {
+    final request = _lastRequest;
+    if (request == null) {
+      throw StateError('retargetTo called with no live request');
+    }
+
+    final position = _current?.mediaInfo?.position ?? request.startPosition;
+    await startCast(
+        device: device, request: request.copyWith(startPosition: position));
+  }
+
+  /// Whether [retargetTo] has a request to move.
+  bool get canRetarget => _lastRequest != null;
+
   /// Connect to [device] with no media on it.
   ///
   /// This is what makes the cast icon's "connected" claim true before anything
@@ -413,6 +434,7 @@ class CastSessionManager {
       forceBridge: forceBridge,
       forceTranscode: forceTranscode,
       startPosition: request.startPosition ?? Duration.zero,
+      subtitles: request.subtitles,
     );
 
     if (route == null) {
@@ -616,17 +638,12 @@ class CastSessionManager {
     CastDevice device,
     CastLaunchRequest request,
   ) async {
-    final subtitles = route.subtitlesSupported
-        ? request.subtitles
-            .map((track) => CastSubtitleTrack(
-                  trackId: track.trackId,
-                  url: resolver.resolveSubtitleUrl(route, track.url) ??
-                      track.url,
-                  label: track.label,
-                  language: track.language,
-                ))
-            .toList()
-        : const <CastSubtitleTrack>[];
+    // The route already rewrote every track to a URL its receiver can fetch,
+    // and dropped them entirely when it cannot serve any. Reading them from
+    // here rather than from `request` is what gives every entry point
+    // subtitles: they all resolve a route, and only one of them ever passed
+    // tracks of its own.
+    final subtitles = route.subtitles;
 
     _useTimeline(StreamTimeline(
       startOffset: route.startOffset,

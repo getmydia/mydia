@@ -607,6 +607,26 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
   }
 
+  /// The file's subtitle tracks, in the shape the cast stack wants.
+  ///
+  /// `url` here is still the media-file URL; `CastRouteResolver` rewrites it
+  /// to a session path once a route exists. Only `trackId` and `language`
+  /// survive that rewrite, but the URL is what the progressive DLNA route
+  /// keeps using, so it is carried rather than blanked.
+  ///
+  /// `deliverable` is the real filter. `url` is a synthesized path and is
+  /// never null, so the `url != null` test this replaces filtered nothing:
+  /// image tracks (PGS, VobSub) reached the receiver as URLs that 415.
+  List<CastSubtitleTrack> _castSubtitleTracks() => _subtitleTracks
+      .where((track) => track.deliverable && track.url != null)
+      .map((track) => CastSubtitleTrack(
+            trackId: track.id,
+            url: track.url!,
+            label: track.displayName,
+            language: track.language,
+          ))
+      .toList();
+
   /// Start on the receiver instead of locally, when a device was chosen
   /// before playback began.
   ///
@@ -662,6 +682,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           title: widget.title ?? 'Untitled',
           duration: _knownCastDuration(),
           startPosition: plan.position,
+          subtitles: _castSubtitleTracks(),
         ),
       );
       // The target and the session coexist deliberately: the target is what
@@ -3927,24 +3948,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           // from the candidates metadata), falling back to whatever the local
           // player managed to work out.
           duration: _knownCastDuration(),
-          // `url` is a synthesized path and is never null, so the old
-          // `where((track) => track.url != null)` filtered nothing: image
-          // tracks (PGS, VobSub) reached the receiver as URLs that 415, and
-          // if one sorted first, dart_cast activated it and the viewer got
-          // silence. `deliverable` is the flag that actually means "the
-          // server can hand this back as text". The server refuses to
-          // materialize an image track too, so this is the UX half of that:
-          // an undeliverable track should not appear in the caption sheet at
-          // all.
-          subtitles: _subtitleTracks
-              .where((track) => track.deliverable && track.url != null)
-              .map((track) => CastSubtitleTrack(
-                    trackId: track.id,
-                    url: track.url!,
-                    label: track.displayName,
-                    language: track.language,
-                  ))
-              .toList(),
+          subtitles: _castSubtitleTracks(),
         ),
       );
 

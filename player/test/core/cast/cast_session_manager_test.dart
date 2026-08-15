@@ -22,6 +22,12 @@ void main() {
     protocol: CastProtocolKind.chromecast,
   );
 
+  const otherDevice = CastDevice(
+    id: 'd2',
+    name: 'Bedroom',
+    protocol: CastProtocolKind.chromecast,
+  );
+
   const launch = CastLaunchRequest(
     fileId: 'file-1',
     mediaId: 'movie-1',
@@ -1505,6 +1511,70 @@ void main() {
       expect(backend.disconnectCallCount, disconnectCallsBeforeLateResolve,
           reason: 'the stale connectTo\'s cleanup must not disconnect a '
               'socket a newer call now owns');
+    });
+  });
+
+  group('subtitles reach the receiver from the route', () {
+    const requestTracks = [
+      CastSubtitleTrack(
+        trackId: '3',
+        url: '/api/player/v1/subtitles/file/file-1/3?format=vtt',
+        label: 'English',
+        language: 'eng',
+      ),
+    ];
+
+    test('the launch request\'s tracks are rewritten to session URLs',
+        () async {
+      final manager = build();
+      addTearDown(manager.dispose);
+
+      await manager.startCast(
+        device: device,
+        request: const CastLaunchRequest(
+          fileId: 'file-1',
+          mediaId: 'movie-1',
+          mediaType: 'movie',
+          title: 'A Movie',
+          subtitles: requestTracks,
+        ),
+      );
+
+      final loaded = backend.loadedRequests.single;
+      expect(loaded.subtitles, hasLength(1));
+      // The media-file URL the request came in with must not survive: the
+      // receiver has to fetch through the session, which is the only shape
+      // that works on both the direct and bridge routes.
+      expect(loaded.subtitles.first.url, contains('/subs_3.vtt'));
+      expect(loaded.subtitles.first.url, isNot(contains('/api/player/v1/')));
+    });
+
+    test('re-targeting reuses the live request rather than the persisted one',
+        () async {
+      final manager = build();
+      addTearDown(manager.dispose);
+
+      await manager.startCast(
+        device: device,
+        request: const CastLaunchRequest(
+          fileId: 'file-1',
+          mediaId: 'movie-1',
+          mediaType: 'movie',
+          title: 'A Movie',
+          imageUrl: 'https://art.test/poster.jpg',
+          subtitleLabel: 'S1E3',
+          subtitles: requestTracks,
+        ),
+      );
+
+      await manager.retargetTo(otherDevice);
+
+      final loaded = backend.loadedRequests.last;
+      // All three are dropped today, because pickCastDevice rebuilds the
+      // request from PersistedCastSession, which carries none of them.
+      expect(loaded.subtitles, isNotEmpty);
+      expect(loaded.imageUrl, 'https://art.test/poster.jpg');
+      expect(loaded.subtitle, 'S1E3');
     });
   });
 }

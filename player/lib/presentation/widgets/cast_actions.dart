@@ -151,6 +151,15 @@ Future<void> pickCastDevice(BuildContext context, WidgetRef ref) async {
 
   try {
     final manager = await ref.read(castSessionManagerProvider.future);
+
+    if (manager.canRetarget) {
+      await manager.retargetTo(device);
+      return;
+    }
+
+    // No live request to move: fall back to the persisted record, which is
+    // enough to resume the right file at the right position but carries no
+    // tracks, artwork or subtitle label.
     await manager.startCast(
       device: device,
       request: CastLaunchRequest(
