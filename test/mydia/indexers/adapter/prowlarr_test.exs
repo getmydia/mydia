@@ -573,4 +573,27 @@ defmodule Mydia.Indexers.Adapter.ProwlarrTest do
       assert_in_delta(actual, expected, 0.0001)
     end
   end
+
+  describe "search/3 retry behavior" do
+    setup do
+      {:ok, bypass: Bypass.open()}
+    end
+
+    test "a failing search is attempted exactly once", %{bypass: bypass} do
+      {:ok, counter} = Agent.start_link(fn -> 0 end)
+
+      Bypass.expect(bypass, "GET", "/api/v1/search", fn conn ->
+        Agent.update(counter, &(&1 + 1))
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(500, ~s({"message":"boom"}))
+      end)
+
+      assert {:error, _} = Prowlarr.search(build_config(bypass), "Ubuntu")
+
+      assert Agent.get(counter, & &1) == 1,
+             "expected exactly one attempt, Req retried a transient failure"
+    end
+  end
 end

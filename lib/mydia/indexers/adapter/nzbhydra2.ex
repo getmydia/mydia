@@ -46,6 +46,8 @@ defmodule Mydia.Indexers.Adapter.NzbHydra2 do
 
   require Logger
 
+  @connect_timeout 10_000
+
   # Newznab XML namespace
   @newznab_ns "http://www.newznab.com/DTD/2010/feeds/attributes/"
 
@@ -86,7 +88,11 @@ defmodule Mydia.Indexers.Adapter.NzbHydra2 do
 
     Logger.debug("NZBHydra2 search: #{url}")
 
-    case Req.get(url, receive_timeout: timeout, retry: false) do
+    case Req.get(url,
+           receive_timeout: timeout,
+           connect_options: [timeout: @connect_timeout],
+           retry: false
+         ) do
       {:ok, %Req.Response{status: 200, body: body}} ->
         parse_search_response(body, config.name)
 

@@ -215,4 +215,37 @@ defmodule Mydia.Indexers.Adapter.JackettTest do
       assert error_type in [:connection_failed, :search_failed]
     end
   end
+
+  describe "search/3 retry behavior" do
+    setup do
+      {:ok, bypass: Bypass.open()}
+    end
+
+    test "a failing search is attempted exactly once", %{bypass: bypass} do
+      {:ok, counter} = Agent.start_link(fn -> 0 end)
+
+      Bypass.expect(bypass, fn conn ->
+        Agent.update(counter, &(&1 + 1))
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/xml")
+        |> Plug.Conn.resp(500, "<error/>")
+      end)
+
+      config = %{
+        type: :jackett,
+        name: "Test Jackett",
+        host: "localhost",
+        port: bypass.port,
+        api_key: "test-api-key",
+        use_ssl: false,
+        options: %{timeout: 5_000}
+      }
+
+      assert {:error, _} = Jackett.search(config, "Ubuntu")
+
+      assert Agent.get(counter, & &1) == 1,
+             "expected exactly one attempt, Req retried a transient failure"
+    end
+  end
 end
