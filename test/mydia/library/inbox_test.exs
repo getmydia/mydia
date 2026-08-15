@@ -76,6 +76,23 @@ defmodule Mydia.Library.InboxTest do
     assert row.media_file.id == unsure.id
   end
 
+  test "orders titled candidates alphabetically with untitled (unidentified) ones last", %{
+    lp: lp,
+    confident: confident,
+    unsure: unsure,
+    unidentified: unidentified
+  } do
+    # `unidentified`'s candidate carries no title (see setup: file_ingest.ex's
+    # record_failure/2 never sets one for a failed match either). SQLite sorts
+    # NULL first in ASC; PostgreSQL sorts NULL last. Plain `asc: c.title` would
+    # therefore put the untitled row first on SQLite and last on PostgreSQL --
+    # the same data, a different shelf position, depending on which database
+    # is running. `asc_nulls_last` pins it last on both.
+    rows = Library.list_inbox_files(library_path_id: lp.id)
+
+    assert Enum.map(rows, & &1.media_file.id) == [confident.id, unsure.id, unidentified.id]
+  end
+
   test "paginates", %{lp: lp} do
     assert length(Library.list_inbox_files(library_path_id: lp.id, limit: 2)) == 2
     assert length(Library.list_inbox_files(library_path_id: lp.id, limit: 2, offset: 2)) == 1

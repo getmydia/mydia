@@ -2778,7 +2778,7 @@ defmodule Mydia.Library do
       |> maybe_scope_library(opts[:library_path_id])
       |> inbox_base_query()
       |> apply_inbox_filter(opts[:filter] || :all)
-      |> order_by([f, c], asc: c.title, asc: f.relative_path)
+      |> order_by([f, c], asc_nulls_last: c.title, asc: f.relative_path)
       |> limit(^limit)
       |> offset(^offset)
       |> select([f, c], %{media_file: f, candidate: c})
