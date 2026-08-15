@@ -12,6 +12,7 @@ defmodule Mydia.P2p.Server do
   alias Mydia.RemoteAccess.DirectUrls
   alias Mydia.RemoteAccess.Pairing
   alias Mydia.Streaming.HlsSession
+  alias Mydia.Streaming.SessionFiles
   alias MydiaWeb.Schema.Middleware.Logging, as: GraphQLLogging
 
   @doc """
@@ -449,12 +450,8 @@ defmodule Mydia.P2p.Server do
         # Wait for the session to be ready (FFmpeg has created initial files)
         case HlsSession.await_ready(pid, 30_000) do
           :ok ->
-            # Build the file path
-            file_path = Path.join(session_info.temp_dir, req.path)
-
-            # Security check: ensure path is within temp_dir
-            case validate_path(file_path, session_info.temp_dir) do
-              :ok ->
+            case SessionFiles.safe_path(session_info.temp_dir, req.path) do
+              {:ok, file_path} ->
                 stream_hls_file(resource, stream_id, file_path, req)
 
               {:error, reason} ->
@@ -553,18 +550,6 @@ defmodule Mydia.P2p.Server do
     end
   end
 
-  defp validate_path(requested_path, base_dir) do
-    # Expand both paths to handle .. and symlinks
-    expanded_requested = Path.expand(requested_path)
-    expanded_base = Path.expand(base_dir)
-
-    if String.starts_with?(expanded_requested, expanded_base) do
-      :ok
-    else
-      {:error, :path_traversal}
-    end
-  end
-
   defp stream_hls_file(resource, stream_id, file_path, req) do
     try do
       do_stream_hls_file(resource, stream_id, file_path, req)
@@ -586,7 +571,7 @@ defmodule Mydia.P2p.Server do
         file_stat_ms = System.monotonic_time(:millisecond) - t0
 
         # Determine content type
-        content_type = hls_content_type(file_path)
+        content_type = SessionFiles.content_type(file_path)
         basename = Path.basename(file_path)
 
         # Handle range requests
@@ -628,22 +613,6 @@ defmodule Mydia.P2p.Server do
       {:error, reason} ->
         Logger.warning("HLS file error: #{inspect(reason)}")
         send_hls_error(resource, stream_id, 500, "Internal error")
-    end
-  end
-
-  defp hls_content_type(path) do
-    case Path.extname(path) do
-      ".m3u8" -> "application/vnd.apple.mpegurl"
-      ".ts" -> "video/mp2t"
-      ".mp4" -> "video/mp4"
-      ".m4v" -> "video/mp4"
-      ".m4s" -> "video/iso.segment"
-      ".mkv" -> "video/x-matroska"
-      ".avi" -> "video/x-msvideo"
-      ".mov" -> "video/quicktime"
-      ".webm" -> "video/webm"
-      ".vtt" -> "text/vtt"
-      _ -> "application/octet-stream"
     end
   end
 

@@ -3,7 +3,7 @@ defmodule MydiaWeb.Api.HlsController do
 
   require Logger
 
-  alias Mydia.Streaming.{AudioPreferences, HlsSessionSupervisor, HlsSession}
+  alias Mydia.Streaming.{AudioPreferences, HlsSessionSupervisor, HlsSession, SessionFiles}
 
   @doc """
   Serves the HLS master playlist for a session.
@@ -197,7 +197,7 @@ defmodule MydiaWeb.Api.HlsController do
 
           # Serve the segment file
           conn
-          |> put_resp_content_type(get_segment_mime_type(segment))
+          |> put_resp_content_type(SessionFiles.content_type(segment))
           |> put_resp_header("cache-control", "public, max-age=31536000, immutable")
           |> send_file(200, path)
       end
@@ -224,14 +224,12 @@ defmodule MydiaWeb.Api.HlsController do
   def root_segment(conn, %{"session_id" => session_id, "segment" => segment}) do
     with {:ok, user_id} <- get_user_id(conn),
          {:ok, temp_dir} <- get_session_temp_dir(session_id, user_id),
-         segment_path <- Path.join(temp_dir, segment),
+         {:ok, segment_path} <- SessionFiles.safe_path(temp_dir, segment),
          true <- File.exists?(segment_path) do
-      # Update session activity
       heartbeat_session(session_id, user_id)
 
-      # Serve the segment file
       conn
-      |> put_resp_content_type(get_segment_mime_type(segment))
+      |> put_resp_content_type(SessionFiles.content_type(segment))
       |> put_resp_header("cache-control", "public, max-age=31536000, immutable")
       |> send_file(200, segment_path)
     else
@@ -244,6 +242,11 @@ defmodule MydiaWeb.Api.HlsController do
         conn
         |> put_status(:not_found)
         |> json(%{error: "HLS session not found"})
+
+      {:error, :path_traversal} ->
+        conn
+        |> put_status(:forbidden)
+        |> json(%{error: "Forbidden"})
 
       false ->
         conn
@@ -406,15 +409,6 @@ defmodule MydiaWeb.Api.HlsController do
 
       _ ->
         :ok
-    end
-  end
-
-  defp get_segment_mime_type(segment) do
-    cond do
-      String.ends_with?(segment, ".m4s") -> "video/iso.segment"
-      String.ends_with?(segment, ".mp4") -> "video/mp4"
-      String.ends_with?(segment, ".ts") -> "video/mp2t"
-      true -> "application/octet-stream"
     end
   end
 end
