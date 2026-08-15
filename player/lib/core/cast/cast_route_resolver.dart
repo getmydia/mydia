@@ -20,9 +20,10 @@ class CastRoute {
 
   /// Whether sidecar subtitles can be served on this route.
   ///
-  /// False on [CastRouteKind.localBridge]: `P2pService` exposes only pairing,
-  /// GraphQL, and HLS request protocols, so arbitrary subtitle files cannot be
-  /// proxied, and the server's HLS output carries no subtitle renditions.
+  /// False only on the bridged DLNA route: it streams the file directly with
+  /// no streaming session to address subtitles by. Every other route — direct
+  /// or bridged Chromecast (both address subtitles by HLS session id), and
+  /// direct DLNA (which keeps the media-file subtitle URLs) — has one.
   final bool subtitlesSupported;
 
   /// Server-side HLS session backing this route, when it needed one.
