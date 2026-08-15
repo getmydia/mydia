@@ -128,6 +128,8 @@ void main() {
       expect(CompatibilityVerdict.playerUpdateRequired.showsBanner, isTrue);
       expect(CompatibilityVerdict.playerUpdateRequired.isRequired, isTrue);
       expect(CompatibilityVerdict.playerUpdateRequired.isDismissible, isFalse);
+      expect(CompatibilityVerdict.serverUpdateRequired.showsBanner, isTrue);
+      expect(CompatibilityVerdict.serverUpdateRequired.isRequired, isTrue);
       expect(CompatibilityVerdict.serverUpdateRequired.isDismissible, isFalse);
     });
 
@@ -138,6 +140,17 @@ void main() {
           CompatibilityVerdict.playerUpdateRecommended.isDismissible, isTrue);
       expect(
           CompatibilityVerdict.serverUpdateRecommended.isDismissible, isTrue);
+    });
+
+    test('isPlayerBehind is true only for the two player-side verdicts', () {
+      expect(CompatibilityVerdict.playerUpdateRequired.isPlayerBehind, isTrue);
+      expect(
+          CompatibilityVerdict.playerUpdateRecommended.isPlayerBehind, isTrue);
+      expect(CompatibilityVerdict.serverUpdateRequired.isPlayerBehind, isFalse);
+      expect(
+          CompatibilityVerdict.serverUpdateRecommended.isPlayerBehind, isFalse);
+      expect(CompatibilityVerdict.compatible.isPlayerBehind, isFalse);
+      expect(CompatibilityVerdict.unknown.isPlayerBehind, isFalse);
     });
   });
 }
