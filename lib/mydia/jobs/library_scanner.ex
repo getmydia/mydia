@@ -30,8 +30,8 @@ defmodule Mydia.Jobs.LibraryScanner do
   @max_startup_delay_ms 30 * 60 * 1000
 
   alias Mydia.Library.{
+    FileIngest,
     MetadataMatcher,
-    MetadataEnricher,
     MusicScanner,
     BookScanner,
     AdultScanner,
@@ -1135,51 +1135,44 @@ defmodule Mydia.Jobs.LibraryScanner do
           from_local_db: Map.get(match_result, :from_local_db, false)
         )
 
-        # Only enrich if the match is from the local database
-        # This prevents creating new MediaItems - we only want to associate files
-        # with MediaItems that already exist in the database
-        if Map.get(match_result, :from_local_db, false) do
-          # Enrich with full metadata - this will update the existing item
-          # and associate the file with it
-          case MetadataEnricher.enrich(match_result,
-                 config: metadata_config,
-                 media_file_id: media_file.id
-               ) do
-            {:ok, media_item} ->
-              Logger.info("Associated file with existing media item",
-                media_item_id: media_item.id,
-                title: media_item.title,
-                path: file_info.path
-              )
+        # :local_only is what keeps the scheduled scan from inventing items.
+        # An external match is cached as a candidate and the file stays
+        # orphaned for the import inbox to offer. See Library.FileIngest.
+        case FileIngest.ingest(media_file, match_result,
+               policy: :local_only,
+               config: metadata_config
+             ) do
+          {:linked, media_item} ->
+            Logger.info("Associated file with existing media item",
+              media_item_id: media_item.id,
+              title: media_item.title,
+              path: file_info.path
+            )
 
-              {:ok, :enriched}
+            {:ok, :enriched}
 
-            {:error, {:library_type_mismatch, message}} ->
-              Logger.warning("Library type mismatch detected",
-                path: file_info.path,
-                error: message
-              )
+          {:candidate, _candidate} ->
+            Logger.info("Skipping external match - file will remain orphaned for manual import",
+              path: file_info.path,
+              title: match_result.title,
+              provider_id: match_result.provider_id
+            )
 
-              {:error, :library_type_mismatch}
+            {:error, :no_local_match}
 
-            {:error, reason} ->
-              Logger.warning("Failed to enrich media",
-                path: file_info.path,
-                reason: reason
-              )
+          {:error, {:library_type_mismatch, message}} ->
+            Logger.warning("Library type mismatch detected",
+              path: file_info.path,
+              error: message
+            )
 
-              {:error, :enrichment_failed}
-          end
-        else
-          # External match found, but we don't want to create new items
-          # The file will remain orphaned until the user imports it via the Import page
-          Logger.info("Skipping external match - file will remain orphaned for manual import",
-            path: file_info.path,
-            title: match_result.title,
-            provider_id: match_result.provider_id
-          )
+            {:error, :library_type_mismatch}
 
-          {:error, :no_local_match}
+          {:error, _reason} ->
+            {:error, :enrichment_failed}
+
+          :no_match ->
+            {:error, :no_matches_found}
         end
 
       {:error, :unknown_media_type} ->
