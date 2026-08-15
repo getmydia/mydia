@@ -152,6 +152,8 @@ defmodule MydiaWeb.MediaLive.Show do
      # Recommendations rail state
      |> assign(:recommendations, [])
      |> assign(:adding_recommendation_tmdb_ids, MapSet.new())
+     |> assign(:adding_recommendation_id, nil)
+     |> assign(:requesting_recommendation_id, nil)
      |> assign_new(:metadata_config, fn -> Mydia.Metadata.default_relay_config() end)
      |> assign(
        :can_create_media,
@@ -420,6 +422,10 @@ defmodule MydiaWeb.MediaLive.Show do
   @impl true
   def handle_event("add_recommendation", params, socket),
     do: RecommendationEvents.add_recommendation(params, socket)
+
+  @impl true
+  def handle_event("request_recommendation", params, socket),
+    do: RecommendationEvents.request_recommendation(params, socket)
 
   @impl true
   def handle_info({:download_created, download}, socket) do

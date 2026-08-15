@@ -54,9 +54,31 @@ defmodule Mydia.Media.Recommendations do
   def for_tmdb_id(nil, _media_type, _config), do: :none
 
   def for_tmdb_id(tmdb_id, media_type, config) when media_type in [:movie, :tv_show] do
+    case normalize_tmdb_id(tmdb_id) do
+      {:ok, tmdb_id} -> fetch(tmdb_id, media_type, config)
+      :error -> :none
+    end
+  end
+
+  def for_tmdb_id(_tmdb_id, _media_type, _config), do: :none
+
+  # `""` and `"abc"` would otherwise be interpolated straight into a relay path
+  # and spend a request to learn what the shape already tells us.
+  defp normalize_tmdb_id(id) when is_integer(id) and id > 0, do: {:ok, to_string(id)}
+
+  defp normalize_tmdb_id(id) when is_binary(id) do
+    case Integer.parse(id) do
+      {parsed, ""} when parsed > 0 -> {:ok, to_string(parsed)}
+      _ -> :error
+    end
+  end
+
+  defp normalize_tmdb_id(_), do: :error
+
+  defp fetch(tmdb_id, media_type, config) do
     config = config || Metadata.default_relay_config()
 
-    case Metadata.fetch_recommendations_cached(config, to_string(tmdb_id), media_type: media_type) do
+    case Metadata.fetch_recommendations_cached(config, tmdb_id, media_type: media_type) do
       {:ok, []} ->
         :none
 
@@ -71,6 +93,4 @@ defmodule Mydia.Media.Recommendations do
         :none
     end
   end
-
-  def for_tmdb_id(_tmdb_id, _media_type, _config), do: :none
 end

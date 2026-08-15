@@ -11,6 +11,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   alias Mydia.Media.Recommendations
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
+  alias MydiaWeb.Live.Helpers.MediaRequestHelpers
 
   require Logger
 
@@ -97,6 +98,54 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   end
 
   @doc """
+  Requests a recommended title on behalf of a guest.
+
+  The rail renders a Request button rather than Add for guests, so this LiveView
+  needs its own handler for it: the card's event reaches `MediaLive.Show`, which
+  otherwise has no `request_media` clause at all.
+  """
+  def request_recommendation(%{"tmdb_id" => tmdb_id}, socket) do
+    case Enum.find(socket.assigns.recommendations, &(to_string(&1.provider_id) == tmdb_id)) do
+      nil ->
+        {:noreply, socket}
+
+      item ->
+        media_type = if socket.assigns.media_item.type == "tv_show", do: :tv_show, else: :movie
+
+        socket = assign(socket, :requesting_recommendation_id, tmdb_id)
+
+        case MediaRequestHelpers.handle_request_media(
+               item,
+               media_type,
+               socket.assigns.current_user.id
+             ) do
+          {:ok, request, status_updates} ->
+            {:noreply,
+             socket
+             |> assign(:requesting_recommendation_id, nil)
+             |> assign(
+               :recommendations,
+               MediaRequestHelpers.enrich_with_request_status(
+                 socket.assigns.recommendations,
+                 status_updates
+               )
+             )
+             |> put_flash(:info, "#{request.title} requested. An admin will review it soon.")}
+
+          {:error, reason} ->
+            Logger.warning(
+              "Recommendation request failed for tmdb #{tmdb_id}: #{inspect(reason)}"
+            )
+
+            {:noreply,
+             socket
+             |> assign(:requesting_recommendation_id, nil)
+             |> put_flash(:error, "Could not request that title")}
+        end
+    end
+  end
+
+  @doc """
   Performs the add. Public so it can be exercised directly in tests without a
   live process.
   """
@@ -149,10 +198,12 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   # because it needs MediaAddHelpers, and a context under Mydia.* must not depend
   # on the web layer.
   defp decorate(results, media_item) do
-    tmdb_ids =
-      results
-      |> Enum.map(&safe_provider_id/1)
-      |> Enum.reject(&is_nil/1)
+    # Drop malformed entries from the list itself, not just from the id lookup.
+    # enrich_with_library_status/2 calls the same raising parser, so filtering
+    # only the ids would still let a non-numeric provider_id raise one line
+    # later, inside handle_load_result/2, taking the detail page down.
+    results = Enum.filter(results, &(safe_provider_id(&1) != nil))
+    tmdb_ids = Enum.map(results, &safe_provider_id/1)
 
     status = Media.library_status_for_tmdb_ids(tmdb_ids, media_item.type)
 
@@ -172,19 +223,26 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
     ArgumentError -> nil
   end
 
+  # The MapSet is the source of truth for "is this id already in flight" and is
+  # what prevents a double-click from racing two adds. The single id alongside
+  # it is only what the card compares against to show its spinner.
   defp mark_in_flight(socket, tmdb_id) do
-    assign(
-      socket,
+    socket
+    |> assign(
       :adding_recommendation_tmdb_ids,
       MapSet.put(socket.assigns.adding_recommendation_tmdb_ids, tmdb_id)
     )
+    |> assign(:adding_recommendation_id, to_string(tmdb_id))
   end
 
   defp clear_in_flight(socket, tmdb_id) do
-    assign(
-      socket,
-      :adding_recommendation_tmdb_ids,
-      MapSet.delete(socket.assigns.adding_recommendation_tmdb_ids, tmdb_id)
+    remaining = MapSet.delete(socket.assigns.adding_recommendation_tmdb_ids, tmdb_id)
+
+    socket
+    |> assign(:adding_recommendation_tmdb_ids, remaining)
+    |> assign(
+      :adding_recommendation_id,
+      remaining |> Enum.at(0) |> then(&if(&1, do: to_string(&1)))
     )
   end
 

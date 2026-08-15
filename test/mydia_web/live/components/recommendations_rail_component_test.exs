@@ -91,4 +91,71 @@ defmodule MydiaWeb.Components.RecommendationsRailComponentTest do
     refute html =~ ~s(phx-click="show_details")
     assert html =~ ~s(<figure class="aspect-[2/3] bg-base-300">)
   end
+
+  describe "action event contract" do
+    # Regression: the rail defaults to Discover's events. On a host with
+    # different handlers that meant the first click on an unowned card emitted
+    # an event nobody handled, which raises FunctionClauseError and kills the
+    # LiveView. The host must be able to name its own events.
+    test "defaults to the Discover event names" do
+      html =
+        render_component(&DiscoverComponents.recommendations_rail/1,
+          items: [item()],
+          media_type: :movie,
+          current_user: user()
+        )
+
+      assert html =~ ~s(phx-click="add_to_library")
+    end
+
+    test "emits the host's add event when overridden" do
+      html =
+        render_component(&DiscoverComponents.recommendations_rail/1,
+          items: [item()],
+          media_type: :movie,
+          current_user: user(),
+          add_event: "add_recommendation"
+        )
+
+      assert html =~ ~s(phx-click="add_recommendation")
+      refute html =~ ~s(phx-click="add_to_library")
+    end
+
+    test "emits the host's request event for a guest" do
+      html =
+        render_component(&DiscoverComponents.recommendations_rail/1,
+          items: [item()],
+          media_type: :movie,
+          current_user: %{id: Ecto.UUID.generate(), role: "guest", username: "g"},
+          request_event: "request_recommendation"
+        )
+
+      assert html =~ ~s(phx-click="request_recommendation")
+      refute html =~ ~s(phx-click="request_media")
+    end
+
+    test "renders no add affordance when the user cannot create media" do
+      html =
+        render_component(&DiscoverComponents.recommendations_rail/1,
+          items: [item()],
+          media_type: :movie,
+          current_user: user(),
+          can_add: false
+        )
+
+      refute html =~ "Add to Library"
+    end
+
+    test "a guest keeps the request affordance even when can_add is false" do
+      html =
+        render_component(&DiscoverComponents.recommendations_rail/1,
+          items: [item()],
+          media_type: :movie,
+          current_user: %{id: Ecto.UUID.generate(), role: "guest", username: "g"},
+          can_add: false
+        )
+
+      assert html =~ ~s(phx-click="request_media")
+    end
+  end
 end

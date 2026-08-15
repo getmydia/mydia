@@ -39,6 +39,14 @@ defmodule MydiaWeb.DiscoverComponents do
   # --warnings-as-errors.
   attr :on_select, :any, default: "show_details"
   attr :navigate, :string, default: nil
+  # The action buttons are the card's event contract with its host LiveView.
+  # Discover handles "add_to_library"/"request_media", so those stay the
+  # defaults, but a host with different handlers must be able to say so:
+  # emitting an event the host does not handle raises FunctionClauseError and
+  # kills the LiveView process on the very first click.
+  attr :add_event, :string, default: "add_to_library"
+  attr :request_event, :string, default: "request_media"
+  attr :can_add, :boolean, default: true
 
   def trending_card(assigns) do
     ~H"""
@@ -99,6 +107,9 @@ defmodule MydiaWeb.DiscoverComponents do
           adding_item_id={@adding_item_id}
           requesting_item_id={@requesting_item_id}
           libraries={@libraries}
+          add_event={@add_event}
+          request_event={@request_event}
+          can_add={@can_add}
         />
       </div>
     </div>
@@ -128,6 +139,12 @@ defmodule MydiaWeb.DiscoverComponents do
   # :any, not :string — see the note on trending_card/1. The media detail page
   # passes nil here because it has no show_details handler.
   attr :on_select, :any, default: "show_details"
+  # Forwarded to trending_card/1. A host LiveView that does not handle
+  # "add_to_library"/"request_media" must override these or the first click on
+  # an unowned card crashes it.
+  attr :add_event, :string, default: "add_to_library"
+  attr :request_event, :string, default: "request_media"
+  attr :can_add, :boolean, default: true
 
   def recommendations_rail(assigns) do
     ~H"""
@@ -145,6 +162,9 @@ defmodule MydiaWeb.DiscoverComponents do
             libraries={@libraries}
             on_select={@on_select}
             navigate={Map.get(item, :navigate)}
+            add_event={@add_event}
+            request_event={@request_event}
+            can_add={@can_add}
           />
         </div>
       </div>
@@ -158,13 +178,16 @@ defmodule MydiaWeb.DiscoverComponents do
   attr :adding_item_id, :string, default: nil
   attr :requesting_item_id, :string, default: nil
   attr :libraries, :list, default: []
+  attr :add_event, :string, default: "add_to_library"
+  attr :request_event, :string, default: "request_media"
+  attr :can_add, :boolean, default: true
 
   defp trending_card_action(assigns) do
     ~H"""
-    <%= if not @item.in_library do %>
-      <%= if @current_user && @current_user.role == "guest" do %>
+    <%= if not @item.in_library and (@can_add or guest?(@current_user)) do %>
+      <%= if guest?(@current_user) do %>
         <button
-          phx-click="request_media"
+          phx-click={@request_event}
           phx-value-tmdb_id={@item.provider_id}
           phx-value-media_type={@media_type}
           disabled={requested?(@item) or requesting?(@item, @requesting_item_id)}
@@ -182,7 +205,7 @@ defmodule MydiaWeb.DiscoverComponents do
       <% else %>
         <div class="join w-full mt-2">
           <button
-            phx-click="add_to_library"
+            phx-click={@add_event}
             phx-value-tmdb_id={@item.provider_id}
             phx-value-media_type={@media_type}
             disabled={@adding_item_id == to_string(@item.provider_id)}
@@ -196,7 +219,7 @@ defmodule MydiaWeb.DiscoverComponents do
           </button>
           <LibraryComponents.library_picker_menu
             libraries={@libraries}
-            event="add_to_library"
+            event={@add_event}
             tmdb_id={@item.provider_id}
             media_type={@media_type}
           />
@@ -210,6 +233,11 @@ defmodule MydiaWeb.DiscoverComponents do
     <% end %>
     """
   end
+
+  # A guest requests rather than adds, so the guest branch is gated on the
+  # request permission, not on `can_add`.
+  defp guest?(%{role: "guest"}), do: true
+  defp guest?(_), do: false
 
   defp requested?(item), do: Map.get(item, :request_status) != nil
 

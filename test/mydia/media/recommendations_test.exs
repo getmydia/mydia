@@ -139,5 +139,19 @@ defmodule Mydia.Media.RecommendationsTest do
     test "returns :none for a nil id", %{config: config} do
       assert :none = Recommendations.for_tmdb_id(nil, :movie, config)
     end
+
+    # A Bypass with no stub fails the test on any request, so these also prove
+    # the malformed ids never reach the relay rather than merely degrading once
+    # they get there.
+    test "returns :none for malformed ids without calling the relay", %{config: config} do
+      for id <- ["", "abc", "12abc", " 12", 0, -5, %{}] do
+        assert :none = Recommendations.for_tmdb_id(id, :movie, config),
+               "expected :none for #{inspect(id)}"
+      end
+    end
+
+    test "returns :none for an unsupported media type", %{config: config} do
+      assert :none = Recommendations.for_tmdb_id(603, :music, config)
+    end
   end
 end
