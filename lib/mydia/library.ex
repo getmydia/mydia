@@ -2723,4 +2723,26 @@ defmodule Mydia.Library do
       _ -> false
     end
   end
+
+  @doc """
+  Returns `{media_file_id, absolute_path}` for files still needing a match.
+
+  A file needs matching when it has no parent association and no cached
+  candidate. Excluding files that already carry a candidate is what lets a
+  resumed run skip relay work a previous run already paid for.
+  """
+  @spec list_unmatched_media_file_paths(binary(), pos_integer()) :: [{binary(), String.t()}]
+  def list_unmatched_media_file_paths(library_path_id, limit) do
+    MediaFile
+    |> where([f], f.library_path_id == ^library_path_id)
+    |> where([f], is_nil(f.media_item_id) and is_nil(f.episode_id))
+    |> where([f], is_nil(f.trashed_at))
+    |> join(:left, [f], c in MatchCandidate, on: c.media_file_id == f.id)
+    |> where([_f, c], is_nil(c.id))
+    |> limit(^limit)
+    |> preload(:library_path)
+    |> Repo.all()
+    |> Enum.map(fn file -> {file.id, MediaFile.absolute_path(file)} end)
+    |> Enum.reject(fn {_id, path} -> is_nil(path) end)
+  end
 end

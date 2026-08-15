@@ -273,7 +273,11 @@ config :mydia, Oban,
     maintenance: 1,
     import_lists: 2,
     integrations: 2,
-    plugins: 1
+    plugins: 1,
+    # A user-started import can run for hours over a large library. It gets its
+    # own single slot so it can never starve :media, which is only concurrency
+    # 3 and also carries library, music and book scans.
+    imports: 1
   ],
   plugins: [
     # Keep completed jobs for 7 days
