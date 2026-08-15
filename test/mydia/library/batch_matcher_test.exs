@@ -28,20 +28,15 @@ defmodule Mydia.Library.BatchMatcherTest do
     pid = Ecto.Adapters.SQL.Sandbox.start_owner!(Mydia.Repo, shared: true)
     on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(pid) end)
 
-    on_exit(fn ->
-      # The search cache key format is
-      # "search:<provider>:<query>:<media_type>:<year>:<language>:<page>".
-      #
-      # TV searches go through the relay's TVDB route by default (see
-      # Mydia.Metadata.Provider.Relay.search/3); these tests force TMDB
-      # routing with `provider: :tmdb` so they can assert against the TMDB
-      # endpoints/shapes in the brief, which puts "tmdb" (not the config
-      # type "metadata_relay") in the TV cache key's provider segment. Movie
-      # search opts never forward `:provider`, so movie keys keep the config
-      # type.
-      Cache.delete("search:tmdb:Bluey:tv_show::en-US:1")
-      Cache.delete("search:metadata_relay:The Matrix:movie::en-US:1")
-    end)
+    # Mydia.Metadata.Cache is global, named ETS with no other test-suite
+    # reset, so clear it on the way in and on the way out (same idiom as
+    # Mydia.MetadataStub.setup_metadata_stub/1). Deleting by hand-computed key
+    # instead of clearing was tried and desynced the moment a stub's response
+    # shape changed which of MetadataMatcher's search branches ran (see the
+    # comment on the cleanup-proof test below) -- a clear cannot drift out of
+    # sync with the code under test.
+    Cache.clear()
+    on_exit(fn -> Cache.clear() end)
 
     {:ok, bypass: bypass, config: config, counter: counter}
   end
@@ -155,5 +150,47 @@ defmodule Mydia.Library.BatchMatcherTest do
 
     assert_receive {:progress, _}, 1_000
     assert_receive {:progress, _}, 1_000
+  end
+
+  test "clears the cache entry a movie search leaves behind, proving cleanup rather than assuming it",
+       %{bypass: bypass, config: config} do
+    # A prior version of this suite cleaned up by deleting a hand-computed key
+    # ("search:metadata_relay:The Matrix:movie::en-US:1", no year) that
+    # matched the *year-less retry* MetadataMatcher.search_external_movie/2
+    # falls back to when the first search returns no results. Once the movie
+    # stub below returns a real match, the with-year search succeeds on the
+    # first try, the retry never fires, and the entry actually left behind
+    # carries the parsed year -- a different key the old delete silently
+    # missed, leaking a global ETS entry across tests. Reproduce that real key
+    # here and prove `Cache.clear/0` (used in `setup`/`on_exit` above) wipes
+    # it, instead of just trusting that it does.
+    Bypass.expect(bypass, "GET", "/tmdb/movies/search", fn conn ->
+      json(conn, %{
+        "results" => [
+          %{"id" => 603, "title" => "The Matrix", "release_date" => "1999-03-30"}
+        ]
+      })
+    end)
+
+    key = "search:metadata_relay:The Matrix:movie:1999:en-US:1"
+
+    assert {:error, :not_found} = Cache.get(key)
+
+    results =
+      BatchMatcher.match_paths(["/media/movies/The.Matrix.1999.1080p.mkv"],
+        config: config,
+        provider: :tmdb
+      )
+
+    assert [{_path, {:ok, _match}}] = results
+
+    # The entry genuinely exists now -- without this, the assertion after
+    # `Cache.clear/0` below would pass trivially even if clearing were broken
+    # or never ran.
+    assert {:ok, _cached} = Cache.get(key)
+
+    Cache.clear()
+
+    assert {:error, :not_found} = Cache.get(key)
   end
 end
