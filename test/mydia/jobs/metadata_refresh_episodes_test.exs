@@ -1,6 +1,7 @@
 defmodule Mydia.Jobs.MetadataRefreshEpisodesTest do
   use Mydia.DataCase, async: false
 
+  import Ecto.Query
   import Mydia.MediaFixtures
 
   alias Mydia.Jobs.MetadataRefresh
@@ -128,15 +129,26 @@ defmodule Mydia.Jobs.MetadataRefreshEpisodesTest do
   # often the pass above re-reads a show, and it was dead in two further ways
   # beyond never being called.
   describe "season refresh throttle" do
-    test "seasons_refreshed_at survives update_media_item/3" do
+    test "stamp_seasons_refreshed/1 persists the timestamp" do
       item = media_item_fixture(%{type: "tv_show", title: "Stamped Show", year: 2023})
+
+      assert Media.get_media_item!(item.id).seasons_refreshed_at == nil
+
+      Media.stamp_seasons_refreshed(item)
+
+      assert %DateTime{} = Media.get_media_item!(item.id).seasons_refreshed_at
+    end
+
+    test "the timestamp is not mass-assignable through update_media_item/3" do
+      item = media_item_fixture(%{type: "tv_show", title: "Unstamped Show", year: 2023})
       stamp = DateTime.utc_now() |> DateTime.truncate(:second)
 
-      assert {:ok, updated} = Media.update_media_item(item, %{seasons_refreshed_at: stamp})
+      assert {:ok, _} = Media.update_media_item(item, %{seasons_refreshed_at: stamp})
 
-      # Read back through the DB: the field was absent from the changeset's cast
-      # list, so the write was silently dropped and the column stayed NULL.
-      assert Media.get_media_item!(updated.id).seasons_refreshed_at == stamp
+      # The throttle field is owned by the refresh machinery. Writing it through
+      # the generic changeset must stay a no-op, so callers cannot extend their
+      # own throttle window by passing it in attrs.
+      assert Media.get_media_item!(item.id).seasons_refreshed_at == nil
     end
 
     test "an ended show is throttled on the completed-show threshold" do
@@ -169,7 +181,13 @@ defmodule Mydia.Jobs.MetadataRefreshEpisodesTest do
       # %MediaMetadata{}, so is_completed was always false and this show was
       # throttled as if it were still airing — i.e. refreshed anyway.
       stamp = DateTime.utc_now() |> DateTime.add(-48, :hour) |> DateTime.truncate(:second)
-      {:ok, item} = Media.update_media_item(item, %{seasons_refreshed_at: stamp})
+
+      Mydia.Repo.update_all(
+        from(m in Mydia.Media.MediaItem, where: m.id == ^item.id),
+        set: [seasons_refreshed_at: stamp]
+      )
+
+      item = Media.get_media_item!(item.id)
 
       episode_fixture(%{media_item_id: item.id, season_number: 1, episode_number: 1})
 
@@ -178,6 +196,70 @@ defmodule Mydia.Jobs.MetadataRefreshEpisodesTest do
       assert :atomics.get(hits, 1) == 0,
              "an ended show inside its threshold must not be refetched"
     end
+
+    test "a failed season leaves the timestamp unstamped so the retry is not throttled" do
+      tvdb_id = System.unique_integer([:positive])
+      good_season = System.unique_integer([:positive])
+      bad_season = System.unique_integer([:positive])
+
+      bypass = Bypass.open()
+
+      Bypass.stub(bypass, "GET", "/tvdb/series/#{tvdb_id}/extended", fn conn ->
+        json(conn, %{
+          "data" => %{
+            "id" => tvdb_id,
+            "name" => "Half Broken Show",
+            "firstAired" => "2023-01-01",
+            "status" => %{"name" => "Continuing"},
+            "genres" => [],
+            "seasons" => [
+              season_stub(good_season, 1),
+              season_stub(bad_season, 2)
+            ]
+          }
+        })
+      end)
+
+      Bypass.stub(bypass, "GET", "/tvdb/seasons/#{good_season}/extended", fn conn ->
+        json(conn, %{"data" => %{"id" => good_season, "number" => 1, "episodes" => []}})
+      end)
+
+      # Season 2 is unavailable this pass.
+      Bypass.stub(bypass, "GET", "/tvdb/seasons/#{bad_season}/extended", fn conn ->
+        Plug.Conn.resp(conn, 500, "boom")
+      end)
+
+      config = %{
+        type: :metadata_relay,
+        base_url: "http://localhost:#{bypass.port}",
+        options: %{language: "en-US", include_adult: false}
+      }
+
+      item =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "Half Broken Show",
+          year: 2023,
+          tvdb_id: tvdb_id,
+          metadata_source: :tvdb
+        })
+
+      assert {:ok, _count} = Media.refresh_episodes_for_tv_show(item, config: config)
+
+      # Stamping here would throttle the next pass and hide the season that
+      # failed until the threshold expired.
+      assert Media.get_media_item!(item.id).seasons_refreshed_at == nil
+    end
+  end
+
+  defp season_stub(id, number) do
+    %{
+      "id" => id,
+      "number" => number,
+      "name" => "Season #{number}",
+      "type" => %{"type" => "official"},
+      "episodeCount" => 0
+    }
   end
 
   defp json(conn, body) do

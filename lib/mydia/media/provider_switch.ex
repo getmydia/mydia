@@ -284,6 +284,10 @@ defmodule Mydia.Media.ProviderSwitch do
             )
           end
 
+          # Only now are the seasons genuinely refreshed from the new provider.
+          # Inside the transaction, so a later rollback takes the stamp with it.
+          Media.stamp_seasons_refreshed(updated)
+
           # Re-attach captured files to the show so re-linking can find them,
           # then re-link by filename. Files that don't parse stay on the show.
           Repo.update_all(
@@ -383,13 +387,15 @@ defmodule Mydia.Media.ProviderSwitch do
     (Repo.all(episode_linked) ++ Repo.all(direct)) |> Enum.uniq()
   end
 
+  # seasons_refreshed_at is deliberately absent: it is not castable, so passing
+  # it here was a silent no-op. Media.stamp_seasons_refreshed/1 sets it once the
+  # switch has actually re-seeded the episodes.
   defp provider_switch_attrs(:tvdb, new_id, metadata) do
     %{
       tvdb_id: String.to_integer(new_id),
       tmdb_id: nil,
       metadata_source: :tvdb,
-      metadata: metadata,
-      seasons_refreshed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+      metadata: metadata
     }
   end
 
@@ -398,8 +404,7 @@ defmodule Mydia.Media.ProviderSwitch do
       tmdb_id: String.to_integer(new_id),
       tvdb_id: nil,
       metadata_source: :tmdb,
-      metadata: metadata,
-      seasons_refreshed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+      metadata: metadata
     }
   end
 end

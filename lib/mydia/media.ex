@@ -1419,12 +1419,15 @@ defmodule Mydia.Media do
               Mydia.Metadata.Cache.delete(cache_key)
             end)
 
-            # Fetch and create episodes for each season
-            episode_count =
-              Enum.reduce(seasons_to_fetch, 0, fn season, count ->
+            # Fetch and create episodes for each season. Track failures: the
+            # timestamp below throttles the next refresh, so stamping it after a
+            # partial pass would hide the seasons that failed until the
+            # threshold expires.
+            {episode_count, failed_seasons} =
+              Enum.reduce(seasons_to_fetch, {0, 0}, fn season, {count, failed} ->
                 # Skip season 0 (specials) unless explicitly monitoring all
                 if season.season_number == 0 and season_monitoring != "all" do
-                  count
+                  {count, failed}
                 else
                   Logger.info("Processing episodes for season #{season.season_number}")
 
@@ -1434,24 +1437,28 @@ defmodule Mydia.Media do
                         "Processed #{created} episodes for season #{season.season_number}"
                       )
 
-                      count + created
+                      {count + created, failed}
 
                     {:error, reason} ->
                       Logger.error(
                         "Failed to create episodes for season #{season.season_number}: #{inspect(reason)}"
                       )
 
-                      count
+                      {count, failed + 1}
                   end
                 end
               end)
 
             Logger.info("Total episodes processed: #{episode_count}")
 
-            # Update seasons_refreshed_at timestamp
-            update_media_item(media_item, %{seasons_refreshed_at: DateTime.utc_now()},
-              reason: "Season metadata refreshed"
-            )
+            if failed_seasons == 0 do
+              stamp_seasons_refreshed(media_item)
+            else
+              Logger.warning(
+                "Not stamping seasons_refreshed_at: #{failed_seasons} season(s) failed",
+                media_item_id: media_item.id
+              )
+            end
 
             {:ok, episode_count}
 
@@ -1464,6 +1471,24 @@ defmodule Mydia.Media do
 
   def refresh_episodes_for_tv_show(%MediaItem{type: type}, _opts) do
     {:error, {:invalid_type, "Expected tv_show, got #{type}"}}
+  end
+
+  @doc """
+  Records that a show's seasons were successfully refreshed.
+
+  Writes straight to the column rather than through `changeset/2`, matching
+  `Upgrades.stamp_checked/2`. This field is owned by the refresh machinery and
+  gates `should_skip_season_refresh?/1`, so it must not be mass-assignable from
+  attrs a caller controls. Routing it through `update_media_item/3` is what
+  silently dropped every write before, since `changeset/2` does not cast it.
+  """
+  @spec stamp_seasons_refreshed(MediaItem.t()) :: {non_neg_integer(), nil}
+  def stamp_seasons_refreshed(%MediaItem{id: id}) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    MediaItem
+    |> where([m], m.id == ^id)
+    |> Repo.update_all(set: [seasons_refreshed_at: now])
   end
 
   ## Calendar
