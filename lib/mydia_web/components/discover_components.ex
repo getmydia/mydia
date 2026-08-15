@@ -70,7 +70,7 @@ defmodule MydiaWeb.DiscoverComponents do
 
     ~H"""
     <div class={[
-      "card bg-base-100 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden",
+      "card bg-base-100 shadow-sm hover:shadow-md transition-shadow relative",
       @current && "ring-2 ring-primary"
     ]}>
       <%= if (vote = Map.get(@item, :vote_average)) && vote > 0 do %>
@@ -97,7 +97,7 @@ defmodule MydiaWeb.DiscoverComponents do
       <%= cond do %>
         <% @navigate -> %>
           <.link navigate={@navigate} class="block">
-            <figure class="aspect-[2/3] bg-base-300 cursor-pointer">
+            <figure class="aspect-[2/3] bg-base-300 cursor-pointer overflow-hidden rounded-t-box">
               <.card_poster
                 item={@item}
                 media_type={@media_type}
@@ -108,7 +108,7 @@ defmodule MydiaWeb.DiscoverComponents do
           </.link>
         <% @on_select -> %>
           <figure
-            class="aspect-[2/3] bg-base-300 cursor-pointer"
+            class="aspect-[2/3] bg-base-300 cursor-pointer overflow-hidden rounded-t-box"
             phx-click={@on_select}
             phx-value-id={@item.provider_id}
             phx-value-type={@media_type}
@@ -121,7 +121,7 @@ defmodule MydiaWeb.DiscoverComponents do
             />
           </figure>
         <% true -> %>
-          <figure class="aspect-[2/3] bg-base-300">
+          <figure class="aspect-[2/3] bg-base-300 overflow-hidden rounded-t-box">
             <.card_poster
               item={@item}
               media_type={@media_type}
