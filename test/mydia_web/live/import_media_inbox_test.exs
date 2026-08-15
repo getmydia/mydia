@@ -200,6 +200,85 @@ defmodule MydiaWeb.ImportMediaInboxTest do
     end
   end
 
+  describe "pagination" do
+    test "the pager renders past one page, and Next shows the second page's rows", %{
+      conn: conn,
+      library_path: lp
+    } do
+      # index.ex's @inbox_page_size is 100. 100 of these plus the setup's
+      # own "The Matrix" row (101 total) is the smallest inbox that forces
+      # a second page.
+      create_movie_rows(lp, 100)
+
+      {:ok, view, _html} = live(conn, ~p"/import")
+
+      html = render(view)
+      assert html =~ "101 files"
+      assert html =~ "Showing 1-100 of 101"
+      assert html =~ "Movie 001"
+      assert html =~ "Movie 100"
+      refute html =~ "The Matrix"
+      assert has_element?(view, "#inbox-next-page")
+
+      html2 = view |> element("#inbox-next-page") |> render_click()
+
+      # Content, not just that the offset assign moved: the second page must
+      # actually hold the row that didn't fit on the first one.
+      assert html2 =~ "Showing 101-101 of 101"
+      assert html2 =~ "The Matrix"
+      refute html2 =~ "Movie 001"
+    end
+
+    test "the pager does not render when the inbox exactly fills one page", %{
+      conn: conn,
+      library_path: lp
+    } do
+      # 99 + the setup's own row = 100, exactly @inbox_page_size. The
+      # pager's guard is `@total > @limit`, not `>=` -- this pins the
+      # boundary so an off-by-one there (a "Next" button leading nowhere)
+      # would be caught.
+      create_movie_rows(lp, 99)
+
+      {:ok, view, _html} = live(conn, ~p"/import")
+
+      assert render(view) =~ "100 files"
+      refute has_element?(view, "#inbox-next-page")
+      refute has_element?(view, "#inbox-prev-page")
+    end
+
+    test "approving the only row on the last page falls back to a page with rows on it", %{
+      conn: conn,
+      library_path: lp,
+      media_file: media_file
+    } do
+      create_movie_rows(lp, 100)
+
+      # Lets the approval actually link (the same recently_enriched?/1
+      # shortcut the "approving a match" tests above use), so this exercises
+      # the real approve_file -> load_inbox path, not a stub.
+      media_item_fixture(%{type: "movie", title: "The Matrix", year: 1999, tmdb_id: 603})
+
+      {:ok, view, _html} = live(conn, ~p"/import")
+
+      # Page two (offset 100) holds exactly the setup's "The Matrix" row --
+      # every "Movie NNN" title sorts before it alphabetically.
+      view |> element("#inbox-next-page") |> render_click()
+      assert has_element?(view, "#approve-#{media_file.id}")
+
+      html = view |> element("#approve-#{media_file.id}") |> render_click()
+
+      # The total drops to 100 and the offset (100) now points past the end
+      # of what remains. A correct clamp falls back to the previous page; a
+      # broken one leaves the offset at 100 and renders nothing there, which
+      # reads as "the inbox is empty" even though 100 real rows sit one page
+      # back -- exactly the quiet failure this test exists to catch.
+      assert html =~ "100 files"
+      assert html =~ "Movie 100"
+      refute html =~ "Nothing waiting"
+      refute html =~ "Nothing matches this filter"
+    end
+  end
+
   describe "Inbox.format_last_error/1" do
     test "passes nil through unchanged" do
       assert Inbox.format_last_error(nil) == nil
@@ -223,6 +302,31 @@ defmodule MydiaWeb.ImportMediaInboxTest do
     test "shows an unrecognised shape as-is rather than hiding it" do
       assert Inbox.format_last_error("something totally unexpected") ==
                "something totally unexpected"
+    end
+  end
+
+  # Creates `count` distinct, confidently-matched inbox rows in
+  # `library_path`, titled "Movie 001".."Movie <count>" (zero-padded to 3
+  # digits so string sort order matches numeric order). Every one of these
+  # sorts alphabetically before "The Matrix" (the setup fixture's own row,
+  # title "The Matrix"), which is what lets the pagination tests reason
+  # about exactly which rows land on which page.
+  defp create_movie_rows(library_path, count) do
+    for n <- 1..count do
+      file = orphaned_media_file_fixture(%{library_path_id: library_path.id})
+
+      {:ok, _} =
+        Library.upsert_match_candidate(%{
+          media_file_id: file.id,
+          rank: 0,
+          provider_type: "tmdb",
+          provider_id: "#{10_000 + n}",
+          title: "Movie #{String.pad_leading(Integer.to_string(n), 3, "0")}",
+          media_type: "movie",
+          confidence: 0.9
+        })
+
+      file
     end
   end
 end
