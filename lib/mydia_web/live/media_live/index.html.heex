@@ -195,18 +195,6 @@
     <%= if @media_items_empty? do %>
       <div class="flex flex-col items-center justify-center py-16">
         <%= cond do %>
-          <% @filter_library_type == :adult -> %>
-            <.icon name="hero-eye-slash" class="w-16 h-16 text-error/50 mb-4" />
-            <h3 class="text-xl font-semibold text-base-content/70 mb-2">
-              No adult content found
-            </h3>
-            <p class="text-base-content/50">
-              <%= if @search_query != "" do %>
-                Try adjusting your search or filters
-              <% else %>
-                Add media to your adult library paths to see them here
-              <% end %>
-            </p>
           <% true -> %>
             <.icon name="hero-film" class="w-16 h-16 text-base-content/30 mb-4" />
             <h3 class="text-xl font-semibold text-base-content/70 mb-2">No media found</h3>

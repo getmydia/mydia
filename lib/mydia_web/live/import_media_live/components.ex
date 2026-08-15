@@ -135,33 +135,21 @@ defmodule MydiaWeb.ImportMediaLive.Components do
   defp library_type_icon(:series), do: "hero-tv"
   defp library_type_icon(:movies), do: "hero-film"
   defp library_type_icon(:mixed), do: "hero-square-3-stack-3d"
-  defp library_type_icon(:music), do: "hero-musical-note"
-  defp library_type_icon(:books), do: "hero-book-open"
-  defp library_type_icon(:adult), do: "hero-eye-slash"
   defp library_type_icon(_), do: "hero-folder"
 
   defp library_type_bg_class(:series), do: "bg-info/10 text-info"
   defp library_type_bg_class(:movies), do: "bg-accent/10 text-accent"
   defp library_type_bg_class(:mixed), do: "bg-secondary/10 text-secondary"
-  defp library_type_bg_class(:music), do: "bg-success/10 text-success"
-  defp library_type_bg_class(:books), do: "bg-warning/10 text-warning"
-  defp library_type_bg_class(:adult), do: "bg-error/10 text-error"
   defp library_type_bg_class(_), do: "bg-base-200 text-base-content/70"
 
   defp library_type_badge_class(:series), do: "badge-info"
   defp library_type_badge_class(:movies), do: "badge-accent"
   defp library_type_badge_class(:mixed), do: "badge-secondary"
-  defp library_type_badge_class(:music), do: "badge-success"
-  defp library_type_badge_class(:books), do: "badge-warning"
-  defp library_type_badge_class(:adult), do: "badge-error"
   defp library_type_badge_class(_), do: "badge-ghost"
 
   defp library_type_display(:series), do: "TV Series"
   defp library_type_display(:movies), do: "Movies"
   defp library_type_display(:mixed), do: "Mixed"
-  defp library_type_display(:music), do: "Music"
-  defp library_type_display(:books), do: "Books"
-  defp library_type_display(:adult), do: "Adult"
   defp library_type_display(type), do: to_string(type)
 
   @doc """

@@ -1182,7 +1182,6 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   def handle_info({:scan_complete, {:ok, scan_result}}, socket) do
     # Get existing files from database (preload library_path for absolute_path resolution)
     # Only skip files that have valid parent associations (not orphaned)
-    # Exception: specialized library files (adult, music, books) don't have parent associations
     existing_files = Library.list_media_files(preload: [:library_path])
 
     existing_valid_paths =
@@ -1256,55 +1255,50 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   def handle_info({:match_files, files}, socket) do
     library_path = socket.assigns.selected_library_path
 
-    # For specialized library types, skip metadata matching entirely
-    if specialized_library?(library_path) do
-      handle_specialized_library_files(files, socket)
-    else
-      # Spawn async task for metadata matching - keeps LiveView responsive
-      liveview_pid = self()
-      metadata_config = socket.assigns.metadata_config
-      total_files = length(files)
-      # New matches use the selected library's configured TV metadata source.
-      provider = library_path && library_path.tv_metadata_source
+    # Spawn async task for metadata matching - keeps LiveView responsive
+    liveview_pid = self()
+    metadata_config = socket.assigns.metadata_config
+    total_files = length(files)
+    # New matches use the selected library's configured TV metadata source.
+    provider = library_path && library_path.tv_metadata_source
 
-      Task.Supervisor.start_child(Mydia.TaskSupervisor, fn ->
-        # Use Task.async_stream for concurrent matching with back-pressure
-        # max_concurrency: 10 limits concurrent HTTP requests to avoid overwhelming metadata-relay
-        # timeout: :infinity prevents Task.async_stream from timing out on slow requests
-        matched_results =
-          files
-          |> Task.async_stream(
-            fn file ->
-              match_result =
-                case MetadataMatcher.match_file(file.path,
-                       config: metadata_config,
-                       provider: provider
-                     ) do
-                  {:ok, match} -> match
-                  {:error, _reason} -> nil
-                end
+    Task.Supervisor.start_child(Mydia.TaskSupervisor, fn ->
+      # Use Task.async_stream for concurrent matching with back-pressure
+      # max_concurrency: 10 limits concurrent HTTP requests to avoid overwhelming metadata-relay
+      # timeout: :infinity prevents Task.async_stream from timing out on slow requests
+      matched_results =
+        files
+        |> Task.async_stream(
+          fn file ->
+            match_result =
+              case MetadataMatcher.match_file(file.path,
+                     config: metadata_config,
+                     provider: provider
+                   ) do
+                {:ok, match} -> match
+                {:error, _reason} -> nil
+              end
 
-              # Send progress update back to LiveView
-              send(liveview_pid, :match_progress_tick)
+            # Send progress update back to LiveView
+            send(liveview_pid, :match_progress_tick)
 
-              %{
-                file: file,
-                match_result: match_result,
-                import_status: :pending
-              }
-            end,
-            max_concurrency: 10,
-            timeout: :infinity,
-            ordered: true
-          )
-          |> Enum.map(fn {:ok, result} -> result end)
+            %{
+              file: file,
+              match_result: match_result,
+              import_status: :pending
+            }
+          end,
+          max_concurrency: 10,
+          timeout: :infinity,
+          ordered: true
+        )
+        |> Enum.map(fn {:ok, result} -> result end)
 
-        send(liveview_pid, {:match_complete, matched_results, library_path})
-      end)
+      send(liveview_pid, {:match_complete, matched_results, library_path})
+    end)
 
-      # Initialize match progress tracking
-      {:noreply, assign(socket, :match_progress, %{matched: 0, total: total_files})}
-    end
+    # Initialize match progress tracking
+    {:noreply, assign(socket, :match_progress, %{matched: 0, total: total_files})}
   end
 
   def handle_info(:match_progress_tick, socket) do
@@ -1430,66 +1424,8 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     {:noreply, socket}
   end
 
-  ## Specialized Library Handling
-
-  defp specialized_library?(nil), do: false
-  defp specialized_library?(%{type: type}), do: type in [:music, :books, :adult]
-
-  # Checks if a media file is orphaned AND belongs to a non-specialized library.
-  # Files in specialized libraries (adult, music, books) are expected to not have
-  # parent associations (media_item_id/episode_id), so they should not be considered
-  # orphaned for re-matching purposes.
   defp orphaned_non_specialized_file?(%MediaFile{} = media_file) do
-    Library.orphaned_media_file?(media_file) and
-      not specialized_library?(media_file.library_path)
-  end
-
-  # Handle files for specialized libraries (music, books, adult)
-  # These don't need metadata matching - just create a simple file listing
-  defp handle_specialized_library_files(files, socket) do
-    # Create matched_files structure without metadata matching
-    matched_files =
-      Enum.map(files, fn file ->
-        %{
-          file: file,
-          match_result: nil,
-          import_status: :pending
-        }
-      end)
-
-    # Group all files under the "simple" category for specialized libraries
-    grouped_files = %{
-      series: [],
-      movies: [],
-      ungrouped: [],
-      type_filtered: [],
-      simple: matched_files
-    }
-
-    # Auto-select all files (user can deselect if needed)
-    auto_selected =
-      matched_files
-      |> Enum.with_index()
-      |> Enum.map(fn {_file, idx} -> idx end)
-      |> MapSet.new()
-
-    socket =
-      socket
-      |> assign(:matching, false)
-      |> assign(:step, :review)
-      |> assign(:matched_files, matched_files)
-      |> assign(:grouped_files, grouped_files)
-      |> assign(:selected_files, auto_selected)
-      |> assign(:scan_stats, %{
-        total: length(files),
-        matched: length(files),
-        unmatched: 0,
-        skipped: socket.assigns.scan_stats.skipped,
-        type_filtered: 0
-      })
-      |> persist_session()
-
-    {:noreply, socket}
+    Library.orphaned_media_file?(media_file)
   end
 
   # Filters out sample files, trailers, and extras based on parsed_info detection
@@ -1804,59 +1740,16 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   ## Private Helpers
 
   defp import_file_with_details(%{match_result: nil, file: file}, _config) do
-    # Check if this file belongs to a specialized library
-    # If so, import without metadata matching
-    library_paths = Settings.list_library_paths()
-
-    {library_path_id, relative_path} =
-      calculate_relative_path_for_import(file.path, library_paths)
-
-    library_path = Enum.find(library_paths, &(&1.id == library_path_id))
-
-    if library_path && library_path.type in [:music, :books, :adult] do
-      # Import file for specialized library without metadata
-      case Library.create_scanned_media_file(%{
-             relative_path: relative_path,
-             library_path_id: library_path_id,
-             size: file.size,
-             verified_at: DateTime.utc_now()
-           }) do
-        {:ok, _media_file} ->
-          %{
-            file_path: file.path,
-            file_name: Path.basename(file.path),
-            status: :success,
-            media_item_title: Path.basename(file.path, Path.extname(file.path)),
-            error_message: nil,
-            action_taken: "Added to #{library_type_label(library_path.type)} library",
-            metadata: %{size: file.size, library_type: library_path.type}
-          }
-
-        {:error, changeset} ->
-          error_msg = format_changeset_errors_friendly(changeset)
-
-          %{
-            file_path: file.path,
-            file_name: Path.basename(file.path),
-            status: :failed,
-            media_item_title: nil,
-            error_message: error_msg,
-            action_taken: nil,
-            metadata: %{size: file.size}
-          }
-      end
-    else
-      # Standard library file without metadata match - report failure
-      %{
-        file_path: file.path,
-        file_name: Path.basename(file.path),
-        status: :failed,
-        media_item_title: nil,
-        error_message: "No metadata match found for this file",
-        action_taken: nil,
-        metadata: %{size: file.size}
-      }
-    end
+    # Standard library file without metadata match - report failure
+    %{
+      file_path: file.path,
+      file_name: Path.basename(file.path),
+      status: :failed,
+      media_item_title: nil,
+      error_message: "No metadata match found for this file",
+      action_taken: nil,
+      metadata: %{size: file.size}
+    }
   end
 
   defp import_file_with_details(%{file: file, match_result: match_result}, config) do
@@ -1994,11 +1887,6 @@ defmodule MydiaWeb.ImportMediaLive.Index do
 
     "Imported #{media_type}: '#{match_result.title}'"
   end
-
-  defp library_type_label(:music), do: "Music"
-  defp library_type_label(:books), do: "Books"
-  defp library_type_label(:adult), do: "Adult"
-  defp library_type_label(type), do: to_string(type)
 
   @doc false
   # Formats changeset errors with user-friendly messages for known issues.
@@ -2205,22 +2093,13 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     end
   end
 
-  # Helper functions for specialized library UI
-  defp library_type_icon(:music), do: "hero-musical-note"
-  defp library_type_icon(:books), do: "hero-book-open"
-  defp library_type_icon(:adult), do: "hero-eye-slash"
+  # Helper functions for library type UI
   defp library_type_icon(:series), do: "hero-tv"
   defp library_type_icon(:movies), do: "hero-film"
   defp library_type_icon(:mixed), do: "hero-square-3-stack-3d"
   defp library_type_icon(_), do: "hero-folder"
 
-  defp library_type_header_class(:music), do: "bg-success/10"
-  defp library_type_header_class(:books), do: "bg-warning/10"
-  defp library_type_header_class(:adult), do: "bg-error/10"
   defp library_type_header_class(_), do: "bg-base-200/50"
 
-  defp library_type_plural(:music), do: "Music Files"
-  defp library_type_plural(:books), do: "Books"
-  defp library_type_plural(:adult), do: "Files"
   defp library_type_plural(_), do: "Files"
 end

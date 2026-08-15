@@ -140,10 +140,7 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
                   options={[
                     {"Movies", "movies"},
                     {"TV Shows", "series"},
-                    {"Mixed", "mixed"},
-                    {"Music", "music"},
-                    {"Books", "books"},
-                    {"Adult", "adult"}
+                    {"Mixed", "mixed"}
                   ]}
                   required
                 />
@@ -504,25 +501,16 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
   defp library_type_icon(:series), do: "hero-tv"
   defp library_type_icon(:movies), do: "hero-film"
   defp library_type_icon(:mixed), do: "hero-square-3-stack-3d"
-  defp library_type_icon(:music), do: "hero-musical-note"
-  defp library_type_icon(:books), do: "hero-book-open"
-  defp library_type_icon(:adult), do: "hero-eye-slash"
   defp library_type_icon(_), do: "hero-folder"
 
   defp library_type_badge_class(:series), do: "badge-info"
   defp library_type_badge_class(:movies), do: "badge-accent"
   defp library_type_badge_class(:mixed), do: "badge-secondary"
-  defp library_type_badge_class(:music), do: "badge-success"
-  defp library_type_badge_class(:books), do: "badge-warning"
-  defp library_type_badge_class(:adult), do: "badge-error"
   defp library_type_badge_class(_), do: "badge-ghost"
 
   defp library_type_display(:series), do: "Series"
   defp library_type_display(:movies), do: "Movies"
   defp library_type_display(:mixed), do: "Mixed"
-  defp library_type_display(:music), do: "Music"
-  defp library_type_display(:books), do: "Books"
-  defp library_type_display(:adult), do: "Adult"
   defp library_type_display(type), do: to_string(type)
 
   # Where a library's metadata comes from. Movies are always sourced from TMDB;

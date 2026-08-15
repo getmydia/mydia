@@ -73,15 +73,6 @@ defmodule MydiaWeb.MediaLive.Index do
     |> load_media_items(reset: true)
   end
 
-  defp apply_action(socket, :adult, _params) do
-    socket
-    |> assign(:page_title, "Adult")
-    |> assign(:filter_type, nil)
-    |> assign(:filter_library_type, :adult)
-    |> assign(:specialized_library_type, nil)
-    |> load_media_items(reset: true)
-  end
-
   @impl true
   def handle_event("toggle_view", %{"mode" => mode}, socket) do
     view_mode = String.to_existing_atom(mode)
