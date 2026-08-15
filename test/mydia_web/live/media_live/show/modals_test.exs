@@ -4,7 +4,9 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
   import Phoenix.LiveViewTest
 
   alias MydiaWeb.MediaLive.Show.Modals
+  alias Mydia.Library.MediaFile
   alias Mydia.Metadata.Structs.SearchResult
+  alias Mydia.Settings.LibraryPath
 
   defp candidate(id, title, year) do
     %SearchResult{
@@ -16,9 +18,14 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
     }
   end
 
-  @subtitle_media_file %{
+  # Production shape. The legacy `path` column is never written any more, so
+  # every row carries `path: nil` and the real location is relative_path joined
+  # onto the preloaded library_path.
+  @subtitle_media_file %MediaFile{
     id: "mf-1",
-    path: "/media/movies/The Matrix (1999)/The.Matrix.1999.1080p.BluRay.mkv"
+    path: nil,
+    relative_path: "The Matrix (1999)/The.Matrix.1999.1080p.BluRay.mkv",
+    library_path: %LibraryPath{path: "/media/movies"}
   }
 
   defp subtitle_modal_html(overrides \\ []) do
@@ -205,6 +212,40 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
       # Header X only; the footer Close button is gone.
       refute html =~ "modal-action"
       # The body is a dedicated scroll region.
+      assert html =~ ~s(id="subtitle-search-body")
+    end
+
+    test "names the file from library_path + relative_path, not the dead path column" do
+      html = subtitle_modal_html()
+
+      assert html =~ "The.Matrix.1999.1080p.BluRay.mkv"
+      # The tooltip still carries the resolved absolute location.
+      assert html =~ ~s|title="/media/movies/The Matrix|
+    end
+
+    test "opens for a file whose library_path was not preloaded" do
+      media_file = %MediaFile{
+        id: "mf-2",
+        path: nil,
+        relative_path: "The Matrix (1999)/The.Matrix.1999.1080p.BluRay.mkv",
+        library_path: %Ecto.Association.NotLoaded{
+          __field__: :library_path,
+          __owner__: MediaFile,
+          __cardinality__: :one
+        }
+      }
+
+      html = subtitle_modal_html(media_file: media_file)
+
+      # Falls back to the relative path rather than crashing the LiveView.
+      assert html =~ "The.Matrix.1999.1080p.BluRay.mkv"
+    end
+
+    test "opens for a file with no resolvable location at all" do
+      media_file = %MediaFile{id: "mf-3", path: nil, relative_path: nil, library_path: nil}
+
+      html = subtitle_modal_html(media_file: media_file)
+
       assert html =~ ~s(id="subtitle-search-body")
     end
 
