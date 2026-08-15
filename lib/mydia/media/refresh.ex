@@ -13,6 +13,7 @@ defmodule Mydia.Media.Refresh do
   require Logger
 
   alias Mydia.Media
+  alias Mydia.Media.ExternalIds
   alias Mydia.Media.MediaItem
   alias Mydia.Metadata
   alias Mydia.Metadata.NfoWriter
@@ -118,6 +119,10 @@ defmodule Mydia.Media.Refresh do
         metadata: metadata
       }
       |> put_provider_id(source, metadata.id)
+      |> ExternalIds.put_free_ids(metadata.external_ids,
+        exclude_id: media_item.id,
+        title: metadata.title
+      )
 
     case Media.update_media_item(media_item, attrs, reason: "Metadata refreshed") do
       {:ok, updated} ->

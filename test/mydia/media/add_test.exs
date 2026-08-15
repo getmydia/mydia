@@ -74,4 +74,37 @@ defmodule Mydia.Media.AddTest do
       refute Mydia.Media.get_media_item_by_tmdb(id)
     end
   end
+
+  describe "cross-provider ids" do
+    test "a TVDB-sourced show carries the TMDB id from remoteIds" do
+      bypass = Bypass.open()
+      tvdb_id = System.unique_integer([:positive])
+      tmdb_id = System.unique_integer([:positive])
+
+      body = %{
+        "data" => %{
+          "id" => tvdb_id,
+          "name" => "Cross Referenced",
+          "firstAired" => "2011-04-17",
+          "seasons" => [],
+          "trailers" => [%{"url" => "https://youtube.com/watch?v=z", "language" => "eng"}],
+          "remoteIds" => [
+            %{"sourceName" => "TheMovieDB.com", "id" => to_string(tmdb_id), "type" => 12}
+          ]
+        }
+      }
+
+      Bypass.stub(bypass, "GET", "/tvdb/series/#{tvdb_id}/extended", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(body))
+      end)
+
+      assert {:ok, attrs} =
+               Add.resolve_attrs(tvdb_id, :tv_show, relay_config(bypass), provider: :tvdb)
+
+      assert attrs.tvdb_id == tvdb_id
+      assert attrs.tmdb_id == tmdb_id
+    end
+  end
 end

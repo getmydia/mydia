@@ -16,6 +16,7 @@ defmodule Mydia.Media.Add do
   require Logger
 
   alias Mydia.Media
+  alias Mydia.Media.ExternalIds
   alias Mydia.Metadata
   alias Mydia.Settings
 
@@ -141,11 +142,14 @@ defmodule Mydia.Media.Add do
     attrs = maybe_put_library_path(attrs, opts[:library_path_id])
 
     # Record provenance for TV shows only; movies leave metadata_source nil.
-    if media_type == :movie do
-      attrs
-    else
-      Map.put(attrs, :metadata_source, opts[:metadata_source])
-    end
+    attrs =
+      if media_type == :movie do
+        attrs
+      else
+        Map.put(attrs, :metadata_source, opts[:metadata_source])
+      end
+
+    ExternalIds.put_free_ids(attrs, metadata.external_ids)
   end
 
   @doc """

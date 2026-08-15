@@ -1,6 +1,7 @@
 defmodule Mydia.Media.RefreshTest do
   use Mydia.DataCase, async: false
 
+  import ExUnit.CaptureLog
   import Mydia.MediaFixtures
 
   alias Mydia.Media.MediaItem
@@ -292,6 +293,95 @@ defmodule Mydia.Media.RefreshTest do
 
       assert updated.tvdb_id == 4242
       refute updated.tmdb_id == 4242
+    end
+
+    test "backfills the cross-referenced provider id from TVDB remoteIds", %{
+      bypass: bypass,
+      config: config
+    } do
+      item =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "Cross Referenced",
+          metadata_source: :tvdb,
+          tvdb_id: 4243,
+          tmdb_id: nil
+        })
+
+      Bypass.expect_once(bypass, "GET", "/tvdb/series/4243/extended", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          200,
+          Jason.encode!(%{
+            "data" => %{
+              "id" => 4243,
+              "name" => "Cross Referenced",
+              "firstAired" => "2015-03-01",
+              "overview" => "x",
+              "genres" => [],
+              "seasons" => [],
+              "characters" => [],
+              "trailers" => [%{"url" => "https://youtube.com/watch?v=a", "language" => "eng"}],
+              "remoteIds" => [
+                %{"sourceName" => "TheMovieDB.com", "id" => "7777", "type" => 12},
+                %{"sourceName" => "IMDB", "id" => "tt7777777", "type" => 2}
+              ]
+            }
+          })
+        )
+      end)
+
+      assert {:ok, updated} = Refresh.run(item, config: config, fetch_episodes: false)
+
+      assert updated.tvdb_id == 4243
+      assert updated.tmdb_id == 7777
+      assert updated.imdb_id == "tt7777777"
+    end
+
+    test "skips a cross-referenced id another row already owns", %{
+      bypass: bypass,
+      config: config
+    } do
+      media_item_fixture(%{type: "tv_show", title: "Incumbent", tmdb_id: 8888})
+
+      item =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "Challenger",
+          metadata_source: :tvdb,
+          tvdb_id: 4244,
+          tmdb_id: nil
+        })
+
+      Bypass.expect_once(bypass, "GET", "/tvdb/series/4244/extended", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          200,
+          Jason.encode!(%{
+            "data" => %{
+              "id" => 4244,
+              "name" => "Challenger",
+              "firstAired" => "2016-03-01",
+              "overview" => "x",
+              "genres" => [],
+              "seasons" => [],
+              "characters" => [],
+              "trailers" => [%{"url" => "https://youtube.com/watch?v=b", "language" => "eng"}],
+              "remoteIds" => [%{"sourceName" => "TheMovieDB.com", "id" => "8888", "type" => 12}]
+            }
+          })
+        )
+      end)
+
+      {result, log} = with_log(fn -> Refresh.run(item, config: config, fetch_episodes: false) end)
+
+      assert log =~ "[ExternalIds] tmdb_id 8888 is already owned by another media item"
+      assert {:ok, updated} = result
+
+      assert updated.tvdb_id == 4244
+      assert updated.tmdb_id == nil
     end
   end
 end

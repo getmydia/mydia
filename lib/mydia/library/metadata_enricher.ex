@@ -11,6 +11,7 @@ defmodule Mydia.Library.MetadataEnricher do
 
   require Logger
   alias Mydia.{Media, Metadata, Repo, Settings}
+  alias Mydia.Media.ExternalIds
   alias Mydia.Metadata.LanguageCode
   alias Mydia.Metadata.NfoWriter
 
@@ -291,13 +292,18 @@ defmodule Mydia.Library.MetadataEnricher do
       monitored: true
     }
 
-    # Set the appropriate provider ID field
+    # Set the id of the provider that produced the match, then add whatever
+    # cross-reference that provider published. A show matched on TVDB used to
+    # be stored with tmdb_id nil, which made Discover render an Add button for
+    # something already in the library.
     attrs =
       if provider_type == :tvdb do
         Map.put(attrs, :tvdb_id, provider_id)
       else
         Map.put(attrs, :tmdb_id, provider_id)
       end
+
+    attrs = ExternalIds.put_free_ids(attrs, metadata.external_ids)
 
     # Record provenance for TV shows so provider-aware refresh can detect a
     # source/library mismatch. Movies leave metadata_source nil.
