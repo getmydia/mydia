@@ -7,6 +7,9 @@ defmodule MydiaWeb.MediaLive.Index do
   alias Mydia.Collections
   alias Mydia.Search
   alias MydiaWeb.Live.Authorization
+  alias MydiaWeb.Live.Helpers.GridDensity
+
+  import MydiaWeb.GridDensityComponents
 
   require Logger
 
@@ -24,6 +27,7 @@ defmodule MydiaWeb.MediaLive.Index do
     {:ok,
      socket
      |> assign(:view_mode, :grid)
+     |> GridDensity.assign_current()
      |> assign(:search_query, "")
      |> assign(:filter_progress, nil)
      |> assign(:filter_monitored, nil)
@@ -91,6 +95,10 @@ defmodule MydiaWeb.MediaLive.Index do
      |> assign(:view_mode, view_mode)
      |> assign(:page, 0)
      |> load_media_items(reset: true)}
+  end
+
+  def handle_event("set_grid_density", %{"density" => density}, socket) do
+    {:noreply, GridDensity.put(socket, density)}
   end
 
   def handle_event("search", params, socket) do

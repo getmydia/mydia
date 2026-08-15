@@ -80,6 +80,11 @@
 
         <%!-- View mode toggle --%>
         <.view_mode_toggle view_mode={@view_mode} />
+        <.grid_density_toggle
+          :if={@view_mode == :grid}
+          id="library-density-toggle"
+          density={@grid_density}
+        />
       </div>
     </div>
 
@@ -298,8 +303,8 @@
       phx-update="stream"
       phx-viewport-bottom="load_more"
       class={[
-        @view_mode == :grid &&
-          "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-4 pb-6 md:pb-8",
+        @view_mode == :grid && "grid gap-3 md:gap-4 pb-6 md:pb-8",
+        @view_mode == :grid && grid_columns_class(@grid_density),
         @view_mode == :list && "card bg-base-100 shadow-lg overflow-hidden -mt-px",
         @selection_mode && "selection-mode"
       ]}
