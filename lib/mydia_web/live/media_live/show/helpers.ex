@@ -30,15 +30,8 @@ defmodule MydiaWeb.MediaLive.Show.Helpers do
     movie_files || episode_files
   end
 
-  def get_poster_url(media_item) do
-    case media_item.metadata do
-      %MediaMetadata{poster_path: path} when is_binary(path) ->
-        Mydia.Metadata.ImageUrl.poster_url(path)
-
-      _ ->
-        "/images/no-poster.svg"
-    end
-  end
+  def get_poster_url(media_item),
+    do: MydiaWeb.Live.Helpers.MediaImages.poster_url(media_item)
 
   def get_backdrop_url(media_item) do
     case media_item.metadata do
