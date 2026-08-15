@@ -135,17 +135,26 @@ defmodule Mydia.Media.Recommendations do
   end
 
   defp mean_rating(results) do
-    case Enum.filter(results, &(votes(&1) > 0)) do
+    case Enum.filter(results, &rated?/1) do
       [] -> nil
       rated -> Enum.sum(Enum.map(rated, &rating/1)) / length(rated)
     end
   end
 
-  defp weighted_rating(result, mean) do
-    v = votes(result)
-    r = rating(result)
+  # An entry needs both a numeric rating and at least one vote before it can
+  # inform the mean. Treating a nil rating as 0.0 would drag the prior down for
+  # every other entry in the set.
+  defp rated?(result), do: votes(result) > 0 and is_number(result.vote_average)
 
-    v / (v + @min_votes) * r + @min_votes / (v + @min_votes) * mean
+  defp weighted_rating(result, mean) do
+    if rated?(result) do
+      v = votes(result)
+
+      v / (v + @min_votes) * rating(result) + @min_votes / (v + @min_votes) * mean
+    else
+      # No usable rating, so the honest score is the set mean: mid-pack.
+      mean
+    end
   end
 
   defp rating(%{vote_average: value}) when is_number(value), do: value / 1
