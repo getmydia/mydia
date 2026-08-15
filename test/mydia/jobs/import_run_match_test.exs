@@ -9,11 +9,43 @@ defmodule Mydia.Jobs.ImportRunMatchTest do
 
   alias Mydia.Library
   alias Mydia.Jobs.ImportRun, as: ImportRunJob
+  alias Mydia.Metadata.Cache
 
   setup do
+    # Mydia.Metadata.Cache is global, named ETS with a 1-hour TTL and no other
+    # test-suite reset. Its key (Metadata.search_cached/3, metadata.ex:159) is
+    # "search:<provider>:<query>:<media_type>:<year>:<language>:<page>" -- it
+    # does NOT include base_url. So a cache entry left behind by an earlier
+    # test with the same title/year would make a search skip the HTTP layer
+    # entirely, regardless of whether :config below is wired correctly. Clear
+    # on the way in and the way out, same idiom as
+    # test/mydia/library/batch_matcher_test.exs and
+    # test/support/metadata_stub.ex. Do NOT delete by hand-computed key:
+    # Task 5 tried that and the key silently desynced the moment a stub's
+    # response shape changed which of MetadataMatcher's search branches ran.
+    Cache.clear()
+    on_exit(fn -> Cache.clear() end)
+
     bypass = Bypass.open()
 
+    # Counts requests that actually land on THIS local Bypass server. This is
+    # the only way to tell "the seam is wired to Bypass" apart from "the seam
+    # silently fell through to Metadata.default_relay_config/0's real
+    # https://relay.mydia.dev" or "the cache above was stale and skipped HTTP
+    # altogether" -- every business-observable assertion in this file (a
+    # candidate got written, files_matched incremented, nothing got linked)
+    # is identical in all three cases, because FileIngest.ingest/3 records a
+    # candidate identically for a real match, a {:error, _}, and a nil match,
+    # and Bypass.stub (unlike Bypass.expect) never fails a test that received
+    # zero requests. A real HTTP call to relay.mydia.dev can never increment
+    # this in-process counter, so counter > 0 is airtight proof of local
+    # interception, and counter == 0 is airtight proof no network call was
+    # attempted at all.
+    counter = :counters.new(1, [:atomics])
+
     Bypass.stub(bypass, "GET", "/tmdb/movies/search", fn conn ->
+      :counters.add(counter, 1, 1)
+
       conn
       |> Plug.Conn.put_resp_content_type("application/json")
       |> Plug.Conn.resp(200, Jason.encode!(%{"results" => []}))
@@ -25,9 +57,7 @@ defmodule Mydia.Jobs.ImportRunMatchTest do
     # global env mutation would race any async test resolving the default
     # relay config concurrently. Without this, run_match_phase/2's internal
     # default (Metadata.default_relay_config/0) would try to reach the real
-    # https://relay.mydia.dev instead of this Bypass server, and Bypass.stub
-    # (unlike Bypass.expect) never fails a test that received zero requests --
-    # so an unwired test here would still turn green while proving nothing.
+    # https://relay.mydia.dev instead of this Bypass server.
     config = %{
       type: :metadata_relay,
       base_url: "http://localhost:#{bypass.port}",
@@ -54,29 +84,44 @@ defmodule Mydia.Jobs.ImportRunMatchTest do
 
     :ok = ImportRunJob.run_scan_phase(Library.get_import_run(run.id))
 
-    {:ok, bypass: bypass, config: config, dir: dir, library_path: library_path, run: run}
+    {:ok,
+     bypass: bypass,
+     config: config,
+     counter: counter,
+     dir: dir,
+     library_path: library_path,
+     run: run}
   end
 
   test "writes a candidate for every unmatched file", %{
     run: run,
     library_path: lp,
-    config: config
+    config: config,
+    counter: counter
   } do
     assert :ok = ImportRunJob.run_match_phase(Library.get_import_run(run.id), config: config)
 
     assert Library.list_unmatched_media_file_paths(lp.id, 100) == []
+
+    # Proves the search actually landed on the local Bypass server rather
+    # than falling through to the real relay or being served from a stale
+    # cache entry -- every assertion above would look identical in either of
+    # those cases.
+    assert :counters.get(counter, 1) > 0
   end
 
-  test "records the matched count on the run", %{run: run, config: config} do
+  test "records the matched count on the run", %{run: run, config: config, counter: counter} do
     :ok = ImportRunJob.run_match_phase(Library.get_import_run(run.id), config: config)
 
     assert Library.get_import_run(run.id).files_matched == 5
+    assert :counters.get(counter, 1) > 0
   end
 
   test "review mode creates no new items from external matches", %{
     run: run,
     library_path: lp,
-    config: config
+    config: config,
+    counter: counter
   } do
     # Review mode uses the :local_only policy, so it will still associate a
     # file whose show already exists in the library. What it must never do is
@@ -91,32 +136,51 @@ defmodule Mydia.Jobs.ImportRunMatchTest do
 
     # Every file got a candidate instead, which is the inbox handoff.
     assert Library.count_inbox_files(library_path_id: lp.id) == 5
+
+    # Confirms these are candidates from an actual (empty) relay search, not
+    # a coincidence of :review mode never linking regardless of what the
+    # relay would have returned.
+    assert :counters.get(counter, 1) > 0
   end
 
-  test "stops at the chunk boundary when asked", %{run: run, config: config} do
+  test "stops at the chunk boundary when asked", %{run: run, config: config, counter: counter} do
     {:ok, _} = Library.request_import_run_stop(Library.get_import_run(run.id))
 
     assert :stopped = ImportRunJob.run_match_phase(Library.get_import_run(run.id), config: config)
+
+    # The stop is checked before the first chunk is ever pulled, so no search
+    # should reach the relay at all -- the mirror-image proof to the > 0
+    # assertions elsewhere in this file.
+    assert :counters.get(counter, 1) == 0
   end
 
   test "a resumed run does not re-match files that already have candidates", %{
     run: run,
     library_path: lp,
-    config: config
+    config: config,
+    counter: counter
   } do
     :ok = ImportRunJob.run_match_phase(Library.get_import_run(run.id), config: config)
 
     before = Library.get_import_run(run.id).files_matched
+    first_run_calls = :counters.get(counter, 1)
+    assert first_run_calls > 0
 
     :ok = ImportRunJob.run_match_phase(Library.get_import_run(run.id), config: config)
 
     # Nothing left to do, so the counter does not move.
     assert Library.get_import_run(run.id).files_matched == before
     assert Library.list_unmatched_media_file_paths(lp.id, 100) == []
+
+    # And no new relay traffic was generated by the second call either: this
+    # is the same "resume skips relay work already paid for" property, proven
+    # against actual network activity rather than only against the DB state
+    # that activity happens to produce.
+    assert :counters.get(counter, 1) == first_run_calls
   end
 
   test "keeps candidates a chunk already committed when a stop lands mid-match, and a resumed run finishes the rest",
-       %{run: run, dir: dir, library_path: lp, config: config} do
+       %{run: run, dir: dir, library_path: lp, config: config, counter: counter} do
     # @match_chunk_size is 50, so this forces a second match_loop iteration to
     # exist: without it, a stop could only ever be observed before the first
     # (and only) chunk, which is the already-covered "stops at the chunk
@@ -160,6 +224,11 @@ defmodule Mydia.Jobs.ImportRunMatchTest do
     assert partial_matched < total_unmatched
     assert remaining == total_unmatched - partial_matched
 
+    # The chunk that committed did real (local) relay work -- this is not a
+    # trivially-true :ok/:stopped return with an empty chunk underneath it.
+    calls_before_resume = :counters.get(counter, 1)
+    assert calls_before_resume > 0
+
     # Mirror what the real coordinator does on :stopped (Jobs.ImportRun.finish/2):
     # the run becomes terminal, which is what lets a fresh run be started for
     # the same library path (a :stopping run is still "active" and blocks a
@@ -183,6 +252,10 @@ defmodule Mydia.Jobs.ImportRunMatchTest do
     # Every file the first (interrupted) run committed a candidate for is
     # untouched by the resume: only the remainder got matched again.
     assert Library.get_import_run(resumed_run.id).files_matched == remaining
+
+    # And the resume did its own real relay work rather than, say, replaying
+    # cached results for the whole library -- the counter keeps climbing.
+    assert :counters.get(counter, 1) > calls_before_resume
     assert Library.list_unmatched_media_file_paths(lp.id, 1000) == []
   end
 end
