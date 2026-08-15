@@ -39,7 +39,12 @@ void main() {
       ),
     );
 
+    // A regression that painted the banner chrome (Container/Icon) without a
+    // Text child would still satisfy a Text-only assertion, so pin the
+    // absence of the chrome widgets too, not just the absence of Text.
     expect(find.byType(Text), findsNothing);
+    expect(find.byType(Container), findsNothing);
+    expect(find.byType(Icon), findsNothing);
   });
 
   testWidgets('renders nothing when the verdict is unknown', (tester) async {
@@ -52,6 +57,25 @@ void main() {
     );
 
     expect(find.byType(Text), findsNothing);
+    expect(find.byType(Container), findsNothing);
+    expect(find.byType(Icon), findsNothing);
+  });
+
+  testWidgets('renders nothing for a dismissed soft nudge', (tester) async {
+    await pumpBanner(
+      tester,
+      const CompatibilityState(
+        verdict: CompatibilityVerdict.playerUpdateRecommended,
+        playerVersion: '0.8.0',
+        serverVersion: '0.9.0',
+        requiredVersion: '0.9.0',
+        dismissed: true,
+      ),
+    );
+
+    expect(find.byType(Text), findsNothing);
+    expect(find.byType(Container), findsNothing);
+    expect(find.byType(Icon), findsNothing);
   });
 
   testWidgets('a required player mismatch shows a non-dismissible banner',
@@ -90,6 +114,26 @@ void main() {
     expect(find.text('Details'), findsOneWidget);
   });
 
+  testWidgets(
+      'a recommended server mismatch is dismissible and offers no update button',
+      (tester) async {
+    await pumpBanner(
+      tester,
+      const CompatibilityState(
+        verdict: CompatibilityVerdict.serverUpdateRecommended,
+        playerVersion: '0.10.0',
+        serverVersion: '0.9.0',
+        requiredVersion: '0.10.0',
+      ),
+    );
+
+    expect(find.textContaining('A newer Mydia server'), findsOneWidget);
+    // The user cannot update someone else's server, hard or soft mismatch.
+    expect(find.text('Update'), findsNothing);
+    expect(find.text('Details'), findsOneWidget);
+    expect(find.byIcon(Icons.close), findsOneWidget);
+  });
+
   testWidgets('a recommended mismatch shows a dismiss affordance',
       (tester) async {
     await pumpBanner(
@@ -104,6 +148,9 @@ void main() {
 
     expect(find.textContaining('A newer Mydia Player'), findsOneWidget);
     expect(find.byIcon(Icons.close), findsOneWidget);
+    // Both actions show together: the player side can act on Update, and can
+    // still dismiss the nudge.
+    expect(find.text('Update'), findsOneWidget);
   });
 
   testWidgets('tapping Details opens the dialog', (tester) async {
