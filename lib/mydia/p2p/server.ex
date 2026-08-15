@@ -13,6 +13,7 @@ defmodule Mydia.P2p.Server do
   alias Mydia.RemoteAccess.Pairing
   alias Mydia.Streaming.HlsSession
   alias Mydia.Streaming.SessionFiles
+  alias Mydia.Streaming.SessionSubtitles
   alias MydiaWeb.Schema.Middleware.Logging, as: GraphQLLogging
 
   @doc """
@@ -450,13 +451,27 @@ defmodule Mydia.P2p.Server do
         # Wait for the session to be ready (FFmpeg has created initial files)
         case HlsSession.await_ready(pid, 30_000) do
           :ok ->
-            case SessionFiles.safe_path(session_info.temp_dir, req.path) do
+            case resolve_session_file(session_info, req.path) do
               {:ok, file_path} ->
                 stream_hls_file(resource, stream_id, file_path, req)
 
-              {:error, reason} ->
-                Logger.warning("HLS path validation failed: #{inspect(reason)}")
+              {:error, :path_traversal} ->
+                Logger.warning("HLS path validation failed for #{req.path}")
                 send_hls_error(resource, stream_id, 403, "Forbidden")
+
+              {:error, :image_subtitle} ->
+                Logger.debug("HLS subtitle unavailable: image-based track #{req.path}")
+
+                send_hls_error(
+                  resource,
+                  stream_id,
+                  415,
+                  "Image-based subtitles cannot be converted to text"
+                )
+
+              {:error, reason} ->
+                Logger.warning("HLS file unavailable: #{inspect(reason)}")
+                send_hls_error(resource, stream_id, 404, "Not found")
             end
 
           {:error, :timeout} ->
@@ -547,6 +562,15 @@ defmodule Mydia.P2p.Server do
 
       [] ->
         {:error, :not_found}
+    end
+  end
+
+  # A subtitle is materialized on demand; anything else is an ordinary file
+  # that either exists in the session directory or does not.
+  defp resolve_session_file(info, name) do
+    case SessionSubtitles.ensure(info, name) do
+      :not_subtitle -> SessionFiles.safe_path(info.temp_dir, name)
+      result -> result
     end
   end
 
@@ -738,6 +762,10 @@ defmodule Mydia.P2p.Server do
       ".m3u8" -> "no-cache"
       # Segments can be cached longer
       ".ts" -> "max-age=86400"
+      # A subtitle body is stable for the life of the session but not
+      # immutable across sessions, and it is small enough that revalidation
+      # costs nothing. Matches HlsController's cache_control_for/1.
+      ".vtt" -> "no-cache"
       _ -> nil
     end
   end
