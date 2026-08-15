@@ -78,8 +78,11 @@ class CompatibilityState {
 
 /// Compares this player against the connected server and exposes the verdict.
 ///
-/// Never throws into the widget tree: every failure resolves to
-/// [CompatibilityVerdict.unknown], which renders nothing.
+/// Never throws into the widget tree: a failed compatibility check resolves
+/// to [CompatibilityVerdict.unknown], which renders nothing. A failure to
+/// read the dismissal box is different: the verdict was already computed
+/// successfully, so that failure falls back to "not dismissed" and the
+/// banner still shows rather than being silently suppressed.
 class CompatibilityNotifier extends AsyncNotifier<CompatibilityState> {
   @override
   Future<CompatibilityState> build() async {
@@ -101,8 +104,17 @@ class CompatibilityNotifier extends AsyncNotifier<CompatibilityState> {
 
     if (!state.verdict.isDismissible) return state;
 
-    final box = await ref.watch(compatibilityDismissalBoxProvider.future);
-    return state.copyWith(dismissed: box.get(state.dismissalKey) ?? false);
+    // The dismissal lookup is an enhancement, not a precondition for the
+    // verdict: the verdict above already resolved successfully, so a broken
+    // Hive box here must not turn a legitimate warning into no banner at
+    // all. Fall back to "not dismissed" and keep showing it.
+    try {
+      final box = await ref.watch(compatibilityDismissalBoxProvider.future);
+      return state.copyWith(dismissed: box.get(state.dismissalKey) ?? false);
+    } catch (e) {
+      debugPrint('[CompatibilityNotifier] could not read dismissals: $e');
+      return state;
+    }
   }
 
   /// The floor the losing side failed to clear, for the banner copy.
@@ -139,6 +151,13 @@ class CompatibilityNotifier extends AsyncNotifier<CompatibilityState> {
     } catch (e) {
       debugPrint('[CompatibilityNotifier] could not persist dismissal: $e');
     }
+
+    // The banner calls dismiss() fire-and-forget with no await. If the
+    // provider is disposed while the Hive write above is in flight (the user
+    // navigates away, or the connection change rebuilds the graph), writing
+    // to state here throws UnmountedRefException into an unhandled async
+    // error instead of a caught one. Bail out quietly instead.
+    if (!ref.mounted) return;
 
     state = AsyncValue.data(current.copyWith(dismissed: true));
   }

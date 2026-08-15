@@ -124,6 +124,31 @@ void main() {
     expect(box.isNotEmpty, isTrue);
   });
 
+  test('dismissing after the container is disposed does not throw', () async {
+    final box = await memoryBox();
+    final container = harness(
+      playerVersion: '0.8.0',
+      response:
+          okResponse(version: '0.9.0', min: '0.7.0', recommended: '0.9.0'),
+      box: box,
+    );
+
+    await container.read(compatibilityProvider.future);
+
+    // Not awaited: dismiss() runs synchronously up to its first await, then
+    // suspends and hands control back here, before the Hive write and the
+    // eventual state write happen.
+    final dismissFuture =
+        container.read(compatibilityProvider.notifier).dismiss();
+
+    // Disposes while dismiss() is still suspended, so its state write races
+    // a torn down provider. Without the ref.mounted guard, resuming below
+    // throws UnmountedRefException instead of returning quietly.
+    container.dispose();
+
+    await expectLater(dismissFuture, completes);
+  });
+
   test('a dismissal does not carry to a different version pair', () async {
     final box = await memoryBox();
 
@@ -191,6 +216,34 @@ void main() {
     final state = await container.read(compatibilityProvider.future);
 
     expect(state.verdict, CompatibilityVerdict.playerUpdateRequired);
+    expect(state.showBanner, isTrue);
+  });
+
+  test('a failing dismissal box does not suppress a recommended banner',
+      () async {
+    final container = ProviderContainer(
+      // Riverpod retries a provider that throws with exponential backoff by
+      // default. Disabled here so the override's throw surfaces immediately
+      // instead of retrying for a real Exception until the test times out.
+      retry: (retryCount, error) => null,
+      overrides: [
+        graphqlClientProvider.overrideWithValue(
+          stubClient(
+            StubLink.responses([
+              okResponse(version: '0.9.0', min: '0.7.0', recommended: '0.9.0'),
+            ]),
+          ),
+        ),
+        playerVersionProvider.overrideWith((ref) async => '0.8.0'),
+        compatibilityDismissalBoxProvider
+            .overrideWith((ref) async => throw Exception('box open failed')),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final state = await container.read(compatibilityProvider.future);
+
+    expect(state.verdict, CompatibilityVerdict.playerUpdateRecommended);
     expect(state.showBanner, isTrue);
   });
 
