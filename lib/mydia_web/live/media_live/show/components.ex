@@ -785,9 +785,11 @@ defmodule MydiaWeb.MediaLive.Show.Components do
         <%!-- Filename row --%>
         <div class="flex items-center gap-2">
           <.icon name="hero-document" class="w-4 h-4 text-base-content/50 flex-shrink-0" />
-          <% absolute_path = Mydia.Library.MediaFile.absolute_path(@file) %>
-          <span class="font-mono text-sm truncate" title={absolute_path}>
-            {Path.basename(absolute_path)}
+          <span
+            class="font-mono text-sm truncate"
+            title={Mydia.Library.MediaFile.display_path(@file)}
+          >
+            {Mydia.Library.MediaFile.display_name(@file)}
           </span>
         </div>
         <%!-- Technical details row --%>
@@ -919,12 +921,12 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                   <%!-- Left side: File info --%>
                   <div class="flex-1 min-w-0 flex flex-col gap-2">
                     <%!-- File path --%>
-                    <% absolute_path = Mydia.Library.MediaFile.absolute_path(file) %>
+                    <% file_path = Mydia.Library.MediaFile.display_path(file) %>
                     <p
                       class="text-sm font-mono text-base-content break-all leading-relaxed"
-                      title={absolute_path}
+                      title={file_path}
                     >
-                      {absolute_path}
+                      {file_path}
                     </p>
                     <%!-- Technical details with quality badge --%>
                     <div class="flex flex-wrap gap-4 text-xs text-base-content/70 items-center">

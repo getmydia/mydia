@@ -114,15 +114,27 @@ defmodule Mydia.Library.MediaFileTest do
       assert MediaFile.display_name(media_file) == "Unknown file"
     end
 
-    test "ignore the dead legacy path column" do
-      # Every row in the wild carries path: nil, so nothing may depend on it.
+    test "prefer the resolved location over the legacy path column" do
       media_file = %MediaFile{
-        path: "/legacy/ignored.mkv",
+        path: "/legacy/stale.mkv",
         relative_path: "Movie.mkv",
         library_path: %LibraryPath{path: "/media/movies"}
       }
 
       assert MediaFile.display_path(media_file) == "/media/movies/Movie.mkv"
+    end
+
+    test "fall back to the legacy path column for an orphaned row" do
+      # The relative_path backfill skips files outside every configured library
+      # path, so on an upgraded install `path` can be all such a row has left.
+      media_file = %MediaFile{
+        path: "/somewhere/outside/Movie.mkv",
+        relative_path: nil,
+        library_path: nil
+      }
+
+      assert MediaFile.display_path(media_file) == "/somewhere/outside/Movie.mkv"
+      assert MediaFile.display_name(media_file) == "Movie.mkv"
     end
   end
 

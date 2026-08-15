@@ -131,8 +131,14 @@ defmodule Mydia.Library.MediaFile do
 
   `absolute_path/1` is the answer whenever the library_path is preloaded and
   set. It falls back to the relative path so an unloaded association degrades
-  into a partial answer instead of nothing. The legacy `path` column is never
-  consulted: nothing has written it in a long time, so every row carries nil.
+  into a partial answer instead of nothing, and then to the legacy `path`
+  column as a last resort.
+
+  That last fallback looks dead — every row on a current install carries
+  `path: nil` — but `populate_media_file_relative_paths` skips files sitting
+  outside every configured library path, leaving them with no relative_path and
+  no library_path_id. On an install that upgraded from a version which still
+  wrote `path`, that column is the only location such a row has left.
 
   ## Examples
 
@@ -146,7 +152,7 @@ defmodule Mydia.Library.MediaFile do
   """
   @spec display_path(t()) :: String.t() | nil
   def display_path(%__MODULE__{} = media_file) do
-    absolute_path(media_file) || media_file.relative_path
+    absolute_path(media_file) || media_file.relative_path || media_file.path
   end
 
   @doc """
