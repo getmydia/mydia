@@ -265,53 +265,6 @@ void main() {
 
       expect(route!.subtitlesSupported, isFalse);
     });
-
-    test('resolveSubtitleUrl builds an absolute, credentialed URL', () async {
-      // The subtitle endpoint is authenticated and the receiver cannot send
-      // an Authorization header, so a URL without the token is a 401.
-      final resolver = directResolver();
-      final route = (await resolver.resolve(
-          fileId: 'f', protocol: CastProtocolKind.chromecast))!;
-
-      expect(
-        resolver.resolveSubtitleUrl(
-            route, '/api/player/v1/subtitles/movie/1/2'),
-        'https://mydia.test/api/player/v1/subtitles/movie/1/2?token=tok123',
-      );
-    });
-
-    test('resolveSubtitleUrl appends the token to a URL that has a query',
-        () async {
-      final resolver = directResolver();
-      final route = (await resolver.resolve(
-          fileId: 'f', protocol: CastProtocolKind.chromecast))!;
-
-      expect(
-        resolver.resolveSubtitleUrl(route, '/api/x.vtt?format=vtt'),
-        'https://mydia.test/api/x.vtt?format=vtt&token=tok123',
-      );
-    });
-
-    test('resolveSubtitleUrl passes through an already absolute URL', () async {
-      final resolver = directResolver(mediaToken: null);
-      final route = (await resolver.resolve(
-          fileId: 'f', protocol: CastProtocolKind.chromecast))!;
-
-      expect(
-        resolver.resolveSubtitleUrl(route, 'https://cdn.test/a.vtt'),
-        'https://cdn.test/a.vtt',
-      );
-    });
-
-    test(
-        'resolveSubtitleUrl returns null when the route has no subtitle support',
-        () async {
-      final resolver = p2pResolver();
-      final route = (await resolver.resolve(
-          fileId: 'f', protocol: CastProtocolKind.dlna))!;
-
-      expect(resolver.resolveSubtitleUrl(route, '/api/x.vtt'), isNull);
-    });
   });
 
   group('subtitle tracks on the route', () {

@@ -302,6 +302,69 @@ void main() {
               'connect rather than being swallowed by the early return');
       expect(backend.connectAttempts.last, _device);
     });
+
+    testWidgets(
+        'a live media session re-targets through retargetTo, carrying '
+        'subtitles the persisted-record rebuild would drop', (tester) async {
+      // Before `manager.canRetarget` was checked here, this branch always
+      // rebuilt a fresh `CastLaunchRequest` from `PersistedCastSession` —
+      // which carries a file id and a position, but no subtitle tracks,
+      // artwork or subtitle label. This test drives a real live-media
+      // session through the actual widget tap, not `retargetTo` directly, so
+      // it proves the wiring this task adds at this call site, not just the
+      // `CastSessionManager` method underneath it.
+      final backend = FakeCastBackend();
+      final manager = buildManager(backend);
+      addTearDown(manager.dispose);
+
+      const tracks = [
+        CastSubtitleTrack(
+          trackId: '3',
+          url: '/api/player/v1/subtitles/file/file-1/3?format=vtt',
+          label: 'English',
+          language: 'eng',
+        ),
+      ];
+
+      // A live media session on the first device, exactly like a user
+      // already watching something and then picking a different receiver
+      // from the overlay button.
+      await manager.startCast(
+        device: _device,
+        request: const CastLaunchRequest(
+          fileId: 'file-1',
+          mediaId: 'movie-1',
+          mediaType: 'movie',
+          title: 'Arrival',
+          subtitles: tracks,
+        ),
+      );
+      expect(manager.currentSession?.mediaInfo, isNotNull);
+
+      await tester.pumpWidget(host(manager: manager, devices: [_otherDevice]));
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('pick-device-button')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(Key('cast-device-${_otherDevice.id}')),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(Key('cast-device-${_otherDevice.id}')));
+      await tester.pumpAndSettle();
+
+      expect(backend.connectAttempts.last, _otherDevice,
+          reason: 'the tap must actually retarget to the newly chosen '
+              'device');
+      expect(
+        backend.loadedRequests.last.subtitles,
+        isNotEmpty,
+        reason: 'a persisted-record rebuild carries no subtitles at all; '
+            'only reusing the live request through retargetTo keeps them',
+      );
+      expect(backend.loadedRequests.last.subtitles.single.trackId, '3');
+    });
   });
 
   group('showCastErrorSnackBar', () {

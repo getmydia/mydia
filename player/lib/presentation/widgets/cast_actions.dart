@@ -157,9 +157,15 @@ Future<void> pickCastDevice(BuildContext context, WidgetRef ref) async {
       return;
     }
 
-    // No live request to move: fall back to the persisted record, which is
-    // enough to resume the right file at the right position but carries no
-    // tracks, artwork or subtitle label.
+    // Defensive fallback, not a reachable state today: `_persisted` and
+    // `_lastRequest` are always written in the same synchronous span inside
+    // `CastSessionManager` (`_loadOnRoute`, `restoreSession`), and cleared
+    // together by `stopCast`, which also publishes a null session — so by
+    // the time this function has a non-null `session.mediaInfo` and a
+    // non-null `persisted` above, `canRetarget` has always already been
+    // true. Kept anyway so a future refactor of that invariant fails safe
+    // (resuming at the right file and position, minus tracks/artwork/label)
+    // instead of throwing out of `retargetTo`.
     await manager.startCast(
       device: device,
       request: CastLaunchRequest(

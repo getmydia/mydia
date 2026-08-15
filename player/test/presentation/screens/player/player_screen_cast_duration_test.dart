@@ -30,7 +30,7 @@ void main() {
     final proxyService = TrackingLocalProxyService();
 
     final link = StubLink.responses([
-      movieDetailResponse(),
+      movieDetailResponse(files: [mediaFileWithSubtitle()]),
       movieSegmentsResponse(),
       streamingCandidatesResponse(duration: 5400),
     ]);
@@ -59,6 +59,32 @@ void main() {
       reason: 'The receiver must get the server-known runtime even though '
           'casting short-circuits before any local Player or HLS session '
           'exists.',
+    );
+    // `_castToTargetIfSet` — the "network streaming branch" call site — is
+    // the entry point the corrected premise names as never having sent
+    // subtitles at all, because it runs on the plain cast-before-play path
+    // with no GraphQL change of its own. `_fetchProgressAndEpisodes` (movie
+    // detail + segments, both already answered above) is awaited before this
+    // call site is reached, so `_subtitleTracks` is populated by the time
+    // `_castSubtitleTracks()` builds the request's `subtitles` list — proving
+    // the wiring, not just that `CastLaunchRequest.subtitles` defaults to
+    // non-empty.
+    expect(
+      captured.subtitles,
+      hasLength(1),
+      reason: '_castToTargetIfSet must carry the file\'s subtitle tracks; '
+          'before Step 7 this call site built no `subtitles:` argument at '
+          'all, so this list was always empty regardless of what GraphQL '
+          'returned.',
+    );
+    expect(captured.subtitles.single.trackId, '3');
+    expect(captured.subtitles.single.language, 'eng');
+    expect(
+      captured.subtitles.single.url,
+      '/api/player/v1/subtitles/file/file-1/3?format=vtt',
+      reason: '_castToTargetIfSet hands the route resolver the raw '
+          'media-file URL; CastRouteResolver, not this call site, is what '
+          'rewrites it to a session path.',
     );
   });
 

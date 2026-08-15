@@ -295,9 +295,16 @@ Future<void> seedLocalProgress(
 /// so the fallback chain in `_resolveRealDuration` sees nothing from progress
 /// or runtime unless [positionSeconds] or [durationSeconds] is supplied —
 /// isolating whichever signal a given test wants to exercise.
+///
+/// [files] is likewise omitted by default: `MediaFileFragment` selects every
+/// field it lists, so a test that supplies files has to hand back all of
+/// them, not just the ones it cares about (see [mediaFileWithSubtitle] for a
+/// ready-made one). This is what `_extractSubtitlesFromFiles` reads
+/// `_subtitleTracks` from.
 Map<String, dynamic> movieDetailResponse({
   int? positionSeconds,
   int? durationSeconds,
+  List<Map<String, dynamic>>? files,
 }) {
   return {
     '__typename': 'Query',
@@ -317,7 +324,51 @@ Map<String, dynamic> movieDetailResponse({
           'watched': false,
           'lastWatchedAt': null,
         },
+      if (files != null) 'files': files,
     },
+  };
+}
+
+/// A single `MediaFileFragment` entry carrying one deliverable subtitle
+/// track, in the shape `movieDetailResponse(files: [...])` and
+/// `episodeDetailResponse`-style callers need.
+///
+/// Every field `MediaFileFragment` and its nested `subtitles` selection ask
+/// for is present — a normalized-cache write rejects the whole query
+/// (`PartialDataException`) if any selected field is missing from the
+/// response, not just the ones a given test happens to read back.
+Map<String, dynamic> mediaFileWithSubtitle({
+  String fileId = 'file-1',
+  String trackId = '3',
+  String language = 'eng',
+  String title = 'English',
+  String url = '/api/player/v1/subtitles/file/file-1/3?format=vtt',
+  bool deliverable = true,
+}) {
+  return {
+    '__typename': 'MediaFile',
+    'id': fileId,
+    'resolution': null,
+    'codec': null,
+    'audioCodec': null,
+    'hdrFormat': null,
+    'size': null,
+    'bitrate': null,
+    'directPlaySupported': null,
+    'streamUrl': null,
+    'directPlayUrl': null,
+    'subtitles': [
+      {
+        '__typename': 'SubtitleTrack',
+        'trackId': trackId,
+        'language': language,
+        'title': title,
+        'format': 'vtt',
+        'embedded': false,
+        'deliverable': deliverable,
+        'url': url,
+      },
+    ],
   };
 }
 

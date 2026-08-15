@@ -237,31 +237,6 @@ class CastRouteResolver {
     );
   }
 
-  /// Turn a subtitle path into a URL the receiver can fetch, or null when the
-  /// route cannot serve subtitles at all.
-  ///
-  /// The subtitle endpoint sits behind the same authentication the stream
-  /// does (`MydiaWeb.Plugs.MediaAuth` accepts `?token=`), and the receiver
-  /// cannot send an `Authorization` header — so the token goes in the URL,
-  /// exactly as [StreamingStrategyService.buildStreamUrl] does for media.
-  String? resolveSubtitleUrl(CastRoute route, String relativeOrAbsoluteUrl) {
-    if (!route.subtitlesSupported) return null;
-
-    final isAbsolute = relativeOrAbsoluteUrl.startsWith('http://') ||
-        relativeOrAbsoluteUrl.startsWith('https://');
-
-    final String base;
-    if (isAbsolute) {
-      base = relativeOrAbsoluteUrl;
-    } else {
-      final server = serverUrl;
-      if (server == null) return null;
-      base = _absoluteUrl(server, relativeOrAbsoluteUrl);
-    }
-
-    return _withToken(base, route.mediaToken);
-  }
-
   /// Turns session-relative subtitle names into URLs for this route.
   ///
   /// The filename convention (`subs_<trackId>.vtt`) is the server's, defined
