@@ -30,6 +30,8 @@
             </button>
           </div>
 
+          <.grid_density_toggle id="discover-density-toggle" density={@grid_density} />
+
           <div role="tablist" class="tabs tabs-box w-fit">
             <%= for {cat_key, cat_label} <- @categories do %>
               <button
@@ -157,7 +159,10 @@
           </div>
         </div>
       <% true -> %>
-        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-5">
+        <div
+          id="discover-grid"
+          class={["grid gap-4 md:gap-5", grid_columns_class(@grid_density)]}
+        >
           <%= for {item, index} <- Enum.with_index(@items) do %>
             <.trending_card
               item={item}
