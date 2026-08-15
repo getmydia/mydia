@@ -12,6 +12,34 @@ class VersionComparator {
     return _compare(remoteParsed, currentParsed) > 0;
   }
 
+  /// Compares two versions on their release core only, for compatibility gates.
+  ///
+  /// Returns negative when [a] is older than [b], zero when they match, and
+  /// positive when [a] is newer. Returns null when either side cannot be
+  /// parsed, which callers must treat as "unknown" and act on by doing nothing.
+  ///
+  /// This deliberately differs from [isNewer] in two ways:
+  ///
+  /// - It strips a `*<sha>` suffix. `System.app_version()` returns
+  ///   "0.9.0*abc1234" on master builds, which would otherwise fail to parse.
+  /// - It ignores prerelease suffixes. [isNewer] sorts "0.9.0-rc1" below
+  ///   "0.9.0", which is right for picking the newest release but wrong for a
+  ///   compatibility floor: an RC of 0.9.0 carries the 0.9.0 contract, and
+  ///   sorting it low would show every RC tester a spurious update banner.
+  static int? compareCore(String a, String b) {
+    final parsedA = _parseCore(a);
+    final parsedB = _parseCore(b);
+    if (parsedA == null || parsedB == null) return null;
+
+    if (parsedA.major != parsedB.major) {
+      return parsedA.major.compareTo(parsedB.major);
+    }
+    if (parsedA.minor != parsedB.minor) {
+      return parsedA.minor.compareTo(parsedB.minor);
+    }
+    return parsedA.patch.compareTo(parsedB.patch);
+  }
+
   /// Parses a version string, stripping a leading "v" if present.
   static _SemVer? _parse(String version) {
     var v = version.trim();
@@ -37,6 +65,32 @@ class VersionComparator {
     if (major == null || minor == null || patch == null) return null;
 
     return _SemVer(major, minor, patch, preRelease);
+  }
+
+  /// Parses a version down to major/minor/patch, discarding everything a
+  /// compatibility gate should not weigh: a leading "v", a `*<sha>` build
+  /// marker, and any prerelease or build-metadata suffix.
+  static _SemVer? _parseCore(String version) {
+    var v = version.trim();
+    if (v.startsWith('v') || v.startsWith('V')) {
+      v = v.substring(1);
+    }
+
+    for (final marker in const ['*', '-', '+']) {
+      final index = v.indexOf(marker);
+      if (index != -1) v = v.substring(0, index);
+    }
+
+    final parts = v.split('.');
+    if (parts.length < 2 || parts.length > 3) return null;
+
+    final major = int.tryParse(parts[0]);
+    final minor = int.tryParse(parts[1]);
+    final patch = parts.length > 2 ? int.tryParse(parts[2]) : 0;
+
+    if (major == null || minor == null || patch == null) return null;
+
+    return _SemVer(major, minor, patch, null);
   }
 
   /// Returns positive if a > b, negative if a < b, zero if equal.
