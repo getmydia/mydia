@@ -39,6 +39,8 @@ CastSession _session({
   required Duration duration,
   Duration position = const Duration(seconds: 29),
   bool isStale = false,
+  List<CastSubtitleTrack> subtitles = const [],
+  CastSubtitleTrack? selectedSubtitle,
 }) {
   return CastSession(
     device: _device,
@@ -50,6 +52,8 @@ CastSession _session({
       duration: duration,
       position: position,
     ),
+    subtitles: subtitles,
+    selectedSubtitle: selectedSubtitle,
   );
 }
 
@@ -624,6 +628,151 @@ void main() {
           reason: 'cancelling mid-connect must tear down whatever the '
               'in-flight connect established on the TV, not merely forget '
               'the device');
+    });
+  });
+
+  group('cast bar subtitle button', () {
+    const trackA = CastSubtitleTrack(
+      trackId: '1',
+      url: 'u1',
+      label: 'English',
+      language: 'eng',
+    );
+    const trackB = CastSubtitleTrack(
+      trackId: '2',
+      url: 'u2',
+      label: 'Spanish',
+      language: 'spa',
+    );
+
+    testWidgets('is absent when the session has no subtitle tracks',
+        (tester) async {
+      await _pump(tester,
+          session: _session(duration: const Duration(minutes: 44)));
+
+      expect(find.byKey(const Key('cast-bar-subtitles')), findsNothing);
+    });
+
+    testWidgets('the icon reflects whether a track is selected',
+        (tester) async {
+      await _pump(
+        tester,
+        session: _session(
+          duration: const Duration(minutes: 44),
+          subtitles: const [trackA],
+        ),
+      );
+      var button = tester
+          .widget<IconButton>(find.byKey(const Key('cast-bar-subtitles')));
+      expect((button.icon as Icon).icon, Icons.closed_caption_off);
+
+      await _pump(
+        tester,
+        session: _session(
+          duration: const Duration(minutes: 44),
+          subtitles: const [trackA],
+          selectedSubtitle: trackA,
+        ),
+      );
+      button = tester
+          .widget<IconButton>(find.byKey(const Key('cast-bar-subtitles')));
+      expect((button.icon as Icon).icon, Icons.closed_caption);
+    });
+
+    testWidgets(
+        'picking a track in the sheet reaches the manager with the exact '
+        "session instance, not a reconstruction", (tester) async {
+      final harness = _buildManagerHarness();
+      addTearDown(harness.manager.dispose);
+
+      final sessionController = StreamController<CastSession?>();
+      addTearDown(sessionController.close);
+
+      await _pumpWithManager(
+        tester,
+        harness: harness,
+        sessionStream: sessionController.stream,
+      );
+      sessionController.add(_session(
+        duration: const Duration(minutes: 44),
+        subtitles: const [trackA, trackB],
+      ));
+      await tester.pump();
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('cast-bar-subtitles')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('cast-subtitle-track-2')));
+      await tester.pumpAndSettle();
+
+      expect(harness.backend.subtitleSelections, hasLength(1));
+      expect(
+          identical(harness.backend.subtitleSelections.single, trackB), isTrue,
+          reason: 'dart_cast keys receiver track ids by URL, so '
+              'selectSubtitle must receive the very instance the session '
+              'held, not one rebuilt from an id');
+    });
+
+    testWidgets('picking Off in the sheet turns subtitles off on the manager',
+        (tester) async {
+      final harness = _buildManagerHarness();
+      addTearDown(harness.manager.dispose);
+
+      final sessionController = StreamController<CastSession?>();
+      addTearDown(sessionController.close);
+
+      await _pumpWithManager(
+        tester,
+        harness: harness,
+        sessionStream: sessionController.stream,
+      );
+      sessionController.add(_session(
+        duration: const Duration(minutes: 44),
+        subtitles: const [trackA],
+        selectedSubtitle: trackA,
+      ));
+      await tester.pump();
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('cast-bar-subtitles')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('cast-subtitle-off')));
+      await tester.pumpAndSettle();
+
+      expect(harness.backend.subtitleSelections, [null]);
+    });
+
+    testWidgets('dismissing the sheet with a barrier tap issues no call at all',
+        (tester) async {
+      final harness = _buildManagerHarness();
+      addTearDown(harness.manager.dispose);
+
+      final sessionController = StreamController<CastSession?>();
+      addTearDown(sessionController.close);
+
+      await _pumpWithManager(
+        tester,
+        harness: harness,
+        sessionStream: sessionController.stream,
+      );
+      sessionController.add(_session(
+        duration: const Duration(minutes: 44),
+        subtitles: const [trackA],
+      ));
+      await tester.pump();
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('cast-bar-subtitles')));
+      await tester.pumpAndSettle();
+
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+
+      expect(harness.backend.subtitleSelections, isEmpty,
+          reason: 'backing out of the sheet must leave the receiver alone, '
+              'not silently turn subtitles off');
     });
   });
 }

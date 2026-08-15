@@ -9,6 +9,7 @@ import '../../core/graphql/graphql_provider.dart';
 import '../../core/router/navigator_keys.dart';
 import '../../domain/models/cast_device.dart';
 import 'cast_actions.dart';
+import 'cast_subtitle_sheet.dart';
 
 /// Mounts [CastMiniController] at the bottom of [child], floating above it.
 ///
@@ -409,6 +410,17 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                     ));
                   },
                 ),
+                if (session.subtitles.isNotEmpty)
+                  IconButton(
+                    key: const Key('cast-bar-subtitles'),
+                    tooltip: 'Subtitles',
+                    icon: Icon(
+                      session.selectedSubtitle == null
+                          ? Icons.closed_caption_off
+                          : Icons.closed_caption,
+                    ),
+                    onPressed: () => _pickSubtitle(session),
+                  ),
                 IconButton(
                   key: const Key('cast-bar-stop'),
                   icon: const Icon(Icons.stop, size: 28),
@@ -496,6 +508,33 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
 
     if (shouldStop == true) {
       await _stopCasting();
+    }
+  }
+
+  /// Opens the caption picker and applies whatever it resolved to.
+  ///
+  /// The tracks and current selection come straight off [session] rather
+  /// than being reconstructed, so [CastSessionManager.selectSubtitle]
+  /// always receives the very track instance the session holds (see
+  /// `cast_subtitle_sheet.dart`'s [CastSubtitlePicked] doc for why that
+  /// matters). A dismissal of the sheet leaves the receiver untouched.
+  Future<void> _pickSubtitle(CastSession session) async {
+    final choice = await showCastSubtitleSheet(
+      context,
+      tracks: session.subtitles,
+      selected: session.selectedSubtitle,
+    );
+
+    if (!mounted) return;
+
+    final manager = await ref.read(castSessionManagerProvider.future);
+    switch (choice) {
+      case CastSubtitlePicked(:final track):
+        await manager.selectSubtitle(track);
+      case CastSubtitleOff():
+        await manager.selectSubtitle(null);
+      case CastSubtitleCancelled():
+        break;
     }
   }
 
