@@ -6,6 +6,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
   require Logger
 
   alias Mydia.Media
+  alias Mydia.Media.Recommendations
   alias Mydia.Metadata
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
@@ -53,6 +54,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
       |> assign(:request_status_map, %{})
       |> assign(:selected_item, nil)
       |> assign(:selected_metadata, nil)
+      |> assign(:selected_recommendations, [])
       |> assign(:load_error, nil)
       |> assign(:detail_loading, false)
       |> assign(:libraries, [])
@@ -242,13 +244,20 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
   def handle_event("show_details", %{"id" => id, "type" => type}, socket) do
     with {:ok, media_type} <- parse_event_media_type(type),
-         item when not is_nil(item) <- Enum.find(socket.assigns.items, &(&1.provider_id == id)) do
+         item when not is_nil(item) <-
+           find_selectable_item(
+             socket.assigns.items,
+             socket.assigns.selected_recommendations,
+             id
+           ) do
       send(self(), {:fetch_detail_metadata, id, media_type})
+      send(self(), {:fetch_recommendations, id, media_type})
 
       {:noreply,
        socket
        |> assign(:selected_item, item)
        |> assign(:selected_metadata, nil)
+       |> assign(:selected_recommendations, [])
        |> assign(:detail_loading, true)}
     else
       _ -> {:noreply, socket}
@@ -343,6 +352,22 @@ defmodule MydiaWeb.DiscoverLive.Index do
     end
   end
 
+  def handle_info({:fetch_recommendations, tmdb_id, media_type}, socket) do
+    case Recommendations.for_tmdb_id(tmdb_id, media_type, nil) do
+      {:ok, results} ->
+        enriched =
+          MediaAddHelpers.enrich_with_library_status(
+            results,
+            socket.assigns.library_status_map
+          )
+
+        {:noreply, assign(socket, :selected_recommendations, enriched)}
+
+      :none ->
+        {:noreply, assign(socket, :selected_recommendations, [])}
+    end
+  end
+
   def handle_info({:add_media_to_library, provider_id, media_type, library_path_id}, socket) do
     # Comes from client params, so a blank string is possible. "" is truthy in
     # Elixir and would reach the changeset as library_path_id: "", failing the
@@ -432,6 +457,19 @@ defmodule MydiaWeb.DiscoverLive.Index do
     do: "Could not submit the request: #{MediaAddHelpers.format_changeset_errors(changeset)}"
 
   defp request_error_message(_), do: "Could not submit the request. Please try again."
+
+  @doc """
+  Resolves a clicked provider id against the current grid page, then the
+  recommendations rail.
+
+  A recommendation is not part of the grid page, so resolving against `items`
+  alone drops the click and the modal never swaps — a failure that looks like
+  nothing happening. Public so it can be exercised without a live process.
+  """
+  def find_selectable_item(items, recommendations, id) do
+    Enum.find(items, &(&1.provider_id == id)) ||
+      Enum.find(recommendations, &(&1.provider_id == id))
+  end
 
   # Private helpers
 
