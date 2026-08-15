@@ -383,5 +383,48 @@ defmodule Mydia.Media.RefreshTest do
       assert updated.tvdb_id == 4244
       assert updated.tmdb_id == nil
     end
+
+    test "does not flag a refreshed item's own id as a conflict against itself", %{
+      bypass: bypass,
+      config: config
+    } do
+      item =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "Self Referenced",
+          metadata_source: :tvdb,
+          tvdb_id: 4245,
+          tmdb_id: 9999
+        })
+
+      Bypass.expect_once(bypass, "GET", "/tvdb/series/4245/extended", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          200,
+          Jason.encode!(%{
+            "data" => %{
+              "id" => 4245,
+              "name" => "Self Referenced",
+              "firstAired" => "2017-03-01",
+              "overview" => "x",
+              "genres" => [],
+              "seasons" => [],
+              "characters" => [],
+              "trailers" => [%{"url" => "https://youtube.com/watch?v=c", "language" => "eng"}],
+              "remoteIds" => [%{"sourceName" => "TheMovieDB.com", "id" => "9999", "type" => 12}]
+            }
+          })
+        )
+      end)
+
+      {result, log} = with_log(fn -> Refresh.run(item, config: config, fetch_episodes: false) end)
+
+      refute log =~ "already owned"
+      assert {:ok, updated} = result
+
+      assert updated.tvdb_id == 4245
+      assert updated.tmdb_id == 9999
+    end
   end
 end
