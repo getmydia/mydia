@@ -70,6 +70,22 @@ defmodule Mydia.Library.ImportRunTest do
       assert stopping.status == :stopping
       assert Library.import_run_stopping?(stopping)
     end
+
+    test "re-reads from the database rather than trusting the passed struct", %{
+      library_path: lp,
+      user: user
+    } do
+      {:ok, run} =
+        Library.create_import_run(%{library_path_id: lp.id, user_id: user.id, mode: :review})
+
+      {:ok, _} = Library.request_import_run_stop(run)
+
+      # `run` is the stale, pre-stop copy: its in-memory status is still :running.
+      # This is exactly the shape the coordinator holds between chunks, so a
+      # struct-only check would return false here and Stop would never take effect.
+      assert run.status == :running
+      assert Library.import_run_stopping?(run)
+    end
   end
 
   describe "active_import_run/1" do

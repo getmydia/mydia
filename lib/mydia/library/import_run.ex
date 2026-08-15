@@ -77,19 +77,7 @@ defmodule Mydia.Library.ImportRun do
     |> put_change(:phase, :scanning)
     |> put_change(:started_at, DateTime.utc_now() |> DateTime.truncate(:second))
     |> foreign_key_constraint(:library_path_id)
-    # Two names for one guarantee: on Postgres the constraint violation reports
-    # the real index name. SQLite's driver never gets an index name back from a
-    # partial-unique violation (just "UNIQUE constraint failed: <table>.<col>"),
-    # so ecto_sqlite3 guesses "<table>_<col>_index" instead. Declaring both lets
-    # either adapter's error resolve to the same changeset error.
-    |> unique_constraint(:library_path_id,
-      name: :import_runs_one_active_per_library_path,
-      message: "already has a running import"
-    )
-    |> unique_constraint(:library_path_id,
-      name: :import_runs_library_path_id_index,
-      message: "already has a running import"
-    )
+    |> guard_single_active_run()
   end
 
   @doc """
@@ -107,6 +95,18 @@ defmodule Mydia.Library.ImportRun do
       :error
     ])
     |> maybe_set_finished_at()
+    |> guard_single_active_run()
+  end
+
+  # Two names for one guarantee: on Postgres the constraint violation reports
+  # the real index name. SQLite's driver never gets an index name back from a
+  # partial-unique violation (just "UNIQUE constraint failed: <table>.<col>"),
+  # so ecto_sqlite3 guesses "<table>_<col>_index" instead. Declaring both lets
+  # either adapter's error resolve to the same changeset error. Kept as one
+  # shared function so the two names never drift out of sync between
+  # create_changeset/1 and changeset/2.
+  defp guard_single_active_run(changeset) do
+    changeset
     |> unique_constraint(:library_path_id,
       name: :import_runs_one_active_per_library_path,
       message: "already has a running import"
