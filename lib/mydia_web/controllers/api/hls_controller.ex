@@ -258,6 +258,8 @@ defmodule MydiaWeb.Api.HlsController do
         |> json(%{error: "Forbidden"})
 
       {:error, :image_subtitle} ->
+        Logger.debug("HLS subtitle unavailable: image-based track #{segment}")
+
         conn
         |> put_status(:unsupported_media_type)
         |> json(%{error: "Image-based subtitles cannot be converted to text"})
