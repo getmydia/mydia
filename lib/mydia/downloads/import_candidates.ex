@@ -15,9 +15,6 @@ defmodule Mydia.Downloads.ImportCandidates do
   alias Mydia.Settings
 
   @video_extensions ~w(.mkv .mp4 .avi .mov .wmv .flv .webm .m4v .mpg .mpeg .m2ts)
-  @music_extensions ~w(.mp3 .flac .wav .aac .ogg .m4a .wma .opus .ape .alac .aiff)
-  @book_extensions ~w(.epub .pdf .mobi .azw .azw3 .cbr .cbz .djvu .fb2 .lit .txt .rtf)
-  @adult_extensions ~w(.mkv .mp4 .avi .mov .wmv .flv .webm .m4v .jpg .jpeg .png .gif .webp .bmp .tiff)
 
   @probe_size_floor 10_485_760
   @probe_cap 20
@@ -102,9 +99,6 @@ defmodule Mydia.Downloads.ImportCandidates do
 
     case library_type do
       type when type in [:movies, :series, :mixed] -> ext in @video_extensions
-      :music -> ext in @music_extensions
-      :books -> ext in @book_extensions
-      :adult -> ext in @adult_extensions
       _unknown -> true
     end
   end
@@ -419,9 +413,8 @@ defmodule Mydia.Downloads.ImportCandidates do
   # `determine_library_path/1` at least once, so when the caller preloaded
   # `:library_path` this is authoritative, not cosmetic: it's what makes the
   # live-listing's `skip_reason` agree with the reason the file was actually
-  # dropped for non-movies/series types (`:music`, `:books`, `:adult`),
-  # which `library_type_for/1` can never guess since it only ever returns
-  # `:movies` or `:series`.
+  # dropped for a `:mixed` library, which `library_type_for/1` can never guess
+  # since it only ever returns `:movies` or `:series`.
   #
   # Falls back to the guess when `library_path` isn't preloaded, isn't set
   # (a download whose failure never got as far as resolving one), or is a

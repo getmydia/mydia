@@ -32,7 +32,7 @@ defmodule Mydia.Library do
     - `:media_item_id` - Filter by media item
     - `:episode_id` - Filter by episode
     - `:library_path_id` - Filter by library path ID
-    - `:library_path_type` - Filter by library path type (e.g., :adult, :music, :books)
+    - `:library_path_type` - Filter by library path type (e.g., :movies, :series)
     - `:preload` - List of associations to preload
   """
   @spec list_media_files(keyword()) :: [MediaFile.t()]
@@ -91,10 +91,10 @@ defmodule Mydia.Library do
   Gets adjacent media files (previous and next) for navigation.
 
   Files are ordered by insertion date (newest first) to match the default
-  listing order in the adult library index.
+  listing order in the library index.
 
   ## Options
-    - `:library_path_type` - Filter by library path type (e.g., :adult)
+    - `:library_path_type` - Filter by library path type (e.g., :movies)
 
   Returns `{previous_file, next_file}` where either can be nil if at the boundary.
   """
@@ -1843,7 +1843,7 @@ defmodule Mydia.Library do
     - `media_file` - The MediaFile to find similar files for (must have phash set)
     - `opts` - Options:
       - `:threshold` - Maximum Hamming distance to consider similar (default: 10)
-      - `:library_path_type` - Filter results to specific library type (e.g., :adult)
+      - `:library_path_type` - Filter results to specific library type (e.g., :movies)
       - `:exclude_self` - Whether to exclude the input file from results (default: true)
       - `:preload` - Associations to preload on returned files
 
@@ -1918,7 +1918,7 @@ defmodule Mydia.Library do
 
   ## Examples
 
-      groups = Library.find_duplicate_files(library_path_type: :adult)
+      groups = Library.find_duplicate_files(library_path_type: :movies)
       # Returns: [[file1, file2], [file3, file4, file5], ...]
   """
   @spec find_duplicate_files(keyword()) :: list(list(MediaFile.t()))
@@ -2079,7 +2079,7 @@ defmodule Mydia.Library do
         where(query, [f], f.library_path_id == ^library_path_id)
 
       {:library_path_type, library_type}, query ->
-        # Filter files by their library path type (e.g., :adult, :music, :books)
+        # Filter files by their library path type (e.g., :movies, :series)
         from(f in query,
           join: lp in assoc(f, :library_path),
           where: lp.type == ^library_type

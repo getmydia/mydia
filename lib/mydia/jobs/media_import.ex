@@ -1700,7 +1700,6 @@ defmodule Mydia.Jobs.MediaImport do
     }
 
     # Use the episode parameter if provided, otherwise fall back to download associations
-    # For specialized libraries (music, books, adult), there may be no media_item/episode
     attrs =
       cond do
         episode && episode.id ->
@@ -1719,18 +1718,6 @@ defmodule Mydia.Jobs.MediaImport do
           Map.merge(attrs, %{
             media_item_id: download.media_item_id,
             episode_id: nil
-          })
-
-        # Specialized library download (music, books, adult) - no media_item needed
-        download.library_path_id && library_path.type in [:music, :books, :adult] ->
-          Logger.debug("Creating media file for specialized library",
-            library_type: library_path.type,
-            download_id: download.id
-          )
-
-          Map.merge(attrs, %{
-            episode_id: nil,
-            media_item_id: nil
           })
 
         true ->
@@ -2182,15 +2169,6 @@ defmodule Mydia.Jobs.MediaImport do
 
       download.media_item && download.media_item.type == "tv_show" ->
         "TV show"
-
-      download.library_path && download.library_path.type == :music ->
-        "music"
-
-      download.library_path && download.library_path.type == :books ->
-        "book"
-
-      download.library_path && download.library_path.type == :adult ->
-        "adult content"
 
       true ->
         "media"

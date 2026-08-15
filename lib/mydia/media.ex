@@ -22,7 +22,7 @@ defmodule Mydia.Media do
     - `:ids` - Filter to a specific list of media item ids
     - `:monitored` - Filter by monitored status (true/false)
     - `:category` - Filter by category (atom or string, e.g., :anime_movie or "anime_movie")
-    - `:library_path_type` - Filter by library path type (:adult, :music, :books, etc.)
+    - `:library_path_type` - Filter by library path type (:movies, :series, etc.)
     - `:search` - Search by title (case-insensitive substring match)
     - `:added_since` - Filter to items inserted after this DateTime
     - `:limit` - Maximum number of items to return

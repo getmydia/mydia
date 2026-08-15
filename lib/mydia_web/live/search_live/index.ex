@@ -1383,9 +1383,6 @@ defmodule MydiaWeb.SearchLive.Index do
   # Helper to get library type label for display
   defp library_type_label(:movies), do: "Movies"
   defp library_type_label(:series), do: "TV Series"
-  defp library_type_label(:music), do: "Music"
-  defp library_type_label(:books), do: "Books"
-  defp library_type_label(:adult), do: "Adult"
   defp library_type_label(:other), do: "Other"
   defp library_type_label(:unknown), do: "Select"
   defp library_type_label(_), do: "Unknown"
@@ -1420,9 +1417,6 @@ defmodule MydiaWeb.SearchLive.Index do
   # Badge color for library type
   defp library_type_badge_class(:movies), do: "badge-primary"
   defp library_type_badge_class(:series), do: "badge-secondary"
-  defp library_type_badge_class(:music), do: "badge-accent"
-  defp library_type_badge_class(:books), do: "badge-info"
-  defp library_type_badge_class(:adult), do: "badge-warning"
   defp library_type_badge_class(:unknown), do: "badge-neutral"
   defp library_type_badge_class(_), do: "badge-ghost"
 end

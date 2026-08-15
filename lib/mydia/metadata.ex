@@ -60,7 +60,6 @@ defmodule Mydia.Metadata do
 
     # Register metadata-relay as the primary provider
     Provider.Registry.register(:metadata_relay, Mydia.Metadata.Provider.Relay)
-    Provider.Registry.register(:music_relay, Mydia.Metadata.Provider.MusicRelay)
     Provider.Registry.register(:open_library, Mydia.Metadata.Provider.OpenLibrary)
 
     # Additional providers will be registered as they are implemented
@@ -246,10 +245,9 @@ defmodule Mydia.Metadata do
   titles.
 
   Relay-only, unlike its provider-agnostic siblings above: a TMDB collection has
-  no equivalent in the other registered provider types (`:music_relay`,
-  `:open_library`), so those are rejected with an `:invalid_config` error rather
-  than routed to the relay adapter under a cache key that names a provider which
-  never served the response.
+  no equivalent in the other registered provider type (`:open_library`), so those
+  are rejected with an `:invalid_config` error rather than routed to the relay
+  adapter under a cache key that names a provider which never served the response.
 
   ## Examples
 
@@ -285,9 +283,9 @@ defmodule Mydia.Metadata do
   Fetches TMDB recommendations for a title, cached in ETS for 24 hours.
 
   Relay-only, for the same reason as `fetch_collection_cached/3`: the other
-  registered provider types (`:music_relay`, `:open_library`) have no equivalent
-  concept, so routing them to the relay adapter would cache a response under a key
-  naming a provider that never served it.
+  registered provider type (`:open_library`) has no equivalent concept, so routing
+  it to the relay adapter would cache a response under a key naming a provider
+  that never served it.
 
   The language is part of the key so a non-English library never reads
   English-cached entries. The media type is part of the key because TMDB movie and
