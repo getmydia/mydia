@@ -236,7 +236,14 @@ defmodule Mydia.Metadata.Provider.Relay do
   # Perform the actual TMDB fetch after validation
   defp perform_tmdb_fetch(config, provider_id, media_type, opts) do
     language = resolve_language(config, opts)
-    append = Keyword.get(opts, :append_to_response, ["credits", "alternative_titles", "videos"])
+
+    append =
+      Keyword.get(opts, :append_to_response, [
+        "credits",
+        "alternative_titles",
+        "videos",
+        "external_ids"
+      ])
 
     endpoint = build_details_endpoint(media_type, provider_id)
 

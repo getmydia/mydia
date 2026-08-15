@@ -553,6 +553,40 @@ defmodule Mydia.Metadata.Provider.RelayTest do
     end
   end
 
+  describe "external_ids request defaults" do
+    test "asks TMDB for external_ids even when the caller sets no append list" do
+      bypass = Bypass.open()
+      tmdb_id = 1399
+      test_pid = self()
+
+      Bypass.stub(bypass, "GET", "/tmdb/tv/shows/#{tmdb_id}", fn conn ->
+        conn = Plug.Conn.fetch_query_params(conn)
+        send(test_pid, {:append, conn.query_params["append_to_response"]})
+
+        body = %{
+          "id" => tmdb_id,
+          "name" => "Game of Thrones",
+          "credits" => %{"cast" => [], "crew" => []},
+          "external_ids" => %{"tvdb_id" => 121_361, "imdb_id" => "tt0944947"}
+        }
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(body))
+      end)
+
+      assert {:ok, metadata} =
+               Relay.fetch_by_id(relay_config(bypass), to_string(tmdb_id),
+                 media_type: :tv_show,
+                 provider: :tmdb
+               )
+
+      assert_receive {:append, append}
+      assert append =~ "external_ids"
+      assert metadata.external_ids.tvdb == 121_361
+    end
+  end
+
   defp relay_config(bypass) do
     %{
       type: :metadata_relay,

@@ -440,7 +440,14 @@ defmodule Mydia.Metadata do
   end
 
   # Resources common to both movie and TV detail fetches.
-  @shared_append_to_response ["credits", "images", "videos", "keywords", "recommendations"]
+  @shared_append_to_response [
+    "credits",
+    "images",
+    "videos",
+    "keywords",
+    "recommendations",
+    "external_ids"
+  ]
 
   @doc """
   The `append_to_response` list for a full-detail metadata fetch (initial
