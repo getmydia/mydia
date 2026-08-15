@@ -1698,5 +1698,91 @@ void main() {
       // back must be the one that was loaded, not one rebuilt from the id.
       expect(backend.subtitleSelections.last?.url, track.url);
     });
+
+    test(
+        'a selected id matching no offered track defaults to off, not '
+        'whatever dart_cast loaded first', () async {
+      final manager = build();
+      addTearDown(manager.dispose);
+
+      await manager.startCast(
+        device: device,
+        request: const CastLaunchRequest(
+          fileId: 'file-1',
+          mediaId: 'movie-1',
+          mediaType: 'movie',
+          title: 'A Movie',
+          subtitles: twoTracks,
+          // Reachable in practice: a viewer watching a PGS/VobSub track
+          // locally, then casting — the player only offers deliverable
+          // tracks, but still names the local selection by id regardless.
+          selectedSubtitleTrackId: 'not-offered',
+        ),
+      );
+
+      // orderSubtitlesForLoad leaves the order untouched for an id it
+      // doesn't recognise, so dart_cast auto-activated whatever loaded
+      // first. The disable call is the only thing that turns it back off —
+      // without it the receiver would keep showing a track the UI reports
+      // as unselected.
+      expect(backend.subtitleSelections, [null]);
+      expect(manager.currentSession?.selectedSubtitle, isNull,
+          reason: 'the UI and the receiver must agree that nothing is on');
+    });
+
+    test(
+        'subtitles and the selected track survive an unrelated session '
+        'update', () async {
+      final manager = build();
+      addTearDown(manager.dispose);
+
+      await manager.startCast(
+        device: device,
+        request: const CastLaunchRequest(
+          fileId: 'file-1',
+          mediaId: 'movie-1',
+          mediaType: 'movie',
+          title: 'A Movie',
+          subtitles: twoTracks,
+          selectedSubtitleTrackId: '3',
+        ),
+      );
+
+      // Guard: prove the load really did carry subtitles and a selection,
+      // so a failure below can't be blamed on the load itself.
+      expect(manager.currentSession?.subtitles, hasLength(2));
+      expect(manager.currentSession?.selectedSubtitle?.trackId, '3');
+
+      // `_updateMediaInfo` republishes the session via `CastSession.copyWith`
+      // on every position/duration tick. If `subtitles`/`selectedSubtitle`
+      // aren't threaded through that copyWith, this resets them to the
+      // constructor defaults (empty list, null) even though nothing about
+      // the subtitle selection changed.
+      backend.emitPosition(const Duration(seconds: 5));
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(manager.currentSession?.subtitles, hasLength(2));
+      expect(manager.currentSession?.selectedSubtitle?.trackId, '3');
+
+      // Same risk via the playback-state listener's own copyWith call.
+      backend.emitState(CastPlaybackState.playing);
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(manager.currentSession?.subtitles, hasLength(2));
+      expect(manager.currentSession?.selectedSubtitle?.trackId, '3');
+    });
+
+    test('orderSubtitlesForLoad does not mutate its input', () {
+      const a = CastSubtitleTrack(
+          trackId: '1', url: 'u1', label: 'A', language: 'eng');
+      const b = CastSubtitleTrack(
+          trackId: '2', url: 'u2', label: 'B', language: 'spa');
+      final tracks = [a, b];
+
+      orderSubtitlesForLoad(tracks, '2');
+
+      expect(tracks, [a, b],
+          reason: 'the caller\'s own list must survive untouched');
+    });
   });
 }

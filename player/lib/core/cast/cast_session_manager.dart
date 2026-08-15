@@ -724,10 +724,15 @@ class CastSessionManager {
         .where((t) => t.trackId == request.selectedSubtitleTrackId)
         .firstOrNull;
 
-    // dart_cast activated subtitles.first at LOAD. Nothing was chosen, so
-    // turn them back off. Cheap, and the only way to match local playback,
-    // which never auto-selects when streaming.
-    if (subtitles.isNotEmpty && request.selectedSubtitleTrackId == null) {
+    // dart_cast activated subtitles.first at LOAD. Nothing *resolved* to a
+    // choice — either nothing was requested, or the requested id doesn't
+    // match any track actually offered (e.g. it named a track this route
+    // dropped for being undeliverable) — so turn them back off. Checking
+    // `_selectedSubtitle` rather than `request.selectedSubtitleTrackId`
+    // directly is what covers the mismatch case: leaving dart_cast's forced
+    // first track active while the UI (`CastSession.selectedSubtitle`) says
+    // off would show the viewer a subtitle they were told is disabled.
+    if (subtitles.isNotEmpty && _selectedSubtitle == null) {
       await _backend.selectSubtitle(null);
     }
 
@@ -943,22 +948,23 @@ class CastSessionManager {
 
   /// Re-emits [_current] with [_subtitles]/[_selectedSubtitle] applied.
   ///
-  /// A plain `copyWith` can't do this: its `field ?? this.field` pattern
-  /// can't express "set selectedSubtitle back to null", which is exactly
-  /// what turning subtitles off needs to do. So this rebuilds the session
-  /// directly instead of going through `CastSession.copyWith` for these two
-  /// fields.
+  /// Goes through `CastSession.copyWith` — including its
+  /// `clearSelectedSubtitle` flag for the "turn off" case a plain
+  /// `selectedSubtitle: null` argument can't express — rather than
+  /// hand-building a new `CastSession`, so every other field on the current
+  /// session (device, mediaInfo, playbackState, connectionState) is carried
+  /// forward automatically. Hand-building here would mean any field added to
+  /// `CastSession` later has to be remembered in two places — the
+  /// constructor and this method — or it silently regresses exactly like the
+  /// bug this pair of fields was added to fix.
   void _republishWithSubtitles() {
     final current = _current;
     if (current == null) return;
 
-    _publish(CastSession(
-      device: current.device,
-      mediaInfo: current.mediaInfo,
-      playbackState: current.playbackState,
-      connectionState: current.connectionState,
+    _publish(current.copyWith(
       subtitles: _subtitles,
       selectedSubtitle: _selectedSubtitle,
+      clearSelectedSubtitle: _selectedSubtitle == null,
     ));
   }
 

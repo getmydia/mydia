@@ -3933,6 +3933,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       final startPosition =
           player == null ? null : _timeline.toReal(player.state.position);
 
+      final offeredSubtitles = _castSubtitleTracks();
+      final localSelection = _selectedSubtitleTrack;
+      // The one entry point that pre-selects: a viewer watching with
+      // subtitles on and tapping cast keeps them on — but only when that
+      // track is actually among the ones being offered. `_castSubtitleTracks`
+      // drops undeliverable tracks (PGS, VobSub); a viewer watching one of
+      // those locally and then casting must not send an id for a track the
+      // receiver was never offered. `CastSessionManager` already treats an
+      // unmatched id as off, but sending one we know won't match is
+      // incoherent regardless of what the manager does with it.
+      final selectedSubtitleTrackId = localSelection != null &&
+              offeredSubtitles.any((t) => t.trackId == localSelection.id)
+          ? localSelection.id
+          : null;
+
       await manager.startCast(
         device: device,
         request: CastLaunchRequest(
@@ -3948,10 +3963,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           // from the candidates metadata), falling back to whatever the local
           // player managed to work out.
           duration: _knownCastDuration(),
-          subtitles: _castSubtitleTracks(),
-          // The one entry point that pre-selects: a viewer watching with
-          // subtitles on and tapping cast keeps them on.
-          selectedSubtitleTrackId: _selectedSubtitleTrack?.id,
+          subtitles: offeredSubtitles,
+          selectedSubtitleTrackId: selectedSubtitleTrackId,
         ),
       );
 

@@ -1,5 +1,3 @@
-import '../../core/cast/cast_backend.dart' show CastSubtitleTrack;
-
 /// The wire protocol a cast receiver speaks.
 enum CastProtocolKind { chromecast, dlna }
 
@@ -125,6 +123,47 @@ class CastMediaInfo {
 /// "connected" honestly before playback starts.
 enum CastConnectionState { connecting, connected, lost }
 
+/// A sidecar subtitle track offered to the receiver.
+class CastSubtitleTrack {
+  /// Mydia's own id for the track: an ffprobe stream index for an embedded
+  /// track, a UUID for a sidecar one.
+  ///
+  /// Distinct from the numeric id the Chromecast assigns at LOAD time, which
+  /// dart_cast keeps to itself. This one survives a session restart and a
+  /// route change, so it is what gets persisted and what builds the
+  /// session-relative URL.
+  final String trackId;
+
+  final String url;
+  final String label;
+  final String language;
+
+  const CastSubtitleTrack({
+    required this.trackId,
+    required this.url,
+    required this.label,
+    required this.language,
+  });
+
+  CastSubtitleTrack copyWith({String? url}) => CastSubtitleTrack(
+        trackId: trackId,
+        url: url ?? this.url,
+        label: label,
+        language: language,
+      );
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is CastSubtitleTrack &&
+          runtimeType == other.runtimeType &&
+          trackId == other.trackId &&
+          url == other.url;
+
+  @override
+  int get hashCode => Object.hash(trackId, url);
+}
+
 /// Represents a connection to a receiver, with or without media on it.
 class CastSession {
   final CastDevice device;
@@ -158,6 +197,11 @@ class CastSession {
   /// [connectionState].
   bool get isStale => connectionState == CastConnectionState.lost;
 
+  /// [clearSelectedSubtitle] is what lets a caller set [selectedSubtitle]
+  /// back to null — a plain `selectedSubtitle: null` argument is
+  /// indistinguishable from "leave it alone" under the `?? this.field`
+  /// pattern every other field here uses, and null is a real, reachable
+  /// state (subtitles off).
   CastSession copyWith({
     CastDevice? device,
     CastMediaInfo? mediaInfo,
@@ -165,6 +209,7 @@ class CastSession {
     CastConnectionState? connectionState,
     List<CastSubtitleTrack>? subtitles,
     CastSubtitleTrack? selectedSubtitle,
+    bool clearSelectedSubtitle = false,
   }) {
     return CastSession(
       device: device ?? this.device,
@@ -172,7 +217,9 @@ class CastSession {
       playbackState: playbackState ?? this.playbackState,
       connectionState: connectionState ?? this.connectionState,
       subtitles: subtitles ?? this.subtitles,
-      selectedSubtitle: selectedSubtitle ?? this.selectedSubtitle,
+      selectedSubtitle: clearSelectedSubtitle
+          ? null
+          : (selectedSubtitle ?? this.selectedSubtitle),
     );
   }
 }
