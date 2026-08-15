@@ -244,14 +244,40 @@ defmodule Mydia.Media.MetadataType do
   # `Mydia.Jobs.MetadataBackfill` reads that nil as "never checked" versus a
   # populated map as "checked, here's what we found". This must round-trip
   # through the database exactly as it was written, nil or not.
+  #
+  # The coercions mirror `Mydia.Metadata.Structs.MediaMetadata`'s own parser:
+  # these ids are handed straight to `Media.get_media_item_by_tmdb/1` and
+  # friends, which query :integer columns and raise `Ecto.Query.CastError` on a
+  # string rather than returning nil. Nothing writes string ids here today, but
+  # a metadata map built by hand would, and the two parsers staying identical
+  # is what keeps that true.
   defp parse_external_ids(nil), do: nil
 
   defp parse_external_ids(ids) when is_map(ids) do
     ids = atomize_keys(ids)
-    %{tmdb: ids[:tmdb], tvdb: ids[:tvdb], imdb: ids[:imdb]}
+
+    %{
+      tmdb: parse_external_integer(ids[:tmdb]),
+      tvdb: parse_external_integer(ids[:tvdb]),
+      imdb: parse_external_string(ids[:imdb])
+    }
   end
 
   defp parse_external_ids(_), do: nil
+
+  defp parse_external_integer(id) when is_integer(id) and id > 0, do: id
+
+  defp parse_external_integer(id) when is_binary(id) do
+    case Integer.parse(id) do
+      {int, ""} when int > 0 -> int
+      _ -> nil
+    end
+  end
+
+  defp parse_external_integer(_), do: nil
+
+  defp parse_external_string(id) when is_binary(id) and id != "", do: id
+  defp parse_external_string(_), do: nil
 
   # Parse date strings to Date structs
   defp parse_date(nil), do: nil

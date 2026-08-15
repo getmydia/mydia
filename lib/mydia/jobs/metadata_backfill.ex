@@ -9,9 +9,9 @@ defmodule Mydia.Jobs.MetadataBackfill do
   button for something already in the library, and the add that follows dies on
   the `tvdb_id` unique index.
 
-  Runs daily. Both queries empty out as the library is repaired, so the job
-  settles into costing one read, and a self-hosted operator never has to find
-  and repair these by hand. Idempotent and safe to re-run.
+  Runs daily. The query matches nothing once the library is repaired, so the
+  job settles into costing one read, and a self-hosted operator never has to
+  find and repair these by hand. Idempotent and safe to re-run.
   """
 
   use Oban.Worker,

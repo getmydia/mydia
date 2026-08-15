@@ -326,6 +326,40 @@ defmodule Mydia.Media.MetadataTypeTest do
       assert hd(metadata.cast).name == "Keanu Reeves"
     end
 
+    test "load/1 coerces string external ids to integers" do
+      # tmdb and tvdb feed Media.get_media_item_by_tmdb/1 and its tvdb twin,
+      # which query :integer columns and raise Ecto.Query.CastError on a string
+      # rather than returning nil. TVDB's remoteIds are strings at the source,
+      # so the load path coerces exactly as the API-side parser does.
+      json =
+        Jason.encode!(%{
+          "provider_id" => "121361",
+          "provider" => "tvdb",
+          "media_type" => "tv_show",
+          "title" => "Game of Thrones",
+          "external_ids" => %{"tmdb" => "1399", "tvdb" => "121361", "imdb" => "tt0944947"}
+        })
+
+      assert {:ok, %MediaMetadata{} = metadata} = MetadataType.load(json)
+      assert metadata.external_ids == %{tmdb: 1399, tvdb: 121_361, imdb: "tt0944947"}
+    end
+
+    test "load/1 drops external ids that are not usable provider ids" do
+      json =
+        Jason.encode!(%{
+          "provider_id" => "1399",
+          "provider" => "metadata_relay",
+          "media_type" => "tv_show",
+          "title" => "Garbage Ids",
+          "external_ids" => %{"tmdb" => "not-a-number", "tvdb" => 0, "imdb" => ""}
+        })
+
+      assert {:ok, %MediaMetadata{} = metadata} = MetadataType.load(json)
+      # Still a map, not nil: MetadataBackfill reads a map as "we asked" and a
+      # nil as "we never asked", and only the nil gets re-enqueued.
+      assert metadata.external_ids == %{tmdb: nil, tvdb: nil, imdb: nil}
+    end
+
     test "load/1 also handles plain maps for adapter compatibility" do
       db_map = %{
         provider_id: "603",
