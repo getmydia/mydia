@@ -45,18 +45,27 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeFilePathTest do
     ]
   end
 
+  # The filename also appears in the title attribute, so asserting on the whole
+  # document would pass even if the visible text went missing.
+  defp visible_filename(html) do
+    html
+    |> LazyHTML.from_fragment()
+    |> LazyHTML.query("span.font-mono")
+    |> LazyHTML.text()
+  end
+
   describe "episode_file_row/1" do
     test "names a resolvable file" do
       html = render_component(&Components.episode_file_row/1, file_row_assigns(resolvable_file()))
 
-      assert html =~ "S01E01 - Pilot.mkv"
+      assert visible_filename(html) =~ "S01E01 - Pilot.mkv"
       assert html =~ ~s|title="/media/series/Season 01/S01E01 - Pilot.mkv"|
     end
 
     test "renders an orphaned file instead of crashing the page" do
       html = render_component(&Components.episode_file_row/1, file_row_assigns(orphaned_file()))
 
-      assert html =~ "Unknown file"
+      assert visible_filename(html) =~ "Unknown file"
     end
   end
 

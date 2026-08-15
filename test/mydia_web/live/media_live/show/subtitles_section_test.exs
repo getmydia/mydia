@@ -45,6 +45,36 @@ defmodule MydiaWeb.MediaLive.Show.SubtitlesSectionTest do
 
       # The Search button still renders; one broken row must not take the page down.
       assert html =~ ~s|phx-click="open_subtitle_search"|
+      # And the row is labelled rather than left blank.
+      assert html =~ "Unknown file"
+    end
+  end
+
+  describe "media_files_section/1 file naming" do
+    defp files_section_html(media_file) do
+      render_component(&Components.media_files_section/1,
+        media_item: %{media_files: [media_file]},
+        refreshing_file_metadata: false,
+        transcode_jobs: %{}
+      )
+    end
+
+    test "shows the full resolved path" do
+      media_file = %MediaFile{
+        id: "mf-3",
+        path: nil,
+        relative_path: "The Matrix (1999)/The.Matrix.1999.1080p.BluRay.mkv",
+        library_path: %LibraryPath{path: "/media/movies"}
+      }
+
+      assert files_section_html(media_file) =~
+               "/media/movies/The Matrix (1999)/The.Matrix.1999.1080p.BluRay.mkv"
+    end
+
+    test "labels an unresolvable file rather than rendering a blank path" do
+      media_file = %MediaFile{id: "mf-4", path: nil, relative_path: nil, library_path: nil}
+
+      assert files_section_html(media_file) =~ "Unknown file"
     end
   end
 end

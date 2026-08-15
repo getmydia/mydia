@@ -926,7 +926,9 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                       class="text-sm font-mono text-base-content break-all leading-relaxed"
                       title={file_path}
                     >
-                      {file_path}
+                      <%!-- display_name/1 is the "Unknown file" label when there is no path,
+                            so an orphaned row reads the same here as everywhere else. --%>
+                      {file_path || Mydia.Library.MediaFile.display_name(file)}
                     </p>
                     <%!-- Technical details with quality badge --%>
                     <div class="flex flex-wrap gap-4 text-xs text-base-content/70 items-center">
