@@ -157,4 +157,49 @@ defmodule MydiaWeb.Api.HlsControllerTest do
       assert conn.status in [401, 302]
     end
   end
+
+  describe "GET /api/v1/hls/:session_id/:track_id/index.m3u8" do
+    test "an ordinary track_id still serves the variant playlist", %{
+      conn: conn,
+      token: token,
+      temp_dir: dir,
+      session_id: session_id
+    } do
+      register_session(session_id, dir)
+      track_dir = Path.join(dir, "0")
+      File.mkdir_p!(track_dir)
+      File.write!(Path.join(track_dir, "index.m3u8"), "#EXTM3U\n")
+
+      conn =
+        conn
+        |> put_req_header("authorization", "Bearer #{token}")
+        |> get("/api/v1/hls/#{session_id}/0/index.m3u8")
+
+      assert conn.status == 200
+      [content_type] = get_resp_header(conn, "content-type")
+      assert String.starts_with?(content_type, "application/vnd.apple.mpegurl")
+      assert conn.resp_body =~ "#EXTM3U"
+    end
+
+    # Phoenix URI-decodes each path segment before matching routes (see
+    # `Phoenix.Router.call/2`), so a track_id of `..%2F..%2Fetc` arrives here
+    # decoded to the single path_info segment "../../etc" - a string that
+    # itself contains slashes - not rejected or split by the router. Only
+    # `SessionFiles.safe_path/2` stands between that value and `File.read/1`.
+    test "a traversal-shaped track_id returns 403", %{
+      conn: conn,
+      token: token,
+      temp_dir: dir,
+      session_id: session_id
+    } do
+      register_session(session_id, dir)
+
+      conn =
+        conn
+        |> put_req_header("authorization", "Bearer #{token}")
+        |> get("/api/v1/hls/#{session_id}/..%2F..%2Fetc/index.m3u8")
+
+      assert conn.status == 403
+    end
+  end
 end

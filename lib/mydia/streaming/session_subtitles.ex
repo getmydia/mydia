@@ -131,6 +131,7 @@ defmodule Mydia.Streaming.SessionSubtitles do
     end
   rescue
     Ecto.NoResultsError -> {:error, :media_file_not_found}
+    Ecto.Query.CastError -> {:error, :media_file_not_found}
   end
 
   defp check_deliverable(media_file, track_id) do

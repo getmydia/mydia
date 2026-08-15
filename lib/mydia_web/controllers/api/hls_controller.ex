@@ -134,7 +134,8 @@ defmodule MydiaWeb.Api.HlsController do
   def variant_playlist(conn, %{"session_id" => session_id, "track_id" => track_id}) do
     with {:ok, user_id} <- get_user_id(conn),
          {:ok, temp_dir} <- get_session_temp_dir(session_id, user_id),
-         playlist_path <- Path.join([temp_dir, track_id, "index.m3u8"]),
+         {:ok, playlist_path} <-
+           SessionFiles.safe_path(temp_dir, Path.join(track_id, "index.m3u8")),
          {:ok, content} <- File.read(playlist_path) do
       # Update session activity
       heartbeat_session(session_id, user_id)
@@ -153,6 +154,11 @@ defmodule MydiaWeb.Api.HlsController do
         conn
         |> put_status(:not_found)
         |> json(%{error: "HLS session not found"})
+
+      {:error, :path_traversal} ->
+        conn
+        |> put_status(:forbidden)
+        |> json(%{error: "Forbidden"})
 
       {:error, :enoent} ->
         conn
