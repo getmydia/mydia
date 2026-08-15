@@ -542,9 +542,17 @@ defmodule MydiaWeb.LibraryComponents do
   attr :media_type, :any, default: nil
   attr :selected_id, :string, default: nil
 
+  # A host that has no room below the caret opens the menu upward instead. An
+  # atom with `values:` rather than a pass-through class string, so a typo is a
+  # compile error and daisyUI class names stay inside this component.
+  attr :placement, :atom, default: :bottom, values: [:bottom, :top]
+
   def library_picker_menu(assigns) do
     ~H"""
-    <div :if={length(@libraries) > 1} class="dropdown dropdown-end">
+    <div
+      :if={length(@libraries) > 1}
+      class={["dropdown dropdown-end", @placement == :top && "dropdown-top"]}
+    >
       <div
         tabindex="0"
         role="button"
@@ -556,7 +564,7 @@ defmodule MydiaWeb.LibraryComponents do
       </div>
       <ul
         tabindex="0"
-        class="dropdown-content z-[1] menu p-2 shadow-lg bg-base-100 rounded-box w-60 border border-base-300"
+        class="dropdown-content z-20 menu p-2 shadow-lg bg-base-100 rounded-box w-60 border border-base-300"
       >
         <li class="menu-title text-xs">Add to library</li>
         <li :for={library <- @libraries}>
