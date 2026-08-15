@@ -91,10 +91,25 @@ defmodule Mydia.Release.TableArchive do
   # archive rather than becoming an opaque Base64 blob. `Ecto.UUID.load/1`
   # only returns `:error` for inputs that are not exactly 16 bytes, so this
   # falls through to the general binary handling below for anything else.
+  #
+  # `byte_size(value) == 16` alone is too broad: SQLite hands back ordinary
+  # TEXT columns as plain Elixir binaries too, and plenty of real strings
+  # (e.g. "Boards of Canada") are exactly 16 bytes. Without the UTF-8 check
+  # those would be silently reformatted into UUID-looking garbage. Requiring
+  # invalid UTF-8 restricts this clause to genuine raw binary data (what
+  # PostgreSQL's uuid extension returns); ordinary text always falls through
+  # to the text path below. A minority of real UUID bytes are coincidentally
+  # valid UTF-8 and will fall through to Base64 instead of formatting as a
+  # UUID string — an acceptable trade-off since Base64 is lossless and
+  # reversible, while corrupting real text is not.
   def encodable(value) when is_binary(value) and byte_size(value) == 16 do
-    case Ecto.UUID.load(value) do
-      {:ok, uuid} -> uuid
-      :error -> encode_binary(value)
+    if String.valid?(value) do
+      encode_binary(value)
+    else
+      case Ecto.UUID.load(value) do
+        {:ok, uuid} -> uuid
+        :error -> encode_binary(value)
+      end
     end
   end
 

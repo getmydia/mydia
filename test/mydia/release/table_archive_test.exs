@@ -62,6 +62,32 @@ defmodule Mydia.Release.TableArchiveTest do
     assert Jason.decode!(line) == %{"id" => uuid, "name" => "widget"}
   end
 
+  # A 16-byte guard alone is not enough to identify a raw UUID: SQLite hands
+  # back ordinary TEXT columns as plain Elixir binaries too, and plenty of
+  # real strings happen to be exactly 16 bytes long. Without an additional
+  # UTF-8 check, a title like "Boards of Canada" would be silently
+  # reformatted into UUID-looking garbage
+  # ("426f6172-6473-206f-6620-43616e616461") instead of archiving as itself.
+  test "archives a 16-byte valid-UTF-8 TEXT value as its literal text, not a UUID", %{
+    tmp_dir: tmp_dir
+  } do
+    name = "Boards of Canada"
+    assert byte_size(name) == 16
+
+    Mydia.Repo.query!("CREATE TABLE text_fixture (id INTEGER, name TEXT)")
+    Mydia.Repo.query!("INSERT INTO text_fixture (id, name) VALUES (1, '#{name}')")
+
+    assert {:ok, counts} = TableArchive.archive_tables(Mydia.Repo, ["text_fixture"], tmp_dir)
+    assert counts["text_fixture"] == 1
+
+    [line] =
+      Path.join(tmp_dir, "text_fixture.ndjson")
+      |> File.read!()
+      |> String.split("\n", trim: true)
+
+    assert Jason.decode!(line) == %{"id" => 1, "name" => "Boards of Canada"}
+  end
+
   test "falls back to Base64 for a non-UUID-shaped binary that is not valid UTF-8", %{
     tmp_dir: tmp_dir
   } do
