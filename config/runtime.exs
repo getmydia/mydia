@@ -310,13 +310,6 @@ if config_env() == :prod do
     external_url: external_url,
     additional_direct_urls: additional_direct_urls,
     data_dir: data_dir
-
-  # Player update URL for protocol version mismatch errors
-  # This URL is sent to clients when they have an incompatible protocol version
-  # and need to update their app
-  if player_update_url = System.get_env("PLAYER_UPDATE_URL") do
-    config :mydia, :player_update_url, player_update_url
-  end
 end
 
 # Trash directory (all environments). Optional: leaving it unset trashes into a
