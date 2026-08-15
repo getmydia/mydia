@@ -72,12 +72,20 @@ defmodule MydiaWeb.DiscoverComponentsTest do
   end
 
   describe "poster loading and size" do
-    # Regression: card_poster/1 used to hardcode loading="lazy" and w500 for
-    # every caller. A bare trending_card/1 is what the Dashboard and Discover
-    # grids render, whose first row is above the fold and must not defer its
-    # fetch, so it keeps eager loading at the w500 default.
-    test "a bare card carries no loading attribute and the w500 default size" do
+    # Regression: PR #461 made loading="lazy" opt-in to protect the LCP element
+    # in the first grid row, but that also removed it from every card below the
+    # fold, which made the Dashboard's two 20-card grids eagerly fetch roughly
+    # 40 w500 posters. Lazy is the safe default; a caller that needs eager
+    # loading for an above-the-fold card now opts out with loading={nil}.
+    test "a bare card defaults to lazy loading and the w500 poster size" do
       html = card(%{})
+
+      assert html =~ ~s(loading="lazy")
+      assert html =~ "/w500/dune.jpg"
+    end
+
+    test "loading={nil} opts a card out of lazy loading" do
+      html = card(%{loading: nil})
 
       refute html =~ "loading="
       assert html =~ "/w500/dune.jpg"

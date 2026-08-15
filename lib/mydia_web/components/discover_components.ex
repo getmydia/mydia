@@ -55,11 +55,12 @@ defmodule MydiaWeb.DiscoverComponents do
   # Discover and Dashboard rely on. A host that can have several adds in flight
   # at once passes a boolean per card instead.
   attr :adding, :boolean, default: nil
-  # nil renders no loading attribute at all, which is what a poster above the
-  # fold (Dashboard, Discover) needs: it is the LCP element, and loading="lazy"
-  # would defer its fetch until layout resolves. A rail passes "lazy" because
-  # its cards start off-screen.
-  attr :loading, :string, default: nil
+  # "lazy" is the safe default: eagerly fetching every card, including the
+  # ones below the fold, is what starved the Dashboard's actual LCP poster
+  # under 40 competing requests. A caller with a poster above the fold
+  # (roughly the first grid row on Dashboard and Discover) opts out with
+  # loading={nil}, which renders no loading attribute at all.
+  attr :loading, :string, default: "lazy"
   # w500 is the right size for a grid card; a rail card is w-36 (144px), which
   # wants the smaller w342 step.
   attr :poster_size, :string, default: "w500"
@@ -228,7 +229,6 @@ defmodule MydiaWeb.DiscoverComponents do
             add_event={@add_event}
             request_event={@request_event}
             can_add={@can_add}
-            loading="lazy"
             poster_size="w342"
           />
         </div>
