@@ -12,6 +12,8 @@ defmodule MydiaWeb.ImportMediaLive.Inbox do
   """
   use MydiaWeb, :html
 
+  alias MydiaWeb.ImportMediaLive.Components
+
   # Sentences for the handful of error shapes that can actually land in
   # `MatchCandidate.last_error` in production (traced through
   # `FileIngest.record_failure/2` and `FileIngest.format_error/1`):
@@ -42,6 +44,15 @@ defmodule MydiaWeb.ImportMediaLive.Inbox do
   attr :filter, :atom, default: :all
   attr :offset, :integer, default: 0
   attr :limit, :integer, default: 100
+  attr :editing_file_id, :string, default: nil
+  attr :editing_file_path, :string, default: nil
+  attr :edit_form, :map, default: nil
+  attr :search_results, :list, default: []
+  attr :batch_selected_ids, :any, default: MapSet.new()
+  attr :batch_search_query, :string, default: ""
+  attr :batch_search_results, :list, default: []
+  attr :batch_selected_match, :map, default: nil
+  attr :batch_season_value, :string, default: ""
 
   def inbox(assigns) do
     ~H"""
@@ -68,11 +79,38 @@ defmodule MydiaWeb.ImportMediaLive.Inbox do
           </select>
         </div>
 
+        <%!--
+          Rendered here, above the list, rather than swapped into the row
+          itself: rows come from a `phx-update="stream"` container, and
+          LiveView only patches a stream item's DOM when it is explicitly
+          re-inserted (`stream_insert/3` or a full `stream/3` reset) -- not
+          when an unrelated assign like `editing_file_id` changes. Nesting
+          the editor's visibility inside the streamed `<li>` would compute
+          the right HTML on the server but never reach the client. A fixed
+          location keyed by id sidesteps that entirely.
+        --%>
+        <div :if={@editing_file_id} class="pb-2">
+          <Components.unmatched_file_list_item
+            media_file_id={@editing_file_id}
+            file_path={@editing_file_path}
+            edit_form={@edit_form}
+            search_results={@search_results}
+          />
+        </div>
+
         <p :if={@total == 0} class="opacity-70">{empty_message(@filter)}</p>
 
         <ul id="inbox-rows" phx-update="stream" class="divide-y divide-base-300">
           <li :for={{dom_id, row} <- @rows} id={dom_id} class="py-3 flex items-center gap-4">
             <% error = format_last_error(row.candidate.last_error) %>
+            <input
+              type="checkbox"
+              id={"batch-toggle-#{row.media_file.id}"}
+              class="checkbox checkbox-primary checkbox-sm"
+              checked={MapSet.member?(@batch_selected_ids, row.media_file.id)}
+              phx-click="batch_toggle_file"
+              phx-value-id={row.media_file.id}
+            />
             <div class="flex-1 min-w-0">
               <p class="font-medium truncate">{title_for(row)}</p>
               <p class="text-sm opacity-70 truncate">{row.media_file.relative_path}</p>
@@ -80,6 +118,17 @@ defmodule MydiaWeb.ImportMediaLive.Inbox do
             </div>
 
             <.confidence_badge candidate={row.candidate} />
+
+            <button
+              id={"edit-#{row.media_file.id}"}
+              type="button"
+              phx-click="edit_file"
+              phx-value-id={row.media_file.id}
+              class="btn btn-sm btn-ghost"
+              title="Find or fix this file's match"
+            >
+              <.icon name="hero-magnifying-glass" class="w-4 h-4" />
+            </button>
 
             <button
               id={"approve-#{row.media_file.id}"}
@@ -96,6 +145,15 @@ defmodule MydiaWeb.ImportMediaLive.Inbox do
         <.pagination total={@total} offset={@offset} limit={@limit} />
       </div>
     </section>
+
+    <Components.batch_edit_toolbar
+      :if={MapSet.size(@batch_selected_ids) > 0}
+      batch_selected_count={MapSet.size(@batch_selected_ids)}
+      batch_search_query={@batch_search_query}
+      batch_search_results={@batch_search_results}
+      batch_selected_match={@batch_selected_match}
+      batch_season_value={@batch_season_value}
+    />
     """
   end
 
