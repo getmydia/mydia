@@ -174,4 +174,80 @@ defmodule Mydia.Metadata.Structs.MediaMetadataTest do
       assert MediaMetadata.from_api_response(body, :tv_show, "1").content_rating == nil
     end
   end
+
+  describe "external_ids" do
+    test "parses the TMDB external_ids block for a TV show" do
+      body = %{
+        "id" => 1399,
+        "name" => "Game of Thrones",
+        "first_air_date" => "2011-04-17",
+        "credits" => %{"cast" => [], "crew" => []},
+        "external_ids" => %{"tvdb_id" => 121_361, "imdb_id" => "tt0944947"}
+      }
+
+      metadata = MediaMetadata.from_api_response(body, :tv_show, "1399")
+
+      assert metadata.external_ids == %{tmdb: nil, tvdb: 121_361, imdb: "tt0944947"}
+    end
+
+    test "fills imdb_id from external_ids when TMDB sends no top-level one" do
+      body = %{
+        "id" => 1399,
+        "name" => "Game of Thrones",
+        "credits" => %{"cast" => [], "crew" => []},
+        "external_ids" => %{"tvdb_id" => 121_361, "imdb_id" => "tt0944947"}
+      }
+
+      metadata = MediaMetadata.from_api_response(body, :tv_show, "1399")
+
+      assert metadata.imdb_id == "tt0944947"
+    end
+
+    test "keeps the top-level imdb_id when both are present" do
+      body = %{
+        "id" => 603,
+        "title" => "The Matrix",
+        "imdb_id" => "tt0133093",
+        "credits" => %{"cast" => [], "crew" => []},
+        "external_ids" => %{"imdb_id" => "tt-should-lose"}
+      }
+
+      metadata = MediaMetadata.from_api_response(body, :movie, "603")
+
+      assert metadata.imdb_id == "tt0133093"
+    end
+
+    test "leaves external_ids nil when the block was never requested" do
+      body = %{
+        "id" => 1399,
+        "name" => "Game of Thrones",
+        "credits" => %{"cast" => [], "crew" => []}
+      }
+
+      metadata = MediaMetadata.from_api_response(body, :tv_show, "1399")
+
+      assert metadata.external_ids == nil
+    end
+
+    test "coerces a string tvdb_id and rejects an unparseable one" do
+      base = %{"id" => 1399, "name" => "X", "credits" => %{"cast" => [], "crew" => []}}
+
+      good =
+        MediaMetadata.from_api_response(
+          Map.put(base, "external_ids", %{"tvdb_id" => "121361"}),
+          :tv_show,
+          "1399"
+        )
+
+      bad =
+        MediaMetadata.from_api_response(
+          Map.put(base, "external_ids", %{"tvdb_id" => "not-a-number"}),
+          :tv_show,
+          "1399"
+        )
+
+      assert good.external_ids.tvdb == 121_361
+      assert bad.external_ids.tvdb == nil
+    end
+  end
 end
