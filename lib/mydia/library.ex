@@ -2746,6 +2746,58 @@ defmodule Mydia.Library do
     |> Enum.reject(fn {_id, path} -> is_nil(path) end)
   end
 
+  ## Import Inbox
+
+  @low_confidence_ceiling 0.8
+
+  @doc """
+  Lists unresolved files with their cached match candidate.
+
+  "Unresolved" means orphaned, untrashed, and carrying a candidate row at rank
+  0 (the only rank the match phase writes today, see `file_ingest.ex`). This
+  is the permanent inbox that replaced the old per-session review list: it is
+  a live query, so approving a file removes it from these results with no
+  session state to persist.
+
+  ## Options
+
+    * `:library_path_id` - restrict to one library
+    * `:filter` - `:all` (default), `:unidentified`, or `:low_confidence`
+    * `:limit` - default 100
+    * `:offset` - default 0
+  """
+  @spec list_inbox_files(keyword()) :: [
+          %{media_file: MediaFile.t(), candidate: MatchCandidate.t()}
+        ]
+  def list_inbox_files(opts \\ []) do
+    limit = Keyword.get(opts, :limit, 100)
+    offset = Keyword.get(opts, :offset, 0)
+
+    rows =
+      MediaFile
+      |> maybe_scope_library(opts[:library_path_id])
+      |> inbox_base_query()
+      |> apply_inbox_filter(opts[:filter] || :all)
+      |> order_by([f, c], asc: c.title, asc: f.relative_path)
+      |> limit(^limit)
+      |> offset(^offset)
+      |> select([f, c], %{media_file: f, candidate: c})
+      |> Repo.all()
+
+    # Preloaded explicitly (rather than via a query-level `preload`) because
+    # the query above already carries a custom `select` map; the two structs
+    # in each row are re-associated by position after the batch preload,
+    # which `Repo.preload/2` guarantees preserves list order.
+    media_files =
+      rows
+      |> Enum.map(& &1.media_file)
+      |> Repo.preload(:library_path)
+
+    rows
+    |> Enum.zip(media_files)
+    |> Enum.map(fn {row, media_file} -> %{row | media_file: media_file} end)
+  end
+
   @doc """
   Counts files awaiting review in the import inbox.
 
@@ -2757,6 +2809,7 @@ defmodule Mydia.Library do
   ## Options
 
     * `:library_path_id` - required, scopes the count to one library path
+    * `:filter` - `:all` (default), `:unidentified`, or `:low_confidence`
   """
   @spec count_inbox_files(keyword()) :: non_neg_integer()
   def count_inbox_files(opts) do
@@ -2764,10 +2817,38 @@ defmodule Mydia.Library do
 
     MediaFile
     |> where([f], f.library_path_id == ^library_path_id)
+    |> inbox_base_query()
+    |> apply_inbox_filter(opts[:filter] || :all)
+    |> select([f, _c], count(f.id, :distinct))
+    |> Repo.one()
+  end
+
+  # Shared by list_inbox_files/1 and count_inbox_files/1 so the two can never
+  # drift on what "unresolved" means: orphaned, untrashed, and joined to its
+  # rank-0 candidate (an inner join, so a file with no candidate at all drops
+  # out entirely -- that set is list_unmatched_media_file_paths/2 instead).
+  defp inbox_base_query(query) do
+    query
     |> where([f], is_nil(f.media_item_id) and is_nil(f.episode_id))
     |> where([f], is_nil(f.trashed_at))
-    |> join(:inner, [f], c in MatchCandidate, on: c.media_file_id == f.id)
-    |> select([f], count(f.id, :distinct))
-    |> Repo.one()
+    |> join(:inner, [f], c in MatchCandidate, on: c.media_file_id == f.id and c.rank == 0)
+  end
+
+  defp maybe_scope_library(query, nil), do: query
+
+  defp maybe_scope_library(query, library_path_id),
+    do: where(query, [f], f.library_path_id == ^library_path_id)
+
+  defp apply_inbox_filter(query, :all), do: query
+
+  defp apply_inbox_filter(query, :unidentified),
+    do: where(query, [_f, c], is_nil(c.provider_id))
+
+  defp apply_inbox_filter(query, :low_confidence) do
+    where(
+      query,
+      [_f, c],
+      not is_nil(c.provider_id) and c.confidence < ^@low_confidence_ceiling
+    )
   end
 end
