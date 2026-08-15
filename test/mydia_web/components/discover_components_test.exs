@@ -177,7 +177,10 @@ defmodule MydiaWeb.DiscoverComponentsTest do
   # library. See #465.
   describe "media_rail picker suppression" do
     test "a rail renders the add button but never a library picker" do
-      html = rail(%{})
+      html =
+        rail(%{
+          libraries: [%{id: "a", path: "/m/a"}, %{id: "b", path: "/m/b"}]
+        })
 
       assert html =~ "Add to Library"
       refute html =~ "library-picker-caret"

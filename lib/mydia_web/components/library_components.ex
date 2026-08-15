@@ -551,7 +551,7 @@ defmodule MydiaWeb.LibraryComponents do
     ~H"""
     <div
       :if={length(@libraries) > 1}
-      class={["dropdown dropdown-end", @placement == :top && "dropdown-top"]}
+      class={["dropdown dropdown-end z-20", @placement == :top && "dropdown-top"]}
     >
       <div
         tabindex="0"
@@ -564,7 +564,7 @@ defmodule MydiaWeb.LibraryComponents do
       </div>
       <ul
         tabindex="0"
-        class="dropdown-content z-20 menu p-2 shadow-lg bg-base-100 rounded-box w-60 border border-base-300"
+        class="dropdown-content menu p-2 shadow-lg bg-base-100 rounded-box w-60 border border-base-300"
       >
         <li class="menu-title text-xs">Add to library</li>
         <li :for={library <- @libraries}>

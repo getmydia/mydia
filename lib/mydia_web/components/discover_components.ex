@@ -189,6 +189,7 @@ defmodule MydiaWeb.DiscoverComponents do
   # No libraries attr on purpose. The rail is a horizontal scroll container, so
   # a library picker dropdown cannot escape it at any placement (#465). Rail
   # cards add to the default library.
+
   attr :id, :string, default: "media-rail"
   attr :title, :string, default: "More like this"
   # :any, not :string - see the note on trending_card/1. The media detail page

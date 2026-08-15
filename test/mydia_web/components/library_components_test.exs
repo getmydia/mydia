@@ -39,11 +39,36 @@ defmodule MydiaWeb.LibraryComponentsTest do
     # Regression for #465: the menu sat at z-[1] while the trending card's
     # rating and in-library badges sit at z-10, so even the unclipped sliver
     # rendered underneath them.
+    #
+    # daisyUI's `.join > :where(:focus, :has(:focus))` rule stamps z-index: 1
+    # on the `.dropdown` wrapper the moment the caret is focused (the same
+    # condition that opens the menu), which creates a stacking context on
+    # that `position: relative` div. A z-index on the inner `<ul>` is then
+    # confined below that context regardless of its value, so the wrapper
+    # itself must carry the z-index, not the menu list.
     test "the menu stacks above the trending card badges" do
       html = picker()
+      document = LazyHTML.from_fragment(html)
 
-      assert html =~ "z-20"
-      refute html =~ "z-[1]"
+      # The `.dropdown` div is the root node of this component's output, so
+      # filter/2 (root nodes only) is correct here.
+      wrapper_class =
+        document
+        |> LazyHTML.filter("div.dropdown")
+        |> LazyHTML.attribute("class")
+        |> List.first()
+
+      assert wrapper_class =~ "z-20"
+
+      # The `<ul>` is nested inside the wrapper, so it needs query/2, not
+      # filter/2, to be found at all.
+      menu_class =
+        document
+        |> LazyHTML.query("ul.dropdown-content")
+        |> LazyHTML.attribute("class")
+        |> List.first()
+
+      refute menu_class =~ "z-20"
     end
 
     test "opens downward by default" do
