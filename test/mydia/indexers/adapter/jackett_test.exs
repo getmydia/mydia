@@ -4,7 +4,10 @@ defmodule Mydia.Indexers.Adapter.JackettTest do
   alias Mydia.Indexers.Adapter.Jackett
   alias Mydia.Indexers.Adapter.Error
 
-  @moduletag :external
+  # Previously the whole module was tagged :external, which excluded every
+  # test by default (including the Bypass-driven, fully offline ones). The
+  # legitimately-network-dependent tests are already individually tagged
+  # `:skip`, so no module-level gate is needed.
 
   describe "test_connection/1" do
     @tag :skip
