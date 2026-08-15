@@ -3949,6 +3949,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           // player managed to work out.
           duration: _knownCastDuration(),
           subtitles: _castSubtitleTracks(),
+          // The one entry point that pre-selects: a viewer watching with
+          // subtitles on and tapping cast keeps them on.
+          selectedSubtitleTrackId: _selectedSubtitleTrack?.id,
         ),
       );
 

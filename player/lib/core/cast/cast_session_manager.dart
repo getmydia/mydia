@@ -11,6 +11,28 @@ import 'cast_seek_restart.dart';
 import 'cast_session_store.dart';
 import 'cast_streaming_session_service.dart';
 
+/// The track list to hand to LOAD, with [selectedTrackId] first.
+///
+/// dart_cast activates `subtitles.first` unconditionally at LOAD
+/// (`cast_media_channel.dart:135`) and exposes no way to offer tracks without
+/// activating one. Ordering is therefore the only lever for *which* track
+/// comes up, and an explicit `selectSubtitle(null)` right after LOAD is the
+/// only lever for none. Both are workarounds for that library behaviour, not
+/// design.
+///
+/// An id that matches nothing leaves the order alone rather than guessing.
+List<CastSubtitleTrack> orderSubtitlesForLoad(
+  List<CastSubtitleTrack> tracks,
+  String? selectedTrackId,
+) {
+  if (selectedTrackId == null) return tracks;
+
+  final index = tracks.indexWhere((t) => t.trackId == selectedTrackId);
+  if (index <= 0) return tracks;
+
+  return [tracks[index], ...tracks]..removeAt(index + 1);
+}
+
 /// Everything the UI knows about the item it wants to cast.
 class CastLaunchRequest {
   final String fileId;
@@ -31,6 +53,12 @@ class CastLaunchRequest {
   /// relative to the current position.
   final Duration? duration;
 
+  /// The track the viewer wants showing, by Mydia's own track id.
+  ///
+  /// Null means off, which is what local playback does when streaming, so it
+  /// is what a cast defaults to.
+  final String? selectedSubtitleTrackId;
+
   const CastLaunchRequest({
     required this.fileId,
     required this.mediaId,
@@ -41,15 +69,28 @@ class CastLaunchRequest {
     this.startPosition,
     this.subtitles = const [],
     this.duration,
+    this.selectedSubtitleTrackId,
   });
 
-  /// The same request, resumed from somewhere else.
+  /// The same request, resumed from somewhere else, or with a new subtitle
+  /// choice.
   ///
-  /// Only [startPosition] can be replaced, and passing null keeps the current
-  /// one. Everything else is carried across verbatim, which is the whole
-  /// point: a seek restart rebuilds the cast from this, and anything dropped
-  /// here disappears from the receiver for the rest of the session.
-  CastLaunchRequest copyWith({Duration? startPosition}) => CastLaunchRequest(
+  /// [startPosition] and [selectedSubtitleTrackId] are the only fields that
+  /// can be replaced. Everything else is carried across verbatim, which is
+  /// the whole point: a seek restart rebuilds the cast from this, and
+  /// anything dropped here disappears from the receiver for the rest of the
+  /// session.
+  ///
+  /// [selectedSubtitleTrackId] can't just be `String?`, because passing null
+  /// would then be ambiguous between "leave unchanged" and "turn subtitles
+  /// off" — [clearSelectedSubtitle] is what [selectSubtitle] uses to say the
+  /// latter.
+  CastLaunchRequest copyWith({
+    Duration? startPosition,
+    String? selectedSubtitleTrackId,
+    bool clearSelectedSubtitle = false,
+  }) =>
+      CastLaunchRequest(
         fileId: fileId,
         mediaId: mediaId,
         mediaType: mediaType,
@@ -59,6 +100,9 @@ class CastLaunchRequest {
         startPosition: startPosition ?? this.startPosition,
         subtitles: subtitles,
         duration: duration,
+        selectedSubtitleTrackId: clearSelectedSubtitle
+            ? null
+            : (selectedSubtitleTrackId ?? this.selectedSubtitleTrackId),
       );
 }
 
@@ -101,6 +145,12 @@ class CastSessionManager {
   Duration _lastDuration = Duration.zero;
   DateTime? _lastProgressSync;
   bool _lanEnabled = false;
+
+  /// The tracks offered to the receiver for whatever is currently loaded.
+  List<CastSubtitleTrack> _subtitles = const [];
+
+  /// The track currently showing on the receiver, or null when off.
+  CastSubtitleTrack? _selectedSubtitle;
 
   /// Server-side HLS session backing the media currently on the receiver.
   String? _activeHlsSessionId;
@@ -643,7 +693,12 @@ class CastSessionManager {
     // here rather than from `request` is what gives every entry point
     // subtitles: they all resolve a route, and only one of them ever passed
     // tracks of its own.
-    final subtitles = route.subtitles;
+    //
+    // Reordered with the viewer's choice first: see `orderSubtitlesForLoad`'s
+    // dartdoc for why this — and the disable call below — are workarounds for
+    // a dart_cast limitation, not design.
+    final subtitles =
+        orderSubtitlesForLoad(route.subtitles, request.selectedSubtitleTrackId);
 
     _useTimeline(StreamTimeline(
       startOffset: route.startOffset,
@@ -663,6 +718,18 @@ class CastSessionManager {
       startPosition: _timeline.toPlayer(request.startPosition ?? Duration.zero),
       subtitles: subtitles,
     ));
+
+    _subtitles = subtitles;
+    _selectedSubtitle = subtitles
+        .where((t) => t.trackId == request.selectedSubtitleTrackId)
+        .firstOrNull;
+
+    // dart_cast activated subtitles.first at LOAD. Nothing was chosen, so
+    // turn them back off. Cheap, and the only way to match local playback,
+    // which never auto-selects when streaming.
+    if (subtitles.isNotEmpty && request.selectedSubtitleTrackId == null) {
+      await _backend.selectSubtitle(null);
+    }
 
     _lastRequest = request;
 
@@ -692,6 +759,8 @@ class CastSessionManager {
         duration: request.duration ?? Duration.zero,
         position: request.startPosition ?? Duration.zero,
       ),
+      subtitles: _subtitles,
+      selectedSubtitle: _selectedSubtitle,
     ));
   }
 
@@ -850,6 +919,49 @@ class CastSessionManager {
   Future<void> play() => _backend.play();
   Future<void> pause() => _backend.pause();
 
+  /// Turns subtitles on, off, or switches track on the live receiver.
+  ///
+  /// [track] must be an instance from the current session's list: dart_cast
+  /// keys its internal Chromecast track ids by URL, and a re-derived URL that
+  /// differs by so much as a token falls back to activating trackId=1 with
+  /// only a log warning.
+  Future<void> selectSubtitle(CastSubtitleTrack? track) async {
+    await _backend.selectSubtitle(track);
+
+    _selectedSubtitle = track;
+    _lastRequest = _lastRequest?.copyWith(
+      selectedSubtitleTrackId: track?.trackId,
+      clearSelectedSubtitle: track == null,
+    );
+
+    // PersistedCastSession.copyWith and the block that persists this choice
+    // land in Task 8. Until then a stored session, or a cold restore, simply
+    // doesn't know about a track switched mid-session.
+
+    _republishWithSubtitles();
+  }
+
+  /// Re-emits [_current] with [_subtitles]/[_selectedSubtitle] applied.
+  ///
+  /// A plain `copyWith` can't do this: its `field ?? this.field` pattern
+  /// can't express "set selectedSubtitle back to null", which is exactly
+  /// what turning subtitles off needs to do. So this rebuilds the session
+  /// directly instead of going through `CastSession.copyWith` for these two
+  /// fields.
+  void _republishWithSubtitles() {
+    final current = _current;
+    if (current == null) return;
+
+    _publish(CastSession(
+      device: current.device,
+      mediaInfo: current.mediaInfo,
+      playbackState: current.playbackState,
+      connectionState: current.connectionState,
+      subtitles: _subtitles,
+      selectedSubtitle: _selectedSubtitle,
+    ));
+  }
+
   /// Seeks to a real media position, restarting the session when the target
   /// is outside what the receiver can reach.
   ///
@@ -949,6 +1061,8 @@ class CastSessionManager {
     _lastRequest = null;
     _lastDuration = Duration.zero;
     _lastProgressSync = null;
+    _subtitles = const [];
+    _selectedSubtitle = null;
     _publish(null);
   }
 

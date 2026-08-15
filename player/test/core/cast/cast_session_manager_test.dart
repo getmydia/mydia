@@ -1577,4 +1577,126 @@ void main() {
       expect(loaded.subtitle, 'S1E3');
     });
   });
+
+  group('which subtitle track is active', () {
+    test('orderSubtitlesForLoad puts the chosen track first', () {
+      const a = CastSubtitleTrack(
+          trackId: '1', url: 'u1', label: 'A', language: 'eng');
+      const b = CastSubtitleTrack(
+          trackId: '2', url: 'u2', label: 'B', language: 'spa');
+
+      expect(orderSubtitlesForLoad([a, b], '2'), [b, a]);
+      expect(orderSubtitlesForLoad([a, b], '1'), [a, b]);
+      // An unknown id must not reorder: the disable call is what turns
+      // subtitles off, and silently promoting some other track would leave
+      // the wrong one showing.
+      expect(orderSubtitlesForLoad([a, b], 'nope'), [a, b]);
+      expect(orderSubtitlesForLoad([a, b], null), [a, b]);
+    });
+
+    // Two tracks, so "which one is first" is a real question. Track '3' is
+    // deliberately second: an implementation that ignores the chosen id and
+    // leaves the order alone would still pass with a single-track list.
+    const twoTracks = [
+      CastSubtitleTrack(
+        trackId: '2',
+        url: '/api/player/v1/subtitles/file/file-1/2?format=vtt',
+        label: 'Spanish',
+        language: 'spa',
+      ),
+      CastSubtitleTrack(
+        trackId: '3',
+        url: '/api/player/v1/subtitles/file/file-1/3?format=vtt',
+        label: 'English',
+        language: 'eng',
+      ),
+    ];
+
+    test('a cast with no chosen track disables subtitles after loading',
+        () async {
+      final manager = build();
+      addTearDown(manager.dispose);
+
+      await manager.startCast(
+        device: device,
+        request: const CastLaunchRequest(
+          fileId: 'file-1',
+          mediaId: 'movie-1',
+          mediaType: 'movie',
+          title: 'A Movie',
+          subtitles: twoTracks,
+        ),
+      );
+
+      // dart_cast force-activates the first track at LOAD, so an explicit
+      // disable is the only way to reach parity with local playback.
+      expect(backend.subtitleSelections, [null]);
+    });
+
+    test(
+        'a cast that carries a chosen track loads it first and does not disable',
+        () async {
+      final manager = build();
+      addTearDown(manager.dispose);
+
+      await manager.startCast(
+        device: device,
+        request: const CastLaunchRequest(
+          fileId: 'file-1',
+          mediaId: 'movie-1',
+          mediaType: 'movie',
+          title: 'A Movie',
+          subtitles: twoTracks,
+          selectedSubtitleTrackId: '3',
+        ),
+      );
+
+      expect(backend.subtitleSelections, isEmpty);
+      expect(backend.loadedRequests.single.subtitles.first.trackId, '3');
+    });
+
+    test('a cast with no tracks at all does not issue a disable', () async {
+      final manager = build();
+      addTearDown(manager.dispose);
+
+      await manager.startCast(
+        device: device,
+        request: const CastLaunchRequest(
+          fileId: 'file-1',
+          mediaId: 'movie-1',
+          mediaType: 'movie',
+          title: 'A Movie',
+        ),
+      );
+
+      // Nothing was offered, so dart_cast activated nothing and there is
+      // nothing to turn off. A stray EDIT_TRACKS_INFO here would be a command
+      // to a receiver with no media session for it.
+      expect(backend.subtitleSelections, isEmpty);
+    });
+
+    test('selectSubtitle forwards the loaded instance and records the choice',
+        () async {
+      final manager = build();
+      addTearDown(manager.dispose);
+
+      await manager.startCast(
+        device: device,
+        request: const CastLaunchRequest(
+          fileId: 'file-1',
+          mediaId: 'movie-1',
+          mediaType: 'movie',
+          title: 'A Movie',
+          subtitles: twoTracks,
+        ),
+      );
+
+      final track = backend.loadedRequests.single.subtitles.first;
+      await manager.selectSubtitle(track);
+
+      // dart_cast keys its internal track map by URL, so the instance handed
+      // back must be the one that was loaded, not one rebuilt from the id.
+      expect(backend.subtitleSelections.last?.url, track.url);
+    });
+  });
 }

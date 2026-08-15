@@ -1,3 +1,5 @@
+import '../../core/cast/cast_backend.dart' show CastSubtitleTrack;
+
 /// The wire protocol a cast receiver speaks.
 enum CastProtocolKind { chromecast, dlna }
 
@@ -130,11 +132,23 @@ class CastSession {
   final CastPlaybackState playbackState;
   final CastConnectionState connectionState;
 
+  /// Subtitle tracks offered to the receiver for whatever is loaded.
+  ///
+  /// Empty when nothing is loaded, or the loaded item carried none.
+  final List<CastSubtitleTrack> subtitles;
+
+  /// The track currently showing on the receiver, or null when subtitles are
+  /// off — which is what a cast defaults to (see `orderSubtitlesForLoad`'s
+  /// dartdoc in `cast_session_manager.dart`).
+  final CastSubtitleTrack? selectedSubtitle;
+
   const CastSession({
     required this.device,
     this.mediaInfo,
     required this.playbackState,
     this.connectionState = CastConnectionState.connected,
+    this.subtitles = const [],
+    this.selectedSubtitle,
   });
 
   /// True once the receiver has dropped off the network. The UI offers a
@@ -149,12 +163,16 @@ class CastSession {
     CastMediaInfo? mediaInfo,
     CastPlaybackState? playbackState,
     CastConnectionState? connectionState,
+    List<CastSubtitleTrack>? subtitles,
+    CastSubtitleTrack? selectedSubtitle,
   }) {
     return CastSession(
       device: device ?? this.device,
       mediaInfo: mediaInfo ?? this.mediaInfo,
       playbackState: playbackState ?? this.playbackState,
       connectionState: connectionState ?? this.connectionState,
+      subtitles: subtitles ?? this.subtitles,
+      selectedSubtitle: selectedSubtitle ?? this.selectedSubtitle,
     );
   }
 }
