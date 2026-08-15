@@ -719,19 +719,6 @@ defmodule Mydia.Metadata do
   end
 
   @doc """
-  Gets the default music relay configuration.
-  """
-  def default_music_relay_config do
-    %{
-      type: :music_relay,
-      base_url: metadata_relay_url(),
-      options: %{
-        timeout: 30_000
-      }
-    }
-  end
-
-  @doc """
   Gets the default book relay configuration.
   """
   def default_book_relay_config do

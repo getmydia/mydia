@@ -306,30 +306,29 @@ defmodule MydiaWeb.Features.ImportTest do
     setup do
       user = create_admin_user()
 
-      # Use an adult library type which skips metadata enrichment
-      # This allows testing the full import flow without external API calls
-      {:ok, adult_path} =
+      {:ok, mixed_path} =
         Settings.create_library_path(%{
-          path: "/test/media/adult_#{System.unique_integer([:positive])}",
-          type: :adult,
+          path: "/test/media/mixed_#{System.unique_integer([:positive])}",
+          type: :mixed,
           monitored: true
         })
 
-      %{user: user, adult_path: adult_path}
+      %{user: user, mixed_path: mixed_path}
     end
 
     @tag :feature
     test "can start import and see progress", %{
       session: session,
       user: user,
-      adult_path: adult_path
+      mixed_path: mixed_path
     } do
       session_id = Ecto.UUID.generate()
 
-      # Create files for specialized library (no metadata matching needed)
+      # Files with no metadata match (no external API calls needed) land in the
+      # ungrouped/unmatched bucket, so pre-build a review-step session there.
       file1 = %{
         "file" => %{
-          "path" => "#{adult_path.path}/video1.mp4",
+          "path" => "#{mixed_path.path}/video1.mp4",
           "size" => 500_000_000
         },
         "match_result" => nil,
@@ -338,7 +337,7 @@ defmodule MydiaWeb.Features.ImportTest do
 
       file2 = %{
         "file" => %{
-          "path" => "#{adult_path.path}/video2.mp4",
+          "path" => "#{mixed_path.path}/video2.mp4",
           "size" => 600_000_000
         },
         "match_result" => nil,
@@ -353,9 +352,8 @@ defmodule MydiaWeb.Features.ImportTest do
         "grouped_files" => %{
           "series" => [],
           "movies" => [],
-          "ungrouped" => [],
-          "type_filtered" => [],
-          "simple" => [grouped_file1, grouped_file2]
+          "ungrouped" => [grouped_file1, grouped_file2],
+          "type_filtered" => []
         },
         "selected_files" => [0, 1],
         "discovered_files" => [],
@@ -367,7 +365,7 @@ defmodule MydiaWeb.Features.ImportTest do
           id: session_id,
           user_id: user.id,
           step: :review,
-          scan_path: adult_path.path,
+          scan_path: mixed_path.path,
           session_data: session_data,
           scan_stats: %{"total" => 2, "matched" => 0, "unmatched" => 0},
           import_progress: %{"current" => 0, "total" => 0, "current_file" => nil},

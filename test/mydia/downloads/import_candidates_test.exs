@@ -313,14 +313,16 @@ defmodule Mydia.Downloads.ImportCandidatesTest do
          %{tmp_dir: tmp_dir} do
       dir = Path.join(tmp_dir, "live")
       File.mkdir_p!(dir)
-      File.write!(Path.join(dir, "track.mkv"), "x")
+      File.write!(Path.join(dir, "track.nfo"), "x")
 
       client = client_with_unrelated_root(tmp_dir)
       # `library_type_for/1`'s guess only ever returns :movies or :series from
       # `media_item.type`, and a "tv_show" media_item guesses :series — under
-      # which a `.mkv` file passes the extension filter (skip_reason nil).
-      # Resolving the real, non-guessable `:music` library type instead makes
-      # the SAME file fail it, proving the resolved type won.
+      # which a `.nfo` file fails the extension filter (skip_reason
+      # "not_video_extension"). Resolving the real, non-guessable `:music`
+      # library type instead makes the SAME file pass (Mydia no longer owns
+      # an extension vocabulary for it, so `importable?/2` treats it as
+      # always importable), proving the resolved type won.
       library_path = library_path_fixture(%{type: "music"})
       media_item = media_item_fixture(%{type: "tv_show"})
 
@@ -339,8 +341,8 @@ defmodule Mydia.Downloads.ImportCandidatesTest do
         |> Repo.preload(:library_path)
 
       assert {:ok, :live, [candidate]} = ImportCandidates.load(download)
-      assert candidate["name"] == "track.mkv"
-      assert candidate["skip_reason"] == "not_video_extension"
+      assert candidate["name"] == "track.nfo"
+      assert candidate["skip_reason"] == nil
     end
 
     test "falls back to the media_item guess when library_path isn't preloaded",
@@ -350,7 +352,9 @@ defmodule Mydia.Downloads.ImportCandidatesTest do
       File.write!(Path.join(dir, "track.mkv"), "x")
 
       client = client_with_unrelated_root(tmp_dir)
-      library_path = library_path_fixture(%{type: "music"})
+      # The library_path's type is irrelevant here: it is deliberately left
+      # unpreloaded below, so `resolved_library_type/1` never reads it.
+      library_path = library_path_fixture(%{type: "movies"})
       media_item = media_item_fixture(%{type: "tv_show"})
 
       download =
