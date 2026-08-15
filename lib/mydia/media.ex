@@ -1451,13 +1451,27 @@ defmodule Mydia.Media do
 
             Logger.info("Total episodes processed: #{episode_count}")
 
-            if failed_seasons == 0 do
-              stamp_seasons_refreshed(media_item)
-            else
-              Logger.warning(
-                "Not stamping seasons_refreshed_at: #{failed_seasons} season(s) failed",
-                media_item_id: media_item.id
-              )
+            # The timestamp means "every season is current", so only a clean pass
+            # over the *full* season set may stamp it. "first"/"latest"/"none"
+            # come from the add-media UI and fetch a subset; stamping after one
+            # would throttle the next "all" pass and leave the seasons it never
+            # fetched stale until the threshold expired.
+            cond do
+              season_monitoring != "all" ->
+                Logger.info(
+                  "Not stamping seasons_refreshed_at: partial season selection " <>
+                    "(#{season_monitoring})",
+                  media_item_id: media_item.id
+                )
+
+              failed_seasons > 0 ->
+                Logger.warning(
+                  "Not stamping seasons_refreshed_at: #{failed_seasons} season(s) failed",
+                  media_item_id: media_item.id
+                )
+
+              true ->
+                stamp_seasons_refreshed(media_item)
             end
 
             {:ok, episode_count}
@@ -1721,9 +1735,26 @@ defmodule Mydia.Media do
            fetch_opts
          ) do
       {:ok, season_data} ->
-        upsert_episodes_from_season(media_item, season_data,
-          monitor_new?: should_monitor_new_episode?(media_item, season.season_number)
-        )
+        # upsert_episodes_from_season/3 swallows per-episode changeset errors and
+        # still reports {:ok, count}, so a season can persist fewer episodes than
+        # the provider returned and look clean. That must not stamp
+        # seasons_refreshed_at, or the dropped episodes stay stale until the
+        # throttle expires. Compare against what was actually upsertable.
+        expected =
+          Enum.count(
+            season_data.episodes || [],
+            &(not is_nil(&1.season_number) and not is_nil(&1.episode_number))
+          )
+
+        case upsert_episodes_from_season(media_item, season_data,
+               monitor_new?: should_monitor_new_episode?(media_item, season.season_number)
+             ) do
+          {:ok, count} when count < expected ->
+            {:error, {:incomplete_episode_upsert, expected, count}}
+
+          other ->
+            other
+        end
 
       {:error, reason} ->
         {:error, reason}

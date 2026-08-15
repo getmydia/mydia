@@ -250,6 +250,59 @@ defmodule Mydia.Jobs.MetadataRefreshEpisodesTest do
       # failed until the threshold expired.
       assert Media.get_media_item!(item.id).seasons_refreshed_at == nil
     end
+
+    test "a partial season selection does not stamp a full-refresh timestamp" do
+      tvdb_id = System.unique_integer([:positive])
+      season_one = System.unique_integer([:positive])
+      season_two = System.unique_integer([:positive])
+
+      bypass = Bypass.open()
+
+      Bypass.stub(bypass, "GET", "/tvdb/series/#{tvdb_id}/extended", fn conn ->
+        json(conn, %{
+          "data" => %{
+            "id" => tvdb_id,
+            "name" => "Partial Show",
+            "firstAired" => "2023-01-01",
+            "status" => %{"name" => "Continuing"},
+            "genres" => [],
+            "seasons" => [season_stub(season_one, 1), season_stub(season_two, 2)]
+          }
+        })
+      end)
+
+      for {id, number} <- [{season_one, 1}, {season_two, 2}] do
+        Bypass.stub(bypass, "GET", "/tvdb/seasons/#{id}/extended", fn conn ->
+          json(conn, %{"data" => %{"id" => id, "number" => number, "episodes" => []}})
+        end)
+      end
+
+      config = %{
+        type: :metadata_relay,
+        base_url: "http://localhost:#{bypass.port}",
+        options: %{language: "en-US", include_adult: false}
+      }
+
+      item =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "Partial Show",
+          year: 2023,
+          tvdb_id: tvdb_id,
+          metadata_source: :tvdb
+        })
+
+      # "latest" is reachable from the add-media UI. It fetches one season, so
+      # stamping would throttle the next "all" pass over a show whose earlier
+      # seasons were never refreshed.
+      assert {:ok, _} =
+               Media.refresh_episodes_for_tv_show(item,
+                 config: config,
+                 season_monitoring: "latest"
+               )
+
+      assert Media.get_media_item!(item.id).seasons_refreshed_at == nil
+    end
   end
 
   defp season_stub(id, number) do
