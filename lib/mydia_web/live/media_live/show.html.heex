@@ -199,6 +199,13 @@
             can_add={@can_create_media}
             adding_tmdb_ids={@adding_franchise_tmdb_ids}
           />
+          <DiscoverComponents.recommendations_rail
+            items={@recommendations}
+            media_type={if @media_item.type == "tv_show", do: :tv_show, else: :movie}
+            current_user={@current_user}
+            libraries={[]}
+            on_select={nil}
+          />
           <%!-- Episodes Section (TV Shows Only) --%>
           <Components.episodes_section
             media_item={@media_item}

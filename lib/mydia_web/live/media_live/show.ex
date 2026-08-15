@@ -16,6 +16,8 @@ defmodule MydiaWeb.MediaLive.Show do
   alias MydiaWeb.MediaLive.Show.SearchEvents
   alias MydiaWeb.MediaLive.Show.SegmentEvents
   alias MydiaWeb.MediaLive.Show.FranchiseEvents
+  alias MydiaWeb.MediaLive.Show.RecommendationEvents
+  alias MydiaWeb.DiscoverComponents
 
   # Import helper modules
   import MydiaWeb.MediaLive.Show.Formatters
@@ -147,6 +149,9 @@ defmodule MydiaWeb.MediaLive.Show do
      # Franchise section state
      |> assign(:franchise, nil)
      |> assign(:adding_franchise_tmdb_ids, MapSet.new())
+     # Recommendations rail state
+     |> assign(:recommendations, [])
+     |> assign(:adding_recommendation_tmdb_ids, MapSet.new())
      |> assign_new(:metadata_config, fn -> Mydia.Metadata.default_relay_config() end)
      |> assign(
        :can_create_media,
@@ -163,6 +168,7 @@ defmodule MydiaWeb.MediaLive.Show do
      |> CollectionEvents.load_collection_data(media_item)
      |> SegmentEvents.assign_segment_status(media_item)
      |> FranchiseEvents.maybe_load()
+     |> RecommendationEvents.maybe_load()
      |> assign_target_library(media_item)
      |> stream_configure(:search_results, dom_id: &generate_positioned_id/1)
      |> stream(:search_results, [])}
@@ -412,6 +418,10 @@ defmodule MydiaWeb.MediaLive.Show do
     do: FranchiseEvents.add_franchise_movie(params, socket)
 
   @impl true
+  def handle_event("add_recommendation", params, socket),
+    do: RecommendationEvents.add_recommendation(params, socket)
+
+  @impl true
   def handle_info({:download_created, download}, socket) do
     if download_for_media?(download, socket.assigns.media_item) do
       media_item = load_media_item(socket.assigns.media_item.id)
@@ -614,6 +624,12 @@ defmodule MydiaWeb.MediaLive.Show do
 
   def handle_async({:add_franchise_movie, tmdb_id}, result, socket),
     do: FranchiseEvents.handle_add_result(tmdb_id, result, socket)
+
+  def handle_async(:load_recommendations, result, socket),
+    do: RecommendationEvents.handle_load_result(result, socket)
+
+  def handle_async({:add_recommendation, tmdb_id}, result, socket),
+    do: RecommendationEvents.handle_add_result(tmdb_id, result, socket)
 
   # Private helpers
 
