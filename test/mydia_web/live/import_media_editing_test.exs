@@ -121,23 +121,159 @@ defmodule MydiaWeb.ImportMediaEditingTest do
     assert candidate.last_error == "no_match"
   end
 
-  test "batch selection is keyed by id and survives a filter change", %{
-    conn: conn,
-    media_file: media_file
-  } do
+  test "batch selection tracks the specific file id, not the position a filter change frees up",
+       %{conn: conn, library_path: lp} do
+    # Alpha and Bravo are identified, so the "unidentified" filter drops them
+    # entirely. Under "all" they sort by title: Alpha at position 0, Bravo at
+    # position 1.
+    alpha =
+      orphaned_media_file_fixture(%{library_path_id: lp.id, relative_path: "batch/alpha.mkv"})
+
+    {:ok, _} =
+      Library.upsert_match_candidate(%{
+        media_file_id: alpha.id,
+        rank: 0,
+        provider_type: "tmdb",
+        provider_id: "501",
+        title: "Alpha Movie",
+        media_type: "movie",
+        confidence: 0.9
+      })
+
+    bravo =
+      orphaned_media_file_fixture(%{library_path_id: lp.id, relative_path: "batch/bravo.mkv"})
+
+    {:ok, _} =
+      Library.upsert_match_candidate(%{
+        media_file_id: bravo.id,
+        rank: 0,
+        provider_type: "tmdb",
+        provider_id: "502",
+        title: "Bravo Movie",
+        media_type: "movie",
+        confidence: 0.9
+      })
+
+    # Charlie and Delta are unidentified, so they alone survive the
+    # "unidentified" filter. Both have a nil title, so relative_path breaks
+    # the tie: Charlie lands at position 0 there, Delta at position 1 --
+    # Delta is the one that inherits Bravo's old position.
+    charlie =
+      orphaned_media_file_fixture(%{library_path_id: lp.id, relative_path: "batch/charlie.mkv"})
+
+    {:ok, _} =
+      Library.upsert_match_candidate(%{
+        media_file_id: charlie.id,
+        rank: 0,
+        attempts: 1,
+        last_error: "no_match"
+      })
+
+    delta =
+      orphaned_media_file_fixture(%{library_path_id: lp.id, relative_path: "batch/delta.mkv"})
+
+    {:ok, _} =
+      Library.upsert_match_candidate(%{
+        media_file_id: delta.id,
+        rank: 0,
+        attempts: 1,
+        last_error: "no_match"
+      })
+
     {:ok, view, _html} = live(conn, ~p"/import")
 
-    view
-    |> element("#batch-toggle-#{media_file.id}")
-    |> render_click()
+    # Toggle Bravo -- position 1 under "all", not the first row, so a bug
+    # that only ever checks position 0 could not pass this by accident.
+    view |> element("#batch-toggle-#{bravo.id}") |> render_click()
 
     assert has_element?(view, "#inbox-batch-toolbar")
+    assert has_element?(view, "#batch-toggle-#{bravo.id}[checked]")
 
-    # An index-addressed implementation would silently select the wrong row
-    # here, because filtering changes list positions.
+    # Switching to "unidentified" drops Alpha and Bravo from the rendered
+    # list entirely, and Delta -- a file nobody selected -- now sits at
+    # position 1, the position Bravo held a moment ago. A position-addressed
+    # implementation (a MapSet of row indices instead of ids) would render
+    # Delta as checked here; an id-addressed one cannot, because Delta's id
+    # was never put in the selected set.
     view |> element("#inbox-filter") |> render_change(%{"filter" => "unidentified"})
 
     assert has_element?(view, "#inbox-batch-toolbar")
+    refute has_element?(view, "#batch-toggle-#{delta.id}[checked]")
+    refute has_element?(view, "#batch-toggle-#{charlie.id}[checked]")
+
+    # And switching back confirms the original selection -- Bravo, and only
+    # Bravo -- survived the round trip untouched.
+    view |> element("#inbox-filter") |> render_change(%{"filter" => "all"})
+
+    assert has_element?(view, "#batch-toggle-#{bravo.id}[checked]")
+    refute has_element?(view, "#batch-toggle-#{alpha.id}[checked]")
+  end
+
+  test "batch apply changes exactly the selected files, leaving the rest untouched", %{
+    conn: conn,
+    library_path: lp
+  } do
+    file1 = orphaned_media_file_fixture(%{library_path_id: lp.id})
+
+    {:ok, _} =
+      Library.upsert_match_candidate(%{
+        media_file_id: file1.id,
+        rank: 0,
+        attempts: 1,
+        last_error: "no_match"
+      })
+
+    file2 = orphaned_media_file_fixture(%{library_path_id: lp.id})
+
+    {:ok, _} =
+      Library.upsert_match_candidate(%{
+        media_file_id: file2.id,
+        rank: 0,
+        attempts: 1,
+        last_error: "no_match"
+      })
+
+    file3 = orphaned_media_file_fixture(%{library_path_id: lp.id})
+
+    {:ok, _} =
+      Library.upsert_match_candidate(%{
+        media_file_id: file3.id,
+        rank: 0,
+        attempts: 1,
+        last_error: "no_match"
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    view |> element("#batch-toggle-#{file1.id}") |> render_click()
+    view |> element("#batch-toggle-#{file2.id}") |> render_click()
+
+    render_click(view, "batch_select_search_result", %{
+      "title" => "Selected Show",
+      "provider_id" => "9001",
+      "type" => "tv_show",
+      "year" => "2020"
+    })
+
+    render_click(view, "batch_apply", %{})
+
+    assert [c1] = Library.list_match_candidates(file1.id)
+    assert c1.title == "Selected Show"
+    assert c1.provider_id == "9001"
+    assert c1.media_type == "tv_show"
+
+    assert [c2] = Library.list_match_candidates(file2.id)
+    assert c2.title == "Selected Show"
+    assert c2.provider_id == "9001"
+
+    # The load-bearing assertion: file3 was never selected, so a batch bug
+    # that operates over the wrong set (e.g. "everything on the page", or a
+    # miscomputed id list) would show up here even if file1 and file2 above
+    # happened to look correct.
+    assert [c3] = Library.list_match_candidates(file3.id)
+    assert c3.title == nil
+    assert c3.provider_id == nil
+    assert c3.last_error == "no_match"
   end
 
   describe "addressing survives pagination" do
