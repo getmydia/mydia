@@ -419,6 +419,9 @@ defmodule MydiaWeb.MediaLive.Show do
   def handle_event("add_franchise_movie", params, socket),
     do: FranchiseEvents.add_franchise_movie(params, socket)
 
+  def handle_event("request_franchise_movie", params, socket),
+    do: FranchiseEvents.request_franchise_movie(params, socket)
+
   @impl true
   def handle_event("add_recommendation", params, socket),
     do: RecommendationEvents.add_recommendation(params, socket)

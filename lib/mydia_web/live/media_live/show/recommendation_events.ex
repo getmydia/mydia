@@ -252,6 +252,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
         item
         |> Map.put(:in_library, true)
         |> Map.put(:id, added.id)
+        |> Map.put(:monitored, added.monitored)
         |> Map.put(:navigate, ~p"/media/#{added.id}")
       else
         item

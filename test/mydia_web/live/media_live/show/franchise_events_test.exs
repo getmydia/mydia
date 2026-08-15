@@ -87,6 +87,37 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEventsTest do
     %{franchise | entries: franchise.entries ++ [extra], total_count: franchise.total_count + 1}
   end
 
+  # Helpers for the guest-request tests below. Deliberately not the fuller
+  # `stub_socket/2` / `franchise_with_missing/2` pair above: those build a
+  # socket wired for `add_franchise_movie/2`'s Bypass-backed async add, which
+  # `request_franchise_movie/2` does not need.
+  defp entry(attrs) do
+    struct!(
+      %FranchiseEntry{tmdb_id: 1, title: "Untitled", year: 2001, poster_path: "/p.jpg"},
+      attrs
+    )
+  end
+
+  defp guest_socket(franchise, user) do
+    %Phoenix.LiveView.Socket{
+      assigns: %{
+        __changed__: %{},
+        franchise: franchise,
+        current_user: user,
+        flash: %{}
+      }
+    }
+  end
+
+  defp small_franchise(entries) do
+    %Franchise{
+      name: "Test Collection",
+      entries: entries,
+      owned_count: Enum.count(entries, & &1.in_library?),
+      total_count: length(entries)
+    }
+  end
+
   describe "add_franchise_movie/2" do
     test "creates the movie inheriting profile and monitored flag",
          %{bypass: bypass, config: config} do
@@ -237,6 +268,65 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEventsTest do
       assert socket.assigns.franchise.owned_count == 3
 
       assert Enum.all?(socket.assigns.franchise.entries, & &1.in_library?)
+    end
+  end
+
+  # Covers the guest request path for a missing franchise movie.
+  #
+  # The shared media rail renders a Request button for a guest on any unowned
+  # card, including a franchise card. Without a handler for the event it emits,
+  # the first click raises FunctionClauseError and takes the detail page down.
+  describe "request_franchise_movie/2" do
+    test "records a request and marks the entry" do
+      user = user_fixture(%{role: "guest"})
+
+      franchise =
+        small_franchise([
+          entry(%{tmdb_id: 671, in_library?: true, current?: true, media_item_id: "a"}),
+          entry(%{tmdb_id: 672, title: "Chamber of Secrets", year: 2002})
+        ])
+
+      {:noreply, updated} =
+        FranchiseEvents.request_franchise_movie(
+          %{"tmdb_id" => "672"},
+          guest_socket(franchise, user)
+        )
+
+      requested = Enum.find(updated.assigns.franchise.entries, &(&1.tmdb_id == 672))
+
+      assert requested.request_status != nil
+    end
+
+    test "ignores an id that is not in the franchise" do
+      user = user_fixture(%{role: "guest"})
+      franchise = small_franchise([entry(%{tmdb_id: 671}), entry(%{tmdb_id: 672})])
+
+      assert {:noreply, _socket} =
+               FranchiseEvents.request_franchise_movie(
+                 %{"tmdb_id" => "999"},
+                 guest_socket(franchise, user)
+               )
+    end
+
+    test "ignores a malformed id" do
+      user = user_fixture(%{role: "guest"})
+      franchise = small_franchise([entry(%{tmdb_id: 671}), entry(%{tmdb_id: 672})])
+
+      assert {:noreply, _socket} =
+               FranchiseEvents.request_franchise_movie(
+                 %{"tmdb_id" => "not-a-number"},
+                 guest_socket(franchise, user)
+               )
+    end
+
+    test "ignores the event when no franchise is loaded" do
+      user = user_fixture(%{role: "guest"})
+
+      assert {:noreply, _socket} =
+               FranchiseEvents.request_franchise_movie(
+                 %{"tmdb_id" => "672"},
+                 guest_socket(nil, user)
+               )
     end
   end
 

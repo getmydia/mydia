@@ -197,9 +197,11 @@
             :if={@franchise}
             franchise={@franchise}
             can_add={@can_create_media}
+            current_user={@current_user}
             adding_tmdb_ids={@adding_franchise_tmdb_ids}
           />
-          <DiscoverComponents.recommendations_rail
+          <DiscoverComponents.media_rail
+            id="recommendations-rail"
             items={@recommendations}
             media_type={if @media_item.type == "tv_show", do: :tv_show, else: :movie}
             current_user={@current_user}
