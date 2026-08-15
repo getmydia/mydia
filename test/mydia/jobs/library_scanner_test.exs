@@ -63,52 +63,18 @@ defmodule Mydia.Jobs.LibraryScannerTest do
       :ok
     end
 
-    test "completes a scan of a music library path" do
-      {:ok, library_path} =
-        Settings.create_library_path(%{
-          path: empty_library_dir(),
-          type: "music",
-          monitored: true
-        })
+    for type <- ["movies", "series", "mixed"] do
+      test "completes a scan of a #{type} library path" do
+        {:ok, library_path} =
+          Settings.create_library_path(%{
+            path: empty_library_dir(),
+            type: unquote(type),
+            monitored: true
+          })
 
-      assert :ok = perform_job(LibraryScanner, %{"library_path_id" => library_path.id})
-      assert Settings.get_library_path!(library_path.id).last_scan_status == :success
-    end
-
-    test "completes a scan of a books library path" do
-      {:ok, library_path} =
-        Settings.create_library_path(%{
-          path: empty_library_dir(),
-          type: "books",
-          monitored: true
-        })
-
-      assert :ok = perform_job(LibraryScanner, %{"library_path_id" => library_path.id})
-      assert Settings.get_library_path!(library_path.id).last_scan_status == :success
-    end
-
-    test "completes a scan of an adult library path" do
-      {:ok, library_path} =
-        Settings.create_library_path(%{
-          path: empty_library_dir(),
-          type: "adult",
-          monitored: true
-        })
-
-      assert :ok = perform_job(LibraryScanner, %{"library_path_id" => library_path.id})
-      assert Settings.get_library_path!(library_path.id).last_scan_status == :success
-    end
-
-    test "completes a scan of a movies library path" do
-      {:ok, library_path} =
-        Settings.create_library_path(%{
-          path: empty_library_dir(),
-          type: "movies",
-          monitored: true
-        })
-
-      assert :ok = perform_job(LibraryScanner, %{"library_path_id" => library_path.id})
-      assert Settings.get_library_path!(library_path.id).last_scan_status == :success
+        assert :ok = perform_job(LibraryScanner, %{"library_path_id" => library_path.id})
+        assert Settings.get_library_path!(library_path.id).last_scan_status == :success
+      end
     end
   end
 

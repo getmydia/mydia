@@ -19,6 +19,15 @@ defmodule Mydia.Config.Schema do
   # clamp_scan_interval/1.
   @min_scan_interval 900
 
+  # Music, books, and adult library support was removed. These three values stay
+  # accepted by the config schema, and only by the config schema, because config
+  # is loaded by Mydia.Application before the supervision tree starts and
+  # Config.Loader.load!/1 raises on an invalid changeset. Rejecting a value that
+  # worked in a released version would put an upgrading instance into a boot
+  # crash loop over a library it can no longer serve. Coerce and say so, exactly
+  # as clamp_scan_interval/1 does.
+  @removed_library_types [:music, :books, :adult]
+
   @type t :: %__MODULE__{
           server: __MODULE__.Server.t() | nil,
           database: __MODULE__.Database.t() | nil,
@@ -274,6 +283,10 @@ defmodule Mydia.Config.Schema do
 
     embeds_many :library_paths, LibraryPath, on_replace: :delete, primary_key: false do
       field :path, :string
+      # Keeps @removed_library_types (:music, :books, :adult) even though
+      # Mydia.Settings.LibraryPath no longer stores them. Narrowing this enum
+      # would crash-loop an upgrading instance instead of letting
+      # coerce_removed_library_types/1 downgrade the entry. See the attribute.
       field :type, Ecto.Enum, values: [:movies, :series, :mixed, :music, :books, :adult]
       field :monitored, :boolean, default: true
       field :scan_interval, :integer
@@ -681,7 +694,28 @@ defmodule Mydia.Config.Schema do
     ])
     |> validate_required([:path, :type])
     |> validate_inclusion(:type, [:movies, :series, :mixed, :music, :books, :adult])
+    |> coerce_removed_library_types()
     |> clamp_scan_interval()
+  end
+
+  defp coerce_removed_library_types(changeset) do
+    type = get_field(changeset, :type)
+
+    if type in @removed_library_types do
+      path = get_field(changeset, :path)
+
+      Logger.warning(
+        "Library path #{inspect(path)} is configured as type #{inspect(type)}, which Mydia " <>
+          "no longer supports. It is being treated as an unmonitored mixed library and will " <>
+          "not be scanned. You can remove the entry from your configuration."
+      )
+
+      changeset
+      |> put_change(:type, :mixed)
+      |> put_change(:monitored, false)
+    else
+      changeset
+    end
   end
 
   # Config is loaded by Mydia.Application before the supervision tree starts, and

@@ -89,9 +89,6 @@ pub enum LibraryType {
     Movies,
     Series,
     Mixed,
-    Music,
-    Books,
-    Adult,
 }
 
 /// Every value the contract carries.

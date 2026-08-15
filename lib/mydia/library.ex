@@ -2135,21 +2135,6 @@ defmodule Mydia.Library do
     |> insert_scan_job()
   end
 
-  @doc """
-  Triggers a manual library scan for all adult library paths.
-
-  This will scan for new/modified/deleted files and automatically
-  generate thumbnails for any new files.
-
-  Returns an Oban job that will perform the scan.
-  """
-  @spec trigger_adult_library_scan() :: {:ok, Oban.Job.t()} | {:error, Ecto.Changeset.t()}
-  def trigger_adult_library_scan do
-    %{library_type: "adult"}
-    |> Mydia.Jobs.LibraryScanner.new()
-    |> insert_scan_job()
-  end
-
   # Insert an Oban job, falling back to a direct Repo insert when Oban's
   # engine is disabled (test mode, config/test.exs sets engine: false so no
   # Oban instance is running). Mirrors the pattern used by

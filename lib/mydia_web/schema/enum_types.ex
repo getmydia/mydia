@@ -25,9 +25,6 @@ defmodule MydiaWeb.Schema.EnumTypes do
     value(:movies, description: "Movie library")
     value(:series, description: "TV series library")
     value(:mixed, description: "Mixed content library")
-    value(:music, description: "Music library")
-    value(:books, description: "Book library")
-    value(:adult, description: "Adult content library")
   end
 
   @desc "Sort field for media lists"

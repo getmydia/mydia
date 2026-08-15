@@ -309,21 +309,23 @@ defmodule Mydia.Downloads.ImportCandidatesTest do
       assert candidate["name"] == "Silo.S01E01.mkv"
     end
 
-    test "uses the download's resolved library_path type over the media_item guess",
+    test "reads the download's resolved library_path type when it is preloaded",
          %{tmp_dir: tmp_dir} do
       dir = Path.join(tmp_dir, "live")
       File.mkdir_p!(dir)
       File.write!(Path.join(dir, "track.nfo"), "x")
 
       client = client_with_unrelated_root(tmp_dir)
-      # `library_type_for/1`'s guess only ever returns :movies or :series from
-      # `media_item.type`, and a "tv_show" media_item guesses :series — under
-      # which a `.nfo` file fails the extension filter (skip_reason
-      # "not_video_extension"). Resolving the real, non-guessable `:music`
-      # library type instead makes the SAME file pass (Mydia no longer owns
-      # an extension vocabulary for it, so `importable?/2` treats it as
-      # always importable), proving the resolved type won.
-      library_path = library_path_fixture(%{type: "music"})
+      # This used to resolve a `:music` library path, whose extension
+      # vocabulary differed from every guessable type and so proved the
+      # resolved type beat the guess. Music, books, and adult are gone and
+      # :movies, :series, and :mixed all share one video-extension list, so no
+      # skip_reason can tell the two apart any more. What is still worth
+      # pinning is that a preloaded `%LibraryPath{}` matches
+      # `resolved_library_type/1`'s first clause for `:mixed` — a type
+      # `library_type_for/1` can never guess — and yields the mixed library's
+      # filtering rather than raising.
+      library_path = library_path_fixture(%{type: "mixed"})
       media_item = media_item_fixture(%{type: "tv_show"})
 
       download =
@@ -342,7 +344,7 @@ defmodule Mydia.Downloads.ImportCandidatesTest do
 
       assert {:ok, :live, [candidate]} = ImportCandidates.load(download)
       assert candidate["name"] == "track.nfo"
-      assert candidate["skip_reason"] == nil
+      assert candidate["skip_reason"] == "not_video_extension"
     end
 
     test "falls back to the media_item guess when library_path isn't preloaded",

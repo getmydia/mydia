@@ -33,14 +33,6 @@ defmodule Mydia.LibraryScanTriggerTest do
       assert job.state == "available"
     end
 
-    test "an adult scan runs immediately" do
-      {:ok, job} = Library.trigger_adult_library_scan()
-
-      assert_enqueued(worker: LibraryScanner, args: %{"library_type" => "adult"})
-
-      assert job.state == "available"
-    end
-
     test "a full scan can be delayed by automatic callers" do
       {:ok, job} = Library.trigger_full_library_scan(schedule_in: 600)
 

@@ -45,28 +45,19 @@ defmodule Mydia.Library.DatabaseHealthCheckTest do
       assert DatabaseHealthCheck.count_orphaned_files() == 1
     end
 
-    test "excludes files from music libraries" do
-      library_path = create_library_path(:music)
+    # count_orphaned_files/0 filters on an explicit allow-list of "standard"
+    # library types. The specialized types it used to exclude (music, books,
+    # adult) are gone, so every surviving type must now be counted. Reading the
+    # list off the schema means adding a library type later fails here rather
+    # than silently dropping its orphans from the health check.
+    test "counts orphans in every library type the schema allows" do
+      types = Ecto.Enum.values(LibraryPath, :type)
 
-      insert_media_file(library_path)
+      for type <- types do
+        create_library_path(type) |> insert_media_file()
+      end
 
-      assert DatabaseHealthCheck.count_orphaned_files() == 0
-    end
-
-    test "excludes files from books libraries" do
-      library_path = create_library_path(:books)
-
-      insert_media_file(library_path)
-
-      assert DatabaseHealthCheck.count_orphaned_files() == 0
-    end
-
-    test "excludes files from adult libraries" do
-      library_path = create_library_path(:adult)
-
-      insert_media_file(library_path)
-
-      assert DatabaseHealthCheck.count_orphaned_files() == 0
+      assert DatabaseHealthCheck.count_orphaned_files() == length(types)
     end
 
     test "counts files with episode_id as not orphaned" do
@@ -218,15 +209,7 @@ defmodule Mydia.Library.DatabaseHealthCheckTest do
   defp restore_app_env(key, value), do: Application.put_env(:mydia, key, value)
 
   defp create_library_path(type) do
-    path =
-      case type do
-        :movies -> "/test/movies/#{System.unique_integer([:positive])}"
-        :series -> "/test/series/#{System.unique_integer([:positive])}"
-        :mixed -> "/test/mixed/#{System.unique_integer([:positive])}"
-        :music -> "/test/music/#{System.unique_integer([:positive])}"
-        :books -> "/test/books/#{System.unique_integer([:positive])}"
-        :adult -> "/test/adult/#{System.unique_integer([:positive])}"
-      end
+    path = "/test/#{type}/#{System.unique_integer([:positive])}"
 
     {:ok, library_path} =
       %LibraryPath{}
