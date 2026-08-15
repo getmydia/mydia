@@ -569,6 +569,7 @@ void main() {
       CastRouteKind routeKind = CastRouteKind.directServer,
       DateTime? savedAt,
       String mediaUrl = 'https://mydia.test/api/v1/stream/file/file-1',
+      String? selectedSubtitleTrackId,
     }) async {
       final session = PersistedCastSession(
         device: device,
@@ -580,6 +581,7 @@ void main() {
         routeKind: routeKind,
         savedAt: savedAt ?? DateTime.utc(2026, 7, 28, 11),
         mediaUrl: mediaUrl,
+        selectedSubtitleTrackId: selectedSubtitleTrackId,
       );
       await store.save(session);
       return session;
@@ -762,6 +764,29 @@ void main() {
       expect(await store.load(), isNull);
       expect(lanCalls, [true, false]);
     });
+
+    test('keeps the persisted subtitle choice across a bridge-route reload',
+        () async {
+      // The bridge branch reloads through `_loadOnRoute`, which re-saves
+      // `_persisted` from the rebuilt request. If `restoreSession` didn't
+      // carry `selectedSubtitleTrackId` onto that request, this reload would
+      // silently overwrite the store's real choice with null.
+      const bridgeUrl =
+          'http://192.168.1.20:4999/g/old/hls/session-old/index.m3u8';
+      await storeSession(
+        routeKind: CastRouteKind.localBridge,
+        mediaUrl: bridgeUrl,
+        selectedSubtitleTrackId: '3',
+      );
+      backend.receiverContentUrl = bridgeUrl;
+      final manager = build(isP2pMode: true);
+      addTearDown(manager.dispose);
+
+      expect(await manager.restoreSession(), isTrue);
+
+      expect((await store.load())?.selectedSubtitleTrackId, '3');
+      expect(manager.persistedSession?.selectedSubtitleTrackId, '3');
+    });
   });
 
   group('reconnectStoredSession', () {
@@ -791,6 +816,35 @@ void main() {
         manager.reconnectStoredSession(),
         throwsA(isA<CastBackendException>()),
       );
+    });
+
+    test(
+        'keeps the persisted subtitle choice rather than overwriting it '
+        'with null', () async {
+      // Unlike restoreSession's direct-route branch (which adopts a
+      // receiver without reloading), this always reaches `_loadOnRoute` via
+      // `startCast`, which re-saves `_persisted` from the request it was
+      // given.
+      final manager = build();
+      addTearDown(manager.dispose);
+      await manager.startCast(
+        device: device,
+        request: const CastLaunchRequest(
+          fileId: 'file-1',
+          mediaId: 'movie-1',
+          mediaType: 'movie',
+          title: 'Arrival',
+          selectedSubtitleTrackId: '3',
+        ),
+      );
+      backend.loadedRequests.clear();
+
+      backend.emitFailure(CastFailureKind.connectionLost);
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      await manager.reconnectStoredSession();
+
+      expect((await store.load())?.selectedSubtitleTrackId, '3');
     });
   });
 
@@ -1783,6 +1837,72 @@ void main() {
 
       expect(tracks, [a, b],
           reason: 'the caller\'s own list must survive untouched');
+    });
+
+    test('selectSubtitle persists the choice so a cold restore remembers it',
+        () async {
+      final manager = build();
+      addTearDown(manager.dispose);
+
+      await manager.startCast(
+        device: device,
+        request: const CastLaunchRequest(
+          fileId: 'file-1',
+          mediaId: 'movie-1',
+          mediaType: 'movie',
+          title: 'A Movie',
+          subtitles: twoTracks,
+        ),
+      );
+
+      final track = backend.loadedRequests.single.subtitles
+          .firstWhere((t) => t.trackId == '3');
+      await manager.selectSubtitle(track);
+
+      expect((await store.load())?.selectedSubtitleTrackId, '3');
+
+      // Turning subtitles back off must persist as *no* selection, not leave
+      // the previous track id behind.
+      await manager.selectSubtitle(null);
+
+      expect((await store.load())?.selectedSubtitleTrackId, isNull);
+    });
+
+    // The brief's own snippet for this test declared a local, non-const
+    // `tracks` list and then passed it as `subtitles: tracks` inside a
+    // `const CastLaunchRequest(...)`, which doesn't compile against a
+    // non-const local. Reusing `twoTracks` (already `const`, and carrying
+    // the identical two tracks) sidesteps that rather than introducing a
+    // second near-duplicate list.
+    test('a seek restart keeps the chosen track', () async {
+      final manager = build();
+      addTearDown(manager.dispose);
+
+      await manager.startCast(
+        device: device,
+        request: const CastLaunchRequest(
+          fileId: 'file-1',
+          mediaId: 'movie-1',
+          mediaType: 'movie',
+          title: 'A Movie',
+          subtitles: twoTracks,
+        ),
+      );
+
+      // Pick the second one, so a restart that dropped the choice would come
+      // back with '2' first and fail loudly.
+      final track = backend.loadedRequests.single.subtitles
+          .firstWhere((t) => t.trackId == '3');
+      await manager.selectSubtitle(track);
+      await manager.seek(const Duration(minutes: 10));
+
+      // Guards against the assertion below passing vacuously: with
+      // `currentPosition` at zero and a 30s tolerance, this target is far
+      // enough forward that `shouldRestartCastForSeek` must restart rather
+      // than seek in place. If it didn't, there would be only one load
+      // request and the track assertion would prove nothing.
+      expect(backend.loadedRequests, hasLength(2));
+      expect(backend.loadedRequests.last.subtitles.first.trackId, '3');
     });
   });
 }

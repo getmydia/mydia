@@ -749,6 +749,7 @@ class CastSessionManager {
       savedAt: _clock(),
       mediaUrl: route.mediaUrl,
       duration: request.duration ?? Duration.zero,
+      selectedSubtitleTrackId: request.selectedSubtitleTrackId,
     );
     await _store.save(_persisted!);
 
@@ -939,9 +940,17 @@ class CastSessionManager {
       clearSelectedSubtitle: track == null,
     );
 
-    // PersistedCastSession.copyWith and the block that persists this choice
-    // land in Task 8. Until then a stored session, or a cold restore, simply
-    // doesn't know about a track switched mid-session.
+    // Keeps a cold restore in sync with whatever the viewer picked mid
+    // session — without this, only a seek restart (which rebuilds from
+    // `_lastRequest`, not the store) would remember the choice.
+    final persisted = _persisted;
+    if (persisted != null) {
+      _persisted = persisted.copyWith(
+        selectedSubtitleTrackId: track?.trackId,
+        clearSelectedSubtitle: track == null,
+      );
+      await _store.save(_persisted!);
+    }
 
     _republishWithSubtitles();
   }
@@ -1035,6 +1044,13 @@ class CastSessionManager {
         title: stored.title,
         startPosition: stored.position,
         duration: stored.duration,
+        // Carried across for the same reason `restoreSession` carries it:
+        // this always reaches `_loadOnRoute` (unlike `restoreSession`'s
+        // direct-route branch, which adopts a receiver without reloading),
+        // and `_loadOnRoute` re-saves `_persisted` from this request. Leaving
+        // it out would silently overwrite the store's real choice with null
+        // on every stale-session reconnect.
+        selectedSubtitleTrackId: stored.selectedSubtitleTrackId,
       ),
     );
   }
@@ -1120,6 +1136,7 @@ class CastSessionManager {
       title: stored.title,
       startPosition: stored.position,
       duration: stored.duration,
+      selectedSubtitleTrackId: stored.selectedSubtitleTrackId,
     );
 
     // The bridge branch below reloads through `_loadOnRoute`, which sets this

@@ -77,6 +77,94 @@ void main() {
     });
   });
 
+  group('selected subtitle track', () {
+    test('round-trips through storage', () {
+      final session = PersistedCastSession(
+        device: const CastDevice(
+          id: 'd1',
+          name: 'Living Room',
+          protocol: CastProtocolKind.chromecast,
+        ),
+        mediaId: 'movie-1',
+        mediaType: 'movie',
+        fileId: 'file-1',
+        title: 'A Movie',
+        position: const Duration(minutes: 5),
+        routeKind: CastRouteKind.directServer,
+        savedAt: DateTime.utc(2026, 8, 15),
+        selectedSubtitleTrackId: '3',
+      );
+
+      final restored = PersistedCastSession.fromMap(session.toMap());
+      expect(restored.selectedSubtitleTrackId, '3');
+    });
+
+    test('a record written before this field existed restores with none', () {
+      // `.toMap()..remove(...)` rather than passing `null` explicitly: the
+      // point is a real record from before this field existed, where the key
+      // is absent entirely, not merely set to null.
+      final map = PersistedCastSession(
+        device: const CastDevice(
+          id: 'd1',
+          name: 'Living Room',
+          protocol: CastProtocolKind.chromecast,
+        ),
+        mediaId: 'movie-1',
+        mediaType: 'movie',
+        fileId: 'file-1',
+        title: 'A Movie',
+        position: Duration.zero,
+        routeKind: CastRouteKind.directServer,
+        savedAt: DateTime.utc(2026, 8, 15),
+      ).toMap()
+        ..remove('selectedSubtitleTrackId');
+
+      expect(map.containsKey('selectedSubtitleTrackId'), isFalse);
+      expect(
+        PersistedCastSession.fromMap(map).selectedSubtitleTrackId,
+        isNull,
+      );
+    });
+
+    test('copyWith replaces the id', () {
+      final session = PersistedCastSession(
+        device: const CastDevice(
+          id: 'd1',
+          name: 'Living Room',
+          protocol: CastProtocolKind.chromecast,
+        ),
+        mediaId: 'movie-1',
+        mediaType: 'movie',
+        fileId: 'file-1',
+        title: 'A Movie',
+        position: Duration.zero,
+        routeKind: CastRouteKind.directServer,
+        savedAt: DateTime.utc(2026, 8, 15),
+        selectedSubtitleTrackId: '2',
+      );
+
+      expect(
+          session
+              .copyWith(selectedSubtitleTrackId: '3')
+              .selectedSubtitleTrackId,
+          '3');
+      // Omitting the argument must leave the existing choice alone, matching
+      // every other field this copyWith carries.
+      expect(
+          session
+              .copyWith(position: const Duration(minutes: 1))
+              .selectedSubtitleTrackId,
+          '2');
+      // Turning subtitles back off needs an unambiguous way to reach null,
+      // since a bare `selectedSubtitleTrackId: null` argument is what "leave
+      // unchanged" already looks like.
+      expect(
+        session.copyWith(clearSelectedSubtitle: true).selectedSubtitleTrackId,
+        isNull,
+      );
+    });
+  });
+
   group('InMemoryCastSessionStore', () {
     test('saves, loads and clears', () async {
       final store = InMemoryCastSessionStore();
@@ -107,7 +195,8 @@ void main() {
     });
 
     test('persists across store instances backed by the same box', () async {
-      await HiveCastSessionStore(box).save(sessionAt(DateTime.utc(2026, 7, 28)));
+      await HiveCastSessionStore(box)
+          .save(sessionAt(DateTime.utc(2026, 7, 28)));
 
       final loaded = await HiveCastSessionStore(box).load();
 
