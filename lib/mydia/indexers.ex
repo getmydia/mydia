@@ -178,9 +178,6 @@ defmodule Mydia.Indexers do
   @spec search_all(binary(), keyword()) ::
           {:ok, %{results: [SearchResult.t()], indexer_errors: [map()]}}
   def search_all(query, opts \\ []) do
-    min_seeders = Keyword.get(opts, :min_seeders, 0)
-    max_results = Keyword.get(opts, :max_results, 100)
-    should_deduplicate = Keyword.get(opts, :deduplicate, true)
     indexer_ids = Keyword.get(opts, :indexer_ids)
 
     # Get traditional indexers (Prowlarr, Jackett)
@@ -241,14 +238,7 @@ defmodule Mydia.Indexers do
             {acc_results, [error | acc_errors]}
         end)
 
-      results =
-        all_results
-        |> filter_by_seeders(min_seeders)
-        |> then(fn results ->
-          if should_deduplicate, do: deduplicate_results(results), else: results
-        end)
-        |> rank_results(query, min_seeders)
-        |> Enum.take(max_results)
+      results = rank_and_dedupe(all_results, query, opts)
 
       total_time = System.monotonic_time(:millisecond) - start_time
 
@@ -260,6 +250,35 @@ defmodule Mydia.Indexers do
 
       {:ok, %{results: results, indexer_errors: Enum.reverse(indexer_errors)}}
     end
+  end
+
+  @doc """
+  Filters, deduplicates and ranks a raw result set.
+
+  Extracted from `search_all/2` so the manual-search LiveViews can re-rank an
+  accumulating result set as each indexer reports, without reimplementing
+  ranking in the web layer.
+
+  ## Options
+
+    - `:min_seeders` - drop torrents below this seeder count (default: 0).
+      NZB results have nil seeders and are always kept.
+    - `:max_results` - truncate to this many results (default: 100)
+    - `:deduplicate` - merge duplicate releases (default: true)
+  """
+  @spec rank_and_dedupe([SearchResult.t()], binary(), keyword()) :: [SearchResult.t()]
+  def rank_and_dedupe(results, query, opts \\ []) do
+    min_seeders = Keyword.get(opts, :min_seeders, 0)
+    max_results = Keyword.get(opts, :max_results, 100)
+    should_deduplicate = Keyword.get(opts, :deduplicate, true)
+
+    results
+    |> filter_by_seeders(min_seeders)
+    |> then(fn results ->
+      if should_deduplicate, do: deduplicate_results(results), else: results
+    end)
+    |> rank_results(query, min_seeders)
+    |> Enum.take(max_results)
   end
 
   @doc """

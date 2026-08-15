@@ -466,4 +466,44 @@ defmodule Mydia.IndexersTest do
       assert info.version == "1.25.0"
     end
   end
+
+  describe "rank_and_dedupe/3" do
+    alias Mydia.Indexers.SearchResult
+
+    defp result(title, seeders) do
+      %SearchResult{
+        title: title,
+        download_url: "magnet:?xt=urn:btih:#{:erlang.phash2(title)}",
+        indexer: "Test",
+        size: 1_000_000_000,
+        seeders: seeders,
+        leechers: 0
+      }
+    end
+
+    test "drops results below min_seeders" do
+      results = [result("Movie.2021.1080p", 1), result("Movie.2021.720p", 50)]
+
+      ranked = Indexers.rank_and_dedupe(results, "Movie 2021", min_seeders: 10)
+
+      assert length(ranked) == 1
+      assert hd(ranked).seeders == 50
+    end
+
+    test "truncates to max_results" do
+      results = Enum.map(1..10, fn n -> result("Movie.2021.Release#{n}", n) end)
+
+      ranked = Indexers.rank_and_dedupe(results, "Movie 2021", max_results: 3)
+
+      assert length(ranked) == 3
+    end
+
+    test "deduplicate: false keeps identical titles" do
+      results = [result("Movie.2021.1080p", 5), result("Movie.2021.1080p", 5)]
+
+      ranked = Indexers.rank_and_dedupe(results, "Movie 2021", deduplicate: false)
+
+      assert length(ranked) == 2
+    end
+  end
 end
