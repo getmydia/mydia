@@ -70,4 +70,17 @@ defmodule MydiaWeb.DiscoverComponentsTest do
       refute html =~ ~s(phx-click="request_media")
     end
   end
+
+  describe "poster loading and size" do
+    # Regression: card_poster/1 used to hardcode loading="lazy" and w500 for
+    # every caller. A bare trending_card/1 is what the Dashboard and Discover
+    # grids render, whose first row is above the fold and must not defer its
+    # fetch, so it keeps eager loading at the w500 default.
+    test "a bare card carries no loading attribute and the w500 default size" do
+      html = card(%{})
+
+      refute html =~ "loading="
+      assert html =~ "/w500/dune.jpg"
+    end
+  end
 end
