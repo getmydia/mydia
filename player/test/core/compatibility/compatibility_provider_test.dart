@@ -165,4 +165,68 @@ void main() {
     expect(state.showBanner, isTrue);
     expect(box.isEmpty, isTrue);
   });
+
+  test('a pre-existing dismissal key does not suppress a required verdict',
+      () async {
+    final box = await memoryBox();
+    const playerVersion = '0.8.0';
+    const serverVersion = '0.9.0';
+
+    // Seeded under the exact key build() would look up for this state, so
+    // the test proves the required verdict is honored rather than proving an
+    // unrelated key simply failed to match.
+    const seeded = CompatibilityState(
+      verdict: CompatibilityVerdict.playerUpdateRequired,
+      playerVersion: playerVersion,
+      serverVersion: serverVersion,
+    );
+    await box.put(seeded.dismissalKey, true);
+
+    final container = harness(
+      playerVersion: playerVersion,
+      response: okResponse(version: serverVersion, min: serverVersion),
+      box: box,
+    );
+
+    final state = await container.read(compatibilityProvider.future);
+
+    expect(state.verdict, CompatibilityVerdict.playerUpdateRequired);
+    expect(state.showBanner, isTrue);
+  });
+
+  test('a pre-existing dismissal key suppresses a matching recommended verdict',
+      () async {
+    final box = await memoryBox();
+    const playerVersion = '0.8.0';
+    const serverVersion = '0.9.0';
+
+    // Same pre-seeding mechanism as the required-verdict test above, but here
+    // the verdict is dismissible, so the seeded key should take effect. This
+    // is what gives the required-verdict test its teeth: it proves a seeded
+    // key can suppress a banner at all, so the required-verdict test not
+    // suppressing one is meaningful rather than a key that never matched
+    // anything.
+    const seeded = CompatibilityState(
+      verdict: CompatibilityVerdict.playerUpdateRecommended,
+      playerVersion: playerVersion,
+      serverVersion: serverVersion,
+    );
+    await box.put(seeded.dismissalKey, true);
+
+    final container = harness(
+      playerVersion: playerVersion,
+      response: okResponse(
+        version: serverVersion,
+        min: '0.7.0',
+        recommended: serverVersion,
+      ),
+      box: box,
+    );
+
+    final state = await container.read(compatibilityProvider.future);
+
+    expect(state.verdict, CompatibilityVerdict.playerUpdateRecommended);
+    expect(state.dismissed, isTrue);
+    expect(state.showBanner, isFalse);
+  });
 }
