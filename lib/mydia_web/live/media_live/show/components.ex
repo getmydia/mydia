@@ -1221,12 +1221,11 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                   <%!-- File info header --%>
                   <div class="flex items-start justify-between gap-4 mb-3">
                     <div class="flex-1 min-w-0">
-                      <% absolute_path = Mydia.Library.MediaFile.absolute_path(media_file) %>
                       <p
                         class="text-sm font-mono text-base-content/80 break-all"
-                        title={absolute_path}
+                        title={Mydia.Library.MediaFile.display_path(media_file)}
                       >
-                        {Path.basename(absolute_path)}
+                        {Mydia.Library.MediaFile.display_name(media_file)}
                       </p>
                       <div class="flex gap-2 mt-1">
                         <span class="badge badge-primary badge-xs">

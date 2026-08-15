@@ -70,6 +70,62 @@ defmodule Mydia.Library.MediaFileTest do
     end
   end
 
+  describe "display_path/1 and display_name/1" do
+    test "prefer the resolved absolute path" do
+      media_file = %MediaFile{
+        relative_path: "The Matrix (1999)/The Matrix (1999) [1080p].mkv",
+        library_path: %LibraryPath{path: "/media/movies"}
+      }
+
+      assert MediaFile.display_path(media_file) ==
+               "/media/movies/The Matrix (1999)/The Matrix (1999) [1080p].mkv"
+
+      assert MediaFile.display_name(media_file) == "The Matrix (1999) [1080p].mkv"
+    end
+
+    test "fall back to the relative path when library_path is missing" do
+      media_file = %MediaFile{relative_path: "Movie.mkv", library_path: nil}
+
+      assert MediaFile.display_path(media_file) == "Movie.mkv"
+      assert MediaFile.display_name(media_file) == "Movie.mkv"
+    end
+
+    test "fall back to the relative path when library_path is not loaded" do
+      media_file = %MediaFile{
+        id: "mf-1",
+        relative_path: "Season 01/S01E01.mkv",
+        library_path: %Ecto.Association.NotLoaded{
+          __field__: :library_path,
+          __owner__: MediaFile,
+          __cardinality__: :one
+        }
+      }
+
+      capture_log(fn ->
+        assert MediaFile.display_path(media_file) == "Season 01/S01E01.mkv"
+        assert MediaFile.display_name(media_file) == "S01E01.mkv"
+      end)
+    end
+
+    test "never raise for a file with no resolvable location" do
+      media_file = %MediaFile{relative_path: nil, library_path: nil}
+
+      assert MediaFile.display_path(media_file) == nil
+      assert MediaFile.display_name(media_file) == "Unknown file"
+    end
+
+    test "ignore the dead legacy path column" do
+      # Every row in the wild carries path: nil, so nothing may depend on it.
+      media_file = %MediaFile{
+        path: "/legacy/ignored.mkv",
+        relative_path: "Movie.mkv",
+        library_path: %LibraryPath{path: "/media/movies"}
+      }
+
+      assert MediaFile.display_path(media_file) == "/media/movies/Movie.mkv"
+    end
+  end
+
   describe "library type compatibility validation" do
     setup do
       # Create library paths with different types (using unique paths to avoid conflicts)

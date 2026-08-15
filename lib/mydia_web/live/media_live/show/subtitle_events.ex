@@ -10,7 +10,8 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
   require Logger
 
   def open_subtitle_search(%{"media-file-id" => media_file_id}, socket) do
-    media_file = Mydia.Library.get_media_file!(media_file_id)
+    # library_path is what resolves the file's location for the modal header.
+    media_file = Mydia.Library.get_media_file!(media_file_id, preload: [:library_path])
 
     {:noreply,
      socket
