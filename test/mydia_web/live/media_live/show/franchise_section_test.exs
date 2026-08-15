@@ -61,14 +61,16 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseSectionTest do
 
     assert has_element?(view, "#franchise-section")
     assert has_element?(view, "#franchise-section .badge", "1 of 2")
-    assert has_element?(view, "#franchise-entry-#{owned_tmdb_id}")
-    assert has_element?(view, "#franchise-entry-#{missing_tmdb_id}")
+    assert has_element?(view, "#franchise-section-item-#{owned_tmdb_id}")
+    assert has_element?(view, "#franchise-section-item-#{missing_tmdb_id}")
 
     # `can_create_media` reaches the component: an admin gets the add affordance
-    # on the missing entry.
+    # on the missing entry. The id lives on the rail's item wrapper; phx-click
+    # is on the trending_card_action button nested inside it, hence the
+    # descendant combinator rather than a compound selector.
     assert has_element?(
              view,
-             "#franchise-entry-#{missing_tmdb_id}[phx-click='add_franchise_movie']"
+             "#franchise-section-item-#{missing_tmdb_id} [phx-click='add_franchise_movie']"
            )
   end
 
