@@ -209,6 +209,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
 
     results
     |> MediaAddHelpers.enrich_with_library_status(status)
+    |> MediaRequestHelpers.enrich_with_request_status(MediaRequestHelpers.request_status_map())
     |> Enum.map(fn item ->
       navigate = if item.in_library && item.id, do: ~p"/media/#{item.id}", else: nil
       Map.put(item, :navigate, navigate)

@@ -32,7 +32,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
   end
 
   def handle_load_result({:ok, {:ok, franchise}}, socket) do
-    {:noreply, assign(socket, :franchise, franchise)}
+    {:noreply, assign(socket, :franchise, enrich_with_request_status(franchise))}
   end
 
   def handle_load_result({:ok, :none}, socket) do
@@ -161,6 +161,21 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
   end
 
   ## Private
+
+  # Populates request_status on load. Without this, a guest who requested a
+  # missing entry and then reloaded the page would see the button revert to an
+  # enabled Request, since mark_requested/3 only sets request_status in memory
+  # for the life of the socket.
+  defp enrich_with_request_status(franchise) do
+    status_map = MediaRequestHelpers.request_status_map()
+
+    entries =
+      Enum.map(franchise.entries, fn entry ->
+        %{entry | request_status: Map.get(status_map, entry.tmdb_id)}
+      end)
+
+    %{franchise | entries: entries}
+  end
 
   defp find_entry(nil, _tmdb_id), do: nil
 

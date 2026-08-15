@@ -1,0 +1,89 @@
+defmodule MydiaWeb.MediaLive.Show.RecommendationEventsTest do
+  @moduledoc false
+
+  use Mydia.DataCase, async: false
+
+  import Mydia.MediaFixtures
+  import Mydia.AccountsFixtures
+
+  alias Mydia.MediaRequests
+  alias Mydia.Metadata.Structs.SearchResult
+  alias MydiaWeb.MediaLive.Show.RecommendationEvents
+
+  defp result(attrs) do
+    struct!(
+      %SearchResult{provider_id: "1", provider: :metadata_relay, media_type: :movie},
+      attrs
+    )
+  end
+
+  defp stub_socket(assigns) do
+    defaults = %{
+      __changed__: %{},
+      flash: %{},
+      recommendations: [],
+      adding_recommendation_tmdb_ids: MapSet.new(),
+      adding_recommendation_id: nil,
+      requesting_recommendation_id: nil,
+      current_user: user_fixture()
+    }
+
+    %Phoenix.LiveView.Socket{
+      assigns: Map.merge(defaults, assigns),
+      private: %{live_temp: %{}}
+    }
+  end
+
+  describe "handle_load_result/2" do
+    # Regression: RecommendationEvents.decorate/2 enriched with library status
+    # but never with request status, though request_recommendation/2 does call
+    # enrich_with_request_status/2 after a successful request. A guest who
+    # requested a recommended title and reloaded the page would see an enabled
+    # Request button again.
+    test "stamps request_status from an outstanding request and leaves the rest nil" do
+      requester = user_fixture(%{role: "guest"})
+
+      current =
+        media_item_fixture(%{
+          type: "movie",
+          title: "Current",
+          tmdb_id: System.unique_integer([:positive])
+        })
+
+      requested_tmdb_id = System.unique_integer([:positive])
+      untouched_tmdb_id = System.unique_integer([:positive])
+
+      {:ok, _request} =
+        MediaRequests.create_request(%{
+          media_type: "movie",
+          title: "Requested Rec",
+          tmdb_id: requested_tmdb_id,
+          requester_id: requester.id
+        })
+
+      results = [
+        result(%{provider_id: to_string(requested_tmdb_id), title: "Requested Rec"}),
+        result(%{provider_id: to_string(untouched_tmdb_id), title: "Untouched Rec"})
+      ]
+
+      socket = stub_socket(%{media_item: current})
+
+      {:noreply, socket} = RecommendationEvents.handle_load_result({:ok, {:ok, results}}, socket)
+
+      requested =
+        Enum.find(
+          socket.assigns.recommendations,
+          &(&1.provider_id == to_string(requested_tmdb_id))
+        )
+
+      untouched =
+        Enum.find(
+          socket.assigns.recommendations,
+          &(&1.provider_id == to_string(untouched_tmdb_id))
+        )
+
+      assert requested.request_status == "pending"
+      assert untouched.request_status == nil
+    end
+  end
+end

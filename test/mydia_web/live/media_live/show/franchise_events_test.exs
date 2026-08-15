@@ -406,6 +406,47 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEventsTest do
   end
 
   describe "handle_load_result/2" do
+    # Regression: mark_requested/3 only set request_status in memory for the
+    # life of the socket. A guest who requested a missing entry then reloaded
+    # the page would see an enabled Request button again, and clicking it hit
+    # the duplicate-request error for a request that was already pending.
+    test "stamps request_status from an outstanding request and leaves the rest nil",
+         %{config: config} do
+      requester = user_fixture(%{role: "guest"})
+
+      current =
+        media_item_fixture(%{
+          type: "movie",
+          title: "First",
+          year: 2001,
+          tmdb_id: System.unique_integer([:positive])
+        })
+
+      requested_tmdb_id = System.unique_integer([:positive])
+      franchise = franchise_with_missing(current, requested_tmdb_id)
+      franchise = with_extra_missing(franchise, System.unique_integer([:positive]))
+      [_current_entry, requested_entry, untouched_entry] = franchise.entries
+
+      {:ok, _request} =
+        Mydia.MediaRequests.create_request(%{
+          media_type: "movie",
+          title: requested_entry.title,
+          tmdb_id: requested_entry.tmdb_id,
+          requester_id: requester.id
+        })
+
+      socket = stub_socket(%{media_item: current, metadata_config: config})
+
+      {:noreply, socket} = FranchiseEvents.handle_load_result({:ok, {:ok, franchise}}, socket)
+
+      entries = socket.assigns.franchise.entries
+      requested = Enum.find(entries, &(&1.tmdb_id == requested_entry.tmdb_id))
+      untouched = Enum.find(entries, &(&1.tmdb_id == untouched_entry.tmdb_id))
+
+      assert requested.request_status == "pending"
+      assert untouched.request_status == nil
+    end
+
     test "assigns the franchise on success", %{config: config} do
       current =
         media_item_fixture(%{type: "movie", title: "First", year: 2001, tmdb_id: 1041})
