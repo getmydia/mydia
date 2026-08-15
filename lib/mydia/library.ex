@@ -2745,4 +2745,29 @@ defmodule Mydia.Library do
     |> Enum.map(fn file -> {file.id, MediaFile.absolute_path(file)} end)
     |> Enum.reject(fn {_id, path} -> is_nil(path) end)
   end
+
+  @doc """
+  Counts files awaiting review in the import inbox.
+
+  A file becomes inbox work once it carries a match candidate (a real match or
+  a recorded failed attempt) and still has no parent. This is the mirror image
+  of `list_unmatched_media_file_paths/2`: unmatched excludes a candidate,
+  inbox requires one.
+
+  ## Options
+
+    * `:library_path_id` - required, scopes the count to one library path
+  """
+  @spec count_inbox_files(keyword()) :: non_neg_integer()
+  def count_inbox_files(opts) do
+    library_path_id = Keyword.fetch!(opts, :library_path_id)
+
+    MediaFile
+    |> where([f], f.library_path_id == ^library_path_id)
+    |> where([f], is_nil(f.media_item_id) and is_nil(f.episode_id))
+    |> where([f], is_nil(f.trashed_at))
+    |> join(:inner, [f], c in MatchCandidate, on: c.media_file_id == f.id)
+    |> select([f], count(f.id, :distinct))
+    |> Repo.one()
+  end
 end

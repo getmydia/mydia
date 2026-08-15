@@ -30,10 +30,12 @@ defmodule Mydia.Jobs.ImportRun do
   require Logger
 
   alias Mydia.Library
-  alias Mydia.Library.{ImportRun, SampleDetector, Scanner}
+  alias Mydia.Library.{BatchMatcher, FileIngest, ImportRun, SampleDetector, Scanner}
+  alias Mydia.Metadata
   alias Mydia.{Repo, Settings}
 
   @scan_batch_size 100
+  @match_chunk_size 50
 
   @doc """
   PubSub topic carrying progress for one run.
@@ -174,10 +176,118 @@ defmodule Mydia.Jobs.ImportRun do
     broadcast(updated)
   end
 
-  ## Phase 2 lands in the next task.
+  ## Phase 2: match
 
-  @doc false
-  def run_match_phase(%ImportRun{}), do: :ok
+  @doc """
+  Matches outstanding files in chunks, caching a candidate for each.
+
+  In `:unattended` mode a match at or above the confidence threshold is linked
+  immediately. In `:review` mode nothing is linked from an external provider
+  match, though a file whose show already exists locally is still associated:
+  that needs no item creation and no human judgement.
+
+  Returns `:ok` when no unmatched files remain, or `:stopped` if a stop was
+  requested. Between chunks the run row is re-read, which is the only place a
+  stop can take effect.
+
+  ## Options
+
+    * `:config` - metadata relay config, defaults to `Metadata.default_relay_config/0`.
+      Lets a test point relay traffic at a local Bypass server without
+      mutating the global `METADATA_RELAY_URL` env var (which would race any
+      concurrently running async test that also resolves the default config).
+    * `:after_chunk` - a 0-arity function invoked once a chunk has committed,
+      before the next chunk's stop check. Mirrors the `:after_batch` seam on
+      `run_scan_phase/2`, for the same reason: it makes the stop boundary
+      deterministic in a test (request the stop from inside the callback)
+      instead of racing a concurrent process against the loop. Defaults to a
+      no-op.
+  """
+  @spec run_match_phase(ImportRun.t(), keyword()) :: :ok | :stopped | {:error, term()}
+  def run_match_phase(%ImportRun{} = run, opts \\ []) do
+    library_path = Settings.get_library_path!(run.library_path_id)
+    config = Keyword.get(opts, :config) || Metadata.default_relay_config()
+    after_chunk = Keyword.get(opts, :after_chunk, fn -> :ok end)
+
+    {:ok, _} = Library.update_import_run(run, %{phase: :matching})
+
+    match_loop(run, library_path, config, after_chunk)
+  end
+
+  defp match_loop(run, library_path, config, after_chunk) do
+    if Library.import_run_stopping?(run.id) do
+      :stopped
+    else
+      case Library.list_unmatched_media_file_paths(library_path.id, @match_chunk_size) do
+        [] ->
+          :ok
+
+        chunk ->
+          process_match_chunk(chunk, run, library_path, config)
+          after_chunk.()
+          match_loop(run, library_path, config, after_chunk)
+      end
+    end
+  end
+
+  defp process_match_chunk(chunk, run, library_path, config) do
+    by_path = Map.new(chunk, fn {file_id, path} -> {path, file_id} end)
+    policy = policy_for(run.mode)
+
+    results =
+      by_path
+      |> Map.keys()
+      |> BatchMatcher.match_paths(
+        config: config,
+        provider: library_path.tv_metadata_source,
+        on_result: fn path, _result -> note_current_file(run, path) end
+      )
+
+    linked =
+      results
+      |> Enum.map(fn {path, result} -> ingest_result(by_path, path, result, policy, config) end)
+      |> Enum.count(&(&1 == :linked))
+
+    latest = Library.get_import_run(run.id)
+
+    {:ok, updated} =
+      Library.update_import_run(latest, %{
+        files_matched: latest.files_matched + length(results),
+        files_linked: latest.files_linked + linked
+      })
+
+    broadcast(updated)
+  end
+
+  defp ingest_result(by_path, path, result, policy, config) do
+    file_id = Map.fetch!(by_path, path)
+    media_file = Library.get_media_file!(file_id)
+
+    match =
+      case result do
+        {:ok, match} -> match
+        {:error, _reason} -> nil
+      end
+
+    case FileIngest.ingest(media_file, match, policy: policy, config: config) do
+      {:linked, _item} -> :linked
+      _ -> :matched
+    end
+  end
+
+  # Review mode caches candidates and links nothing new from the relay, so the
+  # human decides. Unattended mode links anything confident enough and leaves
+  # the rest as a candidate.
+  defp policy_for(:review), do: :local_only
+  defp policy_for(:unattended), do: :create_items
+
+  defp note_current_file(run, path) do
+    Phoenix.PubSub.broadcast(
+      Mydia.PubSub,
+      progress_topic(run.id),
+      {:import_run_current_file, Path.basename(path)}
+    )
+  end
 
   ## Progress
 
