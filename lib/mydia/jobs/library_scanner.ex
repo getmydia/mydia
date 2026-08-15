@@ -1138,42 +1138,14 @@ defmodule Mydia.Jobs.LibraryScanner do
         # :local_only is what keeps the scheduled scan from inventing items.
         # An external match is cached as a candidate and the file stays
         # orphaned for the import inbox to offer. See Library.FileIngest.
-        case FileIngest.ingest(media_file, match_result,
-               policy: :local_only,
-               config: metadata_config
-             ) do
-          {:linked, media_item} ->
-            Logger.info("Associated file with existing media item",
-              media_item_id: media_item.id,
-              title: media_item.title,
-              path: file_info.path
-            )
+        ingest_result =
+          FileIngest.ingest(media_file, match_result,
+            policy: :local_only,
+            config: metadata_config
+          )
 
-            {:ok, :enriched}
-
-          {:candidate, _candidate} ->
-            Logger.info("Skipping external match - file will remain orphaned for manual import",
-              path: file_info.path,
-              title: match_result.title,
-              provider_id: match_result.provider_id
-            )
-
-            {:error, :no_local_match}
-
-          {:error, {:library_type_mismatch, message}} ->
-            Logger.warning("Library type mismatch detected",
-              path: file_info.path,
-              error: message
-            )
-
-            {:error, :library_type_mismatch}
-
-          {:error, _reason} ->
-            {:error, :enrichment_failed}
-
-          :no_match ->
-            {:error, :no_matches_found}
-        end
+        log_ingest_result(ingest_result, match_result, file_info)
+        scan_result_from_ingest(ingest_result)
 
       {:error, :unknown_media_type} ->
         Logger.debug("Could not determine media type",
@@ -1213,6 +1185,49 @@ defmodule Mydia.Jobs.LibraryScanner do
 
       {:error, :exception}
   end
+
+  defp log_ingest_result({:linked, media_item}, _match_result, file_info) do
+    Logger.info("Associated file with existing media item",
+      media_item_id: media_item.id,
+      title: media_item.title,
+      path: file_info.path
+    )
+  end
+
+  defp log_ingest_result({:candidate, _candidate}, match_result, file_info) do
+    Logger.info("Skipping external match - file will remain orphaned for manual import",
+      path: file_info.path,
+      title: match_result.title,
+      provider_id: match_result.provider_id
+    )
+  end
+
+  defp log_ingest_result({:error, {:library_type_mismatch, message}}, _match_result, file_info) do
+    Logger.warning("Library type mismatch detected",
+      path: file_info.path,
+      error: message
+    )
+  end
+
+  defp log_ingest_result(_ingest_result, _match_result, _file_info), do: :ok
+
+  @doc false
+  # Public only so the mapping from a `FileIngest.ingest/3` result to the
+  # scanner's legacy return contract can be tested directly. The caller,
+  # `match_file_to_existing_items/4`, is private and its only entry point
+  # (`perform_job/1`) is tagged `:external` and excluded from the default
+  # test suite, so without this seam the translation — including the
+  # ordering that makes `{:library_type_mismatch, _}` take priority over the
+  # generic `{:error, _}` catch-all — would have zero coverage.
+  @spec scan_result_from_ingest(FileIngest.result()) :: {:ok, :enriched} | {:error, atom()}
+  def scan_result_from_ingest({:linked, _media_item}), do: {:ok, :enriched}
+  def scan_result_from_ingest({:candidate, _candidate}), do: {:error, :no_local_match}
+
+  def scan_result_from_ingest({:error, {:library_type_mismatch, _message}}),
+    do: {:error, :library_type_mismatch}
+
+  def scan_result_from_ingest({:error, _reason}), do: {:error, :enrichment_failed}
+  def scan_result_from_ingest(:no_match), do: {:error, :no_matches_found}
 
   # Detects type mismatches in existing files based on library path type
   defp detect_type_mismatches(existing_files, library_path, mismatch_type) do
