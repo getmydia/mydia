@@ -1955,7 +1955,13 @@ defmodule Mydia.MediaTest do
           tvdb_id: 67_890
         })
 
-      Bypass.expect_once(bypass, "GET", "/tmdb/tv/shows/12345", fn conn ->
+      # `expect`, not `expect_once`: the episode leg of the refresh re-fetches
+      # the show to read its season list, so the endpoint is hit twice. It used
+      # to be hit once here only because that leg dropped the injected config
+      # and escaped to the global default relay — the routing this test exists
+      # to pin was never actually covered for the episode fetch. A
+      # wrong-provider fetch still fails, since no TVDB path is stubbed.
+      Bypass.expect(bypass, "GET", "/tmdb/tv/shows/12345", fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.resp(

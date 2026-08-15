@@ -158,8 +158,22 @@ defmodule Mydia.Jobs.MetadataRefresh do
       {:error, :not_found}
   end
 
-  defp refresh_one(media_item) do
-    Refresh.run(media_item, recover_by_title: true, fetch_episodes: false)
+  @doc false
+  # The scheduled pass is the only recurring job that re-reads provider data, so
+  # `fetch_episodes: false` here meant episode rows were written once at import
+  # and never again. Anything a provider publishes after an episode airs — the
+  # screencap, overview and runtime, which TVDB fills in around the air date —
+  # could therefore never land, leaving recently aired episodes permanently
+  # thumbnail-less while the show row refreshed weekly.
+  #
+  # Cost is bounded by should_skip_season_refresh?/1, whose thresholds (24h
+  # ongoing, 168h ended) existed for this call and were unreachable while the
+  # bulk pass never set seasons_refreshed_at.
+  #
+  # Public for testability: proving the pass requests episodes without hitting
+  # the real relay requires injecting a config.
+  def refresh_one(media_item, opts \\ []) do
+    Refresh.run(media_item, Keyword.merge([recover_by_title: true, fetch_episodes: true], opts))
   end
 
   # A single bad item must not abort the pass. The ErrorTracker report is
