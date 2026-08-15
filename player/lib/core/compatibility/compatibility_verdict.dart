@@ -75,6 +75,19 @@ CompatibilityVerdict evaluateCompatibility({
 }) {
   if (server == null) return CompatibilityVerdict.unknown;
 
+  // A build with no version stamped reports "0.0.0-dev": mix.exs falls back to
+  // it whenever BUILD_VERSION is unset, which covers every local dev server,
+  // every self-built image, and the published :master image, since ci-docker.yml
+  // does not pass BUILD_VERSION. That is an unversioned build, not an ancient
+  // one, so it gets the same unknown verdict as a version that will not parse.
+  // Without this, 0.0.0 sorts below every floor and raises a permanent
+  // non-dismissible "your server is out of date" banner against a server
+  // running the newest code in the repo.
+  if (VersionComparator.compareCore(server.version, '0.0.0') == 0 ||
+      VersionComparator.compareCore(playerVersion, '0.0.0') == 0) {
+    return CompatibilityVerdict.unknown;
+  }
+
   final playerVsMin =
       VersionComparator.compareCore(playerVersion, server.minPlayerVersion);
   final playerVsRecommended = VersionComparator.compareCore(

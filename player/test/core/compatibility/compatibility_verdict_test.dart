@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/compatibility/compatibility.dart';
 import 'package:player/core/compatibility/compatibility_verdict.dart';
+import 'package:player/core/update/version_comparator.dart';
 
 /// A server on 0.9.0 whose floors are both 0.9.0, matching the shipped baseline.
 ServerCompatibilityInfo server({
@@ -115,6 +117,78 @@ void main() {
         ),
         CompatibilityVerdict.compatible,
       );
+    });
+
+    test('an unversioned dev-build server yields unknown, not a banner', () {
+      // mix.exs falls back to "0.0.0-dev" whenever BUILD_VERSION is unset,
+      // which covers every local dev server, self-built image, and the
+      // published :master image. That must never sort below every floor and
+      // raise a non-dismissible banner.
+      expect(
+        evaluateCompatibility(
+          playerVersion: '0.13.2',
+          server: server(version: '0.0.0-dev*abc1234'),
+        ),
+        CompatibilityVerdict.unknown,
+      );
+    });
+
+    test('a plain 0.0.0 server version yields unknown', () {
+      expect(
+        evaluateCompatibility(
+          playerVersion: '0.13.2',
+          server: server(version: '0.0.0'),
+        ),
+        CompatibilityVerdict.unknown,
+      );
+    });
+
+    test('an unversioned dev-build player yields unknown, symmetrically', () {
+      expect(
+        evaluateCompatibility(
+          playerVersion: '0.0.0-dev',
+          server: server(),
+        ),
+        CompatibilityVerdict.unknown,
+      );
+    });
+
+    test('a genuinely old but versioned server still requires an update', () {
+      // Sanity check: an over-broad fix for the 0.0.0 case above must not
+      // silently disable the feature for real ancient-server mismatches.
+      expect(
+        evaluateCompatibility(
+          playerVersion: '0.13.2',
+          server: server(version: '0.8.0', min: '0.0.0', recommended: '0.0.0'),
+        ),
+        CompatibilityVerdict.serverUpdateRequired,
+      );
+    });
+  });
+
+  group('Compatibility floors', () {
+    test('minServerVersion parses as a version', () {
+      expect(
+        VersionComparator.compareCore(Compatibility.minServerVersion, '0.0.0'),
+        isNotNull,
+      );
+    });
+
+    test('recommendedServerVersion parses as a version', () {
+      expect(
+        VersionComparator.compareCore(
+            Compatibility.recommendedServerVersion, '0.0.0'),
+        isNotNull,
+      );
+    });
+
+    test('recommendedServerVersion is at or above minServerVersion', () {
+      final comparison = VersionComparator.compareCore(
+        Compatibility.recommendedServerVersion,
+        Compatibility.minServerVersion,
+      );
+      expect(comparison, isNotNull);
+      expect(comparison! >= 0, isTrue);
     });
   });
 

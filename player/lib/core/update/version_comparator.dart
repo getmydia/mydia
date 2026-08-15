@@ -18,10 +18,13 @@ class VersionComparator {
   /// positive when [a] is newer. Returns null when either side cannot be
   /// parsed, which callers must treat as "unknown" and act on by doing nothing.
   ///
-  /// This deliberately differs from [isNewer] in two ways:
+  /// This deliberately differs from [isNewer] in three ways:
   ///
   /// - It strips a `*<sha>` suffix. `System.app_version()` returns
   ///   "0.9.0*abc1234" on master builds, which would otherwise fail to parse.
+  /// - It strips a `+<build-metadata>` suffix, which [isNewer] cannot parse at
+  ///   all: its parser only splits on a hyphen, so a `+` suffix is left
+  ///   attached to the patch segment and fails `int.tryParse`.
   /// - It ignores prerelease suffixes. [isNewer] sorts "0.9.0-rc1" below
   ///   "0.9.0", which is right for picking the newest release but wrong for a
   ///   compatibility floor: an RC of 0.9.0 carries the 0.9.0 contract, and

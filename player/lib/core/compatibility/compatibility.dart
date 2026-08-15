@@ -24,7 +24,9 @@
 ///
 /// ## Last changed
 ///
-/// - 0.9.0: initial baseline, set to the release this mechanism shipped in.
+/// - 0.9.0: initial baseline. The value is a no-op at ship time: only builds
+///   carrying this feature ever send or answer the compatibility query, so
+///   both floors are unreachable regardless of which version they name.
 class Compatibility {
   const Compatibility._();
 

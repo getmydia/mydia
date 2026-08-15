@@ -13,6 +13,7 @@ defmodule MydiaWeb.Schema.QueryTypes do
   alias MydiaWeb.Schema.Resolvers.CollectionResolver
   alias MydiaWeb.Schema.Resolvers.SubtitleResolver
   alias MydiaWeb.Schema.Resolvers.SubtitleSearchResolver
+  alias MydiaWeb.Schema.Resolvers.ServerResolver
 
   # Node interface for global node resolution with hierarchical navigation
   interface :node do
@@ -317,7 +318,7 @@ defmodule MydiaWeb.Schema.QueryTypes do
   object :server_queries do
     @desc "Get this server's version and the player versions it supports"
     field :server_compatibility, :server_compatibility do
-      resolve(&MydiaWeb.Schema.Resolvers.ServerResolver.compatibility/3)
+      resolve(&ServerResolver.compatibility/3)
     end
   end
 end

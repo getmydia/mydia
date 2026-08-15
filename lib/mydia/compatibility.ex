@@ -10,7 +10,7 @@ defmodule Mydia.Compatibility do
   ## When to bump
 
   Bump `@min_player_version` to the release you are shipping when that release
-  makes a change a older player cannot cope with: removing or renaming a
+  makes a change an older player cannot cope with: removing or renaming a
   GraphQL field the player selects, changing the meaning of a response, or
   changing a streaming or download contract.
 
@@ -27,7 +27,9 @@ defmodule Mydia.Compatibility do
 
   ## Last changed
 
-  - 0.9.0: initial baseline, set to the release this mechanism shipped in.
+  - 0.9.0: initial baseline. The value is a no-op at ship time: only builds
+    carrying this feature ever send or answer the compatibility query, so
+    both floors are unreachable regardless of which version they name.
   """
 
   @min_player_version "0.9.0"
