@@ -3927,9 +3927,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           // from the candidates metadata), falling back to whatever the local
           // player managed to work out.
           duration: _knownCastDuration(),
+          // `url` is a synthesized path and is never null, so the old
+          // `where((track) => track.url != null)` filtered nothing: image
+          // tracks (PGS, VobSub) reached the receiver as URLs that 415, and
+          // if one sorted first, dart_cast activated it and the viewer got
+          // silence. `deliverable` is the flag that actually means "the
+          // server can hand this back as text". The server refuses to
+          // materialize an image track too, so this is the UX half of that:
+          // an undeliverable track should not appear in the caption sheet at
+          // all.
           subtitles: _subtitleTracks
-              .where((track) => track.url != null)
+              .where((track) => track.deliverable && track.url != null)
               .map((track) => CastSubtitleTrack(
+                    trackId: track.id,
                     url: track.url!,
                     label: track.displayName,
                     language: track.language,

@@ -47,6 +47,14 @@ class CastRoute {
   /// what `CastSessionManager`'s `StreamTimeline` translates back.
   final Duration startOffset;
 
+  /// Tracks already rewritten to URLs this route's receiver can fetch.
+  ///
+  /// Resolved here rather than at load time because the shape depends
+  /// entirely on the route: an HLS route addresses subtitles by streaming
+  /// session, the progressive one by media file. `CastSessionManager` reads
+  /// this and never has to know which kind it got.
+  final List<CastSubtitleTrack> subtitles;
+
   const CastRoute({
     required this.mediaUrl,
     required this.kind,
@@ -55,6 +63,7 @@ class CastRoute {
     this.hlsSessionId,
     this.mediaToken,
     this.startOffset = Duration.zero,
+    this.subtitles = const [],
   });
 }
 
@@ -127,6 +136,7 @@ class CastRouteResolver {
     bool forceBridge = false,
     bool forceTranscode = false,
     Duration startPosition = Duration.zero,
+    List<CastSubtitleTrack> subtitles = const [],
   }) async {
     final isChromecast = protocol == CastProtocolKind.chromecast;
     final mediaKind = mediaKindFor(protocol);
@@ -158,9 +168,14 @@ class CastRouteResolver {
         mediaUrl: '$base/hls/${session.sessionId}/index.m3u8',
         kind: CastRouteKind.localBridge,
         mediaKind: mediaKind,
-        subtitlesSupported: false,
+        subtitlesSupported: true,
         hlsSessionId: session.sessionId,
         startOffset: session.startOffset,
+        subtitles: _sessionSubtitles(
+          subtitles,
+          base: '$base/hls/${session.sessionId}',
+          token: null,
+        ),
       );
     }
 
@@ -192,6 +207,11 @@ class CastRouteResolver {
         mediaToken: token,
         hlsSessionId: session.sessionId,
         startOffset: session.startOffset,
+        subtitles: _sessionSubtitles(
+          subtitles,
+          base: '$server/api/v1/hls/${session.sessionId}',
+          token: token,
+        ),
       );
     }
 
@@ -212,6 +232,7 @@ class CastRouteResolver {
       mediaKind: mediaKind,
       subtitlesSupported: true,
       mediaToken: token,
+      subtitles: _progressiveSubtitles(subtitles, server: server, token: token),
     );
   }
 
@@ -234,12 +255,49 @@ class CastRouteResolver {
     } else {
       final server = serverUrl;
       if (server == null) return null;
-      base = '$server$relativeOrAbsoluteUrl';
+      base = _absoluteUrl(server, relativeOrAbsoluteUrl);
     }
 
-    final token = route.mediaToken;
-    if (token == null || base.contains('token=')) return base;
+    return _withToken(base, route.mediaToken);
+  }
 
-    return '$base${base.contains('?') ? '&' : '?'}token=$token';
+  /// Turns session-relative subtitle names into URLs for this route.
+  ///
+  /// The filename convention (`subs_<trackId>.vtt`) is the server's, defined
+  /// in `Mydia.Streaming.SessionSubtitles`. It lives here rather than in
+  /// `MediaRoutes` because this resolver already builds its sibling HLS URLs
+  /// inline, and splitting the two across files is how they drift apart.
+  static List<CastSubtitleTrack> _sessionSubtitles(
+    List<CastSubtitleTrack> tracks, {
+    required String base,
+    required String? token,
+  }) =>
+      tracks
+          .map((track) => track.copyWith(
+                url: _withToken('$base/subs_${track.trackId}.vtt', token),
+              ))
+          .toList();
+
+  /// Rewrites the media-file subtitle URLs the progressive (DLNA) route keeps
+  /// using, since it has no streaming session to address subtitles by.
+  static List<CastSubtitleTrack> _progressiveSubtitles(
+    List<CastSubtitleTrack> tracks, {
+    required String server,
+    required String? token,
+  }) =>
+      tracks
+          .map((track) => track.copyWith(
+                url: _withToken(_absoluteUrl(server, track.url), token),
+              ))
+          .toList();
+
+  static String _absoluteUrl(String server, String urlOrPath) =>
+      urlOrPath.startsWith('http://') || urlOrPath.startsWith('https://')
+          ? urlOrPath
+          : '$server$urlOrPath';
+
+  static String _withToken(String url, String? token) {
+    if (token == null || url.contains('token=')) return url;
+    return '$url${url.contains('?') ? '&' : '?'}token=$token';
   }
 }

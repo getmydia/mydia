@@ -255,11 +255,13 @@ void main() {
       expect(route!.subtitlesSupported, isTrue);
     });
 
-    test('are not supported on the bridge route', () async {
-      // P2pService offers no generic HTTP passthrough, so subtitle bytes
-      // cannot be proxied. See the plan's "Known limitation".
+    test('are not supported on the DLNA bridge route', () async {
+      // The DLNA bridge streams the file itself with no streaming session to
+      // address subtitles by. The Chromecast bridge route, covered in the
+      // 'subtitle tracks on the route' group below, gained support once it
+      // had an HLS session to hang session-relative subtitle URLs off.
       final route = await p2pResolver()
-          .resolve(fileId: 'f', protocol: CastProtocolKind.chromecast);
+          .resolve(fileId: 'f', protocol: CastProtocolKind.dlna);
 
       expect(route!.subtitlesSupported, isFalse);
     });
@@ -301,12 +303,93 @@ void main() {
       );
     });
 
-    test('resolveSubtitleUrl returns null on the bridge route', () async {
+    test(
+        'resolveSubtitleUrl returns null when the route has no subtitle support',
+        () async {
       final resolver = p2pResolver();
       final route = (await resolver.resolve(
-          fileId: 'f', protocol: CastProtocolKind.chromecast))!;
+          fileId: 'f', protocol: CastProtocolKind.dlna))!;
 
       expect(resolver.resolveSubtitleUrl(route, '/api/x.vtt'), isNull);
+    });
+  });
+
+  group('subtitle tracks on the route', () {
+    const tracks = [
+      CastSubtitleTrack(
+        trackId: '3',
+        url: '/api/player/v1/subtitles/file/file-1/3?format=vtt',
+        label: 'English',
+        language: 'eng',
+      ),
+      CastSubtitleTrack(
+        trackId: '0f8fad5b-d9cb-469f-a165-70867728950e',
+        url:
+            '/api/player/v1/subtitles/file/file-1/0f8fad5b-d9cb-469f-a165-70867728950e?format=vtt',
+        label: 'Spanish',
+        language: 'spa',
+      ),
+    ];
+
+    test('a direct Chromecast route rewrites tracks to session paths',
+        () async {
+      final route = await directResolver().resolve(
+        fileId: 'file-1',
+        protocol: CastProtocolKind.chromecast,
+        subtitles: tracks,
+      );
+
+      expect(route!.subtitlesSupported, isTrue);
+      expect(route.subtitles, hasLength(2));
+      expect(
+        route.subtitles.first.url,
+        'https://mydia.test/api/v1/hls/${route.hlsSessionId}/subs_3.vtt?token=tok123',
+      );
+      expect(route.subtitles.first.language, 'eng');
+      expect(route.subtitles.first.trackId, '3');
+    });
+
+    test('a bridged Chromecast route serves subtitles from the LAN proxy',
+        () async {
+      final route = await p2pResolver().resolve(
+        fileId: 'file-1',
+        protocol: CastProtocolKind.chromecast,
+        subtitles: tracks,
+      );
+
+      expect(route!.kind, CastRouteKind.localBridge);
+      // The whole point: the bridge could not serve subtitles at all before.
+      expect(route.subtitlesSupported, isTrue);
+      expect(
+        route.subtitles.last.url,
+        'http://192.168.1.20:5000/g/abcd/hls/${route.hlsSessionId}'
+        '/subs_0f8fad5b-d9cb-469f-a165-70867728950e.vtt',
+      );
+    });
+
+    test('a bridged DLNA route has no session, so no subtitles', () async {
+      final route = await p2pResolver().resolve(
+        fileId: 'file-1',
+        protocol: CastProtocolKind.dlna,
+        subtitles: tracks,
+      );
+
+      expect(route!.subtitlesSupported, isFalse);
+      expect(route.subtitles, isEmpty);
+    });
+
+    test('a direct DLNA route keeps the media-file subtitle URLs', () async {
+      final route = await directResolver().resolve(
+        fileId: 'file-1',
+        protocol: CastProtocolKind.dlna,
+        subtitles: tracks,
+      );
+
+      expect(route!.subtitlesSupported, isTrue);
+      expect(
+        route.subtitles.first.url,
+        'https://mydia.test/api/player/v1/subtitles/file/file-1/3?format=vtt&token=tok123',
+      );
     });
   });
 }

@@ -877,6 +877,7 @@ void main() {
           duration: Duration(hours: 1),
           subtitles: [
             CastSubtitleTrack(
+              trackId: '0',
               url: 'https://mydia.test/subs/en.vtt',
               label: 'English',
               language: 'en',

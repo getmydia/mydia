@@ -6,15 +6,43 @@ enum CastMediaKind { hls, progressive }
 
 /// A sidecar subtitle track offered to the receiver.
 class CastSubtitleTrack {
+  /// Mydia's own id for the track: an ffprobe stream index for an embedded
+  /// track, a UUID for a sidecar one.
+  ///
+  /// Distinct from the numeric id the Chromecast assigns at LOAD time, which
+  /// dart_cast keeps to itself. This one survives a session restart and a
+  /// route change, so it is what gets persisted and what builds the
+  /// session-relative URL.
+  final String trackId;
+
   final String url;
   final String label;
   final String language;
 
   const CastSubtitleTrack({
+    required this.trackId,
     required this.url,
     required this.label,
     required this.language,
   });
+
+  CastSubtitleTrack copyWith({String? url}) => CastSubtitleTrack(
+        trackId: trackId,
+        url: url ?? this.url,
+        label: label,
+        language: language,
+      );
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is CastSubtitleTrack &&
+          runtimeType == other.runtimeType &&
+          trackId == other.trackId &&
+          url == other.url;
+
+  @override
+  int get hashCode => Object.hash(trackId, url);
 }
 
 /// Everything a receiver needs to start playing one item.

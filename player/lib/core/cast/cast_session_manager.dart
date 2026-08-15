@@ -619,6 +619,7 @@ class CastSessionManager {
     final subtitles = route.subtitlesSupported
         ? request.subtitles
             .map((track) => CastSubtitleTrack(
+                  trackId: track.trackId,
                   url: resolver.resolveSubtitleUrl(route, track.url) ??
                       track.url,
                   label: track.label,
