@@ -59,6 +59,69 @@ defmodule Mydia.Jobs.ImportRunJobTest do
 
       assert :stopped = ImportRunJob.run_scan_phase(Library.get_import_run(run.id))
     end
+
+    test "keeps rows a batch already committed when a stop lands mid-scan, and a resumed run finishes the rest",
+         %{run: run, dir: dir, library_path: lp} do
+      # @scan_batch_size is 100, so this forces a second reduce_while
+      # iteration to exist: without it, a stop could only ever be observed
+      # before the first (and only) batch, which is the already-covered
+      # "stops when a stop was requested" case above, not this one.
+      season_two = Path.join(dir, "Season 02")
+      File.mkdir_p!(season_two)
+
+      for ep <- 1..150 do
+        padded = ep |> Integer.to_string() |> String.pad_leading(3, "0")
+        File.write!(Path.join(season_two, "Bluey.S02E#{padded}.mkv"), "x")
+      end
+
+      total_on_disk = 3 + 150
+
+      # Requesting the stop from inside :after_batch runs it synchronously in
+      # the same call stack as run_scan_phase/2, right after the first batch
+      # commits and strictly before the loop's next stopping-check reads the
+      # run row. That ordering is a program-counter guarantee, not a race
+      # against a concurrent process or a sleep: import_run_stopping?/1 is a
+      # fresh DB read, and this write is guaranteed to have already happened
+      # by the time that read runs.
+      stop_after_first_batch = fn ->
+        {:ok, _} = Library.request_import_run_stop(Library.get_import_run(run.id))
+      end
+
+      assert :stopped =
+               ImportRunJob.run_scan_phase(Library.get_import_run(run.id),
+                 after_batch: stop_after_first_batch
+               )
+
+      partial_count = length(Library.list_media_files(library_path_id: lp.id))
+
+      # Both halves matter: >0 proves the first batch's commit was not rolled
+      # back, <total proves the stop actually cut the scan short rather than
+      # the run simply finishing.
+      assert partial_count > 0
+      assert partial_count < total_on_disk
+
+      # Mirror what the real coordinator does on :stopped
+      # (Mydia.Jobs.ImportRun.finish/2): the run becomes terminal, which is
+      # what lets a fresh run be started for the same library path (a
+      # :stopping run is still "active" and blocks a second one).
+      {:ok, _} =
+        Library.update_import_run(Library.get_import_run(run.id), %{
+          status: :stopped,
+          phase: :finished
+        })
+
+      {:ok, resumed_run} =
+        Library.create_import_run(%{
+          library_path_id: lp.id,
+          user_id: run.user_id,
+          mode: :review
+        })
+
+      assert :ok = ImportRunJob.run_scan_phase(Library.get_import_run(resumed_run.id))
+
+      final_count = length(Library.list_media_files(library_path_id: lp.id))
+      assert final_count == total_on_disk
+    end
   end
 
   describe "list_unmatched_media_file_paths/2" do

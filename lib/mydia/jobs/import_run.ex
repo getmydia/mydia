@@ -91,9 +91,19 @@ defmodule Mydia.Jobs.ImportRun do
 
   Returns `:ok` when the whole tree was scanned, or `:stopped` if a stop was
   requested partway through. A partial scan is valid state, not an error.
+
+  ## Options
+
+    * `:after_batch` - a 0-arity function invoked once a batch has committed,
+      before the next batch's stop check. Mirrors the `:progress_callback`
+      seam on `Scanner.scan/2`. Defaults to a no-op. Exists so a test can make
+      the stop boundary deterministic (request the stop from inside the
+      callback) instead of racing a concurrent process against the loop.
   """
-  @spec run_scan_phase(ImportRun.t()) :: :ok | :stopped | {:error, term()}
-  def run_scan_phase(%ImportRun{} = run) do
+  @spec run_scan_phase(ImportRun.t(), keyword()) :: :ok | :stopped | {:error, term()}
+  def run_scan_phase(%ImportRun{} = run, opts \\ []) do
+    after_batch = Keyword.get(opts, :after_batch, fn -> :ok end)
+
     library_path = Settings.get_library_path!(run.library_path_id)
     extensions = Scanner.extensions_for_library_type(library_path.type)
 
@@ -109,6 +119,7 @@ defmodule Mydia.Jobs.ImportRun do
             {:halt, :stopped}
           else
             insert_batch(batch, library_path, run)
+            after_batch.()
             {:cont, :ok}
           end
         end)
@@ -153,9 +164,11 @@ defmodule Mydia.Jobs.ImportRun do
         end)
       end)
 
+    current_run = Library.get_import_run(run.id)
+
     {:ok, updated} =
-      Library.update_import_run(Library.get_import_run(run.id), %{
-        files_discovered: Library.get_import_run(run.id).files_discovered + inserted
+      Library.update_import_run(current_run, %{
+        files_discovered: current_run.files_discovered + inserted
       })
 
     broadcast(updated)
