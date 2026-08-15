@@ -80,4 +80,51 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
 
     assert render(view) =~ "4,200"
   end
+
+  test "starting a run while another tab already started one shows a friendly message and does not create a duplicate",
+       %{conn: conn, library_path: lp, user: user} do
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    # Simulate a second tab winning the race: a run for this library path
+    # exists in the database by the time this (stale) view submits, even
+    # though this view's own socket state never learned about it -- exactly
+    # what happens when two browser tabs both have the start form open.
+    {:ok, existing} =
+      Library.create_import_run(%{library_path_id: lp.id, user_id: user.id, mode: :review})
+
+    html =
+      view
+      |> element("#start-run-form")
+      |> render_submit(%{"library_path_id" => lp.id, "mode" => "review"})
+
+    assert html =~ "That library is already being imported."
+
+    # The second assertion is the one that matters: a broken implementation
+    # that swallowed the error and inserted a duplicate row anyway would
+    # still show no crash and would still make the first assertion alone
+    # pass.
+    assert Library.active_import_run(lp.id).id == existing.id
+  end
+
+  test "a reload after a failed run shows the outcome instead of a blank form", %{
+    conn: conn,
+    library_path: lp,
+    user: user
+  } do
+    {:ok, run} =
+      Library.create_import_run(%{library_path_id: lp.id, user_id: user.id, mode: :review})
+
+    {:ok, _} =
+      Library.update_import_run(run, %{
+        status: :failed,
+        phase: :finished,
+        files_discovered: 12,
+        error: ":not_found"
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    assert has_element?(view, "#run-outcome")
+    assert render(view) =~ ":not_found"
+  end
 end

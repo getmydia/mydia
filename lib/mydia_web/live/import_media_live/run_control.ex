@@ -10,12 +10,15 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
 
   attr :library_paths, :list, required: true
   attr :active_run, :map, default: nil
+  attr :outcome_run, :map, default: nil
 
   def run_control(assigns) do
     ~H"""
     <section id="import-run-control" class="card bg-base-100 shadow-xl">
       <div class="card-body">
         <h2 class="card-title">Import a library</h2>
+
+        <.run_outcome :if={@outcome_run} run={@outcome_run} />
 
         <%= if @active_run do %>
           <.run_progress run={@active_run} />
@@ -68,20 +71,7 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
         <span :if={@run.status == :stopping} class="badge badge-warning">Stopping</span>
       </div>
 
-      <div class="stats stats-horizontal shadow">
-        <div class="stat">
-          <div class="stat-title">Found</div>
-          <div class="stat-value text-2xl">{number(@run.files_discovered)}</div>
-        </div>
-        <div class="stat">
-          <div class="stat-title">Matched</div>
-          <div class="stat-value text-2xl">{number(@run.files_matched)}</div>
-        </div>
-        <div class="stat">
-          <div class="stat-title">Added</div>
-          <div class="stat-value text-2xl">{number(@run.files_linked)}</div>
-        </div>
-      </div>
+      <.run_stats run={@run} />
 
       <p :if={@run.current_file} class="text-sm opacity-70 truncate">{@run.current_file}</p>
 
@@ -97,9 +87,74 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
     """
   end
 
+  # Shown in place of the start form once a run has reached a terminal
+  # state (:done, :failed, or :stopped). The run row stays exactly as the
+  # coordinator left it -- nothing here is socket state -- so this renders
+  # identically whether the outcome arrived over PubSub in-session or was
+  # read back from `Library.last_import_run/1` after a reload.
+  attr :run, :map, required: true
+
+  defp run_outcome(assigns) do
+    ~H"""
+    <div
+      id="run-outcome"
+      class={["alert flex-col items-start gap-3", outcome_alert_class(@run.status)]}
+    >
+      <div class="flex items-center gap-2 w-full">
+        <.icon name={outcome_icon(@run.status)} class="w-5 h-5 shrink-0" />
+        <span class="font-medium">{outcome_label(@run.status)}</span>
+        <span class="badge badge-ghost">{mode_label(@run.mode)}</span>
+      </div>
+
+      <.run_stats run={@run} />
+
+      <div :if={@run.status == :failed and @run.error} class="w-full">
+        <p class="text-sm opacity-70 mb-1">Error details</p>
+        <pre class="text-xs whitespace-pre-wrap break-all bg-base-100/60 rounded-lg p-2">{@run.error}</pre>
+      </div>
+    </div>
+    """
+  end
+
+  attr :run, :map, required: true
+
+  defp run_stats(assigns) do
+    ~H"""
+    <div class="stats stats-horizontal shadow">
+      <div class="stat">
+        <div class="stat-title">Found</div>
+        <div class="stat-value text-2xl">{number(@run.files_discovered)}</div>
+      </div>
+      <div class="stat">
+        <div class="stat-title">Matched</div>
+        <div class="stat-value text-2xl">{number(@run.files_matched)}</div>
+      </div>
+      <div class="stat">
+        <div class="stat-title">Added</div>
+        <div class="stat-value text-2xl">{number(@run.files_linked)}</div>
+      </div>
+    </div>
+    """
+  end
+
   defp phase_label(:scanning), do: "Finding files"
   defp phase_label(:matching), do: "Identifying files"
   defp phase_label(:finished), do: "Finished"
+
+  defp outcome_label(:done), do: "Import finished"
+  defp outcome_label(:failed), do: "Import failed"
+  defp outcome_label(:stopped), do: "Import stopped"
+
+  defp outcome_alert_class(:done), do: "alert-success"
+  defp outcome_alert_class(:failed), do: "alert-error"
+  defp outcome_alert_class(:stopped), do: "alert-warning"
+
+  defp outcome_icon(:done), do: "hero-check-circle"
+  defp outcome_icon(:failed), do: "hero-exclamation-triangle"
+  defp outcome_icon(:stopped), do: "hero-stop-circle"
+
+  defp mode_label(:review), do: "Review"
+  defp mode_label(:unattended), do: "Unattended"
 
   # Thousands separators, because these numbers get large enough that a bare
   # digit string stops being readable at a glance.

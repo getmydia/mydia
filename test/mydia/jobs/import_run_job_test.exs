@@ -124,6 +124,29 @@ defmodule Mydia.Jobs.ImportRunJobTest do
     end
   end
 
+  describe "failure" do
+    test "broadcasts the failure so a subscribed LiveView can react", %{run: run, dir: dir} do
+      Phoenix.PubSub.subscribe(Mydia.PubSub, ImportRunJob.progress_topic(run.id))
+
+      # Removing the scan root out from under the run makes Scanner.scan/2's
+      # validate_directory/1 fail, driving execute/1's {:error, reason}
+      # branch (perform/1's only route to it) without faking anything deeper
+      # in the pipeline. on_exit already rm_rf's dir, so this is a no-op by
+      # the time that runs.
+      File.rm_rf!(dir)
+
+      assert {:error, :not_found} =
+               ImportRunJob.perform(%Oban.Job{args: %{"import_run_id" => run.id}})
+
+      assert_receive {:import_run_progress, %{status: :failed} = broadcast_run}
+      assert broadcast_run.error =~ "not_found"
+
+      persisted = Library.get_import_run(run.id)
+      assert persisted.status == :failed
+      assert persisted.error =~ "not_found"
+    end
+  end
+
   describe "list_unmatched_media_file_paths/2" do
     test "returns files with no candidate and no parent", %{run: run, library_path: lp} do
       :ok = ImportRunJob.run_scan_phase(Library.get_import_run(run.id))

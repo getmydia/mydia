@@ -2688,6 +2688,24 @@ defmodule Mydia.Library do
   end
 
   @doc """
+  Returns the most recently started run for a library path, regardless of
+  status, or nil if the path has never had one.
+
+  Exists so a reload can still show what a finished, failed, or stopped run
+  did, since `active_import_run/1` deliberately excludes terminal states (the
+  coordinator and the single-active-run uniqueness guard both depend on that
+  exclusion, so it is not widened here).
+  """
+  @spec last_import_run(binary()) :: ImportRun.t() | nil
+  def last_import_run(library_path_id) do
+    ImportRun
+    |> where([r], r.library_path_id == ^library_path_id)
+    |> order_by([r], desc: r.inserted_at)
+    |> limit(1)
+    |> Repo.one()
+  end
+
+  @doc """
   Updates progress counters or lifecycle state on a run.
   """
   @spec update_import_run(ImportRun.t(), map()) ::

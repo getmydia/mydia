@@ -4,7 +4,7 @@ defmodule Mydia.Library.ImportRunTest do
   import Mydia.AccountsFixtures
   import Mydia.SettingsFixtures
 
-  alias Mydia.Library
+  alias Mydia.{Library, Repo}
 
   setup do
     %{library_path: library_path_fixture(), user: user_fixture()}
@@ -112,6 +112,45 @@ defmodule Mydia.Library.ImportRunTest do
       {:ok, _} = Library.update_import_run(run, %{status: :done, phase: :finished})
 
       refute Library.active_import_run(lp.id)
+    end
+  end
+
+  describe "last_import_run/1" do
+    test "returns nil when the path has never had a run", %{library_path: lp} do
+      refute Library.last_import_run(lp.id)
+    end
+
+    test "returns a terminal run, unlike active_import_run/1", %{library_path: lp, user: user} do
+      {:ok, run} =
+        Library.create_import_run(%{library_path_id: lp.id, user_id: user.id, mode: :review})
+
+      {:ok, _} =
+        Library.update_import_run(run, %{status: :failed, phase: :finished, error: "boom"})
+
+      assert Library.last_import_run(lp.id).id == run.id
+    end
+
+    test "prefers the newer of two runs for the same path", %{library_path: lp, user: user} do
+      {:ok, first} =
+        Library.create_import_run(%{library_path_id: lp.id, user_id: user.id, mode: :review})
+
+      {:ok, _} = Library.update_import_run(first, %{status: :done, phase: :finished})
+
+      # import_runs.inserted_at is second-resolution (timestamps(type:
+      # :utc_datetime)), so two runs created back-to-back in the same test
+      # can tie on it. Backdating `first` deterministically establishes
+      # "second is newer" without a real sleep, which would just make this
+      # test slow rather than reliable (a tie could still land either way
+      # depending on the clock).
+      backdated = DateTime.add(first.inserted_at, -5, :second)
+      {:ok, _} = first |> Ecto.Changeset.change(inserted_at: backdated) |> Repo.update()
+
+      {:ok, second} =
+        Library.create_import_run(%{library_path_id: lp.id, user_id: user.id, mode: :unattended})
+
+      {:ok, _} = Library.update_import_run(second, %{status: :done, phase: :finished})
+
+      assert Library.last_import_run(lp.id).id == second.id
     end
   end
 end

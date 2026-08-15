@@ -69,7 +69,13 @@ defmodule Mydia.Jobs.ImportRun do
           reason: inspect(reason)
         )
 
-        Library.update_import_run(run, %{status: :failed, error: inspect(reason)})
+        {:ok, updated} =
+          Library.update_import_run(Library.get_import_run(run.id), %{
+            status: :failed,
+            error: inspect(reason)
+          })
+
+        broadcast(updated)
         {:error, reason}
     end
   end
