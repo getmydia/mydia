@@ -280,5 +280,19 @@ defmodule Mydia.Media.RecommendationsTest do
     test "an empty list stays empty" do
       assert Recommendations.rank([]) == []
     end
+
+    # Regression: rated?/1 read result.vote_average with the dot operator,
+    # which raises KeyError on a map lacking that key entirely. Its siblings
+    # rating/1 and votes/1 both pattern-match with a catch-all precisely so a
+    # loose map cannot crash the ranking.
+    test "an entry map with no vote_average key at all does not raise" do
+      ranked =
+        Recommendations.rank([
+          result(%{provider_id: "1", title: "Rated", vote_average: 8.0, vote_count: 100}),
+          %{provider_id: "2", title: "Loose Entry", vote_count: 10}
+        ])
+
+      assert titles(ranked) == ["Rated", "Loose Entry"]
+    end
   end
 end

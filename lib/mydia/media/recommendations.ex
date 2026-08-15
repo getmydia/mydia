@@ -143,8 +143,13 @@ defmodule Mydia.Media.Recommendations do
 
   # An entry needs both a numeric rating and at least one vote before it can
   # inform the mean. Treating a nil rating as 0.0 would drag the prior down for
-  # every other entry in the set.
-  defp rated?(result), do: votes(result) > 0 and is_number(result.vote_average)
+  # every other entry in the set. Pattern-matched, like rating/1 and votes/1
+  # below, so a loose map missing :vote_average entirely falls to the
+  # catch-all instead of raising KeyError on the dot access.
+  defp rated?(%{vote_average: value} = result) when is_number(value),
+    do: votes(result) > 0
+
+  defp rated?(_result), do: false
 
   defp weighted_rating(result, mean) do
     if rated?(result) do
