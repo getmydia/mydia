@@ -88,6 +88,56 @@ defmodule Mydia.Media.FranchisesTest do
       assert third.media_item_id == nil
     end
 
+    test "carries the rating and the monitored flag onto each entry", %{
+      bypass: bypass,
+      config: config
+    } do
+      cid = System.unique_integer([:positive])
+      current = movie_with_pointer(811, cid)
+      _monitored = movie_with_pointer(812, cid, %{title: "Sequel", monitored: true})
+      _unmonitored = movie_with_pointer(813, cid, %{title: "Threequel", monitored: false})
+
+      stub_collection(bypass, cid, [
+        Map.put(part(811, "First", "2001-01-01"), "vote_average", 7.4),
+        Map.put(part(812, "Second", "2004-01-01"), "vote_average", 6.1),
+        Map.put(part(813, "Third", "2007-01-01"), "vote_average", 5.2)
+      ])
+
+      assert {:ok, franchise} = Franchises.for_media_item(current, config)
+
+      by_id = Map.new(franchise.entries, &{&1.tmdb_id, &1})
+
+      assert by_id[811].vote_average == 7.4
+      assert by_id[812].vote_average == 6.1
+      assert by_id[813].vote_average == 5.2
+
+      # The struct defaults monitored to false, so a true here proves the value
+      # came off the library join rather than the default.
+      assert by_id[812].monitored == true
+      assert by_id[813].monitored == false
+    end
+
+    test "a missing entry has no rating fallback and is not monitored", %{
+      bypass: bypass,
+      config: config
+    } do
+      cid = System.unique_integer([:positive])
+      current = movie_with_pointer(821, cid)
+
+      stub_collection(bypass, cid, [
+        part(821, "First", "2001-01-01"),
+        part(822, "Second", "2004-01-01")
+      ])
+
+      assert {:ok, franchise} = Franchises.for_media_item(current, config)
+
+      missing = Enum.find(franchise.entries, &(&1.tmdb_id == 822))
+
+      assert missing.vote_average == nil
+      assert missing.in_library? == false
+      assert missing.monitored == false
+    end
+
     test "orders entries by release date, undated last", %{bypass: bypass, config: config} do
       cid = System.unique_integer([:positive])
       current = movie_with_pointer(811, cid)
