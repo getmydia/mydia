@@ -12,6 +12,7 @@ defmodule Mydia.Media.RecommendationsTest do
 
   alias Mydia.Media.{MediaItem, Recommendations}
   alias Mydia.Metadata.Cache
+  alias Mydia.Metadata.Structs.SearchResult
 
   setup do
     bypass = Bypass.open()
@@ -53,6 +54,15 @@ defmodule Mydia.Media.RecommendationsTest do
       })
     end)
   end
+
+  defp result(attrs) do
+    struct!(
+      %SearchResult{provider_id: "1", provider: :metadata_relay, media_type: :movie},
+      attrs
+    )
+  end
+
+  defp titles(results), do: Enum.map(results, & &1.title)
 
   describe "for_media_item/2" do
     test "returns parsed recommendations for a movie", %{
@@ -113,6 +123,26 @@ defmodule Mydia.Media.RecommendationsTest do
 
       assert :none = Recommendations.for_media_item(item, config)
     end
+
+    test "caps what the relay returns", %{bypass: bypass, config: config, tmdb_id: tmdb_id} do
+      stub_recommendations(
+        bypass,
+        tmdb_id,
+        for n <- 1..20 do
+          %{
+            "id" => 1_000 + n,
+            "title" => "Rec #{n}",
+            "vote_average" => 7.0,
+            "vote_count" => 100
+          }
+        end
+      )
+
+      item = media_item_fixture(%{type: "movie", title: "Prolific", tmdb_id: tmdb_id})
+
+      assert {:ok, results} = Recommendations.for_media_item(item, config)
+      assert length(results) == 12
+    end
   end
 
   describe "for_tmdb_id/3" do
@@ -152,6 +182,83 @@ defmodule Mydia.Media.RecommendationsTest do
 
     test "returns :none for an unsupported media type", %{config: config} do
       assert :none = Recommendations.for_tmdb_id(603, :music, config)
+    end
+  end
+
+  describe "rank/1" do
+    # The defect this fixes: TMDB's raw order let a 10.0 from three voters lead
+    # the rail. The prior pulls it back toward the set mean.
+    test "a high rating from few voters does not lead the rail" do
+      ranked =
+        Recommendations.rank([
+          result(%{provider_id: "1", title: "Three Voters", vote_average: 10.0, vote_count: 3}),
+          result(%{
+            provider_id: "2",
+            title: "Crowd Pleaser",
+            vote_average: 8.2,
+            vote_count: 5_000
+          }),
+          result(%{provider_id: "3", title: "Solid", vote_average: 7.5, vote_count: 1_200}),
+          result(%{provider_id: "4", title: "Mediocre", vote_average: 6.0, vote_count: 800})
+        ])
+
+      assert titles(ranked) == ["Crowd Pleaser", "Three Voters", "Solid", "Mediocre"]
+    end
+
+    test "an unrated entry lands mid-pack rather than at either end" do
+      ranked =
+        Recommendations.rank([
+          result(%{
+            provider_id: "1",
+            title: "Crowd Pleaser",
+            vote_average: 8.2,
+            vote_count: 5_000
+          }),
+          result(%{provider_id: "2", title: "Solid", vote_average: 7.5, vote_count: 1_200}),
+          result(%{provider_id: "3", title: "Unrated", vote_average: nil, vote_count: nil}),
+          result(%{provider_id: "4", title: "Mediocre", vote_average: 6.0, vote_count: 800})
+        ])
+
+      assert titles(ranked) == ["Crowd Pleaser", "Solid", "Unrated", "Mediocre"]
+    end
+
+    test "ties fall back to TMDB's own order" do
+      ranked =
+        Recommendations.rank([
+          result(%{provider_id: "1", title: "First", vote_average: 7.0, vote_count: 100}),
+          result(%{provider_id: "2", title: "Second", vote_average: 7.0, vote_count: 100})
+        ])
+
+      assert titles(ranked) == ["First", "Second"]
+    end
+
+    test "keeps TMDB's order when nothing in the set is rated" do
+      ranked =
+        Recommendations.rank([
+          result(%{provider_id: "1", title: "Zeta", vote_average: nil, vote_count: nil}),
+          result(%{provider_id: "2", title: "Yankee", vote_average: nil, vote_count: 0}),
+          result(%{provider_id: "3", title: "Xray", vote_average: 0.0, vote_count: 0})
+        ])
+
+      assert titles(ranked) == ["Zeta", "Yankee", "Xray"]
+    end
+
+    test "caps the list at twelve" do
+      results =
+        for n <- 1..20 do
+          result(%{
+            provider_id: to_string(n),
+            title: "Title #{n}",
+            vote_average: 7.0,
+            vote_count: 100
+          })
+        end
+
+      assert length(Recommendations.rank(results)) == 12
+    end
+
+    test "an empty list stays empty" do
+      assert Recommendations.rank([]) == []
     end
   end
 end
