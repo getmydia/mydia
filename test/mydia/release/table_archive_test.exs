@@ -44,9 +44,18 @@ defmodule Mydia.Release.TableArchiveTest do
   # BLOB column and a SQLite blob literal (`X'...'`), so the bytes round-trip
   # exactly as inserted regardless of how the driver binds ordinary string
   # parameters.
+  #
+  # The UUID is fixed rather than generated: the UUID branch now requires the
+  # 16 bytes to be invalid UTF-8, and a random UUID is occasionally valid UTF-8
+  # (roughly one run in tens of thousands), which would fail intermittently and
+  # reproduce for nobody. This one leads with 0xFF, a byte that can never appear
+  # in valid UTF-8, and the guard below keeps that true if anyone edits it.
   test "formats a 16-byte binary id as a canonical UUID string", %{tmp_dir: tmp_dir} do
-    uuid = Ecto.UUID.generate()
-    hex = uuid |> Ecto.UUID.dump!() |> Base.encode16()
+    uuid = "ff0e8400-e29b-41d4-a716-446655440000"
+    raw = Ecto.UUID.dump!(uuid)
+    refute String.valid?(raw)
+
+    hex = Base.encode16(raw)
 
     Mydia.Repo.query!("CREATE TABLE uuid_fixture (id BLOB, name TEXT)")
     Mydia.Repo.query!("INSERT INTO uuid_fixture (id, name) VALUES (X'#{hex}', 'widget')")
