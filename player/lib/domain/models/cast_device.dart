@@ -145,6 +145,29 @@ class CastSubtitleTrack {
     required this.language,
   });
 
+  /// Whether `id` is a shape the server can actually serve as a session
+  /// subtitle.
+  ///
+  /// Mirrors `Mydia.Streaming.SessionSubtitles`'s `@filename_pattern`
+  /// exactly (an ffprobe stream index, or a sidecar UUID) — the two must
+  /// agree, because `CastRouteResolver._sessionSubtitles` builds the request
+  /// URL as `subs_<trackId>.vtt` for *every* track it is handed, with no
+  /// validation of its own. An id this predicate admits but the server
+  /// pattern rejects (or vice versa) means a receiver either gets a 404 with
+  /// no subtitles, or a track that should have worked gets silently dropped
+  /// before it ever reaches the request.
+  ///
+  /// This is what keeps a `mk_<n>` id — media_kit's own synthetic id for a
+  /// direct-play embedded track, built in `_detectTracks`, which the server
+  /// has never heard of — out of a cast request, while still letting through
+  /// a freshly downloaded sidecar (`SubtitleTrack.fromDownload`), whose id is
+  /// a real UUID but whose `url` is deliberately null.
+  static final RegExp _servableIdPattern = RegExp(
+    r'^([0-9]+|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$',
+  );
+
+  static bool isServableTrackId(String id) => _servableIdPattern.hasMatch(id);
+
   CastSubtitleTrack copyWith({String? url}) => CastSubtitleTrack(
         trackId: trackId,
         url: url ?? this.url,

@@ -133,6 +133,87 @@ void main() {
     expect(captured.subtitles.single.trackId, '3');
   });
 
+  testWidgets('a media_kit-shaped track id never reaches the cast request',
+      (tester) async {
+    // Regression test for the bug fixed alongside this test: `_detectTracks`
+    // builds synthetic ids like `mk_0` for a direct-play session's embedded
+    // tracks (see the comment on `_castSubtitleTracks`). This scenario
+    // stands in for that without needing a real media_kit player — the
+    // filter in `_castSubtitleTracks` only looks at the id's shape, so a
+    // GraphQL-sourced track carrying an `mk_`-shaped id exercises exactly
+    // the same code path. `CastRouteResolver._sessionSubtitles` builds
+    // `subs_mk_0.vtt` from whatever id it is handed with no validation of
+    // its own, and the server's anchored filename regex rejects it, so
+    // letting this through would 404 on the receiver.
+    final castManager = CapturingCastSessionManager();
+    final proxyService = TrackingLocalProxyService();
+
+    final link = StubLink.responses([
+      movieDetailResponse(files: [mediaFileWithSubtitle(trackId: 'mk_0')]),
+      movieSegmentsResponse(),
+      streamingCandidatesResponse(duration: 5400),
+    ]);
+
+    final container = buildPlayerScreenContainer(
+      link: link,
+      connectionState: conn.ConnectionState.direct(),
+      castManager: castManager,
+      proxyService: proxyService,
+    );
+    addTearDown(container.dispose);
+
+    container.read(castTargetProvider.notifier).set(testDevice);
+
+    await pumpPlayerScreen(tester, container);
+    await pumpUntil(tester, () => castManager.capturedRequest != null);
+
+    final captured = castManager.capturedRequest;
+    expect(captured, isNotNull);
+    expect(
+      captured!.subtitles,
+      isEmpty,
+      reason: 'an mk_-prefixed id is not a shape the server can serve; '
+          '_castSubtitleTracks must drop it rather than send a track id '
+          'that will 404 on the receiver.',
+    );
+  });
+
+  testWidgets('a sidecar uuid track id reaches the cast request',
+      (tester) async {
+    final castManager = CapturingCastSessionManager();
+    final proxyService = TrackingLocalProxyService();
+
+    const uuid = '0f8fad5b-d9cb-469f-a165-70867728950e';
+    final link = StubLink.responses([
+      movieDetailResponse(files: [mediaFileWithSubtitle(trackId: uuid)]),
+      movieSegmentsResponse(),
+      streamingCandidatesResponse(duration: 5400),
+    ]);
+
+    final container = buildPlayerScreenContainer(
+      link: link,
+      connectionState: conn.ConnectionState.direct(),
+      castManager: castManager,
+      proxyService: proxyService,
+    );
+    addTearDown(container.dispose);
+
+    container.read(castTargetProvider.notifier).set(testDevice);
+
+    await pumpPlayerScreen(tester, container);
+    await pumpUntil(tester, () => castManager.capturedRequest != null);
+
+    final captured = castManager.capturedRequest;
+    expect(captured, isNotNull);
+    expect(
+      captured!.subtitles,
+      hasLength(1),
+      reason: 'a uuid is a shape the server can serve (a sidecar track id), '
+          'so it must still reach the cast request.',
+    );
+    expect(captured.subtitles.single.trackId, uuid);
+  });
+
   testWidgets('a successful cast leaves the chosen device set', (tester) async {
     // Clearing it here would drop the cast icon to white while the cast is
     // running — the reported bug, inverted. Opting out is the bar's ✕ or

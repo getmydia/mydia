@@ -614,16 +614,37 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// survive that rewrite, but the URL is what the progressive DLNA route
   /// keeps using, so it is carried rather than blanked.
   ///
-  /// `deliverable` is the real filter: image tracks (PGS, VobSub) must never
-  /// be offered, since a receiver fetching one gets a 415. `url` is allowed
-  /// to be null here — `SubtitleTrack.fromDownload` deliberately leaves it
-  /// null for a track that was just downloaded but never had a media-file URL
-  /// assigned — and is passed through as an empty string. That is only a
-  /// progressive-route concern: `CastRouteResolver._progressiveSubtitles`
-  /// drops any track it can't build a URL for, while the session-addressed
-  /// (HLS) routes ignore this field entirely and rewrite it from `trackId`.
+  /// `deliverable` is one half of the filter: image tracks (PGS, VobSub)
+  /// must never be offered, since a receiver fetching one gets a 415. `url`
+  /// is allowed to be null here — `SubtitleTrack.fromDownload` deliberately
+  /// leaves it null for a track that was just downloaded but never had a
+  /// media-file URL assigned — and is passed through as an empty string.
+  /// That is only a progressive-route concern: `CastRouteResolver.
+  /// _progressiveSubtitles` drops any track it can't build a URL for, while
+  /// the session-addressed (HLS) routes ignore this field entirely and
+  /// rewrite it from `trackId`.
+  ///
+  /// The other half is `CastSubtitleTrack.isServableTrackId`. In direct play
+  /// `_detectTracks` replaces `_subtitleTracks` with media_kit's own track
+  /// list for every embedded track, carrying synthetic ids like `mk_0` (see
+  /// the comment there). Those have no url and default to `deliverable`, so
+  /// dropping the old `url != null` half of this filter (to let a
+  /// just-downloaded sidecar through) would also let `mk_0` through — and
+  /// `CastRouteResolver._sessionSubtitles` builds `subs_mk_0.vtt` for it
+  /// unconditionally, which `Mydia.Streaming.SessionSubtitles`'s anchored
+  /// filename regex rejects outright, so the receiver 404s and shows
+  /// nothing. Filtering on id shape instead keeps downloaded sidecars (UUID,
+  /// null url) working while excluding every `mk_` id — at the cost that a
+  /// direct-play session, whose whole `_subtitleTracks` list is `mk_` ids
+  /// plus sidecars, now offers no *embedded* subtitles to a receiver at all,
+  /// only sidecars. That is strictly better than offering ids that 404, but
+  /// it is a real gap: there is no server-side stream index to fall back to
+  /// here, because media_kit's own track ordering is not guaranteed to match
+  /// ffprobe's, and guessing one would show the wrong subtitle instead of
+  /// none.
   List<CastSubtitleTrack> _castSubtitleTracks() => _subtitleTracks
-      .where((track) => track.deliverable)
+      .where((track) =>
+          track.deliverable && CastSubtitleTrack.isServableTrackId(track.id))
       .map((track) => CastSubtitleTrack(
             trackId: track.id,
             url: track.url ?? '',
