@@ -293,4 +293,95 @@ abstract final class DepthTokens {
 
   /// Corner radius for the 36px-tall top-bar pills (fully rounded).
   static const double radiusPlayerPill = 18.0;
+
+  // ---------------------------------------------------------------------------
+  // Player chrome lensing (iOS 26 / 27 material)
+  //
+  // Parameters for the refracting glass material behind
+  // `GlassSurface.playerChrome`. Everything above this block describes a
+  // surface that only *blurs* its backdrop; these describe one that also
+  // *bends* it, which is the difference between frosted plastic and glass.
+  //
+  // Deliberately expressed as bare doubles and Flutter types, never as
+  // `liquid_glass_widgets` enums, even where the underlying knob is an enum
+  // (specular sharpness). `glass_surface.dart` is the single file allowed to
+  // import that package (see the dependency's comment in `pubspec.yaml`), and
+  // that seam is what makes a rollback to a plain `BackdropFilter` a one-file
+  // revert. A package type in this module would quietly spread the dependency
+  // into the token layer and every test that reads it.
+  //
+  // These are inert on tiers that render no shader; see
+  // `GlassSurface.playerChrome`.
+  // ---------------------------------------------------------------------------
+
+  /// Index of refraction for the panel's rim.
+  ///
+  /// 1.0 is a vacuum (no bending at all) and real glass is ~1.5. The package
+  /// defaults to 1.2, which barely reads at this panel's size. 1.4 sits near
+  /// real glass while stopping short of the fishbowl distortion that starts
+  /// to warp the control glyphs sitting on top of the lens.
+  static const double playerChromeRefractiveIndex = 1.4;
+
+  /// Apparent thickness of the glass slab, in logical pixels.
+  ///
+  /// Governs how wide the refracted band at the panel's edge is. Held just
+  /// under [radiusPlayerPanel] (16) so the lensing stays inside the corner
+  /// curve and does not intrude on the control row, which begins
+  /// `ChromePanel.verticalPadding` (10px) in from the top edge.
+  static const double playerChromeThickness = 14.0;
+
+  /// Per-channel dispersion at the refracted edge.
+  ///
+  /// Real lenses split colour slightly at their edges, and its total absence
+  /// is part of why a plain blur reads as synthetic. Kept at the package
+  /// default: this panel sits over video whose own colour is the subject, and
+  /// visible fringing on chrome would compete with it.
+  static const double playerChromeChromaticAberration = 0.01;
+
+  /// Specular highlight intensity along the lit edge.
+  ///
+  /// Raised well above the package default of 0.5, following the brighter
+  /// specular highlights iOS 27 introduced. This is the cue that survives on
+  /// the tiers that cannot refract, so it carries the material's read on web
+  /// as well as native.
+  static const double playerChromeLightIntensity = 0.8;
+
+  /// Direction of the virtual light, in radians, clockwise from +x.
+  ///
+  /// `-pi / 2` puts the source directly overhead, matching [playerRimTop]'s
+  /// premise that glass catches light on its upper edge. Kept consistent with
+  /// that rim rather than with the package default so the two treatments
+  /// agree about where the light is.
+  static const double playerChromeLightAngle = -1.5707963267948966; // -pi/2
+
+  /// Darkened outer edge, painted *outside* the panel silhouette (iOS 27).
+  ///
+  /// iOS 27 added a dark edge around glass elements for separation from busy
+  /// backdrops. This is ours to paint: `liquid_glass_widgets` exposes
+  /// `shadow`/`shadowElevation`, but both are documented "has no effect in
+  /// dark mode" in three places in `LiquidGlassSettings`, and this player's
+  /// theme is dark-only and never switches (see the note at the top of this
+  /// module). Passing them would silently do nothing.
+  ///
+  /// Tight and near-opaque rather than soft and wide: the goal is a defining
+  /// edge, not a floating drop shadow. [chrome] above is the latter, and this
+  /// panel deliberately does not use it.
+  ///
+  /// Expressed as a colour plus a blur sigma rather than a [BoxShadow],
+  /// because it is painted with `MaskFilter.blur(BlurStyle.outer, ...)` and
+  /// not by a [BoxDecoration]. That distinction is load-bearing rather than
+  /// stylistic: a [BoxShadow] paints *behind* its child, and this panel's
+  /// fill is translucent by design, so the shadow would show through and
+  /// darken it. That would silently shift the backdrop that
+  /// `glass_legibility_test.dart` models as uniform, moving the panel's
+  /// measured contrast without anything in that test changing.
+  /// [BlurStyle.outer] paints strictly outside the silhouette, so the fill is
+  /// untouched and the contrast contract holds.
+  static const Color playerChromeEdgeShadowColor = Color(0x4D000000); // 0.30
+
+  /// Blur sigma for [playerChromeEdgeShadowColor].
+  ///
+  /// Small on purpose. Wide enough and this stops reading as an edge and
+  /// starts reading as elevation, which is [chrome]'s job, not this one's.
+  static const double playerChromeEdgeShadowSigma = 2.0;
 }
