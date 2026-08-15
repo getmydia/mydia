@@ -136,6 +136,33 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEventsTest do
       assert media_item.quality_profile_id == profile.id
     end
 
+    test "reports already-in-library instead of crashing on a duplicate tmdb id",
+         %{bypass: bypass, config: config} do
+      current =
+        media_item_fixture(%{type: "movie", title: "First", year: 2001, tmdb_id: 1301})
+
+      existing =
+        media_item_fixture(%{type: "movie", title: "Missing Sequel", year: 2004, tmdb_id: 1302})
+
+      Bypass.stub(bypass, "GET", "/tmdb/movies/1302", fn conn ->
+        body = %{
+          "id" => 1302,
+          "title" => "Missing Sequel",
+          "release_date" => "2004-01-01",
+          "credits" => %{"cast" => [], "crew" => []}
+        }
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(body))
+      end)
+
+      assert {:already_in_library, media_item} =
+               FranchiseEvents.perform_add(current, 1302, config)
+
+      assert media_item.id == existing.id
+    end
+
     test "refuses without create permission", %{config: config} do
       current =
         media_item_fixture(%{type: "movie", title: "First", year: 2001, tmdb_id: 1011})
@@ -264,6 +291,34 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEventsTest do
       entry = Enum.find(socket.assigns.franchise.entries, &(&1.tmdb_id == 1022))
       assert entry.in_library? == true
       assert entry.media_item_id == added.id
+    end
+
+    test "already_in_library flips the entry to owned instead of flashing an error",
+         %{config: config} do
+      current =
+        media_item_fixture(%{type: "movie", title: "First", year: 2001, tmdb_id: 1311})
+
+      added =
+        media_item_fixture(%{type: "movie", title: "Missing Sequel", year: 2004, tmdb_id: 1312})
+
+      socket =
+        stub_socket(%{
+          media_item: current,
+          metadata_config: config,
+          adding_franchise_tmdb_ids: MapSet.new([1312]),
+          franchise: franchise_with_missing(current, 1312)
+        })
+
+      {:noreply, socket} =
+        FranchiseEvents.handle_add_result(1312, {:ok, {:already_in_library, added}}, socket)
+
+      assert MapSet.size(socket.assigns.adding_franchise_tmdb_ids) == 0
+      assert socket.assigns.franchise.owned_count == 2
+
+      entry = Enum.find(socket.assigns.franchise.entries, &(&1.tmdb_id == 1312))
+      assert entry.in_library? == true
+      assert entry.media_item_id == added.id
+      assert socket.assigns.flash["info"] =~ "already in your library"
     end
 
     @tag :capture_log

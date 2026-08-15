@@ -111,6 +111,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
     )
     |> case do
       {:ok, added, _status_map} -> {:ok, added}
+      {:already_in_library, added, _status_map} -> {:already_in_library, added}
       {:error, reason} -> {:error, reason}
     end
   end
@@ -121,6 +122,16 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
      |> clear_in_flight(tmdb_id)
      |> assign(:franchise, mark_owned(socket.assigns.franchise, added))
      |> put_flash(:info, "Added #{added.title} to your library")}
+  end
+
+  # Not an error from here up: the movie the user clicked is already in the
+  # library, just under an entry this panel had not linked up yet.
+  def handle_add_result(tmdb_id, {:ok, {:already_in_library, added}}, socket) do
+    {:noreply,
+     socket
+     |> clear_in_flight(tmdb_id)
+     |> assign(:franchise, mark_owned(socket.assigns.franchise, added))
+     |> put_flash(:info, "#{added.title} is already in your library")}
   end
 
   def handle_add_result(tmdb_id, {:ok, {:error, reason}}, socket) do

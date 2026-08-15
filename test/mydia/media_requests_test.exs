@@ -196,13 +196,14 @@ defmodule Mydia.MediaRequestsTest do
       assert media_item.type == request.media_type
     end
 
-    test "rolls back if media creation fails", %{
+    test "links the request to an existing media item instead of hitting the tmdb_id index", %{
       request: request,
       admin: admin,
       config: config
     } do
-      # Create a media item with the same TMDB ID to cause a conflict
-      {:ok, _existing} =
+      # A row with the same TMDB ID was added to the library after the
+      # request was filed but before it was approved.
+      {:ok, existing} =
         Media.create_media_item(%{
           type: "movie",
           title: "Existing",
@@ -212,12 +213,12 @@ defmodule Mydia.MediaRequestsTest do
 
       attrs = %{approved_by_id: admin.id}
 
-      assert {:error, _changeset} = MediaRequests.approve_request(request, attrs, config: config)
+      assert {:ok, %{request: updated_request, media_item: media_item}} =
+               MediaRequests.approve_request(request, attrs, config: config)
 
-      # Verify request was not updated
-      reloaded = Repo.get!(MediaRequest, request.id)
-      assert reloaded.status == "pending"
-      assert reloaded.approved_at == nil
+      assert media_item.id == existing.id
+      assert updated_request.status == "approved"
+      assert updated_request.media_item_id == existing.id
     end
 
     test "requires approved_by_id", %{request: request, config: config} do

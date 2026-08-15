@@ -207,5 +207,30 @@ defmodule Mydia.Media.AddTest do
 
       assert attrs.tvdb_id == exact_tvdb_id
     end
+
+    test "reports an existing row instead of violating the tvdb_id index" do
+      tvdb_id = System.unique_integer([:positive])
+      tmdb_id = System.unique_integer([:positive])
+
+      existing =
+        Mydia.MediaFixtures.media_item_fixture(%{
+          type: "tv_show",
+          title: "Already Here",
+          tvdb_id: tvdb_id
+        })
+
+      attrs = %{
+        type: "tv_show",
+        title: "Already Here",
+        tvdb_id: tvdb_id,
+        tmdb_id: tmdb_id,
+        monitored: true
+      }
+
+      assert {:error, {:already_in_library, found}} = Add.from_attrs(attrs)
+
+      assert found.id == existing.id
+      assert found.tmdb_id == tmdb_id
+    end
   end
 end

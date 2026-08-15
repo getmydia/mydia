@@ -279,6 +279,25 @@ defmodule MydiaWeb.DashboardLive.Index do
          |> assign(:trending_tv, trending_tv)
          |> put_flash(:info, "#{media_item.title} has been added to your library")}
 
+      {:already_in_library, media_item, updated_map} ->
+        trending_movies =
+          socket.assigns.trending_movies
+          |> MediaAddHelpers.enrich_with_library_status(updated_map)
+          |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)
+
+        trending_tv =
+          socket.assigns.trending_tv
+          |> MediaAddHelpers.enrich_with_library_status(updated_map)
+          |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)
+
+        {:noreply,
+         socket
+         |> assign(:adding_item_id, nil)
+         |> assign(:library_status_map, updated_map)
+         |> assign(:trending_movies, trending_movies)
+         |> assign(:trending_tv, trending_tv)
+         |> put_flash(:info, "#{media_item.title} is already in your library")}
+
       {:error, {:changeset, changeset}} ->
         {:noreply,
          socket

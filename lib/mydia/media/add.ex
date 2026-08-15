@@ -23,7 +23,10 @@ defmodule Mydia.Media.Add do
   # Options consumed by `Media.create_media_item/2` rather than by attrs building.
   @create_opt_keys [:actor_type, :actor_id, :skip_episode_refresh, :season_monitoring]
 
-  @type error :: {:metadata, term()} | {:changeset, Ecto.Changeset.t()}
+  @type error ::
+          {:metadata, term()}
+          | {:changeset, Ecto.Changeset.t()}
+          | {:already_in_library, Media.MediaItem.t()}
 
   @doc """
   Fetches provider metadata and builds the attrs for `Media.create_media_item/2`.
@@ -64,10 +67,19 @@ defmodule Mydia.Media.Add do
   pre-existing behaviour and is deliberately left where it is.
   """
   @spec from_attrs(map(), map() | nil, keyword()) ::
-          {:ok, Media.MediaItem.t()} | {:error, {:changeset, Ecto.Changeset.t()}}
+          {:ok, Media.MediaItem.t()}
+          | {:error,
+             {:changeset, Ecto.Changeset.t()} | {:already_in_library, Media.MediaItem.t()}}
   def from_attrs(attrs, config \\ nil, opts \\ []) do
     config = config || Metadata.default_relay_config()
 
+    case existing_item(attrs) do
+      nil -> insert_media_item(attrs, config, opts)
+      item -> {:error, {:already_in_library, backfill_ids(item, attrs)}}
+    end
+  end
+
+  defp insert_media_item(attrs, config, opts) do
     create_opts =
       opts
       |> Keyword.take(@create_opt_keys)
@@ -76,6 +88,44 @@ defmodule Mydia.Media.Add do
     case Media.create_media_item(attrs, create_opts) do
       {:ok, media_item} -> {:ok, media_item}
       {:error, changeset} -> {:error, {:changeset, changeset}}
+    end
+  end
+
+  # The unique indexes on tmdb_id and tvdb_id turn "you already have this" into
+  # a changeset error the user reads as a bug. Look first, so the caller can
+  # say something true instead.
+  defp existing_item(attrs) do
+    ids = %{tmdb: attrs[:tmdb_id], tvdb: attrs[:tvdb_id], imdb: attrs[:imdb_id]}
+
+    if Enum.all?(Map.values(ids), &is_nil/1) do
+      nil
+    else
+      Media.find_by_external_ids(ids, type: attrs[:type])
+    end
+  end
+
+  # The existing row is usually the one missing an id, which is exactly why it
+  # was not recognised. Fill what is free so the gap closes for good.
+  defp backfill_ids(item, attrs) do
+    merged =
+      %{tmdb_id: item.tmdb_id, tvdb_id: item.tvdb_id}
+      |> ExternalIds.put_free_ids(%{tmdb: attrs[:tmdb_id], tvdb: attrs[:tvdb_id]},
+        exclude_id: item.id,
+        title: item.title
+      )
+
+    changes =
+      merged
+      |> Enum.reject(fn {key, value} -> Map.get(item, key) == value end)
+      |> Map.new()
+
+    if changes == %{} do
+      item
+    else
+      case Media.update_media_item(item, changes, reason: "Cross-referenced provider id") do
+        {:ok, updated} -> updated
+        {:error, _reason} -> item
+      end
     end
   end
 

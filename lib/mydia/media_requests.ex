@@ -134,8 +134,17 @@ defmodule Mydia.MediaRequests do
              actor_type: :user,
              actor_id: attrs[:approved_by_id]
            ) do
-        {:ok, media_item} -> {:ok, media_item}
-        {:error, {:changeset, changeset}} -> {:error, changeset}
+        {:ok, media_item} ->
+          {:ok, media_item}
+
+        # Not a failure: the request is asking for something already in the
+        # library. Link the request to the existing row instead of bouncing
+        # the approval off a unique constraint the admin can't act on.
+        {:error, {:already_in_library, media_item}} ->
+          {:ok, media_item}
+
+        {:error, {:changeset, changeset}} ->
+          {:error, changeset}
       end
     end)
     |> Multi.run(:request, fn _repo, %{media_item: media_item} ->
