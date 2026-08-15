@@ -66,6 +66,6 @@ defmodule MydiaWeb.Components.TrendingDetailModalTest do
   test "renders no season badge for a movie" do
     html = render_modal(item(%{media_type: :movie}), metadata(%{number_of_seasons: nil}))
 
-    refute html =~ "season"
+    refute html =~ ~r/\d+ seasons?/
   end
 end

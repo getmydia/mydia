@@ -41,7 +41,7 @@ defmodule MydiaWeb.DashboardLive.Components do
             <.link navigate={~p"/media/#{entry.media_item.id}"}>
               <figure class="relative aspect-[2/3] overflow-hidden bg-base-300">
                 <img
-                  src={MediaImages.poster_url(entry.media_item)}
+                  src={MediaImages.poster_url(entry.media_item, "w342")}
                   alt={entry.media_item.title}
                   class="w-full h-full object-cover"
                   loading={if index < 6, do: nil, else: "lazy"}

@@ -14,11 +14,17 @@ defmodule MydiaWeb.Live.Helpers.MediaImages do
 
   @doc """
   Poster URL for a media item, or a placeholder when it has no poster path.
+
+  `size` is a TMDB image size. It defaults to `"w500"`, which is what the
+  full-width library grid wants. Narrow callers should ask for something
+  smaller: the dashboard rail renders 144px-wide cards and passes `"w342"`,
+  matching what `DiscoverComponents.media_rail` already requests for the
+  same card size.
   """
-  @spec poster_url(struct()) :: String.t()
-  def poster_url(media_item) do
+  @spec poster_url(struct(), String.t()) :: String.t()
+  def poster_url(media_item, size \\ "w500") do
     case media_item.metadata do
-      %MediaMetadata{poster_path: path} when is_binary(path) -> ImageUrl.poster_url(path)
+      %MediaMetadata{poster_path: path} when is_binary(path) -> ImageUrl.poster_url(path, size)
       _ -> @placeholder
     end
   end

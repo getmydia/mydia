@@ -2,7 +2,6 @@ defmodule MydiaWeb.DiscoverLive.Index do
   use MydiaWeb, :live_view
 
   import MydiaWeb.DiscoverComponents
-  import MydiaWeb.GridDensityComponents
 
   require Logger
 
@@ -13,6 +12,8 @@ defmodule MydiaWeb.DiscoverLive.Index do
   alias MydiaWeb.Live.Helpers.GridDensity
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
+
+  import MydiaWeb.GridDensityComponents
 
   @movie_categories [
     {:trending, "Trending"},
