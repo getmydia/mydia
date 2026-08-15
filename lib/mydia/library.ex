@@ -2826,15 +2826,13 @@ defmodule Mydia.Library do
 
   ## Options
 
-    * `:library_path_id` - required, scopes the count to one library path
+    * `:library_path_id` - scopes the count to one library path (default: every path)
     * `:filter` - `:all` (default), `:unidentified`, or `:low_confidence`
   """
   @spec count_inbox_files(keyword()) :: non_neg_integer()
-  def count_inbox_files(opts) do
-    library_path_id = Keyword.fetch!(opts, :library_path_id)
-
+  def count_inbox_files(opts \\ []) do
     MediaFile
-    |> where([f], f.library_path_id == ^library_path_id)
+    |> maybe_scope_library(opts[:library_path_id])
     |> inbox_base_query()
     |> apply_inbox_filter(opts[:filter] || :all)
     |> select([f, _c], count(f.id, :distinct))

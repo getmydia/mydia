@@ -102,4 +102,30 @@ defmodule Mydia.Library.InboxTest do
     assert Library.count_inbox_files(library_path_id: lp.id) == 3
     assert Library.count_inbox_files(library_path_id: lp.id, filter: :unidentified) == 1
   end
+
+  test "counts and lists across every library when no library_path_id is given", %{lp: lp} do
+    other_lp = library_path_fixture()
+    other_file = orphaned_media_file_fixture(%{library_path_id: other_lp.id})
+
+    {:ok, _} =
+      Library.upsert_match_candidate(%{
+        media_file_id: other_file.id,
+        rank: 0,
+        attempts: 1,
+        last_error: "no_match"
+      })
+
+    # No :library_path_id at all -- the review inbox (Task 10) shows one
+    # queue across every library, matching how the run control panel
+    # already treats "the import run" as a single global thing rather than
+    # one per library path. Scoping to `lp` alone must still stay at 3, so
+    # this proves the default is "every path", not a silent no-op filter.
+    assert Library.count_inbox_files(library_path_id: lp.id) == 3
+    assert Library.count_inbox_files() == 4
+    assert Library.count_inbox_files(filter: :unidentified) == 2
+
+    all_ids = Library.list_inbox_files() |> Enum.map(& &1.media_file.id)
+    assert other_file.id in all_ids
+    assert length(all_ids) == 4
+  end
 end
