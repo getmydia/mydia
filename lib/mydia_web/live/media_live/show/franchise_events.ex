@@ -225,7 +225,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
     entries =
       Enum.map(franchise.entries, fn entry ->
         if entry.tmdb_id == added.tmdb_id do
-          %{entry | in_library?: true, media_item_id: added.id}
+          %{entry | in_library?: true, media_item_id: added.id, monitored: added.monitored}
         else
           entry
         end

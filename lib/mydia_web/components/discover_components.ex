@@ -298,6 +298,7 @@ defmodule MydiaWeb.DiscoverComponents do
       <img
         src={ImageUrl.poster_url(@item.poster_path)}
         alt={@item.title}
+        loading="lazy"
         class="w-full h-full object-cover"
       />
     <% else %>

@@ -77,6 +77,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseComponentsTest do
     refute current =~ "Go to Movie"
     refute current =~ "Add to Library"
     refute current =~ "phx-click"
+    refute current =~ "<a "
   end
 
   test "an owned entry links to its media page" do
