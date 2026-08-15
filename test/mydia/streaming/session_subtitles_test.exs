@@ -1,7 +1,11 @@
 defmodule Mydia.Streaming.SessionSubtitlesTest do
-  use ExUnit.Case, async: true
+  use Mydia.DataCase, async: false
 
+  alias Mydia.Library.Structs.FileMetadata
+  alias Mydia.Library.Structs.StreamInfo
+  alias Mydia.MediaFixtures
   alias Mydia.Streaming.SessionSubtitles
+  alias Mydia.Subtitles.Subtitle
 
   describe "filename/1" do
     test "names an embedded track by its stream index" do
@@ -40,6 +44,16 @@ defmodule Mydia.Streaming.SessionSubtitlesTest do
       assert :error = SessionSubtitles.track_id_from_filename("subs_../../etc/passwd.vtt")
       assert :error = SessionSubtitles.track_id_from_filename("subs_3.vtt.exe")
     end
+
+    # A bare `$` in PCRE matches just before a single trailing newline, not
+    # only true end-of-string, so "subs_3.vtt\n" would slip past a pattern
+    # anchored with `$` instead of `\z`. A leading newline is already refused
+    # by `^` (which only ever anchors to the true start of the subject, with
+    # no multiline flag set), but is asserted here too as a regression guard.
+    test "rejects a name carrying a trailing or leading newline" do
+      assert :error = SessionSubtitles.track_id_from_filename("subs_3.vtt\n")
+      assert :error = SessionSubtitles.track_id_from_filename("\nsubs_3.vtt")
+    end
   end
 
   describe "ensure/2" do
@@ -67,9 +81,155 @@ defmodule Mydia.Streaming.SessionSubtitlesTest do
       assert File.read!(path) == "WEBVTT\n\n"
     end
 
-    test "refuses a traversal attempt dressed as a subtitle name", %{temp_dir: dir} do
+    # "../subs_3.vtt" never reaches SessionFiles.safe_path/2: it is rejected by
+    # the filename regex itself, because it does not start with "subs_". The
+    # {:error, :path_traversal} branch in ensure/2 is unreachable by
+    # construction while that regex holds (see the comment on that clause);
+    # this test covers the regex rejection, not the path-validation branch.
+    test "rejects a traversal-shaped name via the filename regex", %{temp_dir: dir} do
       info = %{temp_dir: dir, media_file_id: "irrelevant"}
       assert :not_subtitle = SessionSubtitles.ensure(info, "../subs_3.vtt")
+    end
+  end
+
+  describe "ensure/2 through materialize/3" do
+    setup do
+      temp_dir =
+        Path.join(
+          System.tmp_dir!(),
+          "session_subs_materialize_#{System.unique_integer([:positive])}"
+        )
+
+      File.mkdir_p!(temp_dir)
+      on_exit(fn -> File.rm_rf(temp_dir) end)
+      {:ok, temp_dir: temp_dir}
+    end
+
+    test "refuses an image-format embedded track and writes nothing", %{temp_dir: dir} do
+      media_file =
+        MediaFixtures.media_file_fixture(%{
+          metadata: %FileMetadata{
+            streams: [
+              %StreamInfo{index: 3, type: :subtitle, codec: "hdmv_pgs_subtitle", language: "spa"}
+            ]
+          }
+        })
+        |> Repo.preload(:library_path)
+
+      info = %{temp_dir: dir, media_file_id: media_file.id}
+      name = SessionSubtitles.filename(3)
+
+      assert {:error, :image_subtitle} = SessionSubtitles.ensure(info, name)
+      refute File.exists?(Path.join(dir, name))
+    end
+
+    test "materializes a sidecar track as WebVTT at the expected path", %{temp_dir: dir} do
+      media_file =
+        MediaFixtures.media_file_fixture(%{metadata: %FileMetadata{streams: []}})
+        |> Repo.preload(:library_path)
+
+      sub_dir =
+        Path.join(System.tmp_dir!(), "session_subs_sidecar_#{System.unique_integer([:positive])}")
+
+      File.mkdir_p!(sub_dir)
+      on_exit(fn -> File.rm_rf(sub_dir) end)
+
+      srt_path = Path.join(sub_dir, "sub.en.srt")
+
+      File.write!(srt_path, """
+      1
+      00:00:01,000 --> 00:00:04,000
+      Hello there.
+      """)
+
+      {:ok, subtitle} =
+        %Subtitle{}
+        |> Subtitle.changeset(%{
+          media_file_id: media_file.id,
+          language: "en",
+          format: "srt",
+          subtitle_hash: "hash-#{System.unique_integer([:positive])}",
+          file_path: srt_path,
+          provider: "relay"
+        })
+        |> Repo.insert()
+
+      info = %{temp_dir: dir, media_file_id: media_file.id}
+      name = SessionSubtitles.filename(subtitle.id)
+      expected_path = Path.join(dir, name)
+
+      assert {:ok, ^expected_path} = SessionSubtitles.ensure(info, name)
+
+      content = File.read!(expected_path)
+      assert String.starts_with?(content, "WEBVTT")
+      assert content =~ "00:00:01.000 --> 00:00:04.000"
+      assert content =~ "Hello there."
+    end
+
+    # Two concurrent callers asking for the same uncached track must not both
+    # win independently. What this proves: both callers get {:ok, path}, the
+    # path is identical, and the file's final content is the one correct
+    # conversion — i.e. concurrent access is safe and does not corrupt or
+    # race the write. What it does NOT prove: that Delivery.content/3 (or an
+    # ffmpeg extraction) ran exactly once. Observing that from outside would
+    # mean instrumenting production code just to make it observable, which
+    # the actual locking behaviour (grant/wait/hand-off) is not — that
+    # guarantee is covered by Mydia.Plugins.SingleFlightTest, which this
+    # module delegates to rather than reimplementing.
+    test "two concurrent callers for the same uncached track both resolve safely", %{
+      temp_dir: dir
+    } do
+      media_file =
+        MediaFixtures.media_file_fixture(%{metadata: %FileMetadata{streams: []}})
+        |> Repo.preload(:library_path)
+
+      sub_dir =
+        Path.join(
+          System.tmp_dir!(),
+          "session_subs_sidecar_concurrent_#{System.unique_integer([:positive])}"
+        )
+
+      File.mkdir_p!(sub_dir)
+      on_exit(fn -> File.rm_rf(sub_dir) end)
+
+      srt_path = Path.join(sub_dir, "sub.en.srt")
+
+      File.write!(srt_path, """
+      1
+      00:00:01,000 --> 00:00:04,000
+      Hello there.
+      """)
+
+      {:ok, subtitle} =
+        %Subtitle{}
+        |> Subtitle.changeset(%{
+          media_file_id: media_file.id,
+          language: "en",
+          format: "srt",
+          subtitle_hash: "hash-#{System.unique_integer([:positive])}",
+          file_path: srt_path,
+          provider: "relay"
+        })
+        |> Repo.insert()
+
+      info = %{temp_dir: dir, media_file_id: media_file.id}
+      name = SessionSubtitles.filename(subtitle.id)
+      expected_path = Path.join(dir, name)
+
+      [result_a, result_b] =
+        [
+          Task.async(fn -> SessionSubtitles.ensure(info, name) end),
+          Task.async(fn -> SessionSubtitles.ensure(info, name) end)
+        ]
+        |> Task.await_many()
+
+      assert {:ok, ^expected_path} = result_a
+      assert {:ok, ^expected_path} = result_b
+      assert File.exists?(expected_path)
+
+      content = File.read!(expected_path)
+      assert String.starts_with?(content, "WEBVTT")
+      assert content =~ "Hello there."
     end
   end
 end

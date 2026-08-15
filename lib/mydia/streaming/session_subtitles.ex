@@ -13,9 +13,12 @@ defmodule Mydia.Streaming.SessionSubtitles do
   is *activated*, and Mydia defaults casts to subtitles off, so a cast where
   nobody turns subtitles on does no work here at all.
 
-  The ffmpeg cost is paid at most once per media file across all sessions:
-  `Mydia.Subtitles.Delivery.content/3` keeps its own on-disk cache keyed by
-  media file id, track id, an mtime/size stamp and format. This module only
+  The lock below serialises extraction within one session; it is keyed by
+  `temp_dir`, so it does not stop two different sessions racing on the same
+  media file. Cross-session deduplication is `Mydia.Subtitles.Delivery`'s own
+  job: `content/3` keeps an on-disk cache keyed by media file id, track id, an
+  mtime/size stamp and format, so a second session's ffmpeg run is the
+  exception rather than the rule, not a structural guarantee. This module only
   copies those bytes into the session directory, which is a few KB of write.
 
   Image-based tracks (PGS, VobSub) never materialize. Enforcing that here
@@ -34,8 +37,10 @@ defmodule Mydia.Streaming.SessionSubtitles do
   @lock Mydia.Streaming.SubtitleLock
 
   # An ffprobe stream index, or a sidecar UUID. Anchored at both ends so a
-  # name like "subs_3.vtt.exe" or "subs_../x.vtt" cannot match.
-  @filename_pattern ~r/^subs_([0-9]+|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\.vtt$/
+  # name like "subs_3.vtt.exe" or "subs_../x.vtt" cannot match. `\z` rather
+  # than `$`: in PCRE (what Elixir's Regex uses) a bare `$` also matches just
+  # before a single trailing newline, so "subs_3.vtt\n" would otherwise pass.
+  @filename_pattern ~r/^subs_([0-9]+|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\.vtt\z/
 
   @doc "The session-relative filename for `track_id`."
   @spec filename(integer() | String.t()) :: String.t()
@@ -97,6 +102,10 @@ defmodule Mydia.Streaming.SessionSubtitles do
       # rejects the traversal; returning :error here would turn a bad name
       # into a 500 instead of a 404.
       :error -> :not_subtitle
+      # Unreachable while @filename_pattern holds: every name it admits
+      # contains only digits or hex-and-hyphens between "subs_" and ".vtt",
+      # so it can never carry "/" or "..". Kept anyway as defence-in-depth,
+      # so the regex is not the single point of failure if it is ever loosened.
       {:error, :path_traversal} -> :not_subtitle
     end
   end
