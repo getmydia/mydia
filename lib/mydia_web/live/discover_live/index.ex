@@ -8,6 +8,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
   alias Mydia.Media
   alias Mydia.Media.Recommendations
   alias Mydia.Metadata
+  alias MydiaWeb.Live.Authorization
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
 
@@ -231,14 +232,14 @@ defmodule MydiaWeb.DiscoverLive.Index do
         %{"tmdb_id" => provider_id, "media_type" => media_type},
         socket
       ) do
-    case parse_event_media_type(media_type) do
-      {:ok, media_type_atom} ->
-        socket = assign(socket, :requesting_item_id, provider_id)
-        send(self(), {:request_media, provider_id, media_type_atom})
-        {:noreply, socket}
-
-      :error ->
-        {:noreply, put_flash(socket, :error, @unsupported_media_type)}
+    with :ok <- Authorization.authorize_submit_request(socket),
+         {:ok, media_type_atom} <- parse_event_media_type(media_type) do
+      socket = assign(socket, :requesting_item_id, provider_id)
+      send(self(), {:request_media, provider_id, media_type_atom})
+      {:noreply, socket}
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+      :error -> {:noreply, put_flash(socket, :error, @unsupported_media_type)}
     end
   end
 
