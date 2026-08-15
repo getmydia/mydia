@@ -208,6 +208,7 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
                     event="add_to_library"
                     tmdb_id={@item.provider_id}
                     media_type={media_type_string(@item)}
+                    placement={:top}
                   />
                 </div>
               <% end %>
