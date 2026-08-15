@@ -4,9 +4,11 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
   import Phoenix.Component, only: [assign: 3]
   import Phoenix.LiveView, only: [start_async: 3, put_flash: 3, connected?: 1]
 
+  alias Mydia.Media.FranchiseEntry
   alias Mydia.Media.Franchises
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
+  alias MydiaWeb.Live.Helpers.MediaRequestHelpers
 
   require Logger
 
@@ -115,6 +117,23 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
     end
   end
 
+  @doc """
+  Requests a missing franchise movie on behalf of a guest.
+
+  The shared rail renders a Request button rather than Add for a guest, and that
+  event reaches `MediaLive.Show`, which has no `request_media` clause of its own.
+  Without this handler the first click raises `FunctionClauseError` and takes the
+  detail page down.
+  """
+  def request_franchise_movie(%{"tmdb_id" => tmdb_id}, socket) do
+    with {parsed, ""} <- Integer.parse(tmdb_id),
+         %FranchiseEntry{} = entry <- find_entry(socket.assigns.franchise, parsed) do
+      submit_request(entry, socket)
+    else
+      _ -> {:noreply, socket}
+    end
+  end
+
   def handle_add_result(tmdb_id, {:ok, {:ok, added}}, socket) do
     {:noreply,
      socket
@@ -142,6 +161,47 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
   end
 
   ## Private
+
+  defp find_entry(nil, _tmdb_id), do: nil
+
+  defp find_entry(franchise, tmdb_id),
+    do: Enum.find(franchise.entries, &(&1.tmdb_id == tmdb_id))
+
+  # handle_request_media/3 reads provider_id, title and year off a plain map. A
+  # FranchiseEntry carries tmdb_id rather than provider_id, so build the shape it
+  # wants instead of widening the helper.
+  defp submit_request(entry, socket) do
+    item = %{provider_id: to_string(entry.tmdb_id), title: entry.title, year: entry.year}
+
+    case MediaRequestHelpers.handle_request_media(item, :movie, socket.assigns.current_user.id) do
+      {:ok, request, _status_updates} ->
+        {:noreply,
+         socket
+         |> assign(
+           :franchise,
+           mark_requested(socket.assigns.franchise, entry.tmdb_id, request.status)
+         )
+         |> put_flash(:info, "#{request.title} requested. An admin will review it soon.")}
+
+      {:error, reason} ->
+        Logger.warning("Franchise request failed for tmdb #{entry.tmdb_id}: #{inspect(reason)}")
+
+        {:noreply, put_flash(socket, :error, "Could not request that movie")}
+    end
+  end
+
+  defp mark_requested(franchise, tmdb_id, status) do
+    entries =
+      Enum.map(franchise.entries, fn entry ->
+        if entry.tmdb_id == tmdb_id do
+          %{entry | request_status: status}
+        else
+          entry
+        end
+      end)
+
+    %{franchise | entries: entries}
+  end
 
   defp mark_in_flight(socket, tmdb_id) do
     assign(

@@ -18,6 +18,7 @@ defmodule Mydia.Media.FranchiseEntry do
     :poster_path,
     :media_item_id,
     :vote_average,
+    :request_status,
     in_library?: false,
     monitored: false,
     current?: false
@@ -31,6 +32,7 @@ defmodule Mydia.Media.FranchiseEntry do
           poster_path: String.t() | nil,
           media_item_id: binary() | nil,
           vote_average: float() | nil,
+          request_status: String.t() | nil,
           in_library?: boolean(),
           monitored: boolean(),
           current?: boolean()
