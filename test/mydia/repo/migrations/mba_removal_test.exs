@@ -44,11 +44,15 @@ defmodule Mydia.Repo.Migrations.MbaRemovalTest do
       # all, runs end to end against a real 'music' row in
       # archive_and_drop_mba_tables_test.exs.
       path
-      |> Ecto.Changeset.change(%{type: :mixed, disabled: true})
+      |> Ecto.Changeset.change(%{type: :mixed, monitored: false})
       |> Repo.update!()
 
       # The row was converted rather than removed, and nothing followed it out.
-      assert Repo.get!(LibraryPath, path.id).disabled
+      converted = Repo.get!(LibraryPath, path.id)
+      refute converted.monitored
+      # Not disabled: disabled paths are filtered out of list_library_paths/1,
+      # which would hide the converted library from the admin screen for good.
+      refute converted.disabled
       assert Repo.aggregate(MediaFile, :count) == before_count
     end
   end

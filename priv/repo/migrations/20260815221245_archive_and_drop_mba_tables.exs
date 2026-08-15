@@ -5,11 +5,16 @@ defmodule Mydia.Repo.Migrations.ArchiveAndDropMbaTables do
   Archives every table that still holds rows to NDJSON BEFORE dropping
   anything, and aborts without dropping if archival fails.
 
-  library_paths rows of the removed types are CONVERTED to :mixed and disabled,
-  never deleted. media_files.library_path_id is on_delete: :delete_all, so
-  deleting those rows would cascade into real user media: adult content lived
-  in the shared media_files table, and music and book downloads left
-  media_files rows behind with no parent at all.
+  library_paths rows of the removed types are CONVERTED to :mixed and left
+  unmonitored, never deleted. media_files.library_path_id is on_delete:
+  :delete_all, so deleting those rows would cascade into real user media: adult
+  content lived in the shared media_files table, and music and book downloads
+  left media_files rows behind with no parent at all.
+
+  They are unmonitored rather than disabled so the operator can still see them
+  on the Library Paths screen and switch monitoring back on there. A disabled
+  path is filtered out of Mydia.Settings.list_library_paths/1 and never reaches
+  the UI at all, which would make the conversion unrecoverable.
   """
   use Ecto.Migration
 
@@ -127,15 +132,16 @@ defmodule Mydia.Repo.Migrations.ArchiveAndDropMbaTables do
     %{num_rows: converted} =
       repo().query!("""
       UPDATE library_paths
-         SET type = 'mixed', disabled = #{Helpers.to_db_value(true)}
+         SET type = 'mixed', monitored = #{Helpers.to_db_value(false)}
        WHERE type IN ('music', 'books', 'adult')
       """)
 
     if converted > 0 do
       Logger.warning("""
       [MBA removal] Converted #{converted} music/books/adult library path(s) to
-      type 'mixed' and disabled them. Their media files were NOT touched.
-      Re-enable them from Settings if you want them scanned as video libraries.
+      type 'mixed' and stopped monitoring them. Their media files were NOT
+      touched. They are still listed under Settings > Library Paths; switch
+      Monitored back on there if you want them scanned as video libraries.
       """)
     end
   end

@@ -29,6 +29,7 @@ defmodule Mydia.Repo.Migrations.ArchiveAndDropMbaTablesTest do
       id TEXT PRIMARY KEY,
       path TEXT NOT NULL,
       type TEXT NOT NULL,
+      monitored INTEGER NOT NULL DEFAULT 1,
       disabled INTEGER NOT NULL DEFAULT 0
     )
     """)
@@ -119,11 +120,15 @@ defmodule Mydia.Repo.Migrations.ArchiveAndDropMbaTablesTest do
 
     run_migration!(@migration, @version)
 
-    assert %{rows: [["mixed", 1]]} =
-             sql!("SELECT type, disabled FROM library_paths WHERE id = 'lp1'")
+    # Unmonitored, not disabled: a disabled path is filtered out of
+    # Mydia.Settings.list_library_paths/1 and never reaches the admin screen,
+    # so disabling it here would leave the operator no way to undo the
+    # conversion. Monitored is an editable toggle on that screen.
+    assert %{rows: [["mixed", 0, 0]]} =
+             sql!("SELECT type, monitored, disabled FROM library_paths WHERE id = 'lp1'")
 
-    assert %{rows: [["movies", 0]]} =
-             sql!("SELECT type, disabled FROM library_paths WHERE id = 'lp2'")
+    assert %{rows: [["movies", 1, 0]]} =
+             sql!("SELECT type, monitored, disabled FROM library_paths WHERE id = 'lp2'")
 
     # The point of the whole exercise: the cascade never fired.
     assert %{rows: [["mf1"], ["mf2"]]} = sql!("SELECT id FROM media_files ORDER BY id")
