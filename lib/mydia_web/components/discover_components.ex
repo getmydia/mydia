@@ -33,7 +33,11 @@ defmodule MydiaWeb.DiscoverComponents do
   attr :adding_item_id, :string, default: nil
   attr :requesting_item_id, :string, default: nil
   attr :libraries, :list, default: []
-  attr :on_select, :string, default: "show_details"
+  # :any rather than :string because nil is a meaningful value here: it renders
+  # an inert poster, which is what a LiveView with no select handler needs.
+  # Typing this :string makes `on_select={nil}` a compile error under
+  # --warnings-as-errors.
+  attr :on_select, :any, default: "show_details"
   attr :navigate, :string, default: nil
 
   def trending_card(assigns) do
@@ -121,7 +125,9 @@ defmodule MydiaWeb.DiscoverComponents do
   attr :libraries, :list, default: []
   attr :id, :string, default: "recommendations-rail"
   attr :title, :string, default: "More like this"
-  attr :on_select, :string, default: "show_details"
+  # :any, not :string — see the note on trending_card/1. The media detail page
+  # passes nil here because it has no show_details handler.
+  attr :on_select, :any, default: "show_details"
 
   def recommendations_rail(assigns) do
     ~H"""
