@@ -33,6 +33,8 @@ defmodule MydiaWeb.DiscoverComponents do
   attr :adding_item_id, :string, default: nil
   attr :requesting_item_id, :string, default: nil
   attr :libraries, :list, default: []
+  attr :on_select, :string, default: "show_details"
+  attr :navigate, :string, default: nil
 
   def trending_card(assigns) do
     ~H"""
@@ -58,27 +60,27 @@ defmodule MydiaWeb.DiscoverComponents do
           <% end %>
         </div>
       <% end %>
-      <figure
-        class="aspect-[2/3] bg-base-300 cursor-pointer"
-        phx-click="show_details"
-        phx-value-id={@item.provider_id}
-        phx-value-type={@media_type}
-      >
-        <%= if @item.poster_path do %>
-          <img
-            src={ImageUrl.poster_url(@item.poster_path)}
-            alt={@item.title}
-            class="w-full h-full object-cover"
-          />
-        <% else %>
-          <div class="flex items-center justify-center w-full h-full">
-            <.icon
-              name={if(@media_type == :movie, do: "hero-film", else: "hero-tv")}
-              class="w-16 h-16 text-base-content/20"
-            />
-          </div>
-        <% end %>
-      </figure>
+      <%= cond do %>
+        <% @navigate -> %>
+          <.link navigate={@navigate} class="block">
+            <figure class="aspect-[2/3] bg-base-300 cursor-pointer">
+              <.card_poster item={@item} media_type={@media_type} />
+            </figure>
+          </.link>
+        <% @on_select -> %>
+          <figure
+            class="aspect-[2/3] bg-base-300 cursor-pointer"
+            phx-click={@on_select}
+            phx-value-id={@item.provider_id}
+            phx-value-type={@media_type}
+          >
+            <.card_poster item={@item} media_type={@media_type} />
+          </figure>
+        <% true -> %>
+          <figure class="aspect-[2/3] bg-base-300">
+            <.card_poster item={@item} media_type={@media_type} />
+          </figure>
+      <% end %>
       <div class="card-body p-3">
         <h3 class="font-semibold text-sm line-clamp-2" title={@item.title}>
           {@item.title}
@@ -94,6 +96,51 @@ defmodule MydiaWeb.DiscoverComponents do
           requesting_item_id={@requesting_item_id}
           libraries={@libraries}
         />
+      </div>
+    </div>
+    """
+  end
+
+  @doc """
+  Renders a horizontal strip of recommended titles.
+
+  Reuses `trending_card/1` so an owned title carries the same badge and an unowned
+  one the same add-or-request action as it would on the Discover grid. The strip
+  renders nothing at all when `items` is empty, which is the designed behaviour for
+  a title TMDB has no recommendations for.
+
+  An item may carry a `:navigate` key. When it does, that card's poster becomes a
+  link instead of a click target, which is how an owned title on the media detail
+  page reaches its own page from a LiveView that has no `show_details` handler.
+  """
+  attr :items, :list, required: true
+  attr :media_type, :atom, required: true
+  attr :current_user, :map, required: true
+  attr :adding_item_id, :string, default: nil
+  attr :requesting_item_id, :string, default: nil
+  attr :libraries, :list, default: []
+  attr :id, :string, default: "recommendations-rail"
+  attr :title, :string, default: "More like this"
+  attr :on_select, :string, default: "show_details"
+
+  def recommendations_rail(assigns) do
+    ~H"""
+    <div :if={@items != []} id={@id} class="mb-6 md:mb-8">
+      <h2 class="text-lg md:text-xl font-semibold mb-3">{@title}</h2>
+
+      <div class="flex gap-3 overflow-x-auto snap-x scroll-smooth pb-2">
+        <div :for={item <- @items} class="snap-start flex-shrink-0 w-36">
+          <.trending_card
+            item={item}
+            media_type={@media_type}
+            current_user={@current_user}
+            adding_item_id={@adding_item_id}
+            requesting_item_id={@requesting_item_id}
+            libraries={@libraries}
+            on_select={@on_select}
+            navigate={Map.get(item, :navigate)}
+          />
+        </div>
       </div>
     </div>
     """
@@ -165,4 +212,26 @@ defmodule MydiaWeb.DiscoverComponents do
 
   defp library_path(:movie, id), do: "/movies/#{id}"
   defp library_path(:tv_show, id), do: "/tv/#{id}"
+
+  attr :item, :map, required: true
+  attr :media_type, :atom, required: true
+
+  defp card_poster(assigns) do
+    ~H"""
+    <%= if @item.poster_path do %>
+      <img
+        src={ImageUrl.poster_url(@item.poster_path)}
+        alt={@item.title}
+        class="w-full h-full object-cover"
+      />
+    <% else %>
+      <div class="flex items-center justify-center w-full h-full">
+        <.icon
+          name={if(@media_type == :movie, do: "hero-film", else: "hero-tv")}
+          class="w-16 h-16 text-base-content/20"
+        />
+      </div>
+    <% end %>
+    """
+  end
 end
