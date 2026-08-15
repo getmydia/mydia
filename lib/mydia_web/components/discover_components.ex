@@ -186,7 +186,9 @@ defmodule MydiaWeb.DiscoverComponents do
   attr :current_user, :map, required: true
   attr :adding_item_id, :string, default: nil
   attr :requesting_item_id, :string, default: nil
-  attr :libraries, :list, default: []
+  # No libraries attr on purpose. The rail is a horizontal scroll container, so
+  # a library picker dropdown cannot escape it at any placement (#465). Rail
+  # cards add to the default library.
   attr :id, :string, default: "media-rail"
   attr :title, :string, default: "More like this"
   # :any, not :string - see the note on trending_card/1. The media detail page
@@ -223,7 +225,6 @@ defmodule MydiaWeb.DiscoverComponents do
             adding={Map.get(item, :adding)}
             current={Map.get(item, :current, false)}
             requesting_item_id={@requesting_item_id}
-            libraries={@libraries}
             on_select={@on_select}
             navigate={Map.get(item, :navigate)}
             add_event={@add_event}

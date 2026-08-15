@@ -54,6 +54,31 @@ defmodule MydiaWeb.DiscoverComponentsTest do
     |> LazyHTML.attribute("class")
   end
 
+  defp rail(overrides) do
+    item = %{
+      provider_id: "693134",
+      title: "Dune: Part Two",
+      year: 2024,
+      poster_path: "/dune.jpg",
+      in_library: false,
+      monitored: false,
+      id: nil,
+      request_status: nil
+    }
+
+    assigns =
+      Map.merge(
+        %{
+          items: [item],
+          media_type: :movie,
+          current_user: %{role: "admin", id: "admin-1"}
+        },
+        overrides
+      )
+
+    render_component(&DiscoverComponents.media_rail/1, assigns)
+  end
+
   describe "guest request button" do
     test "renders a request_media button rather than a link to the search page" do
       html = card(%{})
@@ -142,6 +167,20 @@ defmodule MydiaWeb.DiscoverComponentsTest do
 
       assert class =~ "overflow-hidden"
       assert class =~ "rounded-t-box"
+    end
+  end
+
+  # The rail is a horizontal scroll container (overflow-x-auto, which makes
+  # overflow-y compute to auto as well) and is one card tall, so a dropdown
+  # cannot escape it at any placement. The picker is withdrawn there rather
+  # than shipped broken: the plain add button still works against the default
+  # library. See #465.
+  describe "media_rail picker suppression" do
+    test "a rail renders the add button but never a library picker" do
+      html = rail(%{})
+
+      assert html =~ "Add to Library"
+      refute html =~ "library-picker-caret"
     end
   end
 end
