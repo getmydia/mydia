@@ -94,13 +94,52 @@ defmodule Mydia.Media.Add do
   # The unique indexes on tmdb_id and tvdb_id turn "you already have this" into
   # a changeset error the user reads as a bug. Look first, so the caller can
   # say something true instead.
+  #
+  # Two passes, because the attrs are not the whole story. A cross-referenced
+  # id is dropped rather than carried: `ExternalIds.put_free_ids/3` leaves
+  # `attrs[:tvdb_id]` nil precisely when another row already owns it, and the
+  # title-search fallback in `lookup_and_add_tvdb_id/2` can then fill the empty
+  # slot with a different, free id. Either way the attrs no longer mention the
+  # taken id, while `metadata.external_ids` still does -- and the row holding
+  # it is the collision. Without the second pass an add of a show already in
+  # the library inserts a duplicate instead of reporting the incumbent.
+  #
+  # `:imdb` is deliberately absent from both passes. `imdb_id` carries no
+  # unique index, so an imdb match can never be the constraint error this
+  # pre-flight exists to pre-empt, and `find_by_external_ids/2`'s imdb leg
+  # over-matches: TVDB's `remoteIds` hands split and spin-off series a shared
+  # imdb id, which would turn a legitimate add into a false "already in your
+  # library" and let `backfill_ids/2` stamp one title's provider id onto the
+  # other. Every row Add or the scan path creates carries a tmdb or tvdb id, so
+  # declining the imdb leg here costs no coverage.
   defp existing_item(attrs) do
-    ids = %{tmdb: attrs[:tmdb_id], tvdb: attrs[:tvdb_id], imdb: attrs[:imdb_id]}
+    xrefs = metadata_external_ids(attrs)
 
+    Enum.find_value(
+      [
+        %{tmdb: attrs[:tmdb_id], tvdb: attrs[:tvdb_id]},
+        %{tmdb: xrefs[:tmdb], tvdb: xrefs[:tvdb]}
+      ],
+      &find_by_ids(&1, attrs[:type])
+    )
+  end
+
+  defp find_by_ids(ids, type) do
     if Enum.all?(Map.values(ids), &is_nil/1) do
       nil
     else
-      Media.find_by_external_ids(ids, type: attrs[:type])
+      Media.find_by_external_ids(ids, type: type)
+    end
+  end
+
+  # `attrs[:metadata]` is a `%MediaMetadata{}` when it came from
+  # `build_media_item_attrs/3`, and absent entirely when a caller hand-built
+  # the attrs. `external_ids` itself is nil on metadata written before
+  # cross-provider ids were stored.
+  defp metadata_external_ids(attrs) do
+    case attrs[:metadata] do
+      %{external_ids: ids} when is_map(ids) -> ids
+      _ -> %{}
     end
   end
 
