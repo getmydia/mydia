@@ -247,26 +247,6 @@ void main() {
     });
   });
 
-  group('subtitles', () {
-    test('are supported on the direct route', () async {
-      final route = await directResolver()
-          .resolve(fileId: 'f', protocol: CastProtocolKind.chromecast);
-
-      expect(route!.subtitlesSupported, isTrue);
-    });
-
-    test('are not supported on the DLNA bridge route', () async {
-      // The DLNA bridge streams the file itself with no streaming session to
-      // address subtitles by. The Chromecast bridge route, covered in the
-      // 'subtitle tracks on the route' group below, gained support once it
-      // had an HLS session to hang session-relative subtitle URLs off.
-      final route = await p2pResolver()
-          .resolve(fileId: 'f', protocol: CastProtocolKind.dlna);
-
-      expect(route!.subtitlesSupported, isFalse);
-    });
-  });
-
   group('subtitle tracks on the route', () {
     const tracks = [
       CastSubtitleTrack(
@@ -292,8 +272,7 @@ void main() {
         subtitles: tracks,
       );
 
-      expect(route!.subtitlesSupported, isTrue);
-      expect(route.subtitles, hasLength(2));
+      expect(route!.subtitles, hasLength(2));
       expect(
         route.subtitles.first.url,
         'https://mydia.test/api/v1/hls/${route.hlsSessionId}/subs_3.vtt?token=tok123',
@@ -312,7 +291,7 @@ void main() {
 
       expect(route!.kind, CastRouteKind.localBridge);
       // The whole point: the bridge could not serve subtitles at all before.
-      expect(route.subtitlesSupported, isTrue);
+      expect(route.subtitles, hasLength(2));
       expect(
         route.subtitles.last.url,
         'http://192.168.1.20:5000/g/abcd/hls/${route.hlsSessionId}'
@@ -327,8 +306,7 @@ void main() {
         subtitles: tracks,
       );
 
-      expect(route!.subtitlesSupported, isFalse);
-      expect(route.subtitles, isEmpty);
+      expect(route!.subtitles, isEmpty);
     });
 
     test('a direct DLNA route keeps the media-file subtitle URLs', () async {
@@ -338,7 +316,7 @@ void main() {
         subtitles: tracks,
       );
 
-      expect(route!.subtitlesSupported, isTrue);
+      expect(route!.subtitles, hasLength(2));
       expect(
         route.subtitles.first.url,
         'https://mydia.test/api/player/v1/subtitles/file/file-1/3?format=vtt&token=tok123',

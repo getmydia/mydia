@@ -1782,6 +1782,11 @@ void main() {
       expect(backend.subtitleSelections, [null]);
       expect(manager.currentSession?.selectedSubtitle, isNull,
           reason: 'the UI and the receiver must agree that nothing is on');
+
+      // The persisted record must not carry 'not-offered' forward either:
+      // it never resolved to a real track, so a cold restore must not claim
+      // it did.
+      expect((await store.load())?.selectedSubtitleTrackId, isNull);
     });
 
     test(

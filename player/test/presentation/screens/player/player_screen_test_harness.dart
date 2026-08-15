@@ -342,7 +342,9 @@ Map<String, dynamic> mediaFileWithSubtitle({
   String trackId = '3',
   String language = 'eng',
   String title = 'English',
-  String url = '/api/player/v1/subtitles/file/file-1/3?format=vtt',
+  // Nullable so a test can reproduce a just-downloaded sidecar, which
+  // `SubtitleTrack.fromDownload` leaves with no url of its own.
+  String? url = '/api/player/v1/subtitles/file/file-1/3?format=vtt',
   bool deliverable = true,
 }) {
   return {

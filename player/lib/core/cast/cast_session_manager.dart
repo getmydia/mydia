@@ -736,7 +736,24 @@ class CastSessionManager {
       await _backend.selectSubtitle(null);
     }
 
-    _lastRequest = request;
+    // What to carry forward as "the chosen id". When tracks were actually
+    // offered and the requested one matched none of them, the id is bogus —
+    // `_selectedSubtitle` is null and the receiver was just told subtitles
+    // are off above, so persisting the unmatched id would leave the store
+    // claiming a selection that never took effect. But an empty `subtitles`
+    // list does *not* mean the same thing: `restoreSession`'s bridge reload
+    // and `reconnectStoredSession` rebuild a request with no track list at
+    // all (a `PersistedCastSession` never carries one), and that structural
+    // gap must not be read as "the id didn't match" and scrub a real,
+    // previously-resolved choice.
+    final resolvedSubtitleId = subtitles.isEmpty
+        ? request.selectedSubtitleTrackId
+        : _selectedSubtitle?.trackId;
+
+    _lastRequest = request.copyWith(
+      selectedSubtitleTrackId: resolvedSubtitleId,
+      clearSelectedSubtitle: resolvedSubtitleId == null,
+    );
 
     _persisted = PersistedCastSession(
       device: device,
@@ -749,7 +766,7 @@ class CastSessionManager {
       savedAt: _clock(),
       mediaUrl: route.mediaUrl,
       duration: request.duration ?? Duration.zero,
-      selectedSubtitleTrackId: request.selectedSubtitleTrackId,
+      selectedSubtitleTrackId: resolvedSubtitleId,
     );
     await _store.save(_persisted!);
 

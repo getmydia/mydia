@@ -614,14 +614,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// survive that rewrite, but the URL is what the progressive DLNA route
   /// keeps using, so it is carried rather than blanked.
   ///
-  /// `deliverable` is the real filter. `url` is a synthesized path and is
-  /// never null, so the `url != null` test this replaces filtered nothing:
-  /// image tracks (PGS, VobSub) reached the receiver as URLs that 415.
+  /// `deliverable` is the real filter: image tracks (PGS, VobSub) must never
+  /// be offered, since a receiver fetching one gets a 415. `url` is allowed
+  /// to be null here — `SubtitleTrack.fromDownload` deliberately leaves it
+  /// null for a track that was just downloaded but never had a media-file URL
+  /// assigned — and is passed through as an empty string. That is only a
+  /// progressive-route concern: `CastRouteResolver._progressiveSubtitles`
+  /// drops any track it can't build a URL for, while the session-addressed
+  /// (HLS) routes ignore this field entirely and rewrite it from `trackId`.
   List<CastSubtitleTrack> _castSubtitleTracks() => _subtitleTracks
-      .where((track) => track.deliverable && track.url != null)
+      .where((track) => track.deliverable)
       .map((track) => CastSubtitleTrack(
             trackId: track.id,
-            url: track.url!,
+            url: track.url ?? '',
             label: track.displayName,
             language: track.language,
           ))

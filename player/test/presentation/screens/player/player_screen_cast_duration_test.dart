@@ -88,6 +88,51 @@ void main() {
     );
   });
 
+  testWidgets(
+      'a subtitle with no url (a just-downloaded sidecar) still reaches the '
+      'cast request', (tester) async {
+    // `SubtitleTrack.fromDownload` deliberately leaves `url` null -- the
+    // body is fetched lazily by trackId, not by URL. `_castSubtitleTracks()`
+    // must not use a blanket `url != null` filter to decide what's castable:
+    // the HLS/session routes never read this field at all, only the
+    // progressive (DLNA) route does, so dropping the track here would wrongly
+    // exclude it from a Chromecast too.
+    final castManager = CapturingCastSessionManager();
+    final proxyService = TrackingLocalProxyService();
+
+    final link = StubLink.responses([
+      movieDetailResponse(
+        files: [mediaFileWithSubtitle(url: null, deliverable: true)],
+      ),
+      movieSegmentsResponse(),
+      streamingCandidatesResponse(duration: 5400),
+    ]);
+
+    final container = buildPlayerScreenContainer(
+      link: link,
+      connectionState: conn.ConnectionState.direct(),
+      castManager: castManager,
+      proxyService: proxyService,
+    );
+    addTearDown(container.dispose);
+
+    container.read(castTargetProvider.notifier).set(testDevice);
+
+    await pumpPlayerScreen(tester, container);
+    await pumpUntil(tester, () => castManager.capturedRequest != null);
+
+    final captured = castManager.capturedRequest;
+    expect(captured, isNotNull);
+    expect(
+      captured!.subtitles,
+      hasLength(1),
+      reason: 'a deliverable track with no media-file url must still be '
+          'offered to the receiver; only the deliverable filter should '
+          'exclude tracks.',
+    );
+    expect(captured.subtitles.single.trackId, '3');
+  });
+
   testWidgets('a successful cast leaves the chosen device set', (tester) async {
     // Clearing it here would drop the cast icon to white while the cast is
     // running — the reported bug, inverted. Opting out is the bar's ✕ or

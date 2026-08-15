@@ -18,14 +18,6 @@ class CastRoute {
   final CastRouteKind kind;
   final CastMediaKind mediaKind;
 
-  /// Whether sidecar subtitles can be served on this route.
-  ///
-  /// False only on the bridged DLNA route: it streams the file directly with
-  /// no streaming session to address subtitles by. Every other route — direct
-  /// or bridged Chromecast (both address subtitles by HLS session id), and
-  /// direct DLNA (which keeps the media-file subtitle URLs) — has one.
-  final bool subtitlesSupported;
-
   /// Server-side HLS session backing this route, when it needed one.
   ///
   /// Every Chromecast route does, bridged or direct: both address HLS by
@@ -54,13 +46,19 @@ class CastRoute {
   /// entirely on the route: an HLS route addresses subtitles by streaming
   /// session, the progressive one by media file. `CastSessionManager` reads
   /// this and never has to know which kind it got.
+  ///
+  /// Empty either because none were offered, or because this route cannot
+  /// serve subtitles at all — the bridged DLNA route, which streams the file
+  /// directly with no streaming session to address them by. There is no
+  /// separate "supported" flag: the resolver enforces that invariant by
+  /// omitting tracks here rather than by a flag a caller has to remember to
+  /// check.
   final List<CastSubtitleTrack> subtitles;
 
   const CastRoute({
     required this.mediaUrl,
     required this.kind,
     required this.mediaKind,
-    required this.subtitlesSupported,
     this.hlsSessionId,
     this.mediaToken,
     this.startOffset = Duration.zero,
@@ -155,7 +153,6 @@ class CastRouteResolver {
           mediaUrl: '$base/direct/$fileId/stream',
           kind: CastRouteKind.localBridge,
           mediaKind: mediaKind,
-          subtitlesSupported: false,
         );
       }
 
@@ -169,7 +166,6 @@ class CastRouteResolver {
         mediaUrl: '$base/hls/${session.sessionId}/index.m3u8',
         kind: CastRouteKind.localBridge,
         mediaKind: mediaKind,
-        subtitlesSupported: true,
         hlsSessionId: session.sessionId,
         startOffset: session.startOffset,
         subtitles: _sessionSubtitles(
@@ -204,10 +200,17 @@ class CastRouteResolver {
             '$server/api/v1/hls/${session.sessionId}/index.m3u8?token=$token',
         kind: CastRouteKind.directServer,
         mediaKind: mediaKind,
-        subtitlesSupported: true,
         mediaToken: token,
         hlsSessionId: session.sessionId,
         startOffset: session.startOffset,
+        // Session-relative subtitle URLs (`/api/v1/hls/<session>/subs_<id>.vtt`)
+        // require a server new enough to serve that path. Against an older
+        // server this 404s and the receiver shows no subtitles at all — there
+        // is no fallback and no version check here; that tradeoff was made
+        // deliberately in favor of one uniform URL shape. It replaces the
+        // previous media-file URL shape
+        // (`/api/player/v1/subtitles/file/:fileId/:trackId?format=vtt`),
+        // which an older server does still serve.
         subtitles: _sessionSubtitles(
           subtitles,
           base: '$server/api/v1/hls/${session.sessionId}',
@@ -231,7 +234,6 @@ class CastRouteResolver {
       ),
       kind: CastRouteKind.directServer,
       mediaKind: mediaKind,
-      subtitlesSupported: true,
       mediaToken: token,
       subtitles: _progressiveSubtitles(subtitles, server: server, token: token),
     );
@@ -256,12 +258,19 @@ class CastRouteResolver {
 
   /// Rewrites the media-file subtitle URLs the progressive (DLNA) route keeps
   /// using, since it has no streaming session to address subtitles by.
+  ///
+  /// This is the one route that actually reads `track.url` rather than
+  /// rewriting it from `trackId`, so it is also the one place the URL
+  /// requirement applies: a track with no media-file URL (e.g. one just
+  /// downloaded, never assigned one) can't be served progressively and is
+  /// dropped here rather than reaching the receiver as a broken link.
   static List<CastSubtitleTrack> _progressiveSubtitles(
     List<CastSubtitleTrack> tracks, {
     required String server,
     required String? token,
   }) =>
       tracks
+          .where((track) => track.url.isNotEmpty)
           .map((track) => track.copyWith(
                 url: _withToken(_absoluteUrl(server, track.url), token),
               ))
