@@ -18,6 +18,14 @@ defmodule Mydia.Repo.Migrations.ArchiveAndDropMbaTables do
   alias Mydia.Release.TableArchive
   alias Mydia.Repo.Migrations.Helpers
 
+  # Declared volumes in the official image. /config is reached through the
+  # SQLite database path rather than named here, because a PostgreSQL
+  # deployment has nothing in it.
+  @volume_data_dir "/data"
+
+  # Inside the release, replaced by the next image pull.
+  @release_data_dir "priv/data"
+
   # Children before parents. On SQLite a DROP fires the foreign key actions of
   # every table still referencing the dropped one, so a parent must never be
   # dropped while one of its children is still around.
@@ -59,7 +67,7 @@ defmodule Mydia.Repo.Migrations.ArchiveAndDropMbaTables do
   end
 
   defp archive!(tables) do
-    dir = Path.join(archive_root(), "mba-#{timestamp()}")
+    dir = archive_dir()
 
     case TableArchive.archive_tables(repo(), tables, dir) do
       {:ok, counts} ->
@@ -132,21 +140,61 @@ defmodule Mydia.Repo.Migrations.ArchiveAndDropMbaTables do
     end
   end
 
-  # An archive is only worth writing if the operator can still find it after the
-  # upgrade that wrote it. On SQLite the database file sits on a durable,
-  # writable volume by construction (/config in the official image), so the
-  # archive goes beside it. PostgreSQL deployments have no such local anchor and
-  # fall back to the release's own data directory. Either way the migration logs
-  # the full path it used.
-  defp archive_root do
-    Path.join(data_dir(), "archives")
+  # An archive is only worth writing where the operator can still find it after
+  # the upgrade that wrote it, and only worth attempting where it can actually
+  # be created. Candidates are tried in order and the first one that accepts the
+  # directory wins.
+  #
+  # Resolution itself never raises. If no candidate accepts it, the last one is
+  # returned anyway so the failure surfaces through TableArchive as a refusal to
+  # drop, rather than as an exception from this function.
+  defp archive_dir do
+    leaf = Path.join("archives", "mba-#{timestamp()}")
+    candidates = data_dir_candidates()
+
+    created =
+      Enum.find_value(candidates, fn root ->
+        dir = Path.join(root, leaf)
+        if File.mkdir_p(dir) == :ok, do: dir
+      end)
+
+    created || Path.join(List.last(candidates), leaf)
   end
 
-  defp data_dir do
-    if Helpers.sqlite?() do
-      sqlite_database_dir() || "priv/data"
-    else
-      "priv/data"
+  defp data_dir_candidates do
+    __data_dir_candidates__(if Helpers.sqlite?(), do: sqlite_database_dir())
+  end
+
+  # Public so the ordering can be asserted directly, including the PostgreSQL
+  # case (a nil database directory), which cannot be reached through a migration
+  # test: the throwaway repo in Mydia.MigrationCase is always SQLite.
+  @doc false
+  def __data_dir_candidates__(sqlite_database_dir) do
+    [
+      # 1. What the operator configured. Explicit intent beats any location this
+      #    code could infer, on either adapter.
+      configured_data_dir(),
+      # 2. On SQLite, the directory holding the database file: durable by
+      #    construction (/config in the official image, a declared volume) and
+      #    provably writable, since the migration is writing to the database
+      #    sitting in it. nil on PostgreSQL, which has no local anchor.
+      sqlite_database_dir,
+      # 3. The image's other declared volume, and only when it already exists,
+      #    so a migration running as root on a bare-metal host never creates a
+      #    stray /data at the filesystem root.
+      if(File.dir?(@volume_data_dir), do: @volume_data_dir),
+      # 4. The release's own data directory. An image pull replaces it, so an
+      #    archive here does not survive the next upgrade: last resort, never
+      #    the default.
+      @release_data_dir
+    ]
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp configured_data_dir do
+    case System.get_env("MYDIA_DATA_DIR") do
+      dir when is_binary(dir) and dir != "" -> dir
+      _ -> nil
     end
   end
 

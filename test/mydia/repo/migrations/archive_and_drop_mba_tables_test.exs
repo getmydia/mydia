@@ -84,9 +84,6 @@ defmodule Mydia.Repo.Migrations.ArchiveAndDropMbaTablesTest do
     build_library_schema()
     build_music_schema()
 
-    # Neither name is exactly 16 bytes long: Mydia.Release.TableArchive reads
-    # any 16-byte binary as a PostgreSQL binary_id and rewrites it as a UUID
-    # string, which mangles text of that length coming out of SQLite.
     sql!("INSERT INTO artists (id, name) VALUES ('a1', 'Portishead'), ('a2', 'Autechre')")
     sql!("INSERT INTO albums (id, title, artist_id) VALUES ('b1', 'Dummy', 'a1')")
 
@@ -139,5 +136,75 @@ defmodule Mydia.Repo.Migrations.ArchiveAndDropMbaTablesTest do
     run_migration!(@migration, @version)
 
     refute File.exists?(Path.join(tmp_dir, "archives"))
+  end
+
+  # Nothing in the running application reads MYDIA_DATA_DIR: config/runtime.exs
+  # consults it once at boot, and these tests are not async. Restored either way
+  # so the rest of the suite sees the environment it started with.
+  defp stub_data_dir_env(value) do
+    previous = System.get_env("MYDIA_DATA_DIR")
+
+    case value do
+      nil -> System.delete_env("MYDIA_DATA_DIR")
+      value -> System.put_env("MYDIA_DATA_DIR", value)
+    end
+
+    on_exit(fn ->
+      case previous do
+        nil -> System.delete_env("MYDIA_DATA_DIR")
+        previous -> System.put_env("MYDIA_DATA_DIR", previous)
+      end
+    end)
+  end
+
+  # /data only makes the list inside the official image, where it is a declared
+  # volume that already exists.
+  defp volume_candidates do
+    if File.dir?("/data"), do: ["/data", "priv/data"], else: ["priv/data"]
+  end
+
+  describe "archive location" do
+    @tag :tmp_dir
+    test "a configured data directory wins over the database directory", %{tmp_dir: tmp_dir} do
+      configured = Path.join(tmp_dir, "configured")
+      stub_data_dir_env(configured)
+
+      build_library_schema()
+      build_music_schema()
+      sql!("INSERT INTO artists (id, name) VALUES ('a1', 'Portishead')")
+
+      run_migration!(@migration, @version)
+
+      assert [dir] = Path.wildcard(Path.join([configured, "archives", "mba-*"]))
+      assert [%{"id" => "a1", "name" => "Portishead"}] = ndjson(dir, "artists")
+
+      # And nothing was left beside the database file.
+      assert Path.wildcard(Path.join([tmp_dir, "archives", "mba-*"])) == []
+    end
+
+    # A PostgreSQL deployment has no local database file to anchor to, which is
+    # the nil below. It cannot be reached through a migration run here, because
+    # the throwaway repo in Mydia.MigrationCase is always SQLite, so the
+    # ordering is asserted directly instead.
+    @tag :tmp_dir
+    test "PostgreSQL prefers a configured data directory over the release directory" do
+      stub_data_dir_env("/srv/mydia")
+
+      assert @migration.__data_dir_candidates__(nil) == ["/srv/mydia" | volume_candidates()]
+    end
+
+    @tag :tmp_dir
+    test "PostgreSQL falls back to the declared volume before the release directory" do
+      stub_data_dir_env(nil)
+
+      assert @migration.__data_dir_candidates__(nil) == volume_candidates()
+    end
+
+    @tag :tmp_dir
+    test "SQLite keeps the database directory ahead of both volumes" do
+      stub_data_dir_env(nil)
+
+      assert @migration.__data_dir_candidates__("/config") == ["/config" | volume_candidates()]
+    end
   end
 end
