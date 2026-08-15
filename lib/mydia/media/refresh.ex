@@ -47,7 +47,7 @@ defmodule Mydia.Media.Refresh do
       {provider_id, source, item} ->
         with {:ok, metadata} <- fetch(provider_id, media_type, source, config),
              {:ok, updated} <- apply_metadata(item, metadata, source) do
-          post_update(updated, media_type, fetch_episodes)
+          post_update(updated, media_type, fetch_episodes, config)
           {:ok, updated}
         end
     end
@@ -140,8 +140,11 @@ defmodule Mydia.Media.Refresh do
   # Episode refresh is best-effort: every other caller already ignores its
   # result, and a failed episode fetch must not fail an otherwise good metadata
   # refresh. Log it so the failure is still visible.
-  defp post_update(updated, :tv_show, true) do
-    case Media.refresh_episodes_for_tv_show(updated) do
+  # `config` is threaded through rather than re-derived: refresh_episodes_for_tv_show/2
+  # falls back to Metadata.default_relay_config/0, so dropping it here sent the
+  # episode leg of an injected-config refresh at the real relay.
+  defp post_update(updated, :tv_show, true, config) do
+    case Media.refresh_episodes_for_tv_show(updated, config: config) do
       {:ok, _count} ->
         :ok
 
@@ -156,7 +159,7 @@ defmodule Mydia.Media.Refresh do
     :ok
   end
 
-  defp post_update(updated, _media_type, _fetch_episodes) do
+  defp post_update(updated, _media_type, _fetch_episodes, _config) do
     NfoWriter.maybe_write_nfos(updated)
     :ok
   end

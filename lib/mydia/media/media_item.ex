@@ -60,6 +60,13 @@ defmodule Mydia.Media.MediaItem do
 
     field :category, :string
     field :category_override, :boolean, default: false
+    # Owned by the season refresh, which stamps it through
+    # Media.stamp_seasons_refreshed/1; never cast from user input. It was
+    # previously written by passing it to Media.update_media_item/3, which casts
+    # through changeset/2 — the field is absent there, so every write was
+    # silently dropped and the column stayed NULL forever. That left
+    # should_skip_season_refresh?/1, which returns false on a nil timestamp,
+    # unable to throttle anything.
     field :seasons_refreshed_at, :utc_datetime
     # Set programmatically by the upgrade sweep; never cast from user input.
     field :last_upgrade_check_at, :utc_datetime

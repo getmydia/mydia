@@ -1955,7 +1955,19 @@ defmodule Mydia.MediaTest do
           tvdb_id: 67_890
         })
 
-      Bypass.expect_once(bypass, "GET", "/tmdb/tv/shows/12345", fn conn ->
+      # `expect` plus an explicit count, not `expect_once`: the episode leg of
+      # the refresh re-fetches the show to read its season list, so the endpoint
+      # is hit twice. It used to be hit once here only because that leg dropped
+      # the injected config and escaped to the global default relay — the
+      # routing this test exists to pin was never actually covered for the
+      # episode fetch. Counting rather than dropping the assertion keeps a third
+      # fetch from slipping in unnoticed. A wrong-provider fetch still fails,
+      # since no TVDB path is stubbed.
+      show_fetches = :atomics.new(1, signed: false)
+
+      Bypass.expect(bypass, "GET", "/tmdb/tv/shows/12345", fn conn ->
+        :atomics.add(show_fetches, 1, 1)
+
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.resp(
@@ -1973,6 +1985,10 @@ defmodule Mydia.MediaTest do
       end)
 
       assert {:ok, _updated} = Mydia.Media.refresh_metadata(item, config)
+
+      # Both legs fetched the show, and both went to TMDB: the item-level
+      # refresh and the episode refresh that reads the season list.
+      assert :atomics.get(show_fetches, 1) == 2
     end
   end
 
