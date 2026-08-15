@@ -2647,4 +2647,80 @@ defmodule Mydia.Library do
     |> where([c], c.media_file_id == ^media_file_id)
     |> Repo.delete_all()
   end
+
+  ## Import Runs
+
+  alias Mydia.Library.ImportRun
+
+  @doc """
+  Starts an import run for a library path.
+
+  Returns an error changeset when the path already has a run in flight. The
+  guarantee is enforced by a partial unique index, so two tabs pressing Start
+  simultaneously cannot both win.
+  """
+  @spec create_import_run(map()) :: {:ok, ImportRun.t()} | {:error, Ecto.Changeset.t()}
+  def create_import_run(attrs) do
+    attrs
+    |> ImportRun.create_changeset()
+    |> Repo.insert()
+  end
+
+  @doc """
+  Fetches an import run by id, or nil.
+  """
+  @spec get_import_run(binary()) :: ImportRun.t() | nil
+  def get_import_run(id), do: Repo.get(ImportRun, id)
+
+  @doc """
+  Returns the in-flight run for a library path, or nil.
+
+  A `:stopping` run counts as in flight: the coordinator is still draining its
+  current chunk and a second run would race it.
+  """
+  @spec active_import_run(binary()) :: ImportRun.t() | nil
+  def active_import_run(library_path_id) do
+    statuses = ImportRun.active_statuses()
+
+    ImportRun
+    |> where([r], r.library_path_id == ^library_path_id and r.status in ^statuses)
+    |> Repo.one()
+  end
+
+  @doc """
+  Updates progress counters or lifecycle state on a run.
+  """
+  @spec update_import_run(ImportRun.t(), map()) ::
+          {:ok, ImportRun.t()} | {:error, Ecto.Changeset.t()}
+  def update_import_run(%ImportRun{} = run, attrs) do
+    run
+    |> ImportRun.changeset(attrs)
+    |> Repo.update()
+  end
+
+  @doc """
+  Asks a run to stop at the next chunk boundary.
+  """
+  @spec request_import_run_stop(ImportRun.t()) ::
+          {:ok, ImportRun.t()} | {:error, Ecto.Changeset.t()}
+  def request_import_run_stop(%ImportRun{} = run) do
+    update_import_run(run, %{status: :stopping})
+  end
+
+  @doc """
+  Re-reads a run and reports whether a stop has been requested.
+
+  Re-reads rather than inspecting the passed struct because the coordinator
+  holds a stale copy between chunks; the whole point is to observe a write made
+  by another process.
+  """
+  @spec import_run_stopping?(ImportRun.t() | binary()) :: boolean()
+  def import_run_stopping?(%ImportRun{id: id}), do: import_run_stopping?(id)
+
+  def import_run_stopping?(id) when is_binary(id) do
+    case Repo.get(ImportRun, id) do
+      %ImportRun{status: :stopping} -> true
+      _ -> false
+    end
+  end
 end
