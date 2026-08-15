@@ -12,6 +12,8 @@ defmodule Mydia.P2p.Server do
   alias Mydia.RemoteAccess.DirectUrls
   alias Mydia.RemoteAccess.Pairing
   alias Mydia.Streaming.HlsSession
+  alias Mydia.Streaming.SessionFiles
+  alias Mydia.Streaming.SessionSubtitles
   alias MydiaWeb.Schema.Middleware.Logging, as: GraphQLLogging
 
   @doc """
@@ -449,17 +451,27 @@ defmodule Mydia.P2p.Server do
         # Wait for the session to be ready (FFmpeg has created initial files)
         case HlsSession.await_ready(pid, 30_000) do
           :ok ->
-            # Build the file path
-            file_path = Path.join(session_info.temp_dir, req.path)
-
-            # Security check: ensure path is within temp_dir
-            case validate_path(file_path, session_info.temp_dir) do
-              :ok ->
+            case resolve_session_file(session_info, req.path) do
+              {:ok, file_path} ->
                 stream_hls_file(resource, stream_id, file_path, req)
 
-              {:error, reason} ->
-                Logger.warning("HLS path validation failed: #{inspect(reason)}")
+              {:error, :path_traversal} ->
+                Logger.warning("HLS path validation failed for #{req.path}")
                 send_hls_error(resource, stream_id, 403, "Forbidden")
+
+              {:error, :image_subtitle} ->
+                Logger.debug("HLS subtitle unavailable: image-based track #{req.path}")
+
+                send_hls_error(
+                  resource,
+                  stream_id,
+                  415,
+                  "Image-based subtitles cannot be converted to text"
+                )
+
+              {:error, reason} ->
+                Logger.warning("HLS file unavailable: #{inspect(reason)}")
+                send_hls_error(resource, stream_id, 404, "Not found")
             end
 
           {:error, :timeout} ->
@@ -553,15 +565,12 @@ defmodule Mydia.P2p.Server do
     end
   end
 
-  defp validate_path(requested_path, base_dir) do
-    # Expand both paths to handle .. and symlinks
-    expanded_requested = Path.expand(requested_path)
-    expanded_base = Path.expand(base_dir)
-
-    if String.starts_with?(expanded_requested, expanded_base) do
-      :ok
-    else
-      {:error, :path_traversal}
+  # A subtitle is materialized on demand; anything else is an ordinary file
+  # that either exists in the session directory or does not.
+  defp resolve_session_file(info, name) do
+    case SessionSubtitles.ensure(info, name) do
+      :not_subtitle -> SessionFiles.safe_path(info.temp_dir, name)
+      result -> result
     end
   end
 
@@ -586,7 +595,7 @@ defmodule Mydia.P2p.Server do
         file_stat_ms = System.monotonic_time(:millisecond) - t0
 
         # Determine content type
-        content_type = hls_content_type(file_path)
+        content_type = SessionFiles.content_type(file_path)
         basename = Path.basename(file_path)
 
         # Handle range requests
@@ -628,22 +637,6 @@ defmodule Mydia.P2p.Server do
       {:error, reason} ->
         Logger.warning("HLS file error: #{inspect(reason)}")
         send_hls_error(resource, stream_id, 500, "Internal error")
-    end
-  end
-
-  defp hls_content_type(path) do
-    case Path.extname(path) do
-      ".m3u8" -> "application/vnd.apple.mpegurl"
-      ".ts" -> "video/mp2t"
-      ".mp4" -> "video/mp4"
-      ".m4v" -> "video/mp4"
-      ".m4s" -> "video/iso.segment"
-      ".mkv" -> "video/x-matroska"
-      ".avi" -> "video/x-msvideo"
-      ".mov" -> "video/quicktime"
-      ".webm" -> "video/webm"
-      ".vtt" -> "text/vtt"
-      _ -> "application/octet-stream"
     end
   end
 
@@ -769,6 +762,10 @@ defmodule Mydia.P2p.Server do
       ".m3u8" -> "no-cache"
       # Segments can be cached longer
       ".ts" -> "max-age=86400"
+      # A subtitle body is stable for the life of the session but not
+      # immutable across sessions, and it is small enough that revalidation
+      # costs nothing. Matches HlsController's cache_control_for/1.
+      ".vtt" -> "no-cache"
       _ -> nil
     end
   end

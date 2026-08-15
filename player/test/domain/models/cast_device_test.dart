@@ -43,8 +43,10 @@ void main() {
         host: '192.168.1.51',
         port: 1900,
         metadata: {
-          'avTransportControlUrl': 'http://192.168.1.51:1900/AVTransport/control',
-          'renderingControlUrl': 'http://192.168.1.51:1900/RenderingControl/control',
+          'avTransportControlUrl':
+              'http://192.168.1.51:1900/AVTransport/control',
+          'renderingControlUrl':
+              'http://192.168.1.51:1900/RenderingControl/control',
         },
       );
 
@@ -67,7 +69,8 @@ void main() {
         protocol: CastProtocolKind.dlna,
       );
 
-      expect(CastDevice.fromJson(dlna.toJson()).protocol, CastProtocolKind.dlna);
+      expect(
+          CastDevice.fromJson(dlna.toJson()).protocol, CastProtocolKind.dlna);
     });
 
     test('falls back to chromecast for an unknown protocol string', () {
@@ -88,6 +91,46 @@ void main() {
       );
 
       expect(device, equals(other));
+    });
+  });
+
+  group('CastSubtitleTrack.isServableTrackId', () {
+    // Mirrors `Mydia.Streaming.SessionSubtitles`'s `@filename_pattern`: an
+    // ffprobe stream index (digits) or a sidecar UUID, and nothing else.
+    // `CastRouteResolver._sessionSubtitles` builds `subs_<trackId>.vtt` from
+    // whatever id it is handed with no validation of its own, so an id this
+    // predicate wrongly admits reaches the server as a URL that 404s.
+
+    test('accepts a numeric ffprobe stream index', () {
+      expect(CastSubtitleTrack.isServableTrackId('3'), isTrue);
+      expect(CastSubtitleTrack.isServableTrackId('0'), isTrue);
+      expect(CastSubtitleTrack.isServableTrackId('42'), isTrue);
+    });
+
+    test('accepts a sidecar uuid', () {
+      expect(
+        CastSubtitleTrack.isServableTrackId(
+          '0f8fad5b-d9cb-469f-a165-70867728950e',
+        ),
+        isTrue,
+      );
+    });
+
+    test('rejects a media_kit synthetic id', () {
+      // Built in `PlayerScreen._detectTracks` for every embedded track in a
+      // direct-play session (`id: 'mk_${mkTrack.id}'`). The server has never
+      // heard of this id; offering it to a receiver is exactly the
+      // regression this predicate exists to prevent.
+      expect(CastSubtitleTrack.isServableTrackId('mk_0'), isFalse);
+      expect(CastSubtitleTrack.isServableTrackId('mk_12'), isFalse);
+    });
+
+    test('rejects other non-conforming shapes', () {
+      expect(CastSubtitleTrack.isServableTrackId(''), isFalse);
+      expect(CastSubtitleTrack.isServableTrackId('trk-1'), isFalse);
+      expect(CastSubtitleTrack.isServableTrackId('3 '), isFalse);
+      expect(CastSubtitleTrack.isServableTrackId(' 3'), isFalse);
+      expect(CastSubtitleTrack.isServableTrackId('3\n'), isFalse);
     });
   });
 }

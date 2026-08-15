@@ -11,6 +11,28 @@ import 'cast_seek_restart.dart';
 import 'cast_session_store.dart';
 import 'cast_streaming_session_service.dart';
 
+/// The track list to hand to LOAD, with [selectedTrackId] first.
+///
+/// dart_cast activates `subtitles.first` unconditionally at LOAD
+/// (`cast_media_channel.dart:135`) and exposes no way to offer tracks without
+/// activating one. Ordering is therefore the only lever for *which* track
+/// comes up, and an explicit `selectSubtitle(null)` right after LOAD is the
+/// only lever for none. Both are workarounds for that library behaviour, not
+/// design.
+///
+/// An id that matches nothing leaves the order alone rather than guessing.
+List<CastSubtitleTrack> orderSubtitlesForLoad(
+  List<CastSubtitleTrack> tracks,
+  String? selectedTrackId,
+) {
+  if (selectedTrackId == null) return tracks;
+
+  final index = tracks.indexWhere((t) => t.trackId == selectedTrackId);
+  if (index <= 0) return tracks;
+
+  return [tracks[index], ...tracks]..removeAt(index + 1);
+}
+
 /// Everything the UI knows about the item it wants to cast.
 class CastLaunchRequest {
   final String fileId;
@@ -31,6 +53,12 @@ class CastLaunchRequest {
   /// relative to the current position.
   final Duration? duration;
 
+  /// The track the viewer wants showing, by Mydia's own track id.
+  ///
+  /// Null means off, which is what local playback does when streaming, so it
+  /// is what a cast defaults to.
+  final String? selectedSubtitleTrackId;
+
   const CastLaunchRequest({
     required this.fileId,
     required this.mediaId,
@@ -41,15 +69,28 @@ class CastLaunchRequest {
     this.startPosition,
     this.subtitles = const [],
     this.duration,
+    this.selectedSubtitleTrackId,
   });
 
-  /// The same request, resumed from somewhere else.
+  /// The same request, resumed from somewhere else, or with a new subtitle
+  /// choice.
   ///
-  /// Only [startPosition] can be replaced, and passing null keeps the current
-  /// one. Everything else is carried across verbatim, which is the whole
-  /// point: a seek restart rebuilds the cast from this, and anything dropped
-  /// here disappears from the receiver for the rest of the session.
-  CastLaunchRequest copyWith({Duration? startPosition}) => CastLaunchRequest(
+  /// [startPosition] and [selectedSubtitleTrackId] are the only fields that
+  /// can be replaced. Everything else is carried across verbatim, which is
+  /// the whole point: a seek restart rebuilds the cast from this, and
+  /// anything dropped here disappears from the receiver for the rest of the
+  /// session.
+  ///
+  /// [selectedSubtitleTrackId] can't just be `String?`, because passing null
+  /// would then be ambiguous between "leave unchanged" and "turn subtitles
+  /// off" — [clearSelectedSubtitle] is what [selectSubtitle] uses to say the
+  /// latter.
+  CastLaunchRequest copyWith({
+    Duration? startPosition,
+    String? selectedSubtitleTrackId,
+    bool clearSelectedSubtitle = false,
+  }) =>
+      CastLaunchRequest(
         fileId: fileId,
         mediaId: mediaId,
         mediaType: mediaType,
@@ -59,6 +100,9 @@ class CastLaunchRequest {
         startPosition: startPosition ?? this.startPosition,
         subtitles: subtitles,
         duration: duration,
+        selectedSubtitleTrackId: clearSelectedSubtitle
+            ? null
+            : (selectedSubtitleTrackId ?? this.selectedSubtitleTrackId),
       );
 }
 
@@ -101,6 +145,12 @@ class CastSessionManager {
   Duration _lastDuration = Duration.zero;
   DateTime? _lastProgressSync;
   bool _lanEnabled = false;
+
+  /// The tracks offered to the receiver for whatever is currently loaded.
+  List<CastSubtitleTrack> _subtitles = const [];
+
+  /// The track currently showing on the receiver, or null when off.
+  CastSubtitleTrack? _selectedSubtitle;
 
   /// Server-side HLS session backing the media currently on the receiver.
   String? _activeHlsSessionId;
@@ -285,6 +335,27 @@ class CastSessionManager {
     }
   }
 
+  /// Moves whatever is playing to [device], keeping the live request.
+  ///
+  /// [_lastRequest] is the only thing that carries subtitle tracks, artwork
+  /// and the subtitle label; `PersistedCastSession` deliberately carries only
+  /// what a cold restore can act on. Rebuilding a request from the persisted
+  /// record, which is what the cast picker used to do, silently dropped all
+  /// three for the rest of the session.
+  Future<void> retargetTo(CastDevice device) async {
+    final request = _lastRequest;
+    if (request == null) {
+      throw StateError('retargetTo called with no live request');
+    }
+
+    final position = _current?.mediaInfo?.position ?? request.startPosition;
+    await startCast(
+        device: device, request: request.copyWith(startPosition: position));
+  }
+
+  /// Whether [retargetTo] has a request to move.
+  bool get canRetarget => _lastRequest != null;
+
   /// Connect to [device] with no media on it.
   ///
   /// This is what makes the cast icon's "connected" claim true before anything
@@ -413,6 +484,7 @@ class CastSessionManager {
       forceBridge: forceBridge,
       forceTranscode: forceTranscode,
       startPosition: request.startPosition ?? Duration.zero,
+      subtitles: request.subtitles,
     );
 
     if (route == null) {
@@ -616,16 +688,17 @@ class CastSessionManager {
     CastDevice device,
     CastLaunchRequest request,
   ) async {
-    final subtitles = route.subtitlesSupported
-        ? request.subtitles
-            .map((track) => CastSubtitleTrack(
-                  url: resolver.resolveSubtitleUrl(route, track.url) ??
-                      track.url,
-                  label: track.label,
-                  language: track.language,
-                ))
-            .toList()
-        : const <CastSubtitleTrack>[];
+    // The route already rewrote every track to a URL its receiver can fetch,
+    // and dropped them entirely when it cannot serve any. Reading them from
+    // here rather than from `request` is what gives every entry point
+    // subtitles: they all resolve a route, and only one of them ever passed
+    // tracks of its own.
+    //
+    // Reordered with the viewer's choice first: see `orderSubtitlesForLoad`'s
+    // dartdoc for why this — and the disable call below — are workarounds for
+    // a dart_cast limitation, not design.
+    final subtitles =
+        orderSubtitlesForLoad(route.subtitles, request.selectedSubtitleTrackId);
 
     _useTimeline(StreamTimeline(
       startOffset: route.startOffset,
@@ -646,7 +719,41 @@ class CastSessionManager {
       subtitles: subtitles,
     ));
 
-    _lastRequest = request;
+    _subtitles = subtitles;
+    _selectedSubtitle = subtitles
+        .where((t) => t.trackId == request.selectedSubtitleTrackId)
+        .firstOrNull;
+
+    // dart_cast activated subtitles.first at LOAD. Nothing *resolved* to a
+    // choice — either nothing was requested, or the requested id doesn't
+    // match any track actually offered (e.g. it named a track this route
+    // dropped for being undeliverable) — so turn them back off. Checking
+    // `_selectedSubtitle` rather than `request.selectedSubtitleTrackId`
+    // directly is what covers the mismatch case: leaving dart_cast's forced
+    // first track active while the UI (`CastSession.selectedSubtitle`) says
+    // off would show the viewer a subtitle they were told is disabled.
+    if (subtitles.isNotEmpty && _selectedSubtitle == null) {
+      await _backend.selectSubtitle(null);
+    }
+
+    // What to carry forward as "the chosen id". When tracks were actually
+    // offered and the requested one matched none of them, the id is bogus —
+    // `_selectedSubtitle` is null and the receiver was just told subtitles
+    // are off above, so persisting the unmatched id would leave the store
+    // claiming a selection that never took effect. But an empty `subtitles`
+    // list does *not* mean the same thing: `restoreSession`'s bridge reload
+    // and `reconnectStoredSession` rebuild a request with no track list at
+    // all (a `PersistedCastSession` never carries one), and that structural
+    // gap must not be read as "the id didn't match" and scrub a real,
+    // previously-resolved choice.
+    final resolvedSubtitleId = subtitles.isEmpty
+        ? request.selectedSubtitleTrackId
+        : _selectedSubtitle?.trackId;
+
+    _lastRequest = request.copyWith(
+      selectedSubtitleTrackId: resolvedSubtitleId,
+      clearSelectedSubtitle: resolvedSubtitleId == null,
+    );
 
     _persisted = PersistedCastSession(
       device: device,
@@ -659,6 +766,7 @@ class CastSessionManager {
       savedAt: _clock(),
       mediaUrl: route.mediaUrl,
       duration: request.duration ?? Duration.zero,
+      selectedSubtitleTrackId: resolvedSubtitleId,
     );
     await _store.save(_persisted!);
 
@@ -674,6 +782,8 @@ class CastSessionManager {
         duration: request.duration ?? Duration.zero,
         position: request.startPosition ?? Duration.zero,
       ),
+      subtitles: _subtitles,
+      selectedSubtitle: _selectedSubtitle,
     ));
   }
 
@@ -832,6 +942,58 @@ class CastSessionManager {
   Future<void> play() => _backend.play();
   Future<void> pause() => _backend.pause();
 
+  /// Turns subtitles on, off, or switches track on the live receiver.
+  ///
+  /// [track] must be an instance from the current session's list: dart_cast
+  /// keys its internal Chromecast track ids by URL, and a re-derived URL that
+  /// differs by so much as a token falls back to activating trackId=1 with
+  /// only a log warning.
+  Future<void> selectSubtitle(CastSubtitleTrack? track) async {
+    await _backend.selectSubtitle(track);
+
+    _selectedSubtitle = track;
+    _lastRequest = _lastRequest?.copyWith(
+      selectedSubtitleTrackId: track?.trackId,
+      clearSelectedSubtitle: track == null,
+    );
+
+    // Keeps a cold restore in sync with whatever the viewer picked mid
+    // session — without this, only a seek restart (which rebuilds from
+    // `_lastRequest`, not the store) would remember the choice.
+    final persisted = _persisted;
+    if (persisted != null) {
+      _persisted = persisted.copyWith(
+        selectedSubtitleTrackId: track?.trackId,
+        clearSelectedSubtitle: track == null,
+      );
+      await _store.save(_persisted!);
+    }
+
+    _republishWithSubtitles();
+  }
+
+  /// Re-emits [_current] with [_subtitles]/[_selectedSubtitle] applied.
+  ///
+  /// Goes through `CastSession.copyWith` — including its
+  /// `clearSelectedSubtitle` flag for the "turn off" case a plain
+  /// `selectedSubtitle: null` argument can't express — rather than
+  /// hand-building a new `CastSession`, so every other field on the current
+  /// session (device, mediaInfo, playbackState, connectionState) is carried
+  /// forward automatically. Hand-building here would mean any field added to
+  /// `CastSession` later has to be remembered in two places — the
+  /// constructor and this method — or it silently regresses exactly like the
+  /// bug this pair of fields was added to fix.
+  void _republishWithSubtitles() {
+    final current = _current;
+    if (current == null) return;
+
+    _publish(current.copyWith(
+      subtitles: _subtitles,
+      selectedSubtitle: _selectedSubtitle,
+      clearSelectedSubtitle: _selectedSubtitle == null,
+    ));
+  }
+
   /// Seeks to a real media position, restarting the session when the target
   /// is outside what the receiver can reach.
   ///
@@ -899,6 +1061,13 @@ class CastSessionManager {
         title: stored.title,
         startPosition: stored.position,
         duration: stored.duration,
+        // Carried across for the same reason `restoreSession` carries it:
+        // this always reaches `_loadOnRoute` (unlike `restoreSession`'s
+        // direct-route branch, which adopts a receiver without reloading),
+        // and `_loadOnRoute` re-saves `_persisted` from this request. Leaving
+        // it out would silently overwrite the store's real choice with null
+        // on every stale-session reconnect.
+        selectedSubtitleTrackId: stored.selectedSubtitleTrackId,
       ),
     );
   }
@@ -931,6 +1100,8 @@ class CastSessionManager {
     _lastRequest = null;
     _lastDuration = Duration.zero;
     _lastProgressSync = null;
+    _subtitles = const [];
+    _selectedSubtitle = null;
     _publish(null);
   }
 
@@ -982,6 +1153,7 @@ class CastSessionManager {
       title: stored.title,
       startPosition: stored.position,
       duration: stored.duration,
+      selectedSubtitleTrackId: stored.selectedSubtitleTrackId,
     );
 
     // The bridge branch below reloads through `_loadOnRoute`, which sets this

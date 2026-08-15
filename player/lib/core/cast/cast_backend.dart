@@ -4,19 +4,6 @@ import 'cast_capabilities.dart';
 /// How the receiver should interpret the media URL.
 enum CastMediaKind { hls, progressive }
 
-/// A sidecar subtitle track offered to the receiver.
-class CastSubtitleTrack {
-  final String url;
-  final String label;
-  final String language;
-
-  const CastSubtitleTrack({
-    required this.url,
-    required this.label,
-    required this.language,
-  });
-}
-
 /// Everything a receiver needs to start playing one item.
 class CastMediaRequest {
   final String url;
