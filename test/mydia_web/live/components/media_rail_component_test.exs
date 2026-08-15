@@ -106,9 +106,13 @@ defmodule MydiaWeb.Components.MediaRailComponentTest do
         on_select: nil
       )
 
+    document = LazyHTML.from_fragment(html)
+
     # Poster must not fire show_details; action buttons may still use phx-click.
     refute html =~ ~s(phx-click="show_details")
-    assert html =~ ~s(<figure class="aspect-[2/3] bg-base-300">)
+    assert Enum.count(LazyHTML.query(document, "figure")) == 1
+    assert Enum.empty?(LazyHTML.query(document, "figure[phx-click]"))
+    assert Enum.empty?(LazyHTML.query(document, "a figure"))
   end
 
   describe "action event contract" do

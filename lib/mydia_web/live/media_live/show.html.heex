@@ -205,7 +205,6 @@
             items={@recommendations}
             media_type={if @media_item.type == "tv_show", do: :tv_show, else: :movie}
             current_user={@current_user}
-            libraries={@target_library_candidates}
             adding_item_id={@adding_recommendation_id}
             requesting_item_id={@requesting_recommendation_id}
             can_add={@can_create_media}
