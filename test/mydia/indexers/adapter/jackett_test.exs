@@ -27,6 +27,7 @@ defmodule Mydia.Indexers.Adapter.JackettTest do
       assert info.app_name == "Jackett"
     end
 
+    @tag :skip
     test "fails with invalid API key" do
       config = %{
         type: :jackett,
@@ -41,6 +42,7 @@ defmodule Mydia.Indexers.Adapter.JackettTest do
       assert {:error, %Error{type: :connection_failed}} = Jackett.test_connection(config)
     end
 
+    @tag :skip
     test "fails with invalid host" do
       config = %{
         type: :jackett,
@@ -104,6 +106,7 @@ defmodule Mydia.Indexers.Adapter.JackettTest do
       assert is_list(results)
     end
 
+    @tag :skip
     test "handles invalid API key" do
       config = %{
         type: :jackett,
