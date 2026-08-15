@@ -2600,4 +2600,51 @@ defmodule Mydia.Library do
 
     {:ok, count}
   end
+
+  ## Match Candidates
+
+  alias Mydia.Library.MatchCandidate
+
+  @doc """
+  Creates or replaces the match candidate at a given rank for a media file.
+
+  Upsert rather than insert so a retried match never doubles up: the matching
+  phase is allowed to run again over a file whose previous attempt crashed
+  mid-write.
+  """
+  @spec upsert_match_candidate(map()) :: {:ok, MatchCandidate.t()} | {:error, Ecto.Changeset.t()}
+  def upsert_match_candidate(attrs) do
+    media_file_id = attrs[:media_file_id] || attrs["media_file_id"]
+    rank = attrs[:rank] || attrs["rank"] || 0
+
+    candidate =
+      Repo.get_by(MatchCandidate, media_file_id: media_file_id, rank: rank) || %MatchCandidate{}
+
+    candidate
+    |> MatchCandidate.changeset(attrs)
+    |> Repo.insert_or_update()
+  end
+
+  @doc """
+  Lists the cached match candidates for a media file, best first.
+  """
+  @spec list_match_candidates(binary()) :: [MatchCandidate.t()]
+  def list_match_candidates(media_file_id) do
+    MatchCandidate
+    |> where([c], c.media_file_id == ^media_file_id)
+    |> order_by([c], asc: c.rank)
+    |> Repo.all()
+  end
+
+  @doc """
+  Deletes every cached candidate for a media file.
+
+  Called once a file is linked, so the inbox query stops returning it.
+  """
+  @spec delete_match_candidates(binary()) :: {integer(), nil}
+  def delete_match_candidates(media_file_id) do
+    MatchCandidate
+    |> where([c], c.media_file_id == ^media_file_id)
+    |> Repo.delete_all()
+  end
 end
