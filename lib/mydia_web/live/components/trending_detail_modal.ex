@@ -166,6 +166,13 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
             <% end %>
           </div>
 
+          <%!-- Optional trailing content, e.g. a recommendations rail. Rendered
+               inside the modal box so it scrolls with the body; a rail placed
+               beside the <dialog> would sit behind the backdrop. --%>
+          <div :if={@rail != []} class="px-4 md:px-6 pb-4">
+            {render_slot(@rail)}
+          </div>
+
           <%!-- Footer actions --%>
           <div class="p-4 md:p-6 border-t border-base-300 bg-base-100 flex justify-end gap-2">
             <button class="btn btn-ghost" phx-click="close_details">
@@ -229,7 +236,9 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
      |> assign_new(:open, fn -> false end)
      |> assign_new(:loading, fn -> false end)
      |> assign_new(:metadata, fn -> nil end)
-     |> assign_new(:libraries, fn -> [] end)}
+     |> assign_new(:libraries, fn -> [] end)
+     # Optional slot: the dashboard renders this modal without one.
+     |> assign_new(:rail, fn -> [] end)}
   end
 
   # Helper functions for accessing data from either SearchResult (item) or MediaMetadata

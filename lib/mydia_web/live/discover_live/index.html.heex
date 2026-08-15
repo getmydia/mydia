@@ -199,5 +199,18 @@
     current_user={@current_user}
     open={@selected_item != nil}
     libraries={@libraries}
-  />
+  >
+    <:rail>
+      <.recommendations_rail
+        :if={@selected_item}
+        id="discover-recommendations-rail"
+        items={@selected_recommendations}
+        media_type={@selected_item.media_type}
+        current_user={@current_user}
+        adding_item_id={@adding_item_id}
+        requesting_item_id={@requesting_item_id}
+        libraries={@libraries}
+      />
+    </:rail>
+  </.live_component>
 </Layouts.app>

@@ -33,6 +33,20 @@ defmodule MydiaWeb.DiscoverComponents do
   attr :adding_item_id, :string, default: nil
   attr :requesting_item_id, :string, default: nil
   attr :libraries, :list, default: []
+  # :any rather than :string because nil is a meaningful value here: it renders
+  # an inert poster, which is what a LiveView with no select handler needs.
+  # Typing this :string makes `on_select={nil}` a compile error under
+  # --warnings-as-errors.
+  attr :on_select, :any, default: "show_details"
+  attr :navigate, :string, default: nil
+  # The action buttons are the card's event contract with its host LiveView.
+  # Discover handles "add_to_library"/"request_media", so those stay the
+  # defaults, but a host with different handlers must be able to say so:
+  # emitting an event the host does not handle raises FunctionClauseError and
+  # kills the LiveView process on the very first click.
+  attr :add_event, :string, default: "add_to_library"
+  attr :request_event, :string, default: "request_media"
+  attr :can_add, :boolean, default: true
 
   def trending_card(assigns) do
     ~H"""
@@ -58,27 +72,27 @@ defmodule MydiaWeb.DiscoverComponents do
           <% end %>
         </div>
       <% end %>
-      <figure
-        class="aspect-[2/3] bg-base-300 cursor-pointer"
-        phx-click="show_details"
-        phx-value-id={@item.provider_id}
-        phx-value-type={@media_type}
-      >
-        <%= if @item.poster_path do %>
-          <img
-            src={ImageUrl.poster_url(@item.poster_path)}
-            alt={@item.title}
-            class="w-full h-full object-cover"
-          />
-        <% else %>
-          <div class="flex items-center justify-center w-full h-full">
-            <.icon
-              name={if(@media_type == :movie, do: "hero-film", else: "hero-tv")}
-              class="w-16 h-16 text-base-content/20"
-            />
-          </div>
-        <% end %>
-      </figure>
+      <%= cond do %>
+        <% @navigate -> %>
+          <.link navigate={@navigate} class="block">
+            <figure class="aspect-[2/3] bg-base-300 cursor-pointer">
+              <.card_poster item={@item} media_type={@media_type} />
+            </figure>
+          </.link>
+        <% @on_select -> %>
+          <figure
+            class="aspect-[2/3] bg-base-300 cursor-pointer"
+            phx-click={@on_select}
+            phx-value-id={@item.provider_id}
+            phx-value-type={@media_type}
+          >
+            <.card_poster item={@item} media_type={@media_type} />
+          </figure>
+        <% true -> %>
+          <figure class="aspect-[2/3] bg-base-300">
+            <.card_poster item={@item} media_type={@media_type} />
+          </figure>
+      <% end %>
       <div class="card-body p-3">
         <h3 class="font-semibold text-sm line-clamp-2" title={@item.title}>
           {@item.title}
@@ -93,7 +107,66 @@ defmodule MydiaWeb.DiscoverComponents do
           adding_item_id={@adding_item_id}
           requesting_item_id={@requesting_item_id}
           libraries={@libraries}
+          add_event={@add_event}
+          request_event={@request_event}
+          can_add={@can_add}
         />
+      </div>
+    </div>
+    """
+  end
+
+  @doc """
+  Renders a horizontal strip of recommended titles.
+
+  Reuses `trending_card/1` so an owned title carries the same badge and an unowned
+  one the same add-or-request action as it would on the Discover grid. The strip
+  renders nothing at all when `items` is empty, which is the designed behaviour for
+  a title TMDB has no recommendations for.
+
+  An item may carry a `:navigate` key. When it does, that card's poster becomes a
+  link instead of a click target, which is how an owned title on the media detail
+  page reaches its own page from a LiveView that has no `show_details` handler.
+  """
+  attr :items, :list, required: true
+  attr :media_type, :atom, required: true
+  attr :current_user, :map, required: true
+  attr :adding_item_id, :string, default: nil
+  attr :requesting_item_id, :string, default: nil
+  attr :libraries, :list, default: []
+  attr :id, :string, default: "recommendations-rail"
+  attr :title, :string, default: "More like this"
+  # :any, not :string — see the note on trending_card/1. The media detail page
+  # passes nil here because it has no show_details handler.
+  attr :on_select, :any, default: "show_details"
+  # Forwarded to trending_card/1. A host LiveView that does not handle
+  # "add_to_library"/"request_media" must override these or the first click on
+  # an unowned card crashes it.
+  attr :add_event, :string, default: "add_to_library"
+  attr :request_event, :string, default: "request_media"
+  attr :can_add, :boolean, default: true
+
+  def recommendations_rail(assigns) do
+    ~H"""
+    <div :if={@items != []} id={@id} class="mb-6 md:mb-8">
+      <h2 class="text-lg md:text-xl font-semibold mb-3">{@title}</h2>
+
+      <div class="flex gap-3 overflow-x-auto snap-x scroll-smooth pb-2">
+        <div :for={item <- @items} class="snap-start flex-shrink-0 w-36">
+          <.trending_card
+            item={item}
+            media_type={@media_type}
+            current_user={@current_user}
+            adding_item_id={@adding_item_id}
+            requesting_item_id={@requesting_item_id}
+            libraries={@libraries}
+            on_select={@on_select}
+            navigate={Map.get(item, :navigate)}
+            add_event={@add_event}
+            request_event={@request_event}
+            can_add={@can_add}
+          />
+        </div>
       </div>
     </div>
     """
@@ -105,13 +178,16 @@ defmodule MydiaWeb.DiscoverComponents do
   attr :adding_item_id, :string, default: nil
   attr :requesting_item_id, :string, default: nil
   attr :libraries, :list, default: []
+  attr :add_event, :string, default: "add_to_library"
+  attr :request_event, :string, default: "request_media"
+  attr :can_add, :boolean, default: true
 
   defp trending_card_action(assigns) do
     ~H"""
-    <%= if not @item.in_library do %>
-      <%= if @current_user && @current_user.role == "guest" do %>
+    <%= if not @item.in_library and (@can_add or guest?(@current_user)) do %>
+      <%= if guest?(@current_user) do %>
         <button
-          phx-click="request_media"
+          phx-click={@request_event}
           phx-value-tmdb_id={@item.provider_id}
           phx-value-media_type={@media_type}
           disabled={requested?(@item) or requesting?(@item, @requesting_item_id)}
@@ -129,7 +205,7 @@ defmodule MydiaWeb.DiscoverComponents do
       <% else %>
         <div class="join w-full mt-2">
           <button
-            phx-click="add_to_library"
+            phx-click={@add_event}
             phx-value-tmdb_id={@item.provider_id}
             phx-value-media_type={@media_type}
             disabled={@adding_item_id == to_string(@item.provider_id)}
@@ -143,7 +219,7 @@ defmodule MydiaWeb.DiscoverComponents do
           </button>
           <LibraryComponents.library_picker_menu
             libraries={@libraries}
-            event="add_to_library"
+            event={@add_event}
             tmdb_id={@item.provider_id}
             media_type={@media_type}
           />
@@ -158,6 +234,11 @@ defmodule MydiaWeb.DiscoverComponents do
     """
   end
 
+  # A guest requests rather than adds, so the guest branch is gated on the
+  # request permission, not on `can_add`.
+  defp guest?(%{role: "guest"}), do: true
+  defp guest?(_), do: false
+
   defp requested?(item), do: Map.get(item, :request_status) != nil
 
   defp requesting?(item, requesting_item_id),
@@ -165,4 +246,26 @@ defmodule MydiaWeb.DiscoverComponents do
 
   defp library_path(:movie, id), do: "/movies/#{id}"
   defp library_path(:tv_show, id), do: "/tv/#{id}"
+
+  attr :item, :map, required: true
+  attr :media_type, :atom, required: true
+
+  defp card_poster(assigns) do
+    ~H"""
+    <%= if @item.poster_path do %>
+      <img
+        src={ImageUrl.poster_url(@item.poster_path)}
+        alt={@item.title}
+        class="w-full h-full object-cover"
+      />
+    <% else %>
+      <div class="flex items-center justify-center w-full h-full">
+        <.icon
+          name={if(@media_type == :movie, do: "hero-film", else: "hero-tv")}
+          class="w-16 h-16 text-base-content/20"
+        />
+      </div>
+    <% end %>
+    """
+  end
 end
