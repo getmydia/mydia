@@ -69,16 +69,42 @@ defmodule Mydia.Release.TableArchive do
   # SQLite and PostgreSQL disagree on representations for dates, times, and
   # binaries. Anything Jason cannot encode natively becomes a safe textual form
   # so an archive never fails on an unexpected value.
-  defp encodable(%DateTime{} = value), do: DateTime.to_iso8601(value)
-  defp encodable(%NaiveDateTime{} = value), do: NaiveDateTime.to_iso8601(value)
-  defp encodable(%Date{} = value), do: Date.to_iso8601(value)
-  defp encodable(%Time{} = value), do: Time.to_iso8601(value)
+  #
+  # Exposed (not `defp`) so the pure encoding rules can be unit tested
+  # directly: SQLite's raw driver never hands back `%Date{}` / `%Time{}` /
+  # `%NaiveDateTime{}` / `%DateTime{}` structs (those only appear coming out of
+  # Postgrex), so the only way to exercise those clauses without a live
+  # Postgres connection is to call this function directly. Not part of the
+  # module's public contract; `@doc false` keeps it out of generated docs.
+  @doc false
+  @spec encodable(term()) :: term()
+  def encodable(%DateTime{} = value), do: DateTime.to_iso8601(value)
+  def encodable(%NaiveDateTime{} = value), do: NaiveDateTime.to_iso8601(value)
+  def encodable(%Date{} = value), do: Date.to_iso8601(value)
+  def encodable(%Time{} = value), do: Time.to_iso8601(value)
 
-  defp encodable(value) when is_binary(value) do
-    if String.valid?(value), do: value, else: Base.encode64(value)
+  # All 12 tables this archives use `:binary_id` primary keys (and mostly
+  # `:binary_id` foreign keys). Raw SQL bypasses Ecto's type-casting layer, so
+  # SQLite (`:binary_id` mapped to `:string`) hands back a plain-text UUID
+  # while PostgreSQL hands back the raw 16-byte binary. Reformat a 16-byte
+  # binary as a canonical UUID string so ids stay human-readable in the
+  # archive rather than becoming an opaque Base64 blob. `Ecto.UUID.load/1`
+  # only returns `:error` for inputs that are not exactly 16 bytes, so this
+  # falls through to the general binary handling below for anything else.
+  def encodable(value) when is_binary(value) and byte_size(value) == 16 do
+    case Ecto.UUID.load(value) do
+      {:ok, uuid} -> uuid
+      :error -> encode_binary(value)
+    end
   end
 
-  defp encodable(value) when is_list(value), do: Enum.map(value, &encodable/1)
-  defp encodable(value) when is_map(value), do: Map.new(value, fn {k, v} -> {k, encodable(v)} end)
-  defp encodable(value), do: value
+  def encodable(value) when is_binary(value), do: encode_binary(value)
+
+  def encodable(value) when is_list(value), do: Enum.map(value, &encodable/1)
+  def encodable(value) when is_map(value), do: Map.new(value, fn {k, v} -> {k, encodable(v)} end)
+  def encodable(value), do: value
+
+  defp encode_binary(value) do
+    if String.valid?(value), do: value, else: Base.encode64(value)
+  end
 end
