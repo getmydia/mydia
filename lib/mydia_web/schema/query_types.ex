@@ -312,4 +312,12 @@ defmodule MydiaWeb.Schema.QueryTypes do
       resolve(&SubtitleResolver.subtitle_content/3)
     end
   end
+
+  # Server queries - version floors, readable without authentication
+  object :server_queries do
+    @desc "Get this server's version and the player versions it supports"
+    field :server_compatibility, :server_compatibility do
+      resolve(&MydiaWeb.Schema.Resolvers.ServerResolver.compatibility/3)
+    end
+  end
 end

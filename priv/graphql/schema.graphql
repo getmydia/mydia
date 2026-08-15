@@ -83,6 +83,9 @@ type RootQueryType {
   id and track id together rather than nesting through a movie or episode.
   """
   subtitleContent(mediaFileId: ID!, trackId: String!, format: SubtitleFormat): String
+
+  "Get this server's version and the player versions it supports"
+  serverCompatibility: ServerCompatibility
 }
 
 type RootMutationType {
@@ -1329,6 +1332,25 @@ type SubtitleProviderStatus {
 type SubtitleSearchPayload {
   results: [SubtitleCandidate!]!
   providers: [SubtitleProviderStatus!]!
+}
+
+"""
+What this server needs from a connecting player.
+
+Published so a player can tell the operator that one side is too old, rather
+than letting the mismatch surface as an unexplained failure. Readable without
+authentication: a client that cannot log in is exactly the one that may need
+to know why.
+"""
+type ServerCompatibility {
+  "This server's own version"
+  version: String!
+
+  "Oldest player version this server works with"
+  minPlayerVersion: String!
+
+  "Oldest player version this server would rather you ran"
+  recommendedPlayerVersion: String!
 }
 
 "Media content types"
