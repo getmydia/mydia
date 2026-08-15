@@ -4,6 +4,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
   import Phoenix.Component, only: [assign: 3]
   import Phoenix.LiveView, only: [start_async: 3, put_flash: 3, connected?: 1]
 
+  alias Mydia.Accounts.Authorization, as: AccountsAuthorization
   alias Mydia.Media.FranchiseEntry
   alias Mydia.Media.Franchises
   alias MydiaWeb.Live.Authorization
@@ -32,7 +33,8 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
   end
 
   def handle_load_result({:ok, {:ok, franchise}}, socket) do
-    {:noreply, assign(socket, :franchise, enrich_with_request_status(franchise))}
+    franchise = enrich_with_request_status(franchise, socket.assigns.current_user)
+    {:noreply, assign(socket, :franchise, franchise)}
   end
 
   def handle_load_result({:ok, :none}, socket) do
@@ -168,15 +170,25 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
   # missing entry and then reloaded the page would see the button revert to an
   # enabled Request, since mark_requested/3 only sets request_status in memory
   # for the life of the socket.
-  defp enrich_with_request_status(franchise) do
-    status_map = MediaRequestHelpers.request_status_map()
+  #
+  # request_status only ever affects the Request button, which only a guest
+  # sees, so a viewer who cannot submit a request skips the query entirely
+  # rather than paying for two unfiltered list_requests/1 calls whose result
+  # they can never act on. Their entries keep FranchiseEntry's own nil
+  # default for request_status.
+  defp enrich_with_request_status(franchise, current_user) do
+    if AccountsAuthorization.can_submit_request?(current_user) do
+      status_map = MediaRequestHelpers.request_status_map()
 
-    entries =
-      Enum.map(franchise.entries, fn entry ->
-        %{entry | request_status: Map.get(status_map, entry.tmdb_id)}
-      end)
+      entries =
+        Enum.map(franchise.entries, fn entry ->
+          %{entry | request_status: Map.get(status_map, entry.tmdb_id)}
+        end)
 
-    %{franchise | entries: entries}
+      %{franchise | entries: entries}
+    else
+      franchise
+    end
   end
 
   defp find_entry(nil, _tmdb_id), do: nil

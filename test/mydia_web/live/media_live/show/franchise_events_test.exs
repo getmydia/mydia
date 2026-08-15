@@ -433,6 +433,10 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEventsTest do
     # life of the socket. A guest who requested a missing entry then reloaded
     # the page would see an enabled Request button again, and clicking it hit
     # the duplicate-request error for a request that was already pending.
+    #
+    # The viewer here (the socket's current_user) is a guest: request_status
+    # only ever affects the Request button, which only guests see, so the
+    # enrichment now runs only for a viewer who can submit a request.
     test "stamps request_status from an outstanding request and leaves the rest nil",
          %{config: config} do
       requester = user_fixture(%{role: "guest"})
@@ -458,7 +462,12 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEventsTest do
           requester_id: requester.id
         })
 
-      socket = stub_socket(%{media_item: current, metadata_config: config})
+      socket =
+        stub_socket(%{
+          media_item: current,
+          metadata_config: config,
+          current_user: user_fixture(%{role: "guest"})
+        })
 
       {:noreply, socket} = FranchiseEvents.handle_load_result({:ok, {:ok, franchise}}, socket)
 
@@ -468,6 +477,49 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEventsTest do
 
       assert requested.request_status == "pending"
       assert untouched.request_status == nil
+    end
+
+    # Regression: request_status_map/0 issued two unfiltered list_requests/1
+    # queries and PR #461 ran them on every franchise load, though the value
+    # only ever affects the Request button that only a guest sees. A non-guest
+    # viewer must not pay for a query whose result they can never act on.
+    test "a non-guest viewer sees no request_status even for an outstanding request",
+         %{config: config} do
+      requester = user_fixture(%{role: "guest"})
+
+      current =
+        media_item_fixture(%{
+          type: "movie",
+          title: "First",
+          year: 2001,
+          tmdb_id: System.unique_integer([:positive])
+        })
+
+      requested_tmdb_id = System.unique_integer([:positive])
+      franchise = franchise_with_missing(current, requested_tmdb_id)
+      [_current_entry, requested_entry] = franchise.entries
+
+      {:ok, _request} =
+        Mydia.MediaRequests.create_request(%{
+          media_type: "movie",
+          title: requested_entry.title,
+          tmdb_id: requested_entry.tmdb_id,
+          requester_id: requester.id
+        })
+
+      socket =
+        stub_socket(%{
+          media_item: current,
+          metadata_config: config,
+          current_user: user_fixture(%{role: "user"})
+        })
+
+      {:noreply, socket} = FranchiseEvents.handle_load_result({:ok, {:ok, franchise}}, socket)
+
+      entries = socket.assigns.franchise.entries
+      requested = Enum.find(entries, &(&1.tmdb_id == requested_entry.tmdb_id))
+
+      assert requested.request_status == nil
     end
 
     test "assigns the franchise on success", %{config: config} do

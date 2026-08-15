@@ -6,6 +6,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   import Phoenix.Component, only: [assign: 3]
   import Phoenix.LiveView, only: [start_async: 3, put_flash: 3, connected?: 1]
 
+  alias Mydia.Accounts.Authorization, as: AccountsAuthorization
   alias Mydia.Media
   alias Mydia.Media.Add
   alias Mydia.Media.Recommendations
@@ -36,7 +37,10 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   end
 
   def handle_load_result({:ok, {:ok, results}}, socket) do
-    {:noreply, assign(socket, :recommendations, decorate(results, socket.assigns.media_item))}
+    recommendations =
+      decorate(results, socket.assigns.media_item, socket.assigns.current_user)
+
+    {:noreply, assign(socket, :recommendations, recommendations)}
   end
 
   def handle_load_result({:ok, :none}, socket) do
@@ -200,7 +204,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   # The library join lives here rather than in Mydia.Media.Recommendations
   # because it needs MediaAddHelpers, and a context under Mydia.* must not depend
   # on the web layer.
-  defp decorate(results, media_item) do
+  defp decorate(results, media_item, current_user) do
     # Drop malformed entries from the list itself, not just from the id lookup.
     # enrich_with_library_status/2 calls the same raising parser, so filtering
     # only the ids would still let a non-numeric provider_id raise one line
@@ -212,11 +216,26 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
 
     results
     |> MediaAddHelpers.enrich_with_library_status(status)
-    |> MediaRequestHelpers.enrich_with_request_status(MediaRequestHelpers.request_status_map())
+    |> maybe_enrich_with_request_status(current_user)
     |> Enum.map(fn item ->
       navigate = if item.in_library && item.id, do: ~p"/media/#{item.id}", else: nil
       Map.put(item, :navigate, navigate)
     end)
+  end
+
+  # request_status only ever affects the Request button, which only a guest
+  # sees, so a viewer who cannot submit a request skips the query entirely
+  # rather than paying for two unfiltered list_requests/1 calls whose result
+  # they can never act on.
+  defp maybe_enrich_with_request_status(results, current_user) do
+    if AccountsAuthorization.can_submit_request?(current_user) do
+      MediaRequestHelpers.enrich_with_request_status(
+        results,
+        MediaRequestHelpers.request_status_map()
+      )
+    else
+      results
+    end
   end
 
   # Add.parse_provider_id/1 raises on a non-numeric binary. TMDB ids are always

@@ -40,6 +40,10 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEventsTest do
     # enrich_with_request_status/2 after a successful request. A guest who
     # requested a recommended title and reloaded the page would see an enabled
     # Request button again.
+    #
+    # The viewer here (the socket's current_user) is a guest: request_status
+    # only ever affects the Request button, which only guests see, so the
+    # enrichment now runs only for a viewer who can submit a request.
     test "stamps request_status from an outstanding request and leaves the rest nil" do
       requester = user_fixture(%{role: "guest"})
 
@@ -66,7 +70,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEventsTest do
         result(%{provider_id: to_string(untouched_tmdb_id), title: "Untouched Rec"})
       ]
 
-      socket = stub_socket(%{media_item: current})
+      socket = stub_socket(%{media_item: current, current_user: user_fixture(%{role: "guest"})})
 
       {:noreply, socket} = RecommendationEvents.handle_load_result({:ok, {:ok, results}}, socket)
 
@@ -84,6 +88,46 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEventsTest do
 
       assert requested.request_status == "pending"
       assert untouched.request_status == nil
+    end
+
+    # Regression: request_status_map/0 issued two unfiltered list_requests/1
+    # queries and PR #461 ran them on every recommendations load, though the
+    # value only ever affects the Request button that only a guest sees. A
+    # non-guest viewer must not pay for a query whose result they can never
+    # act on.
+    test "a non-guest viewer sees no request_status even for an outstanding request" do
+      requester = user_fixture(%{role: "guest"})
+
+      current =
+        media_item_fixture(%{
+          type: "movie",
+          title: "Current",
+          tmdb_id: System.unique_integer([:positive])
+        })
+
+      requested_tmdb_id = System.unique_integer([:positive])
+
+      {:ok, _request} =
+        MediaRequests.create_request(%{
+          media_type: "movie",
+          title: "Requested Rec",
+          tmdb_id: requested_tmdb_id,
+          requester_id: requester.id
+        })
+
+      results = [result(%{provider_id: to_string(requested_tmdb_id), title: "Requested Rec"})]
+
+      socket = stub_socket(%{media_item: current, current_user: user_fixture(%{role: "user"})})
+
+      {:noreply, socket} = RecommendationEvents.handle_load_result({:ok, {:ok, results}}, socket)
+
+      requested =
+        Enum.find(
+          socket.assigns.recommendations,
+          &(&1.provider_id == to_string(requested_tmdb_id))
+        )
+
+      assert Map.get(requested, :request_status) == nil
     end
   end
 
