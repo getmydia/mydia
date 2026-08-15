@@ -166,9 +166,22 @@ defmodule Mydia.Jobs.MetadataRefresh do
   # could therefore never land, leaving recently aired episodes permanently
   # thumbnail-less while the show row refreshed weekly.
   #
-  # Cost is bounded by should_skip_season_refresh?/1, whose thresholds (24h
-  # ongoing, 168h ended) existed for this call and were unreachable while the
-  # bulk pass never set seasons_refreshed_at.
+  # On cost, precisely. should_skip_season_refresh?/1 was dead three ways: it is
+  # only reached from refresh_episodes_for_tv_show/2 (which this pass never
+  # called), it keys off seasons_refreshed_at (which MediaItem.changeset/2 did
+  # not cast, so it was never persisted and stayed nil, and a nil timestamp
+  # returns false), and its ended-show branch matched a string key against an
+  # atom-keyed struct. All three are fixed here, so the throttle now actually
+  # runs. It still does not skip an airing show on this pass — the interval is
+  # 168h and the ongoing threshold 24h — which is the intent: a weekly episode
+  # re-read is the whole point. What it does buy is that another trigger within
+  # 24h (manual refresh, library scan, import) no longer redoes the work, and
+  # that ended shows fall under the longer completed-show threshold.
+  #
+  # The residual cost is real and worth knowing: season_monitoring defaults to
+  # "all", so every season of every show is re-read weekly, and each episode
+  # costs a translation fetch against the shared relay. Narrowing that to
+  # seasons that can actually have changed is the obvious follow-up.
   #
   # Public for testability: proving the pass requests episodes without hitting
   # the real relay requires injecting a config.

@@ -93,7 +93,13 @@ defmodule Mydia.Media.MediaItem do
       :monitored,
       :monitor_new_seasons,
       :quality_profile_id,
-      :library_path_id
+      :library_path_id,
+      # Omitting this silently dropped every write. Both writers
+      # (refresh_episodes_for_tv_show/2 and ProviderSwitch) go through
+      # Media.update_media_item/3 and this changeset, so the column stayed NULL
+      # forever and should_skip_season_refresh?/1 — which returns false on a nil
+      # timestamp — could never throttle anything.
+      :seasons_refreshed_at
     ])
     |> validate_required([:type, :title])
     |> validate_inclusion(:type, @type_values)

@@ -2380,10 +2380,16 @@ defmodule Mydia.Media do
   defp should_skip_season_refresh?(%MediaItem{} = media_item) do
     config = Mydia.Config.get()
 
-    # Determine if show is completed/ended
+    # Determine if show is completed/ended.
+    #
+    # Read through MetadataAccess: `metadata` is loaded as a %MediaMetadata{}
+    # struct with atom keys, so the string-keyed match this used to do could
+    # never succeed. `is_completed` was therefore always false and
+    # completed_show_refresh_threshold_hours was never read — every ended show
+    # was throttled as if it were still airing.
     is_completed =
-      case media_item.metadata do
-        %{"status" => status} when is_binary(status) ->
+      case MetadataAccess.get(media_item.metadata, :status) do
+        status when is_binary(status) ->
           String.downcase(status) in ["ended", "canceled", "cancelled"]
 
         _ ->

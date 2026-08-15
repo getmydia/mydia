@@ -24,12 +24,17 @@ defmodule Mydia.Jobs.MetadataRefreshEpisodesTest do
       bypass = Bypass.open()
 
       Bypass.stub(bypass, "GET", "/tvdb/series/#{tvdb_id}/extended", fn conn ->
+        # TVDB input shape, not the TMDB-like shape the relay transforms it
+        # into: "firstAired" and a nested "status", per
+        # transform_tvdb_to_tmdb_format/3. Sending "first_air_date" here would
+        # leave first_air_date nil and quietly overwrite the show's year.
         json(conn, %{
           "data" => %{
             "id" => tvdb_id,
             "name" => "Late Still Show",
             "overview" => "x",
-            "first_air_date" => "2023-01-01",
+            "firstAired" => "2023-01-01",
+            "status" => %{"name" => "Continuing"},
             "genres" => [],
             "seasons" => [
               %{
@@ -112,6 +117,66 @@ defmodule Mydia.Jobs.MetadataRefreshEpisodesTest do
 
       assert refreshed.metadata.overview == "Published once the episode aired."
       assert refreshed.metadata.runtime == 52
+
+      # The show row must survive the pass intact: a mis-shaped provider payload
+      # shows up here as the year being nulled out.
+      assert Media.get_media_item!(item.id).year == 2023
+    end
+  end
+
+  # REGRESSION: should_skip_season_refresh?/1 is the only thing bounding how
+  # often the pass above re-reads a show, and it was dead in two further ways
+  # beyond never being called.
+  describe "season refresh throttle" do
+    test "seasons_refreshed_at survives update_media_item/3" do
+      item = media_item_fixture(%{type: "tv_show", title: "Stamped Show", year: 2023})
+      stamp = DateTime.utc_now() |> DateTime.truncate(:second)
+
+      assert {:ok, updated} = Media.update_media_item(item, %{seasons_refreshed_at: stamp})
+
+      # Read back through the DB: the field was absent from the changeset's cast
+      # list, so the write was silently dropped and the column stayed NULL.
+      assert Media.get_media_item!(updated.id).seasons_refreshed_at == stamp
+    end
+
+    test "an ended show is throttled on the completed-show threshold" do
+      bypass = Bypass.open()
+      hits = :atomics.new(1, signed: false)
+
+      Bypass.stub(bypass, "GET", "/tvdb/series/:id/extended", fn conn ->
+        :atomics.add(hits, 1, 1)
+        json(conn, %{"data" => %{}})
+      end)
+
+      config = %{
+        type: :metadata_relay,
+        base_url: "http://localhost:#{bypass.port}",
+        options: %{language: "en-US", include_adult: false}
+      }
+
+      item =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "Finished Show",
+          year: 2010,
+          tvdb_id: System.unique_integer([:positive]),
+          metadata_source: :tvdb,
+          metadata: %{status: "Ended"}
+        })
+
+      # 48h ago: past the 24h ongoing threshold, well inside the 168h completed
+      # one. The ended branch matched a string key against an atom-keyed
+      # %MediaMetadata{}, so is_completed was always false and this show was
+      # throttled as if it were still airing — i.e. refreshed anyway.
+      stamp = DateTime.utc_now() |> DateTime.add(-48, :hour) |> DateTime.truncate(:second)
+      {:ok, item} = Media.update_media_item(item, %{seasons_refreshed_at: stamp})
+
+      episode_fixture(%{media_item_id: item.id, season_number: 1, episode_number: 1})
+
+      assert {:ok, 1} = Media.refresh_episodes_for_tv_show(item, config: config)
+
+      assert :atomics.get(hits, 1) == 0,
+             "an ended show inside its threshold must not be refetched"
     end
   end
 
