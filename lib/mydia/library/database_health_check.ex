@@ -39,6 +39,7 @@ defmodule Mydia.Library.DatabaseHealthCheck do
 
   alias Mydia.Repo
   alias Mydia.Settings
+  alias Mydia.Library.MatchCandidate
   alias Mydia.Library.MediaFile
   alias Mydia.Settings.LibraryPath
 
@@ -104,6 +105,12 @@ defmodule Mydia.Library.DatabaseHealthCheck do
   Orphaned files are those with no `media_item_id` and no `episode_id`.
   Files in specialized libraries (music, books, adult) are excluded as they
   don't require parent associations.
+
+  Files that already hold a match candidate are excluded too. A candidate
+  means the file is queued in the import inbox for review, not stuck: the
+  import coordinator writes orphaned rows as its first phase, and a scan can
+  legitimately leave thousands of them sitting there awaiting a decision.
+  Without this exclusion, that queued work reads as database damage.
   """
   def count_orphaned_files do
     standard_types = [:movies, :series, :mixed]
@@ -111,8 +118,11 @@ defmodule Mydia.Library.DatabaseHealthCheck do
     from(mf in MediaFile,
       join: lp in LibraryPath,
       on: mf.library_path_id == lp.id,
+      left_join: c in MatchCandidate,
+      on: c.media_file_id == mf.id,
       where: is_nil(mf.media_item_id) and is_nil(mf.episode_id),
       where: lp.type in ^standard_types,
+      where: is_nil(c.id),
       select: count(mf.id)
     )
     |> Repo.one()
