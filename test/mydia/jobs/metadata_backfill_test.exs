@@ -65,10 +65,10 @@ defmodule Mydia.Jobs.MetadataBackfillTest do
     assert_enqueued(worker: MetadataRefresh, args: %{media_item_id: item.id})
   end
 
-  test "enqueues a refresh for a TV show holding neither provider id" do
-    # Discover matches on tmdb_id, so this row also renders an Add button for
-    # something already in the library. It has no id to collide with, so the
-    # add silently creates a duplicate row instead of raising.
+  test "enqueues a refresh for a TV show missing both persisted provider ids" do
+    # Metadata is present and carries a provider_id, but neither id column is
+    # populated. Why it matters, not what this test asserts: Discover reads the
+    # tmdb_id column, so such a row is offered for adding all over again.
     item =
       media_item_fixture(%{
         type: "tv_show",
