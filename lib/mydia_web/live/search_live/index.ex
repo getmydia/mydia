@@ -15,10 +15,7 @@ defmodule MydiaWeb.SearchLive.Index do
   @library_type_options [
     {:all, "All Types"},
     {:movies, "Movies"},
-    {:series, "TV Series"},
-    {:music, "Music"},
-    {:books, "Books"},
-    {:adult, "Adult"}
+    {:series, "TV Series"}
   ]
 
   @impl true
@@ -166,7 +163,7 @@ defmodule MydiaWeb.SearchLive.Index do
         "all" ->
           :all
 
-        type when type in ["movies", "series", "music", "books", "adult"] ->
+        type when type in ["movies", "series"] ->
           String.to_existing_atom(type)
 
         _ ->
@@ -416,15 +413,9 @@ defmodule MydiaWeb.SearchLive.Index do
 
       # Use appropriate download flow based on type
       socket =
-        if detected_type in [:movies, :series] do
-          start_async(socket, :add_to_library, fn ->
-            add_release_to_library(search_result.title)
-          end)
-        else
-          start_async(socket, :direct_download, fn ->
-            direct_download_to_library(search_result, detected_type)
-          end)
-        end
+        start_async(socket, :add_to_library, fn ->
+          add_release_to_library(search_result.title)
+        end)
 
       {:noreply, socket}
     else
@@ -469,17 +460,6 @@ defmodule MydiaWeb.SearchLive.Index do
 
       # Use the target type to determine the download flow
       case target_type do
-        type when type in [:music, :books, :adult] ->
-          # For specialized libraries, download directly without metadata lookup
-          {:noreply,
-           socket
-           |> assign(:pending_release_title, search_result.title)
-           |> assign(:pending_search_result, search_result)
-           |> assign(:should_download_after_add, true)
-           |> start_async(:direct_download, fn ->
-             direct_download_to_library(search_result, type)
-           end)}
-
         type when type in [:movies, :series] ->
           # For movies/series, use the existing metadata lookup flow
           {:noreply,
@@ -831,42 +811,6 @@ defmodule MydiaWeb.SearchLive.Index do
      socket
      |> assign(:selecting_match_id, nil)
      |> put_flash(:error, "Failed to add to library: #{inspect(reason)}")}
-  end
-
-  # Handle direct download async results (for specialized libraries)
-  def handle_async(:direct_download, {:ok, {:ok, download}}, socket) do
-    Logger.info("Direct download started successfully: #{download.title}")
-
-    # Stay on search page so user can download more items
-    {:noreply,
-     socket
-     |> close_download_modal()
-     |> put_flash(:info, "Download started: #{download.title}. View in Downloads queue.")}
-  end
-
-  def handle_async(:direct_download, {:ok, {:error, reason}}, socket) do
-    Logger.error("Direct download failed: #{inspect(reason)}")
-
-    error_msg =
-      case reason do
-        :no_library_path -> "No library path configured for this type"
-        {:client_error, err} -> "Download client error: #{inspect(err)}"
-        _ -> "Download failed: #{inspect(reason)}"
-      end
-
-    {:noreply,
-     socket
-     |> close_download_modal()
-     |> put_flash(:error, error_msg)}
-  end
-
-  def handle_async(:direct_download, {:exit, reason}, socket) do
-    Logger.error("Direct download task crashed: #{inspect(reason)}")
-
-    {:noreply,
-     socket
-     |> close_download_modal()
-     |> put_flash(:error, "Download failed unexpectedly")}
   end
 
   ## Private Functions
@@ -1362,30 +1306,9 @@ defmodule MydiaWeb.SearchLive.Index do
   defp format_client_error(error) when is_binary(error), do: error
   defp format_client_error(error), do: inspect(error)
 
-  # Direct download for specialized libraries (music, books, adult)
-  # These don't require metadata lookup - just start the download
-  defp direct_download_to_library(search_result, library_type) do
-    Logger.info("Starting direct download for #{library_type}: #{search_result.title}")
-
-    # Find a library path for this type
-    library_paths = Settings.list_library_paths()
-    library_path = Enum.find(library_paths, fn path -> path.type == library_type end)
-
-    if library_path do
-      # Initiate the download with library_path_id instead of media_item_id
-      Downloads.initiate_download(search_result, library_path_id: library_path.id)
-    else
-      Logger.warning("No library path found for type: #{library_type}")
-      {:error, :no_library_path}
-    end
-  end
-
   # Helper to get library type label for display
   defp library_type_label(:movies), do: "Movies"
   defp library_type_label(:series), do: "TV Series"
-  defp library_type_label(:music), do: "Music"
-  defp library_type_label(:books), do: "Books"
-  defp library_type_label(:adult), do: "Adult"
   defp library_type_label(:other), do: "Other"
   defp library_type_label(:unknown), do: "Select"
   defp library_type_label(_), do: "Unknown"
@@ -1393,9 +1316,6 @@ defmodule MydiaWeb.SearchLive.Index do
   # Helper to get library type icon
   defp library_type_icon(:movies), do: "hero-film"
   defp library_type_icon(:series), do: "hero-tv"
-  defp library_type_icon(:music), do: "hero-musical-note"
-  defp library_type_icon(:books), do: "hero-book-open"
-  defp library_type_icon(:adult), do: "hero-eye-slash"
   defp library_type_icon(:unknown), do: "hero-question-mark-circle"
   defp library_type_icon(_), do: "hero-question-mark-circle"
 
@@ -1420,9 +1340,6 @@ defmodule MydiaWeb.SearchLive.Index do
   # Badge color for library type
   defp library_type_badge_class(:movies), do: "badge-primary"
   defp library_type_badge_class(:series), do: "badge-secondary"
-  defp library_type_badge_class(:music), do: "badge-accent"
-  defp library_type_badge_class(:books), do: "badge-info"
-  defp library_type_badge_class(:adult), do: "badge-warning"
   defp library_type_badge_class(:unknown), do: "badge-neutral"
   defp library_type_badge_class(_), do: "badge-ghost"
 end

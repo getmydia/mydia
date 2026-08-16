@@ -186,27 +186,33 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
   end
 
   describe "library types that cannot be imported" do
-    setup do
-      %{music: library_path_fixture(%{type: "music", name: "Music"})}
-    end
+    # The start form used to filter out music, books and adult paths, and a
+    # crafted event naming one directly had to be refused too. Those types no
+    # longer exist, so there is nothing left to filter and no such path can be
+    # built -- library_path_fixture validates against the same enum the form
+    # reads. What survives is the shape of the check: every type the schema
+    # allows is offered, and an id outside the offered set is still refused.
+    test "every type the schema allows is offered in the start form", %{conn: conn} do
+      paths =
+        for type <- Ecto.Enum.values(Mydia.Settings.LibraryPath, :type) do
+          library_path_fixture(%{type: to_string(type), name: "Lib #{type}"})
+        end
 
-    test "are not offered in the start form", %{conn: conn, music: music, library_path: lp} do
       {:ok, view, _html} = live(conn, ~p"/import")
 
       html = render(view)
 
-      assert html =~ lp.path
-      refute html =~ music.path
+      for path <- paths, do: assert(html =~ path.path)
     end
 
-    test "are refused even when the event names one directly", %{conn: conn, music: music} do
+    test "an id outside the offered set is refused", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/import")
 
       view
       |> element("#start-run-form")
-      |> render_submit(%{"library_path_id" => music.id, "mode" => "unattended"})
+      |> render_submit(%{"library_path_id" => Ecto.UUID.generate(), "mode" => "unattended"})
 
-      refute Library.active_import_run(music.id)
+      assert Mydia.Repo.aggregate(Mydia.Library.ImportRun, :count) == 0
     end
   end
 

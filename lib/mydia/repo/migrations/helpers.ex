@@ -363,7 +363,7 @@ defmodule Mydia.Repo.Migrations.Helpers do
         ],
         postgres: [
           "ALTER TABLE library_paths DROP CONSTRAINT IF EXISTS library_paths_type_check",
-          "ALTER TABLE library_paths ADD CONSTRAINT library_paths_type_check CHECK (type IN ('movies', 'series', 'mixed', 'music', 'books', 'adult'))"
+          "ALTER TABLE library_paths ADD CONSTRAINT library_paths_type_check CHECK (type IN ('movies', 'series', 'mixed'))"
         ]
       )
   """

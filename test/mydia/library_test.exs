@@ -84,7 +84,7 @@ defmodule Mydia.LibraryTest do
     test "filters media files by library path type" do
       # Create library paths of different types
       movies_path = library_path_fixture(%{path: "/movies", type: "movies"})
-      adult_path = library_path_fixture(%{path: "/adult", type: "adult"})
+      series_path = library_path_fixture(%{path: "/series", type: "series"})
 
       # Create media files in each library
       {:ok, movies_file} =
@@ -94,17 +94,17 @@ defmodule Mydia.LibraryTest do
           size: 1_000_000
         })
 
-      {:ok, adult_file} =
+      {:ok, series_file} =
         Library.create_scanned_media_file(%{
           relative_path: "video.mp4",
-          library_path_id: adult_path.id,
+          library_path_id: series_path.id,
           size: 2_000_000
         })
 
-      # Filter by adult type
-      adult_files = Library.list_media_files(library_path_type: :adult)
-      assert length(adult_files) == 1
-      assert hd(adult_files).id == adult_file.id
+      # Filter by series type
+      series_files = Library.list_media_files(library_path_type: :series)
+      assert length(series_files) == 1
+      assert hd(series_files).id == series_file.id
 
       # Filter by movies type
       movie_files = Library.list_media_files(library_path_type: :movies)
@@ -124,23 +124,23 @@ defmodule Mydia.LibraryTest do
         })
 
       # Query for a different type
-      adult_files = Library.list_media_files(library_path_type: :adult)
-      assert Enum.empty?(adult_files)
+      series_files = Library.list_media_files(library_path_type: :series)
+      assert Enum.empty?(series_files)
     end
 
     test "can combine library_path_type with preload" do
-      adult_path = library_path_fixture(%{path: "/adult2", type: "adult"})
+      series_path = library_path_fixture(%{path: "/series2", type: "series"})
 
-      {:ok, _adult_file} =
+      {:ok, _series_file} =
         Library.create_scanned_media_file(%{
           relative_path: "video2.mp4",
-          library_path_id: adult_path.id,
+          library_path_id: series_path.id,
           size: 2_000_000
         })
 
-      files = Library.list_media_files(library_path_type: :adult, preload: [:library_path])
+      files = Library.list_media_files(library_path_type: :series, preload: [:library_path])
       assert length(files) == 1
-      assert hd(files).library_path.type == :adult
+      assert hd(files).library_path.type == :series
     end
   end
 

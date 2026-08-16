@@ -155,7 +155,7 @@ defmodule Mydia.Indexers do
       - `:deduplicate` - Whether to deduplicate results (default: true)
       - `:categories` - List of Torznab category IDs to filter by (default: [])
         Use `Mydia.Indexers.CategoryMapping.categories_for_type/1` to get categories
-        for a library type (e.g., `:movies`, `:series`, `:music`, `:books`, `:adult`)
+        for a library type (e.g., `:movies`, `:series`, `:mixed`)
       - `:indexer_ids` - List of indexer config IDs to search (default: all enabled)
         When provided, only the specified indexers will be searched.
 
@@ -168,8 +168,8 @@ defmodule Mydia.Indexers do
       {:ok, [%SearchResult{}, ...]}
 
       iex> alias Mydia.Indexers.CategoryMapping
-      iex> categories = CategoryMapping.categories_for_type(:music)
-      iex> Mydia.Indexers.search_all("Beatles", categories: categories)
+      iex> categories = CategoryMapping.categories_for_type(:movies)
+      iex> Mydia.Indexers.search_all("Arrival", categories: categories)
       {:ok, [%SearchResult{}, ...]}
 
       iex> Mydia.Indexers.search_all("Ubuntu", indexer_ids: ["abc-123", "def-456"])

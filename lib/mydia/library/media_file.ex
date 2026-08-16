@@ -291,37 +291,19 @@ defmodule Mydia.Library.MediaFile do
   end
 
   # Ensure either media_item_id or episode_id is set, but not both
-  # Exception: specialized library types (music, books, adult) allow both to be nil
   defp validate_one_parent(changeset) do
     media_item_id = get_field(changeset, :media_item_id)
     episode_id = get_field(changeset, :episode_id)
-    library_path_id = get_field(changeset, :library_path_id)
 
     cond do
-      # Both are nil - check if this is a specialized library type
       is_nil(media_item_id) and is_nil(episode_id) ->
-        if specialized_library?(library_path_id) do
-          # Specialized libraries (music, books, adult) don't require media_item/episode
-          changeset
-        else
-          add_error(changeset, :media_item_id, "either media_item_id or episode_id must be set")
-        end
+        add_error(changeset, :media_item_id, "either media_item_id or episode_id must be set")
 
       not is_nil(media_item_id) and not is_nil(episode_id) ->
         add_error(changeset, :media_item_id, "cannot set both media_item_id and episode_id")
 
       true ->
         changeset
-    end
-  end
-
-  # Checks if the library path is a specialized type (music, books, adult)
-  defp specialized_library?(nil), do: false
-
-  defp specialized_library?(library_path_id) do
-    case Mydia.Repo.get(Mydia.Settings.LibraryPath, library_path_id) do
-      nil -> false
-      library_path -> library_path.type in [:music, :books, :adult]
     end
   end
 
@@ -348,24 +330,17 @@ defmodule Mydia.Library.MediaFile do
     if is_nil(library_path_id) do
       changeset
     else
-      # Check if this is a specialized library type
-      if specialized_library?(library_path_id) do
-        # For specialized libraries, we don't need media_item/episode validation
-        # Files can exist without associations in music, books, adult libraries
+      # Validate media type compatibility. Only validate if a parent association
+      # is set (orphaned files are allowed).
+      if is_nil(media_item_id) and is_nil(episode_id) do
         changeset
       else
-        # For standard video libraries, validate media type compatibility
-        # Only validate if parent association is set (orphaned files are allowed)
-        if is_nil(media_item_id) and is_nil(episode_id) do
-          changeset
-        else
-          validate_media_type_against_library_path_id(
-            changeset,
-            library_path_id,
-            media_item_id,
-            episode_id
-          )
-        end
+        validate_media_type_against_library_path_id(
+          changeset,
+          library_path_id,
+          media_item_id,
+          episode_id
+        )
       end
     end
   end

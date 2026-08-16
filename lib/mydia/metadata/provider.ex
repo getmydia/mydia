@@ -175,7 +175,6 @@ defmodule Mydia.Metadata.Provider do
         }
 
   alias Mydia.Metadata.Structs.{
-    BookMetadata,
     CastMember,
     CrewMember,
     EpisodeData,
@@ -186,11 +185,11 @@ defmodule Mydia.Metadata.Provider do
     SeasonData
   }
 
-  @type media_type :: :movie | :tv_show | :book
+  @type media_type :: :movie | :tv_show
 
   @type search_result :: SearchResult.t()
 
-  @type metadata :: MediaMetadata.t() | BookMetadata.t()
+  @type metadata :: MediaMetadata.t()
 
   @type cast_member :: CastMember.t()
 

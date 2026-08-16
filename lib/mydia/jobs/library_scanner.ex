@@ -32,9 +32,6 @@ defmodule Mydia.Jobs.LibraryScanner do
   alias Mydia.Library.{
     FileIngest,
     MetadataMatcher,
-    MusicScanner,
-    BookScanner,
-    AdultScanner,
     SampleDetector,
     ScanSummary
   }
@@ -232,7 +229,7 @@ defmodule Mydia.Jobs.LibraryScanner do
              progress_callback: progress_callback,
              video_extensions: extensions
            ) do
-      process_scan_result_by_type(library_path, scan_result)
+      summarize(process_scan_result(library_path, scan_result))
     else
       {:error, :not_found} ->
         handle_scan_error(library_path, "Library path does not exist: #{library_path.path}")
@@ -278,34 +275,9 @@ defmodule Mydia.Jobs.LibraryScanner do
     {:error, error_message}
   end
 
-  # Dispatch to appropriate scanner based on library type
-  defp process_scan_result_by_type(library_path, scan_result) do
-    result =
-      case library_path.type do
-        :music ->
-          process_music_scan_result(library_path, scan_result)
-
-        :books ->
-          process_books_scan_result(library_path, scan_result)
-
-        :adult ->
-          process_adult_scan_result(library_path, scan_result)
-
-        # Video-based library types use the standard video processing
-        type when type in [:movies, :series, :mixed] ->
-          process_scan_result(library_path, scan_result)
-
-        # Default to video processing for unknown types
-        _ ->
-          process_scan_result(library_path, scan_result)
-      end
-
-    summarize(result)
-  end
-
-  # The per-type processors return two different shapes: the video processor
-  # returns lists under :changes, the others return integer counts. Normalize
-  # both into a ScanSummary so callers have a single contract.
+  # process_scan_result/2 returns its counts as lists under :changes. Convert
+  # them to a ScanSummary so callers read one shape and cannot reach into the
+  # processor's own return value by accident.
   defp summarize({:ok, %{changes: changes} = details}) do
     {:ok,
      %ScanSummary{
@@ -316,225 +288,8 @@ defmodule Mydia.Jobs.LibraryScanner do
      }}
   end
 
-  defp summarize(
-         {:ok, %{new_files: new, modified_files: modified, deleted_files: deleted} = details}
-       )
-       when is_integer(new) and is_integer(modified) and is_integer(deleted) do
-    {:ok,
-     %ScanSummary{
-       new_files: new,
-       modified_files: modified,
-       deleted_files: deleted,
-       details: details
-     }}
-  end
-
   # Errors from handle_scan_error/2 pass through unchanged.
   defp summarize(other), do: other
-
-  defp process_music_scan_result(library_path, scan_result) do
-    Logger.info("Processing music library scan",
-      library_path_id: library_path.id,
-      files_found: length(scan_result.files)
-    )
-
-    result = MusicScanner.process_scan_result(library_path, scan_result)
-
-    # Update library path with success status
-    if updatable_library_path?(library_path) do
-      {:ok, _} =
-        Settings.update_library_path(library_path, %{
-          last_scan_at: DateTime.utc_now(),
-          last_scan_status: :success,
-          last_scan_error: nil
-        })
-    end
-
-    # Broadcast scan completed
-    Phoenix.PubSub.broadcast(
-      Mydia.PubSub,
-      "library_scanner",
-      {:library_scan_completed,
-       %{
-         library_path_id: library_path.id,
-         type: library_path.type,
-         new_files: result.new_files,
-         modified_files: result.modified_files,
-         deleted_files: result.deleted_files
-       }}
-    )
-
-    {:ok, result}
-  rescue
-    error ->
-      error_message = Exception.format(:error, error, __STACKTRACE__)
-      Logger.error("Music library scan raised exception", error: error_message)
-      handle_scan_error(library_path, error_message)
-  end
-
-  defp process_books_scan_result(library_path, scan_result) do
-    Logger.info("Processing books library scan",
-      library_path_id: library_path.id,
-      files_found: length(scan_result.files)
-    )
-
-    result = BookScanner.process_scan_result(library_path, scan_result)
-
-    # Update library path with success status
-    if updatable_library_path?(library_path) do
-      {:ok, _} =
-        Settings.update_library_path(library_path, %{
-          last_scan_at: DateTime.utc_now(),
-          last_scan_status: :success,
-          last_scan_error: nil
-        })
-    end
-
-    # Broadcast scan completed
-    Phoenix.PubSub.broadcast(
-      Mydia.PubSub,
-      "library_scanner",
-      {:library_scan_completed,
-       %{
-         library_path_id: library_path.id,
-         type: library_path.type,
-         new_files: result.new_files,
-         modified_files: result.modified_files,
-         deleted_files: result.deleted_files
-       }}
-    )
-
-    {:ok, result}
-  rescue
-    error ->
-      error_message = Exception.format(:error, error, __STACKTRACE__)
-      Logger.error("Books library scan raised exception", error: error_message)
-      handle_scan_error(library_path, error_message)
-  end
-
-  defp process_adult_scan_result(library_path, scan_result) do
-    Logger.info("Processing adult library scan",
-      library_path_id: library_path.id,
-      files_found: length(scan_result.files)
-    )
-
-    # Process adult content metadata (studios, scenes, adult_files)
-    adult_result = AdultScanner.process_scan_result(library_path, scan_result)
-
-    # Also process as standard media files for thumbnails and playback
-    # Get existing media files from database
-    existing_files = Library.list_media_files(library_path_id: library_path.id)
-
-    # Detect changes using the shared scanner logic
-    changes = Library.Scanner.detect_changes(scan_result, existing_files, library_path)
-
-    # Create MediaFile records for new files (for thumbnails and playback)
-    new_media_file_ids =
-      Enum.flat_map(changes.new_files, fn file_info ->
-        relative_path = Path.relative_to(file_info.path, library_path.path)
-
-        case Library.create_scanned_media_file(%{
-               library_path_id: library_path.id,
-               relative_path: relative_path,
-               size: file_info.size,
-               verified_at: DateTime.utc_now()
-             }) do
-          {:ok, media_file} ->
-            Logger.debug("Created media file for adult content",
-              path: file_info.path,
-              media_file_id: media_file.id
-            )
-
-            [media_file.id]
-
-          {:error, changeset} ->
-            Logger.error("Failed to create media file for adult content",
-              path: file_info.path,
-              errors: inspect(changeset.errors)
-            )
-
-            []
-        end
-      end)
-
-    # Update modified files
-    Enum.each(changes.modified_files, fn file_info ->
-      relative_path = Path.relative_to(file_info.path, library_path.path)
-
-      case Library.get_media_file_by_relative_path(library_path.id, relative_path) do
-        nil ->
-          Logger.warning("Modified file not found in database",
-            path: file_info.path,
-            relative_path: relative_path
-          )
-
-        media_file ->
-          Library.update_media_file(media_file, %{
-            size: file_info.size,
-            verified_at: DateTime.utc_now()
-          })
-      end
-    end)
-
-    # Trash removed files (soft-delete for recovery)
-    Enum.each(changes.deleted_files, fn media_file ->
-      Library.trash_media_file(media_file)
-    end)
-
-    # Find existing files missing thumbnails
-    existing_files_missing_thumbnails =
-      existing_files
-      |> Enum.filter(&is_nil(&1.cover_blob))
-      |> Enum.map(& &1.id)
-
-    # Combine new files and existing files missing thumbnails
-    files_needing_thumbnails = new_media_file_ids ++ existing_files_missing_thumbnails
-
-    # Enqueue thumbnail generation for all files needing thumbnails (includes sprites)
-    if files_needing_thumbnails != [] do
-      Logger.info("Enqueueing thumbnail generation for adult files",
-        new_files: length(new_media_file_ids),
-        existing_missing: length(existing_files_missing_thumbnails),
-        total: length(files_needing_thumbnails)
-      )
-
-      Mydia.Jobs.ThumbnailGeneration.enqueue_batch(files_needing_thumbnails,
-        include_sprites: true,
-        include_previews: true
-      )
-    end
-
-    # Update library path with success status
-    if updatable_library_path?(library_path) do
-      {:ok, _} =
-        Settings.update_library_path(library_path, %{
-          last_scan_at: DateTime.utc_now(),
-          last_scan_status: :success,
-          last_scan_error: nil
-        })
-    end
-
-    # Broadcast scan completed
-    Phoenix.PubSub.broadcast(
-      Mydia.PubSub,
-      "library_scanner",
-      {:library_scan_completed,
-       %{
-         library_path_id: library_path.id,
-         type: library_path.type,
-         new_files: adult_result.new_files,
-         modified_files: adult_result.modified_files,
-         deleted_files: adult_result.deleted_files
-       }}
-    )
-
-    {:ok, adult_result}
-  rescue
-    error ->
-      error_message = Exception.format(:error, error, __STACKTRACE__)
-      Logger.error("Adult library scan raised exception", error: error_message)
-      handle_scan_error(library_path, error_message)
-  end
 
   defp process_scan_result(library_path, scan_result) do
     # Get existing files from database - only files within this library path

@@ -43,13 +43,6 @@ defmodule MydiaWeb.Layouts do
   attr :downloads_count, :integer, default: 0, doc: "number of active downloads"
   attr :pending_requests_count, :integer, default: 0, doc: "number of pending requests"
 
-  attr :configured_library_types, :any,
-    default: MapSet.new(),
-    doc: "set of library types that have configured paths"
-
-  attr :adult_count, :integer, default: 0, doc: "number of adult items in library"
-  attr :music_count, :integer, default: 0, doc: "number of music albums in library"
-  attr :books_count, :integer, default: 0, doc: "number of books in library"
   attr :executing_jobs, :list, default: [], doc: "list of currently executing background jobs"
   attr :feedback_enabled?, :boolean, default: false, doc: "whether to render feedback UI"
   attr :show_feedback_modal, :boolean, default: false, doc: "whether the feedback modal is open"
@@ -179,40 +172,6 @@ defmodule MydiaWeb.Layouts do
                   <span class="badge badge-sm">{@tv_show_count}</span>
                 </.link>
               </li>
-              <%= if MapSet.member?(@configured_library_types, :music) do %>
-                <li>
-                  <.link
-                    navigate="/music"
-                    class={nav_active?(@current_path, "/music", false) && "active"}
-                  >
-                    <.icon name="hero-musical-note" class="w-5 h-5" /> Music
-                    <span class="badge badge-sm">{@music_count}</span>
-                  </.link>
-                </li>
-              <% end %>
-              <%= if MapSet.member?(@configured_library_types, :books) do %>
-                <li>
-                  <.link
-                    navigate="/books"
-                    class={nav_active?(@current_path, "/books", false) && "active"}
-                  >
-                    <.icon name="hero-book-open" class="w-5 h-5" /> Books
-                    <span class="badge badge-sm">{@books_count}</span>
-                  </.link>
-                </li>
-              <% end %>
-              <%= if MapSet.member?(@configured_library_types, :adult) do %>
-                <li>
-                  <.link
-                    navigate="/adult"
-                    class={nav_active?(@current_path, "/adult", false) && "active"}
-                  >
-                    <.icon name="hero-eye-slash" class="w-5 h-5" /> Adult
-                    <span class="badge badge-sm">{@adult_count}</span>
-                  </.link>
-                </li>
-              <% end %>
-
               <li class="menu-title mt-4">
                 <span>Management</span>
               </li>

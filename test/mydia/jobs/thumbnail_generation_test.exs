@@ -86,10 +86,10 @@ defmodule Mydia.Jobs.ThumbnailGenerationTest do
         ThumbnailGeneration.new(%{
           mode: "missing",
           include_sprites: false,
-          library_type: "adult"
+          library_type: "movies"
         })
 
-      assert job.changes.args[:library_type] == "adult"
+      assert job.changes.args[:library_type] == "movies"
     end
   end
 
@@ -152,7 +152,7 @@ defmodule Mydia.Jobs.ThumbnailGenerationTest do
                perform_job(ThumbnailGeneration, %{
                  "mode" => "missing",
                  "include_sprites" => false,
-                 "library_type" => "adult"
+                 "library_type" => "movies"
                })
     end
   end

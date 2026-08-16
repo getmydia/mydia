@@ -27,41 +27,6 @@ defmodule Mydia.Indexers.CategoryMappingTest do
       refute 2000 in categories
     end
 
-    test "returns audio categories for :music type" do
-      categories = CategoryMapping.categories_for_type(:music)
-
-      assert is_list(categories)
-      assert 3000 in categories
-      assert 3010 in categories
-      assert 3040 in categories
-      # Should not include video categories
-      refute 2000 in categories
-      refute 5000 in categories
-    end
-
-    test "returns book categories for :books type" do
-      categories = CategoryMapping.categories_for_type(:books)
-
-      assert is_list(categories)
-      assert 7000 in categories
-      assert 7020 in categories
-      assert 7030 in categories
-      # Should not include other types
-      refute 2000 in categories
-      refute 3000 in categories
-    end
-
-    test "returns adult categories for :adult type" do
-      categories = CategoryMapping.categories_for_type(:adult)
-
-      assert is_list(categories)
-      assert 6000 in categories
-      assert 6040 in categories
-      # Should not include other types
-      refute 2000 in categories
-      refute 5000 in categories
-    end
-
     test "returns combined movies and TV for :mixed type" do
       categories = CategoryMapping.categories_for_type(:mixed)
       movie_categories = CategoryMapping.categories_for_type(:movies)
@@ -86,9 +51,6 @@ defmodule Mydia.Indexers.CategoryMappingTest do
     test "returns parent category ID for each library type" do
       assert CategoryMapping.parent_category(:movies) == 2000
       assert CategoryMapping.parent_category(:series) == 5000
-      assert CategoryMapping.parent_category(:music) == 3000
-      assert CategoryMapping.parent_category(:books) == 7000
-      assert CategoryMapping.parent_category(:adult) == 6000
     end
 
     test "returns nil for mixed type" do
@@ -148,12 +110,6 @@ defmodule Mydia.Indexers.CategoryMappingTest do
       assert CategoryMapping.category_matches_type?(5070, :series)
       refute CategoryMapping.category_matches_type?(2000, :series)
     end
-
-    test "correctly identifies music categories" do
-      assert CategoryMapping.category_matches_type?(3000, :music)
-      assert CategoryMapping.category_matches_type?(3040, :music)
-      refute CategoryMapping.category_matches_type?(2000, :music)
-    end
   end
 
   describe "type_for_category/1" do
@@ -163,21 +119,21 @@ defmodule Mydia.Indexers.CategoryMappingTest do
       assert CategoryMapping.type_for_category(2500) == :movies
       assert CategoryMapping.type_for_category(2999) == :movies
 
-      # Audio: 3000-3999
-      assert CategoryMapping.type_for_category(3000) == :music
-      assert CategoryMapping.type_for_category(3500) == :music
+      # Audio: 3000-3999 (no longer a Mydia library type; falls through)
+      assert CategoryMapping.type_for_category(3000) == :other
+      assert CategoryMapping.type_for_category(3500) == :other
 
       # TV: 5000-5999
       assert CategoryMapping.type_for_category(5000) == :series
       assert CategoryMapping.type_for_category(5999) == :series
 
-      # Adult: 6000-6999
-      assert CategoryMapping.type_for_category(6000) == :adult
-      assert CategoryMapping.type_for_category(6500) == :adult
+      # Adult: 6000-6999 (no longer a Mydia library type; falls through)
+      assert CategoryMapping.type_for_category(6000) == :other
+      assert CategoryMapping.type_for_category(6500) == :other
 
-      # Books: 7000-7999
-      assert CategoryMapping.type_for_category(7000) == :books
-      assert CategoryMapping.type_for_category(7999) == :books
+      # Books: 7000-7999 (no longer a Mydia library type; falls through)
+      assert CategoryMapping.type_for_category(7000) == :other
+      assert CategoryMapping.type_for_category(7999) == :other
     end
 
     test "returns :other for unknown ranges" do
@@ -210,9 +166,7 @@ defmodule Mydia.Indexers.CategoryMappingTest do
 
       assert :movies in types
       assert :series in types
-      assert :music in types
-      assert :books in types
-      assert :adult in types
+      assert :other in types
     end
   end
 

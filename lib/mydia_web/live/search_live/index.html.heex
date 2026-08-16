@@ -653,10 +653,7 @@
             <% available_types =
               [
                 {:movies, "Movies"},
-                {:series, "TV Series"},
-                {:music, "Music"},
-                {:books, "Books"},
-                {:adult, "Adult"}
+                {:series, "TV Series"}
               ]
               |> Enum.filter(fn {type, _label} ->
                 MapSet.member?(@configured_library_types, type)
@@ -692,8 +689,6 @@
                   <%= cond do %>
                     <% @download_target_type in [:movies, :series] -> %>
                       Will search metadata providers to match title
-                    <% @download_target_type in [:music, :books, :adult] -> %>
-                      Will download directly without metadata lookup
                     <% true -> %>
                       Select a library type to continue
                   <% end %>

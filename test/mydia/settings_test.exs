@@ -327,38 +327,21 @@ defmodule Mydia.SettingsTest do
     end
   end
 
-  describe "specialized library types" do
-    test "can create library path with :music type" do
-      {:ok, library_path} =
-        Settings.create_library_path(%{
-          path: "/media/music_#{System.unique_integer([:positive])}",
-          type: :music,
-          monitored: true
-        })
+  describe "library types" do
+    # Music, books, and adult were removed from Mydia. They stay accepted by
+    # Mydia.Config.Schema, which coerces them so an upgrading instance still
+    # boots, but nothing may write one to the database again.
+    test "rejects the removed music, books, and adult types" do
+      for type <- [:music, :books, :adult] do
+        {:error, changeset} =
+          Settings.create_library_path(%{
+            path: "/media/#{type}_#{System.unique_integer([:positive])}",
+            type: type,
+            monitored: true
+          })
 
-      assert library_path.type == :music
-    end
-
-    test "can create library path with :books type" do
-      {:ok, library_path} =
-        Settings.create_library_path(%{
-          path: "/media/books_#{System.unique_integer([:positive])}",
-          type: :books,
-          monitored: true
-        })
-
-      assert library_path.type == :books
-    end
-
-    test "can create library path with :adult type" do
-      {:ok, library_path} =
-        Settings.create_library_path(%{
-          path: "/media/adult_#{System.unique_integer([:positive])}",
-          type: :adult,
-          monitored: true
-        })
-
-      assert library_path.type == :adult
+        assert changeset.errors[:type] != nil
+      end
     end
 
     test "rejects invalid library type" do
@@ -373,7 +356,7 @@ defmodule Mydia.SettingsTest do
     end
 
     test "all valid library types are accepted" do
-      valid_types = [:movies, :series, :mixed, :music, :books, :adult]
+      valid_types = [:movies, :series, :mixed]
 
       Enum.each(valid_types, fn type ->
         unique_path = "/media/test_#{type}_#{System.unique_integer([:positive])}"

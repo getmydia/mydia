@@ -7,7 +7,7 @@ defmodule Mydia.Library do
   import Mydia.DB
   import Mydia.QueryHelpers
   alias Mydia.Repo
-  alias Mydia.Library.{MediaFile, FileAnalyzer, PhashGenerator, Text, TrashStore}
+  alias Mydia.Library.{MediaFile, FileAnalyzer, Text, TrashStore}
   alias Mydia.Library.ReleaseParser, as: FileParser
   alias Mydia.Library.Structs.FileMetadata
 
@@ -32,7 +32,7 @@ defmodule Mydia.Library do
     - `:media_item_id` - Filter by media item
     - `:episode_id` - Filter by episode
     - `:library_path_id` - Filter by library path ID
-    - `:library_path_type` - Filter by library path type (e.g., :adult, :music, :books)
+    - `:library_path_type` - Filter by library path type (e.g., :movies, :series)
     - `:preload` - List of associations to preload
   """
   @spec list_media_files(keyword()) :: [MediaFile.t()]
@@ -85,55 +85,6 @@ defmodule Mydia.Library do
     MediaFile
     |> maybe_preload(opts[:preload])
     |> Repo.get(id)
-  end
-
-  @doc """
-  Gets adjacent media files (previous and next) for navigation.
-
-  Files are ordered by insertion date (newest first) to match the default
-  listing order in the adult library index.
-
-  ## Options
-    - `:library_path_type` - Filter by library path type (e.g., :adult)
-
-  Returns `{previous_file, next_file}` where either can be nil if at the boundary.
-  """
-  @spec get_adjacent_media_files(binary(), keyword()) ::
-          {MediaFile.t() | nil, MediaFile.t() | nil}
-  def get_adjacent_media_files(current_file_id, opts \\ []) do
-    # Build base query with optional library type filter
-    base_query =
-      MediaFile
-      |> apply_media_file_filters(opts)
-      |> order_by([f], desc: f.inserted_at, desc: f.id)
-
-    # Get the current file to find its position
-    current_file = Repo.get!(MediaFile, current_file_id)
-
-    # Previous file: files inserted after the current one (newer)
-    previous_file =
-      base_query
-      |> where(
-        [f],
-        f.inserted_at > ^current_file.inserted_at or
-          (f.inserted_at == ^current_file.inserted_at and f.id > ^current_file_id)
-      )
-      |> order_by([f], asc: f.inserted_at, asc: f.id)
-      |> limit(1)
-      |> Repo.one()
-
-    # Next file: files inserted before the current one (older)
-    next_file =
-      base_query
-      |> where(
-        [f],
-        f.inserted_at < ^current_file.inserted_at or
-          (f.inserted_at == ^current_file.inserted_at and f.id < ^current_file_id)
-      )
-      |> limit(1)
-      |> Repo.one()
-
-    {previous_file, next_file}
   end
 
   @doc """
@@ -1833,188 +1784,6 @@ defmodule Mydia.Library do
     is_nil(media_file.media_item_id) and is_nil(media_file.episode_id)
   end
 
-  @doc """
-  Finds media files similar to the given file based on perceptual hash.
-
-  Uses the dHash algorithm to compare video content. Files with a Hamming distance
-  less than or equal to the threshold are considered similar.
-
-  ## Parameters
-    - `media_file` - The MediaFile to find similar files for (must have phash set)
-    - `opts` - Options:
-      - `:threshold` - Maximum Hamming distance to consider similar (default: 10)
-      - `:library_path_type` - Filter results to specific library type (e.g., :adult)
-      - `:exclude_self` - Whether to exclude the input file from results (default: true)
-      - `:preload` - Associations to preload on returned files
-
-  ## Returns
-    - `{:ok, similar_files}` - List of similar MediaFile structs with :distance key added
-    - `{:error, :no_phash}` - The input file has no perceptual hash
-
-  ## Examples
-
-      {:ok, similar} = Library.find_similar_files(media_file)
-      {:ok, similar} = Library.find_similar_files(media_file, threshold: 5)
-  """
-  @spec find_similar_files(MediaFile.t(), keyword()) ::
-          {:ok, list(map())} | {:error, :no_phash}
-  def find_similar_files(%MediaFile{phash: nil}, _opts) do
-    {:error, :no_phash}
-  end
-
-  def find_similar_files(%MediaFile{phash: phash, id: file_id}, opts) do
-    threshold = Keyword.get(opts, :threshold, 10)
-    exclude_self = Keyword.get(opts, :exclude_self, true)
-
-    # Get all files with phash values
-    query =
-      MediaFile
-      |> where([f], not is_nil(f.phash))
-      |> apply_media_file_filters(opts)
-
-    query =
-      if exclude_self do
-        where(query, [f], f.id != ^file_id)
-      else
-        query
-      end
-
-    files =
-      query
-      |> maybe_preload(opts[:preload])
-      |> Repo.all()
-
-    # Calculate Hamming distance for each file and filter by threshold
-    similar_files =
-      files
-      |> Enum.map(fn file ->
-        distance = PhashGenerator.hamming_distance(phash, file.phash)
-        {file, distance}
-      end)
-      |> Enum.filter(fn {_file, distance} -> distance <= threshold end)
-      |> Enum.sort_by(fn {_file, distance} -> distance end)
-      |> Enum.map(fn {file, distance} ->
-        Map.put(file, :distance, distance)
-      end)
-
-    {:ok, similar_files}
-  end
-
-  @doc """
-  Lists potential duplicate files across the library based on perceptual hashing.
-
-  Groups files that are likely duplicates (same or very similar content) based
-  on their perceptual hash similarity.
-
-  ## Parameters
-    - `opts` - Options:
-      - `:threshold` - Maximum Hamming distance for duplicates (default: 5)
-      - `:library_path_type` - Filter to specific library type
-      - `:min_group_size` - Minimum files in a group to include (default: 2)
-      - `:preload` - Associations to preload
-
-  ## Returns
-    A list of duplicate groups, where each group is a list of similar files.
-
-  ## Examples
-
-      groups = Library.find_duplicate_files(library_path_type: :adult)
-      # Returns: [[file1, file2], [file3, file4, file5], ...]
-  """
-  @spec find_duplicate_files(keyword()) :: list(list(MediaFile.t()))
-  def find_duplicate_files(opts \\ []) do
-    threshold = Keyword.get(opts, :threshold, 5)
-    min_group_size = Keyword.get(opts, :min_group_size, 2)
-
-    # Get all files with phash values
-    files =
-      MediaFile
-      |> where([f], not is_nil(f.phash))
-      |> apply_media_file_filters(opts)
-      |> maybe_preload(opts[:preload])
-      |> Repo.all()
-
-    # Group files by similarity using union-find approach
-    groups = group_similar_files(files, threshold)
-
-    # Filter to groups with at least min_group_size files
-    groups
-    |> Enum.filter(fn group -> length(group) >= min_group_size end)
-    |> Enum.sort_by(fn group -> -length(group) end)
-  end
-
-  # Groups files by similarity using a simple clustering approach
-  defp group_similar_files(files, threshold) do
-    # Build a map of file_id -> file for quick lookup
-    file_map = Map.new(files, fn f -> {f.id, f} end)
-
-    # Build adjacency list of similar files
-    adjacencies =
-      files
-      |> Enum.reduce(%{}, fn file, acc ->
-        similar_ids =
-          files
-          |> Enum.filter(fn other ->
-            other.id != file.id and
-              PhashGenerator.hamming_distance(file.phash, other.phash) <= threshold
-          end)
-          |> Enum.map(& &1.id)
-
-        Map.put(acc, file.id, similar_ids)
-      end)
-
-    # Find connected components
-    find_connected_components(files, adjacencies, file_map)
-  end
-
-  # Finds connected components in the similarity graph
-  defp find_connected_components(files, adjacencies, file_map) do
-    # Start with all files unvisited
-    all_ids = Enum.map(files, & &1.id) |> MapSet.new()
-
-    {components, _visited} =
-      Enum.reduce(all_ids, {[], MapSet.new()}, fn id, {components, visited} ->
-        if MapSet.member?(visited, id) do
-          {components, visited}
-        else
-          {component, new_visited} = bfs_component(id, adjacencies, visited)
-
-          if component != [] do
-            component_files = Enum.map(component, &Map.get(file_map, &1))
-            {[component_files | components], new_visited}
-          else
-            {components, new_visited}
-          end
-        end
-      end)
-
-    components
-  end
-
-  # BFS to find all nodes in a connected component
-  defp bfs_component(start_id, adjacencies, visited) do
-    do_bfs([start_id], adjacencies, visited, [])
-  end
-
-  defp do_bfs([], _adjacencies, visited, component), do: {component, visited}
-
-  defp do_bfs([id | rest], adjacencies, visited, component) do
-    if MapSet.member?(visited, id) do
-      do_bfs(rest, adjacencies, visited, component)
-    else
-      new_visited = MapSet.put(visited, id)
-      neighbors = Map.get(adjacencies, id, [])
-      unvisited_neighbors = Enum.reject(neighbors, &MapSet.member?(new_visited, &1))
-
-      do_bfs(
-        rest ++ unvisited_neighbors,
-        adjacencies,
-        new_visited,
-        [id | component]
-      )
-    end
-  end
-
   ## Private Functions
 
   # Calculates the relative path and library_path_id for an absolute file path
@@ -2079,7 +1848,7 @@ defmodule Mydia.Library do
         where(query, [f], f.library_path_id == ^library_path_id)
 
       {:library_path_type, library_type}, query ->
-        # Filter files by their library path type (e.g., :adult, :music, :books)
+        # Filter files by their library path type (e.g., :movies, :series)
         from(f in query,
           join: lp in assoc(f, :library_path),
           where: lp.type == ^library_type
@@ -2132,21 +1901,6 @@ defmodule Mydia.Library do
   def trigger_full_library_scan(opts \\ []) do
     %{}
     |> Mydia.Jobs.LibraryScanner.new(Keyword.take(opts, [:schedule_in]))
-    |> insert_scan_job()
-  end
-
-  @doc """
-  Triggers a manual library scan for all adult library paths.
-
-  This will scan for new/modified/deleted files and automatically
-  generate thumbnails for any new files.
-
-  Returns an Oban job that will perform the scan.
-  """
-  @spec trigger_adult_library_scan() :: {:ok, Oban.Job.t()} | {:error, Ecto.Changeset.t()}
-  def trigger_adult_library_scan do
-    %{library_type: "adult"}
-    |> Mydia.Jobs.LibraryScanner.new()
     |> insert_scan_job()
   end
 

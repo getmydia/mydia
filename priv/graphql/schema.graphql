@@ -1390,15 +1390,6 @@ enum LibraryType {
 
   "Mixed content library"
   MIXED
-
-  "Music library"
-  MUSIC
-
-  "Book library"
-  BOOKS
-
-  "Adult content library"
-  ADULT
 }
 
 "Sort field for media lists"

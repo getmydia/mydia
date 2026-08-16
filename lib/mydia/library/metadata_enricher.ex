@@ -608,22 +608,6 @@ defmodule Mydia.Library.MetadataEnricher do
       library_path.type == :mixed ->
         :ok
 
-      # Specialized library types (music, books, adult) should not have movie/TV metadata enrichment
-      library_path.type in [:music, :books, :adult] ->
-        emit_type_mismatch_telemetry(media_type_string, library_path)
-
-        Logger.warning(
-          "Type mismatch: Cannot enrich #{media_type_string} metadata in specialized library",
-          media_type: media_type_string,
-          library_path: library_path.path,
-          library_type: library_path.type,
-          file_path: absolute_path
-        )
-
-        {:error,
-         {:library_type_mismatch,
-          "Cannot add #{media_type_string} to a library path configured for #{library_path.type} (path: #{library_path.path})"}}
-
       # Movie in :series library
       media_type_string == "movie" and library_path.type == :series ->
         emit_type_mismatch_telemetry(media_type_string, library_path)

@@ -174,12 +174,15 @@ defmodule Mydia.Jobs.ImportRun do
   Refuses a library path whose type is not in
   `Mydia.Library.ImportRun.importable_types/0`. The start form already filters
   those out, but this is the layer that a stale bookmark or a crafted event
-  cannot walk around, and it matters: nothing downstream restricts by library
-  type. `Library.inbox_base_query/1` has no type filter, and
-  `MediaFile.library_type_compatible?/3` has no clause for `:music`, `:books`
-  or `:adult` so it falls through to `true`. An unattended run over a music
-  path would send `Artist - 03 - Track.flac` to the relay and could link the
-  result to a movie item.
+  cannot walk around.
+
+  That list currently names every value of `LibraryPath`'s type enum, so the
+  guard turns nothing away today. It is kept because nothing downstream would
+  catch a new type: `Library.inbox_base_query/1` has no type filter, and
+  `MediaFile.library_type_compatible?/3` falls through to `true` for any type
+  it has no clause for. Adding a library type whose files are not movies or
+  episodes has to come here first, or an unattended run will send them to the
+  relay and link whatever comes back.
 
   ## Options
 

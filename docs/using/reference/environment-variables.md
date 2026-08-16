@@ -61,12 +61,12 @@ Configure additional libraries using numbered variables (`<N>` = 1, 2, 3, etc.):
 
 | Variable Pattern | Description | Example |
 |------------------|-------------|---------|
-| `LIBRARY_PATH_<N>_PATH` | Directory path | `/media/music` |
-| `LIBRARY_PATH_<N>_TYPE` | Library type | `music` |
+| `LIBRARY_PATH_<N>_PATH` | Directory path | `/media/anime` |
+| `LIBRARY_PATH_<N>_TYPE` | Library type | `mixed` |
 | `LIBRARY_PATH_<N>_MONITORED` | Enable monitoring | `true` |
 | `LIBRARY_PATH_<N>_SCAN_INTERVAL` | Automatic scan interval in seconds. Minimum 900. Omit for manual-only scanning. | `3600` |
 
-**Library Types:** `movies`, `series`, `mixed`, `music`, `books`, `adult`
+**Library Types:** `movies`, `series`, or `mixed`
 
 ## Authentication
 

@@ -25,7 +25,6 @@ import { LiveSocket } from "phoenix_live_view";
 import { hooks as colocatedHooks } from "phoenix-colocated/mydia";
 import topbar from "../vendor/topbar";
 import VideoPlayer from "./hooks/video_player";
-import MusicPlayer from "./hooks/music_player";
 import PlexOAuth from "./hooks/plex_oauth";
 import DockNav from "./hooks/dock_nav";
 // Alpine.js for reactive UI components
@@ -434,7 +433,6 @@ const liveSocket = new LiveSocket("/live", Socket, {
     ...colocatedHooks,
     ThemeToggle,
     VideoPlayer,
-    MusicPlayer,
     PathAutocomplete,
     DownloadFile,
     StickyToolbar,

@@ -137,10 +137,17 @@ defmodule Mydia.Library.TargetResolver do
 
   ## Candidate validation
 
-  # A download-level override is honoured as-is. It is the pre-existing
-  # specialized-library escape hatch (music, books, adult) whose type would
-  # never satisfy a movie's or show's allow-list, and the design leaves that
-  # step unchanged.
+  # A download-level override is honoured as-is: `download.library_path_id` is
+  # an explicit per-download choice already made against one specific path, so
+  # the resolver does not second-guess it against the media item's allowed
+  # types.
+  #
+  # Note this skips every check, `disabled?/1` and `monitored` included, not
+  # just the type allow-list. The escape hatch originally existed so a music,
+  # books, or adult library could receive a download whose type no allow-list
+  # would accept; those types are gone and what remains is an operator override
+  # that outranks the resolver's own preferences. Narrowing it to reject
+  # disabled paths would be a behaviour change, not a cleanup.
   defp acceptable?(%LibraryPath{}, _allowed, :no_validation), do: true
 
   defp acceptable?(%LibraryPath{} = candidate, allowed, rules) do

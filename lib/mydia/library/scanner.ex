@@ -15,9 +15,6 @@ defmodule Mydia.Library.Scanner do
   alias Mydia.Library.TrashStore
 
   @video_extensions ~w(.mkv .mp4 .avi .mov .wmv .flv .webm .m4v .mpg .mpeg .m2ts .ts)
-  @music_extensions ~w(.mp3 .flac .wav .aac .ogg .m4a .wma .opus .ape .alac .aiff)
-  @book_extensions ~w(.epub .pdf .mobi .azw .azw3 .cbr .cbz .djvu .fb2 .lit .txt .rtf)
-  @image_extensions ~w(.jpg .jpeg .png .gif .bmp .webp)
 
   @doc """
   Returns file extensions for the given library type.
@@ -25,9 +22,6 @@ defmodule Mydia.Library.Scanner do
   def extensions_for_library_type(:movies), do: @video_extensions
   def extensions_for_library_type(:series), do: @video_extensions
   def extensions_for_library_type(:mixed), do: @video_extensions
-  def extensions_for_library_type(:music), do: @music_extensions
-  def extensions_for_library_type(:books), do: @book_extensions
-  def extensions_for_library_type(:adult), do: @video_extensions ++ @image_extensions
   def extensions_for_library_type(_), do: @video_extensions
 
   @doc """

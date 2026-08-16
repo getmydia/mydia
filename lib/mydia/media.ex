@@ -22,7 +22,7 @@ defmodule Mydia.Media do
     - `:ids` - Filter to a specific list of media item ids
     - `:monitored` - Filter by monitored status (true/false)
     - `:category` - Filter by category (atom or string, e.g., :anime_movie or "anime_movie")
-    - `:library_path_type` - Filter by library path type (:adult, :music, :books, etc.)
+    - `:library_path_type` - Filter by library path type (:movies, :series, etc.)
     - `:search` - Search by title (case-insensitive substring match)
     - `:added_since` - Filter to items inserted after this DateTime
     - `:limit` - Maximum number of items to return
@@ -756,19 +756,6 @@ defmodule Mydia.Media do
   def count_tv_shows do
     MediaItem
     |> where([m], m.type == "tv_show")
-    |> Repo.aggregate(:count)
-  end
-
-  @doc """
-  Returns the count of media items by library path type.
-
-  This counts media items that have files in library paths of the specified type.
-  Includes both direct media files (for movies) and episode media files (for TV shows).
-  """
-  @spec count_by_library_path_type(atom()) :: non_neg_integer()
-  def count_by_library_path_type(library_type) do
-    MediaItem
-    |> filter_by_library_path_type(library_type)
     |> Repo.aggregate(:count)
   end
 

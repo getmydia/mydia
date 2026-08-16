@@ -38,7 +38,7 @@ defmodule Mydia.Settings.LibraryPath do
           updated_at: DateTime.t()
         }
 
-  @path_types [:movies, :series, :mixed, :music, :books, :adult]
+  @path_types [:movies, :series, :mixed]
   @movie_library_types [:movies, :mixed]
   @series_library_types [:series, :mixed]
   @scan_statuses [:success, :failed, :in_progress]

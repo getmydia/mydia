@@ -4,12 +4,12 @@ defmodule Mydia.Library.DatabaseHealthCheck do
   triggers library re-scans when needed.
 
   Runs on application startup to detect:
-  1. Stuck media files: no `media_item_id`, no `episode_id`, in a standard
-     (non-specialized) library, AND carrying no match candidate. The candidate
-     exclusion is the load-bearing half. The import coordinator commits
-     orphaned rows as its first phase and can legitimately leave thousands of
-     them queued in the review inbox; those are pending work, not damage, and
-     counting them here would queue a re-scan against a healthy library. See
+  1. Stuck media files: no `media_item_id`, no `episode_id`, under a monitored
+     library path, AND carrying no match candidate. The candidate exclusion is
+     the load-bearing half. The import coordinator commits orphaned rows as its
+     first phase and can legitimately leave thousands of them queued in the
+     review inbox; those are pending work, not damage, and counting them here
+     would queue a re-scan against a healthy library. See
      `count_orphaned_files/0`.
   2. Media files with relative_path but missing library_path_id
 
@@ -106,17 +106,31 @@ defmodule Mydia.Library.DatabaseHealthCheck do
   end
 
   @doc """
-  Counts orphaned media files in standard (non-specialized) libraries.
+  Counts orphaned media files in monitored libraries.
 
   Orphaned files are those with no `media_item_id` and no `episode_id`.
-  Files in specialized libraries (music, books, adult) are excluded as they
-  don't require parent associations.
+
+  Unmonitored library paths are excluded. The repair this count triggers is a
+  rescan, and a rescan only walks monitored paths, so an orphan under an
+  unmonitored one would be reported on every boot and never go away. Paths
+  converted off the removed music, books and adult types are exactly that case:
+  they are `:mixed` and unmonitored, and the parentless rows they left behind
+  are not something a rescan can resolve.
 
   Files that already hold a match candidate are excluded too. A candidate
   means the file is queued in the import inbox for review, not stuck: the
   import coordinator writes orphaned rows as its first phase, and a scan can
   legitimately leave thousands of them sitting there awaiting a decision.
   Without this exclusion, that queued work reads as database damage.
+
+  The two exclusions cover different populations and neither subsumes the
+  other: a converted music/books/adult file carries no candidate, so only the
+  `monitored` filter keeps it out.
+
+  The `standard_types` filter is a tripwire rather than a live narrowing. It
+  currently names every value of `LibraryPath`'s type enum, so it excludes
+  nothing today; it exists so that adding a specialized library type back has
+  to come here and decide what this count means for it.
   """
   def count_orphaned_files do
     standard_types = [:movies, :series, :mixed]
@@ -127,7 +141,7 @@ defmodule Mydia.Library.DatabaseHealthCheck do
       left_join: c in MatchCandidate,
       on: c.media_file_id == mf.id,
       where: is_nil(mf.media_item_id) and is_nil(mf.episode_id),
-      where: lp.type in ^standard_types,
+      where: lp.type in ^standard_types and lp.monitored,
       where: is_nil(c.id),
       select: count(mf.id)
     )

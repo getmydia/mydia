@@ -178,28 +178,25 @@ defmodule Mydia.Jobs.ImportRunJobTest do
   end
 
   describe "library types that cannot be imported" do
-    test "the scan phase refuses a music library even when a run row exists", %{user: user} do
-      dir = Path.join(System.tmp_dir!(), "import_music_#{System.unique_integer([:positive])}")
-      File.mkdir_p!(dir)
-      on_exit(fn -> File.rm_rf!(dir) end)
+    # This guard used to be reachable: music, books and adult paths were real
+    # enum values that run_scan_phase/2 had to turn away, because nothing
+    # downstream (inbox_base_query/1, MediaFile.library_type_compatible?/3)
+    # restricts by library type, so an unattended run over one could link a
+    # track to a movie item. Those types are gone, and no constructible
+    # library path is refused any more -- library_path_fixture cannot even
+    # build one, since the changeset validates against the same enum.
+    #
+    # So the guard is now covered where it can be: the pure predicate, and a
+    # tripwire on the enum. Adding a library type whose files are not movies
+    # or episodes fails here and has to decide what import means for it.
+    test "the importable allow-list still covers every type the schema allows" do
+      assert Enum.sort(Ecto.Enum.values(Mydia.Settings.LibraryPath, :type)) ==
+               Enum.sort(Mydia.Library.ImportRun.importable_types())
+    end
 
-      music = library_path_fixture(%{path: dir, type: "music"})
-
-      {:ok, run} =
-        Library.create_import_run(%{
-          library_path_id: music.id,
-          user_id: user.id,
-          mode: :unattended
-        })
-
-      # The UI filters these out, but a stale bookmark or a crafted event can
-      # still reach here. Nothing downstream (inbox_base_query/1,
-      # MediaFile.library_type_compatible?/3) restricts by library type, so an
-      # unattended run over a music path can link a track to a movie item.
-      assert {:error, {:unsupported_library_type, _}} =
-               ImportRunJob.run_scan_phase(Library.get_import_run(run.id))
-
-      assert Library.list_media_files(library_path_id: music.id) == []
+    test "the scan-phase guard still refuses a type outside the allow-list" do
+      refute Mydia.Library.ImportRun.importable_type?(:music)
+      refute Mydia.Library.ImportRun.importable_type?(:some_future_type)
     end
   end
 

@@ -80,7 +80,7 @@ defmodule Mydia.Indexers.CategoryMapping do
   Returns all category IDs for the given library type.
 
   ## Parameters
-    - library_type: One of :movies, :series, :mixed, :music, :books, :adult
+    - library_type: One of :movies, :series, :mixed
 
   ## Returns
     - List of Torznab category IDs
@@ -90,11 +90,8 @@ defmodule Mydia.Indexers.CategoryMapping do
       iex> CategoryMapping.categories_for_type(:movies)
       [2000, 2010, 2020, 2030, 2040, 2045, 2050, 2060, 2070]
 
-      iex> CategoryMapping.categories_for_type(:music)
-      [3000, 3010, 3020, 3030, 3040, 3050, 3060]
-
-      iex> CategoryMapping.categories_for_type(:adult)
-      [6000, 6010, 6020, 6030, 6040, 6045, 6050, 6060, 6070, 6080, 6090]
+      iex> CategoryMapping.categories_for_type(:series)
+      [5000, 5010, 5020, 5030, 5040, 5045, 5050, 5060, 5070, 5080]
   """
   @spec categories_for_type(atom()) :: [integer()]
   def categories_for_type(:movies) do
@@ -126,47 +123,6 @@ defmodule Mydia.Indexers.CategoryMapping do
     ]
   end
 
-  def categories_for_type(:music) do
-    [
-      @audio_parent,
-      @audio_mp3,
-      @audio_video,
-      @audio_audiobook,
-      @audio_lossless,
-      @audio_other,
-      @audio_foreign
-    ]
-  end
-
-  def categories_for_type(:books) do
-    [
-      @books_parent,
-      @books_foreign,
-      @books_ebook,
-      @books_comics,
-      @books_magazines,
-      @books_technical,
-      @books_other,
-      @books_audiobook
-    ]
-  end
-
-  def categories_for_type(:adult) do
-    [
-      @xxx_parent,
-      @xxx_dvd,
-      @xxx_wmv,
-      @xxx_xvid,
-      @xxx_x264,
-      @xxx_uhd,
-      @xxx_pack,
-      @xxx_imageset,
-      @xxx_packs,
-      @xxx_sd,
-      @xxx_webdl
-    ]
-  end
-
   # Mixed library type searches across all video content
   def categories_for_type(:mixed) do
     categories_for_type(:movies) ++ categories_for_type(:series)
@@ -185,15 +141,12 @@ defmodule Mydia.Indexers.CategoryMapping do
       iex> CategoryMapping.parent_category(:movies)
       2000
 
-      iex> CategoryMapping.parent_category(:music)
-      3000
+      iex> CategoryMapping.parent_category(:series)
+      5000
   """
   @spec parent_category(atom()) :: integer() | nil
   def parent_category(:movies), do: @movies_parent
   def parent_category(:series), do: @tv_parent
-  def parent_category(:music), do: @audio_parent
-  def parent_category(:books), do: @books_parent
-  def parent_category(:adult), do: @xxx_parent
   def parent_category(:mixed), do: nil
   def parent_category(_), do: nil
 
@@ -295,16 +248,13 @@ defmodule Mydia.Indexers.CategoryMapping do
       :movies
 
       iex> CategoryMapping.type_for_category(3000)
-      :music
+      :other
   """
   @spec type_for_category(integer()) :: atom()
   def type_for_category(category_id) when is_integer(category_id) do
     cond do
       category_id >= 2000 and category_id < 3000 -> :movies
-      category_id >= 3000 and category_id < 4000 -> :music
       category_id >= 5000 and category_id < 6000 -> :series
-      category_id >= 6000 and category_id < 7000 -> :adult
-      category_id >= 7000 and category_id < 8000 -> :books
       true -> :other
     end
   end
