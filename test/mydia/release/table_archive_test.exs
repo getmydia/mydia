@@ -5,6 +5,32 @@ defmodule Mydia.Release.TableArchiveTest do
 
   @moduletag :tmp_dir
 
+  # SQLite's binary column type is `BLOB`; PostgreSQL's is `bytea`. Likewise
+  # SQLite accepts a blob literal as `X'<hex>'`, while PostgreSQL only
+  # recognises that spelling as a bit-string literal for the `bit` type — its
+  # portable spelling for a bytea literal is the hex-format string
+  # `'\xhexdigits'`, which the target column's type resolves the untyped
+  # string literal into. Picking the adapter at runtime (rather than hardcoding
+  # either syntax) is what lets this fixture run under both `Test / SQLite`
+  # and `Test / PostgreSQL` in CI.
+  #
+  # Deliberately NOT `Mydia.Repo.Migrations.Helpers.postgres?/0`: that helper
+  # calls `repo()`, which is only valid inside a running migration and raises
+  # here.
+  defp binary_column_type do
+    case Mydia.Repo.__adapter__() do
+      Ecto.Adapters.Postgres -> "bytea"
+      _ -> "BLOB"
+    end
+  end
+
+  defp binary_literal(hex) do
+    case Mydia.Repo.__adapter__() do
+      Ecto.Adapters.Postgres -> "'\\x#{hex}'"
+      _ -> "X'#{hex}'"
+    end
+  end
+
   test "writes one NDJSON line per row and reports the count", %{tmp_dir: tmp_dir} do
     Mydia.Repo.query!("CREATE TABLE archive_fixture (id INTEGER, name TEXT)")
     Mydia.Repo.query!("INSERT INTO archive_fixture (id, name) VALUES (1, 'alpha')")
@@ -41,9 +67,10 @@ defmodule Mydia.Release.TableArchiveTest do
   # by the tests above. What is not covered anywhere is what happens when raw
   # SQL hands back the 16-byte binary representation, which is exactly what
   # PostgreSQL's uuid extension returns. Exercise that here via an explicit
-  # BLOB column and a SQLite blob literal (`X'...'`), so the bytes round-trip
-  # exactly as inserted regardless of how the driver binds ordinary string
-  # parameters.
+  # binary column and an adapter-appropriate blob literal (see
+  # `binary_column_type/0` and `binary_literal/1` above), so the bytes
+  # round-trip exactly as inserted regardless of how the driver binds
+  # ordinary string parameters.
   #
   # The UUID is fixed rather than generated: the UUID branch now requires the
   # 16 bytes to be invalid UTF-8, and a random UUID is occasionally valid UTF-8
@@ -57,8 +84,11 @@ defmodule Mydia.Release.TableArchiveTest do
 
     hex = Base.encode16(raw)
 
-    Mydia.Repo.query!("CREATE TABLE uuid_fixture (id BLOB, name TEXT)")
-    Mydia.Repo.query!("INSERT INTO uuid_fixture (id, name) VALUES (X'#{hex}', 'widget')")
+    Mydia.Repo.query!("CREATE TABLE uuid_fixture (id #{binary_column_type()}, name TEXT)")
+
+    Mydia.Repo.query!(
+      "INSERT INTO uuid_fixture (id, name) VALUES (#{binary_literal(hex)}, 'widget')"
+    )
 
     assert {:ok, counts} = TableArchive.archive_tables(Mydia.Repo, ["uuid_fixture"], tmp_dir)
     assert counts["uuid_fixture"] == 1
@@ -107,8 +137,9 @@ defmodule Mydia.Release.TableArchiveTest do
     invalid_utf8 = <<0xFF, 0xFE, 0xFD, 0xFC, 0xFB, 0xFA, 0xF9, 0xF8>>
     hex = Base.encode16(invalid_utf8)
 
-    Mydia.Repo.query!("CREATE TABLE blob_fixture (id INTEGER, payload BLOB)")
-    Mydia.Repo.query!("INSERT INTO blob_fixture (id, payload) VALUES (1, X'#{hex}')")
+    Mydia.Repo.query!("CREATE TABLE blob_fixture (id INTEGER, payload #{binary_column_type()})")
+
+    Mydia.Repo.query!("INSERT INTO blob_fixture (id, payload) VALUES (1, #{binary_literal(hex)})")
 
     assert {:ok, counts} = TableArchive.archive_tables(Mydia.Repo, ["blob_fixture"], tmp_dir)
     assert counts["blob_fixture"] == 1
