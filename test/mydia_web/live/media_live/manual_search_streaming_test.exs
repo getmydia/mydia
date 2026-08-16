@@ -36,6 +36,49 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
     "search-result-#{String.pad_leading(Integer.to_string(pos), 5, "0")}-#{hash}"
   end
 
+  # The raw Prowlarr JSON item returned by the Bypass indexer in the
+  # real-fan-out test below. `magnetUrl` is what Adapter.Prowlarr turns into
+  # the result's download_url, and `indexer` names the upstream tracker (as
+  # opposed to the configured indexer's own name).
+  defp real_result_item(title) do
+    %{
+      "title" => title,
+      "size" => 8_000_000_000,
+      "seeders" => 100,
+      "leechers" => 5,
+      "magnetUrl" => "magnet:?xt=urn:btih:#{:erlang.phash2(title)}",
+      "indexer" => "upstream"
+    }
+  end
+
+  # The %SearchResult{} Adapter.Prowlarr builds from real_result_item/1,
+  # mirroring the parse so the test can compute the positioned DOM id the real
+  # result row will render under. Only the fields participate in the dom id
+  # (download_url + indexer) and the ranking survival (title + seeders).
+  defp real_result(title) do
+    %Mydia.Indexers.SearchResult{
+      title: title,
+      download_url: "magnet:?xt=urn:btih:#{:erlang.phash2(title)}",
+      indexer: "upstream",
+      size: 8_000_000_000,
+      seeders: 100,
+      leechers: 5
+    }
+  end
+
+  defp wait_until_result_renders(view, row, retries \\ 200) do
+    if retries == 0 do
+      flunk("timed out waiting for #{row} to render")
+    else
+      if has_element?(view, row) do
+        :ok
+      else
+        Process.sleep(10)
+        wait_until_result_renders(view, row, retries - 1)
+      end
+    end
+  end
+
   # Mirrors MydiaWeb.SearchLive.StreamingTest's fixture of the same name: a
   # real indexer whose HTTP call is parked behind a Bypass server that sleeps
   # past the test's lifetime. Retrying an indexer starts a second real search
@@ -854,5 +897,38 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
     |> render_change(%{"quality" => "", "min_seeders" => "0"})
 
     assert has_element?(view, "##{positioned_result_dom_id(dune)}")
+  end
+
+  # Every test above injects %IndexerProgress{} directly and never runs the
+  # real Indexers.search_all/2 fan-out — the exact gap that let the nil-field
+  # crash ship. This test drives the real fan-out through a Bypass-backed
+  # Prowlarr indexer returning realistic JSON and asserts the parsed result
+  # row renders, proving the end-to-end path (Prowlarr parse -> rank/dedupe ->
+  # apply_indexer_progress -> stream) survives without injected progress.
+  test "a real search_all fan-out renders a result in the manual search modal", %{conn: conn} do
+    media_item = media_item_fixture(%{title: "Dune", type: "movie"})
+    bypass = Bypass.open()
+
+    Bypass.expect(bypass, "GET", "/api/v1/search", fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, Jason.encode!([real_result_item("Dune.2021.1080p.BluRay")]))
+    end)
+
+    indexer_config_fixture(%{
+      name: "real-indexer",
+      type: :prowlarr,
+      base_url: "http://localhost:#{bypass.port}"
+    })
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+
+    view |> element("#manual-search-button") |> render_click()
+
+    row = "##{positioned_result_dom_id(real_result("Dune.2021.1080p.BluRay"))}"
+
+    wait_until_result_renders(view, row)
+
+    assert has_element?(view, row)
   end
 end

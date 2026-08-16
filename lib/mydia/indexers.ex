@@ -648,11 +648,15 @@ defmodule Mydia.Indexers do
     end
   end
 
+  defp extract_hash_from_url(nil), do: nil
+
   defp normalize_title(title) when is_binary(title) do
     title
     |> String.downcase()
     |> String.replace(~r/[^a-z0-9]+/, "")
   end
+
+  defp normalize_title(nil), do: ""
 
   defp merge_duplicates([single]), do: single
 

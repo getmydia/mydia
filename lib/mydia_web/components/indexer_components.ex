@@ -10,13 +10,14 @@ defmodule MydiaWeb.IndexerComponents do
 
   use Phoenix.Component
 
-  import MydiaWeb.CoreComponents, only: [icon: 1]
+  import MydiaWeb.CoreComponents, only: [button: 1, icon: 1]
 
   alias Mydia.Indexers.Structs.IndexerProgress
 
   @doc """
-  Renders one chip per indexer, showing whether it is still searching, how many
-  results it returned, or why it failed.
+  Renders a collapsed summary of the search's progress — total results,
+  completion count, and a failed count — with an expandable `<details>` list of
+  one row per indexer.
 
   `progress` is a map of `indexer_id => %IndexerProgress{}`. Pass `retry_event`
   to render a retry button on failed and timed-out indexers; the button sends
@@ -26,55 +27,83 @@ defmodule MydiaWeb.IndexerComponents do
   attr :retry_event, :string, default: nil
 
   def indexer_search_status(assigns) do
-    assigns = assign(assigns, :rows, sort_rows(assigns.progress))
+    rows = sort_rows(assigns.progress)
+
+    total_results =
+      rows
+      |> Enum.filter(&(&1.status == :ok))
+      |> Enum.reduce(0, &(&2 + (&1.result_count || 0)))
+
+    done = Enum.count(rows, &(&1.status in [:ok, :error, :timeout]))
+    total = length(rows)
+    failed = Enum.count(rows, &(&1.status in [:error, :timeout]))
+
+    assigns =
+      assigns
+      |> assign(:rows, rows)
+      |> assign(:total_results, total_results)
+      |> assign(:done, done)
+      |> assign(:total, total)
+      |> assign(:failed, failed)
 
     ~H"""
     <div :if={@rows != []} id="indexer-search-status" class="mb-4">
-      <div class="flex flex-wrap items-center gap-2">
-        <div
-          :for={row <- @rows}
-          id={"indexer-status-#{row.indexer_id}"}
-          class={["badge badge-lg gap-2 py-3", status_class(row.status)]}
-        >
-          <span :if={row.status == :pending} class="loading loading-spinner loading-xs"></span>
-          <.icon :if={row.status == :ok} name="hero-check-circle" class="w-4 h-4 shrink-0" />
-          <.icon
-            :if={row.status == :error}
-            name="hero-exclamation-triangle"
-            class="w-4 h-4 shrink-0"
-          />
-          <.icon :if={row.status == :timeout} name="hero-clock" class="w-4 h-4 shrink-0" />
+      <details class="collapse collapse-arrow bg-base-200/50 border border-base-300">
+        <summary class="collapse-title text-sm font-medium flex items-center gap-2">
+          <span>{@total_results} results · {@done}/{@total} indexers</span>
+          <span :if={@failed > 0} class="badge badge-sm badge-error">{@failed} failed</span>
+        </summary>
+        <div class="collapse-content">
+          <ul class="menu w-full">
+            <li
+              :for={row <- @rows}
+              id={"indexer-status-#{row.indexer_id}"}
+              class="flex items-center gap-2"
+            >
+              <span :if={row.status == :pending} class="loading loading-spinner loading-xs"></span>
+              <.icon
+                :if={row.status == :ok}
+                name="hero-check-circle"
+                class="w-4 h-4 shrink-0 text-success"
+              />
+              <.icon
+                :if={row.status == :error}
+                name="hero-exclamation-triangle"
+                class="w-4 h-4 shrink-0 text-error"
+              />
+              <.icon
+                :if={row.status == :timeout}
+                name="hero-clock"
+                class="w-4 h-4 shrink-0 text-warning"
+              />
 
-          <span class="font-medium">{row.indexer}</span>
-          <span class="text-xs opacity-70">{status_label(row)}</span>
+              <span class="font-medium">{row.indexer}</span>
+              <span class="text-xs opacity-70">{status_label(row)}</span>
 
-          <button
-            :if={@retry_event && row.status in [:error, :timeout]}
-            type="button"
-            class="btn btn-ghost btn-xs"
-            phx-click={@retry_event}
-            phx-value-id={row.indexer_id}
-          >
-            Retry
-          </button>
+              <.button
+                :if={@retry_event && row.status in [:error, :timeout]}
+                type="button"
+                class="btn btn-ghost btn-xs"
+                phx-click={@retry_event}
+                phx-value-id={row.indexer_id}
+              >
+                Retry
+              </.button>
+            </li>
+          </ul>
         </div>
-      </div>
+      </details>
     </div>
     """
   end
 
-  # Sorted by name so chips keep a stable position as indexers settle out of
+  # Sorted by name so rows keep a stable position as indexers settle out of
   # order. Sorting by status would make rows jump around mid-search.
   defp sort_rows(progress) do
     progress
     |> Map.values()
     |> Enum.sort_by(& &1.indexer)
   end
-
-  defp status_class(:pending), do: "badge-ghost"
-  defp status_class(:ok), do: "badge-success badge-outline"
-  defp status_class(:error), do: "badge-error badge-outline"
-  defp status_class(:timeout), do: "badge-warning badge-outline"
 
   defp status_label(%IndexerProgress{status: :pending}), do: "searching..."
 
