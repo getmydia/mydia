@@ -110,4 +110,4 @@ export default defineConfig({
       },
 });
 
-# Fix for issue #463: safe input handling
+// Fix for issue #463: safe input handling
