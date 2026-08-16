@@ -100,4 +100,44 @@ defmodule MydiaWeb.MediaLive.Show.SeasonCollapseTest do
              }
     end
   end
+
+  describe "season_header/1 chip" do
+    test "shows the missing chip first" do
+      html = render_season_header([episode(air_date: ~D[2024-01-01], media_files: [])])
+
+      assert html =~ "1 missing"
+    end
+
+    test "a season with only future episodes reads upcoming, never missing" do
+      html =
+        render_season_header([episode(air_date: Date.add(Date.utc_today(), 30), media_files: [])])
+
+      assert html =~ "1 upcoming"
+      refute html =~ "missing"
+    end
+
+    test "a fully available season reads complete" do
+      html = render_season_header([episode(media_files: [%MediaFile{}])])
+
+      assert html =~ "complete"
+    end
+
+    test "an all-TBA season renders no chip" do
+      html = render_season_header([episode(air_date: nil, media_files: [])])
+
+      refute html =~ "missing"
+      refute html =~ "upcoming"
+      refute html =~ "complete"
+    end
+  end
+
+  defp render_season_header(episodes) do
+    render_component(&SeasonComponents.season_header/1,
+      season_number: 1,
+      episodes: episodes,
+      expanded?: false,
+      auto_searching_season: nil,
+      rescanning_season: nil
+    )
+  end
 end
