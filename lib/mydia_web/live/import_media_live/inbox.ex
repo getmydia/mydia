@@ -12,6 +12,7 @@ defmodule MydiaWeb.ImportMediaLive.Inbox do
   """
   use MydiaWeb, :html
 
+  alias Mydia.Library.MediaFile
   alias MydiaWeb.ImportMediaLive.Components
 
   # Sentences for the handful of error shapes that can actually land in
@@ -45,7 +46,7 @@ defmodule MydiaWeb.ImportMediaLive.Inbox do
   attr :offset, :integer, default: 0
   attr :limit, :integer, default: 100
   attr :editing_file_id, :string, default: nil
-  attr :editing_file_path, :string, default: nil
+  attr :editing_file_name, :string, default: nil
   attr :edit_form, :map, default: nil
   attr :search_results, :list, default: []
   attr :batch_selected_ids, :any, default: MapSet.new()
@@ -71,7 +72,7 @@ defmodule MydiaWeb.ImportMediaLive.Inbox do
               without it, importing a 200 episode show means ticking 100
               checkboxes per page by hand before the batch editor appears.
             --%>
-            <button
+            <.button
               :if={@total > 0}
               id="inbox-select-page"
               type="button"
@@ -79,22 +80,21 @@ defmodule MydiaWeb.ImportMediaLive.Inbox do
               class="btn btn-sm btn-ghost"
             >
               <.icon name="hero-check" class="w-4 h-4" /> Select all on this page
-            </button>
+            </.button>
 
-            <select
+            <.input
               id="inbox-filter"
               name="filter"
+              type="select"
+              value={to_string(@filter)}
+              options={[
+                {"Everything", "all"},
+                {"Unsure matches", "low_confidence"},
+                {"Could not identify", "unidentified"}
+              ]}
               phx-change="filter_inbox"
               class="select select-bordered select-sm"
-            >
-              <option value="all" selected={@filter == :all}>Everything</option>
-              <option value="low_confidence" selected={@filter == :low_confidence}>
-                Unsure matches
-              </option>
-              <option value="unidentified" selected={@filter == :unidentified}>
-                Could not identify
-              </option>
-            </select>
+            />
           </div>
         </div>
 
@@ -111,7 +111,7 @@ defmodule MydiaWeb.ImportMediaLive.Inbox do
         <div :if={@editing_file_id} class="pb-2">
           <Components.unmatched_file_list_item
             media_file_id={@editing_file_id}
-            file_path={@editing_file_path}
+            file_name={@editing_file_name}
             edit_form={@edit_form}
             search_results={@search_results}
           />
@@ -122,6 +122,12 @@ defmodule MydiaWeb.ImportMediaLive.Inbox do
         <ul id="inbox-rows" phx-update="stream" class="divide-y divide-base-300">
           <li :for={{dom_id, row} <- @rows} id={dom_id} class="py-3 flex items-center gap-4">
             <% error = format_last_error(row.candidate.last_error) %>
+            <%!--
+              Left as a bare input rather than `<.input type="checkbox">`: this
+              is a phx-click target, not a form field, and that component emits
+              a paired hidden input plus a label/fieldset wrapper for form
+              submission, none of which has anything to submit here.
+            --%>
             <input
               type="checkbox"
               id={"batch-toggle-#{row.media_file.id}"}
@@ -130,15 +136,22 @@ defmodule MydiaWeb.ImportMediaLive.Inbox do
               phx-click="batch_toggle_file"
               phx-value-id={row.media_file.id}
             />
+            <%!--
+              display_path/1, not display_name/1: this line is the row's
+              location, and the title line above already falls back to the
+              name. `list_inbox_files/1` preloads :library_path, so this is
+              the file's absolute path, and it is nil rather than a raise for
+              a row whose location cannot be resolved at all.
+            --%>
             <div class="flex-1 min-w-0">
               <p class="font-medium truncate">{title_for(row)}</p>
-              <p class="text-sm opacity-70 truncate">{row.media_file.relative_path}</p>
+              <p class="text-sm opacity-70 truncate">{MediaFile.display_path(row.media_file)}</p>
               <p :if={error} class="text-xs opacity-70 truncate">{error}</p>
             </div>
 
             <.confidence_badge candidate={row.candidate} />
 
-            <button
+            <.button
               id={"edit-#{row.media_file.id}"}
               type="button"
               phx-click="edit_file"
@@ -147,9 +160,9 @@ defmodule MydiaWeb.ImportMediaLive.Inbox do
               title="Find or fix this file's match"
             >
               <.icon name="hero-magnifying-glass" class="w-4 h-4" />
-            </button>
+            </.button>
 
-            <button
+            <.button
               id={"approve-#{row.media_file.id}"}
               phx-click="approve_file"
               phx-value-id={row.media_file.id}
@@ -157,7 +170,7 @@ defmodule MydiaWeb.ImportMediaLive.Inbox do
               class="btn btn-sm btn-primary"
             >
               Add
-            </button>
+            </.button>
           </li>
         </ul>
 
@@ -208,7 +221,7 @@ defmodule MydiaWeb.ImportMediaLive.Inbox do
         Showing {@offset + 1}-{min(@offset + @limit, @total)} of {@total}
       </p>
       <div class="join">
-        <button
+        <.button
           id="inbox-prev-page"
           phx-click="inbox_page"
           phx-value-offset={max(@offset - @limit, 0)}
@@ -216,8 +229,8 @@ defmodule MydiaWeb.ImportMediaLive.Inbox do
           class="join-item btn btn-sm"
         >
           <.icon name="hero-chevron-left" class="w-4 h-4" />
-        </button>
-        <button
+        </.button>
+        <.button
           id="inbox-next-page"
           phx-click="inbox_page"
           phx-value-offset={@offset + @limit}
@@ -225,7 +238,7 @@ defmodule MydiaWeb.ImportMediaLive.Inbox do
           class="join-item btn btn-sm"
         >
           <.icon name="hero-chevron-right" class="w-4 h-4" />
-        </button>
+        </.button>
       </div>
     </div>
     """
@@ -279,8 +292,11 @@ defmodule MydiaWeb.ImportMediaLive.Inbox do
     String.starts_with?(last_error, "{:library_type_mismatch,")
   end
 
+  # display_name/1 rather than a local Path.basename/1: it is the helper every
+  # other media-file renderer in the app uses, and it is the only one that
+  # cannot raise or return "" for a file whose location will not resolve.
   defp title_for(%{candidate: %{title: title}}) when is_binary(title), do: title
-  defp title_for(%{media_file: file}), do: Path.basename(file.relative_path || "")
+  defp title_for(%{media_file: file}), do: MediaFile.display_name(file)
 
   defp empty_message(:all), do: "Nothing waiting. Start a run to find files."
   defp empty_message(_filter), do: "Nothing matches this filter."

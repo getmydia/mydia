@@ -276,6 +276,84 @@ defmodule MydiaWeb.ImportMediaEditingTest do
     assert c3.last_error == "no_match"
   end
 
+  test "an edit naming a media type the app has no clause for is stored as one it does", %{
+    conn: conn,
+    media_file: media_file
+  } do
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    view |> element("#edit-#{media_file.id}") |> render_click()
+
+    # `type` rides a hidden field, so its value is whatever the client sends.
+    # It is written straight to a column with no enum behind it and read back
+    # as an atom when the file is approved, which is where an unknown value
+    # used to surface -- as a crash, one screen away from where it entered.
+    render_click(view, "select_search_result", %{
+      "title" => "The Matrix",
+      "provider_id" => "603",
+      "type" => "not_a_media_type_7b2"
+    })
+
+    view |> form("#inbox-edit-form-#{media_file.id}") |> render_submit()
+
+    assert [candidate] = Library.list_match_candidates(media_file.id)
+    assert candidate.media_type == "movie"
+  end
+
+  test "batch apply reports the files it could not update instead of claiming them all", %{
+    conn: conn,
+    library_path: lp
+  } do
+    kept = orphaned_media_file_fixture(%{library_path_id: lp.id})
+
+    {:ok, _} =
+      Library.upsert_match_candidate(%{
+        media_file_id: kept.id,
+        rank: 0,
+        attempts: 1,
+        last_error: "no_match"
+      })
+
+    vanishing = orphaned_media_file_fixture(%{library_path_id: lp.id})
+
+    {:ok, _} =
+      Library.upsert_match_candidate(%{
+        media_file_id: vanishing.id,
+        rank: 0,
+        attempts: 1,
+        last_error: "no_match"
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    view |> element("#batch-toggle-#{kept.id}") |> render_click()
+    view |> element("#batch-toggle-#{vanishing.id}") |> render_click()
+
+    # The file goes away between this page rendering and the button being
+    # pressed: a scan that noticed it was gone, or a delete from another tab.
+    # Its candidate goes with it, on delete cascade.
+    Mydia.Repo.delete!(Library.get_media_file!(vanishing.id))
+
+    render_click(view, "batch_select_search_result", %{
+      "title" => "Selected Show",
+      "provider_id" => "9001",
+      "type" => "tv_show",
+      "year" => "2020"
+    })
+
+    html = render_click(view, "batch_apply", %{})
+
+    # The flash used to report every selected file as edited no matter what
+    # came back from the write, so a rejected changeset looked exactly like a
+    # success from the only place a user can see.
+    assert html =~ "Batch edit applied to 1 file(s)"
+    assert html =~ "1 could not be updated"
+
+    assert [candidate] = Library.list_match_candidates(kept.id)
+    assert candidate.title == "Selected Show"
+    assert Library.list_match_candidates(vanishing.id) == []
+  end
+
   describe "addressing survives pagination" do
     test "editing the sole row on page 2 opens its own editor, not the row that occupies the same position on page 1",
          %{conn: conn, library_path: lp, media_file: media_file} do

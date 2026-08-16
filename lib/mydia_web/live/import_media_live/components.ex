@@ -21,12 +21,15 @@ defmodule MydiaWeb.ImportMediaLive.Components do
 
   ## Attributes
     * `:media_file_id` - The `MediaFile` id this editor is for
-    * `:file_path` - The file's relative path, shown as a subtitle
+    * `:file_name` - The file's display name, shown as a subtitle. Built by the
+      LiveView with `Mydia.Library.MediaFile.display_name/1` rather than by
+      calling `Path.basename/1` here, which raises on the nil path a file with
+      no resolvable location has.
     * `:edit_form` - Edit form data (`"title"`, `"provider_id"`, `"type"`, `"season"`, `"episodes"`)
     * `:search_results` - Metadata search results to show in the dropdown
   """
   attr :media_file_id, :string, required: true
-  attr :file_path, :string, required: true
+  attr :file_name, :string, required: true
   attr :edit_form, :map, required: true
   attr :search_results, :list, default: []
 
@@ -42,7 +45,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
           <div class="flex-1 min-w-0">
             <h4 class="font-semibold text-sm">Find Metadata Match</h4>
             <p class="text-xs text-base-content/60 truncate">
-              {Path.basename(@file_path)}
+              {@file_name}
             </p>
           </div>
           <button

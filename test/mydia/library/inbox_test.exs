@@ -128,4 +128,81 @@ defmodule Mydia.Library.InboxTest do
     assert other_file.id in all_ids
     assert length(all_ids) == 4
   end
+
+  describe "apply_batch_match/3" do
+    test "stamps a season without blanking the match already on the file", %{
+      confident: confident
+    } do
+      assert {:ok, %{updated: 1, failed: 0}} = Library.apply_batch_match([confident.id], nil, 3)
+
+      # The merge, not an overwrite: a season-only batch edit that dropped the
+      # title and provider would silently turn an identified file back into an
+      # unidentified one.
+      assert [candidate] = Library.list_match_candidates(confident.id)
+      assert candidate.title == "Confident"
+      assert candidate.provider_id == "1"
+      assert candidate.parsed_info["season"] == 3
+    end
+
+    test "applies a chosen match over whatever the file already had", %{unidentified: file} do
+      match = %{provider_id: "9001", title: "Selected Show", type: "tv_show"}
+
+      assert {:ok, %{updated: 1, failed: 0}} = Library.apply_batch_match([file.id], match, 2)
+
+      assert [candidate] = Library.list_match_candidates(file.id)
+      assert candidate.title == "Selected Show"
+      assert candidate.provider_id == "9001"
+      assert candidate.media_type == "tv_show"
+      assert candidate.confidence == 1.0
+      assert candidate.parsed_info["season"] == 2
+      # The batch edit is a fresh start for the file, so the failure that put
+      # it in the inbox is cleared rather than left contradicting the match.
+      assert is_nil(candidate.last_error)
+    end
+
+    test "counts a file that no longer exists as failed instead of writing it", %{
+      lp: lp,
+      confident: confident
+    } do
+      gone = orphaned_media_file_fixture(%{library_path_id: lp.id})
+      Mydia.Repo.delete!(gone)
+
+      match = %{provider_id: "9001", title: "Selected Show", type: "tv_show"}
+
+      # The write for a vanished file cannot succeed -- media_file_id is a
+      # foreign key -- so the only question is whether the caller is told. It
+      # must not be silently folded into the success count.
+      assert {:ok, %{updated: 1, failed: 1}} =
+               Library.apply_batch_match([confident.id, gone.id], match, nil)
+
+      assert [candidate] = Library.list_match_candidates(confident.id)
+      assert candidate.title == "Selected Show"
+    end
+  end
+
+  describe "list_unmatched_media_file_paths/2" do
+    test "logs the files it drops for having no resolvable location", %{lp: lp} do
+      # A row with no relative_path resolves to a nil absolute path. The
+      # rejection runs after the SQL LIMIT, so a chunk made only of these comes
+      # back empty and Jobs.ImportRun reads that as "matching is finished" --
+      # the files never get a candidate, never reach the inbox, and the run
+      # still reports success. Written past the changeset because
+      # scan_changeset requires the column; the rows this guards against
+      # predate it.
+      stranded = orphaned_media_file_fixture(%{library_path_id: lp.id})
+
+      {1, _} =
+        Mydia.Repo.update_all(
+          from(f in Mydia.Library.MediaFile, where: f.id == ^stranded.id),
+          set: [relative_path: nil]
+        )
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert Library.list_unmatched_media_file_paths(lp.id, 50) == []
+        end)
+
+      assert log =~ stranded.id
+    end
+  end
 end

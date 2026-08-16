@@ -108,6 +108,70 @@ defmodule MydiaWeb.ImportMediaInboxTest do
     refute render(view) =~ "2 files"
   end
 
+  describe "values the server does not recognise" do
+    test "a stale filter leaves the inbox showing what it already showed", %{
+      conn: conn,
+      media_file: media_file
+    } do
+      {:ok, view, _html} = live(conn, ~p"/import")
+
+      # A select left over from an older build, or a crafted event. Converting
+      # it straight to an atom raises, and a raise in a handler closes the
+      # user's page rather than answering them.
+      html =
+        view
+        |> element("#inbox-filter")
+        |> render_change(%{"filter" => "not_a_real_filter_9f3"})
+
+      assert html =~ "The Matrix"
+      assert has_element?(view, "#approve-#{media_file.id}")
+    end
+
+    test "a page offset that is not a number leaves the page where it is", %{
+      conn: conn,
+      media_file: media_file
+    } do
+      {:ok, view, _html} = live(conn, ~p"/import")
+
+      html = render_click(view, "inbox_page", %{"offset" => "not-a-number"})
+
+      assert html =~ "The Matrix"
+      assert has_element?(view, "#approve-#{media_file.id}")
+    end
+
+    test "a candidate whose stored media type is unknown can still be added", %{
+      conn: conn,
+      library_path: lp
+    } do
+      # Nothing constrains these two columns to a known value at the database
+      # level, and they are read back as atoms when a file is approved. A row
+      # carrying anything else used to take the page down at exactly the
+      # moment the user pressed Add.
+      file = orphaned_media_file_fixture(%{library_path_id: lp.id})
+
+      {:ok, _} =
+        Library.upsert_match_candidate(%{
+          media_file_id: file.id,
+          rank: 0,
+          provider_type: "not_a_provider_7b2",
+          provider_id: "603",
+          title: "The Matrix",
+          year: 1999,
+          media_type: "not_a_media_type_7b2",
+          confidence: 0.95
+        })
+
+      media_item_fixture(%{type: "movie", title: "The Matrix", year: 1999, tmdb_id: 603})
+
+      {:ok, view, _html} = live(conn, ~p"/import")
+
+      html = view |> element("#approve-#{file.id}") |> render_click()
+
+      assert html =~ "Added The Matrix"
+      assert Library.get_media_file!(file.id).media_item_id
+    end
+  end
+
   describe "approving a match" do
     test "links the file to its match, clears its candidate, and removes it from the inbox", %{
       conn: conn,

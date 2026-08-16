@@ -2533,6 +2533,111 @@ defmodule Mydia.Library do
     |> Repo.delete_all()
   end
 
+  @doc """
+  Applies one match and/or season to the rank-0 candidate of many files.
+
+  This is the review inbox's batch edit. It merges into each file's existing
+  candidate rather than overwriting it, so applying only a season number does
+  not blank out a title or provider that an earlier edit or the matching phase
+  already set.
+
+  `match` is `nil` or a map with `:provider_id`, `:title` and `:type`; `season`
+  is `nil` or the season number to stamp on every selected file. Returns
+  `{:ok, %{updated: n, failed: n}}`.
+
+  Files that vanished between the page rendering and the button being pressed
+  are counted as failed rather than written: the candidate's `media_file_id`
+  is a foreign key, so attempting the write would either raise or, on an
+  adapter that reports the violation, poison the enclosing transaction. Every
+  write is a savepoint for the same reason, so one rejected changeset cannot
+  cost the rest of the batch.
+  """
+  @spec apply_batch_match([binary()], map() | nil, integer() | nil) ::
+          {:ok, %{updated: non_neg_integer(), failed: non_neg_integer()}}
+  def apply_batch_match(media_file_ids, match, season) do
+    Repo.transaction(fn ->
+      live_ids =
+        MediaFile
+        |> where([f], f.id in ^media_file_ids)
+        |> select([f], f.id)
+        |> Repo.all()
+        |> MapSet.new()
+
+      existing =
+        MatchCandidate
+        |> where([c], c.media_file_id in ^media_file_ids and c.rank == 0)
+        |> Repo.all()
+        |> Map.new(&{&1.media_file_id, &1})
+
+      Enum.reduce(media_file_ids, %{updated: 0, failed: 0}, fn id, counts ->
+        if MapSet.member?(live_ids, id) do
+          count_batch_write(counts, id, Map.get(existing, id), match, season)
+        else
+          Logger.warning("Skipping a batch match for a media file that no longer exists",
+            media_file_id: id
+          )
+
+          %{counts | failed: counts.failed + 1}
+        end
+      end)
+    end)
+  end
+
+  defp count_batch_write(counts, media_file_id, existing, match, season) do
+    case write_batch_candidate(media_file_id, existing, match, season) do
+      {:ok, _candidate} ->
+        %{counts | updated: counts.updated + 1}
+
+      {:error, changeset} ->
+        Logger.error("Could not apply a batch match to a media file",
+          media_file_id: media_file_id,
+          errors: inspect(changeset.errors)
+        )
+
+        %{counts | failed: counts.failed + 1}
+    end
+  end
+
+  # Deliberately not upsert_match_candidate/1: the caller already read every
+  # rank-0 candidate in one query, and going back through that function would
+  # re-read each one individually (a full 100-row page selection cost 200
+  # queries before this).
+  defp write_batch_candidate(media_file_id, existing, match, season) do
+    parsed_info = (existing && existing.parsed_info) || %{}
+    parsed_info = if season, do: Map.put(parsed_info, "season", season), else: parsed_info
+
+    attrs = %{
+      media_file_id: media_file_id,
+      rank: 0,
+      attempts: 0,
+      last_error: nil,
+      provider_type: (existing && existing.provider_type) || "tmdb",
+      provider_id: existing && existing.provider_id,
+      title: existing && existing.title,
+      media_type: existing && existing.media_type,
+      confidence: existing && existing.confidence,
+      parsed_info: parsed_info
+    }
+
+    attrs =
+      if match do
+        %{
+          attrs
+          | provider_type: "tmdb",
+            provider_id: match.provider_id,
+            title: match.title,
+            media_type: match.type,
+            confidence: 1.0
+        }
+      else
+        attrs
+      end
+
+    (existing || %MatchCandidate{})
+    |> MatchCandidate.changeset(attrs)
+    |> Repo.insert_or_update(mode: :savepoint)
+  end
+
   ## Import Runs
 
   alias Mydia.Library.ImportRun
@@ -2718,7 +2823,27 @@ defmodule Mydia.Library do
     |> preload(:library_path)
     |> Repo.all()
     |> Enum.map(fn file -> {file.id, MediaFile.absolute_path(file)} end)
-    |> Enum.reject(fn {_id, path} -> is_nil(path) end)
+    |> drop_unresolvable_paths()
+  end
+
+  # `limit/2` runs in SQL and this rejection runs after it, so a chunk made
+  # entirely of rows whose absolute path cannot be resolved comes back empty --
+  # which `Jobs.ImportRun`'s match_loop/5 reads as "nothing left to match".
+  # Those files then never get a candidate, never reach the inbox, and the run
+  # still reports success. The return contract is unchanged (resolvable pairs
+  # only); logging is what makes the condition observable at all, since the
+  # only other trace it leaves is an orphan count that never goes down.
+  defp drop_unresolvable_paths(pairs) do
+    {dropped, resolvable} = Enum.split_with(pairs, fn {_id, path} -> is_nil(path) end)
+
+    if dropped != [] do
+      Logger.warning("Skipping media files whose location could not be resolved",
+        count: length(dropped),
+        media_file_ids: Enum.map_join(dropped, ",", fn {id, _path} -> id end)
+      )
+    end
+
+    resolvable
   end
 
   ## Import Inbox

@@ -11,6 +11,25 @@ defmodule Mydia.Library.BatchMatcher do
   group first so the cache is warm, then fans the rest of that group out. The
   groups themselves still run concurrently, so throughput is unchanged while
   relay traffic drops to roughly one search per distinct title.
+
+  ## Failure containment
+
+  `match_paths/2` returns exactly one result per input path, no matter what
+  happens inside a worker. `Jobs.ImportRun`'s match loop depends on that: a
+  path with no result gets no `MatchCandidate`, stays in the outstanding set,
+  and is reselected by every later chunk forever.
+
+  Two layers keep that true. `MetadataMatcher.match_file/2` is HTTP plus
+  parsing of payloads this code does not control, so a raise there is
+  realistic and is caught per file, failing that one file. Anything else that
+  can take a worker down (a progress callback that raises, an exit signal) is
+  contained by running the workers under `Mydia.TaskSupervisor` with
+  `async_stream_nolink`, which reports the crash as `{:exit, reason}` instead
+  of killing the caller: plain `Task.async_stream/3` links its tasks, so a
+  raising worker would take the whole coordinator down with it. Both streams
+  are `ordered: true` purely so an `{:exit, _}` can be zipped back to the
+  paths it was working on; the emission order of the results is not part of
+  this module's contract.
   """
 
   require Logger
@@ -23,9 +42,11 @@ defmodule Mydia.Library.BatchMatcher do
   @type match_result :: {:ok, map()} | {:error, term()}
 
   @doc """
-  Matches every path and returns `{path, result}` pairs.
+  Matches every path and returns `{path, result}` pairs, one per input path.
 
-  Order is not guaranteed; key the results by path.
+  Order is not guaranteed; key the results by path. A file whose match crashed
+  comes back as `{:error, {:matcher_crashed, reason}}` rather than being
+  dropped (see the moduledoc).
 
   ## Options
 
@@ -44,15 +65,21 @@ defmodule Mydia.Library.BatchMatcher do
     on_result = Keyword.get(opts, :on_result)
     match_opts = Keyword.take(opts, [:config, :provider])
 
-    paths
-    |> Enum.group_by(&group_key/1)
-    |> Task.async_stream(
-      fn {_key, group_paths} -> match_group(group_paths, match_opts, on_result) end,
+    groups = paths |> Enum.group_by(&group_key/1) |> Map.values()
+
+    Mydia.TaskSupervisor
+    |> Task.Supervisor.async_stream_nolink(
+      groups,
+      fn group_paths -> match_group(group_paths, match_opts, on_result) end,
       max_concurrency: max_concurrency,
       timeout: :infinity,
-      ordered: false
+      ordered: true
     )
-    |> Enum.flat_map(fn {:ok, results} -> results end)
+    |> Enum.zip(groups)
+    |> Enum.flat_map(fn
+      {{:ok, results}, _group_paths} -> results
+      {{:exit, reason}, group_paths} -> crashed_results(group_paths, reason)
+    end)
   end
 
   ## Grouping
@@ -77,23 +104,69 @@ defmodule Mydia.Library.BatchMatcher do
     head_result = match_one(head, match_opts, on_result)
 
     tail_results =
-      tail
-      |> Task.async_stream(
+      Mydia.TaskSupervisor
+      |> Task.Supervisor.async_stream_nolink(
+        tail,
         fn path -> match_one(path, match_opts, on_result) end,
         max_concurrency: @default_max_concurrency,
         timeout: :infinity,
-        ordered: false
+        ordered: true
       )
-      |> Enum.map(fn {:ok, result} -> result end)
+      |> Enum.zip(tail)
+      |> Enum.flat_map(fn
+        {{:ok, result}, _path} -> [result]
+        {{:exit, reason}, path} -> crashed_results([path], reason)
+      end)
 
     [head_result | tail_results]
   end
 
   defp match_one(path, match_opts, on_result) do
-    result = MetadataMatcher.match_file(path, match_opts)
+    result = safe_match_file(path, match_opts)
 
     if is_function(on_result, 2), do: on_result.(path, result)
 
     {path, result}
+  end
+
+  # Deliberately narrower than the whole worker: this wraps the one call that
+  # parses payloads from an external service, so a provider returning
+  # something unexpected costs the file that hit it and nothing else. The
+  # group's remaining files still get their own searches (one cache miss each,
+  # which is the correct trade against losing a whole season to one bad
+  # response). Everything outside this call is left to the stream's `{:exit,
+  # _}` handling above.
+  defp safe_match_file(path, match_opts) do
+    MetadataMatcher.match_file(path, match_opts)
+  rescue
+    error ->
+      Logger.error("Matching a file raised, recording it as a failed match",
+        path: path,
+        error: Exception.format(:error, error, __STACKTRACE__)
+      )
+
+      {:error, {:matcher_crashed, Exception.message(error)}}
+  catch
+    kind, value ->
+      Logger.error("Matching a file did not return, recording it as a failed match",
+        path: path,
+        kind: kind,
+        reason: inspect(value)
+      )
+
+      {:error, {:matcher_crashed, value}}
+  end
+
+  # A crashed worker still owes a result for every path it was holding. Losing
+  # them would leave those files with no candidate and no parent, which is
+  # exactly the state `Jobs.ImportRun`'s match loop reselects forever.
+  defp crashed_results(paths, reason) do
+    Logger.error("A batch match worker crashed, failing its files instead of the run",
+      files: length(paths),
+      example_path: List.first(paths),
+      reason: inspect(reason)
+    )
+
+    Enum.map(paths, &{&1, {:error, {:matcher_crashed, reason}}})
   end
 end

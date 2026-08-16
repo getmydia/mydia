@@ -41,36 +41,50 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
       </span>
     </div>
 
-    <form
+    <.form
       :if={@library_paths != []}
+      for={%{}}
       id="start-run-form"
       phx-submit="start_run"
       class="flex flex-col gap-4"
     >
-      <label class="form-control w-full">
-        <span class="label-text">Library</span>
-        <select name="library_path_id" class="select select-bordered" required>
-          <option :for={lp <- @library_paths} value={lp.id}>{lp.path}</option>
-        </select>
-      </label>
+      <.input
+        id="start-run-library"
+        name="library_path_id"
+        type="select"
+        label="Library"
+        value={default_library_path_id(@library_paths)}
+        options={Enum.map(@library_paths, &{&1.path, &1.id})}
+        required
+      />
 
-      <label class="form-control w-full">
-        <span class="label-text">Mode</span>
-        <select name="mode" class="select select-bordered">
-          <option value="review">Review every match before it is added</option>
-          <option value="unattended">Add confident matches automatically</option>
-        </select>
-      </label>
+      <.input
+        id="start-run-mode"
+        name="mode"
+        type="select"
+        label="Mode"
+        value="review"
+        options={[
+          {"Review every match before it is added", "review"},
+          {"Add confident matches automatically", "unattended"}
+        ]}
+      />
 
       <p class="text-sm opacity-70">
         The run keeps going if you close this page. You can stop it at any point and keep
         everything it has already done.
       </p>
 
-      <button id="start-run-button" type="submit" class="btn btn-primary">Start</button>
-    </form>
+      <.button id="start-run-button" type="submit" variant="primary">Start</.button>
+    </.form>
     """
   end
+
+  # Marks the first option as selected rather than leaving the select with no
+  # value at all, so what the form submits matches what a user sees before they
+  # touch it.
+  defp default_library_path_id([%{id: id} | _rest]), do: id
+  defp default_library_path_id(_library_paths), do: nil
 
   attr :run, :map, required: true
 
@@ -87,14 +101,14 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
 
       <p :if={@run.current_file} class="text-sm opacity-70 truncate">{@run.current_file}</p>
 
-      <button
+      <.button
         id="stop-run-button"
         phx-click="stop_run"
         disabled={@run.status == :stopping}
         class="btn btn-outline btn-warning"
       >
         Stop and keep progress
-      </button>
+      </.button>
 
       <%!--
         The escape hatch for a run whose coordinator is gone but whose row
@@ -106,14 +120,14 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
         :stopping, which is also active.
       --%>
       <div class="flex flex-col gap-1">
-        <button
+        <.button
           id="release-run-button"
           phx-click="release_run"
           data-confirm="Mark this import as not running? Everything it already added is kept, and you will be able to start a new import for this library."
           class="btn btn-ghost btn-xs self-start"
         >
           <.icon name="hero-wrench-screwdriver" class="w-3.5 h-3.5" /> Not actually running?
-        </button>
+        </.button>
         <p class="text-xs opacity-60">
           Use this only if the import has been stuck since a restart or a crash.
         </p>

@@ -132,6 +132,90 @@ defmodule Mydia.Library.BatchMatcherTest do
     assert Enum.all?(results, fn {path, _} -> path in paths end)
   end
 
+  @tag :capture_log
+  test "a provider payload that crashes the matcher fails only that file", %{
+    bypass: bypass,
+    config: config
+  } do
+    Bypass.stub(bypass, "GET", "/tmdb/tv/search", fn conn -> json(conn, %{"results" => []}) end)
+
+    # A search result that is not a map. `SearchResult.from_api_response/2`
+    # guards on `is_map/1`, so this raises inside the matcher task -- the
+    # realistic shape of "the provider returned something this code does not
+    # parse", which is all MetadataMatcher.match_file/2 needs to raise.
+    Bypass.stub(bypass, "GET", "/tmdb/movies/search", fn conn ->
+      json(conn, %{"results" => ["not a result object"]})
+    end)
+
+    tv_paths = [
+      "/media/tv/Bluey/Season 01/Bluey.S01E01.mkv",
+      "/media/tv/Bluey/Season 01/Bluey.S01E02.mkv"
+    ]
+
+    movie_path = "/media/movies/The.Matrix.1999.1080p.mkv"
+    paths = tv_paths ++ [movie_path]
+
+    results = BatchMatcher.match_paths(paths, config: config, provider: :tmdb)
+
+    # The load-bearing assertion. Before this was contained, the raise
+    # travelled up the link from the task to whoever called match_paths/2 and
+    # killed it -- in production the import coordinator, mid-chunk. Every input
+    # path must still come back with exactly one result, because
+    # Jobs.ImportRun's match loop reselects any file that got none, forever.
+    assert length(results) == 3
+    assert Enum.sort(Enum.map(results, &elem(&1, 0))) == Enum.sort(paths)
+
+    assert {^movie_path, {:error, {:matcher_crashed, _}}} =
+             Enum.find(results, fn {path, _result} -> path == movie_path end)
+
+    # And the two files that did not crash were matched on their own merits
+    # rather than being failed alongside the one that did.
+    for tv_path <- tv_paths do
+      assert {^tv_path, {:error, reason}} =
+               Enum.find(results, fn {path, _result} -> path == tv_path end)
+
+      refute match?({:matcher_crashed, _}, reason)
+    end
+  end
+
+  @tag :capture_log
+  test "a progress callback that raises fails its own group, not the batch", %{
+    bypass: bypass,
+    config: config
+  } do
+    # Nothing malformed here: the relay answers both searches normally. What
+    # blows up is the caller-supplied `:on_result` callback, which runs inside
+    # the worker but outside the per-file guard, so this is the path that
+    # reaches the stream's own `{:exit, reason}` handling.
+    Bypass.stub(bypass, "GET", "/tmdb/tv/search", fn conn -> json(conn, %{"results" => []}) end)
+
+    Bypass.stub(bypass, "GET", "/tmdb/movies/search", fn conn ->
+      json(conn, %{"results" => []})
+    end)
+
+    test_pid = self()
+    tv_path = "/media/tv/Bluey/Season 01/Bluey.S01E01.mkv"
+    movie_path = "/media/movies/The.Matrix.1999.1080p.mkv"
+
+    results =
+      BatchMatcher.match_paths([tv_path, movie_path],
+        config: config,
+        provider: :tmdb,
+        on_result: fn
+          ^movie_path, _result -> raise "progress callback blew up"
+          path, _result -> send(test_pid, {:progress, path})
+        end
+      )
+
+    assert length(results) == 2
+
+    assert {^movie_path, {:error, {:matcher_crashed, _}}} =
+             Enum.find(results, fn {path, _result} -> path == movie_path end)
+
+    assert {^tv_path, _result} = Enum.find(results, fn {path, _} -> path == tv_path end)
+    assert_receive {:progress, ^tv_path}, 1_000
+  end
+
   test "invokes the progress callback once per file", %{bypass: bypass, config: config} do
     Bypass.stub(bypass, "GET", "/tmdb/tv/search", fn conn -> json(conn, %{"results" => []}) end)
 

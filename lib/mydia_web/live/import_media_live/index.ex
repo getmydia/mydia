@@ -12,6 +12,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   alias Mydia.Jobs.ImportRun, as: ImportRunJob
   alias Mydia.Library.FileIngest
   alias Mydia.Library.ImportRun
+  alias Mydia.Library.MediaFile
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.ImportMediaLive.{Inbox, RunControl}
 
@@ -20,6 +21,24 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   # rather than one per path), paged at a fixed size rather than a
   # user-configurable one -- there is no UI for changing it yet.
   @inbox_page_size 100
+
+  # Everything a client can name is mapped from an explicit table rather than
+  # converted. `String.to_existing_atom/1` and `String.to_integer/1` both raise
+  # on anything unexpected, and a raise inside a handler takes the LiveView
+  # process down: a tab left open across a deploy, a replayed event, or a
+  # crafted one would close the page instead of getting an answer back. These
+  # tables are also the only thing standing between a crafted event and a
+  # `media_type` the rest of the app has no clause for.
+  @modes %{"review" => :review, "unattended" => :unattended}
+
+  @inbox_filters %{
+    "all" => :all,
+    "low_confidence" => :low_confidence,
+    "unidentified" => :unidentified
+  }
+
+  @media_types ~w(movie tv_show)
+  @default_media_type "movie"
 
   @impl true
   def mount(_params, _session, socket) do
@@ -58,7 +77,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
      |> assign(:inbox_offset, 0)
      |> assign(:inbox_limit, @inbox_page_size)
      |> assign(:editing_file_id, nil)
-     |> assign(:editing_file_path, nil)
+     |> assign(:editing_file_name, nil)
      |> assign(:edit_form, nil)
      |> assign(:search_results, [])
      |> assign(:batch_selected_ids, MapSet.new())
@@ -75,11 +94,12 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   @impl true
   def handle_event("start_run", %{"library_path_id" => path_id, "mode" => mode}, socket) do
     with :ok <- Authorization.authorize_import_media(socket),
-         :ok <- authorize_library_path(socket, path_id) do
+         :ok <- authorize_library_path(socket, path_id),
+         {:ok, mode} <- Map.fetch(@modes, mode) do
       attrs = %{
         library_path_id: path_id,
         user_id: socket.assigns.current_user.id,
-        mode: String.to_existing_atom(mode)
+        mode: mode
       }
 
       case Library.create_import_run(attrs) do
@@ -106,6 +126,12 @@ defmodule MydiaWeb.ImportMediaLive.Index do
 
       {:unsupported_type, socket} ->
         {:noreply, socket}
+
+      # Map.fetch/2 on an unknown mode. Only reachable from a stale or crafted
+      # form, so the sentence is deliberately vague rather than echoing back
+      # whatever string arrived.
+      :error ->
+        {:noreply, put_flash(socket, :error, "That import mode is not available.")}
     end
   end
 
@@ -157,19 +183,29 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     end
   end
 
+  # An unknown filter or a malformed offset leaves the inbox exactly as it is,
+  # with no flash: these are view controls, so the honest response to a value
+  # the server does not recognise is to keep showing what is already on screen
+  # rather than interrupt with an error about a select box.
   def handle_event("filter_inbox", %{"filter" => filter}, socket) do
-    {:noreply,
-     socket
-     |> assign(:inbox_filter, String.to_existing_atom(filter))
-     |> assign(:inbox_offset, 0)
-     |> load_inbox()}
+    case Map.fetch(@inbox_filters, filter) do
+      {:ok, filter} ->
+        {:noreply,
+         socket
+         |> assign(:inbox_filter, filter)
+         |> assign(:inbox_offset, 0)
+         |> load_inbox()}
+
+      :error ->
+        {:noreply, socket}
+    end
   end
 
   def handle_event("inbox_page", %{"offset" => offset}, socket) do
-    {:noreply,
-     socket
-     |> assign(:inbox_offset, String.to_integer(offset))
-     |> load_inbox()}
+    case parse_offset(offset) do
+      {:ok, offset} -> {:noreply, socket |> assign(:inbox_offset, offset) |> load_inbox()}
+      :error -> {:noreply, socket}
+    end
   end
 
   def handle_event("approve_file", %{"id" => media_file_id}, socket) do
@@ -201,13 +237,15 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   end
 
   def handle_event("edit_file", %{"id" => id}, socket) do
-    media_file = Library.get_media_file!(id)
+    # Preloaded because MediaFile.display_name/1 resolves the absolute path
+    # first and logs a warning when the association is missing.
+    media_file = Library.get_media_file!(id, preload: [:library_path])
     candidate = List.first(Library.list_match_candidates(id))
 
     form = %{
       "title" => (candidate && candidate.title) || "",
       "provider_id" => (candidate && candidate.provider_id) || "",
-      "type" => (candidate && candidate.media_type) || "movie",
+      "type" => media_type(candidate && candidate.media_type),
       "season" => season_string(candidate),
       "episodes" => episodes_string(candidate)
     }
@@ -215,7 +253,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     {:noreply,
      socket
      |> assign(:editing_file_id, id)
-     |> assign(:editing_file_path, media_file.relative_path)
+     |> assign(:editing_file_name, MediaFile.display_name(media_file))
      |> assign(:edit_form, form)
      |> assign(:search_results, [])}
   end
@@ -224,7 +262,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     {:noreply,
      socket
      |> assign(:editing_file_id, nil)
-     |> assign(:editing_file_path, nil)
+     |> assign(:editing_file_name, nil)
      |> assign(:edit_form, nil)
      |> assign(:search_results, [])}
   end
@@ -253,31 +291,41 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   def handle_event("save_edit", %{"edit_form" => params}, socket) do
     with :ok <- Authorization.authorize_import_media(socket),
          id when is_binary(id) <- socket.assigns.editing_file_id do
-      {:ok, _candidate} =
-        Library.upsert_match_candidate(%{
-          media_file_id: id,
-          rank: 0,
-          provider_type: "tmdb",
-          provider_id: params["provider_id"],
-          title: params["title"],
-          media_type: params["type"],
-          # A human typed this, so it is certain by definition.
-          confidence: 1.0,
-          parsed_info: %{
-            "season" => parse_int(params["season"]),
-            "episodes" => parse_episode_list(params["episodes"])
-          },
-          attempts: 0,
-          last_error: nil
-        })
+      attrs = %{
+        media_file_id: id,
+        rank: 0,
+        provider_type: "tmdb",
+        provider_id: params["provider_id"],
+        title: params["title"],
+        # Only ever one of the two types this app knows about. The hidden field
+        # this arrives in is client-controlled, and the value is read back as an
+        # atom when the file is approved.
+        media_type: media_type(params["type"]),
+        # A human typed this, so it is certain by definition.
+        confidence: 1.0,
+        parsed_info: %{
+          "season" => parse_int(params["season"]),
+          "episodes" => parse_episode_list(params["episodes"])
+        },
+        attempts: 0,
+        last_error: nil
+      }
 
-      {:noreply,
-       socket
-       |> assign(:editing_file_id, nil)
-       |> assign(:editing_file_path, nil)
-       |> assign(:edit_form, nil)
-       |> put_flash(:info, "Match updated")
-       |> load_inbox()}
+      case Library.upsert_match_candidate(attrs) do
+        {:ok, _candidate} ->
+          {:noreply,
+           socket
+           |> assign(:editing_file_id, nil)
+           |> assign(:editing_file_name, nil)
+           |> assign(:edit_form, nil)
+           |> put_flash(:info, "Match updated")
+           |> load_inbox()}
+
+        # The editor stays open with what was typed still in it, rather than
+        # the page disappearing on a rejected write.
+        {:error, _changeset} ->
+          {:noreply, put_flash(socket, :error, "That match could not be saved.")}
+      end
     else
       {:unauthorized, socket} -> {:noreply, socket}
       nil -> {:noreply, socket}
@@ -295,15 +343,24 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   # change how many rows the inbox holds, and on the 200k-row inbox this
   # feature exists for, a full aggregate scan per tick is the difference
   # between a checkbox and a stall.
+  #
+  # Only a row rendered on the current page can be toggled. The checkbox
+  # carries the id as a `phx-value`, so without this an event could put an
+  # arbitrary string into the selected set, and every id in that set is later
+  # used as a `media_file_id` in a query and a foreign key.
   def handle_event("batch_toggle_file", %{"id" => id}, socket) do
-    selected = socket.assigns.batch_selected_ids
+    if id in socket.assigns.inbox_row_ids do
+      selected = socket.assigns.batch_selected_ids
 
-    selected =
-      if MapSet.member?(selected, id),
-        do: MapSet.delete(selected, id),
-        else: MapSet.put(selected, id)
+      selected =
+        if MapSet.member?(selected, id),
+          do: MapSet.delete(selected, id),
+          else: MapSet.put(selected, id)
 
-    {:noreply, socket |> assign(:batch_selected_ids, selected) |> restream_inbox()}
+      {:noreply, socket |> assign(:batch_selected_ids, selected) |> restream_inbox()}
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_event("batch_select_all", _params, socket) do
@@ -329,7 +386,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       title: params["title"],
       provider_id: params["provider_id"],
       year: if(params["year"] not in [nil, ""], do: params["year"]),
-      type: params["type"]
+      type: media_type(params["type"])
     }
 
     {:noreply,
@@ -355,9 +412,9 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     with :ok <- Authorization.authorize_import_media(socket) do
       selected_ids = MapSet.to_list(socket.assigns.batch_selected_ids)
       match = socket.assigns.batch_selected_match
-      season = socket.assigns.batch_season_value
+      season = parse_int(socket.assigns.batch_season_value)
 
-      if match == nil and String.trim(season || "") == "" do
+      if match == nil and season == nil do
         {:noreply,
          put_flash(
            socket,
@@ -365,7 +422,12 @@ defmodule MydiaWeb.ImportMediaLive.Index do
            "No changes to apply. Select a series/movie or enter a season number."
          )}
       else
-        Enum.each(selected_ids, &apply_batch_change(&1, match, season))
+        # The merge rules, the reads and the writes all live in the context.
+        # What comes back is counted, because a file can disappear between this
+        # page rendering and the button being pressed, and reporting success
+        # for a write that never happened is worse than reporting the failure.
+        {:ok, %{updated: updated, failed: failed}} =
+          Library.apply_batch_match(selected_ids, match, season)
 
         {:noreply,
          socket
@@ -374,12 +436,22 @@ defmodule MydiaWeb.ImportMediaLive.Index do
          |> assign(:batch_search_results, [])
          |> assign(:batch_selected_match, nil)
          |> assign(:batch_season_value, "")
-         |> put_flash(:info, "Batch edit applied to #{length(selected_ids)} file(s)")
+         |> put_flash(batch_flash_kind(failed), batch_flash_message(updated, failed))
          |> load_inbox()}
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
     end
+  end
+
+  defp batch_flash_kind(0), do: :info
+  defp batch_flash_kind(_failed), do: :error
+
+  defp batch_flash_message(updated, 0), do: "Batch edit applied to #{updated} file(s)"
+
+  defp batch_flash_message(updated, failed) do
+    "Batch edit applied to #{updated} file(s). #{failed} could not be updated, " <>
+      "most likely because they are no longer in the library."
   end
 
   @impl true
@@ -437,7 +509,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   defp candidate_to_match(candidate) do
     %{
       provider_id: candidate.provider_id,
-      provider_type: String.to_existing_atom(candidate.provider_type || "tmdb"),
+      provider_type: provider_type_atom(candidate.provider_type),
       title: candidate.title,
       year: candidate.year,
       match_confidence: candidate.confidence || 1.0,
@@ -451,11 +523,35 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     parsed = candidate.parsed_info || %{}
 
     %{
-      type: String.to_existing_atom(candidate.media_type || "movie"),
+      type: media_type_atom(candidate.media_type),
       season: Map.get(parsed, "season"),
       episodes: Map.get(parsed, "episodes") || []
     }
   end
+
+  # These two columns are plain strings, not an Ecto.Enum, so nothing in the
+  # database stops a value the rest of the app has no clause for from landing
+  # in them. `String.to_existing_atom/1` would raise on one and take the page
+  # down as the row is read back, which is the wrong end of the system to
+  # discover it. Reading falls back to the same default the writer uses.
+  defp provider_type_atom("tvdb"), do: :tvdb
+  defp provider_type_atom(_), do: :tmdb
+
+  defp media_type_atom("tv_show"), do: :tv_show
+  defp media_type_atom(_), do: :movie
+
+  defp media_type(type) when type in @media_types, do: type
+  defp media_type(_), do: @default_media_type
+
+  defp parse_offset(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {offset, ""} when offset >= 0 -> {:ok, offset}
+      _ -> :error
+    end
+  end
+
+  defp parse_offset(value) when is_integer(value) and value >= 0, do: {:ok, value}
+  defp parse_offset(_), do: :error
 
   # The inbox is a live query, not socket state: every mutation that can
   # change it (approving a row, changing the filter, paging) reloads from the
@@ -511,7 +607,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       if socket.assigns.editing_file_id == media_file_id do
         socket
         |> assign(:editing_file_id, nil)
-        |> assign(:editing_file_path, nil)
+        |> assign(:editing_file_name, nil)
         |> assign(:edit_form, nil)
       else
         socket
@@ -585,49 +681,5 @@ defmodule MydiaWeb.ImportMediaLive.Index do
 
       Enum.take(movie ++ tv, 10)
     end
-  end
-
-  # Merges a batch edit into a file's existing rank-0 candidate instead of
-  # overwriting it outright, so applying only a season number (no match
-  # change selected) does not blank out a title/provider an earlier edit or
-  # the matching phase already set.
-  defp apply_batch_change(media_file_id, match, season) do
-    existing = List.first(Library.list_match_candidates(media_file_id))
-    parsed_info = (existing && existing.parsed_info) || %{}
-
-    attrs = %{
-      media_file_id: media_file_id,
-      rank: 0,
-      attempts: 0,
-      last_error: nil,
-      provider_type: (existing && existing.provider_type) || "tmdb",
-      provider_id: existing && existing.provider_id,
-      title: existing && existing.title,
-      media_type: existing && existing.media_type,
-      confidence: existing && existing.confidence
-    }
-
-    attrs =
-      if match do
-        %{
-          attrs
-          | provider_type: "tmdb",
-            provider_id: match.provider_id,
-            title: match.title,
-            media_type: match.type,
-            confidence: 1.0
-        }
-      else
-        attrs
-      end
-
-    parsed_info =
-      if String.trim(season || "") != "" do
-        Map.put(parsed_info, "season", parse_int(season))
-      else
-        parsed_info
-      end
-
-    Library.upsert_match_candidate(Map.put(attrs, :parsed_info, parsed_info))
   end
 end

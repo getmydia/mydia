@@ -90,8 +90,22 @@ defmodule Mydia.Library.FileIngest do
         :no_match
 
       :candidate ->
-        {:ok, candidate} = write_candidate(media_file, match_result)
-        {:candidate, candidate}
+        case write_candidate(media_file, match_result) do
+          {:ok, candidate} ->
+            {:candidate, candidate}
+
+          # Not a hard match on `{:ok, _}`, because the write that loses a race
+          # is a real shape: the scheduled `Jobs.LibraryScanner` and a
+          # user-started import run both ingest, and the rank-0 candidate is
+          # covered by a unique index, so a concurrent insert comes back as a
+          # changeset rather than a row. Raising here would fail the whole
+          # coordinator over one file that the other writer had already
+          # cached. The file stays outstanding, which the match loop rediscovers
+          # on its next pass -- by which point the winning write is visible and
+          # the file has left the outstanding set on its own.
+          {:error, changeset} ->
+            {:error, {:candidate_write_failed, changeset}}
+        end
 
       :link ->
         link(media_file, match_result, opts)
@@ -182,8 +196,9 @@ defmodule Mydia.Library.FileIngest do
   # Logs rather than discarding, for the same reason `record_failure/2` does.
   # This row is the one the inbox renders (title, provider, confidence), so a
   # silent failure here leaves a file listed with none of what was found about
-  # it. `ingest/3`'s `:candidate` branch still hard-matches the `{:ok, _}`,
-  # which is deliberate: that path has no fallback write behind it.
+  # it. Both callers handle the error: `ingest/3`'s `:candidate` branch turns
+  # it into `{:error, {:candidate_write_failed, _}}`, and
+  # `confirm_association/3` writes the failure reason over the top regardless.
   defp write_candidate(media_file, match) do
     case do_write_candidate(media_file, match) do
       {:ok, candidate} ->

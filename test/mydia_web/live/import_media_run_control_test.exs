@@ -106,6 +106,25 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
     assert Library.active_import_run(lp.id).id == existing.id
   end
 
+  test "a mode the server does not recognise is refused instead of killing the page", %{
+    conn: conn,
+    library_path: lp
+  } do
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    # A tab left open across a deploy that renamed a mode, a replayed event, or
+    # a crafted one. Converting this straight to an atom raises, and a raise in
+    # a handler takes the LiveView process with it: the user's page closes
+    # instead of answering them.
+    html =
+      view
+      |> element("#start-run-form")
+      |> render_submit(%{"library_path_id" => lp.id, "mode" => "not_a_real_mode_9f3"})
+
+    assert html =~ "That import mode is not available."
+    refute Library.active_import_run(lp.id)
+  end
+
   test "stopping a run that finished in the meantime does not lock the path", %{
     conn: conn,
     library_path: lp,
