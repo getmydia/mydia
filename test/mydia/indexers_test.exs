@@ -285,8 +285,12 @@ defmodule Mydia.IndexersTest do
 
       assert_received {:progress, first}
 
-      # The fast indexer settles first because fan-out is concurrent; the
-      # three slow indexers race each other after that, in no fixed order.
+      # The fast indexer settles first because fan-out is concurrent. With
+      # `ordered: false`, Task.async_stream emits each indexer's result as it
+      # settles rather than buffering to input order, so among the three slow
+      # indexers - identical 3000ms sleeps started at the same time - which
+      # one lands 2nd/3rd/4th is a genuine race with no fixed outcome. Only
+      # the set of who finished and their status/counts is asserted below.
       assert first.indexer == "fast-indexer"
       assert first.status == :ok
       assert first.completed == 1
@@ -344,6 +348,71 @@ defmodule Mydia.IndexersTest do
                Enum.map(without_callbacks.results, & &1.title)
 
       assert with_callbacks.indexer_errors == without_callbacks.indexer_errors
+    end
+  end
+
+  describe "search_all/2 fan-out ordering" do
+    # Named so the slow indexers sort BEFORE the fast one alphabetically -
+    # list_indexer_configs orders enabled, equal-priority indexers by name
+    # ascending, so this is the reverse of the "search_all/2 fan-out" describe
+    # block above. That inversion is the point: Task.async_stream defaults to
+    # `ordered: true`, which buffers each element's result until it's that
+    # element's turn in *input* order, not completion order. Under that
+    # default, the fast indexer's already-available result would sit behind
+    # three 3000ms sleeps and the assertion below would fail. search_all/2
+    # passes `ordered: false` specifically so results stream out as they
+    # settle instead.
+    setup do
+      for n <- 1..3 do
+        slow = Bypass.open()
+
+        Bypass.expect(slow, "GET", "/api/v1/search", fn conn ->
+          # See the sibling describe block above for why Bypass.pass/1 must
+          # run before the sleep.
+          Bypass.pass(slow)
+          Process.sleep(3_000)
+
+          conn
+          |> Plug.Conn.put_resp_content_type("application/json")
+          |> Plug.Conn.resp(200, Jason.encode!([prowlarr_item("Slow#{n}.Movie.2021.1080p")]))
+        end)
+
+        indexer_config_fixture(%{
+          name: "aaa-slow-indexer-#{n}",
+          type: :prowlarr,
+          base_url: "http://localhost:#{slow.port}"
+        })
+      end
+
+      fast = Bypass.open()
+
+      Bypass.expect(fast, "GET", "/api/v1/search", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!([prowlarr_item("Fast.Movie.2021.1080p")]))
+      end)
+
+      indexer_config_fixture(%{
+        name: "zzz-fast-indexer",
+        type: :prowlarr,
+        base_url: "http://localhost:#{fast.port}"
+      })
+
+      :ok
+    end
+
+    test "on_indexer_result fires in completion order, not input order" do
+      parent = self()
+
+      Indexers.search_all("Movie 2021",
+        on_indexer_result: fn progress -> send(parent, {:progress, progress}) end
+      )
+
+      assert_received {:progress, first}
+
+      assert first.indexer == "zzz-fast-indexer",
+             "expected the fast indexer's callback first (completion order); " <>
+               "got #{first.indexer} instead - results are being buffered to input order"
     end
   end
 

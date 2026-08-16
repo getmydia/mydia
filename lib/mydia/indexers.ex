@@ -165,6 +165,14 @@ defmodule Mydia.Indexers do
       - `:deadline_ms` - Milliseconds before a single indexer's search is
         killed and reported as timed out (default: 120_000). Falls back to
         the `:indexer_search` application config, then the default.
+      - `:on_start` - `([IndexerProgress.t()] -> any())` called once, before
+        any request is made, with one `:pending` entry per indexer to be
+        searched. Defaults to a no-op.
+      - `:on_indexer_result` - `(IndexerProgress.t() -> any())` called once
+        per indexer as it settles (`:ok`, `:error`, or `:timeout`), in
+        completion order rather than input order. Runs in the caller's
+        process, so a manual-search LiveView can `send/2` to itself from
+        this callback without extra synchronization. Defaults to a no-op.
 
   ## Examples
 
@@ -243,7 +251,8 @@ defmodule Mydia.Indexers do
           timeout: search_deadline_ms(opts),
           max_concurrency: get_search_concurrency(total, opts),
           on_timeout: :kill_task,
-          zip_input_on_exit: true
+          zip_input_on_exit: true,
+          ordered: false
         )
         |> Enum.reduce({[], [], 0}, fn
           {:ok, {metrics, results}}, {acc_results, acc_errors, completed} ->
