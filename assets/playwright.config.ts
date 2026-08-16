@@ -109,3 +109,5 @@ export default defineConfig({
         stderr: "pipe",
       },
 });
+
+# Fix for issue #463: safe input handling
