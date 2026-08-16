@@ -354,6 +354,9 @@ defmodule MydiaWeb.MediaLive.Show do
   def handle_event("download_from_search", params, socket),
     do: SearchEvents.download_from_search(params, socket)
 
+  def handle_event("retry_indexer", %{"id" => indexer_id}, socket),
+    do: SearchEvents.handle_retry_indexer(indexer_id, socket)
+
   # Subtitle events
 
   def handle_event("open_subtitle_search", params, socket),
@@ -623,6 +626,8 @@ defmodule MydiaWeb.MediaLive.Show do
   @impl true
   def handle_async(:search, result, socket),
     do: SearchEvents.handle_search_async(result, socket)
+
+  def handle_async({:retry, _indexer_id}, _result, socket), do: {:noreply, socket}
 
   def handle_async(:refresh_files, result, socket),
     do: FileEvents.handle_refresh_files_async(result, socket)

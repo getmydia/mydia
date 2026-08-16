@@ -220,6 +220,35 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
     {:noreply, reset_search_modal(socket)}
   end
 
+  # Retries a single indexer under a distinct start_async key so it cannot
+  # cancel an in-flight full search (LiveView only cancels a prior async when
+  # the key matches) and reuses the current search_id so its progress
+  # messages pass the stale-guard in handle_info({:indexer_progress, ...}).
+  #
+  # This re-runs SearchHelpers.perform_search/4 for every indexer, since it
+  # takes no indexer_ids parameter to scope to just one. That is acceptable
+  # for a manual retry: results merge idempotently through
+  # apply_indexer_progress/2, which re-ranks and deduplicates on every
+  # arrival.
+  def handle_retry_indexer(indexer_id, socket) do
+    query = socket.assigns.manual_search_query
+    min_seeders = socket.assigns.min_seeders
+    lv = self()
+    search_id = socket.assigns.search_id
+
+    indexer_progress =
+      Map.update(socket.assigns.indexer_progress, indexer_id, nil, fn entry ->
+        %{entry | status: :pending, error: nil, result_count: nil, duration_ms: nil}
+      end)
+
+    {:noreply,
+     socket
+     |> assign(:indexer_progress, indexer_progress)
+     |> start_async({:retry, indexer_id}, fn ->
+       perform_search(query, min_seeders, lv, search_id)
+     end)}
+  end
+
   defp reset_search_modal(socket) do
     socket
     |> assign(:show_manual_search_modal, false)

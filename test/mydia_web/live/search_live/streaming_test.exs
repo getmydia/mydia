@@ -195,4 +195,72 @@ defmodule MydiaWeb.SearchLive.StreamingTest do
 
     assert_patched(view, ~p"/search?q=Dune")
   end
+
+  # The retry itself starts a real (second) search against the indexer, keyed
+  # to the SAME search_id (by design, see the retry_indexer handler). If that
+  # indexer resolved fast (e.g. a plain indexer_config_fixture hitting
+  # localhost:9696, which fails almost instantly with econnrefused), its own
+  # on_indexer_result callback can race the test's post-click assertion and
+  # legitimately overwrite the :pending status back to :error before
+  # :sys.get_state runs. Using the slow Bypass-backed fixture (like the
+  # completion-race avoidance above) keeps the retry's real HTTP call parked
+  # well past the test's lifetime, removing that race entirely.
+  test "retrying a failed indexer marks it pending again", %{conn: conn} do
+    indexer = pending_indexer_fixture("flaky-indexer")
+
+    {:ok, view, _html} = live(conn, ~p"/search")
+    render_patch(view, ~p"/search?q=Dune")
+    wait_for_indexer_progress(view)
+
+    failed = %IndexerProgress{
+      indexer: "flaky-indexer",
+      indexer_id: indexer.id,
+      status: :error,
+      error: "Connection failed: :econnrefused",
+      completed: 1,
+      total: 1
+    }
+
+    send(view.pid, {:indexer_progress, current_search_id(view), failed})
+
+    assert has_element?(view, "#indexer-status-#{indexer.id} button")
+
+    view
+    |> element("#indexer-status-#{indexer.id} button")
+    |> render_click()
+
+    assert :sys.get_state(view.pid).socket.assigns.indexer_progress[indexer.id].status ==
+             :pending
+  end
+
+  # Before this task, no handle_event("retry_indexer", ...) clause existed
+  # anywhere in the LiveView, so clicking Retry raised a FunctionClauseError
+  # and crashed the process. render_click/1 re-raises that crash in the test
+  # process, so simply completing the click and then successfully rendering
+  # the view again is direct proof the crash is gone.
+  test "retrying a failed indexer does not crash the LiveView", %{conn: conn} do
+    indexer = pending_indexer_fixture("flaky-indexer")
+
+    {:ok, view, _html} = live(conn, ~p"/search")
+    render_patch(view, ~p"/search?q=Dune")
+    wait_for_indexer_progress(view)
+
+    failed = %IndexerProgress{
+      indexer: "flaky-indexer",
+      indexer_id: indexer.id,
+      status: :error,
+      error: "Connection failed: :econnrefused",
+      completed: 1,
+      total: 1
+    }
+
+    send(view.pid, {:indexer_progress, current_search_id(view), failed})
+
+    view
+    |> element("#indexer-status-#{indexer.id} button")
+    |> render_click()
+
+    assert Process.alive?(view.pid)
+    assert render(view) =~ "flaky-indexer"
+  end
 end

@@ -509,6 +509,26 @@ defmodule MydiaWeb.SearchLive.Index do
      |> assign(:selected_result, nil)}
   end
 
+  def handle_event("retry_indexer", %{"id" => indexer_id}, socket) do
+    query = socket.assigns.search_query
+    min_seeders = socket.assigns.min_seeders
+    lv = self()
+    search_id = socket.assigns.search_id
+
+    indexer_progress =
+      Map.update(socket.assigns.indexer_progress, indexer_id, nil, fn entry ->
+        %{entry | status: :pending, error: nil, result_count: nil, duration_ms: nil}
+      end)
+
+    {:noreply,
+     socket
+     |> assign(:indexer_progress, indexer_progress)
+     # A distinct key so a retry never cancels an in-flight full search.
+     |> start_async({:retry, indexer_id}, fn ->
+       perform_search(query, min_seeders, [indexer_id], lv, search_id)
+     end)}
+  end
+
   @impl true
   def handle_info({:download_updated, _download_id}, socket) do
     # Just trigger a re-render to update the downloads counter in the sidebar
@@ -669,6 +689,12 @@ defmodule MydiaWeb.SearchLive.Index do
      socket
      |> assign(:searching, false)
      |> put_flash(:error, "Search failed unexpectedly")}
+  end
+
+  def handle_async({:retry, _indexer_id}, _result, socket) do
+    # Results already arrived through the :indexer_progress messages; the final
+    # batched value carries only this one indexer and would clobber the rest.
+    {:noreply, socket}
   end
 
   def handle_async(

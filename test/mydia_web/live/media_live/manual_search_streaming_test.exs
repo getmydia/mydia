@@ -3,6 +3,7 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
 
   import Phoenix.LiveViewTest
   import Mydia.MediaFixtures
+  import Mydia.SettingsFixtures
 
   alias Mydia.Indexers.Structs.IndexerProgress
 
@@ -24,6 +25,51 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
 
   defp current_search_id(view) do
     :sys.get_state(view.pid).socket.assigns.search_id
+  end
+
+  # Mirrors MydiaWeb.SearchLive.StreamingTest's fixture of the same name: a
+  # real indexer whose HTTP call is parked behind a Bypass server that sleeps
+  # past the test's lifetime. Retrying an indexer starts a second real search
+  # under the SAME search_id (by design), so a fast-resolving indexer (e.g. a
+  # plain indexer_config_fixture hitting localhost:9696, which fails almost
+  # instantly) can race the test's post-click assertion and legitimately
+  # overwrite the status the test is trying to observe. This removes that
+  # race entirely rather than narrowing it.
+  defp pending_indexer_fixture(name) do
+    bypass = Bypass.open()
+
+    Bypass.expect(bypass, "GET", "/api/v1/search", fn conn ->
+      Bypass.pass(bypass)
+      Process.sleep(3_000)
+      Plug.Conn.resp(conn, 200, "[]")
+    end)
+
+    indexer_config_fixture(%{
+      name: name,
+      type: :prowlarr,
+      base_url: "http://localhost:#{bypass.port}"
+    })
+  end
+
+  # See MydiaWeb.SearchLive.StreamingTest for the full rationale: the on_start
+  # callback fires (and does a full-replace assign of indexer_progress)
+  # before any HTTP request, so synthetic progress sent before it lands can be
+  # silently wiped out by the real message arriving later.
+  defp wait_for_indexer_progress(view, retries \\ 50)
+
+  defp wait_for_indexer_progress(_view, 0) do
+    flunk("timed out waiting for the real on_start message to populate indexer_progress")
+  end
+
+  defp wait_for_indexer_progress(view, retries) do
+    case :sys.get_state(view.pid).socket.assigns.indexer_progress do
+      progress when progress == %{} ->
+        Process.sleep(10)
+        wait_for_indexer_progress(view, retries - 1)
+
+      progress ->
+        progress
+    end
   end
 
   test "one indexer's results render while another is pending", %{conn: conn} do
@@ -121,5 +167,66 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
 
     assert html =~ "Dune.2024.2160p.UHD"
     assert has_element?(view, "#indexer-status-old-id")
+  end
+
+  test "retrying a failed indexer marks it pending again", %{conn: conn} do
+    media_item = media_item_fixture(%{title: "Dune", type: "movie"})
+    indexer = pending_indexer_fixture("flaky-indexer")
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+    view |> element("#manual-search-button") |> render_click()
+    wait_for_indexer_progress(view)
+
+    failed = %IndexerProgress{
+      indexer: "flaky-indexer",
+      indexer_id: indexer.id,
+      status: :error,
+      error: "Connection failed: :econnrefused",
+      completed: 1,
+      total: 1
+    }
+
+    send(view.pid, {:indexer_progress, current_search_id(view), failed})
+
+    assert has_element?(view, "#indexer-status-#{indexer.id} button")
+
+    view
+    |> element("#indexer-status-#{indexer.id} button")
+    |> render_click()
+
+    assert :sys.get_state(view.pid).socket.assigns.indexer_progress[indexer.id].status ==
+             :pending
+  end
+
+  # Before this task, no handle_event("retry_indexer", ...) clause existed on
+  # this LiveView, so clicking Retry raised a FunctionClauseError and crashed
+  # the process. render_click/1 re-raises that crash in the test process, so
+  # simply completing the click and then successfully rendering the view
+  # again is direct proof the crash is gone.
+  test "retrying a failed indexer does not crash the LiveView", %{conn: conn} do
+    media_item = media_item_fixture(%{title: "Dune", type: "movie"})
+    indexer = pending_indexer_fixture("flaky-indexer")
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+    view |> element("#manual-search-button") |> render_click()
+    wait_for_indexer_progress(view)
+
+    failed = %IndexerProgress{
+      indexer: "flaky-indexer",
+      indexer_id: indexer.id,
+      status: :error,
+      error: "Connection failed: :econnrefused",
+      completed: 1,
+      total: 1
+    }
+
+    send(view.pid, {:indexer_progress, current_search_id(view), failed})
+
+    view
+    |> element("#indexer-status-#{indexer.id} button")
+    |> render_click()
+
+    assert Process.alive?(view.pid)
+    assert render(view) =~ "flaky-indexer"
   end
 end
