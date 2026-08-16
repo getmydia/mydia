@@ -50,6 +50,10 @@ defmodule Mydia.Jobs.ImportRun do
   @scan_batch_size 100
   @match_chunk_size 50
 
+  # A run in one of these has had its verdict recorded and must never be
+  # executed again. Mirrors the complement of `ImportRun.active_statuses/0`.
+  @terminal_statuses ~w(done failed stopped)a
+
   @doc """
   PubSub topic carrying progress for one run.
   """
@@ -61,6 +65,25 @@ defmodule Mydia.Jobs.ImportRun do
     case Library.get_import_run(run_id) do
       nil ->
         Logger.warning("Import run vanished before it could execute", import_run_id: run_id)
+        :ok
+
+      # Defence in depth against a job that outlived its run's verdict. Boot
+      # reconciliation retires the jobs of every run it releases, so this
+      # should not be reachable, but the collision it guards against is not
+      # hypothetical: `Mydia.Jobs.reset_stale_executing_jobs/1` re-queues any
+      # job that has been `executing` for over an hour, and an import that ran
+      # for hours before a crash is exactly that. Executing phases against a
+      # terminal run would finish it at `:done` carrying somebody else's error
+      # text, and would do it alongside whatever run the user started after
+      # being told the first one failed.
+      %ImportRun{status: status} = stale when status in @terminal_statuses ->
+        Logger.warning("Refusing to execute an import run that already finished",
+          import_run_id: run_id,
+          status: status,
+          attempt: job.attempt
+        )
+
+        broadcast(stale)
         :ok
 
       run ->
@@ -129,7 +152,11 @@ defmodule Mydia.Jobs.ImportRun do
       Library.update_import_run(Library.get_import_run(run.id), %{
         status: status,
         phase: :finished,
-        current_file: nil
+        current_file: nil,
+        # The run reached its own end, so whatever was in `error` is not the
+        # outcome. Leaving it would put a stale sentence under a green
+        # "Import finished" in the outcome panel.
+        error: nil
       })
 
     broadcast(updated)
@@ -444,12 +471,14 @@ defmodule Mydia.Jobs.ImportRun do
   """
   @spec reconcile_interrupted_runs() :: {:ok, non_neg_integer()}
   def reconcile_interrupted_runs do
-    live = live_run_ids()
+    jobs = unfinished_jobs()
+    live = live_run_ids(jobs)
+    jobs_by_run = Enum.group_by(jobs, & &1.run_id, & &1.id)
 
     count =
       Library.list_active_import_runs()
       |> Enum.reject(&MapSet.member?(live, &1.id))
-      |> Enum.count(&reconcile_run/1)
+      |> Enum.count(&reconcile_run(&1, Map.get(jobs_by_run, &1.id, [])))
 
     if count > 0 do
       Logger.warning("Released import runs left in flight by an interrupted node", count: count)
@@ -463,7 +492,7 @@ defmodule Mydia.Jobs.ImportRun do
       {:ok, 0}
   end
 
-  defp reconcile_run(run) do
+  defp reconcile_run(run, job_ids) do
     case Library.update_import_run(run, %{
            status: reconciled_status(run.status),
            phase: :finished,
@@ -471,6 +500,7 @@ defmodule Mydia.Jobs.ImportRun do
            error: @interrupted_error
          }) do
       {:ok, updated} ->
+        retire_jobs(run, job_ids)
         broadcast(updated)
         true
 
@@ -484,30 +514,73 @@ defmodule Mydia.Jobs.ImportRun do
     end
   end
 
+  # Retiring the job is not bookkeeping, it is what makes the terminal status
+  # above stick.
+  #
+  # `Mydia.Application` calls `Mydia.Jobs.reset_stale_executing_jobs/1` later in
+  # the same boot, which flips ANY job still `executing` with an `attempted_at`
+  # over an hour old back to `available`. An import that ran for hours before
+  # the crash is exactly that job. Without this, the run row said `:failed`
+  # while Oban happily re-queued and re-ran the very coordinator this function
+  # just declared dead, against a terminal run, finishing at `:done` with the
+  # interruption text still attached. Worse, `:failed` is not active, so Start
+  # was enabled and the user following this function's own error message could
+  # put a second coordinator on the same library path: the partial unique index
+  # guards active `import_runs` rows, not Oban jobs.
+  #
+  # Written with `Repo.update_all` rather than `Oban.cancel_all_jobs/1` because
+  # no Oban instance is running yet at this point in boot, which is the same
+  # ordering that makes an `executing` row readable as stale in the first
+  # place. `cancelled` (not `discarded`) because this is a deliberate
+  # retirement, and the Pruner cleans it up on the same schedule either way.
+  defp retire_jobs(_run, []), do: :ok
+
+  defp retire_jobs(run, job_ids) do
+    {count, _} =
+      Oban.Job
+      |> where([j], j.id in ^job_ids)
+      |> Repo.update_all(set: [state: "cancelled", cancelled_at: DateTime.utc_now()])
+
+    Logger.warning("Retired the Oban jobs of an interrupted import run",
+      import_run_id: run.id,
+      jobs: count
+    )
+
+    :ok
+  end
+
   # A run that was already draining is reported as stopped, not failed: the
   # user asked for it to end and it did, just not cleanly.
   defp reconciled_status(:stopping), do: :stopped
   defp reconciled_status(_running), do: :failed
 
-  # Read back in Elixir rather than filtered in SQL: pulling a value out of a
-  # JSON column is not portable between SQLite and PostgreSQL, and the worker
-  # plus state filter already narrows this to a handful of rows.
-  defp live_run_ids do
+  # Every coordinator job that has not reached a terminal Oban state, projected
+  # to just what the two callers below need. Read back in Elixir rather than
+  # filtered in SQL: pulling a value out of a JSON column is not portable
+  # between SQLite and PostgreSQL, and the worker plus state filter already
+  # narrows this to a handful of rows.
+  defp unfinished_jobs do
     states = [@executing_state | @queued_job_states]
-    this_node = Oban.Config.node_name()
 
     Oban.Job
     |> where([j], j.worker == ^inspect(__MODULE__) and j.state in ^states)
-    |> select([j], {j.state, j.attempted_by, j.args})
+    |> select([j], {j.id, j.state, j.attempted_by, j.args})
     |> Repo.all()
-    |> Enum.filter(fn {state, attempted_by, _args} ->
-      live_job?(state, attempted_by, this_node)
-    end)
     |> Enum.flat_map(fn
-      {_state, _attempted_by, %{"import_run_id" => id}} when is_binary(id) -> [id]
-      _ -> []
+      {id, state, attempted_by, %{"import_run_id" => run_id}} when is_binary(run_id) ->
+        [%{id: id, state: state, attempted_by: attempted_by, run_id: run_id}]
+
+      _ ->
+        []
     end)
-    |> MapSet.new()
+  end
+
+  defp live_run_ids(jobs) do
+    this_node = Oban.Config.node_name()
+
+    jobs
+    |> Enum.filter(&live_job?(&1.state, &1.attempted_by, this_node))
+    |> MapSet.new(& &1.run_id)
   end
 
   # `attempted_by` is `[node, uuid]` on the Basic engine and `[node]` on Lite,

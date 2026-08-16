@@ -2658,7 +2658,8 @@ defmodule Mydia.Library do
   saying a human ended it.
   """
   @spec release_import_run(ImportRun.t() | binary()) ::
-          {:ok, ImportRun.t()} | {:error, :not_active | :not_found}
+          {:ok, ImportRun.t()}
+          | {:error, :not_active | :not_found | Ecto.Changeset.t()}
   def release_import_run(%ImportRun{id: id}), do: release_import_run(id)
 
   def release_import_run(id) when is_binary(id) do

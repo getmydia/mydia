@@ -21,6 +21,16 @@ defmodule Mydia.Jobs.ImportRunReconciler do
       Mydia's default adapter) stores `[node]` alone, and a container's node
       name is identical across restarts.
 
+  Ordering is sufficient for a single instance, which is Mydia's deployment
+  model, and the node comparison in `live_job?/3` extends it to a cluster whose
+  nodes have distinct names. The case neither covers: two container replicas
+  started with the *same* explicitly-set hostname produce the same
+  `Oban.Config.node_name/0`, so replica B booting would read replica A's live
+  `executing` row as its own leftover and release a healthy import. Per the
+  engine analysis above there is nothing in `attempted_by` that could tell them
+  apart on SQLite, and the run is recoverable (Start again), so this is
+  documented rather than defended against.
+
   It does its work synchronously in `init/1` and then returns `:ignore`, the
   same shape `Mydia.Release.MigrationBackup` uses, so no process lingers.
 
