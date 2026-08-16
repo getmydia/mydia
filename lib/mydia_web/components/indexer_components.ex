@@ -55,7 +55,11 @@ defmodule MydiaWeb.IndexerComponents do
         </summary>
         <div class="collapse-content">
           <ul class="menu w-full">
-            <li :for={row <- @rows} class="flex items-center gap-2">
+            <li
+              :for={row <- @rows}
+              id={"indexer-status-#{row.indexer_id}"}
+              class="flex items-center gap-2"
+            >
               <span :if={row.status == :pending} class="loading loading-spinner loading-xs"></span>
               <.icon
                 :if={row.status == :ok}

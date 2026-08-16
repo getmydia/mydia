@@ -28,7 +28,7 @@ defmodule MydiaWeb.IndexerComponentsTest do
         retry_event: "retry_indexer"
       )
 
-    assert html =~ "5 results"
+    assert html =~ "5 results · 2/3 indexers"
     assert html =~ "2/3 indexers"
     assert html =~ "1 failed"
 
