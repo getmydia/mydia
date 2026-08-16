@@ -150,18 +150,26 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
     conn: conn,
     library_path: lp
   } do
+    series = library_path_fixture(%{type: "series"})
+
     {:ok, view, _html} = live(conn, ~p"/import")
 
-    assert has_element?(
-             view,
-             "label.card input[type=radio][name=library_path_id][value='#{lp.id}']"
-           )
+    for path <- [lp, series] do
+      assert has_element?(
+               view,
+               "label.card input[type=radio][name=library_path_id][value='#{path.id}']"
+             )
+    end
 
     # The first path is preselected so the form always submits a real id.
     assert has_element?(
              view,
              "input[type=radio][name=library_path_id][value='#{lp.id}'][checked]"
            )
+
+    # Each card carries the icon for its library type.
+    assert has_element?(view, "span.hero-film")
+    assert has_element?(view, "span.hero-tv")
   end
 
   describe "library types that cannot be imported" do
