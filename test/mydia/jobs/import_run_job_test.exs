@@ -66,6 +66,49 @@ defmodule Mydia.Jobs.ImportRunJobTest do
       assert length(Library.list_media_files(library_path_id: lp.id)) == 3
     end
 
+    test "tolerates duplicate rows for one path without crashing or adding more", %{
+      run: run,
+      library_path: lp
+    } do
+      # The data anomaly that used to strand a run: two builds of the scanner
+      # (or a scanner racing the import coordinator) created two rows for the
+      # same relative path. get_media_file_by_relative_path/3 raised
+      # Ecto.MultipleResultsError here, which Oban discarded after retries,
+      # leaving the run row :running forever.
+      relative_path = "Season 01/Bluey.S01E01.mkv"
+
+      for _ <- 1..2 do
+        {:ok, _} =
+          Library.create_scanned_media_file(%{
+            library_path_id: lp.id,
+            relative_path: relative_path,
+            size: 1,
+            verified_at: DateTime.utc_now()
+          })
+      end
+
+      assert :ok = ImportRunJob.run_scan_phase(Library.get_import_run(run.id))
+
+      files = Library.list_media_files(library_path_id: lp.id)
+      assert Enum.count(files, &(&1.relative_path == relative_path)) == 2
+    end
+
+    test "broadcasts the path being scanned", %{run: run} do
+      Phoenix.PubSub.subscribe(Mydia.PubSub, ImportRunJob.progress_topic(run.id))
+
+      assert :ok = ImportRunJob.run_scan_phase(Library.get_import_run(run.id))
+
+      # The scanner reports every directory it enters and every file it finds,
+      # relative to the library root, so the page can show what "Finding files"
+      # is looking at. The exact set depends on File.ls ordering, so assert the
+      # shapes rather than a specific sequence.
+      paths =
+        receive_scan_paths([])
+
+      assert "Season 01" in paths
+      assert "Season 01/Bluey.S01E01.mkv" in paths
+    end
+
     test "stops when a stop was requested", %{run: run} do
       {:ok, _} = Library.request_import_run_stop(Library.get_import_run(run.id))
 
@@ -216,6 +259,18 @@ defmodule Mydia.Jobs.ImportRunJobTest do
         Library.upsert_match_candidate(%{media_file_id: file_id, rank: 0, attempts: 1})
 
       assert length(Library.list_unmatched_media_file_paths(lp.id, 100)) == 2
+    end
+  end
+
+  # Drains the scan-progress messages `run_scan_phase/2` already broadcast
+  # into the test process's mailbox (the scan is synchronous, so they are all
+  # queued by the time this runs). The short timeout only bounds an empty
+  # mailbox, not a slow scan.
+  defp receive_scan_paths(acc) do
+    receive do
+      {:import_run_current_file, path} -> receive_scan_paths([path | acc])
+    after
+      200 -> acc
     end
   end
 end

@@ -158,31 +158,6 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     end
   end
 
-  def handle_event("release_run", _params, socket) do
-    with :ok <- Authorization.authorize_import_media(socket) do
-      case socket.assigns.active_run do
-        nil ->
-          {:noreply, socket}
-
-        run ->
-          case Library.release_import_run(run.id) do
-            {:ok, released} ->
-              {:noreply,
-               socket
-               |> show_outcome(released)
-               |> put_flash(:info, "Marked as not running. You can start a new import now.")}
-
-            # Already terminal, or gone. Either way there is nothing to
-            # release, and the run's real outcome is what should be on screen.
-            {:error, _reason} ->
-              {:noreply, show_outcome(socket, Library.get_import_run(run.id))}
-          end
-      end
-    else
-      {:unauthorized, socket} -> {:noreply, socket}
-    end
-  end
-
   # An unknown filter or a malformed offset leaves the inbox exactly as it is,
   # with no flash: these are view controls, so the honest response to a value
   # the server does not recognise is to keep showing what is already on screen

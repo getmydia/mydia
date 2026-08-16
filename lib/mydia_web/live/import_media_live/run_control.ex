@@ -48,15 +48,46 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
       phx-submit="start_run"
       class="flex flex-col gap-4"
     >
-      <.input
-        id="start-run-library"
-        name="library_path_id"
-        type="select"
-        label="Library"
-        value={default_library_path_id(@library_paths)}
-        options={Enum.map(@library_paths, &{&1.path, &1.id})}
-        required
-      />
+      <fieldset class="flex flex-col gap-2">
+        <legend class="text-sm font-medium opacity-80">Library</legend>
+        <div class="grid gap-3">
+          <%= for path <- @library_paths do %>
+            <label class={[
+              "group card card-compact bg-base-100 border border-base-300 cursor-pointer transition-all duration-200",
+              "hover:border-primary hover:shadow-lg",
+              "has-checked:border-primary has-checked:bg-primary/5 has-checked:ring-2 has-checked:ring-primary/40"
+            ]}>
+              <input
+                type="radio"
+                name="library_path_id"
+                value={path.id}
+                class="sr-only"
+                checked={path.id == default_library_path_id(@library_paths)}
+              />
+              <div class="card-body flex-row items-center gap-4">
+                <div class={[
+                  "flex items-center justify-center w-12 h-12 rounded-lg shrink-0 transition-transform group-hover:scale-105",
+                  library_type_bg_class(path.type)
+                ]}>
+                  <.icon name={library_type_icon(path.type)} class="w-6 h-6" />
+                </div>
+                <div class="flex-1 min-w-0">
+                  <span class={["badge badge-sm mb-1", library_type_badge_class(path.type)]}>
+                    {library_type_display(path.type)}
+                  </span>
+                  <p class="font-mono text-sm truncate text-base-content/80 group-has-checked:text-base-content">
+                    {path.path}
+                  </p>
+                </div>
+                <.icon
+                  name="hero-check"
+                  class="w-5 h-5 text-primary shrink-0 opacity-0 group-has-checked:opacity-100 transition-opacity"
+                />
+              </div>
+            </label>
+          <% end %>
+        </div>
+      </fieldset>
 
       <.input
         id="start-run-mode"
@@ -109,29 +140,6 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
       >
         Stop and keep progress
       </.button>
-
-      <%!--
-        The escape hatch for a run whose coordinator is gone but whose row
-        still says otherwise. Boot reconciliation
-        (Mydia.Jobs.ImportRun.reconcile_interrupted_runs/0) covers the common
-        case, a restart, but a job cancelled from the jobs page leaves no
-        restart to trigger it. Without something here, recovery means editing
-        the database: Start is refused for this path and Stop only writes
-        :stopping, which is also active.
-      --%>
-      <div class="flex flex-col gap-1">
-        <.button
-          id="release-run-button"
-          phx-click="release_run"
-          data-confirm="Mark this import as not running? Everything it already added is kept, and you will be able to start a new import for this library."
-          class="btn btn-ghost btn-xs self-start"
-        >
-          <.icon name="hero-wrench-screwdriver" class="w-3.5 h-3.5" /> Not actually running?
-        </.button>
-        <p class="text-xs opacity-60">
-          Use this only if the import has been stuck since a restart or a crash.
-        </p>
-      </div>
     </div>
     """
   end
@@ -227,4 +235,28 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
   end
 
   defp number(_), do: "0"
+
+  # Icon, badge and accent styling per library type, mirroring the old
+  # wizard's path-selection cards. `LibraryPath` only knows :movies, :series
+  # and :mixed today; the fallbacks exist so a new type degrades visibly
+  # instead of crashing the template.
+  defp library_type_icon(:series), do: "hero-tv"
+  defp library_type_icon(:movies), do: "hero-film"
+  defp library_type_icon(:mixed), do: "hero-square-3-stack-3d"
+  defp library_type_icon(_), do: "hero-folder"
+
+  defp library_type_bg_class(:series), do: "bg-info/10 text-info"
+  defp library_type_bg_class(:movies), do: "bg-accent/10 text-accent"
+  defp library_type_bg_class(:mixed), do: "bg-secondary/10 text-secondary"
+  defp library_type_bg_class(_), do: "bg-base-200 text-base-content/70"
+
+  defp library_type_badge_class(:series), do: "badge-info"
+  defp library_type_badge_class(:movies), do: "badge-accent"
+  defp library_type_badge_class(:mixed), do: "badge-secondary"
+  defp library_type_badge_class(_), do: "badge-ghost"
+
+  defp library_type_display(:series), do: "TV Series"
+  defp library_type_display(:movies), do: "Movies"
+  defp library_type_display(:mixed), do: "Mixed"
+  defp library_type_display(type), do: to_string(type)
 end
