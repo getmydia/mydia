@@ -33,6 +33,8 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
         end
 
       min_seeders = socket.assigns.min_seeders
+      lv = self()
+      search_id = socket.assigns.search_id + 1
 
       {:noreply,
        socket
@@ -40,10 +42,26 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
        |> assign(:manual_search_query, search_query)
        |> assign(:manual_search_context, %{type: :media_item})
        |> assign(:searching, true)
-       |> assign(:results_empty?, false)
+       # TRUE, not false: the display set is genuinely empty until the first
+       # indexer reports. The modal's loading gate is
+       # `@searching && @results_empty?` and its results list is gated on
+       # `!@results_empty?`, so starting at false suppresses the spinner and
+       # renders an empty <ul> with no message for the whole search window.
+       # The "No Results Found" state is gated on `!@searching`, so it stays
+       # hidden until the search actually ends. The other two search entry
+       # points below do the same for the same reason.
+       |> assign(:results_empty?, true)
        |> assign(:download_error, nil)
+       |> assign(:search_id, search_id)
+       |> assign(:indexer_progress, %{})
+       |> assign(:indexer_raw_results, %{})
+       |> assign(:indexer_errors, [])
+       |> assign(:raw_search_results, [])
+       |> assign(:result_states, %{})
        |> stream(:search_results, [], reset: true)
-       |> start_async(:search, fn -> perform_search(search_query, min_seeders) end)}
+       |> start_async(:search, fn ->
+         perform_search(search_query, min_seeders, lv, search_id)
+       end)}
     else
       {:unauthorized, socket} -> {:noreply, socket}
     end
@@ -101,6 +119,8 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
       "#{media_item.title} S#{String.pad_leading(to_string(episode.season_number), 2, "0")}E#{String.pad_leading(to_string(episode.episode_number), 2, "0")}"
 
     min_seeders = socket.assigns.min_seeders
+    lv = self()
+    search_id = socket.assigns.search_id + 1
 
     {:noreply,
      socket
@@ -116,10 +136,20 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
        }
      )
      |> assign(:searching, true)
-     |> assign(:results_empty?, false)
+     # true so the spinner shows until the first indexer reports; see
+     # manual_search/2 above.
+     |> assign(:results_empty?, true)
      |> assign(:download_error, nil)
+     |> assign(:search_id, search_id)
+     |> assign(:indexer_progress, %{})
+     |> assign(:indexer_raw_results, %{})
+     |> assign(:indexer_errors, [])
+     |> assign(:raw_search_results, [])
+     |> assign(:result_states, %{})
      |> stream(:search_results, [], reset: true)
-     |> start_async(:search, fn -> perform_search(search_query, min_seeders) end)}
+     |> start_async(:search, fn ->
+       perform_search(search_query, min_seeders, lv, search_id)
+     end)}
   end
 
   def manual_search_season(%{"season-number" => season_number_str}, socket) do
@@ -130,6 +160,8 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
       "#{media_item.title} S#{String.pad_leading(to_string(season_num), 2, "0")}"
 
     min_seeders = socket.assigns.min_seeders
+    lv = self()
+    search_id = socket.assigns.search_id + 1
 
     {:noreply,
      socket
@@ -137,10 +169,20 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
      |> assign(:manual_search_query, search_query)
      |> assign(:manual_search_context, %{type: :season, season_number: season_num})
      |> assign(:searching, true)
-     |> assign(:results_empty?, false)
+     # true so the spinner shows until the first indexer reports; see
+     # manual_search/2 above.
+     |> assign(:results_empty?, true)
      |> assign(:download_error, nil)
+     |> assign(:search_id, search_id)
+     |> assign(:indexer_progress, %{})
+     |> assign(:indexer_raw_results, %{})
+     |> assign(:indexer_errors, [])
+     |> assign(:raw_search_results, [])
+     |> assign(:result_states, %{})
      |> stream(:search_results, [], reset: true)
-     |> start_async(:search, fn -> perform_search(search_query, min_seeders) end)}
+     |> start_async(:search, fn ->
+       perform_search(search_query, min_seeders, lv, search_id)
+     end)}
   end
 
   def auto_search_season(%{"season-number" => season_number_str}, socket) do
@@ -193,6 +235,90 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
     {:noreply, reset_search_modal(socket)}
   end
 
+  # Retries a single indexer under a distinct start_async key so it cannot
+  # cancel an in-flight full search (LiveView only cancels a prior async when
+  # the key matches) and reuses the current search_id so its progress
+  # messages pass the stale-guard in handle_info({:indexer_progress, ...}).
+  #
+  # The retry is SCOPED to the one indexer via perform_search/5's indexer_ids
+  # argument. Re-running every indexer would not just waste requests against
+  # hosts that ban on rate: since handle_info({:indexer_search_started, ...})
+  # merges rather than replaces, an unscoped retry's on_start carries a
+  # :pending entry for EVERY indexer, so clicking Retry on one failed chip
+  # would visibly restart all of them.
+  #
+  # Authorized exactly like the other three entry points that start an indexer
+  # search (manual_search/2, auto_search_download/2, download_from_search/2):
+  # Retry hits the same indexers with the same query, so it must sit behind
+  # the same permission check rather than being a side door around it.
+  def handle_retry_indexer(indexer_id, socket) do
+    with :ok <- Authorization.authorize_manage_downloads(socket) do
+      query = socket.assigns.manual_search_query
+      min_seeders = socket.assigns.min_seeders
+      lv = self()
+      search_id = socket.assigns.search_id
+
+      # Map.replace_lazy/3 no-ops when indexer_id isn't a key in the map, rather
+      # than inserting `indexer_id => nil` (as Map.update/4's default would),
+      # which would otherwise flow a nil straight into the status chip
+      # component. Not reachable through the shipped UI today (the Retry
+      # button only renders for rows already present in the map), but an
+      # unknown or forged id should be a clean no-op, not a crash landmine.
+      indexer_progress =
+        Map.replace_lazy(socket.assigns.indexer_progress, indexer_id, fn entry ->
+          %{entry | status: :pending, error: nil, result_count: nil, duration_ms: nil}
+        end)
+
+      {:noreply,
+       socket
+       |> assign(:indexer_progress, indexer_progress)
+       |> start_async({:retry, indexer_id}, fn ->
+         perform_search(query, min_seeders, lv, search_id, [indexer_id])
+       end)}
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
+  # Terminal handler for a single-indexer retry.
+  #
+  # The SUCCESS case is deliberately a no-op: every release the retry found
+  # already arrived through `on_indexer_result` (see handle_search_async/2's
+  # note above), and the batched aggregate carries ONLY the retried indexer,
+  # so applying it would clobber every other indexer's contribution.
+  #
+  # The failure cases are not no-ops. handle_retry_indexer/2 sets the chip to
+  # `:pending` before starting the task; if that task dies or returns an error
+  # before any progress message lands, nothing else ever clears `:pending`, so
+  # the chip spins forever AND the Retry button disappears (it only renders
+  # for `:error`/`:timeout`). Restoring an error state puts the indexer back
+  # into an actionable state.
+  def handle_retry_async(_indexer_id, {:ok, {:ok, _results, _indexer_errors}}, socket) do
+    {:noreply, socket}
+  end
+
+  def handle_retry_async(indexer_id, {:ok, {:error, reason}}, socket) do
+    Logger.error("Indexer retry failed: #{inspect(reason)}")
+    {:noreply, restore_retry_error(socket, indexer_id, "Retry failed: #{inspect(reason)}")}
+  end
+
+  def handle_retry_async(indexer_id, {:exit, reason}, socket) do
+    Logger.error("Indexer retry crashed: #{inspect(reason)}")
+    {:noreply, restore_retry_error(socket, indexer_id, "Retry failed unexpectedly")}
+  end
+
+  # Map.replace_lazy/3 for the same reason handle_retry_indexer/2 uses it: an
+  # id that is not already in the map must be a clean no-op, never an insert
+  # of a half-built entry.
+  defp restore_retry_error(socket, indexer_id, message) do
+    indexer_progress =
+      Map.replace_lazy(socket.assigns.indexer_progress, indexer_id, fn entry ->
+        %{entry | status: :error, error: message, result_count: nil, duration_ms: nil}
+      end)
+
+    assign(socket, :indexer_progress, indexer_progress)
+  end
+
   defp reset_search_modal(socket) do
     socket
     |> assign(:show_manual_search_modal, false)
@@ -202,6 +328,9 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
     |> assign(:results_empty?, false)
     |> assign(:raw_search_results, [])
     |> assign(:indexer_errors, [])
+    |> assign(:indexer_progress, %{})
+    |> assign(:indexer_raw_results, %{})
+    |> assign(:result_states, %{})
     |> assign(:download_error, nil)
     |> stream(:search_results, [], reset: true)
   end
@@ -336,10 +465,32 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
   # Re-stream a single result row with extra fields merged in (e.g. `:downloading`,
   # `:downloaded`). Streams don't re-render existing items on parent assign changes,
   # so per-row state must be pushed via stream_insert.
+  #
+  # The same state is also recorded in `:result_states`, keyed by download_url.
+  # The stream is rebuilt with `reset: true` on every progress message, filter
+  # change and re-sort, and a reset drops anything that only ever lived in the
+  # stream. `:result_states` is what SearchHelpers.stream_prepared_results/2
+  # folds back in on each rebuild, so a badge survives the next indexer
+  # reporting mid-search.
   defp mark_result(socket, download_url, extra) do
+    states =
+      Map.update(
+        Map.get(socket.assigns, :result_states, %{}),
+        download_url,
+        extra,
+        &Map.merge(&1, extra)
+      )
+
+    socket = assign(socket, :result_states, states)
+
     case find_prepared_result(socket, download_url) do
-      nil -> socket
-      item -> stream_insert(socket, :search_results, Map.merge(item, extra))
+      nil ->
+        socket
+
+      item ->
+        # Merge the ACCUMULATED state, not just this call's `extra`, so the row
+        # rendered here matches exactly what a later stream rebuild produces.
+        stream_insert(socket, :search_results, Map.merge(item, Map.fetch!(states, download_url)))
     end
   end
 
@@ -357,34 +508,41 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
 
   # handle_async dispatches
 
+  # Terminal handler for the full search. It deliberately does NOT touch the
+  # displayed results.
+  #
+  # Every indexer's output already arrived through `on_indexer_result`:
+  # Indexers.search_all/2 invokes it on the success branch, the error branch
+  # and the exit/timeout branch alike, and start_async delivers this reply
+  # from the same process that sent those progress messages, so all of them
+  # have already been folded in by SearchHelpers.apply_indexer_progress/2
+  # (which owns :raw_search_results, :indexer_raw_results, :results_empty?
+  # and the stream).
+  #
+  # `results` here is the aggregate of the FULL search only. Re-streaming it
+  # with reset: true would silently delete anything a single-indexer retry
+  # contributed, which is the ordinary case rather than an exotic race: the
+  # Retry button appears as soon as one indexer errors, while slow indexers
+  # are still pending, so a retry against a fast-failing host normally
+  # settles before the slow ones finish.
+  #
+  # The zero-indexer case is why this clause still has to end the search:
+  # search_all/2 returns early there, before `on_start`, so no progress
+  # message ever arrives and nothing else can clear :searching.
+  # :results_empty? was set to true when the search started and nothing has
+  # flipped it, so the "No Results Found" state renders correctly.
   def handle_search_async({:ok, {:ok, results, indexer_errors}}, socket) do
-    start_time = System.monotonic_time(:millisecond)
-
-    search_query = socket.assigns.manual_search_query
-
-    filtered_results = filter_search_results(results, socket.assigns)
-    ranking_opts = build_manual_ranking_opts(socket.assigns)
-
-    sorted_results =
-      sort_search_results_with_opts(filtered_results, socket.assigns.sort_by, ranking_opts)
-
-    prepared_results = prepare_for_stream(sorted_results)
-
-    duration = System.monotonic_time(:millisecond) - start_time
-
     Logger.info(
-      "Search completed: query=\"#{search_query}\", " <>
-        "results=#{length(results)}, filtered=#{length(filtered_results)}, " <>
-        "indexer_errors=#{length(indexer_errors)}, processing_time=#{duration}ms"
+      "Search completed: query=\"#{socket.assigns.manual_search_query}\", " <>
+        "aggregate_results=#{length(results)}, " <>
+        "displayed=#{length(Map.get(socket.assigns, :raw_search_results, []))}, " <>
+        "indexer_errors=#{length(indexer_errors)}"
     )
 
     {:noreply,
      socket
      |> assign(:searching, false)
-     |> assign(:results_empty?, sorted_results == [])
-     |> assign(:raw_search_results, results)
-     |> assign(:indexer_errors, indexer_errors)
-     |> stream(:search_results, prepared_results, reset: true)}
+     |> assign(:indexer_errors, indexer_errors)}
   end
 
   def handle_search_async({:ok, {:error, reason}}, socket) do

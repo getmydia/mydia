@@ -118,6 +118,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
           </button>
           <button
             type="button"
+            id="manual-search-button"
             phx-click="manual_search"
             class="btn btn-outline"
           >

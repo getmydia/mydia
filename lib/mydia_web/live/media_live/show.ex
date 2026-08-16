@@ -115,6 +115,8 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:sort_by, :quality)
      |> assign(:results_empty?, false)
      |> assign(:indexer_errors, [])
+     |> assign(:indexer_progress, %{})
+     |> assign(:search_id, 0)
      # Auto search state
      |> assign(:auto_searching, false)
      |> assign(:auto_searching_season, nil)
@@ -160,6 +162,19 @@ defmodule MydiaWeb.MediaLive.Show do
        Mydia.Accounts.Authorization.can_create_media?(socket.assigns.current_user)
      )
      |> assign(:raw_search_results, [])
+     # Untruncated, undeduplicated pool of every release seen so far in the
+     # current manual search, keyed by download_url. Progress messages fold
+     # onto this (never onto :raw_search_results, which is already truncated
+     # and deduplicated) so a later, weaker duplicate can never crown itself
+     # over a stronger release evicted by an earlier round's truncation. See
+     # apply_indexer_progress/2 in SearchHelpers.
+     |> assign(:indexer_raw_results, %{})
+     # Per-row grab state (:downloading, :downloaded, :duplicate, :grab_failed)
+     # keyed by download_url. The stream is rebuilt with reset: true on every
+     # progress message, filter change and re-sort, and a reset drops anything
+     # that only lived in the stream, so this is the assign those badges
+     # actually survive in. See SearchHelpers.stream_prepared_results/2.
+     |> assign(:result_states, %{})
      # Category modal state
      |> assign(:show_category_modal, false)
      |> assign(:category_form, nil)
@@ -344,6 +359,9 @@ defmodule MydiaWeb.MediaLive.Show do
 
   def handle_event("download_from_search", params, socket),
     do: SearchEvents.download_from_search(params, socket)
+
+  def handle_event("retry_indexer", %{"id" => indexer_id}, socket),
+    do: SearchEvents.handle_retry_indexer(indexer_id, socket)
 
   # Subtitle events
 
@@ -590,6 +608,34 @@ defmodule MydiaWeb.MediaLive.Show do
   def handle_info({:grab_duplicate, payload}, socket),
     do: SearchEvents.handle_grab_duplicate(payload, socket)
 
+  def handle_info({:indexer_search_started, search_id, pending}, socket) do
+    if search_id == socket.assigns.search_id do
+      incoming = Map.new(pending, fn entry -> {entry.indexer_id, entry} end)
+
+      # Merge rather than replace: a scoped retry's on_start message only
+      # covers the indexer(s) actually being retried, so a full replace here
+      # would wipe every OTHER indexer's chip (success counts, durations,
+      # errors) out of indexer_progress, even though those indexers were
+      # never re-searched and will never report in again this search. A
+      # fresh search still resets indexer_progress to %{} before starting
+      # (see SearchEvents.manual_search/2), so merge and replace are
+      # equivalent there; this only changes behavior for the scoped-retry
+      # case.
+      progress = Map.merge(socket.assigns.indexer_progress, incoming)
+      {:noreply, assign(socket, :indexer_progress, progress)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_info({:indexer_progress, search_id, progress}, socket) do
+    if search_id == socket.assigns.search_id do
+      {:noreply, apply_indexer_progress(socket, progress)}
+    else
+      {:noreply, socket}
+    end
+  end
+
   def handle_info(_msg, socket), do: {:noreply, socket}
 
   # handle_async dispatches to event modules
@@ -597,6 +643,9 @@ defmodule MydiaWeb.MediaLive.Show do
   @impl true
   def handle_async(:search, result, socket),
     do: SearchEvents.handle_search_async(result, socket)
+
+  def handle_async({:retry, indexer_id}, result, socket),
+    do: SearchEvents.handle_retry_async(indexer_id, result, socket)
 
   def handle_async(:refresh_files, result, socket),
     do: FileEvents.handle_refresh_files_async(result, socket)

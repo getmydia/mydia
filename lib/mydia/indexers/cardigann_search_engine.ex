@@ -762,6 +762,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     base_opts = [
       headers: request_params.headers,
       receive_timeout: 30_000,
+      connect_options: [timeout: 10_000],
       redirect: definition.follow_redirect,
       retry: false
     ]

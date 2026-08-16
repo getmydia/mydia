@@ -10,6 +10,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
   alias Mydia.Indexers.ReleaseRanker
   alias Mydia.Indexers.SearchResult
   alias Mydia.Indexers.SearchScorer
+  alias Mydia.Indexers.Structs.IndexerProgress
   alias Mydia.Media
   alias Mydia.Settings.CustomFormats
 
@@ -41,16 +42,123 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
 
   def generate_positioned_id(result), do: generate_result_id(result)
 
-  def perform_search(query, min_seeders) do
+  @doc """
+  Rebuild the `:search_results` stream from a freshly sorted list, re-applying
+  the per-row grab state held in `:result_states`.
+
+  Per-row flags (`:downloading`, `:downloaded`, `:duplicate`, `:grab_failed`)
+  are written into the stream by `SearchEvents.mark_result/3` and live nowhere
+  else, so every `reset: true` rebuild would erase them. That used to be
+  unreachable: results were only clickable once the search had finished, and
+  nothing rebuilt the stream after that. Now that results stream in while slow
+  indexers are still running, a user can grab a release and watch the badge
+  vanish the moment the next indexer reports.
+
+  `:result_states` is the backing assign that survives those rebuilds, mirroring
+  how `MydiaWeb.SearchLive.Index` keeps `:downloading_urls` in assigns and
+  re-derives per-row state after each re-stream.
+  """
+  def stream_prepared_results(socket, sorted_results) do
+    states = Map.get(socket.assigns, :result_states, %{})
+
+    prepared =
+      sorted_results
+      |> prepare_for_stream()
+      |> Enum.map(fn result ->
+        case Map.get(states, result.download_url) do
+          nil -> result
+          state -> Map.merge(result, state)
+        end
+      end)
+
+    Phoenix.LiveView.stream(socket, :search_results, prepared, reset: true)
+  end
+
+  @doc """
+  Run a manual search, streaming per-indexer progress back to `lv`.
+
+  `indexer_ids` scopes the search to a subset of the enabled indexers. It
+  defaults to `nil`, which searches all of them; the single-indexer retry
+  passes `[indexer_id]` so retrying one failed chip does not re-run (and
+  re-set to `:pending`) every other indexer. `Indexers.search_all/2` treats a
+  `nil` value the same as the option being absent.
+  """
+  def perform_search(query, min_seeders, lv, search_id, indexer_ids \\ nil) do
     opts = [
       min_seeders: min_seeders,
-      deduplicate: true
+      deduplicate: true,
+      indexer_ids: indexer_ids,
+      on_start: fn pending -> send(lv, {:indexer_search_started, search_id, pending}) end,
+      on_indexer_result: fn progress -> send(lv, {:indexer_progress, search_id, progress}) end
     ]
 
-    {:ok, %{results: results, indexer_errors: indexer_errors}} =
-      Indexers.search_all(query, opts)
+    case Indexers.search_all(query, opts) do
+      {:ok, %{results: results, indexer_errors: indexer_errors}} ->
+        {:ok, results, indexer_errors}
 
-    {:ok, results, indexer_errors}
+      other ->
+        {:error, other}
+    end
+  end
+
+  @doc """
+  Folds one indexer's results into the accumulated set and re-ranks everything,
+  so the list stays correctly ordered as indexers report out of order.
+
+  Two collections are kept deliberately, and must NOT be collapsed into one:
+
+    - `:indexer_raw_results` - every release seen so far this search, keyed by
+      `download_url`, UNTRUNCATED. This is what future progress messages fold
+      new results onto.
+    - `:raw_search_results` - the ranked-and-deduplicated (and therefore
+      truncated-to-max_results) set, matching what `handle_search_async/2`
+      assigns at the end of a search. `apply_search_filters/1` re-filters
+      straight from it without deduplicating, so it must stay deduplicated.
+
+  Folding new results directly onto `:raw_search_results` (rather than a
+  separate untruncated pool) would corrupt deduplication across rounds: an
+  item can be evicted by `rank_and_dedupe/3`'s `max_results` truncation while
+  it was the sole member of its dedup group, having never lost a dedup
+  comparison. If a WEAKER duplicate of that same release arrives in a later
+  round, deduping against the truncated set would only see the weak
+  duplicate (the true winner already evicted) and crown it as the group's
+  representative. Re-ranking from the full untruncated pool every round
+  means deduplication always compares every variant of a release ever seen,
+  so the strongest one always wins.
+
+  `results` is cleared from the stored progress struct before it's put in
+  `:indexer_progress`, because it can be large and the releases already live
+  in `:indexer_raw_results`.
+  """
+  def apply_indexer_progress(socket, %IndexerProgress{} = progress) do
+    indexer_progress =
+      Map.put(socket.assigns.indexer_progress, progress.indexer_id, %{progress | results: []})
+
+    raw_pool =
+      Enum.reduce(progress.results, socket.assigns.indexer_raw_results, fn result, acc ->
+        Map.put(acc, result.download_url, result)
+      end)
+
+    ranked =
+      raw_pool
+      |> Map.values()
+      |> Indexers.rank_and_dedupe(socket.assigns.manual_search_query,
+        min_seeders: socket.assigns.min_seeders
+      )
+
+    ranking_opts = build_manual_ranking_opts(socket.assigns)
+
+    sorted =
+      ranked
+      |> filter_search_results(socket.assigns)
+      |> sort_search_results_with_opts(socket.assigns.sort_by, ranking_opts)
+
+    socket
+    |> Phoenix.Component.assign(:indexer_progress, indexer_progress)
+    |> Phoenix.Component.assign(:indexer_raw_results, raw_pool)
+    |> Phoenix.Component.assign(:raw_search_results, ranked)
+    |> Phoenix.Component.assign(:results_empty?, sorted == [])
+    |> stream_prepared_results(sorted)
   end
 
   def apply_search_filters(socket) do
@@ -62,11 +170,9 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
     sorted_results =
       sort_search_results_with_opts(filtered_results, socket.assigns.sort_by, ranking_opts)
 
-    prepared_results = prepare_for_stream(sorted_results)
-
     socket
     |> Phoenix.Component.assign(:results_empty?, sorted_results == [])
-    |> Phoenix.LiveView.stream(:search_results, prepared_results, reset: true)
+    |> stream_prepared_results(sorted_results)
   end
 
   def apply_search_sort(socket) do
@@ -78,10 +184,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
     sorted_results =
       sort_search_results_with_opts(filtered_results, socket.assigns.sort_by, ranking_opts)
 
-    prepared_results = prepare_for_stream(sorted_results)
-
-    socket
-    |> Phoenix.LiveView.stream(:search_results, prepared_results, reset: true)
+    stream_prepared_results(socket, sorted_results)
   end
 
   def filter_search_results(results, assigns) do

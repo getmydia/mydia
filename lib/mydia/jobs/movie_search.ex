@@ -312,7 +312,10 @@ defmodule Mydia.Jobs.MovieSearch do
 
     min_seeders = get_min_seeders()
 
-    case Indexers.search_all(query, min_seeders: min_seeders) do
+    case Indexers.search_all(
+           query,
+           [min_seeders: min_seeders] ++ Indexers.background_search_opts()
+         ) do
       {:ok, %{results: [], indexer_errors: indexer_errors}} ->
         if indexer_errors != [] do
           Logger.warning("Movie search failed due to indexer errors",
@@ -510,7 +513,10 @@ defmodule Mydia.Jobs.MovieSearch do
     min_seeders = get_min_seeders()
     resource_type = Keyword.get(opts, :backoff_resource_type, "movie")
 
-    case Indexers.search_all(query, min_seeders: min_seeders) do
+    case Indexers.search_all(
+           query,
+           [min_seeders: min_seeders] ++ Indexers.background_search_opts()
+         ) do
       {:ok, %{results: [], indexer_errors: indexer_errors}} ->
         if indexer_errors != [] do
           Logger.warning("Movie search failed due to indexer errors",

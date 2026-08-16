@@ -51,6 +51,11 @@ defmodule Mydia.Indexers.Adapter.Prowlarr do
 
   require Logger
 
+  # A host that drops SYN packets hangs in TCP connect, a phase receive_timeout
+  # does not govern. Slow-but-reachable indexers are unaffected: they connect
+  # promptly and then take their time replying, which receive_timeout covers.
+  @connect_timeout 10_000
+
   alias Mydia.Downloads.TorrentHash
 
   @impl true
@@ -89,7 +94,12 @@ defmodule Mydia.Indexers.Adapter.Prowlarr do
 
     Logger.debug("Prowlarr search: #{url}")
 
-    case Req.get(url, headers: headers, receive_timeout: timeout) do
+    case Req.get(url,
+           headers: headers,
+           receive_timeout: timeout,
+           connect_options: [timeout: @connect_timeout],
+           retry: false
+         ) do
       {:ok, %Req.Response{status: 200, body: body}} ->
         parse_search_response(body, config.name)
 

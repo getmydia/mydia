@@ -4,6 +4,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   """
   use Phoenix.Component
   import MydiaWeb.CoreComponents
+  import MydiaWeb.IndexerComponents
 
   # Import the formatting and search helper functions
   import MydiaWeb.MediaLive.Show.Formatters
@@ -572,7 +573,12 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   attr :close_after_grab, :boolean, default: false
   attr :download_error, :any, default: nil
   attr :results_empty?, :boolean, required: true
+  # Whether the accumulated (pre-filter) result pool is still empty. Gates the
+  # filters bar: see the comment on it below for why this is not
+  # `results_empty?`.
+  attr :raw_results_empty?, :boolean, default: true
   attr :indexer_errors, :list, default: []
+  attr :indexer_progress, :map, default: %{}
   attr :streams, :map, required: true
   attr :quality_filter, :string, default: nil
   attr :min_seeders, :integer, default: 0
@@ -638,7 +644,19 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
           </div>
         </div>
         <%!-- Filters Bar (compact) --%>
-        <%= if !@searching do %>
+        <%!-- Additive to the old `!@searching` gate. Results now stream in
+             indexer by indexer, so gating only on the search being over left
+             the user staring at rows they could not filter or re-sort for up
+             to the full 120s deadline. Adding "or the accumulated pool is not
+             empty" opens the bar as soon as the first indexer reports.
+
+             The extra condition is the PRE-filter pool, not `!@results_empty?`
+             (what the results list below uses). `results_empty?` is the
+             post-filter display set, so a quality filter that happens to match
+             nothing would hide the very controls needed to undo it. Keeping
+             `!@searching` as a floor also keeps the "Close after grabbing"
+             preference reachable after a search that found nothing. --%>
+        <%= if !@raw_results_empty? or !@searching do %>
           <div class="bg-base-200/50 border-b border-base-300 px-4 py-3">
             <div class="flex flex-wrap items-center gap-3">
               <form phx-change="filter_search" class="flex flex-wrap items-center gap-3">
@@ -696,25 +714,16 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
               <span class="text-sm">{@download_error}</span>
             </div>
           <% end %>
-          <%!-- Indexer Error Warning --%>
-          <%= if @indexer_errors != [] && !@searching do %>
-            <div class="alert alert-warning mx-4 mt-3 mb-1">
-              <.icon name="hero-exclamation-triangle" class="w-5 h-5 shrink-0" />
-              <div class="flex-1">
-                <div class="text-sm font-medium">
-                  {length(@indexer_errors)} indexer(s) failed
-                </div>
-                <ul class="text-xs opacity-80 mt-1">
-                  <%= for error <- @indexer_errors do %>
-                    <li>{error.indexer}: {error.error}</li>
-                  <% end %>
-                </ul>
-              </div>
-            </div>
-          <% end %>
+          <%!-- Per-indexer search progress --%>
+          <div class="px-4">
+            <.indexer_search_status progress={@indexer_progress} retry_event="retry_indexer" />
+          </div>
           <%!-- Loading State --%>
-          <%= if @searching do %>
-            <div class="flex flex-col items-center justify-center py-16">
+          <%= if @searching && @results_empty? do %>
+            <div
+              id="manual-search-loading-state"
+              class="flex flex-col items-center justify-center py-16"
+            >
               <span class="loading loading-spinner loading-lg text-primary mb-4"></span>
               <h3 class="text-xl font-semibold text-base-content/70 mb-2">
                 Searching across indexers...
@@ -741,7 +750,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
             </div>
           <% end %>
           <%!-- Results List --%>
-          <%= if !@searching && !@results_empty? do %>
+          <%= if !@results_empty? do %>
             <ul id="manual-search-results" class="list bg-base-100" phx-update="stream">
               <li
                 :for={{id, result} <- @streams.search_results}

@@ -31,6 +31,7 @@ defmodule Mydia.Indexers do
   alias Mydia.Indexers.CardigannAuth
   alias Mydia.Indexers.CardigannDownload
   alias Mydia.Indexers.CardigannParser
+  alias Mydia.Indexers.Structs.IndexerProgress
   alias Mydia.Settings
   alias Mydia.Repo
   import Ecto.Query
@@ -158,6 +159,20 @@ defmodule Mydia.Indexers do
         for a library type (e.g., `:movies`, `:series`, `:mixed`)
       - `:indexer_ids` - List of indexer config IDs to search (default: all enabled)
         When provided, only the specified indexers will be searched.
+      - `:max_concurrency` - Maximum indexers searched at once (default: every
+        selected indexer, capped at 16). Falls back to the `:indexer_search`
+        application config, then the default.
+      - `:deadline_ms` - Milliseconds before a single indexer's search is
+        killed and reported as timed out (default: 120_000). Falls back to
+        the `:indexer_search` application config, then the default.
+      - `:on_start` - `([IndexerProgress.t()] -> any())` called once, before
+        any request is made, with one `:pending` entry per indexer to be
+        searched. Defaults to a no-op.
+      - `:on_indexer_result` - `(IndexerProgress.t() -> any())` called once
+        per indexer as it settles (`:ok`, `:error`, or `:timeout`), in
+        completion order rather than input order. Runs in the caller's
+        process, so a manual-search LiveView can `send/2` to itself from
+        this callback without extra synchronization. Defaults to a no-op.
 
   ## Examples
 
@@ -178,10 +193,9 @@ defmodule Mydia.Indexers do
   @spec search_all(binary(), keyword()) ::
           {:ok, %{results: [SearchResult.t()], indexer_errors: [map()]}}
   def search_all(query, opts \\ []) do
-    min_seeders = Keyword.get(opts, :min_seeders, 0)
-    max_results = Keyword.get(opts, :max_results, 100)
-    should_deduplicate = Keyword.get(opts, :deduplicate, true)
     indexer_ids = Keyword.get(opts, :indexer_ids)
+    on_start = Keyword.get(opts, :on_start, fn _pending -> :ok end)
+    on_indexer_result = Keyword.get(opts, :on_indexer_result, fn _progress -> :ok end)
 
     # Get traditional indexers (Prowlarr, Jackett)
     indexers = Settings.list_indexer_configs()
@@ -217,49 +231,145 @@ defmodule Mydia.Indexers do
       {:ok, %{results: [], indexer_errors: []}}
     else
       start_time = System.monotonic_time(:millisecond)
+      total = length(all_indexers)
 
-      {all_results, indexer_errors} =
+      on_start.(
+        Enum.map(all_indexers, fn config ->
+          %IndexerProgress{
+            indexer: indexer_display_name(config),
+            indexer_id: Map.get(config, :id),
+            status: :pending,
+            total: total
+          }
+        end)
+      )
+
+      {all_results, indexer_errors, _completed} =
         all_indexers
         |> Task.async_stream(
           fn config -> search_with_metrics(config, query, opts) end,
-          timeout: :infinity,
-          max_concurrency: get_search_concurrency(),
-          on_timeout: :kill_task
+          timeout: search_deadline_ms(opts),
+          max_concurrency: get_search_concurrency(total, opts),
+          on_timeout: :kill_task,
+          zip_input_on_exit: true,
+          ordered: false
         )
-        |> Enum.reduce({[], []}, fn
-          {:ok, {metrics, results}}, {acc_results, acc_errors} ->
+        |> Enum.reduce({[], [], 0}, fn
+          {:ok, {metrics, results}}, {acc_results, acc_errors, completed} ->
+            completed = completed + 1
+
+            on_indexer_result.(%IndexerProgress{
+              indexer: metrics.indexer,
+              indexer_id: metrics.indexer_id,
+              status: if(metrics.success, do: :ok, else: :error),
+              results: results,
+              result_count: length(results),
+              error: metrics.error,
+              duration_ms: metrics.duration_ms,
+              completed: completed,
+              total: total
+            })
+
             if metrics.success do
-              {results ++ acc_results, acc_errors}
+              {results ++ acc_results, acc_errors, completed}
             else
               error = %{indexer: metrics.indexer, error: metrics.error}
-              {acc_results, [error | acc_errors]}
+              {acc_results, [error | acc_errors], completed}
             end
 
-          {:exit, reason}, {acc_results, acc_errors} ->
-            Logger.error("Indexer search task crashed: #{inspect(reason)}")
-            error = %{indexer: "unknown", error: "Task crashed: #{inspect(reason)}"}
-            {acc_results, [error | acc_errors]}
+          # zip_input_on_exit: true puts the input config in the exit tuple.
+          # Without it Task.async_stream never says which element died, which is
+          # why this branch used to report "unknown".
+          {:exit, {config, reason}}, {acc_results, acc_errors, completed} ->
+            completed = completed + 1
+            name = indexer_display_name(config)
+            message = format_exit_reason(reason)
+
+            Logger.error("Indexer search failed for #{name}: #{inspect(reason)}")
+
+            on_indexer_result.(%IndexerProgress{
+              indexer: name,
+              indexer_id: Map.get(config, :id),
+              status: if(reason == :timeout, do: :timeout, else: :error),
+              result_count: 0,
+              error: message,
+              completed: completed,
+              total: total
+            })
+
+            {acc_results, [%{indexer: name, error: message} | acc_errors], completed}
         end)
 
-      results =
-        all_results
-        |> filter_by_seeders(min_seeders)
-        |> then(fn results ->
-          if should_deduplicate, do: deduplicate_results(results), else: results
-        end)
-        |> rank_results(query, min_seeders)
-        |> Enum.take(max_results)
+      results = rank_and_dedupe(all_results, query, opts)
 
       total_time = System.monotonic_time(:millisecond) - start_time
 
       Logger.info(
-        "Search completed: query=#{query}, indexers=#{length(all_indexers)}, " <>
+        "Search completed: query=#{query}, indexers=#{total}, " <>
           "cardigann=#{length(cardigann_configs)}, results=#{length(results)}, " <>
           "errors=#{length(indexer_errors)}, time=#{total_time}ms"
       )
 
       {:ok, %{results: results, indexer_errors: Enum.reverse(indexer_errors)}}
     end
+  end
+
+  @doc """
+  Filters, deduplicates and ranks a raw result set.
+
+  Extracted from `search_all/2` so the manual-search LiveViews can re-rank an
+  accumulating result set as each indexer reports, without reimplementing
+  ranking in the web layer.
+
+  ## Options
+
+    - `:min_seeders` - drop torrents below this seeder count (default: 0).
+      NZB results have nil seeders and are always kept.
+    - `:max_results` - truncate to this many results (default: 100)
+    - `:deduplicate` - merge duplicate releases (default: true)
+  """
+  @spec rank_and_dedupe([SearchResult.t()], binary(), keyword()) :: [SearchResult.t()]
+  def rank_and_dedupe(results, query, opts \\ []) do
+    min_seeders = Keyword.get(opts, :min_seeders, 0)
+    max_results = Keyword.get(opts, :max_results, 100)
+    should_deduplicate = Keyword.get(opts, :deduplicate, true)
+
+    results
+    |> filter_by_seeders(min_seeders)
+    |> then(fn results ->
+      if should_deduplicate, do: deduplicate_results(results), else: results
+    end)
+    |> rank_results(query, min_seeders)
+    |> Enum.take(max_results)
+  end
+
+  @doc """
+  Search options for unattended background jobs.
+
+  Background searches run repeatedly across a whole library, so they stay
+  throttled to avoid indexer bans. Manual searches deliberately do not use
+  this: they fan out fully because a user is waiting.
+
+  The deadline is deliberately tighter than the interactive one (120s).
+  `MovieSearch` and `TVShowSearch` walk their items one at a time and the Oban
+  `:search` queue sets no execution timeout, so a per-indexer deadline is the
+  only thing bounding a sweep: with `max_concurrency: 2`, one query costs up to
+  `ceil(indexers / 2) * deadline`, multiplied again by every monitored item in
+  the run. Nobody is waiting on the answer, so a slow host is worth much less
+  patience here than in the manual dialog. 60s still clears the 30-45s a
+  Prowlarr or Jackett instance can legitimately take when it fans out to a cold
+  upstream tracker, while halving the worst-case tail.
+
+  Override with `:background_deadline_ms` in the `:indexer_search` config block,
+  alongside `:background_max_concurrency`.
+  """
+  @spec background_search_opts() :: keyword()
+  def background_search_opts do
+    config = Application.get_env(:mydia, :indexer_search, [])
+    concurrency = config[:background_max_concurrency] || 2
+    deadline_ms = config[:background_deadline_ms] || 60_000
+
+    [max_concurrency: concurrency, deadline_ms: deadline_ms]
   end
 
   @doc """
@@ -394,10 +504,31 @@ defmodule Mydia.Indexers do
     |> Keyword.get(:default_cardigann_rate_limit, 3)
   end
 
-  defp get_search_concurrency do
-    Application.get_env(:mydia, :indexer_search, [])
-    |> Keyword.get(:max_concurrency, 2)
+  # Defaults to searching every selected indexer at once, capped at 16. The
+  # previous default of 2 meant six indexers at a normal 30s response took 90
+  # seconds even when all were healthy, and a single wedged indexer held one of
+  # only two slots for its whole duration. An explicit config value still wins,
+  # so a deployment that deliberately throttled stays throttled.
+  defp get_search_concurrency(indexer_count, opts) do
+    Keyword.get(opts, :max_concurrency) ||
+      Application.get_env(:mydia, :indexer_search, [])[:max_concurrency] ||
+      min(max(indexer_count, 1), 16)
   end
+
+  # 4x a normal 30s response. Generous on purpose: indexers here are legitimately
+  # slow and do eventually answer, so this is a backstop against a wedged
+  # connection rather than a latency budget.
+  defp search_deadline_ms(opts) do
+    Keyword.get(opts, :deadline_ms) ||
+      Application.get_env(:mydia, :indexer_search, [])[:deadline_ms] ||
+      120_000
+  end
+
+  defp indexer_display_name(%{name: name}) when is_binary(name), do: name
+  defp indexer_display_name(_config), do: "unknown"
+
+  defp format_exit_reason(:timeout), do: "Timed out"
+  defp format_exit_reason(reason), do: "Task crashed: #{inspect(reason)}"
 
   defp search_with_metrics(config, query, opts) do
     start_time = System.monotonic_time(:millisecond)
@@ -429,6 +560,7 @@ defmodule Mydia.Indexers do
 
     metrics = %{
       indexer: config.name,
+      indexer_id: Map.get(config, :id),
       success: success,
       duration_ms: duration,
       result_count: length(results),

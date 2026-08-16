@@ -4,7 +4,11 @@ defmodule Mydia.Indexers.Adapter.JackettTest do
   alias Mydia.Indexers.Adapter.Jackett
   alias Mydia.Indexers.Adapter.Error
 
-  @moduletag :external
+  # Previously the whole module was tagged :external, which excluded every
+  # test by default (including the Bypass-driven, fully offline ones). The
+  # tests that genuinely need a live Jackett are individually tagged `:skip`,
+  # and every remaining test is offline by construction (Bypass, or a port
+  # Bypass has vacated), so no module-level gate is needed.
 
   describe "test_connection/1" do
     @tag :skip
@@ -24,6 +28,7 @@ defmodule Mydia.Indexers.Adapter.JackettTest do
       assert info.app_name == "Jackett"
     end
 
+    @tag :skip
     test "fails with invalid API key" do
       config = %{
         type: :jackett,
@@ -38,6 +43,7 @@ defmodule Mydia.Indexers.Adapter.JackettTest do
       assert {:error, %Error{type: :connection_failed}} = Jackett.test_connection(config)
     end
 
+    @tag :skip
     test "fails with invalid host" do
       config = %{
         type: :jackett,
@@ -101,6 +107,7 @@ defmodule Mydia.Indexers.Adapter.JackettTest do
       assert is_list(results)
     end
 
+    @tag :skip
     test "handles invalid API key" do
       config = %{
         type: :jackett,
@@ -182,37 +189,96 @@ defmodule Mydia.Indexers.Adapter.JackettTest do
   end
 
   describe "use_ssl defaults (GitHub issue #28)" do
-    test "test_connection works without use_ssl key - fails gracefully" do
+    # These two guard a real regression: a config with no :use_ssl key (what
+    # the web UI produces) used to raise KeyError instead of failing
+    # gracefully. That is why they must NOT be tagged :skip like the
+    # network-dependent tests above -- skipping means the guard never runs.
+    #
+    # They used to point at port 9117, which made them environment-dependent
+    # in exactly the way the :skip tags elsewhere in this file exist to avoid:
+    # they passed on a machine with nothing listening there and failed on a
+    # developer machine actually running Jackett. Opening a Bypass and
+    # immediately shutting it down yields a port the OS just confirmed was
+    # free and that now has nothing behind it, so the connection refusal is
+    # guaranteed regardless of what is running locally.
+    #
+    # The connection target is incidental to what these assert: only that the
+    # call returns an error tuple rather than raising. A KeyError would fail
+    # the match below rather than satisfy it.
+    setup do
+      bypass = Bypass.open()
+      port = bypass.port
+      Bypass.down(bypass)
+
+      {:ok, closed_port: port}
+    end
+
+    test "test_connection works without use_ssl key - fails gracefully", %{
+      closed_port: closed_port
+    } do
       # Config WITHOUT use_ssl key - simulates web UI config
       config = %{
         type: :jackett,
         name: "Test Jackett",
         host: "localhost",
-        port: 9117,
+        port: closed_port,
         api_key: "test-api-key",
         options: %{}
       }
 
       # This should not crash with KeyError but return a connection error
-      # (since there's no Jackett server running)
+      # (nothing is listening on closed_port)
       assert {:error, %Error{type: :connection_failed}} = Jackett.test_connection(config)
     end
 
-    test "search works without use_ssl key - fails gracefully" do
+    test "search works without use_ssl key - fails gracefully", %{closed_port: closed_port} do
       # Config WITHOUT use_ssl key - simulates web UI config
       config = %{
         type: :jackett,
         name: "Test Jackett",
         host: "localhost",
-        port: 9117,
+        port: closed_port,
         api_key: "test-api-key",
         options: %{}
       }
 
       # This should not crash with KeyError but return a connection/search error
-      # (since there's no Jackett server running)
+      # (nothing is listening on closed_port)
       assert {:error, %Error{type: error_type}} = Jackett.search(config, "test")
       assert error_type in [:connection_failed, :search_failed]
+    end
+  end
+
+  describe "search/3 retry behavior" do
+    setup do
+      {:ok, bypass: Bypass.open()}
+    end
+
+    test "a failing search is attempted exactly once", %{bypass: bypass} do
+      {:ok, counter} = Agent.start_link(fn -> 0 end)
+
+      Bypass.expect(bypass, fn conn ->
+        Agent.update(counter, &(&1 + 1))
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/xml")
+        |> Plug.Conn.resp(500, "<error/>")
+      end)
+
+      config = %{
+        type: :jackett,
+        name: "Test Jackett",
+        host: "localhost",
+        port: bypass.port,
+        api_key: "test-api-key",
+        use_ssl: false,
+        options: %{timeout: 5_000}
+      }
+
+      assert {:error, _} = Jackett.search(config, "Ubuntu")
+
+      assert Agent.get(counter, & &1) == 1,
+             "expected exactly one attempt, Req retried a transient failure"
     end
   end
 end

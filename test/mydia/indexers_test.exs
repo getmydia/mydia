@@ -1,22 +1,35 @@
 defmodule Mydia.IndexersTest do
   use Mydia.DataCase, async: false
 
+  import Mydia.SettingsFixtures
+
   alias Mydia.Indexers
   alias Mydia.Indexers.SearchResult
   alias Mydia.Settings
   alias Mydia.IndexerMock
+
+  # Disable every DB-persisted indexer config so a describe block's own
+  # fixtures are the only enabled indexers. Any test that pins an exact result
+  # count, or an exact set of indexer names, needs this or a config left
+  # enabled by an earlier setup silently breaks it.
+  #
+  # Runtime configs (inserted_at == nil, configured through environment
+  # variables) cannot be updated and stay enabled; see the "returns empty list
+  # when no indexers are enabled" test for how that case is handled.
+  defp disable_persisted_indexer_configs do
+    Settings.list_indexer_configs()
+    |> Enum.filter(fn config -> not is_nil(config.inserted_at) end)
+    |> Enum.each(fn config ->
+      Settings.update_indexer_config(config, %{enabled: false})
+    end)
+  end
 
   describe "search_all/2" do
     setup do
       # Ensure adapters are registered (needed for CI environment)
       Indexers.register_adapters()
 
-      # Disable all existing indexer configs from test database
-      Settings.list_indexer_configs()
-      |> Enum.filter(fn config -> not is_nil(config.inserted_at) end)
-      |> Enum.each(fn config ->
-        Settings.update_indexer_config(config, %{enabled: false})
-      end)
+      disable_persisted_indexer_configs()
 
       # Set up mock Prowlarr servers
       bypass1 = Bypass.open()
@@ -163,6 +176,271 @@ defmodule Mydia.IndexersTest do
       # This is tested indirectly through the ranking implementation
       assert {:ok, %{results: results}} = Indexers.search_all("test")
       assert is_list(results)
+    end
+  end
+
+  describe "search_all/2 fan-out" do
+    # 1 fast + 3 slow indexers, permanently (not temporary scaffolding). With
+    # only 2 indexers, `get_search_concurrency(2, [])` computes `min(2, 16) ==
+    # 2`, identical to the old hardcoded default of 2 - a test with 2
+    # indexers passes under both the old and the new code and proves nothing.
+    # 4 indexers force a genuine RED under the old default (2 waves of 2, one
+    # of which is two 3s sleepers back to back: ~6000ms) vs GREEN under full
+    # fan-out (all 4 concurrent: ~3000ms), with headroom on both sides of the
+    # 4_500ms assertion below.
+    setup do
+      disable_persisted_indexer_configs()
+
+      fast = Bypass.open()
+
+      Bypass.expect(fast, "GET", "/api/v1/search", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!([prowlarr_item("Fast.Movie.2021.1080p")]))
+      end)
+
+      indexer_config_fixture(%{
+        name: "fast-indexer",
+        type: :prowlarr,
+        base_url: "http://localhost:#{fast.port}"
+      })
+
+      for n <- 1..3 do
+        slow = Bypass.open()
+
+        Bypass.expect(slow, "GET", "/api/v1/search", fn conn ->
+          # Bypass.pass/1 must run before the sleep: the deadline test kills
+          # the client mid-request, which makes Cowboy tear down this plug
+          # process with reason :shutdown. Without marking the expectation
+          # passed first, Bypass's on_exit verification re-raises that as a
+          # test crash, even though the abandoned connection is exactly what
+          # the deadline is supposed to produce.
+          Bypass.pass(slow)
+          Process.sleep(3_000)
+
+          conn
+          |> Plug.Conn.put_resp_content_type("application/json")
+          |> Plug.Conn.resp(200, Jason.encode!([prowlarr_item("Slow#{n}.Movie.2021.1080p")]))
+        end)
+
+        indexer_config_fixture(%{
+          name: "slow-indexer-#{n}",
+          type: :prowlarr,
+          base_url: "http://localhost:#{slow.port}"
+        })
+      end
+
+      :ok
+    end
+
+    defp prowlarr_item(title) do
+      %{
+        "title" => title,
+        "size" => 8_000_000_000,
+        "seeders" => 100,
+        "leechers" => 5,
+        "magnetUrl" => "magnet:?xt=urn:btih:#{:erlang.phash2(title)}",
+        "indexer" => "upstream"
+      }
+    end
+
+    test "a slow indexer does not serialize behind the fast one" do
+      started = System.monotonic_time(:millisecond)
+
+      {:ok, %{results: results}} = Indexers.search_all("Movie 2021")
+
+      elapsed = System.monotonic_time(:millisecond) - started
+
+      assert length(results) == 4
+
+      assert elapsed < 4_500,
+             "indexers ran serialized (#{elapsed}ms); expected concurrent fan-out"
+    end
+
+    test "an indexer past the deadline is reported by name, not as unknown" do
+      {:ok, %{results: results, indexer_errors: errors}} =
+        Indexers.search_all("Movie 2021", deadline_ms: 500)
+
+      assert length(results) == 1
+      assert hd(results).title =~ "Fast.Movie"
+
+      assert length(errors) == 3
+
+      assert errors |> Enum.map(& &1.indexer) |> Enum.sort() ==
+               ["slow-indexer-1", "slow-indexer-2", "slow-indexer-3"]
+
+      assert Enum.all?(errors, fn error -> error.error =~ "Timed out" end)
+    end
+
+    test "on_start reports every indexer as pending before any request" do
+      parent = self()
+
+      Indexers.search_all("Movie 2021",
+        on_start: fn pending -> send(parent, {:started, pending}) end
+      )
+
+      assert_received {:started, pending}
+      assert length(pending) == 4
+      assert Enum.all?(pending, &(&1.status == :pending))
+      assert Enum.all?(pending, &(&1.total == 4))
+      assert Enum.all?(pending, &is_binary(&1.indexer_id))
+
+      assert Enum.sort(Enum.map(pending, & &1.indexer)) ==
+               ["fast-indexer", "slow-indexer-1", "slow-indexer-2", "slow-indexer-3"]
+    end
+
+    test "on_indexer_result fires once per indexer with counts and timing" do
+      parent = self()
+
+      Indexers.search_all("Movie 2021",
+        on_indexer_result: fn progress -> send(parent, {:progress, progress}) end
+      )
+
+      assert_received {:progress, first}
+
+      # The fast indexer settles first because fan-out is concurrent. With
+      # `ordered: false`, Task.async_stream emits each indexer's result as it
+      # settles rather than buffering to input order, so among the three slow
+      # indexers - identical 3000ms sleeps started at the same time - which
+      # one lands 2nd/3rd/4th is a genuine race with no fixed outcome. Only
+      # the set of who finished and their status/counts is asserted below.
+      assert first.indexer == "fast-indexer"
+      assert first.status == :ok
+      assert first.completed == 1
+      assert first.total == 4
+      assert first.result_count == 1
+      assert length(first.results) == 1
+      assert is_integer(first.duration_ms)
+
+      rest = collect_progress([])
+      assert length(rest) == 3
+      assert Enum.all?(rest, &(&1.status == :ok))
+      assert Enum.map(rest, & &1.completed) |> Enum.sort() == [2, 3, 4]
+
+      assert Enum.map(rest, & &1.indexer) |> Enum.sort() ==
+               ["slow-indexer-1", "slow-indexer-2", "slow-indexer-3"]
+    end
+
+    test "a timed-out indexer reports :timeout status through the callback" do
+      parent = self()
+
+      Indexers.search_all("Movie 2021",
+        deadline_ms: 500,
+        on_indexer_result: fn progress -> send(parent, {:progress, progress}) end
+      )
+
+      progress = collect_progress([])
+
+      assert %{status: :ok, indexer: "fast-indexer"} = Enum.find(progress, &(&1.status == :ok))
+
+      timed_out = Enum.filter(progress, &(&1.status == :timeout))
+      assert length(timed_out) == 3
+
+      assert Enum.map(timed_out, & &1.indexer) |> Enum.sort() ==
+               ["slow-indexer-1", "slow-indexer-2", "slow-indexer-3"]
+
+      assert Enum.all?(timed_out, &(&1.error =~ "Timed out"))
+      assert Enum.all?(timed_out, &(&1.results == []))
+    end
+
+    defp collect_progress(acc) do
+      receive do
+        {:progress, progress} -> collect_progress([progress | acc])
+      after
+        0 -> Enum.reverse(acc)
+      end
+    end
+
+    test "omitting the callbacks leaves the return value unchanged" do
+      {:ok, with_callbacks} =
+        Indexers.search_all("Movie 2021", on_indexer_result: fn _ -> :ok end)
+
+      {:ok, without_callbacks} = Indexers.search_all("Movie 2021")
+
+      assert Enum.map(with_callbacks.results, & &1.title) ==
+               Enum.map(without_callbacks.results, & &1.title)
+
+      assert with_callbacks.indexer_errors == without_callbacks.indexer_errors
+    end
+  end
+
+  describe "search_all/2 fan-out ordering" do
+    # Named so the slow indexers sort BEFORE the fast one alphabetically -
+    # list_indexer_configs orders enabled, equal-priority indexers by name
+    # ascending, so this is the reverse of the "search_all/2 fan-out" describe
+    # block above. That inversion is the point: Task.async_stream defaults to
+    # `ordered: true`, which buffers each element's result until it's that
+    # element's turn in *input* order, not completion order. Under that
+    # default, the fast indexer's already-available result would sit behind
+    # three 3000ms sleeps and the assertion below would fail. search_all/2
+    # passes `ordered: false` specifically so results stream out as they
+    # settle instead.
+    setup do
+      disable_persisted_indexer_configs()
+
+      for n <- 1..3 do
+        slow = Bypass.open()
+
+        Bypass.expect(slow, "GET", "/api/v1/search", fn conn ->
+          # See the sibling describe block above for why Bypass.pass/1 must
+          # run before the sleep.
+          Bypass.pass(slow)
+          Process.sleep(3_000)
+
+          conn
+          |> Plug.Conn.put_resp_content_type("application/json")
+          |> Plug.Conn.resp(200, Jason.encode!([prowlarr_item("Slow#{n}.Movie.2021.1080p")]))
+        end)
+
+        indexer_config_fixture(%{
+          name: "aaa-slow-indexer-#{n}",
+          type: :prowlarr,
+          base_url: "http://localhost:#{slow.port}"
+        })
+      end
+
+      fast = Bypass.open()
+
+      Bypass.expect(fast, "GET", "/api/v1/search", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!([prowlarr_item("Fast.Movie.2021.1080p")]))
+      end)
+
+      indexer_config_fixture(%{
+        name: "zzz-fast-indexer",
+        type: :prowlarr,
+        base_url: "http://localhost:#{fast.port}"
+      })
+
+      :ok
+    end
+
+    test "on_indexer_result fires in completion order, not input order" do
+      parent = self()
+
+      Indexers.search_all("Movie 2021",
+        on_indexer_result: fn progress -> send(parent, {:progress, progress}) end
+      )
+
+      assert_received {:progress, first}
+
+      assert first.indexer == "zzz-fast-indexer",
+             "expected the fast indexer's callback first (completion order); " <>
+               "got #{first.indexer} instead - results are being buffered to input order"
+    end
+  end
+
+  describe "background_search_opts/0" do
+    test "defaults to throttled concurrency and a bounded deadline" do
+      assert Indexers.background_search_opts() == [max_concurrency: 2, deadline_ms: 60_000]
+    end
+
+    # The deadline exists to stop an unattended sweep inheriting the 120s
+    # interactive one. Asserting it is strictly tighter keeps that intent from
+    # being undone by a config edit that happens to leave the test above green.
+    test "the background deadline is tighter than the manual one" do
+      assert Indexers.background_search_opts()[:deadline_ms] < 120_000
     end
   end
 
@@ -464,6 +742,46 @@ defmodule Mydia.IndexersTest do
 
       assert {:ok, info} = Indexers.test_connection(config)
       assert info.version == "1.25.0"
+    end
+  end
+
+  describe "rank_and_dedupe/3" do
+    alias Mydia.Indexers.SearchResult
+
+    defp result(title, seeders) do
+      %SearchResult{
+        title: title,
+        download_url: "magnet:?xt=urn:btih:#{:erlang.phash2(title)}",
+        indexer: "Test",
+        size: 1_000_000_000,
+        seeders: seeders,
+        leechers: 0
+      }
+    end
+
+    test "drops results below min_seeders" do
+      results = [result("Movie.2021.1080p", 1), result("Movie.2021.720p", 50)]
+
+      ranked = Indexers.rank_and_dedupe(results, "Movie 2021", min_seeders: 10)
+
+      assert length(ranked) == 1
+      assert hd(ranked).seeders == 50
+    end
+
+    test "truncates to max_results" do
+      results = Enum.map(1..10, fn n -> result("Movie.2021.Release#{n}", n) end)
+
+      ranked = Indexers.rank_and_dedupe(results, "Movie 2021", max_results: 3)
+
+      assert length(ranked) == 3
+    end
+
+    test "deduplicate: false keeps identical titles" do
+      results = [result("Movie.2021.1080p", 5), result("Movie.2021.1080p", 5)]
+
+      ranked = Indexers.rank_and_dedupe(results, "Movie 2021", deduplicate: false)
+
+      assert length(ranked) == 2
     end
   end
 end

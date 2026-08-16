@@ -48,6 +48,8 @@ defmodule Mydia.Indexers.Adapter.Jackett do
 
   require Logger
 
+  @connect_timeout 10_000
+
   # Torznab XML namespace
   @torznab_ns "http://torznab.com/schemas/2015/feed"
 
@@ -84,7 +86,11 @@ defmodule Mydia.Indexers.Adapter.Jackett do
 
     Logger.debug("Jackett search: #{url}")
 
-    case Req.get(url, receive_timeout: timeout) do
+    case Req.get(url,
+           receive_timeout: timeout,
+           connect_options: [timeout: @connect_timeout],
+           retry: false
+         ) do
       {:ok, %Req.Response{status: 200, body: body}} ->
         parse_search_response(body, config.name)
 

@@ -929,7 +929,10 @@ defmodule Mydia.Jobs.TVShowSearch do
       query: query
     )
 
-    case Indexers.search_all(query, min_seeders: get_min_seeders()) do
+    case Indexers.search_all(
+           query,
+           [min_seeders: get_min_seeders()] ++ Indexers.background_search_opts()
+         ) do
       {:ok, %{results: []}} ->
         Logger.warning("No season pack results found",
           media_item_id: media_item.id,
@@ -1290,7 +1293,10 @@ defmodule Mydia.Jobs.TVShowSearch do
       query: query
     )
 
-    case Indexers.search_all(query, min_seeders: get_min_seeders()) do
+    case Indexers.search_all(
+           query,
+           [min_seeders: get_min_seeders()] ++ Indexers.background_search_opts()
+         ) do
       {:ok, %{results: []}} ->
         Logger.warning("No results found for episode",
           episode_id: episode.id,
@@ -2087,7 +2093,10 @@ defmodule Mydia.Jobs.TVShowSearch do
     # Increment counter for the season pack search
     new_count = search_count + 1
 
-    case Indexers.search_all(query, min_seeders: get_min_seeders()) do
+    case Indexers.search_all(
+           query,
+           [min_seeders: get_min_seeders()] ++ Indexers.background_search_opts()
+         ) do
       {:ok, %{results: []}} ->
         Logger.warning("No season pack results found, falling back to individual episodes",
           media_item_id: media_item.id,
@@ -2284,7 +2293,10 @@ defmodule Mydia.Jobs.TVShowSearch do
       query: query
     )
 
-    case Indexers.search_all(query, min_seeders: get_min_seeders()) do
+    case Indexers.search_all(
+           query,
+           [min_seeders: get_min_seeders()] ++ Indexers.background_search_opts()
+         ) do
       {:ok, %{results: []}} ->
         Logger.warning("No results found for episode",
           episode_id: episode.id,
