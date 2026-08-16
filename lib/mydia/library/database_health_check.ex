@@ -4,7 +4,7 @@ defmodule Mydia.Library.DatabaseHealthCheck do
   triggers library re-scans when needed.
 
   Runs on application startup to detect:
-  1. Orphaned media files (no media_item_id or episode_id in standard libraries)
+  1. Orphaned media files (no media_item_id or episode_id in monitored libraries)
   2. Media files with relative_path but missing library_path_id
 
   When issues are detected above a threshold, a library re-scan is queued as a
@@ -99,11 +99,16 @@ defmodule Mydia.Library.DatabaseHealthCheck do
   end
 
   @doc """
-  Counts orphaned media files in standard (non-specialized) libraries.
+  Counts orphaned media files in monitored libraries.
 
   Orphaned files are those with no `media_item_id` and no `episode_id`.
-  Files in specialized libraries (music, books, adult) are excluded as they
-  don't require parent associations.
+
+  Unmonitored library paths are excluded. The repair this count triggers is a
+  rescan, and a rescan only walks monitored paths, so an orphan under an
+  unmonitored one would be reported on every boot and never go away. Paths
+  converted off the removed music, books and adult types are exactly that case:
+  they are `:mixed` and unmonitored, and the parentless rows they left behind
+  are not something a rescan can resolve.
   """
   def count_orphaned_files do
     standard_types = [:movies, :series, :mixed]
@@ -112,7 +117,7 @@ defmodule Mydia.Library.DatabaseHealthCheck do
       join: lp in LibraryPath,
       on: mf.library_path_id == lp.id,
       where: is_nil(mf.media_item_id) and is_nil(mf.episode_id),
-      where: lp.type in ^standard_types,
+      where: lp.type in ^standard_types and lp.monitored,
       select: count(mf.id)
     )
     |> Repo.one()

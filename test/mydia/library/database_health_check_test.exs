@@ -60,6 +60,23 @@ defmodule Mydia.Library.DatabaseHealthCheckTest do
       assert DatabaseHealthCheck.count_orphaned_files() == length(types)
     end
 
+    # The repair this count triggers is a rescan, and a rescan only walks
+    # monitored paths, so an orphan under an unmonitored one would be reported
+    # on every boot forever. Library paths converted off the removed music,
+    # books and adult types land here: :mixed and unmonitored.
+    test "ignores orphans under an unmonitored library path" do
+      create_library_path(:mixed, monitored: false) |> insert_media_file()
+
+      assert DatabaseHealthCheck.count_orphaned_files() == 0
+    end
+
+    test "counts orphans only under the monitored path when both exist" do
+      create_library_path(:movies) |> insert_media_file()
+      create_library_path(:mixed, monitored: false) |> insert_media_file()
+
+      assert DatabaseHealthCheck.count_orphaned_files() == 1
+    end
+
     test "counts files with episode_id as not orphaned" do
       library_path = create_library_path(:series)
       tv_show = insert(:tv_show)
@@ -208,7 +225,7 @@ defmodule Mydia.Library.DatabaseHealthCheckTest do
   defp restore_app_env(key, nil), do: Application.delete_env(:mydia, key)
   defp restore_app_env(key, value), do: Application.put_env(:mydia, key, value)
 
-  defp create_library_path(type) do
+  defp create_library_path(type, opts \\ []) do
     path = "/test/#{type}/#{System.unique_integer([:positive])}"
 
     {:ok, library_path} =
@@ -216,7 +233,7 @@ defmodule Mydia.Library.DatabaseHealthCheckTest do
       |> LibraryPath.changeset(%{
         path: path,
         type: type,
-        monitored: true
+        monitored: Keyword.get(opts, :monitored, true)
       })
       |> Repo.insert()
 
