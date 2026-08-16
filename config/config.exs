@@ -408,9 +408,19 @@ config :mydia, :auto_search,
 # Indexer search throttling
 # Controls concurrency and rate limiting for indexer queries
 config :mydia, :indexer_search,
-  # Max concurrent indexer requests per search query
-  # Lower values reduce pressure on indexer sites
-  max_concurrency: 2,
+  # Max concurrent indexer requests per MANUAL search query. No value here on
+  # purpose: Mydia.Indexers.search_all/2 defaults to searching every selected
+  # indexer at once (capped at 16) unless a deployment explicitly sets
+  # max_concurrency here, which still wins over that default. This used to be
+  # hardcoded to 2 both here and in indexers.ex, which meant six 30s indexers
+  # took 90 seconds even when every one of them was healthy. Manual search is
+  # user-initiated and one at a time, so full fan-out is safe.
+  #
+  # Concurrency for UNATTENDED background searches (MovieSearch, TVShowSearch).
+  # Deliberately low: see 02be582a, which reduced this from ~8 to 2 to stop
+  # automatic searches getting users rate-limited and banned by indexer sites.
+  # Manual searches do not use this; they fan out fully for latency.
+  background_max_concurrency: 2,
   # Default rate limit for Cardigann indexers (requests per minute per indexer)
   # Cardigann indexers hit sites directly, so conservative limits prevent bans
   default_cardigann_rate_limit: 3

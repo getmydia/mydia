@@ -295,6 +295,21 @@ defmodule Mydia.Indexers do
   end
 
   @doc """
+  Search options for unattended background jobs.
+
+  Background searches run repeatedly across a whole library, so they stay
+  throttled to avoid indexer bans. Manual searches deliberately do not use
+  this: they fan out fully because a user is waiting.
+  """
+  @spec background_search_opts() :: keyword()
+  def background_search_opts do
+    concurrency =
+      Application.get_env(:mydia, :indexer_search, [])[:background_max_concurrency] || 2
+
+    [max_concurrency: concurrency]
+  end
+
+  @doc """
   Tests the connection to an indexer.
 
   ## Examples

@@ -169,29 +169,21 @@ defmodule Mydia.IndexersTest do
   end
 
   describe "search_all/2 fan-out" do
+    # 1 fast + 3 slow indexers, permanently (not temporary scaffolding). With
+    # only 2 indexers, `get_search_concurrency(2, [])` computes `min(2, 16) ==
+    # 2`, identical to the old hardcoded default of 2 - a test with 2
+    # indexers passes under both the old and the new code and proves nothing.
+    # 4 indexers force a genuine RED under the old default (2 waves of 2, one
+    # of which is two 3s sleepers back to back: ~6000ms) vs GREEN under full
+    # fan-out (all 4 concurrent: ~3000ms), with headroom on both sides of the
+    # 4_500ms assertion below.
     setup do
       fast = Bypass.open()
-      slow = Bypass.open()
 
       Bypass.expect(fast, "GET", "/api/v1/search", fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.resp(200, Jason.encode!([prowlarr_item("Fast.Movie.2021.1080p")]))
-      end)
-
-      Bypass.expect(slow, "GET", "/api/v1/search", fn conn ->
-        # Bypass.pass/1 must run before the sleep: the deadline test kills the
-        # client mid-request, which makes Cowboy tear down this plug process
-        # with reason :shutdown. Without marking the expectation passed first,
-        # Bypass's on_exit verification re-raises that as a test crash, even
-        # though the abandoned connection is exactly what the deadline is
-        # supposed to produce.
-        Bypass.pass(slow)
-        Process.sleep(2_000)
-
-        conn
-        |> Plug.Conn.put_resp_content_type("application/json")
-        |> Plug.Conn.resp(200, Jason.encode!([prowlarr_item("Slow.Movie.2021.1080p")]))
       end)
 
       indexer_config_fixture(%{
@@ -200,11 +192,30 @@ defmodule Mydia.IndexersTest do
         base_url: "http://localhost:#{fast.port}"
       })
 
-      indexer_config_fixture(%{
-        name: "slow-indexer",
-        type: :prowlarr,
-        base_url: "http://localhost:#{slow.port}"
-      })
+      for n <- 1..3 do
+        slow = Bypass.open()
+
+        Bypass.expect(slow, "GET", "/api/v1/search", fn conn ->
+          # Bypass.pass/1 must run before the sleep: the deadline test kills
+          # the client mid-request, which makes Cowboy tear down this plug
+          # process with reason :shutdown. Without marking the expectation
+          # passed first, Bypass's on_exit verification re-raises that as a
+          # test crash, even though the abandoned connection is exactly what
+          # the deadline is supposed to produce.
+          Bypass.pass(slow)
+          Process.sleep(3_000)
+
+          conn
+          |> Plug.Conn.put_resp_content_type("application/json")
+          |> Plug.Conn.resp(200, Jason.encode!([prowlarr_item("Slow#{n}.Movie.2021.1080p")]))
+        end)
+
+        indexer_config_fixture(%{
+          name: "slow-indexer-#{n}",
+          type: :prowlarr,
+          base_url: "http://localhost:#{slow.port}"
+        })
+      end
 
       :ok
     end
@@ -227,10 +238,10 @@ defmodule Mydia.IndexersTest do
 
       elapsed = System.monotonic_time(:millisecond) - started
 
-      assert length(results) == 2
+      assert length(results) == 4
 
-      assert elapsed < 3_500,
-             "two indexers ran sequentially (#{elapsed}ms); expected concurrent fan-out"
+      assert elapsed < 4_500,
+             "indexers ran serialized (#{elapsed}ms); expected concurrent fan-out"
     end
 
     test "an indexer past the deadline is reported by name, not as unknown" do
@@ -240,8 +251,18 @@ defmodule Mydia.IndexersTest do
       assert length(results) == 1
       assert hd(results).title =~ "Fast.Movie"
 
-      assert [%{indexer: "slow-indexer"} = error] = errors
-      assert error.error =~ "Timed out"
+      assert length(errors) == 3
+
+      assert errors |> Enum.map(& &1.indexer) |> Enum.sort() ==
+               ["slow-indexer-1", "slow-indexer-2", "slow-indexer-3"]
+
+      assert Enum.all?(errors, fn error -> error.error =~ "Timed out" end)
+    end
+  end
+
+  describe "background_search_opts/0" do
+    test "defaults to max_concurrency: 2" do
+      assert Indexers.background_search_opts() == [max_concurrency: 2]
     end
   end
 
