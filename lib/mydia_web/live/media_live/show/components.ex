@@ -785,9 +785,11 @@ defmodule MydiaWeb.MediaLive.Show.Components do
         <%!-- Filename row --%>
         <div class="flex items-center gap-2">
           <.icon name="hero-document" class="w-4 h-4 text-base-content/50 flex-shrink-0" />
-          <% absolute_path = Mydia.Library.MediaFile.absolute_path(@file) %>
-          <span class="font-mono text-sm truncate" title={absolute_path}>
-            {Path.basename(absolute_path)}
+          <span
+            class="font-mono text-sm truncate"
+            title={Mydia.Library.MediaFile.display_path(@file)}
+          >
+            {Mydia.Library.MediaFile.display_name(@file)}
           </span>
         </div>
         <%!-- Technical details row --%>
@@ -919,12 +921,14 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                   <%!-- Left side: File info --%>
                   <div class="flex-1 min-w-0 flex flex-col gap-2">
                     <%!-- File path --%>
-                    <% absolute_path = Mydia.Library.MediaFile.absolute_path(file) %>
+                    <% file_path = Mydia.Library.MediaFile.display_path(file) %>
                     <p
                       class="text-sm font-mono text-base-content break-all leading-relaxed"
-                      title={absolute_path}
+                      title={file_path}
                     >
-                      {absolute_path}
+                      <%!-- display_name/1 is the "Unknown file" label when there is no path,
+                            so an orphaned row reads the same here as everywhere else. --%>
+                      {file_path || Mydia.Library.MediaFile.display_name(file)}
                     </p>
                     <%!-- Technical details with quality badge --%>
                     <div class="flex flex-wrap gap-4 text-xs text-base-content/70 items-center">
@@ -1221,12 +1225,11 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                   <%!-- File info header --%>
                   <div class="flex items-start justify-between gap-4 mb-3">
                     <div class="flex-1 min-w-0">
-                      <% absolute_path = Mydia.Library.MediaFile.absolute_path(media_file) %>
                       <p
                         class="text-sm font-mono text-base-content/80 break-all"
-                        title={absolute_path}
+                        title={Mydia.Library.MediaFile.display_path(media_file)}
                       >
-                        {Path.basename(absolute_path)}
+                        {Mydia.Library.MediaFile.display_name(media_file)}
                       </p>
                       <div class="flex gap-2 mt-1">
                         <span class="badge badge-primary badge-xs">

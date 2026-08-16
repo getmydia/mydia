@@ -607,6 +607,52 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
   }
 
+  /// The file's subtitle tracks, in the shape the cast stack wants.
+  ///
+  /// `url` here is still the media-file URL; `CastRouteResolver` rewrites it
+  /// to a session path once a route exists. Only `trackId` and `language`
+  /// survive that rewrite, but the URL is what the progressive DLNA route
+  /// keeps using, so it is carried rather than blanked.
+  ///
+  /// `deliverable` is one half of the filter: image tracks (PGS, VobSub)
+  /// must never be offered, since a receiver fetching one gets a 415. `url`
+  /// is allowed to be null here — `SubtitleTrack.fromDownload` deliberately
+  /// leaves it null for a track that was just downloaded but never had a
+  /// media-file URL assigned — and is passed through as an empty string.
+  /// That is only a progressive-route concern: `CastRouteResolver.
+  /// _progressiveSubtitles` drops any track it can't build a URL for, while
+  /// the session-addressed (HLS) routes ignore this field entirely and
+  /// rewrite it from `trackId`.
+  ///
+  /// The other half is `CastSubtitleTrack.isServableTrackId`. In direct play
+  /// `_detectTracks` replaces `_subtitleTracks` with media_kit's own track
+  /// list for every embedded track, carrying synthetic ids like `mk_0` (see
+  /// the comment there). Those have no url and default to `deliverable`, so
+  /// dropping the old `url != null` half of this filter (to let a
+  /// just-downloaded sidecar through) would also let `mk_0` through — and
+  /// `CastRouteResolver._sessionSubtitles` builds `subs_mk_0.vtt` for it
+  /// unconditionally, which `Mydia.Streaming.SessionSubtitles`'s anchored
+  /// filename regex rejects outright, so the receiver 404s and shows
+  /// nothing. Filtering on id shape instead keeps downloaded sidecars (UUID,
+  /// null url) working while excluding every `mk_` id — at the cost that a
+  /// direct-play session, whose whole `_subtitleTracks` list is `mk_` ids
+  /// plus sidecars, now offers no *embedded* subtitles to a receiver at all,
+  /// only sidecars. That is strictly better than offering ids that 404, but
+  /// it is a real gap: there is no server-side stream index to fall back to
+  /// here, because media_kit's own track ordering is not guaranteed to match
+  /// ffprobe's, and guessing one would show the wrong subtitle instead of
+  /// none.
+  List<CastSubtitleTrack> _castSubtitleTracks() => _subtitleTracks
+      .where((track) =>
+          track.deliverable && CastSubtitleTrack.isServableTrackId(track.id))
+      .map((track) => CastSubtitleTrack(
+            trackId: track.id,
+            url: track.url ?? '',
+            label: track.displayName,
+            language: track.language,
+          ))
+      .toList();
+
   /// Start on the receiver instead of locally, when a device was chosen
   /// before playback began.
   ///
@@ -662,6 +708,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           title: widget.title ?? 'Untitled',
           duration: _knownCastDuration(),
           startPosition: plan.position,
+          subtitles: _castSubtitleTracks(),
         ),
       );
       // The target and the session coexist deliberately: the target is what
@@ -3912,6 +3959,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       final startPosition =
           player == null ? null : _timeline.toReal(player.state.position);
 
+      final offeredSubtitles = _castSubtitleTracks();
+      final localSelection = _selectedSubtitleTrack;
+      // The one entry point that pre-selects: a viewer watching with
+      // subtitles on and tapping cast keeps them on — but only when that
+      // track is actually among the ones being offered. `_castSubtitleTracks`
+      // drops undeliverable tracks (PGS, VobSub); a viewer watching one of
+      // those locally and then casting must not send an id for a track the
+      // receiver was never offered. `CastSessionManager` already treats an
+      // unmatched id as off, but sending one we know won't match is
+      // incoherent regardless of what the manager does with it.
+      final selectedSubtitleTrackId = localSelection != null &&
+              offeredSubtitles.any((t) => t.trackId == localSelection.id)
+          ? localSelection.id
+          : null;
+
       await manager.startCast(
         device: device,
         request: CastLaunchRequest(
@@ -3927,14 +3989,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           // from the candidates metadata), falling back to whatever the local
           // player managed to work out.
           duration: _knownCastDuration(),
-          subtitles: _subtitleTracks
-              .where((track) => track.url != null)
-              .map((track) => CastSubtitleTrack(
-                    url: track.url!,
-                    label: track.displayName,
-                    language: track.language,
-                  ))
-              .toList(),
+          subtitles: offeredSubtitles,
+          selectedSubtitleTrackId: selectedSubtitleTrackId,
         ),
       );
 

@@ -247,66 +247,80 @@ void main() {
     });
   });
 
-  group('subtitles', () {
-    test('are supported on the direct route', () async {
-      final route = await directResolver()
-          .resolve(fileId: 'f', protocol: CastProtocolKind.chromecast);
+  group('subtitle tracks on the route', () {
+    const tracks = [
+      CastSubtitleTrack(
+        trackId: '3',
+        url: '/api/player/v1/subtitles/file/file-1/3?format=vtt',
+        label: 'English',
+        language: 'eng',
+      ),
+      CastSubtitleTrack(
+        trackId: '0f8fad5b-d9cb-469f-a165-70867728950e',
+        url:
+            '/api/player/v1/subtitles/file/file-1/0f8fad5b-d9cb-469f-a165-70867728950e?format=vtt',
+        label: 'Spanish',
+        language: 'spa',
+      ),
+    ];
 
-      expect(route!.subtitlesSupported, isTrue);
-    });
-
-    test('are not supported on the bridge route', () async {
-      // P2pService offers no generic HTTP passthrough, so subtitle bytes
-      // cannot be proxied. See the plan's "Known limitation".
-      final route = await p2pResolver()
-          .resolve(fileId: 'f', protocol: CastProtocolKind.chromecast);
-
-      expect(route!.subtitlesSupported, isFalse);
-    });
-
-    test('resolveSubtitleUrl builds an absolute, credentialed URL', () async {
-      // The subtitle endpoint is authenticated and the receiver cannot send
-      // an Authorization header, so a URL without the token is a 401.
-      final resolver = directResolver();
-      final route = (await resolver.resolve(
-          fileId: 'f', protocol: CastProtocolKind.chromecast))!;
-
-      expect(
-        resolver.resolveSubtitleUrl(
-            route, '/api/player/v1/subtitles/movie/1/2'),
-        'https://mydia.test/api/player/v1/subtitles/movie/1/2?token=tok123',
-      );
-    });
-
-    test('resolveSubtitleUrl appends the token to a URL that has a query',
+    test('a direct Chromecast route rewrites tracks to session paths',
         () async {
-      final resolver = directResolver();
-      final route = (await resolver.resolve(
-          fileId: 'f', protocol: CastProtocolKind.chromecast))!;
+      final route = await directResolver().resolve(
+        fileId: 'file-1',
+        protocol: CastProtocolKind.chromecast,
+        subtitles: tracks,
+      );
 
+      expect(route!.subtitles, hasLength(2));
       expect(
-        resolver.resolveSubtitleUrl(route, '/api/x.vtt?format=vtt'),
-        'https://mydia.test/api/x.vtt?format=vtt&token=tok123',
+        route.subtitles.first.url,
+        'https://mydia.test/api/v1/hls/${route.hlsSessionId}/subs_3.vtt?token=tok123',
+      );
+      expect(route.subtitles.first.language, 'eng');
+      expect(route.subtitles.first.trackId, '3');
+    });
+
+    test('a bridged Chromecast route serves subtitles from the LAN proxy',
+        () async {
+      final route = await p2pResolver().resolve(
+        fileId: 'file-1',
+        protocol: CastProtocolKind.chromecast,
+        subtitles: tracks,
+      );
+
+      expect(route!.kind, CastRouteKind.localBridge);
+      // The whole point: the bridge could not serve subtitles at all before.
+      expect(route.subtitles, hasLength(2));
+      expect(
+        route.subtitles.last.url,
+        'http://192.168.1.20:5000/g/abcd/hls/${route.hlsSessionId}'
+        '/subs_0f8fad5b-d9cb-469f-a165-70867728950e.vtt',
       );
     });
 
-    test('resolveSubtitleUrl passes through an already absolute URL', () async {
-      final resolver = directResolver(mediaToken: null);
-      final route = (await resolver.resolve(
-          fileId: 'f', protocol: CastProtocolKind.chromecast))!;
-
-      expect(
-        resolver.resolveSubtitleUrl(route, 'https://cdn.test/a.vtt'),
-        'https://cdn.test/a.vtt',
+    test('a bridged DLNA route has no session, so no subtitles', () async {
+      final route = await p2pResolver().resolve(
+        fileId: 'file-1',
+        protocol: CastProtocolKind.dlna,
+        subtitles: tracks,
       );
+
+      expect(route!.subtitles, isEmpty);
     });
 
-    test('resolveSubtitleUrl returns null on the bridge route', () async {
-      final resolver = p2pResolver();
-      final route = (await resolver.resolve(
-          fileId: 'f', protocol: CastProtocolKind.chromecast))!;
+    test('a direct DLNA route keeps the media-file subtitle URLs', () async {
+      final route = await directResolver().resolve(
+        fileId: 'file-1',
+        protocol: CastProtocolKind.dlna,
+        subtitles: tracks,
+      );
 
-      expect(resolver.resolveSubtitleUrl(route, '/api/x.vtt'), isNull);
+      expect(route!.subtitles, hasLength(2));
+      expect(
+        route.subtitles.first.url,
+        'https://mydia.test/api/player/v1/subtitles/file/file-1/3?format=vtt&token=tok123',
+      );
     });
   });
 }

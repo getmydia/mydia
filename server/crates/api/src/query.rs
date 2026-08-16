@@ -14,7 +14,8 @@ use crate::types::common::{
     MediaCategory, MediaType, Node, PageInfo, SearchResultType, SortInput, SubtitleFormat,
 };
 use crate::types::discovery::{
-    Collection, ContinueWatchingItem, RemoteAccessStatus, SearchResults, UpNextItem,
+    Collection, ContinueWatchingItem, RemoteAccessStatus, SearchResults, ServerCompatibility,
+    UpNextItem,
 };
 use crate::types::media::{
     Episode, LibraryPath, Movie, MovieConnection, MovieEdge, RecentlyAddedItem,
@@ -441,6 +442,14 @@ impl RootQueryType {
 
     /// Get remote access / P2P connection status
     async fn remote_access_status(&self, _ctx: &Context<'_>) -> Result<Option<RemoteAccessStatus>> {
+        Ok(None)
+    }
+
+    /// Get this server's version and the player versions it supports
+    async fn server_compatibility(
+        &self,
+        _ctx: &Context<'_>,
+    ) -> Result<Option<ServerCompatibility>> {
         Ok(None)
     }
 

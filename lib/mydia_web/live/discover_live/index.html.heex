@@ -158,7 +158,7 @@
         </div>
       <% true -> %>
         <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-5">
-          <%= for item <- @items do %>
+          <%= for {item, index} <- Enum.with_index(@items) do %>
             <.trending_card
               item={item}
               media_type={item.media_type || @media_type}
@@ -166,6 +166,7 @@
               adding_item_id={@adding_item_id}
               requesting_item_id={@requesting_item_id}
               libraries={@libraries}
+              loading={if(index < 6, do: nil, else: "lazy")}
             />
           <% end %>
         </div>
@@ -201,7 +202,7 @@
     libraries={@libraries}
   >
     <:rail>
-      <.recommendations_rail
+      <.media_rail
         :if={@selected_item}
         id="discover-recommendations-rail"
         items={@selected_recommendations}
@@ -209,7 +210,6 @@
         current_user={@current_user}
         adding_item_id={@adding_item_id}
         requesting_item_id={@requesting_item_id}
-        libraries={@libraries}
       />
     </:rail>
   </.live_component>

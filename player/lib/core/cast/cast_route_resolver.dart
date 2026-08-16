@@ -18,13 +18,6 @@ class CastRoute {
   final CastRouteKind kind;
   final CastMediaKind mediaKind;
 
-  /// Whether sidecar subtitles can be served on this route.
-  ///
-  /// False on [CastRouteKind.localBridge]: `P2pService` exposes only pairing,
-  /// GraphQL, and HLS request protocols, so arbitrary subtitle files cannot be
-  /// proxied, and the server's HLS output carries no subtitle renditions.
-  final bool subtitlesSupported;
-
   /// Server-side HLS session backing this route, when it needed one.
   ///
   /// Every Chromecast route does, bridged or direct: both address HLS by
@@ -47,14 +40,29 @@ class CastRoute {
   /// what `CastSessionManager`'s `StreamTimeline` translates back.
   final Duration startOffset;
 
+  /// Tracks already rewritten to URLs this route's receiver can fetch.
+  ///
+  /// Resolved here rather than at load time because the shape depends
+  /// entirely on the route: an HLS route addresses subtitles by streaming
+  /// session, the progressive one by media file. `CastSessionManager` reads
+  /// this and never has to know which kind it got.
+  ///
+  /// Empty either because none were offered, or because this route cannot
+  /// serve subtitles at all — the bridged DLNA route, which streams the file
+  /// directly with no streaming session to address them by. There is no
+  /// separate "supported" flag: the resolver enforces that invariant by
+  /// omitting tracks here rather than by a flag a caller has to remember to
+  /// check.
+  final List<CastSubtitleTrack> subtitles;
+
   const CastRoute({
     required this.mediaUrl,
     required this.kind,
     required this.mediaKind,
-    required this.subtitlesSupported,
     this.hlsSessionId,
     this.mediaToken,
     this.startOffset = Duration.zero,
+    this.subtitles = const [],
   });
 }
 
@@ -127,6 +135,7 @@ class CastRouteResolver {
     bool forceBridge = false,
     bool forceTranscode = false,
     Duration startPosition = Duration.zero,
+    List<CastSubtitleTrack> subtitles = const [],
   }) async {
     final isChromecast = protocol == CastProtocolKind.chromecast;
     final mediaKind = mediaKindFor(protocol);
@@ -144,7 +153,6 @@ class CastRouteResolver {
           mediaUrl: '$base/direct/$fileId/stream',
           kind: CastRouteKind.localBridge,
           mediaKind: mediaKind,
-          subtitlesSupported: false,
         );
       }
 
@@ -158,9 +166,13 @@ class CastRouteResolver {
         mediaUrl: '$base/hls/${session.sessionId}/index.m3u8',
         kind: CastRouteKind.localBridge,
         mediaKind: mediaKind,
-        subtitlesSupported: false,
         hlsSessionId: session.sessionId,
         startOffset: session.startOffset,
+        subtitles: _sessionSubtitles(
+          subtitles,
+          base: '$base/hls/${session.sessionId}',
+          token: null,
+        ),
       );
     }
 
@@ -188,10 +200,22 @@ class CastRouteResolver {
             '$server/api/v1/hls/${session.sessionId}/index.m3u8?token=$token',
         kind: CastRouteKind.directServer,
         mediaKind: mediaKind,
-        subtitlesSupported: true,
         mediaToken: token,
         hlsSessionId: session.sessionId,
         startOffset: session.startOffset,
+        // Session-relative subtitle URLs (`/api/v1/hls/<session>/subs_<id>.vtt`)
+        // require a server new enough to serve that path. Against an older
+        // server this 404s and the receiver shows no subtitles at all — there
+        // is no fallback and no version check here; that tradeoff was made
+        // deliberately in favor of one uniform URL shape. It replaces the
+        // previous media-file URL shape
+        // (`/api/player/v1/subtitles/file/:fileId/:trackId?format=vtt`),
+        // which an older server does still serve.
+        subtitles: _sessionSubtitles(
+          subtitles,
+          base: '$server/api/v1/hls/${session.sessionId}',
+          token: token,
+        ),
       );
     }
 
@@ -210,36 +234,55 @@ class CastRouteResolver {
       ),
       kind: CastRouteKind.directServer,
       mediaKind: mediaKind,
-      subtitlesSupported: true,
       mediaToken: token,
+      subtitles: _progressiveSubtitles(subtitles, server: server, token: token),
     );
   }
 
-  /// Turn a subtitle path into a URL the receiver can fetch, or null when the
-  /// route cannot serve subtitles at all.
+  /// Turns session-relative subtitle names into URLs for this route.
   ///
-  /// The subtitle endpoint sits behind the same authentication the stream
-  /// does (`MydiaWeb.Plugs.MediaAuth` accepts `?token=`), and the receiver
-  /// cannot send an `Authorization` header — so the token goes in the URL,
-  /// exactly as [StreamingStrategyService.buildStreamUrl] does for media.
-  String? resolveSubtitleUrl(CastRoute route, String relativeOrAbsoluteUrl) {
-    if (!route.subtitlesSupported) return null;
+  /// The filename convention (`subs_<trackId>.vtt`) is the server's, defined
+  /// in `Mydia.Streaming.SessionSubtitles`. It lives here rather than in
+  /// `MediaRoutes` because this resolver already builds its sibling HLS URLs
+  /// inline, and splitting the two across files is how they drift apart.
+  static List<CastSubtitleTrack> _sessionSubtitles(
+    List<CastSubtitleTrack> tracks, {
+    required String base,
+    required String? token,
+  }) =>
+      tracks
+          .map((track) => track.copyWith(
+                url: _withToken('$base/subs_${track.trackId}.vtt', token),
+              ))
+          .toList();
 
-    final isAbsolute = relativeOrAbsoluteUrl.startsWith('http://') ||
-        relativeOrAbsoluteUrl.startsWith('https://');
+  /// Rewrites the media-file subtitle URLs the progressive (DLNA) route keeps
+  /// using, since it has no streaming session to address subtitles by.
+  ///
+  /// This is the one route that actually reads `track.url` rather than
+  /// rewriting it from `trackId`, so it is also the one place the URL
+  /// requirement applies: a track with no media-file URL (e.g. one just
+  /// downloaded, never assigned one) can't be served progressively and is
+  /// dropped here rather than reaching the receiver as a broken link.
+  static List<CastSubtitleTrack> _progressiveSubtitles(
+    List<CastSubtitleTrack> tracks, {
+    required String server,
+    required String? token,
+  }) =>
+      tracks
+          .where((track) => track.url.isNotEmpty)
+          .map((track) => track.copyWith(
+                url: _withToken(_absoluteUrl(server, track.url), token),
+              ))
+          .toList();
 
-    final String base;
-    if (isAbsolute) {
-      base = relativeOrAbsoluteUrl;
-    } else {
-      final server = serverUrl;
-      if (server == null) return null;
-      base = '$server$relativeOrAbsoluteUrl';
-    }
+  static String _absoluteUrl(String server, String urlOrPath) =>
+      urlOrPath.startsWith('http://') || urlOrPath.startsWith('https://')
+          ? urlOrPath
+          : '$server$urlOrPath';
 
-    final token = route.mediaToken;
-    if (token == null || base.contains('token=')) return base;
-
-    return '$base${base.contains('?') ? '&' : '?'}token=$token';
+  static String _withToken(String url, String? token) {
+    if (token == null || url.contains('token=')) return url;
+    return '$url${url.contains('?') ? '&' : '?'}token=$token';
   }
 }

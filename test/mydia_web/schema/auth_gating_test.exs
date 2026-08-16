@@ -17,7 +17,12 @@ defmodule MydiaWeb.Schema.AuthGatingTest do
 
   # Kept deliberately in step with the allowlist in MydiaWeb.Schema. Adding a
   # field here is a security decision and should be visible in review.
-  @public_fields [:login, :refresh_media_token, :refresh_access_token]
+  @public_fields [
+    :login,
+    :refresh_media_token,
+    :refresh_access_token,
+    :server_compatibility
+  ]
   @introspection_fields [:__schema, :__type, :__typename]
 
   describe "root field gating" do

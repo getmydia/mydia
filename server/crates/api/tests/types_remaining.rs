@@ -38,6 +38,7 @@ const OWNED_DISCOVERY: &[&str] = &[
     "SearchSection",
     "SearchResults",
     "RemoteAccessStatus",
+    "ServerCompatibility",
 ];
 
 fn reference_sdl() -> String {

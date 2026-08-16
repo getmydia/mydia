@@ -24,6 +24,16 @@ defmodule Mydia.Media.Recommendations do
 
   @media_types %{"movie" => :movie, "tv_show" => :tv_show}
 
+  # TMDB returns up to 20 recommendations in an order of its own. Twelve ranked
+  # entries is roughly one screen of horizontal scroll past what a typical
+  # content column shows; twenty is nearly two.
+  @rail_limit 12
+
+  # Prior weight for the Bayesian rating. An entry needs roughly this many votes
+  # before its own average outweighs the set mean, which is what stops a 10.0
+  # from three voters leading the rail.
+  @min_votes 50
+
   @doc """
   Returns recommendations for a library item, or `:none`.
 
@@ -62,6 +72,36 @@ defmodule Mydia.Media.Recommendations do
 
   def for_tmdb_id(_tmdb_id, _media_type, _config), do: :none
 
+  @doc """
+  Orders recommendations by Bayesian weighted rating and caps the list.
+
+  `WR = (v / (v + m)) * R + (m / (v + m)) * C`, where `R` is the entry's rating,
+  `v` its vote count, `m` is `@min_votes`, and `C` the mean rating of the rated
+  entries in this set. Deriving `C` from the set itself avoids carrying a global
+  TMDB average that would silently rot.
+
+  An unrated entry scores exactly `C` and lands mid-pack. Ties fall back to
+  TMDB's own order so the result is deterministic under test.
+
+  Public so the ranking can be exercised without a relay round trip.
+  """
+  @spec rank([SearchResult.t()]) :: [SearchResult.t()]
+  def rank(results) when is_list(results) do
+    case mean_rating(results) do
+      # Nothing in the set has a vote, so there is no signal to sort on. Keep
+      # TMDB's order and apply the cap alone.
+      nil ->
+        Enum.take(results, @rail_limit)
+
+      mean ->
+        results
+        |> Enum.with_index()
+        |> Enum.sort_by(fn {result, index} -> {-weighted_rating(result, mean), index} end)
+        |> Enum.map(&elem(&1, 0))
+        |> Enum.take(@rail_limit)
+    end
+  end
+
   # `""` and `"abc"` would otherwise be interpolated straight into a relay path
   # and spend a request to learn what the shape already tells us.
   defp normalize_tmdb_id(id) when is_integer(id) and id > 0, do: {:ok, to_string(id)}
@@ -83,7 +123,7 @@ defmodule Mydia.Media.Recommendations do
         :none
 
       {:ok, results} when is_list(results) ->
-        {:ok, results}
+        {:ok, rank(results)}
 
       {:error, reason} ->
         Logger.warning(
@@ -93,4 +133,38 @@ defmodule Mydia.Media.Recommendations do
         :none
     end
   end
+
+  defp mean_rating(results) do
+    case Enum.filter(results, &rated?/1) do
+      [] -> nil
+      rated -> Enum.sum(Enum.map(rated, &rating/1)) / length(rated)
+    end
+  end
+
+  # An entry needs both a numeric rating and at least one vote before it can
+  # inform the mean. Treating a nil rating as 0.0 would drag the prior down for
+  # every other entry in the set. Pattern-matched, like rating/1 and votes/1
+  # below, so a loose map missing :vote_average entirely falls to the
+  # catch-all instead of raising KeyError on the dot access.
+  defp rated?(%{vote_average: value} = result) when is_number(value),
+    do: votes(result) > 0
+
+  defp rated?(_result), do: false
+
+  defp weighted_rating(result, mean) do
+    if rated?(result) do
+      v = votes(result)
+
+      v / (v + @min_votes) * rating(result) + @min_votes / (v + @min_votes) * mean
+    else
+      # No usable rating, so the honest score is the set mean: mid-pack.
+      mean
+    end
+  end
+
+  defp rating(%{vote_average: value}) when is_number(value), do: value / 1
+  defp rating(_result), do: 0.0
+
+  defp votes(%{vote_count: value}) when is_integer(value) and value > 0, do: value
+  defp votes(_result), do: 0
 end

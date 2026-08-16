@@ -4,6 +4,9 @@ defmodule Mydia.Media.FranchiseEntry do
 
   `release_date` is carried alongside `year` because entries are ordered by full
   date, not by year alone.
+
+  `vote_average` and `monitored` exist so the entry can be rendered by the shared
+  media rail, which draws a star badge and an ownership dot from them.
   """
 
   @enforce_keys [:tmdb_id]
@@ -14,7 +17,10 @@ defmodule Mydia.Media.FranchiseEntry do
     :release_date,
     :poster_path,
     :media_item_id,
+    :vote_average,
+    :request_status,
     in_library?: false,
+    monitored: false,
     current?: false
   ]
 
@@ -25,7 +31,10 @@ defmodule Mydia.Media.FranchiseEntry do
           release_date: Date.t() | nil,
           poster_path: String.t() | nil,
           media_item_id: binary() | nil,
+          vote_average: float() | nil,
+          request_status: String.t() | nil,
           in_library?: boolean(),
+          monitored: boolean(),
           current?: boolean()
         }
 end

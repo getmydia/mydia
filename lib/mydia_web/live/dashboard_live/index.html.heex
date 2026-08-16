@@ -217,7 +217,7 @@
         </div>
       <% true -> %>
         <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4">
-          <%= for movie <- @trending_movies do %>
+          <%= for {movie, index} <- Enum.with_index(@trending_movies) do %>
             <.trending_card
               item={movie}
               media_type={:movie}
@@ -225,6 +225,7 @@
               adding_item_id={@adding_item_id}
               requesting_item_id={@requesting_item_id}
               libraries={@movie_libraries}
+              loading={if(index < 6, do: nil, else: "lazy")}
             />
           <% end %>
         </div>
@@ -252,7 +253,7 @@
         </div>
       <% true -> %>
         <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4">
-          <%= for show <- @trending_tv do %>
+          <%= for {show, index} <- Enum.with_index(@trending_tv) do %>
             <.trending_card
               item={show}
               media_type={:tv_show}
@@ -260,6 +261,7 @@
               adding_item_id={@adding_item_id}
               requesting_item_id={@requesting_item_id}
               libraries={@show_libraries}
+              loading={if(index < 6, do: nil, else: "lazy")}
             />
           <% end %>
         </div>

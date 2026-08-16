@@ -26,7 +26,16 @@ class FakeCastBackend implements CastBackend {
   CastFailureKind? _pendingConnectFailure;
   bool discoveryStarted = false;
   bool discoveryStopped = false;
-  CastSubtitleTrack? selectedSubtitle;
+
+  /// Every `selectSubtitle` call in order, including the nulls.
+  ///
+  /// A list rather than the last value: loading with subtitles off issues an
+  /// explicit disable right after LOAD, and a test proving that has to see
+  /// the call happened at all, not just what the final state settled on.
+  final List<CastSubtitleTrack?> subtitleSelections = [];
+
+  CastSubtitleTrack? get selectedSubtitle =>
+      subtitleSelections.isEmpty ? null : subtitleSelections.last;
 
   /// Held open by [holdNextConnect] until [releaseConnect] completes it, so a
   /// test can observe state (a cancel, a second `connectTo`) while `connect`
@@ -163,7 +172,7 @@ class FakeCastBackend implements CastBackend {
 
   @override
   Future<void> selectSubtitle(CastSubtitleTrack? track) async =>
-      selectedSubtitle = track;
+      subtitleSelections.add(track);
 
   @override
   Stream<CastPlaybackState> get stateStream => _states.stream;

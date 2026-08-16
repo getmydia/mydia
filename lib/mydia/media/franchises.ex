@@ -157,7 +157,8 @@ defmodule Mydia.Media.Franchises do
           title: part.title,
           year: part.release_date && part.release_date.year,
           release_date: part.release_date,
-          poster_path: part.poster_path
+          poster_path: part.poster_path,
+          vote_average: part.vote_average
         }
 
       _ ->
@@ -169,8 +170,11 @@ defmodule Mydia.Media.Franchises do
     entry = %{entry | current?: entry.tmdb_id == current_tmdb_id}
 
     case Map.get(status, entry.tmdb_id) do
-      %{id: media_item_id} -> %{entry | in_library?: true, media_item_id: media_item_id}
-      nil -> entry
+      %{id: media_item_id, monitored: monitored} ->
+        %{entry | in_library?: true, media_item_id: media_item_id, monitored: monitored}
+
+      nil ->
+        entry
     end
   end
 

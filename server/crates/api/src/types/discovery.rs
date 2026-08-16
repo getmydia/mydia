@@ -2,7 +2,8 @@
 //!
 //! Types owned by this module (keep in sync with tests/types_remaining.rs):
 //! ContinueWatchingItem, RecentlyAddedItem, UpNextItem, Collection,
-//! SearchResult, SearchSection, SearchResults, RemoteAccessStatus.
+//! SearchResult, SearchSection, SearchResults, RemoteAccessStatus,
+//! ServerCompatibility.
 
 use async_graphql::{SimpleObject, ID};
 
@@ -84,6 +85,19 @@ pub struct RemoteAccessStatus {
     pub connected_peers: i32,
 }
 
+/// What this server needs from a connecting player.
+///
+/// Schema-only, like every type in this crate: the values a real server would
+/// return are Elixir-side constants. It exists because the player talks to
+/// both servers and GraphQL rejects an entire query containing an unknown
+/// field, so omitting it here would break the query, not just the field.
+#[derive(SimpleObject)]
+pub struct ServerCompatibility {
+    pub version: String,
+    pub min_player_version: String,
+    pub recommended_player_version: String,
+}
+
 /// Renders just this group's types as SDL.
 pub fn sdl_fragment() -> String {
     use async_graphql::{EmptyMutation, EmptySubscription, Object, Schema};
@@ -117,6 +131,10 @@ pub fn sdl_fragment() -> String {
         }
 
         async fn remote_access_status(&self) -> RemoteAccessStatus {
+            std::future::pending().await
+        }
+
+        async fn server_compatibility(&self) -> ServerCompatibility {
             std::future::pending().await
         }
     }

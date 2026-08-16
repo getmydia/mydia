@@ -3,7 +3,13 @@ defmodule MydiaWeb.Api.HlsController do
 
   require Logger
 
-  alias Mydia.Streaming.{AudioPreferences, HlsSessionSupervisor, HlsSession}
+  alias Mydia.Streaming.{
+    AudioPreferences,
+    HlsSessionSupervisor,
+    HlsSession,
+    SessionFiles,
+    SessionSubtitles
+  }
 
   @doc """
   Serves the HLS master playlist for a session.
@@ -128,7 +134,8 @@ defmodule MydiaWeb.Api.HlsController do
   def variant_playlist(conn, %{"session_id" => session_id, "track_id" => track_id}) do
     with {:ok, user_id} <- get_user_id(conn),
          {:ok, temp_dir} <- get_session_temp_dir(session_id, user_id),
-         playlist_path <- Path.join([temp_dir, track_id, "index.m3u8"]),
+         {:ok, playlist_path} <-
+           SessionFiles.safe_path(temp_dir, Path.join(track_id, "index.m3u8")),
          {:ok, content} <- File.read(playlist_path) do
       # Update session activity
       heartbeat_session(session_id, user_id)
@@ -147,6 +154,11 @@ defmodule MydiaWeb.Api.HlsController do
         conn
         |> put_status(:not_found)
         |> json(%{error: "HLS session not found"})
+
+      {:error, :path_traversal} ->
+        conn
+        |> put_status(:forbidden)
+        |> json(%{error: "Forbidden"})
 
       {:error, :enoent} ->
         conn
@@ -171,13 +183,11 @@ defmodule MydiaWeb.Api.HlsController do
   """
   def segment(conn, %{"session_id" => session_id, "track_id" => track_id, "segment" => segment}) do
     with {:ok, user_id} <- get_user_id(conn),
-         {:ok, temp_dir} <- get_session_temp_dir(session_id, user_id) do
-      # Try Membrane-style path first (track subdirectory)
-      membrane_path = Path.join([temp_dir, track_id, segment])
-
-      # Fall back to FFmpeg-style path (root directory) if track doesn't exist
-      ffmpeg_path = Path.join(temp_dir, segment)
-
+         {:ok, temp_dir} <- get_session_temp_dir(session_id, user_id),
+         # Try Membrane-style path first (track subdirectory)
+         {:ok, membrane_path} <- SessionFiles.safe_path(temp_dir, Path.join(track_id, segment)),
+         # Fall back to FFmpeg-style path (root directory) if track doesn't exist
+         {:ok, ffmpeg_path} <- SessionFiles.safe_path(temp_dir, segment) do
       segment_path =
         cond do
           File.exists?(membrane_path) -> membrane_path
@@ -197,7 +207,7 @@ defmodule MydiaWeb.Api.HlsController do
 
           # Serve the segment file
           conn
-          |> put_resp_content_type(get_segment_mime_type(segment))
+          |> put_resp_content_type(SessionFiles.content_type(segment))
           |> put_resp_header("cache-control", "public, max-age=31536000, immutable")
           |> send_file(200, path)
       end
@@ -211,6 +221,11 @@ defmodule MydiaWeb.Api.HlsController do
         conn
         |> put_status(:not_found)
         |> json(%{error: "HLS session not found"})
+
+      {:error, :path_traversal} ->
+        conn
+        |> put_status(:forbidden)
+        |> json(%{error: "Forbidden"})
     end
   end
 
@@ -223,16 +238,14 @@ defmodule MydiaWeb.Api.HlsController do
   """
   def root_segment(conn, %{"session_id" => session_id, "segment" => segment}) do
     with {:ok, user_id} <- get_user_id(conn),
-         {:ok, temp_dir} <- get_session_temp_dir(session_id, user_id),
-         segment_path <- Path.join(temp_dir, segment),
+         {:ok, info} <- get_session_info_by_id(session_id, user_id),
+         {:ok, segment_path} <- resolve_session_file(info, segment),
          true <- File.exists?(segment_path) do
-      # Update session activity
       heartbeat_session(session_id, user_id)
 
-      # Serve the segment file
       conn
-      |> put_resp_content_type(get_segment_mime_type(segment))
-      |> put_resp_header("cache-control", "public, max-age=31536000, immutable")
+      |> put_resp_content_type(SessionFiles.content_type(segment))
+      |> put_resp_header("cache-control", cache_control_for(segment))
       |> send_file(200, segment_path)
     else
       {:error, :no_user} ->
@@ -245,10 +258,46 @@ defmodule MydiaWeb.Api.HlsController do
         |> put_status(:not_found)
         |> json(%{error: "HLS session not found"})
 
+      {:error, :path_traversal} ->
+        conn
+        |> put_status(:forbidden)
+        |> json(%{error: "Forbidden"})
+
+      {:error, :image_subtitle} ->
+        Logger.debug("HLS subtitle unavailable: image-based track #{segment}")
+
+        conn
+        |> put_status(:unsupported_media_type)
+        |> json(%{error: "Image-based subtitles cannot be converted to text"})
+
+      {:error, _reason} ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{error: "Segment not found"})
+
       false ->
         conn
         |> put_status(:not_found)
         |> json(%{error: "Segment not found"})
+    end
+  end
+
+  # A subtitle is materialized on demand; anything else is an ordinary file
+  # that either exists in the session directory or does not.
+  defp resolve_session_file(info, name) do
+    case SessionSubtitles.ensure(info, name) do
+      :not_subtitle -> SessionFiles.safe_path(info.temp_dir, name)
+      result -> result
+    end
+  end
+
+  # A subtitle body is stable for the life of the session but not immutable
+  # across sessions, and it is small enough that revalidation costs nothing.
+  defp cache_control_for(name) do
+    if String.ends_with?(name, ".vtt") do
+      "no-cache"
+    else
+      "public, max-age=31536000, immutable"
     end
   end
 
@@ -383,6 +432,13 @@ defmodule MydiaWeb.Api.HlsController do
     end
   end
 
+  defp get_session_info_by_id(session_id, user_id) do
+    case find_session_by_id(session_id, user_id) do
+      {:ok, pid} -> HlsSession.get_info(pid)
+      error -> error
+    end
+  end
+
   defp find_session_by_id(session_id, _user_id) do
     # O(1) lookup using Registry
     case Registry.lookup(Mydia.Streaming.HlsSessionRegistry, {:session, session_id}) do
@@ -406,15 +462,6 @@ defmodule MydiaWeb.Api.HlsController do
 
       _ ->
         :ok
-    end
-  end
-
-  defp get_segment_mime_type(segment) do
-    cond do
-      String.ends_with?(segment, ".m4s") -> "video/iso.segment"
-      String.ends_with?(segment, ".mp4") -> "video/mp4"
-      String.ends_with?(segment, ".ts") -> "video/mp2t"
-      true -> "application/octet-stream"
     end
   end
 end

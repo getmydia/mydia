@@ -30,6 +30,14 @@ class PersistedCastSession {
   /// started in the meantime.
   final String mediaUrl;
 
+  /// The track the viewer had showing, by Mydia's own track id.
+  ///
+  /// The id alone, not the list: the list is rebuilt from the route on
+  /// restore, and a persisted copy would go stale the moment the file's
+  /// subtitles changed. Null means off, which is also what a record written
+  /// before this field existed restores as.
+  final String? selectedSubtitleTrackId;
+
   const PersistedCastSession({
     required this.device,
     required this.mediaId,
@@ -41,6 +49,7 @@ class PersistedCastSession {
     required this.savedAt,
     this.mediaUrl = '',
     this.duration = Duration.zero,
+    this.selectedSubtitleTrackId,
   });
 
   /// Sessions older than this are discarded without a reconnect attempt.
@@ -60,6 +69,7 @@ class PersistedCastSession {
         'savedAt': savedAt.toIso8601String(),
         'mediaUrl': mediaUrl,
         'durationSeconds': duration.inSeconds,
+        'selectedSubtitleTrackId': selectedSubtitleTrackId,
       };
 
   factory PersistedCastSession.fromMap(Map<dynamic, dynamic> map) {
@@ -83,13 +93,22 @@ class PersistedCastSession {
       // Records written before the cast session carried a duration have no
       // such key; zero reads as "unknown", which the UI already handles.
       duration: Duration(seconds: map['durationSeconds'] as int? ?? 0),
+      // Records written before subtitle selection was persisted carry no
+      // such key at all; that reads the same as an explicit off.
+      selectedSubtitleTrackId: map['selectedSubtitleTrackId'] as String?,
     );
   }
 
+  /// [selectedSubtitleTrackId] can't just be `String?`, because passing null
+  /// would then be ambiguous between "leave unchanged" and "turn subtitles
+  /// off" — [clearSelectedSubtitle] says the latter, mirroring
+  /// `CastLaunchRequest.copyWith`.
   PersistedCastSession copyWith({
     Duration? position,
     DateTime? savedAt,
     Duration? duration,
+    String? selectedSubtitleTrackId,
+    bool clearSelectedSubtitle = false,
   }) {
     return PersistedCastSession(
       device: device,
@@ -102,6 +121,9 @@ class PersistedCastSession {
       savedAt: savedAt ?? this.savedAt,
       mediaUrl: mediaUrl,
       duration: duration ?? this.duration,
+      selectedSubtitleTrackId: clearSelectedSubtitle
+          ? null
+          : (selectedSubtitleTrackId ?? this.selectedSubtitleTrackId),
     );
   }
 }

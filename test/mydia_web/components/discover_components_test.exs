@@ -37,6 +37,48 @@ defmodule MydiaWeb.DiscoverComponentsTest do
     render_component(&DiscoverComponents.trending_card/1, assigns)
   end
 
+  defp root_class(html) do
+    html
+    |> LazyHTML.from_fragment()
+    |> LazyHTML.filter("div.card")
+    |> LazyHTML.attribute("class")
+    |> List.first()
+  end
+
+  defp figure_classes(html) do
+    html
+    |> LazyHTML.from_fragment()
+    # LazyHTML.filter/2 only matches root nodes of the fragment; the figure
+    # is nested inside the card div, so it needs query/2 to be found at all.
+    |> LazyHTML.query("figure")
+    |> LazyHTML.attribute("class")
+  end
+
+  defp rail(overrides) do
+    item = %{
+      provider_id: "693134",
+      title: "Dune: Part Two",
+      year: 2024,
+      poster_path: "/dune.jpg",
+      in_library: false,
+      monitored: false,
+      id: nil,
+      request_status: nil
+    }
+
+    assigns =
+      Map.merge(
+        %{
+          items: [item],
+          media_type: :movie,
+          current_user: %{role: "admin", id: "admin-1"}
+        },
+        overrides
+      )
+
+    render_component(&DiscoverComponents.media_rail/1, assigns)
+  end
+
   describe "guest request button" do
     test "renders a request_media button rather than a link to the search page" do
       html = card(%{})
@@ -68,6 +110,80 @@ defmodule MydiaWeb.DiscoverComponentsTest do
 
       assert html =~ "Add to Library"
       refute html =~ ~s(phx-click="request_media")
+    end
+  end
+
+  describe "poster loading and size" do
+    # Regression: PR #461 made loading="lazy" opt-in to protect the LCP element
+    # in the first grid row, but that also removed it from every card below the
+    # fold, which made the Dashboard's two 20-card grids eagerly fetch roughly
+    # 40 w500 posters. Lazy is the safe default; a caller that needs eager
+    # loading for an above-the-fold card now opts out with loading={nil}.
+    test "a bare card defaults to lazy loading and the w500 poster size" do
+      html = card(%{})
+
+      assert html =~ ~s(loading="lazy")
+      assert html =~ "/w500/dune.jpg"
+    end
+
+    test "loading={nil} opts a card out of lazy loading" do
+      html = card(%{loading: nil})
+
+      refute html =~ "loading="
+      assert html =~ "/w500/dune.jpg"
+    end
+  end
+
+  # Regression for #465. The card root used to carry overflow-hidden, which
+  # trapped the absolutely positioned library picker menu inside the card so
+  # only its top line was visible. The poster keeps its own clipping instead.
+  describe "picker containment" do
+    test "the card root does not clip its children" do
+      refute root_class(card(%{})) =~ "overflow-hidden"
+    end
+
+    test "the card root still draws the ring for the current title" do
+      assert root_class(card(%{current: true})) =~ "ring-2"
+    end
+
+    # One case per branch of the poster cond: navigate wins first, then
+    # on_select (the default), then the inert figure when both are nil.
+    test "the poster clips itself in the navigate branch" do
+      [class] = figure_classes(card(%{navigate: "/movies/1"}))
+
+      assert class =~ "overflow-hidden"
+      assert class =~ "rounded-t-box"
+    end
+
+    test "the poster clips itself in the on_select branch" do
+      [class] = figure_classes(card(%{}))
+
+      assert class =~ "overflow-hidden"
+      assert class =~ "rounded-t-box"
+    end
+
+    test "the poster clips itself in the inert branch" do
+      [class] = figure_classes(card(%{on_select: nil}))
+
+      assert class =~ "overflow-hidden"
+      assert class =~ "rounded-t-box"
+    end
+  end
+
+  # The rail is a horizontal scroll container (overflow-x-auto, which makes
+  # overflow-y compute to auto as well) and is one card tall, so a dropdown
+  # cannot escape it at any placement. The picker is withdrawn there rather
+  # than shipped broken: the plain add button still works against the default
+  # library. See #465.
+  describe "media_rail picker suppression" do
+    test "a rail renders the add button but never a library picker" do
+      html =
+        rail(%{
+          libraries: [%{id: "a", path: "/m/a"}, %{id: "b", path: "/m/b"}]
+        })
+
+      assert html =~ "Add to Library"
+      refute html =~ "library-picker-caret"
     end
   end
 end

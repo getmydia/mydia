@@ -129,6 +129,16 @@ defmodule Mydia.Application do
       # Per-plugin invocation single-flight lock (U4): serializes on-event /
       # on-schedule / inline calls for one plugin so shared KV state is safe.
       Mydia.Plugins.SingleFlight,
+      # Separate named lock instance serializing session subtitle extraction
+      # (see Mydia.Streaming.SessionSubtitles). A slow ffmpeg extraction must
+      # never make a plugin invocation wait behind it, hence its own instance
+      # rather than sharing the plugin host's lock above. The explicit :id
+      # disambiguates it from the SingleFlight child above: both default to
+      # the module name as their child id, which the supervisor rejects as
+      # a duplicate.
+      Supervisor.child_spec({Mydia.Plugins.SingleFlight, name: Mydia.Streaming.SubtitleLock},
+        id: Mydia.Streaming.SubtitleLock
+      ),
       # Fans "events:all" out to subscribed plugins (U5). Replaces the Luerl
       # hooks manager removed in U11.
       Mydia.Plugins.Dispatcher,
