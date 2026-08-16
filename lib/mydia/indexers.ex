@@ -679,16 +679,11 @@ defmodule Mydia.Indexers do
     # Use the unified ReleaseRanker for consistent scoring across manual and automated searches
     # This provides sophisticated ranking with size scoring, age scoring, seeder ratio multipliers,
     # and title relevance scoring
-    {rankable, titleless} = Enum.split_with(results, &is_binary(&1.title))
-
     ranked_results =
-      rankable
-      |> ReleaseRanker.rank_all(min_seeders: min_seeders, search_query: search_query)
-      |> Enum.map(fn ranked -> ranked.result end)
+      ReleaseRanker.rank_all(results, min_seeders: min_seeders, search_query: search_query)
 
-    # A result with a nil title can't be relevance-ranked (ReleaseRanker expects
-    # a binary title); surface it after the ranked results instead of crashing.
-    ranked_results ++ titleless
+    # Extract the SearchResult from each RankedResult to maintain the expected return type
+    Enum.map(ranked_results, fn ranked -> ranked.result end)
   end
 
   defp indexer_config_to_adapter_config(%Settings.IndexerConfig{} = config) do

@@ -784,7 +784,7 @@ defmodule Mydia.IndexersTest do
       assert length(ranked) == 2
     end
 
-    test "rank_and_dedupe/3 survives nil download_url and title" do
+    test "rank_and_dedupe/3 survives nil download_url and drops nil title" do
       result = %SearchResult{
         title: "Dune.2021.1080p.BluRay",
         download_url: nil,
@@ -797,7 +797,7 @@ defmodule Mydia.IndexersTest do
       assert [_] = Indexers.rank_and_dedupe([result], "Dune", [])
 
       nil_title = %{result | title: nil, download_url: "magnet:?xt=urn:btih:abc"}
-      assert [_] = Indexers.rank_and_dedupe([nil_title], "Dune", [])
+      assert [] = Indexers.rank_and_dedupe([nil_title], "Dune", [])
     end
   end
 end

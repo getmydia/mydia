@@ -63,8 +63,11 @@ defmodule Mydia.Downloads.ReleaseValidator do
   - `:yenc_pattern` - Raw usenet binary encoding
   - `:no_meaningful_content` - No extractable title content
   - `:suspicious_extension` - Release name ends in an executable extension
+  - `:no_title` - Release has a nil title (malformed result)
   """
-  @spec validate_release(String.t()) :: {:ok, String.t()} | {:error, atom()}
+  @spec validate_release(String.t() | nil) :: {:ok, String.t()} | {:error, atom()}
+  def validate_release(nil), do: {:error, :no_title}
+
   def validate_release(name) when is_binary(name) do
     cond do
       suspicious_extension?(name) ->
