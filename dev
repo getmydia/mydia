@@ -112,10 +112,10 @@ ${YELLOW}Process Lifecycle (devenv processes):${NC}
   logs <process>       Show recent logs for a process (e.g. 'logs phoenix';
                        no live-follow — use foreground 'up' to stream live)
   ps                   List managed processes and their status
-  killall              Force-kill ALL devenv processes on every worktree plus
-                      orphaned dev processes (phx.server BEAMs, dart codegen,
-                      watchers, devenv-managed Postgres). Docker services and
-                      the metadata_relay release are left untouched.
+  killall              Force-kill ALL devenv process trees on every worktree
+                      (daemons, phx.server BEAMs, dart codegen, watchers,
+                      devenv-managed Postgres). Docker services and the
+                      metadata_relay release are left untouched.
 
 ${YELLOW}Shells & Mix:${NC}
   shell                Open an interactive devenv shell
@@ -261,35 +261,60 @@ PRECOMMIT
 # devenv's `processes down` only touches the current worktree. Stale worktrees
 # (and agent-spawned ones) leave their process daemons and children running
 # until reboot. This sweeps them all, plus orphaned dev processes whose devenv
-# parent already exited. Matching is by command-line signature only:
-#   - devenv daemon     : `daemon-processes` (the wrapped process manager)
-#   - devenv wrappers   : `devenv-processes-{phoenix,postgres,flutter-codegen}`
-#   - phoenix BEAM      : `mix phx.server` (dev mode; the metadata_relay release
-#                         runs `-sname metadata_relay` and never matches)
-#   - dart codegen      : build_runner.dart / build.dart.aot watchers
-#   - file watchers     : inotifywait
-#   - asset watchers    : esbuild-linux-x64 / tailwind-linux-x64
-#   - flutter tests     : flutter_tester
-#   - devenv Postgres   : postmaster whose -D data dir is .devenv/state/postgres
-#                         (a system Postgres never carries this path)
-# Docker services (mydia_metadata_relay, mydia_prowlarr) are left untouched.
+# parent already exited.
+#
+# Only devenv's OWN signatures are matched directly — `daemon-processes` (the
+# wrapped process manager), `devenv-processes-{phoenix,postgres,flutter-codegen}`
+# (the wrapper scripts), and `.devenv/state/postgres` (devenv's Postgres data
+# dir). These are unambiguous, so an unrelated process can never match.
+# Everything else — the phx.server BEAMs, dart codegen, inotify/esbuild/tailwind
+# watchers, and Postgres backends — is reached only as a DESCENDANT of those
+# roots, so an unrelated project's dev server or watcher is never touched. This
+# also covers Postgres orphan cleanup: a killed postmaster's backends are
+# already in the target set as its descendants, so they are reaped without ever
+# matching an arbitrary `postgres:` process by name.
+#
+# Docker services (mydia_metadata_relay, mydia_prowlarr) and the metadata_relay
+# release BEAM are left untouched.
 kill_all_dev_processes() {
-    local snap pid ppid args pids count
+    local snap pid ppid args roots="" pids="" count
     snap="$(ps -eo pid=,ppid=,args=)"
 
+    # Pass 1: devenv roots.
     while IFS= read -r line; do
         read -r pid ppid args <<< "$line"
-        if [[ "$args" =~ daemon-processes|devenv-processes|phx\.server|build_runner\.dart|build\.dart\.aot|inotifywait|esbuild-linux-x64|tailwind-linux-x64|flutter_tester|\.devenv/state/postgres ]]; then
-            pids="$pids $pid"
-        fi
+        case "$args" in
+            *daemon-processes*|*devenv-processes*|*.devenv/state/postgres*)
+                roots="$roots $pid" ;;
+        esac
     done <<< "$snap"
 
-    if [ -z "$pids" ]; then
+    if [ -z "$roots" ]; then
         echo -e "${GREEN}No devenv/mydia dev processes found.${NC}"
         return 0
     fi
 
-    # Deduplicate (a process can match several signatures) and count.
+    # Pass 2: descendants of the roots via the snapshot's ppid links.
+    local -A children
+    while IFS= read -r line; do
+        read -r pid ppid args <<< "$line"
+        children[$ppid]+=" $pid"
+    done <<< "$snap"
+
+    local -a stack
+    local p child
+    stack=($roots)
+    pids="$roots"
+    while [ ${#stack[@]} -gt 0 ]; do
+        p="${stack[0]}"
+        stack=("${stack[@]:1}")
+        for child in ${children[$p]}; do
+            pids="$pids $child"
+            stack+=("$child")
+        done
+    done
+
+    # Deduplicate (a root may also be another root's descendant) and count.
     pids="$(printf '%s\n' $pids | sort -un | tr '\n' ' ')"
     count="$(echo -n "$pids" | wc -w)"
 
@@ -306,14 +331,6 @@ kill_all_dev_processes() {
         echo -e "${YELLOW}Force-killing $(echo "$still" | wc -w) straggler(s)…${NC}"
         # shellcheck disable=SC2086
         kill -KILL $still 2>/dev/null || true
-    fi
-
-    # A SIGKILLed postmaster orphans its backend workers; reap those too.
-    local orphans
-    orphans="$(ps -eo pid=,ppid=,args= | awk '$2 == 1 && $3 == "postgres:" {print $1}' | tr '\n' ' ')"
-    if [ -n "$orphans" ]; then
-        # shellcheck disable=SC2086
-        kill -KILL $orphans 2>/dev/null || true
     fi
     echo -e "${GREEN}Done.${NC}"
 }
