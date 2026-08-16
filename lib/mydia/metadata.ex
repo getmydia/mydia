@@ -60,7 +60,6 @@ defmodule Mydia.Metadata do
 
     # Register metadata-relay as the primary provider
     Provider.Registry.register(:metadata_relay, Mydia.Metadata.Provider.Relay)
-    Provider.Registry.register(:open_library, Mydia.Metadata.Provider.OpenLibrary)
 
     # Additional providers will be registered as they are implemented
     # Provider.Registry.register(:tmdb, Mydia.Metadata.Provider.TMDB)
@@ -244,10 +243,10 @@ defmodule Mydia.Metadata do
   `fetch_by_id_cached/3` — a non-English library must not read English-cached
   titles.
 
-  Relay-only, unlike its provider-agnostic siblings above: a TMDB collection has
-  no equivalent in the other registered provider type (`:open_library`), so those
-  are rejected with an `:invalid_config` error rather than routed to the relay
-  adapter under a cache key that names a provider which never served the response.
+  Relay-only, unlike its provider-agnostic siblings above: a TMDB collection is a
+  relay concept, so a config naming any other provider type is rejected with an
+  `:invalid_config` error rather than routed to the relay adapter under a cache
+  key that names a provider which never served the response.
 
   ## Examples
 
@@ -282,10 +281,9 @@ defmodule Mydia.Metadata do
   @doc """
   Fetches TMDB recommendations for a title, cached in ETS for 24 hours.
 
-  Relay-only, for the same reason as `fetch_collection_cached/3`: the other
-  registered provider type (`:open_library`) has no equivalent concept, so routing
-  it to the relay adapter would cache a response under a key naming a provider
-  that never served it.
+  Relay-only, for the same reason as `fetch_collection_cached/3`: no other
+  provider type has an equivalent concept, so routing one to the relay adapter
+  would cache a response under a key naming a provider that never served it.
 
   The language is part of the key so a non-English library never reads
   English-cached entries. The media type is part of the key because TMDB movie and
@@ -716,62 +714,5 @@ defmodule Mydia.Metadata do
       end,
       ttl: :timer.hours(24)
     )
-  end
-
-  @doc """
-  Gets the default book relay configuration.
-  """
-  def default_book_relay_config do
-    %{
-      type: :open_library,
-      base_url: metadata_relay_url(),
-      options: %{
-        timeout: 30_000
-      }
-    }
-  end
-
-  # Music Metadata Functions
-
-  def search_artist(%{type: type} = config, query, opts \\ []) when is_atom(type) do
-    with {:ok, provider} <- Provider.Registry.get_provider(type) do
-      provider.search_artist(config, query, opts)
-    end
-  end
-
-  def search_release(%{type: type} = config, query, opts \\ []) when is_atom(type) do
-    with {:ok, provider} <- Provider.Registry.get_provider(type) do
-      provider.search_release(config, query, opts)
-    end
-  end
-
-  def get_artist(%{type: type} = config, mbid) when is_atom(type) do
-    with {:ok, provider} <- Provider.Registry.get_provider(type) do
-      provider.get_artist(config, mbid)
-    end
-  end
-
-  def get_release(%{type: type} = config, mbid) when is_atom(type) do
-    with {:ok, provider} <- Provider.Registry.get_provider(type) do
-      provider.get_release(config, mbid)
-    end
-  end
-
-  def get_release_group(%{type: type} = config, mbid) when is_atom(type) do
-    with {:ok, provider} <- Provider.Registry.get_provider(type) do
-      provider.get_release_group(config, mbid)
-    end
-  end
-
-  def get_recording(%{type: type} = config, mbid) when is_atom(type) do
-    with {:ok, provider} <- Provider.Registry.get_provider(type) do
-      provider.get_recording(config, mbid)
-    end
-  end
-
-  def get_cover_art(%{type: type} = config, mbid) when is_atom(type) do
-    with {:ok, provider} <- Provider.Registry.get_provider(type) do
-      provider.get_cover_art(config, mbid)
-    end
   end
 end

@@ -126,7 +126,7 @@ defmodule Mydia.MetadataRecommendationsCachedTest do
 
   test "rejects a non-relay provider config", %{tmdb_id: tmdb_id} do
     assert {:error, %Error{type: :invalid_config}} =
-             Metadata.fetch_recommendations_cached(%{type: :open_library}, tmdb_id,
+             Metadata.fetch_recommendations_cached(%{type: :not_the_relay}, tmdb_id,
                media_type: :movie
              )
   end
