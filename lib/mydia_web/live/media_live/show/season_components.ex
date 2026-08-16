@@ -264,6 +264,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
             id={"season-#{@season_number}-auto-search"}
             phx-click="auto_search_season"
             phx-value-season-number={@season_number}
+            aria-label="Auto search season"
             class="btn btn-sm btn-primary"
             disabled={@auto_searching_season == @season_number}
           >
@@ -279,6 +280,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
             type="button"
             phx-click="manual_search_season"
             phx-value-season-number={@season_number}
+            aria-label="Manual search"
             class="btn btn-sm btn-ghost"
           >
             <.icon name="hero-magnifying-glass" class="w-4 h-4" />
@@ -289,6 +291,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
             type="button"
             phx-click="rescan_season"
             phx-value-season-number={@season_number}
+            aria-label="Re-scan"
             class="btn btn-sm btn-ghost"
             disabled={@rescanning_season == @season_number}
           >
@@ -308,6 +311,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
             id={"season-#{@season_number}-monitor-toggle"}
             phx-click={if @season_state == :all, do: "unmonitor_season", else: "monitor_season"}
             phx-value-season-number={@season_number}
+            aria-label={season_monitoring_tooltip(@season_state)}
             class={[
               "btn btn-sm btn-ghost",
               @season_state == :none && "opacity-60"
