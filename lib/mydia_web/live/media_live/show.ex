@@ -115,6 +115,8 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:sort_by, :quality)
      |> assign(:results_empty?, false)
      |> assign(:indexer_errors, [])
+     |> assign(:indexer_progress, %{})
+     |> assign(:search_id, 0)
      # Auto search state
      |> assign(:auto_searching, false)
      |> assign(:auto_searching_season, nil)
@@ -160,6 +162,13 @@ defmodule MydiaWeb.MediaLive.Show do
        Mydia.Accounts.Authorization.can_create_media?(socket.assigns.current_user)
      )
      |> assign(:raw_search_results, [])
+     # Untruncated, undeduplicated pool of every release seen so far in the
+     # current manual search, keyed by download_url. Progress messages fold
+     # onto this (never onto :raw_search_results, which is already truncated
+     # and deduplicated) so a later, weaker duplicate can never crown itself
+     # over a stronger release evicted by an earlier round's truncation. See
+     # apply_indexer_progress/2 in SearchHelpers.
+     |> assign(:indexer_raw_results, %{})
      # Category modal state
      |> assign(:show_category_modal, false)
      |> assign(:category_form, nil)
@@ -589,6 +598,23 @@ defmodule MydiaWeb.MediaLive.Show do
 
   def handle_info({:grab_duplicate, payload}, socket),
     do: SearchEvents.handle_grab_duplicate(payload, socket)
+
+  def handle_info({:indexer_search_started, search_id, pending}, socket) do
+    if search_id == socket.assigns.search_id do
+      progress = Map.new(pending, fn entry -> {entry.indexer_id, entry} end)
+      {:noreply, assign(socket, :indexer_progress, progress)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_info({:indexer_progress, search_id, progress}, socket) do
+    if search_id == socket.assigns.search_id do
+      {:noreply, apply_indexer_progress(socket, progress)}
+    else
+      {:noreply, socket}
+    end
+  end
 
   def handle_info(_msg, socket), do: {:noreply, socket}
 

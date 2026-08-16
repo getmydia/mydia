@@ -33,6 +33,8 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
         end
 
       min_seeders = socket.assigns.min_seeders
+      lv = self()
+      search_id = socket.assigns.search_id + 1
 
       {:noreply,
        socket
@@ -42,8 +44,15 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
        |> assign(:searching, true)
        |> assign(:results_empty?, false)
        |> assign(:download_error, nil)
+       |> assign(:search_id, search_id)
+       |> assign(:indexer_progress, %{})
+       |> assign(:indexer_raw_results, %{})
+       |> assign(:indexer_errors, [])
+       |> assign(:raw_search_results, [])
        |> stream(:search_results, [], reset: true)
-       |> start_async(:search, fn -> perform_search(search_query, min_seeders) end)}
+       |> start_async(:search, fn ->
+         perform_search(search_query, min_seeders, lv, search_id)
+       end)}
     else
       {:unauthorized, socket} -> {:noreply, socket}
     end
@@ -101,6 +110,8 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
       "#{media_item.title} S#{String.pad_leading(to_string(episode.season_number), 2, "0")}E#{String.pad_leading(to_string(episode.episode_number), 2, "0")}"
 
     min_seeders = socket.assigns.min_seeders
+    lv = self()
+    search_id = socket.assigns.search_id + 1
 
     {:noreply,
      socket
@@ -118,8 +129,15 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
      |> assign(:searching, true)
      |> assign(:results_empty?, false)
      |> assign(:download_error, nil)
+     |> assign(:search_id, search_id)
+     |> assign(:indexer_progress, %{})
+     |> assign(:indexer_raw_results, %{})
+     |> assign(:indexer_errors, [])
+     |> assign(:raw_search_results, [])
      |> stream(:search_results, [], reset: true)
-     |> start_async(:search, fn -> perform_search(search_query, min_seeders) end)}
+     |> start_async(:search, fn ->
+       perform_search(search_query, min_seeders, lv, search_id)
+     end)}
   end
 
   def manual_search_season(%{"season-number" => season_number_str}, socket) do
@@ -130,6 +148,8 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
       "#{media_item.title} S#{String.pad_leading(to_string(season_num), 2, "0")}"
 
     min_seeders = socket.assigns.min_seeders
+    lv = self()
+    search_id = socket.assigns.search_id + 1
 
     {:noreply,
      socket
@@ -139,8 +159,15 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
      |> assign(:searching, true)
      |> assign(:results_empty?, false)
      |> assign(:download_error, nil)
+     |> assign(:search_id, search_id)
+     |> assign(:indexer_progress, %{})
+     |> assign(:indexer_raw_results, %{})
+     |> assign(:indexer_errors, [])
+     |> assign(:raw_search_results, [])
      |> stream(:search_results, [], reset: true)
-     |> start_async(:search, fn -> perform_search(search_query, min_seeders) end)}
+     |> start_async(:search, fn ->
+       perform_search(search_query, min_seeders, lv, search_id)
+     end)}
   end
 
   def auto_search_season(%{"season-number" => season_number_str}, socket) do
@@ -202,6 +229,8 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
     |> assign(:results_empty?, false)
     |> assign(:raw_search_results, [])
     |> assign(:indexer_errors, [])
+    |> assign(:indexer_progress, %{})
+    |> assign(:indexer_raw_results, %{})
     |> assign(:download_error, nil)
     |> stream(:search_results, [], reset: true)
   end

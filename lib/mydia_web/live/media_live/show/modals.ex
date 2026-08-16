@@ -4,6 +4,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   """
   use Phoenix.Component
   import MydiaWeb.CoreComponents
+  import MydiaWeb.IndexerComponents
 
   # Import the formatting and search helper functions
   import MydiaWeb.MediaLive.Show.Formatters
@@ -573,6 +574,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   attr :download_error, :any, default: nil
   attr :results_empty?, :boolean, required: true
   attr :indexer_errors, :list, default: []
+  attr :indexer_progress, :map, default: %{}
   attr :streams, :map, required: true
   attr :quality_filter, :string, default: nil
   attr :min_seeders, :integer, default: 0
@@ -696,24 +698,12 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
               <span class="text-sm">{@download_error}</span>
             </div>
           <% end %>
-          <%!-- Indexer Error Warning --%>
-          <%= if @indexer_errors != [] && !@searching do %>
-            <div class="alert alert-warning mx-4 mt-3 mb-1">
-              <.icon name="hero-exclamation-triangle" class="w-5 h-5 shrink-0" />
-              <div class="flex-1">
-                <div class="text-sm font-medium">
-                  {length(@indexer_errors)} indexer(s) failed
-                </div>
-                <ul class="text-xs opacity-80 mt-1">
-                  <%= for error <- @indexer_errors do %>
-                    <li>{error.indexer}: {error.error}</li>
-                  <% end %>
-                </ul>
-              </div>
-            </div>
-          <% end %>
+          <%!-- Per-indexer search progress --%>
+          <div class="px-4">
+            <.indexer_search_status progress={@indexer_progress} retry_event="retry_indexer" />
+          </div>
           <%!-- Loading State --%>
-          <%= if @searching do %>
+          <%= if @searching && @results_empty? do %>
             <div class="flex flex-col items-center justify-center py-16">
               <span class="loading loading-spinner loading-lg text-primary mb-4"></span>
               <h3 class="text-xl font-semibold text-base-content/70 mb-2">
@@ -741,7 +731,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
             </div>
           <% end %>
           <%!-- Results List --%>
-          <%= if !@searching && !@results_empty? do %>
+          <%= if !@results_empty? do %>
             <ul id="manual-search-results" class="list bg-base-100" phx-update="stream">
               <li
                 :for={{id, result} <- @streams.search_results}
