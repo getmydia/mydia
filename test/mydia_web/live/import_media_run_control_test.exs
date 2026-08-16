@@ -152,8 +152,16 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
   } do
     {:ok, view, _html} = live(conn, ~p"/import")
 
-    assert has_element?(view, "input[type=radio][name=library_path_id][value='#{lp.id}']")
-    assert has_element?(view, "label.card")
+    assert has_element?(
+             view,
+             "label.card input[type=radio][name=library_path_id][value='#{lp.id}']"
+           )
+
+    # The first path is preselected so the form always submits a real id.
+    assert has_element?(
+             view,
+             "input[type=radio][name=library_path_id][value='#{lp.id}'][checked]"
+           )
   end
 
   describe "library types that cannot be imported" do
