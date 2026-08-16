@@ -5,9 +5,10 @@ defmodule Mydia.Jobs.MetadataBackfill do
   Two cases qualify. Items stored with no `metadata` at all render as an empty
   poster placeholder forever; approving a media request used to create them,
   which is fixed at the source in `Mydia.MediaRequests.approve_request/3`. TV
-  shows holding one provider id and not the other make Discover show an Add
-  button for something already in the library, and the add that follows dies on
-  the `tvdb_id` unique index.
+  shows missing either provider id make Discover show an Add button for
+  something already in the library; with one id present the add that follows
+  dies on the `tvdb_id` unique index, and with neither it silently creates a
+  second row for the same show.
 
   Runs daily. The query matches nothing once the library is repaired, so the
   job settles into costing one read, and a self-hosted operator never has to
@@ -41,9 +42,7 @@ defmodule Mydia.Jobs.MetadataBackfill do
       from(m in MediaItem,
         where:
           is_nil(m.metadata) or
-            (m.type == "tv_show" and
-               ((is_nil(m.tmdb_id) and not is_nil(m.tvdb_id)) or
-                  (is_nil(m.tvdb_id) and not is_nil(m.tmdb_id)))),
+            (m.type == "tv_show" and (is_nil(m.tmdb_id) or is_nil(m.tvdb_id))),
         select: struct(m, [:id, :metadata]),
         order_by: [asc: m.title]
       )

@@ -65,6 +65,27 @@ defmodule Mydia.Jobs.MetadataBackfillTest do
     assert_enqueued(worker: MetadataRefresh, args: %{media_item_id: item.id})
   end
 
+  test "enqueues a refresh for a TV show holding neither provider id" do
+    # Discover matches on tmdb_id, so this row also renders an Add button for
+    # something already in the library. It has no id to collide with, so the
+    # add silently creates a duplicate row instead of raising.
+    item =
+      media_item_fixture(%{
+        type: "tv_show",
+        title: "No Ids At All",
+        metadata: %MediaMetadata{
+          provider_id: "121364",
+          provider: :tvdb,
+          media_type: :tv_show,
+          title: "No Ids At All"
+        }
+      })
+
+    assert :ok = perform_job(MetadataBackfill, %{})
+
+    assert_enqueued(worker: MetadataRefresh, args: %{media_item_id: item.id})
+  end
+
   test "skips a TV show that already carries both provider ids" do
     item =
       media_item_fixture(%{
