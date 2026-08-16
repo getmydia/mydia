@@ -33,6 +33,7 @@ defmodule Mydia.Library.Scanner do
     - `:recursive` - Whether to scan subdirectories (default: true)
     - `:video_extensions` - List of video file extensions to detect (default: common formats)
     - `:progress_callback` - Function called with progress updates (file_count)
+    - `:path_callback` - Function called with each directory entered and each video file found
 
   ## Examples
 
@@ -48,12 +49,13 @@ defmodule Mydia.Library.Scanner do
     recursive = Keyword.get(opts, :recursive, true)
     extensions = Keyword.get(opts, :video_extensions, @video_extensions)
     progress_callback = Keyword.get(opts, :progress_callback)
+    path_callback = Keyword.get(opts, :path_callback)
 
     Logger.info("Starting library scan", directory: directory_path, recursive: recursive)
 
     case validate_directory(directory_path) do
       :ok ->
-        result = do_scan(directory_path, recursive, extensions, progress_callback)
+        result = do_scan(directory_path, recursive, extensions, progress_callback, path_callback)
 
         Logger.info("Library scan completed",
           directory: directory_path,
@@ -187,7 +189,7 @@ defmodule Mydia.Library.Scanner do
     end
   end
 
-  defp do_scan(directory_path, recursive, extensions, progress_callback) do
+  defp do_scan(directory_path, recursive, extensions, progress_callback, path_callback) do
     initial_state = %{
       files: [],
       errors: [],
@@ -196,7 +198,14 @@ defmodule Mydia.Library.Scanner do
     }
 
     result =
-      walk_directory(directory_path, recursive, extensions, progress_callback, initial_state)
+      walk_directory(
+        directory_path,
+        recursive,
+        extensions,
+        progress_callback,
+        path_callback,
+        initial_state
+      )
 
     %{
       files: Enum.reverse(result.files),
@@ -206,12 +215,14 @@ defmodule Mydia.Library.Scanner do
     }
   end
 
-  defp walk_directory(path, recursive, extensions, progress_callback, state) do
+  defp walk_directory(path, recursive, extensions, progress_callback, path_callback, state) do
+    if path_callback, do: path_callback.(path)
+
     case File.ls(path) do
       {:ok, entries} ->
         Enum.reduce(entries, state, fn entry, acc ->
           full_path = Path.join(path, entry)
-          process_entry(full_path, recursive, extensions, progress_callback, acc)
+          process_entry(full_path, recursive, extensions, progress_callback, path_callback, acc)
         end)
 
       {:error, reason} ->
@@ -221,12 +232,12 @@ defmodule Mydia.Library.Scanner do
     end
   end
 
-  defp process_entry(path, recursive, extensions, progress_callback, state) do
+  defp process_entry(path, recursive, extensions, progress_callback, path_callback, state) do
     # Use lstat to detect symlinks without following them
     case File.lstat(path) do
       {:ok, %File.Stat{type: :directory}} ->
         if recursive and not trash_directory?(path) do
-          walk_directory(path, recursive, extensions, progress_callback, state)
+          walk_directory(path, recursive, extensions, progress_callback, path_callback, state)
         else
           state
         end
@@ -238,11 +249,11 @@ defmodule Mydia.Library.Scanner do
             if trash_directory?(path) do
               state
             else
-              walk_directory(path, recursive, extensions, progress_callback, state)
+              walk_directory(path, recursive, extensions, progress_callback, path_callback, state)
             end
 
           {:ok, %File.Stat{type: :regular}} ->
-            process_file(path, extensions, progress_callback, state)
+            process_file(path, extensions, progress_callback, path_callback, state)
 
           {:ok, _} ->
             state
@@ -254,7 +265,7 @@ defmodule Mydia.Library.Scanner do
         end
 
       {:ok, %File.Stat{type: :regular}} ->
-        process_file(path, extensions, progress_callback, state)
+        process_file(path, extensions, progress_callback, path_callback, state)
 
       {:ok, _} ->
         # Other file types (device, pipe, etc.) - skip
@@ -275,13 +286,15 @@ defmodule Mydia.Library.Scanner do
   # row, undoing the trash.
   defp trash_directory?(path), do: Path.basename(path) == TrashStore.dir_name()
 
-  defp process_file(path, extensions, progress_callback, state) do
+  defp process_file(path, extensions, progress_callback, path_callback, state) do
     if video_file?(path, extensions) do
       case extract_file_metadata(path) do
         {:ok, file_info} ->
           new_count = state.file_count + 1
 
-          # Report progress every 100 files
+          # Report the file and, every 100 files, a count.
+          if path_callback, do: path_callback.(path)
+
           if progress_callback && rem(new_count, 100) == 0 do
             progress_callback.(new_count)
           end

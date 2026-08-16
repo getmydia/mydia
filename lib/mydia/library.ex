@@ -140,6 +140,32 @@ defmodule Mydia.Library do
   end
 
   @doc """
+  Returns every media file at a relative path, live files first.
+
+  `get_media_file_by_relative_path/3` raises `Ecto.MultipleResultsError` when
+  duplicate rows exist for one path, a state the database has reached before
+  (a path imported by two builds of the scanner). Callers that only need to
+  answer "does this file already exist" use this instead so a duplicate row is
+  data to skip, not a crash.
+  """
+  @spec list_media_files_by_relative_path(binary(), String.t(), keyword()) :: [MediaFile.t()]
+  def list_media_files_by_relative_path(library_path_id, relative_path, opts \\ []) do
+    query =
+      MediaFile
+      |> where([f], f.library_path_id == ^library_path_id and f.relative_path == ^relative_path)
+
+    query =
+      if Keyword.get(opts, :include_trashed, false),
+        do: query,
+        else: where(query, [f], is_nil(f.trashed_at))
+
+    query
+    |> order_by([f], asc: f.trashed_at)
+    |> maybe_preload(opts[:preload])
+    |> Repo.all()
+  end
+
+  @doc """
   Returns true when the episode already has a media file that has not been trashed.
 
   Used by the importer to skip season-pack files for episodes the library
@@ -2499,45 +2525,6 @@ defmodule Mydia.Library do
 
       run ->
         update_import_run(run, %{status: :stopping})
-    end
-  end
-
-  @doc """
-  Forces an active run into a terminal state.
-
-  The escape hatch for a run boot reconciliation could not reach: the node
-  never restarted, so nothing ran the sweep, but the coordinator is gone all
-  the same (a cancelled job, a killed queue). Without this the only recovery
-  is editing the database by hand.
-
-  Re-reads and refuses a run that is already terminal, mirroring
-  `request_import_run_stop/1`. Same race, same shape: the run can reach `:done`
-  between the panel rendering and the click landing, and overwriting that with
-  `:stopped` would throw away the real outcome and replace it with a message
-  saying a human ended it.
-  """
-  @spec release_import_run(ImportRun.t() | binary()) ::
-          {:ok, ImportRun.t()}
-          | {:error, :not_active | :not_found | Ecto.Changeset.t()}
-  def release_import_run(%ImportRun{id: id}), do: release_import_run(id)
-
-  def release_import_run(id) when is_binary(id) do
-    case get_import_run(id) do
-      nil ->
-        {:error, :not_found}
-
-      %ImportRun{status: status} = run ->
-        if status in ImportRun.active_statuses() do
-          update_import_run(run, %{
-            status: :stopped,
-            phase: :finished,
-            current_file: nil,
-            error:
-              "Marked as not running from the import page. Everything it had already added was kept."
-          })
-        else
-          {:error, :not_active}
-        end
     end
   end
 

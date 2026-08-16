@@ -92,15 +92,28 @@ defmodule Mydia.Jobs.ImportRun do
   end
 
   defp execute(run, job) do
-    with :ok <- run_scan_phase(run),
-         :ok <- run_match_phase(Library.get_import_run(run.id)) do
-      finish(run, :done)
-    else
-      :stopped ->
-        finish(run, :stopped)
+    try do
+      with :ok <- run_scan_phase(run),
+           :ok <- run_match_phase(Library.get_import_run(run.id)) do
+        finish(run, :done)
+      else
+        :stopped ->
+          finish(run, :stopped)
 
-      {:error, reason} ->
-        fail(run, reason, job)
+        {:error, reason} ->
+          fail(run, reason, job)
+      end
+    rescue
+      # A crash that escapes the phases above still has to take the run to a
+      # terminal state. Without this, an exception (for example
+      # `Ecto.MultipleResultsError` on a duplicate row) makes Oban discard the
+      # job after its retries while the run row stays `:running` forever: Start
+      # is refused, Stop only writes `:stopping` (also active), and the panel
+      # spins with no worker behind it. `fail/3` writes `:failed` on the final
+      # attempt and keeps the run active otherwise, matching the returned-error
+      # path exactly.
+      error ->
+        fail(run, error, job)
     end
   end
 
@@ -223,7 +236,12 @@ defmodule Mydia.Jobs.ImportRun do
   end
 
   defp scan_tree(run, library_path, extensions, after_batch) do
-    case Scanner.scan(library_path.path, video_extensions: extensions) do
+    path_callback = fn path -> note_scan_path(run, library_path, path) end
+
+    case Scanner.scan(library_path.path,
+           video_extensions: extensions,
+           path_callback: path_callback
+         ) do
       {:ok, scan_result} ->
         scan_result.files
         |> Enum.reject(&sample_or_extra?/1)
@@ -254,10 +272,10 @@ defmodule Mydia.Jobs.ImportRun do
         Enum.count(batch, fn file_info ->
           relative_path = Path.relative_to(file_info.path, library_path.path)
 
-          case Library.get_media_file_by_relative_path(library_path.id, relative_path,
+          case Library.list_media_files_by_relative_path(library_path.id, relative_path,
                  include_trashed: true
                ) do
-            nil ->
+            [] ->
               case Library.create_scanned_media_file(%{
                      library_path_id: library_path.id,
                      relative_path: relative_path,
@@ -268,12 +286,19 @@ defmodule Mydia.Jobs.ImportRun do
                 {:error, _} -> false
               end
 
-            %{trashed_at: trashed_at} = trashed when not is_nil(trashed_at) ->
-              match?({:ok, _}, Library.restore_media_file(trashed))
+            existing ->
+              # A file is "already recorded" when any live row exists, even
+              # alongside a trashed duplicate -- restoring the trashed copy
+              # would resurrect a path that is already owned. Only when every
+              # row is trashed does a restore make sense.
+              case Enum.find(existing, &is_nil(&1.trashed_at)) do
+                nil ->
+                  match?({:ok, _}, Library.restore_media_file(List.first(existing)))
 
-            _existing ->
-              # Already recorded by an earlier run. This is the resume path.
-              false
+                _live ->
+                  # Already recorded by an earlier run. This is the resume path.
+                  false
+              end
           end
         end)
       end)
@@ -424,6 +449,25 @@ defmodule Mydia.Jobs.ImportRun do
       Mydia.PubSub,
       progress_topic(run.id),
       {:import_run_current_file, Path.basename(path)}
+    )
+  end
+
+  # Reports the directory or file the scanner is walking, relative to the
+  # library root, so "Finding files" shows *what* it is looking at rather than
+  # an anonymous spinner. The scan phase writes no run row per path (a full
+  # library would turn this into a write storm), so this is PubSub-only, the
+  # same contract `note_current_file/2` uses during matching.
+  defp note_scan_path(run, library_path, path) do
+    relative =
+      case Path.relative_to(path, library_path.path) do
+        "." -> Path.basename(library_path.path)
+        rel -> rel
+      end
+
+    Phoenix.PubSub.broadcast(
+      Mydia.PubSub,
+      progress_topic(run.id),
+      {:import_run_current_file, relative}
     )
   end
 

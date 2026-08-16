@@ -146,43 +146,14 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
     refute Library.active_import_run(lp.id)
   end
 
-  test "offers a recovery control that releases a run stuck in flight", %{
+  test "renders one selectable library card per path, with an icon", %{
     conn: conn,
-    library_path: lp,
-    user: user
+    library_path: lp
   } do
-    {:ok, run} =
-      Library.create_import_run(%{library_path_id: lp.id, user_id: user.id, mode: :review})
-
     {:ok, view, _html} = live(conn, ~p"/import")
 
-    assert has_element?(view, "#release-run-button")
-
-    view |> element("#release-run-button") |> render_click()
-
-    assert Library.get_import_run(run.id).status == :stopped
-    refute Library.active_import_run(lp.id)
-  end
-
-  test "releasing a run that finished in the meantime keeps its real outcome", %{
-    conn: conn,
-    library_path: lp,
-    user: user
-  } do
-    {:ok, run} =
-      Library.create_import_run(%{library_path_id: lp.id, user_id: user.id, mode: :review})
-
-    {:ok, view, _html} = live(conn, ~p"/import")
-
-    # Same render-then-click race the Stop button is guarded against. Writing
-    # :stopped over a :done row would replace the run's real outcome with a
-    # message saying a human ended it.
-    {:ok, _} = Library.update_import_run(run, %{status: :done, phase: :finished})
-
-    view |> element("#release-run-button") |> render_click()
-
-    assert Library.get_import_run(run.id).status == :done
-    assert is_nil(Library.get_import_run(run.id).error)
+    assert has_element?(view, "input[type=radio][name=library_path_id][value='#{lp.id}']")
+    assert has_element?(view, "label.card")
   end
 
   describe "library types that cannot be imported" do
