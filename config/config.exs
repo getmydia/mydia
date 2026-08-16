@@ -63,6 +63,7 @@ config :logger, :default_formatter,
     :media_item_count,
     :media_type,
     :media_file_id,
+    :media_file_ids,
     :library_path_id,
     :library_path,
     :library_type,
@@ -273,7 +274,11 @@ config :mydia, Oban,
     maintenance: 1,
     import_lists: 2,
     integrations: 2,
-    plugins: 1
+    plugins: 1,
+    # A user-started import can run for hours over a large library. It gets its
+    # own single slot so it can never starve :media, which is only concurrency
+    # 3 and also carries library, music and book scans.
+    imports: 1
   ],
   plugins: [
     # Keep completed jobs for 7 days
@@ -296,8 +301,6 @@ config :mydia, Oban,
        {"0 3 * * *", Mydia.Jobs.DefinitionSync},
        # Check Cardigann indexer health every hour
        {"0 * * * *", Mydia.Jobs.CardigannHealthCheck},
-       # Clean up old import sessions daily at 4 AM
-       {"0 4 * * *", Mydia.Jobs.ImportSessionCleanup},
        # Check for import lists due for sync every 15 minutes
        {"*/15 * * * *", Mydia.Jobs.ImportListScheduler},
        # Enqueue scans for library paths whose scan_interval has elapsed (opt-in per path)

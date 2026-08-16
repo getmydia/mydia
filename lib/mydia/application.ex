@@ -24,95 +24,7 @@ defmodule Mydia.Application do
     # Store validated config in Application environment for fast access
     Application.put_env(:mydia, :runtime_config, config)
 
-    children =
-      [
-        MydiaWeb.Telemetry,
-        Mydia.Repo,
-        # Backs up the database before the migrator touches it. Needs a live Repo
-        # to ask whether migrations are pending, so it sits between the two, and
-        # returns :ignore once done rather than lingering as a process.
-        {Mydia.Release.MigrationBackup, skip: skip_migrations?()},
-        {Ecto.Migrator,
-         repos: Application.fetch_env!(:mydia, :ecto_repos), skip: skip_migrations?()},
-        {DNSCluster, query: Application.get_env(:mydia, :dns_cluster_query) || :ignore},
-        {Phoenix.PubSub, name: Mydia.PubSub},
-        Mydia.Downloads.Client.Registry,
-        # Owns the ETS table holding the derived set of client torrents Mydia
-        # does not manage. init/1 only creates the table (no I/O), so unlike
-        # ClientHealth this is safe to start in every environment.
-        Mydia.Downloads.ExternalTorrents,
-        Mydia.Indexers.Adapter.Registry,
-        Mydia.Indexers.RateLimiter,
-        # Passive circuit breaker for subtitle providers. In-memory only, no DB,
-        # so it is safe to start in every environment including tests.
-        Mydia.Subtitles.Health,
-        Mydia.Metadata.Provider.Registry,
-        Mydia.Metadata.Cache,
-        Mydia.Metadata.ProviderIDRegistry,
-        {Task.Supervisor, name: Mydia.TaskSupervisor},
-        # Request task supervisor for multiplexed request handling with independent timeouts
-        {Task.Supervisor, name: Mydia.RequestTaskSupervisor},
-        # Supervises optimistic manual-grab pipelines (Mydia.Downloads.Grabber)
-        # so grabs survive the LiveView that started them.
-        {Task.Supervisor, name: Mydia.Downloads.GrabSupervisor},
-        # WASM plugin platform: per-plugin pools register here and live under
-        # the dynamic supervisor (see Mydia.Plugins.Host); the Agent registry
-        # holds installed plugin descriptors (see Mydia.Plugins.Registry).
-        Mydia.Plugins.Registry,
-        {Registry, keys: :unique, name: Mydia.Plugins.PoolRegistry},
-        {DynamicSupervisor, name: Mydia.Plugins.PoolSupervisor, strategy: :one_for_one},
-        # Per-plugin invocation single-flight lock (U4): serializes on-event /
-        # on-schedule / inline calls for one plugin so shared KV state is safe.
-        Mydia.Plugins.SingleFlight,
-        # Separate named lock instance serializing session subtitle extraction
-        # (see Mydia.Streaming.SessionSubtitles). A slow ffmpeg extraction must
-        # never make a plugin invocation wait behind it, hence its own instance
-        # rather than sharing the plugin host's lock above. The explicit :id
-        # disambiguates it from the SingleFlight child above: both default to
-        # the module name as their child id, which the supervisor rejects as
-        # a duplicate.
-        Supervisor.child_spec({Mydia.Plugins.SingleFlight, name: Mydia.Streaming.SubtitleLock},
-          id: Mydia.Streaming.SubtitleLock
-        ),
-        # Fans "events:all" out to subscribed plugins (U5). Replaces the Luerl
-        # hooks manager removed in U11.
-        Mydia.Plugins.Dispatcher,
-        {Registry, keys: :unique, name: Mydia.Streaming.HlsSessionRegistry},
-        Mydia.Streaming.HlsSessionSupervisor,
-        {Mydia.Streaming.SessionSampler,
-         Application.get_env(:mydia, Mydia.Streaming.SessionSampler, [])},
-        {Registry, keys: :unique, name: Mydia.Downloads.TranscodeRegistry},
-        {Registry, keys: :unique, name: Mydia.Downloads.Client.Debrid.FetcherRegistry},
-        {DynamicSupervisor,
-         name: Mydia.Downloads.Client.Debrid.FetcherSupervisor, strategy: :one_for_one},
-        Mydia.Downloads.Client.Debrid.RateLimiter,
-        {Registry, keys: :unique, name: Mydia.Downloads.Seedbox.FetcherRegistry},
-        {DynamicSupervisor,
-         name: Mydia.Downloads.Seedbox.FetcherSupervisor, strategy: :one_for_one},
-        Mydia.Downloads.JobManager,
-        Mydia.CrashReporter.Throttle,
-        Mydia.CrashReporter.Queue,
-        Mydia.RemoteAccess.ClaimRateLimiter,
-        Mydia.Accounts.ApiKeyRateLimiter,
-        {Registry, keys: :unique, name: Mydia.DynamicSupervisorRegistry},
-        {DynamicSupervisor,
-         name: {:via, Registry, {Mydia.DynamicSupervisorRegistry, :relay}}, strategy: :one_for_one}
-      ] ++
-        remote_access_children() ++
-        client_health_children() ++
-        indexer_health_children() ++
-        media_server_health_children() ++
-        relay_children() ++
-        oban_children() ++
-        oidc_children() ++
-        [
-          # Start a worker by calling: Mydia.Worker.start_link(arg)
-          # {Mydia.Worker, arg},
-          # Start to serve requests, typically the last entry
-          MydiaWeb.Endpoint,
-          # Absinthe subscriptions must start after the Endpoint
-          {Absinthe.Subscription, MydiaWeb.Endpoint}
-        ]
+    children = children()
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
@@ -153,6 +65,119 @@ defmodule Mydia.Application do
 
       {:ok, pid}
     end
+  end
+
+  @doc """
+  The supervision children, in start order.
+
+  Public so the order itself can be asserted. Position is load-bearing in at
+  least three places here, and `Mydia.Jobs.ImportRunReconciler` is the sharpest
+  of them: its entire safety argument for reading a lingering `executing` Oban
+  job as stale is that it runs before any Oban child exists. A refactor that
+  moved it below `oban_children/1` would leave every other test green while
+  making it release healthy, just-started jobs.
+
+  `oban_config` is a parameter rather than a direct env read so a test can ask
+  what the list looks like with Oban present. The test environment disables
+  Oban (`testing: :manual`), which would otherwise make any assertion about
+  ordering around it vacuously true.
+  """
+  @spec children(keyword()) :: [:supervisor.child_spec() | {module(), term()} | module()]
+  def children(oban_config \\ Application.get_env(:mydia, Oban, [])) do
+    [
+      MydiaWeb.Telemetry,
+      Mydia.Repo,
+      # Backs up the database before the migrator touches it. Needs a live Repo
+      # to ask whether migrations are pending, so it sits between the two, and
+      # returns :ignore once done rather than lingering as a process.
+      {Mydia.Release.MigrationBackup, skip: skip_migrations?()},
+      {Ecto.Migrator,
+       repos: Application.fetch_env!(:mydia, :ecto_repos), skip: skip_migrations?()},
+      # Releases import runs whose coordinator died with the previous node.
+      # Must run after the migrator (it queries import_runs) and before the
+      # Oban child below, because "no queue has started yet" is exactly what
+      # lets it read a lingering `executing` job row as an orphan rather than
+      # as a healthy job this boot just picked up. Returns :ignore once done.
+      Mydia.Jobs.ImportRunReconciler,
+      {DNSCluster, query: Application.get_env(:mydia, :dns_cluster_query) || :ignore},
+      {Phoenix.PubSub, name: Mydia.PubSub},
+      Mydia.Downloads.Client.Registry,
+      # Owns the ETS table holding the derived set of client torrents Mydia
+      # does not manage. init/1 only creates the table (no I/O), so unlike
+      # ClientHealth this is safe to start in every environment.
+      Mydia.Downloads.ExternalTorrents,
+      Mydia.Indexers.Adapter.Registry,
+      Mydia.Indexers.RateLimiter,
+      # Passive circuit breaker for subtitle providers. In-memory only, no DB,
+      # so it is safe to start in every environment including tests.
+      Mydia.Subtitles.Health,
+      Mydia.Metadata.Provider.Registry,
+      Mydia.Metadata.Cache,
+      Mydia.Metadata.ProviderIDRegistry,
+      {Task.Supervisor, name: Mydia.TaskSupervisor},
+      # Request task supervisor for multiplexed request handling with independent timeouts
+      {Task.Supervisor, name: Mydia.RequestTaskSupervisor},
+      # Supervises optimistic manual-grab pipelines (Mydia.Downloads.Grabber)
+      # so grabs survive the LiveView that started them.
+      {Task.Supervisor, name: Mydia.Downloads.GrabSupervisor},
+      # WASM plugin platform: per-plugin pools register here and live under
+      # the dynamic supervisor (see Mydia.Plugins.Host); the Agent registry
+      # holds installed plugin descriptors (see Mydia.Plugins.Registry).
+      Mydia.Plugins.Registry,
+      {Registry, keys: :unique, name: Mydia.Plugins.PoolRegistry},
+      {DynamicSupervisor, name: Mydia.Plugins.PoolSupervisor, strategy: :one_for_one},
+      # Per-plugin invocation single-flight lock (U4): serializes on-event /
+      # on-schedule / inline calls for one plugin so shared KV state is safe.
+      Mydia.Plugins.SingleFlight,
+      # Separate named lock instance serializing session subtitle extraction
+      # (see Mydia.Streaming.SessionSubtitles). A slow ffmpeg extraction must
+      # never make a plugin invocation wait behind it, hence its own instance
+      # rather than sharing the plugin host's lock above. The explicit :id
+      # disambiguates it from the SingleFlight child above: both default to
+      # the module name as their child id, which the supervisor rejects as
+      # a duplicate.
+      Supervisor.child_spec({Mydia.Plugins.SingleFlight, name: Mydia.Streaming.SubtitleLock},
+        id: Mydia.Streaming.SubtitleLock
+      ),
+      # Fans "events:all" out to subscribed plugins (U5). Replaces the Luerl
+      # hooks manager removed in U11.
+      Mydia.Plugins.Dispatcher,
+      {Registry, keys: :unique, name: Mydia.Streaming.HlsSessionRegistry},
+      Mydia.Streaming.HlsSessionSupervisor,
+      {Mydia.Streaming.SessionSampler,
+       Application.get_env(:mydia, Mydia.Streaming.SessionSampler, [])},
+      {Registry, keys: :unique, name: Mydia.Downloads.TranscodeRegistry},
+      {Registry, keys: :unique, name: Mydia.Downloads.Client.Debrid.FetcherRegistry},
+      {DynamicSupervisor,
+       name: Mydia.Downloads.Client.Debrid.FetcherSupervisor, strategy: :one_for_one},
+      Mydia.Downloads.Client.Debrid.RateLimiter,
+      {Registry, keys: :unique, name: Mydia.Downloads.Seedbox.FetcherRegistry},
+      {DynamicSupervisor,
+       name: Mydia.Downloads.Seedbox.FetcherSupervisor, strategy: :one_for_one},
+      Mydia.Downloads.JobManager,
+      Mydia.CrashReporter.Throttle,
+      Mydia.CrashReporter.Queue,
+      Mydia.RemoteAccess.ClaimRateLimiter,
+      Mydia.Accounts.ApiKeyRateLimiter,
+      {Registry, keys: :unique, name: Mydia.DynamicSupervisorRegistry},
+      {DynamicSupervisor,
+       name: {:via, Registry, {Mydia.DynamicSupervisorRegistry, :relay}}, strategy: :one_for_one}
+    ] ++
+      remote_access_children() ++
+      client_health_children() ++
+      indexer_health_children() ++
+      media_server_health_children() ++
+      relay_children() ++
+      oban_children(oban_config) ++
+      oidc_children() ++
+      [
+        # Start a worker by calling: Mydia.Worker.start_link(arg)
+        # {Mydia.Worker, arg},
+        # Start to serve requests, typically the last entry
+        MydiaWeb.Endpoint,
+        # Absinthe subscriptions must start after the Endpoint
+        {Absinthe.Subscription, MydiaWeb.Endpoint}
+      ]
   end
 
   # Tell Phoenix to update the endpoint configuration
@@ -216,10 +241,8 @@ defmodule Mydia.Application do
     :ok
   end
 
-  defp oban_children do
+  defp oban_children(oban_config) do
     # Don't start Oban in test environment to avoid pool conflicts with SQL Sandbox
-    oban_config = Application.get_env(:mydia, Oban, [])
-
     # Skip Oban if testing is manual or queues are disabled
     if Keyword.get(oban_config, :testing) == :manual or
          Keyword.get(oban_config, :queues) == false do

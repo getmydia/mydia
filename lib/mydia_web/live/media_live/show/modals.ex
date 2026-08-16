@@ -11,6 +11,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   import MydiaWeb.MediaLive.Show.SearchHelpers
 
   alias Mydia.Indexers.SearchResult
+  alias Mydia.Library.MediaFile
 
   @doc """
   Delete confirmation modal for removing media item from library.
@@ -1199,8 +1200,11 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
           <div class="flex items-start justify-between gap-4">
             <div class="min-w-0">
               <h3 class="text-xl sm:text-2xl font-bold">Search Subtitles</h3>
-              <p class="text-sm text-base-content/70 truncate mt-1" title={@media_file.path}>
-                {Path.basename(@media_file.path)}
+              <p
+                class="text-sm text-base-content/70 truncate mt-1"
+                title={MediaFile.display_path(@media_file)}
+              >
+                {MediaFile.display_name(@media_file)}
               </p>
             </div>
             <button

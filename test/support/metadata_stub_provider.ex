@@ -119,6 +119,14 @@ defmodule Mydia.MetadataStubProvider do
       id: @movie_tmdb_id,
       title: @movie_title,
       original_title: @movie_title,
+      # `year` is set explicitly rather than left for a caller to derive from
+      # release_date: this struct is built as a literal, so nothing normalizes
+      # it, and MetadataMatcher.calculate_movie_match_score/2 reads
+      # `result.year` directly. A nil year costs the year bonus and lands the
+      # score on 0.7999999999999999, just under FileIngest's 0.8 auto-link
+      # threshold, which silently turns every "confident match" test into a
+      # "cached candidate" one.
+      year: 1999,
       release_date: "1999-03-30",
       overview: "A stub movie used by the guest request tests.",
       poster_path: "/stub-movie-poster.jpg",

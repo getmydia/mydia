@@ -1,6 +1,8 @@
 defmodule Mydia.Library.DatabaseHealthCheckTest do
   use Mydia.DataCase
 
+  import Mydia.MediaFixtures
+
   alias Mydia.Library.DatabaseHealthCheck
   alias Mydia.Library.MediaFile
   alias Mydia.Settings.LibraryPath
@@ -99,6 +101,28 @@ defmodule Mydia.Library.DatabaseHealthCheckTest do
       insert_media_file(library_path, media_item_id: media_item.id)
 
       assert DatabaseHealthCheck.count_orphaned_files() == 2
+    end
+  end
+
+  describe "count_orphaned_files/0 with import candidates" do
+    test "counts a file with no parent and no candidate" do
+      _file = orphaned_media_file_fixture()
+
+      assert DatabaseHealthCheck.count_orphaned_files() == 1
+    end
+
+    test "ignores a file queued for import review" do
+      file = orphaned_media_file_fixture()
+
+      {:ok, _} =
+        Mydia.Library.upsert_match_candidate(%{
+          media_file_id: file.id,
+          rank: 0,
+          attempts: 1,
+          last_error: "no_match"
+        })
+
+      assert DatabaseHealthCheck.count_orphaned_files() == 0
     end
   end
 

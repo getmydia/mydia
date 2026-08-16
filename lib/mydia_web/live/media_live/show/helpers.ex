@@ -255,8 +255,7 @@ defmodule MydiaWeb.MediaLive.Show.Helpers do
       [_ | _] = files ->
         filenames =
           Enum.map_join(files, "\n", fn file ->
-            absolute_path = Mydia.Library.MediaFile.absolute_path(file)
-            basename = Path.basename(absolute_path)
+            basename = Mydia.Library.MediaFile.display_name(file)
             resolution = file.resolution || "?"
             "• #{basename} (#{resolution})"
           end)

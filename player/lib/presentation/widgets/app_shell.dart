@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/auth/auth_status.dart';
+import '../../core/compatibility/compatibility_provider.dart';
 import '../../core/config/web_config.dart';
 import '../../core/downloads/collection_auto_sync.dart';
 import '../../core/downloads/download_service.dart' show isDownloadSupported;
@@ -12,6 +13,7 @@ import '../../core/theme/colors.dart';
 import 'ambient_backdrop.dart';
 import 'ambient_backdrop_provider.dart';
 import 'cast_actions.dart';
+import 'compatibility_banner.dart';
 import 'nav/bottom_nav.dart';
 import 'nav/desktop_sidebar.dart';
 import 'nav/mobile_drawer.dart';
@@ -142,7 +144,8 @@ class AppShell extends ConsumerStatefulWidget {
   ConsumerState<AppShell> createState() => _AppShellState();
 }
 
-class _AppShellState extends ConsumerState<AppShell> {
+class _AppShellState extends ConsumerState<AppShell>
+    with WidgetsBindingObserver {
   GoRouter? _router;
   CollectionAutoSync? _collectionAutoSync;
 
@@ -157,6 +160,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       enabled: isDownloadSupported,
       onQueued: _showAutoSyncSnackBar,
     );
+    WidgetsBinding.instance.addObserver(this);
   }
 
   @override
@@ -177,7 +181,26 @@ class _AppShellState extends ConsumerState<AppShell> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState lifecycleState) {
+    // An operator may have upgraded the server while we were backgrounded, so
+    // re-ask on the way back in.
+    //
+    // The catchError is load-bearing, not defensive noise. refresh() awaits the
+    // rebuilt future, and if that rebuild lands on AsyncValue.error (the
+    // PackageInfo lookup or the Hive box open failing), the await rethrows.
+    // This call site is fire and forget, so an unguarded rejection would
+    // surface as an unhandled async error from a lifecycle callback. Swallowing
+    // it is correct here: a failed refresh leaves the provider in its error
+    // state, which the banner already renders as nothing.
+    if (lifecycleState == AppLifecycleState.resumed) {
+      ref.read(compatibilityProvider.notifier).refresh().catchError(
+          (Object e) => debugPrint('[AppShell] refresh failed: $e'));
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _router?.routerDelegate.removeListener(_onRouteChanged);
     _collectionAutoSync?.dispose();
     super.dispose();
@@ -281,6 +304,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                     child: Column(
                       children: [
                         if (isOffline) const OfflineBanner(),
+                        const CompatibilityBanner(),
                         Expanded(child: widget.child),
                       ],
                     ),
@@ -317,6 +341,7 @@ class _AppShellState extends ConsumerState<AppShell> {
             child: Column(
               children: [
                 if (isOffline) const OfflineBanner(),
+                const CompatibilityBanner(),
                 Expanded(child: widget.child),
               ],
             ),

@@ -591,6 +591,24 @@ defmodule MydiaWeb.Schema.CommonTypes do
     field :providers, non_null(list_of(non_null(:subtitle_provider_status)))
   end
 
+  @desc """
+  What this server needs from a connecting player.
+
+  Published so a player can tell the operator that one side is too old, rather
+  than letting the mismatch surface as an unexplained failure. Readable without
+  authentication: a client that cannot log in is exactly the one that may need
+  to know why.
+  """
+  object :server_compatibility do
+    field :version, non_null(:string), description: "This server's own version"
+
+    field :min_player_version, non_null(:string),
+      description: "Oldest player version this server works with"
+
+    field :recommended_player_version, non_null(:string),
+      description: "Oldest player version this server would rather you ran"
+  end
+
   defp metadata_field(%{metadata: %Mydia.Library.Structs.FileMetadata{} = metadata}, key),
     do: Map.get(metadata, key)
 
