@@ -206,6 +206,63 @@ defmodule MydiaWeb.MediaLive.Show.Helpers do
     |> Enum.sort_by(fn {season, _} -> season end, :desc)
   end
 
+  @doc """
+  The season(s) to expand by default on mount.
+
+  The season of the next episode wins, so the page opens on what the user would
+  actually play next. When there is no next episode — `:all_watched`, a show
+  `get_next_episode/2` returns `nil` for, or a next episode whose season is not
+  in the grouped list — falls back to the newest season. Non-TV shows and shows
+  with no episodes expand nothing.
+  """
+  def default_expanded_seasons(%{type: "tv_show"} = media_item, next_episode) do
+    season_numbers =
+      media_item.episodes
+      |> Enum.map(& &1.season_number)
+      |> Enum.uniq()
+
+    preferred =
+      case next_episode do
+        %{season_number: season} when is_integer(season) -> season
+        _ -> nil
+      end
+
+    season =
+      cond do
+        preferred in season_numbers -> preferred
+        season_numbers != [] -> Enum.max(season_numbers)
+        true -> nil
+      end
+
+    case season do
+      nil -> MapSet.new()
+      season -> MapSet.new([season])
+    end
+  end
+
+  def default_expanded_seasons(_media_item, _next_episode), do: MapSet.new()
+
+  @doc """
+  Counts one season's episodes by availability in a single pass.
+
+  `available` counts `:downloaded` episodes — those with a media file. The
+  `{available}/{total}` header figure and the status chip both read from this,
+  so they can never disagree.
+  """
+  def season_episode_counts(episodes) do
+    counts =
+      Enum.reduce(episodes, %{available: 0, missing: 0, upcoming: 0}, fn episode, acc ->
+        case get_episode_status(episode).state do
+          :downloaded -> %{acc | available: acc.available + 1}
+          :missing -> %{acc | missing: acc.missing + 1}
+          :upcoming -> %{acc | upcoming: acc.upcoming + 1}
+          _ -> acc
+        end
+      end)
+
+    Map.put(counts, :total, length(episodes))
+  end
+
   def get_episode_quality_badge(episode) do
     case episode.media_files do
       [] ->

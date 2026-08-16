@@ -53,26 +53,12 @@ defmodule MydiaWeb.MediaLive.Show do
     # Load timeline events from Events system
     timeline_events = load_timeline_events(media_item)
 
-    # Initialize expanded seasons - expand the first (most recent) season by default
-    expanded_seasons =
-      case media_item.type do
-        "tv_show" ->
-          media_item.episodes
-          |> Enum.map(& &1.season_number)
-          |> Enum.uniq()
-          |> Enum.sort(:desc)
-          |> List.first()
-          |> case do
-            nil -> MapSet.new()
-            season_num -> MapSet.new([season_num])
-          end
-
-        _ ->
-          MapSet.new()
-      end
-
     # Load next episode for TV shows
     {next_episode, next_episode_state} = load_next_episode(media_item, socket)
+
+    # Expand the season of the next episode, or the newest season when there is
+    # no next episode.
+    expanded_seasons = default_expanded_seasons(media_item, next_episode)
 
     {:ok,
      socket
