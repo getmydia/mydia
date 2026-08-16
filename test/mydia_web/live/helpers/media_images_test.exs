@@ -54,4 +54,10 @@ defmodule MydiaWeb.Live.Helpers.MediaImagesTest do
 
     assert MediaImages.poster_url(item) == @placeholder
   end
+
+  test "returns the placeholder when poster_path is an empty string" do
+    item = media_item(metadata(%{poster_path: ""}))
+
+    assert MediaImages.poster_url(item) == @placeholder
+  end
 end

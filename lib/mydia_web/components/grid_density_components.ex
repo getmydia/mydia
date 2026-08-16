@@ -26,7 +26,7 @@ defmodule MydiaWeb.GridDensityComponents do
   }
 
   @levels [
-    {"comfortable", "Comfortable", "hero-squares-2x2"},
+    {"comfortable", "Comfortable", "hero-rectangle-group"},
     {"compact", "Compact", "hero-squares-plus"},
     {"dense", "Dense", "hero-view-columns"}
   ]

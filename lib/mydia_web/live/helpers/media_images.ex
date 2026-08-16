@@ -24,8 +24,11 @@ defmodule MydiaWeb.Live.Helpers.MediaImages do
   @spec poster_url(struct(), String.t()) :: String.t()
   def poster_url(media_item, size \\ "w500") do
     case media_item.metadata do
-      %MediaMetadata{poster_path: path} when is_binary(path) -> ImageUrl.poster_url(path, size)
-      _ -> @placeholder
+      %MediaMetadata{poster_path: path} when is_binary(path) and path != "" ->
+        ImageUrl.poster_url(path, size)
+
+      _ ->
+        @placeholder
     end
   end
 end
