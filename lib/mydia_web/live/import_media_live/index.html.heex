@@ -55,42 +55,6 @@
 
         <%!-- Files List - Flat List View --%>
         <div id="batch-select-container" phx-hook="BatchSelect" class="space-y-4">
-          <%!-- Simple File List (for specialized libraries: music, books, adult) --%>
-          <%= if @grouped_files[:simple] && @grouped_files.simple != [] do %>
-            <div class="bg-base-100 rounded-lg shadow border border-base-300">
-              <div class={[
-                "px-4 py-2 border-b border-base-300",
-                library_type_header_class(@selected_library_path && @selected_library_path.type)
-              ]}>
-                <div class="flex items-center justify-between">
-                  <div class="flex items-center gap-2">
-                    <.icon
-                      name={
-                        library_type_icon(@selected_library_path && @selected_library_path.type)
-                      }
-                      class="w-5 h-5"
-                    />
-                    <h3 class="font-bold text-base">
-                      {library_type_plural(@selected_library_path && @selected_library_path.type)}
-                    </h3>
-                  </div>
-                  <div class="badge badge-sm">
-                    {length(@grouped_files.simple)} files
-                  </div>
-                </div>
-              </div>
-              <ul class="divide-y divide-base-300">
-                <%= for {file, idx} <- Enum.with_index(@grouped_files.simple) do %>
-                  <Components.simple_file_list_item
-                    file={file}
-                    index={idx}
-                    is_selected={MapSet.member?(@selected_files, idx)}
-                  />
-                <% end %>
-              </ul>
-            </div>
-          <% end %>
-
           <%!-- TV Series (Flat List by Series and Season) --%>
           <%= for series <- @grouped_files.series do %>
             <% series_key = Mydia.Library.FileGrouper.series_key(series) %>

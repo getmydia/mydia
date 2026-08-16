@@ -760,19 +760,6 @@ defmodule Mydia.Media do
   end
 
   @doc """
-  Returns the count of media items by library path type.
-
-  This counts media items that have files in library paths of the specified type.
-  Includes both direct media files (for movies) and episode media files (for TV shows).
-  """
-  @spec count_by_library_path_type(atom()) :: non_neg_integer()
-  def count_by_library_path_type(library_type) do
-    MediaItem
-    |> filter_by_library_path_type(library_type)
-    |> Repo.aggregate(:count)
-  end
-
-  @doc """
   Returns a map of provider IDs to library status for efficient lookup.
 
   Returns a map where:

@@ -411,10 +411,14 @@ defmodule Mydia.Downloads.ImportCandidates do
   # `MediaImport.organize_and_import_files/4` really filtered against — over
   # the movie/series guess below. A failed download was routed through
   # `determine_library_path/1` at least once, so when the caller preloaded
-  # `:library_path` this is authoritative, not cosmetic: it's what makes the
-  # live-listing's `skip_reason` agree with the reason the file was actually
-  # dropped for a `:mixed` library, which `library_type_for/1` can never guess
-  # since it only ever returns `:movies` or `:series`.
+  # `:library_path` this is the real answer rather than a reconstruction.
+  #
+  # It no longer changes any outcome. `importable?/2` accepts the same video
+  # extensions for every surviving library type, so a resolved `:mixed` and a
+  # guessed `:movies` yield identical `skip_reason` values. The distinction was
+  # load-bearing for the removed music, books, and adult types, whose extension
+  # vocabularies differed. Reading the real type stays correct if the
+  # vocabularies ever diverge again.
   #
   # Falls back to the guess when `library_path` isn't preloaded, isn't set
   # (a download whose failure never got as far as resolving one), or is a

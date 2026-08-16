@@ -194,75 +194,72 @@
     <%!-- Empty state (shown when no items) --%>
     <%= if @media_items_empty? do %>
       <div class="flex flex-col items-center justify-center py-16">
-        <%= cond do %>
-          <% true -> %>
-            <.icon name="hero-film" class="w-16 h-16 text-base-content/30 mb-4" />
-            <h3 class="text-xl font-semibold text-base-content/70 mb-2">No media found</h3>
-            <p class="text-base-content/50">
-              <%= if @search_query != "" do %>
-                No results for "<span class="font-semibold">{@search_query}</span>".
-                <%= if @current_user && @current_user.role != "guest" do %>
-                  <%!-- Admin users can add media --%>
-                  <%= cond do %>
-                    <% @filter_type == "movie" -> %>
-                      <.link
-                        navigate={~p"/add/movie?q=#{@search_query}"}
-                        class="link link-primary font-semibold"
-                      >
-                        Add it to your library
-                      </.link>
-                    <% @filter_type == "tv_show" -> %>
-                      <.link
-                        navigate={~p"/add/series?q=#{@search_query}"}
-                        class="link link-primary font-semibold"
-                      >
-                        Add it to your library
-                      </.link>
-                    <% true -> %>
-                      <%!-- All media page - show both options --%>
-                      <span class="block mt-2">
-                        Add as
-                        <.link
-                          navigate={~p"/add/movie?q=#{@search_query}"}
-                          class="link link-primary font-semibold"
-                        >
-                          Movie
-                        </.link>
-                        or
-                        <.link
-                          navigate={~p"/add/series?q=#{@search_query}"}
-                          class="link link-primary font-semibold"
-                        >
-                          TV Series
-                        </.link>
-                      </span>
-                  <% end %>
-                <% else %>
-                  <%!-- Guest users should request media --%>
-                  <%= cond do %>
-                    <% @filter_type == "movie" -> %>
-                      <.link
-                        navigate={~p"/request/movie?q=#{@search_query}"}
-                        class="link link-primary font-semibold"
-                      >
-                        Request it
-                      </.link>
-                    <% @filter_type == "tv_show" -> %>
-                      <.link
-                        navigate={~p"/request/series?q=#{@search_query}"}
-                        class="link link-primary font-semibold"
-                      >
-                        Request it
-                      </.link>
-                    <% true -> %>
-                      Try adjusting your search or filters
-                  <% end %>
-                <% end %>
-              <% else %>
-                Add some media to get started
+        <.icon name="hero-film" class="w-16 h-16 text-base-content/30 mb-4" />
+        <h3 class="text-xl font-semibold text-base-content/70 mb-2">No media found</h3>
+        <p class="text-base-content/50">
+          <%= if @search_query != "" do %>
+            No results for "<span class="font-semibold">{@search_query}</span>".
+            <%= if @current_user && @current_user.role != "guest" do %>
+              <%!-- Admin users can add media --%>
+              <%= cond do %>
+                <% @filter_type == "movie" -> %>
+                  <.link
+                    navigate={~p"/add/movie?q=#{@search_query}"}
+                    class="link link-primary font-semibold"
+                  >
+                    Add it to your library
+                  </.link>
+                <% @filter_type == "tv_show" -> %>
+                  <.link
+                    navigate={~p"/add/series?q=#{@search_query}"}
+                    class="link link-primary font-semibold"
+                  >
+                    Add it to your library
+                  </.link>
+                <% true -> %>
+                  <%!-- All media page - show both options --%>
+                  <span class="block mt-2">
+                    Add as
+                    <.link
+                      navigate={~p"/add/movie?q=#{@search_query}"}
+                      class="link link-primary font-semibold"
+                    >
+                      Movie
+                    </.link>
+                    or
+                    <.link
+                      navigate={~p"/add/series?q=#{@search_query}"}
+                      class="link link-primary font-semibold"
+                    >
+                      TV Series
+                    </.link>
+                  </span>
               <% end %>
-            </p>
-        <% end %>
+            <% else %>
+              <%!-- Guest users should request media --%>
+              <%= cond do %>
+                <% @filter_type == "movie" -> %>
+                  <.link
+                    navigate={~p"/request/movie?q=#{@search_query}"}
+                    class="link link-primary font-semibold"
+                  >
+                    Request it
+                  </.link>
+                <% @filter_type == "tv_show" -> %>
+                  <.link
+                    navigate={~p"/request/series?q=#{@search_query}"}
+                    class="link link-primary font-semibold"
+                  >
+                    Request it
+                  </.link>
+                <% true -> %>
+                  Try adjusting your search or filters
+              <% end %>
+            <% end %>
+          <% else %>
+            Add some media to get started
+          <% end %>
+        </p>
       </div>
     <% end %>
 

@@ -1203,69 +1203,6 @@ defmodule MydiaWeb.ImportMediaLive.Components do
   end
 
   @doc """
-  Renders a simple file list item for specialized libraries (music, books, adult).
-  These files don't need metadata matching - just display basic file info.
-
-  ## Attributes
-    * `:file` - File data with `:file` map containing path, size, etc.
-    * `:index` - The index of this file in the matched_files list
-    * `:is_selected` - Whether this file is selected for import
-  """
-  attr :file, :map, required: true
-  attr :index, :integer, required: true
-  attr :is_selected, :boolean, required: true
-
-  def simple_file_list_item(assigns) do
-    ~H"""
-    <li class="flex items-center gap-3 py-2 px-3 hover:bg-base-200/50 rounded-lg">
-      <input
-        type="checkbox"
-        class="checkbox checkbox-primary checkbox-sm"
-        checked={@is_selected}
-        phx-click="toggle_file_selection"
-        phx-value-index={@index}
-      />
-      <div class="flex-1 min-w-0">
-        <div class="flex items-center justify-between gap-3">
-          <div class="flex-1 min-w-0">
-            <p class="font-medium text-sm truncate">
-              {Path.basename(@file.file.path)}
-            </p>
-            <p class="text-xs text-base-content/60 truncate">
-              {@file.file.path}
-            </p>
-            <p class="text-xs text-base-content/50">
-              {format_file_size(@file.file.size)}
-              <%= if @file.file[:modified_at] do %>
-                • {format_date(@file.file.modified_at)}
-              <% end %>
-            </p>
-          </div>
-          <div class="flex items-center gap-2">
-            <div class="badge badge-xs badge-ghost">
-              {file_extension(@file.file.path)}
-            </div>
-          </div>
-        </div>
-      </div>
-    </li>
-    """
-  end
-
-  defp file_extension(path) do
-    case Path.extname(path) do
-      "" -> "file"
-      ext -> String.upcase(String.trim_leading(ext, "."))
-    end
-  end
-
-  defp format_date(%DateTime{} = dt) do
-    Calendar.strftime(dt, "%Y-%m-%d %H:%M")
-  end
-
-  defp format_date(_), do: nil
-
-  @doc """
   Renders a search results dropdown (compact version).
 
   ## Attributes

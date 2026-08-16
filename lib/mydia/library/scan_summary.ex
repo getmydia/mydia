@@ -2,16 +2,13 @@ defmodule Mydia.Library.ScanSummary do
   @moduledoc """
   Normalized result of scanning a single library path.
 
-  `Mydia.Jobs.LibraryScanner` dispatches scanning by library type, and the
-  per-type processors return different shapes. The video processor returns
-  lists of changed files under a `:changes` key, while the music, books and
-  adult processors return integer counts directly. This struct is the single
-  contract at that dispatch boundary, so callers cannot accidentally depend on
-  one branch's shape.
+  `Mydia.Jobs.LibraryScanner`'s processor returns lists of changed files under a
+  `:changes` key, alongside scan bookkeeping callers have no business reading.
+  This struct is the contract it hands back instead, so a caller that only wants
+  counts cannot grow a dependency on the processor's internal shape.
 
-  `details` carries the originating processor's own return value unchanged, so
-  branch-specific data such as `new_media_files` stays reachable by the code
-  that already relies on it.
+  `details` carries the processor's own return value unchanged, so data such as
+  `new_media_files` stays reachable by the code that already relies on it.
   """
 
   @type t :: %__MODULE__{

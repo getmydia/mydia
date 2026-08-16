@@ -42,8 +42,6 @@ defmodule MydiaWeb.MediaLive.Index do
      |> assign(:scanning, false)
      |> assign(:scan_result, nil)
      |> assign(:scan_progress, nil)
-     |> assign(:filter_library_type, nil)
-     |> assign(:specialized_library_type, nil)
      |> assign(:show_add_to_collection_modal, false)
      |> assign(:user_collections, [])
      |> assign(:all_visible_ids, MapSet.new())
@@ -59,8 +57,6 @@ defmodule MydiaWeb.MediaLive.Index do
     socket
     |> assign(:page_title, "Movies")
     |> assign(:filter_type, "movie")
-    |> assign(:filter_library_type, nil)
-    |> assign(:specialized_library_type, nil)
     |> load_media_items(reset: true)
   end
 
@@ -68,8 +64,6 @@ defmodule MydiaWeb.MediaLive.Index do
     socket
     |> assign(:page_title, "TV Shows")
     |> assign(:filter_type, "tv_show")
-    |> assign(:filter_library_type, nil)
-    |> assign(:specialized_library_type, nil)
     |> load_media_items(reset: true)
   end
 
@@ -731,7 +725,6 @@ defmodule MydiaWeb.MediaLive.Index do
     []
     |> maybe_add_filter(:type, assigns.filter_type)
     |> maybe_add_filter(:monitored, assigns.filter_monitored)
-    |> maybe_add_filter(:library_path_type, assigns[:filter_library_type])
     |> Keyword.put(:preload, [
       :downloads,
       media_files: active_files_query,

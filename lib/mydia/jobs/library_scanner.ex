@@ -229,7 +229,7 @@ defmodule Mydia.Jobs.LibraryScanner do
              progress_callback: progress_callback,
              video_extensions: extensions
            ) do
-      process_scan_result_by_type(library_path, scan_result)
+      summarize(process_scan_result(library_path, scan_result))
     else
       {:error, :not_found} ->
         handle_scan_error(library_path, "Library path does not exist: #{library_path.path}")
@@ -275,44 +275,15 @@ defmodule Mydia.Jobs.LibraryScanner do
     {:error, error_message}
   end
 
-  # Dispatch to appropriate scanner based on library type
-  defp process_scan_result_by_type(library_path, scan_result) do
-    result =
-      case library_path.type do
-        # Video-based library types use the standard video processing
-        type when type in [:movies, :series, :mixed] ->
-          process_scan_result(library_path, scan_result)
-
-        # Default to video processing for unknown types
-        _ ->
-          process_scan_result(library_path, scan_result)
-      end
-
-    summarize(result)
-  end
-
-  # The per-type processors return two different shapes: the video processor
-  # returns lists under :changes, the others return integer counts. Normalize
-  # both into a ScanSummary so callers have a single contract.
+  # process_scan_result/2 returns its counts as lists under :changes. Convert
+  # them to a ScanSummary so callers read one shape and cannot reach into the
+  # processor's own return value by accident.
   defp summarize({:ok, %{changes: changes} = details}) do
     {:ok,
      %ScanSummary{
        new_files: length(changes.new_files),
        modified_files: length(changes.modified_files),
        deleted_files: length(changes.deleted_files),
-       details: details
-     }}
-  end
-
-  defp summarize(
-         {:ok, %{new_files: new, modified_files: modified, deleted_files: deleted} = details}
-       )
-       when is_integer(new) and is_integer(modified) and is_integer(deleted) do
-    {:ok,
-     %ScanSummary{
-       new_files: new,
-       modified_files: modified,
-       deleted_files: deleted,
        details: details
      }}
   end

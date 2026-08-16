@@ -96,8 +96,10 @@ defmodule Mydia.Downloads.Download do
     belongs_to :media_item, Mydia.Media.MediaItem
     belongs_to :episode, Mydia.Media.Episode
 
-    # For specialized library downloads (music, books, adult) that don't have
-    # a media_item, this field indicates which library to import files to
+    # An explicit per-download library override. When set, it wins over the
+    # library Mydia.Library.TargetResolver would otherwise pick, and
+    # Mydia.Downloads.ImportCandidates reads it back to report the type a
+    # skipped file was really filtered against.
     belongs_to :library_path, Mydia.Settings.LibraryPath
 
     timestamps(type: :utc_datetime, updated_at: :updated_at)

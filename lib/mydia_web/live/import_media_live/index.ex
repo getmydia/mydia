@@ -32,8 +32,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       movies: [],
       ungrouped: [],
       type_filtered: [],
-      sample_filtered: [],
-      simple: []
+      sample_filtered: []
     })
     |> assign(:selected_files, MapSet.new())
     |> assign(:scan_stats, %{
@@ -416,8 +415,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
         series: [],
         movies: [],
         ungrouped: [],
-        type_filtered: [],
-        simple: []
+        type_filtered: []
       })
       |> assign(:selected_files, MapSet.new())
       |> assign(:scan_stats, %{
@@ -1186,15 +1184,15 @@ defmodule MydiaWeb.ImportMediaLive.Index do
 
     existing_valid_paths =
       existing_files
-      |> Enum.reject(&orphaned_non_specialized_file?/1)
+      |> Enum.reject(&Library.orphaned_media_file?/1)
       |> Enum.map(&MediaFile.absolute_path/1)
       |> Enum.reject(&is_nil/1)
       |> MapSet.new()
 
-    # Build map of orphaned files for re-matching (only non-specialized libraries)
+    # Build map of orphaned files for re-matching
     orphaned_files_map =
       existing_files
-      |> Enum.filter(&orphaned_non_specialized_file?/1)
+      |> Enum.filter(&Library.orphaned_media_file?/1)
       |> Enum.map(fn file ->
         case MediaFile.absolute_path(file) do
           nil -> nil
@@ -1422,10 +1420,6 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     end
 
     {:noreply, socket}
-  end
-
-  defp orphaned_non_specialized_file?(%MediaFile{} = media_file) do
-    Library.orphaned_media_file?(media_file)
   end
 
   # Filters out sample files, trailers, and extras based on parsed_info detection
@@ -2092,14 +2086,4 @@ defmodule MydiaWeb.ImportMediaLive.Index do
         {library_path.id, relative_path}
     end
   end
-
-  # Helper functions for library type UI
-  defp library_type_icon(:series), do: "hero-tv"
-  defp library_type_icon(:movies), do: "hero-film"
-  defp library_type_icon(:mixed), do: "hero-square-3-stack-3d"
-  defp library_type_icon(_), do: "hero-folder"
-
-  defp library_type_header_class(_), do: "bg-base-200/50"
-
-  defp library_type_plural(_), do: "Files"
 end
