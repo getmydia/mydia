@@ -140,4 +140,85 @@ defmodule MydiaWeb.MediaLive.Show.SeasonCollapseTest do
       rescanning_season: nil
     )
   end
+
+  describe "collapse at mount and on click" do
+    test "expands the next episode's season at mount and collapses the rest", %{conn: conn} do
+      {media_item, _ep_1, _ep_2} = two_season_show()
+
+      {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+
+      assert has_element?(view, "#season-1-episodes")
+      refute has_element?(view, "#season-2-episodes")
+    end
+
+    test "a fully watched show falls back to the newest season", %{conn: conn, admin: admin} do
+      {media_item, ep_1, ep_2} = two_season_show()
+
+      mark_watched!(admin, ep_1)
+      mark_watched!(admin, ep_2)
+
+      {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+
+      assert has_element?(view, "#season-2-episodes")
+      refute has_element?(view, "#season-1-episodes")
+    end
+
+    test "the toggle expands and collapses a season", %{conn: conn} do
+      {media_item, _ep_1, _ep_2} = two_season_show()
+
+      {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+
+      refute has_element?(view, "#season-2-episodes")
+
+      view |> element("#season-2-toggle") |> render_click()
+      assert has_element?(view, "#season-2-episodes")
+
+      view |> element("#season-2-toggle") |> render_click()
+      refute has_element?(view, "#season-2-episodes")
+    end
+
+    test "clicking a season's auto search never toggles the season", %{conn: conn} do
+      {media_item, _ep_1, _ep_2} = two_season_show()
+
+      {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+
+      refute has_element?(view, "#season-2-episodes")
+      view |> element("#season-2-auto-search") |> render_click()
+      refute has_element?(view, "#season-2-episodes")
+
+      assert has_element?(view, "#season-1-episodes")
+      view |> element("#season-1-auto-search") |> render_click()
+      assert has_element?(view, "#season-1-episodes")
+    end
+  end
+
+  # A two-season show, one file per season, so the next episode is season 1's
+  # first episode (episodes are ordered season asc, episode asc, then filtered
+  # to those with files).
+  defp two_season_show do
+    media_item = media_item_fixture(%{type: "tv_show"})
+
+    ep_1 = episode_fixture(%{media_item_id: media_item.id, season_number: 1, episode_number: 1})
+    media_file_fixture(%{episode_id: ep_1.id})
+
+    ep_2 = episode_fixture(%{media_item_id: media_item.id, season_number: 2, episode_number: 1})
+    media_file_fixture(%{episode_id: ep_2.id})
+
+    {media_item, ep_1, ep_2}
+  end
+
+  defp mark_watched!(user, episode) do
+    %Progress{}
+    |> Progress.changeset(
+      %{
+        user_id: user.id,
+        episode_id: episode.id,
+        position_seconds: 0,
+        duration_seconds: 100,
+        watched: true
+      },
+      authoritative_watched: true
+    )
+    |> Repo.insert!()
+  end
 end
