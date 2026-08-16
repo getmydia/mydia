@@ -1,6 +1,8 @@
 defmodule Mydia.IndexersTest do
   use Mydia.DataCase, async: false
 
+  import Mydia.SettingsFixtures
+
   alias Mydia.Indexers
   alias Mydia.Indexers.SearchResult
   alias Mydia.Settings
@@ -163,6 +165,83 @@ defmodule Mydia.IndexersTest do
       # This is tested indirectly through the ranking implementation
       assert {:ok, %{results: results}} = Indexers.search_all("test")
       assert is_list(results)
+    end
+  end
+
+  describe "search_all/2 fan-out" do
+    setup do
+      fast = Bypass.open()
+      slow = Bypass.open()
+
+      Bypass.expect(fast, "GET", "/api/v1/search", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!([prowlarr_item("Fast.Movie.2021.1080p")]))
+      end)
+
+      Bypass.expect(slow, "GET", "/api/v1/search", fn conn ->
+        # Bypass.pass/1 must run before the sleep: the deadline test kills the
+        # client mid-request, which makes Cowboy tear down this plug process
+        # with reason :shutdown. Without marking the expectation passed first,
+        # Bypass's on_exit verification re-raises that as a test crash, even
+        # though the abandoned connection is exactly what the deadline is
+        # supposed to produce.
+        Bypass.pass(slow)
+        Process.sleep(2_000)
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!([prowlarr_item("Slow.Movie.2021.1080p")]))
+      end)
+
+      indexer_config_fixture(%{
+        name: "fast-indexer",
+        type: :prowlarr,
+        base_url: "http://localhost:#{fast.port}"
+      })
+
+      indexer_config_fixture(%{
+        name: "slow-indexer",
+        type: :prowlarr,
+        base_url: "http://localhost:#{slow.port}"
+      })
+
+      :ok
+    end
+
+    defp prowlarr_item(title) do
+      %{
+        "title" => title,
+        "size" => 8_000_000_000,
+        "seeders" => 100,
+        "leechers" => 5,
+        "magnetUrl" => "magnet:?xt=urn:btih:#{:erlang.phash2(title)}",
+        "indexer" => "upstream"
+      }
+    end
+
+    test "a slow indexer does not serialize behind the fast one" do
+      started = System.monotonic_time(:millisecond)
+
+      {:ok, %{results: results}} = Indexers.search_all("Movie 2021")
+
+      elapsed = System.monotonic_time(:millisecond) - started
+
+      assert length(results) == 2
+
+      assert elapsed < 3_500,
+             "two indexers ran sequentially (#{elapsed}ms); expected concurrent fan-out"
+    end
+
+    test "an indexer past the deadline is reported by name, not as unknown" do
+      {:ok, %{results: results, indexer_errors: errors}} =
+        Indexers.search_all("Movie 2021", deadline_ms: 500)
+
+      assert length(results) == 1
+      assert hd(results).title =~ "Fast.Movie"
+
+      assert [%{indexer: "slow-indexer"} = error] = errors
+      assert error.error =~ "Timed out"
     end
   end
 

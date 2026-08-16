@@ -158,6 +158,12 @@ defmodule Mydia.Indexers do
         for a library type (e.g., `:movies`, `:series`, `:music`, `:books`, `:adult`)
       - `:indexer_ids` - List of indexer config IDs to search (default: all enabled)
         When provided, only the specified indexers will be searched.
+      - `:max_concurrency` - Maximum indexers searched at once (default: every
+        selected indexer, capped at 16). Falls back to the `:indexer_search`
+        application config, then the default.
+      - `:deadline_ms` - Milliseconds before a single indexer's search is
+        killed and reported as timed out (default: 120_000). Falls back to
+        the `:indexer_search` application config, then the default.
 
   ## Examples
 
@@ -219,9 +225,10 @@ defmodule Mydia.Indexers do
         all_indexers
         |> Task.async_stream(
           fn config -> search_with_metrics(config, query, opts) end,
-          timeout: :infinity,
-          max_concurrency: get_search_concurrency(),
-          on_timeout: :kill_task
+          timeout: search_deadline_ms(opts),
+          max_concurrency: get_search_concurrency(length(all_indexers), opts),
+          on_timeout: :kill_task,
+          zip_input_on_exit: true
         )
         |> Enum.reduce({[], []}, fn
           {:ok, {metrics, results}}, {acc_results, acc_errors} ->
@@ -232,10 +239,16 @@ defmodule Mydia.Indexers do
               {acc_results, [error | acc_errors]}
             end
 
-          {:exit, reason}, {acc_results, acc_errors} ->
-            Logger.error("Indexer search task crashed: #{inspect(reason)}")
-            error = %{indexer: "unknown", error: "Task crashed: #{inspect(reason)}"}
-            {acc_results, [error | acc_errors]}
+          # zip_input_on_exit: true puts the input config in the exit tuple.
+          # Without it Task.async_stream never says which element died, which is
+          # why this branch used to report "unknown".
+          {:exit, {config, reason}}, {acc_results, acc_errors} ->
+            name = indexer_display_name(config)
+            message = format_exit_reason(reason)
+
+            Logger.error("Indexer search failed for #{name}: #{inspect(reason)}")
+
+            {acc_results, [%{indexer: name, error: message} | acc_errors]}
         end)
 
       results = rank_and_dedupe(all_results, query, opts)
@@ -413,10 +426,31 @@ defmodule Mydia.Indexers do
     |> Keyword.get(:default_cardigann_rate_limit, 3)
   end
 
-  defp get_search_concurrency do
-    Application.get_env(:mydia, :indexer_search, [])
-    |> Keyword.get(:max_concurrency, 2)
+  # Defaults to searching every selected indexer at once, capped at 16. The
+  # previous default of 2 meant six indexers at a normal 30s response took 90
+  # seconds even when all were healthy, and a single wedged indexer held one of
+  # only two slots for its whole duration. An explicit config value still wins,
+  # so a deployment that deliberately throttled stays throttled.
+  defp get_search_concurrency(indexer_count, opts) do
+    Keyword.get(opts, :max_concurrency) ||
+      Application.get_env(:mydia, :indexer_search, [])[:max_concurrency] ||
+      min(max(indexer_count, 1), 16)
   end
+
+  # 4x a normal 30s response. Generous on purpose: indexers here are legitimately
+  # slow and do eventually answer, so this is a backstop against a wedged
+  # connection rather than a latency budget.
+  defp search_deadline_ms(opts) do
+    Keyword.get(opts, :deadline_ms) ||
+      Application.get_env(:mydia, :indexer_search, [])[:deadline_ms] ||
+      120_000
+  end
+
+  defp indexer_display_name(%{name: name}) when is_binary(name), do: name
+  defp indexer_display_name(_config), do: "unknown"
+
+  defp format_exit_reason(:timeout), do: "Timed out"
+  defp format_exit_reason(reason), do: "Task crashed: #{inspect(reason)}"
 
   defp search_with_metrics(config, query, opts) do
     start_time = System.monotonic_time(:millisecond)
