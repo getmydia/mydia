@@ -707,7 +707,10 @@ defmodule Mydia.Config.Schema do
       Logger.warning(
         "Library path #{inspect(path)} is configured as type #{inspect(type)}, which Mydia " <>
           "no longer supports. It is being treated as an unmonitored mixed library and will " <>
-          "not be scanned. You can remove the entry from your configuration."
+          "not be scanned. Leave it unmonitored: this directory holds media Mydia no longer " <>
+          "indexes, and a monitored mixed library scans for video files only, so every other " <>
+          "file in it would be treated as deleted and moved to the trash store. Remove the " <>
+          "entry from your configuration, or point it at video content."
       )
 
       changeset

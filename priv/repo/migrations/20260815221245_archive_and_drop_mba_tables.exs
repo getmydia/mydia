@@ -12,9 +12,17 @@ defmodule Mydia.Repo.Migrations.ArchiveAndDropMbaTables do
   left media_files rows behind with no parent at all.
 
   They are unmonitored rather than disabled so the operator can still see them
-  on the Library Paths screen and switch monitoring back on there. A disabled
-  path is filtered out of Mydia.Settings.list_library_paths/1 and never reaches
-  the UI at all, which would make the conversion unrecoverable.
+  on the Library Paths screen and decide what to do with them. A disabled path
+  is filtered out of Mydia.Settings.list_library_paths/1 and never reaches the
+  UI at all, which would hide the conversion entirely.
+
+  Monitoring must stay off. A :mixed scan collects video extensions only, and
+  Scanner.detect_changes/3 classifies every existing media_file the scan did not
+  find as deleted, which sends it through Library.trash_media_file/1 and moves
+  the bytes into the trash store. Monitoring a music, book, or image directory
+  as :mixed would therefore move its contents out from under the operator. The
+  safe resolutions are to remove the library path or repoint it at video
+  content.
   """
   use Ecto.Migration
 
@@ -88,8 +96,14 @@ defmodule Mydia.Repo.Migrations.ArchiveAndDropMbaTables do
 
       {:error, reason} ->
         raise Ecto.MigrationError,
-          message:
-            "Refusing to drop music/books/adult tables: archival failed with #{inspect(reason)}"
+          message: """
+          Refusing to drop music/books/adult tables: archival failed with #{inspect(reason)}
+          while writing to:
+            #{dir}
+          The tables were left in place and nothing was deleted. Set MYDIA_DATA_DIR
+          to a directory this instance can write to, then start it again to retry
+          the upgrade.
+          """
     end
   end
 
@@ -140,8 +154,11 @@ defmodule Mydia.Repo.Migrations.ArchiveAndDropMbaTables do
       Logger.warning("""
       [MBA removal] Converted #{converted} music/books/adult library path(s) to
       type 'mixed' and stopped monitoring them. Their media files were NOT
-      touched. They are still listed under Settings > Library Paths; switch
-      Monitored back on there if you want them scanned as video libraries.
+      touched. These directories hold media Mydia no longer indexes, so leave
+      them unmonitored: a monitored 'mixed' library scans for video files only,
+      and every other file in the directory would be treated as deleted and
+      moved to the trash store. They are still listed under Settings > Library
+      Paths. Remove the library path there, or point it at video content.
       """)
     end
   end
