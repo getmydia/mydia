@@ -7,21 +7,16 @@ Complete reference of the library types Mydia supports and what each one does.
 | **Movies** | Feature films | Full metadata, downloads, quality profiles |
 | **Series** | TV shows with seasons/episodes | Episode tracking, air dates, season monitoring |
 | **Mixed** | Combined movies and TV shows | Both movie and series features |
-| **Music** | Music collections | Scanning, browsing, and MusicBrainz metadata (experimental) |
-| **Books** | E-books and audiobooks | Scanning, browsing, and Open Library metadata (experimental) |
-| **Adult** | Adult content | Scanning and browsing only (experimental) |
 
-!!! warning "Experimental Library Types"
-    Music, Books, and Adult libraries are experimental and do far less than the
-    Movies and Series types. None of them get download automation or quality
-    profiles: nothing searches indexers or grabs releases for them, so they only
-    ever show files you already have on disk.
+Every type scans for video files only. A library holding music, e-books, images
+or any other non-video content has nothing for Mydia to index.
 
-    They do differ in metadata, though:
+!!! warning "Music, Books and Adult libraries were removed in v0.13.3"
+    Those three types were experimental, never got download automation or
+    quality profiles, and are gone. An existing library path of one of those
+    types converts to **Mixed** and stops being monitored on upgrade; its files
+    are left where they are.
 
-    - **Music** enriches artists and albums from MusicBrainz through the metadata
-      relay, and fetches album cover art.
-    - **Books** enriches from Open Library, matching on ISBN where the file
-      provides one.
-    - **Adult** is genuinely scan-only. Everything shown comes from the files and
-      their paths.
+    Leave a converted path unmonitored. A Mixed scan looks for video files
+    only, so everything else in the directory would be treated as deleted and
+    moved to the trash store. Remove the path, or point it at video content.

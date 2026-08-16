@@ -16,11 +16,11 @@ MOVIES_PATH=/media/library/movies
 TV_PATH=/media/library/tv
 
 # Additional libraries using numbered variables
-LIBRARY_PATH_1_PATH=/media/music
-LIBRARY_PATH_1_TYPE=music
+LIBRARY_PATH_1_PATH=/media/documentaries
+LIBRARY_PATH_1_TYPE=movies
 
-LIBRARY_PATH_2_PATH=/media/books
-LIBRARY_PATH_2_TYPE=books
+LIBRARY_PATH_2_PATH=/media/anime
+LIBRARY_PATH_2_TYPE=mixed
 ```
 
 ### Via Admin UI
@@ -29,7 +29,7 @@ LIBRARY_PATH_2_TYPE=books
 2. Click **New** in the Library Paths panel
 3. Fill in the form:
    - **Path** (required) is the path inside the container
-   - **Type** (required) is Movies, Series, Mixed, Music, Books, or Adult
+   - **Type** (required) is Movies, Series, or Mixed
    - **Monitored** controls whether scan-all includes this library
    - **Automatic scanning** picks a scan schedule, or Off
    - **TV metadata source** appears for Series and Mixed libraries only

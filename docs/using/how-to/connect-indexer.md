@@ -78,8 +78,13 @@ Restrict an indexer to particular content categories with
 
 - `movies` - Movie content
 - `tv` - TV show content
-- `music` - Music content (experimental)
-- `books` - Book content (experimental)
+- `music` - Torznab Audio categories
+- `books` - Torznab Books categories
+
+`music` and `books` still map to the Torznab categories the protocol defines, so
+an indexer can be restricted to them. Mydia no longer has a library to put those
+results in, though: a result in an Audio, Books or XXX category does not
+auto-assign a library and prompts you to pick one instead.
 
 ## Rate Limiting
 
