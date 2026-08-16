@@ -258,6 +258,93 @@ defmodule Mydia.IndexersTest do
 
       assert Enum.all?(errors, fn error -> error.error =~ "Timed out" end)
     end
+
+    test "on_start reports every indexer as pending before any request" do
+      parent = self()
+
+      Indexers.search_all("Movie 2021",
+        on_start: fn pending -> send(parent, {:started, pending}) end
+      )
+
+      assert_received {:started, pending}
+      assert length(pending) == 4
+      assert Enum.all?(pending, &(&1.status == :pending))
+      assert Enum.all?(pending, &(&1.total == 4))
+      assert Enum.all?(pending, &is_binary(&1.indexer_id))
+
+      assert Enum.sort(Enum.map(pending, & &1.indexer)) ==
+               ["fast-indexer", "slow-indexer-1", "slow-indexer-2", "slow-indexer-3"]
+    end
+
+    test "on_indexer_result fires once per indexer with counts and timing" do
+      parent = self()
+
+      Indexers.search_all("Movie 2021",
+        on_indexer_result: fn progress -> send(parent, {:progress, progress}) end
+      )
+
+      assert_received {:progress, first}
+
+      # The fast indexer settles first because fan-out is concurrent; the
+      # three slow indexers race each other after that, in no fixed order.
+      assert first.indexer == "fast-indexer"
+      assert first.status == :ok
+      assert first.completed == 1
+      assert first.total == 4
+      assert first.result_count == 1
+      assert length(first.results) == 1
+      assert is_integer(first.duration_ms)
+
+      rest = collect_progress([])
+      assert length(rest) == 3
+      assert Enum.all?(rest, &(&1.status == :ok))
+      assert Enum.map(rest, & &1.completed) |> Enum.sort() == [2, 3, 4]
+
+      assert Enum.map(rest, & &1.indexer) |> Enum.sort() ==
+               ["slow-indexer-1", "slow-indexer-2", "slow-indexer-3"]
+    end
+
+    test "a timed-out indexer reports :timeout status through the callback" do
+      parent = self()
+
+      Indexers.search_all("Movie 2021",
+        deadline_ms: 500,
+        on_indexer_result: fn progress -> send(parent, {:progress, progress}) end
+      )
+
+      progress = collect_progress([])
+
+      assert %{status: :ok, indexer: "fast-indexer"} = Enum.find(progress, &(&1.status == :ok))
+
+      timed_out = Enum.filter(progress, &(&1.status == :timeout))
+      assert length(timed_out) == 3
+
+      assert Enum.map(timed_out, & &1.indexer) |> Enum.sort() ==
+               ["slow-indexer-1", "slow-indexer-2", "slow-indexer-3"]
+
+      assert Enum.all?(timed_out, &(&1.error =~ "Timed out"))
+      assert Enum.all?(timed_out, &(&1.results == []))
+    end
+
+    defp collect_progress(acc) do
+      receive do
+        {:progress, progress} -> collect_progress([progress | acc])
+      after
+        0 -> Enum.reverse(acc)
+      end
+    end
+
+    test "omitting the callbacks leaves the return value unchanged" do
+      {:ok, with_callbacks} =
+        Indexers.search_all("Movie 2021", on_indexer_result: fn _ -> :ok end)
+
+      {:ok, without_callbacks} = Indexers.search_all("Movie 2021")
+
+      assert Enum.map(with_callbacks.results, & &1.title) ==
+               Enum.map(without_callbacks.results, & &1.title)
+
+      assert with_callbacks.indexer_errors == without_callbacks.indexer_errors
+    end
   end
 
   describe "background_search_opts/0" do

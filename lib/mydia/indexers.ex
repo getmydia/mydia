@@ -31,6 +31,7 @@ defmodule Mydia.Indexers do
   alias Mydia.Indexers.CardigannAuth
   alias Mydia.Indexers.CardigannDownload
   alias Mydia.Indexers.CardigannParser
+  alias Mydia.Indexers.Structs.IndexerProgress
   alias Mydia.Settings
   alias Mydia.Repo
   import Ecto.Query
@@ -185,6 +186,8 @@ defmodule Mydia.Indexers do
           {:ok, %{results: [SearchResult.t()], indexer_errors: [map()]}}
   def search_all(query, opts \\ []) do
     indexer_ids = Keyword.get(opts, :indexer_ids)
+    on_start = Keyword.get(opts, :on_start, fn _pending -> :ok end)
+    on_indexer_result = Keyword.get(opts, :on_indexer_result, fn _progress -> :ok end)
 
     # Get traditional indexers (Prowlarr, Jackett)
     indexers = Settings.list_indexer_configs()
@@ -220,35 +223,72 @@ defmodule Mydia.Indexers do
       {:ok, %{results: [], indexer_errors: []}}
     else
       start_time = System.monotonic_time(:millisecond)
+      total = length(all_indexers)
 
-      {all_results, indexer_errors} =
+      on_start.(
+        Enum.map(all_indexers, fn config ->
+          %IndexerProgress{
+            indexer: indexer_display_name(config),
+            indexer_id: Map.get(config, :id),
+            status: :pending,
+            total: total
+          }
+        end)
+      )
+
+      {all_results, indexer_errors, _completed} =
         all_indexers
         |> Task.async_stream(
           fn config -> search_with_metrics(config, query, opts) end,
           timeout: search_deadline_ms(opts),
-          max_concurrency: get_search_concurrency(length(all_indexers), opts),
+          max_concurrency: get_search_concurrency(total, opts),
           on_timeout: :kill_task,
           zip_input_on_exit: true
         )
-        |> Enum.reduce({[], []}, fn
-          {:ok, {metrics, results}}, {acc_results, acc_errors} ->
+        |> Enum.reduce({[], [], 0}, fn
+          {:ok, {metrics, results}}, {acc_results, acc_errors, completed} ->
+            completed = completed + 1
+
+            on_indexer_result.(%IndexerProgress{
+              indexer: metrics.indexer,
+              indexer_id: metrics.indexer_id,
+              status: if(metrics.success, do: :ok, else: :error),
+              results: results,
+              result_count: length(results),
+              error: metrics.error,
+              duration_ms: metrics.duration_ms,
+              completed: completed,
+              total: total
+            })
+
             if metrics.success do
-              {results ++ acc_results, acc_errors}
+              {results ++ acc_results, acc_errors, completed}
             else
               error = %{indexer: metrics.indexer, error: metrics.error}
-              {acc_results, [error | acc_errors]}
+              {acc_results, [error | acc_errors], completed}
             end
 
           # zip_input_on_exit: true puts the input config in the exit tuple.
           # Without it Task.async_stream never says which element died, which is
           # why this branch used to report "unknown".
-          {:exit, {config, reason}}, {acc_results, acc_errors} ->
+          {:exit, {config, reason}}, {acc_results, acc_errors, completed} ->
+            completed = completed + 1
             name = indexer_display_name(config)
             message = format_exit_reason(reason)
 
             Logger.error("Indexer search failed for #{name}: #{inspect(reason)}")
 
-            {acc_results, [%{indexer: name, error: message} | acc_errors]}
+            on_indexer_result.(%IndexerProgress{
+              indexer: name,
+              indexer_id: Map.get(config, :id),
+              status: if(reason == :timeout, do: :timeout, else: :error),
+              result_count: 0,
+              error: message,
+              completed: completed,
+              total: total
+            })
+
+            {acc_results, [%{indexer: name, error: message} | acc_errors], completed}
         end)
 
       results = rank_and_dedupe(all_results, query, opts)
@@ -256,7 +296,7 @@ defmodule Mydia.Indexers do
       total_time = System.monotonic_time(:millisecond) - start_time
 
       Logger.info(
-        "Search completed: query=#{query}, indexers=#{length(all_indexers)}, " <>
+        "Search completed: query=#{query}, indexers=#{total}, " <>
           "cardigann=#{length(cardigann_configs)}, results=#{length(results)}, " <>
           "errors=#{length(indexer_errors)}, time=#{total_time}ms"
       )
@@ -497,6 +537,7 @@ defmodule Mydia.Indexers do
 
     metrics = %{
       indexer: config.name,
+      indexer_id: Map.get(config, :id),
       success: success,
       duration_ms: duration,
       result_count: length(results),
