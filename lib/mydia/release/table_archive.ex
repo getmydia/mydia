@@ -46,7 +46,7 @@ defmodule Mydia.Release.TableArchive do
         path = Path.join(dir, "#{table}.ndjson")
         contents = Enum.map_join(rows, "\n", &encode_row(columns, &1))
 
-        case File.write(path, contents <> "\n") do
+        case write_durably(dir, path, contents <> "\n") do
           :ok ->
             Logger.info("[TableArchive] #{table}: archived #{length(rows)} rows to #{path}")
             {:ok, length(rows)}
@@ -57,6 +57,62 @@ defmodule Mydia.Release.TableArchive do
     end
   rescue
     exception -> {:error, exception}
+  end
+
+  # `File.write/2` closes the file descriptor but never calls `fsync`, and
+  # never touches the directory entry either. A host crash right after it
+  # returns `:ok` can leave the archive truncated, corrupt, or entirely
+  # missing on disk (both the file's own dirty pages and the directory's
+  # dirty pages can still be sitting in the page cache) while the migration
+  # goes on to drop the source tables. Since this archive is the only copy of
+  # that data once the drop runs, this needs to be durable, not merely
+  # "written":
+  #
+  #   1. Write to a temp file in the same directory (same filesystem, so the
+  #      final rename is atomic).
+  #   2. `:file.sync/1` the temp file to flush its data to disk.
+  #   3. Rename the temp file into place — atomic on the same filesystem.
+  #   4. Open and sync the directory itself, so the rename's directory-entry
+  #      update is also flushed rather than only living in the page cache.
+  #
+  # Any failure returns `{:error, reason}` so the caller's existing
+  # abort-before-drop path fires exactly as it does today.
+  defp write_durably(dir, path, contents) do
+    tmp_path = Path.join(dir, ".#{Path.basename(path)}.tmp-#{System.unique_integer([:positive])}")
+
+    with {:ok, io} <- File.open(tmp_path, [:write, :binary]),
+         :ok <- IO.binwrite(io, contents),
+         :ok <- :file.sync(io),
+         :ok <- File.close(io),
+         :ok <- File.rename(tmp_path, path),
+         :ok <- sync_dir(dir) do
+      :ok
+    else
+      {:error, reason} ->
+        File.rm(tmp_path)
+        {:error, reason}
+    end
+  end
+
+  # `File.open/2` (and plain `:file.open/2`) rejects directories with
+  # `:eisdir` — the file driver assumes a regular file unless told otherwise.
+  # `:directory` (added in OTP 25, present in the OTP 28 this project runs)
+  # is the documented escape hatch for exactly this: obtaining a handle to a
+  # directory for the sole purpose of `:file.sync/1`, so a rename's
+  # directory-entry update is flushed rather than left sitting in the page
+  # cache.
+  defp sync_dir(dir) do
+    case :file.open(String.to_charlist(dir), [:raw, :read, :directory]) do
+      {:ok, fd} ->
+        try do
+          :file.sync(fd)
+        after
+          :file.close(fd)
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   defp encode_row(columns, values) do
