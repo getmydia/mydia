@@ -3237,9 +3237,13 @@
 <ul>
 <li><code>movies</code> - Movie content</li>
 <li><code>tv</code> - TV show content</li>
-<li><code>music</code> - Music content (experimental)</li>
-<li><code>books</code> - Book content (experimental)</li>
+<li><code>music</code> - Torznab Audio categories</li>
+<li><code>books</code> - Torznab Books categories</li>
 </ul>
+<p><code>music</code> and <code>books</code> still map to the Torznab categories the protocol defines, so
+an indexer can be restricted to them. Mydia no longer has a library to put those
+results in, though: a result in an Audio, Books or XXX category does not
+auto-assign a library and prompts you to pick one instead.</p>
 <h2 id="rate-limiting">Rate Limiting</h2>
 <p>Set <code>INDEXER_&lt;N&gt;_RATE_LIMIT</code> to cap how hard Mydia hits an indexer. There is no
 field for this in the admin form either.</p>

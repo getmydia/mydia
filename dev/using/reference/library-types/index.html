@@ -2837,38 +2837,19 @@
 <td>Combined movies and TV shows</td>
 <td>Both movie and series features</td>
 </tr>
-<tr>
-<td><strong>Music</strong></td>
-<td>Music collections</td>
-<td>Scanning, browsing, and MusicBrainz metadata (experimental)</td>
-</tr>
-<tr>
-<td><strong>Books</strong></td>
-<td>E-books and audiobooks</td>
-<td>Scanning, browsing, and Open Library metadata (experimental)</td>
-</tr>
-<tr>
-<td><strong>Adult</strong></td>
-<td>Adult content</td>
-<td>Scanning and browsing only (experimental)</td>
-</tr>
 </tbody>
 </table>
+<p>Every type scans for video files only. A library holding music, e-books, images
+or any other non-video content has nothing for Mydia to index.</p>
 <div class="admonition warning">
-<p class="admonition-title">Experimental Library Types</p>
-<p>Music, Books, and Adult libraries are experimental and do far less than the
-Movies and Series types. None of them get download automation or quality
-profiles: nothing searches indexers or grabs releases for them, so they only
-ever show files you already have on disk.</p>
-<p>They do differ in metadata, though:</p>
-<ul>
-<li><strong>Music</strong> enriches artists and albums from MusicBrainz through the metadata
-  relay, and fetches album cover art.</li>
-<li><strong>Books</strong> enriches from Open Library, matching on ISBN where the file
-  provides one.</li>
-<li><strong>Adult</strong> is genuinely scan-only. Everything shown comes from the files and
-  their paths.</li>
-</ul>
+<p class="admonition-title">Music, Books and Adult libraries were removed in v0.13.3</p>
+<p>Those three types were experimental, never got download automation or
+quality profiles, and are gone. An existing library path of one of those
+types converts to <strong>Mixed</strong> and stops being monitored on upgrade; its files
+are left where they are.</p>
+<p>Leave a converted path unmonitored. A Mixed scan looks for video files
+only, so everything else in the directory would be treated as deleted and
+moved to the trash store. Remove the path, or point it at video content.</p>
 </div>
 
 
