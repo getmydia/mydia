@@ -13,6 +13,7 @@ import 'core/navigation/sidebar_layout_providers.dart';
 import 'core/window/desktop_window.dart';
 import 'core/startup/startup_error_app.dart';
 import 'core/startup/startup_lock.dart';
+import 'presentation/widgets/glass_surface.dart';
 
 import 'package:player/native/frb_generated.dart';
 
@@ -135,6 +136,25 @@ Future<void> _startApp() async {
     MediaKit.ensureInitialized();
   } catch (e, st) {
     debugPrint('[MediaKit] Failed to initialize: $e');
+    debugPrint('Stack trace: $st');
+  }
+
+  // Pre-compile the playback chrome's glass shaders. Paired with the
+  // MediaKit call above deliberately: both exist so that *starting playback*
+  // is cheap, and the OSD's first frame is the first thing drawn once it
+  // does. Compiling inline there instead costs 100-800ms on mid-range
+  // Android GLES hardware, landing precisely on the frame the viewer is
+  // watching for.
+  //
+  // Best-effort, in the same style as the rest of this function: the glass
+  // renderer falls back to a tinted passthrough while a shader is missing,
+  // so a failure here is a briefly plainer OSD and never a broken app. Must
+  // not be allowed to throw, or it would break this function's invariant
+  // that `runApp` is called exactly once on every path.
+  try {
+    await GlassSurface.warmUpShaders();
+  } catch (e, st) {
+    debugPrint('[GlassSurface] Shader warm-up failed: $e');
     debugPrint('Stack trace: $st');
   }
 

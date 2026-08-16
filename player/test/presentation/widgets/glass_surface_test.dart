@@ -301,19 +301,26 @@ void main() {
           ),
         );
 
+    /// The panel's *fill* decoration.
+    ///
+    /// Identified by carrying a gradient rather than by being the first
+    /// [DecoratedBox] under the surface. The fill is the only decoration on
+    /// this surface with one, and position-based lookup is not stable: the
+    /// lensed path nests the fill inside the glass package's own widgets,
+    /// which contribute [DecoratedBox]es of their own ahead of it.
     BoxDecoration decorationOf(WidgetTester tester) => tester
-        .widget<DecoratedBox>(
-          find
-              .descendant(
-                of: find.byType(GlassSurface),
-                matching: find.byType(DecoratedBox),
-              )
-              .first,
+        .widgetList<DecoratedBox>(
+          find.descendant(
+            of: find.byType(GlassSurface),
+            matching: find.byType(DecoratedBox),
+          ),
         )
-        .decoration as BoxDecoration;
+        .map((box) => box.decoration)
+        .whereType<BoxDecoration>()
+        .firstWhere((decoration) => decoration.gradient != null);
 
     testWidgets(
-        'full tier composes blur with the exact Rec.709 saturation matrix',
+        'full tier composes blur with a saturation matrix, at the token sigma',
         (tester) async {
       await tester.pumpWidget(
         host(
@@ -330,40 +337,51 @@ void main() {
       expect(surface.blurSigma, DepthTokens.blurPlayerChrome);
       expect(surface.saturation, DepthTokens.playerChromeSaturation);
 
-      expect(find.byType(BackdropFilter), findsOneWidget);
-      final filter =
-          tester.widget<BackdropFilter>(find.byType(BackdropFilter)).filter;
+      // Two backdrop passes, not one: the lensed material applies the blur
+      // and the saturation matrix as separate BackdropFilters rather than a
+      // single `ImageFilter.compose`. Both must be present — a bare blur
+      // with no matrix would mean the saturation token never reached the
+      // material.
+      final filters = tester
+          .widgetList<BackdropFilter>(find.byType(BackdropFilter))
+          .map((backdrop) => backdrop.filter)
+          .toList();
 
-      // Pin the exact composed filter: the right sigma, the right
-      // saturation token, and compose()/ColorFilter.matrix wired the right
-      // way round. A wrong sigma, a wrong saturation constant, a
-      // transposed matrix, or non-Rec.709 coefficients would all fail this
-      // -- unlike a bare "differs from an uncomposed blur" check, which
-      // passes for any of those bugs. The matrix's own coefficients
-      // (identity at s=1.0, luminance preservation for any s) are
-      // unit-tested directly against saturationColorMatrix in the group
-      // below, independent of this wiring check.
-      final expectedFilter = ImageFilter.compose(
-        outer: ImageFilter.blur(
-          sigmaX: DepthTokens.blurPlayerChrome,
-          sigmaY: DepthTokens.blurPlayerChrome,
-        ),
-        inner: ColorFilter.matrix(
-          saturationColorMatrix(DepthTokens.playerChromeSaturation),
-        ),
-      );
-      expect(filter, expectedFilter);
-
-      // Still confirm it's not merely a bare blur, guarding against a
-      // future change that accidentally short-circuits the saturation
-      // branch back to the uncomposed filter.
       expect(
-        filter,
-        isNot(ImageFilter.blur(
+        filters,
+        contains(ImageFilter.blur(
           sigmaX: DepthTokens.blurPlayerChrome,
           sigmaY: DepthTokens.blurPlayerChrome,
         )),
+        reason: 'the blur pass must run at the player chrome sigma',
       );
+      expect(
+        filters.any((f) => f is ColorFilter),
+        isTrue,
+        reason: 'the saturation token must reach the material as a matrix',
+      );
+
+      // This deliberately no longer pins the *exact* composed filter.
+      //
+      // It used to, because this file built it: `ImageFilter.compose` with
+      // `saturationColorMatrix`'s Rec.709 coefficients. On the lensed path
+      // `liquid_glass_widgets` composes the blur and the colour matrix
+      // itself, and its matrix uses Rec.601 luma coefficients
+      // (0.299/0.587/0.114) rather than Rec.709 (0.2126/0.7152/0.0722),
+      // despite a comment in that package naming Rec.709. Both preserve
+      // luminance under their own definition, so neutral backdrops are
+      // unaffected and only saturated ones shift slightly in hue.
+      //
+      // Reconstructing their matrix here to assert equality would hard-code
+      // a package internal into our suite and break on any version bump,
+      // which is worse coverage than none. What still matters is asserted
+      // above instead: the blur runs at our sigma, and a colour matrix is
+      // present at all rather than the saturation token being silently
+      // dropped.
+      //
+      // `saturationColorMatrix`'s own coefficients stay directly unit-tested
+      // in the group above; that function is still this app's reference
+      // implementation and what the non-lensed path would use on revert.
     });
 
     testWidgets('reduced tier uses a bare blur, no colour matrix',
@@ -442,16 +460,20 @@ void main() {
       // rounded corners continuously.
       expect(decorationOf(tester).border, isNull);
 
+      // Selected by painter type, not by position. The lensed material adds
+      // a second CustomPaint above this one for the outer edge shadow (which
+      // uses `painter`, not `foregroundPainter`), so `.first` would return
+      // that one and read a null foregroundPainter.
       final painter = tester
-          .widget<CustomPaint>(
-            find
-                .descendant(
-                  of: find.byType(GlassSurface),
-                  matching: find.byType(CustomPaint),
-                )
-                .first,
+          .widgetList<CustomPaint>(
+            find.descendant(
+              of: find.byType(GlassSurface),
+              matching: find.byType(CustomPaint),
+            ),
           )
-          .foregroundPainter! as PlayerChromeRimPainter;
+          .map((paint) => paint.foregroundPainter)
+          .whereType<PlayerChromeRimPainter>()
+          .single;
 
       expect(
         painter.borderRadius,

@@ -4,7 +4,11 @@ publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.3.0 <4.0.0'
+  # Floor raised from 3.3.0 by liquid_glass_widgets, which requires Dart
+  # >=3.5.0. The toolchain in player/.fvmrc (Flutter 3.44.2) ships a much
+  # newer Dart than either bound, so this only tightens what the manifest
+  # *claims* to support; nothing in resolution or CI changes.
+  sdk: '>=3.5.0 <4.0.0'
 
 dependencies:
   flutter:
@@ -52,6 +56,19 @@ dependencies:
   # Direct, not transitive: window geometry restore needs the display work
   # areas to decide whether a saved rect is still reachable.
   screen_retriever: ^0.2.2
+  # Supplies the playback chrome's glass material only (GlassContainer,
+  # LiquidGlassSettings, GlassQuality) — see GlassSurface.playerChrome. None of
+  # the package's widget kit (GlassScaffold, GlassButton, GlassTextField, ...)
+  # is used, and nothing outside `glass_surface.dart` may import it: that one
+  # file is the seam that keeps a rollback to a plain BackdropFilter a
+  # single-file revert.
+  #
+  # Pinned exact, not caret. The package is pre-1.0 (0.29.x) and ships
+  # breaking changes on minor bumps, and the fragment shaders behind
+  # LiquidGlassSettings are what the OSD's whole appearance rides on. An
+  # unattended `pub upgrade` moving this is a visual regression nobody
+  # reviewed.
+  liquid_glass_widgets: 0.29.5
 
 dev_dependencies:
   flutter_test:

@@ -1,6 +1,13 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+// Prefixed, and imported *only* here. This file is the seam that keeps the
+// dependency swappable (see the `liquid_glass_widgets` entry in
+// `pubspec.yaml`): nothing else in the app may import it, and a rollback to a
+// plain `BackdropFilter` is a revert of this one file. The prefix also keeps
+// the package's large export surface — GlassCard, GlassButton, GlassScaffold,
+// and dozens more we do not use — out of this library's namespace.
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart' as lg;
 
 import '../../core/player/platform_features.dart';
 import '../../core/theme/colors.dart';
@@ -73,6 +80,20 @@ class GlassSurface extends StatelessWidget {
   /// the corners to avoid that.
   final Gradient? rimGradient;
 
+  /// When non-null, this surface renders the *refracting* playback-chrome
+  /// material for the given tier instead of the plain
+  /// blur-and-fill composition every other constructor uses.
+  ///
+  /// Only [GlassSurface.playerChrome] sets this. Null (every other named
+  /// constructor, and the unnamed one) leaves [build] on the original
+  /// `BackdropFilter` path, so no existing surface changes behaviour.
+  ///
+  /// [PlayerGlassTier.faux] is deliberately *not* excluded here: [build]
+  /// routes it back to the no-live-blur path, because there is no point
+  /// paying for a refraction shader on a tier whose entire premise is that
+  /// the device cannot afford one.
+  final PlayerGlassTier? playerTier;
+
   final Widget? child;
 
   const GlassSurface({
@@ -86,8 +107,24 @@ class GlassSurface extends StatelessWidget {
     this.grouped = false,
     this.saturation = 1.0,
     this.rimGradient,
+    this.playerTier,
     this.child,
   });
+
+  /// Pre-compiles the glass fragment shaders.
+  ///
+  /// Call once from `main()` before `runApp`. Without it the first frame that
+  /// mounts playback chrome pays the shader compile inline — the package
+  /// documents 100-800ms on mid-range Android GLES hardware — and that first
+  /// frame is exactly when the OSD appears at playback start. The renderer
+  /// degrades to a tinted passthrough rather than throwing while the shader
+  /// is missing, so a skipped or failed warm-up is a visible pop, not a
+  /// crash.
+  ///
+  /// Wrapped here rather than called directly from `main.dart` so this file
+  /// stays the only importer of `liquid_glass_widgets`; see the import
+  /// comment at the top.
+  static Future<void> warmUpShaders() => lg.LiquidGlassWidgets.initialize();
 
   /// App-bar chrome glass: chrome blur sigma, [AppColors.background] fill at the
   /// chrome fill opacity, no border, square corners. Pass [opacity] to override
@@ -235,13 +272,16 @@ class GlassSurface extends StatelessWidget {
         end: Alignment.bottomCenter,
         colors: [DepthTokens.playerRimTop, DepthTokens.playerRimBottom],
       ),
+      playerTier: resolvedTier,
       child: child,
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    // Faux-glass: no BackdropFilter at all (R8).
+    // Faux-glass: no BackdropFilter at all (R8). Checked before [playerTier]
+    // so PlayerGlassTier.faux keeps landing here rather than paying for a
+    // refraction shader (see [playerTier]'s dartdoc).
     if (!live) {
       return RepaintBoundary(
         child: ClipRRect(
@@ -250,6 +290,9 @@ class GlassSurface extends StatelessWidget {
         ),
       );
     }
+
+    final tier = playerTier;
+    if (tier != null) return _buildLensed(tier);
 
     final blur = ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma);
     final filter = saturation == 1.0
@@ -266,6 +309,86 @@ class GlassSurface extends StatelessWidget {
       child: ClipRRect(
         borderRadius: borderRadius,
         child: _withRim(backdrop),
+      ),
+    );
+  }
+
+  /// The refracting playback-chrome material.
+  ///
+  /// Differs from the [BackdropFilter] path above in what it does to the
+  /// backdrop: that one only blurs, this one also *bends*, sampling the video
+  /// behind the panel at displaced coordinates so the rim reads as a lens
+  /// rather than a frosted rectangle.
+  ///
+  /// The fill stays ours. `glassColor` is fully transparent so the package
+  /// contributes no tint of its own, and [_fill]'s gradient
+  /// ([DepthTokens.playerChromeFillTopAlpha] -> `...BottomAlpha`) remains the
+  /// only thing standing between the controls and the video. That is
+  /// deliberate and load-bearing: `glass_legibility_test.dart` derives the
+  /// panel's WCAG contrast analytically from those two tokens, and the
+  /// package has no gradient fill at all (`LiquidGlassSettings.glassColor` is
+  /// a single [Color]). Letting it own the fill would flatten the gradient to
+  /// one alpha *and* move the contrast contract out of our tests.
+  ///
+  /// That analytic model survives this change. Over the spatially uniform
+  /// worst-case backdrop it assumes, refraction and chromatic aberration are
+  /// both the identity — displaced samples of a constant field are that same
+  /// constant — exactly as blur and the saturation matrix already were. The
+  /// one genuinely new term is the specular highlight, which *adds* light and
+  /// so lowers contrast for white glyphs wherever it lands. It is confined to
+  /// the lit edge, and [ChromePanel] holds row 1 a further
+  /// `ChromePanel.verticalPadding` (10px) inboard of that edge, so it falls
+  /// on padding rather than on any glyph. Narrow the padding, raise
+  /// [DepthTokens.playerChromeLightIntensity], or put content flush to the
+  /// top edge and that stops being true.
+  Widget _buildLensed(PlayerGlassTier tier) {
+    final settings = lg.LiquidGlassSettings(
+      // Transparent: see above. The package must add no tint of its own.
+      glassColor: const Color(0x00000000),
+      blur: blurSigma,
+      saturation: saturation,
+      thickness: DepthTokens.playerChromeThickness,
+      refractiveIndex: DepthTokens.playerChromeRefractiveIndex,
+      chromaticAberration: DepthTokens.playerChromeChromaticAberration,
+      lightIntensity: DepthTokens.playerChromeLightIntensity,
+      lightAngle: DepthTokens.playerChromeLightAngle,
+      specularSharpness: lg.GlassSpecularSharpness.medium,
+    );
+
+    return RepaintBoundary(
+      // The iOS 27 darkened outer edge, painted by us. The package's own
+      // `shadow`/`shadowElevation` are documented "has no effect in dark
+      // mode" in three separate places in `LiquidGlassSettings`, and this
+      // player's theme is dark-only and never switches, so passing them
+      // would be a silent no-op.
+      //
+      // A painter rather than a `DecoratedBox(boxShadow:)` for the reason in
+      // DepthTokens.playerChromeEdgeShadowColor's dartdoc: a box shadow would
+      // paint behind the translucent fill and darken it. It also keeps this
+      // from becoming the first DecoratedBox under the surface, which is how
+      // several tests locate the *fill*.
+      child: CustomPaint(
+        painter: PlayerChromeEdgeShadowPainter(borderRadius: borderRadius),
+        child: lg.GlassContainer(
+          shape: lg.LiquidRoundedSuperellipse(
+            borderRadius: borderRadius.topLeft.x,
+          ),
+          settings: settings,
+          // premium captures a backdrop texture for true refraction and is
+          // Impeller-only; standard runs the lightweight single-pass shader,
+          // which still pushes a BackdropFilterLayer (so web keeps the blur
+          // and saturation it has today) but cannot lens without that
+          // texture. faux never reaches here.
+          quality: tier == PlayerGlassTier.full
+              ? lg.GlassQuality.premium
+              : lg.GlassQuality.standard,
+          // Required, not cosmetic: playback chrome sits over the video
+          // surface, and on hybrid composition a live BackdropFilter is the
+          // only path that blurs a PlatformView at all. Without this the
+          // panel renders over unblurred video.
+          platformViewBackdrop: true,
+          child: _withRim(_fill()),
+        ),
       ),
     );
   }
@@ -347,6 +470,50 @@ class PlayerChromeRimPainter extends CustomPainter {
     return oldDelegate.borderRadius != borderRadius ||
         oldDelegate.gradient != gradient ||
         oldDelegate.strokeWidth != strokeWidth;
+  }
+}
+
+/// Paints the playback panel's darkened outer edge (iOS 27) strictly
+/// *outside* the [borderRadius] silhouette.
+///
+/// [BlurStyle.outer] is the whole point. The obvious implementation, a
+/// [BoxDecoration] with a [BoxShadow], paints behind its child — and this
+/// panel's fill is deliberately translucent (see
+/// [DepthTokens.playerChromeFillTopAlpha]), so that shadow would read through
+/// the glass and darken it. Beyond looking wrong, it would move the panel's
+/// real contrast away from what `glass_legibility_test.dart` computes, with
+/// nothing in that test changing to reveal it. Painting outer-only leaves
+/// every pixel inside the silhouette untouched.
+///
+/// Public rather than library-private so tests can assert on its fields
+/// directly instead of re-deriving them from painted pixels, matching
+/// [PlayerChromeRimPainter].
+@visibleForTesting
+class PlayerChromeEdgeShadowPainter extends CustomPainter {
+  const PlayerChromeEdgeShadowPainter({
+    required this.borderRadius,
+    this.color = DepthTokens.playerChromeEdgeShadowColor,
+    this.sigma = DepthTokens.playerChromeEdgeShadowSigma,
+  });
+
+  final BorderRadius borderRadius;
+  final Color color;
+  final double sigma;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rrect = borderRadius.toRRect(Offset.zero & size);
+    final paint = Paint()
+      ..color = color
+      ..maskFilter = MaskFilter.blur(BlurStyle.outer, sigma);
+    canvas.drawRRect(rrect, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant PlayerChromeEdgeShadowPainter oldDelegate) {
+    return oldDelegate.borderRadius != borderRadius ||
+        oldDelegate.color != color ||
+        oldDelegate.sigma != sigma;
   }
 }
 

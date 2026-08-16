@@ -60,16 +60,16 @@ void main() {
         (tester) async {
       await tester.pumpWidget(_host(_panel(PlayerGlassTier.full)));
 
+      // Located by carrying a gradient, not by position under a
+      // BackdropFilter. The fill is the only decoration on this panel with
+      // one, and anchoring on BackdropFilter is not stable: on the lensed
+      // path the glass package owns the backdrop pass, so the fill is no
+      // longer a descendant of any BackdropFilter this app builds.
       final decoration = tester
-          .widget<DecoratedBox>(
-            find
-                .descendant(
-                  of: find.byType(BackdropFilter),
-                  matching: find.byType(DecoratedBox),
-                )
-                .first,
-          )
-          .decoration as BoxDecoration;
+          .widgetList<DecoratedBox>(find.byType(DecoratedBox))
+          .map((box) => box.decoration)
+          .whereType<BoxDecoration>()
+          .firstWhere((decoration) => decoration.gradient != null);
       final gradient = decoration.gradient! as LinearGradient;
 
       // The gradient is asymmetric and dense-at-the-top: ChromePanel puts the
