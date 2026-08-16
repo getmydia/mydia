@@ -179,7 +179,28 @@ defmodule Mydia.Library.FileIngest do
     end
   end
 
+  # Logs rather than discarding, for the same reason `record_failure/2` does.
+  # This row is the one the inbox renders (title, provider, confidence), so a
+  # silent failure here leaves a file listed with none of what was found about
+  # it. `ingest/3`'s `:candidate` branch still hard-matches the `{:ok, _}`,
+  # which is deliberate: that path has no fallback write behind it.
   defp write_candidate(media_file, match) do
+    case do_write_candidate(media_file, match) do
+      {:ok, candidate} ->
+        {:ok, candidate}
+
+      {:error, changeset} ->
+        Logger.error("Could not cache a match candidate for a media file",
+          media_file_id: media_file.id,
+          title: Map.get(match, :title),
+          errors: inspect(changeset.errors)
+        )
+
+        {:error, changeset}
+    end
+  end
+
+  defp do_write_candidate(media_file, match) do
     parsed = Map.get(match, :parsed_info) || %{}
 
     Library.upsert_match_candidate(%{

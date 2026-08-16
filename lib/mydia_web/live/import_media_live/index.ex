@@ -139,17 +139,17 @@ defmodule MydiaWeb.ImportMediaLive.Index do
           {:noreply, socket}
 
         run ->
-          case Library.get_import_run(run.id) do
-            nil ->
-              {:noreply, assign(socket, :active_run, nil)}
-
-            current ->
-              {:ok, released} = Library.release_import_run(current)
-
+          case Library.release_import_run(run.id) do
+            {:ok, released} ->
               {:noreply,
                socket
                |> show_outcome(released)
                |> put_flash(:info, "Marked as not running. You can start a new import now.")}
+
+            # Already terminal, or gone. Either way there is nothing to
+            # release, and the run's real outcome is what should be on screen.
+            {:error, _reason} ->
+              {:noreply, show_outcome(socket, Library.get_import_run(run.id))}
           end
       end
     else

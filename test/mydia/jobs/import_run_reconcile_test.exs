@@ -2,13 +2,18 @@ defmodule Mydia.Jobs.ImportRunReconcileTest do
   @moduledoc """
   Boot reconciliation for runs that were in flight when the node went away.
 
-  Nothing but the coordinator itself ever moves a run out of `:running` or
-  `:stopping`, and `Oban.Plugins.Lifeline` is deliberately not configured (its
-  `rescue_after` is measured from `attempted_at`, and this job legitimately
-  runs for hours without checkpointing, so any window short enough to rescue a
-  crashed run would also duplicate a healthy one). A container restart during
-  an import therefore used to leave the row active forever, which locks that
-  library path out of ever being imported again.
+  Every fixture here carries an Oban job row, because production never has a
+  run without one: `MydiaWeb.ImportMediaLive.Index` inserts the coordinator job
+  in the same handler that creates the run, and `Oban.Plugins.Pruner` never
+  prunes a job that is still `executing`. A reconciliation test whose fixture
+  is "a run with no job at all" is testing a state the product cannot reach.
+
+  The state that matters is `executing`. Without `Oban.Plugins.Lifeline` (which
+  cannot be used here: `rescue_after` runs from `attempted_at`, and a real
+  import runs for hours without checkpointing) nothing ever moves a job out of
+  `executing` when the node dies. `Engine.shutdown/2` only sets `paused: true`.
+  So `executing` is the normal shape of the crash being recovered from, not
+  evidence that a worker is on it.
   """
   use Mydia.DataCase, async: false
 
@@ -23,90 +28,159 @@ defmodule Mydia.Jobs.ImportRunReconcileTest do
     %{library_path: library_path_fixture(), user: user_fixture()}
   end
 
-  defp start_run(lp, user, status) do
-    {:ok, run} =
-      Library.create_import_run(%{library_path_id: lp.id, user_id: user.id, mode: :review})
+  # The node name Oban stamps into `attempted_by`. Derived the same way Oban
+  # derives it rather than hardcoded, so this stays correct whether or not the
+  # test VM happens to be distributed.
+  defp this_node, do: Oban.Config.node_name()
 
-    if status == :running do
-      run
-    else
-      # Written straight through Ecto rather than via update_import_run/2: the
-      # legal-transition guard is what this file's siblings cover, and some of
-      # these fixtures are deliberately illegal states left behind by a crash.
-      run |> Ecto.Changeset.change(status: status) |> Repo.update!()
-    end
-  end
+  defp insert_job(run_id, state, attempted_by \\ nil) do
+    changes =
+      case attempted_by do
+        nil -> [state: state]
+        by -> [state: state, attempted_by: by, attempted_at: DateTime.utc_now()]
+      end
 
-  defp insert_job(run_id, state) do
     %{"import_run_id" => run_id}
     |> Oban.Job.new(worker: ImportRunJob, queue: :imports)
-    |> Ecto.Changeset.put_change(:state, state)
+    |> Ecto.Changeset.change(changes)
     |> Repo.insert!()
   end
 
-  test "marks an interrupted running run as failed", %{library_path: lp, user: user} do
-    run = start_run(lp, user, :running)
+  # A run exactly as a killed node leaves it: the row still active, and its
+  # coordinator job still `executing`, stamped with this node's name because
+  # this node is the one that died.
+  defp interrupted_run(lp, user, status) do
+    {:ok, run} =
+      Library.create_import_run(%{library_path_id: lp.id, user_id: user.id, mode: :review})
 
-    assert {:ok, 1} = ImportRunJob.reconcile_interrupted_runs()
+    run =
+      if status == :running do
+        run
+      else
+        # Written straight through Ecto: a crash leaves states behind that the
+        # legal-transition guard would refuse, which is the point.
+        run |> Ecto.Changeset.change(status: status) |> Repo.update!()
+      end
 
-    reconciled = Library.get_import_run(run.id)
-    assert reconciled.status == :failed
-    assert reconciled.phase == :finished
-    assert reconciled.error =~ "interrupted"
+    insert_job(run.id, "executing", [this_node()])
+
+    run
   end
 
-  test "marks an interrupted stopping run as stopped", %{library_path: lp, user: user} do
-    run = start_run(lp, user, :stopping)
+  describe "a run whose job is still executing on this node" do
+    test "is marked failed when it was running", %{library_path: lp, user: user} do
+      run = interrupted_run(lp, user, :running)
 
-    assert {:ok, 1} = ImportRunJob.reconcile_interrupted_runs()
+      assert {:ok, 1} = ImportRunJob.reconcile_interrupted_runs()
 
-    assert Library.get_import_run(run.id).status == :stopped
-  end
+      reconciled = Library.get_import_run(run.id)
+      assert reconciled.status == :failed
+      assert reconciled.phase == :finished
+      assert reconciled.error =~ "interrupted"
+    end
 
-  test "releases the library path so a new run can start", %{library_path: lp, user: user} do
-    _run = start_run(lp, user, :running)
+    test "is marked stopped when it was already draining", %{library_path: lp, user: user} do
+      run = interrupted_run(lp, user, :stopping)
 
-    # The whole point: before reconciliation the partial unique index refuses
-    # a second run, and nothing in the product could ever clear the first one.
-    assert {:error, _} =
-             Library.create_import_run(%{
-               library_path_id: lp.id,
-               user_id: user.id,
-               mode: :review
-             })
+      assert {:ok, 1} = ImportRunJob.reconcile_interrupted_runs()
 
-    {:ok, _} = ImportRunJob.reconcile_interrupted_runs()
+      assert Library.get_import_run(run.id).status == :stopped
+    end
 
-    assert {:ok, _} =
-             Library.create_import_run(%{
-               library_path_id: lp.id,
-               user_id: user.id,
-               mode: :review
-             })
-  end
+    test "releases the library path so a new run can start", %{library_path: lp, user: user} do
+      _run = interrupted_run(lp, user, :running)
 
-  for state <- ~w(executing available retryable scheduled) do
-    test "leaves a run alone while its job is still #{state}", %{library_path: lp, user: user} do
-      run = start_run(lp, user, :running)
-      insert_job(run.id, unquote(state))
+      # Before reconciliation the partial unique index refuses a second run,
+      # and nothing in the product could ever clear the first one.
+      assert {:error, _} =
+               Library.create_import_run(%{
+                 library_path_id: lp.id,
+                 user_id: user.id,
+                 mode: :review
+               })
 
-      assert {:ok, 0} = ImportRunJob.reconcile_interrupted_runs()
-      assert Library.get_import_run(run.id).status == :running
+      {:ok, _} = ImportRunJob.reconcile_interrupted_runs()
+
+      assert {:ok, _} =
+               Library.create_import_run(%{
+                 library_path_id: lp.id,
+                 user_id: user.id,
+                 mode: :review
+               })
+    end
+
+    test "is reconciled when the job carries no attempted_by at all", %{
+      library_path: lp,
+      user: user
+    } do
+      {:ok, run} =
+        Library.create_import_run(%{library_path_id: lp.id, user_id: user.id, mode: :review})
+
+      insert_job(run.id, "executing")
+
+      assert {:ok, 1} = ImportRunJob.reconcile_interrupted_runs()
+      assert Library.get_import_run(run.id).status == :failed
     end
   end
 
-  test "ignores a completed job for the same run", %{library_path: lp, user: user} do
-    run = start_run(lp, user, :running)
-    insert_job(run.id, "completed")
+  describe "runs that must be left alone" do
+    test "a job executing on a different node", %{library_path: lp, user: user} do
+      {:ok, run} =
+        Library.create_import_run(%{library_path_id: lp.id, user_id: user.id, mode: :review})
+
+      insert_job(run.id, "executing", ["some-other-host", Ecto.UUID.generate()])
+
+      # This node's reconciler runs before this node's Oban starts, so a local
+      # `executing` row is provably stale. Another node's is provably not.
+      assert {:ok, 0} = ImportRunJob.reconcile_interrupted_runs()
+      assert Library.get_import_run(run.id).status == :running
+    end
+
+    for state <- ~w(available retryable scheduled) do
+      test "a job still queued as #{state}", %{library_path: lp, user: user} do
+        {:ok, run} =
+          Library.create_import_run(%{library_path_id: lp.id, user_id: user.id, mode: :review})
+
+        insert_job(run.id, unquote(state))
+
+        assert {:ok, 0} = ImportRunJob.reconcile_interrupted_runs()
+        assert Library.get_import_run(run.id).status == :running
+      end
+    end
+
+    test "a terminal run", %{library_path: lp, user: user} do
+      {:ok, run} =
+        Library.create_import_run(%{library_path_id: lp.id, user_id: user.id, mode: :review})
+
+      run |> Ecto.Changeset.change(status: :done) |> Repo.update!()
+      insert_job(run.id, "completed")
+
+      assert {:ok, 0} = ImportRunJob.reconcile_interrupted_runs()
+      assert Library.get_import_run(run.id).status == :done
+    end
+  end
+
+  test "a completed job does not keep an active run alive", %{library_path: lp, user: user} do
+    {:ok, run} =
+      Library.create_import_run(%{library_path_id: lp.id, user_id: user.id, mode: :review})
+
+    insert_job(run.id, "completed", [this_node()])
 
     assert {:ok, 1} = ImportRunJob.reconcile_interrupted_runs()
     assert Library.get_import_run(run.id).status == :failed
   end
 
-  test "leaves terminal runs untouched", %{library_path: lp, user: user} do
-    run = start_run(lp, user, :done)
+  describe "the supervision child" do
+    test "runs the sweep and then gets out of the way", %{library_path: lp, user: user} do
+      run = interrupted_run(lp, user, :running)
 
-    assert {:ok, 0} = ImportRunJob.reconcile_interrupted_runs()
-    assert Library.get_import_run(run.id).status == :done
+      # :ignore is what keeps this from lingering as a process, and is why it
+      # can sit in the children list between Ecto.Migrator and the Oban child
+      # without becoming something to supervise. See the module doc: that
+      # position is the entire discriminator for a stale `executing` row.
+      assert :ignore = Mydia.Jobs.ImportRunReconciler.start_link([])
+
+      assert Library.get_import_run(run.id).status == :failed
+    end
   end
 end

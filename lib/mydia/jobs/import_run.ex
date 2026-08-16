@@ -399,11 +399,27 @@ defmodule Mydia.Jobs.ImportRun do
 
   ## Crash recovery
 
-  # Every state Oban can hold a job in where it may still run. `:scheduled` is
-  # included beyond the obvious three: a job that snoozed sits there, and
-  # reconciling it would be a false positive with a real coordinator about to
-  # pick the run back up.
-  @live_job_states ~w(executing available retryable scheduled)
+  # States where a job is queued and will run again on its own. `scheduled` is
+  # included beyond the obvious two: a snoozed job sits there, and reconciling
+  # it would be a false positive with a real coordinator about to pick the run
+  # back up.
+  @queued_job_states ~w(available retryable scheduled)
+
+  # `executing` is deliberately NOT in the list above, because it is the state
+  # this whole function exists for. Without `Oban.Plugins.Lifeline` (see the
+  # moduledoc for why it cannot be used here), nothing ever moves a job out of
+  # `executing` when the node dies mid-run: `Engine.shutdown/2` only sets
+  # `paused: true`. So a lingering `executing` row is the normal shape of the
+  # crash being recovered from, and treating it as "still live" made this
+  # function a no-op for its own purpose.
+  #
+  # It cannot be blanket-ignored either, since a healthy job is `executing`
+  # too. The discriminator is ordering, not row contents:
+  # `Mydia.Jobs.ImportRunReconciler` runs before this node's Oban child starts,
+  # so no local queue can have claimed anything yet. A row attempted by THIS
+  # node therefore has to be a leftover. A row attempted by a different node is
+  # somebody else's live job and is left alone.
+  @executing_state "executing"
 
   @interrupted_error "This import was interrupted, most likely by a restart while it was running. Everything it had already added was kept. Start it again to carry on from where it stopped."
 
@@ -421,8 +437,9 @@ defmodule Mydia.Jobs.ImportRun do
   seconds, so even a graceful `docker restart` orphans the job. This is
   routine, not an edge case.
 
-  A run is only reconciled when no Oban job for it is in a state that could
-  still execute, so this is safe to call while healthy runs are in flight.
+  Called from `Mydia.Jobs.ImportRunReconciler`, which is positioned in the
+  supervision tree before this node's Oban child so that a lingering
+  `executing` job row is unambiguous. See that module and `live_job?/3`.
   Returns the number of rows it changed.
   """
   @spec reconcile_interrupted_runs() :: {:ok, non_neg_integer()}
@@ -476,16 +493,30 @@ defmodule Mydia.Jobs.ImportRun do
   # JSON column is not portable between SQLite and PostgreSQL, and the worker
   # plus state filter already narrows this to a handful of rows.
   defp live_run_ids do
+    states = [@executing_state | @queued_job_states]
+    this_node = Oban.Config.node_name()
+
     Oban.Job
-    |> where([j], j.worker == ^inspect(__MODULE__) and j.state in ^@live_job_states)
-    |> select([j], j.args)
+    |> where([j], j.worker == ^inspect(__MODULE__) and j.state in ^states)
+    |> select([j], {j.state, j.attempted_by, j.args})
     |> Repo.all()
+    |> Enum.filter(fn {state, attempted_by, _args} ->
+      live_job?(state, attempted_by, this_node)
+    end)
     |> Enum.flat_map(fn
-      %{"import_run_id" => id} when is_binary(id) -> [id]
+      {_state, _attempted_by, %{"import_run_id" => id}} when is_binary(id) -> [id]
       _ -> []
     end)
     |> MapSet.new()
   end
+
+  # `attempted_by` is `[node, uuid]` on the Basic engine and `[node]` on Lite,
+  # so only the head is portable. That is enough here: this runs before any
+  # local queue exists, so the only node whose `executing` row can be trusted
+  # as live is one that is not us.
+  defp live_job?(@executing_state, [node | _], this_node), do: node != this_node
+  defp live_job?(@executing_state, _attempted_by, _this_node), do: false
+  defp live_job?(_queued, _attempted_by, _this_node), do: true
 
   ## Progress
 

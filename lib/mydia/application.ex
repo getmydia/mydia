@@ -34,6 +34,12 @@ defmodule Mydia.Application do
         {Mydia.Release.MigrationBackup, skip: skip_migrations?()},
         {Ecto.Migrator,
          repos: Application.fetch_env!(:mydia, :ecto_repos), skip: skip_migrations?()},
+        # Releases import runs whose coordinator died with the previous node.
+        # Must run after the migrator (it queries import_runs) and before the
+        # Oban child below, because "no queue has started yet" is exactly what
+        # lets it read a lingering `executing` job row as an orphan rather than
+        # as a healthy job this boot just picked up. Returns :ignore once done.
+        Mydia.Jobs.ImportRunReconciler,
         {DNSCluster, query: Application.get_env(:mydia, :dns_cluster_query) || :ignore},
         {Phoenix.PubSub, name: Mydia.PubSub},
         Mydia.Downloads.Client.Registry,
@@ -135,10 +141,6 @@ defmodule Mydia.Application do
         validate_library_paths()
         # Sync library paths and populate relative paths for media files
         Mydia.Library.StartupSync.sync_all()
-        # Release import runs whose coordinator died with the previous node.
-        # Nothing else ever moves those rows out of :running/:stopping, and
-        # while one sits there the library path cannot be imported again.
-        Mydia.Jobs.ImportRun.reconcile_interrupted_runs()
         # Check for database integrity issues and queue repairs if needed
         Mydia.Library.DatabaseHealthCheck.run()
         # Clean up stale HLS session directories

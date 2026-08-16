@@ -2650,16 +2650,35 @@ defmodule Mydia.Library do
   never restarted, so nothing ran the sweep, but the coordinator is gone all
   the same (a cancelled job, a killed queue). Without this the only recovery
   is editing the database by hand.
+
+  Re-reads and refuses a run that is already terminal, mirroring
+  `request_import_run_stop/1`. Same race, same shape: the run can reach `:done`
+  between the panel rendering and the click landing, and overwriting that with
+  `:stopped` would throw away the real outcome and replace it with a message
+  saying a human ended it.
   """
-  @spec release_import_run(ImportRun.t()) :: {:ok, ImportRun.t()} | {:error, Ecto.Changeset.t()}
-  def release_import_run(%ImportRun{} = run) do
-    update_import_run(run, %{
-      status: :stopped,
-      phase: :finished,
-      current_file: nil,
-      error:
-        "Marked as not running from the import page. Everything it had already added was kept."
-    })
+  @spec release_import_run(ImportRun.t() | binary()) ::
+          {:ok, ImportRun.t()} | {:error, :not_active | :not_found}
+  def release_import_run(%ImportRun{id: id}), do: release_import_run(id)
+
+  def release_import_run(id) when is_binary(id) do
+    case get_import_run(id) do
+      nil ->
+        {:error, :not_found}
+
+      %ImportRun{status: status} = run ->
+        if status in ImportRun.active_statuses() do
+          update_import_run(run, %{
+            status: :stopped,
+            phase: :finished,
+            current_file: nil,
+            error:
+              "Marked as not running from the import page. Everything it had already added was kept."
+          })
+        else
+          {:error, :not_active}
+        end
+    end
   end
 
   @doc """
