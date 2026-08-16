@@ -973,13 +973,22 @@ defmodule MydiaWeb.SearchLive.Index do
   #     assigns at the end of a search. apply_filters/1 re-filters straight
   #     from this map without deduplicating, so it must stay deduplicated.
   #
-  # Folding new results onto search_results_map instead of the raw map would
-  # rank each indexer's results against an already-truncated pool: a release
-  # that looked weak against the first max_results candidates would be
-  # dropped for good and never reconsidered once more results arrive, even
-  # though it might rank in the true top set once the full history is
-  # visible. Always re-rank from the raw map, then re-derive the truncated
-  # display set from that ranked output.
+  # Plain truncation is NOT why the raw map exists: Indexers.rank_and_dedupe/3
+  # scores each result independently of the rest of the pool, so an item's
+  # rank can only stay the same or worsen as the pool grows. An item outside
+  # round one's top max_results is outside the full-history top max_results
+  # too, and folding onto a truncated base can never lose a genuine contender
+  # to truncation alone.
+  #
+  # The real reason is DEDUPLICATION across rounds. An item can be evicted by
+  # truncation while it was the sole member of its dedup group, having never
+  # lost a dedup comparison. If a WEAKER duplicate of that same group arrives
+  # in a later round, deduping against the truncated search_results_map would
+  # see only the weak duplicate (the true winner already gone) and crown it
+  # as the group's representative, showing the wrong release or dropping the
+  # group when the true winner would have qualified. Re-ranking from the full
+  # raw_search_results_map every round means deduplication always compares
+  # every variant of a release ever seen, so the strongest one always wins.
   #
   # `results` is cleared from the stored progress struct: it can be large and
   # the releases already live in raw_search_results_map.
