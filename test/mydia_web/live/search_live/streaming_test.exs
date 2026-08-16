@@ -67,7 +67,7 @@ defmodule MydiaWeb.SearchLive.StreamingTest do
   # the search provably cannot finish while the gate is shut.
   defp gated_indexer_fixture(name) do
     bypass = Bypass.open()
-    {:ok, gate} = Agent.start_link(fn -> false end)
+    {:ok, gate} = Agent.start_link(fn -> %{open: false, timed_out: false} end)
 
     Bypass.expect(bypass, "GET", "/api/v1/search", fn conn ->
       Bypass.pass(bypass)
@@ -88,20 +88,44 @@ defmodule MydiaWeb.SearchLive.StreamingTest do
     {config, gate}
   end
 
-  defp open_gate(gate), do: Agent.update(gate, fn _ -> true end)
+  defp open_gate(gate), do: Agent.update(gate, &%{&1 | open: true})
 
-  # Bounded on purpose: a gate that is never opened must surface as a failed
-  # assertion in the test, never as a hung suite.
+  # Bounded on purpose: a gate that is never opened must surface as a failure,
+  # never as a hung suite -- and never as a PASS. This clause used to return
+  # :ok, which let the Bypass handler answer anyway: the full search then
+  # completed normally and the ordering the gated test exists to establish was
+  # never actually established, yet the test still passed.
+  #
+  # flunk/1 alone does not fix that. This runs in the Bypass plug process, and
+  # Bypass.pass/1 has already marked the expectation passed, so the raise is
+  # swallowed: the connection simply errors, the indexer reports a failure and
+  # the search proceeds exactly as if the gate had opened. (Verified: with the
+  # retry budget cut to 3, the test still passed on the flunk alone.) The
+  # give-up is therefore recorded in the Agent FIRST, and assert_gate_held/1,
+  # which runs in the test process, is what turns it into a failure. The raise
+  # is still worth keeping: it stops the handler returning a normal 200.
   defp await_gate(gate, retries \\ 500)
-  defp await_gate(_gate, 0), do: :ok
+
+  defp await_gate(gate, 0) do
+    Agent.update(gate, &%{&1 | timed_out: true})
+    flunk("timed out waiting for the gated indexer to be released; the gate was never opened")
+  end
 
   defp await_gate(gate, retries) do
-    if Agent.get(gate, & &1) do
+    if Agent.get(gate, & &1.open) do
       :ok
     else
       Process.sleep(10)
       await_gate(gate, retries - 1)
     end
+  end
+
+  # Must run in the test process; see await_gate/2 for why the handler cannot
+  # report this itself.
+  defp assert_gate_held(gate) do
+    refute Agent.get(gate, & &1.timed_out),
+           "the gated indexer stopped waiting and answered on its own, so the full " <>
+             "search was never actually held behind the gate and this test proved nothing"
   end
 
   defp wait_until_search_finished(view, retries \\ 300)
@@ -251,6 +275,7 @@ defmodule MydiaWeb.SearchLive.StreamingTest do
     open_gate(gate)
     wait_until_search_finished(view)
 
+    assert_gate_held(gate)
     assert has_element?(view, "##{result_dom_id(dune)}")
   end
 
@@ -462,5 +487,89 @@ defmodule MydiaWeb.SearchLive.StreamingTest do
 
     assert Process.alive?(view.pid)
     assert render(view) =~ "flaky-indexer"
+  end
+
+  # handle_event("retry_indexer", ...) sets the chip to :pending before starting
+  # the task. If that task dies or errors before any progress message lands,
+  # nothing else ever clears :pending: the chip spins forever and the Retry
+  # button is gone, because it only renders for :error/:timeout. These drive
+  # handle_async/3 directly because the failure modes (a crashed task, a
+  # non-:ok return from search_all/2) cannot be provoked through a live
+  # indexer.
+  describe "handle_async({:retry, id}, ...)" do
+    defp retry_socket(indexer_progress) do
+      %Phoenix.LiveView.Socket{
+        assigns: %{__changed__: %{}, indexer_progress: indexer_progress}
+      }
+    end
+
+    defp pending_retry_progress do
+      %{
+        "flaky-id" => %IndexerProgress{
+          indexer: "flaky-indexer",
+          indexer_id: "flaky-id",
+          status: :pending,
+          result_count: nil,
+          duration_ms: nil,
+          total: 1
+        }
+      }
+    end
+
+    test "a crashed retry leaves the indexer actionable, not pending forever" do
+      {:noreply, socket} =
+        MydiaWeb.SearchLive.Index.handle_async(
+          {:retry, "flaky-id"},
+          {:exit, :killed},
+          retry_socket(pending_retry_progress())
+        )
+
+      entry = socket.assigns.indexer_progress["flaky-id"]
+
+      assert entry.status == :error
+      assert is_binary(entry.error) and entry.error != ""
+      assert entry.result_count == nil
+      assert entry.duration_ms == nil
+    end
+
+    test "a retry that returns an error leaves the indexer actionable" do
+      {:noreply, socket} =
+        MydiaWeb.SearchLive.Index.handle_async(
+          {:retry, "flaky-id"},
+          {:ok, {:error, :boom}},
+          retry_socket(pending_retry_progress())
+        )
+
+      assert socket.assigns.indexer_progress["flaky-id"].status == :error
+    end
+
+    # The success case must stay a no-op: the retry's releases already arrived
+    # as progress messages, and its batched aggregate covers only the retried
+    # indexer, so applying it would clobber every other indexer's chip.
+    test "a successful retry does not touch indexer_progress" do
+      progress = pending_retry_progress()
+
+      {:noreply, socket} =
+        MydiaWeb.SearchLive.Index.handle_async(
+          {:retry, "flaky-id"},
+          {:ok, {:ok, [], []}},
+          retry_socket(progress)
+        )
+
+      assert socket.assigns.indexer_progress == progress
+    end
+
+    test "an unknown indexer id is a clean no-op rather than an insert" do
+      progress = pending_retry_progress()
+
+      {:noreply, socket} =
+        MydiaWeb.SearchLive.Index.handle_async(
+          {:retry, "never-seen-id"},
+          {:exit, :killed},
+          retry_socket(progress)
+        )
+
+      assert socket.assigns.indexer_progress == progress
+    end
   end
 end

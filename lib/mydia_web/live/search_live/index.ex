@@ -709,10 +709,27 @@ defmodule MydiaWeb.SearchLive.Index do
      |> put_flash(:error, "Search failed unexpectedly")}
   end
 
-  def handle_async({:retry, _indexer_id}, _result, socket) do
-    # Results already arrived through the :indexer_progress messages; the final
-    # batched value carries only this one indexer and would clobber the rest.
+  # Results already arrived through the :indexer_progress messages; the final
+  # batched value carries only this one indexer and would clobber the rest, so
+  # success is a no-op.
+  def handle_async({:retry, _indexer_id}, {:ok, {:ok, _results, _indexer_errors}}, socket) do
     {:noreply, socket}
+  end
+
+  # Failure is NOT a no-op. handle_event("retry_indexer", ...) sets the chip to
+  # :pending before starting the task; if that task dies or returns an error
+  # before any progress message lands, nothing else ever clears :pending, so
+  # the chip spins forever AND the Retry button disappears (it only renders for
+  # :error/:timeout). Restoring an error state puts the indexer back into an
+  # actionable state.
+  def handle_async({:retry, indexer_id}, {:ok, {:error, reason}}, socket) do
+    Logger.error("Indexer retry failed: #{inspect(reason)}")
+    {:noreply, restore_retry_error(socket, indexer_id, "Retry failed: #{inspect(reason)}")}
+  end
+
+  def handle_async({:retry, indexer_id}, {:exit, reason}, socket) do
+    Logger.error("Indexer retry crashed: #{inspect(reason)}")
+    {:noreply, restore_retry_error(socket, indexer_id, "Retry failed unexpectedly")}
   end
 
   def handle_async(
@@ -923,6 +940,18 @@ defmodule MydiaWeb.SearchLive.Index do
   end
 
   ## Private Functions
+
+  # Map.replace_lazy/3 for the same reason handle_event("retry_indexer", ...)
+  # uses it: an id that is not already in the map must be a clean no-op, never
+  # an insert of a half-built entry.
+  defp restore_retry_error(socket, indexer_id, message) do
+    indexer_progress =
+      Map.replace_lazy(socket.assigns.indexer_progress, indexer_id, fn entry ->
+        %{entry | status: :error, error: message, result_count: nil, duration_ms: nil}
+      end)
+
+    assign(socket, :indexer_progress, indexer_progress)
+  end
 
   defp close_download_modal(socket) do
     # Clear the downloading URL if there was one and re-insert result to update UI

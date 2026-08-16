@@ -57,6 +57,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
        |> assign(:indexer_raw_results, %{})
        |> assign(:indexer_errors, [])
        |> assign(:raw_search_results, [])
+       |> assign(:result_states, %{})
        |> stream(:search_results, [], reset: true)
        |> start_async(:search, fn ->
          perform_search(search_query, min_seeders, lv, search_id)
@@ -144,6 +145,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
      |> assign(:indexer_raw_results, %{})
      |> assign(:indexer_errors, [])
      |> assign(:raw_search_results, [])
+     |> assign(:result_states, %{})
      |> stream(:search_results, [], reset: true)
      |> start_async(:search, fn ->
        perform_search(search_query, min_seeders, lv, search_id)
@@ -176,6 +178,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
      |> assign(:indexer_raw_results, %{})
      |> assign(:indexer_errors, [])
      |> assign(:raw_search_results, [])
+     |> assign(:result_states, %{})
      |> stream(:search_results, [], reset: true)
      |> start_async(:search, fn ->
        perform_search(search_query, min_seeders, lv, search_id)
@@ -243,29 +246,77 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
   # merges rather than replaces, an unscoped retry's on_start carries a
   # :pending entry for EVERY indexer, so clicking Retry on one failed chip
   # would visibly restart all of them.
+  #
+  # Authorized exactly like the other three entry points that start an indexer
+  # search (manual_search/2, auto_search_download/2, download_from_search/2):
+  # Retry hits the same indexers with the same query, so it must sit behind
+  # the same permission check rather than being a side door around it.
   def handle_retry_indexer(indexer_id, socket) do
-    query = socket.assigns.manual_search_query
-    min_seeders = socket.assigns.min_seeders
-    lv = self()
-    search_id = socket.assigns.search_id
+    with :ok <- Authorization.authorize_manage_downloads(socket) do
+      query = socket.assigns.manual_search_query
+      min_seeders = socket.assigns.min_seeders
+      lv = self()
+      search_id = socket.assigns.search_id
 
-    # Map.replace_lazy/3 no-ops when indexer_id isn't a key in the map, rather
-    # than inserting `indexer_id => nil` (as Map.update/4's default would),
-    # which would otherwise flow a nil straight into the status chip
-    # component. Not reachable through the shipped UI today (the Retry
-    # button only renders for rows already present in the map), but an
-    # unknown or forged id should be a clean no-op, not a crash landmine.
+      # Map.replace_lazy/3 no-ops when indexer_id isn't a key in the map, rather
+      # than inserting `indexer_id => nil` (as Map.update/4's default would),
+      # which would otherwise flow a nil straight into the status chip
+      # component. Not reachable through the shipped UI today (the Retry
+      # button only renders for rows already present in the map), but an
+      # unknown or forged id should be a clean no-op, not a crash landmine.
+      indexer_progress =
+        Map.replace_lazy(socket.assigns.indexer_progress, indexer_id, fn entry ->
+          %{entry | status: :pending, error: nil, result_count: nil, duration_ms: nil}
+        end)
+
+      {:noreply,
+       socket
+       |> assign(:indexer_progress, indexer_progress)
+       |> start_async({:retry, indexer_id}, fn ->
+         perform_search(query, min_seeders, lv, search_id, [indexer_id])
+       end)}
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
+  # Terminal handler for a single-indexer retry.
+  #
+  # The SUCCESS case is deliberately a no-op: every release the retry found
+  # already arrived through `on_indexer_result` (see handle_search_async/2's
+  # note above), and the batched aggregate carries ONLY the retried indexer,
+  # so applying it would clobber every other indexer's contribution.
+  #
+  # The failure cases are not no-ops. handle_retry_indexer/2 sets the chip to
+  # `:pending` before starting the task; if that task dies or returns an error
+  # before any progress message lands, nothing else ever clears `:pending`, so
+  # the chip spins forever AND the Retry button disappears (it only renders
+  # for `:error`/`:timeout`). Restoring an error state puts the indexer back
+  # into an actionable state.
+  def handle_retry_async(_indexer_id, {:ok, {:ok, _results, _indexer_errors}}, socket) do
+    {:noreply, socket}
+  end
+
+  def handle_retry_async(indexer_id, {:ok, {:error, reason}}, socket) do
+    Logger.error("Indexer retry failed: #{inspect(reason)}")
+    {:noreply, restore_retry_error(socket, indexer_id, "Retry failed: #{inspect(reason)}")}
+  end
+
+  def handle_retry_async(indexer_id, {:exit, reason}, socket) do
+    Logger.error("Indexer retry crashed: #{inspect(reason)}")
+    {:noreply, restore_retry_error(socket, indexer_id, "Retry failed unexpectedly")}
+  end
+
+  # Map.replace_lazy/3 for the same reason handle_retry_indexer/2 uses it: an
+  # id that is not already in the map must be a clean no-op, never an insert
+  # of a half-built entry.
+  defp restore_retry_error(socket, indexer_id, message) do
     indexer_progress =
       Map.replace_lazy(socket.assigns.indexer_progress, indexer_id, fn entry ->
-        %{entry | status: :pending, error: nil, result_count: nil, duration_ms: nil}
+        %{entry | status: :error, error: message, result_count: nil, duration_ms: nil}
       end)
 
-    {:noreply,
-     socket
-     |> assign(:indexer_progress, indexer_progress)
-     |> start_async({:retry, indexer_id}, fn ->
-       perform_search(query, min_seeders, lv, search_id, [indexer_id])
-     end)}
+    assign(socket, :indexer_progress, indexer_progress)
   end
 
   defp reset_search_modal(socket) do
@@ -279,6 +330,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
     |> assign(:indexer_errors, [])
     |> assign(:indexer_progress, %{})
     |> assign(:indexer_raw_results, %{})
+    |> assign(:result_states, %{})
     |> assign(:download_error, nil)
     |> stream(:search_results, [], reset: true)
   end
@@ -413,10 +465,32 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
   # Re-stream a single result row with extra fields merged in (e.g. `:downloading`,
   # `:downloaded`). Streams don't re-render existing items on parent assign changes,
   # so per-row state must be pushed via stream_insert.
+  #
+  # The same state is also recorded in `:result_states`, keyed by download_url.
+  # The stream is rebuilt with `reset: true` on every progress message, filter
+  # change and re-sort, and a reset drops anything that only ever lived in the
+  # stream. `:result_states` is what SearchHelpers.stream_prepared_results/2
+  # folds back in on each rebuild, so a badge survives the next indexer
+  # reporting mid-search.
   defp mark_result(socket, download_url, extra) do
+    states =
+      Map.update(
+        Map.get(socket.assigns, :result_states, %{}),
+        download_url,
+        extra,
+        &Map.merge(&1, extra)
+      )
+
+    socket = assign(socket, :result_states, states)
+
     case find_prepared_result(socket, download_url) do
-      nil -> socket
-      item -> stream_insert(socket, :search_results, Map.merge(item, extra))
+      nil ->
+        socket
+
+      item ->
+        # Merge the ACCUMULATED state, not just this call's `extra`, so the row
+        # rendered here matches exactly what a later stream rebuild produces.
+        stream_insert(socket, :search_results, Map.merge(item, Map.fetch!(states, download_url)))
     end
   end
 

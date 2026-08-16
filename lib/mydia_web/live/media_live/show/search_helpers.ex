@@ -43,6 +43,38 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
   def generate_positioned_id(result), do: generate_result_id(result)
 
   @doc """
+  Rebuild the `:search_results` stream from a freshly sorted list, re-applying
+  the per-row grab state held in `:result_states`.
+
+  Per-row flags (`:downloading`, `:downloaded`, `:duplicate`, `:grab_failed`)
+  are written into the stream by `SearchEvents.mark_result/3` and live nowhere
+  else, so every `reset: true` rebuild would erase them. That used to be
+  unreachable: results were only clickable once the search had finished, and
+  nothing rebuilt the stream after that. Now that results stream in while slow
+  indexers are still running, a user can grab a release and watch the badge
+  vanish the moment the next indexer reports.
+
+  `:result_states` is the backing assign that survives those rebuilds, mirroring
+  how `MydiaWeb.SearchLive.Index` keeps `:downloading_urls` in assigns and
+  re-derives per-row state after each re-stream.
+  """
+  def stream_prepared_results(socket, sorted_results) do
+    states = Map.get(socket.assigns, :result_states, %{})
+
+    prepared =
+      sorted_results
+      |> prepare_for_stream()
+      |> Enum.map(fn result ->
+        case Map.get(states, result.download_url) do
+          nil -> result
+          state -> Map.merge(result, state)
+        end
+      end)
+
+    Phoenix.LiveView.stream(socket, :search_results, prepared, reset: true)
+  end
+
+  @doc """
   Run a manual search, streaming per-indexer progress back to `lv`.
 
   `indexer_ids` scopes the search to a subset of the enabled indexers. It
@@ -121,14 +153,12 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
       |> filter_search_results(socket.assigns)
       |> sort_search_results_with_opts(socket.assigns.sort_by, ranking_opts)
 
-    prepared = prepare_for_stream(sorted)
-
     socket
     |> Phoenix.Component.assign(:indexer_progress, indexer_progress)
     |> Phoenix.Component.assign(:indexer_raw_results, raw_pool)
     |> Phoenix.Component.assign(:raw_search_results, ranked)
     |> Phoenix.Component.assign(:results_empty?, sorted == [])
-    |> Phoenix.LiveView.stream(:search_results, prepared, reset: true)
+    |> stream_prepared_results(sorted)
   end
 
   def apply_search_filters(socket) do
@@ -140,11 +170,9 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
     sorted_results =
       sort_search_results_with_opts(filtered_results, socket.assigns.sort_by, ranking_opts)
 
-    prepared_results = prepare_for_stream(sorted_results)
-
     socket
     |> Phoenix.Component.assign(:results_empty?, sorted_results == [])
-    |> Phoenix.LiveView.stream(:search_results, prepared_results, reset: true)
+    |> stream_prepared_results(sorted_results)
   end
 
   def apply_search_sort(socket) do
@@ -156,10 +184,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
     sorted_results =
       sort_search_results_with_opts(filtered_results, socket.assigns.sort_by, ranking_opts)
 
-    prepared_results = prepare_for_stream(sorted_results)
-
-    socket
-    |> Phoenix.LiveView.stream(:search_results, prepared_results, reset: true)
+    stream_prepared_results(socket, sorted_results)
   end
 
   def filter_search_results(results, assigns) do

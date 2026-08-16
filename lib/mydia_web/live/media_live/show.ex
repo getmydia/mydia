@@ -169,6 +169,12 @@ defmodule MydiaWeb.MediaLive.Show do
      # over a stronger release evicted by an earlier round's truncation. See
      # apply_indexer_progress/2 in SearchHelpers.
      |> assign(:indexer_raw_results, %{})
+     # Per-row grab state (:downloading, :downloaded, :duplicate, :grab_failed)
+     # keyed by download_url. The stream is rebuilt with reset: true on every
+     # progress message, filter change and re-sort, and a reset drops anything
+     # that only lived in the stream, so this is the assign those badges
+     # actually survive in. See SearchHelpers.stream_prepared_results/2.
+     |> assign(:result_states, %{})
      # Category modal state
      |> assign(:show_category_modal, false)
      |> assign(:category_form, nil)
@@ -638,7 +644,8 @@ defmodule MydiaWeb.MediaLive.Show do
   def handle_async(:search, result, socket),
     do: SearchEvents.handle_search_async(result, socket)
 
-  def handle_async({:retry, _indexer_id}, _result, socket), do: {:noreply, socket}
+  def handle_async({:retry, indexer_id}, result, socket),
+    do: SearchEvents.handle_retry_async(indexer_id, result, socket)
 
   def handle_async(:refresh_files, result, socket),
     do: FileEvents.handle_refresh_files_async(result, socket)

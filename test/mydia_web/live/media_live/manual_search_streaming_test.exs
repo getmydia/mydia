@@ -67,7 +67,7 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
   # the search provably cannot finish while the gate is shut.
   defp gated_indexer_fixture(name) do
     bypass = Bypass.open()
-    {:ok, gate} = Agent.start_link(fn -> false end)
+    {:ok, gate} = Agent.start_link(fn -> %{open: false, timed_out: false} end)
 
     Bypass.expect(bypass, "GET", "/api/v1/search", fn conn ->
       Bypass.pass(bypass)
@@ -88,20 +88,41 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
     {config, gate}
   end
 
-  defp open_gate(gate), do: Agent.update(gate, fn _ -> true end)
+  defp open_gate(gate), do: Agent.update(gate, &%{&1 | open: true})
 
-  # Bounded on purpose: a gate that is never opened must surface as a failed
-  # assertion in the test, never as a hung suite.
+  # See MydiaWeb.SearchLive.StreamingTest for the full rationale. In short: a
+  # gate that is never opened must surface as a failure, never as a hung suite
+  # -- and never as a PASS. This clause used to return :ok, which let the
+  # Bypass handler answer anyway, so the search completed normally and the
+  # ordering the gated test exists to establish was never established.
+  #
+  # flunk/1 alone does not fix that: this runs in the Bypass plug process and
+  # Bypass.pass/1 has already marked the expectation passed, so the raise is
+  # swallowed. The give-up is recorded in the Agent first, and
+  # assert_gate_held/1 (which runs in the test process) turns it into a
+  # failure.
   defp await_gate(gate, retries \\ 500)
-  defp await_gate(_gate, 0), do: :ok
+
+  defp await_gate(gate, 0) do
+    Agent.update(gate, &%{&1 | timed_out: true})
+    flunk("timed out waiting for the gated indexer to be released; the gate was never opened")
+  end
 
   defp await_gate(gate, retries) do
-    if Agent.get(gate, & &1) do
+    if Agent.get(gate, & &1.open) do
       :ok
     else
       Process.sleep(10)
       await_gate(gate, retries - 1)
     end
+  end
+
+  # Must run in the test process; see await_gate/2 for why the handler cannot
+  # report this itself.
+  defp assert_gate_held(gate) do
+    refute Agent.get(gate, & &1.timed_out),
+           "the gated indexer stopped waiting and answered on its own, so the full " <>
+             "search was never actually held behind the gate and this test proved nothing"
   end
 
   defp wait_until_search_finished(view, retries \\ 300)
@@ -232,6 +253,7 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
     open_gate(gate)
     wait_until_search_finished(view)
 
+    assert_gate_held(gate)
     assert has_element?(view, "##{positioned_result_dom_id(dune)}")
   end
 
@@ -494,5 +516,292 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
 
     assert Process.alive?(view.pid)
     assert render(view) =~ "flaky-indexer"
+  end
+
+  # Retry starts a real indexer search, exactly like the three other entry
+  # points on this LiveView (manual search, auto search, grab), all of which
+  # sit behind Authorization.authorize_manage_downloads/1. It shipped without
+  # that check, so a role that cannot manage downloads could still drive
+  # indexer traffic by pushing the event over the socket.
+  #
+  # The event is pushed directly rather than clicked: a guest never sees the
+  # Retry button (they cannot open the modal at all), and pushing over the
+  # socket is precisely the attack the guard has to stop.
+  #
+  # The positive control is the pair of tests above, which push the same event
+  # as the default "user" role from setup and observe the chip flip to
+  # :pending. A guard that rejected everyone would fail those.
+  test "a role that cannot manage downloads cannot retry an indexer" do
+    media_item = media_item_fixture(%{title: "Dune", type: "movie"})
+    {conn, _guest} = register_and_log_in_user(build_conn(), %{role: "guest"})
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+
+    failed = %IndexerProgress{
+      indexer: "flaky-indexer",
+      indexer_id: "flaky-id",
+      status: :error,
+      error: "Connection failed: :econnrefused",
+      completed: 1,
+      total: 1
+    }
+
+    # search_id is still 0 for a user who never started a search, so this
+    # passes the stale-guard in handle_info({:indexer_progress, ...}).
+    send(view.pid, {:indexer_progress, current_search_id(view), failed})
+    render(view)
+
+    render_click(view, "retry_indexer", %{"id" => "flaky-id"})
+
+    state = :sys.get_state(view.pid).socket.assigns
+
+    assert state.indexer_progress["flaky-id"].status == :error,
+           "the retry ran despite the user lacking manage-downloads permission"
+
+    assert state.flash["error"] =~ "permission"
+  end
+
+  # handle_retry_indexer/2 sets the chip to :pending before starting the task.
+  # If that task dies or errors before any progress message lands, nothing else
+  # ever clears :pending: the chip spins forever and the Retry button is gone,
+  # because it only renders for :error/:timeout. These drive handle_async/3
+  # directly because the failure modes (a crashed task, a non-:ok return from
+  # search_all/2) cannot be provoked through a live indexer.
+  describe "handle_async({:retry, id}, ...)" do
+    defp retry_socket(indexer_progress) do
+      %Phoenix.LiveView.Socket{
+        assigns: %{__changed__: %{}, indexer_progress: indexer_progress}
+      }
+    end
+
+    defp pending_retry_progress do
+      %{
+        "flaky-id" => %IndexerProgress{
+          indexer: "flaky-indexer",
+          indexer_id: "flaky-id",
+          status: :pending,
+          result_count: nil,
+          duration_ms: nil,
+          total: 1
+        }
+      }
+    end
+
+    test "a crashed retry leaves the indexer actionable, not pending forever" do
+      {:noreply, socket} =
+        MydiaWeb.MediaLive.Show.handle_async(
+          {:retry, "flaky-id"},
+          {:exit, :killed},
+          retry_socket(pending_retry_progress())
+        )
+
+      entry = socket.assigns.indexer_progress["flaky-id"]
+
+      assert entry.status == :error
+      assert is_binary(entry.error) and entry.error != ""
+      assert entry.result_count == nil
+      assert entry.duration_ms == nil
+    end
+
+    test "a retry that returns an error leaves the indexer actionable" do
+      {:noreply, socket} =
+        MydiaWeb.MediaLive.Show.handle_async(
+          {:retry, "flaky-id"},
+          {:ok, {:error, :boom}},
+          retry_socket(pending_retry_progress())
+        )
+
+      assert socket.assigns.indexer_progress["flaky-id"].status == :error
+    end
+
+    # The success case must stay a no-op: the retry's releases already arrived
+    # as progress messages, and its batched aggregate covers only the retried
+    # indexer, so applying it would clobber every other indexer's chip.
+    test "a successful retry does not touch indexer_progress" do
+      progress = pending_retry_progress()
+
+      {:noreply, socket} =
+        MydiaWeb.MediaLive.Show.handle_async(
+          {:retry, "flaky-id"},
+          {:ok, {:ok, [], []}},
+          retry_socket(progress)
+        )
+
+      assert socket.assigns.indexer_progress == progress
+    end
+
+    test "an unknown indexer id is a clean no-op rather than an insert" do
+      progress = pending_retry_progress()
+
+      {:noreply, socket} =
+        MydiaWeb.MediaLive.Show.handle_async(
+          {:retry, "never-seen-id"},
+          {:exit, :killed},
+          retry_socket(progress)
+        )
+
+      assert socket.assigns.indexer_progress == progress
+    end
+  end
+
+  # Per-row grab flags are written into the stream by mark_result/3 and live
+  # nowhere else, while every progress message rebuilds that stream with
+  # reset: true. Before results streamed in, rows were only clickable once the
+  # search had finished, so no reset could follow a grab. Now a user can grab
+  # while a slow indexer is still running and watch the badge disappear when
+  # the next indexer reports.
+  #
+  # The second progress message deliberately carries NO results: an unchanged
+  # pool keeps the row's rank (and therefore its positioned DOM id) fixed, so
+  # a failure can only mean the flag was dropped, never that the row moved.
+  test "a grab badge survives the next indexer reporting", %{conn: conn} do
+    media_item = media_item_fixture(%{title: "Dune", type: "movie"})
+    indexer = pending_indexer_fixture("slow-indexer")
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+    view |> element("#manual-search-button") |> render_click()
+    wait_for_indexer_progress(view)
+
+    dune = search_result("Dune.2024.2160p.UHD")
+
+    send(
+      view.pid,
+      {:indexer_progress, current_search_id(view),
+       %IndexerProgress{
+         indexer: "slow-indexer",
+         indexer_id: indexer.id,
+         status: :ok,
+         results: [dune],
+         result_count: 1,
+         duration_ms: 700,
+         completed: 1,
+         total: 2
+       }}
+    )
+
+    render(view)
+
+    # The same message Downloads.Grabber broadcasts on the "downloads" topic
+    # when a grab lands, which is what flips the row to "Grabbed".
+    send(view.pid, {:grab_completed, %{download_url: dune.download_url}})
+    render(view)
+
+    row = "##{positioned_result_dom_id(dune)}"
+
+    assert has_element?(view, "#{row} .btn-success"),
+           "precondition failed: the grabbed badge never rendered"
+
+    send(
+      view.pid,
+      {:indexer_progress, current_search_id(view),
+       %IndexerProgress{
+         indexer: "other-indexer",
+         indexer_id: "other-id",
+         status: :ok,
+         results: [],
+         result_count: 0,
+         duration_ms: 90,
+         completed: 2,
+         total: 2
+       }}
+    )
+
+    render(view)
+
+    assert has_element?(view, "#{row} .btn-success"),
+           "the grabbed badge was erased by the next indexer's progress message"
+  end
+
+  # The results list renders as soon as the first indexer reports, but the
+  # filters bar above it used to stay gated on `!@searching`, so a user could
+  # see streamed results and not be able to filter or re-sort them until the
+  # slowest indexer settled, which can be the full 120s deadline.
+  test "filter and sort controls are available while a slow indexer runs", %{conn: conn} do
+    media_item = media_item_fixture(%{title: "Dune", type: "movie"})
+    indexer = pending_indexer_fixture("slow-indexer")
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+    view |> element("#manual-search-button") |> render_click()
+    wait_for_indexer_progress(view)
+
+    # Nothing has arrived yet, so there is nothing to filter and the bar must
+    # stay hidden. Without this the assertion below could pass on a bar that
+    # simply always renders.
+    refute has_element?(view, "#close-after-grab-toggle")
+
+    send(
+      view.pid,
+      {:indexer_progress, current_search_id(view),
+       %IndexerProgress{
+         indexer: "slow-indexer",
+         indexer_id: indexer.id,
+         status: :ok,
+         results: [search_result("Dune.2024.2160p.UHD")],
+         result_count: 1,
+         duration_ms: 700,
+         completed: 1,
+         total: 2
+       }}
+    )
+
+    render(view)
+
+    assert :sys.get_state(view.pid).socket.assigns.searching,
+           "precondition failed: the search already ended, so this proves nothing"
+
+    assert has_element?(view, ~s(#manual-search-modal form[phx-change="filter_search"]))
+    assert has_element?(view, ~s(#manual-search-modal form[phx-change="sort_search"]))
+    assert has_element?(view, "#close-after-grab-toggle")
+  end
+
+  # Two things at once: the filter handler re-filters the accumulated set
+  # correctly mid-search, and filtering down to nothing does NOT take the
+  # controls away with it. That second half is why the bar is gated on the
+  # pre-filter pool rather than on `!@results_empty?` like the results list:
+  # test fixtures carry no parsed quality, so a resolution filter matches
+  # nothing, and gating on the post-filter set would strand the user with no
+  # way to undo the filter they just applied.
+  test "a filter applied mid-search re-filters without stranding the user", %{conn: conn} do
+    media_item = media_item_fixture(%{title: "Dune", type: "movie"})
+    indexer = pending_indexer_fixture("slow-indexer")
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+    view |> element("#manual-search-button") |> render_click()
+    wait_for_indexer_progress(view)
+
+    dune = search_result("Dune.2024.2160p.UHD")
+
+    send(
+      view.pid,
+      {:indexer_progress, current_search_id(view),
+       %IndexerProgress{
+         indexer: "slow-indexer",
+         indexer_id: indexer.id,
+         status: :ok,
+         results: [dune],
+         result_count: 1,
+         duration_ms: 700,
+         completed: 1,
+         total: 2
+       }}
+    )
+
+    render(view)
+    assert has_element?(view, "##{positioned_result_dom_id(dune)}")
+
+    view
+    |> element(~s(#manual-search-modal form[phx-change="filter_search"]))
+    |> render_change(%{"quality" => "2160p", "min_seeders" => "0"})
+
+    refute has_element?(view, "##{positioned_result_dom_id(dune)}")
+
+    assert has_element?(view, ~s(#manual-search-modal form[phx-change="filter_search"])),
+           "the filter that matched nothing also removed the controls needed to undo it"
+
+    view
+    |> element(~s(#manual-search-modal form[phx-change="filter_search"]))
+    |> render_change(%{"quality" => "", "min_seeders" => "0"})
+
+    assert has_element?(view, "##{positioned_result_dom_id(dune)}")
   end
 end

@@ -573,6 +573,10 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   attr :close_after_grab, :boolean, default: false
   attr :download_error, :any, default: nil
   attr :results_empty?, :boolean, required: true
+  # Whether the accumulated (pre-filter) result pool is still empty. Gates the
+  # filters bar: see the comment on it below for why this is not
+  # `results_empty?`.
+  attr :raw_results_empty?, :boolean, default: true
   attr :indexer_errors, :list, default: []
   attr :indexer_progress, :map, default: %{}
   attr :streams, :map, required: true
@@ -640,7 +644,19 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
           </div>
         </div>
         <%!-- Filters Bar (compact) --%>
-        <%= if !@searching do %>
+        <%!-- Additive to the old `!@searching` gate. Results now stream in
+             indexer by indexer, so gating only on the search being over left
+             the user staring at rows they could not filter or re-sort for up
+             to the full 120s deadline. Adding "or the accumulated pool is not
+             empty" opens the bar as soon as the first indexer reports.
+
+             The extra condition is the PRE-filter pool, not `!@results_empty?`
+             (what the results list below uses). `results_empty?` is the
+             post-filter display set, so a quality filter that happens to match
+             nothing would hide the very controls needed to undo it. Keeping
+             `!@searching` as a floor also keeps the "Close after grabbing"
+             preference reachable after a search that found nothing. --%>
+        <%= if !@raw_results_empty? or !@searching do %>
           <div class="bg-base-200/50 border-b border-base-300 px-4 py-3">
             <div class="flex flex-wrap items-center gap-3">
               <form phx-change="filter_search" class="flex flex-wrap items-center gap-3">

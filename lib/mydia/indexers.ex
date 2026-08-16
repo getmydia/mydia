@@ -349,13 +349,27 @@ defmodule Mydia.Indexers do
   Background searches run repeatedly across a whole library, so they stay
   throttled to avoid indexer bans. Manual searches deliberately do not use
   this: they fan out fully because a user is waiting.
+
+  The deadline is deliberately tighter than the interactive one (120s).
+  `MovieSearch` and `TVShowSearch` walk their items one at a time and the Oban
+  `:search` queue sets no execution timeout, so a per-indexer deadline is the
+  only thing bounding a sweep: with `max_concurrency: 2`, one query costs up to
+  `ceil(indexers / 2) * deadline`, multiplied again by every monitored item in
+  the run. Nobody is waiting on the answer, so a slow host is worth much less
+  patience here than in the manual dialog. 60s still clears the 30-45s a
+  Prowlarr or Jackett instance can legitimately take when it fans out to a cold
+  upstream tracker, while halving the worst-case tail.
+
+  Override with `:background_deadline_ms` in the `:indexer_search` config block,
+  alongside `:background_max_concurrency`.
   """
   @spec background_search_opts() :: keyword()
   def background_search_opts do
-    concurrency =
-      Application.get_env(:mydia, :indexer_search, [])[:background_max_concurrency] || 2
+    config = Application.get_env(:mydia, :indexer_search, [])
+    concurrency = config[:background_max_concurrency] || 2
+    deadline_ms = config[:background_deadline_ms] || 60_000
 
-    [max_concurrency: concurrency]
+    [max_concurrency: concurrency, deadline_ms: deadline_ms]
   end
 
   @doc """

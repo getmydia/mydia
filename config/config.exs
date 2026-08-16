@@ -421,6 +421,12 @@ config :mydia, :indexer_search,
   # automatic searches getting users rate-limited and banned by indexer sites.
   # Manual searches do not use this; they fan out fully for latency.
   background_max_concurrency: 2,
+  # Milliseconds before a single indexer is abandoned during an UNATTENDED
+  # background search. Tighter than the 120s manual deadline on purpose: no
+  # user is waiting, background jobs walk their items sequentially, and the
+  # Oban :search queue has no execution timeout, so this is what bounds a
+  # long sweep. See Mydia.Indexers.background_search_opts/0.
+  background_deadline_ms: 60_000,
   # Default rate limit for Cardigann indexers (requests per minute per indexer)
   # Cardigann indexers hit sites directly, so conservative limits prevent bans
   default_cardigann_rate_limit: 3

@@ -8,17 +8,28 @@ defmodule Mydia.IndexersTest do
   alias Mydia.Settings
   alias Mydia.IndexerMock
 
+  # Disable every DB-persisted indexer config so a describe block's own
+  # fixtures are the only enabled indexers. Any test that pins an exact result
+  # count, or an exact set of indexer names, needs this or a config left
+  # enabled by an earlier setup silently breaks it.
+  #
+  # Runtime configs (inserted_at == nil, configured through environment
+  # variables) cannot be updated and stay enabled; see the "returns empty list
+  # when no indexers are enabled" test for how that case is handled.
+  defp disable_persisted_indexer_configs do
+    Settings.list_indexer_configs()
+    |> Enum.filter(fn config -> not is_nil(config.inserted_at) end)
+    |> Enum.each(fn config ->
+      Settings.update_indexer_config(config, %{enabled: false})
+    end)
+  end
+
   describe "search_all/2" do
     setup do
       # Ensure adapters are registered (needed for CI environment)
       Indexers.register_adapters()
 
-      # Disable all existing indexer configs from test database
-      Settings.list_indexer_configs()
-      |> Enum.filter(fn config -> not is_nil(config.inserted_at) end)
-      |> Enum.each(fn config ->
-        Settings.update_indexer_config(config, %{enabled: false})
-      end)
+      disable_persisted_indexer_configs()
 
       # Set up mock Prowlarr servers
       bypass1 = Bypass.open()
@@ -178,6 +189,8 @@ defmodule Mydia.IndexersTest do
     # fan-out (all 4 concurrent: ~3000ms), with headroom on both sides of the
     # 4_500ms assertion below.
     setup do
+      disable_persisted_indexer_configs()
+
       fast = Bypass.open()
 
       Bypass.expect(fast, "GET", "/api/v1/search", fn conn ->
@@ -363,6 +376,8 @@ defmodule Mydia.IndexersTest do
     # passes `ordered: false` specifically so results stream out as they
     # settle instead.
     setup do
+      disable_persisted_indexer_configs()
+
       for n <- 1..3 do
         slow = Bypass.open()
 
@@ -417,8 +432,15 @@ defmodule Mydia.IndexersTest do
   end
 
   describe "background_search_opts/0" do
-    test "defaults to max_concurrency: 2" do
-      assert Indexers.background_search_opts() == [max_concurrency: 2]
+    test "defaults to throttled concurrency and a bounded deadline" do
+      assert Indexers.background_search_opts() == [max_concurrency: 2, deadline_ms: 60_000]
+    end
+
+    # The deadline exists to stop an unattended sweep inheriting the 120s
+    # interactive one. Asserting it is strictly tighter keeps that intent from
+    # being undone by a config edit that happens to leave the test above green.
+    test "the background deadline is tighter than the manual one" do
+      assert Indexers.background_search_opts()[:deadline_ms] < 120_000
     end
   end
 
