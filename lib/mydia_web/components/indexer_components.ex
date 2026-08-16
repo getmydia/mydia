@@ -10,7 +10,7 @@ defmodule MydiaWeb.IndexerComponents do
 
   use Phoenix.Component
 
-  import MydiaWeb.CoreComponents, only: [icon: 1]
+  import MydiaWeb.CoreComponents, only: [button: 1, icon: 1]
 
   alias Mydia.Indexers.Structs.IndexerProgress
 
@@ -80,7 +80,7 @@ defmodule MydiaWeb.IndexerComponents do
               <span class="font-medium">{row.indexer}</span>
               <span class="text-xs opacity-70">{status_label(row)}</span>
 
-              <button
+              <.button
                 :if={@retry_event && row.status in [:error, :timeout]}
                 type="button"
                 class="btn btn-ghost btn-xs"
@@ -88,7 +88,7 @@ defmodule MydiaWeb.IndexerComponents do
                 phx-value-id={row.indexer_id}
               >
                 Retry
-              </button>
+              </.button>
             </li>
           </ul>
         </div>
