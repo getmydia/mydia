@@ -1,8 +1,11 @@
 defmodule Mydia.MediaRequestsTest do
   use Mydia.DataCase, async: false
 
+  import ExUnit.CaptureLog
+
   alias Mydia.MediaRequests
   alias Mydia.{Accounts, Media, Repo}
+  alias Mydia.Media.MediaItem
   alias Mydia.Media.MediaRequest
 
   describe "list_requests/1" do
@@ -196,13 +199,14 @@ defmodule Mydia.MediaRequestsTest do
       assert media_item.type == request.media_type
     end
 
-    test "rolls back if media creation fails", %{
+    test "links the request to an existing media item instead of hitting the tmdb_id index", %{
       request: request,
       admin: admin,
       config: config
     } do
-      # Create a media item with the same TMDB ID to cause a conflict
-      {:ok, _existing} =
+      # A row with the same TMDB ID was added to the library after the
+      # request was filed but before it was approved.
+      {:ok, existing} =
         Media.create_media_item(%{
           type: "movie",
           title: "Existing",
@@ -212,17 +216,66 @@ defmodule Mydia.MediaRequestsTest do
 
       attrs = %{approved_by_id: admin.id}
 
-      assert {:error, _changeset} = MediaRequests.approve_request(request, attrs, config: config)
+      assert {:ok, %{request: updated_request, media_item: media_item}} =
+               MediaRequests.approve_request(request, attrs, config: config)
 
-      # Verify request was not updated
-      reloaded = Repo.get!(MediaRequest, request.id)
-      assert reloaded.status == "pending"
-      assert reloaded.approved_at == nil
+      assert media_item.id == existing.id
+      assert updated_request.status == "approved"
+      assert updated_request.media_item_id == existing.id
     end
 
     test "requires approved_by_id", %{request: request, config: config} do
       assert {:error, changeset} = MediaRequests.approve_request(request, %{}, config: config)
       assert %{approved_by_id: ["can't be blank"]} = errors_on(changeset)
+    end
+
+    # `Add.from_attrs/3`'s pre-flight is scoped to the request's own media type,
+    # while the unique index on tmdb_id is global. A movie holding the id is
+    # therefore invisible to the lookup and only the index catches it, which is
+    # the one path left that reaches insert_approval/4's media_item rollback.
+    # Pinning the behaviour here: closing the cross-type gap needs a composite
+    # (type, tmdb_id) index and so a migration.
+    test "rolls back and leaves the request pending when the other media type owns the tmdb_id",
+         %{user: user, admin: admin} do
+      bypass = Bypass.open()
+      tmdb_id = System.unique_integer([:positive])
+
+      request =
+        create_request(user, %{media_type: "tv_show", title: "Crossed Type", tmdb_id: tmdb_id})
+
+      # Filed first, so create_request/1's own duplicate check does not fire:
+      # the movie lands in the library while the request sits pending.
+      {:ok, movie} =
+        Media.create_media_item(%{
+          type: "movie",
+          title: "Crossed Type",
+          year: 2023,
+          tmdb_id: tmdb_id
+        })
+
+      stub_tmdb_tv_show(bypass, tmdb_id, "Crossed Type")
+      stub_tvdb_search_empty(bypass)
+
+      before_count = Repo.aggregate(MediaItem, :count)
+
+      log =
+        capture_log(fn ->
+          assert {:error, %Ecto.Changeset{} = changeset} =
+                   MediaRequests.approve_request(request, %{approved_by_id: admin.id},
+                     config: relay_config(bypass)
+                   )
+
+          assert %{tmdb_id: ["has already been taken"]} = errors_on(changeset)
+        end)
+
+      assert log =~ "Failed to create media item for request #{request.id}"
+
+      reloaded = Repo.get!(MediaRequest, request.id)
+      assert reloaded.status == "pending"
+      assert is_nil(reloaded.media_item_id)
+
+      assert Repo.aggregate(MediaItem, :count) == before_count
+      assert Media.get_media_item_by_tmdb(tmdb_id).id == movie.id
     end
   end
 
@@ -401,6 +454,34 @@ defmodule Mydia.MediaRequestsTest do
       conn
       |> Plug.Conn.put_resp_content_type("application/json")
       |> Plug.Conn.resp(200, Jason.encode!(body))
+    end)
+  end
+
+  defp stub_tmdb_tv_show(bypass, id, title) do
+    body = %{
+      "id" => id,
+      "name" => title,
+      "first_air_date" => "2021-03-04",
+      "overview" => "x",
+      "credits" => %{"cast" => [], "crew" => []},
+      "seasons" => [],
+      "genres" => []
+    }
+
+    Bypass.stub(bypass, "GET", "/tmdb/tv/shows/#{id}", fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, Jason.encode!(body))
+    end)
+  end
+
+  # No TVDB cross-reference and no title-search hit, so the show resolves on
+  # TMDB content alone and the attrs carry only the tmdb_id under test.
+  defp stub_tvdb_search_empty(bypass) do
+    Bypass.stub(bypass, "GET", "/tvdb/search", fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, Jason.encode!(%{"data" => []}))
     end)
   end
 

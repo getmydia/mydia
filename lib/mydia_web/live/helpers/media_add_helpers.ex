@@ -63,8 +63,14 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   @doc """
   Handles the full add-media-to-library flow.
 
-  Returns `{:ok, media_item, updated_library_status_map}` or `{:error, reason}`,
-  where reason is `{:metadata, term()}` or `{:changeset, Ecto.Changeset.t()}`.
+  Returns `{:ok, media_item, updated_library_status_map}`,
+  `{:already_in_library, media_item, updated_library_status_map}`, or
+  `{:error, reason}`, where reason is `{:metadata, term()}` or
+  `{:changeset, Ecto.Changeset.t()}`.
+
+  The `:already_in_library` tuple is not an error from a caller's point of
+  view: the show the user asked for is in the library, just under a row that
+  was already there. Callers should flash it as info rather than an error.
 
   An optional `config` (relay config map) can be injected for testing; it
   defaults to `Metadata.default_relay_config()`.
@@ -85,8 +91,14 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
 
     case Add.from_provider(provider_id, media_type, config, opts) do
       {:ok, media_item} ->
-        updated_map = update_library_status_map(library_status_map, media_item, provider_id_int)
-        {:ok, media_item, updated_map}
+        {:ok, media_item,
+         update_library_status_map(library_status_map, media_item, provider_id_int)}
+
+      # Not an error from here up: the show the user asked for is in the
+      # library. Callers flash it as info and flip the card.
+      {:error, {:already_in_library, media_item}} ->
+        {:already_in_library, media_item,
+         update_library_status_map(library_status_map, media_item, provider_id_int)}
 
       {:error, _} = error ->
         error

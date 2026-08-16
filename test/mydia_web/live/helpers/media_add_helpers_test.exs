@@ -204,6 +204,44 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
     end
   end
 
+  describe "handle_add_media_to_library/4 already in library" do
+    setup do
+      bypass = Bypass.open()
+
+      config = %{
+        type: :metadata_relay,
+        base_url: "http://localhost:#{bypass.port}",
+        options: %{language: "en-US", include_adult: false}
+      }
+
+      %{bypass: bypass, config: config}
+    end
+
+    # This is the tuple shape DiscoverLive and DashboardLive pattern-match on
+    # in their `{:add_media_to_library, ...}` handle_info clauses. A drift
+    # here (arity, atom, tuple position) falls through to their `case`
+    # clauses undetected by any compiler check.
+    test "returns {:already_in_library, item, updated_map} instead of an error",
+         %{bypass: bypass, config: config} do
+      id = System.unique_integer([:positive])
+
+      existing =
+        Mydia.MediaFixtures.media_item_fixture(%{
+          type: "movie",
+          title: "Already Added",
+          tmdb_id: id
+        })
+
+      stub_tmdb_movie(bypass, id, "Already Added", 2019)
+
+      assert {:already_in_library, item, updated_map} =
+               MediaAddHelpers.handle_add_media_to_library(to_string(id), :movie, %{}, config)
+
+      assert item.id == existing.id
+      assert updated_map[id][:in_library] == true
+    end
+  end
+
   describe "fetch_detail_metadata/3 reflects the derived source" do
     setup do
       bypass = Bypass.open()

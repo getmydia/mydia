@@ -1,16 +1,18 @@
 defmodule Mydia.Jobs.MetadataBackfill do
   @moduledoc """
-  Enqueues a metadata refresh for every media item stored without metadata.
+  Repairs media items that need a metadata refresh to become correct.
 
-  Approving a media request used to create a bare row with no `metadata`, which
-  renders as an empty poster placeholder forever. That is fixed at the source in
-  `Mydia.MediaRequests.approve_request/3`, but libraries already carry the
-  damaged rows, and a self-hosted operator should not have to find and repair
-  them by hand.
+  Two cases qualify. Items stored with no `metadata` at all render as an empty
+  poster placeholder forever; approving a media request used to create them,
+  which is fixed at the source in `Mydia.MediaRequests.approve_request/3`. TV
+  shows missing either provider id make Discover show an Add button for
+  something already in the library; with one id present the add that follows
+  dies on the `tvdb_id` unique index, and with neither it silently creates a
+  second row for the same show.
 
-  Runs daily. Once a library is repaired the query returns nothing and the job
-  costs one empty read, so it also self-heals if nil-metadata items appear again
-  from any other cause. Idempotent and safe to re-run.
+  Runs daily. The query matches nothing once the library is repaired, so the
+  job settles into costing one read, and a self-hosted operator never has to
+  find and repair these by hand. Idempotent and safe to re-run.
   """
 
   use Oban.Worker,
@@ -37,15 +39,23 @@ defmodule Mydia.Jobs.MetadataBackfill do
   @impl Oban.Worker
   def perform(%Oban.Job{}) do
     ids =
-      from(m in MediaItem, where: is_nil(m.metadata), select: m.id, order_by: [asc: m.title])
+      from(m in MediaItem,
+        where:
+          is_nil(m.metadata) or
+            (m.type == "tv_show" and (is_nil(m.tmdb_id) or is_nil(m.tvdb_id))),
+        select: struct(m, [:id, :metadata]),
+        order_by: [asc: m.title]
+      )
       |> Repo.all()
+      |> Enum.filter(&needs_backfill?/1)
+      |> Enum.map(& &1.id)
 
     total = length(ids)
 
     if total == 0 do
       :ok
     else
-      Logger.info("[MetadataBackfill] Found #{total} media items without metadata")
+      Logger.info("[MetadataBackfill] Found #{total} media items needing repair")
 
       ids
       |> Enum.chunk_every(@batch_size)
@@ -63,6 +73,16 @@ defmodule Mydia.Jobs.MetadataBackfill do
       :ok
     end
   end
+
+  # The stored metadata is its own marker. Metadata written before
+  # cross-provider id storage has `external_ids` nil, which means we have never
+  # asked its provider for a cross-reference. Anything written since always
+  # carries the map, even when every entry inside is nil, so a show that
+  # neither provider cross-references drops out of this filter after one
+  # refresh instead of being re-enqueued every night.
+  defp needs_backfill?(%MediaItem{metadata: nil}), do: true
+  defp needs_backfill?(%MediaItem{metadata: %{external_ids: ids}}) when is_map(ids), do: false
+  defp needs_backfill?(%MediaItem{}), do: true
 
   defp enqueue_refresh(media_item_id) do
     # Singular Oban.insert/1, never insert_all/1: uniqueness on Basic and Lite

@@ -75,6 +75,12 @@ defmodule Mydia.Events.Presentation do
       color: "text-info",
       title: "Episodes refreshed"
     },
+    %{
+      type: "media_item.duplicate_provider_id",
+      icon: "hero-exclamation-triangle",
+      color: "text-warning",
+      title: "Duplicate provider id skipped"
+    },
 
     # media_file.*
     %{

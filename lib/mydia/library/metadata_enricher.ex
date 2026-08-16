@@ -11,6 +11,7 @@ defmodule Mydia.Library.MetadataEnricher do
 
   require Logger
   alias Mydia.{Media, Metadata, Repo, Settings}
+  alias Mydia.Media.ExternalIds
   alias Mydia.Metadata.LanguageCode
   alias Mydia.Metadata.NfoWriter
 
@@ -217,8 +218,15 @@ defmodule Mydia.Library.MetadataEnricher do
 
       case fetch_full_metadata(provider_id, media_type, config, provider_type) do
         {:ok, full_metadata} ->
+          # `exclude_id` matters only here: the row already exists and usually
+          # already owns the cross-referenced id, so without it the item is
+          # found as the owner of its own id, the id is dropped and the
+          # operator gets a spurious duplicate warning out of an ordinary scan.
           attrs =
-            build_media_item_attrs(full_metadata, media_type, %{provider_type: provider_type})
+            build_media_item_attrs(full_metadata, media_type, %{
+              provider_type: provider_type,
+              exclude_id: existing_item.id
+            })
 
           Media.update_media_item(existing_item, attrs, reason: "Metadata enriched")
 
@@ -291,13 +299,23 @@ defmodule Mydia.Library.MetadataEnricher do
       monitored: true
     }
 
-    # Set the appropriate provider ID field
+    # Set the id of the provider that produced the match, then add whatever
+    # cross-reference that provider published. A show matched on TVDB used to
+    # be stored with tmdb_id nil, which made Discover render an Add button for
+    # something already in the library.
     attrs =
       if provider_type == :tvdb do
         Map.put(attrs, :tvdb_id, provider_id)
       else
         Map.put(attrs, :tmdb_id, provider_id)
       end
+
+    # `:exclude_id` is absent on the create path -- there is no row yet, so
+    # every owner found really is a different item.
+    attrs =
+      ExternalIds.put_free_ids(attrs, metadata.external_ids,
+        exclude_id: Map.get(match_result, :exclude_id)
+      )
 
     # Record provenance for TV shows so provider-aware refresh can detect a
     # source/library mismatch. Movies leave metadata_source nil.

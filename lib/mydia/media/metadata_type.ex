@@ -118,6 +118,7 @@ defmodule Mydia.Media.MetadataType do
       vote_average: data[:vote_average],
       vote_count: data[:vote_count],
       imdb_id: data[:imdb_id],
+      external_ids: parse_external_ids(data[:external_ids]),
       production_companies: data[:production_companies],
       production_countries: data[:production_countries],
       spoken_languages: data[:spoken_languages],
@@ -237,6 +238,53 @@ defmodule Mydia.Media.MetadataType do
       }
     end)
   end
+
+  # `external_ids` is nil when the metadata was written before cross-provider
+  # id storage existed, or when the provider response carried no such block.
+  # `Mydia.Jobs.MetadataBackfill` reads that nil as "never checked" versus a
+  # populated map as "checked, here's what we found". This must round-trip
+  # through the database exactly as it was written, nil or not.
+  #
+  # The coercions mirror `Mydia.Metadata.Structs.MediaMetadata`'s own parser:
+  # these ids are handed straight to `Media.get_media_item_by_tmdb/1` and
+  # friends, which query :integer columns and raise `Ecto.Query.CastError` on a
+  # string rather than returning nil. Nothing writes string ids here today, but
+  # a metadata map built by hand would, and the two parsers staying identical
+  # is what keeps that true.
+  defp parse_external_ids(nil), do: nil
+
+  defp parse_external_ids(ids) when is_map(ids) do
+    %{
+      tmdb: parse_external_integer(external_id_value(ids, :tmdb)),
+      tvdb: parse_external_integer(external_id_value(ids, :tvdb)),
+      imdb: parse_external_string(external_id_value(ids, :imdb))
+    }
+  end
+
+  defp parse_external_ids(_), do: nil
+
+  # Read the three keys directly in both forms rather than atomizing the map.
+  # It arrives from persisted JSON, so its keys are whatever was written, and
+  # `atomize_keys/1` falls back to `String.to_atom/1` for a key it has never
+  # seen -- one permanently held VM atom per distinct key. Nothing else in this
+  # map is meaningful.
+  defp external_id_value(ids, key) do
+    Map.get(ids, key) || Map.get(ids, Atom.to_string(key))
+  end
+
+  defp parse_external_integer(id) when is_integer(id) and id > 0, do: id
+
+  defp parse_external_integer(id) when is_binary(id) do
+    case Integer.parse(id) do
+      {int, ""} when int > 0 -> int
+      _ -> nil
+    end
+  end
+
+  defp parse_external_integer(_), do: nil
+
+  defp parse_external_string(id) when is_binary(id) and id != "", do: id
+  defp parse_external_string(_), do: nil
 
   # Parse date strings to Date structs
   defp parse_date(nil), do: nil

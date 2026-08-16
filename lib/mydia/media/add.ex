@@ -16,13 +16,17 @@ defmodule Mydia.Media.Add do
   require Logger
 
   alias Mydia.Media
+  alias Mydia.Media.ExternalIds
   alias Mydia.Metadata
   alias Mydia.Settings
 
   # Options consumed by `Media.create_media_item/2` rather than by attrs building.
   @create_opt_keys [:actor_type, :actor_id, :skip_episode_refresh, :season_monitoring]
 
-  @type error :: {:metadata, term()} | {:changeset, Ecto.Changeset.t()}
+  @type error ::
+          {:metadata, term()}
+          | {:changeset, Ecto.Changeset.t()}
+          | {:already_in_library, Media.MediaItem.t()}
 
   @doc """
   Fetches provider metadata and builds the attrs for `Media.create_media_item/2`.
@@ -63,10 +67,19 @@ defmodule Mydia.Media.Add do
   pre-existing behaviour and is deliberately left where it is.
   """
   @spec from_attrs(map(), map() | nil, keyword()) ::
-          {:ok, Media.MediaItem.t()} | {:error, {:changeset, Ecto.Changeset.t()}}
+          {:ok, Media.MediaItem.t()}
+          | {:error,
+             {:changeset, Ecto.Changeset.t()} | {:already_in_library, Media.MediaItem.t()}}
   def from_attrs(attrs, config \\ nil, opts \\ []) do
     config = config || Metadata.default_relay_config()
 
+    case existing_item(attrs) do
+      nil -> insert_media_item(attrs, config, opts)
+      item -> {:error, {:already_in_library, backfill_ids(item, attrs)}}
+    end
+  end
+
+  defp insert_media_item(attrs, config, opts) do
     create_opts =
       opts
       |> Keyword.take(@create_opt_keys)
@@ -75,6 +88,97 @@ defmodule Mydia.Media.Add do
     case Media.create_media_item(attrs, create_opts) do
       {:ok, media_item} -> {:ok, media_item}
       {:error, changeset} -> {:error, {:changeset, changeset}}
+    end
+  end
+
+  # The unique indexes on tmdb_id and tvdb_id turn "you already have this" into
+  # a changeset error the user reads as a bug. Look first, so the caller can
+  # say something true instead.
+  #
+  # Two passes, because the attrs are not the whole story. A cross-referenced
+  # id is dropped rather than carried: `ExternalIds.put_free_ids/3` leaves
+  # `attrs[:tvdb_id]` nil precisely when another row already owns it, and the
+  # title-search fallback in `lookup_and_add_tvdb_id/2` can then fill the empty
+  # slot with a different, free id. Either way the attrs no longer mention the
+  # taken id, while `metadata.external_ids` still does -- and the row holding
+  # it is the collision. Without the second pass an add of a show already in
+  # the library inserts a duplicate instead of reporting the incumbent.
+  #
+  # `:imdb` is deliberately absent from both passes. `imdb_id` carries no
+  # unique index, so an imdb match can never be the constraint error this
+  # pre-flight exists to pre-empt, and `find_by_external_ids/2`'s imdb leg
+  # over-matches: TVDB's `remoteIds` hands split and spin-off series a shared
+  # imdb id, which would turn a legitimate add into a false "already in your
+  # library" and let `backfill_ids/2` stamp one title's provider id onto the
+  # other. Every row Add or the scan path creates carries a tmdb or tvdb id, so
+  # declining the imdb leg here costs no coverage.
+  defp existing_item(attrs) do
+    xrefs = metadata_external_ids(attrs)
+
+    Enum.find_value(
+      [
+        %{tmdb: attrs[:tmdb_id], tvdb: attrs[:tvdb_id]},
+        %{tmdb: xrefs[:tmdb], tvdb: xrefs[:tvdb]}
+      ],
+      &find_by_ids(&1, attrs[:type])
+    )
+  end
+
+  defp find_by_ids(ids, type) do
+    if Enum.all?(Map.values(ids), &is_nil/1) do
+      nil
+    else
+      Media.find_by_external_ids(ids, type: type)
+    end
+  end
+
+  # `attrs[:metadata]` is a `%MediaMetadata{}` when it came from
+  # `build_media_item_attrs/3`, and absent entirely when a caller hand-built
+  # the attrs. `external_ids` itself is nil on metadata written before
+  # cross-provider ids were stored.
+  defp metadata_external_ids(attrs) do
+    case attrs[:metadata] do
+      %{external_ids: ids} when is_map(ids) -> ids
+      _ -> %{}
+    end
+  end
+
+  # The existing row is usually the one missing an id, which is exactly why it
+  # was not recognised. Fill what is free so the gap closes for good.
+  #
+  # The two providers are read from different places on purpose. `tmdb_id` in
+  # the attrs is the id the user actually picked on Discover, or the exact
+  # cross-reference TVDB published under `remoteIds`; either way it is not a
+  # guess. `tvdb_id` can be one: when TMDB carries no cross-reference,
+  # `lookup_and_add_tvdb_id/2` fills the slot from a TVDB title-and-year search
+  # that takes the first hit on faith. Guessing is acceptable for the row we
+  # are about to create -- nothing else claims it -- and not for a row that
+  # already exists, where a wrong tvdb_id sends every later refresh to the
+  # wrong series. So only the id `metadata.external_ids` cross-references is
+  # persisted here. A row left without one is picked up by
+  # `Mydia.Jobs.MetadataBackfill`, which refreshes it from its own provider.
+  defp backfill_ids(item, attrs) do
+    xrefs = metadata_external_ids(attrs)
+
+    merged =
+      %{tmdb_id: item.tmdb_id, tvdb_id: item.tvdb_id}
+      |> ExternalIds.put_free_ids(%{tmdb: attrs[:tmdb_id], tvdb: xrefs[:tvdb]},
+        exclude_id: item.id,
+        title: item.title
+      )
+
+    changes =
+      merged
+      |> Enum.reject(fn {key, value} -> Map.get(item, key) == value end)
+      |> Map.new()
+
+    if changes == %{} do
+      item
+    else
+      case Media.update_media_item(item, changes, reason: "Cross-referenced provider id") do
+        {:ok, updated} -> updated
+        {:error, _reason} -> item
+      end
     end
   end
 
@@ -141,16 +245,25 @@ defmodule Mydia.Media.Add do
     attrs = maybe_put_library_path(attrs, opts[:library_path_id])
 
     # Record provenance for TV shows only; movies leave metadata_source nil.
-    if media_type == :movie do
-      attrs
-    else
-      Map.put(attrs, :metadata_source, opts[:metadata_source])
-    end
+    attrs =
+      if media_type == :movie do
+        attrs
+      else
+        Map.put(attrs, :metadata_source, opts[:metadata_source])
+      end
+
+    ExternalIds.put_free_ids(attrs, metadata.external_ids)
   end
 
   @doc """
   Looks up a TVDB ID for a TV show by searching TVDB by title and year.
+
+  A `tvdb_id` already present in the attrs was resolved exactly, from TMDB's
+  `external_ids`, so it wins over anything this title search would find.
   """
+  def lookup_and_add_tvdb_id(%{tvdb_id: tvdb_id} = attrs, _config) when not is_nil(tvdb_id),
+    do: attrs
+
   def lookup_and_add_tvdb_id(attrs, config) do
     search_opts =
       if attrs[:year] do
@@ -173,8 +286,32 @@ defmodule Mydia.Media.Add do
 
   @doc """
   Resolves richer TVDB metadata for a show discovered on TMDB.
+
+  TMDB publishes the TVDB id under `external_ids`, so prefer that exact
+  mapping. The title and year search below is the fallback for the shows TMDB
+  does not cross-reference; it takes the first hit on faith, which is how a
+  show can be resolved onto an id another row already owns.
   """
   def resolve_tvdb_metadata(tmdb_metadata, config) do
+    case tvdb_id_from_metadata(tmdb_metadata) do
+      nil -> resolve_tvdb_metadata_by_search(tmdb_metadata, config)
+      tvdb_id -> fetch_tvdb_series(tvdb_id, config)
+    end
+  end
+
+  defp tvdb_id_from_metadata(%{external_ids: %{tvdb: tvdb_id}}) when is_integer(tvdb_id),
+    do: tvdb_id
+
+  defp tvdb_id_from_metadata(_), do: nil
+
+  defp fetch_tvdb_series(tvdb_id, config) do
+    case Metadata.fetch_by_id(config, to_string(tvdb_id), media_type: :tv_show, provider: :tvdb) do
+      {:ok, tvdb_metadata} -> {:ok, tvdb_metadata, tvdb_id}
+      {:error, _reason} -> {:error, :tvdb_not_found}
+    end
+  end
+
+  defp resolve_tvdb_metadata_by_search(tmdb_metadata, config) do
     year = extract_year(tmdb_metadata)
 
     search_opts =

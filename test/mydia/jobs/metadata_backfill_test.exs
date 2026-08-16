@@ -45,4 +45,84 @@ defmodule Mydia.Jobs.MetadataBackfillTest do
 
     refute_enqueued(worker: MetadataRefresh, args: %{"media_item_id" => populated.id})
   end
+
+  test "enqueues a refresh for a TV show holding only one provider id" do
+    item =
+      media_item_fixture(%{
+        type: "tv_show",
+        title: "One Id Only",
+        tvdb_id: 121_361,
+        metadata: %MediaMetadata{
+          provider_id: "121361",
+          provider: :tvdb,
+          media_type: :tv_show,
+          title: "One Id Only"
+        }
+      })
+
+    assert :ok = perform_job(MetadataBackfill, %{})
+
+    assert_enqueued(worker: MetadataRefresh, args: %{media_item_id: item.id})
+  end
+
+  test "enqueues a refresh for a TV show missing both persisted provider ids" do
+    # Metadata is present and carries a provider_id, but neither id column is
+    # populated. Why it matters, not what this test asserts: Discover reads the
+    # tmdb_id column, so such a row is offered for adding all over again.
+    item =
+      media_item_fixture(%{
+        type: "tv_show",
+        title: "No Ids At All",
+        metadata: %MediaMetadata{
+          provider_id: "121364",
+          provider: :tvdb,
+          media_type: :tv_show,
+          title: "No Ids At All"
+        }
+      })
+
+    assert :ok = perform_job(MetadataBackfill, %{})
+
+    assert_enqueued(worker: MetadataRefresh, args: %{media_item_id: item.id})
+  end
+
+  test "skips a TV show that already carries both provider ids" do
+    item =
+      media_item_fixture(%{
+        type: "tv_show",
+        title: "Both Ids",
+        tvdb_id: 121_362,
+        tmdb_id: 1400,
+        metadata: %MediaMetadata{
+          provider_id: "121362",
+          provider: :tvdb,
+          media_type: :tv_show,
+          title: "Both Ids"
+        }
+      })
+
+    assert :ok = perform_job(MetadataBackfill, %{})
+
+    refute_enqueued(worker: MetadataRefresh, args: %{media_item_id: item.id})
+  end
+
+  test "skips a TV show already known to have no cross-reference" do
+    item =
+      media_item_fixture(%{
+        type: "tv_show",
+        title: "No Cross Reference",
+        tvdb_id: 121_363,
+        metadata: %MediaMetadata{
+          provider_id: "121363",
+          provider: :tvdb,
+          media_type: :tv_show,
+          title: "No Cross Reference",
+          external_ids: %{tmdb: nil, tvdb: nil, imdb: nil}
+        }
+      })
+
+    assert :ok = perform_job(MetadataBackfill, %{})
+
+    refute_enqueued(worker: MetadataRefresh, args: %{media_item_id: item.id})
+  end
 end

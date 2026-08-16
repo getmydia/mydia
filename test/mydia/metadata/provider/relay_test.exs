@@ -5,8 +5,6 @@ defmodule Mydia.Metadata.Provider.RelayTest do
   alias Mydia.Metadata.Provider.Error
   alias Mydia.Metadata.Structs.Video
 
-  @moduletag :external
-
   # Live smoke test against the real relay. `metadata-relay.fly.dev` is a
   # long-abandoned deployment; use the current production default (or
   # METADATA_RELAY_URL, if the caller wants to point this at a different
@@ -14,9 +12,16 @@ defmodule Mydia.Metadata.Provider.RelayTest do
   # actually exists. `@config` is a module attribute, resolved once at
   # compile time — export METADATA_RELAY_URL before running `mix test`
   # (a stale `_build` won't pick up a later env change without a recompile).
+  #
+  # `:external` is applied per describe block (not as a `@moduletag`) so that
+  # the offline, Bypass-stubbed "TVDB remoteIds cross-reference" block below
+  # can run under the default `mix test` exclusion instead of being silently
+  # skipped along with these live-relay tests.
   @config Mydia.Metadata.default_relay_config()
 
   describe "test_connection/1" do
+    @describetag :external
+
     test "successfully connects to relay service" do
       assert {:ok, result} = Relay.test_connection(@config)
       assert result.status == "ok"
@@ -32,6 +37,8 @@ defmodule Mydia.Metadata.Provider.RelayTest do
   end
 
   describe "search/3" do
+    @describetag :external
+
     test "searches for movies by title" do
       assert {:ok, results} = Relay.search(@config, "The Matrix", media_type: :movie)
 
@@ -103,6 +110,8 @@ defmodule Mydia.Metadata.Provider.RelayTest do
   end
 
   describe "fetch_by_id/3" do
+    @describetag :external
+
     test "fetches movie metadata by ID" do
       # The Matrix (1999) - TMDB ID: 603
       assert {:ok, metadata} = Relay.fetch_by_id(@config, "603", media_type: :movie)
@@ -192,6 +201,8 @@ defmodule Mydia.Metadata.Provider.RelayTest do
   end
 
   describe "fetch_images/3" do
+    @describetag :external
+
     test "fetches movie images" do
       assert {:ok, images} = Relay.fetch_images(@config, "603", media_type: :movie)
 
@@ -240,6 +251,8 @@ defmodule Mydia.Metadata.Provider.RelayTest do
   end
 
   describe "fetch_season/4" do
+    @describetag :external
+
     test "fetches TV show season with episodes" do
       # Breaking Bad Season 1
       assert {:ok, season} = Relay.fetch_season(@config, "1396", 1)
@@ -291,6 +304,8 @@ defmodule Mydia.Metadata.Provider.RelayTest do
   end
 
   describe "error handling" do
+    @describetag :external
+
     test "handles network errors gracefully" do
       config = %{@config | base_url: "https://localhost:99999"}
 
@@ -305,6 +320,8 @@ defmodule Mydia.Metadata.Provider.RelayTest do
   end
 
   describe "multi-language support" do
+    @describetag :external
+
     test "searches with custom language" do
       assert {:ok, results} =
                Relay.search(@config, "The Matrix", media_type: :movie, language: "es-ES")
@@ -338,6 +355,8 @@ defmodule Mydia.Metadata.Provider.RelayTest do
   end
 
   describe "pagination" do
+    @describetag :external
+
     test "searches with pagination" do
       assert {:ok, page1} = Relay.search(@config, "matrix", media_type: :movie, page: 1)
       assert {:ok, page2} = Relay.search(@config, "matrix", media_type: :movie, page: 2)
@@ -352,6 +371,8 @@ defmodule Mydia.Metadata.Provider.RelayTest do
   end
 
   describe "fetch_by_id/3 with TVDB provider" do
+    @describetag :external
+
     test "fetches TV show metadata from TVDB by ID" do
       # Stranger Things - TVDB ID: 305288
       assert {:ok, metadata} =
@@ -419,6 +440,8 @@ defmodule Mydia.Metadata.Provider.RelayTest do
   end
 
   describe "search/3 with provider routing" do
+    @describetag :external
+
     test "TV search with provider: :tmdb returns results via the TMDB endpoint" do
       assert {:ok, results} =
                Relay.search(@config, "Breaking Bad", media_type: :tv_show, provider: :tmdb)
@@ -459,5 +482,116 @@ defmodule Mydia.Metadata.Provider.RelayTest do
       assert results != []
       assert List.first(results).media_type == :movie
     end
+  end
+
+  # This describe block is offline (Bypass-stubbed), unlike this file's other
+  # blocks which are tagged `:external` live-relay smoke tests. It carries no
+  # such tag, so it runs under the default `mix test` exclusion.
+  describe "TVDB remoteIds cross-reference" do
+    test "maps remoteIds into external_ids" do
+      bypass = Bypass.open()
+      tvdb_id = 121_361
+
+      body = %{
+        "data" => %{
+          "id" => tvdb_id,
+          "name" => "Game of Thrones",
+          "firstAired" => "2011-04-17",
+          "seasons" => [],
+          "trailers" => [%{"url" => "https://youtube.com/watch?v=x", "language" => "eng"}],
+          "remoteIds" => [
+            %{"sourceName" => "TheMovieDB.com", "id" => "1399", "type" => 12},
+            %{"sourceName" => "IMDB", "id" => "tt0944947", "type" => 2}
+          ]
+        }
+      }
+
+      Bypass.stub(bypass, "GET", "/tvdb/series/#{tvdb_id}/extended", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(body))
+      end)
+
+      assert {:ok, metadata} =
+               Relay.fetch_by_id(relay_config(bypass), to_string(tvdb_id),
+                 media_type: :tv_show,
+                 provider: :tvdb
+               )
+
+      assert metadata.external_ids.tmdb == 1399
+      assert metadata.external_ids.imdb == "tt0944947"
+      assert metadata.imdb_id == "tt0944947"
+    end
+
+    test "leaves the cross-reference nil when remoteIds carries a non-string id" do
+      bypass = Bypass.open()
+      tvdb_id = 121_362
+
+      body = %{
+        "data" => %{
+          "id" => tvdb_id,
+          "name" => "Bad Remote Ids",
+          "seasons" => [],
+          "trailers" => [%{"url" => "https://youtube.com/watch?v=y", "language" => "eng"}],
+          "remoteIds" => [%{"sourceName" => "TheMovieDB.com", "id" => 1399, "type" => 12}]
+        }
+      }
+
+      Bypass.stub(bypass, "GET", "/tvdb/series/#{tvdb_id}/extended", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(body))
+      end)
+
+      assert {:ok, metadata} =
+               Relay.fetch_by_id(relay_config(bypass), to_string(tvdb_id),
+                 media_type: :tv_show,
+                 provider: :tvdb
+               )
+
+      assert metadata.external_ids.tmdb == nil
+    end
+  end
+
+  describe "external_ids request defaults" do
+    test "asks TMDB for external_ids even when the caller sets no append list" do
+      bypass = Bypass.open()
+      tmdb_id = 1399
+      test_pid = self()
+
+      Bypass.stub(bypass, "GET", "/tmdb/tv/shows/#{tmdb_id}", fn conn ->
+        conn = Plug.Conn.fetch_query_params(conn)
+        send(test_pid, {:append, conn.query_params["append_to_response"]})
+
+        body = %{
+          "id" => tmdb_id,
+          "name" => "Game of Thrones",
+          "credits" => %{"cast" => [], "crew" => []},
+          "external_ids" => %{"tvdb_id" => 121_361, "imdb_id" => "tt0944947"}
+        }
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(body))
+      end)
+
+      assert {:ok, metadata} =
+               Relay.fetch_by_id(relay_config(bypass), to_string(tmdb_id),
+                 media_type: :tv_show,
+                 provider: :tmdb
+               )
+
+      assert_receive {:append, append}
+      assert append =~ "external_ids"
+      assert metadata.external_ids.tvdb == 121_361
+    end
+  end
+
+  defp relay_config(bypass) do
+    %{
+      type: :metadata_relay,
+      base_url: "http://localhost:#{bypass.port}",
+      options: %{language: "en-US", include_adult: false}
+    }
   end
 end

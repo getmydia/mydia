@@ -405,6 +405,19 @@ defmodule MydiaWeb.DiscoverLive.Index do
          |> assign(:selected_recommendations, recommendations)
          |> put_flash(:info, "#{media_item.title} has been added to your library")}
 
+      {:already_in_library, media_item, updated_map} ->
+        items =
+          socket.assigns.items
+          |> MediaAddHelpers.enrich_with_library_status(updated_map)
+          |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)
+
+        {:noreply,
+         socket
+         |> assign(:adding_item_id, nil)
+         |> assign(:library_status_map, updated_map)
+         |> assign(:items, items)
+         |> put_flash(:info, "#{media_item.title} is already in your library")}
+
       {:error, {:changeset, changeset}} ->
         {:noreply,
          socket

@@ -34,6 +34,7 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
     :vote_average,
     :vote_count,
     :imdb_id,
+    :external_ids,
     :production_companies,
     :production_countries,
     :spoken_languages,
@@ -59,6 +60,12 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
     :seasons
   ]
 
+  @type external_ids :: %{
+          tmdb: integer() | nil,
+          tvdb: integer() | nil,
+          imdb: String.t() | nil
+        }
+
   @type t :: %__MODULE__{
           provider_id: String.t(),
           provider: atom(),
@@ -80,6 +87,7 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
           vote_average: float() | nil,
           vote_count: integer() | nil,
           imdb_id: String.t() | nil,
+          external_ids: external_ids() | nil,
           production_companies: [String.t()] | nil,
           production_countries: [String.t()] | nil,
           spoken_languages: [String.t()] | nil,
@@ -115,6 +123,7 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
     year = extract_year(data, media_type)
     release_date = parse_date(get_release_date(data, media_type))
     {collection_id, collection_name} = parse_collection(data["belongs_to_collection"])
+    external_ids = parse_external_ids(data["external_ids"])
 
     base_metadata = %__MODULE__{
       id: data["id"],
@@ -136,7 +145,8 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
       popularity: data["popularity"],
       vote_average: data["vote_average"],
       vote_count: data["vote_count"],
-      imdb_id: data["imdb_id"],
+      imdb_id: data["imdb_id"] || external_id(external_ids, :imdb),
+      external_ids: external_ids,
       production_companies: parse_names(data["production_companies"]),
       production_countries: parse_country_codes(data["production_countries"]),
       spoken_languages: parse_language_codes(data["spoken_languages"]),
@@ -391,4 +401,38 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
   end
 
   defp parse_recommended_ids(_), do: []
+
+  # `external_ids` is nil when the caller did not request the block. That is a
+  # meaningful distinction, not an empty result: `Mydia.Jobs.MetadataBackfill`
+  # reads a nil here as "we have never asked this provider for a
+  # cross-reference", while a map with nil entries means we asked and the
+  # provider has none. Do not collapse the two into an empty map.
+  defp parse_external_ids(ids) when is_map(ids) do
+    %{
+      tmdb: parse_external_integer(ids["tmdb_id"]),
+      tvdb: parse_external_integer(ids["tvdb_id"]),
+      imdb: parse_external_string(ids["imdb_id"])
+    }
+  end
+
+  defp parse_external_ids(_), do: nil
+
+  defp external_id(nil, _key), do: nil
+  defp external_id(ids, key), do: Map.get(ids, key)
+
+  # TMDB sends these as integers, TVDB's remoteIds as strings, and either can
+  # be null or absent.
+  defp parse_external_integer(id) when is_integer(id) and id > 0, do: id
+
+  defp parse_external_integer(id) when is_binary(id) do
+    case Integer.parse(id) do
+      {int, ""} when int > 0 -> int
+      _ -> nil
+    end
+  end
+
+  defp parse_external_integer(_), do: nil
+
+  defp parse_external_string(id) when is_binary(id) and id != "", do: id
+  defp parse_external_string(_), do: nil
 end
