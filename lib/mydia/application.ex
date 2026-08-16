@@ -135,6 +135,10 @@ defmodule Mydia.Application do
         validate_library_paths()
         # Sync library paths and populate relative paths for media files
         Mydia.Library.StartupSync.sync_all()
+        # Release import runs whose coordinator died with the previous node.
+        # Nothing else ever moves those rows out of :running/:stopping, and
+        # while one sits there the library path cannot be imported again.
+        Mydia.Jobs.ImportRun.reconcile_interrupted_runs()
         # Check for database integrity issues and queue repairs if needed
         Mydia.Library.DatabaseHealthCheck.run()
         # Clean up stale HLS session directories

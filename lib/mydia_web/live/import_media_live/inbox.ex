@@ -63,20 +63,39 @@ defmodule MydiaWeb.ImportMediaLive.Inbox do
             Waiting for review <span class="badge badge-neutral">{@total} {file_word(@total)}</span>
           </h2>
 
-          <select
-            id="inbox-filter"
-            name="filter"
-            phx-change="filter_inbox"
-            class="select select-bordered select-sm"
-          >
-            <option value="all" selected={@filter == :all}>Everything</option>
-            <option value="low_confidence" selected={@filter == :low_confidence}>
-              Unsure matches
-            </option>
-            <option value="unidentified" selected={@filter == :unidentified}>
-              Could not identify
-            </option>
-          </select>
+          <div class="flex items-center gap-2 flex-wrap">
+            <%!--
+              Lives in the header rather than in the batch toolbar, which is
+              only rendered once something is already selected. This is the
+              cheapest mitigation for the removed series re-match capability:
+              without it, importing a 200 episode show means ticking 100
+              checkboxes per page by hand before the batch editor appears.
+            --%>
+            <button
+              :if={@total > 0}
+              id="inbox-select-page"
+              type="button"
+              phx-click="batch_select_all"
+              class="btn btn-sm btn-ghost"
+            >
+              <.icon name="hero-check" class="w-4 h-4" /> Select all on this page
+            </button>
+
+            <select
+              id="inbox-filter"
+              name="filter"
+              phx-change="filter_inbox"
+              class="select select-bordered select-sm"
+            >
+              <option value="all" selected={@filter == :all}>Everything</option>
+              <option value="low_confidence" selected={@filter == :low_confidence}>
+                Unsure matches
+              </option>
+              <option value="unidentified" selected={@filter == :unidentified}>
+                Could not identify
+              </option>
+            </select>
+          </div>
         </div>
 
         <%!--

@@ -4,7 +4,13 @@ defmodule Mydia.Library.DatabaseHealthCheck do
   triggers library re-scans when needed.
 
   Runs on application startup to detect:
-  1. Orphaned media files (no media_item_id or episode_id in standard libraries)
+  1. Stuck media files: no `media_item_id`, no `episode_id`, in a standard
+     (non-specialized) library, AND carrying no match candidate. The candidate
+     exclusion is the load-bearing half. The import coordinator commits
+     orphaned rows as its first phase and can legitimately leave thousands of
+     them queued in the review inbox; those are pending work, not damage, and
+     counting them here would queue a re-scan against a healthy library. See
+     `count_orphaned_files/0`.
   2. Media files with relative_path but missing library_path_id
 
   When issues are detected above a threshold, a library re-scan is queued as a

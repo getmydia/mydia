@@ -34,7 +34,19 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
 
   defp start_form(assigns) do
     ~H"""
-    <form id="start-run-form" phx-submit="start_run" class="flex flex-col gap-4">
+    <div :if={@library_paths == []} class="alert alert-info">
+      <.icon name="hero-information-circle" class="w-5 h-5 shrink-0" />
+      <span>
+        There is no movie or TV library to import yet. Add one under Settings, then come back.
+      </span>
+    </div>
+
+    <form
+      :if={@library_paths != []}
+      id="start-run-form"
+      phx-submit="start_run"
+      class="flex flex-col gap-4"
+    >
       <label class="form-control w-full">
         <span class="label-text">Library</span>
         <select name="library_path_id" class="select select-bordered" required>
@@ -83,6 +95,29 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
       >
         Stop and keep progress
       </button>
+
+      <%!--
+        The escape hatch for a run whose coordinator is gone but whose row
+        still says otherwise. Boot reconciliation
+        (Mydia.Jobs.ImportRun.reconcile_interrupted_runs/0) covers the common
+        case, a restart, but a job cancelled from the jobs page leaves no
+        restart to trigger it. Without something here, recovery means editing
+        the database: Start is refused for this path and Stop only writes
+        :stopping, which is also active.
+      --%>
+      <div class="flex flex-col gap-1">
+        <button
+          id="release-run-button"
+          phx-click="release_run"
+          data-confirm="Mark this import as not running? Everything it already added is kept, and you will be able to start a new import for this library."
+          class="btn btn-ghost btn-xs self-start"
+        >
+          <.icon name="hero-wrench-screwdriver" class="w-3.5 h-3.5" /> Not actually running?
+        </button>
+        <p class="text-xs opacity-60">
+          Use this only if the import has been stuck since a restart or a crash.
+        </p>
+      </div>
     </div>
     """
   end
@@ -108,8 +143,14 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
 
       <.run_stats run={@run} />
 
-      <div :if={@run.status == :failed and @run.error} class="w-full">
-        <p class="text-sm opacity-70 mb-1">Error details</p>
+      <%!--
+        Rendered for any status that carries an error, not only :failed. A run
+        released by boot reconciliation, or by the recovery control above,
+        lands on :stopped with the explanation in this field, and hiding it
+        would leave the user with a bare "Import stopped" and no reason.
+      --%>
+      <div :if={@run.error} class="w-full">
+        <p class="text-sm opacity-70 mb-1">{error_label(@run.status)}</p>
         <pre class="text-xs whitespace-pre-wrap break-all bg-base-100/60 rounded-lg p-2">{@run.error}</pre>
       </div>
     </div>
@@ -144,6 +185,9 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
   defp outcome_label(:done), do: "Import finished"
   defp outcome_label(:failed), do: "Import failed"
   defp outcome_label(:stopped), do: "Import stopped"
+
+  defp error_label(:failed), do: "Error details"
+  defp error_label(_status), do: "What happened"
 
   defp outcome_alert_class(:done), do: "alert-success"
   defp outcome_alert_class(:failed), do: "alert-error"

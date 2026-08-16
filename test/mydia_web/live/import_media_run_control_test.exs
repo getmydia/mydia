@@ -106,6 +106,70 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
     assert Library.active_import_run(lp.id).id == existing.id
   end
 
+  test "stopping a run that finished in the meantime does not lock the path", %{
+    conn: conn,
+    library_path: lp,
+    user: user
+  } do
+    {:ok, run} =
+      Library.create_import_run(%{library_path_id: lp.id, user_id: user.id, mode: :review})
+
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    # The coordinator reaches :done after this view rendered its Stop button.
+    {:ok, _} = Library.update_import_run(run, %{status: :done, phase: :finished})
+
+    view |> element("#stop-run-button") |> render_click()
+
+    # Writing :stopping here would be a permanent lockout: :stopping counts as
+    # active, and no worker is left alive to advance it.
+    assert Library.get_import_run(run.id).status == :done
+    refute Library.active_import_run(lp.id)
+  end
+
+  test "offers a recovery control that releases a run stuck in flight", %{
+    conn: conn,
+    library_path: lp,
+    user: user
+  } do
+    {:ok, run} =
+      Library.create_import_run(%{library_path_id: lp.id, user_id: user.id, mode: :review})
+
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    assert has_element?(view, "#release-run-button")
+
+    view |> element("#release-run-button") |> render_click()
+
+    assert Library.get_import_run(run.id).status == :stopped
+    refute Library.active_import_run(lp.id)
+  end
+
+  describe "library types that cannot be imported" do
+    setup do
+      %{music: library_path_fixture(%{type: "music", name: "Music"})}
+    end
+
+    test "are not offered in the start form", %{conn: conn, music: music, library_path: lp} do
+      {:ok, view, _html} = live(conn, ~p"/import")
+
+      html = render(view)
+
+      assert html =~ lp.path
+      refute html =~ music.path
+    end
+
+    test "are refused even when the event names one directly", %{conn: conn, music: music} do
+      {:ok, view, _html} = live(conn, ~p"/import")
+
+      view
+      |> element("#start-run-form")
+      |> render_submit(%{"library_path_id" => music.id, "mode" => "unattended"})
+
+      refute Library.active_import_run(music.id)
+    end
+  end
+
   test "a reload after a failed run shows the outcome instead of a blank form", %{
     conn: conn,
     library_path: lp,

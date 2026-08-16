@@ -31,6 +31,19 @@ defmodule Mydia.Library.FileIngestTest do
     )
   end
 
+  defp local_tv_match(show, episodes) do
+    %{
+      provider_id: to_string(show.tvdb_id),
+      provider_type: :tvdb,
+      title: show.title,
+      year: show.year,
+      match_confidence: 0.95,
+      metadata: %{},
+      from_local_db: true,
+      parsed_info: %{type: :tv_show, season: 1, episodes: episodes}
+    }
+  end
+
   describe "ingest/3 with no match" do
     test "returns :no_match and records the attempt" do
       file = orphaned_media_file_fixture()
@@ -87,6 +100,64 @@ defmodule Mydia.Library.FileIngestTest do
                  policy: :create_items,
                  threshold: 0.9
                )
+    end
+  end
+
+  describe "ingest/3 only reports a link when the file really got a parent" do
+    # A local-database match keeps this network-free: the show already exists
+    # and was created moments ago, so `MetadataEnricher.update_existing_media_item/5`
+    # takes its "recently enriched, skip the re-fetch" branch, and the show
+    # already having an episode row takes the fast association path. What is
+    # under test is the branch after that, where the target episode does not
+    # exist: `enrich/2` logs a warning and still returns `{:ok, media_item}`.
+    setup do
+      library_path = Mydia.SettingsFixtures.library_path_fixture(%{type: "series"})
+
+      show =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "Ingest Contract Show",
+          tvdb_id: System.unique_integer([:positive])
+        })
+
+      _existing_episode =
+        episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
+
+      file = orphaned_media_file_fixture(%{library_path_id: library_path.id})
+
+      %{media_file: file, show: show}
+    end
+
+    test "links when the target episode exists", %{media_file: file, show: show} do
+      assert {:linked, item} =
+               FileIngest.ingest(file, local_tv_match(show, [1]), policy: :local_only)
+
+      assert item.id == show.id
+      refute is_nil(Library.get_media_file!(file.id).episode_id)
+      assert Library.list_match_candidates(file.id) == []
+    end
+
+    test "does not link when the target episode does not exist", %{media_file: file, show: show} do
+      # The defect this pins: `enrich/2` returns `{:ok, show}` here even though
+      # it associated nothing. Reporting that as `{:linked, _}` and deleting
+      # the candidates leaves the file with no parent AND no candidate, which
+      # is exactly the set `Library.list_unmatched_media_file_paths/2` selects,
+      # so the import coordinator picks it up again on every single pass and
+      # the match phase never terminates.
+      refute match?(
+               {:linked, _},
+               FileIngest.ingest(file, local_tv_match(show, [99]), policy: :local_only)
+             )
+
+      reloaded = Library.get_media_file!(file.id)
+      assert is_nil(reloaded.episode_id)
+      assert is_nil(reloaded.media_item_id)
+
+      # A candidate must survive, otherwise the file is invisible in the inbox
+      # and invisible to the health check's orphan count while still being
+      # outstanding work.
+      assert [candidate] = Library.list_match_candidates(file.id)
+      assert candidate.last_error =~ show.title
     end
   end
 

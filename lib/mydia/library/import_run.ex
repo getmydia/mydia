@@ -25,6 +25,13 @@ defmodule Mydia.Library.ImportRun do
 
   @active_statuses ~w(running stopping)a
 
+  # The only library types this feature understands. Music, books and adult
+  # paths hold files no metadata provider can identify, and nothing
+  # downstream of the coordinator filters by type: the inbox query does not,
+  # and `MediaFile.library_type_compatible?/3` has no clause for them so it
+  # falls through to `true`, which would let a track be linked to a movie.
+  @importable_types ~w(movies series mixed)a
+
   @type t :: %__MODULE__{
           id: binary(),
           library_path_id: binary(),
@@ -64,7 +71,24 @@ defmodule Mydia.Library.ImportRun do
   @doc """
   Statuses that mean the coordinator may still be working.
   """
+  @spec active_statuses() :: [atom()]
   def active_statuses, do: @active_statuses
+
+  @doc """
+  Library path types an import run can be started for.
+  """
+  @spec importable_types() :: [atom()]
+  def importable_types, do: @importable_types
+
+  @doc """
+  Whether a library path type can be imported.
+
+  The single source of truth behind both guards: the start form filters on it
+  and `Mydia.Jobs.ImportRun.run_scan_phase/2` refuses on it, so a crafted
+  event cannot walk around the UI.
+  """
+  @spec importable_type?(atom()) :: boolean()
+  def importable_type?(type), do: type in @importable_types
 
   @doc """
   Builds a changeset for a new run.
@@ -94,8 +118,23 @@ defmodule Mydia.Library.ImportRun do
       :current_file,
       :error
     ])
+    |> guard_stop_transition()
     |> maybe_set_finished_at()
     |> guard_single_active_run()
+  end
+
+  # `:stopping` is an active status, so writing it onto a row that is already
+  # terminal locks the library path out permanently: no coordinator is left
+  # alive to advance it, and the partial unique index then refuses every
+  # future run for that path. The reachable case is a Stop click racing the
+  # coordinator reaching `:done`, which needs no crash at all. `:running` is
+  # the only state a stop can legally come from.
+  defp guard_stop_transition(changeset) do
+    if get_change(changeset, :status) == :stopping and changeset.data.status != :running do
+      add_error(changeset, :status, "can only stop a running import")
+    else
+      changeset
+    end
   end
 
   # Two names for one guarantee: on Postgres the constraint violation reports

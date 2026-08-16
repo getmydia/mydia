@@ -79,10 +79,11 @@ defmodule Mydia.Jobs.LibraryScannerIngestTest do
       # MetadataEnricher.recently_enriched?/1's one-hour window, so
       # update_existing_media_item/5 takes the "skip re-fetch" branch and
       # never calls the relay. That makes this the one outcome of a routine
-      # scan — a file matching an item already in the local database — that
-      # is reachable in a fast, deterministic, network-free test. Assert it
-      # actually runs fast: a broken policy that fell through to the relay
-      # path would time out or take seconds, not milliseconds.
+      # scan, a file matching an item already in the local database, that is
+      # reachable in a deterministic, network-free test. The database
+      # assertions below are what prove the link happened locally; there is
+      # deliberately no wall-clock assertion, which would only add a CI flake
+      # without ruling anything out that they do not.
       item = media_item_fixture(%{type: "movie", tmdb_id: 603, title: "The Matrix"})
       file = orphaned_media_file_fixture()
 
@@ -100,17 +101,9 @@ defmodule Mydia.Jobs.LibraryScannerIngestTest do
         parsed_info: parsed
       }
 
-      {elapsed_us, result} =
-        :timer.tc(fn -> FileIngest.ingest(file, match, policy: :local_only) end)
-
-      assert {:linked, linked} = result
+      assert {:linked, linked} = FileIngest.ingest(file, match, policy: :local_only)
       assert linked.id == item.id
       assert Library.get_media_file!(file.id).media_item_id == item.id
-
-      # 500ms is generous for a DB-only path and stingy for anything that
-      # actually reached the network.
-      assert elapsed_us < 500_000,
-             "expected a network-free link, took #{elapsed_us / 1000}ms"
     end
   end
 

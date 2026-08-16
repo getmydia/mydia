@@ -30,7 +30,19 @@ defmodule Mydia.Jobs.ImportRunJobTest do
         mode: :review
       })
 
-    {:ok, dir: dir, library_path: library_path, run: run}
+    {:ok, dir: dir, library_path: library_path, run: run, user: user}
+  end
+
+  # `attempt` and `max_attempts` are load-bearing on every job built here: a
+  # failure is only terminal on the last attempt, because Oban still holds
+  # retries before that and a :failed row would let the user start a second,
+  # concurrent coordinator for the same library path.
+  defp job(run_id, attempt, max_attempts \\ 3) do
+    %Oban.Job{
+      args: %{"import_run_id" => run_id},
+      attempt: attempt,
+      max_attempts: max_attempts
+    }
   end
 
   describe "phase 1: scanning" do
@@ -135,8 +147,7 @@ defmodule Mydia.Jobs.ImportRunJobTest do
       # the time that runs.
       File.rm_rf!(dir)
 
-      assert {:error, :not_found} =
-               ImportRunJob.perform(%Oban.Job{args: %{"import_run_id" => run.id}})
+      assert {:error, :not_found} = ImportRunJob.perform(job(run.id, 3))
 
       assert_receive {:import_run_progress, %{status: :failed} = broadcast_run}
       assert broadcast_run.error =~ "not_found"
@@ -144,6 +155,51 @@ defmodule Mydia.Jobs.ImportRunJobTest do
       persisted = Library.get_import_run(run.id)
       assert persisted.status == :failed
       assert persisted.error =~ "not_found"
+    end
+
+    test "keeps the run active while Oban still holds retries", %{
+      run: run,
+      dir: dir,
+      library_path: lp
+    } do
+      File.rm_rf!(dir)
+
+      assert {:error, :not_found} = ImportRunJob.perform(job(run.id, 1))
+
+      # Still :running, for two reasons. The user should not be told "Import
+      # failed" while the system is about to try again, and more importantly
+      # a terminal row makes active_import_run/1 return nil, which would let
+      # them start a SECOND coordinator against this path while the first is
+      # queued for retry. The partial unique index guards import_runs rows,
+      # not Oban jobs, so nothing else would stop that.
+      assert Library.get_import_run(run.id).status == :running
+      assert Library.active_import_run(lp.id)
+    end
+  end
+
+  describe "library types that cannot be imported" do
+    test "the scan phase refuses a music library even when a run row exists", %{user: user} do
+      dir = Path.join(System.tmp_dir!(), "import_music_#{System.unique_integer([:positive])}")
+      File.mkdir_p!(dir)
+      on_exit(fn -> File.rm_rf!(dir) end)
+
+      music = library_path_fixture(%{path: dir, type: "music"})
+
+      {:ok, run} =
+        Library.create_import_run(%{
+          library_path_id: music.id,
+          user_id: user.id,
+          mode: :unattended
+        })
+
+      # The UI filters these out, but a stale bookmark or a crafted event can
+      # still reach here. Nothing downstream (inbox_base_query/1,
+      # MediaFile.library_type_compatible?/3) restricts by library type, so an
+      # unattended run over a music path can link a track to a movie item.
+      assert {:error, {:unsupported_library_type, _}} =
+               ImportRunJob.run_scan_phase(Library.get_import_run(run.id))
+
+      assert Library.list_media_files(library_path_id: music.id) == []
     end
   end
 

@@ -19,6 +19,24 @@ defmodule Mydia.Library.FileIngest do
   Anything not linked is written as a `MatchCandidate`, which is what lets the
   review inbox render without touching the relay and what lets a resumed run
   skip files a previous run already matched.
+
+  ## The progress contract
+
+  Every call to `ingest/3` must leave the file either with a parent
+  (`media_item_id` or `episode_id`) or with a rank-0 `MatchCandidate`. Those
+  two sets are exactly what `Library.list_unmatched_media_file_paths/2`
+  excludes, so a file that ends up in neither is outstanding work forever:
+  `Jobs.ImportRun`'s match loop reselects it on every pass and never
+  terminates.
+
+  This is why `{:linked, item}` is only returned once the file has been
+  re-read and confirmed to have a parent. `MetadataEnricher.enrich/2` returns
+  `{:ok, media_item}` in several cases where it associated nothing at all (a
+  TV episode row that does not exist for the parsed season/episode, parsed
+  info with no episode numbers, a movie association whose update failed), so
+  its `:ok` is a statement about the item, not about the file. Making the
+  check local to this module is what keeps loop termination a property
+  something owns, rather than one that emerges from three modules agreeing.
   """
 
   require Logger
@@ -52,6 +70,14 @@ defmodule Mydia.Library.FileIngest do
   See the module doc for the policies. Returns `:no_match` when the matcher
   found nothing, in which case the attempt is still recorded so the inbox can
   show that the file was tried.
+
+  `{:linked, item}` means the file provably has a `media_item_id` or an
+  `episode_id` after this call, verified by re-reading the row. A match that
+  enriched an item but associated nothing comes back as
+  `{:error, {:not_associated, message}}` with the candidate left in place, so
+  the file stays visible in the inbox with a reason instead of vanishing from
+  both the inbox and the unmatched set. See the module doc's progress
+  contract, which the import coordinator's loop termination depends on.
   """
   @spec ingest(MediaFile.t(), map() | nil, keyword()) :: result()
   def ingest(%MediaFile{} = media_file, match_result, opts) do
@@ -91,9 +117,7 @@ defmodule Mydia.Library.FileIngest do
 
     case MetadataEnricher.enrich(match_result, config: config, media_file_id: media_file.id) do
       {:ok, media_item} ->
-        # The file now has a parent, so it is no longer inbox work.
-        Library.delete_match_candidates(media_file.id)
-        {:linked, media_item}
+        confirm_association(media_file, media_item, match_result)
 
       {:error, reason} ->
         Logger.warning("Failed to link media file",
@@ -104,6 +128,54 @@ defmodule Mydia.Library.FileIngest do
 
         record_failure(media_file, format_error(reason))
         {:error, reason}
+    end
+  end
+
+  # `enrich/2` returning {:ok, item} says the item exists, not that this file
+  # was attached to it. Re-read the row and check, because that is the whole
+  # progress contract (see the moduledoc): a file with neither a parent nor a
+  # candidate is invisible in the inbox, invisible to the health check's
+  # orphan count, and still selected by every subsequent match chunk.
+  defp confirm_association(media_file, media_item, match_result) do
+    reloaded = Library.get_media_file!(media_file.id)
+
+    if is_nil(reloaded.media_item_id) and is_nil(reloaded.episode_id) do
+      message = not_associated_message(match_result)
+
+      Logger.warning("Enrichment succeeded but the media file was never associated",
+        media_file_id: media_file.id,
+        media_item_id: media_item.id,
+        title: Map.get(match_result, :title)
+      )
+
+      # Deliberately NOT delete_match_candidates/1: the candidate is the only
+      # thing keeping this file reachable. Write the full match first so the
+      # inbox can show what was found, then stamp the reason onto the same
+      # rank-0 row.
+      write_candidate(media_file, match_result)
+      record_failure(media_file, message)
+
+      {:error, {:not_associated, message}}
+    else
+      # The file now has a parent, so it is no longer inbox work.
+      Library.delete_match_candidates(media_file.id)
+      {:linked, media_item}
+    end
+  end
+
+  # Written for a self-hosted operator reading the inbox, not for a log
+  # grepper: this string is rendered verbatim by
+  # `MydiaWeb.ImportMediaLive.Inbox.format_last_error/1`.
+  defp not_associated_message(match_result) do
+    title = Map.get(match_result, :title) || "that title"
+    parsed = Map.get(match_result, :parsed_info) || %{}
+    season = get_parsed(parsed, :season)
+    episodes = get_parsed(parsed, :episodes) || []
+
+    if get_parsed(parsed, :type) == :tv_show and not is_nil(season) and episodes != [] do
+      "Matched #{title} but season #{season} episode #{Enum.join(episodes, ", ")} does not exist on it, so nothing was added."
+    else
+      "Matched #{title} but this file could not be attached to it, so nothing was added."
     end
   end
 
@@ -125,6 +197,12 @@ defmodule Mydia.Library.FileIngest do
     })
   end
 
+  # The write result is matched rather than discarded. A dropped candidate is
+  # the one input that breaks the moduledoc's progress contract from the
+  # inside: the file ends up with no parent and no candidate, which is what
+  # `Jobs.ImportRun`'s match loop treats as "still to do" forever. There is
+  # nothing useful to do about it here beyond refusing to be quiet, so it logs
+  # at :error and hands the changeset back.
   defp record_failure(media_file, error) do
     previous =
       case Library.list_match_candidates(media_file.id) do
@@ -132,12 +210,24 @@ defmodule Mydia.Library.FileIngest do
         _ -> 0
       end
 
-    Library.upsert_match_candidate(%{
-      media_file_id: media_file.id,
-      rank: 0,
-      attempts: previous + 1,
-      last_error: error
-    })
+    case Library.upsert_match_candidate(%{
+           media_file_id: media_file.id,
+           rank: 0,
+           attempts: previous + 1,
+           last_error: error
+         }) do
+      {:ok, candidate} ->
+        {:ok, candidate}
+
+      {:error, changeset} ->
+        Logger.error("Could not record a match failure, the file will be retried indefinitely",
+          media_file_id: media_file.id,
+          attempted_error: error,
+          errors: inspect(changeset.errors)
+        )
+
+        {:error, changeset}
+    end
   end
 
   ## Helpers
@@ -175,6 +265,18 @@ defmodule Mydia.Library.FileIngest do
   # without requiring the Enumerable protocol a bare struct doesn't implement.
   defp get_parsed(parsed, key) when is_map(parsed), do: Map.get(parsed, key)
 
+  # TRAP: do not add a clause for `:library_type_mismatch` here.
+  #
+  # `{:library_type_mismatch, message}` deliberately falls through to the
+  # `inspect/1` catch-all below, and the inbox's "Wrong library" badge keys on
+  # exactly that: `MydiaWeb.ImportMediaLive.Inbox.library_type_mismatch?/1`
+  # tests `String.starts_with?(last_error, "{:library_type_mismatch,")`.
+  # Unwrapping the tuple here would store the bare message, the badge would
+  # stop rendering, and nothing would fail: the sentence still displays, so
+  # the loss is silent and only visible by eye. `Jobs.LibraryScanner`'s
+  # `scan_result_from_ingest/1` pattern-matches the same tagged tuple.
+  # If this ever needs to change, change the badge predicate in the same
+  # commit.
   defp format_error({:invalid_match_result, message}), do: message
   defp format_error(reason) when is_binary(reason), do: reason
   defp format_error(reason), do: inspect(reason)

@@ -11,6 +11,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   alias Mydia.{Library, Metadata, Settings}
   alias Mydia.Jobs.ImportRun, as: ImportRunJob
   alias Mydia.Library.FileIngest
+  alias Mydia.Library.ImportRun
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.ImportMediaLive.{Inbox, RunControl}
 
@@ -47,6 +48,10 @@ defmodule MydiaWeb.ImportMediaLive.Index do
      socket
      |> assign(:page_title, "Import Media")
      |> assign(:library_paths, library_paths)
+     # The start form offers only what the coordinator can actually import.
+     # `@library_paths` deliberately keeps every path so a run left on a
+     # music path by an older build is still found, shown, and stoppable.
+     |> assign(:importable_library_paths, Enum.filter(library_paths, &importable?/1))
      |> assign(:active_run, active_run)
      |> assign(:outcome_run, outcome_run)
      |> assign(:inbox_filter, :all)
@@ -69,7 +74,8 @@ defmodule MydiaWeb.ImportMediaLive.Index do
 
   @impl true
   def handle_event("start_run", %{"library_path_id" => path_id, "mode" => mode}, socket) do
-    with :ok <- Authorization.authorize_import_media(socket) do
+    with :ok <- Authorization.authorize_import_media(socket),
+         :ok <- authorize_library_path(socket, path_id) do
       attrs = %{
         library_path_id: path_id,
         user_id: socket.assigns.current_user.id,
@@ -95,7 +101,11 @@ defmodule MydiaWeb.ImportMediaLive.Index do
           {:noreply, put_flash(socket, :error, "That library is already being imported.")}
       end
     else
-      {:unauthorized, socket} -> {:noreply, socket}
+      {:unauthorized, socket} ->
+        {:noreply, socket}
+
+      {:unsupported_type, socket} ->
+        {:noreply, socket}
     end
   end
 
@@ -106,8 +116,41 @@ defmodule MydiaWeb.ImportMediaLive.Index do
           {:noreply, socket}
 
         run ->
-          {:ok, stopping} = Library.request_import_run_stop(Library.get_import_run(run.id))
-          {:noreply, assign(socket, :active_run, stopping)}
+          case Library.request_import_run_stop(run.id) do
+            {:ok, stopping} ->
+              {:noreply, assign(socket, :active_run, stopping)}
+
+            # The run reached a terminal state between this page rendering and
+            # the click landing. Show what it actually did rather than forcing
+            # it back into an active status nothing would ever advance.
+            {:error, _changeset} ->
+              {:noreply, show_outcome(socket, Library.get_import_run(run.id))}
+          end
+      end
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("release_run", _params, socket) do
+    with :ok <- Authorization.authorize_import_media(socket) do
+      case socket.assigns.active_run do
+        nil ->
+          {:noreply, socket}
+
+        run ->
+          case Library.get_import_run(run.id) do
+            nil ->
+              {:noreply, assign(socket, :active_run, nil)}
+
+            current ->
+              {:ok, released} = Library.release_import_run(current)
+
+              {:noreply,
+               socket
+               |> show_outcome(released)
+               |> put_flash(:info, "Marked as not running. You can start a new import now.")}
+          end
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
@@ -241,15 +284,17 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     end
   end
 
-  # Every batch-selection handler below ends with load_inbox/1 even though
-  # none of them write to the database: a checkbox's `checked` state lives
-  # inside the `phx-update="stream"` row list, and LiveView only patches an
-  # already-rendered stream item's content on an explicit stream operation,
-  # not because some other assign (`batch_selected_ids`) changed. load_inbox/1
-  # already exists for exactly this "make the rendered rows match current
-  # state" purpose (see its own moduledoc note), so reusing it here -- a full
-  # re-stream of the current page -- is the same pattern the rest of this
-  # module already relies on, not a new one.
+  # Every batch-selection handler below re-streams the current page even
+  # though none of them write to the database: a checkbox's `checked` state
+  # lives inside the `phx-update="stream"` row list, and LiveView only patches
+  # an already-rendered stream item's content on an explicit stream operation,
+  # not because some other assign (`batch_selected_ids`) changed.
+  #
+  # They call restream_inbox/1 rather than load_inbox/1 because the re-stream
+  # is unavoidable but the COUNT(DISTINCT) is not. Selecting a checkbox cannot
+  # change how many rows the inbox holds, and on the 200k-row inbox this
+  # feature exists for, a full aggregate scan per tick is the difference
+  # between a checkbox and a stall.
   def handle_event("batch_toggle_file", %{"id" => id}, socket) do
     selected = socket.assigns.batch_selected_ids
 
@@ -258,18 +303,18 @@ defmodule MydiaWeb.ImportMediaLive.Index do
         do: MapSet.delete(selected, id),
         else: MapSet.put(selected, id)
 
-    {:noreply, socket |> assign(:batch_selected_ids, selected) |> load_inbox()}
+    {:noreply, socket |> assign(:batch_selected_ids, selected) |> restream_inbox()}
   end
 
   def handle_event("batch_select_all", _params, socket) do
     {:noreply,
      socket
      |> assign(:batch_selected_ids, MapSet.new(socket.assigns.inbox_row_ids))
-     |> load_inbox()}
+     |> restream_inbox()}
   end
 
   def handle_event("batch_deselect_all", _params, socket) do
-    {:noreply, socket |> assign(:batch_selected_ids, MapSet.new()) |> load_inbox()}
+    {:noreply, socket |> assign(:batch_selected_ids, MapSet.new()) |> restream_inbox()}
   end
 
   def handle_event("batch_search", %{"value" => query}, socket) do
@@ -362,6 +407,29 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     end
   end
 
+  defp importable?(library_path), do: ImportRun.importable_type?(library_path.type)
+
+  # The start form only lists importable paths, but a stale bookmark or a
+  # crafted event can still name any id. `run_scan_phase/2` refuses the same
+  # set; this layer only exists so the user gets a sentence instead of a run
+  # that starts and immediately fails.
+  defp authorize_library_path(socket, path_id) do
+    if Enum.any?(socket.assigns.importable_library_paths, &(&1.id == path_id)) do
+      :ok
+    else
+      {:unsupported_type,
+       put_flash(socket, :error, "Only movie, TV and mixed libraries can be imported.")}
+    end
+  end
+
+  # A terminal run stays on screen as an outcome rather than reverting the
+  # panel to a blank start form, matching what mount/3 does after a reload.
+  defp show_outcome(socket, run) do
+    socket
+    |> assign(:active_run, nil)
+    |> assign(:outcome_run, run)
+  end
+
   # threshold: 0.0 below is deliberate. A human pressed Add, so their
   # judgement replaces the confidence gate rather than being second-guessed
   # by it -- the same reasoning FileIngest.default_threshold/0 documents for
@@ -393,9 +461,22 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   # change it (approving a row, changing the filter, paging) reloads from the
   # database rather than patching @streams.inbox_rows by hand, so it can
   # never drift from what a fresh page load would show.
-  defp load_inbox(socket) do
+  defp load_inbox(socket), do: reload_inbox(socket, recount: true)
+
+  # Same re-stream, no aggregate. Only safe when nothing that could change the
+  # row count has happened, which is why it is private to the selection
+  # handlers rather than an option any caller can pass.
+  defp restream_inbox(socket), do: reload_inbox(socket, recount: false)
+
+  defp reload_inbox(socket, opts) do
     filter = socket.assigns.inbox_filter
-    total = Library.count_inbox_files(filter: filter)
+
+    total =
+      if Keyword.fetch!(opts, :recount) do
+        Library.count_inbox_files(filter: filter)
+      else
+        socket.assigns.inbox_total
+      end
 
     # Clamp rather than render a page past the end: approving the last row on
     # the last page (or switching to a filter with fewer results) would

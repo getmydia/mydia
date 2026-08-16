@@ -16,6 +16,17 @@ defmodule Mydia.Jobs.ImportRun do
   querying for it: phase 1 skips paths that already have rows, and phase 2
   skips files that already have a candidate or a parent. The database is the
   cursor.
+
+  Because the database is the cursor, phase 2 terminates only if every file it
+  processes leaves the outstanding set. That is `Library.FileIngest`'s progress
+  contract, documented on that module; `match_loop/5` carries a no-progress
+  guard as a backstop rather than as the primary mechanism.
+
+  Crash recovery is `reconcile_interrupted_runs/0`, called once at boot.
+  `Oban.Plugins.Lifeline` is deliberately not configured: its `rescue_after`
+  is measured from `attempted_at`, and this job legitimately runs for hours
+  without checkpointing, so any window short enough to rescue a crashed run
+  would also duplicate a healthy one.
   """
 
   use Oban.Worker,
@@ -26,6 +37,8 @@ defmodule Mydia.Jobs.ImportRun do
       states: [:available, :scheduled, :executing, :retryable, :suspended],
       keys: [:import_run_id]
     ]
+
+  import Ecto.Query, only: [where: 3, select: 3]
 
   require Logger
 
@@ -44,18 +57,18 @@ defmodule Mydia.Jobs.ImportRun do
   def progress_topic(run_id), do: "import_run:#{run_id}"
 
   @impl Oban.Worker
-  def perform(%Oban.Job{args: %{"import_run_id" => run_id}}) do
+  def perform(%Oban.Job{args: %{"import_run_id" => run_id}} = job) do
     case Library.get_import_run(run_id) do
       nil ->
         Logger.warning("Import run vanished before it could execute", import_run_id: run_id)
         :ok
 
       run ->
-        execute(run)
+        execute(run, job)
     end
   end
 
-  defp execute(run) do
+  defp execute(run, job) do
     with :ok <- run_scan_phase(run),
          :ok <- run_match_phase(Library.get_import_run(run.id)) do
       finish(run, :done)
@@ -64,21 +77,52 @@ defmodule Mydia.Jobs.ImportRun do
         finish(run, :stopped)
 
       {:error, reason} ->
-        Logger.error("Import run failed",
-          import_run_id: run.id,
-          reason: inspect(reason)
-        )
-
-        {:ok, updated} =
-          Library.update_import_run(Library.get_import_run(run.id), %{
-            status: :failed,
-            error: inspect(reason)
-          })
-
-        broadcast(updated)
-        {:error, reason}
+        fail(run, reason, job)
     end
   end
+
+  # A failure is only terminal once Oban has no attempts left. Writing :failed
+  # on attempt 1 tells the user the import failed while the system is still
+  # about to retry it, and worse, :failed is terminal so `active_import_run/1`
+  # returns nil and the user can start a SECOND coordinator for the same
+  # library path while the first sits in :retryable. The partial unique index
+  # guards `import_runs` rows, not Oban jobs, so nothing else would catch that.
+  defp fail(run, reason, %Oban.Job{attempt: attempt, max_attempts: max_attempts}) do
+    Logger.error("Import run failed",
+      import_run_id: run.id,
+      reason: inspect(reason),
+      attempt: attempt,
+      max_attempts: max_attempts
+    )
+
+    if attempt >= max_attempts do
+      {:ok, updated} =
+        Library.update_import_run(Library.get_import_run(run.id), %{
+          status: :failed,
+          phase: :finished,
+          current_file: nil,
+          error: format_run_error(reason)
+        })
+
+      broadcast(updated)
+    else
+      Logger.warning("Leaving the import run active for Oban to retry",
+        import_run_id: run.id,
+        attempt: attempt,
+        max_attempts: max_attempts
+      )
+    end
+
+    {:error, reason}
+  end
+
+  # This string is rendered verbatim in the outcome panel. The two failures
+  # this coordinator raises itself carry a written sentence, so unwrap those
+  # rather than showing the operator Elixir tuple syntax. Anything from
+  # further down (`{:error, :not_found}` from the scanner, for instance) has
+  # no sentence to unwrap and falls back to inspect/1.
+  defp format_run_error({_tag, message}) when is_binary(message), do: message
+  defp format_run_error(reason), do: inspect(reason)
 
   defp finish(run, status) do
     {:ok, updated} =
@@ -100,6 +144,16 @@ defmodule Mydia.Jobs.ImportRun do
   Returns `:ok` when the whole tree was scanned, or `:stopped` if a stop was
   requested partway through. A partial scan is valid state, not an error.
 
+  Refuses a library path whose type is not in
+  `Mydia.Library.ImportRun.importable_types/0`. The start form already filters
+  those out, but this is the layer that a stale bookmark or a crafted event
+  cannot walk around, and it matters: nothing downstream restricts by library
+  type. `Library.inbox_base_query/1` has no type filter, and
+  `MediaFile.library_type_compatible?/3` has no clause for `:music`, `:books`
+  or `:adult` so it falls through to `true`. An unattended run over a music
+  path would send `Artist - 03 - Track.flac` to the relay and could link the
+  result to a movie item.
+
   ## Options
 
     * `:after_batch` - a 0-arity function invoked once a batch has committed,
@@ -113,10 +167,32 @@ defmodule Mydia.Jobs.ImportRun do
     after_batch = Keyword.get(opts, :after_batch, fn -> :ok end)
 
     library_path = Settings.get_library_path!(run.library_path_id)
-    extensions = Scanner.extensions_for_library_type(library_path.type)
 
-    {:ok, _} = Library.update_import_run(run, %{phase: :scanning})
+    with :ok <- ensure_importable(library_path) do
+      extensions = Scanner.extensions_for_library_type(library_path.type)
 
+      {:ok, _} = Library.update_import_run(run, %{phase: :scanning})
+
+      scan_tree(run, library_path, extensions, after_batch)
+    end
+  end
+
+  defp ensure_importable(library_path) do
+    if ImportRun.importable_type?(library_path.type) do
+      :ok
+    else
+      Logger.warning("Refusing to import a library path that is not movies or TV",
+        library_path_id: library_path.id,
+        type: library_path.type
+      )
+
+      {:error,
+       {:unsupported_library_type,
+        "Only movie, TV and mixed libraries can be imported. This path is a #{library_path.type} library."}}
+    end
+  end
+
+  defp scan_tree(run, library_path, extensions, after_batch) do
     case Scanner.scan(library_path.path, video_extensions: extensions) do
       {:ok, scan_result} ->
         scan_result.files
@@ -220,7 +296,7 @@ defmodule Mydia.Jobs.ImportRun do
     match_loop(run, library_path, config, after_chunk)
   end
 
-  defp match_loop(run, library_path, config, after_chunk) do
+  defp match_loop(run, library_path, config, after_chunk, previous_ids \\ nil) do
     if Library.import_run_stopping?(run.id) do
       :stopped
     else
@@ -229,11 +305,37 @@ defmodule Mydia.Jobs.ImportRun do
           :ok
 
         chunk ->
-          process_match_chunk(chunk, run, library_path, config)
-          after_chunk.()
-          match_loop(run, library_path, config, after_chunk)
+          ids = chunk |> Enum.map(&elem(&1, 0)) |> MapSet.new()
+
+          if ids == previous_ids do
+            no_progress(run, library_path, chunk)
+          else
+            process_match_chunk(chunk, run, library_path, config)
+            after_chunk.()
+            match_loop(run, library_path, config, after_chunk, ids)
+          end
       end
     end
+  end
+
+  # Unreachable while `FileIngest`'s progress contract holds: every ingest
+  # outcome leaves the file with a parent or a candidate, and either removes
+  # it from this query's result set. Kept because the cost of being wrong is
+  # an import that spins forever on the queue's only slot, writing NFOs on
+  # every pass and permanently blocking any further import of that path.
+  defp no_progress(run, library_path, chunk) do
+    {_id, example} = hd(chunk)
+
+    Logger.error("Import run made no progress on a chunk, halting",
+      import_run_id: run.id,
+      library_path_id: library_path.id,
+      chunk_size: length(chunk),
+      example_path: example
+    )
+
+    {:error,
+     {:no_progress,
+      "The import stopped because #{length(chunk)} file(s) could not be resolved and kept coming back, starting with #{Path.basename(example)}. This is a bug, please report it."}}
   end
 
   defp process_match_chunk(chunk, run, library_path, config) do
@@ -293,6 +395,96 @@ defmodule Mydia.Jobs.ImportRun do
       progress_topic(run.id),
       {:import_run_current_file, Path.basename(path)}
     )
+  end
+
+  ## Crash recovery
+
+  # Every state Oban can hold a job in where it may still run. `:scheduled` is
+  # included beyond the obvious three: a job that snoozed sits there, and
+  # reconciling it would be a false positive with a real coordinator about to
+  # pick the run back up.
+  @live_job_states ~w(executing available retryable scheduled)
+
+  @interrupted_error "This import was interrupted, most likely by a restart while it was running. Everything it had already added was kept. Start it again to carry on from where it stopped."
+
+  @doc """
+  Releases runs that were in flight when the node went away.
+
+  Nothing but this coordinator ever moves a run out of `:running` or
+  `:stopping`, and a partial unique index refuses a second run while either is
+  present. A container restart mid-import therefore used to leave the row
+  active forever: the panel showed a spinner with no worker behind it, Start
+  was refused for that path, and pressing Stop made it worse by writing
+  `:stopping`, which is also active. Recovery meant hand-editing the database.
+
+  Imports run for hours and Oban's default `shutdown_grace_period` is 15
+  seconds, so even a graceful `docker restart` orphans the job. This is
+  routine, not an edge case.
+
+  A run is only reconciled when no Oban job for it is in a state that could
+  still execute, so this is safe to call while healthy runs are in flight.
+  Returns the number of rows it changed.
+  """
+  @spec reconcile_interrupted_runs() :: {:ok, non_neg_integer()}
+  def reconcile_interrupted_runs do
+    live = live_run_ids()
+
+    count =
+      Library.list_active_import_runs()
+      |> Enum.reject(&MapSet.member?(live, &1.id))
+      |> Enum.count(&reconcile_run/1)
+
+    if count > 0 do
+      Logger.warning("Released import runs left in flight by an interrupted node", count: count)
+    end
+
+    {:ok, count}
+  rescue
+    error ->
+      # Boot-time work must never take the application down with it.
+      Logger.error("Could not reconcile interrupted import runs: #{inspect(error)}")
+      {:ok, 0}
+  end
+
+  defp reconcile_run(run) do
+    case Library.update_import_run(run, %{
+           status: reconciled_status(run.status),
+           phase: :finished,
+           current_file: nil,
+           error: @interrupted_error
+         }) do
+      {:ok, updated} ->
+        broadcast(updated)
+        true
+
+      {:error, changeset} ->
+        Logger.error("Could not release an interrupted import run",
+          import_run_id: run.id,
+          errors: inspect(changeset.errors)
+        )
+
+        false
+    end
+  end
+
+  # A run that was already draining is reported as stopped, not failed: the
+  # user asked for it to end and it did, just not cleanly.
+  defp reconciled_status(:stopping), do: :stopped
+  defp reconciled_status(_running), do: :failed
+
+  # Read back in Elixir rather than filtered in SQL: pulling a value out of a
+  # JSON column is not portable between SQLite and PostgreSQL, and the worker
+  # plus state filter already narrows this to a handful of rows.
+  defp live_run_ids do
+    Oban.Job
+    |> where([j], j.worker == ^inspect(__MODULE__) and j.state in ^@live_job_states)
+    |> select([j], j.args)
+    |> Repo.all()
+    |> Enum.flat_map(fn
+      %{"import_run_id" => id} when is_binary(id) -> [id]
+      _ -> []
+    end)
+    |> MapSet.new()
   end
 
   ## Progress

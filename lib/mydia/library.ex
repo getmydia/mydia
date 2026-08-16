@@ -2602,12 +2602,64 @@ defmodule Mydia.Library do
   end
 
   @doc """
-  Asks a run to stop at the next chunk boundary.
+  Returns every run currently in an active status, across all library paths.
+
+  Exists for boot reconciliation (`Mydia.Jobs.ImportRun.reconcile_interrupted_runs/0`),
+  which has to sweep the whole table rather than one path at a time.
   """
-  @spec request_import_run_stop(ImportRun.t()) ::
+  @spec list_active_import_runs() :: [ImportRun.t()]
+  def list_active_import_runs do
+    statuses = ImportRun.active_statuses()
+
+    ImportRun
+    |> where([r], r.status in ^statuses)
+    |> Repo.all()
+  end
+
+  @doc """
+  Asks a run to stop at the next chunk boundary.
+
+  Re-reads the row first, for the same reason `import_run_stopping?/1` does:
+  the caller is holding a struct read before the click, and the coordinator
+  may have reached a terminal state since. `:stopping` is an active status, so
+  writing it over a terminal row would lock that library path out forever with
+  no worker left alive to advance it. Returns `{:error, changeset}` when the
+  run is no longer running.
+  """
+  @spec request_import_run_stop(ImportRun.t() | binary()) ::
           {:ok, ImportRun.t()} | {:error, Ecto.Changeset.t()}
-  def request_import_run_stop(%ImportRun{} = run) do
-    update_import_run(run, %{status: :stopping})
+  def request_import_run_stop(%ImportRun{id: id}), do: request_import_run_stop(id)
+
+  def request_import_run_stop(id) when is_binary(id) do
+    case get_import_run(id) do
+      nil ->
+        {:error,
+         %ImportRun{}
+         |> ImportRun.changeset(%{})
+         |> Ecto.Changeset.add_error(:id, "import run no longer exists")}
+
+      run ->
+        update_import_run(run, %{status: :stopping})
+    end
+  end
+
+  @doc """
+  Forces an active run into a terminal state.
+
+  The escape hatch for a run boot reconciliation could not reach: the node
+  never restarted, so nothing ran the sweep, but the coordinator is gone all
+  the same (a cancelled job, a killed queue). Without this the only recovery
+  is editing the database by hand.
+  """
+  @spec release_import_run(ImportRun.t()) :: {:ok, ImportRun.t()} | {:error, Ecto.Changeset.t()}
+  def release_import_run(%ImportRun{} = run) do
+    update_import_run(run, %{
+      status: :stopped,
+      phase: :finished,
+      current_file: nil,
+      error:
+        "Marked as not running from the import page. Everything it had already added was kept."
+    })
   end
 
   @doc """

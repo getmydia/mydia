@@ -86,6 +86,33 @@ defmodule Mydia.Library.ImportRunTest do
       assert run.status == :running
       assert Library.import_run_stopping?(run)
     end
+
+    test "refuses to stop a run that already finished", %{library_path: lp, user: user} do
+      {:ok, run} =
+        Library.create_import_run(%{library_path_id: lp.id, user_id: user.id, mode: :review})
+
+      {:ok, _} = Library.update_import_run(run, %{status: :done, phase: :finished})
+
+      # `run` is the stale copy a Stop click holds when the coordinator reaches
+      # :done in between the page rendering and the click landing. Without a
+      # state-machine guard this writes :stopping over a terminal row, and
+      # :stopping is active, so the path is locked out forever with no
+      # coordinator left alive to advance it.
+      assert {:error, _} = Library.request_import_run_stop(run)
+
+      assert Library.get_import_run(run.id).status == :done
+      refute Library.active_import_run(lp.id)
+    end
+
+    test "refuses to stop a run that already stopped", %{library_path: lp, user: user} do
+      {:ok, run} =
+        Library.create_import_run(%{library_path_id: lp.id, user_id: user.id, mode: :review})
+
+      {:ok, _} = Library.update_import_run(run, %{status: :stopped, phase: :finished})
+
+      assert {:error, _} = Library.request_import_run_stop(run)
+      assert Library.get_import_run(run.id).status == :stopped
+    end
   end
 
   describe "active_import_run/1" do
