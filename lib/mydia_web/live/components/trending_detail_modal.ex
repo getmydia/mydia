@@ -88,6 +88,11 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
                     <%= if runtime(@metadata) do %>
                       <span class="badge badge-ghost">{format_runtime(runtime(@metadata))}</span>
                     <% end %>
+                    <%= if format_seasons(seasons(@metadata)) do %>
+                      <span class="badge badge-ghost">
+                        {format_seasons(seasons(@metadata))}
+                      </span>
+                    <% end %>
                     <%= if genres(@metadata) != [] do %>
                       <span class="text-white/40">•</span>
                     <% end %>
@@ -265,6 +270,9 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
   defp runtime(nil), do: nil
   defp runtime(metadata), do: metadata.runtime
 
+  defp seasons(nil), do: nil
+  defp seasons(metadata), do: metadata.number_of_seasons
+
   defp genres(nil), do: []
   defp genres(metadata), do: metadata.genres || []
 
@@ -321,4 +329,12 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
   end
 
   defp format_runtime(_), do: nil
+
+  defp format_seasons(1), do: "1 season"
+
+  defp format_seasons(count) when is_integer(count) and count > 0 do
+    "#{count} seasons"
+  end
+
+  defp format_seasons(_), do: nil
 end

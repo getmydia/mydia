@@ -9,8 +9,11 @@ defmodule MydiaWeb.DiscoverLive.Index do
   alias Mydia.Media.Recommendations
   alias Mydia.Metadata
   alias MydiaWeb.Live.Authorization
+  alias MydiaWeb.Live.Helpers.GridDensity
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
+
+  import MydiaWeb.GridDensityComponents
 
   @movie_categories [
     {:trending, "Trending"},
@@ -59,6 +62,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
       |> assign(:load_error, nil)
       |> assign(:detail_loading, false)
       |> assign(:libraries, [])
+      |> GridDensity.assign_current()
 
     {:ok, socket}
   end
@@ -271,6 +275,10 @@ defmodule MydiaWeb.DiscoverLive.Index do
      |> assign(:selected_item, nil)
      |> assign(:selected_metadata, nil)
      |> assign(:detail_loading, false)}
+  end
+
+  def handle_event("set_grid_density", %{"density" => density}, socket) do
+    {:noreply, GridDensity.put(socket, density)}
   end
 
   # Info handlers

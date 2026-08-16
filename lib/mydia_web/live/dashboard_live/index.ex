@@ -6,11 +6,13 @@ defmodule MydiaWeb.DashboardLive.Index do
   require Logger
 
   alias Mydia.Media
+  alias Mydia.Media.RecentlyAdded
   alias Mydia.Library
   alias Mydia.Downloads
   alias Mydia.Metadata
   alias Mydia.MediaRequests
   alias Mydia.Accounts.Authorization
+  alias MydiaWeb.DashboardLive.Components
   alias MydiaWeb.Live.Authorization, as: LiveAuthorization
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
@@ -50,6 +52,7 @@ defmodule MydiaWeb.DashboardLive.Index do
         |> assign(:total_storage, "0 GB")
         |> assign(:recent_episodes, [])
         |> assign(:upcoming_episodes, [])
+        |> assign(:recently_added, [])
         |> assign(:library_status_map, %{})
         |> assign(:adding_item_id, nil)
         |> assign(:requesting_item_id, nil)
@@ -102,6 +105,17 @@ defmodule MydiaWeb.DashboardLive.Index do
     send(self(), :load_trending_movies)
     send(self(), :load_trending_tv)
 
+    # Same window and semantics the player's rail uses
+    # (discovery_resolver.ex:39), so both clients agree on what "recently
+    # added" means. This is a local query, so unlike the trending rails below
+    # it does not need to be pushed off the mount path.
+    recently_added =
+      RecentlyAdded.list_recent(
+        since: DateTime.add(DateTime.utc_now(), -30, :day),
+        types: nil,
+        limit: 12
+      )
+
     socket
     |> assign(:movie_count, movie_count)
     |> assign(:tv_show_count, tv_show_count)
@@ -112,6 +126,7 @@ defmodule MydiaWeb.DashboardLive.Index do
     |> assign(:recent_episodes, Enum.take(recent_episodes, 10))
     |> assign(:upcoming_episodes, Enum.take(upcoming_episodes, 10))
     |> assign(:pending_requests_count, pending_requests_count)
+    |> assign(:recently_added, recently_added)
   end
 
   @impl true

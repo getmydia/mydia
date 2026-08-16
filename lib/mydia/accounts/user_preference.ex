@@ -17,12 +17,14 @@ defmodule Mydia.Accounts.UserPreference do
     "metadata_language" => "en",
     "interface_language" => "en",
     "theme" => "system",
-    "close_manual_search_after_grab" => false
+    "close_manual_search_after_grab" => false,
+    "grid_density" => "comfortable"
   }
 
   # Valid values for each preference
   @valid_themes ~w(system light dark)
   @valid_languages ~w(en es fr de it pt ja zh ko ru)
+  @valid_densities ~w(comfortable compact dense)
 
   @type t :: %__MODULE__{
           id: binary(),
@@ -74,6 +76,13 @@ defmodule Mydia.Accounts.UserPreference do
   end
 
   @doc """
+  Grid density for the Discover and Libraries poster grids.
+  """
+  def grid_density(%__MODULE__{preferences: prefs}) do
+    Map.get(prefs, "grid_density", @defaults["grid_density"])
+  end
+
+  @doc """
   Changeset for creating or updating user preferences.
 
   The `preferences` param should be a map with string keys, e.g.:
@@ -108,6 +117,7 @@ defmodule Mydia.Accounts.UserPreference do
     |> validate_preference_value("metadata_language", @valid_languages)
     |> validate_preference_value("interface_language", @valid_languages)
     |> validate_preference_value("close_manual_search_after_grab", [true, false])
+    |> validate_preference_value("grid_density", @valid_densities)
   end
 
   defp validate_preference_value(changeset, key, valid_values) do
