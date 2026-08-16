@@ -9,6 +9,10 @@ defmodule MydiaWeb.SearchLive.Index do
   alias Mydia.Downloads
   alias Mydia.Settings
 
+  import MydiaWeb.IndexerComponents
+
+  alias Mydia.Indexers.Structs.IndexerProgress
+
   require Logger
 
   # Library type options for the filter
@@ -70,6 +74,8 @@ defmodule MydiaWeb.SearchLive.Index do
      |> assign(:sort_by, :quality)
      |> assign(:results_empty?, false)
      |> assign(:indexer_errors, [])
+     |> assign(:indexer_progress, %{})
+     |> assign(:search_id, 0)
      |> assign(:show_disambiguation_modal, false)
      |> assign(:metadata_matches, [])
      |> assign(:metadata_media_type, nil)
@@ -103,14 +109,7 @@ defmodule MydiaWeb.SearchLive.Index do
     socket =
       case params do
         %{"q" => query} when is_binary(query) and query != "" ->
-          # Trigger a search with the query parameter
-          min_seeders = socket.assigns.min_seeders
-          indexer_ids = MapSet.to_list(socket.assigns.selected_indexer_ids)
-
-          socket
-          |> assign(:search_query, query)
-          |> assign(:searching, true)
-          |> start_async(:search, fn -> perform_search(query, min_seeders, indexer_ids) end)
+          start_search(socket, query)
 
         _ ->
           socket
@@ -130,15 +129,7 @@ defmodule MydiaWeb.SearchLive.Index do
        |> assign(:results_empty?, false)
        |> stream(:search_results, [], reset: true)}
     else
-      # Extract only needed values to avoid copying the whole assigns to the async task
-      min_seeders = socket.assigns.min_seeders
-      indexer_ids = MapSet.to_list(socket.assigns.selected_indexer_ids)
-
-      {:noreply,
-       socket
-       |> assign(:search_query, query)
-       |> assign(:searching, true)
-       |> start_async(:search, fn -> perform_search(query, min_seeders, indexer_ids) end)}
+      {:noreply, push_patch(socket, to: ~p"/search?#{[q: query]}")}
     end
   end
 
@@ -602,6 +593,23 @@ defmodule MydiaWeb.SearchLive.Index do
   def handle_info({:grab_failed, _payload}, socket), do: {:noreply, socket}
   def handle_info({:grab_duplicate, _payload}, socket), do: {:noreply, socket}
 
+  def handle_info({:indexer_search_started, search_id, pending}, socket) do
+    if search_id == socket.assigns.search_id do
+      progress = Map.new(pending, fn entry -> {entry.indexer_id, entry} end)
+      {:noreply, assign(socket, :indexer_progress, progress)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_info({:indexer_progress, search_id, %IndexerProgress{} = progress}, socket) do
+    if search_id == socket.assigns.search_id do
+      {:noreply, apply_indexer_progress(socket, progress)}
+    else
+      {:noreply, socket}
+    end
+  end
+
   def handle_info(msg, socket) do
     # Catch-all for unhandled messages to prevent crashes
     Logger.warning("Unhandled message in SearchLive.Index: #{inspect(msg)}")
@@ -899,17 +907,43 @@ defmodule MydiaWeb.SearchLive.Index do
     "search-result-#{hash}"
   end
 
-  defp perform_search(query, min_seeders, indexer_ids) do
+  defp start_search(socket, query) do
+    min_seeders = socket.assigns.min_seeders
+    indexer_ids = MapSet.to_list(socket.assigns.selected_indexer_ids)
+    # self() inside start_async is the task, not the LiveView, so capture it here.
+    lv = self()
+    search_id = socket.assigns.search_id + 1
+
+    socket
+    |> assign(:search_query, query)
+    |> assign(:searching, true)
+    |> assign(:search_id, search_id)
+    |> assign(:indexer_progress, %{})
+    |> assign(:indexer_errors, [])
+    |> assign(:search_results_map, %{})
+    |> assign(:results_empty?, false)
+    |> stream(:search_results, [], reset: true)
+    |> start_async(:search, fn ->
+      perform_search(query, min_seeders, indexer_ids, lv, search_id)
+    end)
+  end
+
+  defp perform_search(query, min_seeders, indexer_ids, lv, search_id) do
     opts = [
       min_seeders: min_seeders,
       deduplicate: true,
-      indexer_ids: indexer_ids
+      indexer_ids: indexer_ids,
+      on_start: fn pending -> send(lv, {:indexer_search_started, search_id, pending}) end,
+      on_indexer_result: fn progress -> send(lv, {:indexer_progress, search_id, progress}) end
     ]
 
-    {:ok, %{results: results, indexer_errors: indexer_errors}} =
-      Indexers.search_all(query, opts)
+    case Indexers.search_all(query, opts) do
+      {:ok, %{results: results, indexer_errors: indexer_errors}} ->
+        {:ok, results, indexer_errors}
 
-    {:ok, results, indexer_errors}
+      other ->
+        {:error, other}
+    end
   end
 
   defp apply_filters(socket) do
@@ -921,6 +955,47 @@ defmodule MydiaWeb.SearchLive.Index do
     socket
     |> assign(:results_empty?, sorted_results == [])
     |> stream(:search_results, sorted_results, reset: true)
+  end
+
+  # Folds one indexer's results into the accumulated set and re-ranks the whole
+  # thing, so the list stays correctly ordered as indexers report out of order.
+  #
+  # search_results_map keeps the ranked-and-deduplicated set rather than the raw
+  # accumulation, matching what handle_async assigns at the end of a search.
+  # apply_filters/1 re-filters straight from this map without deduplicating, so
+  # storing raw results here would surface duplicates the moment a user touched a
+  # filter mid-search.
+  #
+  # `results` is cleared from the stored progress struct: it can be large and the
+  # releases already live in search_results_map.
+  defp apply_indexer_progress(socket, %IndexerProgress{} = progress) do
+    indexer_progress =
+      Map.put(socket.assigns.indexer_progress, progress.indexer_id, %{progress | results: []})
+
+    accumulated =
+      Enum.reduce(progress.results, socket.assigns.search_results_map, fn result, acc ->
+        Map.put(acc, result.download_url, result)
+      end)
+
+    ranked =
+      accumulated
+      |> Map.values()
+      |> Indexers.rank_and_dedupe(socket.assigns.search_query,
+        min_seeders: socket.assigns.min_seeders
+      )
+
+    results_map = Map.new(ranked, fn result -> {result.download_url, result} end)
+
+    sorted =
+      ranked
+      |> filter_results(socket.assigns)
+      |> sort_results(socket.assigns.sort_by)
+
+    socket
+    |> assign(:indexer_progress, indexer_progress)
+    |> assign(:search_results_map, results_map)
+    |> assign(:results_empty?, sorted == [])
+    |> stream(:search_results, sorted, reset: true)
   end
 
   defp apply_sort(socket) do

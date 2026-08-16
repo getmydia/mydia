@@ -167,15 +167,15 @@
       </div>
     <% end %>
 
-    <%!-- Loading State --%>
-    <%= if @searching do %>
+    <%!-- Loading State: only before the first indexer reports --%>
+    <%= if @searching && @results_empty? do %>
       <div class="card bg-base-100 shadow-lg">
         <div class="card-body flex flex-col items-center justify-center py-16">
           <span class="loading loading-spinner loading-lg text-primary mb-4"></span>
           <h3 class="text-xl font-semibold text-base-content/70 mb-2">
             Searching indexers...
           </h3>
-          <p class="text-base-content/50">This may take a few seconds</p>
+          <p class="text-base-content/50">Results appear as each indexer responds</p>
         </div>
       </div>
     <% end %>
@@ -193,22 +193,8 @@
       </div>
     <% end %>
 
-    <%!-- Indexer Error Warning --%>
-    <%= if @indexer_errors != [] && !@searching do %>
-      <div class="alert alert-warning shadow-lg mb-4">
-        <.icon name="hero-exclamation-triangle" class="w-5 h-5 shrink-0" />
-        <div class="flex-1">
-          <div class="text-sm font-medium">
-            {length(@indexer_errors)} indexer(s) failed
-          </div>
-          <ul class="text-xs opacity-80 mt-1">
-            <%= for error <- @indexer_errors do %>
-              <li>{error.indexer}: {error.error}</li>
-            <% end %>
-          </ul>
-        </div>
-      </div>
-    <% end %>
+    <%!-- Per-indexer search progress --%>
+    <.indexer_search_status progress={@indexer_progress} retry_event="retry_indexer" />
     <%!-- Empty State (no results) --%>
     <%= if @results_empty? && @search_query != "" && !@searching do %>
       <div class="card bg-base-100 shadow-lg">
@@ -231,7 +217,7 @@
     <% end %>
 
     <%!-- Results --%>
-    <%= if @search_query != "" && !@searching && !@results_empty? do %>
+    <%= if @search_query != "" && !@results_empty? do %>
       <div class="card bg-base-100 shadow-lg overflow-hidden">
         <%!-- Results count --%>
         <div class="px-4 py-3 bg-base-200 border-b border-base-300 flex items-center justify-between">
