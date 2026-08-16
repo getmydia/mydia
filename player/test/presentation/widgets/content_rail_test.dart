@@ -79,6 +79,58 @@ void main() {
     });
   });
 
+  // The show detail screen's "Similar in your library" rail is supporting
+  // context, so it opens closed and the posters are never built until asked
+  // for. Every other rail on every other surface must be untouched by that.
+  group('ContentRail disclosure', () {
+    testWidgets('a collapsible rail starts closed, showing only its header',
+        (tester) async {
+      await tester.pumpWidget(
+        _host(ContentRail(
+          title: 'Similar in your library',
+          items: _items(5),
+          collapsible: true,
+        )),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Similar in your library'), findsOneWidget);
+      expect(find.byKey(ContentRail.disclosureKey), findsOneWidget);
+      expect(find.byType(MediaCard), findsNothing);
+    });
+
+    testWidgets('tapping the header opens the rail and tapping again closes it',
+        (tester) async {
+      await tester.pumpWidget(
+        _host(ContentRail(
+          title: 'Similar in your library',
+          items: _items(5),
+          collapsible: true,
+        )),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Similar in your library'));
+      await tester.pumpAndSettle();
+      expect(find.byType(MediaCard), findsWidgets);
+
+      await tester.tap(find.text('Similar in your library'));
+      await tester.pumpAndSettle();
+      expect(find.byType(MediaCard), findsNothing);
+    });
+
+    testWidgets('a rail is open with no chevron unless asked to collapse',
+        (tester) async {
+      await tester.pumpWidget(
+        _host(ContentRail(title: 'Recently Added', items: _items(5))),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(MediaCard), findsWidgets);
+      expect(find.byKey(ContentRail.disclosureKey), findsNothing);
+    });
+  });
+
   group('ContentRail RecentlyAddedItem subtitle', () {
     // Regression guard for `item.newContentLabel ?? item.year?.toString()`:
     // if that coalescing order is ever flipped, this is the test that catches
