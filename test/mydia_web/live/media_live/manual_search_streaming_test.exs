@@ -67,10 +67,15 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
   # the search provably cannot finish while the gate is shut.
   defp gated_indexer_fixture(name) do
     bypass = Bypass.open()
-    {:ok, gate} = Agent.start_link(fn -> %{open: false, timed_out: false} end)
+
+    {:ok, gate} =
+      Agent.start_link(fn ->
+        %{open: false, entered: false, already_open_at_entry: false, timed_out: false}
+      end)
 
     Bypass.expect(bypass, "GET", "/api/v1/search", fn conn ->
       Bypass.pass(bypass)
+      enter_gate(gate)
       await_gate(gate)
 
       conn
@@ -89,6 +94,39 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
   end
 
   defp open_gate(gate), do: Agent.update(gate, &%{&1 | open: true})
+
+  # See MydiaWeb.SearchLive.StreamingTest for the full rationale. `entered`
+  # alone would not prove the handler ever waited (an already-open gate lets
+  # await_gate/2 return immediately while `entered` still flips to true), so
+  # the state of the gate AT ENTRY is recorded too, once, and refuted by
+  # assert_gate_held/1.
+  defp enter_gate(gate) do
+    Agent.update(gate, fn
+      %{entered: false} = state -> %{state | entered: true, already_open_at_entry: state.open}
+      state -> state
+    end)
+  end
+
+  # Must be awaited before the test opens the gate, or whether the search is
+  # actually held is a coin flip on whether the HTTP request happens to start
+  # before or after open_gate/1.
+  defp wait_until_gate_entered(gate, retries \\ 500)
+
+  defp wait_until_gate_entered(_gate, 0) do
+    flunk(
+      "timed out waiting for the gated indexer to receive its request; " <>
+        "nothing was ever parked behind the gate"
+    )
+  end
+
+  defp wait_until_gate_entered(gate, retries) do
+    if Agent.get(gate, & &1.entered) do
+      :ok
+    else
+      Process.sleep(10)
+      wait_until_gate_entered(gate, retries - 1)
+    end
+  end
 
   # See MydiaWeb.SearchLive.StreamingTest for the full rationale. In short: a
   # gate that is never opened must surface as a failure, never as a hung suite
@@ -118,9 +156,17 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
   end
 
   # Must run in the test process; see await_gate/2 for why the handler cannot
-  # report this itself.
+  # report either of these itself. The two guard different failures: one that
+  # the request never waited at all, one that it waited and then gave up.
   defp assert_gate_held(gate) do
-    refute Agent.get(gate, & &1.timed_out),
+    state = Agent.get(gate, & &1)
+
+    refute state.already_open_at_entry,
+           "the gated indexer's request arrived when the gate was already open, so it " <>
+             "was never held and the full search's completion was not ordered after the " <>
+             "retry's result at all"
+
+    refute state.timed_out,
            "the gated indexer stopped waiting and answered on its own, so the full " <>
              "search was never actually held behind the gate and this test proved nothing"
   end
@@ -229,6 +275,11 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
     {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
     view |> element("#manual-search-button") |> render_click()
     wait_for_indexer_progress(view)
+
+    # on_start fires before any HTTP request, so wait_for_indexer_progress/1
+    # above does NOT mean the gated indexer has been contacted yet. Everything
+    # below depends on the search being genuinely parked behind the gate.
+    wait_until_gate_entered(gate)
 
     dune = search_result("Dune.2024.2160p.UHD")
 
