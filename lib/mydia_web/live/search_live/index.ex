@@ -90,6 +90,7 @@ defmodule MydiaWeb.SearchLive.Index do
      |> assign(:show_retry_modal, false)
      |> assign(:retry_error_message, nil)
      |> assign(:search_results_map, %{})
+     |> assign(:raw_search_results_map, %{})
      |> assign(:show_detail_modal, false)
      |> assign(:selected_result, nil)
      |> assign(:show_download_modal, false)
@@ -921,6 +922,7 @@ defmodule MydiaWeb.SearchLive.Index do
     |> assign(:indexer_progress, %{})
     |> assign(:indexer_errors, [])
     |> assign(:search_results_map, %{})
+    |> assign(:raw_search_results_map, %{})
     |> assign(:results_empty?, false)
     |> stream(:search_results, [], reset: true)
     |> start_async(:search, fn ->
@@ -960,25 +962,38 @@ defmodule MydiaWeb.SearchLive.Index do
   # Folds one indexer's results into the accumulated set and re-ranks the whole
   # thing, so the list stays correctly ordered as indexers report out of order.
   #
-  # search_results_map keeps the ranked-and-deduplicated set rather than the raw
-  # accumulation, matching what handle_async assigns at the end of a search.
-  # apply_filters/1 re-filters straight from this map without deduplicating, so
-  # storing raw results here would surface duplicates the moment a user touched a
-  # filter mid-search.
+  # Two collections are kept deliberately, and must NOT be collapsed back into
+  # one:
   #
-  # `results` is cleared from the stored progress struct: it can be large and the
-  # releases already live in search_results_map.
+  #   - raw_search_results_map: every release ever seen this search, keyed by
+  #     download_url, UNTRUNCATED. This is what future progress messages fold
+  #     new results onto.
+  #   - search_results_map: the ranked-and-deduplicated (and therefore
+  #     truncated-to-max_results) DISPLAY set, matching what handle_async
+  #     assigns at the end of a search. apply_filters/1 re-filters straight
+  #     from this map without deduplicating, so it must stay deduplicated.
+  #
+  # Folding new results onto search_results_map instead of the raw map would
+  # rank each indexer's results against an already-truncated pool: a release
+  # that looked weak against the first max_results candidates would be
+  # dropped for good and never reconsidered once more results arrive, even
+  # though it might rank in the true top set once the full history is
+  # visible. Always re-rank from the raw map, then re-derive the truncated
+  # display set from that ranked output.
+  #
+  # `results` is cleared from the stored progress struct: it can be large and
+  # the releases already live in raw_search_results_map.
   defp apply_indexer_progress(socket, %IndexerProgress{} = progress) do
     indexer_progress =
       Map.put(socket.assigns.indexer_progress, progress.indexer_id, %{progress | results: []})
 
-    accumulated =
-      Enum.reduce(progress.results, socket.assigns.search_results_map, fn result, acc ->
+    raw_results =
+      Enum.reduce(progress.results, socket.assigns.raw_search_results_map, fn result, acc ->
         Map.put(acc, result.download_url, result)
       end)
 
     ranked =
-      accumulated
+      raw_results
       |> Map.values()
       |> Indexers.rank_and_dedupe(socket.assigns.search_query,
         min_seeders: socket.assigns.min_seeders
@@ -993,6 +1008,7 @@ defmodule MydiaWeb.SearchLive.Index do
 
     socket
     |> assign(:indexer_progress, indexer_progress)
+    |> assign(:raw_search_results_map, raw_results)
     |> assign(:search_results_map, results_map)
     |> assign(:results_empty?, sorted == [])
     |> stream(:search_results, sorted, reset: true)
