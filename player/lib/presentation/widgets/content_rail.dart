@@ -142,6 +142,7 @@ class _ContentRailState extends State<ContentRail> {
           Flexible(
             child: Text(
               widget.title,
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.bold,
