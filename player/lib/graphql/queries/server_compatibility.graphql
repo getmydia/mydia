@@ -1,0 +1,7 @@
+query ServerCompatibility {
+  serverCompatibility {
+    version
+    minPlayerVersion
+    recommendedPlayerVersion
+  }
+}
