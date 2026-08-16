@@ -4,7 +4,13 @@ defmodule Mydia.Library.DatabaseHealthCheck do
   triggers library re-scans when needed.
 
   Runs on application startup to detect:
-  1. Orphaned media files (no media_item_id or episode_id in standard libraries)
+  1. Stuck media files: no `media_item_id`, no `episode_id`, in a standard
+     (non-specialized) library, AND carrying no match candidate. The candidate
+     exclusion is the load-bearing half. The import coordinator commits
+     orphaned rows as its first phase and can legitimately leave thousands of
+     them queued in the review inbox; those are pending work, not damage, and
+     counting them here would queue a re-scan against a healthy library. See
+     `count_orphaned_files/0`.
   2. Media files with relative_path but missing library_path_id
 
   When issues are detected above a threshold, a library re-scan is queued as a
@@ -39,6 +45,7 @@ defmodule Mydia.Library.DatabaseHealthCheck do
 
   alias Mydia.Repo
   alias Mydia.Settings
+  alias Mydia.Library.MatchCandidate
   alias Mydia.Library.MediaFile
   alias Mydia.Settings.LibraryPath
 
@@ -104,6 +111,12 @@ defmodule Mydia.Library.DatabaseHealthCheck do
   Orphaned files are those with no `media_item_id` and no `episode_id`.
   Files in specialized libraries (music, books, adult) are excluded as they
   don't require parent associations.
+
+  Files that already hold a match candidate are excluded too. A candidate
+  means the file is queued in the import inbox for review, not stuck: the
+  import coordinator writes orphaned rows as its first phase, and a scan can
+  legitimately leave thousands of them sitting there awaiting a decision.
+  Without this exclusion, that queued work reads as database damage.
   """
   def count_orphaned_files do
     standard_types = [:movies, :series, :mixed]
@@ -111,8 +124,11 @@ defmodule Mydia.Library.DatabaseHealthCheck do
     from(mf in MediaFile,
       join: lp in LibraryPath,
       on: mf.library_path_id == lp.id,
+      left_join: c in MatchCandidate,
+      on: c.media_file_id == mf.id,
       where: is_nil(mf.media_item_id) and is_nil(mf.episode_id),
       where: lp.type in ^standard_types,
+      where: is_nil(c.id),
       select: count(mf.id)
     )
     |> Repo.one()

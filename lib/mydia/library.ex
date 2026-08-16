@@ -2486,118 +2486,467 @@ defmodule Mydia.Library do
     {:ok, success_count}
   end
 
-  ## Import Sessions
+  ## Match Candidates
 
-  alias Mydia.Library.ImportSession
+  alias Mydia.Library.MatchCandidate
 
   @doc """
-  Creates a new import session for a user.
+  Creates or replaces the match candidate at a given rank for a media file.
+
+  Upsert rather than insert so a retried match never doubles up: the matching
+  phase is allowed to run again over a file whose previous attempt crashed
+  mid-write.
   """
-  @spec create_import_session(map()) :: {:ok, ImportSession.t()} | {:error, Ecto.Changeset.t()}
-  def create_import_session(attrs \\ %{}) do
+  @spec upsert_match_candidate(map()) :: {:ok, MatchCandidate.t()} | {:error, Ecto.Changeset.t()}
+  def upsert_match_candidate(attrs) do
+    media_file_id = attrs[:media_file_id] || attrs["media_file_id"]
+    rank = attrs[:rank] || attrs["rank"] || 0
+
+    candidate =
+      Repo.get_by(MatchCandidate, media_file_id: media_file_id, rank: rank) || %MatchCandidate{}
+
+    candidate
+    |> MatchCandidate.changeset(attrs)
+    |> Repo.insert_or_update()
+  end
+
+  @doc """
+  Lists the cached match candidates for a media file, best first.
+  """
+  @spec list_match_candidates(binary()) :: [MatchCandidate.t()]
+  def list_match_candidates(media_file_id) do
+    MatchCandidate
+    |> where([c], c.media_file_id == ^media_file_id)
+    |> order_by([c], asc: c.rank)
+    |> Repo.all()
+  end
+
+  @doc """
+  Deletes every cached candidate for a media file.
+
+  Called once a file is linked, so the inbox query stops returning it.
+  """
+  @spec delete_match_candidates(binary()) :: {integer(), nil}
+  def delete_match_candidates(media_file_id) do
+    MatchCandidate
+    |> where([c], c.media_file_id == ^media_file_id)
+    |> Repo.delete_all()
+  end
+
+  @doc """
+  Applies one match and/or season to the rank-0 candidate of many files.
+
+  This is the review inbox's batch edit. It merges into each file's existing
+  candidate rather than overwriting it, so applying only a season number does
+  not blank out a title or provider that an earlier edit or the matching phase
+  already set.
+
+  `match` is `nil` or a map with `:provider_id`, `:title` and `:type`; `season`
+  is `nil` or the season number to stamp on every selected file. Returns
+  `{:ok, %{updated: n, failed: n}}`.
+
+  Files that vanished between the page rendering and the button being pressed
+  are counted as failed rather than written: the candidate's `media_file_id`
+  is a foreign key, so attempting the write would either raise or, on an
+  adapter that reports the violation, poison the enclosing transaction. Every
+  write is a savepoint for the same reason, so one rejected changeset cannot
+  cost the rest of the batch.
+  """
+  @spec apply_batch_match([binary()], map() | nil, integer() | nil) ::
+          {:ok, %{updated: non_neg_integer(), failed: non_neg_integer()}}
+  def apply_batch_match(media_file_ids, match, season) do
+    Repo.transaction(fn ->
+      live_ids =
+        MediaFile
+        |> where([f], f.id in ^media_file_ids)
+        |> select([f], f.id)
+        |> Repo.all()
+        |> MapSet.new()
+
+      existing =
+        MatchCandidate
+        |> where([c], c.media_file_id in ^media_file_ids and c.rank == 0)
+        |> Repo.all()
+        |> Map.new(&{&1.media_file_id, &1})
+
+      Enum.reduce(media_file_ids, %{updated: 0, failed: 0}, fn id, counts ->
+        if MapSet.member?(live_ids, id) do
+          count_batch_write(counts, id, Map.get(existing, id), match, season)
+        else
+          Logger.warning("Skipping a batch match for a media file that no longer exists",
+            media_file_id: id
+          )
+
+          %{counts | failed: counts.failed + 1}
+        end
+      end)
+    end)
+  end
+
+  defp count_batch_write(counts, media_file_id, existing, match, season) do
+    case write_batch_candidate(media_file_id, existing, match, season) do
+      {:ok, _candidate} ->
+        %{counts | updated: counts.updated + 1}
+
+      {:error, changeset} ->
+        Logger.error("Could not apply a batch match to a media file",
+          media_file_id: media_file_id,
+          errors: inspect(changeset.errors)
+        )
+
+        %{counts | failed: counts.failed + 1}
+    end
+  end
+
+  # Deliberately not upsert_match_candidate/1: the caller already read every
+  # rank-0 candidate in one query, and going back through that function would
+  # re-read each one individually (a full 100-row page selection cost 200
+  # queries before this).
+  defp write_batch_candidate(media_file_id, existing, match, season) do
+    parsed_info = (existing && existing.parsed_info) || %{}
+    parsed_info = if season, do: Map.put(parsed_info, "season", season), else: parsed_info
+
+    attrs = %{
+      media_file_id: media_file_id,
+      rank: 0,
+      attempts: 0,
+      last_error: nil,
+      provider_type: (existing && existing.provider_type) || "tmdb",
+      provider_id: existing && existing.provider_id,
+      title: existing && existing.title,
+      media_type: existing && existing.media_type,
+      confidence: existing && existing.confidence,
+      parsed_info: parsed_info
+    }
+
+    attrs =
+      if match do
+        %{
+          attrs
+          | provider_type: "tmdb",
+            provider_id: match.provider_id,
+            title: match.title,
+            media_type: match.type,
+            confidence: 1.0
+        }
+      else
+        attrs
+      end
+
+    (existing || %MatchCandidate{})
+    |> MatchCandidate.changeset(attrs)
+    |> Repo.insert_or_update(mode: :savepoint)
+  end
+
+  ## Import Runs
+
+  alias Mydia.Library.ImportRun
+
+  @doc """
+  Starts an import run for a library path.
+
+  Returns an error changeset when the path already has a run in flight. The
+  guarantee is enforced by a partial unique index, so two tabs pressing Start
+  simultaneously cannot both win.
+  """
+  @spec create_import_run(map()) :: {:ok, ImportRun.t()} | {:error, Ecto.Changeset.t()}
+  def create_import_run(attrs) do
     attrs
-    |> ImportSession.create_changeset()
+    |> ImportRun.create_changeset()
     |> Repo.insert()
   end
 
   @doc """
-  Gets the active import session for a user.
-  Returns nil if no active session exists.
+  Fetches an import run by id, or nil.
   """
-  @spec get_active_import_session(binary()) :: ImportSession.t() | nil
-  def get_active_import_session(user_id) do
-    ImportSession
-    |> where([s], s.user_id == ^user_id and s.status == :active)
-    |> order_by([s], desc: s.updated_at)
+  @spec get_import_run(binary()) :: ImportRun.t() | nil
+  def get_import_run(id), do: Repo.get(ImportRun, id)
+
+  @doc """
+  Returns the in-flight run for a library path, or nil.
+
+  A `:stopping` run counts as in flight: the coordinator is still draining its
+  current chunk and a second run would race it.
+  """
+  @spec active_import_run(binary()) :: ImportRun.t() | nil
+  def active_import_run(library_path_id) do
+    statuses = ImportRun.active_statuses()
+
+    ImportRun
+    |> where([r], r.library_path_id == ^library_path_id and r.status in ^statuses)
+    |> Repo.one()
+  end
+
+  @doc """
+  Returns the most recently started run for a library path, regardless of
+  status, or nil if the path has never had one.
+
+  Exists so a reload can still show what a finished, failed, or stopped run
+  did, since `active_import_run/1` deliberately excludes terminal states (the
+  coordinator and the single-active-run uniqueness guard both depend on that
+  exclusion, so it is not widened here).
+  """
+  @spec last_import_run(binary()) :: ImportRun.t() | nil
+  def last_import_run(library_path_id) do
+    ImportRun
+    |> where([r], r.library_path_id == ^library_path_id)
+    |> order_by([r], desc: r.inserted_at)
     |> limit(1)
     |> Repo.one()
   end
 
   @doc """
-  Gets an import session by ID.
-  Returns nil if not found.
+  Updates progress counters or lifecycle state on a run.
   """
-  @spec get_import_session(binary()) :: ImportSession.t() | nil
-  def get_import_session(id) do
-    Repo.get(ImportSession, id)
-  end
-
-  @doc """
-  Gets an import session by ID.
-  Raises Ecto.NoResultsError if not found.
-  """
-  @spec get_import_session!(binary()) :: ImportSession.t()
-  def get_import_session!(id) do
-    Repo.get!(ImportSession, id)
-  end
-
-  @doc """
-  Updates an import session.
-  """
-  @spec update_import_session(ImportSession.t(), map()) ::
-          {:ok, ImportSession.t()} | {:error, Ecto.Changeset.t()}
-  def update_import_session(%ImportSession{} = session, attrs) do
-    session
-    |> ImportSession.changeset(attrs)
+  @spec update_import_run(ImportRun.t(), map()) ::
+          {:ok, ImportRun.t()} | {:error, Ecto.Changeset.t()}
+  def update_import_run(%ImportRun{} = run, attrs) do
+    run
+    |> ImportRun.changeset(attrs)
     |> Repo.update()
   end
 
   @doc """
-  Marks an import session as completed.
+  Returns every run currently in an active status, across all library paths.
+
+  Exists for boot reconciliation (`Mydia.Jobs.ImportRun.reconcile_interrupted_runs/0`),
+  which has to sweep the whole table rather than one path at a time.
   """
-  @spec complete_import_session(ImportSession.t()) ::
-          {:ok, ImportSession.t()} | {:error, Ecto.Changeset.t()}
-  def complete_import_session(%ImportSession{} = session) do
-    session
-    |> ImportSession.complete_changeset()
-    |> Repo.update()
+  @spec list_active_import_runs() :: [ImportRun.t()]
+  def list_active_import_runs do
+    statuses = ImportRun.active_statuses()
+
+    ImportRun
+    |> where([r], r.status in ^statuses)
+    |> Repo.all()
   end
 
   @doc """
-  Abandons all active import sessions for a user.
-  This is called when starting a new import session.
+  Asks a run to stop at the next chunk boundary.
+
+  Re-reads the row first, for the same reason `import_run_stopping?/1` does:
+  the caller is holding a struct read before the click, and the coordinator
+  may have reached a terminal state since. `:stopping` is an active status, so
+  writing it over a terminal row would lock that library path out forever with
+  no worker left alive to advance it. Returns `{:error, changeset}` when the
+  run is no longer running.
   """
-  @spec abandon_active_import_sessions(binary()) :: {non_neg_integer(), nil | [term()]}
-  def abandon_active_import_sessions(user_id) do
-    from(s in ImportSession,
-      where: s.user_id == ^user_id and s.status == :active
-    )
-    |> Repo.update_all(
-      set: [status: :abandoned, updated_at: DateTime.utc_now() |> DateTime.truncate(:second)]
-    )
+  @spec request_import_run_stop(ImportRun.t() | binary()) ::
+          {:ok, ImportRun.t()} | {:error, Ecto.Changeset.t()}
+  def request_import_run_stop(%ImportRun{id: id}), do: request_import_run_stop(id)
+
+  def request_import_run_stop(id) when is_binary(id) do
+    case get_import_run(id) do
+      nil ->
+        {:error,
+         %ImportRun{}
+         |> ImportRun.changeset(%{})
+         |> Ecto.Changeset.add_error(:id, "import run no longer exists")}
+
+      run ->
+        update_import_run(run, %{status: :stopping})
+    end
   end
 
   @doc """
-  Deletes expired import sessions.
-  Returns the count of deleted sessions.
-  """
-  @spec delete_expired_import_sessions() :: {:ok, non_neg_integer()}
-  def delete_expired_import_sessions do
-    now = DateTime.utc_now() |> DateTime.truncate(:second)
+  Forces an active run into a terminal state.
 
-    {count, _} =
-      from(s in ImportSession,
-        where: s.expires_at < ^now
+  The escape hatch for a run boot reconciliation could not reach: the node
+  never restarted, so nothing ran the sweep, but the coordinator is gone all
+  the same (a cancelled job, a killed queue). Without this the only recovery
+  is editing the database by hand.
+
+  Re-reads and refuses a run that is already terminal, mirroring
+  `request_import_run_stop/1`. Same race, same shape: the run can reach `:done`
+  between the panel rendering and the click landing, and overwriting that with
+  `:stopped` would throw away the real outcome and replace it with a message
+  saying a human ended it.
+  """
+  @spec release_import_run(ImportRun.t() | binary()) ::
+          {:ok, ImportRun.t()}
+          | {:error, :not_active | :not_found | Ecto.Changeset.t()}
+  def release_import_run(%ImportRun{id: id}), do: release_import_run(id)
+
+  def release_import_run(id) when is_binary(id) do
+    case get_import_run(id) do
+      nil ->
+        {:error, :not_found}
+
+      %ImportRun{status: status} = run ->
+        if status in ImportRun.active_statuses() do
+          update_import_run(run, %{
+            status: :stopped,
+            phase: :finished,
+            current_file: nil,
+            error:
+              "Marked as not running from the import page. Everything it had already added was kept."
+          })
+        else
+          {:error, :not_active}
+        end
+    end
+  end
+
+  @doc """
+  Re-reads a run and reports whether a stop has been requested.
+
+  Re-reads rather than inspecting the passed struct because the coordinator
+  holds a stale copy between chunks; the whole point is to observe a write made
+  by another process.
+  """
+  @spec import_run_stopping?(ImportRun.t() | binary()) :: boolean()
+  def import_run_stopping?(%ImportRun{id: id}), do: import_run_stopping?(id)
+
+  def import_run_stopping?(id) when is_binary(id) do
+    case Repo.get(ImportRun, id) do
+      %ImportRun{status: :stopping} -> true
+      _ -> false
+    end
+  end
+
+  @doc """
+  Returns `{media_file_id, absolute_path}` for files still needing a match.
+
+  A file needs matching when it has no parent association and no cached
+  candidate. Excluding files that already carry a candidate is what lets a
+  resumed run skip relay work a previous run already paid for.
+  """
+  @spec list_unmatched_media_file_paths(binary(), pos_integer()) :: [{binary(), String.t()}]
+  def list_unmatched_media_file_paths(library_path_id, limit) do
+    MediaFile
+    |> where([f], f.library_path_id == ^library_path_id)
+    |> where([f], is_nil(f.media_item_id) and is_nil(f.episode_id))
+    |> where([f], is_nil(f.trashed_at))
+    |> join(:left, [f], c in MatchCandidate, on: c.media_file_id == f.id)
+    |> where([_f, c], is_nil(c.id))
+    |> limit(^limit)
+    |> preload(:library_path)
+    |> Repo.all()
+    |> Enum.map(fn file -> {file.id, MediaFile.absolute_path(file)} end)
+    |> drop_unresolvable_paths()
+  end
+
+  # `limit/2` runs in SQL and this rejection runs after it, so a chunk made
+  # entirely of rows whose absolute path cannot be resolved comes back empty --
+  # which `Jobs.ImportRun`'s match_loop/5 reads as "nothing left to match".
+  # Those files then never get a candidate, never reach the inbox, and the run
+  # still reports success. The return contract is unchanged (resolvable pairs
+  # only); logging is what makes the condition observable at all, since the
+  # only other trace it leaves is an orphan count that never goes down.
+  defp drop_unresolvable_paths(pairs) do
+    {dropped, resolvable} = Enum.split_with(pairs, fn {_id, path} -> is_nil(path) end)
+
+    if dropped != [] do
+      Logger.warning("Skipping media files whose location could not be resolved",
+        count: length(dropped),
+        media_file_ids: Enum.map_join(dropped, ",", fn {id, _path} -> id end)
       )
-      |> Repo.delete_all()
+    end
 
-    {:ok, count}
+    resolvable
+  end
+
+  ## Import Inbox
+
+  @low_confidence_ceiling 0.8
+
+  @doc """
+  Lists unresolved files with their cached match candidate.
+
+  "Unresolved" means orphaned, untrashed, and carrying a candidate row at rank
+  0 (the only rank the match phase writes today, see `file_ingest.ex`). This
+  is the permanent inbox that replaced the old per-session review list: it is
+  a live query, so approving a file removes it from these results with no
+  session state to persist.
+
+  ## Options
+
+    * `:library_path_id` - restrict to one library
+    * `:filter` - `:all` (default), `:unidentified`, or `:low_confidence`
+    * `:limit` - default 100
+    * `:offset` - default 0
+  """
+  @spec list_inbox_files(keyword()) :: [
+          %{media_file: MediaFile.t(), candidate: MatchCandidate.t()}
+        ]
+  def list_inbox_files(opts \\ []) do
+    limit = Keyword.get(opts, :limit, 100)
+    offset = Keyword.get(opts, :offset, 0)
+
+    rows =
+      MediaFile
+      |> maybe_scope_library(opts[:library_path_id])
+      |> inbox_base_query()
+      |> apply_inbox_filter(opts[:filter] || :all)
+      |> order_by([f, c], asc_nulls_last: c.title, asc: f.relative_path)
+      |> limit(^limit)
+      |> offset(^offset)
+      |> select([f, c], %{media_file: f, candidate: c})
+      |> Repo.all()
+
+    # Preloaded explicitly (rather than via a query-level `preload`) because
+    # the query above already carries a custom `select` map; the two structs
+    # in each row are re-associated by position after the batch preload,
+    # which `Repo.preload/2` guarantees preserves list order.
+    media_files =
+      rows
+      |> Enum.map(& &1.media_file)
+      |> Repo.preload(:library_path)
+
+    rows
+    |> Enum.zip(media_files)
+    |> Enum.map(fn {row, media_file} -> %{row | media_file: media_file} end)
   end
 
   @doc """
-  Deletes completed import sessions older than the given number of days.
-  Returns the count of deleted sessions.
+  Counts files awaiting review in the import inbox.
+
+  A file becomes inbox work once it carries a match candidate (a real match or
+  a recorded failed attempt) and still has no parent. This is the mirror image
+  of `list_unmatched_media_file_paths/2`: unmatched excludes a candidate,
+  inbox requires one.
+
+  ## Options
+
+    * `:library_path_id` - scopes the count to one library path (default: every path)
+    * `:filter` - `:all` (default), `:unidentified`, or `:low_confidence`
   """
-  @spec delete_old_completed_sessions(integer()) :: {:ok, non_neg_integer()}
-  def delete_old_completed_sessions(days \\ 7) do
-    cutoff = DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.add(-days, :day)
+  @spec count_inbox_files(keyword()) :: non_neg_integer()
+  def count_inbox_files(opts \\ []) do
+    MediaFile
+    |> maybe_scope_library(opts[:library_path_id])
+    |> inbox_base_query()
+    |> apply_inbox_filter(opts[:filter] || :all)
+    |> select([f, _c], count(f.id, :distinct))
+    |> Repo.one()
+  end
 
-    {count, _} =
-      from(s in ImportSession,
-        where: s.status == :completed and s.completed_at < ^cutoff
-      )
-      |> Repo.delete_all()
+  # Shared by list_inbox_files/1 and count_inbox_files/1 so the two can never
+  # drift on what "unresolved" means: orphaned, untrashed, and joined to its
+  # rank-0 candidate (an inner join, so a file with no candidate at all drops
+  # out entirely -- that set is list_unmatched_media_file_paths/2 instead).
+  defp inbox_base_query(query) do
+    query
+    |> where([f], is_nil(f.media_item_id) and is_nil(f.episode_id))
+    |> where([f], is_nil(f.trashed_at))
+    |> join(:inner, [f], c in MatchCandidate, on: c.media_file_id == f.id and c.rank == 0)
+  end
 
-    {:ok, count}
+  defp maybe_scope_library(query, nil), do: query
+
+  defp maybe_scope_library(query, library_path_id),
+    do: where(query, [f], f.library_path_id == ^library_path_id)
+
+  defp apply_inbox_filter(query, :all), do: query
+
+  defp apply_inbox_filter(query, :unidentified),
+    do: where(query, [_f, c], is_nil(c.provider_id))
+
+  defp apply_inbox_filter(query, :low_confidence) do
+    where(
+      query,
+      [_f, c],
+      not is_nil(c.provider_id) and c.confidence < ^@low_confidence_ceiling
+    )
   end
 end
