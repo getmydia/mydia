@@ -104,4 +104,87 @@ defmodule MydiaWeb.IndexerComponentsTest do
 
     assert LazyHTML.query(document, "#indexer-search-status") |> Enum.empty?()
   end
+
+  test "rows render in alphabetical order by indexer name, regardless of status or map order" do
+    progress =
+      progress_map([
+        %IndexerProgress{
+          indexer: "Zeta",
+          indexer_id: "z",
+          status: :error,
+          error: "boom",
+          total: 3
+        },
+        %IndexerProgress{
+          indexer: "Alpha",
+          indexer_id: "a",
+          status: :ok,
+          result_count: 1,
+          duration_ms: 10,
+          total: 3
+        },
+        %IndexerProgress{indexer: "Mango", indexer_id: "m", status: :pending, total: 3}
+      ])
+
+    html =
+      render_component(&MydiaWeb.IndexerComponents.indexer_search_status/1, progress: progress)
+
+    document = LazyHTML.from_fragment(html)
+
+    ids =
+      document
+      |> LazyHTML.query("#indexer-search-status [id^=\"indexer-status-\"]")
+      |> LazyHTML.attribute("id")
+
+    assert ids == ["indexer-status-a", "indexer-status-m", "indexer-status-z"]
+  end
+
+  test "a timed-out indexer shows a retry button when the event is given" do
+    progress =
+      progress_map([
+        %IndexerProgress{
+          indexer: "FileList",
+          indexer_id: "d",
+          status: :timeout,
+          error: "Timed out",
+          total: 1
+        }
+      ])
+
+    html =
+      render_component(&MydiaWeb.IndexerComponents.indexer_search_status/1,
+        progress: progress,
+        retry_event: "retry_indexer"
+      )
+
+    document = LazyHTML.from_fragment(html)
+
+    buttons = LazyHTML.query(document, "#indexer-status-d button")
+
+    assert LazyHTML.attribute(buttons, "phx-value-id") == ["d"]
+  end
+
+  test "an ok indexer shows no retry button even when the event is given" do
+    progress =
+      progress_map([
+        %IndexerProgress{
+          indexer: "Nyaa",
+          indexer_id: "b",
+          status: :ok,
+          result_count: 12,
+          duration_ms: 840,
+          total: 1
+        }
+      ])
+
+    html =
+      render_component(&MydiaWeb.IndexerComponents.indexer_search_status/1,
+        progress: progress,
+        retry_event: "retry_indexer"
+      )
+
+    document = LazyHTML.from_fragment(html)
+
+    assert LazyHTML.query(document, "#indexer-status-b button") |> Enum.empty?()
+  end
 end
