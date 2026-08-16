@@ -704,7 +704,10 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
           </div>
           <%!-- Loading State --%>
           <%= if @searching && @results_empty? do %>
-            <div class="flex flex-col items-center justify-center py-16">
+            <div
+              id="manual-search-loading-state"
+              class="flex flex-col items-center justify-center py-16"
+            >
               <span class="loading loading-spinner loading-lg text-primary mb-4"></span>
               <h3 class="text-xl font-semibold text-base-content/70 mb-2">
                 Searching across indexers...

@@ -42,10 +42,20 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
 
   def generate_positioned_id(result), do: generate_result_id(result)
 
-  def perform_search(query, min_seeders, lv, search_id) do
+  @doc """
+  Run a manual search, streaming per-indexer progress back to `lv`.
+
+  `indexer_ids` scopes the search to a subset of the enabled indexers. It
+  defaults to `nil`, which searches all of them; the single-indexer retry
+  passes `[indexer_id]` so retrying one failed chip does not re-run (and
+  re-set to `:pending`) every other indexer. `Indexers.search_all/2` treats a
+  `nil` value the same as the option being absent.
+  """
+  def perform_search(query, min_seeders, lv, search_id, indexer_ids \\ nil) do
     opts = [
       min_seeders: min_seeders,
       deduplicate: true,
+      indexer_ids: indexer_ids,
       on_start: fn pending -> send(lv, {:indexer_search_started, search_id, pending}) end,
       on_indexer_result: fn progress -> send(lv, {:indexer_progress, search_id, progress}) end
     ]

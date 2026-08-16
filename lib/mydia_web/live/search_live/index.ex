@@ -653,40 +653,42 @@ defmodule MydiaWeb.SearchLive.Index do
     {:noreply, socket}
   end
 
+  # Terminal handler for the full search. It deliberately does NOT touch the
+  # displayed results.
+  #
+  # Every indexer's output already arrived through `on_indexer_result`:
+  # Indexers.search_all/2 invokes it on the success branch, the error branch
+  # and the exit/timeout branch alike, and start_async delivers this reply
+  # from the same process that sent those progress messages, so all of them
+  # have already been folded in by apply_indexer_progress/2 (which owns
+  # search_results_map, raw_search_results_map, results_empty? and the
+  # stream).
+  #
+  # `results` here is the aggregate of the FULL search only. Re-streaming it
+  # with reset: true would silently delete anything a single-indexer retry
+  # contributed, which is the ordinary case rather than an exotic race: the
+  # Retry button appears as soon as one indexer errors, while slow indexers
+  # are still pending, so a retry against a fast-failing host normally
+  # settles before the slow ones finish.
+  #
+  # The zero-indexer case is why this clause still has to end the search:
+  # search_all/2 returns early there, before `on_start`, so no progress
+  # message ever arrives and nothing else can clear :searching.
+  # results_empty? was set to true when the search started and nothing has
+  # flipped it, so the "No Results Found" empty state renders correctly.
   @impl true
   def handle_async(:search, {:ok, {:ok, results, indexer_errors}}, socket) do
-    start_time = System.monotonic_time(:millisecond)
-
-    filtered_results = filter_results(results, socket.assigns)
-    sorted_results = sort_results(filtered_results, socket.assigns.sort_by)
-
-    duration = System.monotonic_time(:millisecond) - start_time
-
     Logger.info(
       "Search completed: query=\"#{socket.assigns.search_query}\", " <>
-        "results=#{length(results)}, filtered=#{length(filtered_results)}, " <>
-        "indexer_errors=#{length(indexer_errors)}, processing_time=#{duration}ms"
+        "aggregate_results=#{length(results)}, " <>
+        "displayed=#{map_size(socket.assigns.search_results_map)}, " <>
+        "indexer_errors=#{length(indexer_errors)}"
     )
-
-    # Store results in a map for quick lookup by download_url
-    results_map =
-      results
-      |> Enum.map(fn result ->
-        Logger.info(
-          "Storing result in map: #{result.title}, protocol: #{inspect(result.download_protocol)}"
-        )
-
-        {result.download_url, result}
-      end)
-      |> Map.new()
 
     {:noreply,
      socket
      |> assign(:searching, false)
-     |> assign(:results_empty?, sorted_results == [])
-     |> assign(:indexer_errors, indexer_errors)
-     |> assign(:search_results_map, results_map)
-     |> stream(:search_results, sorted_results, reset: true)}
+     |> assign(:indexer_errors, indexer_errors)}
   end
 
   def handle_async(:search, {:ok, {:error, reason}}, socket) do
@@ -965,7 +967,14 @@ defmodule MydiaWeb.SearchLive.Index do
     |> assign(:indexer_errors, [])
     |> assign(:search_results_map, %{})
     |> assign(:raw_search_results_map, %{})
-    |> assign(:results_empty?, false)
+    # TRUE, not false: the display set is genuinely empty until the first
+    # indexer reports. The loading gate is `@searching && @results_empty?`
+    # and the results gate is `!@results_empty?`, so starting at false
+    # suppresses the spinner and renders the results card with a count of
+    # zero ("0 results for Dune") for the whole search window. The "No
+    # Results Found" empty state is gated on `!@searching`, so it stays
+    # hidden until the search actually ends.
+    |> assign(:results_empty?, true)
     |> stream(:search_results, [], reset: true)
     |> start_async(:search, fn ->
       perform_search(query, min_seeders, indexer_ids, lv, search_id)

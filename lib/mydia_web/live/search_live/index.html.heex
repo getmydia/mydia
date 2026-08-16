@@ -169,7 +169,7 @@
 
     <%!-- Loading State: only before the first indexer reports --%>
     <%= if @searching && @results_empty? do %>
-      <div class="card bg-base-100 shadow-lg">
+      <div id="search-loading-state" class="card bg-base-100 shadow-lg">
         <div class="card-body flex flex-col items-center justify-center py-16">
           <span class="loading loading-spinner loading-lg text-primary mb-4"></span>
           <h3 class="text-xl font-semibold text-base-content/70 mb-2">
@@ -221,7 +221,7 @@
       <div class="card bg-base-100 shadow-lg overflow-hidden">
         <%!-- Results count --%>
         <div class="px-4 py-3 bg-base-200 border-b border-base-300 flex items-center justify-between">
-          <span class="text-sm font-medium">
+          <span id="search-results-count" class="text-sm font-medium">
             {map_size(@search_results_map)} results for "{@search_query}"
           </span>
         </div>
