@@ -515,8 +515,14 @@ defmodule MydiaWeb.SearchLive.Index do
     lv = self()
     search_id = socket.assigns.search_id
 
+    # Map.replace_lazy/3 no-ops when indexer_id isn't a key in the map, rather
+    # than inserting `indexer_id => nil` (as Map.update/4's default would),
+    # which would otherwise flow a nil straight into the status chip
+    # component. Not reachable through the shipped UI today (the Retry
+    # button only renders for rows already present in the map), but an
+    # unknown or forged id should be a clean no-op, not a crash landmine.
     indexer_progress =
-      Map.update(socket.assigns.indexer_progress, indexer_id, nil, fn entry ->
+      Map.replace_lazy(socket.assigns.indexer_progress, indexer_id, fn entry ->
         %{entry | status: :pending, error: nil, result_count: nil, duration_ms: nil}
       end)
 
@@ -616,7 +622,17 @@ defmodule MydiaWeb.SearchLive.Index do
 
   def handle_info({:indexer_search_started, search_id, pending}, socket) do
     if search_id == socket.assigns.search_id do
-      progress = Map.new(pending, fn entry -> {entry.indexer_id, entry} end)
+      incoming = Map.new(pending, fn entry -> {entry.indexer_id, entry} end)
+
+      # Merge rather than replace: a scoped retry's on_start message only
+      # covers the indexer(s) actually being retried, so a full replace here
+      # would wipe every OTHER indexer's chip (success counts, durations,
+      # errors) out of indexer_progress, even though those indexers were
+      # never re-searched and will never report in again this search. A
+      # fresh search still resets indexer_progress to %{} before starting
+      # (see start_search/2), so merge and replace are equivalent there;
+      # this only changes behavior for the scoped-retry case.
+      progress = Map.merge(socket.assigns.indexer_progress, incoming)
       {:noreply, assign(socket, :indexer_progress, progress)}
     else
       {:noreply, socket}

@@ -205,12 +205,40 @@ defmodule MydiaWeb.SearchLive.StreamingTest do
   # :sys.get_state runs. Using the slow Bypass-backed fixture (like the
   # completion-race avoidance above) keeps the retry's real HTTP call parked
   # well past the test's lifetime, removing that race entirely.
-  test "retrying a failed indexer marks it pending again", %{conn: conn} do
+  #
+  # A single indexer cannot prove handle_info({:indexer_search_started, ...})
+  # MERGES rather than REPLACES: with one entry in indexer_progress, "wiped
+  # the map down to just this one pending entry" and "correctly updated this
+  # one entry to pending" are indistinguishable. A second entry ("succeeded-
+  # id") makes the two hypotheses diverge. It is deliberately NOT backed by a
+  # real indexer_config (same pattern as the "old-indexer"/"old-id" entries
+  # used elsewhere in this file), so it can never appear in any real
+  # on_start's pending list -- exactly mirroring an indexer that already
+  # finished and is NOT part of the scoped retry. Retrying "flaky-indexer"
+  # sends a real, scoped on_start covering only flaky-indexer; a REPLACE-
+  # based handler would wipe "succeeded-id" out of indexer_progress the
+  # moment that real message lands, a MERGE-based one preserves it.
+  test "retrying a failed indexer marks it pending again without wiping other indexers", %{
+    conn: conn
+  } do
     indexer = pending_indexer_fixture("flaky-indexer")
 
     {:ok, view, _html} = live(conn, ~p"/search")
     render_patch(view, ~p"/search?q=Dune")
     wait_for_indexer_progress(view)
+
+    succeeded = %IndexerProgress{
+      indexer: "succeeded-indexer",
+      indexer_id: "succeeded-id",
+      status: :ok,
+      results: [],
+      result_count: 3,
+      duration_ms: 500,
+      completed: 1,
+      total: 1
+    }
+
+    send(view.pid, {:indexer_progress, current_search_id(view), succeeded})
 
     failed = %IndexerProgress{
       indexer: "flaky-indexer",
@@ -229,8 +257,17 @@ defmodule MydiaWeb.SearchLive.StreamingTest do
     |> element("#indexer-status-#{indexer.id} button")
     |> render_click()
 
-    assert :sys.get_state(view.pid).socket.assigns.indexer_progress[indexer.id].status ==
-             :pending
+    # The retry's own real on_start fires before any HTTP request (same
+    # timing as the initial search's on_start above, which wait_for_indexer_
+    # progress/1 confirms lands within tens of ms in this suite), so this
+    # short wait reliably outlasts it before we inspect final state.
+    Process.sleep(200)
+
+    progress = :sys.get_state(view.pid).socket.assigns.indexer_progress
+
+    assert progress[indexer.id].status == :pending
+    assert progress["succeeded-id"].status == :ok
+    assert progress["succeeded-id"].result_count == 3
   end
 
   # Before this task, no handle_event("retry_indexer", ...) clause existed

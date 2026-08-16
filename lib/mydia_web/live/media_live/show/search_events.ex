@@ -236,8 +236,14 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
     lv = self()
     search_id = socket.assigns.search_id
 
+    # Map.replace_lazy/3 no-ops when indexer_id isn't a key in the map, rather
+    # than inserting `indexer_id => nil` (as Map.update/4's default would),
+    # which would otherwise flow a nil straight into the status chip
+    # component. Not reachable through the shipped UI today (the Retry
+    # button only renders for rows already present in the map), but an
+    # unknown or forged id should be a clean no-op, not a crash landmine.
     indexer_progress =
-      Map.update(socket.assigns.indexer_progress, indexer_id, nil, fn entry ->
+      Map.replace_lazy(socket.assigns.indexer_progress, indexer_id, fn entry ->
         %{entry | status: :pending, error: nil, result_count: nil, duration_ms: nil}
       end)
 

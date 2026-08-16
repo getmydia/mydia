@@ -169,13 +169,43 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
     assert has_element?(view, "#indexer-status-old-id")
   end
 
-  test "retrying a failed indexer marks it pending again", %{conn: conn} do
+  # A single indexer cannot prove handle_info({:indexer_search_started, ...})
+  # MERGES rather than REPLACES: with one entry in indexer_progress, "wiped
+  # the map down to just this one pending entry" and "correctly updated this
+  # one entry to pending" are indistinguishable. A second entry ("succeeded-
+  # id") makes the two hypotheses diverge. It is deliberately NOT backed by a
+  # real indexer_config (same pattern as the "old"/"old-id" entries used
+  # elsewhere in this file), so it can never appear in any real on_start's
+  # pending list: SearchHelpers.perform_search/4 re-searches every ENABLED
+  # indexer_config on retry (it has no indexer_ids scoping, unlike /search),
+  # so "flaky-indexer" being the only REAL config in the DB is what makes the
+  # retry's on_start list end up scoped to it alone in practice, exactly
+  # mirroring an indexer that already finished and should NOT be touched. A
+  # REPLACE-based handler would wipe "succeeded-id" out of indexer_progress
+  # the moment that real on_start message lands; a MERGE-based one preserves
+  # it.
+  test "retrying a failed indexer marks it pending again without wiping other indexers", %{
+    conn: conn
+  } do
     media_item = media_item_fixture(%{title: "Dune", type: "movie"})
     indexer = pending_indexer_fixture("flaky-indexer")
 
     {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
     view |> element("#manual-search-button") |> render_click()
     wait_for_indexer_progress(view)
+
+    succeeded = %IndexerProgress{
+      indexer: "succeeded-indexer",
+      indexer_id: "succeeded-id",
+      status: :ok,
+      results: [],
+      result_count: 3,
+      duration_ms: 500,
+      completed: 1,
+      total: 1
+    }
+
+    send(view.pid, {:indexer_progress, current_search_id(view), succeeded})
 
     failed = %IndexerProgress{
       indexer: "flaky-indexer",
@@ -194,8 +224,16 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
     |> element("#indexer-status-#{indexer.id} button")
     |> render_click()
 
-    assert :sys.get_state(view.pid).socket.assigns.indexer_progress[indexer.id].status ==
-             :pending
+    # The retry's own real on_start fires before any HTTP request (same
+    # timing as the initial search's on_start above), so this short wait
+    # reliably outlasts it before we inspect final state.
+    Process.sleep(200)
+
+    progress = :sys.get_state(view.pid).socket.assigns.indexer_progress
+
+    assert progress[indexer.id].status == :pending
+    assert progress["succeeded-id"].status == :ok
+    assert progress["succeeded-id"].result_count == 3
   end
 
   # Before this task, no handle_event("retry_indexer", ...) clause existed on
