@@ -8,6 +8,10 @@ import '../../domain/models/watch_status.dart';
 import 'media_card.dart';
 import 'media_context_menu.dart';
 
+/// Shared by the chevron rotation and the height change so a collapsible rail
+/// opens as one motion.
+const _disclosureDuration = Duration(milliseconds: 220);
+
 class ContentRail extends StatefulWidget {
   final String title;
   final List<dynamic> items;
@@ -21,6 +25,12 @@ class ContentRail extends StatefulWidget {
   /// item's files and progress, which an (id, type) pair cannot carry.
   final void Function(Object item)? onItemActivate;
 
+  /// Turns the header into a disclosure and starts the rail collapsed, so only
+  /// the title line is drawn until it is tapped. For rails that are supporting
+  /// context rather than the reason the page was opened, an always-open strip
+  /// of posters competes with the content it sits beside.
+  final bool collapsible;
+
   const ContentRail({
     super.key,
     required this.title,
@@ -30,7 +40,11 @@ class ContentRail extends StatefulWidget {
     this.onItemTap,
     this.onSeeAllTap,
     this.onItemActivate,
+    this.collapsible = false,
   });
+
+  /// Test/lookup handle for the disclosure chevron (player key convention).
+  static const disclosureKey = ValueKey('content-rail-disclosure');
 
   @override
   State<ContentRail> createState() => _ContentRailState();
@@ -40,10 +54,12 @@ class _ContentRailState extends State<ContentRail> {
   final ScrollController _scrollController = ScrollController();
   bool _showLeftFade = false;
   bool _showRightFade = true;
+  late bool _expanded;
 
   @override
   void initState() {
     super.initState();
+    _expanded = !widget.collapsible;
     _scrollController.addListener(_updateFadeState);
   }
 
@@ -81,105 +97,163 @@ class _ContentRailState extends State<ContentRail> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Header
-        Padding(
-          padding: EdgeInsets.fromLTRB(horizontalPadding, isDesktop ? 32 : 24,
-              horizontalPadding, isDesktop ? 20 : 16),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                widget.title,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: -0.3,
-                    ),
-              ),
-              if (widget.onSeeAllTap != null)
-                TextButton.icon(
-                  onPressed: widget.onSeeAllTap,
-                  icon: const Text('See All'),
-                  label: const Icon(Icons.chevron_right_rounded, size: 18),
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppColors.primary,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
+        _buildHeader(context, horizontalPadding, isDesktop),
+
+        // Scrollable content with fade edges. A collapsed rail builds none of
+        // it, so a hidden rail costs no cards and no poster fetches.
+        AnimatedSize(
+          duration: _disclosureDuration,
+          curve: Curves.easeOutCubic,
+          alignment: Alignment.topCenter,
+          child: _expanded
+              ? SizedBox(
+                  height: railHeight,
+                  child: _buildRailBody(horizontalPadding, cardSpacing),
+                )
+              : const SizedBox(width: double.infinity, height: 0),
+        ),
+      ],
+    );
+  }
+
+  /// The header line. When [ContentRail.collapsible] it doubles as the
+  /// disclosure control for the strip below it.
+  Widget _buildHeader(
+    BuildContext context,
+    double horizontalPadding,
+    bool isDesktop,
+  ) {
+    // Closed, the title sits directly above whatever follows it, so it keeps
+    // only enough room to read as its own line rather than the gap that an
+    // open rail needs above its posters.
+    final bottomPadding =
+        _expanded ? (isDesktop ? 20.0 : 16.0) : (isDesktop ? 10.0 : 8.0);
+
+    final header = Padding(
+      padding: EdgeInsets.fromLTRB(
+        horizontalPadding,
+        isDesktop ? 32 : 24,
+        horizontalPadding,
+        bottomPadding,
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Flexible(
+            child: Text(
+              widget.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: -0.3,
                   ),
-                ),
-            ],
+            ),
           ),
+          if (widget.collapsible)
+            AnimatedRotation(
+              key: ContentRail.disclosureKey,
+              turns: _expanded ? 0.5 : 0,
+              duration: _disclosureDuration,
+              curve: Curves.easeOutCubic,
+              child: const Icon(
+                Icons.expand_more_rounded,
+                size: 26,
+                color: AppColors.textSecondary,
+              ),
+            )
+          else if (widget.onSeeAllTap != null)
+            TextButton.icon(
+              onPressed: widget.onSeeAllTap,
+              icon: const Text('See All'),
+              label: const Icon(Icons.chevron_right_rounded, size: 18),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+              ),
+            ),
+        ],
+      ),
+    );
+
+    if (!widget.collapsible) return header;
+
+    return Semantics(
+      button: true,
+      expanded: _expanded,
+      child: InkWell(
+        onTap: () => setState(() => _expanded = !_expanded),
+        child: header,
+      ),
+    );
+  }
+
+  Widget _buildRailBody(double horizontalPadding, double cardSpacing) {
+    return Stack(
+      children: [
+        // Main scrollable list
+        ListView.builder(
+          controller: _scrollController,
+          scrollDirection: Axis.horizontal,
+          padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+          itemCount: widget.items.length,
+          itemBuilder: (context, index) {
+            final item = widget.items[index];
+            return Padding(
+              key: _keyFor(item, index),
+              padding: EdgeInsets.only(
+                right: index < widget.items.length - 1 ? cardSpacing : 0,
+              ),
+              child: _buildCard(context, item),
+            );
+          },
         ),
 
-        // Scrollable content with fade edges
-        SizedBox(
-          height: railHeight,
-          child: Stack(
-            children: [
-              // Main scrollable list
-              ListView.builder(
-                controller: _scrollController,
-                scrollDirection: Axis.horizontal,
-                padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-                itemCount: widget.items.length,
-                itemBuilder: (context, index) {
-                  final item = widget.items[index];
-                  return Padding(
-                    key: _keyFor(item, index),
-                    padding: EdgeInsets.only(
-                      right: index < widget.items.length - 1 ? cardSpacing : 0,
-                    ),
-                    child: _buildCard(context, item),
-                  );
-                },
+        // Left fade gradient
+        if (_showLeftFade)
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            child: IgnorePointer(
+              child: Container(
+                width: 40,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    colors: [
+                      AppColors.background,
+                      AppColors.background.withValues(alpha: 0),
+                    ],
+                  ),
+                ),
               ),
-
-              // Left fade gradient
-              if (_showLeftFade)
-                Positioned(
-                  left: 0,
-                  top: 0,
-                  bottom: 0,
-                  child: IgnorePointer(
-                    child: Container(
-                      width: 40,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.centerLeft,
-                          end: Alignment.centerRight,
-                          colors: [
-                            AppColors.background,
-                            AppColors.background.withValues(alpha: 0),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-
-              // Right fade gradient
-              if (_showRightFade)
-                Positioned(
-                  right: 0,
-                  top: 0,
-                  bottom: 0,
-                  child: IgnorePointer(
-                    child: Container(
-                      width: 40,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.centerRight,
-                          end: Alignment.centerLeft,
-                          colors: [
-                            AppColors.background,
-                            AppColors.background.withValues(alpha: 0),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
+            ),
           ),
-        ),
+
+        // Right fade gradient
+        if (_showRightFade)
+          Positioned(
+            right: 0,
+            top: 0,
+            bottom: 0,
+            child: IgnorePointer(
+              child: Container(
+                width: 40,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.centerRight,
+                    end: Alignment.centerLeft,
+                    colors: [
+                      AppColors.background,
+                      AppColors.background.withValues(alpha: 0),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }

@@ -289,6 +289,10 @@ class ShowDetailScreen extends ConsumerWidget {
           SliverToBoxAdapter(
             child: ContentRail(
               title: 'Similar in your library',
+              // Collapsed by default: you open a show to reach its episodes,
+              // and a strip of other titles between the cast and the seasons
+              // pulls against that.
+              collapsible: true,
               items: show.similar,
               onItemTap: (itemId, type) => context.push(
                 type.toLowerCase() == 'movie'
