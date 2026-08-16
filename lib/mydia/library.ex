@@ -160,7 +160,7 @@ defmodule Mydia.Library do
         else: where(query, [f], is_nil(f.trashed_at))
 
     query
-    |> order_by([f], asc: f.trashed_at)
+    |> order_by([f], asc_nulls_first: f.trashed_at)
     |> maybe_preload(opts[:preload])
     |> Repo.all()
   end
