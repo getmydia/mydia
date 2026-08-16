@@ -1290,7 +1290,32 @@ defmodule MydiaWeb.ImportMediaLive.Index do
           timeout: :infinity,
           ordered: true
         )
-        |> Enum.map(fn {:ok, result} -> result end)
+        # `ordered: true` guarantees results line up positionally with `files`,
+        # so zipping is how a crashed task (`{:exit, reason}`) gets mapped back
+        # to the file it was matching. A raise inside `MetadataMatcher.match_file/2`
+        # (parsing or response conversion) surfaces here as `{:exit, reason}`
+        # rather than `{:ok, result}`; the task never reaches its own
+        # `send(liveview_pid, :match_progress_tick)` in that case, so it has to be
+        # sent here instead, or the progress bar stalls short of `total`. Without
+        # this, the plain `{:ok, result} -> result` mapper used to raise inside
+        # the supervisor child, which meant `{:match_complete, ...}` was never
+        # sent and the LiveView stayed stuck in the matching state forever.
+        |> Enum.zip(files)
+        |> Enum.map(fn
+          {{:ok, result}, _file} ->
+            result
+
+          {{:exit, reason}, file} ->
+            Logger.warning("Metadata matching crashed for #{file.path}: #{inspect(reason)}")
+
+            send(liveview_pid, :match_progress_tick)
+
+            %{
+              file: file,
+              match_result: nil,
+              import_status: :pending
+            }
+        end)
 
       send(liveview_pid, {:match_complete, matched_results, library_path})
     end)
