@@ -460,6 +460,78 @@ defmodule Mydia.MediaTest do
       assert {:ok, %Episode{}} = Media.delete_episode(episode)
       assert_raise Ecto.NoResultsError, fn -> Media.get_episode!(episode.id) end
     end
+
+    test "create_episode/1 casts and persists absolute_number and provider_episode_id" do
+      media_item = media_item_fixture(%{type: "tv_show"})
+
+      attrs = %{
+        media_item_id: media_item.id,
+        season_number: 1,
+        episode_number: 52,
+        absolute_number: 52,
+        provider_episode_id: "6832458"
+      }
+
+      assert {:ok, %Episode{} = episode} = Media.create_episode(attrs)
+      assert episode.absolute_number == 52
+      assert episode.provider_episode_id == "6832458"
+
+      # Round-trip through the database, not just the in-memory struct.
+      reloaded = Media.get_episode!(episode.id)
+      assert reloaded.absolute_number == 52
+      assert reloaded.provider_episode_id == "6832458"
+    end
+
+    test "duplicate provider_episode_id under the same media_item is rejected" do
+      media_item = media_item_fixture(%{type: "tv_show"})
+
+      assert {:ok, _first} =
+               Media.create_episode(%{
+                 media_item_id: media_item.id,
+                 season_number: 1,
+                 episode_number: 1,
+                 provider_episode_id: "tvdb-6832458"
+               })
+
+      # No unique_constraint/3 maps this index yet (deferred to a later task),
+      # so the DB-level violation surfaces as a raise rather than an error
+      # changeset. Assert the behavior that exists today.
+      assert_raise Ecto.ConstraintError, fn ->
+        Media.create_episode(%{
+          media_item_id: media_item.id,
+          season_number: 2,
+          episode_number: 1,
+          provider_episode_id: "tvdb-6832458"
+        })
+      end
+    end
+
+    test "multiple episodes with nil provider_episode_id coexist under the same media_item" do
+      media_item = media_item_fixture(%{type: "tv_show"})
+
+      assert {:ok, _} =
+               Media.create_episode(%{
+                 media_item_id: media_item.id,
+                 season_number: 1,
+                 episode_number: 1
+               })
+
+      assert {:ok, _} =
+               Media.create_episode(%{
+                 media_item_id: media_item.id,
+                 season_number: 1,
+                 episode_number: 2
+               })
+
+      assert {:ok, _} =
+               Media.create_episode(%{
+                 media_item_id: media_item.id,
+                 season_number: 1,
+                 episode_number: 3
+               })
+
+      assert length(Media.list_episodes(media_item.id)) == 3
+    end
   end
 
   describe "category classification" do
