@@ -8,6 +8,7 @@ defmodule Mydia.Library do
   import Mydia.QueryHelpers
   alias Mydia.Repo
   alias Mydia.Library.{MediaFile, FileAnalyzer, Text, TrashStore}
+  alias Mydia.Library.FileGrouper
   alias Mydia.Library.ReleaseParser, as: FileParser
   alias Mydia.Library.Structs.FileMetadata
 
@@ -2690,4 +2691,73 @@ defmodule Mydia.Library do
       not is_nil(c.provider_id) and c.confidence < ^@low_confidence_ceiling
     )
   end
+
+  @doc """
+  Groups one library's unresolved inbox files for the Review page.
+
+  Returns `%{series:, movies:, unmatched:, wrong_library:}`. Each grouped
+  entry's `file` field is `%{media_file: MediaFile.t(), candidate:
+  MatchCandidate.t()}` so the Review page can render the row without a second
+  query. `series` is the `FileGrouper` hierarchy; `movies`, `unmatched` and
+  `wrong_library` are flat `GroupedFile` lists. `wrong_library` is the subset
+  of otherwise-unmatched files whose candidate recorded a library/media-type
+  mismatch in `last_error`.
+  """
+  @spec group_inbox_files(binary()) :: %{
+          series: [Mydia.Library.Structs.GroupedSeries.t()],
+          movies: [Mydia.Library.Structs.GroupedFile.t()],
+          unmatched: [Mydia.Library.Structs.GroupedFile.t()],
+          wrong_library: [Mydia.Library.Structs.GroupedFile.t()]
+        }
+  def group_inbox_files(library_path_id) do
+    grouped =
+      list_inbox_files(library_path_id: library_path_id, filter: :all)
+      |> Enum.map(&to_matched_file/1)
+      |> FileGrouper.group_files()
+
+    {wrong_library, unmatched} =
+      Enum.split_with(grouped.ungrouped, fn entry ->
+        library_type_mismatch?(entry.file.candidate)
+      end)
+
+    %{
+      series: grouped.series,
+      movies: grouped.movies,
+      unmatched: unmatched,
+      wrong_library: wrong_library
+    }
+  end
+
+  # FileGrouper's input is %{file: map(), match_result: map() | nil, import_status:
+  # atom()}. It only reads match_result.title/provider_id/year and
+  # match_result.parsed_info.type/season; it passes `file` through untouched.
+  defp to_matched_file(%{media_file: media_file, candidate: candidate}) do
+    %{
+      file: %{media_file: media_file, candidate: candidate},
+      match_result: match_result_from_candidate(candidate),
+      import_status: :unresolved
+    }
+  end
+
+  defp match_result_from_candidate(%{provider_id: nil}), do: nil
+
+  defp match_result_from_candidate(candidate) do
+    parsed = candidate.parsed_info || %{}
+
+    %{
+      title: candidate.title,
+      provider_id: candidate.provider_id,
+      year: candidate.year,
+      parsed_info: %{
+        type: if(candidate.media_type == "tv_show", do: :tv_show, else: :movie),
+        season: Map.get(parsed, "season"),
+        episodes: Map.get(parsed, "episodes") || []
+      }
+    }
+  end
+
+  defp library_type_mismatch?(%{last_error: nil}), do: false
+
+  defp library_type_mismatch?(%{last_error: last_error}),
+    do: String.starts_with?(last_error, "{:library_type_mismatch,")
 end

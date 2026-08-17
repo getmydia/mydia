@@ -7,6 +7,7 @@ defmodule Mydia.LibraryTest do
   alias Mydia.Library.MediaFile
 
   import Mydia.SettingsFixtures
+  import Mydia.MediaFixtures
 
   describe "delete_media_file/2" do
     setup do
@@ -1038,5 +1039,80 @@ defmodule Mydia.LibraryTest do
     test "returns an empty map for an empty id list" do
       assert Library.count_imported_files_by_download([]) == %{}
     end
+  end
+
+  test "group_inbox_files/1 groups a library's inbox into series, movies, unmatched, and wrong_library" do
+    lp = library_path_fixture()
+
+    # A TV episode with a confident match
+    ep = orphaned_media_file_fixture(%{library_path_id: lp.id})
+
+    {:ok, _} =
+      Library.upsert_match_candidate(%{
+        media_file_id: ep.id,
+        rank: 0,
+        provider_type: "tmdb",
+        provider_id: "1396",
+        title: "Breaking Bad",
+        year: 2008,
+        media_type: "tv_show",
+        confidence: 0.9,
+        parsed_info: %{"season" => 1, "episodes" => [1]}
+      })
+
+    # A movie
+    mv = orphaned_media_file_fixture(%{library_path_id: lp.id})
+
+    {:ok, _} =
+      Library.upsert_match_candidate(%{
+        media_file_id: mv.id,
+        rank: 0,
+        provider_type: "tmdb",
+        provider_id: "603",
+        title: "The Matrix",
+        year: 1999,
+        media_type: "movie",
+        confidence: 0.95
+      })
+
+    # An unidentified file (no provider_id)
+    un = orphaned_media_file_fixture(%{library_path_id: lp.id})
+
+    {:ok, _} =
+      Library.upsert_match_candidate(%{
+        media_file_id: un.id,
+        rank: 0,
+        attempts: 1,
+        last_error: "no_match"
+      })
+
+    # A library-type-mismatch file
+    wl = orphaned_media_file_fixture(%{library_path_id: lp.id})
+
+    {:ok, _} =
+      Library.upsert_match_candidate(%{
+        media_file_id: wl.id,
+        rank: 0,
+        attempts: 1,
+        last_error: ~s({:library_type_mismatch, "Cannot add movies to a series-only library"})
+      })
+
+    group = Library.group_inbox_files(lp.id)
+
+    assert [series] = group.series
+    assert series.title == "Breaking Bad"
+    assert [season] = series.seasons
+    assert season.season_number == 1
+    assert [episode] = season.episodes
+    assert episode.file.media_file.id == ep.id
+
+    assert [movie] = group.movies
+    assert movie.file.media_file.id == mv.id
+
+    assert [unmatched] = group.unmatched
+    assert unmatched.file.media_file.id == un.id
+
+    assert [wrong] = group.wrong_library
+    assert wrong.file.media_file.id == wl.id
   end
 end
