@@ -462,16 +462,19 @@ defmodule Mydia.Media.RefreshTest do
         options: %{language: "en-US", include_adult: false}
       }
 
-      # Deliberately wrong: a tv_show stamped "movie". Before the hook exists
-      # the refresh leaves this untouched, which is the failure this test pins.
+      # Creation auto-classifies from empty metadata (Media.auto_classify_media_item/1),
+      # which stamps "tv_show" here since animated?(nil) is false. Before the
+      # hook exists, refreshing writes the anime-signalling metadata above but
+      # never re-touches category, so it stays stuck at "tv_show" even though
+      # the freshly written metadata says otherwise. That staleness is the
+      # failure this test pins.
       item =
         media_item_fixture(%{
           type: "tv_show",
           title: "Reclassify Me",
           year: 2017,
           tvdb_id: tvdb_id,
-          metadata_source: :tvdb,
-          category: "movie"
+          metadata_source: :tvdb
         })
 
       assert {:ok, _updated} = Refresh.run(item, config: config, fetch_episodes: false)
@@ -479,7 +482,7 @@ defmodule Mydia.Media.RefreshTest do
       reloaded = Repo.get!(MediaItem, item.id)
 
       assert to_string(reloaded.category) == to_string(CategoryClassifier.classify(reloaded))
-      refute to_string(reloaded.category) == "movie"
+      refute to_string(reloaded.category) == "tv_show"
     end
 
     test "category_override survives a refresh" do
