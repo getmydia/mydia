@@ -1643,7 +1643,7 @@ defmodule Mydia.Media do
         if is_nil(season_num) or is_nil(episode_num) do
           acc
         else
-          existing = get_episode_by_number(media_item.id, season_num, episode_num)
+          existing = find_existing_episode(media_item.id, episode)
 
           air_date = parse_air_date(episode.air_date)
 
@@ -1652,6 +1652,8 @@ defmodule Mydia.Media do
                    media_item_id: media_item.id,
                    season_number: season_num,
                    episode_number: episode_num,
+                   absolute_number: episode.absolute_number,
+                   provider_episode_id: episode.provider_episode_id,
                    title: episode.name,
                    air_date: air_date,
                    metadata: Map.from_struct(episode),
@@ -1661,8 +1663,15 @@ defmodule Mydia.Media do
               {:error, _changeset} -> acc
             end
           else
-            # Update existing episode with fresh metadata
+            # Update existing episode with fresh metadata. Season/episode
+            # number are included because the lookup is now keyed on
+            # provider_episode_id when present — a matched episode may
+            # legitimately need to move to new coordinates (a reordering).
             case update_episode(existing, %{
+                   season_number: season_num,
+                   episode_number: episode_num,
+                   absolute_number: episode.absolute_number,
+                   provider_episode_id: episode.provider_episode_id,
                    title: episode.name,
                    air_date: air_date,
                    metadata: Map.from_struct(episode)
@@ -1675,6 +1684,30 @@ defmodule Mydia.Media do
       end)
 
     {:ok, count}
+  end
+
+  # Provider episode id is the only identity stable across a season
+  # reordering, so it wins when present. Without this, switching a show's
+  # ordering inserts a parallel set of episodes and strands the originals,
+  # along with their file links, watch history and monitored flags.
+  #
+  # Falls back to (season_number, episode_number) whenever the provider-id
+  # lookup comes up empty — either because the incoming episode carries no
+  # provider id (every TMDB-sourced show), or because it does but no row has
+  # been tagged with it yet (every existing row until a backfill runs).
+  # Skipping that second case would insert a duplicate row for the
+  # not-yet-tagged episode at the very next refresh, colliding with the
+  # (media_item_id, season_number, episode_number) unique index and failing
+  # silently instead of updating the row in place.
+  defp find_existing_episode(media_item_id, episode) do
+    find_episode_by_provider_id(media_item_id, episode.provider_episode_id) ||
+      get_episode_by_number(media_item_id, episode.season_number, episode.episode_number)
+  end
+
+  defp find_episode_by_provider_id(_media_item_id, nil), do: nil
+
+  defp find_episode_by_provider_id(media_item_id, provider_id) when is_binary(provider_id) do
+    Repo.get_by(Episode, media_item_id: media_item_id, provider_episode_id: provider_id)
   end
 
   ## Private Functions

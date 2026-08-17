@@ -404,6 +404,65 @@ defmodule Mydia.MediaTest do
         Media.upsert_episodes_from_season(media_item, season_data)
       end
     end
+
+    test "upsert_episodes_from_season/3 persists absolute numbers and provider ids" do
+      show = media_item_fixture(%{type: "tv_show", title: "Absolute"})
+
+      season_data = %Mydia.Metadata.Structs.SeasonData{
+        season_number: 1,
+        episodes: [
+          %Mydia.Metadata.Structs.EpisodeData{
+            season_number: 1,
+            episode_number: 52,
+            absolute_number: 52,
+            provider_episode_id: "6832458",
+            name: "Whoever's Strongest Wins"
+          }
+        ]
+      }
+
+      {:ok, 1} = Media.upsert_episodes_from_season(show, season_data, monitor_new?: true)
+
+      episode = Media.find_episode(show.id, 1, 52)
+      assert episode.absolute_number == 52
+      assert episode.provider_episode_id == "6832458"
+    end
+
+    test "upsert_episodes_from_season/3 moves an episode rather than duplicating it" do
+      show = media_item_fixture(%{type: "tv_show", title: "Reordered"})
+
+      official = %Mydia.Metadata.Structs.SeasonData{
+        season_number: 1,
+        episodes: [
+          %Mydia.Metadata.Structs.EpisodeData{
+            season_number: 1,
+            episode_number: 52,
+            absolute_number: 52,
+            provider_episode_id: "6832458"
+          }
+        ]
+      }
+
+      {:ok, 1} = Media.upsert_episodes_from_season(show, official, monitor_new?: true)
+
+      # The same provider episode, presented under DVD ordering as S2E1.
+      dvd = %Mydia.Metadata.Structs.SeasonData{
+        season_number: 2,
+        episodes: [
+          %Mydia.Metadata.Structs.EpisodeData{
+            season_number: 2,
+            episode_number: 1,
+            absolute_number: 52,
+            provider_episode_id: "6832458"
+          }
+        ]
+      }
+
+      {:ok, 1} = Media.upsert_episodes_from_season(show, dvd, monitor_new?: true)
+
+      assert Media.find_episode(show.id, 1, 52) == nil
+      assert %{provider_episode_id: "6832458"} = Media.find_episode(show.id, 2, 1)
+    end
   end
 
   describe "episodes" do
