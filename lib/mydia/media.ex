@@ -1667,6 +1667,16 @@ defmodule Mydia.Media do
             # number are included because the lookup is now keyed on
             # provider_episode_id when present — a matched episode may
             # legitimately need to move to new coordinates (a reordering).
+            #
+            # `absolute_number`/`provider_episode_id` are written unguarded,
+            # including when the incoming value is nil. Currently unreachable
+            # for a tagged row in practice — the only way to reach the update
+            # branch with a nil incoming provider_episode_id is via the
+            # season/episode fallback, and `fallback_by_number/2` above only
+            # ever hands back an *untagged* row when the incoming id is
+            # present, or the untouched row otherwise — but nothing here
+            # enforces it, so a future change to that matching logic could
+            # silently start clearing a tagged row's id.
             case update_episode(existing, %{
                    season_number: season_num,
                    episode_number: episode_num,
@@ -1701,13 +1711,36 @@ defmodule Mydia.Media do
   # silently instead of updating the row in place.
   defp find_existing_episode(media_item_id, episode) do
     find_episode_by_provider_id(media_item_id, episode.provider_episode_id) ||
-      get_episode_by_number(media_item_id, episode.season_number, episode.episode_number)
+      fallback_by_number(media_item_id, episode)
   end
 
   defp find_episode_by_provider_id(_media_item_id, nil), do: nil
 
   defp find_episode_by_provider_id(media_item_id, provider_id) when is_binary(provider_id) do
     Repo.get_by(Episode, media_item_id: media_item_id, provider_episode_id: provider_id)
+  end
+
+  # No row currently carries the incoming provider id (or it has none). The
+  # positional fallback is only safe to adopt when the row it finds is
+  # untagged: an untagged row at these coordinates is very likely this same
+  # episode, just not yet backfilled with an id. A row already tagged with a
+  # *different* id is a different episode that happens to sit at the same
+  # coordinates right now — adopting it would silently transfer that row's
+  # identity (and its file links, watch history, monitored flag) onto the
+  # incoming episode, which a later provider payload could permanently strand
+  # at the wrong coordinates. Let that case fall through to create, where it
+  # collides with the season/episode unique index and surfaces via the
+  # {:incomplete_episode_upsert, ...} count check instead of doing this
+  # silently.
+  defp fallback_by_number(media_item_id, %{provider_episode_id: nil} = episode) do
+    get_episode_by_number(media_item_id, episode.season_number, episode.episode_number)
+  end
+
+  defp fallback_by_number(media_item_id, episode) do
+    case get_episode_by_number(media_item_id, episode.season_number, episode.episode_number) do
+      %Episode{provider_episode_id: nil} = untagged -> untagged
+      _ -> nil
+    end
   end
 
   ## Private Functions

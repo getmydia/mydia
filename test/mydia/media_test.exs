@@ -444,6 +444,7 @@ defmodule Mydia.MediaTest do
       }
 
       {:ok, 1} = Media.upsert_episodes_from_season(show, official, monitor_new?: true)
+      original_id = Media.find_episode(show.id, 1, 52).id
 
       # The same provider episode, presented under DVD ordering as S2E1.
       dvd = %Mydia.Metadata.Structs.SeasonData{
@@ -461,7 +462,107 @@ defmodule Mydia.MediaTest do
       {:ok, 1} = Media.upsert_episodes_from_season(show, dvd, monitor_new?: true)
 
       assert Media.find_episode(show.id, 1, 52) == nil
-      assert %{provider_episode_id: "6832458"} = Media.find_episode(show.id, 2, 1)
+
+      moved = Media.find_episode(show.id, 2, 1)
+      assert moved.provider_episode_id == "6832458"
+
+      # Same row moved in place, not deleted-and-recreated: an implementation
+      # that dropped S1E52 and inserted a fresh S2E1 row would satisfy every
+      # assertion above while destroying that row's file links, watch
+      # history and monitored flag — the entire reason to key on provider id.
+      assert moved.id == original_id
+      assert length(Media.list_episodes(show.id)) == 1
+    end
+
+    test "upsert_episodes_from_season/3 does not retag a row already tagged with a different provider id" do
+      show = media_item_fixture(%{type: "tv_show", title: "Renumbered"})
+
+      original = %Mydia.Metadata.Structs.SeasonData{
+        season_number: 1,
+        episodes: [
+          %Mydia.Metadata.Structs.EpisodeData{
+            season_number: 1,
+            episode_number: 52,
+            provider_episode_id: "X"
+          }
+        ]
+      }
+
+      {:ok, 1} = Media.upsert_episodes_from_season(show, original, monitor_new?: true)
+
+      # A genuinely different provider episode ("Y") arrives at the same
+      # coordinates row "X" currently occupies — e.g. an upstream renumber
+      # mid-season. The (season_number, episode_number) fallback must not
+      # silently adopt "X"'s row and overwrite its identity with "Y": that
+      # would permanently strand "X"'s file links and watch history under
+      # the wrong episode the next time a payload moves "Y" elsewhere.
+      renumbered = %Mydia.Metadata.Structs.SeasonData{
+        season_number: 1,
+        episodes: [
+          %Mydia.Metadata.Structs.EpisodeData{
+            season_number: 1,
+            episode_number: 52,
+            provider_episode_id: "Y"
+          }
+        ]
+      }
+
+      # The fallback refuses to adopt the tagged row, so "Y" falls to create,
+      # which collides with the season/episode unique index ("X" still sits
+      # there) and is discarded. Noisy and self-correcting via the returned
+      # count, rather than silently transferring "X"'s identity to "Y".
+      assert {:ok, 0} = Media.upsert_episodes_from_season(show, renumbered, monitor_new?: true)
+
+      assert %{provider_episode_id: "X"} = Media.find_episode(show.id, 1, 52)
+    end
+
+    test "upsert_episodes_from_season/3 rejects a move onto coordinates another episode already occupies" do
+      # KNOWN LIMITATION: a single-pass positional write cannot move an
+      # episode onto coordinates a different episode currently occupies
+      # without a transient unique-index collision. A later task in this
+      # plan performs ordering switches through a dedicated two-pass remap
+      # inside a transaction for exactly this reason; this upsert path does
+      # not attempt to handle it, and this test documents that boundary
+      # rather than treating it as incidental.
+      show = media_item_fixture(%{type: "tv_show", title: "Collision"})
+
+      both = %Mydia.Metadata.Structs.SeasonData{
+        season_number: 1,
+        episodes: [
+          %Mydia.Metadata.Structs.EpisodeData{
+            season_number: 1,
+            episode_number: 1,
+            provider_episode_id: "A"
+          },
+          %Mydia.Metadata.Structs.EpisodeData{
+            season_number: 1,
+            episode_number: 2,
+            provider_episode_id: "B"
+          }
+        ]
+      }
+
+      {:ok, 2} = Media.upsert_episodes_from_season(show, both, monitor_new?: true)
+
+      # Episode "B" tries to move onto S1E1, which "A" still occupies.
+      swapped = %Mydia.Metadata.Structs.SeasonData{
+        season_number: 1,
+        episodes: [
+          %Mydia.Metadata.Structs.EpisodeData{
+            season_number: 1,
+            episode_number: 1,
+            provider_episode_id: "B"
+          }
+        ]
+      }
+
+      # The move is rejected and the count reflects it — not silent.
+      assert {:ok, 0} = Media.upsert_episodes_from_season(show, swapped, monitor_new?: true)
+
+      # Neither episode moved: "A" is untouched, and "B" stayed at its
+      # original coordinates rather than landing somewhere unexpected.
+      assert %{provider_episode_id: "A"} = Media.find_episode(show.id, 1, 1)
+      assert %{provider_episode_id: "B"} = Media.find_episode(show.id, 1, 2)
     end
   end
 
