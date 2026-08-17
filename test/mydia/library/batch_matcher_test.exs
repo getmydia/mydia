@@ -308,6 +308,11 @@ defmodule Mydia.Library.BatchMatcherTest do
     assert {:error, :not_found} = Cache.get(key)
   end
 
+  # Folder names in this describe block must be at least 2 characters, or
+  # PathAnchor.valid_title?/1 rejects them as titles and they collapse into
+  # the shared "__root__" loose-file cluster, silently defeating whatever the
+  # test meant to assert about grouping. An earlier draft used single-letter
+  # folders ("A", "B") and hit exactly this.
   describe "anchor grouping" do
     alias Mydia.Library.{EchoMatcher, FailingMatcher}
 
@@ -332,7 +337,11 @@ defmodule Mydia.Library.BatchMatcherTest do
 
     test "different series folders resolve independently" do
       root = "/media/Series"
-      paths = ["#{root}/A/Season 01/a.mkv", "#{root}/B/Season 01/b.mkv"]
+
+      paths = [
+        "#{root}/Cornemuse (1999)/Season 01/a.mkv",
+        "#{root}/Pin-Pon (1996)/Season 01/b.mkv"
+      ]
 
       results = BatchMatcher.match_paths(paths, library_root: root, matcher: EchoMatcher)
 
@@ -343,7 +352,11 @@ defmodule Mydia.Library.BatchMatcherTest do
 
     test "every input path still gets exactly one result when the anchor match fails" do
       root = "/media/Series"
-      paths = ["#{root}/A/Season 01/a.mkv", "#{root}/A/Season 01/b.mkv"]
+
+      paths = [
+        "#{root}/Cornemuse (1999)/Season 01/a.mkv",
+        "#{root}/Cornemuse (1999)/Season 01/b.mkv"
+      ]
 
       results = BatchMatcher.match_paths(paths, library_root: root, matcher: FailingMatcher)
 
