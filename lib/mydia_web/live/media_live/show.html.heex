@@ -200,8 +200,13 @@
             current_user={@current_user}
             adding_tmdb_ids={@adding_franchise_tmdb_ids}
           />
+          <%!-- Collapsed by default on shows, so the episode list below is not
+                pushed under a strip of other titles. Movies render it open. --%>
           <DiscoverComponents.media_rail
             id="recommendations-rail"
+            collapsible={@media_item.type == "tv_show"}
+            expanded={@recommendations_expanded}
+            toggle_event="toggle_recommendations"
             items={@recommendations}
             media_type={if @media_item.type == "tv_show", do: :tv_show, else: :movie}
             current_user={@current_user}
