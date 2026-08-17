@@ -60,4 +60,26 @@ defmodule Mydia.Library.ImportGroupTest do
     assert {:ok, _} = %ImportGroup{} |> ImportGroup.changeset(valid_attrs(a)) |> Repo.insert()
     assert {:ok, _} = %ImportGroup{} |> ImportGroup.changeset(valid_attrs(b)) |> Repo.insert()
   end
+
+  test "season_span is sorted, deduplicated, and round-trips through the database" do
+    library_path = library_path_fixture(%{type: "series"})
+    attrs = Map.put(valid_attrs(library_path), :season_span, [3, 1, 2, 1])
+
+    assert {:ok, group} =
+             %ImportGroup{} |> ImportGroup.changeset(attrs) |> Repo.insert()
+
+    reloaded = Repo.get!(ImportGroup, group.id)
+
+    assert ImportGroup.season_span(reloaded) == [1, 2, 3]
+  end
+
+  test "rejects a season_span with a non-integer element" do
+    library_path = library_path_fixture(%{type: "series"})
+    attrs = Map.put(valid_attrs(library_path), :season_span, [1, "two"])
+
+    changeset = ImportGroup.changeset(%ImportGroup{}, attrs)
+
+    refute changeset.valid?
+    assert %{season_span: _} = errors_on(changeset)
+  end
 end

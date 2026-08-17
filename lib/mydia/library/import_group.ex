@@ -78,13 +78,13 @@ defmodule Mydia.Library.ImportGroup do
   @castable ~w(library_path_id import_run_id anchor_path cluster_key display_title
                file_count unresolved_count numbered_count media_type provider_type
                provider_id suggested_title suggested_year min_confidence evidence
-               status decided_at)a
+               season_span status decided_at)a
 
   @doc "Builds a changeset for an import group."
   def changeset(group, attrs) do
     group
     |> cast(attrs, @castable)
-    |> cast_season_span(attrs)
+    |> cast_season_span()
     |> validate_required([:library_path_id, :anchor_path, :cluster_key, :status])
     |> validate_inclusion(:status, @statuses)
     |> validate_number(:min_confidence, greater_than_or_equal_to: 0.0, less_than_or_equal_to: 1.0)
@@ -106,16 +106,13 @@ defmodule Mydia.Library.ImportGroup do
     end
   end
 
-  defp cast_season_span(changeset, attrs) do
-    case attrs[:season_span] || attrs["season_span"] do
+  defp cast_season_span(changeset) do
+    case get_change(changeset, :season_span) do
       nil ->
         changeset
 
-      list when is_list(list) ->
+      list ->
         put_change(changeset, :season_span_json, Jason.encode!(Enum.sort(Enum.uniq(list))))
-
-      _ ->
-        changeset
     end
   end
 end
