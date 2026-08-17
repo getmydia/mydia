@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -489,218 +491,68 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   // ===== LOGIN CARD =====
   Widget _buildClaimCodeCard(LoginState loginState, bool isCompact) {
     return Container(
-      constraints: const BoxConstraints(maxWidth: 360),
+      constraints: const BoxConstraints(maxWidth: 380),
       child: GlassSurface.modal(
         child: Padding(
           padding: EdgeInsets.all(isCompact ? 20 : 24),
-          child: _showDirectConnection
-              ? _buildDirectConnectionContent(loginState, isCompact)
-              : _buildClaimCodeContent(loginState, isCompact),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildCardHeader(isCompact),
+              SizedBox(height: isCompact ? 14 : 18),
+              _buildSegmentedControl(loginState),
+              SizedBox(height: isCompact ? 16 : 20),
+              if (!_showDirectConnection)
+                _buildClaimCodeContent(loginState, isCompact)
+              else
+                _buildDirectConnectionContent(loginState, isCompact),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildClaimCodeContent(LoginState loginState, bool isCompact) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
+  Widget _buildCardHeader(bool isCompact) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        // Title
-        Text(
-          'Connect to Server',
-          style: TextStyle(
-            fontSize: isCompact ? 18 : 20,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          'Scan QR code or enter claim code manually',
-          style: TextStyle(
-            fontSize: 12,
-            color: AppColors.textSecondary.withValues(alpha: 0.7),
-          ),
-        ),
-        SizedBox(height: isCompact ? 16 : 20),
-
-        // Scan QR Code button
-        SizedBox(
-          height: 52,
-          child: OutlinedButton.icon(
-            onPressed: loginState.isLoading ? null : _openQrScanner,
-            icon: const Icon(Icons.qr_code_scanner_rounded, size: 22),
-            label: const Text(
-              'Scan QR Code',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-            ),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.primary,
-              side: BorderSide(
-                color: AppColors.primary.withValues(alpha: 0.5),
-                width: 1.5,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ),
-        ),
-
-        // "or" divider
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Row(
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Container(
-                  height: 1,
-                  color: AppColors.border.withValues(alpha: 0.2),
+              Text(
+                'Connect to Server',
+                style: TextStyle(
+                  fontSize: isCompact ? 18 : 20,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Text(
-                  'or enter code',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: AppColors.textSecondary.withValues(alpha: 0.6),
-                  ),
-                ),
-              ),
-              Expanded(
-                child: Container(
-                  height: 1,
-                  color: AppColors.border.withValues(alpha: 0.2),
+              const SizedBox(height: 2),
+              Text(
+                _showDirectConnection
+                    ? 'Sign in directly with your server credentials'
+                    : 'Pair with your server using QR code or claim code',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary.withValues(alpha: 0.7),
                 ),
               ),
             ],
           ),
         ),
-
-        // Claim code input (no server URL needed - relay looks it up)
-        _buildClaimCodeInput(loginState),
-
-        if (loginState.claimCodeMessage != null &&
-            loginState.claimCodeStatus != ClaimCodeStatus.error) ...[
-          const SizedBox(height: 16),
-          _buildProgressIndicator(loginState),
-        ],
-
-        if (loginState.error != null &&
-            loginState.mode != ConnectionMode.direct) ...[
-          const SizedBox(height: 14),
-          _buildErrorMessage(loginState.error!),
-        ],
-
-        SizedBox(height: isCompact ? 20 : 24),
-        _buildClaimCodeButton(loginState),
-
-        // Direct Connection link
-        const SizedBox(height: 24),
-        _buildDirectConnectionLink(loginState),
-      ],
-    );
-  }
-
-  Widget _buildDirectConnectionLink(LoginState loginState) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // Divider with "or"
-        Row(
-          children: [
-            Expanded(
-              child: Container(
-                height: 1,
-                color: AppColors.border.withValues(alpha: 0.2),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                'or',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: AppColors.textSecondary.withValues(alpha: 0.6),
-                ),
-              ),
-            ),
-            Expanded(
-              child: Container(
-                height: 1,
-                color: AppColors.border.withValues(alpha: 0.2),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-
-        // Direct Connection button
-        GestureDetector(
-          onTap: loginState.isLoading
-              ? null
-              : () {
-                  setState(() => _showDirectConnection = true);
-                  ref
-                      .read(loginControllerProvider.notifier)
-                      .setMode(ConnectionMode.direct);
-                },
-          child: Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceVariant.withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: AppColors.border.withValues(alpha: 0.15),
-              ),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceVariant.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.dns_outlined,
-                    color: AppColors.textSecondary,
-                    size: 18,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Direct Connection',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Advanced: Enter server URL directly',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: AppColors.textSecondary.withValues(alpha: 0.7),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Icon(
-                  Icons.arrow_forward_rounded,
-                  size: 18,
-                  color: AppColors.textSecondary.withValues(alpha: 0.6),
-                ),
-              ],
+        const SizedBox(width: 8),
+        IconButton(
+          onPressed: () => setState(() => _showAdvancedSettings = true),
+          icon: const Icon(Icons.settings_outlined, size: 20),
+          color: AppColors.textSecondary,
+          tooltip: 'Relay & Network Settings',
+          style: IconButton.styleFrom(
+            backgroundColor: AppColors.surfaceVariant.withValues(alpha: 0.3),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
             ),
           ),
         ),
@@ -708,15 +560,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     );
   }
 
-  Widget _buildDirectConnectionContent(LoginState loginState, bool isCompact) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Back button and title row
-        Row(
-          children: [
-            GestureDetector(
+  Widget _buildSegmentedControl(LoginState loginState) {
+    return Container(
+      height: 40,
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceVariant.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: AppColors.border.withValues(alpha: 0.15),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildSegmentTab(
+              title: 'Quick Pair',
+              icon: Icons.qr_code_rounded,
+              isSelected: !_showDirectConnection,
               onTap: loginState.isLoading
                   ? null
                   : () {
@@ -725,52 +586,131 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                           .read(loginControllerProvider.notifier)
                           .setMode(ConnectionMode.claimCode);
                     },
-              child: Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceVariant.withValues(alpha: 0.4),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  Icons.arrow_back_rounded,
-                  size: 18,
-                  color: loginState.isLoading
-                      ? AppColors.textDisabled
-                      : AppColors.textSecondary,
-                ),
-              ),
             ),
-            const SizedBox(width: 12),
-            Expanded(
+          ),
+          Expanded(
+            child: _buildSegmentTab(
+              title: 'Direct Server',
+              icon: Icons.dns_outlined,
+              isSelected: _showDirectConnection,
+              onTap: loginState.isLoading
+                  ? null
+                  : () {
+                      setState(() => _showDirectConnection = true);
+                      ref
+                          .read(loginControllerProvider.notifier)
+                          .setMode(ConnectionMode.direct);
+                    },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSegmentTab({
+    required String title,
+    required IconData icon,
+    required bool isSelected,
+    required VoidCallback? onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeInOut,
+        alignment: Alignment.center,
+        height: double.infinity,
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primary : Colors.transparent,
+          borderRadius: BorderRadius.circular(7),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: AppColors.primary.withValues(alpha: 0.3),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 15,
+              color: isSelected ? Colors.white : AppColors.textSecondary,
+            ),
+            const SizedBox(width: 4),
+            Flexible(
               child: Text(
-                'Direct Connection',
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: isCompact ? 18 : 20,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary,
+                  fontSize: 13,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                  color: isSelected ? Colors.white : AppColors.textSecondary,
                 ),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 4),
-        Padding(
-          padding: const EdgeInsets.only(left: 44),
-          child: Text(
-            'Connect directly to your server',
-            style: TextStyle(
-              fontSize: 12,
-              color: AppColors.textSecondary.withValues(alpha: 0.7),
+      ),
+    );
+  }
+
+  Widget _buildClaimCodeContent(LoginState loginState, bool isCompact) {
+    final isMobile = defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildClaimCodeInput(loginState),
+        SizedBox(height: isCompact ? 12 : 14),
+        SizedBox(
+          height: 44,
+          child: OutlinedButton.icon(
+            onPressed: loginState.isLoading ? null : _openQrScanner,
+            icon: const Icon(Icons.qr_code_scanner_rounded, size: 20),
+            label: Text(
+              isMobile ? 'Scan QR Code' : 'Scan QR Code with Camera',
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+            ),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.primary,
+              side: BorderSide(
+                color: AppColors.primary.withValues(alpha: 0.4),
+                width: 1.5,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
           ),
         ),
-        SizedBox(height: isCompact ? 20 : 24),
-
-        // Direct connection form
-        _buildDirectConnectionForm(loginState, isCompact),
+        if (loginState.claimCodeMessage != null &&
+            loginState.claimCodeStatus != ClaimCodeStatus.error) ...[
+          const SizedBox(height: 14),
+          _buildProgressIndicator(loginState),
+        ],
+        if (loginState.error != null &&
+            loginState.mode != ConnectionMode.direct) ...[
+          const SizedBox(height: 14),
+          _buildErrorMessage(loginState.error!),
+        ],
+        SizedBox(height: isCompact ? 16 : 20),
+        _buildClaimCodeButton(loginState),
       ],
     );
+  }
+
+  Widget _buildDirectConnectionContent(LoginState loginState, bool isCompact) {
+    return _buildDirectConnectionForm(loginState, isCompact);
   }
 
   Widget _buildDirectConnectionForm(LoginState loginState, bool isCompact) {
@@ -888,7 +828,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       ],
       onFieldSubmitted: (_) => _handleClaimCodeSubmit(),
       style: const TextStyle(
-        fontSize: 24,
+        fontSize: 22,
         fontWeight: FontWeight.w600,
         color: AppColors.textPrimary,
         letterSpacing: 4,
@@ -897,26 +837,45 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         hintText: 'ABC123',
         hintStyle: TextStyle(
           color: AppColors.textDisabled.withValues(alpha: 0.4),
-          fontSize: 24,
+          fontSize: 22,
           fontWeight: FontWeight.w600,
           letterSpacing: 4,
         ),
         filled: true,
         fillColor: AppColors.surfaceVariant.withValues(alpha: 0.4),
         contentPadding:
-            const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        suffixIcon: IconButton(
+          icon: const Icon(Icons.content_paste_rounded, size: 18),
+          color: AppColors.textSecondary,
+          tooltip: 'Paste claim code',
+          onPressed: loginState.isLoading
+              ? null
+              : () async {
+                  final data = await Clipboard.getData(Clipboard.kTextPlain);
+                  if (data?.text != null && data!.text!.isNotEmpty) {
+                    final cleanText = data.text!
+                        .replaceAll(RegExp(r'[^a-zA-Z0-9]'), '')
+                        .toUpperCase();
+                    _claimCodeController.text = cleanText;
+                    if (cleanText.length >= 6) {
+                      _handleClaimCodeSubmit();
+                    }
+                  }
+                },
+        ),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide(
             color: AppColors.border.withValues(alpha: 0.15),
           ),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
         ),
       ),
@@ -1122,125 +1081,51 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   }
 
   Widget _buildFooter(LoginState loginState) {
-    final showEncrypted = !_showDirectConnection ||
-        loginState.mode == ConnectionMode.claimCode ||
-        loginState.mode == ConnectionMode.selection;
-    final icon = showEncrypted ? Icons.lock_rounded : Icons.shield_outlined;
-    final text = showEncrypted ? 'End-to-end encrypted' : 'Secure connection';
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              size: 12,
-              color: AppColors.textSecondary.withValues(alpha: 0.4),
-            ),
-            const SizedBox(width: 4),
-            Text(
-              text,
-              style: TextStyle(
-                fontSize: 11,
-                color: AppColors.textSecondary.withValues(alpha: 0.4),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        _buildP2pStatus(),
-      ],
-    );
-  }
-
-  Widget _buildP2pStatus() {
     final p2pStatus = ref.watch(p2pStatusNotifierProvider);
 
-    // Don't show anything if not initialized yet
-    if (!p2pStatus.isInitialized) {
-      return const SizedBox.shrink();
-    }
-
-    // Get display relay URL
-    final displayRelayUrl = p2pStatus.relayUrl ?? defaultRelayUrl;
-
-    return Column(
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Relay connection status indicator
-            Container(
-              width: 6,
-              height: 6,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: p2pStatus.isRelayConnected
-                    ? AppColors.success
-                    : AppColors.warning,
-              ),
+        if (p2pStatus.isInitialized) ...[
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: p2pStatus.isRelayConnected
+                  ? AppColors.success
+                  : AppColors.warning,
             ),
-            const SizedBox(width: 6),
-            Text(
-              p2pStatus.isRelayConnected ? 'P2P Ready' : 'Connecting...',
-              style: TextStyle(
-                fontSize: 10,
-                color: AppColors.textSecondary.withValues(alpha: 0.5),
-              ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            p2pStatus.isRelayConnected ? 'P2P Ready' : 'Connecting...',
+            style: TextStyle(
+              fontSize: 11,
+              color: AppColors.textSecondary.withValues(alpha: 0.5),
             ),
-            // Show connected peer count
-            if (p2pStatus.connectedPeersCount > 0) ...[
-              const SizedBox(width: 8),
-              Icon(
-                Icons.people_outline_rounded,
-                size: 10,
-                color: AppColors.textSecondary.withValues(alpha: 0.4),
-              ),
-              const SizedBox(width: 3),
-              Text(
-                '${p2pStatus.connectedPeersCount}',
-                style: TextStyle(
-                  fontSize: 10,
-                  color: AppColors.textSecondary.withValues(alpha: 0.5),
-                ),
-              ),
-            ],
-            // Settings button
-            const SizedBox(width: 12),
-            GestureDetector(
-              onTap: () => setState(() => _showAdvancedSettings = true),
-              child: Icon(
-                Icons.settings_outlined,
-                size: 14,
-                color: AppColors.textSecondary.withValues(alpha: 0.5),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        // Show relay URL
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.cloud_outlined,
-              size: 10,
+          ),
+          Text(
+            '  •  ',
+            style: TextStyle(
+              fontSize: 11,
               color: AppColors.textSecondary.withValues(alpha: 0.3),
             ),
-            const SizedBox(width: 4),
-            Text(
-              displayRelayUrl,
-              style: TextStyle(
-                fontSize: 9,
-                color: AppColors.textSecondary.withValues(alpha: 0.3),
-              ),
-            ),
-          ],
+          ),
+        ],
+        Icon(
+          Icons.lock_rounded,
+          size: 11,
+          color: AppColors.textSecondary.withValues(alpha: 0.4),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          'End-to-end encrypted',
+          style: TextStyle(
+            fontSize: 11,
+            color: AppColors.textSecondary.withValues(alpha: 0.4),
+          ),
         ),
       ],
     );
@@ -1322,13 +1207,39 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                               color: AppColors.textSecondary,
                             ),
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'The relay server used for P2P connections',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: AppColors.textSecondary
-                                  .withValues(alpha: 0.7),
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: AppColors.surfaceVariant
+                                  .withValues(alpha: 0.25),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: AppColors.border.withValues(alpha: 0.1),
+                              ),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(
+                                  Icons.info_outline_rounded,
+                                  size: 14,
+                                  color: AppColors.textSecondary
+                                      .withValues(alpha: 0.7),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Change this if using a custom or self-hosted P2P relay server. Both your Mydia server and Mydia Player must be connected to the exact same relay for Quick Pair to work.',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      height: 1.35,
+                                      color: AppColors.textSecondary
+                                          .withValues(alpha: 0.75),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                           const SizedBox(height: 12),
