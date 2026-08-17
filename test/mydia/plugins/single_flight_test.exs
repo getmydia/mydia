@@ -5,8 +5,12 @@ defmodule Mydia.Plugins.SingleFlightTest do
 
   setup do
     name = :"sf_#{System.unique_integer([:positive])}"
-    {:ok, pid} = SingleFlight.start_link(name: name)
-    on_exit(fn -> if Process.alive?(pid), do: GenServer.stop(pid) end)
+
+    # Supervised rather than start_link + on_exit: start_link links the server
+    # to the test process, so it is already dying when on_exit runs and a
+    # GenServer.stop there races the link exit for a flaky `:noproc`.
+    start_supervised!({SingleFlight, name: name})
+
     %{sf: name}
   end
 

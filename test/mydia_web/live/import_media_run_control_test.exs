@@ -6,6 +6,7 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
 
   import Phoenix.LiveViewTest
   import Mydia.AccountsFixtures
+  import Mydia.MediaFixtures
   import Mydia.SettingsFixtures
 
   alias Mydia.Library
@@ -215,5 +216,66 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
 
     assert has_element?(view, "#run-outcome")
     assert render(view) =~ ":not_found"
+  end
+
+  test "outcome panel shows review CTA when unresolved files exist for the library path", %{
+    conn: conn,
+    library_path: lp,
+    user: user
+  } do
+    media_file = orphaned_media_file_fixture(%{library_path_id: lp.id})
+
+    {:ok, _} =
+      Library.upsert_match_candidate(%{
+        media_file_id: media_file.id,
+        rank: 0,
+        provider_type: "tmdb",
+        provider_id: "603",
+        title: "The Matrix",
+        confidence: 0.95
+      })
+
+    {:ok, run} =
+      Library.create_import_run(%{library_path_id: lp.id, user_id: user.id, mode: :review})
+
+    {:ok, _} =
+      Library.update_import_run(run, %{
+        status: :done,
+        phase: :finished,
+        files_discovered: 1,
+        files_matched: 1,
+        files_linked: 0
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    assert has_element?(
+             view,
+             "#run-outcome a[href='/review']",
+             "Review 1 file(s) that need attention"
+           )
+  end
+
+  test "outcome panel hides review CTA when no unresolved files exist", %{
+    conn: conn,
+    library_path: lp,
+    user: user
+  } do
+    {:ok, run} =
+      Library.create_import_run(%{library_path_id: lp.id, user_id: user.id, mode: :review})
+
+    {:ok, _} =
+      Library.update_import_run(run, %{
+        status: :done,
+        phase: :finished,
+        files_discovered: 1,
+        files_matched: 1,
+        files_linked: 1
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    assert has_element?(view, "#run-outcome")
+    refute has_element?(view, "#run-outcome a[href='/review']")
   end
 end
