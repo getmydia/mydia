@@ -139,6 +139,7 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:adding_franchise_tmdb_ids, MapSet.new())
      # Recommendations rail state
      |> assign(:recommendations, [])
+     |> assign(:recommendations_expanded, false)
      |> assign(:adding_recommendation_tmdb_ids, MapSet.new())
      |> assign(:adding_recommendation_id, nil)
      |> assign(:requesting_recommendation_id, nil)
@@ -425,6 +426,10 @@ defmodule MydiaWeb.MediaLive.Show do
 
   def handle_event("request_franchise_movie", params, socket),
     do: FranchiseEvents.request_franchise_movie(params, socket)
+
+  @impl true
+  def handle_event("toggle_recommendations", params, socket),
+    do: RecommendationEvents.toggle_expanded(params, socket)
 
   @impl true
   def handle_event("add_recommendation", params, socket),

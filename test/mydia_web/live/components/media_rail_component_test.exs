@@ -295,4 +295,93 @@ defmodule MydiaWeb.Components.MediaRailComponentTest do
     |> LazyHTML.query(~s(##{rail_id}-item-#{provider_id}))
     |> LazyHTML.to_html()
   end
+
+  defp collapsible(opts) do
+    render_component(
+      &DiscoverComponents.media_rail/1,
+      Keyword.merge(
+        [
+          items: [item(), item(%{provider_id: "102", title: "Janet Planet"})],
+          media_type: :movie,
+          current_user: user(),
+          collapsible: true,
+          toggle_event: "toggle_recommendations"
+        ],
+        opts
+      )
+    )
+  end
+
+  describe "collapsible rail" do
+    test "a collapsed rail renders its header and none of its cards" do
+      html = collapsible(expanded: false)
+
+      assert html =~ ~s(id="media-rail-toggle")
+      assert html =~ ~s(aria-expanded="false")
+      refute html =~ ~s(id="media-rail-items")
+      refute html =~ ~s(id="media-rail-item-101")
+      refute html =~ "The Eternal Daughter"
+    end
+
+    test "an expanded rail renders its cards under the strip id" do
+      html = collapsible(expanded: true)
+
+      assert html =~ ~s(aria-expanded="true")
+      assert html =~ ~s(id="media-rail-items")
+      assert html =~ ~s(id="media-rail-item-101")
+      assert html =~ "The Eternal Daughter"
+    end
+
+    # aria-controls must name an element that is actually in the document. The
+    # strip is removed entirely while collapsed, not hidden, so the attribute has
+    # to come and go with it.
+    test "aria-controls is present only while the strip is in the document" do
+      refute collapsible(expanded: false) =~ "aria-controls"
+      assert collapsible(expanded: true) =~ ~s(aria-controls="media-rail-items")
+    end
+
+    # `button` takes phrasing content, and a heading is not phrasing content, so
+    # the heading has to wrap the button rather than sit inside it.
+    test "the disclosure button is nested inside the heading, not the reverse" do
+      doc = collapsible(expanded: false) |> LazyHTML.from_fragment()
+
+      assert [_] = Enum.to_list(LazyHTML.query(doc, "h2 > button#media-rail-toggle"))
+      assert [] = Enum.to_list(LazyHTML.query(doc, "button h2"))
+    end
+
+    test "the header carries the item count" do
+      count =
+        collapsible(expanded: false)
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query("#media-rail-toggle .badge")
+        |> LazyHTML.text()
+
+      assert count == "2"
+    end
+
+    test "a non-collapsible rail renders no toggle and no strip id" do
+      html =
+        render_component(&DiscoverComponents.media_rail/1,
+          items: [item()],
+          media_type: :movie,
+          current_user: user()
+        )
+
+      assert html =~ ~s(id="media-rail")
+      refute html =~ ~s(id="media-rail-toggle")
+      refute html =~ ~s(id="media-rail-items")
+      refute html =~ "aria-expanded"
+    end
+
+    test "a collapsible rail with no toggle_event raises" do
+      assert_raise ArgumentError, ~r/toggle_event/, fn ->
+        render_component(&DiscoverComponents.media_rail/1,
+          items: [item()],
+          media_type: :movie,
+          current_user: user(),
+          collapsible: true
+        )
+      end
+    end
+  end
 end

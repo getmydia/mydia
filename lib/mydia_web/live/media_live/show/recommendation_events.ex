@@ -62,6 +62,18 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   end
 
   @doc """
+  Flips the rail open or closed.
+
+  The rail opens collapsed on TV shows so the episode list is not pushed below a
+  strip of other titles. State is per mount and deliberately not persisted, so
+  every visit starts closed.
+  """
+  def toggle_expanded(_params, socket) do
+    {:noreply,
+     assign(socket, :recommendations_expanded, !socket.assigns.recommendations_expanded)}
+  end
+
+  @doc """
   Adds a recommended title, inheriting the viewed item's quality profile and
   monitored flag.
 
