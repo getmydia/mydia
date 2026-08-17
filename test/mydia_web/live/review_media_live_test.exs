@@ -185,7 +185,7 @@ defmodule MydiaWeb.ReviewMediaLiveTest do
 
     {:ok, view, _html} = live(conn, ~p"/review")
 
-    view |> element("#season-select-#{f1.id}") |> render_click()
+    view |> element("#season-select-111-s1") |> render_click()
 
     assert has_element?(view, "#batch-toggle-#{f1.id}[checked]")
     refute has_element?(view, "#batch-toggle-#{f2.id}[checked]")
@@ -215,10 +215,10 @@ defmodule MydiaWeb.ReviewMediaLiveTest do
 
     assert has_element?(view, "#batch-toggle-#{f1.id}")
 
-    view |> element("#season-toggle-#{f1.id}") |> render_click()
+    view |> element("#season-toggle-111-s1") |> render_click()
     refute has_element?(view, "#batch-toggle-#{f1.id}")
 
-    view |> element("#season-toggle-#{f1.id}") |> render_click()
+    view |> element("#season-toggle-111-s1") |> render_click()
     assert has_element?(view, "#batch-toggle-#{f1.id}")
   end
 
@@ -332,12 +332,12 @@ defmodule MydiaWeb.ReviewMediaLiveTest do
     view |> element("#review-library-#{lp.id}") |> render_click()
 
     # Select all in season 1
-    view |> element("#season-select-#{f1.id}") |> render_click()
+    view |> element("#season-select-111-s1") |> render_click()
     assert has_element?(view, "#batch-toggle-#{f1.id}[checked]")
     assert has_element?(view, "#batch-toggle-#{f2.id}[checked]")
 
     # Toggle again should deselect all in season 1
-    view |> element("#season-select-#{f1.id}") |> render_click()
+    view |> element("#season-select-111-s1") |> render_click()
     refute has_element?(view, "#batch-toggle-#{f1.id}[checked]")
     refute has_element?(view, "#batch-toggle-#{f2.id}[checked]")
   end
@@ -529,6 +529,31 @@ defmodule MydiaWeb.ReviewMediaLiveTest do
 
     assert html =~ "no match to add"
     assert is_nil(Library.get_media_file!(unidentified.id).media_item_id)
+  end
+
+  test "renders unmatched files section with per-file error text", %{
+    conn: conn,
+    library_path: lp
+  } do
+    unidentified = orphaned_media_file_fixture(%{library_path_id: lp.id})
+
+    {:ok, _} =
+      Library.upsert_match_candidate(%{
+        media_file_id: unidentified.id,
+        rank: 0,
+        attempts: 1,
+        last_error: "no_match"
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/review")
+
+    html = render(view)
+
+    # The "No match" badge should be present
+    assert html =~ "No match"
+    # The per-file error reason should also be visible so users have
+    # actionable information about why the file was not matched.
+    assert html =~ "No matching title was found."
   end
 
   test "a candidate whose stored media type is unknown can still be added", %{

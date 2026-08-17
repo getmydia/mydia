@@ -43,6 +43,7 @@ defmodule MydiaWeb.ReviewMediaLive.Index do
      |> assign(:batch_selected_match, nil)
      |> assign(:batch_season_value, "")
      |> assign(:group_file_ids, MapSet.new())
+     |> assign(:actionable_file_ids, MapSet.new())
      |> assign(:editing_file_id, nil)
      |> assign(:editing_file_name, nil)
      |> assign(:edit_form, nil)
@@ -186,7 +187,7 @@ defmodule MydiaWeb.ReviewMediaLive.Index do
   end
 
   def handle_event("batch_select_all", _params, socket) do
-    {:noreply, assign(socket, :batch_selected_ids, socket.assigns.group_file_ids)}
+    {:noreply, assign(socket, :batch_selected_ids, socket.assigns.actionable_file_ids)}
   end
 
   def handle_event("batch_deselect_all", _params, socket) do
@@ -271,17 +272,24 @@ defmodule MydiaWeb.ReviewMediaLive.Index do
   end
 
   def handle_event("toggle_season_selection", %{"ids" => ids}, socket) do
-    episode_ids = ids |> String.split(",") |> Enum.filter(&(&1 != ""))
-    valid_ids = MapSet.new(episode_ids) |> MapSet.intersection(socket.assigns.group_file_ids)
+    # Guard against a crafted or runaway payload; 64 KB is generous for any
+    # real season but still finite. Drop the event silently rather than
+    # splitting an arbitrarily long string in the LiveView process.
+    if String.length(ids) > 65_536 do
+      {:noreply, socket}
+    else
+      episode_ids = ids |> String.split(",") |> Enum.filter(&(&1 != ""))
+      valid_ids = MapSet.new(episode_ids) |> MapSet.intersection(socket.assigns.group_file_ids)
 
-    selected = socket.assigns.batch_selected_ids
+      selected = socket.assigns.batch_selected_ids
 
-    selected =
-      if MapSet.subset?(valid_ids, selected),
-        do: MapSet.difference(selected, valid_ids),
-        else: MapSet.union(selected, valid_ids)
+      selected =
+        if MapSet.subset?(valid_ids, selected),
+          do: MapSet.difference(selected, valid_ids),
+          else: MapSet.union(selected, valid_ids)
 
-    {:noreply, assign(socket, :batch_selected_ids, selected)}
+      {:noreply, assign(socket, :batch_selected_ids, selected)}
+    end
   end
 
   def handle_event("edit_series_rematch", %{"series_key" => key}, socket) do
@@ -323,7 +331,19 @@ defmodule MydiaWeb.ReviewMediaLive.Index do
          |> put_flash(batch_flash_kind(failed), batch_flash_message(updated, failed))
          |> load_group()}
       else
-        {:noreply, socket}
+        # The series was approved (or removed) from another session between
+        # when this user opened the rematch UI and when they clicked a result.
+        # Reload so the stale group entry disappears rather than leaving
+        # the user staring at a search result that no longer applies.
+        {:noreply,
+         socket
+         |> assign(:rematching_series_key, nil)
+         |> assign(:series_search_results, [])
+         |> put_flash(
+           :info,
+           "That series is no longer in the queue — the list has been refreshed."
+         )
+         |> load_group()}
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
@@ -459,15 +479,17 @@ defmodule MydiaWeb.ReviewMediaLive.Index do
     socket
     |> assign(:group, %{series: [], movies: [], unmatched: [], wrong_library: []})
     |> assign(:group_file_ids, MapSet.new())
+    |> assign(:actionable_file_ids, MapSet.new())
   end
 
   defp load_group(socket) do
     group = Library.group_inbox_files(socket.assigns.selected_library_path_id)
-    file_ids = extract_group_file_ids(group)
+    {file_ids, actionable_ids} = extract_group_file_ids(group)
 
     socket
     |> assign(:group, group)
     |> assign(:group_file_ids, file_ids)
+    |> assign(:actionable_file_ids, actionable_ids)
   end
 
   defp extract_group_file_ids(%{
@@ -487,7 +509,12 @@ defmodule MydiaWeb.ReviewMediaLive.Index do
     unmatched_ids = Enum.map(unmatched, & &1.file.media_file.id)
     wrong_ids = Enum.map(wrong, & &1.file.media_file.id)
 
-    MapSet.new(series_ids ++ movie_ids ++ unmatched_ids ++ wrong_ids)
+    all_ids = MapSet.new(series_ids ++ movie_ids ++ unmatched_ids ++ wrong_ids)
+    # wrong_library files need to be moved to another library, not re-matched,
+    # so they are excluded from the actionable set used by batch_select_all.
+    actionable_ids = MapSet.new(series_ids ++ movie_ids ++ unmatched_ids)
+
+    {all_ids, actionable_ids}
   end
 
   defp total_unresolved(%{

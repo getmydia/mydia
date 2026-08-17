@@ -8,11 +8,10 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
   """
   use MydiaWeb, :html
 
-  alias Mydia.Library
-
   attr :library_paths, :list, required: true
   attr :active_run, :map, default: nil
   attr :outcome_run, :map, default: nil
+  attr :outcome_inbox_count, :integer, default: 0
 
   def run_control(assigns) do
     ~H"""
@@ -20,7 +19,7 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
       <div class="card-body">
         <h2 class="card-title">Import a library</h2>
 
-        <.run_outcome :if={@outcome_run} run={@outcome_run} />
+        <.run_outcome :if={@outcome_run} run={@outcome_run} unresolved={@outcome_inbox_count} />
 
         <%= if @active_run do %>
           <.run_progress run={@active_run} />
@@ -152,6 +151,7 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
   # identically whether the outcome arrived over PubSub in-session or was
   # read back from `Library.last_import_run/1` after a reload.
   attr :run, :map, required: true
+  attr :unresolved, :integer, default: 0
 
   defp run_outcome(assigns) do
     ~H"""
@@ -167,7 +167,7 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
 
       <.run_stats run={@run} />
 
-      <.outcome_review_cta run={@run} />
+      <.outcome_review_cta unresolved={@unresolved} />
 
       <%!--
         Rendered for any status that carries an error, not only :failed. A run
@@ -183,16 +183,9 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
     """
   end
 
-  attr :run, :map, required: true
+  attr :unresolved, :integer, default: 0
 
   defp outcome_review_cta(assigns) do
-    assigns =
-      assign(
-        assigns,
-        :unresolved,
-        Library.count_inbox_files(library_path_id: assigns.run.library_path_id)
-      )
-
     ~H"""
     <div :if={@unresolved > 0} class="w-full">
       <.link navigate={~p"/review"} class="btn btn-sm btn-outline">

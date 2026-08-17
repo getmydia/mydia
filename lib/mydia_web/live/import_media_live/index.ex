@@ -52,7 +52,8 @@ defmodule MydiaWeb.ImportMediaLive.Index do
      # music path by an older build is still found, shown, and stoppable.
      |> assign(:importable_library_paths, Enum.filter(library_paths, &importable?/1))
      |> assign(:active_run, active_run)
-     |> assign(:outcome_run, outcome_run)}
+     |> assign(:outcome_run, outcome_run)
+     |> assign(:outcome_inbox_count, inbox_count_for_outcome(outcome_run))}
   end
 
   @impl true
@@ -79,7 +80,8 @@ defmodule MydiaWeb.ImportMediaLive.Index do
           {:noreply,
            socket
            |> assign(:active_run, run)
-           |> assign(:outcome_run, nil)}
+           |> assign(:outcome_run, nil)
+           |> assign(:outcome_inbox_count, 0)}
 
         {:error, _changeset} ->
           {:noreply, put_flash(socket, :error, "That library is already being imported.")}
@@ -135,6 +137,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
         socket
         |> assign(:active_run, nil)
         |> assign(:outcome_run, run)
+        |> assign(:outcome_inbox_count, inbox_count_for_outcome(run))
       end
 
     {:noreply, socket}
@@ -168,5 +171,14 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     socket
     |> assign(:active_run, nil)
     |> assign(:outcome_run, run)
+    |> assign(:outcome_inbox_count, inbox_count_for_outcome(run))
+  end
+
+  # Queries the inbox count once when a run reaches a terminal state so the
+  # outcome_review_cta component never calls the DB directly from its body.
+  defp inbox_count_for_outcome(nil), do: 0
+
+  defp inbox_count_for_outcome(run) do
+    Library.count_inbox_files(library_path_id: run.library_path_id)
   end
 end

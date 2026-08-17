@@ -24,15 +24,14 @@ defmodule MydiaWeb.ReviewMediaLive.Components do
   def grouped_tree(assigns) do
     ~H"""
     <div class="flex flex-col gap-6">
-      <%= for series <- @group.series do %>
-        <.series_block
-          series={series}
-          collapsed_seasons={@collapsed_seasons}
-          batch_selected_ids={@batch_selected_ids}
-          rematching_series_key={@rematching_series_key}
-          series_search_results={@series_search_results}
-        />
-      <% end %>
+      <.series_block
+        :for={series <- @group.series}
+        series={series}
+        collapsed_seasons={@collapsed_seasons}
+        batch_selected_ids={@batch_selected_ids}
+        rematching_series_key={@rematching_series_key}
+        series_search_results={@series_search_results}
+      />
 
       <div :if={@group.movies != []} class="card bg-base-100 shadow">
         <div class="card-body">
@@ -40,16 +39,15 @@ defmodule MydiaWeb.ReviewMediaLive.Components do
             <.icon name="hero-film" class="w-5 h-5 text-accent" /> Movies
           </h3>
           <ul class="divide-y divide-base-300">
-            <%= for movie <- @group.movies do %>
-              <.file_row
-                entry={movie}
-                batch_selected_ids={@batch_selected_ids}
-                editing_file_id={@editing_file_id}
-                editing_file_name={@editing_file_name}
-                edit_form={@edit_form}
-                search_results={@search_results}
-              />
-            <% end %>
+            <.file_row
+              :for={movie <- @group.movies}
+              entry={movie}
+              batch_selected_ids={@batch_selected_ids}
+              editing_file_id={@editing_file_id}
+              editing_file_name={@editing_file_name}
+              edit_form={@edit_form}
+              search_results={@search_results}
+            />
           </ul>
         </div>
       </div>
@@ -63,16 +61,15 @@ defmodule MydiaWeb.ReviewMediaLive.Components do
             These files were matched, but to a type this library cannot hold.
           </p>
           <ul class="divide-y divide-base-300">
-            <%= for entry <- @group.wrong_library do %>
-              <.file_row
-                entry={entry}
-                batch_selected_ids={@batch_selected_ids}
-                editing_file_id={@editing_file_id}
-                editing_file_name={@editing_file_name}
-                edit_form={@edit_form}
-                search_results={@search_results}
-              />
-            <% end %>
+            <.file_row
+              :for={entry <- @group.wrong_library}
+              entry={entry}
+              batch_selected_ids={@batch_selected_ids}
+              editing_file_id={@editing_file_id}
+              editing_file_name={@editing_file_name}
+              edit_form={@edit_form}
+              search_results={@search_results}
+            />
           </ul>
         </div>
       </div>
@@ -83,16 +80,15 @@ defmodule MydiaWeb.ReviewMediaLive.Components do
             <.icon name="hero-question-mark-circle" class="w-5 h-5 text-warning" /> Unmatched
           </h3>
           <ul class="divide-y divide-base-300">
-            <%= for entry <- @group.unmatched do %>
-              <.file_row
-                entry={entry}
-                batch_selected_ids={@batch_selected_ids}
-                editing_file_id={@editing_file_id}
-                editing_file_name={@editing_file_name}
-                edit_form={@edit_form}
-                search_results={@search_results}
-              />
-            <% end %>
+            <.file_row
+              :for={entry <- @group.unmatched}
+              entry={entry}
+              batch_selected_ids={@batch_selected_ids}
+              editing_file_id={@editing_file_id}
+              editing_file_name={@editing_file_name}
+              edit_form={@edit_form}
+              search_results={@search_results}
+            />
           </ul>
         </div>
       </div>
@@ -147,36 +143,36 @@ defmodule MydiaWeb.ReviewMediaLive.Components do
               phx-debounce="300"
               autofocus
             />
-            <%= if @series_search_results != [] do %>
-              <div class="absolute z-20 w-full mt-1 bg-base-100 border border-base-300 rounded-lg shadow-xl max-h-72 overflow-y-auto">
-                <%= for result <- @series_search_results do %>
-                  <button
-                    type="button"
-                    class="w-full text-left px-3 py-2 hover:bg-info/10"
-                    phx-click="select_series_rematch"
-                    phx-value-provider_id={result.provider_id}
-                    phx-value-title={result.title}
-                  >
-                    <span class="font-medium text-sm">{result.title}</span>
-                    <span :if={result.year} class="text-xs text-base-content/60">
-                      ({result.year})
-                    </span>
-                  </button>
-                <% end %>
-              </div>
-            <% end %>
+            <div
+              :if={@series_search_results != []}
+              class="absolute z-20 w-full mt-1 bg-base-100 border border-base-300 rounded-lg shadow-xl max-h-72 overflow-y-auto"
+            >
+              <button
+                :for={result <- @series_search_results}
+                type="button"
+                class="w-full text-left px-3 py-2 hover:bg-info/10"
+                phx-click="select_series_rematch"
+                phx-value-provider_id={result.provider_id}
+                phx-value-title={result.title}
+              >
+                <span class="font-medium text-sm">{result.title}</span>
+                <span :if={result.year} class="text-xs text-base-content/60">
+                  ({result.year})
+                </span>
+              </button>
+            </div>
           </div>
         <% end %>
 
         <div>
-          <%= for season <- @series.seasons do %>
-            <.season_block
-              series_key={@series_key}
-              season={season}
-              collapsed_seasons={@collapsed_seasons}
-              batch_selected_ids={@batch_selected_ids}
-            />
-          <% end %>
+          <.season_block
+            :for={season <- @series.seasons}
+            series_key={@series_key}
+            series_provider_id={@series.provider_id}
+            season={season}
+            collapsed_seasons={@collapsed_seasons}
+            batch_selected_ids={@batch_selected_ids}
+          />
         </div>
       </div>
     </div>
@@ -184,13 +180,18 @@ defmodule MydiaWeb.ReviewMediaLive.Components do
   end
 
   attr :series_key, :string, required: true
+  attr :series_provider_id, :string, required: true
   attr :season, :map, required: true
   attr :collapsed_seasons, :any, required: true
   attr :batch_selected_ids, :any, required: true
 
   defp season_block(assigns) do
     episode_ids = Enum.map(assigns.season.episodes, & &1.file.media_file.id)
-    season_id = List.first(episode_ids)
+
+    # Use a stable key derived from series provider_id + season number rather
+    # than the first episode's DB id, so collapsing survives episode approvals.
+    season_id =
+      "#{assigns.series_provider_id}-s#{assigns.season.season_number}"
 
     all_selected = Enum.all?(episode_ids, &MapSet.member?(assigns.batch_selected_ids, &1))
 
@@ -236,9 +237,11 @@ defmodule MydiaWeb.ReviewMediaLive.Components do
       </div>
 
       <ul :if={not @collapsed} class="divide-y divide-base-300 pb-2">
-        <%= for episode <- @season.episodes do %>
-          <.file_row entry={episode} batch_selected_ids={@batch_selected_ids} />
-        <% end %>
+        <.file_row
+          :for={episode <- @season.episodes}
+          entry={episode}
+          batch_selected_ids={@batch_selected_ids}
+        />
       </ul>
     </div>
     """
@@ -275,6 +278,12 @@ defmodule MydiaWeb.ReviewMediaLive.Components do
       <div class="flex-1 min-w-0">
         <p class="font-medium truncate">{@title}</p>
         <p class="text-sm opacity-70 truncate">{MediaFile.display_path(@file)}</p>
+        <p
+          :if={is_nil(@candidate.provider_id) and @candidate.last_error}
+          class="text-xs text-error/80 mt-0.5"
+        >
+          {format_last_error(@candidate.last_error)}
+        </p>
       </div>
 
       <span :if={is_nil(@candidate.provider_id)} class="badge badge-ghost">No match</span>
@@ -304,6 +313,31 @@ defmodule MydiaWeb.ReviewMediaLive.Components do
       </.button>
     </li>
     """
+  end
+
+  # Turns the raw last_error string stored by the matcher into a short,
+  # human-readable sentence. The atom representations that older code
+  # inspect()-ed into strings are handled by pattern matching on their
+  # text prefix; anything unknown is truncated and shown verbatim so a
+  # new error kind is still visible rather than silently swallowed.
+  defp format_last_error(nil), do: nil
+  defp format_last_error("no_match"), do: "No matching title was found."
+  defp format_last_error("timeout"), do: "The metadata lookup timed out."
+
+  defp format_last_error(error) when is_binary(error) do
+    cond do
+      String.contains?(error, "library_type_mismatch") ->
+        "Matched to the wrong library type."
+
+      String.contains?(error, "network") or String.contains?(error, "connection") ->
+        "A network error occurred during lookup."
+
+      true ->
+        # Truncate to keep the UI tidy; full detail is in server logs.
+        if String.length(error) > 80,
+          do: String.slice(error, 0, 80) <> "…",
+          else: error
+    end
   end
 
   defp confidence_class(nil), do: "badge-ghost"
