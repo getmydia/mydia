@@ -251,6 +251,14 @@ defmodule MydiaWeb.LibraryComponents do
   @doc """
   Renders a view mode toggle (grid/list).
 
+  Icon-only, so `aria-label` carries each button's accessible name and
+  `aria-pressed` its state. `aria-pressed` is wrapped in `to_string/1` because
+  HEEx renders a `true` attribute value as a bare attribute and omits it for
+  `false`, and ARIA needs the literal strings.
+
+  Kept in step with `MydiaWeb.GridDensityComponents.grid_density_toggle/1`,
+  which sits directly beside this on the Libraries toolbar.
+
   ## Attributes
 
     * `:view_mode` - Required. Current view mode (:grid or :list).
@@ -263,28 +271,32 @@ defmodule MydiaWeb.LibraryComponents do
       <button
         type="button"
         class={[
-          "btn btn-sm join-item",
+          "btn btn-sm btn-square join-item tooltip tooltip-bottom",
           @view_mode == :grid && "btn-primary",
           @view_mode != :grid && "btn-ghost"
         ]}
         phx-click="toggle_view"
         phx-value-mode="grid"
+        data-tip="Grid"
+        aria-label="Grid"
+        aria-pressed={to_string(@view_mode == :grid)}
       >
-        <.icon name="hero-squares-2x2" class="w-5 h-5" />
-        <span class="hidden sm:inline ml-1">Grid</span>
+        <.icon name="hero-squares-2x2" class="w-4 h-4" />
       </button>
       <button
         type="button"
         class={[
-          "btn btn-sm join-item",
+          "btn btn-sm btn-square join-item tooltip tooltip-bottom",
           @view_mode == :list && "btn-primary",
           @view_mode != :list && "btn-ghost"
         ]}
         phx-click="toggle_view"
         phx-value-mode="list"
+        data-tip="List"
+        aria-label="List"
+        aria-pressed={to_string(@view_mode == :list)}
       >
-        <.icon name="hero-list-bullet" class="w-5 h-5" />
-        <span class="hidden sm:inline ml-1">List</span>
+        <.icon name="hero-list-bullet" class="w-4 h-4" />
       </button>
     </div>
     """

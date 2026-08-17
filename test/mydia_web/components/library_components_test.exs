@@ -79,4 +79,52 @@ defmodule MydiaWeb.LibraryComponentsTest do
       assert picker(%{placement: :top}) =~ "dropdown-top"
     end
   end
+
+  describe "view_mode_toggle/1" do
+    test "renders two icon-only buttons with accessible names and pressed state" do
+      html = render_component(&LibraryComponents.view_mode_toggle/1, view_mode: :grid)
+
+      buttons =
+        html
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query("button")
+
+      assert LazyHTML.attribute(buttons, "aria-label") == ["Grid", "List"]
+
+      # Literal strings, not bare attributes. HEEx drops aria-pressed={false}
+      # entirely, so the component wraps the comparison in to_string/1.
+      assert LazyHTML.attribute(buttons, "aria-pressed") == ["true", "false"]
+
+      # The mode bindings the LiveViews dispatch on must survive the relabel.
+      assert LazyHTML.attribute(buttons, "phx-value-mode") == ["grid", "list"]
+    end
+
+    test "the buttons render no visible text label" do
+      html = render_component(&LibraryComponents.view_mode_toggle/1, view_mode: :list)
+
+      # Checked as text content: "Grid" and "List" still appear in aria-label
+      # and data-tip, so a raw substring refute would fail on correct output.
+      text =
+        html
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query("button")
+        |> LazyHTML.text()
+        |> String.trim()
+
+      assert text == ""
+    end
+
+    test "the active mode is the one marked btn-primary" do
+      html = render_component(&LibraryComponents.view_mode_toggle/1, view_mode: :list)
+
+      classes =
+        html
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query("button")
+        |> LazyHTML.attribute("class")
+
+      refute Enum.at(classes, 0) =~ "btn-primary"
+      assert Enum.at(classes, 1) =~ "btn-primary"
+    end
+  end
 end
