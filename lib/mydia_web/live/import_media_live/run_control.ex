@@ -8,6 +8,8 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
   """
   use MydiaWeb, :html
 
+  alias Mydia.Library
+
   attr :library_paths, :list, required: true
   attr :active_run, :map, default: nil
   attr :outcome_run, :map, default: nil
@@ -165,6 +167,8 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
 
       <.run_stats run={@run} />
 
+      <.outcome_review_cta run={@run} />
+
       <%!--
         Rendered for any status that carries an error, not only :failed. A run
         released by boot reconciliation, or by the recovery control above,
@@ -175,6 +179,26 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
         <p class="text-sm opacity-70 mb-1">{error_label(@run.status)}</p>
         <pre class="text-xs whitespace-pre-wrap break-all bg-base-100/60 rounded-lg p-2">{@run.error}</pre>
       </div>
+    </div>
+    """
+  end
+
+  attr :run, :map, required: true
+
+  defp outcome_review_cta(assigns) do
+    assigns =
+      assign(
+        assigns,
+        :unresolved,
+        Library.count_inbox_files(library_path_id: assigns.run.library_path_id)
+      )
+
+    ~H"""
+    <div :if={@unresolved > 0} class="w-full">
+      <.link navigate={~p"/review"} class="btn btn-sm btn-outline">
+        <.icon name="hero-inbox-stack" class="w-4 h-4" />
+        Review {@unresolved} file(s) that need attention
+      </.link>
     </div>
     """
   end
