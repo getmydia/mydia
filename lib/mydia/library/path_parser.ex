@@ -45,6 +45,31 @@ defmodule Mydia.Library.PathParser do
 
   require Logger
 
+  @doc """
+  Reads a season number out of one path segment.
+
+  The single seam every season-folder decision goes through. `PathAnchor` calls
+  it while clustering and this module's own path walkers call it, so widening the
+  patterns (other languages, decorated folders, bare numerics) changes one place.
+  """
+  @spec season_from_segment(String.t()) :: {:ok, non_neg_integer()} | :error
+  def season_from_segment(segment) when is_binary(segment) do
+    cond do
+      Regex.match?(specials_pattern(), segment) ->
+        {:ok, 0}
+
+      true ->
+        Enum.find_value(season_patterns(), :error, fn pattern ->
+          case Regex.run(pattern, segment) do
+            [_, number] -> {:ok, String.to_integer(number)}
+            _ -> nil
+          end
+        end)
+    end
+  end
+
+  def season_from_segment(_), do: :error
+
   # Define season patterns as a function to avoid module attribute compilation issues
   defp season_patterns do
     [
@@ -127,25 +152,7 @@ defmodule Mydia.Library.PathParser do
   """
   @spec parse_season_folder(String.t()) :: {:ok, integer()} | :error
   def parse_season_folder(folder_name) when is_binary(folder_name) do
-    Enum.find_value(season_patterns(), :error, fn pattern ->
-      case Regex.run(pattern, folder_name) do
-        # Specials pattern (no capture group)
-        [_match] ->
-          # Check if this is the specials pattern
-          if Regex.match?(specials_pattern(), folder_name) do
-            {:ok, 0}
-          else
-            nil
-          end
-
-        # Season number patterns
-        [_match, season_str] ->
-          {:ok, String.to_integer(season_str)}
-
-        nil ->
-          nil
-      end
-    end)
+    season_from_segment(folder_name)
   end
 
   def parse_season_folder(_), do: :error
