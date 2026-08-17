@@ -443,6 +443,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :media_item, :map, required: true
   attr :expanded_seasons, :any, required: true
   attr :expanded_episodes, :map, default: MapSet.new()
+  attr :expanded_chunks, :any, default: MapSet.new()
   attr :auto_searching_season, :any, default: nil
   attr :rescanning_season, :any, default: nil
   attr :auto_searching_episode, :any, default: nil
@@ -536,6 +537,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
               episodes={episodes}
               expanded?={MapSet.member?(@expanded_seasons, season_num)}
               expanded_episodes={@expanded_episodes}
+              expanded_chunks={@expanded_chunks}
               auto_searching_season={@auto_searching_season}
               rescanning_season={@rescanning_season}
               auto_searching_episode={@auto_searching_episode}

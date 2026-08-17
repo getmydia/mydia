@@ -1,5 +1,9 @@
 defmodule MydiaWeb.MediaLive.Show.EpisodeChunkingTest do
-  use ExUnit.Case, async: true
+  # async: false — connected LiveView tests hit the Postgres non-shared
+  # sandbox, which hides test rows from the mount process.
+  use MydiaWeb.ConnCase, async: false
+
+  import Phoenix.LiveViewTest
 
   alias Mydia.Media.Episode
   alias MydiaWeb.MediaLive.Show.Helpers
@@ -35,6 +39,46 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeChunkingTest do
       chunks = Helpers.episode_chunks(episodes(101..270))
 
       assert Enum.map(chunks, &elem(&1, 0)) == ["251-270", "201-250", "151-200", "101-150"]
+    end
+  end
+
+  describe "rendered chunking" do
+    setup %{conn: conn} do
+      admin = Mydia.AccountsFixtures.admin_user_fixture()
+      %{conn: MydiaWeb.AuthHelpers.log_in_user(conn, admin)}
+    end
+
+    test "a 170-episode season renders chunk toggles instead of 170 rows", %{conn: conn} do
+      show = Mydia.MediaFixtures.media_item_fixture(%{type: "tv_show", title: "Chunky"})
+
+      for n <- 1..170 do
+        Mydia.MediaFixtures.episode_fixture(%{
+          media_item_id: show.id,
+          season_number: 1,
+          episode_number: n
+        })
+      end
+
+      {:ok, view, _html} = live(conn, ~p"/media/#{show.id}")
+
+      assert has_element?(view, "#season-1-chunk-151-170-toggle")
+      assert has_element?(view, "#season-1-chunk-1-50-toggle")
+    end
+
+    test "a small season renders no chunk toggles", %{conn: conn} do
+      show = Mydia.MediaFixtures.media_item_fixture(%{type: "tv_show", title: "Small"})
+
+      for n <- 1..10 do
+        Mydia.MediaFixtures.episode_fixture(%{
+          media_item_id: show.id,
+          season_number: 1,
+          episode_number: n
+        })
+      end
+
+      {:ok, view, _html} = live(conn, ~p"/media/#{show.id}")
+
+      refute has_element?(view, "[id^='season-1-chunk-']")
     end
   end
 end

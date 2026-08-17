@@ -107,6 +107,7 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:auto_searching, false)
      |> assign(:auto_searching_season, nil)
      |> assign(:auto_searching_episode, nil)
+     |> assign(:expanded_chunks, MapSet.new())
      # Pre-transcode state
      |> assign(:transcode_jobs, load_transcode_jobs(media_item))
      # File metadata refresh state
@@ -261,6 +262,9 @@ defmodule MydiaWeb.MediaLive.Show do
 
   def handle_event("auto_search_season", params, socket),
     do: SearchEvents.auto_search_season(params, socket)
+
+  def handle_event("toggle_episode_chunk", params, socket),
+    do: EpisodeEvents.toggle_episode_chunk(params, socket)
 
   def handle_event("auto_search_episode", params, socket),
     do: SearchEvents.auto_search_episode(params, socket)
