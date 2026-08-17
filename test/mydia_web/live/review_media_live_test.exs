@@ -4,9 +4,14 @@ defmodule MydiaWeb.ReviewMediaLiveTest do
   import Phoenix.LiveViewTest
   import Mydia.AccountsFixtures
   import Mydia.MediaFixtures
+  import Mydia.MetadataStub
   import Mydia.SettingsFixtures
 
   alias Mydia.Library
+
+  # The batch and rematch search boxes call Metadata.search/3, which would
+  # otherwise reach the live relay.
+  setup :setup_metadata_stub
 
   setup %{conn: conn} do
     user = user_fixture(%{role: "admin"})
@@ -46,6 +51,50 @@ defmodule MydiaWeb.ReviewMediaLiveTest do
     refute has_element?(view, "#approve-#{media_file.id}")
     assert Library.get_media_file!(media_file.id).media_item_id == item.id
     assert Library.list_match_candidates(media_file.id) == []
+  end
+
+  test "approving a file another session already removed refreshes instead of crashing", %{
+    conn: conn,
+    media_file: media_file
+  } do
+    {:ok, view, _html} = live(conn, ~p"/review")
+
+    {:ok, _} = Library.delete_media_file(media_file)
+
+    html = view |> element("#approve-#{media_file.id}") |> render_click()
+
+    assert html =~ "no longer in the queue"
+    refute has_element?(view, "#approve-#{media_file.id}")
+  end
+
+  test "editing a file another session already removed refreshes instead of crashing", %{
+    conn: conn,
+    media_file: media_file
+  } do
+    {:ok, view, _html} = live(conn, ~p"/review")
+
+    {:ok, _} = Library.delete_media_file(media_file)
+
+    html = view |> element("#edit-#{media_file.id}") |> render_click()
+
+    assert html =~ "no longer in the queue"
+    refute has_element?(view, "#inbox-edit-form-#{media_file.id}")
+  end
+
+  test "the per-library badge is recomputed after a file is approved", %{
+    conn: conn,
+    library_path: library_path,
+    media_file: media_file
+  } do
+    _item = media_item_fixture(%{type: "movie", title: "The Matrix", year: 1999, tmdb_id: 603})
+
+    {:ok, view, _html} = live(conn, ~p"/review")
+
+    assert view |> element("#review-library-#{library_path.id} .badge") |> render() =~ "1"
+
+    view |> element("#approve-#{media_file.id}") |> render_click()
+
+    assert view |> element("#review-library-#{library_path.id} .badge") |> render() =~ "0"
   end
 
   test "opening the editor renders the edit form", %{conn: conn, media_file: media_file} do

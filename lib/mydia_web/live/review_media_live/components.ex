@@ -214,6 +214,7 @@ defmodule MydiaWeb.ReviewMediaLive.Components do
         <input
           type="checkbox"
           id={"season-select-#{@season_id}"}
+          aria-label={"Select every episode in season #{@season.season_number}"}
           class={["checkbox checkbox-primary checkbox-sm", @some_selected && "checkbox-warning"]}
           checked={@all_selected or @some_selected}
           phx-click="toggle_season_selection"
@@ -269,6 +270,7 @@ defmodule MydiaWeb.ReviewMediaLive.Components do
       <input
         type="checkbox"
         id={"batch-toggle-#{@file.id}"}
+        aria-label={"Select #{@title}"}
         class="checkbox checkbox-primary checkbox-sm"
         checked={MapSet.member?(@batch_selected_ids, @file.id)}
         phx-click="batch_toggle_file"

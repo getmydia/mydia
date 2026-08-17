@@ -17,6 +17,12 @@ defmodule MydiaWeb.ReviewMediaLive.Index do
   @media_types ~w(movie tv_show)
   @default_media_type "movie"
 
+  # The group is a live query rendered before the click, so a row can be
+  # approved by another session (or removed by a scan) in between. Reload
+  # instead of raising a NoResultsError the user would see as a reconnect.
+  @stale_file_flash "That file is no longer in the queue. The list has been refreshed."
+  @stale_series_flash "That series is no longer in the queue. The list has been refreshed."
+
   @impl true
   def mount(_params, _session, socket) do
     library_paths =
@@ -64,26 +70,9 @@ defmodule MydiaWeb.ReviewMediaLive.Index do
 
   def handle_event("approve_file", %{"id" => media_file_id}, socket) do
     with :ok <- Authorization.authorize_import_media(socket) do
-      media_file = Library.get_media_file!(media_file_id)
-
-      case Library.list_match_candidates(media_file_id) do
-        [%{provider_id: provider_id} = candidate | _] when not is_nil(provider_id) ->
-          match = candidate_to_match(candidate)
-
-          case FileIngest.ingest(media_file, match, policy: :create_items, threshold: 0.0) do
-            {:linked, _media_item} ->
-              {:noreply,
-               socket
-               |> forget_file(media_file_id)
-               |> put_flash(:info, "Added #{candidate.title}")
-               |> load_group()}
-
-            _ ->
-              {:noreply, put_flash(socket, :error, "Could not add #{candidate.title}")}
-          end
-
-        _ ->
-          {:noreply, put_flash(socket, :error, "That file has no match to add yet.")}
+      case Library.get_media_file(media_file_id) do
+        nil -> {:noreply, refresh_stale(socket, @stale_file_flash)}
+        media_file -> approve_media_file(socket, media_file)
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
@@ -91,23 +80,28 @@ defmodule MydiaWeb.ReviewMediaLive.Index do
   end
 
   def handle_event("edit_file", %{"id" => id}, socket) do
-    media_file = Library.get_media_file!(id, preload: [:library_path])
-    candidate = List.first(Library.list_match_candidates(id))
+    case Library.get_media_file(id, preload: [:library_path]) do
+      nil ->
+        {:noreply, refresh_stale(socket, @stale_file_flash)}
 
-    form = %{
-      "title" => (candidate && candidate.title) || "",
-      "provider_id" => (candidate && candidate.provider_id) || "",
-      "type" => media_type(candidate && candidate.media_type),
-      "season" => season_string(candidate),
-      "episodes" => episodes_string(candidate)
-    }
+      media_file ->
+        candidate = List.first(Library.list_match_candidates(id))
 
-    {:noreply,
-     socket
-     |> assign(:editing_file_id, id)
-     |> assign(:editing_file_name, MediaFile.display_name(media_file))
-     |> assign(:edit_form, form)
-     |> assign(:search_results, [])}
+        form = %{
+          "title" => (candidate && candidate.title) || "",
+          "provider_id" => (candidate && candidate.provider_id) || "",
+          "type" => media_type(candidate && candidate.media_type),
+          "season" => season_string(candidate),
+          "episodes" => episodes_string(candidate)
+        }
+
+        {:noreply,
+         socket
+         |> assign(:editing_file_id, id)
+         |> assign(:editing_file_name, MediaFile.display_name(media_file))
+         |> assign(:edit_form, form)
+         |> assign(:search_results, [])}
+    end
   end
 
   def handle_event("cancel_edit", _params, socket) do
@@ -339,15 +333,37 @@ defmodule MydiaWeb.ReviewMediaLive.Index do
          socket
          |> assign(:rematching_series_key, nil)
          |> assign(:series_search_results, [])
-         |> put_flash(
-           :info,
-           "That series is no longer in the queue — the list has been refreshed."
-         )
-         |> load_group()}
+         |> refresh_stale(@stale_series_flash)}
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
     end
+  end
+
+  defp approve_media_file(socket, media_file) do
+    case Library.list_match_candidates(media_file.id) do
+      [%{provider_id: provider_id} = candidate | _] when not is_nil(provider_id) ->
+        match = candidate_to_match(candidate)
+
+        case FileIngest.ingest(media_file, match, policy: :create_items, threshold: 0.0) do
+          {:linked, _media_item} ->
+            {:noreply,
+             socket
+             |> forget_file(media_file.id)
+             |> put_flash(:info, "Added #{candidate.title}")
+             |> load_group()}
+
+          _ ->
+            {:noreply, put_flash(socket, :error, "Could not add #{candidate.title}")}
+        end
+
+      _ ->
+        {:noreply, put_flash(socket, :error, "That file has no match to add yet.")}
+    end
+  end
+
+  defp refresh_stale(socket, message) do
+    socket |> put_flash(:info, message) |> load_group()
   end
 
   defp candidate_to_match(candidate) do
@@ -475,14 +491,30 @@ defmodule MydiaWeb.ReviewMediaLive.Index do
     paths |> Enum.max_by(& &1.unresolved) |> Map.fetch!(:id)
   end
 
-  defp load_group(%{assigns: %{selected_library_path_id: nil}} = socket) do
+  defp load_group(socket) do
+    socket |> refresh_library_counts() |> load_selected_group()
+  end
+
+  # The per-library badges are read from the same inbox the group is, so they
+  # have to be re-read alongside it. Left at their mount value they drift from
+  # `total_unresolved/1` the moment the user approves anything.
+  defp refresh_library_counts(socket) do
+    paths =
+      Enum.map(socket.assigns.library_paths, fn path ->
+        %{path | unresolved: Library.count_inbox_files(library_path_id: path.id)}
+      end)
+
+    assign(socket, :library_paths, paths)
+  end
+
+  defp load_selected_group(%{assigns: %{selected_library_path_id: nil}} = socket) do
     socket
     |> assign(:group, %{series: [], movies: [], unmatched: [], wrong_library: []})
     |> assign(:group_file_ids, MapSet.new())
     |> assign(:actionable_file_ids, MapSet.new())
   end
 
-  defp load_group(socket) do
+  defp load_selected_group(socket) do
     group = Library.group_inbox_files(socket.assigns.selected_library_path_id)
     {file_ids, actionable_ids} = extract_group_file_ids(group)
 

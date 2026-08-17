@@ -1115,4 +1115,27 @@ defmodule Mydia.LibraryTest do
     assert [wrong] = group.wrong_library
     assert wrong.file.media_file.id == wl.id
   end
+
+  test "group_inbox_files/1 returns every unresolved file, not list_inbox_files/1's page of 100" do
+    lp = library_path_fixture()
+    over_one_page = 105
+
+    for _ <- 1..over_one_page do
+      file = orphaned_media_file_fixture(%{library_path_id: lp.id})
+
+      {:ok, _} =
+        Library.upsert_match_candidate(%{
+          media_file_id: file.id,
+          rank: 0,
+          attempts: 1,
+          last_error: "no_match"
+        })
+    end
+
+    assert length(Library.list_inbox_files(library_path_id: lp.id)) == 100
+    assert Library.count_inbox_files(library_path_id: lp.id) == over_one_page
+
+    group = Library.group_inbox_files(lp.id)
+    assert length(group.unmatched) == over_one_page
+  end
 end

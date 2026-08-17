@@ -2605,8 +2605,8 @@ defmodule Mydia.Library do
 
     * `:library_path_id` - restrict to one library
     * `:filter` - `:all` (default), `:unidentified`, or `:low_confidence`
-    * `:limit` - default 100
-    * `:offset` - default 0
+    * `:limit` - default 100, or `:all` for every unresolved row
+    * `:offset` - default 0 (ignored when `:limit` is `:all`)
   """
   @spec list_inbox_files(keyword()) :: [
           %{media_file: MediaFile.t(), candidate: MatchCandidate.t()}
@@ -2621,8 +2621,7 @@ defmodule Mydia.Library do
       |> inbox_base_query()
       |> apply_inbox_filter(opts[:filter] || :all)
       |> order_by([f, c], asc_nulls_last: c.title, asc: f.relative_path)
-      |> limit(^limit)
-      |> offset(^offset)
+      |> apply_inbox_page(limit, offset)
       |> select([f, c], %{media_file: f, candidate: c})
       |> Repo.all()
 
@@ -2661,6 +2660,14 @@ defmodule Mydia.Library do
     |> apply_inbox_filter(opts[:filter] || :all)
     |> select([f, _c], count(f.id, :distinct))
     |> Repo.one()
+  end
+
+  # `:all` drops both clauses rather than only the limit: SQLite rejects an
+  # OFFSET with no LIMIT, so an unbounded query has to carry neither.
+  defp apply_inbox_page(query, :all, _offset), do: query
+
+  defp apply_inbox_page(query, limit, offset) do
+    query |> limit(^limit) |> offset(^offset)
   end
 
   # Shared by list_inbox_files/1 and count_inbox_files/1 so the two can never
@@ -2702,6 +2709,11 @@ defmodule Mydia.Library do
   `wrong_library` are flat `GroupedFile` lists. `wrong_library` is the subset
   of otherwise-unmatched files whose candidate recorded a library/media-type
   mismatch in `last_error`.
+
+  Every unresolved row is returned, not `list_inbox_files/1`'s default page of
+  100. The Review page renders one tree with no pagination, and its per-library
+  badge comes from the uncapped `count_inbox_files/1`, so a page would show a
+  silently truncated tree next to a total it does not add up to.
   """
   @spec group_inbox_files(binary()) :: %{
           series: [Mydia.Library.Structs.GroupedSeries.t()],
@@ -2711,7 +2723,7 @@ defmodule Mydia.Library do
         }
   def group_inbox_files(library_path_id) do
     grouped =
-      list_inbox_files(library_path_id: library_path_id, filter: :all)
+      list_inbox_files(library_path_id: library_path_id, filter: :all, limit: :all)
       |> Enum.map(&to_matched_file/1)
       |> FileGrouper.group_files()
 
