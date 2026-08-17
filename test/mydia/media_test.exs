@@ -506,7 +506,16 @@ defmodule Mydia.MediaTest do
       end
     end
 
-    test "multiple episodes with nil provider_episode_id coexist under the same media_item" do
+    test "create_episode/1 allows multiple episodes with no provider_episode_id under the same media_item" do
+      # Every existing episode is in this state until the backfill (a later
+      # task) runs, so create_episode/1 must not treat an unset
+      # provider_episode_id as a value that has to be unique. This does not
+      # exercise the migration's `where:` clause specifically — a plain,
+      # non-partial unique index already permits unlimited NULLs per
+      # media_item_id, since SQL treats NULL as distinct from NULL on both
+      # adapters. The `where:` clause is a size optimization for the index,
+      # not a correctness requirement, so there is no behavior here that
+      # pins it.
       media_item = media_item_fixture(%{type: "tv_show"})
 
       assert {:ok, _} =

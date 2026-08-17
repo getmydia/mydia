@@ -16,8 +16,12 @@ defmodule Mydia.Repo.Migrations.AddAbsoluteNumbersToEpisodes do
 
     create index(:episodes, [:media_item_id, :absolute_number])
 
-    # Partial on not-null so the backfill can proceed one show at a time
-    # without existing null rows colliding with each other.
+    # Partial on not-null as a size optimization, not a correctness
+    # requirement: a plain unique index already permits unlimited NULLs per
+    # media_item_id, since SQL treats NULL as distinct from NULL. episodes is
+    # a high-row-count table and most rows will hold NULL provider_episode_id
+    # until the backfill completes, so scoping the index to non-null rows
+    # keeps it from indexing rows it can never usefully constrain.
     create unique_index(:episodes, [:media_item_id, :provider_episode_id],
              where: "provider_episode_id IS NOT NULL",
              name: :episodes_media_item_id_provider_episode_id_index
