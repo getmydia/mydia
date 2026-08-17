@@ -121,7 +121,7 @@ defmodule Mydia.Library.PathAnchor do
           not valid_title?(segment) ->
             if above == [],
               do: loose_file(),
-              else: climb(above, climbed ++ [:redundant_release], season)
+              else: climb(above, climbed ++ [:invalid_title], season)
 
           redundant?(segment, above) ->
             climb_past(above, segment, climbed ++ [:redundant_release], season)

@@ -88,5 +88,27 @@ defmodule Mydia.Library.PathAnchorTest do
       assert %{anchor_path: "", cluster_key: "__root__"} =
                PathAnchor.anchor_for("/media/media/x.mkv", "/media")
     end
+
+    test "climbs past a dot-prefixed invalid-title folder to the parent anchor" do
+      path = "#{@root}/Show Name/.hidden/ep.mkv"
+
+      assert %{
+               anchor_path: "Show Name",
+               cluster_key: "show name",
+               season_hint: nil,
+               climbed: [:invalid_title]
+             } = PathAnchor.anchor_for(path, @root)
+    end
+
+    test "does not climb past a nested title that does not repeat its parent" do
+      path = "#{@root}/Anime/One Piece/Season 1/ep.mkv"
+
+      assert %{
+               anchor_path: "Anime/One Piece",
+               cluster_key: "one piece",
+               season_hint: 1,
+               climbed: [{:season, 1}]
+             } = PathAnchor.anchor_for(path, @root)
+    end
   end
 end
