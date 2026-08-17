@@ -47,61 +47,72 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
           status={Map.get(@segment_statuses, @season_number)}
         />
 
-        <%!-- Episodes list, split into labelled ranges above the chunk threshold --%>
-        <%= for {label, chunk_episodes} <- episode_chunks(@episodes) do %>
-          <%= if is_nil(label) do %>
-            <div
-              id={"season-#{@season_number}-episodes"}
-              class="bg-base-100 rounded-lg divide-y divide-base-200"
-            >
-              <.episode_rows
-                episodes={chunk_episodes}
-                expanded_episodes={@expanded_episodes}
-                auto_searching_episode={@auto_searching_episode}
-                playback_enabled={@playback_enabled}
-                transcode_jobs={@transcode_jobs}
-              />
-            </div>
-          <% else %>
-            <button
-              type="button"
-              id={"season-#{@season_number}-chunk-#{label}-toggle"}
-              class="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-base-200 rounded-lg"
-              phx-click="toggle_episode_chunk"
-              phx-value-season-number={@season_number}
-              phx-value-chunk-label={label}
-              aria-expanded={to_string(MapSet.member?(@expanded_chunks, {@season_number, label}))}
-              aria-controls={"season-#{@season_number}-chunk-#{label}"}
-            >
-              <.icon
-                name={
-                  if MapSet.member?(@expanded_chunks, {@season_number, label}),
-                    do: "hero-chevron-down",
-                    else: "hero-chevron-right"
-                }
-                class="w-4 h-4 text-base-content/40"
-              />
-              <span class="text-sm font-medium">Episodes {label}</span>
-              <span class="text-xs text-base-content/60">{length(chunk_episodes)}</span>
-            </button>
-            <div
-              :if={MapSet.member?(@expanded_chunks, {@season_number, label})}
-              id={"season-#{@season_number}-chunk-#{label}"}
-              class="bg-base-100 rounded-lg divide-y divide-base-200"
-            >
-              <.episode_rows
-                episodes={chunk_episodes}
-                expanded_episodes={@expanded_episodes}
-                auto_searching_episode={@auto_searching_episode}
-                playback_enabled={@playback_enabled}
-                transcode_jobs={@transcode_jobs}
-              />
-            </div>
+        <%!-- Episodes list, split into labelled ranges above the chunk threshold.
+              One id owns "season-#{n}-episodes" regardless of branch, since
+              the season disclosure's aria-controls always points at it. --%>
+        <div id={"season-#{@season_number}-episodes"}>
+          <%= for {{label, chunk_episodes}, index} <- Enum.with_index(episode_chunks(@episodes)) do %>
+            <%= if is_nil(label) do %>
+              <div class="bg-base-100 rounded-lg divide-y divide-base-200">
+                <.episode_rows
+                  episodes={chunk_episodes}
+                  expanded_episodes={@expanded_episodes}
+                  auto_searching_episode={@auto_searching_episode}
+                  playback_enabled={@playback_enabled}
+                  transcode_jobs={@transcode_jobs}
+                />
+              </div>
+            <% else %>
+              <% expanded_chunk? =
+                chunk_expanded?(@expanded_chunks, @season_number, label, index == 0) %>
+              <button
+                type="button"
+                id={"season-#{@season_number}-chunk-#{label}-toggle"}
+                class="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-base-200 rounded-lg"
+                phx-click="toggle_episode_chunk"
+                phx-value-season-number={@season_number}
+                phx-value-chunk-label={label}
+                aria-expanded={to_string(expanded_chunk?)}
+                aria-controls={"season-#{@season_number}-chunk-#{label}"}
+              >
+                <.icon
+                  name={if expanded_chunk?, do: "hero-chevron-down", else: "hero-chevron-right"}
+                  class="w-4 h-4 text-base-content/40"
+                />
+                <span class="text-sm font-medium">Episodes {label}</span>
+                <span class="text-xs text-base-content/60">{length(chunk_episodes)}</span>
+              </button>
+              <div
+                :if={expanded_chunk?}
+                id={"season-#{@season_number}-chunk-#{label}"}
+                class="bg-base-100 rounded-lg divide-y divide-base-200"
+              >
+                <.episode_rows
+                  episodes={chunk_episodes}
+                  expanded_episodes={@expanded_episodes}
+                  auto_searching_episode={@auto_searching_episode}
+                  playback_enabled={@playback_enabled}
+                  transcode_jobs={@transcode_jobs}
+                />
+              </div>
+            <% end %>
           <% end %>
-        <% end %>
+        </div>
       <% end %>
     </div>
     """
+  end
+
+  # The newest chunk (index 0, since `episode_chunks/1` returns newest-first)
+  # starts expanded without a click. `expanded_chunks` records keys *toggled
+  # away from their default*, so membership means something different per
+  # chunk: for the newest chunk, present means collapsed (the user closed the
+  # one that opened itself); for every other chunk, present means expanded
+  # (the ordinary click-to-open meaning). This keeps the initial MapSet empty
+  # — no per-season mount-time computation — at the cost of that inversion.
+  defp chunk_expanded?(expanded_chunks, season_number, label, newest?) do
+    toggled? = MapSet.member?(expanded_chunks, {season_number, label})
+    if newest?, do: !toggled?, else: toggled?
   end
 
   # One chunk's worth of episode rows: episode number, title, quality/air-date
