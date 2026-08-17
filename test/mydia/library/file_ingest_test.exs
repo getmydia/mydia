@@ -8,9 +8,11 @@ defmodule Mydia.Library.FileIngestTest do
   use Mydia.DataCase, async: true
 
   import Mydia.MediaFixtures
+  import Mydia.SettingsFixtures
 
   alias Mydia.Library
   alias Mydia.Library.FileIngest
+  alias Mydia.Library.MatchCandidate
   alias Mydia.Library.ReleaseParser
   alias Mydia.Library.Structs.ParsedFileInfo
   alias Mydia.Library.Structs.Quality
@@ -162,8 +164,8 @@ defmodule Mydia.Library.FileIngestTest do
   end
 
   describe "default_threshold/0" do
-    test "matches the confidence the old wizard auto-selected at" do
-      assert FileIngest.default_threshold() == 0.8
+    test "matches the review page's auto-accept threshold" do
+      assert FileIngest.default_threshold() == 0.85
     end
   end
 
@@ -222,6 +224,49 @@ defmodule Mydia.Library.FileIngestTest do
       assert reloaded.parsed_info["is_sample"] == false
       assert reloaded.parsed_info["is_trailer"] == false
       assert reloaded.parsed_info["is_extra"] == false
+    end
+  end
+
+  describe "retryable failures" do
+    test "a failed match records a future retry time with backoff" do
+      library_path = library_path_fixture(%{type: "series"})
+      file = orphaned_media_file_fixture(%{library_path_id: library_path.id})
+
+      assert :no_match = FileIngest.ingest(file, nil, policy: :create_items)
+
+      candidate = Repo.get_by!(MatchCandidate, media_file_id: file.id)
+      assert candidate.attempts == 1
+      assert candidate.next_retry_at
+      assert DateTime.compare(candidate.next_retry_at, DateTime.utc_now()) == :gt
+    end
+
+    test "a file whose retry time has passed is reselected as unmatched" do
+      library_path = library_path_fixture(%{type: "series"})
+      file = orphaned_media_file_fixture(%{library_path_id: library_path.id})
+
+      :no_match = FileIngest.ingest(file, nil, policy: :create_items)
+
+      past = DateTime.utc_now() |> DateTime.add(-3600, :second) |> DateTime.truncate(:second)
+      Repo.update_all(MatchCandidate, set: [next_retry_at: past])
+
+      paths = Library.list_unmatched_media_file_paths(library_path.id, 10)
+      assert Enum.any?(paths, fn {id, _path} -> id == file.id end)
+    end
+
+    test "a file whose retry time is still in the future is not reselected" do
+      library_path = library_path_fixture(%{type: "series"})
+      file = orphaned_media_file_fixture(%{library_path_id: library_path.id})
+
+      :no_match = FileIngest.ingest(file, nil, policy: :create_items)
+
+      paths = Library.list_unmatched_media_file_paths(library_path.id, 10)
+      refute Enum.any?(paths, fn {id, _path} -> id == file.id end)
+    end
+  end
+
+  describe "auto-link threshold" do
+    test "links at 0.85 and holds below it" do
+      assert FileIngest.default_threshold() == 0.85
     end
   end
 end

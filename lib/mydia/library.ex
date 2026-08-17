@@ -2549,18 +2549,28 @@ defmodule Mydia.Library do
   @doc """
   Returns `{media_file_id, absolute_path}` for files still needing a match.
 
-  A file needs matching when it has no parent association and no cached
-  candidate. Excluding files that already carry a candidate is what lets a
-  resumed run skip relay work a previous run already paid for.
+  A file needs matching when it has no parent association and either no
+  cached candidate, or a failed candidate (no `provider_id`) whose retry
+  window has passed. Excluding a file with a fresh failure or a real match
+  candidate is what lets a resumed run skip relay work a previous run already
+  paid for; letting an expired failure back in is what stops a single relay
+  outage from parking a file forever.
   """
   @spec list_unmatched_media_file_paths(binary(), pos_integer()) :: [{binary(), String.t()}]
   def list_unmatched_media_file_paths(library_path_id, limit) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
     MediaFile
     |> where([f], f.library_path_id == ^library_path_id)
     |> where([f], is_nil(f.media_item_id) and is_nil(f.episode_id))
     |> where([f], is_nil(f.trashed_at))
     |> join(:left, [f], c in MatchCandidate, on: c.media_file_id == f.id)
-    |> where([_f, c], is_nil(c.id))
+    |> where(
+      [_f, c],
+      is_nil(c.id) or
+        (is_nil(c.provider_id) and not is_nil(c.next_retry_at) and c.next_retry_at <= ^now)
+    )
+    |> order_by([f], asc: f.id)
     |> limit(^limit)
     |> preload(:library_path)
     |> Repo.all()

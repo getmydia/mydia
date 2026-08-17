@@ -45,7 +45,13 @@ defmodule Mydia.Library.FileIngest do
   alias Mydia.Library.{MediaFile, MetadataEnricher}
   alias Mydia.Metadata
 
-  @default_threshold 0.8
+  # One number, shared with the review UI's "Ready" band so the two cannot drift.
+  @default_threshold Mydia.ImportGroups.auto_accept_threshold()
+
+  # Exponential backoff capped at a day. A relay outage should cost a retry
+  # window, not the files: before this, one failed attempt excluded a file from
+  # every later run forever.
+  @retry_backoff_seconds [300, 1_800, 7_200, 21_600, 86_400]
 
   @type policy :: :local_only | :create_items
   @type result ::
@@ -57,9 +63,14 @@ defmodule Mydia.Library.FileIngest do
   @doc """
   The confidence at or above which `:create_items` links automatically.
 
-  0.8 deliberately matches the threshold the old import wizard used to
-  pre-tick matches at, so users see the same matches accepted automatically
-  that they were already accepting by hand.
+  Calibrated against the production library on 2026-08-17, whose candidates
+  cluster at 0.65-0.70 and 0.90-1.00 with nothing in between; every value in
+  [0.75, 0.89] produces the same partition there. This is the same number
+  `Mydia.ImportGroups.auto_accept_threshold/0` uses for the review page's
+  "Ready" band, read at compile time so the two cannot drift apart the way
+  they already have once (this threshold used to be 0.8, which made
+  `MetadataMatcher`'s series-level match, capped at 0.70, permanently
+  unlinkable).
   """
   @spec default_threshold() :: float()
   def default_threshold, do: @default_threshold
@@ -246,11 +257,14 @@ defmodule Mydia.Library.FileIngest do
         _ -> 0
       end
 
+    attempts = previous + 1
+
     case Library.upsert_match_candidate(%{
            media_file_id: media_file.id,
            rank: 0,
-           attempts: previous + 1,
-           last_error: error
+           attempts: attempts,
+           last_error: error,
+           next_retry_at: next_retry_at(attempts)
          }) do
       {:ok, candidate} ->
         {:ok, candidate}
@@ -264,6 +278,12 @@ defmodule Mydia.Library.FileIngest do
 
         {:error, changeset}
     end
+  end
+
+  defp next_retry_at(attempts) do
+    seconds = Enum.at(@retry_backoff_seconds, attempts - 1, List.last(@retry_backoff_seconds))
+
+    DateTime.utc_now() |> DateTime.add(seconds, :second) |> DateTime.truncate(:second)
   end
 
   ## Helpers

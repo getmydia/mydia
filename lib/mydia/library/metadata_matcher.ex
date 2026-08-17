@@ -528,8 +528,12 @@ defmodule Mydia.Library.MetadataMatcher do
                provider_type: provider_type,
                title: series.title,
                year: series.year,
-               match_confidence: 0.70,
-               # Lower confidence for partial match
+               # A series-level match is an identity claim backed by the
+               # folder name, the strongest signal available once the
+               # episode-specific search has failed. At 0.70 this could never
+               # clear FileIngest's link threshold, which made this whole
+               # code path dead in unattended mode.
+               match_confidence: 0.85,
                match_type: :partial_match,
                partial_reason: :episode_not_found,
                metadata: series_metadata,
