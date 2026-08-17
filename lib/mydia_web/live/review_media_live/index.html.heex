@@ -32,10 +32,23 @@
         {total_unresolved(@group)} file(s) waiting in this library.
       </p>
 
+      <div :if={@editing_file_id} class="pb-2">
+        <ImportComponents.unmatched_file_list_item
+          media_file_id={@editing_file_id}
+          file_name={@editing_file_name}
+          edit_form={@edit_form}
+          search_results={@search_results}
+        />
+      </div>
+
       <Components.grouped_tree
         group={@group}
         collapsed_seasons={@collapsed_seasons}
         selected_ids={@selected_ids}
+        editing_file_id={@editing_file_id}
+        editing_file_name={@editing_file_name}
+        edit_form={@edit_form}
+        search_results={@search_results}
       />
     <% end %>
   </div>

@@ -8,9 +8,14 @@ defmodule MydiaWeb.ReviewMediaLive.Index do
   """
   use MydiaWeb, :live_view
 
-  alias Mydia.{Library, Settings}
-  alias Mydia.Library.ImportRun
+  alias Mydia.{Library, Metadata, Settings}
+  alias Mydia.Library.{FileIngest, ImportRun, MediaFile}
+  alias MydiaWeb.Live.Authorization
+  alias MydiaWeb.ImportMediaLive.Components, as: ImportComponents
   alias MydiaWeb.ReviewMediaLive.Components
+
+  @media_types ~w(movie tv_show)
+  @default_media_type "movie"
 
   @impl true
   def mount(_params, _session, socket) do
@@ -33,6 +38,10 @@ defmodule MydiaWeb.ReviewMediaLive.Index do
      |> assign(:selected_library_path_id, default_library_path_id(library_paths))
      |> assign(:collapsed_seasons, MapSet.new())
      |> assign(:selected_ids, MapSet.new())
+     |> assign(:editing_file_id, nil)
+     |> assign(:editing_file_name, nil)
+     |> assign(:edit_form, nil)
+     |> assign(:search_results, [])
      |> load_group()}
   end
 
@@ -45,6 +54,220 @@ defmodule MydiaWeb.ReviewMediaLive.Index do
     end
   end
 
+  def handle_event("approve_file", %{"id" => media_file_id}, socket) do
+    with :ok <- Authorization.authorize_import_media(socket) do
+      media_file = Library.get_media_file!(media_file_id)
+
+      case Library.list_match_candidates(media_file_id) do
+        [%{provider_id: provider_id} = candidate | _] when not is_nil(provider_id) ->
+          match = candidate_to_match(candidate)
+
+          case FileIngest.ingest(media_file, match, policy: :create_items, threshold: 0.0) do
+            {:linked, _media_item} ->
+              {:noreply,
+               socket
+               |> forget_file(media_file_id)
+               |> put_flash(:info, "Added #{candidate.title}")
+               |> load_group()}
+
+            _ ->
+              {:noreply, put_flash(socket, :error, "Could not add #{candidate.title}")}
+          end
+
+        _ ->
+          {:noreply, put_flash(socket, :error, "That file has no match to add yet.")}
+      end
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("edit_file", %{"id" => id}, socket) do
+    media_file = Library.get_media_file!(id, preload: [:library_path])
+    candidate = List.first(Library.list_match_candidates(id))
+
+    form = %{
+      "title" => (candidate && candidate.title) || "",
+      "provider_id" => (candidate && candidate.provider_id) || "",
+      "type" => media_type(candidate && candidate.media_type),
+      "season" => season_string(candidate),
+      "episodes" => episodes_string(candidate)
+    }
+
+    {:noreply,
+     socket
+     |> assign(:editing_file_id, id)
+     |> assign(:editing_file_name, MediaFile.display_name(media_file))
+     |> assign(:edit_form, form)
+     |> assign(:search_results, [])}
+  end
+
+  def handle_event("cancel_edit", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:editing_file_id, nil)
+     |> assign(:editing_file_name, nil)
+     |> assign(:edit_form, nil)
+     |> assign(:search_results, [])}
+  end
+
+  def handle_event("search_metadata", %{"edit_form" => %{"title" => query}}, socket) do
+    {:noreply, assign(socket, :search_results, search_metadata(query))}
+  end
+
+  def handle_event("select_search_result", params, socket) do
+    form =
+      socket.assigns.edit_form
+      |> Map.put("title", params["title"])
+      |> Map.put("provider_id", params["provider_id"])
+      |> Map.put("type", params["type"])
+
+    {:noreply, socket |> assign(:edit_form, form) |> assign(:search_results, [])}
+  end
+
+  def handle_event("save_edit", %{"edit_form" => params}, socket) do
+    with :ok <- Authorization.authorize_import_media(socket),
+         id when is_binary(id) <- socket.assigns.editing_file_id do
+      attrs = %{
+        media_file_id: id,
+        rank: 0,
+        provider_type: "tmdb",
+        provider_id: params["provider_id"],
+        title: params["title"],
+        media_type: media_type(params["type"]),
+        confidence: 1.0,
+        parsed_info: %{
+          "season" => parse_int(params["season"]),
+          "episodes" => parse_episode_list(params["episodes"])
+        },
+        attempts: 0,
+        last_error: nil
+      }
+
+      case Library.upsert_match_candidate(attrs) do
+        {:ok, _candidate} ->
+          {:noreply,
+           socket
+           |> assign(:editing_file_id, nil)
+           |> assign(:editing_file_name, nil)
+           |> assign(:edit_form, nil)
+           |> put_flash(:info, "Match updated")
+           |> load_group()}
+
+        {:error, _changeset} ->
+          {:noreply, put_flash(socket, :error, "That match could not be saved.")}
+      end
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+      nil -> {:noreply, socket}
+    end
+  end
+
+  defp candidate_to_match(candidate) do
+    %{
+      provider_id: candidate.provider_id,
+      provider_type: provider_type_atom(candidate.provider_type),
+      title: candidate.title,
+      year: candidate.year,
+      match_confidence: candidate.confidence || 1.0,
+      metadata: %{},
+      manually_edited: true,
+      parsed_info: restore_parsed_info(candidate)
+    }
+  end
+
+  defp restore_parsed_info(candidate) do
+    parsed = candidate.parsed_info || %{}
+
+    %{
+      type: media_type_atom(candidate.media_type),
+      season: Map.get(parsed, "season"),
+      episodes: Map.get(parsed, "episodes") || []
+    }
+  end
+
+  defp provider_type_atom("tvdb"), do: :tvdb
+  defp provider_type_atom(_), do: :tmdb
+
+  defp media_type_atom("tv_show"), do: :tv_show
+  defp media_type_atom(_), do: :movie
+
+  defp media_type(type) when type in @media_types, do: type
+  defp media_type(_), do: @default_media_type
+
+  defp forget_file(socket, media_file_id) do
+    socket =
+      if socket.assigns.editing_file_id == media_file_id do
+        socket
+        |> assign(:editing_file_id, nil)
+        |> assign(:editing_file_name, nil)
+        |> assign(:edit_form, nil)
+      else
+        socket
+      end
+
+    assign(socket, :selected_ids, MapSet.delete(socket.assigns.selected_ids, media_file_id))
+  end
+
+  defp season_string(nil), do: ""
+
+  defp season_string(candidate) do
+    case Map.get(candidate.parsed_info || %{}, "season") do
+      nil -> ""
+      season -> to_string(season)
+    end
+  end
+
+  defp episodes_string(nil), do: ""
+
+  defp episodes_string(candidate) do
+    (candidate.parsed_info || %{})
+    |> Map.get("episodes", [])
+    |> Enum.join(", ")
+  end
+
+  defp parse_int(value) when is_binary(value) do
+    case Integer.parse(String.trim(value)) do
+      {n, _} -> n
+      :error -> nil
+    end
+  end
+
+  defp parse_int(_), do: nil
+
+  defp parse_episode_list(value) when is_binary(value) do
+    value
+    |> String.split(",")
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.map(&parse_int/1)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp parse_episode_list(_), do: []
+
+  defp search_metadata(query) do
+    if String.length(String.trim(query)) < 2 do
+      []
+    else
+      config = Metadata.default_relay_config()
+
+      movie =
+        case Metadata.search(config, query, media_type: :movie) do
+          {:ok, results} -> Enum.map(results, &Map.put(&1, :media_type, "movie"))
+          _ -> []
+        end
+
+      tv =
+        case Metadata.search(config, query, media_type: :tv_show) do
+          {:ok, results} -> Enum.map(results, &Map.put(&1, :media_type, "tv_show"))
+          _ -> []
+        end
+
+      Enum.take(movie ++ tv, 10)
+    end
+  end
+
   defp default_library_path_id([]), do: nil
 
   defp default_library_path_id(paths) do
@@ -52,12 +275,38 @@ defmodule MydiaWeb.ReviewMediaLive.Index do
   end
 
   defp load_group(%{assigns: %{selected_library_path_id: nil}} = socket) do
-    assign(socket, :group, %{series: [], movies: [], unmatched: [], wrong_library: []})
+    socket
+    |> assign(:group, %{series: [], movies: [], unmatched: [], wrong_library: []})
+    |> assign(:group_file_ids, MapSet.new())
   end
 
   defp load_group(socket) do
     group = Library.group_inbox_files(socket.assigns.selected_library_path_id)
-    assign(socket, :group, group)
+    file_ids = extract_group_file_ids(group)
+
+    socket
+    |> assign(:group, group)
+    |> assign(:group_file_ids, file_ids)
+  end
+
+  defp extract_group_file_ids(%{
+         series: series,
+         movies: movies,
+         unmatched: unmatched,
+         wrong_library: wrong
+       }) do
+    series_ids =
+      Enum.flat_map(series, fn s ->
+        Enum.flat_map(s.seasons, fn season ->
+          Enum.map(season.episodes, & &1.file.media_file.id)
+        end)
+      end)
+
+    movie_ids = Enum.map(movies, & &1.file.media_file.id)
+    unmatched_ids = Enum.map(unmatched, & &1.file.media_file.id)
+    wrong_ids = Enum.map(wrong, & &1.file.media_file.id)
+
+    MapSet.new(series_ids ++ movie_ids ++ unmatched_ids ++ wrong_ids)
   end
 
   defp total_unresolved(%{
