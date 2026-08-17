@@ -14,6 +14,22 @@ defmodule MydiaWeb.GridDensityComponents do
   on purpose: HEEx renders a `true` attribute value as a bare attribute and
   omits it entirely for `false`, and ARIA needs the literal strings.
 
+  The tooltip lives on a wrapper `div`, never on the `<button>` itself.
+  daisyUI shows the tip on `.tooltip-open`, `:hover` and `.tooltip:has(:focus-visible)`,
+  and `:has()` carries an implicit descendant combinator: it matches when a
+  *descendant* is focused, not the element itself. A `.tooltip` button whose
+  only descendant is the non-focusable `<span>` from `icon/1` therefore never
+  shows its tip on keyboard focus, leaving a tabbing user with a bare icon.
+  Wrapping is the form every focusable tooltip in this app already uses.
+
+  `join-item` stays on the button and is deliberately kept off that wrapper.
+  daisyUI's `.join-item > *` resets `--join-ss`/`--join-se`/`--join-es`/`--join-ee`
+  to `initial`, so a button nested inside a `join-item` wrapper computes all
+  four corners to 0 and the filled active button spills square out of the
+  join's rounded end cap. With the wrapper left plain, the join's radius
+  variables inherit straight through to the button and the caps render as
+  they did before the tooltip moved.
+
   Kept in step with `MydiaWeb.LibraryComponents.view_mode_toggle/1`, which is
   icon-only for the same reasons; the two sit side by side on the Libraries
   toolbar.
@@ -70,23 +86,27 @@ defmodule MydiaWeb.GridDensityComponents do
     assigns = assign(assigns, :levels, @levels)
 
     ~H"""
-    <div class="join" id={@id}>
-      <button
+    <div class="join" id={@id} role="group" aria-label="Grid density">
+      <div
         :for={{value, label, icon_name} <- @levels}
-        type="button"
-        class={[
-          "btn btn-sm btn-square join-item tooltip tooltip-bottom",
-          @density == value && "btn-primary",
-          @density != value && "btn-ghost"
-        ]}
-        phx-click="set_grid_density"
-        phx-value-density={value}
+        class="tooltip tooltip-bottom"
         data-tip={label}
-        aria-label={label}
-        aria-pressed={to_string(@density == value)}
       >
-        <.icon name={icon_name} class="w-4 h-4" />
-      </button>
+        <button
+          type="button"
+          class={[
+            "btn btn-sm btn-square join-item",
+            @density == value && "btn-primary",
+            @density != value && "btn-ghost"
+          ]}
+          phx-click="set_grid_density"
+          phx-value-density={value}
+          aria-label={label}
+          aria-pressed={to_string(@density == value)}
+        >
+          <.icon name={icon_name} class="w-4 h-4" />
+        </button>
+      </div>
     </div>
     """
   end

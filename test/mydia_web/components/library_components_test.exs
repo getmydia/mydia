@@ -114,6 +114,53 @@ defmodule MydiaWeb.LibraryComponentsTest do
       assert text == ""
     end
 
+    test "each tooltip sits on a wrapper around the button, not on the button" do
+      html = render_component(&LibraryComponents.view_mode_toggle/1, view_mode: :grid)
+      document = LazyHTML.from_fragment(html)
+
+      # daisyUI reveals the tip through `.tooltip:has(:focus-visible)`, and
+      # `:has()` implies a descendant combinator, so a `.tooltip` on the button
+      # only matches when something inside it is focused. The button's only
+      # child is the non-focusable span from icon/1, which would leave a
+      # keyboard user tabbing onto an unlabelled icon.
+      wrappers = LazyHTML.query(document, "div.tooltip")
+
+      assert LazyHTML.attribute(wrappers, "data-tip") == ["Grid", "List"]
+
+      # join-item belongs on the button, never on the wrapper: daisyUI's
+      # `.join-item > *` resets the --join-* radius variables to `initial`, so
+      # a nested button computes every corner to 0 and the filled active button
+      # spills square out of the join's rounded end cap.
+      for class <- LazyHTML.attribute(wrappers, "class") do
+        refute class =~ "join-item"
+      end
+
+      for class <- document |> LazyHTML.query("button") |> LazyHTML.attribute("class") do
+        assert class =~ "join-item"
+      end
+
+      refute document
+             |> LazyHTML.query("button")
+             |> LazyHTML.attribute("class")
+             |> Enum.any?(&(&1 =~ "tooltip"))
+    end
+
+    test "the buttons are square icon buttons and the join is a labelled group" do
+      html = render_component(&LibraryComponents.view_mode_toggle/1, view_mode: :grid)
+      document = LazyHTML.from_fragment(html)
+
+      # btn-square keeps a label-less button from collapsing to its icon.
+      for class <- document |> LazyHTML.query("button") |> LazyHTML.attribute("class") do
+        assert class =~ "btn-square"
+      end
+
+      # Without visible labels the two buttons need to announce as one control.
+      join = LazyHTML.filter(document, "div.join")
+
+      assert LazyHTML.attribute(join, "role") == ["group"]
+      assert LazyHTML.attribute(join, "aria-label") == ["View mode"]
+    end
+
     test "the active mode is the one marked btn-primary" do
       html = render_component(&LibraryComponents.view_mode_toggle/1, view_mode: :list)
 
