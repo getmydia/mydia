@@ -13,17 +13,20 @@ defmodule Mydia.Repo.Migrations.BackfillImportGroups do
 
   import Ecto.Query
 
+  # Without this, Ecto.Migrator wraps the entire up/0 body in one
+  # repo.transaction/2 (SQLite's adapter reports supports_ddl_transaction?
+  # true, same as PostgreSQL), which holds SQLite's single global write lock
+  # for the whole backfill and defeats the point of upsert_for_library/2's
+  # keyset chunking: a crash partway through would roll back every library
+  # already processed instead of leaving their groups in place, and "resumable
+  # after a partial failure" (see moduledoc) would be false. Disabling it makes
+  # each Repo call its own commit, so a failure partway through leaves earlier
+  # libraries' groups intact and a re-run only has to redo the rest.
+  @disable_ddl_transaction true
+
   def up do
     # Migrations run outside the app's supervision tree in a release, but the
     # Repo is started by the migrator, which is all these functions need.
-    #
-    # `String.to_existing_atom/1` below leans on Mydia.Settings.LibraryPath's
-    # Ecto.Enum atoms already being registered in the VM's atom table. Nothing
-    # else in a bare `mix ecto.migrate` (or a release's migrator) is
-    # guaranteed to have loaded that module first, so force it explicitly
-    # instead of relying on incidental load order elsewhere in the app.
-    Code.ensure_loaded!(Mydia.Settings.LibraryPath)
-
     Mydia.Repo.all(
       from(lp in "library_paths",
         where: lp.type in ["series", "movies"],
@@ -35,7 +38,7 @@ defmodule Mydia.Repo.Migrations.BackfillImportGroups do
         struct(Mydia.Settings.LibraryPath, %{
           id: normalize_id(row.id),
           path: row.path,
-          type: String.to_existing_atom(row.type)
+          type: path_type(row.type)
         })
 
       {:ok, result} = Mydia.ImportGroups.upsert_for_library(library_path)
@@ -57,4 +60,13 @@ defmodule Mydia.Repo.Migrations.BackfillImportGroups do
   # expects.
   defp normalize_id(id) when byte_size(id) == 16, do: Ecto.UUID.load!(id)
   defp normalize_id(id), do: id
+
+  # A direct mapping instead of String.to_existing_atom/1: the query above
+  # already constrains row.type to exactly these two values, so this needs no
+  # reliance on some other module having interned the atom first into the
+  # VM's atom table, which a bare `mix ecto.migrate` does not guarantee. No
+  # catch-all is deliberate: if the query's `where` ever grows a third type,
+  # this raises immediately instead of silently mis-typing a library.
+  defp path_type("series"), do: :series
+  defp path_type("movies"), do: :movies
 end
