@@ -114,6 +114,7 @@ defmodule Mydia.Metadata.Structs.EpisodeData do
   # TVDB ids arrive as integers; they are stored as text so the column can hold
   # a TMDB id later without a type change.
   defp stringify_id(nil), do: nil
+  defp stringify_id(""), do: nil
   defp stringify_id(id) when is_integer(id), do: Integer.to_string(id)
   defp stringify_id(id) when is_binary(id), do: id
 end

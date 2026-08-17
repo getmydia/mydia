@@ -37,4 +37,18 @@ defmodule Mydia.Metadata.Structs.EpisodeDataAbsoluteTest do
     assert %EpisodeData{absolute_number: nil, provider_episode_id: nil} =
              EpisodeData.from_api_response(%{"season_number" => 1, "episode_number" => 1})
   end
+
+  test "missing id results in nil provider_episode_id" do
+    episode = Map.delete(tvdb_episode(), "id")
+
+    assert %EpisodeData{provider_episode_id: nil} =
+             EpisodeData.from_tvdb_response(episode)
+  end
+
+  test "empty string id results in nil to prevent index collision" do
+    episode = Map.put(tvdb_episode(), "id", "")
+
+    assert %EpisodeData{provider_episode_id: nil} =
+             EpisodeData.from_tvdb_response(episode)
+  end
 end
