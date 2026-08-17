@@ -29,14 +29,23 @@ defmodule MydiaWeb.ReviewMediaLiveTest do
     {:ok, conn: log_in_user(conn, user), library_path: lp, media_file: media_file}
   end
 
-  test "approving a file removes it from the group", %{conn: conn, media_file: media_file} do
+  test "approving a file links the media file, clears candidate, and removes it from the group",
+       %{
+         conn: conn,
+         media_file: media_file
+       } do
+    item = media_item_fixture(%{type: "movie", title: "The Matrix", year: 1999, tmdb_id: 603})
+
     {:ok, view, _html} = live(conn, ~p"/review")
 
     assert has_element?(view, "#approve-#{media_file.id}")
 
-    view |> element("#approve-#{media_file.id}") |> render_click()
+    html = view |> element("#approve-#{media_file.id}") |> render_click()
 
+    assert html =~ "Added The Matrix"
     refute has_element?(view, "#approve-#{media_file.id}")
+    assert Library.get_media_file!(media_file.id).media_item_id == item.id
+    assert Library.list_match_candidates(media_file.id) == []
   end
 
   test "opening the editor renders the edit form", %{conn: conn, media_file: media_file} do
@@ -494,5 +503,217 @@ defmodule MydiaWeb.ReviewMediaLiveTest do
     view |> render_change("search_series_rematch", %{"query" => "a"})
 
     refute has_element?(view, "button[phx-click=select_series_rematch]")
+  end
+
+  test "refuses a file with no identified match yet", %{
+    conn: conn,
+    library_path: lp
+  } do
+    unidentified = orphaned_media_file_fixture(%{library_path_id: lp.id})
+
+    {:ok, _} =
+      Library.upsert_match_candidate(%{
+        media_file_id: unidentified.id,
+        rank: 0,
+        attempts: 1,
+        last_error: "no_match"
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/review")
+
+    assert_raise ArgumentError, ~r/disabled/, fn ->
+      view |> element("#approve-#{unidentified.id}") |> render_click()
+    end
+
+    html = render_click(view, "approve_file", %{"id" => unidentified.id})
+
+    assert html =~ "no match to add"
+    assert is_nil(Library.get_media_file!(unidentified.id).media_item_id)
+  end
+
+  test "a candidate whose stored media type is unknown can still be added", %{
+    conn: conn,
+    library_path: lp
+  } do
+    file = orphaned_media_file_fixture(%{library_path_id: lp.id})
+
+    {:ok, _} =
+      Library.upsert_match_candidate(%{
+        media_file_id: file.id,
+        rank: 0,
+        provider_type: "not_a_provider_7b2",
+        provider_id: "603",
+        title: "The Matrix",
+        year: 1999,
+        media_type: "not_a_media_type_7b2",
+        confidence: 0.95
+      })
+
+    media_item_fixture(%{type: "movie", title: "The Matrix", year: 1999, tmdb_id: 603})
+
+    {:ok, view, _html} = live(conn, ~p"/review")
+
+    html = view |> element("#approve-#{file.id}") |> render_click()
+
+    assert html =~ "Added The Matrix"
+    assert Library.get_media_file!(file.id).media_item_id
+  end
+
+  test "an edit naming a media type the app has no clause for is stored as one it does", %{
+    conn: conn,
+    media_file: media_file
+  } do
+    {:ok, view, _html} = live(conn, ~p"/review")
+
+    view |> element("#edit-#{media_file.id}") |> render_click()
+
+    render_click(view, "select_search_result", %{
+      "title" => "The Matrix",
+      "provider_id" => "603",
+      "type" => "not_a_media_type_7b2"
+    })
+
+    view |> form("#inbox-edit-form-#{media_file.id}") |> render_submit()
+
+    assert [candidate] = Library.list_match_candidates(media_file.id)
+    assert candidate.media_type == "movie"
+  end
+
+  test "renders library type mismatch in the wrong library section", %{
+    conn: conn,
+    library_path: lp
+  } do
+    mismatched = orphaned_media_file_fixture(%{library_path_id: lp.id})
+
+    {:ok, _} =
+      Library.upsert_match_candidate(%{
+        media_file_id: mismatched.id,
+        rank: 0,
+        attempts: 1,
+        last_error:
+          inspect(
+            {:library_type_mismatch,
+             "Cannot add movies to a library path configured for TV series only (path: /media/tv)"}
+          )
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/review")
+
+    html = render(view)
+
+    assert html =~ "Wrong library"
+    assert html =~ "These files were matched, but to a type this library cannot hold."
+    refute html =~ "{:library_type_mismatch"
+  end
+
+  test "batch apply changes exactly the selected files, leaving unselected files untouched", %{
+    conn: conn,
+    library_path: lp
+  } do
+    file1 = orphaned_media_file_fixture(%{library_path_id: lp.id})
+
+    {:ok, _} =
+      Library.upsert_match_candidate(%{
+        media_file_id: file1.id,
+        rank: 0,
+        attempts: 1,
+        last_error: "no_match"
+      })
+
+    file2 = orphaned_media_file_fixture(%{library_path_id: lp.id})
+
+    {:ok, _} =
+      Library.upsert_match_candidate(%{
+        media_file_id: file2.id,
+        rank: 0,
+        attempts: 1,
+        last_error: "no_match"
+      })
+
+    file3 = orphaned_media_file_fixture(%{library_path_id: lp.id})
+
+    {:ok, _} =
+      Library.upsert_match_candidate(%{
+        media_file_id: file3.id,
+        rank: 0,
+        attempts: 1,
+        last_error: "no_match"
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/review")
+
+    view |> element("#batch-toggle-#{file1.id}") |> render_click()
+    view |> element("#batch-toggle-#{file2.id}") |> render_click()
+
+    render_click(view, "batch_select_search_result", %{
+      "title" => "Selected Show",
+      "provider_id" => "9001",
+      "type" => "tv_show",
+      "year" => "2020"
+    })
+
+    render_click(view, "batch_apply", %{})
+
+    assert [c1] = Library.list_match_candidates(file1.id)
+    assert c1.title == "Selected Show"
+    assert c1.provider_id == "9001"
+    assert c1.media_type == "tv_show"
+
+    assert [c2] = Library.list_match_candidates(file2.id)
+    assert c2.title == "Selected Show"
+    assert c2.provider_id == "9001"
+
+    assert [c3] = Library.list_match_candidates(file3.id)
+    assert c3.title == nil
+    assert c3.provider_id == nil
+    assert c3.last_error == "no_match"
+  end
+
+  test "batch apply reports the files it could not update instead of claiming them all", %{
+    conn: conn,
+    library_path: lp
+  } do
+    kept = orphaned_media_file_fixture(%{library_path_id: lp.id})
+
+    {:ok, _} =
+      Library.upsert_match_candidate(%{
+        media_file_id: kept.id,
+        rank: 0,
+        attempts: 1,
+        last_error: "no_match"
+      })
+
+    vanishing = orphaned_media_file_fixture(%{library_path_id: lp.id})
+
+    {:ok, _} =
+      Library.upsert_match_candidate(%{
+        media_file_id: vanishing.id,
+        rank: 0,
+        attempts: 1,
+        last_error: "no_match"
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/review")
+
+    view |> element("#batch-toggle-#{kept.id}") |> render_click()
+    view |> element("#batch-toggle-#{vanishing.id}") |> render_click()
+
+    Mydia.Repo.delete!(Library.get_media_file!(vanishing.id))
+
+    render_click(view, "batch_select_search_result", %{
+      "title" => "Selected Show",
+      "provider_id" => "9001",
+      "type" => "tv_show",
+      "year" => "2020"
+    })
+
+    html = render_click(view, "batch_apply", %{})
+
+    assert html =~ "Batch edit applied to 1 file(s)"
+    assert html =~ "1 could not be updated"
+
+    assert [candidate] = Library.list_match_candidates(kept.id)
+    assert candidate.title == "Selected Show"
+    assert Library.list_match_candidates(vanishing.id) == []
   end
 end
