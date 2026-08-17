@@ -178,6 +178,14 @@ defmodule MydiaWeb.Layouts do
 
               <li>
                 <.link
+                  navigate="/review"
+                  class={nav_active?(@current_path, "/review", false) && "active"}
+                >
+                  <.icon name="hero-inbox-stack" class="w-5 h-5" /> Review
+                </.link>
+              </li>
+              <li>
+                <.link
                   navigate="/downloads"
                   class={nav_active?(@current_path, "/downloads", false) && "active"}
                 >
