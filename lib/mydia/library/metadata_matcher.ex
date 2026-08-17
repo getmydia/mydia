@@ -9,6 +9,8 @@ defmodule Mydia.Library.MetadataMatcher do
   - Fallback strategies when exact matches aren't found
   """
 
+  @behaviour Mydia.Library.Matcher
+
   require Logger
   alias Mydia.{Media, Metadata}
   alias Mydia.Library.ReleaseParser, as: FileParser

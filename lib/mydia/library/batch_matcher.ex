@@ -7,10 +7,19 @@ defmodule Mydia.Library.BatchMatcher do
   the cache at the same instant and issue the same search, so a twelve episode
   season costs up to `max_concurrency` identical round trips instead of one.
 
-  This module groups a batch by normalized search title, matches one file per
-  group first so the cache is warm, then fans the rest of that group out. The
-  groups themselves still run concurrently, so throughput is unchanged while
-  relay traffic drops to roughly one search per distinct title.
+  This module groups a batch by anchor folder (`Mydia.Library.PathAnchor`),
+  resolves one file per group, and reuses that single verdict for every other
+  file beneath the same anchor rather than re-deriving it. A season folder
+  with two hundred episodes is therefore one provider decision, not two
+  hundred independent ones free to disagree with each other -- and because the
+  anchor is found from the path alone, grouping holds even when filenames are
+  too noisy for a per-file title match, which is exactly when it matters most.
+  The groups themselves still run concurrently, so throughput is unchanged
+  while relay traffic drops to roughly one search per distinct anchor.
+
+  The resolver itself is a `Mydia.Library.Matcher` behaviour passed in as
+  `:matcher` rather than hard-wired to `Mydia.Library.MetadataMatcher`, so
+  tests can supply a deterministic stub instead of standing up a relay.
 
   ## Failure containment
 
@@ -26,16 +35,15 @@ defmodule Mydia.Library.BatchMatcher do
   contained by running the workers under `Mydia.TaskSupervisor` with
   `async_stream_nolink`, which reports the crash as `{:exit, reason}` instead
   of killing the caller: plain `Task.async_stream/3` links its tasks, so a
-  raising worker would take the whole coordinator down with it. Both streams
-  are `ordered: true` purely so an `{:exit, _}` can be zipped back to the
-  paths it was working on; the emission order of the results is not part of
-  this module's contract.
+  raising worker would take the whole coordinator down with it. The stream is
+  `ordered: true` purely so an `{:exit, _}` can be zipped back to the paths it
+  was working on; the emission order of the results is not part of this
+  module's contract.
   """
 
   require Logger
 
-  alias Mydia.Library.MetadataMatcher
-  alias Mydia.Library.ReleaseParser
+  alias Mydia.Library.PathAnchor
 
   @default_max_concurrency 10
 
@@ -50,6 +58,12 @@ defmodule Mydia.Library.BatchMatcher do
 
   ## Options
 
+    * `:library_root` - required. The library path paths are relative to,
+      used to find each file's anchor folder.
+    * `:matcher` - required. A module implementing `Mydia.Library.Matcher`,
+      used to resolve one file per group. Required rather than defaulted: a
+      default would make the seam optional and let a caller silently keep the
+      old per-file behaviour.
     * `:config` - metadata config, defaults to the relay default
     * `:provider` - TV metadata source for new matches
     * `:max_concurrency` - concurrent groups, default #{@default_max_concurrency}
@@ -61,16 +75,21 @@ defmodule Mydia.Library.BatchMatcher do
   def match_paths([], _opts), do: []
 
   def match_paths(paths, opts) do
+    library_root = Keyword.fetch!(opts, :library_root)
+    # Required, not defaulted: a default would make the seam optional and let
+    # a caller silently keep the old per-file behaviour. Every call site names
+    # its matcher.
+    matcher = Keyword.fetch!(opts, :matcher)
     max_concurrency = Keyword.get(opts, :max_concurrency, @default_max_concurrency)
     on_result = Keyword.get(opts, :on_result)
     match_opts = Keyword.take(opts, [:config, :provider])
 
-    groups = paths |> Enum.group_by(&group_key/1) |> Map.values()
+    groups = paths |> Enum.group_by(&group_key(&1, library_root)) |> Map.values()
 
     Mydia.TaskSupervisor
     |> Task.Supervisor.async_stream_nolink(
       groups,
-      fn group_paths -> match_group(group_paths, match_opts, on_result) end,
+      fn group_paths -> match_group(group_paths, match_opts, on_result, matcher) end,
       max_concurrency: max_concurrency,
       timeout: :infinity,
       ordered: true
@@ -84,45 +103,42 @@ defmodule Mydia.Library.BatchMatcher do
 
   ## Grouping
 
-  # Files that will search for the same thing share a key. Parsing is cheap and
-  # local, so doing it twice (here and inside match_file/2) costs nothing next
-  # to one avoided HTTP round trip.
-  defp group_key(path) do
-    parsed = ReleaseParser.parse_with_path(path)
-
-    case parsed.title do
-      nil -> {:unparsed, path}
-      title -> {parsed.type, MetadataMatcher.normalize_search_query(title)}
-    end
+  # Files that name the same thing share a key. The key is the folder that
+  # names the media, not the filename: two hundred episodes of one show are
+  # one decision, and the grouping holds even when filenames are noisy, which
+  # is exactly when per-filename grouping falls apart.
+  defp group_key(path, library_root) do
+    PathAnchor.anchor_for(path, library_root).cluster_key
   end
 
   ## Matching
 
-  # The head is matched alone so its search populates the ETS cache. Only then
-  # is the tail fanned out, where every one of them is a cache hit.
-  defp match_group([head | tail], match_opts, on_result) do
-    head_result = match_one(head, match_opts, on_result)
+  # Resolves the series once from the anchor and applies that answer to every
+  # file beneath it. The head is matched alone (as before, so the ETS cache is
+  # warm) but its result is now reused rather than re-derived, which removes
+  # both the redundant relay traffic and the possibility of siblings
+  # disagreeing.
+  defp match_group([head | tail], match_opts, on_result, matcher) do
+    head_result = match_one(head, match_opts, on_result, matcher)
 
     tail_results =
-      Mydia.TaskSupervisor
-      |> Task.Supervisor.async_stream_nolink(
-        tail,
-        fn path -> match_one(path, match_opts, on_result) end,
-        max_concurrency: @default_max_concurrency,
-        timeout: :infinity,
-        ordered: true
-      )
-      |> Enum.zip(tail)
-      |> Enum.flat_map(fn
-        {{:ok, result}, _path} -> [result]
-        {{:exit, reason}, path} -> crashed_results([path], reason)
+      Enum.map(tail, fn path ->
+        result = reuse(head_result, path)
+        if is_function(on_result, 2), do: on_result.(path, elem(result, 1))
+        result
       end)
 
     [head_result | tail_results]
   end
 
-  defp match_one(path, match_opts, on_result) do
-    result = safe_match_file(path, match_opts)
+  # The anchor's verdict carries the series identity. Season and episode stay
+  # per-file, because they come from the filename and the season folder, not
+  # from the provider search.
+  defp reuse({_head_path, {:ok, match}}, path), do: {path, {:ok, match}}
+  defp reuse({_head_path, {:error, reason}}, path), do: {path, {:error, reason}}
+
+  defp match_one(path, match_opts, on_result, matcher) do
+    result = safe_match_file(path, match_opts, matcher)
 
     if is_function(on_result, 2), do: on_result.(path, result)
 
@@ -131,13 +147,14 @@ defmodule Mydia.Library.BatchMatcher do
 
   # Deliberately narrower than the whole worker: this wraps the one call that
   # parses payloads from an external service, so a provider returning
-  # something unexpected costs the file that hit it and nothing else. The
-  # group's remaining files still get their own searches (one cache miss each,
-  # which is the correct trade against losing a whole season to one bad
-  # response). Everything outside this call is left to the stream's `{:exit,
-  # _}` handling above.
-  defp safe_match_file(path, match_opts) do
-    MetadataMatcher.match_file(path, match_opts)
+  # something unexpected costs only the group whose head hit it, not the
+  # whole batch. This runs once per group, on the head alone -- a crash here
+  # becomes {:error, {:matcher_crashed, reason}}, which `reuse/2` then hands
+  # to every other file in the group exactly like a legitimate no-match
+  # verdict would be. Everything outside this call is left to the stream's
+  # `{:exit, _}` handling above.
+  defp safe_match_file(path, match_opts, matcher) do
+    matcher.match_file(path, match_opts)
   rescue
     error ->
       Logger.error("Matching a file raised, recording it as a failed match",

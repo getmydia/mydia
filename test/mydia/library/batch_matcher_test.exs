@@ -7,7 +7,7 @@ defmodule Mydia.Library.BatchMatcherTest do
   """
   use ExUnit.Case, async: false
 
-  alias Mydia.Library.BatchMatcher
+  alias Mydia.Library.{BatchMatcher, MetadataMatcher}
   alias Mydia.Metadata.Cache
 
   setup do
@@ -71,7 +71,13 @@ defmodule Mydia.Library.BatchMatcherTest do
         "/media/tv/Bluey/Season 01/Bluey.S01E#{String.pad_leading(to_string(ep), 2, "0")}.mkv"
       end
 
-    results = BatchMatcher.match_paths(paths, config: config, provider: :tmdb)
+    results =
+      BatchMatcher.match_paths(paths,
+        library_root: "/media",
+        matcher: MetadataMatcher,
+        config: config,
+        provider: :tmdb
+      )
 
     assert length(results) == 12
     assert :counters.get(counter, 1) == 1
@@ -105,7 +111,13 @@ defmodule Mydia.Library.BatchMatcherTest do
       "/media/movies/The.Matrix.1999.1080p.mkv"
     ]
 
-    _results = BatchMatcher.match_paths(paths, config: config, provider: :tmdb)
+    _results =
+      BatchMatcher.match_paths(paths,
+        library_root: "/media",
+        matcher: MetadataMatcher,
+        config: config,
+        provider: :tmdb
+      )
 
     # One TV search for Bluey, one movie search for The Matrix.
     assert :counters.get(counter, 1) == 2
@@ -126,7 +138,13 @@ defmodule Mydia.Library.BatchMatcherTest do
       "/media/movies/Totally.Unmatchable.Thing.mkv"
     ]
 
-    results = BatchMatcher.match_paths(paths, config: config, provider: :tmdb)
+    results =
+      BatchMatcher.match_paths(paths,
+        library_root: "/media",
+        matcher: MetadataMatcher,
+        config: config,
+        provider: :tmdb
+      )
 
     assert length(results) == 2
     assert Enum.all?(results, fn {path, _} -> path in paths end)
@@ -155,7 +173,13 @@ defmodule Mydia.Library.BatchMatcherTest do
     movie_path = "/media/movies/The.Matrix.1999.1080p.mkv"
     paths = tv_paths ++ [movie_path]
 
-    results = BatchMatcher.match_paths(paths, config: config, provider: :tmdb)
+    results =
+      BatchMatcher.match_paths(paths,
+        library_root: "/media",
+        matcher: MetadataMatcher,
+        config: config,
+        provider: :tmdb
+      )
 
     # The load-bearing assertion. Before this was contained, the raise
     # travelled up the link from the task to whoever called match_paths/2 and
@@ -199,6 +223,8 @@ defmodule Mydia.Library.BatchMatcherTest do
 
     results =
       BatchMatcher.match_paths([tv_path, movie_path],
+        library_root: "/media",
+        matcher: MetadataMatcher,
         config: config,
         provider: :tmdb,
         on_result: fn
@@ -227,6 +253,8 @@ defmodule Mydia.Library.BatchMatcherTest do
     ]
 
     BatchMatcher.match_paths(paths,
+      library_root: "/media",
+      matcher: MetadataMatcher,
       config: config,
       provider: :tmdb,
       on_result: fn path, _result -> send(test_pid, {:progress, path}) end
@@ -262,6 +290,8 @@ defmodule Mydia.Library.BatchMatcherTest do
 
     results =
       BatchMatcher.match_paths(["/media/movies/The.Matrix.1999.1080p.mkv"],
+        library_root: "/media",
+        matcher: MetadataMatcher,
         config: config,
         provider: :tmdb
       )
@@ -276,5 +306,49 @@ defmodule Mydia.Library.BatchMatcherTest do
     Cache.clear()
 
     assert {:error, :not_found} = Cache.get(key)
+  end
+
+  describe "anchor grouping" do
+    alias Mydia.Library.{EchoMatcher, FailingMatcher}
+
+    test "one resolution is reused across every episode under a series folder" do
+      root = "/media/Series"
+
+      paths =
+        for season <- 1..2, episode <- 1..3 do
+          "#{root}/Cornemuse (1999)/Season 0#{season}/Cornemuse - S0#{season}E0#{episode}.mkv"
+        end
+
+      results = BatchMatcher.match_paths(paths, library_root: root, matcher: EchoMatcher)
+
+      assert length(results) == 6
+
+      titles = for {_path, {:ok, match}} <- results, do: match.title
+
+      # All six carry one title. Per-file matching would yield six distinct
+      # basenames; one title proves the group resolved once and reused it.
+      assert length(Enum.uniq(titles)) == 1
+    end
+
+    test "different series folders resolve independently" do
+      root = "/media/Series"
+      paths = ["#{root}/A/Season 01/a.mkv", "#{root}/B/Season 01/b.mkv"]
+
+      results = BatchMatcher.match_paths(paths, library_root: root, matcher: EchoMatcher)
+
+      titles = for {_path, {:ok, match}} <- results, do: match.title
+
+      assert length(Enum.uniq(titles)) == 2
+    end
+
+    test "every input path still gets exactly one result when the anchor match fails" do
+      root = "/media/Series"
+      paths = ["#{root}/A/Season 01/a.mkv", "#{root}/A/Season 01/b.mkv"]
+
+      results = BatchMatcher.match_paths(paths, library_root: root, matcher: FailingMatcher)
+
+      assert length(results) == 2
+      assert Enum.all?(results, fn {_p, r} -> match?({:error, _}, r) end)
+    end
   end
 end

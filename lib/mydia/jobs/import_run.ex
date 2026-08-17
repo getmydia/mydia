@@ -43,7 +43,16 @@ defmodule Mydia.Jobs.ImportRun do
   require Logger
 
   alias Mydia.Library
-  alias Mydia.Library.{BatchMatcher, FileIngest, ImportRun, SampleDetector, Scanner}
+
+  alias Mydia.Library.{
+    BatchMatcher,
+    FileIngest,
+    ImportRun,
+    MetadataMatcher,
+    SampleDetector,
+    Scanner
+  }
+
   alias Mydia.Metadata
   alias Mydia.{Repo, Settings}
 
@@ -401,6 +410,8 @@ defmodule Mydia.Jobs.ImportRun do
       by_path
       |> Map.keys()
       |> BatchMatcher.match_paths(
+        library_root: library_path.path,
+        matcher: MetadataMatcher,
         config: config,
         provider: library_path.tv_metadata_source,
         on_result: fn path, _result -> note_current_file(run, path) end
