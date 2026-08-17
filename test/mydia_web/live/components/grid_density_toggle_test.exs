@@ -44,4 +44,46 @@ defmodule MydiaWeb.Components.GridDensityToggleTest do
     assert html =~ "set_grid_density"
     assert html =~ "btn-primary"
   end
+
+  test "every button carries an accessible name and an explicit pressed state" do
+    html =
+      render_component(&GridDensityComponents.grid_density_toggle/1,
+        density: "compact",
+        id: "library-density-toggle"
+      )
+
+    buttons =
+      html
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query("button")
+
+    # Removing the visible labels removes each button's accessible name, so
+    # aria-label has to carry it instead.
+    assert LazyHTML.attribute(buttons, "aria-label") == ["Comfortable", "Compact", "Dense"]
+
+    # btn-primary alone is invisible to a screen reader. These must be the
+    # literal strings: HEEx renders aria-pressed={true} as a bare attribute
+    # and drops it entirely for false, so the component needs to_string/1.
+    assert LazyHTML.attribute(buttons, "aria-pressed") == ["false", "true", "false"]
+  end
+
+  test "the buttons render no visible text label" do
+    html =
+      render_component(&GridDensityComponents.grid_density_toggle/1,
+        density: "compact",
+        id: "library-density-toggle"
+      )
+
+    # Checked as text content, not as a substring of the raw HTML: the level
+    # names still appear inside aria-label and data-tip, so `refute html =~
+    # "Compact"` would fail even on a correct implementation.
+    text =
+      html
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query("button")
+      |> LazyHTML.text()
+      |> String.trim()
+
+    assert text == ""
+  end
 end
