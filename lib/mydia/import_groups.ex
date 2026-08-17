@@ -132,11 +132,29 @@ defmodule Mydia.ImportGroups do
   end
 
   defp apply_search(query, q) when is_binary(q) and q != "" do
-    like = "%#{String.replace(q, "%", "\\%")}%"
-    where(query, [g], fragment("LOWER(?) LIKE LOWER(?)", g.anchor_path, ^like))
+    like = "%" <> escape_like(q) <> "%"
+
+    where(
+      query,
+      [g],
+      fragment("LOWER(?) LIKE LOWER(?) ESCAPE '\\'", g.anchor_path, ^like)
+    )
   end
 
   defp apply_search(query, _), do: query
+
+  # Backslash must be escaped first, or the escapes added on the next two
+  # lines get escaped again. `_` is LIKE's single-character wildcard and shows
+  # up constantly in release folder names, so it needs the same treatment as
+  # `%`. The `ESCAPE '\'` clause above is what makes this backslash convention
+  # take effect: PostgreSQL treats backslash as the implicit LIKE escape, but
+  # SQLite has no escape character at all unless one is declared.
+  defp escape_like(term) do
+    term
+    |> String.replace("\\", "\\\\")
+    |> String.replace("%", "\\%")
+    |> String.replace("_", "\\_")
+  end
 
   defp apply_cursor(query, nil), do: query
 

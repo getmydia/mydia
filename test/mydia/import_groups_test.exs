@@ -81,6 +81,29 @@ defmodule Mydia.ImportGroupsTest do
       assert Enum.map(third, & &1.file_count) == [1]
     end
 
+    test "breaks file_count ties by id ascending without repeating or skipping rows" do
+      lp = library_path_fixture(%{type: "series"})
+
+      tied_a =
+        group(lp, cluster_key: "tied-a", file_count: 3, provider_id: "1", min_confidence: 1.0)
+
+      tied_b =
+        group(lp, cluster_key: "tied-b", file_count: 3, provider_id: "1", min_confidence: 1.0)
+
+      group(lp, cluster_key: "lowest", file_count: 2, provider_id: "1", min_confidence: 1.0)
+
+      [first_tied, second_tied] = Enum.sort_by([tied_a, tied_b], & &1.id)
+
+      {first_page, cursor} = ImportGroups.page(lp.id, limit: 1)
+      assert Enum.map(first_page, & &1.cluster_key) == [first_tied.cluster_key]
+
+      {second_page, cursor2} = ImportGroups.page(lp.id, limit: 1, after: cursor)
+      assert Enum.map(second_page, & &1.cluster_key) == [second_tied.cluster_key]
+
+      {third_page, nil} = ImportGroups.page(lp.id, limit: 1, after: cursor2)
+      assert Enum.map(third_page, & &1.cluster_key) == ["lowest"]
+    end
+
     test "filters by band" do
       lp = library_path_fixture(%{type: "series"})
       group(lp, cluster_key: "hi", file_count: 9, provider_id: "1", min_confidence: 1.0)
@@ -97,6 +120,15 @@ defmodule Mydia.ImportGroupsTest do
 
       {hits, _} = ImportGroups.page(lp.id, q: "corne")
       assert Enum.map(hits, & &1.cluster_key) == ["a"]
+    end
+
+    test "matches a literal percent in the search text without it acting as a wildcard" do
+      lp = library_path_fixture(%{type: "series"})
+      group(lp, cluster_key: "pct", anchor_path: "100% Wolf (2020)", file_count: 2)
+      group(lp, cluster_key: "no_pct", anchor_path: "1002 Dalmatians (2000)", file_count: 1)
+
+      {hits, _} = ImportGroups.page(lp.id, q: "100%")
+      assert Enum.map(hits, & &1.cluster_key) == ["pct"]
     end
   end
 end
