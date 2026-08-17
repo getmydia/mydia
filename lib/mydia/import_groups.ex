@@ -333,13 +333,18 @@ defmodule Mydia.ImportGroups do
         "candidates" => MapSet.size(rollup.provider_ids),
         "disagreement" => disagreement
       },
-      season_span: MapSet.to_list(rollup.seasons)
+      season_span: MapSet.to_list(rollup.seasons),
+      status: "pending"
     }
 
     existing =
       Repo.get_by(ImportGroup, library_path_id: library_path.id, cluster_key: cluster_key)
 
-    # A decided group keeps its status: recomputing must never un-decide a human.
+    # A brand new group starts "pending". An existing group has :status
+    # stripped here before the changeset runs, so cast/3 sees no change for it
+    # and the row's current status (set by a human, or by an earlier run of
+    # this same function) is left exactly as it was: recomputing must never
+    # un-decide a human's accepted/ignored call.
     attrs = if existing, do: Map.drop(attrs, [:status]), else: attrs
 
     {:ok, group} =

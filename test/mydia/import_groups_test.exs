@@ -6,6 +6,8 @@ defmodule Mydia.ImportGroupsTest do
 
   alias Mydia.ImportGroups
   alias Mydia.Library.ImportGroup
+  alias Mydia.Library.MatchCandidate
+  alias Mydia.Library.MediaFile
   alias Mydia.Repo
 
   defp group(library_path, attrs) do
@@ -147,8 +149,8 @@ defmodule Mydia.ImportGroupsTest do
         })
 
       if candidate_attrs do
-        %Mydia.Library.MatchCandidate{}
-        |> Mydia.Library.MatchCandidate.changeset(
+        %MatchCandidate{}
+        |> MatchCandidate.changeset(
           Map.merge(%{media_file_id: file.id, rank: 0}, Map.new(candidate_attrs))
         )
         |> Repo.insert!()
@@ -245,6 +247,62 @@ defmodule Mydia.ImportGroupsTest do
 
       group = Repo.one!(ImportGroup)
       assert Repo.reload!(file).import_group_id == group.id
+    end
+
+    test "stamps every file even when the unresolved set crosses the chunk and buffer boundaries",
+         %{library_path: lp} do
+      # Deliberately just over @upsert_chunk / @id_bind_chunk (both 500): the
+      # keyset walk sees a full 500-row chunk followed by a short remainder
+      # chunk, and stamp_members/2's buffer flushes once at the 500 cap and
+      # once more via the trailing Enum.each for what's left. A regular
+      # fixture-based insert at this count would be far too slow, so this
+      # bulk-inserts directly and skips the changesets.
+      count = 520
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+      file_rows =
+        for n <- 1..count do
+          %{
+            id: Ecto.UUID.generate(),
+            library_path_id: lp.id,
+            relative_path:
+              "Bulk Show (2020)/Season 01/Bulk Show - S01E#{String.pad_leading(Integer.to_string(n), 4, "0")}.mkv",
+            media_item_id: nil,
+            episode_id: nil,
+            trashed_at: nil,
+            inserted_at: now,
+            updated_at: now
+          }
+        end
+
+      {^count, _} = Repo.insert_all(MediaFile, file_rows)
+
+      candidate_rows =
+        for %{id: file_id} <- file_rows do
+          %{
+            id: Ecto.UUID.generate(),
+            media_file_id: file_id,
+            rank: 0,
+            provider_id: "1",
+            provider_type: "tvdb",
+            title: "Bulk Show",
+            confidence: 1.0,
+            inserted_at: now,
+            updated_at: now
+          }
+        end
+
+      {^count, _} = Repo.insert_all(MatchCandidate, candidate_rows)
+
+      assert {:ok, %{groups: 1, files: ^count}} = ImportGroups.upsert_for_library(lp)
+
+      group = Repo.one!(ImportGroup)
+      assert group.file_count == count
+
+      stamped_count =
+        Repo.aggregate(from(f in MediaFile, where: f.import_group_id == ^group.id), :count)
+
+      assert stamped_count == count
     end
   end
 end
