@@ -31,6 +31,12 @@
       <p class="text-sm opacity-70">
         {total_unresolved(@group)} file(s) waiting in this library.
       </p>
+
+      <Components.grouped_tree
+        group={@group}
+        collapsed_seasons={@collapsed_seasons}
+        selected_ids={@selected_ids}
+      />
     <% end %>
   </div>
 </Layouts.app>

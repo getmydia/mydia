@@ -10,6 +10,7 @@ defmodule MydiaWeb.ReviewMediaLive.Index do
 
   alias Mydia.{Library, Settings}
   alias Mydia.Library.ImportRun
+  alias MydiaWeb.ReviewMediaLive.Components
 
   @impl true
   def mount(_params, _session, socket) do
@@ -30,6 +31,8 @@ defmodule MydiaWeb.ReviewMediaLive.Index do
      |> assign(:page_title, "Review")
      |> assign(:library_paths, library_paths)
      |> assign(:selected_library_path_id, default_library_path_id(library_paths))
+     |> assign(:collapsed_seasons, MapSet.new())
+     |> assign(:selected_ids, MapSet.new())
      |> load_group()}
   end
 
