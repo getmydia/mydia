@@ -154,4 +154,47 @@ defmodule Mydia.Library.ReleaseParser.AbsoluteEpisodeTest do
 
     assert result.absolute_episode == 5
   end
+
+  test "resolves through a compound-dash-split quality tag with no separating dash" do
+    result =
+      ReleaseParser.parse("Black Clover 170 DTS-HD 1080p.mkv", target: anime_target())
+
+    assert result.absolute_episode == 170
+  end
+
+  test "resolves through separate audio words with no separating dash" do
+    result = ReleaseParser.parse("Black Clover 170 DTS HD 1080p.mkv", target: anime_target())
+
+    assert result.absolute_episode == 170
+  end
+
+  test "resolves through a codec tag with no separating dash" do
+    result = ReleaseParser.parse("Black Clover 170 x264 1080p.mkv", target: anime_target())
+
+    assert result.absolute_episode == 170
+  end
+
+  test "resolves through a trailing codec tag with no other anchors" do
+    result = ReleaseParser.parse("Black Clover 170 HEVC.mkv", target: anime_target())
+
+    assert result.absolute_episode == 170
+  end
+
+  test "resolves through a trailing audio tag with no other anchors" do
+    result = ReleaseParser.parse("Black Clover 170 AAC.mkv", target: anime_target())
+
+    assert result.absolute_episode == 170
+  end
+
+  test "resolves a low episode number through a trailing audio tag" do
+    result = ReleaseParser.parse("Black Clover 05 AAC.mkv", target: anime_target())
+
+    assert result.absolute_episode == 5
+  end
+
+  test "resolves a low episode number through a trailing codec tag" do
+    result = ReleaseParser.parse("Black Clover 05 HEVC.mkv", target: anime_target())
+
+    assert result.absolute_episode == 5
+  end
 end

@@ -688,25 +688,29 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
     |> Enum.filter(&bare_episode_candidate?(&1, assignments_map))
   end
 
-  # Fallback for filenames with no (or a misplaced) dash: the last
-  # token still inside the title zone (`byte_offset < boundary`),
-  # after dropping a trailing run of standalone `-` tokens (so
+  # Fallback for filenames with no (or a misplaced) dash: search
+  # backward from the end of the title zone (`byte_offset < boundary`)
+  # for the first bare-digit token that still qualifies, after
+  # dropping a trailing run of standalone `-` tokens (so
   # `Black Clover 05 - 1080p.mkv`, where the dash trails the episode
-  # number rather than leading it, still resolves to `05`). `boundary`
-  # may be the atom `:infinity` (no year/resolution/episode_marker
-  # anchor at all) — `byte_offset < :infinity` is always true for an
-  # integer offset under Erlang term ordering, so every token counts
-  # as title zone, matching the classifier's own `zone_for/2`
-  # convention for the same boundary value.
+  # number rather than leading it, still resolves to `05`). Searching
+  # rather than testing only the literal last token matters because a
+  # non-numeric quality tag can sit between the episode number and the
+  # boundary with no dash present (`Black Clover 170 DTS-HD 1080p.mkv`
+  # splits into `..., 170, DTS, HD, 1080p` — `HD` is the last title-zone
+  # token and isn't a bare digit, but `170` two tokens back still is).
+  # `boundary` may be the atom `:infinity` (no year/resolution/
+  # episode_marker anchor at all) — `byte_offset < :infinity` is
+  # always true for an integer offset under Erlang term ordering, so
+  # every token counts as title zone, matching the classifier's own
+  # `zone_for/2` convention for the same boundary value.
   defp title_zone_tail_candidate(tokens, boundary, assignments_map) do
     tokens
     |> Enum.filter(fn %Token{byte_offset: o} -> o < boundary end)
     |> Enum.reverse()
     |> Enum.drop_while(&dash_token?/1)
-    |> case do
-      [last | _] -> Enum.filter([last], &bare_episode_candidate?(&1, assignments_map))
-      [] -> []
-    end
+    |> Enum.filter(&bare_episode_candidate?(&1, assignments_map))
+    |> Enum.take(1)
   end
 
   defp dash_token?(%Token{value: "-"}), do: true
