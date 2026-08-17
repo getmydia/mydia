@@ -338,9 +338,15 @@ defmodule Mydia.Library.BatchMatcherTest do
     test "different series folders resolve independently" do
       root = "/media/Series"
 
+      # Two files under Cornemuse and one under Pin-Pon: with only one file
+      # per folder, per-file grouping and anchor grouping would be
+      # indistinguishable (both produce two titles). A multi-file group here
+      # proves the two Cornemuse files still collapse to one title *and* stay
+      # independent of Pin-Pon's.
       paths = [
         "#{root}/Cornemuse (1999)/Season 01/a.mkv",
-        "#{root}/Pin-Pon (1996)/Season 01/b.mkv"
+        "#{root}/Cornemuse (1999)/Season 01/b.mkv",
+        "#{root}/Pin-Pon (1996)/Season 01/c.mkv"
       ]
 
       results = BatchMatcher.match_paths(paths, library_root: root, matcher: EchoMatcher)
@@ -362,6 +368,55 @@ defmodule Mydia.Library.BatchMatcherTest do
 
       assert length(results) == 2
       assert Enum.all?(results, fn {_p, r} -> match?({:error, _}, r) end)
+    end
+
+    @tag :capture_log
+    test "a callback raising for one file in a group fails the whole group, not just that file" do
+      # Anchor grouping changed the containment unit from file to group: the
+      # tail no longer runs under its own nested async_stream_nolink, so an
+      # on_result raise anywhere in a group -- including a tail file -- now
+      # crashes the whole group's Task and every path in it, head included,
+      # comes back matcher_crashed even though the head had already succeeded.
+      # See the moduledoc's "Failure containment" section.
+      root = "/media/Series"
+      test_pid = self()
+
+      group_paths = [
+        "#{root}/Cornemuse (1999)/Season 01/Cornemuse - S01E01.mkv",
+        "#{root}/Cornemuse (1999)/Season 01/Cornemuse - S01E02.mkv",
+        "#{root}/Cornemuse (1999)/Season 01/Cornemuse - S01E03.mkv"
+      ]
+
+      [_e1, e2, _e3] = group_paths
+      other_path = "#{root}/Pin-Pon (1996)/Season 01/Pin-Pon - S01E01.mkv"
+      paths = group_paths ++ [other_path]
+
+      results =
+        BatchMatcher.match_paths(paths,
+          library_root: root,
+          matcher: EchoMatcher,
+          on_result: fn
+            ^e2, _result -> raise "progress callback blew up"
+            path, _result -> send(test_pid, {:progress, path})
+          end
+        )
+
+      assert length(results) == 4
+
+      # The discriminating assertion: e1 is the group's head and its match
+      # already succeeded before e2's callback raised, yet it still comes back
+      # as an error, because the whole group's worker was replaced by
+      # crashed_results/2. A version of crashed_results/2 (or match_group/4)
+      # that failed only the raising path would leave e1 and e3 as {:ok, _},
+      # and this loop would fail.
+      for path <- group_paths do
+        assert {^path, {:error, {:matcher_crashed, _}}} =
+                 Enum.find(results, fn {p, _result} -> p == path end)
+      end
+
+      # A second, separate anchor group in the same batch is unaffected.
+      assert {^other_path, {:ok, _match}} =
+               Enum.find(results, fn {p, _result} -> p == other_path end)
     end
   end
 end

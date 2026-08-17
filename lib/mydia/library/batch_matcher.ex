@@ -39,6 +39,27 @@ defmodule Mydia.Library.BatchMatcher do
   `ordered: true` purely so an `{:exit, _}` can be zipped back to the paths it
   was working on; the emission order of the results is not part of this
   module's contract.
+
+  The unit of containment is the group's worker, not the file. `match_group/4`
+  runs an entire anchor group -- the head plus every tail file that reuses its
+  result -- inside one `Task`, so a raise from `on_result` on *any* file in the
+  group, head or tail, takes that whole group's worker down. `crashed_results/2`
+  then replaces the group's results wholesale, marking every path in it --
+  including files whose match had already succeeded -- as
+  `{:error, {:matcher_crashed, reason}}`. An anchor group can be a whole show's
+  worth of episodes, so this is a two-order-of-magnitude difference in blast
+  radius from a single file. This matches what this section has always
+  promised: worker-level, not file-level, containment for anything other than
+  the matcher call itself, which stays wrapped per file in `safe_match_file/3`
+  regardless of group size. The finer per-tail-file granularity the
+  pre-anchor-grouping version had was incidental to that version's
+  cache-warming design, where each tail file ran under its own nested
+  `async_stream_nolink` -- not a guarantee this module makes. `on_result` is
+  caller-supplied; today's production callback is a bare
+  `Phoenix.PubSub.broadcast/3` that will not realistically raise, but a caller
+  that later adds real work there (a database write, richer progress
+  tracking) should know a raise anywhere in that callback now costs the whole
+  anchor group it fired for, not just the one file.
   """
 
   require Logger
