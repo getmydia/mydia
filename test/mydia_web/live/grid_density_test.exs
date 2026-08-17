@@ -60,4 +60,14 @@ defmodule MydiaWeb.GridDensityTest do
              "#discover-density-toggle button[phx-value-density='dense'].btn-primary"
            )
   end
+
+  test "discover groups the density toggle with the media-type join", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/discover")
+
+    # The row is sm:justify-between with three children. Once the density
+    # toggle shrank to icons, an ungrouped middle child floats in dead centre.
+    # Asserting the toggle is inside the cluster keeps that grouping from
+    # being undone by a later edit to the toolbar.
+    assert has_element?(view, "#discover-view-controls #discover-density-toggle")
+  end
 end
