@@ -1,6 +1,7 @@
 defmodule Mydia.ImportGroupsTest do
   use Mydia.DataCase, async: true
 
+  import Mydia.MediaFixtures
   import Mydia.SettingsFixtures
 
   alias Mydia.ImportGroups
@@ -129,6 +130,121 @@ defmodule Mydia.ImportGroupsTest do
 
       {hits, _} = ImportGroups.page(lp.id, q: "100%")
       assert Enum.map(hits, & &1.cluster_key) == ["pct"]
+    end
+  end
+
+  describe "upsert_for_library/2" do
+    setup do
+      lp = library_path_fixture(%{type: "series", path: "/media/Series"})
+      {:ok, library_path: lp}
+    end
+
+    defp unresolved_file(lp, relative_path, candidate_attrs) do
+      file =
+        orphaned_media_file_fixture(%{
+          library_path_id: lp.id,
+          relative_path: relative_path
+        })
+
+      if candidate_attrs do
+        %Mydia.Library.MatchCandidate{}
+        |> Mydia.Library.MatchCandidate.changeset(
+          Map.merge(%{media_file_id: file.id, rank: 0}, Map.new(candidate_attrs))
+        )
+        |> Repo.insert!()
+      end
+
+      file
+    end
+
+    test "collapses a season tree into one group", %{library_path: lp} do
+      for n <- 1..3 do
+        unresolved_file(
+          lp,
+          "Cornemuse (1999)/Season 02/Cornemuse (1999) - S02E0#{n}.mkv",
+          provider_id: "277262",
+          provider_type: "tvdb",
+          title: "Cornemuse",
+          confidence: 1.0
+        )
+      end
+
+      assert {:ok, %{groups: 1, files: 3}} = ImportGroups.upsert_for_library(lp)
+
+      group = Repo.one!(ImportGroup)
+      assert group.anchor_path == "Cornemuse (1999)"
+      assert group.cluster_key == "cornemuse"
+      assert group.file_count == 3
+      assert group.unresolved_count == 3
+      assert group.provider_id == "277262"
+      assert group.min_confidence == 1.0
+      assert ImportGroup.season_span(group) == [2]
+      assert ImportGroups.band(group) == :ready
+    end
+
+    test "merges sibling seasons of one show into a single group", %{library_path: lp} do
+      unresolved_file(lp, "Passe-Partout (2018)/Season 01/a.mkv",
+        provider_id: "9",
+        confidence: 0.95
+      )
+
+      unresolved_file(lp, "Passe-Partout (2018)/Season 02/b.mkv",
+        provider_id: "9",
+        confidence: 0.90
+      )
+
+      assert {:ok, %{groups: 1, files: 2}} = ImportGroups.upsert_for_library(lp)
+
+      group = Repo.one!(ImportGroup)
+      assert group.file_count == 2
+      assert group.min_confidence == 0.90
+      assert ImportGroup.season_span(group) == [1, 2]
+    end
+
+    test "a group whose members disagree on provider is not ready", %{library_path: lp} do
+      unresolved_file(lp, "Show/Season 01/a.mkv", provider_id: "1", confidence: 1.0)
+      unresolved_file(lp, "Show/Season 01/b.mkv", provider_id: "2", confidence: 1.0)
+
+      assert {:ok, %{groups: 1}} = ImportGroups.upsert_for_library(lp)
+
+      group = Repo.one!(ImportGroup)
+      assert group.evidence["disagreement"] == true
+      assert group.min_confidence == nil
+      assert ImportGroups.band(group) == :needs_attention
+    end
+
+    test "files with no provider match land in a no_match group", %{library_path: lp} do
+      unresolved_file(lp, "Les mots de Passe-Partout (2023)/Season 01/a.mkv",
+        provider_id: nil,
+        last_error: "no_match"
+      )
+
+      assert {:ok, %{groups: 1}} = ImportGroups.upsert_for_library(lp)
+
+      group = Repo.one!(ImportGroup)
+      assert group.provider_id == nil
+      assert group.evidence["kind"] == "none"
+      assert ImportGroups.band(group) == :no_match
+    end
+
+    test "is idempotent and keeps a decided group's status", %{library_path: lp} do
+      unresolved_file(lp, "Show/Season 01/a.mkv", provider_id: "1", confidence: 1.0)
+
+      assert {:ok, %{groups: 1}} = ImportGroups.upsert_for_library(lp)
+      Repo.update_all(ImportGroup, set: [status: "ignored"])
+
+      assert {:ok, %{groups: 1}} = ImportGroups.upsert_for_library(lp)
+      assert Repo.one!(ImportGroup).status == "ignored"
+      assert Repo.aggregate(ImportGroup, :count) == 1
+    end
+
+    test "stamps import_group_id onto every member file", %{library_path: lp} do
+      file = unresolved_file(lp, "Show/Season 01/a.mkv", provider_id: "1", confidence: 1.0)
+
+      assert {:ok, _} = ImportGroups.upsert_for_library(lp)
+
+      group = Repo.one!(ImportGroup)
+      assert Repo.reload!(file).import_group_id == group.id
     end
   end
 end
