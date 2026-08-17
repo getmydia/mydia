@@ -121,4 +121,42 @@ defmodule Mydia.Library.ReleaseParser.TargetContextTest do
       assert ctx.title == ""
     end
   end
+
+  describe "anime fields" do
+    test "carries the media item's category" do
+      item = %MediaItem{
+        type: "tv_show",
+        title: "Black Clover",
+        category: "anime_series",
+        episodes: [%Episode{season_number: 1, episode_number: 1, absolute_number: 1}]
+      }
+
+      assert %{category: "anime_series"} = TargetContext.from_media_item(item)
+    end
+
+    test "carries the highest absolute number" do
+      item = %MediaItem{
+        type: "tv_show",
+        title: "Black Clover",
+        category: "anime_series",
+        episodes: [
+          %Episode{season_number: 1, episode_number: 1, absolute_number: 1},
+          %Episode{season_number: 1, episode_number: 170, absolute_number: 170}
+        ]
+      }
+
+      assert %{max_absolute_number: 170} = TargetContext.from_media_item(item)
+    end
+
+    test "leaves the maximum nil when no episode has an absolute number" do
+      item = %MediaItem{
+        type: "tv_show",
+        title: "Ordinary Show",
+        category: "tv_show",
+        episodes: [%Episode{season_number: 1, episode_number: 1}]
+      }
+
+      assert %{max_absolute_number: nil} = TargetContext.from_media_item(item)
+    end
+  end
 end
