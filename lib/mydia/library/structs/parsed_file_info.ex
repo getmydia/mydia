@@ -21,6 +21,11 @@ defmodule Mydia.Library.Structs.ParsedFileInfo do
     :year,
     :season,
     :episodes,
+    # Absolute episode number resolved for anime targets when no
+    # season/episode marker was present in the filename (e.g. "Show -
+    # 170" for `[SubsPlease] Show - 170.mkv`). `nil` for every other
+    # parse, including non-anime targets and unbound parses.
+    :absolute_episode,
     :quality,
     :release_group,
     # External provider ID (extracted from folder name like [tmdb-664])
@@ -62,6 +67,7 @@ defmodule Mydia.Library.Structs.ParsedFileInfo do
           year: integer() | nil,
           season: integer() | nil,
           episodes: [integer()] | nil,
+          absolute_episode: integer() | nil,
           quality: Quality.t(),
           release_group: String.t() | nil,
           confidence: float(),
@@ -92,6 +98,7 @@ defmodule Mydia.Library.Structs.ParsedFileInfo do
       year: metadata[:year],
       season: metadata[:season],
       episodes: metadata[:episodes],
+      absolute_episode: metadata[:absolute_episode],
       quality: metadata[:quality] || Quality.empty(),
       release_group: metadata[:release_group],
       confidence: confidence,

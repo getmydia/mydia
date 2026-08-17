@@ -284,6 +284,7 @@ defmodule Mydia.Library.ReleaseParser do
     year = resolver_result.year
     season = resolver_result.season
     episodes = normalize_episodes(resolver_result.episodes)
+    absolute_episode = resolver_result.absolute_episode
     release_group = resolver_result.release_group
 
     # Type inference: episode marker → tv_show; else use the resolver
@@ -311,6 +312,7 @@ defmodule Mydia.Library.ReleaseParser do
       year: year,
       season: season,
       episodes: episodes,
+      absolute_episode: absolute_episode,
       quality: quality,
       release_group: release_group,
       confidence: confidence,

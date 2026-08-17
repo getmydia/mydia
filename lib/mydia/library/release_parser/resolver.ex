@@ -22,6 +22,7 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
         year: integer() | nil,
         season: integer() | nil,
         episodes: [integer()] | nil,
+        absolute_episode: integer() | nil,
         quality_tokens: [%{label: atom(), value: term(), token: %Token{}}],
         release_group: String.t() | nil,
         language: String.t() | nil,
@@ -120,6 +121,9 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
     {season, episodes, episode_token, episode_conf} =
       extract_episode_info(tokens, assignments_map)
 
+    absolute_episode =
+      resolve_absolute_episode(tokens, target, assignments_map, season, episodes)
+
     year_pick = pick_assignment(assignments, :year)
     year_value = pick_year_value(year_pick)
     year_confidence = pick_confidence(year_pick)
@@ -139,6 +143,7 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
       year: year_value,
       season: season,
       episodes: episodes,
+      absolute_episode: absolute_episode,
       quality_tokens: quality_tokens,
       release_group: release_group,
       language: language,
@@ -560,6 +565,71 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
 
   defp dedupe_sorted(list) when is_list(list) do
     list |> Enum.uniq() |> Enum.sort()
+  end
+
+  # ---- Absolute episode resolution (anime) ----
+  #
+  # Anime releases are numbered absolutely with no season marker
+  # ("Black Clover - 170"), which the tokenizer deliberately does not
+  # treat as an episode marker: a bare integer is far more often a
+  # year, a resolution or a part number. Resolving it here, gated
+  # behind an explicit anime target, keeps the parity suite green
+  # (target is always `nil` or non-anime there) while still matching
+  # the dominant anime naming convention.
+  #
+  # A bare integer token only qualifies when:
+  #
+  #   1. No season/episode marker was already resolved from the
+  #      filename (guarded by the first clause below).
+  #   2. The target is bound, its `category` is `"anime_series"`, and
+  #      it carries a `max_absolute_number` (nil disables the feature,
+  #      per `TargetContext` — every non-anime show has nil).
+  #   3. The token itself hasn't already won a singleton-label fight
+  #      (`:year`, `:resolution`, `:release_group`, etc.) — a token
+  #      already claimed as the release year or a quality/group value
+  #      is not re-read as an episode number.
+  #   4. The token sits outside brackets/parens/braces — real absolute
+  #      episode numbers appear bare (`Show - 170`), while brackets and
+  #      parens are where quality annotations and hash-style release
+  #      tags (`[A1B2C3]`) live.
+  #   5. The value falls within `1..max_absolute_number` — this is
+  #      what keeps `1080`, `2049` and other large bare numbers from
+  #      ever matching.
+  defp resolve_absolute_episode(_tokens, _target, _assignments_map, season, episodes)
+       when not is_nil(season) or episodes not in [nil, []],
+       do: nil
+
+  defp resolve_absolute_episode(
+         tokens,
+         %TargetContext{category: "anime_series", max_absolute_number: max},
+         assignments_map,
+         _season,
+         _episodes
+       )
+       when is_integer(max) do
+    tokens
+    |> Enum.filter(&bare_episode_candidate?(&1, assignments_map))
+    |> Enum.map(&String.to_integer(&1.value))
+    |> Enum.filter(fn n -> n >= 1 and n <= max end)
+    |> List.first()
+  end
+
+  defp resolve_absolute_episode(_tokens, _target, _assignments_map, _season, _episodes), do: nil
+
+  defp bare_episode_candidate?(
+         %Token{bracket_context: nil, value: value} = token,
+         assignments_map
+       ) do
+    Regex.match?(~r/^\d{1,4}$/, value) and not singleton_claimed?(token, assignments_map)
+  end
+
+  defp bare_episode_candidate?(%Token{}, _assignments_map), do: false
+
+  defp singleton_claimed?(%Token{} = token, assignments_map) do
+    case assignments_map_get(assignments_map, token) do
+      nil -> false
+      cands -> Enum.any?(cands, &(&1.label in @singleton_labels))
+    end
   end
 
   # ---- Type inference ----
