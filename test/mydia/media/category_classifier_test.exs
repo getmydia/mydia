@@ -343,4 +343,32 @@ defmodule Mydia.Media.CategoryClassifierTest do
       assert CategoryClassifier.classify(item) == :anime_series
     end
   end
+
+  describe "TVDB three-letter codes" do
+    test "classifies a TVDB-shaped series as anime without an Anime genre" do
+      metadata = %{
+        genres: ["Animation", "Action"],
+        origin_country: ["jpn"],
+        original_language: "jpn"
+      }
+
+      assert CategoryClassifier.classify_from_metadata(:tv_show, metadata) == :anime_series
+    end
+
+    test "accepts an uppercase alpha-3 country code" do
+      metadata = %{genres: ["Animation"], origin_country: ["JPN"]}
+
+      assert CategoryClassifier.japanese_origin?(metadata)
+    end
+
+    test "still treats a non-Japanese cartoon as a cartoon" do
+      metadata = %{
+        genres: ["Animation"],
+        origin_country: ["usa"],
+        original_language: "eng"
+      }
+
+      assert CategoryClassifier.classify_from_metadata(:tv_show, metadata) == :cartoon_series
+    end
+  end
 end
