@@ -197,4 +197,25 @@ defmodule Mydia.Library.ReleaseParser.AbsoluteEpisodeTest do
 
     assert result.absolute_episode == 5
   end
+
+  # When the filename is ambiguous, decline. With no dash to say which
+  # bare integer is the episode number, guessing risks silently filing
+  # episode 170 as episode 2; returning nil costs one manual action.
+  test "declines when a second bare number follows the episode number" do
+    result = ReleaseParser.parse("Black Clover 170 2 HEVC.mkv", target: anime_target())
+
+    assert result.absolute_episode == nil
+  end
+
+  test "declines when a second bare number follows a low episode number" do
+    result = ReleaseParser.parse("Black Clover 05 2 1080p.mkv", target: anime_target())
+
+    assert result.absolute_episode == nil
+  end
+
+  test "declines when the second bare number is not a plausible part number" do
+    result = ReleaseParser.parse("Black Clover 170 8 HEVC.mkv", target: anime_target())
+
+    assert result.absolute_episode == nil
+  end
 end

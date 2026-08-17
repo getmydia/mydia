@@ -608,13 +608,15 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
   #      accepting `12` (is), and rejects the embedded `12` in
   #      `Black Clover - 05 - The Title 12 [1080p]` (preceded by
   #      `Title`, not `-`) while accepting `05`.
-  #   2. Only when (1) finds nothing: the last non-dash token still
-  #      inside the title zone (`title_zone_tail_candidate/3`) — this
-  #      is what recovers filenames with no dash at all
+  #   2. Only when (1) finds nothing: the *sole* bare-digit token
+  #      inside the title zone (`unambiguous_title_zone_candidate/3`)
+  #      — this is what recovers filenames with no dash at all
   #      (`Black Clover 170.mkv`, `Black Clover.170.1080p.mkv`,
   #      `[SubsPlease] Black Clover 170 (1080p) [A1B2C3].mkv`) and the
   #      case where the dash sits *after* the episode number instead
-  #      of before it (`Black Clover 05 - 1080p.mkv`).
+  #      of before it (`Black Clover 05 - 1080p.mkv`). With no dash
+  #      there is no positional evidence at all, so this anchor only
+  #      fires when the zone leaves nothing to choose between.
   #
   # Dash-adjacency is tried first and wins whenever it finds anything,
   # specifically so that a later, unrelated trailing digit (the `12`
@@ -655,7 +657,7 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
        when is_integer(max) do
     candidates =
       case dash_adjacent_candidates(tokens, assignments_map) do
-        [] -> title_zone_tail_candidate(tokens, boundary, assignments_map)
+        [] -> unambiguous_title_zone_candidate(tokens, boundary, assignments_map)
         list -> list
       end
 
@@ -688,29 +690,45 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
     |> Enum.filter(&bare_episode_candidate?(&1, assignments_map))
   end
 
-  # Fallback for filenames with no (or a misplaced) dash: search
-  # backward from the end of the title zone (`byte_offset < boundary`)
-  # for the first bare-digit token that still qualifies, after
-  # dropping a trailing run of standalone `-` tokens (so
-  # `Black Clover 05 - 1080p.mkv`, where the dash trails the episode
-  # number rather than leading it, still resolves to `05`). Searching
-  # rather than testing only the literal last token matters because a
-  # non-numeric quality tag can sit between the episode number and the
-  # boundary with no dash present (`Black Clover 170 DTS-HD 1080p.mkv`
-  # splits into `..., 170, DTS, HD, 1080p` — `HD` is the last title-zone
-  # token and isn't a bare digit, but `170` two tokens back still is).
+  # Fallback for filenames with no (or a misplaced) dash: the title
+  # zone (`byte_offset < boundary`) must contain exactly one qualifying
+  # bare-digit token, which is then the episode number. Two or more and
+  # this returns nothing.
+  #
+  # **When the filename is ambiguous, decline.** Without a dash there is
+  # no positional evidence about which digit is the episode number, so
+  # any rule that picks one out of several is guessing. The cost of the
+  # two outcomes is not symmetric: a missed match costs the user one
+  # manual action and is exactly what happens today with the feature
+  # off, while a wrong match silently files episode 170 as episode 2 and
+  # is discovered much later, if at all. Every positional variant tried
+  # here (test the literal last token; search backward for the first
+  # bare digit) resolved `Black Clover 170 2 HEVC.mkv` — where `2` is a
+  # part/season number, not an episode — to `2`. Uniqueness is what
+  # makes the fallback fail toward `nil` instead.
+  #
+  # Recall is preserved because a real absolute-numbered release with no
+  # dash carries exactly one bare integer: quality tags that sit between
+  # the number and the boundary are words, not digits
+  # (`Black Clover 170 DTS-HD 1080p.mkv` splits into
+  # `..., 170, DTS, HD, 1080p`, and `1080p` is the boundary itself), and
+  # filenames whose numeric noise *does* tokenize into bare digits
+  # (`FLAC 2.0`, `24 fps`) are the dash-marked shapes that never reach
+  # this fallback.
+  #
   # `boundary` may be the atom `:infinity` (no year/resolution/
   # episode_marker anchor at all) — `byte_offset < :infinity` is
   # always true for an integer offset under Erlang term ordering, so
   # every token counts as title zone, matching the classifier's own
   # `zone_for/2` convention for the same boundary value.
-  defp title_zone_tail_candidate(tokens, boundary, assignments_map) do
+  defp unambiguous_title_zone_candidate(tokens, boundary, assignments_map) do
     tokens
     |> Enum.filter(fn %Token{byte_offset: o} -> o < boundary end)
-    |> Enum.reverse()
-    |> Enum.drop_while(&dash_token?/1)
     |> Enum.filter(&bare_episode_candidate?(&1, assignments_map))
-    |> Enum.take(1)
+    |> case do
+      [only] -> [only]
+      _ambiguous_or_empty -> []
+    end
   end
 
   defp dash_token?(%Token{value: "-"}), do: true
