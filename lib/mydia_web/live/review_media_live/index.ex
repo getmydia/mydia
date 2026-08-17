@@ -37,7 +37,12 @@ defmodule MydiaWeb.ReviewMediaLive.Index do
      |> assign(:library_paths, library_paths)
      |> assign(:selected_library_path_id, default_library_path_id(library_paths))
      |> assign(:collapsed_seasons, MapSet.new())
-     |> assign(:selected_ids, MapSet.new())
+     |> assign(:batch_selected_ids, MapSet.new())
+     |> assign(:batch_search_query, "")
+     |> assign(:batch_search_results, [])
+     |> assign(:batch_selected_match, nil)
+     |> assign(:batch_season_value, "")
+     |> assign(:group_file_ids, MapSet.new())
      |> assign(:editing_file_id, nil)
      |> assign(:editing_file_name, nil)
      |> assign(:edit_form, nil)
@@ -163,6 +168,120 @@ defmodule MydiaWeb.ReviewMediaLive.Index do
     end
   end
 
+  def handle_event("batch_toggle_file", %{"id" => id}, socket) do
+    if id in socket.assigns.group_file_ids do
+      selected = socket.assigns.batch_selected_ids
+
+      selected =
+        if MapSet.member?(selected, id),
+          do: MapSet.delete(selected, id),
+          else: MapSet.put(selected, id)
+
+      {:noreply, assign(socket, :batch_selected_ids, selected)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("batch_select_all", _params, socket) do
+    {:noreply, assign(socket, :batch_selected_ids, socket.assigns.group_file_ids)}
+  end
+
+  def handle_event("batch_deselect_all", _params, socket) do
+    {:noreply, assign(socket, :batch_selected_ids, MapSet.new())}
+  end
+
+  def handle_event("batch_search", %{"value" => query}, socket) do
+    {:noreply,
+     socket
+     |> assign(:batch_search_query, query)
+     |> assign(:batch_search_results, search_metadata(query))}
+  end
+
+  def handle_event("batch_select_search_result", params, socket) do
+    match = %{
+      title: params["title"],
+      provider_id: params["provider_id"],
+      year: if(params["year"] not in [nil, ""], do: params["year"]),
+      type: media_type(params["type"])
+    }
+
+    {:noreply,
+     socket
+     |> assign(:batch_selected_match, match)
+     |> assign(:batch_search_query, match.title)
+     |> assign(:batch_search_results, [])}
+  end
+
+  def handle_event("batch_clear_match", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:batch_selected_match, nil)
+     |> assign(:batch_search_query, "")
+     |> assign(:batch_search_results, [])}
+  end
+
+  def handle_event("batch_update_season", %{"value" => value}, socket) do
+    {:noreply, assign(socket, :batch_season_value, value)}
+  end
+
+  def handle_event("batch_apply", _params, socket) do
+    with :ok <- Authorization.authorize_import_media(socket) do
+      selected_ids = MapSet.to_list(socket.assigns.batch_selected_ids)
+      match = socket.assigns.batch_selected_match
+      season = parse_int(socket.assigns.batch_season_value)
+
+      if match == nil and season == nil do
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           "No changes to apply. Select a series/movie or enter a season number."
+         )}
+      else
+        {:ok, %{updated: updated, failed: failed}} =
+          Library.apply_batch_match(selected_ids, match, season)
+
+        {:noreply,
+         socket
+         |> assign(:batch_selected_ids, MapSet.new())
+         |> assign(:batch_search_query, "")
+         |> assign(:batch_search_results, [])
+         |> assign(:batch_selected_match, nil)
+         |> assign(:batch_season_value, "")
+         |> put_flash(batch_flash_kind(failed), batch_flash_message(updated, failed))
+         |> load_group()}
+      end
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("toggle_season_collapse", %{"season_id" => id}, socket) do
+    collapsed = socket.assigns.collapsed_seasons
+
+    collapsed =
+      if MapSet.member?(collapsed, id),
+        do: MapSet.delete(collapsed, id),
+        else: MapSet.put(collapsed, id)
+
+    {:noreply, assign(socket, :collapsed_seasons, collapsed)}
+  end
+
+  def handle_event("toggle_season_selection", %{"ids" => ids}, socket) do
+    episode_ids = ids |> String.split(",") |> Enum.filter(&(&1 != ""))
+    valid_ids = MapSet.new(episode_ids) |> MapSet.intersection(socket.assigns.group_file_ids)
+
+    selected = socket.assigns.batch_selected_ids
+
+    selected =
+      if MapSet.subset?(valid_ids, selected),
+        do: MapSet.difference(selected, valid_ids),
+        else: MapSet.union(selected, valid_ids)
+
+    {:noreply, assign(socket, :batch_selected_ids, selected)}
+  end
+
   defp candidate_to_match(candidate) do
     %{
       provider_id: candidate.provider_id,
@@ -206,7 +325,21 @@ defmodule MydiaWeb.ReviewMediaLive.Index do
         socket
       end
 
-    assign(socket, :selected_ids, MapSet.delete(socket.assigns.selected_ids, media_file_id))
+    assign(
+      socket,
+      :batch_selected_ids,
+      MapSet.delete(socket.assigns.batch_selected_ids, media_file_id)
+    )
+  end
+
+  defp batch_flash_kind(0), do: :info
+  defp batch_flash_kind(_failed), do: :error
+
+  defp batch_flash_message(updated, 0), do: "Batch edit applied to #{updated} file(s)"
+
+  defp batch_flash_message(updated, failed) do
+    "Batch edit applied to #{updated} file(s). #{failed} could not be updated, " <>
+      "most likely because they are no longer in the library."
   end
 
   defp season_string(nil), do: ""

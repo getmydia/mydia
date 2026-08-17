@@ -44,11 +44,20 @@
       <Components.grouped_tree
         group={@group}
         collapsed_seasons={@collapsed_seasons}
-        selected_ids={@selected_ids}
+        batch_selected_ids={@batch_selected_ids}
         editing_file_id={@editing_file_id}
         editing_file_name={@editing_file_name}
         edit_form={@edit_form}
         search_results={@search_results}
+      />
+
+      <ImportComponents.batch_edit_toolbar
+        :if={MapSet.size(@batch_selected_ids) > 0}
+        batch_selected_count={MapSet.size(@batch_selected_ids)}
+        batch_search_query={@batch_search_query}
+        batch_search_results={@batch_search_results}
+        batch_selected_match={@batch_selected_match}
+        batch_season_value={@batch_season_value}
       />
     <% end %>
   </div>

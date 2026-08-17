@@ -13,7 +13,7 @@ defmodule MydiaWeb.ReviewMediaLive.Components do
 
   attr :group, :map, required: true
   attr :collapsed_seasons, :any, required: true
-  attr :selected_ids, :any, required: true
+  attr :batch_selected_ids, :any, required: true
   attr :editing_file_id, :string, default: nil
   attr :editing_file_name, :string, default: nil
   attr :edit_form, :map, default: nil
@@ -28,7 +28,7 @@ defmodule MydiaWeb.ReviewMediaLive.Components do
         <.series_block
           series={series}
           collapsed_seasons={@collapsed_seasons}
-          selected_ids={@selected_ids}
+          batch_selected_ids={@batch_selected_ids}
           rematching_series_key={@rematching_series_key}
           series_search_results={@series_search_results}
         />
@@ -43,7 +43,7 @@ defmodule MydiaWeb.ReviewMediaLive.Components do
             <%= for movie <- @group.movies do %>
               <.file_row
                 entry={movie}
-                selected_ids={@selected_ids}
+                batch_selected_ids={@batch_selected_ids}
                 editing_file_id={@editing_file_id}
                 editing_file_name={@editing_file_name}
                 edit_form={@edit_form}
@@ -66,7 +66,7 @@ defmodule MydiaWeb.ReviewMediaLive.Components do
             <%= for entry <- @group.wrong_library do %>
               <.file_row
                 entry={entry}
-                selected_ids={@selected_ids}
+                batch_selected_ids={@batch_selected_ids}
                 editing_file_id={@editing_file_id}
                 editing_file_name={@editing_file_name}
                 edit_form={@edit_form}
@@ -86,7 +86,7 @@ defmodule MydiaWeb.ReviewMediaLive.Components do
             <%= for entry <- @group.unmatched do %>
               <.file_row
                 entry={entry}
-                selected_ids={@selected_ids}
+                batch_selected_ids={@batch_selected_ids}
                 editing_file_id={@editing_file_id}
                 editing_file_name={@editing_file_name}
                 edit_form={@edit_form}
@@ -102,7 +102,7 @@ defmodule MydiaWeb.ReviewMediaLive.Components do
 
   attr :series, :map, required: true
   attr :collapsed_seasons, :any, required: true
-  attr :selected_ids, :any, required: true
+  attr :batch_selected_ids, :any, required: true
   attr :rematching_series_key, :string, default: nil
   attr :series_search_results, :list, default: []
 
@@ -174,7 +174,7 @@ defmodule MydiaWeb.ReviewMediaLive.Components do
               series_key={@series_key}
               season={season}
               collapsed_seasons={@collapsed_seasons}
-              selected_ids={@selected_ids}
+              batch_selected_ids={@batch_selected_ids}
             />
           <% end %>
         </div>
@@ -186,16 +186,16 @@ defmodule MydiaWeb.ReviewMediaLive.Components do
   attr :series_key, :string, required: true
   attr :season, :map, required: true
   attr :collapsed_seasons, :any, required: true
-  attr :selected_ids, :any, required: true
+  attr :batch_selected_ids, :any, required: true
 
   defp season_block(assigns) do
     episode_ids = Enum.map(assigns.season.episodes, & &1.file.media_file.id)
     season_id = List.first(episode_ids)
 
-    all_selected = Enum.all?(episode_ids, &MapSet.member?(assigns.selected_ids, &1))
+    all_selected = Enum.all?(episode_ids, &MapSet.member?(assigns.batch_selected_ids, &1))
 
     some_selected =
-      not all_selected and Enum.any?(episode_ids, &MapSet.member?(assigns.selected_ids, &1))
+      not all_selected and Enum.any?(episode_ids, &MapSet.member?(assigns.batch_selected_ids, &1))
 
     collapsed = MapSet.member?(assigns.collapsed_seasons, season_id)
 
@@ -237,7 +237,7 @@ defmodule MydiaWeb.ReviewMediaLive.Components do
 
       <ul :if={not @collapsed} class="divide-y divide-base-300 pb-2">
         <%= for episode <- @season.episodes do %>
-          <.file_row entry={episode} selected_ids={@selected_ids} />
+          <.file_row entry={episode} batch_selected_ids={@batch_selected_ids} />
         <% end %>
       </ul>
     </div>
@@ -245,7 +245,7 @@ defmodule MydiaWeb.ReviewMediaLive.Components do
   end
 
   attr :entry, :map, required: true
-  attr :selected_ids, :any, required: true
+  attr :batch_selected_ids, :any, required: true
   attr :editing_file_id, :string, default: nil
   attr :editing_file_name, :string, default: nil
   attr :edit_form, :map, default: nil
@@ -267,7 +267,7 @@ defmodule MydiaWeb.ReviewMediaLive.Components do
         type="checkbox"
         id={"batch-toggle-#{@file.id}"}
         class="checkbox checkbox-primary checkbox-sm"
-        checked={MapSet.member?(@selected_ids, @file.id)}
+        checked={MapSet.member?(@batch_selected_ids, @file.id)}
         phx-click="batch_toggle_file"
         phx-value-id={@file.id}
       />
