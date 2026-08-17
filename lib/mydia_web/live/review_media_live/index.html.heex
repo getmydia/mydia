@@ -1,0 +1,36 @@
+<Layouts.app {assigns}>
+  <div class="max-w-5xl mx-auto p-4 flex flex-col gap-6">
+    <h1 class="text-3xl font-bold">Review</h1>
+
+    <%= if @library_paths == [] do %>
+      <div class="alert alert-info">
+        <.icon name="hero-information-circle" class="w-5 h-5 shrink-0" />
+        <span>
+          There is no movie or TV library to review yet. Add one under Settings, then run an import.
+        </span>
+      </div>
+    <% else %>
+      <div class="flex items-center gap-2 flex-wrap">
+        <%= for path <- @library_paths do %>
+          <button
+            type="button"
+            id={"review-library-#{path.id}"}
+            phx-click="select_library"
+            phx-value-library_path_id={path.id}
+            class={[
+              "btn btn-sm",
+              if(path.id == @selected_library_path_id, do: "btn-primary", else: "btn-ghost")
+            ]}
+          >
+            {path.path}
+            <span class="badge badge-sm">{path.unresolved}</span>
+          </button>
+        <% end %>
+      </div>
+
+      <p class="text-sm opacity-70">
+        {total_unresolved(@group)} file(s) waiting in this library.
+      </p>
+    <% end %>
+  </div>
+</Layouts.app>
