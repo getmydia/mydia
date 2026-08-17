@@ -601,26 +601,32 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
   #
   # So this uses two anchors, tried in order:
   #
-  #   1. Dash-adjacency (`dash_adjacent_candidates/2`): a bare integer
-  #      immediately preceded by a standalone `-` token
-  #      (`Title - NN`). This is precise — it's what correctly rejects
-  #      `86` in `86 - Eighty Six - 12` (not dash-preceded) while
-  #      accepting `12` (is), and rejects the embedded `12` in
+  #   1. Dash-adjacency (`unambiguous_dash_adjacent_candidate/2`): the
+  #      sole bare integer immediately preceded by a standalone `-`
+  #      token (`Title - NN`). This is precise — it's what correctly
+  #      rejects `86` in `86 - Eighty Six - 12` (not dash-preceded)
+  #      while accepting `12` (is), and rejects the embedded `12` in
   #      `Black Clover - 05 - The Title 12 [1080p]` (preceded by
   #      `Title`, not `-`) while accepting `05`.
-  #   2. Only when (1) finds nothing: the *sole* bare-digit token
+  #   2. Only when (1) finds nothing: the sole bare-digit token
   #      inside the title zone (`unambiguous_title_zone_candidate/3`)
   #      — this is what recovers filenames with no dash at all
   #      (`Black Clover 170.mkv`, `Black Clover.170.1080p.mkv`,
   #      `[SubsPlease] Black Clover 170 (1080p) [A1B2C3].mkv`) and the
   #      case where the dash sits *after* the episode number instead
-  #      of before it (`Black Clover 05 - 1080p.mkv`). With no dash
-  #      there is no positional evidence at all, so this anchor only
-  #      fires when the zone leaves nothing to choose between.
+  #      of before it (`Black Clover 05 - 1080p.mkv`).
   #
-  # Dash-adjacency is tried first and wins whenever it finds anything,
+  # Both anchors are cardinality-bounded by `only_if_unambiguous/1`:
+  # each selects a *set* of candidates on evidence, then declines
+  # unless that set has exactly one member. Neither ever picks a winner
+  # among several. See that function for why.
+  #
+  # Dash-adjacency is tried first and wins whenever it yields anything,
   # specifically so that a later, unrelated trailing digit (the `12`
-  # above) can never outrank the real dash-marked episode number.
+  # above) can never outrank the real dash-marked episode number. When
+  # it declines on ambiguity the zone anchor still runs, but it is
+  # bounded the same way, so a filename ambiguous under both resolves
+  # to nil (`Black Clover - 2 - 170 HEVC.mkv`).
   #
   # A bare integer token only qualifies when:
   #
@@ -656,7 +662,7 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
        )
        when is_integer(max) do
     candidates =
-      case dash_adjacent_candidates(tokens, assignments_map) do
+      case unambiguous_dash_adjacent_candidate(tokens, assignments_map) do
         [] -> unambiguous_title_zone_candidate(tokens, boundary, assignments_map)
         list -> list
       end
@@ -677,44 +683,42 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
        ),
        do: nil
 
-  # Tokens immediately preceded, in filename order, by a standalone `-`
-  # token (`Title - NN`). Dash isn't a tokenizer separator (it stays
-  # attached inside compound words like `Spider-Man`), so a `-`
-  # surrounded by whitespace on both sides survives as its own token —
-  # exactly the shape this naming convention produces.
-  defp dash_adjacent_candidates(tokens, assignments_map) do
+  # The sole token immediately preceded, in filename order, by a
+  # standalone `-` token (`Title - NN`). Dash isn't a tokenizer
+  # separator (it stays attached inside compound words like
+  # `Spider-Man`), so a `-` surrounded by whitespace on both sides
+  # survives as its own token — exactly the shape this naming
+  # convention produces.
+  #
+  # Dash-adjacency is strong evidence but not unique evidence: a
+  # filename can carry two of them (`Black Clover - 2 - 170 HEVC.mkv`,
+  # where `2` is a cour/part number, or
+  # `[Group] Black Clover - 05 - 12 Days Later.mkv`, where `12` opens a
+  # numeric episode title). Taking the first resolved the former to `2`
+  # and taking the last would break the latter — no positional rule
+  # satisfies both, which is exactly why this is bounded by
+  # cardinality instead.
+  defp unambiguous_dash_adjacent_candidate(tokens, assignments_map) do
     tokens
     |> Enum.chunk_every(2, 1, :discard)
     |> Enum.filter(fn [prev, _curr] -> dash_token?(prev) end)
     |> Enum.map(fn [_prev, curr] -> curr end)
     |> Enum.filter(&bare_episode_candidate?(&1, assignments_map))
+    |> only_if_unambiguous()
   end
 
-  # Fallback for filenames with no (or a misplaced) dash: the title
-  # zone (`byte_offset < boundary`) must contain exactly one qualifying
-  # bare-digit token, which is then the episode number. Two or more and
-  # this returns nothing.
+  # Fallback for filenames with no (or a misplaced) dash: the sole
+  # qualifying bare-digit token in the title zone
+  # (`byte_offset < boundary`).
   #
-  # **When the filename is ambiguous, decline.** Without a dash there is
-  # no positional evidence about which digit is the episode number, so
-  # any rule that picks one out of several is guessing. The cost of the
-  # two outcomes is not symmetric: a missed match costs the user one
-  # manual action and is exactly what happens today with the feature
-  # off, while a wrong match silently files episode 170 as episode 2 and
-  # is discovered much later, if at all. Every positional variant tried
-  # here (test the literal last token; search backward for the first
-  # bare digit) resolved `Black Clover 170 2 HEVC.mkv` — where `2` is a
-  # part/season number, not an episode — to `2`. Uniqueness is what
-  # makes the fallback fail toward `nil` instead.
-  #
-  # Recall is preserved because a real absolute-numbered release with no
-  # dash carries exactly one bare integer: quality tags that sit between
-  # the number and the boundary are words, not digits
-  # (`Black Clover 170 DTS-HD 1080p.mkv` splits into
-  # `..., 170, DTS, HD, 1080p`, and `1080p` is the boundary itself), and
-  # filenames whose numeric noise *does* tokenize into bare digits
-  # (`FLAC 2.0`, `24 fps`) are the dash-marked shapes that never reach
-  # this fallback.
+  # Recall survives the cardinality bound because a real
+  # absolute-numbered release with no dash carries exactly one bare
+  # integer: quality tags that sit between the number and the boundary
+  # are words, not digits (`Black Clover 170 DTS-HD 1080p.mkv` splits
+  # into `..., 170, DTS, HD, 1080p`, and `1080p` is the boundary
+  # itself), and filenames whose numeric noise *does* tokenize into
+  # bare digits (`FLAC 2.0`, `24 fps`) are dash-marked shapes that this
+  # fallback never sees.
   #
   # `boundary` may be the atom `:infinity` (no year/resolution/
   # episode_marker anchor at all) — `byte_offset < :infinity` is
@@ -725,11 +729,37 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
     tokens
     |> Enum.filter(fn %Token{byte_offset: o} -> o < boundary end)
     |> Enum.filter(&bare_episode_candidate?(&1, assignments_map))
-    |> case do
-      [only] -> [only]
-      _ambiguous_or_empty -> []
-    end
+    |> only_if_unambiguous()
   end
+
+  # **When the filename is ambiguous, decline.** Both anchors gather
+  # candidates on positive evidence and then hand the set here; one
+  # survivor is an answer, two or more is a guess, and this returns
+  # nothing rather than guess.
+  #
+  # The two outcomes do not cost the same. A missed match costs the
+  # user one manual action and is exactly what happens with the feature
+  # off. A wrong match silently files episode 170 as episode 2 and is
+  # discovered much later, if at all — on someone's media library, by
+  # an opt-in feature.
+  #
+  # Every positional rule tried here produced a wrong match somewhere:
+  # first-in-stream read `[Erai-raws] 86 - ...` as episode 86; the
+  # title-zone tail (literal last token, then backward search) read
+  # `Black Clover 170 2 HEVC.mkv` as episode 2; first-dash-adjacent
+  # read `Black Clover - 2 - 170 HEVC.mkv` as episode 2. Last-adjacent
+  # would fix that one and break
+  # `[Group] Black Clover - 05 - 12 Days Later.mkv`, which wants the
+  # first. No positional rule satisfies both directions, because the
+  # filename genuinely does not say which digit is the episode.
+  # Cardinality is the honest answer, and it fails toward nil.
+  #
+  # The accepted price: an episode whose *title* starts with a number
+  # (`- 05 - 12 Days Later`) no longer resolves. That is a recall loss
+  # taken deliberately, in exchange for never inventing an episode
+  # number.
+  defp only_if_unambiguous([only]), do: [only]
+  defp only_if_unambiguous(_ambiguous_or_empty), do: []
 
   defp dash_token?(%Token{value: "-"}), do: true
   defp dash_token?(%Token{}), do: false

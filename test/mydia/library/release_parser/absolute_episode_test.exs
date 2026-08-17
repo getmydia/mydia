@@ -218,4 +218,40 @@ defmodule Mydia.Library.ReleaseParser.AbsoluteEpisodeTest do
 
     assert result.absolute_episode == nil
   end
+
+  # The dash path has the same ambiguity as the no-dash one: a cour or
+  # part number can be dash-adjacent too, and taking the first match
+  # read this as episode 2.
+  test "declines when two bare numbers are both dash-adjacent" do
+    result = ReleaseParser.parse("Black Clover - 2 - 170 HEVC.mkv", target: anime_target())
+
+    assert result.absolute_episode == nil
+  end
+
+  test "declines when a dash-adjacent cour number precedes a dash-adjacent episode" do
+    result = ReleaseParser.parse("Black Clover - 2 - 05.mkv", target: anime_target())
+
+    assert result.absolute_episode == nil
+  end
+
+  test "resolves when the cour number is not itself dash-adjacent" do
+    result = ReleaseParser.parse("Black Clover - Cour 2 - 05.mkv", target: anime_target())
+
+    assert result.absolute_episode == 5
+  end
+
+  # Deliberate recall loss, changed from 5 to nil when the dash path
+  # gained the same cardinality bound as the title-zone path. Both `05`
+  # and `12` are dash-adjacent here, so the set is ambiguous and the
+  # parser declines. It resolved before only because taking the first
+  # match happened to pick the right one; taking the last would have
+  # been needed for `Black Clover - 2 - 170 HEVC.mkv`, and no positional
+  # rule satisfies both. Losing an episode with a numeric title to nil
+  # is the accepted price for never inventing an episode number.
+  test "declines an episode whose title begins with a dash-adjacent number" do
+    result =
+      ReleaseParser.parse("[Group] Black Clover - 05 - 12 Days Later.mkv", target: anime_target())
+
+    assert result.absolute_episode == nil
+  end
 end
