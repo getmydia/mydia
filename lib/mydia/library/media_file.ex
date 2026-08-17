@@ -37,6 +37,7 @@ defmodule Mydia.Library.MediaFile do
           trashed_at: DateTime.t() | nil,
           relative_path: String.t() | nil,
           supersedes_media_file_id: binary() | nil,
+          import_group_id: binary() | nil,
           library_path: Mydia.Settings.LibraryPath.t() | Ecto.Association.NotLoaded.t(),
           media_item: Mydia.Media.MediaItem.t() | Ecto.Association.NotLoaded.t(),
           episode: Mydia.Media.Episode.t() | nil | Ecto.Association.NotLoaded.t(),
@@ -88,6 +89,7 @@ defmodule Mydia.Library.MediaFile do
     belongs_to :quality_profile, Mydia.Settings.QualityProfile
     has_many :segments, Mydia.Library.MediaSegment
     belongs_to :supersedes_media_file, __MODULE__, foreign_key: :supersedes_media_file_id
+    belongs_to :import_group, Mydia.Library.ImportGroup, type: :binary_id
 
     timestamps(type: :utc_datetime)
   end
@@ -220,7 +222,8 @@ defmodule Mydia.Library.MediaFile do
       :fingerprint_blob,
       :generated_at,
       :trashed_at,
-      :supersedes_media_file_id
+      :supersedes_media_file_id,
+      :import_group_id
     ])
     |> validate_required([:relative_path, :library_path_id])
     |> validate_one_parent()
@@ -236,6 +239,7 @@ defmodule Mydia.Library.MediaFile do
     |> foreign_key_constraint(:quality_profile_id)
     |> foreign_key_constraint(:library_path_id)
     |> foreign_key_constraint(:supersedes_media_file_id)
+    |> foreign_key_constraint(:import_group_id)
   end
 
   @doc """

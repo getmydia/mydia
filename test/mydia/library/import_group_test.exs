@@ -1,6 +1,7 @@
 defmodule Mydia.Library.ImportGroupTest do
   use Mydia.DataCase, async: true
 
+  import Mydia.MediaFixtures
   import Mydia.SettingsFixtures
 
   alias Mydia.Library.ImportGroup
@@ -81,5 +82,28 @@ defmodule Mydia.Library.ImportGroupTest do
 
     refute changeset.valid?
     assert %{season_span: _} = errors_on(changeset)
+  end
+
+  test "a media file can belong to a group and is nilified when the group goes" do
+    library_path = library_path_fixture(%{type: "series"})
+
+    {:ok, group} =
+      %ImportGroup{} |> ImportGroup.changeset(valid_attrs(library_path)) |> Repo.insert()
+
+    media_item = media_item_fixture(%{type: "tv_show"})
+
+    media_file =
+      media_file_fixture(%{library_path_id: library_path.id, media_item_id: media_item.id})
+
+    {:ok, media_file} =
+      media_file
+      |> Ecto.Changeset.change(import_group_id: group.id)
+      |> Repo.update()
+
+    assert media_file.import_group_id == group.id
+
+    Repo.delete!(group)
+
+    assert Repo.reload!(media_file).import_group_id == nil
   end
 end
