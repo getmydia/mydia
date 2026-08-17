@@ -427,4 +427,110 @@ defmodule Mydia.Media.RefreshTest do
       assert updated.tmdb_id == 9999
     end
   end
+
+  describe "run/2 reclassification" do
+    alias Mydia.Media
+    alias Mydia.Media.CategoryClassifier
+    alias Mydia.Repo
+
+    test "category agrees with the refreshed metadata" do
+      bypass = Bypass.open()
+      tvdb_id = System.unique_integer([:positive])
+
+      Bypass.stub(bypass, "GET", "/tvdb/series/#{tvdb_id}/extended", fn conn ->
+        body = %{
+          "data" => %{
+            "id" => tvdb_id,
+            "name" => "Reclassify Me",
+            "overview" => "x",
+            "first_air_date" => "2017-10-03",
+            "genres" => [%{"id" => 1, "name" => "Animation"}, %{"id" => 2, "name" => "Anime"}],
+            "originalCountry" => "jpn",
+            "originalLanguage" => "jpn",
+            "seasons" => []
+          }
+        }
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(body))
+      end)
+
+      config = %{
+        type: :metadata_relay,
+        base_url: "http://localhost:#{bypass.port}",
+        options: %{language: "en-US", include_adult: false}
+      }
+
+      # Deliberately wrong: a tv_show stamped "movie". Before the hook exists
+      # the refresh leaves this untouched, which is the failure this test pins.
+      item =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "Reclassify Me",
+          year: 2017,
+          tvdb_id: tvdb_id,
+          metadata_source: :tvdb,
+          category: "movie"
+        })
+
+      assert {:ok, _updated} = Refresh.run(item, config: config, fetch_episodes: false)
+
+      reloaded = Repo.get!(MediaItem, item.id)
+
+      assert to_string(reloaded.category) == to_string(CategoryClassifier.classify(reloaded))
+      refute to_string(reloaded.category) == "movie"
+    end
+
+    test "category_override survives a refresh" do
+      bypass = Bypass.open()
+      tvdb_id = System.unique_integer([:positive])
+
+      Bypass.stub(bypass, "GET", "/tvdb/series/#{tvdb_id}/extended", fn conn ->
+        body = %{
+          "data" => %{
+            "id" => tvdb_id,
+            "name" => "Pinned",
+            "overview" => "x",
+            "genres" => [%{"id" => 1, "name" => "Animation"}],
+            "originalCountry" => "jpn",
+            "seasons" => []
+          }
+        }
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(body))
+      end)
+
+      config = %{
+        type: :metadata_relay,
+        base_url: "http://localhost:#{bypass.port}",
+        options: %{language: "en-US", include_adult: false}
+      }
+
+      # `MediaItem.changeset/2` (used by both create_media_item/2 and
+      # update_media_item/3) does not cast :category or :category_override, so
+      # passing them straight to media_item_fixture/1 is silently dropped, and
+      # the auto-classification that runs right after creation
+      # (Media.auto_classify_media_item/1) unconditionally overwrites
+      # category_override back to false. Media.update_category/3 is the real
+      # public entry point for pinning a category, so use it to get the item
+      # into the state this test actually needs.
+      item =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "Pinned",
+          tvdb_id: tvdb_id,
+          metadata_source: :tvdb
+        })
+
+      assert {:ok, item} = Media.update_category(item, :tv_show, override: true)
+      assert item.category_override
+
+      assert {:ok, _} = Refresh.run(item, config: config, fetch_episodes: false)
+
+      assert to_string(Repo.get!(MediaItem, item.id).category) == "tv_show"
+    end
+  end
 end

@@ -48,9 +48,25 @@ defmodule Mydia.Media.Refresh do
       {provider_id, source, item} ->
         with {:ok, metadata} <- fetch(provider_id, media_type, source, config),
              {:ok, updated} <- apply_metadata(item, metadata, source) do
-          post_update(updated, media_type, fetch_episodes, config)
-          {:ok, updated}
+          reclassified = reclassify_after_refresh(updated)
+          post_update(reclassified, media_type, fetch_episodes, config)
+          {:ok, reclassified}
         end
+    end
+  end
+
+  # Classification was computed once at creation and never again, so a provider
+  # that later added or removed a genre left the category stale forever. The
+  # hook belongs here rather than in Media.refresh_metadata/2, which is a bare
+  # delegate: every other caller of run/2, including the weekly MetadataRefresh
+  # sweep, has to get the same treatment.
+  #
+  # A classification failure must not fail the refresh, matching how
+  # Media.auto_classify_media_item/1 already degrades.
+  defp reclassify_after_refresh(%MediaItem{} = media_item) do
+    case Media.reclassify_media_item(media_item) do
+      {:ok, reclassified} -> reclassified
+      {:error, _changeset} -> media_item
     end
   end
 
