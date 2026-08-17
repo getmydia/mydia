@@ -332,6 +332,23 @@ defmodule MydiaWeb.Components.MediaRailComponentTest do
       assert html =~ "The Eternal Daughter"
     end
 
+    # aria-controls must name an element that is actually in the document. The
+    # strip is removed entirely while collapsed, not hidden, so the attribute has
+    # to come and go with it.
+    test "aria-controls is present only while the strip is in the document" do
+      refute collapsible(expanded: false) =~ "aria-controls"
+      assert collapsible(expanded: true) =~ ~s(aria-controls="media-rail-items")
+    end
+
+    # `button` takes phrasing content, and a heading is not phrasing content, so
+    # the heading has to wrap the button rather than sit inside it.
+    test "the disclosure button is nested inside the heading, not the reverse" do
+      doc = collapsible(expanded: false) |> LazyHTML.from_fragment()
+
+      assert [_] = Enum.to_list(LazyHTML.query(doc, "h2 > button#media-rail-toggle"))
+      assert [] = Enum.to_list(LazyHTML.query(doc, "button h2"))
+    end
+
     test "the header carries the item count" do
       count =
         collapsible(expanded: false)

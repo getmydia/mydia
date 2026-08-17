@@ -223,25 +223,27 @@ defmodule MydiaWeb.DiscoverComponents do
     ~H"""
     <div :if={@items != []} id={@id} class="mb-6 md:mb-8">
       <div class="flex items-center justify-between gap-3 mb-3">
-        <%!-- The title is repeated across both branches on purpose: HEEx cannot
-              swap a tag name, and a disclosure's label has to live inside its
-              own button to be announced and focusable. --%>
-        <button
-          :if={@collapsible}
-          type="button"
-          id={"#{@id}-toggle"}
-          class="flex items-center gap-2 min-w-0 cursor-pointer text-left"
-          phx-click={@toggle_event}
-          aria-expanded={to_string(@open?)}
-          aria-controls={"#{@id}-items"}
-        >
-          <.icon
-            name={if @open?, do: "hero-chevron-down", else: "hero-chevron-right"}
-            class="w-4 h-4 text-base-content/40 shrink-0"
-          />
-          <h2 class="text-lg md:text-xl font-semibold truncate">{@title}</h2>
-          <span class="badge badge-ghost badge-sm shrink-0">{length(@items)}</span>
-        </button>
+        <%!-- The heading is repeated across both branches on purpose: HEEx cannot
+              swap a tag name. The collapsible branch puts the button inside the
+              heading rather than the other way around, because `button` takes
+              phrasing content and a heading is not phrasing content. --%>
+        <h2 :if={@collapsible} class="min-w-0">
+          <button
+            type="button"
+            id={"#{@id}-toggle"}
+            class="flex items-center gap-2 min-w-0 w-full cursor-pointer text-left"
+            phx-click={@toggle_event}
+            aria-expanded={to_string(@open?)}
+            aria-controls={if @open?, do: "#{@id}-items"}
+          >
+            <.icon
+              name={if @open?, do: "hero-chevron-down", else: "hero-chevron-right"}
+              class="w-4 h-4 text-base-content/40 shrink-0"
+            />
+            <span class="text-lg md:text-xl font-semibold truncate">{@title}</span>
+            <span class="badge badge-ghost badge-sm shrink-0">{length(@items)}</span>
+          </button>
+        </h2>
         <h2 :if={not @collapsible} class="text-lg md:text-xl font-semibold truncate">{@title}</h2>
         <div :if={@badge != []} class="flex-shrink-0">{render_slot(@badge)}</div>
       </div>
