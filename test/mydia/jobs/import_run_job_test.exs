@@ -250,13 +250,29 @@ defmodule Mydia.Jobs.ImportRunJobTest do
       assert length(Library.list_unmatched_media_file_paths(lp.id, 100)) == 3
     end
 
-    test "excludes a file that already carries a candidate", %{run: run, library_path: lp} do
+    test "excludes a file whose failure is still inside its retry window", %{
+      run: run,
+      library_path: lp
+    } do
       :ok = ImportRunJob.run_scan_phase(Library.get_import_run(run.id))
 
       [{file_id, _path} | _] = Library.list_unmatched_media_file_paths(lp.id, 100)
 
+      # Mirrors what `FileIngest.record_failure/2` actually writes on a first
+      # attempt: a rank-0 candidate with `next_retry_at` in the future. A
+      # candidate with `next_retry_at` unset is a different case (a
+      # pre-existing failure predating the backoff, or one written outside
+      # `record_failure/2`) and is deliberately still eligible -- see
+      # `Library.list_unmatched_media_file_paths/2`'s moduledoc.
+      future = DateTime.utc_now() |> DateTime.add(300, :second) |> DateTime.truncate(:second)
+
       {:ok, _} =
-        Library.upsert_match_candidate(%{media_file_id: file_id, rank: 0, attempts: 1})
+        Library.upsert_match_candidate(%{
+          media_file_id: file_id,
+          rank: 0,
+          attempts: 1,
+          next_retry_at: future
+        })
 
       assert length(Library.list_unmatched_media_file_paths(lp.id, 100)) == 2
     end

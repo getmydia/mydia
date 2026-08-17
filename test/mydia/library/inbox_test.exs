@@ -197,9 +197,17 @@ defmodule Mydia.Library.InboxTest do
           set: [relative_path: nil]
         )
 
+      # Not asserting the whole result is `[]`: the shared setup's
+      # `unidentified` fixture also carries a failed (no-`provider_id`)
+      # candidate with no `next_retry_at`, which is legitimately eligible
+      # here (see `Library.list_unmatched_media_file_paths/2`'s moduledoc on
+      # a NULL retry time meaning "eligible"). What this test pins is that
+      # `stranded` specifically -- the one with no resolvable path -- never
+      # comes back, and that its exclusion is logged.
       log =
         ExUnit.CaptureLog.capture_log(fn ->
-          assert Library.list_unmatched_media_file_paths(lp.id, 50) == []
+          paths = Library.list_unmatched_media_file_paths(lp.id, 50)
+          refute Enum.any?(paths, fn {id, _path} -> id == stranded.id end)
         end)
 
       assert log =~ stranded.id

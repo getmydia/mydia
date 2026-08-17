@@ -262,6 +262,78 @@ defmodule Mydia.Library.FileIngestTest do
       paths = Library.list_unmatched_media_file_paths(library_path.id, 10)
       refute Enum.any?(paths, fn {id, _path} -> id == file.id end)
     end
+
+    test "a pre-existing failed candidate with no next_retry_at is reselected as unmatched" do
+      # Simulates the entire backlog written before this change: every failed
+      # candidate created before the `next_retry_at` backoff shipped has that
+      # column NULL forever, since nothing ever goes back and backfills it.
+      # Under the old predicate (`not is_nil(c.next_retry_at) and
+      # c.next_retry_at <= now`), NULL made `NOT (NULL IS NULL)` false, so
+      # these rows were excluded and could never become eligible again --
+      # being excluded here is exactly what stops `record_failure/2` from
+      # ever running on the file a second time to populate the column. NULL
+      # must mean "eligible", not "not yet due".
+      library_path = library_path_fixture(%{type: "series"})
+      file = orphaned_media_file_fixture(%{library_path_id: library_path.id})
+
+      :no_match = FileIngest.ingest(file, nil, policy: :create_items)
+
+      Repo.update_all(MatchCandidate, set: [next_retry_at: nil])
+
+      paths = Library.list_unmatched_media_file_paths(library_path.id, 10)
+      assert Enum.any?(paths, fn {id, _path} -> id == file.id end)
+    end
+  end
+
+  describe "series-level match at the new threshold" do
+    # Pins the actual effect of Task 9's confidence bump, not just the
+    # constant: before this change, `try_series_level_match/3` in
+    # `MetadataMatcher` returned `match_confidence: 0.70`, which could never
+    # clear `FileIngest`'s (then 0.8) link threshold, so this whole code path
+    # was dead in unattended mode. At 0.85 it must reach `:link`. This test
+    # builds the exact match shape `try_series_level_match/3` produces
+    # (`match_type: :partial_match`, `partial_reason: :episode_not_found`,
+    # `match_confidence: 0.85`) rather than exercising the private function
+    # through a live search, mirroring how every other test in this file
+    # feeds `FileIngest.ingest/3` a hand-built match result.
+    setup do
+      library_path = Mydia.SettingsFixtures.library_path_fixture(%{type: "series"})
+
+      show =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "Series Level Show",
+          tvdb_id: System.unique_integer([:positive])
+        })
+
+      _existing_episode =
+        episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
+
+      file = orphaned_media_file_fixture(%{library_path_id: library_path.id})
+
+      %{media_file: file, show: show}
+    end
+
+    test "a series-level match links under :create_items instead of only caching a candidate",
+         %{media_file: file, show: show} do
+      series_level_match = %{
+        provider_id: to_string(show.tvdb_id),
+        provider_type: :tvdb,
+        title: show.title,
+        year: show.year,
+        match_confidence: 0.85,
+        match_type: :partial_match,
+        partial_reason: :episode_not_found,
+        metadata: %{},
+        from_local_db: false,
+        parsed_info: %{type: :tv_show, season: 1, episodes: [1]}
+      }
+
+      assert {:linked, item} = FileIngest.ingest(file, series_level_match, policy: :create_items)
+
+      assert item.id == show.id
+      refute is_nil(Library.get_media_file!(file.id).episode_id)
+    end
   end
 
   describe "auto-link threshold" do

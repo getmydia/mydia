@@ -2551,10 +2551,17 @@ defmodule Mydia.Library do
 
   A file needs matching when it has no parent association and either no
   cached candidate, or a failed candidate (no `provider_id`) whose retry
-  window has passed. Excluding a file with a fresh failure or a real match
-  candidate is what lets a resumed run skip relay work a previous run already
-  paid for; letting an expired failure back in is what stops a single relay
-  outage from parking a file forever.
+  window has passed or was never set. Excluding a file with a fresh failure
+  or a real match candidate is what lets a resumed run skip relay work a
+  previous run already paid for; letting an expired (or unset) failure back
+  in is what stops a single relay outage from parking a file forever.
+
+  A NULL `next_retry_at` counts as eligible, not excluded: `record_failure/2`
+  always writes the column now, so NULL means exactly one thing -- a failure
+  recorded before this backoff shipped. Treating it as "not yet due" would
+  permanently strand that entire pre-existing backlog, since being excluded
+  here is exactly what stops `record_failure/2` from ever running on the file
+  again to populate the column.
   """
   @spec list_unmatched_media_file_paths(binary(), pos_integer()) :: [{binary(), String.t()}]
   def list_unmatched_media_file_paths(library_path_id, limit) do
@@ -2568,7 +2575,8 @@ defmodule Mydia.Library do
     |> where(
       [_f, c],
       is_nil(c.id) or
-        (is_nil(c.provider_id) and not is_nil(c.next_retry_at) and c.next_retry_at <= ^now)
+        (is_nil(c.provider_id) and
+           (is_nil(c.next_retry_at) or c.next_retry_at <= ^now))
     )
     |> order_by([f], asc: f.id)
     |> limit(^limit)
