@@ -14,6 +14,7 @@ defmodule Mydia.ImportGroups do
   alias Mydia.Library.MatchCandidate
   alias Mydia.Library.MediaFile
   alias Mydia.Library.PathAnchor
+  alias Mydia.Library.SelectionScope
   alias Mydia.Repo
 
   @auto_accept_threshold 0.85
@@ -423,5 +424,85 @@ defmodule Mydia.ImportGroups do
       end,
       fn _ -> :ok end
     )
+  end
+
+  @doc """
+  Marks a selection accepted and enqueues the commit.
+
+  The status flip is guarded on `status == "pending"`, so two sessions racing on
+  the same group produce one winner and a zero count for the loser rather than a
+  double commit.
+  """
+  @spec accept(SelectionScope.t()) :: {:ok, non_neg_integer()}
+  def accept(%SelectionScope{} = scope) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    {count, _} =
+      scope
+      |> SelectionScope.to_query()
+      |> Repo.update_all(set: [status: "accepted", decided_at: now, updated_at: now])
+
+    if count > 0 do
+      %{"library_path_id" => scope.library_path_id}
+      |> Mydia.Jobs.ApplyImportGroups.new()
+      |> insert_job()
+    end
+
+    {:ok, count}
+  end
+
+  @doc "Marks a selection ignored. No files are touched."
+  @spec ignore(SelectionScope.t()) :: {:ok, non_neg_integer()}
+  def ignore(%SelectionScope{} = scope) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    {count, _} =
+      scope
+      |> SelectionScope.to_query()
+      |> Repo.update_all(set: [status: "ignored", decided_at: now, updated_at: now])
+
+    {:ok, count}
+  end
+
+  @doc """
+  One group's member files, for lazy expansion in the UI.
+
+  Capped by `:limit` (default 200). A group can hold tens of thousands of files
+  and the page must never render them all.
+  """
+  @spec members(binary(), keyword()) :: [
+          %{media_file: MediaFile.t(), candidate: MatchCandidate.t() | nil}
+        ]
+  def members(group_id, opts \\ []) do
+    limit = Keyword.get(opts, :limit, 200)
+
+    MediaFile
+    |> where([f], f.import_group_id == ^group_id)
+    |> where([f], is_nil(f.media_item_id) and is_nil(f.episode_id) and is_nil(f.trashed_at))
+    |> join(:left, [f], c in MatchCandidate, on: c.media_file_id == f.id and c.rank == 0)
+    |> order_by([f], asc: f.relative_path)
+    |> limit(^limit)
+    |> select([f, c], %{media_file: f, candidate: c})
+    |> Repo.all()
+  end
+
+  @doc "How many unresolved members a group still has."
+  @spec member_count(binary()) :: non_neg_integer()
+  def member_count(group_id) do
+    MediaFile
+    |> where([f], f.import_group_id == ^group_id)
+    |> where([f], is_nil(f.media_item_id) and is_nil(f.episode_id) and is_nil(f.trashed_at))
+    |> Repo.aggregate(:count)
+  end
+
+  # Insert an Oban job, falling back to a direct Repo insert when Oban's engine
+  # is disabled (test mode). Mirrors the pattern in Search, Downloads.Queue, and
+  # DownloadMonitor: config/test.exs sets `engine: false`, so the application
+  # supervisor never starts an Oban process to insert against, and a bare
+  # `Oban.insert/1` raises `RuntimeError` for every caller in the test suite.
+  defp insert_job(changeset) do
+    Oban.insert(changeset)
+  rescue
+    RuntimeError -> Repo.insert(changeset)
   end
 end
