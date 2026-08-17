@@ -9,7 +9,7 @@ defmodule MydiaWeb.ReviewMediaLive.Index do
   use MydiaWeb, :live_view
 
   alias Mydia.{Library, Metadata, Settings}
-  alias Mydia.Library.{FileIngest, ImportRun, MediaFile}
+  alias Mydia.Library.{FileGrouper, FileIngest, ImportRun, MediaFile}
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.ImportMediaLive.Components, as: ImportComponents
   alias MydiaWeb.ReviewMediaLive.Components
@@ -47,6 +47,8 @@ defmodule MydiaWeb.ReviewMediaLive.Index do
      |> assign(:editing_file_name, nil)
      |> assign(:edit_form, nil)
      |> assign(:search_results, [])
+     |> assign(:rematching_series_key, nil)
+     |> assign(:series_search_results, [])
      |> load_group()}
   end
 
@@ -280,6 +282,52 @@ defmodule MydiaWeb.ReviewMediaLive.Index do
         else: MapSet.union(selected, valid_ids)
 
     {:noreply, assign(socket, :batch_selected_ids, selected)}
+  end
+
+  def handle_event("edit_series_rematch", %{"series_key" => key}, socket) do
+    {:noreply,
+     socket |> assign(:rematching_series_key, key) |> assign(:series_search_results, [])}
+  end
+
+  def handle_event("cancel_series_rematch", _params, socket) do
+    {:noreply,
+     socket |> assign(:rematching_series_key, nil) |> assign(:series_search_results, [])}
+  end
+
+  def handle_event("search_series_rematch", %{"query" => query}, socket) do
+    {:noreply, assign(socket, :series_search_results, search_metadata(query))}
+  end
+
+  def handle_event("select_series_rematch", params, socket) do
+    with :ok <- Authorization.authorize_import_media(socket) do
+      key = socket.assigns.rematching_series_key
+      series = Enum.find(socket.assigns.group.series, &(FileGrouper.series_key(&1) == key))
+
+      if series do
+        episode_ids =
+          for season <- series.seasons, episode <- season.episodes, do: episode.file.media_file.id
+
+        match = %{
+          title: params["title"],
+          provider_id: params["provider_id"],
+          type: "tv_show"
+        }
+
+        {:ok, %{updated: updated, failed: failed}} =
+          Library.apply_batch_match(episode_ids, match, nil)
+
+        {:noreply,
+         socket
+         |> assign(:rematching_series_key, nil)
+         |> assign(:series_search_results, [])
+         |> put_flash(batch_flash_kind(failed), batch_flash_message(updated, failed))
+         |> load_group()}
+      else
+        {:noreply, socket}
+      end
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
   end
 
   defp candidate_to_match(candidate) do

@@ -359,4 +359,140 @@ defmodule MydiaWeb.ReviewMediaLiveTest do
 
     refute has_element?(view, "#inbox-batch-toolbar")
   end
+
+  test "re-matching a series re-points every episode and collapses the editor", %{
+    conn: conn,
+    library_path: lp
+  } do
+    f1 = orphaned_media_file_fixture(%{library_path_id: lp.id})
+
+    {:ok, _} =
+      Library.upsert_match_candidate(%{
+        media_file_id: f1.id,
+        rank: 0,
+        provider_type: "tmdb",
+        provider_id: "111",
+        title: "Wrong Show",
+        year: 2020,
+        media_type: "tv_show",
+        confidence: 0.9,
+        parsed_info: %{"season" => 1, "episodes" => [1]}
+      })
+
+    f2 = orphaned_media_file_fixture(%{library_path_id: lp.id})
+
+    {:ok, _} =
+      Library.upsert_match_candidate(%{
+        media_file_id: f2.id,
+        rank: 0,
+        provider_type: "tmdb",
+        provider_id: "111",
+        title: "Wrong Show",
+        year: 2020,
+        media_type: "tv_show",
+        confidence: 0.9,
+        parsed_info: %{"season" => 1, "episodes" => [2]}
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/review")
+
+    view |> element("#rematch-111") |> render_click()
+
+    assert has_element?(view, "input[name=query]")
+
+    view
+    |> render_hook("select_series_rematch", %{
+      "provider_id" => "1396",
+      "title" => "Breaking Bad"
+    })
+
+    assert has_element?(view, "h3", "Breaking Bad")
+    refute has_element?(view, "input[name=query]")
+  end
+
+  test "canceling series rematch collapses the editor", %{conn: conn, library_path: lp} do
+    f1 = orphaned_media_file_fixture(%{library_path_id: lp.id})
+
+    {:ok, _} =
+      Library.upsert_match_candidate(%{
+        media_file_id: f1.id,
+        rank: 0,
+        provider_type: "tmdb",
+        provider_id: "111",
+        title: "Wrong Show",
+        year: 2020,
+        media_type: "tv_show",
+        confidence: 0.9,
+        parsed_info: %{"season" => 1, "episodes" => [1]}
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/review")
+
+    view |> element("#rematch-111") |> render_click()
+    assert has_element?(view, "input[name=query]")
+
+    view |> render_hook("cancel_series_rematch", %{})
+    refute has_element?(view, "input[name=query]")
+  end
+
+  test "readonly users cannot select series rematch", %{conn: conn, library_path: lp} do
+    f1 = orphaned_media_file_fixture(%{library_path_id: lp.id})
+
+    {:ok, _} =
+      Library.upsert_match_candidate(%{
+        media_file_id: f1.id,
+        rank: 0,
+        provider_type: "tmdb",
+        provider_id: "111",
+        title: "Wrong Show",
+        year: 2020,
+        media_type: "tv_show",
+        confidence: 0.9,
+        parsed_info: %{"season" => 1, "episodes" => [1]}
+      })
+
+    readonly_user = user_fixture(%{role: "readonly"})
+    readonly_conn = log_in_user(conn, readonly_user)
+
+    {:ok, view, _html} = live(readonly_conn, ~p"/review")
+
+    view |> element("#rematch-111") |> render_click()
+
+    view
+    |> render_hook("select_series_rematch", %{
+      "provider_id" => "1396",
+      "title" => "Breaking Bad"
+    })
+
+    assert [candidate] = Library.list_match_candidates(f1.id)
+    assert candidate.title == "Wrong Show"
+  end
+
+  test "searching series rematch with short query returns empty results", %{
+    conn: conn,
+    library_path: lp
+  } do
+    f1 = orphaned_media_file_fixture(%{library_path_id: lp.id})
+
+    {:ok, _} =
+      Library.upsert_match_candidate(%{
+        media_file_id: f1.id,
+        rank: 0,
+        provider_type: "tmdb",
+        provider_id: "111",
+        title: "Wrong Show",
+        year: 2020,
+        media_type: "tv_show",
+        confidence: 0.9,
+        parsed_info: %{"season" => 1, "episodes" => [1]}
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/review")
+
+    view |> element("#rematch-111") |> render_click()
+
+    view |> render_change("search_series_rematch", %{"query" => "a"})
+
+    refute has_element?(view, "button[phx-click=select_series_rematch]")
+  end
 end
