@@ -122,7 +122,7 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
       extract_episode_info(tokens, assignments_map)
 
     absolute_episode =
-      resolve_absolute_episode(tokens, target, assignments_map, season, episodes)
+      resolve_absolute_episode(tokens, target, assignments_map, boundary, season, episodes)
 
     year_pick = pick_assignment(assignments, :year)
     year_value = pick_year_value(year_pick)
@@ -584,12 +584,41 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
   # title's `2` or `24` is not). An exclusion list can't close that —
   # audio channel layouts (`2.0`, `5.1`), frame rates (`24 fps`), and
   # bit depths tokenize into bare digits with no distinguishing
-  # candidate to exclude on. Instead this anchors on *position*: the
-  # dominant convention is `Title - NN`, so only a bare integer token
-  # immediately preceded by a standalone `-` token is considered at
-  # all. That is a positive anchor, not a list of things to reject, so
-  # it can't be defeated by yet another quality/title shape that
-  # happens to contain a bare number.
+  # candidate to exclude on.
+  #
+  # `title_boundary_for/1` (computed once in `resolve/3` and threaded
+  # in here) turns out NOT to separate these cases the way it might
+  # look like it should: it is the position of the earliest
+  # year/resolution/episode_marker anchor, and in the dominant
+  # `Title - NN (Quality)` convention the episode number sits *before*
+  # that anchor, in the same "title zone" as `86` or `Log Horizon`'s
+  # `2`. Verified by instrumenting `title_boundary_for/1` directly
+  # against the corpus below — every correct episode number and every
+  # false-positive title digit land on the *same* side of the
+  # boundary. A raw ">= boundary" filter was tried and rejected: it
+  # excludes every positive case, including the originally required
+  # `[SubsPlease] Black Clover - 170 (1080p) [A1B2C3].mkv`.
+  #
+  # So this uses two anchors, tried in order:
+  #
+  #   1. Dash-adjacency (`dash_adjacent_candidates/2`): a bare integer
+  #      immediately preceded by a standalone `-` token
+  #      (`Title - NN`). This is precise — it's what correctly rejects
+  #      `86` in `86 - Eighty Six - 12` (not dash-preceded) while
+  #      accepting `12` (is), and rejects the embedded `12` in
+  #      `Black Clover - 05 - The Title 12 [1080p]` (preceded by
+  #      `Title`, not `-`) while accepting `05`.
+  #   2. Only when (1) finds nothing: the last non-dash token still
+  #      inside the title zone (`title_zone_tail_candidate/3`) — this
+  #      is what recovers filenames with no dash at all
+  #      (`Black Clover 170.mkv`, `Black Clover.170.1080p.mkv`,
+  #      `[SubsPlease] Black Clover 170 (1080p) [A1B2C3].mkv`) and the
+  #      case where the dash sits *after* the episode number instead
+  #      of before it (`Black Clover 05 - 1080p.mkv`).
+  #
+  # Dash-adjacency is tried first and wins whenever it finds anything,
+  # specifically so that a later, unrelated trailing digit (the `12`
+  # above) can never outrank the real dash-marked episode number.
   #
   # A bare integer token only qualifies when:
   #
@@ -598,22 +627,20 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
   #   2. The target is bound, its `category` is `"anime_series"`, and
   #      it carries a `max_absolute_number` (nil disables the feature,
   #      per `TargetContext` — every non-anime show has nil).
-  #   3. The token is immediately preceded by a standalone `-` token
-  #      (`Title - NN`) — this is what keeps title-zone numbers like
-  #      the `86` in `86 - Eighty Six - 12` or the `2` in
-  #      `Log Horizon 2 - 05` from ever being candidates.
+  #   3. It is selected by one of the two anchors above.
   #   4. The token itself hasn't already won a singleton-label fight
   #      (`:year`, `:resolution`, `:release_group`, etc.) — a token
   #      already claimed as the release year or a quality/group value
   #      is not re-read as an episode number.
   #   5. The token sits outside brackets/parens/braces — real absolute
   #      episode numbers appear bare (`Show - 170`), while brackets and
-  #      parens are where quality annotations and hash-style release
-  #      tags (`[A1B2C3]`) live.
+  #      parens are where quality annotations, hash-style release tags
+  #      (`[A1B2C3]`), and bracketed episode numbers (`[170]`, out of
+  #      scope for this feature) live.
   #   6. The value falls within `1..max_absolute_number` — this is
   #      what keeps `1080`, `2049` and other large bare numbers from
   #      ever matching.
-  defp resolve_absolute_episode(_tokens, _target, _assignments_map, season, episodes)
+  defp resolve_absolute_episode(_tokens, _target, _assignments_map, _boundary, season, episodes)
        when not is_nil(season) or episodes not in [nil, []],
        do: nil
 
@@ -621,30 +648,65 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
          tokens,
          %TargetContext{category: "anime_series", max_absolute_number: max},
          assignments_map,
+         boundary,
          _season,
          _episodes
        )
        when is_integer(max) do
-    tokens
-    |> dash_prefixed_tokens()
-    |> Enum.filter(&bare_episode_candidate?(&1, assignments_map))
+    candidates =
+      case dash_adjacent_candidates(tokens, assignments_map) do
+        [] -> title_zone_tail_candidate(tokens, boundary, assignments_map)
+        list -> list
+      end
+
+    candidates
     |> Enum.map(&String.to_integer(&1.value))
     |> Enum.filter(fn n -> n >= 1 and n <= max end)
     |> List.first()
   end
 
-  defp resolve_absolute_episode(_tokens, _target, _assignments_map, _season, _episodes), do: nil
+  defp resolve_absolute_episode(
+         _tokens,
+         _target,
+         _assignments_map,
+         _boundary,
+         _season,
+         _episodes
+       ),
+       do: nil
 
   # Tokens immediately preceded, in filename order, by a standalone `-`
   # token (`Title - NN`). Dash isn't a tokenizer separator (it stays
   # attached inside compound words like `Spider-Man`), so a `-`
   # surrounded by whitespace on both sides survives as its own token —
   # exactly the shape this naming convention produces.
-  defp dash_prefixed_tokens(tokens) do
+  defp dash_adjacent_candidates(tokens, assignments_map) do
     tokens
     |> Enum.chunk_every(2, 1, :discard)
     |> Enum.filter(fn [prev, _curr] -> dash_token?(prev) end)
     |> Enum.map(fn [_prev, curr] -> curr end)
+    |> Enum.filter(&bare_episode_candidate?(&1, assignments_map))
+  end
+
+  # Fallback for filenames with no (or a misplaced) dash: the last
+  # token still inside the title zone (`byte_offset < boundary`),
+  # after dropping a trailing run of standalone `-` tokens (so
+  # `Black Clover 05 - 1080p.mkv`, where the dash trails the episode
+  # number rather than leading it, still resolves to `05`). `boundary`
+  # may be the atom `:infinity` (no year/resolution/episode_marker
+  # anchor at all) — `byte_offset < :infinity` is always true for an
+  # integer offset under Erlang term ordering, so every token counts
+  # as title zone, matching the classifier's own `zone_for/2`
+  # convention for the same boundary value.
+  defp title_zone_tail_candidate(tokens, boundary, assignments_map) do
+    tokens
+    |> Enum.filter(fn %Token{byte_offset: o} -> o < boundary end)
+    |> Enum.reverse()
+    |> Enum.drop_while(&dash_token?/1)
+    |> case do
+      [last | _] -> Enum.filter([last], &bare_episode_candidate?(&1, assignments_map))
+      [] -> []
+    end
   end
 
   defp dash_token?(%Token{value: "-"}), do: true

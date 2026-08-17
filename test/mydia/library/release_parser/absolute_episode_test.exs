@@ -117,4 +117,41 @@ defmodule Mydia.Library.ReleaseParser.AbsoluteEpisodeTest do
 
     assert result.absolute_episode == 5
   end
+
+  test "resolves a space-separated bare number with no dash at all" do
+    result =
+      ReleaseParser.parse("[SubsPlease] Black Clover 170 (1080p) [A1B2C3].mkv",
+        target: anime_target()
+      )
+
+    assert result.absolute_episode == 170
+  end
+
+  test "resolves a trailing bare number with no other anchors" do
+    result = ReleaseParser.parse("Black Clover 170.mkv", target: anime_target())
+
+    assert result.absolute_episode == 170
+  end
+
+  test "resolves a dot-separated bare number with no dash" do
+    result = ReleaseParser.parse("Black Clover.170.1080p.mkv", target: anime_target())
+
+    assert result.absolute_episode == 170
+  end
+
+  test "resolves a bare number that precedes the dash instead of following it" do
+    result = ReleaseParser.parse("Black Clover 05 - 1080p.mkv", target: anime_target())
+
+    assert result.absolute_episode == 5
+  end
+
+  test "prefers the dash-adjacent episode number over a later embedded digit" do
+    result =
+      ReleaseParser.parse(
+        "[Group] Black Clover - 05 - The Title 12 [1080p].mkv",
+        target: anime_target()
+      )
+
+    assert result.absolute_episode == 5
+  end
 end
