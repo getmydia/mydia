@@ -62,4 +62,59 @@ defmodule Mydia.Library.ReleaseParser.AbsoluteEpisodeTest do
     assert result.episodes == [52]
     assert result.absolute_episode == nil
   end
+
+  test "ignores a bare number when category is present but not anime" do
+    target = %{ordinary_target() | max_absolute_number: 170}
+
+    result =
+      ReleaseParser.parse(
+        "[SubsPlease] Black Clover - 170 (1080p) [A1B2C3].mkv",
+        target: target
+      )
+
+    assert result.absolute_episode == nil
+  end
+
+  test "does not pick up a numeric title as the episode number" do
+    result =
+      ReleaseParser.parse("[Erai-raws] 86 - Eighty Six - 12 [1080p].mkv", target: anime_target())
+
+    assert result.absolute_episode == 12
+  end
+
+  test "does not pick up a numeric title's leading digits as the episode number" do
+    result =
+      ReleaseParser.parse("[HorribleSubs] 91 Days - 07 [720p].mkv", target: anime_target())
+
+    assert result.absolute_episode == 7
+  end
+
+  test "does not pick up a sequel number in the title as the episode number" do
+    result =
+      ReleaseParser.parse(
+        "[SubsPlease] Log Horizon 2 - 05 (1080p) [ABCDEF].mkv",
+        target: anime_target()
+      )
+
+    assert result.absolute_episode == 5
+  end
+
+  test "does not pick up a part number in the title as the episode number" do
+    result = ReleaseParser.parse("Black Clover Part 2 - 05.mkv", target: anime_target())
+
+    assert result.absolute_episode == 5
+  end
+
+  test "does not pick up a frame rate as the episode number" do
+    result =
+      ReleaseParser.parse("Black Clover 10bit 24 fps - 05.mkv", target: anime_target())
+
+    assert result.absolute_episode == 5
+  end
+
+  test "does not pick up an audio channel layout as the episode number" do
+    result = ReleaseParser.parse("Black Clover FLAC 2.0 - 05.mkv", target: anime_target())
+
+    assert result.absolute_episode == 5
+  end
 end

@@ -577,6 +577,20 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
   # (target is always `nil` or non-anime there) while still matching
   # the dominant anime naming convention.
   #
+  # A numeric ceiling alone is not enough: numeric titles ("86",
+  # "91 Days") and sequel-numbered titles ("Log Horizon 2") put bare
+  # integers that are comfortably *below* `max_absolute_number` in the
+  # title zone itself (`170` and `2049` are safely out of range, but a
+  # title's `2` or `24` is not). An exclusion list can't close that —
+  # audio channel layouts (`2.0`, `5.1`), frame rates (`24 fps`), and
+  # bit depths tokenize into bare digits with no distinguishing
+  # candidate to exclude on. Instead this anchors on *position*: the
+  # dominant convention is `Title - NN`, so only a bare integer token
+  # immediately preceded by a standalone `-` token is considered at
+  # all. That is a positive anchor, not a list of things to reject, so
+  # it can't be defeated by yet another quality/title shape that
+  # happens to contain a bare number.
+  #
   # A bare integer token only qualifies when:
   #
   #   1. No season/episode marker was already resolved from the
@@ -584,15 +598,19 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
   #   2. The target is bound, its `category` is `"anime_series"`, and
   #      it carries a `max_absolute_number` (nil disables the feature,
   #      per `TargetContext` — every non-anime show has nil).
-  #   3. The token itself hasn't already won a singleton-label fight
+  #   3. The token is immediately preceded by a standalone `-` token
+  #      (`Title - NN`) — this is what keeps title-zone numbers like
+  #      the `86` in `86 - Eighty Six - 12` or the `2` in
+  #      `Log Horizon 2 - 05` from ever being candidates.
+  #   4. The token itself hasn't already won a singleton-label fight
   #      (`:year`, `:resolution`, `:release_group`, etc.) — a token
   #      already claimed as the release year or a quality/group value
   #      is not re-read as an episode number.
-  #   4. The token sits outside brackets/parens/braces — real absolute
+  #   5. The token sits outside brackets/parens/braces — real absolute
   #      episode numbers appear bare (`Show - 170`), while brackets and
   #      parens are where quality annotations and hash-style release
   #      tags (`[A1B2C3]`) live.
-  #   5. The value falls within `1..max_absolute_number` — this is
+  #   6. The value falls within `1..max_absolute_number` — this is
   #      what keeps `1080`, `2049` and other large bare numbers from
   #      ever matching.
   defp resolve_absolute_episode(_tokens, _target, _assignments_map, season, episodes)
@@ -608,6 +626,7 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
        )
        when is_integer(max) do
     tokens
+    |> dash_prefixed_tokens()
     |> Enum.filter(&bare_episode_candidate?(&1, assignments_map))
     |> Enum.map(&String.to_integer(&1.value))
     |> Enum.filter(fn n -> n >= 1 and n <= max end)
@@ -615,6 +634,21 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
   end
 
   defp resolve_absolute_episode(_tokens, _target, _assignments_map, _season, _episodes), do: nil
+
+  # Tokens immediately preceded, in filename order, by a standalone `-`
+  # token (`Title - NN`). Dash isn't a tokenizer separator (it stays
+  # attached inside compound words like `Spider-Man`), so a `-`
+  # surrounded by whitespace on both sides survives as its own token —
+  # exactly the shape this naming convention produces.
+  defp dash_prefixed_tokens(tokens) do
+    tokens
+    |> Enum.chunk_every(2, 1, :discard)
+    |> Enum.filter(fn [prev, _curr] -> dash_token?(prev) end)
+    |> Enum.map(fn [_prev, curr] -> curr end)
+  end
+
+  defp dash_token?(%Token{value: "-"}), do: true
+  defp dash_token?(%Token{}), do: false
 
   defp bare_episode_candidate?(
          %Token{bracket_context: nil, value: value} = token,
