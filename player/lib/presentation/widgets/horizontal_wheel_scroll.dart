@@ -17,12 +17,13 @@ const _glideCurve = Curves.easeOutCubic;
 /// It claims it only while the rail can actually use it, so vertical page
 /// scrolling still works over a rail that has nowhere left to go.
 ///
-/// There is deliberately no check for "the page is already scrolling". Every
-/// [ScrollActivity] whose `isScrolling` is true also sets `shouldIgnorePointer`,
-/// and [Scrollable] wraps its viewport in an `IgnorePointer` driven by that
-/// flag. A rail inside a moving page is therefore already outside the hit-test
-/// path, so such a check could never fire. An earlier revision of this widget
-/// carried one; it was removed as unreachable.
+/// The page-in-motion check in `_onPointerSignal` looks redundant and mostly
+/// is: [Scrollable] wraps its viewport in an `IgnorePointer` while scrolling,
+/// so a rail inside a moving page is usually not hit-tested at all. It is not
+/// redundant during an overscroll bounce-back, where `setPixels` forces
+/// `setIgnorePointer(false)` while the position is out of range and the rail
+/// becomes reachable again. That case is the platform default on macOS and
+/// iOS. The check was deleted once as dead code and had to be restored.
 class HorizontalWheelScroll extends StatefulWidget {
   /// The scrollable's controller. Pass one when the call site already owns it,
   /// as the rails do for their edge fades. When null this widget creates and
@@ -54,6 +55,11 @@ class _HorizontalWheelScrollState extends State<HorizontalWheelScroll> {
   /// of each tick restarting from wherever the animation happens to be.
   double? _target;
 
+  /// The page scroller this rail sits inside, resolved once per dependency
+  /// change. `_ScrollableScope` only notifies when the position object itself
+  /// is replaced, so this dependency costs nothing per frame.
+  ScrollableState? _verticalAncestor;
+
   ScrollController get _controller => widget.controller ?? _ownedController!;
 
   @override
@@ -62,6 +68,12 @@ class _HorizontalWheelScrollState extends State<HorizontalWheelScroll> {
     if (widget.controller == null) {
       _ownedController = ScrollController();
     }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _verticalAncestor = Scrollable.maybeOf(context, axis: Axis.vertical);
   }
 
   @override
@@ -85,6 +97,16 @@ class _HorizontalWheelScrollState extends State<HorizontalWheelScroll> {
     // Mirrors Scrollable's own guard, so a NeverScrollableScrollPhysics rail
     // stays inert instead of being scrolled from here.
     if (!position.physics.shouldAcceptUserOffset(position)) return;
+
+    // A page scroll already in flight keeps the wheel until it settles, so a
+    // flick down the home screen is not snagged by a rail it passes over.
+    //
+    // Mostly redundant: while a page scrolls it wraps its viewport in an
+    // IgnorePointer, so the rail is usually not in the hit-test path at all.
+    // The exception is an overscroll bounce-back under BouncingScrollPhysics,
+    // where setPixels forces setIgnorePointer(false) while out of range. There
+    // the rail IS reachable and this line is the only thing declining.
+    if (_verticalAncestor?.position.isScrollingNotifier.value ?? false) return;
 
     // `pixels` is direction-normalised, so `dy` maps onto it unsigned in both
     // LTR and RTL: down always means further through the list.

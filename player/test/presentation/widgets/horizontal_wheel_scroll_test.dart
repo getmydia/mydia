@@ -19,6 +19,7 @@ Widget _host({
   ScrollController? railController,
   int cards = 40,
   ScrollPhysics? railPhysics,
+  ScrollPhysics? pagePhysics,
   TextDirection textDirection = TextDirection.ltr,
 }) {
   return Directionality(
@@ -28,6 +29,7 @@ Widget _host({
       child: Material(
         child: ListView(
           controller: pageController,
+          physics: pagePhysics,
           children: [
             SizedBox(
               height: _railHeight,
@@ -314,5 +316,46 @@ void main() {
     expect(_rail(tester).pixels, greaterThan(0),
         reason: 'the IgnorePointer is transient; a settled page must hand the '
             'rail back its wheel');
+  });
+
+  testWidgets('a page bouncing back from overscroll keeps the wheel',
+      (tester) async {
+    final page = ScrollController();
+    addTearDown(page.dispose);
+
+    // BouncingScrollPhysics explicitly, because it is the platform default on
+    // macOS and iOS but not on the Android default the test binding uses. Under
+    // ClampingScrollPhysics the page can never go out of range, and this test
+    // would pass whether or not the momentum lock exists.
+    await tester.pumpWidget(_host(
+      pageController: page,
+      pagePhysics: const BouncingScrollPhysics(),
+    ));
+
+    // Drag the page past its top edge and release into the bounce-back. This
+    // is the one window where Flutter reports the page as scrolling while
+    // still delivering pointer events to its children: setPixels forces
+    // setIgnorePointer(false) whenever the position is out of range.
+    final drag = await tester.startGesture(
+      tester.getCenter(find.text('spacer').first),
+    );
+    await drag.moveBy(const Offset(0, 120));
+    await tester.pump();
+    await drag.up();
+    await tester.pump();
+
+    expect(_page(tester).outOfRange, isTrue,
+        reason: 'premise guard: the page must actually be overscrolled');
+    expect(_page(tester).isScrollingNotifier.value, isTrue,
+        reason: 'premise guard: the bounce-back must be running');
+
+    await _wheelOverRail(tester, 120);
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(_rail(tester).pixels, 0,
+        reason: 'a bouncing page still delivers pointers to its children, so '
+            'only the momentum lock stops the rail claiming this wheel');
+
+    await tester.pumpAndSettle();
   });
 }
