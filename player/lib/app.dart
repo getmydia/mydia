@@ -13,6 +13,7 @@ import 'core/graphql/watch/watcher_registry.dart';
 import 'core/cast/cast_providers.dart';
 import 'core/downloads/download_providers.dart';
 import 'core/downloads/download_service.dart';
+import 'core/scroll/app_scroll_behavior.dart';
 import 'presentation/widgets/cast_mini_controller.dart';
 import 'package:player/core/p2p/p2p_service.dart';
 
@@ -130,6 +131,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       return MaterialApp(
         title: 'Mydia Player',
         debugShowCheckedModeBanner: false,
+        scrollBehavior: const AppScrollBehavior(),
         theme: AppTheme.darkTheme,
         home: const Scaffold(
           body: Center(
@@ -152,6 +154,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       return MaterialApp(
         title: 'Mydia Player',
         debugShowCheckedModeBanner: false,
+        scrollBehavior: const AppScrollBehavior(),
         theme: AppTheme.darkTheme,
         home: Scaffold(
           body: Center(
@@ -176,6 +179,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     return MaterialApp.router(
       title: 'Mydia Player',
       debugShowCheckedModeBanner: false,
+      scrollBehavior: const AppScrollBehavior(),
       theme: AppTheme.darkTheme,
       routerConfig: router,
       // Float the cast mini controller above every route. `CastBarLayer`

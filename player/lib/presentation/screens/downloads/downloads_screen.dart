@@ -8,6 +8,7 @@ import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/cast_actions.dart';
 import '../../widgets/cast_button.dart';
 import '../../widgets/glass_surface.dart';
+import '../../widgets/horizontal_wheel_scroll.dart';
 import '../../../core/downloads/download_providers.dart';
 import '../../../core/downloads/download_queue_providers.dart';
 import '../../../core/downloads/storage_quota_providers.dart';
@@ -269,17 +270,22 @@ class DownloadsScreen extends ConsumerWidget {
         ),
         SizedBox(
           height: 160,
-          child: ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            scrollDirection: Axis.horizontal,
-            itemCount: failed.length,
-            itemBuilder: (context, index) {
-              return Container(
-                width: 300,
-                margin: const EdgeInsets.only(right: 12),
-                child: _buildFailedDownloadCard(context, ref, failed[index]),
-              );
-            },
+          child: HorizontalWheelScroll(
+            builder: (context, controller) => ListView.builder(
+              controller: controller,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              scrollDirection: Axis.horizontal,
+              itemCount: failed.length,
+              itemBuilder: (context, index) {
+                final task = failed[index];
+                return Container(
+                  key: ValueKey('failed-download-${task.id}'),
+                  width: 300,
+                  margin: const EdgeInsets.only(right: 12),
+                  child: _buildFailedDownloadCard(context, ref, task),
+                );
+              },
+            ),
           ),
         ),
       ],

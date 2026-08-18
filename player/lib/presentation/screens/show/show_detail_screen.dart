@@ -27,6 +27,7 @@ import '../../widgets/cast_rail.dart';
 import '../../widgets/content_rail.dart';
 import '../../widgets/detail_action_row.dart';
 import '../../widgets/hero_play_control.dart';
+import '../../widgets/horizontal_wheel_scroll.dart';
 import '../../widgets/media_info/media_info_sheet.dart';
 import '../../widgets/watch_indicator.dart';
 
@@ -930,30 +931,35 @@ class ShowDetailScreen extends ConsumerWidget {
         const SizedBox(height: 16),
         SizedBox(
           height: 44,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            itemCount: availableSeasons.length,
-            itemBuilder: (context, index) {
-              final season = availableSeasons[index];
-              final unwatched = season.watchStatus?.unwatchedEpisodeCount ?? 0;
-              final isSelected = season.seasonNumber == selectedSeason;
+          child: HorizontalWheelScroll(
+            builder: (context, controller) => ListView.builder(
+              controller: controller,
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              itemCount: availableSeasons.length,
+              itemBuilder: (context, index) {
+                final season = availableSeasons[index];
+                final unwatched =
+                    season.watchStatus?.unwatchedEpisodeCount ?? 0;
+                final isSelected = season.seasonNumber == selectedSeason;
 
-              return Padding(
-                padding: const EdgeInsets.only(right: 10),
-                child: _SeasonChip(
-                  label: 'Season ${season.seasonNumber}',
-                  unwatched: unwatched,
-                  watchStatus: season.watchStatus,
-                  isSelected: isSelected,
-                  onTap: () {
-                    ref
-                        .read(selectedSeasonProvider(id).notifier)
-                        .select(season.seasonNumber);
-                  },
-                ),
-              );
-            },
+                return Padding(
+                  key: ValueKey('season-chip-${season.seasonNumber}'),
+                  padding: const EdgeInsets.only(right: 10),
+                  child: _SeasonChip(
+                    label: 'Season ${season.seasonNumber}',
+                    unwatched: unwatched,
+                    watchStatus: season.watchStatus,
+                    isSelected: isSelected,
+                    onTap: () {
+                      ref
+                          .read(selectedSeasonProvider(id).notifier)
+                          .select(season.seasonNumber);
+                    },
+                  ),
+                );
+              },
+            ),
           ),
         ),
       ],

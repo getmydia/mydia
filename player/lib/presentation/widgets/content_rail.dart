@@ -5,6 +5,7 @@ import '../../domain/models/continue_watching_item.dart';
 import '../../domain/models/recently_added_item.dart';
 import '../../domain/models/up_next_item.dart';
 import '../../domain/models/watch_status.dart';
+import 'horizontal_wheel_scroll.dart';
 import 'media_card.dart';
 import 'media_context_menu.dart';
 
@@ -191,22 +192,27 @@ class _ContentRailState extends State<ContentRail> {
   Widget _buildRailBody(double horizontalPadding, double cardSpacing) {
     return Stack(
       children: [
-        // Main scrollable list
-        ListView.builder(
+        // Main scrollable list. The wrapper is what makes a plain mouse wheel
+        // move it; the controller stays owned here because the edge fades
+        // listen to it.
+        HorizontalWheelScroll(
           controller: _scrollController,
-          scrollDirection: Axis.horizontal,
-          padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-          itemCount: widget.items.length,
-          itemBuilder: (context, index) {
-            final item = widget.items[index];
-            return Padding(
-              key: _keyFor(item, index),
-              padding: EdgeInsets.only(
-                right: index < widget.items.length - 1 ? cardSpacing : 0,
-              ),
-              child: _buildCard(context, item),
-            );
-          },
+          builder: (context, controller) => ListView.builder(
+            controller: controller,
+            scrollDirection: Axis.horizontal,
+            padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+            itemCount: widget.items.length,
+            itemBuilder: (context, index) {
+              final item = widget.items[index];
+              return Padding(
+                key: _keyFor(item, index),
+                padding: EdgeInsets.only(
+                  right: index < widget.items.length - 1 ? cardSpacing : 0,
+                ),
+                child: _buildCard(context, item),
+              );
+            },
+          ),
         ),
 
         // Left fade gradient
