@@ -4,6 +4,8 @@
 // Scrollables rather than off controllers, so tests cover the case where the
 // wrapper owns the controller itself.
 
+import 'dart:async';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -253,46 +255,55 @@ void main() {
     expect(_page(tester).pixels, 0);
   });
 
-  testWidgets('a page scroll already in flight keeps the wheel',
+  // The next two tests cover a guarantee this widget relies on but does not
+  // implement. Scrollable wraps its viewport in an IgnorePointer while it is
+  // scrolling, so a rail inside a moving page cannot receive the wheel at all.
+  // That is what stops a page scroll from being snagged by a rail it passes
+  // over, and it is why this widget carries no momentum lock of its own. If
+  // Flutter ever changes it, these fail and the widget needs the clause back.
+
+  testWidgets('a moving page keeps the wheel from reaching the rail',
       (tester) async {
     final page = ScrollController();
     addTearDown(page.dispose);
 
     await tester.pumpWidget(_host(pageController: page));
 
-    // Hold a page drag open so the page position reports as scrolling.
-    final drag = await tester.startGesture(
-      tester.getCenter(find.text('spacer').first),
-    );
-    await drag.moveBy(const Offset(0, -60));
+    // Short travel over a long duration on purpose: sampled early, the page has
+    // moved only a few pixels, so the rail is still under the pointer.
+    unawaited(page.animateTo(
+      40,
+      duration: const Duration(milliseconds: 600),
+      curve: Curves.linear,
+    ));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
 
-    expect(_page(tester).isScrollingNotifier.value, isTrue);
+    expect(_page(tester).isScrollingNotifier.value, isTrue,
+        reason: 'premise guard: the page must actually be in motion');
 
     await _wheelOverRail(tester, 120);
-    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump(const Duration(milliseconds: 100));
 
     expect(_rail(tester).pixels, 0,
         reason: 'a flick down the page must not be snagged by a rail it '
             'passes over');
 
-    await drag.up();
     await tester.pumpAndSettle();
   });
 
-  testWidgets('the wheel returns to the rail once the page settles',
+  testWidgets('the wheel reaches the rail again once the page settles',
       (tester) async {
     final page = ScrollController();
     addTearDown(page.dispose);
 
     await tester.pumpWidget(_host(pageController: page));
 
-    final drag = await tester.startGesture(
-      tester.getCenter(find.text('spacer').first),
-    );
-    await drag.moveBy(const Offset(0, -60));
-    await tester.pump();
-    await drag.up();
+    unawaited(page.animateTo(
+      40,
+      duration: const Duration(milliseconds: 600),
+      curve: Curves.linear,
+    ));
     await tester.pumpAndSettle();
 
     expect(_page(tester).isScrollingNotifier.value, isFalse);
@@ -300,6 +311,8 @@ void main() {
     await _wheelOverRail(tester, 120);
     await tester.pumpAndSettle();
 
-    expect(_rail(tester).pixels, greaterThan(0));
+    expect(_rail(tester).pixels, greaterThan(0),
+        reason: 'the IgnorePointer is transient; a settled page must hand the '
+            'rail back its wheel');
   });
 }
