@@ -109,11 +109,20 @@ void main() {
       expect(keys, contains(QueryKeys.favorites.target));
     });
 
-    test('is refreshed when playback finishes', () {
+    test('is refreshed when playback finishes for an episode', () {
       final keys = InvalidationRules.playbackFinished(
         mediaType: 'episode',
         mediaId: 'e1',
         showId: 's1',
+      );
+
+      expect(keys, contains(QueryKeys.favorites.target));
+    });
+
+    test('is refreshed when playback finishes for a movie', () {
+      final keys = InvalidationRules.playbackFinished(
+        mediaType: 'movie',
+        mediaId: 'm1',
       );
 
       expect(keys, contains(QueryKeys.favorites.target));
