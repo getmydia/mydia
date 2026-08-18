@@ -64,7 +64,7 @@ defmodule Mydia.Library.BatchMatcher do
 
   require Logger
 
-  alias Mydia.Library.PathAnchor
+  alias Mydia.Library.{PathAnchor, ReleaseParser}
 
   @default_max_concurrency 10
 
@@ -152,10 +152,20 @@ defmodule Mydia.Library.BatchMatcher do
     [head_result | tail_results]
   end
 
-  # The anchor's verdict carries the series identity. Season and episode stay
-  # per-file, because they come from the filename and the season folder, not
-  # from the provider search.
-  defp reuse({_head_path, {:ok, match}}, path), do: {path, {:ok, match}}
+  # The anchor's verdict carries the series identity -- provider_id,
+  # provider_type, title, year, match_confidence, metadata -- and that part is
+  # reused as-is. Season and episode must NOT be reused: they come from the
+  # filename and the season folder, not from the provider search, so
+  # `parsed_info` is re-derived per tail file with the same parser
+  # `MetadataMatcher.match_file/2` uses (`ReleaseParser.parse_with_path/1`)
+  # instead of being copied from the head. Copying it verbatim previously sent
+  # every file in a group to the head's season/episode, because
+  # `MetadataEnricher` reads season/episode from `parsed_info`, not from the
+  # path.
+  defp reuse({_head_path, {:ok, match}}, path) do
+    {path, {:ok, Map.put(match, :parsed_info, ReleaseParser.parse_with_path(path))}}
+  end
+
   defp reuse({_head_path, {:error, reason}}, path), do: {path, {:error, reason}}
 
   defp match_one(path, match_opts, on_result, matcher) do

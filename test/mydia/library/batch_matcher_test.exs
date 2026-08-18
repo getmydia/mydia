@@ -314,7 +314,7 @@ defmodule Mydia.Library.BatchMatcherTest do
   # test meant to assert about grouping. An earlier draft used single-letter
   # folders ("A", "B") and hit exactly this.
   describe "anchor grouping" do
-    alias Mydia.Library.{EchoMatcher, FailingMatcher}
+    alias Mydia.Library.{EchoMatcher, FailingMatcher, ParsedInfoMatcher}
 
     test "one resolution is reused across every episode under a series folder" do
       root = "/media/Series"
@@ -417,6 +417,36 @@ defmodule Mydia.Library.BatchMatcherTest do
       # A second, separate anchor group in the same batch is unaffected.
       assert {^other_path, {:ok, _match}} =
                Enum.find(results, fn {p, _result} -> p == other_path end)
+    end
+
+    test "a reused tail match keeps its own parsed season and episode, not the head's" do
+      root = "/media/Series"
+
+      e1 = "#{root}/Cornemuse (1999)/Season 01/Cornemuse - S01E01.mkv"
+      e2 = "#{root}/Cornemuse (1999)/Season 01/Cornemuse - S01E02.mkv"
+
+      results =
+        BatchMatcher.match_paths([e1, e2], library_root: root, matcher: ParsedInfoMatcher)
+
+      parsed_by_path =
+        for {path, {:ok, match}} <- results, into: %{}, do: {path, match.parsed_info}
+
+      # e1 is the group's head (resolved directly by match_one/4); e2 is the
+      # tail, resolved by reuse/2. Before the fix, reuse/2 handed e2 the head's
+      # whole match map unchanged, so e2's parsed_info.episodes came back [1]
+      # instead of [2] -- the exact corruption that sent every file in a
+      # 29-episode group to the same episode downstream in MetadataEnricher.
+      assert parsed_by_path[e1].episodes == [1]
+      assert parsed_by_path[e2].episodes == [2]
+      assert parsed_by_path[e1].season == 1
+      assert parsed_by_path[e2].season == 1
+
+      # The provider identity from the head's resolution is still reused --
+      # only season/episode are per-file.
+      for {_path, {:ok, match}} <- results do
+        assert match.provider_id == "stub"
+        assert match.title == "Cornemuse"
+      end
     end
   end
 end
