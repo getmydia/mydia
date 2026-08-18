@@ -1,410 +1,422 @@
 defmodule MydiaWeb.ImportMediaLive.Components do
   @moduledoc """
-  Reusable UI components for the Import Media workflow.
+  Reusable UI components for the grouped import review table.
 
-  These components break down the import media interface into smaller,
-  focused, and testable pieces. Each component is a pure presentation
-  function with clearly defined attributes.
+  Each component renders from an `Mydia.Library.ImportGroup` row (or a page of
+  them), never from a loaded collection of files: that is what keeps the page
+  independent of how many files a group actually has.
   """
 
   use Phoenix.Component
   import MydiaWeb.CoreComponents
+
   alias Mydia.Metadata.ImageUrl
 
   @doc """
-  Renders the metadata-match editor card for one inbox row.
+  A row of buttons for switching which library the review section shows.
 
-  Addressed by `media_file_id` (a `MediaFile` id), not list position: the
-  inbox is a paged, live-filtered query, so a row's index in the currently
-  rendered page is not a stable way to refer to it. Every event this renders
-  carries `phx-value-id={@media_file_id}` for exactly that reason.
-
-  ## Attributes
-    * `:media_file_id` - The `MediaFile` id this editor is for
-    * `:file_name` - The file's display name, shown as a subtitle. Built by the
-      LiveView with `Mydia.Library.MediaFile.display_name/1` rather than by
-      calling `Path.basename/1` here, which raises on the nil path a file with
-      no resolvable location has.
-    * `:edit_form` - Edit form data (`"title"`, `"provider_id"`, `"type"`, `"season"`, `"episodes"`)
-    * `:search_results` - Metadata search results to show in the dropdown
+  Only meaningful with more than one importable library path -- the caller
+  is expected to gate rendering on that, same as the `filter` this row of
+  buttons resembles. `counts` maps `library_path_id` to its pending group
+  total (`ImportGroups.band_counts/1`'s `:total`, one call per path), so a
+  user picking between two libraries can see where the work actually is
+  before switching to it.
   """
-  attr :media_file_id, :string, required: true
-  attr :file_name, :string, required: true
-  attr :edit_form, :map, required: true
-  attr :search_results, :list, default: []
+  attr :library_paths, :list, required: true
+  attr :selected_id, :string, required: true
+  attr :counts, :map, required: true
 
-  def unmatched_file_list_item(assigns) do
+  def library_picker(assigns) do
     ~H"""
-    <div class="card card-compact bg-base-100 border border-warning/30 shadow-lg w-full">
-      <div class="card-body gap-4">
-        <%!-- Header --%>
-        <div class="flex items-start gap-3 pb-2 border-b border-base-300">
-          <div class="w-10 h-10 rounded-lg bg-warning/10 flex items-center justify-center shrink-0">
-            <.icon name="hero-question-mark-circle" class="w-5 h-5 text-warning" />
-          </div>
-          <div class="flex-1 min-w-0">
-            <h4 class="font-semibold text-sm">Find Metadata Match</h4>
-            <p class="text-xs text-base-content/60 truncate">
-              {@file_name}
-            </p>
-          </div>
-          <button
-            type="button"
-            class="btn btn-ghost btn-xs btn-circle"
-            phx-click="cancel_edit"
-          >
-            <.icon name="hero-x-mark" class="w-4 h-4" />
-          </button>
-        </div>
+    <div class="flex items-center gap-2 flex-wrap">
+      <button
+        :for={path <- @library_paths}
+        type="button"
+        id={"library-picker-#{path.id}"}
+        class={["btn btn-sm", if(path.id == @selected_id, do: "btn-primary", else: "btn-ghost")]}
+        phx-click="select_library"
+        phx-value-library_path_id={path.id}
+      >
+        {path.path}
+        <span class="badge badge-sm">{Map.get(@counts, path.id, 0)}</span>
+      </button>
+    </div>
+    """
+  end
 
-        <.form
-          for={%{}}
-          phx-submit="save_edit"
-          id={"inbox-edit-form-#{@media_file_id}"}
-          class="space-y-4"
+  @doc """
+  The band filter chips plus the folder search box.
+
+  `counts` is `ImportGroups.band_counts/1`'s return shape: `:ready`,
+  `:needs_attention`, `:no_match` and `:total`. `:all` has no key of its own
+  in that map, so `count_for/2` reads `:total` for it instead.
+
+  Each chip is a `<label>` wrapping a checkbox rather than a bare
+  `<input class="btn">`: daisyUI's own `.filter` CSS supports both (it targets
+  `input` by descendant selector, not only direct children), and a bare input
+  can only carry a count via its `aria-label`, which is invisible to anything
+  that reads the rendered markup rather than paints it -- including this
+  page's own tests.
+  """
+  attr :band, :atom, required: true
+  attr :counts, :map, required: true
+  attr :search, :string, default: ""
+
+  def band_filter(assigns) do
+    ~H"""
+    <div class="flex items-center gap-2 flex-wrap">
+      <div class="filter">
+        <label
+          :for={
+            {band, id, label} <- [
+              {:all, "band-all", "All"},
+              {:ready, "band-ready", "Ready"},
+              {:needs_attention, "band-needs-attention", "Needs attention"},
+              {:no_match, "band-no-match", "No match"},
+              {:ignored, "band-ignored", "Ignored"}
+            ]
+          }
+          id={id}
+          class={["btn btn-sm gap-1.5", @band == band && "btn-active"]}
+          phx-click="select_band"
+          phx-value-band={band}
         >
-          <%!-- Search Field --%>
-          <div class="form-control">
-            <label class="label py-1">
-              <span class="label-text text-xs font-medium">Search for Title</span>
-              <%= if @edit_form["provider_id"] do %>
-                <span class="label-text-alt text-xs text-success">
-                  <.icon name="hero-check-circle" class="w-3 h-3 inline" /> Matched
-                </span>
-              <% end %>
-            </label>
-            <div class="relative">
-              <div class="join w-full">
-                <span class="join-item flex items-center px-3 bg-base-200 border border-base-300 border-r-0">
-                  <.icon name="hero-magnifying-glass" class="w-4 h-4 text-base-content/50" />
-                </span>
-                <input
-                  type="text"
-                  name="edit_form[title]"
-                  value={@edit_form["title"]}
-                  class="input input-sm join-item flex-1"
-                  phx-change="search_metadata"
-                  phx-debounce="300"
-                  autocomplete="off"
-                  placeholder="Search by title..."
-                />
-              </div>
-              <%= if @search_results != [] do %>
-                <.search_results_dropdown_with_poster results={@search_results} />
-              <% end %>
-            </div>
-          </div>
+          <input type="checkbox" class="checkbox checkbox-xs" checked={@band == band} tabindex="-1" />
+          {label}
+          <span class="badge badge-sm">{count_for(@counts, band)}</span>
+        </label>
+      </div>
 
-          <input type="hidden" name="edit_form[provider_id]" value={@edit_form["provider_id"]} />
-          <input type="hidden" name="edit_form[type]" value={@edit_form["type"]} />
+      <form phx-change="search" id="import-search-form" class="ml-auto">
+        <input
+          type="text"
+          name="q"
+          value={@search}
+          placeholder="Search folder…"
+          phx-debounce="300"
+          class="input input-sm input-bordered"
+        />
+      </form>
+    </div>
+    """
+  end
 
-          <%!-- Media Type Indicator --%>
-          <%= if @edit_form["provider_id"] do %>
-            <div class="flex items-center gap-2 py-2 px-3 bg-base-200/50 rounded-lg">
-              <%= if @edit_form["type"] == "tv_show" do %>
-                <.icon name="hero-tv" class="w-4 h-4 text-info" />
-                <span class="text-xs font-medium">TV Series</span>
-              <% else %>
-                <.icon name="hero-film" class="w-4 h-4 text-accent" />
-                <span class="text-xs font-medium">Movie</span>
-              <% end %>
-            </div>
-          <% end %>
+  defp count_for(counts, :all), do: counts.total
+  defp count_for(counts, band), do: Map.get(counts, band, 0)
 
-          <%!-- Conditional Season/Episode Fields --%>
-          <%= if @edit_form["type"] == "tv_show" do %>
-            <div class="grid grid-cols-2 gap-3">
-              <div class="form-control">
-                <label class="input input-sm">
-                  <span class="label">Season</span>
-                  <input
-                    type="number"
-                    name="edit_form[season]"
-                    value={@edit_form["season"]}
-                    placeholder="1"
-                    min="0"
-                  />
-                </label>
-              </div>
-              <div class="form-control">
-                <label class="input input-sm">
-                  <span class="label">Episode(s)</span>
-                  <input
-                    type="text"
-                    name="edit_form[episodes]"
-                    value={@edit_form["episodes"]}
-                    placeholder="1, 2"
-                  />
-                </label>
-              </div>
-            </div>
-          <% else %>
-            <input type="hidden" name="edit_form[season]" value="" />
-            <input type="hidden" name="edit_form[episodes]" value="" />
-          <% end %>
+  @doc """
+  The selection toolbar: how many groups are selected, a shortcut to select
+  every group matching the active filter, and the accept/ignore/clear actions.
 
-          <%!-- Action Buttons --%>
-          <div class="card-actions justify-end pt-2 border-t border-base-300">
-            <button type="button" class="btn btn-ghost btn-sm" phx-click="cancel_edit">
-              Cancel
-            </button>
-            <button
-              type="submit"
-              class="btn btn-primary btn-sm gap-1"
-              disabled={@edit_form["provider_id"] == nil or @edit_form["provider_id"] == ""}
-            >
-              <.icon name="hero-check" class="w-4 h-4" /> Apply Match
-            </button>
-          </div>
-        </.form>
+  Shown whenever there is something to act on -- either a group is already
+  selected, or the band/search filter narrows the page to a subset a user
+  would plausibly want to select in bulk without touching every checkbox.
+
+  `matching_count` is how many groups the active band *and* search actually
+  match, library-wide -- not `band_counts/1`'s total, which knows nothing
+  about the search box and would offer to "select all" a number the search
+  has already narrowed past. The caller computes it with the same
+  `SelectionScope` predicate `select_all_matching/1` itself uses, so the two
+  can never disagree.
+  """
+  attr :count, :integer, required: true
+  attr :matching_count, :integer, required: true
+
+  def bulk_bar(assigns) do
+    ~H"""
+    <div class="alert alert-info flex-wrap gap-2" id="bulk-bar">
+      <span>{@count} group(s) selected.</span>
+
+      <button
+        :if={@matching_count > @count}
+        id="select-all-matching"
+        class="btn btn-xs btn-ghost"
+        phx-click="select_all_matching"
+      >
+        Select all {@matching_count} matching this filter
+      </button>
+
+      <div class="ml-auto flex gap-2">
+        <button
+          id="accept-selected"
+          class="btn btn-sm btn-primary"
+          disabled={@count == 0}
+          phx-click="accept_selected"
+        >
+          Accept {@count}
+        </button>
+        <button
+          id="ignore-selected"
+          class="btn btn-sm btn-ghost"
+          disabled={@count == 0}
+          phx-click="ignore_selected"
+        >
+          Ignore
+        </button>
+        <button id="clear-selection" class="btn btn-sm btn-ghost" phx-click="clear_selection">
+          Clear
+        </button>
       </div>
     </div>
     """
   end
 
   @doc """
-  Renders a search results dropdown with poster images.
+  One group row: a checkbox, the collapsed summary, and (when expanded) its
+  member files.
 
-  ## Attributes
-    * `:results` - List of search result maps
+  `expanded` is per-row (any number of rows can be open at once -- a settled
+  group starts closed, an unsettled one starts open). `members` is not: only
+  the one group most recently clicked ever gets `@streams.members`, every
+  other open row is passed `[]` so its `<ul>` renders with nothing in it
+  until it, too, is clicked. That is what keeps the page bounded even when
+  every group on it is unsettled and auto-expanded.
   """
-  attr :results, :list, required: true
+  attr :id, :string, required: true
+  attr :group, :map, required: true
+  attr :band, :atom, required: true
+  attr :selected, :boolean, required: true
+  attr :expanded, :boolean, required: true
+  attr :members, :any, required: true
 
-  def search_results_dropdown_with_poster(assigns) do
+  def group_row(assigns) do
     ~H"""
-    <div class="absolute z-20 w-full mt-1 bg-base-100 border border-base-300 rounded-lg shadow-xl max-h-72 overflow-y-auto">
-      <div class="py-1">
-        <%= for result <- @results do %>
+    <div id={@id} class="py-3">
+      <div class="flex items-center gap-3">
+        <input
+          type="checkbox"
+          class="checkbox checkbox-sm"
+          checked={@selected}
+          aria-label={"Select #{@group.display_title}"}
+          phx-click="toggle_group"
+          phx-value-id={@group.id}
+        />
+
+        <button
+          type="button"
+          id={"group-toggle-#{@group.id}"}
+          class="flex-1 flex items-center gap-2 text-left"
+          phx-click="expand_group"
+          phx-value-id={@group.id}
+        >
+          <.icon
+            name={if(@expanded, do: "hero-chevron-down", else: "hero-chevron-right")}
+            class="w-4 h-4 opacity-60"
+          />
+          <span class="font-semibold">{@group.display_title}</span>
+          <span class="badge badge-sm">{@group.file_count} files</span>
+          <span :if={season_label(@group)} class="badge badge-ghost badge-sm">
+            {season_label(@group)}
+          </span>
+        </button>
+
+        <span class={["badge badge-sm", band_class(@band)]}>{band_label(@band)}</span>
+      </div>
+
+      <p class="pl-10 text-sm opacity-70 flex items-center gap-2 flex-wrap">
+        {suggestion_line(@group)}
+        <span :if={evidence_label(@group.evidence)} class="badge badge-ghost badge-xs">
+          {evidence_label(@group.evidence)}
+        </span>
+        <button
+          id={"change-match-#{@group.id}"}
+          class="btn btn-xs btn-outline"
+          phx-click="open_match_search"
+          phx-value-id={@group.id}
+        >
+          {if @band == :no_match, do: "Identify", else: "Change match"}
+        </button>
+        <button
+          :if={@band == :no_match}
+          id={"create-local-#{@group.id}"}
+          class="btn btn-xs btn-outline"
+          phx-click="create_local_show"
+          phx-value-id={@group.id}
+        >
+          Create show from folder
+        </button>
+      </p>
+
+      <ul :if={@expanded} id={"members-#{@group.id}"} phx-update="stream" class="pl-10 pt-2">
+        <li :for={{member_dom_id, member} <- @members} id={member_dom_id} class="text-sm py-1">
+          <span id={"member-#{member.media_file.id}"}>{member.media_file.relative_path}</span>
+        </li>
+      </ul>
+    </div>
+    """
+  end
+
+  @doc """
+  One row on the Ignored view.
+
+  Deliberately not a variant of `group_row/1`: an ignored group has nothing
+  to select, accept, change or expand -- accept/ignore/change_match all
+  refuse a non-"pending" group, and `SelectionScope`'s own query is hardcoded
+  to `status == "pending"`, so a checkbox here would either do nothing or
+  lie about what it does. The one thing this view offers is the way back.
+  """
+  attr :id, :string, required: true
+  attr :group, :map, required: true
+
+  def ignored_group_row(assigns) do
+    ~H"""
+    <div id={@id} class="py-3 flex items-center gap-3">
+      <span class="flex-1 flex items-center gap-2 min-w-0">
+        <span class="font-semibold truncate">{@group.display_title}</span>
+        <span class="badge badge-sm">{@group.file_count} files</span>
+        <span :if={season_label(@group)} class="badge badge-ghost badge-sm">
+          {season_label(@group)}
+        </span>
+      </span>
+
+      <p class="text-sm opacity-70 truncate">{suggestion_line(@group)}</p>
+
+      <button
+        id={"restore-#{@group.id}"}
+        class="btn btn-xs btn-outline shrink-0"
+        phx-click="restore_group"
+        phx-value-id={@group.id}
+      >
+        Restore
+      </button>
+    </div>
+    """
+  end
+
+  @doc """
+  The "Change match" / "Identify" search modal.
+
+  `state` is `ImportMediaLive.Index`'s `@match_search` assign -- nil when
+  closed, otherwise `%{group_id:, media_type:, query:, results:, searching:,
+  error:}`. Selecting a result submits `provider_id` *and* `provider`
+  together (a result's own provider tag, `:tvdb` or `:metadata_relay`/etc for
+  TMDB), which is what lets the handler tell two providers' ids apart rather
+  than trusting `provider_id` alone to be unique.
+  """
+  attr :state, :any, default: nil
+
+  def match_search_modal(assigns) do
+    ~H"""
+    <.modal id="match-search-modal" show={not is_nil(@state)} on_cancel="close_match_search">
+      <:title>Change match</:title>
+
+      <form phx-change="match_search_query" id="match-search-form">
+        <input
+          type="text"
+          name="q"
+          value={@state && @state.query}
+          placeholder="Search by title…"
+          phx-debounce="300"
+          class="input input-bordered w-full"
+        />
+      </form>
+
+      <div :if={@state} class="mt-4 flex flex-col gap-1 max-h-96 overflow-y-auto" id="match-results">
+        <div :if={@state.searching} class="flex justify-center py-6">
+          <span class="loading loading-spinner loading-md"></span>
+        </div>
+
+        <div :if={!@state.searching}>
+          <p :if={@state.error} class="text-error text-sm py-2">{@state.error}</p>
+
+          <p
+            :if={!@state.error && @state.results == []}
+            class="text-sm opacity-70 text-center py-6"
+          >
+            No results.
+          </p>
+
           <button
+            :for={result <- @state.results}
             type="button"
-            class="w-full text-left px-3 py-2.5 hover:bg-primary/10 transition-colors flex items-center gap-3"
-            phx-click="select_search_result"
+            id={"match-result-#{result.provider_id}-#{result.provider}"}
+            class="flex items-center gap-3 p-2 rounded-lg hover:bg-base-200 text-left w-full"
+            phx-click="select_match"
             phx-value-provider_id={result.provider_id}
-            phx-value-title={result.title}
-            phx-value-year={result.year || ""}
-            phx-value-type={result.media_type}
+            phx-value-provider={result.provider}
           >
-            <%= if result.poster_path do %>
-              <img
-                src={ImageUrl.image_url(result.poster_path, "w92")}
-                alt={result.title}
-                class="w-10 h-14 rounded object-cover shadow-sm"
-              />
-            <% else %>
-              <div class={"w-10 h-14 rounded flex items-center justify-center shrink-0 " <>
-                if(result.media_type == :tv_show or result.media_type == "tv_show", do: "bg-info/10 text-info", else: "bg-accent/10 text-accent")
-              }>
-                <%= if result.media_type == :tv_show or result.media_type == "tv_show" do %>
-                  <.icon name="hero-tv" class="w-5 h-5" />
-                <% else %>
-                  <.icon name="hero-film" class="w-5 h-5" />
-                <% end %>
-              </div>
-            <% end %>
-            <div class="flex-1 min-w-0">
-              <div class="font-medium text-sm truncate">{result.title}</div>
-              <div class="flex items-center gap-2 text-xs text-base-content/60 mt-0.5">
-                <%= if result.year do %>
-                  <span>{result.year}</span>
-                  <span>•</span>
-                <% end %>
-                <span class={[
-                  "badge badge-xs",
-                  if(result.media_type == :tv_show or result.media_type == "tv_show",
-                    do: "badge-info",
-                    else: "badge-accent"
-                  )
-                ]}>
-                  {if(result.media_type == :tv_show or result.media_type == "tv_show",
-                    do: "TV Series",
-                    else: "Movie"
-                  )}
-                </span>
-              </div>
+            <img
+              :if={result.poster_path}
+              src={ImageUrl.image_url(result.poster_path, "w92")}
+              class="w-10 h-14 object-cover rounded shrink-0"
+            />
+            <div
+              :if={!result.poster_path}
+              class="w-10 h-14 bg-base-300 rounded flex items-center justify-center shrink-0"
+            >
+              <.icon name="hero-film" class="w-5 h-5 opacity-40" />
             </div>
-          </button>
-        <% end %>
-      </div>
-    </div>
-    """
-  end
-
-  @doc """
-  Renders the batch edit toolbar that appears at the bottom of the screen.
-
-  Shows when at least one file is selected for batch editing, providing
-  a search input for series/movie, season number input, and apply button.
-
-  ## Attributes
-    * `:batch_selected_count` - Number of files selected for batch editing
-    * `:batch_search_query` - Current search text in toolbar
-    * `:batch_search_results` - Search results dropdown items
-    * `:batch_selected_match` - The chosen match (map with title, provider_id, year, type) or nil
-    * `:batch_season_value` - Current season input value
-    * `:library_type` - Library type atom (:series, :movies, :mixed, etc.)
-  """
-  attr :batch_selected_count, :integer, required: true
-  attr :batch_search_query, :string, default: ""
-  attr :batch_search_results, :list, default: []
-  attr :batch_selected_match, :map, default: nil
-  attr :batch_season_value, :string, default: ""
-  attr :library_type, :atom, default: nil
-
-  def batch_edit_toolbar(assigns) do
-    ~H"""
-    <div
-      id="inbox-batch-toolbar"
-      class={[
-        "fixed bottom-0 left-0 lg:left-64 right-0 z-30 bg-base-100 border-t border-base-300 shadow-[0_-4px_12px_rgba(0,0,0,0.15)] transition-transform duration-300",
-        if(@batch_selected_count > 0, do: "translate-y-0", else: "translate-y-full")
-      ]}
-    >
-      <div class="max-w-7xl mx-auto px-4 py-3">
-        <div class="flex items-center gap-3 flex-wrap">
-          <%!-- Selected count --%>
-          <div class="flex items-center gap-2 shrink-0">
-            <span class="badge badge-info gap-1">
-              <.icon name="hero-pencil-square" class="w-3.5 h-3.5" />
-              {@batch_selected_count} selected
-            </span>
-            <button type="button" class="btn btn-xs btn-ghost" phx-click="batch_deselect_all">
-              Clear
-            </button>
-          </div>
-
-          <div class="divider divider-horizontal mx-0"></div>
-
-          <%!-- Series/Movie Search --%>
-          <div class="flex-1 min-w-48 max-w-sm relative">
-            <%= if @batch_selected_match do %>
-              <%!-- Show selected match as badge --%>
-              <div class="flex items-center gap-2">
-                <div class="badge badge-success gap-1">
-                  <.icon name="hero-check-circle" class="w-3.5 h-3.5" />
-                  {@batch_selected_match.title}
-                  <%= if @batch_selected_match.year do %>
-                    ({@batch_selected_match.year})
-                  <% end %>
-                </div>
-                <button
-                  type="button"
-                  class="btn btn-xs btn-ghost btn-circle"
-                  phx-click="batch_clear_match"
-                  title="Clear match"
-                >
-                  <.icon name="hero-x-mark" class="w-3.5 h-3.5" />
-                </button>
-              </div>
-            <% else %>
-              <%!-- Search input --%>
-              <div class="join w-full">
-                <span class="join-item flex items-center px-2 bg-base-200 border border-base-300 border-r-0">
-                  <.icon name="hero-magnifying-glass" class="w-4 h-4 text-base-content/50" />
-                </span>
-                <input
-                  type="text"
-                  name="query"
-                  value={@batch_search_query}
-                  placeholder="Search series or movie..."
-                  class="input input-sm join-item flex-1"
-                  phx-keyup="batch_search"
-                  phx-debounce="300"
-                  autocomplete="off"
-                />
-              </div>
-              <%!-- Upward-opening dropdown --%>
-              <%= if @batch_search_results != [] do %>
-                <.batch_search_results_dropdown results={@batch_search_results} />
-              <% end %>
-            <% end %>
-          </div>
-
-          <%!-- Season Input (only for non-movie libraries) --%>
-          <%= if @library_type not in [:movies] do %>
-            <label class="input input-sm w-20">
-              <span class="text-base-content/50 text-xs shrink-0 mr-1">S</span>
-              <input
-                type="text"
-                inputmode="numeric"
-                pattern="[0-9]*"
-                name="value"
-                value={@batch_season_value}
-                placeholder="#"
-                phx-keyup="batch_update_season"
-                phx-debounce="300"
-                class="grow min-w-0"
-              />
-            </label>
-          <% end %>
-
-          <%!-- Apply Button --%>
-          <button
-            type="button"
-            class="btn btn-sm btn-info shrink-0"
-            phx-click="batch_apply"
-            disabled={@batch_selected_match == nil and String.trim(@batch_season_value) == ""}
-          >
-            <.icon name="hero-check" class="w-4 h-4" /> Apply to {@batch_selected_count}
+            <div class="flex-1 min-w-0">
+              <p class="font-medium truncate">{result.title}</p>
+              <p class="text-xs opacity-60 flex items-center gap-1.5">
+                <span :if={result.year}>{result.year}</span>
+                <span class="badge badge-ghost badge-xs">{media_type_label(result.media_type)}</span>
+              </p>
+            </div>
           </button>
         </div>
       </div>
-    </div>
+
+      <:actions>
+        <button class="btn btn-ghost" phx-click="close_match_search">Cancel</button>
+      </:actions>
+    </.modal>
     """
   end
 
-  attr :results, :list, required: true
+  defp media_type_label(:tv_show), do: "TV Show"
+  defp media_type_label(:movie), do: "Movie"
+  defp media_type_label(_), do: "Unknown"
 
-  defp batch_search_results_dropdown(assigns) do
-    ~H"""
-    <div class="absolute z-30 w-full bottom-full mb-1 bg-base-100 border border-base-300 rounded-lg shadow-xl max-h-56 overflow-y-auto">
-      <div class="py-1">
-        <%= for result <- @results do %>
-          <button
-            type="button"
-            class="w-full text-left px-3 py-2 hover:bg-info/10 transition-colors flex items-center gap-3"
-            phx-click="batch_select_search_result"
-            phx-value-provider_id={result.provider_id}
-            phx-value-title={result.title}
-            phx-value-year={result.year || ""}
-            phx-value-type={result.media_type}
-          >
-            <div class={[
-              "w-8 h-8 rounded flex items-center justify-center shrink-0",
-              if(result.media_type == :tv_show or result.media_type == "tv_show",
-                do: "bg-info/10 text-info",
-                else: "bg-accent/10 text-accent"
-              )
-            ]}>
-              <%= if result.media_type == :tv_show or result.media_type == "tv_show" do %>
-                <.icon name="hero-tv" class="w-4 h-4" />
-              <% else %>
-                <.icon name="hero-film" class="w-4 h-4" />
-              <% end %>
-            </div>
-            <div class="flex-1 min-w-0">
-              <div class="font-medium text-sm truncate">{result.title}</div>
-              <div class="flex items-center gap-2 text-xs text-base-content/60">
-                <%= if result.year do %>
-                  <span>{result.year}</span>
-                  <span>•</span>
-                <% end %>
-                <span class={
-                  if(result.media_type == :tv_show or result.media_type == "tv_show",
-                    do: "text-info",
-                    else: "text-accent"
-                  )
-                }>
-                  {if(result.media_type == :tv_show or result.media_type == "tv_show",
-                    do: "TV Series",
-                    else: "Movie"
-                  )}
-                </span>
-              </div>
-            </div>
-          </button>
-        <% end %>
-      </div>
-    </div>
-    """
+  defp band_class(:ready), do: "badge-success"
+  defp band_class(:needs_attention), do: "badge-warning"
+  defp band_class(:no_match), do: "badge-error"
+
+  defp band_label(:ready), do: "ready"
+  defp band_label(:needs_attention), do: "needs attention"
+  defp band_label(:no_match), do: "no match"
+
+  defp season_label(group) do
+    case Mydia.Library.ImportGroup.season_span(group) do
+      [] -> nil
+      [one] -> "S#{one}"
+      seasons -> "S#{List.first(seasons)}–S#{List.last(seasons)}"
+    end
   end
+
+  defp suggestion_line(%{provider_id: nil}), do: "No provider match"
+
+  defp suggestion_line(group) do
+    year = if group.suggested_year, do: " (#{group.suggested_year})", else: ""
+    "→ #{group.suggested_title}#{year}"
+  end
+
+  # The human-readable side of `Mydia.ImportGroups`'s `evidence` column: what
+  # actually earned a group its suggested match, not just the confidence
+  # number. This is the design's own accountability mechanism for a fixed
+  # 0.85 threshold -- "the evidence label in the UI is what keeps this
+  # honest" -- so it has to render, not just get computed and stored.
+  #
+  # Only `"none"`, `"exact_title"` and `"fuzzy"` are emitted by
+  # `ImportGroups`'s `evidence_kind/2` today; `"external_id"` and `"reused"`
+  # are the spec's own table for a future matcher pass, and `"manual"` is
+  # `ImportGroups.change_match/2`'s own kind for a human-picked match. Every
+  # other kind (including one this module has never heard of) falls through
+  # to the raw string rather than crashing, so a future evidence kind renders
+  # as *something* immediately, with no LiveView deploy required just to stop
+  # erroring.
+  defp evidence_label(%{"kind" => "external_id"}), do: "tvdb id in folder name"
+  defp evidence_label(%{"kind" => "reused"}), do: "matched before"
+  defp evidence_label(%{"kind" => "exact_title"}), do: "exact title match"
+  defp evidence_label(%{"kind" => "manual"}), do: "manually matched"
+
+  defp evidence_label(%{"kind" => "fuzzy", "candidates" => n}) when is_integer(n) and n > 0,
+    do: "fuzzy title, #{n} candidate#{if n == 1, do: "", else: "s"}"
+
+  defp evidence_label(%{"kind" => "fuzzy"}), do: "fuzzy title match"
+  # "no match" is already said by suggestion_line/1 above; a second badge
+  # repeating it would be noise, not evidence.
+  defp evidence_label(%{"kind" => "none"}), do: nil
+  defp evidence_label(%{"kind" => kind}) when is_binary(kind), do: kind
+  defp evidence_label(_), do: nil
 end

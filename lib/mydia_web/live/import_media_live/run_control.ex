@@ -11,7 +11,7 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
   attr :library_paths, :list, required: true
   attr :active_run, :map, default: nil
   attr :outcome_run, :map, default: nil
-  attr :outcome_inbox_count, :integer, default: 0
+  attr :outcome_group_count, :integer, default: 0
 
   def run_control(assigns) do
     ~H"""
@@ -19,7 +19,11 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
       <div class="card-body">
         <h2 class="card-title">Import a library</h2>
 
-        <.run_outcome :if={@outcome_run} run={@outcome_run} unresolved={@outcome_inbox_count} />
+        <.run_outcome
+          :if={@outcome_run}
+          run={@outcome_run}
+          pending_groups={@outcome_group_count}
+        />
 
         <%= if @active_run do %>
           <.run_progress run={@active_run} />
@@ -151,7 +155,7 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
   # identically whether the outcome arrived over PubSub in-session or was
   # read back from `Library.last_import_run/1` after a reload.
   attr :run, :map, required: true
-  attr :unresolved, :integer, default: 0
+  attr :pending_groups, :integer, default: 0
 
   defp run_outcome(assigns) do
     ~H"""
@@ -167,7 +171,7 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
 
       <.run_stats run={@run} />
 
-      <.outcome_review_cta unresolved={@unresolved} />
+      <.outcome_review_cta pending_groups={@pending_groups} />
 
       <%!--
         Rendered for any status that carries an error, not only :failed. A run
@@ -183,14 +187,20 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
     """
   end
 
-  attr :unresolved, :integer, default: 0
+  # `pending_groups` is `ImportGroups.band_counts/1`'s `:total` for this run's
+  # own library path, computed once in the parent LiveView
+  # (`group_count_for_outcome/1`) so this component never queries the DB from
+  # its body. It is a group count, not a file count -- one group can hold a
+  # whole season -- matching the "group(s)" language the rest of this page
+  # uses for accept/ignore counts.
+  attr :pending_groups, :integer, default: 0
 
   defp outcome_review_cta(assigns) do
     ~H"""
-    <div :if={@unresolved > 0} class="w-full">
-      <.link navigate={~p"/review"} class="btn btn-sm btn-outline">
+    <div :if={@pending_groups > 0} class="w-full">
+      <.link navigate={~p"/import"} class="btn btn-sm btn-outline">
         <.icon name="hero-inbox-stack" class="w-4 h-4" />
-        Review {@unresolved} file(s) that need attention
+        Review {@pending_groups} group(s) that need attention
       </.link>
     </div>
     """

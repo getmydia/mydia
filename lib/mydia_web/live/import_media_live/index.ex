@@ -1,17 +1,23 @@
 defmodule MydiaWeb.ImportMediaLive.Index do
   @moduledoc """
-  Import Media: start a run, watch it, stop it.
+  Import Media: start a run, watch it, stop it, then review what it found.
 
-  There is no wizard and no session state. The run lives in Oban, so this
-  LiveView holds no import progress of its own beyond what it reads back.
+  The run itself lives in Oban, so the run-control section holds no import
+  progress of its own beyond what it reads back. The review section below it
+  is a streamed, keyset-paged table of `Mydia.Library.ImportGroup` rows (one
+  row per anchor folder, not one per file), so opening this page never loads
+  more than one page of groups regardless of how large the library is.
   """
   use MydiaWeb, :live_view
 
-  alias Mydia.{Library, Settings}
+  require Logger
+
+  alias Mydia.{Library, Metadata, Repo, Settings}
+  alias Mydia.ImportGroups
   alias Mydia.Jobs.ImportRun, as: ImportRunJob
-  alias Mydia.Library.ImportRun
+  alias Mydia.Library.{ImportGroup, ImportRun, SelectionScope}
   alias MydiaWeb.Live.Authorization
-  alias MydiaWeb.ImportMediaLive.RunControl
+  alias MydiaWeb.ImportMediaLive.{Components, RunControl}
 
   # Everything a client can name is mapped from an explicit table rather than
   # converted. `String.to_existing_atom/1` and `String.to_integer/1` both raise
@@ -19,6 +25,36 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   # process down: a tab left open across a deploy, a replayed event, or a
   # crafted one would close the page instead of getting an answer back.
   @modes %{"review" => :review, "unattended" => :unattended}
+
+  # Same reasoning as @modes: `phx-value-band` is client-controlled, so the
+  # atom it names is looked up rather than converted. An unknown value is a
+  # silent no-op -- unlike an unknown mode, there is no form state to explain
+  # a rejection to, so there is nothing useful to flash.
+  # `:ignored` is not a confidence band -- it is a status -- but it rides the
+  # same chip row and the same client-controlled atom lookup as the real
+  # bands, and load_groups/1 translates it into ImportGroups.page/2's
+  # `:status` option rather than its `:band` option (which has no clause for
+  # it and would raise).
+  @bands %{
+    "all" => :all,
+    "ready" => :ready,
+    "needs_attention" => :needs_attention,
+    "no_match" => :no_match,
+    "ignored" => :ignored
+  }
+
+  @empty_band_counts %{ready: 0, needs_attention: 0, no_match: 0, ignored: 0, total: 0}
+
+  # How long an :import_groups_changed burst is allowed to coalesce into one
+  # refresh. ApplyImportGroups.broadcast/1 fires once per Oban job, and an
+  # active run can enqueue and complete many of those jobs in quick
+  # succession -- each one otherwise re-triggering refresh_counts/1's full
+  # band_counts/1 read (every pending group row, once per importable library
+  # path) on every open page. Mirrors Jobs.ImportRun's own
+  # @broadcast_ms_interval for progress updates, just applied on the
+  # receiving end here instead of the sending end there, since this
+  # broadcast has no single producer to throttle.
+  @refresh_debounce_ms 500
 
   @impl true
   def mount(_params, _session, socket) do
@@ -38,22 +74,95 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       end
 
     run_to_watch = active_run || outcome_run
+    importable_library_paths = Enum.filter(library_paths, &importable?/1)
+    selected_library_path_id = default_library_path_id(importable_library_paths)
 
-    if connected?(socket) and run_to_watch do
-      Phoenix.PubSub.subscribe(Mydia.PubSub, ImportRunJob.progress_topic(run_to_watch.id))
+    if connected?(socket) do
+      if run_to_watch do
+        Phoenix.PubSub.subscribe(Mydia.PubSub, ImportRunJob.progress_topic(run_to_watch.id))
+      end
+
+      if selected_library_path_id do
+        Phoenix.PubSub.subscribe(Mydia.PubSub, "import_groups:#{selected_library_path_id}")
+      end
     end
 
-    {:ok,
-     socket
-     |> assign(:page_title, "Import Media")
-     |> assign(:library_paths, library_paths)
-     # The start form offers only what the coordinator can actually import.
-     # `@library_paths` deliberately keeps every path so a run left on a
-     # music path by an older build is still found, shown, and stoppable.
-     |> assign(:importable_library_paths, Enum.filter(library_paths, &importable?/1))
-     |> assign(:active_run, active_run)
-     |> assign(:outcome_run, outcome_run)
-     |> assign(:outcome_inbox_count, inbox_count_for_outcome(outcome_run))}
+    socket =
+      socket
+      |> assign(:page_title, "Import Media")
+      |> assign(:library_paths, library_paths)
+      # The start form offers only what the coordinator can actually import.
+      # `@library_paths` deliberately keeps every path so a run left on a
+      # music path by an older build is still found, shown, and stoppable.
+      |> assign(:importable_library_paths, importable_library_paths)
+      |> assign(:active_run, active_run)
+      |> assign(:outcome_run, outcome_run)
+      |> assign(:outcome_group_count, group_count_for_outcome(outcome_run))
+      |> assign(:band, :all)
+      |> assign(:search, "")
+      |> assign(:cursor, nil)
+      |> assign(:next_cursor, nil)
+      |> assign(:cursor_stack, [])
+      |> assign(:expanded_ids, MapSet.new())
+      |> assign(:expanded_group_id, nil)
+      |> assign(:band_counts, @empty_band_counts)
+      # Per-library pending totals for the picker, keyed by library_path_id.
+      # Populated by refresh_counts/1 alongside band_counts, not here: an
+      # empty map is the correct disconnected-render value (no query at all),
+      # matching band_counts's own placeholder above.
+      |> assign(:library_group_counts, %{})
+      |> assign(:matching_count, 0)
+      |> assign(:selected_library_path_id, selected_library_path_id)
+      |> assign(:selection, SelectionScope.new(selected_library_path_id))
+      # Guards the :import_groups_changed debounce below: true while a
+      # deferred refresh is already scheduled, so a burst of broadcasts
+      # schedules exactly one Process.send_after/3 rather than one per
+      # message.
+      |> assign(:refresh_scheduled?, false)
+      # The "Change match" / "Identify" search modal's state, nil when
+      # closed. `match_search_token` is a monotonic counter (mirrors
+      # SearchLive's own `search_id`) captured by each `start_async` search
+      # closure, so a slow response from an earlier keystroke can never
+      # overwrite a newer one -- LiveView cancels the previous `start_async`
+      # call under the same name, but the result message can already be in
+      # flight by the time it does, so the token is the actual guard.
+      |> assign(:match_search, nil)
+      |> assign(:match_search_token, 0)
+      # `ImportGroup` rows carry an `:id` field, so the default `"groups-<id>"`
+      # naming would be adequate, but the page's key elements are addressed as
+      # `#group-<id>` (singular). `ImportGroups.members/2` rows are plain
+      # `%{media_file:, candidate:}` maps with no top-level `:id` at all, so
+      # without an explicit `:dom_id` here streaming them crashes outright --
+      # LiveView's default id function requires one. `member-row-` (not
+      # `member-`) keeps the stream item's id distinct from the
+      # `#member-<file id>` span `group_row/1` renders inside each row.
+      |> stream_configure(:groups, dom_id: &"group-#{&1.id}")
+      |> stream_configure(:members, dom_id: &"member-row-#{&1.media_file.id}")
+      |> stream(:groups, [])
+      |> stream(:members, [])
+
+    # The disconnected branch does no database work at all beyond what the
+    # run-control section already needed. That is what keeps the initial HTTP
+    # response fast on a large library, and it is the property pinned by the
+    # "issues no query on the disconnected render" test.
+    if connected?(socket) do
+      {:ok, socket |> load_groups() |> refresh_counts()}
+    else
+      {:ok, socket}
+    end
+  end
+
+  @impl true
+  def handle_params(_params, uri, socket) do
+    # `/review` is kept as a redirect for old bookmarks and links -- the
+    # module it used to point to is gone, and this page is the only one there
+    # is now. Nothing still links here on purpose; `RunControl`'s outcome CTA
+    # points straight at `/import` to avoid this exact round trip.
+    if URI.parse(uri).path == "/review" do
+      {:noreply, push_navigate(socket, to: ~p"/import")}
+    else
+      {:noreply, socket}
+    end
   end
 
   @impl true
@@ -81,7 +190,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
            socket
            |> assign(:active_run, run)
            |> assign(:outcome_run, nil)
-           |> assign(:outcome_inbox_count, 0)}
+           |> assign(:outcome_group_count, 0)}
 
         {:error, _changeset} ->
           {:noreply, put_flash(socket, :error, "That library is already being imported.")}
@@ -124,6 +233,410 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     end
   end
 
+  # A stale bookmark, an id from before a path was removed, or a crafted
+  # event can still name any id -- same guard shape as
+  # authorize_library_path/2 above.
+  def handle_event("select_library", %{"library_path_id" => id}, socket) do
+    if Enum.any?(socket.assigns.importable_library_paths, &(&1.id == id)) do
+      {:noreply, switch_library(socket, id)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("select_band", %{"band" => band}, socket) do
+    case Map.fetch(@bands, band) do
+      {:ok, band} ->
+        {:noreply,
+         socket
+         |> assign(:band, band)
+         |> assign(:cursor, nil)
+         |> assign(:cursor_stack, [])
+         |> assign(:selection, SelectionScope.new(socket.assigns.selected_library_path_id))
+         |> load_groups()}
+
+      :error ->
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("search", %{"q" => q}, socket) do
+    {:noreply,
+     socket
+     |> assign(:search, q)
+     |> assign(:cursor, nil)
+     |> assign(:cursor_stack, [])
+     # A selection made under one search must not survive into another: in
+     # :filter mode select_all_matching/1 captures the current :q, and both
+     # SelectionScope.selected?/2 (checkbox state) and to_query/1 (what
+     # accept_selected/ignore_selected act on) would otherwise disagree with
+     # what is actually on screen after the search changes. select_band/1
+     # resets the selection for the same reason.
+     |> assign(:selection, SelectionScope.new(socket.assigns.selected_library_path_id))
+     |> load_groups()}
+  end
+
+  def handle_event("next_page", _params, socket) do
+    case socket.assigns.next_cursor do
+      nil ->
+        {:noreply, socket}
+
+      next_cursor ->
+        {:noreply,
+         socket
+         |> assign(:cursor_stack, [socket.assigns.cursor | socket.assigns.cursor_stack])
+         |> assign(:cursor, next_cursor)
+         |> load_groups()}
+    end
+  end
+
+  def handle_event("prev_page", _params, socket) do
+    case socket.assigns.cursor_stack do
+      [] ->
+        {:noreply, socket}
+
+      [previous | rest] ->
+        {:noreply,
+         socket
+         |> assign(:cursor, previous)
+         |> assign(:cursor_stack, rest)
+         |> load_groups()}
+    end
+  end
+
+  def handle_event("toggle_group", %{"id" => id}, socket) do
+    socket = assign(socket, :selection, SelectionScope.toggle(socket.assigns.selection, id))
+    {:noreply, refresh_group_row(socket, id)}
+  end
+
+  # The button this responds to is never rendered on the Ignored view (see
+  # ignored_group_row/1 -- ignored rows carry no checkbox at all), but the
+  # event name itself is still a valid target for a crafted or stale request.
+  # `SelectionScope.apply_band/2` has no clause for `:ignored` (it is a
+  # status, not a real band), so building a filter-mode scope with it would
+  # raise the first time anything read the scope back -- refusing here instead
+  # keeps that a routine no-op rather than a crash.
+  def handle_event("select_all_matching", _params, socket) do
+    if socket.assigns.band == :ignored do
+      {:noreply, socket}
+    else
+      filter = %{band: socket.assigns.band, q: socket.assigns.search}
+
+      selection =
+        socket.assigns.selected_library_path_id
+        |> SelectionScope.new()
+        |> SelectionScope.select_all_matching(filter)
+
+      # `selected?/2` reads `:selection` fresh on every render, but a stream
+      # item's rendered body does not: switching to :filter mode here selects
+      # every matching row in the database without touching the `:groups`
+      # stream, so every checkbox currently on screen would stay visually
+      # unchecked. load_groups/1 re-inserts the whole current page, which is
+      # the only thing that makes a stream item's `selected` attribute
+      # re-evaluate -- see refresh_group_row/2's comment for the general rule.
+      {:noreply, socket |> assign(:selection, selection) |> load_groups()}
+    end
+  end
+
+  def handle_event("clear_selection", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
+     |> load_groups()}
+  end
+
+  def handle_event("accept_selected", _params, socket) do
+    with :ok <- Authorization.authorize_import_media(socket) do
+      # accept/1 can fail at the enqueue step, in which case the groups are
+      # marked accepted but nothing will apply them. Say so rather than
+      # reporting success.
+      case ImportGroups.accept(socket.assigns.selection) do
+        {:ok, count} ->
+          {:noreply,
+           socket
+           |> put_flash(:info, "Accepted #{count} group(s). Linking in the background.")
+           |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
+           |> load_groups()
+           |> refresh_counts()}
+
+        {:error, reason} ->
+          Logger.error("Could not enqueue the import group apply job", reason: inspect(reason))
+
+          # accept/1 flips status to "accepted" *before* it tries to enqueue,
+          # so the affected rows are already gone from the "pending" set both
+          # page/2 and SelectionScope filter on -- regardless of whether the
+          # enqueue itself succeeded. Reload so the stream (and the counts)
+          # match the database instead of continuing to show rows that no
+          # longer match the query, and clear the selection: it names ids
+          # that can no longer be acted on, and re-running accept/1 against
+          # them would select nothing, short-circuit, and return {:ok, 0} --
+          # a second, silent "success" for a selection that already failed
+          # once.
+          {:noreply,
+           socket
+           |> put_flash(
+             :error,
+             "Marked for import, but the background job could not be started. " <>
+               "They are not lost: the next successful accept for this library " <>
+               "will pick them up."
+           )
+           |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
+           |> load_groups()
+           |> refresh_counts()}
+      end
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("ignore_selected", _params, socket) do
+    with :ok <- Authorization.authorize_import_media(socket) do
+      {:ok, count} = ImportGroups.ignore(socket.assigns.selection)
+
+      {:noreply,
+       socket
+       |> put_flash(:info, "Ignored #{count} group(s).")
+       |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
+       |> load_groups()
+       |> refresh_counts()}
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
+  # `expanded_ids` tracks which groups are visually open (the chevron); a
+  # settled group starts absent from it, an unsettled one starts present
+  # (seeded in load_groups/1). `expanded_group_id` is a separate, single
+  # value tracking which one group's members are actually loaded into
+  # `@streams.members` -- auto-expanding every unsettled group on the page
+  # must not mean eagerly loading members for all of them, so opening a
+  # group only ever populates the member list for the group most recently
+  # clicked; every other open group renders its `<ul>` with an empty member
+  # list until it, too, is clicked.
+  def handle_event("expand_group", %{"id" => id}, socket) do
+    expanded = socket.assigns.expanded_ids
+
+    # A group row's `expanded` and `members` are computed from assigns
+    # outside the `:groups` stream itself. Stream items only redraw when
+    # explicitly re-inserted -- LiveView diffs a stream by its own
+    # insert/delete/reset operations, not by the outer assigns a `:for` over
+    # it happens to close over -- so every row whose derived output just
+    # changed must be re-inserted, or neither its chevron nor its member
+    # list would ever change on screen.
+    if MapSet.member?(expanded, id) do
+      {:noreply,
+       socket
+       |> assign(:expanded_ids, MapSet.delete(expanded, id))
+       |> refresh_group_row(id)}
+    else
+      previously_loaded = socket.assigns.expanded_group_id
+
+      socket =
+        socket
+        |> assign(:expanded_ids, MapSet.put(expanded, id))
+        |> assign(:expanded_group_id, id)
+        |> stream(:members, ImportGroups.members(id, limit: 200), reset: true)
+        |> refresh_group_row(id)
+
+      # The group that previously held the loaded member list, if any and if
+      # different, just lost it (its `@members` prop now evaluates to `[]`)
+      # even though it may still be visually open -- that row needs
+      # re-inserting too.
+      socket =
+        if previously_loaded && previously_loaded != id do
+          refresh_group_row(socket, previously_loaded)
+        else
+          socket
+        end
+
+      {:noreply, socket}
+    end
+  end
+
+  # The escape hatch for a group no provider carries: build the show straight
+  # from its folder name instead of waiting on a match that will never come.
+  # `total` is read before the call, not after: on success `create_local_show/1`
+  # stamps the group with a synthetic provider identity so a second call is
+  # refused, and its own `unresolved_count` is the only trace of how many
+  # members it started with. A file with no parsed episode number stays
+  # orphaned rather than guessed at, and the flash says so rather than
+  # reporting a clean success for a partially-done action -- the failure mode
+  # this project has already corrected twice.
+  def handle_event("create_local_show", %{"id" => id}, socket) do
+    with :ok <- Authorization.authorize_import_media(socket) do
+      total = ImportGroups.member_count(id)
+
+      case ImportGroups.create_local_show(id) do
+        {:ok, item} ->
+          remaining = ImportGroups.member_count(id)
+          linked = total - remaining
+
+          message =
+            if remaining > 0 do
+              "Created #{item.title} and linked #{linked} of #{total} files. " <>
+                "#{remaining} had no episode number."
+            else
+              "Created #{item.title} from the folder name."
+            end
+
+          {:noreply,
+           socket
+           |> put_flash(:info, message)
+           |> load_groups()
+           |> refresh_counts()}
+
+        # No `phx-disable-with` guards this button, and a crash partway
+        # through a previous call would leave nothing else to retry against
+        # -- so this is a routine double-click or a stale click on an
+        # already-handled row, not a system failure. Say so plainly rather
+        # than the generic error message below.
+        {:error, :already_created} ->
+          {:noreply, put_flash(socket, :info, "That show was already created from this folder.")}
+
+        {:error, reason} ->
+          {:noreply, put_flash(socket, :error, "Could not create the show: #{inspect(reason)}")}
+      end
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
+  # Ignore used to be a one-way door: a rescan can never bring a group back
+  # (write_group/4 preserves status on purpose), and until now there was no
+  # UI that could even see an ignored group to reconsider it. This is the way
+  # back -- only reachable from the Ignored view's own row, which is the only
+  # place `restore_group` is rendered, but a stale click after another tab
+  # already restored the same group is a normal, silent `{:ok, 0}`.
+  def handle_event("restore_group", %{"id" => id}, socket) do
+    with :ok <- Authorization.authorize_import_media(socket) do
+      case ImportGroups.restore(id) do
+        {:ok, count} when count > 0 ->
+          {:noreply,
+           socket
+           |> put_flash(:info, "Restored to pending.")
+           |> load_groups()
+           |> refresh_counts()}
+
+        {:ok, 0} ->
+          {:noreply, put_flash(socket, :info, "That group is no longer ignored.")}
+      end
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
+  # Opens the "Change match" / "Identify" modal for one group and kicks off
+  # its first search, prefilled from the group's own suggested (or folder)
+  # title -- a reviewer correcting a wrong match almost always wants to see
+  # alternatives immediately, not type the title back in from scratch. Not
+  # authorization-guarded: this only reads from the metadata relay and opens
+  # UI state, it writes nothing. `select_match/2` below is the mutation, and
+  # that is where the guard and the readonly-user test live, matching how
+  # `create_local_show`'s button is rendered for every viewer but its handler
+  # is the one that checks.
+  def handle_event("open_match_search", %{"id" => id}, socket) do
+    case Repo.get(ImportGroup, id) do
+      nil ->
+        {:noreply, put_flash(socket, :error, "That group is no longer available.")}
+
+      group ->
+        query = group.suggested_title || group.display_title || ""
+
+        state = %{
+          group_id: group.id,
+          media_type: group.media_type,
+          query: query,
+          results: [],
+          searching: true,
+          error: nil
+        }
+
+        {:noreply, socket |> assign(:match_search, state) |> run_match_search(query)}
+    end
+  end
+
+  def handle_event("match_search_query", %{"q" => query}, socket) do
+    case socket.assigns.match_search do
+      nil ->
+        {:noreply, socket}
+
+      state ->
+        {:noreply,
+         socket
+         |> assign(:match_search, %{state | query: query, searching: true, error: nil})
+         |> run_match_search(query)}
+    end
+  end
+
+  def handle_event("close_match_search", _params, socket) do
+    {:noreply, assign(socket, :match_search, nil)}
+  end
+
+  # The mutation: applies one chosen search result to the whole group. Keyed
+  # by `provider_id` *and* `provider` together (not `provider_id` alone) so a
+  # numeric collision between two different providers' ids can never resolve
+  # to the wrong result -- within one search both always agree (the query is
+  # scoped to a single provider, see run_match_search/2), but nothing here
+  # depends on that staying true.
+  def handle_event(
+        "select_match",
+        %{"provider_id" => provider_id, "provider" => provider},
+        socket
+      ) do
+    with :ok <- Authorization.authorize_import_media(socket) do
+      state = socket.assigns.match_search
+
+      result =
+        state &&
+          Enum.find(state.results, fn r ->
+            to_string(r.provider_id) == provider_id and to_string(r.provider) == provider
+          end)
+
+      case {state, result} do
+        {nil, _} ->
+          {:noreply, socket}
+
+        {_, nil} ->
+          {:noreply,
+           put_flash(socket, :error, "That result is no longer available. Search again.")}
+
+        {%{group_id: group_id}, result} ->
+          apply_selected_match(socket, group_id, result)
+      end
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
+  @impl true
+  def handle_async(:group_match_search, {:ok, {token, group_id, result}}, socket) do
+    if stale_match_search?(socket, token, group_id) do
+      {:noreply, socket}
+    else
+      {:noreply,
+       assign(socket, :match_search, apply_search_result(socket.assigns.match_search, result))}
+    end
+  end
+
+  def handle_async(:group_match_search, {:exit, reason}, socket) do
+    Logger.warning("Group match search crashed", reason: inspect(reason))
+
+    socket =
+      case socket.assigns.match_search do
+        nil ->
+          socket
+
+        state ->
+          assign(socket, :match_search, %{
+            state
+            | searching: false,
+              error: "Search failed. Try again."
+          })
+      end
+
+    {:noreply, socket}
+  end
+
   @impl true
   def handle_info({:import_run_progress, run}, socket) do
     socket =
@@ -137,7 +650,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
         socket
         |> assign(:active_run, nil)
         |> assign(:outcome_run, run)
-        |> assign(:outcome_inbox_count, inbox_count_for_outcome(run))
+        |> assign(:outcome_group_count, group_count_for_outcome(run))
       end
 
     {:noreply, socket}
@@ -148,6 +661,31 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       nil -> {:noreply, socket}
       run -> {:noreply, assign(socket, :active_run, %{run | current_file: name})}
     end
+  end
+
+  def handle_info({:import_groups_changed, _library_path_id}, socket) do
+    # Only ever arrives for the currently selected library: switch_library/2
+    # unsubscribes from the old topic and subscribes to the new one in the
+    # same step, so there is nothing to filter on here.
+    #
+    # Coalesced rather than acted on immediately: see @refresh_debounce_ms.
+    # A refresh already scheduled means a broadcast earlier in this burst
+    # already queued one, so this message is dropped -- it will be covered
+    # by that refresh once it fires.
+    if socket.assigns.refresh_scheduled? do
+      {:noreply, socket}
+    else
+      Process.send_after(self(), :run_deferred_group_refresh, @refresh_debounce_ms)
+      {:noreply, assign(socket, :refresh_scheduled?, true)}
+    end
+  end
+
+  def handle_info(:run_deferred_group_refresh, socket) do
+    {:noreply,
+     socket
+     |> assign(:refresh_scheduled?, false)
+     |> load_groups()
+     |> refresh_counts()}
   end
 
   defp importable?(library_path), do: ImportRun.importable_type?(library_path.type)
@@ -171,14 +709,285 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     socket
     |> assign(:active_run, nil)
     |> assign(:outcome_run, run)
-    |> assign(:outcome_inbox_count, inbox_count_for_outcome(run))
+    |> assign(:outcome_group_count, group_count_for_outcome(run))
   end
 
-  # Queries the inbox count once when a run reaches a terminal state so the
-  # outcome_review_cta component never calls the DB directly from its body.
-  defp inbox_count_for_outcome(nil), do: 0
+  # Queries the pending group count once when a run reaches a terminal state
+  # so the outcome_review_cta component never calls the DB directly from its
+  # body.
+  #
+  # Deliberately `band_counts/1` (scoped to this run's own library path), not
+  # `ImportGroups.count_pending/0` (the global nav-badge total, see its own
+  # doc): this CTA reports what one specific run just found, and a global
+  # count would fold in every other library's backlog too, showing a number
+  # that could disagree with -- and in a multi-library install often would --
+  # what `/import` actually displays for the library this run touched.
+  #
+  # Was `Library.count_inbox_files/1`, a `MediaFile`/`MatchCandidate` query
+  # that has nothing to do with `import_groups`, the table the review page
+  # actually reads. That mismatch is Critical 1 from the whole-branch review:
+  # the CTA could say "review N files" while the page it linked to showed
+  # nothing at all. Sourcing both from the same table is what makes the
+  # number and the destination agree.
+  defp group_count_for_outcome(nil), do: 0
 
-  defp inbox_count_for_outcome(run) do
-    Library.count_inbox_files(library_path_id: run.library_path_id)
+  defp group_count_for_outcome(run) do
+    ImportGroups.band_counts(run.library_path_id).total
+  end
+
+  # The review section works one library path at a time. On mount it defaults
+  # to the first importable path, same as the start form's own radio default;
+  # after that, select_library/2 (via the picker) is what changes it.
+  defp default_library_path_id([%{id: id} | _rest]), do: id
+  defp default_library_path_id([]), do: nil
+
+  # Switches which library path the review section shows. Every piece of
+  # state the review section owns is either library-scoped (selection,
+  # paging, expansion) or would silently act on rows no longer on screen if
+  # left as-is (a filter-mode selection built against the old library's
+  # groups, most of all) -- so all of it resets here rather than only the
+  # pieces that would visibly break.
+  defp switch_library(socket, id) do
+    previous_id = socket.assigns.selected_library_path_id
+
+    if connected?(socket) and previous_id != id do
+      if previous_id, do: Phoenix.PubSub.unsubscribe(Mydia.PubSub, "import_groups:#{previous_id}")
+      Phoenix.PubSub.subscribe(Mydia.PubSub, "import_groups:#{id}")
+    end
+
+    socket
+    |> assign(:selected_library_path_id, id)
+    |> assign(:cursor, nil)
+    |> assign(:cursor_stack, [])
+    |> assign(:expanded_ids, MapSet.new())
+    |> assign(:expanded_group_id, nil)
+    |> assign(:selection, SelectionScope.new(id))
+    |> stream(:members, [], reset: true)
+    |> load_groups()
+    |> refresh_counts()
+  end
+
+  # Paging and filtering (band, search, cursor) never change how many groups
+  # exist in each band or in any other library -- only accepting, ignoring,
+  # switching libraries, or another session's own accept/ignore (over
+  # PubSub) do. So this reloads only the current page of groups; callers
+  # that know the counts actually changed also call refresh_counts/1.
+  defp load_groups(socket) do
+    library_path_id = socket.assigns.selected_library_path_id
+    band = socket.assigns.band
+    # `:ignored` is a status, not a real band -- ImportGroups.page/2's :band
+    # option has no clause for it, so it goes through :status instead and the
+    # band filter itself is left at :all (an ignored group's own confidence
+    # band plays no part in the Ignored view).
+    {status, page_band} = if band == :ignored, do: {"ignored", :all}, else: {"pending", band}
+    filter = %{band: page_band, q: socket.assigns.search}
+
+    {groups, next_cursor} =
+      ImportGroups.page(library_path_id,
+        band: filter.band,
+        q: filter.q,
+        status: status,
+        after: socket.assigns.cursor
+      )
+
+    # What "select all matching this filter" would actually select, right
+    # now, under the active band and search -- not band_counts/1's total,
+    # which only accounts for the band and knows nothing about the search
+    # box. A `SelectionScope.count/1` in :filter mode is a single SQL COUNT
+    # against the same predicate select_all_matching/1 itself would use, so
+    # this stays correct without duplicating that predicate here.
+    #
+    # Skipped entirely on the Ignored view: SelectionScope's own query is
+    # hardcoded to `status == "pending"` (nothing there is selectable), and
+    # its `apply_band/2` has no `:ignored` clause to run in the first place.
+    matching_count =
+      if band == :ignored do
+        0
+      else
+        library_path_id
+        |> SelectionScope.new()
+        |> SelectionScope.select_all_matching(filter)
+        |> SelectionScope.count()
+      end
+
+    # The wizard pre-collapsed any season whose episodes all matched confidently,
+    # and losing that is why the rewritten page read as one huge list. Same rule,
+    # one level up: a settled group starts closed, an unsettled one starts open.
+    expanded =
+      groups
+      |> Enum.reject(&(ImportGroups.band(&1) == :ready))
+      |> Enum.map(& &1.id)
+      |> MapSet.new()
+
+    socket
+    |> stream(:groups, groups, reset: true)
+    |> assign(:next_cursor, next_cursor)
+    |> assign(:matching_count, matching_count)
+    |> assign(:expanded_ids, expanded)
+  end
+
+  # Recomputes the counts that only change when a group's status changes,
+  # not on every page move or search keystroke: the current library's band
+  # breakdown for the filter chips, the Ignored chip's own count, and every
+  # importable library's pending total for the picker. band_counts/1 loads
+  # every pending group row for each library path it is asked about, so this
+  # is deliberately called only from mount/1, switch_library/2,
+  # accept/ignore/restore, and the PubSub handler -- never from load_groups/1,
+  # which paging and search both go through.
+  defp refresh_counts(socket) do
+    library_path_id = socket.assigns.selected_library_path_id
+
+    band_counts =
+      library_path_id
+      |> ImportGroups.band_counts()
+      |> Map.put(:ignored, ImportGroups.count_by_status(library_path_id, "ignored"))
+
+    socket
+    |> assign(:band_counts, band_counts)
+    |> assign(
+      :library_group_counts,
+      Map.new(socket.assigns.importable_library_paths, fn path ->
+        {path.id, ImportGroups.band_counts(path.id).total}
+      end)
+    )
+  end
+
+  # Re-inserts one group, purely to force LiveView to redraw its row.
+  # `group_row/1`'s `selected` and `expanded` attributes are derived from
+  # `@selection`/`@expanded_ids`, not from the group struct itself, and a
+  # stream only redraws an item on an explicit insert/delete/reset -- so a
+  # handler that only reassigns those has nothing else that would make the
+  # checkbox or chevron move. A stream's contents can only be walked from
+  # inside the `:for` a template compiles it into, not from a handler, so
+  # this re-reads the one row by primary key rather than searching the
+  # in-memory stream. A group that has vanished between render and click
+  # (accepted or ignored from another session) is a silent no-op: the row
+  # will drop out on the next full `load_groups/1` regardless.
+  defp refresh_group_row(socket, id) do
+    case Repo.get(ImportGroup, id) do
+      nil -> socket
+      group -> stream_insert(socket, :groups, group)
+    end
+  end
+
+  # Fires (or re-fires) the group match search asynchronously -- the page
+  # this replaced ran two synchronous relay calls inline in a keystroke
+  # handler and froze while they were in flight, which is exactly what
+  # `start_async/3` exists to avoid. `phx-debounce="300"` on the modal's
+  # input (see Components.match_search_modal/1) keeps every keystroke from
+  # spawning its own request; the token here is what keeps a slow response
+  # from an earlier one from clobbering a newer one that already landed.
+  #
+  # A blank query (the group's own display title, `PathAnchor`'s
+  # "Loose files" fallback, or an emptied search box) is refused before
+  # spawning a task at all: `Metadata.search/3`'s relay adapter treats an
+  # empty query as invalid, so there is nothing useful to send.
+  defp run_match_search(socket, query) do
+    if String.trim(query) == "" do
+      assign(socket, :match_search, %{socket.assigns.match_search | results: [], searching: false})
+    else
+      token = socket.assigns.match_search_token + 1
+      group_id = socket.assigns.match_search.group_id
+      media_type_hint = socket.assigns.match_search.media_type
+
+      library_path =
+        Enum.find(
+          socket.assigns.library_paths,
+          &(&1.id == socket.assigns.selected_library_path_id)
+        )
+
+      media_type = search_media_type(library_path, media_type_hint)
+      provider = library_path && library_path.tv_metadata_source
+      config = Metadata.default_relay_config()
+
+      socket
+      |> assign(:match_search_token, token)
+      |> start_async(:group_match_search, fn ->
+        opts =
+          if media_type == :tv_show do
+            [media_type: media_type, provider: provider]
+          else
+            [media_type: media_type]
+          end
+
+        {token, group_id, Metadata.search(config, query, opts)}
+      end)
+    end
+  end
+
+  # Scopes the search to the library's own media type where one is knowable,
+  # per the design note this feature shipped against: a series library
+  # should never offer movie results. A `:mixed` library has no single type
+  # to scope by, so this falls back to the group's own `media_type` (already
+  # known from its rollup) when the group has one, and otherwise leaves the
+  # search unscoped -- `Metadata.search/3` defaults an unscoped query to a
+  # movie search.
+  defp search_media_type(%{type: :movies}, _hint), do: :movie
+  defp search_media_type(%{type: :series}, _hint), do: :tv_show
+  defp search_media_type(%{type: :mixed}, "tv_show"), do: :tv_show
+  defp search_media_type(%{type: :mixed}, "movie"), do: :movie
+  defp search_media_type(_library_path, _hint), do: nil
+
+  defp stale_match_search?(socket, token, group_id) do
+    case socket.assigns.match_search do
+      nil -> true
+      %{group_id: ^group_id} -> socket.assigns.match_search_token != token
+      _different_group -> true
+    end
+  end
+
+  defp apply_search_result(state, {:ok, results}) do
+    %{state | results: results, searching: false, error: nil}
+  end
+
+  defp apply_search_result(state, {:error, reason}) do
+    Logger.warning("Group match search failed", reason: inspect(reason))
+    %{state | results: [], searching: false, error: "Search failed. Try again."}
+  end
+
+  defp apply_selected_match(socket, group_id, result) do
+    case ImportGroups.change_match(group_id, match_from_result(result)) do
+      {:ok, _group} ->
+        {:noreply,
+         socket
+         |> assign(:match_search, nil)
+         |> put_flash(:info, "Updated the match for this group.")
+         |> load_groups()
+         |> refresh_counts()}
+
+      {:error, :not_pending} ->
+        {:noreply,
+         socket
+         |> assign(:match_search, nil)
+         |> put_flash(:error, "That group has already been decided.")
+         |> load_groups()
+         |> refresh_counts()}
+
+      {:error, :not_found} ->
+        {:noreply,
+         socket
+         |> assign(:match_search, nil)
+         |> put_flash(:error, "That group is no longer available.")
+         |> load_groups()
+         |> refresh_counts()}
+    end
+  end
+
+  # `result.provider` is the search result's own provider tag -- `:tvdb` for
+  # a TVDB result, `:metadata_relay` for a TMDB one (the relay's TMDB search
+  # stamps every result that way; see `SearchResult.from_api_response/2`) --
+  # so this mirrors `MetadataMatcher`'s own `if result.provider == :tvdb, do:
+  # :tvdb, else: :tmdb` convention rather than trusting the tag's literal
+  # value. This, not a hardcoded `"tmdb"`, is what closes the bug the design
+  # flagged in the code this replaced: a TVDB library's corrected match must
+  # not get mis-stamped as TMDB.
+  defp match_from_result(result) do
+    %{
+      provider_id: result.provider_id,
+      provider_type: if(result.provider == :tvdb, do: :tvdb, else: :tmdb),
+      title: result.title,
+      year: result.year,
+      media_type: result.media_type
+    }
   end
 end

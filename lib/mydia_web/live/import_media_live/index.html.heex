@@ -1,12 +1,71 @@
 <Layouts.app {assigns}>
   <div class="max-w-5xl mx-auto p-4 flex flex-col gap-6">
-    <h1 class="text-3xl font-bold">Import Media</h1>
+    <h1 class="text-3xl font-bold">Import</h1>
 
     <RunControl.run_control
       library_paths={@importable_library_paths}
       active_run={@active_run}
       outcome_run={@outcome_run}
-      outcome_inbox_count={@outcome_inbox_count}
+      outcome_group_count={@outcome_group_count}
     />
+
+    <Components.library_picker
+      :if={length(@importable_library_paths) > 1}
+      library_paths={@importable_library_paths}
+      selected_id={@selected_library_path_id}
+      counts={@library_group_counts}
+    />
+
+    <Components.band_filter band={@band} counts={@band_counts} search={@search} />
+
+    <Components.bulk_bar
+      :if={
+        SelectionScope.count(@selection) > 0 or (@band != :all and @band != :ignored) or
+          @search != ""
+      }
+      count={SelectionScope.count(@selection)}
+      matching_count={@matching_count}
+    />
+
+    <div id="groups" phx-update="stream" class="flex flex-col divide-y divide-base-300">
+      <div id="no-groups" class="hidden only:block p-8 text-center opacity-70">
+        Nothing to review. Every file in this library is linked.
+      </div>
+      <%= for {dom_id, group} <- @streams.groups do %>
+        <%= if group.status == "ignored" do %>
+          <Components.ignored_group_row id={dom_id} group={group} />
+        <% else %>
+          <Components.group_row
+            id={dom_id}
+            group={group}
+            band={ImportGroups.band(group)}
+            selected={SelectionScope.selected?(@selection, group.id)}
+            expanded={MapSet.member?(@expanded_ids, group.id)}
+            members={if @expanded_group_id == group.id, do: @streams.members, else: []}
+          />
+        <% end %>
+      <% end %>
+    </div>
+
+    <div class="join self-center">
+      <button
+        id="prev-page"
+        class="join-item btn btn-sm"
+        disabled={@cursor_stack == []}
+        phx-click="prev_page"
+      >
+        Previous
+      </button>
+      <button
+        id="next-page"
+        class="join-item btn btn-sm"
+        disabled={is_nil(@next_cursor)}
+        phx-click="next_page"
+      >
+        Next
+      </button>
+    </div>
+
+    <Components.match_search_modal state={@match_search} />
   </div>
 </Layouts.app>

@@ -7,7 +7,7 @@ defmodule Mydia.Library.BatchMatcherTest do
   """
   use ExUnit.Case, async: false
 
-  alias Mydia.Library.BatchMatcher
+  alias Mydia.Library.{BatchMatcher, MetadataMatcher}
   alias Mydia.Metadata.Cache
 
   setup do
@@ -71,7 +71,13 @@ defmodule Mydia.Library.BatchMatcherTest do
         "/media/tv/Bluey/Season 01/Bluey.S01E#{String.pad_leading(to_string(ep), 2, "0")}.mkv"
       end
 
-    results = BatchMatcher.match_paths(paths, config: config, provider: :tmdb)
+    results =
+      BatchMatcher.match_paths(paths,
+        library_root: "/media",
+        matcher: MetadataMatcher,
+        config: config,
+        provider: :tmdb
+      )
 
     assert length(results) == 12
     assert :counters.get(counter, 1) == 1
@@ -105,7 +111,13 @@ defmodule Mydia.Library.BatchMatcherTest do
       "/media/movies/The.Matrix.1999.1080p.mkv"
     ]
 
-    _results = BatchMatcher.match_paths(paths, config: config, provider: :tmdb)
+    _results =
+      BatchMatcher.match_paths(paths,
+        library_root: "/media",
+        matcher: MetadataMatcher,
+        config: config,
+        provider: :tmdb
+      )
 
     # One TV search for Bluey, one movie search for The Matrix.
     assert :counters.get(counter, 1) == 2
@@ -126,7 +138,13 @@ defmodule Mydia.Library.BatchMatcherTest do
       "/media/movies/Totally.Unmatchable.Thing.mkv"
     ]
 
-    results = BatchMatcher.match_paths(paths, config: config, provider: :tmdb)
+    results =
+      BatchMatcher.match_paths(paths,
+        library_root: "/media",
+        matcher: MetadataMatcher,
+        config: config,
+        provider: :tmdb
+      )
 
     assert length(results) == 2
     assert Enum.all?(results, fn {path, _} -> path in paths end)
@@ -155,7 +173,13 @@ defmodule Mydia.Library.BatchMatcherTest do
     movie_path = "/media/movies/The.Matrix.1999.1080p.mkv"
     paths = tv_paths ++ [movie_path]
 
-    results = BatchMatcher.match_paths(paths, config: config, provider: :tmdb)
+    results =
+      BatchMatcher.match_paths(paths,
+        library_root: "/media",
+        matcher: MetadataMatcher,
+        config: config,
+        provider: :tmdb
+      )
 
     # The load-bearing assertion. Before this was contained, the raise
     # travelled up the link from the task to whoever called match_paths/2 and
@@ -199,6 +223,8 @@ defmodule Mydia.Library.BatchMatcherTest do
 
     results =
       BatchMatcher.match_paths([tv_path, movie_path],
+        library_root: "/media",
+        matcher: MetadataMatcher,
         config: config,
         provider: :tmdb,
         on_result: fn
@@ -227,6 +253,8 @@ defmodule Mydia.Library.BatchMatcherTest do
     ]
 
     BatchMatcher.match_paths(paths,
+      library_root: "/media",
+      matcher: MetadataMatcher,
       config: config,
       provider: :tmdb,
       on_result: fn path, _result -> send(test_pid, {:progress, path}) end
@@ -262,6 +290,8 @@ defmodule Mydia.Library.BatchMatcherTest do
 
     results =
       BatchMatcher.match_paths(["/media/movies/The.Matrix.1999.1080p.mkv"],
+        library_root: "/media",
+        matcher: MetadataMatcher,
         config: config,
         provider: :tmdb
       )
@@ -276,5 +306,147 @@ defmodule Mydia.Library.BatchMatcherTest do
     Cache.clear()
 
     assert {:error, :not_found} = Cache.get(key)
+  end
+
+  # Folder names in this describe block must be at least 2 characters, or
+  # PathAnchor.valid_title?/1 rejects them as titles and they collapse into
+  # the shared "__root__" loose-file cluster, silently defeating whatever the
+  # test meant to assert about grouping. An earlier draft used single-letter
+  # folders ("A", "B") and hit exactly this.
+  describe "anchor grouping" do
+    alias Mydia.Library.{EchoMatcher, FailingMatcher, ParsedInfoMatcher}
+
+    test "one resolution is reused across every episode under a series folder" do
+      root = "/media/Series"
+
+      paths =
+        for season <- 1..2, episode <- 1..3 do
+          "#{root}/Cornemuse (1999)/Season 0#{season}/Cornemuse - S0#{season}E0#{episode}.mkv"
+        end
+
+      results = BatchMatcher.match_paths(paths, library_root: root, matcher: EchoMatcher)
+
+      assert length(results) == 6
+
+      titles = for {_path, {:ok, match}} <- results, do: match.title
+
+      # All six carry one title. Per-file matching would yield six distinct
+      # basenames; one title proves the group resolved once and reused it.
+      assert length(Enum.uniq(titles)) == 1
+    end
+
+    test "different series folders resolve independently" do
+      root = "/media/Series"
+
+      # Two files under Cornemuse and one under Pin-Pon: with only one file
+      # per folder, per-file grouping and anchor grouping would be
+      # indistinguishable (both produce two titles). A multi-file group here
+      # proves the two Cornemuse files still collapse to one title *and* stay
+      # independent of Pin-Pon's.
+      paths = [
+        "#{root}/Cornemuse (1999)/Season 01/a.mkv",
+        "#{root}/Cornemuse (1999)/Season 01/b.mkv",
+        "#{root}/Pin-Pon (1996)/Season 01/c.mkv"
+      ]
+
+      results = BatchMatcher.match_paths(paths, library_root: root, matcher: EchoMatcher)
+
+      titles = for {_path, {:ok, match}} <- results, do: match.title
+
+      assert length(Enum.uniq(titles)) == 2
+    end
+
+    test "every input path still gets exactly one result when the anchor match fails" do
+      root = "/media/Series"
+
+      paths = [
+        "#{root}/Cornemuse (1999)/Season 01/a.mkv",
+        "#{root}/Cornemuse (1999)/Season 01/b.mkv"
+      ]
+
+      results = BatchMatcher.match_paths(paths, library_root: root, matcher: FailingMatcher)
+
+      assert length(results) == 2
+      assert Enum.all?(results, fn {_p, r} -> match?({:error, _}, r) end)
+    end
+
+    @tag :capture_log
+    test "a callback raising for one file in a group fails the whole group, not just that file" do
+      # Anchor grouping changed the containment unit from file to group: the
+      # tail no longer runs under its own nested async_stream_nolink, so an
+      # on_result raise anywhere in a group -- including a tail file -- now
+      # crashes the whole group's Task and every path in it, head included,
+      # comes back matcher_crashed even though the head had already succeeded.
+      # See the moduledoc's "Failure containment" section.
+      root = "/media/Series"
+      test_pid = self()
+
+      group_paths = [
+        "#{root}/Cornemuse (1999)/Season 01/Cornemuse - S01E01.mkv",
+        "#{root}/Cornemuse (1999)/Season 01/Cornemuse - S01E02.mkv",
+        "#{root}/Cornemuse (1999)/Season 01/Cornemuse - S01E03.mkv"
+      ]
+
+      [_e1, e2, _e3] = group_paths
+      other_path = "#{root}/Pin-Pon (1996)/Season 01/Pin-Pon - S01E01.mkv"
+      paths = group_paths ++ [other_path]
+
+      results =
+        BatchMatcher.match_paths(paths,
+          library_root: root,
+          matcher: EchoMatcher,
+          on_result: fn
+            ^e2, _result -> raise "progress callback blew up"
+            path, _result -> send(test_pid, {:progress, path})
+          end
+        )
+
+      assert length(results) == 4
+
+      # The discriminating assertion: e1 is the group's head and its match
+      # already succeeded before e2's callback raised, yet it still comes back
+      # as an error, because the whole group's worker was replaced by
+      # crashed_results/2. A version of crashed_results/2 (or match_group/4)
+      # that failed only the raising path would leave e1 and e3 as {:ok, _},
+      # and this loop would fail.
+      for path <- group_paths do
+        assert {^path, {:error, {:matcher_crashed, _}}} =
+                 Enum.find(results, fn {p, _result} -> p == path end)
+      end
+
+      # A second, separate anchor group in the same batch is unaffected.
+      assert {^other_path, {:ok, _match}} =
+               Enum.find(results, fn {p, _result} -> p == other_path end)
+    end
+
+    test "a reused tail match keeps its own parsed season and episode, not the head's" do
+      root = "/media/Series"
+
+      e1 = "#{root}/Cornemuse (1999)/Season 01/Cornemuse - S01E01.mkv"
+      e2 = "#{root}/Cornemuse (1999)/Season 01/Cornemuse - S01E02.mkv"
+
+      results =
+        BatchMatcher.match_paths([e1, e2], library_root: root, matcher: ParsedInfoMatcher)
+
+      parsed_by_path =
+        for {path, {:ok, match}} <- results, into: %{}, do: {path, match.parsed_info}
+
+      # e1 is the group's head (resolved directly by match_one/4); e2 is the
+      # tail, resolved by reuse/2. Before the fix, reuse/2 handed e2 the head's
+      # whole match map unchanged, so e2's parsed_info.episodes came back [1]
+      # instead of [2] -- the exact corruption that sent every file in a
+      # 29-episode group to the same episode downstream in MetadataEnricher.
+      assert parsed_by_path[e1].episodes == [1]
+      assert parsed_by_path[e2].episodes == [2]
+      assert parsed_by_path[e1].season == 1
+      assert parsed_by_path[e2].season == 1
+
+      # The provider identity from the head's resolution is still reused --
+      # only season/episode are per-file.
+      for {_path, {:ok, match}} <- results do
+        assert match.provider_id == "stub"
+        assert match.title == "Cornemuse"
+      end
+    end
   end
 end

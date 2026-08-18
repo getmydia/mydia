@@ -43,6 +43,10 @@ defmodule MydiaWeb.Layouts do
   attr :downloads_count, :integer, default: 0, doc: "number of active downloads"
   attr :pending_requests_count, :integer, default: 0, doc: "number of pending requests"
 
+  attr :import_group_count, :integer,
+    default: 0,
+    doc: "number of pending import groups awaiting review"
+
   attr :executing_jobs, :list, default: [], doc: "list of currently executing background jobs"
   attr :feedback_enabled?, :boolean, default: false, doc: "whether to render feedback UI"
   attr :show_feedback_modal, :boolean, default: false, doc: "whether the feedback modal is open"
@@ -178,10 +182,17 @@ defmodule MydiaWeb.Layouts do
 
               <li>
                 <.link
-                  navigate="/review"
-                  class={nav_active?(@current_path, "/review", false) && "active"}
+                  navigate="/import"
+                  class={nav_active?(@current_path, "/import", false) && "active"}
                 >
-                  <.icon name="hero-inbox-stack" class="w-5 h-5" /> Review
+                  <.icon name="hero-inbox-stack" class="w-5 h-5" /> Import
+                  <span
+                    :if={@import_group_count > 0}
+                    id="nav-import-badge"
+                    class="badge badge-primary badge-sm"
+                  >
+                    {@import_group_count}
+                  </span>
                 </.link>
               </li>
               <li>

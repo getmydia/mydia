@@ -9,6 +9,8 @@ defmodule Mydia.Library.MetadataMatcher do
   - Fallback strategies when exact matches aren't found
   """
 
+  @behaviour Mydia.Library.Matcher
+
   require Logger
   alias Mydia.{Media, Metadata}
   alias Mydia.Library.ReleaseParser, as: FileParser
@@ -500,11 +502,12 @@ defmodule Mydia.Library.MetadataMatcher do
       {:ok, results} when results != [] ->
         # Find best matching series
         case find_best_series_match(results, parsed) do
-          {:ok, series} ->
+          {:ok, series, score} ->
             Logger.info("Found series-level match for future/unreleased episode",
               series_title: series.title,
               parsed_season: parsed.season,
-              parsed_episodes: parsed.episodes
+              parsed_episodes: parsed.episodes,
+              score: score
             )
 
             # Return partial match result
@@ -526,8 +529,19 @@ defmodule Mydia.Library.MetadataMatcher do
                provider_type: provider_type,
                title: series.title,
                year: series.year,
-               match_confidence: 0.70,
-               # Lower confidence for partial match
+               # A series-level match is an identity claim backed by the
+               # folder name, the strongest signal available once the
+               # episode-specific search has failed. A flat 0.85 here would
+               # promote a barely-passing `find_best_series_match/2` score
+               # (0.5, the floor it accepts) to the same confidence as a
+               # near-exact title match, clearing FileIngest's auto-link
+               # threshold on a weak guess. Using the score itself keeps that
+               # threshold meaningful: only a genuinely strong series match
+               # can auto-link, while a weak one still surfaces (this whole
+               # code path was dead at the old flat 0.70, which never cleared
+               # the threshold at all -- the fix is scoring it, not flattening
+               # it a second time).
+               match_confidence: score,
                match_type: :partial_match,
                partial_reason: :episode_not_found,
                metadata: series_metadata,
@@ -547,7 +561,10 @@ defmodule Mydia.Library.MetadataMatcher do
     end
   end
 
-  # Find the best matching series from search results
+  # Find the best matching series from search results. Returns the score
+  # alongside the match so the caller can use it as match_confidence instead
+  # of a flat constant -- see the comment at the `match_confidence: score`
+  # call site in `try_series_level_match/3`.
   defp find_best_series_match(results, parsed) do
     scored_results =
       Enum.map(results, fn result ->
@@ -557,7 +574,7 @@ defmodule Mydia.Library.MetadataMatcher do
 
     case Enum.max_by(scored_results, fn {_result, score} -> score end, fn -> nil end) do
       {best_match, score} when score >= 0.5 ->
-        {:ok, best_match}
+        {:ok, best_match, score}
 
       _ ->
         {:error, :low_confidence_match}

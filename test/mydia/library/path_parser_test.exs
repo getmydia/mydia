@@ -573,4 +573,25 @@ defmodule Mydia.Library.PathParserTest do
       assert PathParser.extract_tv_show_from_path(nil) == nil
     end
   end
+
+  describe "season_from_segment/1" do
+    test "reads the season number from every supported folder form" do
+      assert PathParser.season_from_segment("Season 01") == {:ok, 1}
+      assert PathParser.season_from_segment("Season 1") == {:ok, 1}
+      assert PathParser.season_from_segment("Season.02") == {:ok, 2}
+      assert PathParser.season_from_segment("S03") == {:ok, 3}
+      assert PathParser.season_from_segment("s3") == {:ok, 3}
+    end
+
+    test "treats specials as season zero" do
+      assert PathParser.season_from_segment("Specials") == {:ok, 0}
+      assert PathParser.season_from_segment("Special") == {:ok, 0}
+    end
+
+    test "rejects anything that is not a season folder" do
+      assert PathParser.season_from_segment("Breaking Bad") == :error
+      assert PathParser.season_from_segment("1080p") == :error
+      assert PathParser.season_from_segment("") == :error
+    end
+  end
 end

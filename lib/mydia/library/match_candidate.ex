@@ -29,7 +29,8 @@ defmodule Mydia.Library.MatchCandidate do
           confidence: float() | nil,
           parsed_info: map() | nil,
           attempts: integer(),
-          last_error: String.t() | nil
+          last_error: String.t() | nil,
+          next_retry_at: DateTime.t() | nil
         }
 
   schema "media_file_match_candidates" do
@@ -43,6 +44,7 @@ defmodule Mydia.Library.MatchCandidate do
     field :parsed_info, Mydia.Settings.JsonMapType
     field :attempts, :integer, default: 0
     field :last_error, :string
+    field :next_retry_at, :utc_datetime
 
     belongs_to :media_file, MediaFile
 
@@ -50,7 +52,8 @@ defmodule Mydia.Library.MatchCandidate do
   end
 
   @castable ~w(media_file_id rank provider_type provider_id title year
-               media_type confidence parsed_info attempts last_error)a
+               media_type confidence parsed_info attempts last_error
+               next_retry_at)a
 
   @doc """
   Builds a changeset for a match candidate.

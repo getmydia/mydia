@@ -17,10 +17,16 @@ defmodule Mydia.Jobs.ImportRun do
   skips files that already have a candidate or a parent. The database is the
   cursor.
 
-  Because the database is the cursor, phase 2 terminates only if every file it
-  processes leaves the outstanding set. That is `Library.FileIngest`'s progress
-  contract, documented on that module; `match_loop/5` carries a no-progress
-  guard as a backstop rather than as the primary mechanism.
+  Phase 2's walk (`match_loop/5`) is a one-way keyset scan over `id`, so it
+  always terminates on its own -- each chunk advances the cursor past
+  whatever it just processed, and the table is finite -- regardless of
+  whether every file in a chunk actually left the outstanding set. Reaching
+  the end of the walk is therefore not the same as the phase having
+  succeeded: `Library.FileIngest`'s progress contract (documented on that
+  module) says every file must leave the outstanding set, and
+  `verify_match_phase_complete/2` is what actually checks that, once the walk
+  is done, failing the run rather than reporting success over files the walk
+  quietly passed by.
 
   Crash recovery is `reconcile_interrupted_runs/0`, called once at boot.
   `Oban.Plugins.Lifeline` is deliberately not configured: its `rescue_after`
@@ -42,8 +48,18 @@ defmodule Mydia.Jobs.ImportRun do
 
   require Logger
 
+  alias Mydia.ImportGroups
   alias Mydia.Library
-  alias Mydia.Library.{BatchMatcher, FileIngest, ImportRun, SampleDetector, Scanner}
+
+  alias Mydia.Library.{
+    BatchMatcher,
+    FileIngest,
+    ImportRun,
+    MetadataMatcher,
+    SampleDetector,
+    Scanner
+  }
+
   alias Mydia.Metadata
   alias Mydia.{Repo, Settings}
 
@@ -95,6 +111,7 @@ defmodule Mydia.Jobs.ImportRun do
     try do
       with :ok <- run_scan_phase(run),
            :ok <- run_match_phase(Library.get_import_run(run.id)) do
+        update_import_groups(run)
         finish(run, :done)
       else
         :stopped ->
@@ -176,6 +193,49 @@ defmodule Mydia.Jobs.ImportRun do
     :ok
   end
 
+  # Recomputes `import_groups` for this run's library path once both phases
+  # have genuinely finished, so the review page's own read path
+  # (`ImportGroups.page/2`) reflects what this run just found instead of only
+  # ever being populated once, at upgrade time, by the backfill migration
+  # (`priv/repo/migrations/20260817143638_backfill_import_groups.exs`). That
+  # migration is the only other caller of `upsert_for_library/2` in
+  # production code; without a second one here, a fresh install's review page
+  # says "Nothing to review" forever, no matter how large the inbox grows.
+  #
+  # Called only from the `:ok` branch of `execute/2`'s `with`, after both
+  # `run_scan_phase/2` and `run_match_phase/2` returned `:ok` -- never on
+  # `:stopped`. A run cut short mid-match has files the match phase never
+  # got to; grouping over that partial state would render half-finished
+  # rollups for no benefit, since the next run over the same library
+  # recomputes from scratch anyway once it actually completes.
+  #
+  # `upsert_for_library/2` is idempotent and chunked (see its doc), the same
+  # property that lets the migration run it once over the whole database --
+  # so running it here, scoped to one library path, on every successful run
+  # is the same operation, not a new one, and it holds no long transaction a
+  # run of this length could not already tolerate.
+  #
+  # Wrapped in its own rescue so a bug in group computation can never turn a
+  # real `:done` run into a `:failed` one: the run's own outcome (files
+  # found, matched, linked) already happened and is real, and losing that
+  # verdict over a failure in a second, derived computation would be worse
+  # than the review page being one run behind, which a later successful run
+  # (or a manual re-run of the migration's logic) still corrects.
+  defp update_import_groups(run) do
+    library_path = Settings.get_library_path!(run.library_path_id)
+    ImportGroups.upsert_for_library(library_path, import_run_id: run.id)
+    :ok
+  rescue
+    error ->
+      Logger.error("Could not compute import groups for a finished import run",
+        import_run_id: run.id,
+        library_path_id: run.library_path_id,
+        error: Exception.format(:error, error, __STACKTRACE__)
+      )
+
+      :ok
+  end
+
   ## Phase 1: scan
 
   @doc """
@@ -236,12 +296,7 @@ defmodule Mydia.Jobs.ImportRun do
   end
 
   defp scan_tree(run, library_path, extensions, after_batch) do
-    path_callback = fn path -> note_scan_path(run, library_path, path) end
-
-    case Scanner.scan(library_path.path,
-           video_extensions: extensions,
-           path_callback: path_callback
-         ) do
+    case Scanner.scan(library_path.path, video_extensions: extensions) do
       {:ok, scan_result} ->
         scan_result.files
         |> Enum.reject(&sample_or_extra?/1)
@@ -333,6 +388,11 @@ defmodule Mydia.Jobs.ImportRun do
       Lets a test point relay traffic at a local Bypass server without
       mutating the global `METADATA_RELAY_URL` env var (which would race any
       concurrently running async test that also resolves the default config).
+    * `:matcher` - a `Mydia.Library.Matcher` implementation, defaults to
+      `MetadataMatcher`. Same seam `BatchMatcher.match_paths/2` already takes;
+      exposed here too so a test can drive `FileIngest`'s decision (link,
+      candidate, or a genuine write failure) directly, without needing a
+      Bypass payload shaped to provoke it.
     * `:after_chunk` - a 0-arity function invoked once a chunk has committed,
       before the next chunk's stop check. Mirrors the `:after_batch` seam on
       `run_scan_phase/2`, for the same reason: it makes the stop boundary
@@ -344,56 +404,93 @@ defmodule Mydia.Jobs.ImportRun do
   def run_match_phase(%ImportRun{} = run, opts \\ []) do
     library_path = Settings.get_library_path!(run.library_path_id)
     config = Keyword.get(opts, :config) || Metadata.default_relay_config()
+    matcher = Keyword.get(opts, :matcher, MetadataMatcher)
     after_chunk = Keyword.get(opts, :after_chunk, fn -> :ok end)
 
     {:ok, _} = Library.update_import_run(run, %{phase: :matching})
 
-    match_loop(run, library_path, config, after_chunk)
+    case match_loop(run, library_path, config, matcher, after_chunk) do
+      :ok -> verify_match_phase_complete(run, library_path)
+      other -> other
+    end
   end
 
-  defp match_loop(run, library_path, config, after_chunk, previous_ids \\ nil) do
+  defp match_loop(
+         run,
+         library_path,
+         config,
+         matcher,
+         after_chunk,
+         after_id \\ nil,
+         broadcast_state \\ initial_broadcast_state()
+       ) do
     if Library.import_run_stopping?(run.id) do
       :stopped
     else
-      case Library.list_unmatched_media_file_paths(library_path.id, @match_chunk_size) do
+      case Library.list_unmatched_media_file_paths(library_path.id, @match_chunk_size,
+             after_id: after_id
+           ) do
         [] ->
           :ok
 
         chunk ->
-          ids = chunk |> Enum.map(&elem(&1, 0)) |> MapSet.new()
+          broadcast_state =
+            process_match_chunk(chunk, run, library_path, config, matcher, broadcast_state)
 
-          if ids == previous_ids do
-            no_progress(run, library_path, chunk)
-          else
-            process_match_chunk(chunk, run, library_path, config)
-            after_chunk.()
-            match_loop(run, library_path, config, after_chunk, ids)
-          end
+          after_chunk.()
+          {last_id, _path} = List.last(chunk)
+          match_loop(run, library_path, config, matcher, after_chunk, last_id, broadcast_state)
       end
     end
   end
 
-  # Unreachable while `FileIngest`'s progress contract holds: every ingest
-  # outcome leaves the file with a parent or a candidate, and either removes
-  # it from this query's result set. Kept because the cost of being wrong is
-  # an import that spins forever on the queue's only slot, writing NFOs on
-  # every pass and permanently blocking any further import of that path.
-  defp no_progress(run, library_path, chunk) do
-    {_id, example} = hd(chunk)
+  # The keyset walk above can only prove it saw no unresolved row above its
+  # cursor; it cannot prove none remain below it. A `FileIngest` bug that
+  # leaves a file matching neither a parent nor a rank-0 candidate (breaking
+  # the progress contract documented on that module) keeps whatever `id` it
+  # already had, so once the walk's cursor passes it, the walk never selects
+  # that file again and still reports the phase done. This is the real
+  # backstop for that contract now. It is strictly better than the per-chunk
+  # equality check it replaces (deleted -- see this function's history if
+  # it's needed again): that guard only fired once the stuck rows happened to
+  # be the entire remaining window, in effect only once they sat at the head
+  # of what was left to scan, while this catches them wherever they are.
+  #
+  # Deliberately `Library.count_files_without_parent_or_candidate/1`, not a
+  # count over the same eligible-for-retry predicate the walk itself queries:
+  # that predicate is time-sensitive (a failure candidate's `next_retry_at`
+  # expires and re-enters the set on its own), so reusing it here would flag
+  # a perfectly healthy file -- one that already satisfied the contract via a
+  # rank-0 candidate -- as corrupted state the moment its backoff elapsed
+  # after this walk had already moved past it. See that function's doc.
+  defp verify_match_phase_complete(run, library_path) do
+    case Library.count_files_without_parent_or_candidate(library_path.id) do
+      0 ->
+        :ok
 
-    Logger.error("Import run made no progress on a chunk, halting",
-      import_run_id: run.id,
-      library_path_id: library_path.id,
-      chunk_size: length(chunk),
-      example_path: example
-    )
+      count ->
+        sample_ids = Library.list_file_ids_without_parent_or_candidate(library_path.id, 5)
 
-    {:error,
-     {:no_progress,
-      "The import stopped because #{length(chunk)} file(s) could not be resolved and kept coming back, starting with #{Path.basename(example)}. This is a bug, please report it."}}
+        # `count:`/`media_file_ids:` (a comma-joined string, not a raw list)
+        # match `Library.drop_unresolvable_paths/1`'s convention for the same
+        # reason: neither key is in `config :logger, :default_formatter`'s
+        # metadata allowlist under those other names, so anything else here
+        # renders nowhere -- silently, the same failure mode this whole check
+        # exists to stop happening one layer up.
+        Logger.error("Import run finished matching but files are still outstanding",
+          import_run_id: run.id,
+          library_path_id: library_path.id,
+          count: count,
+          media_file_ids: Enum.map_join(sample_ids, ",", & &1)
+        )
+
+        {:error,
+         {:files_outstanding,
+          "The import finished but #{count} file(s) never got a match result and are still outstanding. This is a bug, please report it."}}
+    end
   end
 
-  defp process_match_chunk(chunk, run, library_path, config) do
+  defp process_match_chunk(chunk, run, library_path, config, matcher, broadcast_state) do
     by_path = Map.new(chunk, fn {file_id, path} -> {path, file_id} end)
     policy = policy_for(run.mode)
 
@@ -401,9 +498,10 @@ defmodule Mydia.Jobs.ImportRun do
       by_path
       |> Map.keys()
       |> BatchMatcher.match_paths(
+        library_root: library_path.path,
+        matcher: matcher,
         config: config,
-        provider: library_path.tv_metadata_source,
-        on_result: fn path, _result -> note_current_file(run, path) end
+        provider: library_path.tv_metadata_source
       )
 
     linked =
@@ -420,6 +518,13 @@ defmodule Mydia.Jobs.ImportRun do
       })
 
     broadcast(updated)
+
+    # `BatchMatcher.match_paths/2` runs its groups concurrently (see its
+    # moduledoc), so per-file progress can only be folded safely here, back on
+    # the single-threaded match loop, after every worker has already returned.
+    Enum.reduce(results, broadcast_state, fn {path, _result}, state ->
+      maybe_broadcast(state, run, path)
+    end)
   end
 
   defp ingest_result(by_path, path, result, policy, config) do
@@ -444,30 +549,33 @@ defmodule Mydia.Jobs.ImportRun do
   defp policy_for(:review), do: :local_only
   defp policy_for(:unattended), do: :create_items
 
+  @broadcast_file_interval 1_000
+  @broadcast_ms_interval 1_000
+
+  defp initial_broadcast_state do
+    %{since_broadcast: 0, last_broadcast_at: System.monotonic_time(:millisecond)}
+  end
+
+  # A 200k run at one broadcast per file is 200k LiveView renders, each
+  # preceded by a run-row read and followed by a write. Coalescing makes
+  # progress cost O(seconds) instead of O(files).
+  defp maybe_broadcast(state, run, path) do
+    now = System.monotonic_time(:millisecond)
+
+    if state.since_broadcast >= @broadcast_file_interval or
+         now - state.last_broadcast_at >= @broadcast_ms_interval do
+      note_current_file(run, path)
+      %{state | since_broadcast: 0, last_broadcast_at: now}
+    else
+      %{state | since_broadcast: state.since_broadcast + 1}
+    end
+  end
+
   defp note_current_file(run, path) do
     Phoenix.PubSub.broadcast(
       Mydia.PubSub,
       progress_topic(run.id),
       {:import_run_current_file, Path.basename(path)}
-    )
-  end
-
-  # Reports the directory or file the scanner is walking, relative to the
-  # library root, so "Finding files" shows *what* it is looking at rather than
-  # an anonymous spinner. The scan phase writes no run row per path (a full
-  # library would turn this into a write storm), so this is PubSub-only, the
-  # same contract `note_current_file/2` uses during matching.
-  defp note_scan_path(run, library_path, path) do
-    relative =
-      case Path.relative_to(path, library_path.path) do
-        "." -> Path.basename(library_path.path)
-        rel -> rel
-      end
-
-    Phoenix.PubSub.broadcast(
-      Mydia.PubSub,
-      progress_topic(run.id),
-      {:import_run_current_file, relative}
     )
   end
 

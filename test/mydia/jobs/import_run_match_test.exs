@@ -8,6 +8,7 @@ defmodule Mydia.Jobs.ImportRunMatchTest do
   import Mydia.SettingsFixtures
 
   alias Mydia.Library
+  alias Mydia.Library.InvalidCandidateMatcher
   alias Mydia.Jobs.ImportRun, as: ImportRunJob
   alias Mydia.Metadata.Cache
 
@@ -257,5 +258,38 @@ defmodule Mydia.Jobs.ImportRunMatchTest do
     # cached results for the whole library -- the counter keeps climbing.
     assert :counters.get(counter, 1) > calls_before_resume
     assert Library.list_unmatched_media_file_paths(lp.id, 1000) == []
+  end
+
+  describe "the progress contract backstop" do
+    test "fails the run instead of reporting :ok when a file is left with neither a parent nor a candidate",
+         %{run: run, library_path: lp} do
+      # InvalidCandidateMatcher's confidence is outside MatchCandidate.changeset/2's
+      # valid range, so Library.upsert_match_candidate/1 genuinely rejects the
+      # write and FileIngest.ingest/3 returns
+      # {:error, {:candidate_write_failed, _}} for every file in this run's
+      # single chunk -- each one left with no parent and no candidate, which
+      # is exactly the progress-contract violation
+      # verify_match_phase_complete/2 exists to catch once the keyset walk
+      # (which never re-visits a chunk's ids once it has advanced past them)
+      # reports the phase done regardless.
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert {:error, {:files_outstanding, message}} =
+                   ImportRunJob.run_match_phase(Library.get_import_run(run.id),
+                     matcher: InvalidCandidateMatcher
+                   )
+
+          assert message =~ "5 file(s)"
+          assert message =~ "still outstanding"
+        end)
+
+      assert log =~ "count=5"
+      assert log =~ "media_file_ids="
+
+      # Not just a message: the files really are still there, unmatched, so
+      # the run's failure reflects real stuck state rather than a check that
+      # fired on stale information.
+      assert length(Library.list_unmatched_media_file_paths(lp.id, 100)) == 5
+    end
   end
 end

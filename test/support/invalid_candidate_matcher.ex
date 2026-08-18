@@ -1,0 +1,30 @@
+defmodule Mydia.Library.InvalidCandidateMatcher do
+  @moduledoc """
+  A matcher whose result `FileIngest` can neither link nor write as a
+  candidate -- the exact progress-contract violation
+  `Jobs.ImportRun.verify_match_phase_complete/2` exists to catch after the
+  keyset match loop reports the phase "done".
+
+  `match_confidence: 2.0` is outside `MatchCandidate.changeset/2`'s
+  `validate_number(:confidence, greater_than_or_equal_to: 0.0,
+  less_than_or_equal_to: 1.0)`, so `Library.upsert_match_candidate/1` returns
+  a real `{:error, changeset}` -- this is not a match `FileIngest` chooses to
+  reject, it is one it genuinely fails to record. `from_local_db` is left
+  unset, so `:local_only` policy (review mode) still routes to the
+  `:candidate` branch rather than `:link`, where that write failure bites.
+  """
+
+  @behaviour Mydia.Library.Matcher
+
+  @impl true
+  def match_file(_path, _opts) do
+    {:ok,
+     %{
+       provider_id: "invalid",
+       provider_type: :tvdb,
+       title: "Invalid Candidate",
+       year: nil,
+       match_confidence: 2.0
+     }}
+  end
+end

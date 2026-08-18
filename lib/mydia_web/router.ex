@@ -132,7 +132,7 @@ defmodule MydiaWeb.Router do
       live "/add/movie", AddMediaLive.Index, :add_movie
       live "/add/series", AddMediaLive.Index, :add_series
       live "/import", ImportMediaLive.Index, :index
-      live "/review", ReviewMediaLive.Index, :index
+      live "/review", ImportMediaLive.Index, :index
       live "/search", SearchLive.Index, :index
       live "/downloads", DownloadsLive.Index, :index
       live "/calendar", CalendarLive.Index, :index
