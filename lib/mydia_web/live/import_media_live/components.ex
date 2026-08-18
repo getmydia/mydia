@@ -210,8 +210,11 @@ defmodule MydiaWeb.ImportMediaLive.Components do
         <span class={["badge badge-sm", band_class(@band)]}>{band_label(@band)}</span>
       </div>
 
-      <p class="pl-10 text-sm opacity-70 flex items-center gap-2">
+      <p class="pl-10 text-sm opacity-70 flex items-center gap-2 flex-wrap">
         {suggestion_line(@group)}
+        <span :if={evidence_label(@group.evidence)} class="badge badge-ghost badge-xs">
+          {evidence_label(@group.evidence)}
+        </span>
         <button
           :if={@band == :no_match}
           id={"create-local-#{@group.id}"}
@@ -254,4 +257,32 @@ defmodule MydiaWeb.ImportMediaLive.Components do
     year = if group.suggested_year, do: " (#{group.suggested_year})", else: ""
     "→ #{group.suggested_title}#{year}"
   end
+
+  # The human-readable side of `Mydia.ImportGroups`'s `evidence` column: what
+  # actually earned a group its suggested match, not just the confidence
+  # number. This is the design's own accountability mechanism for a fixed
+  # 0.85 threshold -- "the evidence label in the UI is what keeps this
+  # honest" -- so it has to render, not just get computed and stored.
+  #
+  # Only `"none"`, `"exact_title"` and `"fuzzy"` are emitted by
+  # `ImportGroups`'s `evidence_kind/2` today; `"external_id"` and `"reused"`
+  # are the spec's own table for a future matcher pass, and `"manual"` is
+  # this module's own change_match/2. Every other kind (including one this
+  # module has never heard of) falls through to the raw string rather than
+  # crashing, so a future evidence kind renders as *something* immediately,
+  # with no LiveView deploy required just to stop erroring.
+  defp evidence_label(%{"kind" => "external_id"}), do: "tvdb id in folder name"
+  defp evidence_label(%{"kind" => "reused"}), do: "matched before"
+  defp evidence_label(%{"kind" => "exact_title"}), do: "exact title match"
+  defp evidence_label(%{"kind" => "manual"}), do: "manually matched"
+
+  defp evidence_label(%{"kind" => "fuzzy", "candidates" => n}) when is_integer(n) and n > 0,
+    do: "fuzzy title, #{n} candidate#{if n == 1, do: "", else: "s"}"
+
+  defp evidence_label(%{"kind" => "fuzzy"}), do: "fuzzy title match"
+  # "no match" is already said by suggestion_line/1 above; a second badge
+  # repeating it would be noise, not evidence.
+  defp evidence_label(%{"kind" => "none"}), do: nil
+  defp evidence_label(%{"kind" => kind}) when is_binary(kind), do: kind
+  defp evidence_label(_), do: nil
 end

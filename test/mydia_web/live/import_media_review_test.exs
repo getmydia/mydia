@@ -95,6 +95,37 @@ defmodule MydiaWeb.ImportMediaReviewTest do
     assert has_element?(view, "#band-no-match", "1")
   end
 
+  test "renders the evidence label next to the suggestion, not just the confidence number",
+       %{conn: conn} do
+    lp = library_path_fixture(%{type: "series"})
+
+    exact =
+      seed_group(lp,
+        cluster_key: "exact",
+        min_confidence: 1.0,
+        evidence: %{"kind" => "exact_title", "candidates" => 1}
+      )
+
+    fuzzy =
+      seed_group(lp,
+        cluster_key: "fuzzy",
+        min_confidence: 0.7,
+        evidence: %{"kind" => "fuzzy", "candidates" => 3}
+      )
+
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    assert has_element?(view, "#group-#{exact.id}", "exact title match")
+    assert has_element?(view, "#group-#{fuzzy.id}", "fuzzy title, 3 candidates")
+  end
+
+  test "a group with no evidence kind renders without crashing", %{conn: conn} do
+    lp = library_path_fixture(%{type: "series"})
+    seed_group(lp, cluster_key: "no-evidence")
+
+    assert {:ok, _view, _html} = live(conn, ~p"/import")
+  end
+
   test "the create-local-show button only appears on a no-match group's row", %{conn: conn} do
     lp = library_path_fixture(%{type: "series"})
     matched = seed_group(lp, cluster_key: "matched", min_confidence: 1.0)
