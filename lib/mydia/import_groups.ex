@@ -432,8 +432,12 @@ defmodule Mydia.ImportGroups do
   The status flip is guarded on `status == "pending"`, so two sessions racing on
   the same group produce one winner and a zero count for the loser rather than a
   double commit.
+
+  Returns `{:error, reason}` when the flip succeeded but the enqueue did not,
+  so a caller never hears "success" for a selection now `accepted` with no
+  worker enqueued to commit it.
   """
-  @spec accept(SelectionScope.t()) :: {:ok, non_neg_integer()}
+  @spec accept(SelectionScope.t()) :: {:ok, non_neg_integer()} | {:error, term()}
   def accept(%SelectionScope{} = scope) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 
@@ -443,12 +447,15 @@ defmodule Mydia.ImportGroups do
       |> Repo.update_all(set: [status: "accepted", decided_at: now, updated_at: now])
 
     if count > 0 do
-      %{"library_path_id" => scope.library_path_id}
-      |> Mydia.Jobs.ApplyImportGroups.new()
-      |> insert_job()
+      case %{"library_path_id" => scope.library_path_id}
+           |> Mydia.Jobs.ApplyImportGroups.new()
+           |> insert_job() do
+        {:ok, _job} -> {:ok, count}
+        {:error, reason} -> {:error, reason}
+      end
+    else
+      {:ok, count}
     end
-
-    {:ok, count}
   end
 
   @doc "Marks a selection ignored. No files are touched."

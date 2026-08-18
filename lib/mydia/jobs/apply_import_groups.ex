@@ -6,14 +6,29 @@ defmodule Mydia.Jobs.ApplyImportGroups do
   for the duration of a library scan. An accept queued behind a multi-hour run
   would look like the button did nothing.
 
-  One transaction per group, never one for the batch. On SQLite a single
-  transaction over a whole batch holds the global write lock and blocks the
-  scanner; on Postgres it overflows the 64-entry subxid cache. Per-group also
-  means a crash loses at most one group's progress, and `unresolved_count` tells
-  a restarted job where it got to.
+  One transaction per page, never one for the group. On SQLite a single
+  transaction over a whole group holds the global write lock for its duration
+  and blocks the scanner; on Postgres it overflows the 64-entry subxid cache.
+  Per-page also means a crash loses at most one page's progress, and
+  `unresolved_count` tells a restarted job where it got to.
+
+  `unique` is keyed on `library_path_id` alone (not the full args, so a custom
+  `member_page` does not defeat it): `:default` runs at concurrency 5 with no
+  other coordination between an accept and a still-draining previous run, and
+  `accept/1`'s pending-guard only protects the `pending -> accepted`
+  transition, not `accepted -> applied`. Without this, two jobs for the same
+  library path can drain the same group concurrently.
+
+  A group that does not reach `applied` — an ingest exception, a page that
+  makes no progress — is reported back to Oban as a failure so `max_attempts`
+  retries it, rather than stranding it `accepted` with nothing to re-enqueue
+  the worker.
   """
 
-  use Oban.Worker, queue: :default, max_attempts: 3
+  use Oban.Worker,
+    queue: :default,
+    max_attempts: 3,
+    unique: [period: 300, keys: [:library_path_id], states: :incomplete]
 
   import Ecto.Query
 
@@ -23,15 +38,24 @@ defmodule Mydia.Jobs.ApplyImportGroups do
   alias Mydia.Library.{FileIngest, ImportGroup}
   alias Mydia.Repo
 
+  @member_page 1_000
+
   @impl Oban.Worker
-  def perform(%Oban.Job{args: %{"library_path_id" => library_path_id}}) do
-    library_path_id
-    |> accepted_groups()
-    |> Enum.each(&apply_group/1)
+  def perform(%Oban.Job{args: %{"library_path_id" => library_path_id} = args}) do
+    page = Map.get(args, "member_page", @member_page)
+
+    stuck =
+      library_path_id
+      |> accepted_groups()
+      |> Enum.map(&apply_group(&1, page))
+      |> Enum.reject(&(&1 == :applied))
 
     broadcast(library_path_id)
 
-    :ok
+    case stuck do
+      [] -> :ok
+      groups -> {:error, "#{length(groups)} import group(s) did not fully apply"}
+    end
   end
 
   defp accepted_groups(library_path_id) do
@@ -41,10 +65,9 @@ defmodule Mydia.Jobs.ApplyImportGroups do
     |> Repo.all()
   end
 
-  @member_page 1_000
-
-  defp apply_group(%ImportGroup{} = group) do
-    remaining = drain(group, ImportGroups.member_count(group.id))
+  @spec apply_group(ImportGroup.t(), pos_integer()) :: :applied | :stuck
+  defp apply_group(%ImportGroup{} = group, page) do
+    remaining = drain(group, ImportGroups.member_count(group.id), page)
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 
     status = if remaining == 0, do: "applied", else: "accepted"
@@ -52,6 +75,8 @@ defmodule Mydia.Jobs.ApplyImportGroups do
     group
     |> Ecto.Changeset.change(unresolved_count: remaining, status: status, updated_at: now)
     |> Repo.update!()
+
+    if status == "applied", do: :applied, else: :stuck
   rescue
     error ->
       Logger.error("Applying an import group failed, leaving it accepted for retry",
@@ -59,7 +84,7 @@ defmodule Mydia.Jobs.ApplyImportGroups do
         error: Exception.format(:error, error, __STACKTRACE__)
       )
 
-      :error
+      :stuck
   end
 
   # Members come back one bounded page at a time, so a group larger than a page
@@ -70,11 +95,11 @@ defmodule Mydia.Jobs.ApplyImportGroups do
   #
   # One transaction per page, never one for the group: on SQLite a single
   # transaction over a whole show holds the global write lock for its duration.
-  defp drain(group, remaining_before) do
+  defp drain(group, remaining_before, page) do
     Repo.transaction(fn ->
       group.id
-      |> ImportGroups.members(limit: @member_page)
-      |> Enum.each(&ingest_member(&1, group))
+      |> ImportGroups.members(limit: page)
+      |> Enum.each(&safe_ingest(&1, group))
     end)
 
     remaining = ImportGroups.member_count(group.id)
@@ -84,7 +109,7 @@ defmodule Mydia.Jobs.ApplyImportGroups do
         0
 
       remaining < remaining_before ->
-        drain(group, remaining)
+        drain(group, remaining, page)
 
       # No progress: every member of that page failed to link, so another pass
       # would fetch the same rows and fail identically. Stop and leave the group
@@ -92,6 +117,23 @@ defmodule Mydia.Jobs.ApplyImportGroups do
       true ->
         remaining
     end
+  end
+
+  # One member's exception must not roll back the page's whole transaction:
+  # without this, a single bad member discards every link that already
+  # succeeded in the same page, and the log carries no member-level detail to
+  # act on.
+  defp safe_ingest(member, group) do
+    ingest_member(member, group)
+  rescue
+    error ->
+      Logger.error("Ingesting a group member failed, leaving it unresolved",
+        import_group_id: group.id,
+        media_file_id: member.media_file.id,
+        error: Exception.format(:error, error, __STACKTRACE__)
+      )
+
+      :error
   end
 
   defp ingest_member(%{media_file: media_file, candidate: nil}, _group) do
