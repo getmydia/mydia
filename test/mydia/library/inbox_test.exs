@@ -193,4 +193,45 @@ defmodule Mydia.Library.InboxTest do
       assert log =~ stranded.id
     end
   end
+
+  describe "count_files_without_parent_or_candidate/1" do
+    test "does not count a file whose failure candidate is past its retry window", %{lp: lp} do
+      file = orphaned_media_file_fixture(%{library_path_id: lp.id})
+
+      past = DateTime.utc_now() |> DateTime.add(-300, :second) |> DateTime.truncate(:second)
+
+      {:ok, _} =
+        Library.upsert_match_candidate(%{
+          media_file_id: file.id,
+          rank: 0,
+          attempts: 1,
+          last_error: "no_match",
+          next_retry_at: past
+        })
+
+      # This file is eligible for another match attempt --
+      # list_unmatched_media_file_paths/3 selects it, asserted below -- but it
+      # already satisfies FileIngest's progress contract: it has a rank-0
+      # candidate. Retry-eligibility and contract-violation are different
+      # conditions. This is the regression guard for conflating them: an
+      # implementation that shared list_unmatched_media_file_paths/3's
+      # time-sensitive predicate (as an earlier version of this function did)
+      # wrongly counts this file the moment its backoff expires, regardless
+      # of how long ago that candidate was actually written.
+      assert Library.count_files_without_parent_or_candidate(lp.id) == 0
+
+      # Confirms the fixture actually exercises the retry-eligible state this
+      # test is about, not one the broader query would also have excluded.
+      assert Enum.any?(Library.list_unmatched_media_file_paths(lp.id, 50), fn {id, _path} ->
+               id == file.id
+             end)
+    end
+
+    test "counts a file with no candidate row at all", %{lp: lp} do
+      file = orphaned_media_file_fixture(%{library_path_id: lp.id})
+
+      assert Library.count_files_without_parent_or_candidate(lp.id) == 1
+      assert Library.list_file_ids_without_parent_or_candidate(lp.id, 5) == [file.id]
+    end
+  end
 end

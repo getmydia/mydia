@@ -17,7 +17,7 @@ defmodule Mydia.Jobs.ImportRun do
   skips files that already have a candidate or a parent. The database is the
   cursor.
 
-  Phase 2's walk (`match_loop/4`) is a one-way keyset scan over `id`, so it
+  Phase 2's walk (`match_loop/5`) is a one-way keyset scan over `id`, so it
   always terminates on its own -- each chunk advances the cursor past
   whatever it just processed, and the table is finite -- regardless of
   whether every file in a chunk actually left the outstanding set. Reaching
@@ -404,23 +404,27 @@ defmodule Mydia.Jobs.ImportRun do
   # leaves a file matching neither a parent nor a rank-0 candidate (breaking
   # the progress contract documented on that module) keeps whatever `id` it
   # already had, so once the walk's cursor passes it, the walk never selects
-  # that file again and still reports the phase done. This unrestricted
-  # count, taken once the walk believes it has finished, is the real backstop
-  # for that contract now. It is strictly better than the per-chunk equality
-  # check it replaces (deleted -- see this function's history if it's needed
-  # again): that guard only fired once the stuck rows happened to be the
-  # entire remaining window, in effect only once they sat at the head of
-  # what was left to scan, while this catches them wherever they are.
+  # that file again and still reports the phase done. This is the real
+  # backstop for that contract now. It is strictly better than the per-chunk
+  # equality check it replaces (deleted -- see this function's history if
+  # it's needed again): that guard only fired once the stuck rows happened to
+  # be the entire remaining window, in effect only once they sat at the head
+  # of what was left to scan, while this catches them wherever they are.
+  #
+  # Deliberately `Library.count_files_without_parent_or_candidate/1`, not a
+  # count over the same eligible-for-retry predicate the walk itself queries:
+  # that predicate is time-sensitive (a failure candidate's `next_retry_at`
+  # expires and re-enters the set on its own), so reusing it here would flag
+  # a perfectly healthy file -- one that already satisfied the contract via a
+  # rank-0 candidate -- as corrupted state the moment its backoff elapsed
+  # after this walk had already moved past it. See that function's doc.
   defp verify_match_phase_complete(run, library_path) do
-    case Library.count_unmatched_media_files(library_path.id) do
+    case Library.count_files_without_parent_or_candidate(library_path.id) do
       0 ->
         :ok
 
       count ->
-        sample_ids =
-          library_path.id
-          |> Library.list_unmatched_media_file_paths(5)
-          |> Enum.map(&elem(&1, 0))
+        sample_ids = Library.list_file_ids_without_parent_or_candidate(library_path.id, 5)
 
         # `count:`/`media_file_ids:` (a comma-joined string, not a raw list)
         # match `Library.drop_unresolvable_paths/1`'s convention for the same

@@ -2583,34 +2583,11 @@ defmodule Mydia.Library do
     |> drop_unresolvable_paths()
   end
 
-  @doc """
-  Counts files still needing a match for a library path, with no keyset cutoff.
-
-  `Jobs.ImportRun`'s match loop walks `list_unmatched_media_file_paths/3` with
-  an ever-advancing `:after_id`, so a query for "what's still unmatched" scoped
-  to `id > after_id` can only prove nothing remains *above* the cursor. It
-  cannot prove nothing remains below it: a `FileIngest` bug that leaves a file
-  matching neither a parent nor a rank-0 candidate (breaking the progress
-  contract documented on that module) keeps whatever `id` it already had, so
-  once the walk's cursor passes it, that query never selects it again and the
-  walk still reports the phase done.
-
-  This is the check that actually closes that gap: an unrestricted count, with
-  no `:after_id`, run once the walk believes it has finished. `Jobs.ImportRun`
-  fails the run rather than reporting success when this is non-zero.
-  """
-  @spec count_unmatched_media_files(binary()) :: non_neg_integer()
-  def count_unmatched_media_files(library_path_id) do
-    library_path_id
-    |> unmatched_media_files_query(nil)
-    |> select([f, _c], count(f.id))
-    |> Repo.one()
-  end
-
-  # Shared by list_unmatched_media_file_paths/3 and count_unmatched_media_files/1
-  # so the two can never disagree about what "still needs a match" means --
-  # the count would otherwise silently drift from the set the loop actually
-  # walks, defeating the point of using it as that walk's own backstop.
+  # Shared by list_unmatched_media_file_paths/3 alone now. Was briefly shared
+  # with a count used as Jobs.ImportRun's match-phase completion backstop;
+  # that was wrong and has been split out below (see
+  # count_files_without_parent_or_candidate/1's doc for why) rather than left
+  # here for a second caller to accidentally reuse.
   defp unmatched_media_files_query(library_path_id, after_id) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 
@@ -2632,9 +2609,62 @@ defmodule Mydia.Library do
 
   defp maybe_after_id(query, after_id), do: where(query, [f], f.id > ^after_id)
 
+  @doc """
+  Counts files that violate `FileIngest`'s progress contract: no parent and
+  no `MatchCandidate` row at all, of any rank.
+
+  This is deliberately not `list_unmatched_media_file_paths/3`'s "eligible for
+  another match attempt" predicate, and shares no query with it. That
+  predicate is time-sensitive -- a file with a rank-0 failure candidate whose
+  `next_retry_at` has already passed is *eligible for retry*, which is a
+  healthy, expected steady state (a relay outage, a genuine `:no_match`), not
+  a bug. Reusing it as `Jobs.ImportRun`'s match-phase completion check meant a
+  perfectly healthy file could get swept up and reported as corrupted state
+  the moment its backoff elapsed after the keyset walk had already moved past
+  it -- exactly the kind of run this task exists to support, since a large
+  library's match phase can easily outlive a 300-second backoff. The contract
+  (`FileIngest`'s moduledoc) only requires a parent *or* a rank-0 candidate;
+  it says nothing about when that candidate becomes eligible again, so the
+  only real violation is a file with neither, full stop -- a condition this
+  query's `is_nil(c.id)` never revisits as `now` moves forward.
+  """
+  @spec count_files_without_parent_or_candidate(binary()) :: non_neg_integer()
+  def count_files_without_parent_or_candidate(library_path_id) do
+    library_path_id
+    |> files_without_parent_or_candidate_query()
+    |> select([f, _c], count(f.id))
+    |> Repo.one()
+  end
+
+  @doc """
+  Lists ids of up to `limit` files violating the progress contract (see
+  `count_files_without_parent_or_candidate/1`), for a diagnostic sample.
+  """
+  @spec list_file_ids_without_parent_or_candidate(binary(), pos_integer()) :: [binary()]
+  def list_file_ids_without_parent_or_candidate(library_path_id, limit) do
+    library_path_id
+    |> files_without_parent_or_candidate_query()
+    |> order_by([f], asc: f.id)
+    |> limit(^limit)
+    |> select([f, _c], f.id)
+    |> Repo.all()
+  end
+
+  # Shared by the two functions above only -- no `now`, no `:after_id`, no
+  # retry-eligibility clause, on purpose. See
+  # count_files_without_parent_or_candidate/1's doc.
+  defp files_without_parent_or_candidate_query(library_path_id) do
+    MediaFile
+    |> where([f], f.library_path_id == ^library_path_id)
+    |> where([f], is_nil(f.media_item_id) and is_nil(f.episode_id))
+    |> where([f], is_nil(f.trashed_at))
+    |> join(:left, [f], c in MatchCandidate, on: c.media_file_id == f.id)
+    |> where([_f, c], is_nil(c.id))
+  end
+
   # `limit/2` runs in SQL and this rejection runs after it, so a chunk made
   # entirely of rows whose absolute path cannot be resolved comes back empty --
-  # which `Jobs.ImportRun`'s match_loop/4 reads as "nothing left to match".
+  # which `Jobs.ImportRun`'s match_loop/5 reads as "nothing left to match".
   # Those files then never get a candidate, never reach the inbox, and the run
   # still reports success. The return contract is unchanged (resolvable pairs
   # only); logging is what makes the condition observable at all, since the
