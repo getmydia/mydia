@@ -1,6 +1,6 @@
 <Layouts.app {assigns}>
   <div class="max-w-5xl mx-auto p-4 flex flex-col gap-6">
-    <h1 class="text-3xl font-bold">Import Media</h1>
+    <h1 class="text-3xl font-bold">Import</h1>
 
     <RunControl.run_control
       library_paths={@importable_library_paths}
@@ -8,5 +8,48 @@
       outcome_run={@outcome_run}
       outcome_inbox_count={@outcome_inbox_count}
     />
+
+    <Components.band_filter band={@band} counts={@band_counts} search={@search} />
+
+    <Components.bulk_bar
+      :if={SelectionScope.count(@selection) > 0 or @band != :all or @search != ""}
+      count={SelectionScope.count(@selection)}
+      band_total={Map.get(@band_counts, @band, @band_counts.total)}
+      mode={@selection.mode}
+    />
+
+    <div id="groups" phx-update="stream" class="flex flex-col divide-y divide-base-300">
+      <div id="no-groups" class="hidden only:block p-8 text-center opacity-70">
+        Nothing to review. Every file in this library is linked.
+      </div>
+      <Components.group_row
+        :for={{dom_id, group} <- @streams.groups}
+        id={dom_id}
+        group={group}
+        band={ImportGroups.band(group)}
+        selected={SelectionScope.selected?(@selection, group.id)}
+        expanded={@expanded_group_id == group.id}
+        members={@streams.members}
+      />
+    </div>
+
+    <div class="join self-center">
+      <button
+        id="prev-page"
+        class="join-item btn btn-sm"
+        disabled={@cursor_stack == []}
+        phx-click="prev_page"
+      >
+        Previous
+      </button>
+      <button
+        id="next-page"
+        class="join-item btn btn-sm"
+        disabled={is_nil(@next_cursor)}
+        phx-click="next_page"
+      >
+        Next
+      </button>
+    </div>
   </div>
 </Layouts.app>
