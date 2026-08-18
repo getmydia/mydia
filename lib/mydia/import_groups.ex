@@ -362,7 +362,36 @@ defmodule Mydia.ImportGroups do
     # and the row's current status (set by a human, or by an earlier run of
     # this same function) is left exactly as it was: recomputing must never
     # un-decide a human's accepted/ignored call.
-    attrs = if existing, do: Map.drop(attrs, [:status]), else: attrs
+    #
+    # A locally-created group (`ImportGroups.create_local_show/1`) gets the
+    # same treatment for `provider_type` and `provider_id`: that synthetic
+    # marker *is* the human's decision for a show no provider carries, same
+    # as `:status` is for accept/ignore, and a routine rescan must not
+    # un-decide it either. Without this, the leftover unresolved file in a
+    # partially-linked local group is still genuinely unresolved, so the next
+    # rescan folds it back into a fresh rollup with no matched candidate,
+    # resets `provider_type`/`provider_id` to nil, and a second click on
+    # "Create show from folder" no longer sees the marker and mints a second,
+    # empty `MediaItem`.
+    #
+    # A provider-*matched* group is deliberately NOT special-cased here: its
+    # provider fields should keep refreshing on a rescan, because a match can
+    # legitimately improve. Only `provider_type == "local"` is preserved --
+    # everything else on a local group (`file_count`, `unresolved_count`,
+    # `numbered_count`, `min_confidence`, `season_span`) keeps recomputing
+    # from the fresh rollup, so if more files land in that folder later, the
+    # rescan still notices them.
+    attrs =
+      cond do
+        is_nil(existing) ->
+          attrs
+
+        existing.provider_type == "local" ->
+          Map.drop(attrs, [:status, :provider_type, :provider_id])
+
+        true ->
+          Map.drop(attrs, [:status])
+      end
 
     {:ok, group} =
       (existing || %ImportGroup{})

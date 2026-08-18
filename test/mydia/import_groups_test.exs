@@ -304,6 +304,36 @@ defmodule Mydia.ImportGroupsTest do
 
       assert stamped_count == count
     end
+
+    # The negative case for write_group/4's local-group special-casing (see
+    # ImportGroups.create_local_show/1's rescan test): a provider-*matched*
+    # group is deliberately NOT protected the same way, because a match can
+    # legitimately improve on a later pass. This is the same shape a real
+    # rematch produces -- the matcher overwrites the rank-0 candidate in
+    # place -- not a new candidate row.
+    test "a rescan still refreshes a provider-matched group's provider_id", %{library_path: lp} do
+      file =
+        unresolved_file(
+          lp,
+          "Show (2023)/Season 01/ep1.mkv",
+          provider_id: "111",
+          provider_type: "tvdb",
+          confidence: 0.9
+        )
+
+      {:ok, _} = ImportGroups.upsert_for_library(lp)
+      group = Repo.one!(ImportGroup)
+      assert group.provider_id == "111"
+
+      MatchCandidate
+      |> Repo.get_by!(media_file_id: file.id, rank: 0)
+      |> MatchCandidate.changeset(%{provider_id: "222"})
+      |> Repo.update!()
+
+      {:ok, _} = ImportGroups.upsert_for_library(lp)
+
+      assert Repo.reload!(group).provider_id == "222"
+    end
   end
 
   describe "create_local_show/1" do
@@ -490,6 +520,67 @@ defmodule Mydia.ImportGroupsTest do
       assert Enum.any?(page, &(&1.id == group.id))
 
       assert ImportGroups.count_pending() == 1
+    end
+
+    test "a rescan preserves the local-show marker, so a second call still refuses" do
+      lp = library_path_fixture(%{type: "series", path: "/media/Series"})
+
+      numbered_file =
+        orphaned_media_file_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "L'univers des Coucou (2023)/Season 01/ep1.mkv"
+        })
+
+      %MatchCandidate{}
+      |> MatchCandidate.changeset(%{
+        media_file_id: numbered_file.id,
+        rank: 0,
+        last_error: "no_match",
+        parsed_info: %{"season" => 1, "episodes" => [1]}
+      })
+      |> Repo.insert!()
+
+      # The leftover, unnumbered member is what makes this a genuine test: it
+      # stays orphaned after create_local_show/1, so it is still genuinely
+      # unresolved and gets picked up again by the rescan below.
+      unnumbered_file =
+        orphaned_media_file_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "L'univers des Coucou (2023)/Season 01/bonus.mkv"
+        })
+
+      %MatchCandidate{}
+      |> MatchCandidate.changeset(%{
+        media_file_id: unnumbered_file.id,
+        rank: 0,
+        last_error: "no_match",
+        parsed_info: %{}
+      })
+      |> Repo.insert!()
+
+      {:ok, _} = ImportGroups.upsert_for_library(lp)
+      group = Repo.one!(ImportGroup)
+
+      assert {:ok, _item} = ImportGroups.create_local_show(group.id)
+
+      after_create = Repo.reload!(group)
+      assert after_create.provider_type == "local"
+      assert after_create.provider_id
+
+      # Simulates a routine rescan of the same library path -- a scheduled
+      # scan, or a user starting another import run over it.
+      {:ok, _} = ImportGroups.upsert_for_library(lp)
+
+      after_rescan = Repo.reload!(group)
+      assert after_rescan.provider_type == "local"
+      assert after_rescan.provider_id == after_create.provider_id
+      assert after_rescan.status == "pending"
+
+      # The end-to-end proof that the hole is closed, not just that a column
+      # survived: the guard the marker exists for must still work after a
+      # rescan folds the leftover file back into a fresh rollup.
+      assert {:error, :already_created} = ImportGroups.create_local_show(group.id)
+      assert Repo.aggregate(Mydia.Media.MediaItem, :count) == 1
     end
   end
 end
