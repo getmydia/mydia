@@ -13,6 +13,7 @@ defmodule Mydia.Media.SeasonOrder do
 
   alias Mydia.Media.Episode
   alias Mydia.Media.MediaItem
+  alias Mydia.Metadata.Provider.Relay
   alias Mydia.Repo
 
   @values [:official, :dvd, :absolute]
@@ -38,6 +39,102 @@ defmodule Mydia.Media.SeasonOrder do
   @spec tvdb_type(atom() | nil) :: String.t()
   def tvdb_type(nil), do: "official"
   def tvdb_type(order) when order in @values, do: Atom.to_string(order)
+
+  @doc """
+  A short, human label for an ordering, for UI display.
+  """
+  @spec label(atom() | nil) :: String.t()
+  def label(nil), do: "Aired order"
+  def label(:official), do: "Aired order"
+  def label(:dvd), do: "DVD order"
+  def label(:absolute), do: "Absolute order"
+
+  @doc """
+  Looks up TVDB's alternative ("dvd") ordering for a show and, if it exists,
+  the real per-season episode counts (specials excluded) — the numbers a
+  suggestion banner needs to name the alternative concretely rather than
+  offering an abstract choice.
+
+  Returns `{:error, :no_alternative_ordering}` when the show has no TVDB
+  "dvd" ordering to offer.
+  """
+  @spec suggest_alternative(MediaItem.t(), map()) ::
+          {:ok, [pos_integer()]} | {:error, :missing_tvdb_id | :no_alternative_ordering | term()}
+  def suggest_alternative(%MediaItem{tvdb_id: nil}, _config), do: {:error, :missing_tvdb_id}
+
+  def suggest_alternative(%MediaItem{} = media_item, config) do
+    provider_id = to_string(media_item.tvdb_id)
+
+    with {:ok, raw_seasons} <- Relay.fetch_raw_seasons(config, provider_id),
+         orderings = Relay.available_orderings(raw_seasons),
+         true <- Map.has_key?(orderings, "dvd") do
+      fetch_alternative_counts(config, provider_id, raw_seasons)
+    else
+      false -> {:error, :no_alternative_ordering}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp fetch_alternative_counts(config, provider_id, raw_seasons) do
+    case Relay.fetch_ordering_episodes(config, provider_id, "dvd", raw_seasons) do
+      {:ok, episodes} ->
+        counts =
+          episodes
+          |> Enum.reject(&(&1.season_number == 0))
+          |> Enum.group_by(& &1.season_number)
+          |> Enum.sort_by(fn {season_number, _} -> season_number end)
+          |> Enum.map(fn {_season_number, eps} -> length(eps) end)
+
+        if counts == [] do
+          {:error, :no_alternative_ordering}
+        else
+          {:ok, counts}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc """
+  Fetches every episode of `target`'s TVDB ordering and remaps the show onto
+  it via `remap/3`.
+
+  This is the counterpart to `suggest_alternative/2`: given a chosen
+  ordering (from the banner, or a manual pick), it does the same kind of
+  fetch and builds the `provider_episode_id => {season, episode}` mapping
+  `remap/3` needs.
+  """
+  @spec switch(MediaItem.t(), atom(), map()) ::
+          {:ok, non_neg_integer()}
+          | {:error,
+             :missing_tvdb_id
+             | :no_alternative_ordering
+             | :missing_provider_ids
+             | :conflicting_mapping
+             | term()}
+  def switch(%MediaItem{tvdb_id: nil}, _target, _config), do: {:error, :missing_tvdb_id}
+
+  def switch(%MediaItem{} = media_item, target, config) when target in @values do
+    provider_id = to_string(media_item.tvdb_id)
+
+    with {:ok, raw_seasons} <- Relay.fetch_raw_seasons(config, provider_id),
+         {:ok, episodes} <-
+           Relay.fetch_ordering_episodes(config, provider_id, tvdb_type(target), raw_seasons) do
+      case episodes do
+        [] ->
+          {:error, :no_alternative_ordering}
+
+        episodes ->
+          mapping =
+            episodes
+            |> Enum.filter(& &1.provider_episode_id)
+            |> Map.new(&{&1.provider_episode_id, {&1.season_number, &1.episode_number}})
+
+          remap(media_item, target, mapping)
+      end
+    end
+  end
 
   @doc """
   Rewrites a show's season and episode numbers to a different ordering.

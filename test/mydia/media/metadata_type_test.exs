@@ -107,6 +107,45 @@ defmodule Mydia.Media.MetadataTypeTest do
       assert hd(reloaded.metadata.seasons).episode_count == 7
     end
 
+    # Regression test: parse_seasons_list/1 rebuilt SeasonInfo without
+    # tvdb_season_id, even though the struct declares the field and
+    # from_api_response/1 populates it. dump/1 serialized it correctly, so the
+    # value survived into storage — the loss was read-side only, and only
+    # visible once a media item goes through the Ecto type (Repo.get,
+    # get_media_item!, ...) rather than staying in the in-memory struct
+    # cast/1 passes through untouched.
+    test "tvdb_season_id survives a database round trip" do
+      {:ok, media_item} =
+        Media.create_media_item(
+          %{
+            type: "tv_show",
+            title: "Black Clover",
+            year: 2017,
+            tvdb_id: 331_753,
+            metadata: %{
+              "id" => 331_753,
+              "provider_id" => "331753",
+              "provider" => "tvdb",
+              "media_type" => "tv_show",
+              "title" => "Black Clover",
+              "seasons" => [
+                %{
+                  "season_number" => 1,
+                  "name" => "Season 1",
+                  "episode_count" => 170,
+                  "tvdb_season_id" => 12_345
+                }
+              ]
+            }
+          },
+          skip_episode_refresh: true
+        )
+
+      reloaded = Repo.get!(Mydia.Media.MediaItem, media_item.id)
+
+      assert [%SeasonInfo{tvdb_season_id: 12_345}] = reloaded.metadata.seasons
+    end
+
     test "handles nil metadata gracefully" do
       {:ok, media_item} =
         Media.create_media_item(%{

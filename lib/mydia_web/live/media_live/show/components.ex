@@ -451,6 +451,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :transcode_jobs, :map, default: %{}
   attr :segment_statuses, :map, default: %{}
   attr :segment_detection_available, :boolean, default: true
+  attr :season_order_suggestion, :any, default: nil
 
   def episodes_section(assigns) do
     assigns = assign(assigns, :monitoring_presets, @monitoring_presets)
@@ -527,6 +528,13 @@ defmodule MydiaWeb.MediaLive.Show.Components do
             </div>
           </div>
           <SegmentComponents.segment_unavailable_note :if={!@segment_detection_available} />
+        </div>
+
+        <div class="card-body p-4 pb-0 pt-0">
+          <SeasonComponents.season_order_controls
+            media_item={@media_item}
+            season_order_suggestion={@season_order_suggestion}
+          />
         </div>
 
         <%!-- All seasons in one container --%>

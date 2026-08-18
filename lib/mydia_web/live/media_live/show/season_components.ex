@@ -9,8 +9,110 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
   import MydiaWeb.MediaLive.Show.Formatters
   import MydiaWeb.MediaLive.Show.Helpers
 
+  alias Mydia.Media.SeasonOrder
   alias MydiaWeb.MediaLive.Show.Components
   alias MydiaWeb.MediaLive.Show.SegmentComponents
+
+  @doc """
+  Season-ordering controls for a TVDB-sourced TV show: a persistent selector
+  (any TVDB show, any time) and a dismissible suggestion banner (only when
+  the show has never been asked and its official season looks wrong).
+
+  Absent entirely for non-TVDB shows — there is nothing to switch between.
+  """
+  attr :media_item, :map, required: true
+  attr :season_order_suggestion, :any, default: nil
+
+  def season_order_controls(assigns) do
+    ~H"""
+    <div :if={tvdb_show?(@media_item)} class="mb-4 space-y-3">
+      <div
+        :if={@season_order_suggestion}
+        id="season-order-suggestion"
+        class="alert alert-info items-start"
+      >
+        <.icon name="hero-information-circle" class="w-5 h-5 shrink-0 mt-0.5" />
+        <div class="flex-1">
+          <p class="text-sm">
+            One season here has {season_episode_max(@media_item)} episodes. TVDB also splits
+            this show into {describe_counts(@season_order_suggestion.counts)} as a DVD ordering.
+          </p>
+          <div class="flex gap-2 mt-2">
+            <button
+              type="button"
+              id="season-order-accept"
+              class="btn btn-sm btn-primary"
+              phx-click="change_season_order"
+              phx-value-order="dvd"
+            >
+              Use DVD ordering
+            </button>
+            <button
+              type="button"
+              id="season-order-dismiss"
+              class="btn btn-sm btn-ghost"
+              phx-click="change_season_order"
+              phx-value-order="official"
+            >
+              Keep aired order
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <form
+        id="season-order-form"
+        phx-change="change_season_order"
+        class="flex items-center gap-2"
+      >
+        <label for="season-order-select" class="text-xs text-base-content/60">
+          Episode ordering
+        </label>
+        <select id="season-order-select" name="order" class="select select-xs select-bordered w-auto">
+          <option
+            :for={order <- SeasonOrder.values()}
+            value={order}
+            selected={current_season_order(@media_item) == order}
+          >
+            {SeasonOrder.label(order)}
+          </option>
+        </select>
+      </form>
+    </div>
+    """
+  end
+
+  defp tvdb_show?(media_item),
+    do: media_item.type == "tv_show" and media_item.metadata_source == :tvdb
+
+  defp current_season_order(media_item), do: media_item.season_order || :official
+
+  defp season_episode_max(media_item) do
+    media_item.episodes
+    |> Enum.group_by(& &1.season_number)
+    |> Enum.map(fn {_season_number, eps} -> length(eps) end)
+    |> Enum.max(fn -> 0 end)
+  end
+
+  defp describe_counts([single]), do: "one season of #{single}"
+
+  defp describe_counts(counts) do
+    "#{season_count_word(length(counts))} seasons of #{join_with_and(counts)}"
+  end
+
+  defp join_with_and([last]), do: to_string(last)
+
+  defp join_with_and(counts) do
+    {init, [last]} = Enum.split(counts, -1)
+    Enum.join(init, ", ") <> " and #{last}"
+  end
+
+  defp season_count_word(2), do: "two"
+  defp season_count_word(3), do: "three"
+  defp season_count_word(4), do: "four"
+  defp season_count_word(5), do: "five"
+  defp season_count_word(6), do: "six"
+  defp season_count_word(n), do: to_string(n)
 
   @doc """
   One season: the disclosure header, the segment status row, and the episode

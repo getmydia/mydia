@@ -214,7 +214,8 @@ defmodule Mydia.Media.MetadataType do
         overview: season[:overview],
         air_date: season[:air_date],
         episode_count: season[:episode_count],
-        poster_path: season[:poster_path]
+        poster_path: season[:poster_path],
+        tvdb_season_id: season[:tvdb_season_id]
       }
     end)
   end

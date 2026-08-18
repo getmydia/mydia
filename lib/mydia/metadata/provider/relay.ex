@@ -570,6 +570,138 @@ defmodule Mydia.Metadata.Provider.Relay do
     end)
   end
 
+  @doc """
+  Fetches the raw TVDB extended series payload's `seasons` list: every
+  ordering TVDB offers for a series, unfiltered. `transform_tvdb_seasons/2`
+  and `available_orderings/1` both expect this shape; nothing else in this
+  module keeps it around once it has picked one ordering out of it.
+
+  TVDB's `/series/{id}/extended` response does not carry a real
+  `episodeCount` per season (unlike what `available_orderings/1`'s summary
+  implies) — only `fetch_ordering_episodes/4`, which fetches each season
+  individually, has real counts. This function exists to get the raw
+  ordering/season-id structure once so callers are not stuck guessing what
+  `available_orderings/1`'s keys mean.
+
+  Cached for 24 hours: a series' set of orderings rarely changes, and both
+  the season-order suggestion banner and the switch it offers read this.
+  """
+  @spec fetch_raw_seasons(map(), String.t()) :: {:ok, list()} | {:error, term()}
+  def fetch_raw_seasons(config, provider_id) do
+    Cache.fetch(
+      "tvdb_raw_seasons:#{provider_id}",
+      fn -> do_fetch_raw_seasons(config, provider_id) end,
+      ttl: :timer.hours(24)
+    )
+  end
+
+  defp do_fetch_raw_seasons(config, provider_id) do
+    req = HTTP.new_request(config)
+
+    case HTTP.get(req, "/tvdb/series/#{provider_id}/extended", params: [meta: "translations"]) do
+      {:ok, %{status: 200, body: body}} ->
+        data = body["data"] || body
+        {:ok, data["seasons"] || []}
+
+      {:ok, %{status: 404}} ->
+        {:error, Error.not_found("TVDB series not found: #{provider_id}")}
+
+      {:ok, %{status: status, body: body}} ->
+        {:error, Error.api_error("TVDB fetch failed with status #{status}", %{body: body})}
+
+      {:error, error} ->
+        {:error, error}
+    end
+  end
+
+  @doc """
+  Fetches every episode of one TVDB ordering (`"official"`, `"dvd"`,
+  `"absolute"`, ...) for a series, as a flat list of
+  `%{provider_episode_id:, season_number:, episode_number:}`.
+
+  `raw_seasons` is the unfiltered list from `fetch_raw_seasons/2` — callers
+  that already fetched it (e.g. to compute `available_orderings/1`) do not
+  pay for a second series-level request just to pick a different ordering
+  out of the same payload.
+
+  Unlike `fetch_season/4` (`Mydia.Metadata.fetch_season_cached/4`), this
+  skips the per-episode translation fetch: callers only need identity and
+  position to build a `SeasonOrder.remap/3` mapping or count seasons, not
+  localized names, so a 170-episode season costs one request instead of 171.
+  """
+  @spec fetch_ordering_episodes(map(), String.t(), String.t(), list()) ::
+          {:ok, [map()]} | {:error, term()}
+  def fetch_ordering_episodes(config, provider_id, order_type, raw_seasons) do
+    season_stubs =
+      raw_seasons
+      |> Enum.filter(fn s -> s["type"]["type"] == order_type end)
+      |> Enum.sort_by(& &1["number"])
+
+    fetch_all_season_episodes(config, provider_id, season_stubs)
+  end
+
+  defp fetch_all_season_episodes(_config, _provider_id, []), do: {:ok, []}
+
+  defp fetch_all_season_episodes(config, provider_id, season_stubs) do
+    results =
+      season_stubs
+      |> Task.async_stream(
+        fn stub ->
+          fetch_season_episode_ids_cached(config, provider_id, stub["id"], stub["number"])
+        end,
+        timeout: :infinity
+      )
+      |> Enum.map(fn {:ok, result} -> result end)
+
+    if Enum.all?(results, &match?({:ok, _}, &1)) do
+      {:ok, Enum.flat_map(results, fn {:ok, episodes} -> episodes end)}
+    else
+      {:error, :season_fetch_failed}
+    end
+  end
+
+  defp fetch_season_episode_ids_cached(config, provider_id, tvdb_season_id, season_number) do
+    Cache.fetch(
+      "tvdb_ordering_episodes:#{provider_id}:#{tvdb_season_id}",
+      fn -> fetch_season_episode_ids(config, tvdb_season_id, season_number) end,
+      ttl: :timer.hours(24)
+    )
+  end
+
+  defp fetch_season_episode_ids(config, tvdb_season_id, season_number) do
+    req = HTTP.new_request(config)
+
+    case HTTP.get(req, "/tvdb/seasons/#{tvdb_season_id}/extended", params: [meta: "translations"]) do
+      {:ok, %{status: 200, body: body}} ->
+        data = body["data"] || body
+
+        episodes =
+          (data["episodes"] || [])
+          |> Enum.map(fn ep ->
+            %{
+              provider_episode_id: ordering_episode_id(ep["id"]),
+              season_number: ep["seasonNumber"] || season_number,
+              episode_number: ep["number"]
+            }
+          end)
+
+        {:ok, episodes}
+
+      {:ok, %{status: 404}} ->
+        {:error, Error.not_found("TVDB season not found: #{tvdb_season_id}")}
+
+      {:ok, %{status: status, body: body}} ->
+        {:error, Error.api_error("TVDB season fetch failed with status #{status}", %{body: body})}
+
+      {:error, error} ->
+        {:error, error}
+    end
+  end
+
+  defp ordering_episode_id(nil), do: nil
+  defp ordering_episode_id(id) when is_integer(id), do: Integer.to_string(id)
+  defp ordering_episode_id(id) when is_binary(id), do: id
+
   defp transform_tvdb_genres(nil), do: []
 
   defp transform_tvdb_genres(genres) when is_list(genres) do
