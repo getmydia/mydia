@@ -911,7 +911,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
          socket
          |> assign(:match_search, nil)
          |> put_flash(:info, "Updated the match for this group.")
-         |> refresh_group_row(group_id)
+         |> load_groups()
          |> refresh_counts()}
 
       {:error, :not_pending} ->

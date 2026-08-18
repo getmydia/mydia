@@ -704,6 +704,29 @@ defmodule MydiaWeb.ImportMediaReviewTest do
       refute has_element?(view, "#match-results")
       assert Repo.reload!(group).provider_id == "9999"
     end
+
+    test "applying a corrected match removes the row from needs_attention filter", %{conn: conn} do
+      lp = library_path_fixture(%{type: "series"})
+      {group, _file} = seed_wrong_match(lp)
+      series_id = MetadataStubProvider.series_tvdb_id()
+
+      {:ok, view, _html} = live(conn, ~p"/import")
+
+      # Filter to the "needs_attention" band
+      view |> element("#band-needs-attention") |> render_click()
+
+      # Verify the group is visible in this band
+      assert has_element?(view, "#group-#{group.id}")
+
+      # Open the match search modal and select a result
+      view |> element("#change-match-#{group.id}") |> render_click()
+      render_async(view)
+
+      view |> element("#match-result-#{series_id}-tvdb") |> render_click()
+
+      # The group's row should no longer be present because it moved to :ready band
+      refute has_element?(view, "#group-#{group.id}")
+    end
   end
 
   test "readonly users cannot apply a chosen match", %{conn: conn} do
