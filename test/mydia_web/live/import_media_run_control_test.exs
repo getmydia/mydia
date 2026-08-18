@@ -261,7 +261,8 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
     send(view.pid, {:dismiss_scan_complete, Ecto.UUID.generate()})
     assert has_element?(view, "#scan-complete-status", "Scan complete")
 
-    Process.sleep(5_100)
+    send(view.pid, {:dismiss_scan_complete, finished.id})
+    render(view)
     refute has_element?(view, "#scan-complete-status")
   end
 
@@ -600,6 +601,13 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
   test "pre-selects movie library tab when type=movies query param is provided", %{
     conn: conn
   } do
+    _default_mixed =
+      library_path_fixture(%{
+        type: "mixed",
+        default_for_movies: true,
+        path: "/tmp/aaa_default_mixed_#{System.unique_integer([:positive])}"
+      })
+
     lp_tv =
       library_path_fixture(%{
         type: "series",

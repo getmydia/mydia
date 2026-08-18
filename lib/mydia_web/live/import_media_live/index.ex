@@ -14,6 +14,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
 
   alias Mydia.{Library, Metadata, Repo, Settings}
   alias Mydia.ImportGroups
+  alias Mydia.Jobs.RematchImportGroups
   alias Mydia.Jobs.ImportRun, as: ImportRunJob
   alias Mydia.Library.{ImportGroup, ImportRun, SelectionScope}
   alias MydiaWeb.Live.Authorization
@@ -441,14 +442,21 @@ defmodule MydiaWeb.ImportMediaLive.Index do
 
   def handle_event("rematch_selected", _params, socket) do
     with :ok <- Authorization.authorize_import_media(socket) do
-      {:ok, count} = ImportGroups.rematch(socket.assigns.selection)
+      selection = socket.assigns.selection
+      count = SelectionScope.count(selection)
+
+      %{
+        "library_path_id" => selection.library_path_id,
+        "selection" => SelectionScope.to_args(selection)
+      }
+      |> RematchImportGroups.new()
+      |> Oban.insert!()
 
       {:noreply,
        socket
-       |> put_flash(:info, "Re-matched #{count} group(s).")
+       |> put_flash(:info, "Queued #{count} group(s) for re-match.")
        |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
-       |> load_groups()
-       |> refresh_counts()}
+       |> load_groups()}
     else
       {:unauthorized, socket} -> {:noreply, socket}
     end
@@ -855,15 +863,15 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   end
 
   defp resolve_library_by_type(type, library_paths) when type in ["movies", "movie"] do
-    Enum.find_value(library_paths, fn lp -> lp.default_for_movies && lp.id end) ||
-      Enum.find_value(library_paths, fn lp -> lp.type == :movies && lp.id end) ||
+    Enum.find_value(library_paths, fn lp -> lp.type == :movies && lp.id end) ||
+      Enum.find_value(library_paths, fn lp -> lp.default_for_movies && lp.id end) ||
       Enum.find_value(library_paths, fn lp -> lp.type == :mixed && lp.id end)
   end
 
   defp resolve_library_by_type(type, library_paths)
        when type in ["tv", "series", "tv_show", "shows"] do
-    Enum.find_value(library_paths, fn lp -> lp.default_for_series && lp.id end) ||
-      Enum.find_value(library_paths, fn lp -> lp.type == :series && lp.id end) ||
+    Enum.find_value(library_paths, fn lp -> lp.type == :series && lp.id end) ||
+      Enum.find_value(library_paths, fn lp -> lp.default_for_series && lp.id end) ||
       Enum.find_value(library_paths, fn lp -> lp.type == :mixed && lp.id end)
   end
 
@@ -979,6 +987,10 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   defp refresh_counts(socket) do
     library_path_id = socket.assigns.selected_library_path_id
 
+    active_runs_by_library =
+      Library.list_active_import_runs()
+      |> Map.new(&{&1.library_path_id, &1})
+
     band_counts =
       library_path_id
       |> ImportGroups.band_counts()
@@ -986,6 +998,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
 
     socket
     |> assign(:band_counts, band_counts)
+    |> assign(:active_runs_by_library, active_runs_by_library)
     |> assign(
       :library_group_counts,
       Map.new(socket.assigns.importable_library_paths, fn path ->

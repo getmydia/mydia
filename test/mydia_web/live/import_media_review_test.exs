@@ -1,5 +1,6 @@
 defmodule MydiaWeb.ImportMediaReviewTest do
   use MydiaWeb.ConnCase, async: false
+  use Oban.Testing, repo: Mydia.Repo
 
   import Ecto.Query
   import Phoenix.LiveViewTest
@@ -15,6 +16,9 @@ defmodule MydiaWeb.ImportMediaReviewTest do
   setup :setup_metadata_stub
 
   setup %{conn: conn} do
+    engine = if Mydia.DB.postgres?(), do: Oban.Engines.Basic, else: Oban.Engines.Lite
+    start_supervised!({Oban, repo: Mydia.Repo, engine: engine, testing: :manual})
+
     user = user_fixture()
     {:ok, conn: log_in_user(conn, user), user: user}
   end
@@ -743,6 +747,28 @@ defmodule MydiaWeb.ImportMediaReviewTest do
     lp = library_path_fixture(%{type: "series"})
     group = seed_group(lp, cluster_key: "readonly-batch-rematch", provider_id: nil)
 
+    file =
+      orphaned_media_file_fixture(%{
+        library_path_id: lp.id,
+        relative_path: "Readonly Show/Season 01/Readonly Show - S01E01.mkv"
+      })
+
+    candidate =
+      %Mydia.Library.MatchCandidate{}
+      |> Mydia.Library.MatchCandidate.changeset(%{
+        media_file_id: file.id,
+        rank: 0,
+        provider_id: "before",
+        provider_type: "tvdb",
+        title: "Before",
+        confidence: 0.5
+      })
+      |> Repo.insert!()
+
+    Repo.update_all(from(f in Mydia.Library.MediaFile, where: f.id == ^file.id),
+      set: [import_group_id: group.id]
+    )
+
     readonly_conn = log_in_user(conn, user_fixture(%{role: "readonly"}))
     {:ok, view, _html} = live(readonly_conn, ~p"/import")
 
@@ -750,6 +776,8 @@ defmodule MydiaWeb.ImportMediaReviewTest do
     render_click(view, "rematch_selected", %{})
 
     assert Repo.reload!(group).provider_id == nil
+    assert Repo.reload!(candidate).provider_id == "before"
+    refute_enqueued(worker: Mydia.Jobs.RematchImportGroups)
   end
 
   describe "Change match" do
@@ -1267,7 +1295,12 @@ defmodule MydiaWeb.ImportMediaReviewTest do
 
       render_click(view, "rematch_selected", %{})
 
-      assert render(view) =~ "Re-matched 1 group(s)."
+      assert render(view) =~ "Queued 1 group(s) for re-match."
+
+      assert_enqueued(
+        worker: Mydia.Jobs.RematchImportGroups,
+        args: %{"library_path_id" => lp.id}
+      )
     end
   end
 end

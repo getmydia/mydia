@@ -20,8 +20,23 @@ export function persistPreference(checkbox, storage) {
 
 const PersistedCheckbox = {
   mounted() {
-    applyStoredPreference(this.el, window.localStorage);
-    this.persistPreference = () => persistPreference(this.el, window.localStorage);
+    let storage;
+
+    try {
+      storage = window.localStorage;
+    } catch (_error) {
+      storage = null;
+    }
+
+    if (storage) {
+      applyStoredPreference(this.el, storage);
+    } else {
+      this.el.checked = true;
+    }
+
+    this.persistPreference = () => {
+      if (storage) persistPreference(this.el, storage);
+    };
     this.el.addEventListener("change", this.persistPreference);
   },
 

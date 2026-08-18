@@ -240,4 +240,53 @@ defmodule Mydia.Library.SelectionScope do
   @doc "The per-query id bind cap, exposed for tests and callers that chunk."
   @spec max_id_binds() :: pos_integer()
   def max_id_binds, do: @max_id_binds
+
+  @doc "Serializes a scope into JSON-safe Oban arguments."
+  @spec to_args(t()) :: map()
+  def to_args(%__MODULE__{} = scope) do
+    %{
+      "mode" => Atom.to_string(scope.mode),
+      "library_path_id" => scope.library_path_id,
+      "status" => scope.status,
+      "filter" =>
+        Map.new(scope.filter, fn {key, value} -> {Atom.to_string(key), encode_filter(value)} end),
+      "included_ids" => MapSet.to_list(scope.included_ids),
+      "excluded_ids" => MapSet.to_list(scope.excluded_ids)
+    }
+  end
+
+  @doc "Restores a selection scope from trusted Oban arguments."
+  @spec from_args(map()) :: t()
+  def from_args(args) do
+    %__MODULE__{
+      mode: decode_mode(args["mode"]),
+      library_path_id: args["library_path_id"],
+      status: args["status"] || "pending",
+      filter: decode_filter(args["filter"] || %{}),
+      included_ids: MapSet.new(args["included_ids"] || []),
+      excluded_ids: MapSet.new(args["excluded_ids"] || [])
+    }
+  end
+
+  defp encode_filter(value) when is_atom(value), do: Atom.to_string(value)
+  defp encode_filter(value), do: value
+
+  defp decode_filter(filter) do
+    %{}
+    |> maybe_put_filter(:q, filter["q"])
+    |> maybe_put_filter(:band, decode_band(filter["band"]))
+  end
+
+  defp maybe_put_filter(filter, _key, nil), do: filter
+  defp maybe_put_filter(filter, key, value), do: Map.put(filter, key, value)
+
+  defp decode_mode("page"), do: :page
+  defp decode_mode("filter"), do: :filter
+  defp decode_mode(_), do: :none
+
+  defp decode_band("all"), do: :all
+  defp decode_band("ready"), do: :ready
+  defp decode_band("needs_attention"), do: :needs_attention
+  defp decode_band("no_match"), do: :no_match
+  defp decode_band(_), do: nil
 end

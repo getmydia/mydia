@@ -34,7 +34,7 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
             <div class="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3">
               <span class="loading loading-spinner loading-md" />
             </div>
-            <h2 class="text-2xl font-bold">Scanning {@library_path.path}</h2>
+            <h2 class="text-2xl font-bold">Scanning library</h2>
             <p class="text-sm text-base-content/60 mt-1 font-mono truncate">
               {@library_path.path}
             </p>
@@ -132,13 +132,10 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
   defp run_outcome(assigns) do
     ~H"""
     <div id="run-outcome" class="flex flex-col gap-3">
-      <div
-        :if={@run.status in [:failed, :stopped]}
-        class={[
-          "alert flex items-center gap-2.5 py-3 px-4 shadow-sm",
-          outcome_alert_class(@run.status)
-        ]}
-      >
+      <div class={[
+        "alert flex items-center gap-2.5 py-3 px-4 shadow-sm",
+        outcome_alert_class(@run.status)
+      ]}>
         <.icon name={outcome_icon(@run.status)} class="w-5 h-5 shrink-0" />
         <span class="font-semibold">{outcome_label(@run.status)}</span>
       </div>

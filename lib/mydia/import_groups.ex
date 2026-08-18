@@ -10,6 +10,8 @@ defmodule Mydia.ImportGroups do
 
   import Ecto.Query
 
+  require Logger
+
   alias Mydia.Library.ImportGroup
   alias Mydia.Library.ImportRun
   alias Mydia.Library.MatchCandidate
@@ -724,6 +726,7 @@ defmodule Mydia.ImportGroups do
     {count, _} =
       scope
       |> SelectionScope.to_query()
+      |> where([g], g.status == "ignored")
       |> Repo.update_all(set: [status: "pending", decided_at: nil, updated_at: now])
 
     {:ok, count}
@@ -740,59 +743,108 @@ defmodule Mydia.ImportGroups do
     {:ok, count}
   end
 
-  @doc """
-  Re-runs metadata matching for media files in the selected groups.
-
-  Runs `BatchMatcher.match_paths/2`, writes the resulting candidates, and updates
-  the import groups' rollups.
-  """
+  @doc "Re-runs metadata matching for media files in the selected groups."
   @spec rematch(SelectionScope.t(), keyword()) :: {:ok, non_neg_integer()}
   def rematch(%SelectionScope{} = scope, opts \\ []) do
+    with {:ok, stats} <- rematch_with_stats(scope, opts) do
+      {:ok, stats.groups}
+    end
+  end
+
+  @doc "Re-matches a selection in bounded pages and reports file-level failures."
+  @spec rematch_with_stats(SelectionScope.t(), keyword()) ::
+          {:ok,
+           %{groups: non_neg_integer(), files: non_neg_integer(), failures: non_neg_integer()}}
+  def rematch_with_stats(%SelectionScope{} = scope, opts \\ []) do
     library_path = Settings.get_library_path!(scope.library_path_id)
     matcher = Keyword.get(opts, :matcher, Mydia.Library.MetadataMatcher)
     config = Keyword.get(opts, :config) || Metadata.default_relay_config()
+    page_size = Keyword.get(opts, :page_size, 250)
 
-    files =
-      MediaFile
-      |> where([f], f.library_path_id == ^scope.library_path_id)
-      |> where([f], is_nil(f.media_item_id) and is_nil(f.episode_id) and is_nil(f.trashed_at))
-      |> join(:inner, [f], g in subquery(SelectionScope.to_query(scope)),
-        on: f.import_group_id == g.id
-      )
-      |> Repo.all()
+    stats =
+      rematch_pages(scope, library_path, matcher, config, page_size, nil, %{files: 0, failures: 0})
 
-    if files != [] do
-      files_by_path =
-        Map.new(files, fn f -> {Path.join(library_path.path, f.relative_path), f} end)
+    upsert_for_library(library_path)
 
-      paths = Map.keys(files_by_path)
+    {:ok, Map.put(stats, :groups, SelectionScope.count(scope))}
+  end
 
-      match_results =
-        Mydia.Library.BatchMatcher.match_paths(paths,
-          library_root: library_path.path,
-          matcher: matcher,
-          config: config
-        )
+  defp rematch_pages(scope, library_path, matcher, config, page_size, after_id, stats) do
+    rows = rematch_page(scope, page_size, after_id)
 
-      Enum.each(match_results, fn {path, match_outcome} ->
-        with %MediaFile{} = media_file <- Map.get(files_by_path, path) do
-          match_data =
-            case match_outcome do
-              {:ok, data} -> data
-              _ -> nil
-            end
+    case rows do
+      [] ->
+        stats
 
-          Mydia.Library.FileIngest.ingest(media_file, match_data,
-            policy: :local_only,
-            config: config
-          )
-        end
-      end)
-
-      upsert_for_library(library_path)
+      rows ->
+        page_stats = rematch_rows(rows, library_path, matcher, config)
+        stats = Map.merge(stats, page_stats, fn _key, left, right -> left + right end)
+        rematch_pages(scope, library_path, matcher, config, page_size, List.last(rows).id, stats)
     end
+  end
 
-    {:ok, SelectionScope.count(scope)}
+  defp rematch_page(scope, page_size, after_id) do
+    MediaFile
+    |> where([f], f.library_path_id == ^scope.library_path_id)
+    |> where([f], is_nil(f.media_item_id) and is_nil(f.episode_id) and is_nil(f.trashed_at))
+    |> join(:inner, [f], g in subquery(SelectionScope.to_query(scope)),
+      on: f.import_group_id == g.id
+    )
+    |> then(fn query ->
+      if after_id, do: where(query, [f], f.id > ^after_id), else: query
+    end)
+    |> order_by([f], asc: f.id)
+    |> limit(^page_size)
+    |> select([f], %{id: f.id, relative_path: f.relative_path})
+    |> Repo.all()
+  end
+
+  defp rematch_rows(rows, library_path, matcher, config) do
+    rows_by_path = Map.new(rows, &{Path.join(library_path.path, &1.relative_path), &1.id})
+
+    rows_by_path
+    |> Map.keys()
+    |> Mydia.Library.BatchMatcher.match_paths(
+      library_root: library_path.path,
+      matcher: matcher,
+      config: config
+    )
+    |> Enum.reduce(%{files: 0, failures: 0}, fn {path, outcome}, stats ->
+      case rematch_file(rows_by_path[path], outcome, config) do
+        :ok -> %{stats | files: stats.files + 1}
+        :error -> %{stats | failures: stats.failures + 1}
+      end
+    end)
+  end
+
+  defp rematch_file(media_file_id, outcome, config) do
+    match_data =
+      case outcome do
+        {:ok, data} -> data
+        {:error, reason} when reason in [:no_match, :no_matches_found, :unknown_media_type] -> nil
+        {:error, _reason} -> :failed
+      end
+
+    with match_data when match_data != :failed <- match_data,
+         %MediaFile{} = media_file <- Repo.get(MediaFile, media_file_id) do
+      case Mydia.Library.FileIngest.ingest(media_file, match_data,
+             policy: :local_only,
+             config: config
+           ) do
+        {:error, _reason} -> :error
+        _success -> :ok
+      end
+    else
+      _failure -> :error
+    end
+  rescue
+    error ->
+      Logger.error("Re-matching an import file failed",
+        media_file_id: media_file_id,
+        error: Exception.format(:error, error, __STACKTRACE__)
+      )
+
+      :error
   end
 
   @doc """
@@ -1038,6 +1090,8 @@ defmodule Mydia.ImportGroups do
     group = Repo.get(ImportGroup, group_id)
 
     if group do
+      library_path = Settings.get_library_path!(group.library_path_id)
+
       members_data =
         MediaFile
         |> where([f], f.import_group_id == ^group_id)
@@ -1054,7 +1108,10 @@ defmodule Mydia.ImportGroups do
               MapSet.put(acc, s)
 
             _ ->
-              case PathAnchor.anchor_for(row.relative_path || "", "") do
+              case PathAnchor.anchor_for(
+                     Path.join(library_path.path, row.relative_path || ""),
+                     library_path.path
+                   ) do
                 %{season_hint: s} when is_integer(s) -> MapSet.put(acc, s)
                 _ -> acc
               end
@@ -1133,6 +1190,14 @@ defmodule Mydia.ImportGroups do
   """
   @spec create_local_show(binary()) :: {:ok, Media.MediaItem.t()} | {:error, term()}
   def create_local_show(group_id) do
+    Repo.transaction(fn -> create_local_show_transaction(group_id) end)
+    |> case do
+      {:ok, result} -> result
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp create_local_show_transaction(group_id) do
     group = Repo.get!(ImportGroup, group_id)
 
     cond do
@@ -1194,13 +1259,19 @@ defmodule Mydia.ImportGroups do
 
     result =
       Enum.reduce(groups, %{created: 0, skipped: 0}, fn group, acc ->
-        case create_local_show(group.id) do
+        case safe_create_local_show(group.id) do
           {:ok, _item} -> %{acc | created: acc.created + 1}
           {:error, _reason} -> %{acc | skipped: acc.skipped + 1}
         end
       end)
 
     {:ok, result}
+  end
+
+  defp safe_create_local_show(group_id) do
+    create_local_show(group_id)
+  rescue
+    Ecto.NoResultsError -> {:error, :not_found}
   end
 
   # Finds or creates the episode this file's parsed numbering points at, then

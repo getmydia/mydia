@@ -1174,6 +1174,20 @@ defmodule Mydia.ImportGroupsTest do
       assert Repo.reload!(g2).status == "pending"
       assert Repo.reload!(g3).status == "ignored"
     end
+
+    test "does not rewrite a pending group selected by a stale ignored scope" do
+      lp = library_path_fixture(%{type: "series"})
+      decided_at = ~U[2026-01-01 12:00:00Z]
+      pending = group(lp, cluster_key: "pending", status: "pending", decided_at: decided_at)
+
+      scope =
+        lp.id
+        |> SelectionScope.new("ignored")
+        |> SelectionScope.select_page([pending.id])
+
+      assert {:ok, 0} = ImportGroups.restore(scope)
+      assert Repo.reload!(pending).decided_at == decided_at
+    end
   end
 
   describe "create_local_shows/1" do

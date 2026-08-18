@@ -120,7 +120,14 @@ defmodule MydiaWeb.ImportMediaLive.Components do
           phx-click="select_band"
           phx-value-band={band}
         >
-          <input type="checkbox" class="sr-only" checked={@band == band} tabindex="-1" />
+          <input
+            id={"#{id}-input"}
+            type="checkbox"
+            class="sr-only"
+            checked={@band == band}
+            phx-click="select_band"
+            phx-value-band={band}
+          />
           {label}
           <span class={[
             "badge badge-sm font-semibold",
@@ -366,18 +373,20 @@ defmodule MydiaWeb.ImportMediaLive.Components do
                   >
                     {member_filename(member)}
                   </span>
-                  <span
-                    :if={@group.media_type != "movie"}
-                    class={[
-                      "badge badge-xs font-mono font-medium shrink-0",
-                      if(member_episode_badge(member) != "No episode",
-                        do: "badge-primary/20 text-primary",
-                        else: "badge-warning/20 text-warning"
-                      )
-                    ]}
-                  >
-                    {member_episode_badge(member)}
-                  </span>
+                  <%= if @group.media_type != "movie" do %>
+                    <%= case member_episode_badge(member) do %>
+                      <% {known?, label} -> %>
+                        <span class={[
+                          "badge badge-xs font-mono font-medium shrink-0",
+                          if(known?,
+                            do: "badge-primary/20 text-primary",
+                            else: "badge-warning/20 text-warning"
+                          )
+                        ]}>
+                          {label}
+                        </span>
+                    <% end %>
+                  <% end %>
                 </div>
                 <p
                   :if={member_folder(member)}
@@ -400,7 +409,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
                 <span class="join-item px-1.5 text-[11px] text-base-content/60 font-mono font-bold">
                   S
                 </span>
-                <input
+                <.input
                   type="number"
                   name="season"
                   value={member_season(member)}
@@ -409,12 +418,13 @@ defmodule MydiaWeb.ImportMediaLive.Components do
                   max="999"
                   phx-debounce="400"
                   class="join-item input input-xs w-12 text-center font-mono border-0 focus:outline-none"
+                  container_class="contents"
                   aria-label={"Season for #{member_filename(member)}"}
                 />
                 <span class="join-item px-1.5 text-[11px] text-base-content/60 font-mono font-bold">
                   E
                 </span>
-                <input
+                <.input
                   type="number"
                   name="episode"
                   value={member_episode(member)}
@@ -423,6 +433,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
                   max="9999"
                   phx-debounce="400"
                   class="join-item input input-xs w-14 text-center font-mono border-0 focus:outline-none"
+                  container_class="contents"
                   aria-label={"Episode for #{member_filename(member)}"}
                 />
               </div>
@@ -677,16 +688,17 @@ defmodule MydiaWeb.ImportMediaLive.Components do
 
     cond do
       season != nil and episode != nil ->
-        "S#{String.pad_leading(to_string(season), 2, "0")}E#{String.pad_leading(to_string(episode), 2, "0")}"
+        {true,
+         "S#{String.pad_leading(to_string(season), 2, "0")}E#{String.pad_leading(to_string(episode), 2, "0")}"}
 
       season != nil ->
-        "S#{String.pad_leading(to_string(season), 2, "0")}"
+        {true, "S#{String.pad_leading(to_string(season), 2, "0")}"}
 
       episode != nil ->
-        "E#{String.pad_leading(to_string(episode), 2, "0")}"
+        {true, "E#{String.pad_leading(to_string(episode), 2, "0")}"}
 
       true ->
-        "No episode"
+        {false, "No episode"}
     end
   end
 end
