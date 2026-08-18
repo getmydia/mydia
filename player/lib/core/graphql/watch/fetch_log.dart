@@ -16,6 +16,13 @@ abstract class FetchLog {
 
   Future<void> clear(QueryKey key);
 
+  /// Clears every entry for [operationName], whatever its variables.
+  ///
+  /// [clear] takes an exact key, which cannot reach a parameterized key whose
+  /// variables the caller does not know. That gap is the whole reason
+  /// `FamilyTarget` exists.
+  Future<void> clearFamily(String operationName);
+
   Future<void> clearAll();
 }
 
@@ -38,6 +45,11 @@ class InMemoryFetchLog implements FetchLog {
   @override
   Future<void> clear(QueryKey key) async {
     _entries.remove(key);
+  }
+
+  @override
+  Future<void> clearFamily(String operationName) async {
+    _entries.removeWhere((key, _) => key.operationName == operationName);
   }
 
   @override
@@ -73,6 +85,24 @@ class HiveFetchLog implements FetchLog {
 
   @override
   Future<void> clear(QueryKey key) => _box.delete(key.canonical);
+
+  @override
+  Future<void> clearFamily(String operationName) async {
+    // Matched on the canonical string, which is
+    // `'$operationName(${jsonEncode(sortedVariables)})'`. The trailing paren
+    // is what makes the prefix unambiguous: an operation name cannot contain
+    // one, so `Collection` matches neither `CollectionItems(...)` nor
+    // `Collections(...)`.
+    final prefix = '$operationName(';
+    // Materialised before deleting: mutating the box while iterating its own
+    // key view is not safe.
+    final doomed = _box.keys
+        .whereType<String>()
+        .where((key) => key.startsWith(prefix))
+        .toList();
+
+    await _box.deleteAll(doomed);
+  }
 
   @override
   Future<void> clearAll() async {

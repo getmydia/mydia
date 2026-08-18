@@ -44,6 +44,10 @@ class _CallOrderFetchLog implements FetchLog {
   Future<void> clear(QueryKey key) => _inner.clear(key);
 
   @override
+  Future<void> clearFamily(String operationName) =>
+      _inner.clearFamily(operationName);
+
+  @override
   Future<void> clearAll() async {
     _onClearAll();
     await _inner.clearAll();
@@ -74,6 +78,9 @@ class _PartiallyFailingFetchLog implements FetchLog {
   }
 
   @override
+  Future<void> clearFamily(String operationName) async {}
+
+  @override
   Future<void> clearAll() async {}
 }
 
@@ -89,6 +96,9 @@ class _ClearAllFailingFetchLog implements FetchLog {
 
   @override
   Future<void> clear(QueryKey key) async {}
+
+  @override
+  Future<void> clearFamily(String operationName) async {}
 
   @override
   Future<void> clearAll() async {
