@@ -358,4 +358,55 @@ void main() {
 
     await tester.pumpAndSettle();
   });
+
+  testWidgets('a trackpad pan is left alone', (tester) async {
+    final page = ScrollController();
+    addTearDown(page.dispose);
+
+    await tester.pumpWidget(_host(pageController: page));
+
+    final at = tester.getCenter(find.byType(HorizontalWheelScroll));
+    final gesture = await tester.createGesture(
+      kind: PointerDeviceKind.trackpad,
+    );
+    await gesture.panZoomStart(at);
+
+    // Stream the pan in increments, the way real trackpad hardware does.
+    // `Scrollable` uses `DragStartBehavior.start`, so a single large jump is
+    // consumed whole as the distance that wins the gesture arena and never
+    // becomes scroll delta, leaving the page motionless and the test asserting
+    // nothing. `pan` is cumulative from `panZoomStart`.
+    for (var dy = -20.0; dy >= -120.0; dy -= 20.0) {
+      await gesture.panZoomUpdate(at, pan: Offset(0, dy));
+      await tester.pump();
+    }
+
+    await gesture.panZoomEnd();
+    await tester.pumpAndSettle();
+
+    expect(_rail(tester).pixels, 0,
+        reason: 'a trackpad already scrolls both axes; intercepting its pan '
+            'would fight the framework');
+    expect(_page(tester).pixels, greaterThan(0));
+  });
+
+  testWidgets('an RTL rail advances on wheel-down, same as LTR',
+      (tester) async {
+    final page = ScrollController();
+    addTearDown(page.dispose);
+
+    await tester.pumpWidget(
+      _host(pageController: page, textDirection: TextDirection.rtl),
+    );
+
+    expect(_rail(tester).axisDirection, AxisDirection.left,
+        reason: 'guards the premise: RTL really does reverse the axis');
+
+    await _wheelOverRail(tester, 120);
+    await tester.pumpAndSettle();
+
+    expect(_rail(tester).pixels, greaterThan(0),
+        reason: 'pixels are direction-normalised, so down means further '
+            'through the list in both directions');
+  });
 }
