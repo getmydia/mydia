@@ -84,13 +84,43 @@ defmodule Mydia.Library.ImportGroup do
   def changeset(group, attrs) do
     group
     |> cast(attrs, @castable)
+    |> put_anchor_path(attrs)
     |> cast_season_span()
-    |> validate_required([:library_path_id, :anchor_path, :cluster_key, :status])
+    # `:anchor_path` is deliberately NOT in this list. `PathAnchor.anchor_for/2`
+    # returns `anchor_path: ""` for a file that sits directly at the library
+    # root with no per-title folder -- an ordinary, common layout for a movie
+    # library, not an edge case -- and `display_title/1` in `ImportGroups` has
+    # a dedicated "Loose files" clause for exactly that group. Requiring it
+    # here rejected every such group with "can't be blank", so
+    # `upsert_for_library/2` crashed instead of grouping anything -- which
+    # would have taken the backfill migration and every subsequent import run
+    # down with it for any movies stored loose. The column itself is still
+    # `null: false` at the DB level (see the `create_import_groups`
+    # migration), so a genuinely missing value is still refused; only the
+    # empty string, which is always explicitly supplied by `write_group/4`, is
+    # allowed through here.
+    |> validate_required([:library_path_id, :cluster_key, :status])
     |> validate_inclusion(:status, @statuses)
     |> validate_number(:min_confidence, greater_than_or_equal_to: 0.0, less_than_or_equal_to: 1.0)
     |> foreign_key_constraint(:library_path_id)
     |> unique_constraint([:library_path_id, :cluster_key], error_key: :cluster_key)
   end
+
+  # `cast/3` treats an empty string as "field not provided" for every string
+  # column (its `:empty_values` default is `[""]`), so `anchor_path: ""` --
+  # the value `write_group/4` always supplies for a "Loose files" root group
+  # -- was silently dropped from `changes` instead of being cast to the
+  # literal empty string. A freshly-built `%ImportGroup{}` has no default for
+  # that field, so the insert sent SQL NULL straight into a `null: false`
+  # column and raised a raw adapter error instead of the friendly
+  # `validate_required/3` message this changeset was actually relying on.
+  # Applied after `cast/3` and scoped to just this one field -- widening
+  # `cast/3`'s own `:empty_values` option would change every other string
+  # column's blank-handling too, which nothing here needs.
+  defp put_anchor_path(changeset, %{anchor_path: value}),
+    do: put_change(changeset, :anchor_path, value)
+
+  defp put_anchor_path(changeset, _attrs), do: changeset
 
   @doc "The valid status values."
   def statuses, do: @statuses

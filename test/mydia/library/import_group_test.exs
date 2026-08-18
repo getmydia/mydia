@@ -32,6 +32,25 @@ defmodule Mydia.Library.ImportGroupTest do
     assert group.cluster_key == "cornemuse"
   end
 
+  test "inserts a group whose anchor_path is the empty string, for a loose file at the library root" do
+    # PathAnchor.anchor_for/2 returns anchor_path: "" for a file with no
+    # per-title folder -- an ordinary movie library layout, not an edge case
+    # -- and ImportGroups.display_title/1 renders it as "Loose files". Ecto's
+    # cast/3 treats "" as "field not provided" for every string column by
+    # default, which used to drop it from the changeset entirely and send SQL
+    # NULL into this column's `null: false` constraint instead of the literal
+    # empty string. See ImportGroup.changeset/2's put_anchor_path/2 comment.
+    library_path = library_path_fixture(%{type: "movies"})
+    attrs = %{valid_attrs(library_path) | anchor_path: "", cluster_key: "__root__"}
+
+    assert {:ok, group} =
+             %ImportGroup{}
+             |> ImportGroup.changeset(attrs)
+             |> Repo.insert()
+
+    assert group.anchor_path == ""
+  end
+
   test "rejects an unknown status" do
     library_path = library_path_fixture(%{type: "series"})
     attrs = %{valid_attrs(library_path) | status: "banana"}

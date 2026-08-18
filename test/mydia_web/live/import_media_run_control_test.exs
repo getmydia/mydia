@@ -9,6 +9,7 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
   import Mydia.MediaFixtures
   import Mydia.SettingsFixtures
 
+  alias Mydia.ImportGroups
   alias Mydia.Library
 
   setup %{conn: conn} do
@@ -218,11 +219,12 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
     assert render(view) =~ ":not_found"
   end
 
-  test "outcome panel shows review CTA when unresolved files exist for the library path", %{
-    conn: conn,
-    library_path: lp,
-    user: user
-  } do
+  test "outcome panel shows review CTA when a pending import group exists for the library path",
+       %{
+         conn: conn,
+         library_path: lp,
+         user: user
+       } do
     media_file = orphaned_media_file_fixture(%{library_path_id: lp.id})
 
     {:ok, _} =
@@ -234,6 +236,13 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
         title: "The Matrix",
         confidence: 0.95
       })
+
+    # The CTA reads `import_groups`, same as the page it links to, so the
+    # group has to actually exist -- a bare MatchCandidate (what the old,
+    # `count_inbox_files`-backed CTA read) is no longer enough. This is the
+    # same call `Jobs.ImportRun.execute/2` makes once a real run's match
+    # phase finishes.
+    {:ok, _} = ImportGroups.upsert_for_library(lp)
 
     {:ok, run} =
       Library.create_import_run(%{library_path_id: lp.id, user_id: user.id, mode: :review})
@@ -252,11 +261,11 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
     assert has_element?(
              view,
              "#run-outcome a[href='/import']",
-             "Review 1 file(s) that need attention"
+             "Review 1 group(s) that need attention"
            )
   end
 
-  test "outcome panel hides review CTA when no unresolved files exist", %{
+  test "outcome panel hides review CTA when no pending import group exists", %{
     conn: conn,
     library_path: lp,
     user: user

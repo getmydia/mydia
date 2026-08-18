@@ -80,7 +80,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       |> assign(:importable_library_paths, importable_library_paths)
       |> assign(:active_run, active_run)
       |> assign(:outcome_run, outcome_run)
-      |> assign(:outcome_inbox_count, inbox_count_for_outcome(outcome_run))
+      |> assign(:outcome_group_count, group_count_for_outcome(outcome_run))
       |> assign(:band, :all)
       |> assign(:search, "")
       |> assign(:cursor, nil)
@@ -159,7 +159,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
            socket
            |> assign(:active_run, run)
            |> assign(:outcome_run, nil)
-           |> assign(:outcome_inbox_count, 0)}
+           |> assign(:outcome_group_count, 0)}
 
         {:error, _changeset} ->
           {:noreply, put_flash(socket, :error, "That library is already being imported.")}
@@ -452,7 +452,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
         socket
         |> assign(:active_run, nil)
         |> assign(:outcome_run, run)
-        |> assign(:outcome_inbox_count, inbox_count_for_outcome(run))
+        |> assign(:outcome_group_count, group_count_for_outcome(run))
       end
 
     {:noreply, socket}
@@ -493,15 +493,30 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     socket
     |> assign(:active_run, nil)
     |> assign(:outcome_run, run)
-    |> assign(:outcome_inbox_count, inbox_count_for_outcome(run))
+    |> assign(:outcome_group_count, group_count_for_outcome(run))
   end
 
-  # Queries the inbox count once when a run reaches a terminal state so the
-  # outcome_review_cta component never calls the DB directly from its body.
-  defp inbox_count_for_outcome(nil), do: 0
+  # Queries the pending group count once when a run reaches a terminal state
+  # so the outcome_review_cta component never calls the DB directly from its
+  # body.
+  #
+  # Deliberately `band_counts/1` (scoped to this run's own library path), not
+  # `ImportGroups.count_pending/0` (the global nav-badge total, see its own
+  # doc): this CTA reports what one specific run just found, and a global
+  # count would fold in every other library's backlog too, showing a number
+  # that could disagree with -- and in a multi-library install often would --
+  # what `/import` actually displays for the library this run touched.
+  #
+  # Was `Library.count_inbox_files/1`, a `MediaFile`/`MatchCandidate` query
+  # that has nothing to do with `import_groups`, the table the review page
+  # actually reads. That mismatch is Critical 1 from the whole-branch review:
+  # the CTA could say "review N files" while the page it linked to showed
+  # nothing at all. Sourcing both from the same table is what makes the
+  # number and the destination agree.
+  defp group_count_for_outcome(nil), do: 0
 
-  defp inbox_count_for_outcome(run) do
-    Library.count_inbox_files(library_path_id: run.library_path_id)
+  defp group_count_for_outcome(run) do
+    ImportGroups.band_counts(run.library_path_id).total
   end
 
   # The review section works one library path at a time. On mount it defaults

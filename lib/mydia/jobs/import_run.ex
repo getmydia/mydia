@@ -48,6 +48,7 @@ defmodule Mydia.Jobs.ImportRun do
 
   require Logger
 
+  alias Mydia.ImportGroups
   alias Mydia.Library
 
   alias Mydia.Library.{
@@ -110,6 +111,7 @@ defmodule Mydia.Jobs.ImportRun do
     try do
       with :ok <- run_scan_phase(run),
            :ok <- run_match_phase(Library.get_import_run(run.id)) do
+        update_import_groups(run)
         finish(run, :done)
       else
         :stopped ->
@@ -189,6 +191,49 @@ defmodule Mydia.Jobs.ImportRun do
 
     broadcast(updated)
     :ok
+  end
+
+  # Recomputes `import_groups` for this run's library path once both phases
+  # have genuinely finished, so the review page's own read path
+  # (`ImportGroups.page/2`) reflects what this run just found instead of only
+  # ever being populated once, at upgrade time, by the backfill migration
+  # (`priv/repo/migrations/20260817143638_backfill_import_groups.exs`). That
+  # migration is the only other caller of `upsert_for_library/2` in
+  # production code; without a second one here, a fresh install's review page
+  # says "Nothing to review" forever, no matter how large the inbox grows.
+  #
+  # Called only from the `:ok` branch of `execute/2`'s `with`, after both
+  # `run_scan_phase/2` and `run_match_phase/2` returned `:ok` -- never on
+  # `:stopped`. A run cut short mid-match has files the match phase never
+  # got to; grouping over that partial state would render half-finished
+  # rollups for no benefit, since the next run over the same library
+  # recomputes from scratch anyway once it actually completes.
+  #
+  # `upsert_for_library/2` is idempotent and chunked (see its doc), the same
+  # property that lets the migration run it once over the whole database --
+  # so running it here, scoped to one library path, on every successful run
+  # is the same operation, not a new one, and it holds no long transaction a
+  # run of this length could not already tolerate.
+  #
+  # Wrapped in its own rescue so a bug in group computation can never turn a
+  # real `:done` run into a `:failed` one: the run's own outcome (files
+  # found, matched, linked) already happened and is real, and losing that
+  # verdict over a failure in a second, derived computation would be worse
+  # than the review page being one run behind, which a later successful run
+  # (or a manual re-run of the migration's logic) still corrects.
+  defp update_import_groups(run) do
+    library_path = Settings.get_library_path!(run.library_path_id)
+    ImportGroups.upsert_for_library(library_path, import_run_id: run.id)
+    :ok
+  rescue
+    error ->
+      Logger.error("Could not compute import groups for a finished import run",
+        import_run_id: run.id,
+        library_path_id: run.library_path_id,
+        error: Exception.format(:error, error, __STACKTRACE__)
+      )
+
+      :ok
   end
 
   ## Phase 1: scan
