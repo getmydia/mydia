@@ -601,32 +601,37 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
   #
   # So this uses two anchors, tried in order:
   #
-  #   1. Dash-adjacency (`unambiguous_dash_adjacent_candidate/2`): the
-  #      sole bare integer immediately preceded by a standalone `-`
-  #      token (`Title - NN`). This is precise — it's what correctly
-  #      rejects `86` in `86 - Eighty Six - 12` (not dash-preceded)
-  #      while accepting `12` (is), and rejects the embedded `12` in
+  #   1. Dash-adjacency (`dash_adjacent_candidates/2`): bare integers
+  #      immediately preceded by a standalone `-` token
+  #      (`Title - NN`). This is precise — it's what correctly rejects
+  #      `86` in `86 - Eighty Six - 12` (not dash-preceded) while
+  #      accepting `12` (is), and rejects the embedded `12` in
   #      `Black Clover - 05 - The Title 12 [1080p]` (preceded by
   #      `Title`, not `-`) while accepting `05`.
-  #   2. Only when (1) finds nothing: the sole bare-digit token
-  #      inside the title zone (`unambiguous_title_zone_candidate/3`)
-  #      — this is what recovers filenames with no dash at all
+  #   2. Only when (1) finds *nothing at all*: the sole bare-digit
+  #      token inside the title zone
+  #      (`unambiguous_title_zone_candidate/3`) — this is what recovers
+  #      filenames with no dash at all
   #      (`Black Clover 170.mkv`, `Black Clover.170.1080p.mkv`,
   #      `[SubsPlease] Black Clover 170 (1080p) [A1B2C3].mkv`) and the
   #      case where the dash sits *after* the episode number instead
   #      of before it (`Black Clover 05 - 1080p.mkv`).
   #
-  # Both anchors are cardinality-bounded by `only_if_unambiguous/1`:
-  # each selects a *set* of candidates on evidence, then declines
-  # unless that set has exactly one member. Neither ever picks a winner
-  # among several. See that function for why.
+  # Both anchors are cardinality-bounded: each selects a *set* of
+  # candidates on evidence, then declines unless that set has exactly
+  # one member. Neither ever picks a winner among several. See
+  # `only_if_unambiguous/1` for why.
   #
-  # Dash-adjacency is tried first and wins whenever it yields anything,
-  # specifically so that a later, unrelated trailing digit (the `12`
-  # above) can never outrank the real dash-marked episode number. When
-  # it declines on ambiguity the zone anchor still runs, but it is
-  # bounded the same way, so a filename ambiguous under both resolves
-  # to nil (`Black Clover - 2 - 170 HEVC.mkv`).
+  # The dash anchor's three outcomes are kept distinct by the `case`
+  # below rather than collapsed by that helper, and the difference
+  # matters: "found several and declined" must suppress the match, not
+  # fall through to the zone anchor. Collapsing both to `[]` let a
+  # declining dash anchor promote the zone's answer, and when a year or
+  # resolution token sits *between* the two dash candidates the zone
+  # holds exactly one digit — the title's. That resolved
+  # `86 (2021) - 12 - 5 Reasons [1080p].mkv` to `86`, reviving the
+  # original false positive dash-adjacency exists to kill. An ambiguous
+  # dash set now means nil, full stop.
   #
   # A bare integer token only qualifies when:
   #
@@ -662,9 +667,10 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
        )
        when is_integer(max) do
     candidates =
-      case unambiguous_dash_adjacent_candidate(tokens, assignments_map) do
+      case dash_adjacent_candidates(tokens, assignments_map) do
         [] -> unambiguous_title_zone_candidate(tokens, boundary, assignments_map)
-        list -> list
+        [only] -> [only]
+        _ambiguous -> []
       end
 
     candidates
@@ -683,12 +689,11 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
        ),
        do: nil
 
-  # The sole token immediately preceded, in filename order, by a
-  # standalone `-` token (`Title - NN`). Dash isn't a tokenizer
-  # separator (it stays attached inside compound words like
-  # `Spider-Man`), so a `-` surrounded by whitespace on both sides
-  # survives as its own token — exactly the shape this naming
-  # convention produces.
+  # Tokens immediately preceded, in filename order, by a standalone `-`
+  # token (`Title - NN`). Dash isn't a tokenizer separator (it stays
+  # attached inside compound words like `Spider-Man`), so a `-`
+  # surrounded by whitespace on both sides survives as its own token —
+  # exactly the shape this naming convention produces.
   #
   # Dash-adjacency is strong evidence but not unique evidence: a
   # filename can carry two of them (`Black Clover - 2 - 170 HEVC.mkv`,
@@ -696,15 +701,19 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
   # `[Group] Black Clover - 05 - 12 Days Later.mkv`, where `12` opens a
   # numeric episode title). Taking the first resolved the former to `2`
   # and taking the last would break the latter — no positional rule
-  # satisfies both, which is exactly why this is bounded by
-  # cardinality instead.
-  defp unambiguous_dash_adjacent_candidate(tokens, assignments_map) do
+  # satisfies both, which is why the caller bounds this by cardinality.
+  #
+  # This returns *all* candidates rather than pre-collapsing to a
+  # singleton, deliberately: the caller has to tell "no dash candidate,
+  # try the zone anchor" apart from "several dash candidates, decline",
+  # and a helper that answered `[]` to both made the second case fall
+  # through to the weaker rule.
+  defp dash_adjacent_candidates(tokens, assignments_map) do
     tokens
     |> Enum.chunk_every(2, 1, :discard)
     |> Enum.filter(fn [prev, _curr] -> dash_token?(prev) end)
     |> Enum.map(fn [_prev, curr] -> curr end)
     |> Enum.filter(&bare_episode_candidate?(&1, assignments_map))
-    |> only_if_unambiguous()
   end
 
   # Fallback for filenames with no (or a misplaced) dash: the sole
@@ -732,10 +741,15 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
     |> only_if_unambiguous()
   end
 
-  # **When the filename is ambiguous, decline.** Both anchors gather
-  # candidates on positive evidence and then hand the set here; one
-  # survivor is an answer, two or more is a guess, and this returns
-  # nothing rather than guess.
+  # **When the filename is ambiguous, decline.** An anchor gathers
+  # candidates on positive evidence; one survivor is an answer, two or
+  # more is a guess, and this returns nothing rather than guess.
+  #
+  # Only the zone anchor pipes through here, because it is the last
+  # rule in the chain: for it, "found nothing" and "found several" both
+  # mean nil, so collapsing them is safe. The dash anchor applies the
+  # same rule at its call site, where the two outcomes must stay
+  # distinguishable — see `resolve_absolute_episode/6`.
   #
   # The two outcomes do not cost the same. A missed match costs the
   # user one manual action and is exactly what happens with the feature

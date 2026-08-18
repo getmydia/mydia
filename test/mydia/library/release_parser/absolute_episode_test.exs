@@ -254,4 +254,62 @@ defmodule Mydia.Library.ReleaseParser.AbsoluteEpisodeTest do
 
     assert result.absolute_episode == nil
   end
+
+  # A dash anchor that declines on ambiguity must suppress the match, not
+  # hand the decision to the title-zone anchor. When a year or resolution
+  # token sits between the two dash candidates, the zone holds exactly one
+  # bare digit — the show's sequel/cour number — so falling through
+  # resolved these to 4, 2 and 86 respectively. The last is the original
+  # round-0 false positive, `86` from `86 - Eighty Six`.
+  #
+  # These assert nil, not the episode number. Both dash candidates survive
+  # filtering in each, so the set is ambiguous and the parser declines, the
+  # same as `[Group] Black Clover - 05 - 12 Days Later.mkv` above. Reading
+  # 5, 5 and 12 out of them would need "first dash-adjacent", which is
+  # precisely the rule that resolved `Black Clover - 2 - 170 HEVC.mkv` to 2.
+  test "declines rather than promoting the sequel number when the dash set is ambiguous" do
+    target = %{anime_target() | title: "Overlord", max_absolute_number: 52}
+
+    result = ReleaseParser.parse("Overlord 4 (2022) - 05 - 12 Days.mkv", target: target)
+
+    assert result.absolute_episode == nil
+  end
+
+  test "declines rather than promoting a cour number past a year token" do
+    target = %{anime_target() | title: "Log Horizon", max_absolute_number: 62}
+
+    result =
+      ReleaseParser.parse("Log Horizon 2 (2021) - 05 - 12 Days Later.mkv", target: target)
+
+    assert result.absolute_episode == nil
+  end
+
+  test "declines rather than promoting a numeric title past a year token" do
+    target = %{anime_target() | title: "86"}
+
+    result = ReleaseParser.parse("86 (2021) - 12 - 5 Reasons [1080p].mkv", target: target)
+
+    assert result.absolute_episode == nil
+  end
+
+  # Accepted cost of suppressing that fall-through: three shapes that the
+  # zone anchor used to rescue now decline. All move toward nil, never
+  # toward a wrong number.
+  test "declines a dash-adjacent pair split by a parenthesised resolution" do
+    result = ReleaseParser.parse("Black Clover - 05 (1080p) - 999.mkv", target: anime_target())
+
+    assert result.absolute_episode == nil
+  end
+
+  test "declines a dash-adjacent pair split by a bare resolution" do
+    result = ReleaseParser.parse("Black Clover - 05 - 1080p - 12.mkv", target: anime_target())
+
+    assert result.absolute_episode == nil
+  end
+
+  test "declines a dash-adjacent pair split by a resolution, high number first" do
+    result = ReleaseParser.parse("Black Clover - 170 - 1080p - 2.mkv", target: anime_target())
+
+    assert result.absolute_episode == nil
+  end
 end
