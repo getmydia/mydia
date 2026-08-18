@@ -53,7 +53,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
       |> assign(:has_more, false)
       |> assign(:genres, [])
       |> assign(:library_status_map, %{})
-      |> assign(:adding_item_id, nil)
+      |> assign(:adding_item_ids, MapSet.new())
       |> assign(:requesting_item_id, nil)
       |> assign(:request_status_map, %{})
       |> assign(:selected_item, nil)
@@ -217,7 +217,12 @@ defmodule MydiaWeb.DiscoverLive.Index do
       ) do
     case parse_event_media_type(media_type) do
       {:ok, media_type_atom} ->
-        socket = assign(socket, :adding_item_id, provider_id)
+        socket =
+          assign(
+            socket,
+            :adding_item_ids,
+            MapSet.put(socket.assigns.adding_item_ids, provider_id)
+          )
 
         send(
           self(),
@@ -407,7 +412,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
         {:noreply,
          socket
-         |> assign(:adding_item_id, nil)
+         |> clear_adding(provider_id)
          |> assign(:library_status_map, updated_map)
          |> assign(:items, items)
          |> assign(:selected_recommendations, recommendations)
@@ -421,7 +426,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
         {:noreply,
          socket
-         |> assign(:adding_item_id, nil)
+         |> clear_adding(provider_id)
          |> assign(:library_status_map, updated_map)
          |> assign(:items, items)
          |> put_flash(:info, "#{media_item.title} is already in your library")}
@@ -429,7 +434,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
       {:error, {:changeset, changeset}} ->
         {:noreply,
          socket
-         |> assign(:adding_item_id, nil)
+         |> clear_adding(provider_id)
          |> put_flash(
            :error,
            "Failed to add: #{MediaAddHelpers.format_changeset_errors(changeset)}"
@@ -438,7 +443,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
       {:error, {:metadata, reason}} ->
         {:noreply,
          socket
-         |> assign(:adding_item_id, nil)
+         |> clear_adding(provider_id)
          |> put_flash(:error, "Failed to fetch metadata: #{inspect(reason)}")}
     end
   end
@@ -513,6 +518,12 @@ defmodule MydiaWeb.DiscoverLive.Index do
     results
     |> MediaAddHelpers.enrich_with_library_status(socket.assigns.library_status_map)
     |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)
+  end
+
+  # Four completion clauses all retire the same id. A MapSet rather than a
+  # single id so a second add cannot blank the first one's spinner (#459).
+  defp clear_adding(socket, provider_id) do
+    assign(socket, :adding_item_ids, MapSet.delete(socket.assigns.adding_item_ids, provider_id))
   end
 
   defp request_error_message(:duplicate_media), do: "That title is already in the library."

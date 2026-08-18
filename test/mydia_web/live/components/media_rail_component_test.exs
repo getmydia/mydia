@@ -5,8 +5,8 @@ defmodule MydiaWeb.Components.MediaRailComponentTest do
   where neither applies. The detail page has no `show_details` handler, so the
   inert case is what keeps a poster click from crashing that LiveView.
 
-  Also covers the two per-item keys the franchise adapter depends on, `:current`
-  and `:adding`.
+  Also covers `:current`, the per-item key the franchise adapter depends on, and
+  the shared `adding_ids` set.
   """
 
   use MydiaWeb.ConnCase, async: true
@@ -234,38 +234,64 @@ defmodule MydiaWeb.Components.MediaRailComponentTest do
       refute html =~ "Add to Library"
     end
 
-    # `adding_item_id` can only name one in-flight add. The franchise strip
-    # routinely has several, so an item may carry its own flag.
-    test "an item's own adding flag beats the single adding_item_id" do
+    # Regression for #459. Two adds can be in flight at once on the
+    # recommendations rail, and the old contract could only name one of them:
+    # when the first finished, an arbitrary survivor was chosen and the other
+    # still-running card silently lost its spinner.
+    test "every id in the set draws a spinner, and nothing else does" do
       html =
         render_component(&DiscoverComponents.media_rail/1,
           items: [
-            item(%{provider_id: "201", title: "Busy", adding: true}),
-            item(%{provider_id: "202", title: "Idle", adding: false})
+            item(%{provider_id: "201", title: "Busy One"}),
+            item(%{provider_id: "202", title: "Busy Two"}),
+            item(%{provider_id: "203", title: "Idle"})
           ],
+          media_type: :movie,
+          current_user: user(),
+          adding_ids: MapSet.new(["201", "202"])
+        )
+
+      first = extract_item(html, "media-rail", "201")
+      second = extract_item(html, "media-rail", "202")
+      idle = extract_item(html, "media-rail", "203")
+
+      assert first =~ "loading-spinner"
+      assert first =~ "disabled"
+      assert second =~ "loading-spinner"
+      assert second =~ "disabled"
+      refute idle =~ "loading-spinner"
+    end
+
+    # The hosts do not agree on id types and cannot be made to. The two detail
+    # page sets hold parsed integers because dispatch_add/2 dedupes on the
+    # integer and keys start_async with it, while a SearchResult's provider_id
+    # is a string. A strict MapSet.member?/2 across that mix would match
+    # nothing and draw no spinner, with no compile-time signal.
+    test "matches an integer set against string provider ids" do
+      html =
+        render_component(&DiscoverComponents.media_rail/1,
+          items: [
+            item(%{provider_id: "201", title: "Busy"}),
+            item(%{provider_id: "202", title: "Idle"})
+          ],
+          media_type: :movie,
+          current_user: user(),
+          adding_ids: MapSet.new([201])
+        )
+
+      assert extract_item(html, "media-rail", "201") =~ "loading-spinner"
+      refute extract_item(html, "media-rail", "202") =~ "loading-spinner"
+    end
+
+    test "an omitted adding_ids draws no spinners" do
+      html =
+        render_component(&DiscoverComponents.media_rail/1,
+          items: [item(%{provider_id: "201"})],
           media_type: :movie,
           current_user: user()
         )
 
-      busy = extract_item(html, "media-rail", "201")
-      idle = extract_item(html, "media-rail", "202")
-
-      assert busy =~ "loading-spinner"
-      assert busy =~ "disabled"
-      refute idle =~ "loading-spinner"
-    end
-
-    test "falls back to adding_item_id when an item carries no flag" do
-      html =
-        render_component(&DiscoverComponents.media_rail/1,
-          items: [item(%{provider_id: "301"}), item(%{provider_id: "302"})],
-          media_type: :movie,
-          current_user: user(),
-          adding_item_id: "301"
-        )
-
-      assert extract_item(html, "media-rail", "301") =~ "loading-spinner"
-      refute extract_item(html, "media-rail", "302") =~ "loading-spinner"
+      refute html =~ "loading-spinner"
     end
 
     # Regression: an unowned card for a user who may neither add nor request
