@@ -211,6 +211,20 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
      |> put_flash(:error, "Could not add that title")}
   end
 
+  @doc """
+  Stamps each item's `:adding` flag from the set of in-flight adds.
+
+  Applied at render rather than inside `decorate/3`, because the set changes on
+  every add and every result while `decorate/3` runs once, when the lookup lands.
+  A single id cannot describe more than one in-flight add, which is what #459
+  was: clicking a second Add blanked the first card's spinner.
+  """
+  def with_in_flight(recommendations, in_flight) do
+    Enum.map(recommendations, fn item ->
+      Map.put(item, :adding, MapSet.member?(in_flight, safe_provider_id(item)))
+    end)
+  end
+
   ## Private
 
   # The library join lives here rather than in Mydia.Media.Recommendations
@@ -258,26 +272,21 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
     ArgumentError -> nil
   end
 
-  # The MapSet is the source of truth for "is this id already in flight" and is
-  # what prevents a double-click from racing two adds. The single id alongside
-  # it is only what the card compares against to show its spinner.
+  # The MapSet is the only in-flight state: it prevents a double-click from
+  # racing two adds, and `with_in_flight/2` turns it into the per-card spinner.
   defp mark_in_flight(socket, tmdb_id) do
-    socket
-    |> assign(
+    assign(
+      socket,
       :adding_recommendation_tmdb_ids,
       MapSet.put(socket.assigns.adding_recommendation_tmdb_ids, tmdb_id)
     )
-    |> assign(:adding_recommendation_id, to_string(tmdb_id))
   end
 
   defp clear_in_flight(socket, tmdb_id) do
-    remaining = MapSet.delete(socket.assigns.adding_recommendation_tmdb_ids, tmdb_id)
-
-    socket
-    |> assign(:adding_recommendation_tmdb_ids, remaining)
-    |> assign(
-      :adding_recommendation_id,
-      remaining |> Enum.at(0) |> then(&if(&1, do: to_string(&1)))
+    assign(
+      socket,
+      :adding_recommendation_tmdb_ids,
+      MapSet.delete(socket.assigns.adding_recommendation_tmdb_ids, tmdb_id)
     )
   end
 

@@ -23,7 +23,6 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEventsTest do
       flash: %{},
       recommendations: [],
       adding_recommendation_tmdb_ids: MapSet.new(),
-      adding_recommendation_id: nil,
       requesting_recommendation_id: nil,
       current_user: user_fixture()
     }
@@ -160,6 +159,45 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEventsTest do
       assert updated.assigns.recommendations == recommendations
       assert updated.assigns.requesting_recommendation_id == nil
       assert MediaRequests.list_requests(status: "pending") == []
+    end
+  end
+
+  describe "with_in_flight/2" do
+    # Regression for #459: the rail used to read a single
+    # :adding_recommendation_id, which can only ever name one card. Clicking a
+    # second Add overwrote it, so the first card lost its spinner while its add
+    # was still running and read as unresponsive.
+    test "flags every id in the set, not only the most recent" do
+      items = [
+        result(%{provider_id: "1"}),
+        result(%{provider_id: "2"}),
+        result(%{provider_id: "3"})
+      ]
+
+      [first, second, third] =
+        RecommendationEvents.with_in_flight(items, MapSet.new([1, 2]))
+
+      assert first.adding
+      assert second.adding
+      refute third.adding
+    end
+
+    test "flags nothing when no add is in flight" do
+      items = [result(%{provider_id: "1"})]
+
+      [only] = RecommendationEvents.with_in_flight(items, MapSet.new())
+
+      refute only.adding
+    end
+
+    # A malformed provider_id must not raise here: safe_provider_id/1 returns nil
+    # for one, and nil is simply not a member of the in-flight set.
+    test "treats an unparseable provider_id as not in flight" do
+      items = [result(%{provider_id: "not-a-number"})]
+
+      [only] = RecommendationEvents.with_in_flight(items, MapSet.new([1]))
+
+      refute only.adding
     end
   end
 end
