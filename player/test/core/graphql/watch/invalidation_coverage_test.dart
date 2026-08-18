@@ -40,35 +40,60 @@ Iterable<File> _sourceFiles(Directory root) =>
     root.listSync(recursive: true).whereType<File>().where((file) =>
         file.path.endsWith('.dart') || file.path.endsWith('.graphql'));
 
-/// One `query` or `fragment` declaration's name and the source slice it
-/// owns: from its own start to the start of the next declaration of either
-/// kind in the same file, or to the end of the file.
+/// Every `query`/`fragment` declaration across [root]'s `.dart` and
+/// `.graphql` files, grouped by name — keeping every declaration for a name
+/// rather than collapsing to one.
 ///
-/// Bounding on both kinds (not just [pattern]'s own kind) keeps a fragment
-/// declared between two queries in the same file from bleeding into either
-/// query's slice, and a query from bleeding into a fragment's. The slice
-/// itself is still a coarse split that errs toward over-reporting: a false
-/// positive is a visible failure someone must consciously allowlist, which
-/// is what keeps the invariant honest.
-Map<String, String> _declarationSlices(String source, RegExp pattern) {
-  final allStarts = <int>[
-    ..._queryDeclaration.allMatches(source).map((m) => m.start),
-    ..._fragmentDeclaration.allMatches(source).map((m) => m.start),
-  ]..sort();
+/// A name can legitimately declare more than once: `RecentlyAddedFull` in
+/// `recently_added_controller.dart` has a primary shape and a
+/// `...Legacy` fallback for a server older than this build, and only the
+/// primary selects `watchStatus`. `HomeScreen` and `ContinueWatchingList`
+/// have the same primary-plus-legacy shape. Collapsing to a single body per
+/// name (whichever declaration a map write happens to see last) can
+/// silently lose the one declaration that actually renders watch state —
+/// which is exactly what happened here before this fixed it: keying by name
+/// in a plain `Map<String, String>` meant the legacy `RecentlyAddedFull`,
+/// declared second and selecting nothing, overwrote the primary one, and
+/// the guard stopped protecting the very screen this branch exists to fix.
+///
+/// [pattern] selects which kind of declaration to collect
+/// ([_queryDeclaration] or [_fragmentDeclaration]); a slice still runs to
+/// the start of the next declaration of *either* kind in the same file (not
+/// just [pattern]'s own kind), so a fragment sitting between two queries in
+/// the same file cannot bleed into either query's slice, and vice versa.
+Map<String, List<String>> _declarationBodies(Directory root, RegExp pattern) {
+  final bodies = <String, List<String>>{};
 
-  final slices = <String, String>{};
-  for (final match in pattern.allMatches(source)) {
-    final next = allStarts.firstWhere(
-      (start) => start > match.start,
-      orElse: () => source.length,
-    );
-    slices[match.group(1)!] = source.substring(match.start, next);
+  for (final file in _sourceFiles(root)) {
+    final source = file.readAsStringSync();
+    final allStarts = <int>[
+      ..._queryDeclaration.allMatches(source).map((m) => m.start),
+      ..._fragmentDeclaration.allMatches(source).map((m) => m.start),
+    ]..sort();
+
+    for (final match in pattern.allMatches(source)) {
+      final next = allStarts.firstWhere(
+        (start) => start > match.start,
+        orElse: () => source.length,
+      );
+      bodies
+          .putIfAbsent(match.group(1)!, () => [])
+          .add(source.substring(match.start, next));
+    }
   }
-  return slices;
+
+  return bodies;
 }
 
 /// Every fragment name whose selection set renders watch state, directly or
 /// through another watch-state fragment it spreads.
+///
+/// A name counts if *any* of its declarations qualifies — see
+/// [_declarationBodies] — not just the last one scanned. Cross-file
+/// duplicates are latent only, since GraphQL requires fragment names to be
+/// unique across a codegen document set or generation fails, but grouping
+/// (rather than the `Map.addAll` last-write-wins this replaced) keeps this
+/// function's collection order-independent like every other set here.
 ///
 /// Resolved to a fixed point rather than in one pass, so a fragment that
 /// only spreads a watch-state fragment (and holds no literal field of its
@@ -79,16 +104,12 @@ Map<String, String> _declarationSlices(String source, RegExp pattern) {
 /// stops contributing once no round adds anything new, so a malformed
 /// fragment file cannot hang the suite.
 Set<String> _watchStateFragments(Directory root) {
-  final bodies = <String, String>{};
-  for (final file in _sourceFiles(root)) {
-    bodies.addAll(
-      _declarationSlices(file.readAsStringSync(), _fragmentDeclaration),
-    );
-  }
+  final bodies = _declarationBodies(root, _fragmentDeclaration);
 
   final watchState = <String>{
     for (final entry in bodies.entries)
-      if (_watchStateFields.any(entry.value.contains)) entry.key,
+      if (entry.value.any((body) => _watchStateFields.any(body.contains)))
+        entry.key,
   };
 
   var changedThisRound = true;
@@ -98,10 +119,12 @@ Set<String> _watchStateFragments(Directory root) {
     round++;
     for (final entry in bodies.entries) {
       if (watchState.contains(entry.key)) continue;
-      final spreadsWatchState = _fragmentSpread
-          .allMatches(entry.value)
-          .map((match) => match.group(1)!)
-          .any(watchState.contains);
+      final spreadsWatchState = entry.value.any(
+        (body) => _fragmentSpread
+            .allMatches(body)
+            .map((match) => match.group(1)!)
+            .any(watchState.contains),
+      );
       if (spreadsWatchState) {
         watchState.add(entry.key);
         changedThisRound = true;
@@ -116,35 +139,34 @@ Set<String> _watchStateFragments(Directory root) {
 /// literally or by spreading a fragment that does (directly or
 /// transitively — see [_watchStateFragments]).
 ///
+/// A name counts if *any* of its declarations qualifies — see
+/// [_declarationBodies] — so a primary-plus-legacy pair like
+/// `RecentlyAddedFull` is still caught even though only the primary
+/// declaration selects a watch field.
+///
 /// Scans `.dart` as well as `.graphql`, because inline query strings skip
 /// codegen validation in this repo and are exactly where a new uncovered
 /// query would appear. [root] defaults to `lib`; tests exercising the
-/// fragment resolution point it at a throwaway fixture directory instead, so
-/// they can pin the behavior without depending on the shape of the real
-/// codebase.
+/// fragment resolution and duplicate-declaration handling point it at a
+/// throwaway fixture directory instead, so they can pin the behavior
+/// without depending on the shape of the real codebase.
 Set<String> _watchStateOperations([Directory? root]) {
   final directory = root ?? Directory('lib');
   final watchStateFragments = _watchStateFragments(directory);
-  final operations = <String>{};
+  final bodies = _declarationBodies(directory, _queryDeclaration);
 
-  for (final file in _sourceFiles(directory)) {
-    final slices =
-        _declarationSlices(file.readAsStringSync(), _queryDeclaration);
-
-    for (final entry in slices.entries) {
-      final rendersWatchState = _watchStateFields.any(entry.value.contains) ||
-          _fragmentSpread
-              .allMatches(entry.value)
-              .map((match) => match.group(1)!)
-              .any(watchStateFragments.contains);
-
-      if (rendersWatchState) {
-        operations.add(entry.key);
-      }
-    }
-  }
-
-  return operations;
+  return {
+    for (final entry in bodies.entries)
+      if (entry.value.any(
+        (body) =>
+            _watchStateFields.any(body.contains) ||
+            _fragmentSpread
+                .allMatches(body)
+                .map((match) => match.group(1)!)
+                .any(watchStateFragments.contains),
+      ))
+        entry.key,
+  };
 }
 
 /// Every operation named by a rule that fires when watch state changes.
@@ -170,6 +192,24 @@ Set<String> _operationsCoveredByWatchedRules() {
 }
 
 void main() {
+  // Shared by every fixture-backed test below (fragment resolution and
+  // duplicate-declaration handling alike): a throwaway directory so those
+  // assertions pin the scan's behavior directly, without depending on which
+  // real query in lib/ happens to be shaped a particular way today.
+  late Directory fixture;
+
+  setUp(() {
+    fixture = Directory.systemTemp.createTempSync('invalidation_coverage_');
+  });
+
+  tearDown(() {
+    fixture.deleteSync(recursive: true);
+  });
+
+  void write(String name, String contents) {
+    File('${fixture.path}/$name').writeAsStringSync(contents);
+  }
+
   test('the scan reaches the player sources', () {
     // Without this, a change to the test working directory would turn every
     // assertion below into a vacuous pass and quietly retire the guard.
@@ -206,26 +246,21 @@ void main() {
     );
   });
 
+  test('RecentlyAddedFull is detected despite its primary-plus-legacy shape',
+      () {
+    // The concrete case Finding 1 was about, run against the real tree
+    // rather than a fixture: recently_added_controller.dart declares
+    // RecentlyAddedFull twice, and only the primary (declared first)
+    // selects watchStatus. This must both be detected as watch-state AND
+    // still pass the main assertion above, since recentlyAdded is genuinely
+    // covered by the three watched rules already.
+    expect(_watchStateOperations(), contains('RecentlyAddedFull'));
+  });
+
   group('fragment-aware detection', () {
     // A capability with no test is a claim: these pin that a query which
     // renders watch state only through a fragment spread is still caught,
-    // not just one that spells the field out literally. Run against a
-    // throwaway fixture directory rather than lib/, so the assertions do not
-    // depend on which real query happens to be shaped this way today.
-    late Directory fixture;
-
-    setUp(() {
-      fixture = Directory.systemTemp.createTempSync('invalidation_coverage_');
-    });
-
-    tearDown(() {
-      fixture.deleteSync(recursive: true);
-    });
-
-    void write(String name, String contents) {
-      File('${fixture.path}/$name').writeAsStringSync(contents);
-    }
-
+    // not just one that spells the field out literally.
     test('a query that only spreads a watch-state fragment is detected', () {
       write('fragment.graphql', '''
 fragment DirectWatchFragment on Progress {
@@ -343,6 +378,71 @@ query CyclicWithWatchQuery(\$id: ID!) {
       expect(
         _watchStateOperations(fixture),
         contains('CyclicWithWatchQuery'),
+      );
+    });
+  });
+
+  group('duplicate declaration handling', () {
+    // Finding 1: a second declaration of the same operation name used to
+    // overwrite the first in a plain Map<String, String>, so a primary
+    // declaration that renders watch state could be silently discarded by a
+    // later, unrelated declaration reusing its name — exactly
+    // RecentlyAddedFull's primary-plus-legacy shape in production, pinned
+    // directly against the real tree above. Here the watch-state
+    // declaration is deliberately FIRST and the non-watch-state one SECOND,
+    // so this genuinely fails against last-write-wins: if it were the other
+    // way around a buggy scan would pass by coincidence and prove nothing.
+    test(
+        'a query name declared twice is still detected when only the '
+        'first declaration renders watch state', () {
+      write('query.graphql', '''
+query DuplicateNameQuery(\$first: Int) {
+  things(first: \$first) {
+    watchStatus { watched percentage }
+  }
+}
+
+query DuplicateNameQuery(\$first: Int) {
+  things(first: \$first) {
+    id
+  }
+}
+''');
+
+      expect(_watchStateOperations(fixture), contains('DuplicateNameQuery'));
+    });
+
+    // Finding 2: the same last-write-wins shape existed one level down, in
+    // how fragment bodies were merged across files. Latent in practice —
+    // GraphQL requires fragment names to be unique across a codegen
+    // document set — but fixed for the same reason and pinned here anyway,
+    // since the underlying helper is now shared between queries and
+    // fragments.
+    test(
+        'a fragment name declared twice is still detected when only the '
+        'first declaration renders watch state', () {
+      write('fragments.graphql', '''
+fragment DuplicateNameFragment on Progress {
+  watched
+}
+
+fragment DuplicateNameFragment on Progress {
+  durationSeconds
+}
+''');
+      write('query.graphql', '''
+query SpreadsDuplicateFragmentQuery(\$id: ID!) {
+  thing(id: \$id) {
+    progress {
+      ...DuplicateNameFragment
+    }
+  }
+}
+''');
+
+      expect(
+        _watchStateOperations(fixture),
+        contains('SpreadsDuplicateFragmentQuery'),
       );
     });
   });
