@@ -45,9 +45,22 @@ defmodule Mydia.ImportGroups do
   Disagreement beats confidence: if the group's members did not all resolve the
   same provider id, a human should look at it however certain each individual
   file was.
+
+  A `provider_type: "local"` group is never `:ready`, whatever its
+  `min_confidence`: "ready" means ready to *accept*, `accept/1` hands a
+  provider match to `FileIngest`, and a local group has none -- its
+  `provider_id` is the synthetic `"local-" <> item.id` marker
+  `ImportGroups.create_local_show/1` stamps to guard against a second call, not
+  a real match. Without this clause, a leftover orphaned member could later
+  acquire its own high-confidence `MatchCandidate` (title matching is
+  independent of episode-number parsing), a rescan would raise the group's
+  `min_confidence` above the threshold, and the group would drift into
+  `:ready`, get accepted, and then `accepted_groups/1` would exclude it
+  forever -- stranding it exactly the way an `"applied"` local group used to.
   """
   @spec band(ImportGroup.t()) :: :ready | :needs_attention | :no_match
   def band(%ImportGroup{provider_id: nil}), do: :no_match
+  def band(%ImportGroup{provider_type: "local"}), do: :needs_attention
 
   def band(%ImportGroup{} = group) do
     cond do
@@ -171,10 +184,16 @@ defmodule Mydia.ImportGroups do
   defp apply_band(query, :no_match), do: where(query, [g], is_nil(g.provider_id))
 
   defp apply_band(query, :ready) do
+    # A `provider_type: "local"` group's `provider_id` is a synthetic marker,
+    # not a real match -- see band/1's doc for why it can never be :ready
+    # however high its min_confidence. Kept in step with SelectionScope's own
+    # `:ready` predicate by the cross-module parity test in
+    # selection_scope_test.exs.
     where(
       query,
       [g],
-      not is_nil(g.provider_id) and g.min_confidence >= ^@auto_accept_threshold
+      not is_nil(g.provider_id) and g.min_confidence >= ^@auto_accept_threshold and
+        (is_nil(g.provider_type) or g.provider_type != "local")
     )
   end
 

@@ -219,6 +219,21 @@ defmodule Mydia.Library.SelectionScopeTest do
         min_confidence: nil
       })
 
+      # A locally-created group (ImportGroups.create_local_show/1) whose
+      # leftover member later picked up a high-confidence MatchCandidate of
+      # its own: non-nil (synthetic) provider_id, min_confidence above
+      # threshold -- exactly the shape that must never be :ready in either
+      # module, since its provider_id is a marker, not a real match.
+      insert_group(%{
+        library_path_id: lp.id,
+        anchor_path: "LocalShow",
+        cluster_key: "local-show",
+        file_count: 1,
+        provider_type: "local",
+        provider_id: "local-deadbeef",
+        min_confidence: 1.0
+      })
+
       for band <- [:ready, :needs_attention, :no_match] do
         {page_groups, _cursor} = ImportGroups.page(lp.id, band: band, limit: 1000)
         page_ids = page_groups |> Enum.map(& &1.id) |> MapSet.new()

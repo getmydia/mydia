@@ -8,6 +8,7 @@ defmodule Mydia.ImportGroupsTest do
   alias Mydia.Library.ImportGroup
   alias Mydia.Library.MatchCandidate
   alias Mydia.Library.MediaFile
+  alias Mydia.Library.SelectionScope
   alias Mydia.Repo
 
   defp group(library_path, attrs) do
@@ -40,6 +41,11 @@ defmodule Mydia.ImportGroupsTest do
 
     test "member disagreement forces needs attention regardless of confidence" do
       g = %ImportGroup{provider_id: "1", min_confidence: 1.0, evidence: %{"disagreement" => true}}
+      assert ImportGroups.band(g) == :needs_attention
+    end
+
+    test "a local group is never ready, whatever its confidence" do
+      g = %ImportGroup{provider_id: "local-abc", provider_type: "local", min_confidence: 1.0}
       assert ImportGroups.band(g) == :needs_attention
     end
   end
@@ -581,6 +587,107 @@ defmodule Mydia.ImportGroupsTest do
       # rescan folds the leftover file back into a fresh rollup.
       assert {:error, :already_created} = ImportGroups.create_local_show(group.id)
       assert Repo.aggregate(Mydia.Media.MediaItem, :count) == 1
+    end
+  end
+
+  describe "a local group can never drift into :ready" do
+    # A local group's leftover, unlinkable member can still independently
+    # acquire a high-confidence MatchCandidate on a later scan pass (title
+    # matching is separate from episode-number parsing), which raises the
+    # group's min_confidence above the threshold on the next rescan while
+    # provider_id stays the frozen "local-<uuid>" marker. Without band/1's
+    # local clause and the matching SQL exclusion in both apply_band/2
+    # implementations, that group would surface under the Ready filter,
+    # "select all ready" would sweep it into accept/1, and
+    # accepted_groups/1's own provider_type filter would then exclude it
+    # forever -- stranded "accepted", invisible, exactly like round 1's
+    # "applied" bug.
+    defp local_group_with_high_confidence do
+      lp = library_path_fixture(%{type: "series", path: "/media/Series"})
+
+      numbered_file =
+        orphaned_media_file_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "L'univers des Coucou (2023)/Season 01/ep1.mkv"
+        })
+
+      %MatchCandidate{}
+      |> MatchCandidate.changeset(%{
+        media_file_id: numbered_file.id,
+        rank: 0,
+        last_error: "no_match",
+        parsed_info: %{"season" => 1, "episodes" => [1]}
+      })
+      |> Repo.insert!()
+
+      unnumbered_file =
+        orphaned_media_file_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "L'univers des Coucou (2023)/Season 01/bonus.mkv"
+        })
+
+      %MatchCandidate{}
+      |> MatchCandidate.changeset(%{
+        media_file_id: unnumbered_file.id,
+        rank: 0,
+        last_error: "no_match",
+        parsed_info: %{}
+      })
+      |> Repo.insert!()
+
+      {:ok, _} = ImportGroups.upsert_for_library(lp)
+      group = Repo.one!(ImportGroup)
+
+      assert {:ok, _item} = ImportGroups.create_local_show(group.id)
+
+      # The leftover file independently picks up a confident candidate --
+      # never linkable (the group itself has no real provider match for
+      # FileIngest to enrich from), but enough to raise min_confidence.
+      Repo.get_by!(MatchCandidate, media_file_id: unnumbered_file.id, rank: 0)
+      |> MatchCandidate.changeset(%{provider_id: "999", confidence: 1.0})
+      |> Repo.update!()
+
+      {:ok, _} = ImportGroups.upsert_for_library(lp)
+
+      {lp, Repo.reload!(group)}
+    end
+
+    test "band/1, page/2, and SelectionScope all agree it's not ready" do
+      {lp, group} = local_group_with_high_confidence()
+
+      assert group.provider_type == "local"
+      assert group.min_confidence == 1.0
+      assert ImportGroups.band(group) == :needs_attention
+
+      {ready_page, _cursor} = ImportGroups.page(lp.id, band: :ready)
+      refute Enum.any?(ready_page, &(&1.id == group.id))
+
+      scope =
+        lp.id
+        |> SelectionScope.new()
+        |> SelectionScope.select_all_matching(%{band: :ready})
+
+      selected_ids = scope |> SelectionScope.to_query() |> Repo.all() |> Enum.map(& &1.id)
+      refute group.id in selected_ids
+    end
+
+    test "an accept-all-ready sweep leaves the group pending, not stranded" do
+      {lp, group} = local_group_with_high_confidence()
+
+      scope =
+        lp.id
+        |> SelectionScope.new()
+        |> SelectionScope.select_all_matching(%{band: :ready})
+
+      # The only group in this library is the local one, so a sweep that
+      # correctly excludes it selects nothing at all.
+      assert {:ok, 0} = ImportGroups.accept(scope)
+
+      # This is the assertion that actually proves it: an "accepted" group
+      # with provider_type "local" would be swept into accepted_groups/1's
+      # own exclusion and left permanently stuck. Staying "pending" is what
+      # keeps it reachable.
+      assert Repo.reload!(group).status == "pending"
     end
   end
 end

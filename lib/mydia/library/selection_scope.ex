@@ -175,8 +175,19 @@ defmodule Mydia.Library.SelectionScope do
   defp apply_band(query, :no_match), do: where(query, [g], is_nil(g.provider_id))
 
   defp apply_band(query, :ready) do
+    # A `provider_type: "local"` group's `provider_id` is a synthetic marker
+    # (`ImportGroups.create_local_show/1`), not a real provider match -- see
+    # `ImportGroups.band/1`'s doc for why it can never be :ready however high
+    # its min_confidence. Kept in step with `ImportGroups`'s own `:ready`
+    # predicate by the cross-module parity test below.
     threshold = ImportGroups.auto_accept_threshold()
-    where(query, [g], not is_nil(g.provider_id) and g.min_confidence >= ^threshold)
+
+    where(
+      query,
+      [g],
+      not is_nil(g.provider_id) and g.min_confidence >= ^threshold and
+        (is_nil(g.provider_type) or g.provider_type != "local")
+    )
   end
 
   defp apply_band(query, :needs_attention) do
