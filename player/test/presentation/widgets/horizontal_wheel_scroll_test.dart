@@ -252,4 +252,54 @@ void main() {
     expect(_rail(tester).pixels, 30);
     expect(_page(tester).pixels, 0);
   });
+
+  testWidgets('a page scroll already in flight keeps the wheel',
+      (tester) async {
+    final page = ScrollController();
+    addTearDown(page.dispose);
+
+    await tester.pumpWidget(_host(pageController: page));
+
+    // Hold a page drag open so the page position reports as scrolling.
+    final drag = await tester.startGesture(
+      tester.getCenter(find.text('spacer').first),
+    );
+    await drag.moveBy(const Offset(0, -60));
+    await tester.pump();
+
+    expect(_page(tester).isScrollingNotifier.value, isTrue);
+
+    await _wheelOverRail(tester, 120);
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(_rail(tester).pixels, 0,
+        reason: 'a flick down the page must not be snagged by a rail it '
+            'passes over');
+
+    await drag.up();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('the wheel returns to the rail once the page settles',
+      (tester) async {
+    final page = ScrollController();
+    addTearDown(page.dispose);
+
+    await tester.pumpWidget(_host(pageController: page));
+
+    final drag = await tester.startGesture(
+      tester.getCenter(find.text('spacer').first),
+    );
+    await drag.moveBy(const Offset(0, -60));
+    await tester.pump();
+    await drag.up();
+    await tester.pumpAndSettle();
+
+    expect(_page(tester).isScrollingNotifier.value, isFalse);
+
+    await _wheelOverRail(tester, 120);
+    await tester.pumpAndSettle();
+
+    expect(_rail(tester).pixels, greaterThan(0));
+  });
 }

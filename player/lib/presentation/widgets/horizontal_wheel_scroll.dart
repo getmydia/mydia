@@ -47,6 +47,11 @@ class _HorizontalWheelScrollState extends State<HorizontalWheelScroll> {
   /// of each tick restarting from wherever the animation happens to be.
   double? _target;
 
+  /// The page scroller this rail sits inside, resolved once per dependency
+  /// change. `_ScrollableScope` only notifies when the position object itself
+  /// is replaced, so this dependency costs nothing per frame.
+  ScrollableState? _verticalAncestor;
+
   ScrollController get _controller => widget.controller ?? _ownedController!;
 
   @override
@@ -55,6 +60,12 @@ class _HorizontalWheelScrollState extends State<HorizontalWheelScroll> {
     if (widget.controller == null) {
       _ownedController = ScrollController();
     }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _verticalAncestor = Scrollable.maybeOf(context, axis: Axis.vertical);
   }
 
   @override
@@ -78,6 +89,12 @@ class _HorizontalWheelScrollState extends State<HorizontalWheelScroll> {
     // Mirrors Scrollable's own guard, so a NeverScrollableScrollPhysics rail
     // stays inert instead of being scrolled from here.
     if (!position.physics.shouldAcceptUserOffset(position)) return;
+
+    // A page scroll already in flight keeps the wheel until it settles, so a
+    // flick down the home screen is not snagged by a rail it passes over. It
+    // also covers the mirror case: once a rail hands off at its end, the page
+    // holds the wheel rather than bouncing back.
+    if (_verticalAncestor?.position.isScrollingNotifier.value ?? false) return;
 
     // `pixels` is direction-normalised, so `dy` maps onto it unsigned in both
     // LTR and RTL: down always means further through the list.
