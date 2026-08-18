@@ -54,17 +54,15 @@ defmodule Mydia.Library.PathParser do
   """
   @spec season_from_segment(String.t()) :: {:ok, non_neg_integer()} | :error
   def season_from_segment(segment) when is_binary(segment) do
-    cond do
-      Regex.match?(specials_pattern(), segment) ->
-        {:ok, 0}
-
-      true ->
-        Enum.find_value(season_patterns(), :error, fn pattern ->
-          case Regex.run(pattern, segment) do
-            [_, number] -> {:ok, String.to_integer(number)}
-            _ -> nil
-          end
-        end)
+    if Regex.match?(specials_pattern(), segment) do
+      {:ok, 0}
+    else
+      Enum.find_value(season_patterns(), :error, fn pattern ->
+        case Regex.run(pattern, segment) do
+          [_, number] -> {:ok, String.to_integer(number)}
+          _ -> nil
+        end
+      end)
     end
   end
 
