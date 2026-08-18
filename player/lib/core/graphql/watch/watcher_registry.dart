@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'fetch_log.dart';
+import 'invalidation_target.dart';
 import 'query_key.dart';
 import 'query_watcher.dart';
 
@@ -33,6 +34,16 @@ class WatcherRegistry {
 
   QueryWatcher<dynamic>? find(QueryKey key) => _watchers[key];
 
+  /// The live watchers for [operationName], whatever their variables.
+  ///
+  /// Materialised with `toList()` for the same reason as [watchers]: a
+  /// refetch can dispose a watcher and mutate `_watchers` mid-iteration.
+  Iterable<QueryWatcher<dynamic>> family(String operationName) =>
+      _watchers.entries
+          .where((entry) => entry.key.operationName == operationName)
+          .map((entry) => entry.value)
+          .toList();
+
   Iterable<QueryWatcher<dynamic>> get watchers => _watchers.values.toList();
 }
 
@@ -57,35 +68,87 @@ class Invalidator {
   final WatcherRegistry _registry;
   final FetchLog _fetchLog;
 
-  /// Invalidates each key in turn.
+  /// Invalidates each target in turn.
   ///
-  /// Each key is isolated in its own try/catch: `HiveFetchLog.clear` can
+  /// Each target is isolated in its own try/catch: `HiveFetchLog.clear` can
   /// throw on an I/O error, and one throw must not abort the rest of the
   /// batch — a favorite toggle invalidating `{favorites, home, tvShowsList}`
   /// has to keep going even if the first key's write fails, or the other two
   /// silently stay stale. The loop stays sequential on purpose: concurrent
   /// refetches over what may be a p2p relay are not wanted here.
-  Future<void> invalidate(Iterable<QueryKey> keys) async {
-    for (final key in keys) {
+  ///
+  /// A `FamilyTarget` carries a second, inner level of isolation: each of its
+  /// live watchers is refetched inside its own try/catch too (see
+  /// [_invalidateFamily]), so one collection screen's failing refetch cannot
+  /// starve every other open collection screen in the same family the way a
+  /// single family-wide try/catch would.
+  Future<void> invalidate(Iterable<InvalidationTarget> targets) async {
+    for (final target in targets) {
       try {
-        final watcher = _registry.find(key);
-        if (watcher != null) {
-          final refetched = await watcher.refetchAutomatically();
-          if (!refetched) {
-            // The watcher's `canRefetch` guard declined (e.g. paginated past
-            // page 1): falling back to a bare `refetch()` here would be
-            // exactly the silent page-1 collapse that guard exists to
-            // prevent, so clear the log entry instead and let the next
-            // fresh mount treat this key as cold.
-            await _fetchLog.clear(key);
-          }
-        } else {
-          await _fetchLog.clear(key);
+        switch (target) {
+          case KeyTarget(:final key):
+            await _invalidateKey(key);
+          case FamilyTarget(:final operationName):
+            await _invalidateFamily(operationName);
         }
       } catch (error, stackTrace) {
         debugPrint(
-          'Invalidator.invalidate: failed to invalidate $key: $error\n'
+          'Invalidator.invalidate: failed to invalidate $target: $error\n'
           '$stackTrace',
+        );
+      }
+    }
+  }
+
+  Future<void> _invalidateKey(QueryKey key) async {
+    final watcher = _registry.find(key);
+    if (watcher != null) {
+      final refetched = await watcher.refetchAutomatically();
+      if (!refetched) {
+        // The watcher's `canRefetch` guard declined (e.g. paginated past
+        // page 1): falling back to a bare `refetch()` here would be
+        // exactly the silent page-1 collapse that guard exists to
+        // prevent, so clear the log entry instead and let the next
+        // fresh mount treat this key as cold.
+        await _fetchLog.clear(key);
+      }
+    } else {
+      await _fetchLog.clear(key);
+    }
+  }
+
+  Future<void> _invalidateFamily(String operationName) async {
+    // Cleared before the refetches, not after. Clearing afterwards would wipe
+    // the `record()` a successful refetch had just written, leaving a screen
+    // that refreshed a moment ago cold on its next mount. Dormant members stay
+    // cleared either way.
+    //
+    // Guarded on its own so a transient storage error degrades to "live
+    // screens still refresh" rather than skipping this target's refetches, the
+    // same treatment `invalidateAll` already gives its `clearAll`.
+    try {
+      await _fetchLog.clearFamily(operationName);
+    } catch (error, stackTrace) {
+      debugPrint(
+        'Invalidator.invalidate: failed to clear the $operationName family: '
+        '$error\n$stackTrace',
+      );
+    }
+
+    for (final watcher in _registry.family(operationName)) {
+      // Isolated per watcher, same as `invalidateAll`: one collection
+      // screen's refetch throwing (e.g. a cache-layer exception inside the
+      // `graphql` package's own network resolution) must not stop every
+      // other live watcher in this family from refreshing.
+      try {
+        final refetched = await watcher.refetchAutomatically();
+        if (!refetched) {
+          await _fetchLog.clear(watcher.key);
+        }
+      } catch (error, stackTrace) {
+        debugPrint(
+          'Invalidator.invalidate: failed to refetch ${watcher.key}: '
+          '$error\n$stackTrace',
         );
       }
     }

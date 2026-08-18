@@ -5,6 +5,7 @@ import '../../core/auth/auth_status.dart';
 import '../../core/format/relative_time.dart';
 import '../../core/graphql/graphql_provider.dart';
 import '../../core/graphql/watch/freshness.dart';
+import '../../core/graphql/watch/invalidation_target.dart';
 import '../../core/graphql/watch/query_key.dart';
 import '../../core/graphql/watch/watcher_registry.dart';
 import '../../core/theme/colors.dart';
@@ -97,8 +98,9 @@ class FreshnessHeader extends ConsumerWidget {
               key: const Key('freshness-banner'),
               failed: freshness.refreshFailed,
               fetchedAt: fetchedAt,
-              onAction: () =>
-                  ref.read(invalidatorProvider).invalidate(queryKeys),
+              onAction: () => ref
+                  .read(invalidatorProvider)
+                  .invalidate(queryKeys.map((key) => key.target)),
             ),
         ],
       ),
