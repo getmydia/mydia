@@ -21,13 +21,21 @@
       library_path={@selected_library_path}
       active_run={@active_run}
       outcome_run={@outcome_run}
-      outcome_group_count={@outcome_group_count}
     />
 
     <section :if={is_nil(@active_run)} id="review-section" class="flex flex-col gap-4 mt-2">
       <div class="flex items-center justify-between gap-4">
         <div>
-          <h2 class="text-xl font-bold">Review</h2>
+          <div id="review-heading" class="flex items-center gap-2.5">
+            <h2 class="text-xl font-bold">Review</h2>
+            <span
+              :if={@scan_complete_run_id}
+              id="scan-complete-status"
+              class="badge badge-success badge-sm gap-1"
+            >
+              <.icon name="hero-check" class="w-3.5 h-3.5" /> Scan complete
+            </span>
+          </div>
           <p class="text-sm text-base-content/60 mt-0.5">
             Confirm matches before they are added to the selected library.
           </p>

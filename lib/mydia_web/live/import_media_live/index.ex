@@ -47,6 +47,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   # receiving end here instead of the sending end there, since this
   # broadcast has no single producer to throttle.
   @refresh_debounce_ms 500
+  @scan_complete_display_ms 5_000
 
   @impl true
   def mount(params, _session, socket) do
@@ -70,7 +71,9 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       if active_run || is_nil(selected_library_path_id) do
         nil
       else
-        Library.last_import_run(selected_library_path_id)
+        selected_library_path_id
+        |> Library.last_import_run()
+        |> persistent_outcome()
       end
 
     if connected?(socket) do
@@ -83,8 +86,6 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       end
     end
 
-    outcome_group_count = group_count_for_outcome(outcome_run)
-
     socket =
       socket
       |> assign(:page_title, "Import Media")
@@ -96,7 +97,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       |> assign(:active_run, active_run)
       |> assign(:active_runs_by_library, active_runs_by_library)
       |> assign(:outcome_run, outcome_run)
-      |> assign(:outcome_group_count, outcome_group_count)
+      |> assign(:scan_complete_run_id, nil)
       |> assign(:band, :all)
       |> assign(:search, "")
       |> assign(:cursor, nil)
@@ -201,7 +202,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
            socket
            |> put_active_run(run)
            |> assign(:outcome_run, nil)
-           |> assign(:outcome_group_count, 0)}
+           |> assign(:scan_complete_run_id, nil)}
 
         {:error, _changeset} ->
           {:noreply, put_flash(socket, :error, "That library is already being imported.")}
@@ -223,7 +224,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
        socket
        |> put_flash(:info, "Cleared #{count} scan result group(s).")
        |> assign(:outcome_run, nil)
-       |> assign(:outcome_group_count, 0)
+       |> assign(:scan_complete_run_id, nil)
        |> assign(:selection, SelectionScope.new(path_id))
        |> assign(:match_search, nil)
        |> load_groups()
@@ -702,13 +703,23 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       if run.status in [:running, :stopping] do
         put_active_run(socket, run)
       else
-        # Terminal: don't just clear the panel. Keep the run visible as an
-        # outcome so a user who walked away comes back to the scan result, not
-        # a blank start form that looks like nothing ever happened.
+        # Successful completion is a short acknowledgement beside Review;
+        # failed and stopped runs remain in the scan panel with their details.
         socket
         |> show_outcome(run)
         |> load_groups()
         |> refresh_counts()
+      end
+
+    {:noreply, socket}
+  end
+
+  def handle_info({:dismiss_scan_complete, run_id}, socket) do
+    socket =
+      if socket.assigns.scan_complete_run_id == run_id do
+        assign(socket, :scan_complete_run_id, nil)
+      else
+        socket
       end
 
     {:noreply, socket}
@@ -794,14 +805,27 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     |> refresh_counts()
   end
 
-  # A terminal run stays on screen as an outcome rather than reverting the
-  # panel to a blank start form, matching what mount/3 does after a reload.
   defp show_outcome(socket, run) do
-    socket
-    |> assign(:active_run, nil)
-    |> update(:active_runs_by_library, &Map.delete(&1, run.library_path_id))
-    |> assign(:outcome_run, run)
-    |> assign(:outcome_group_count, group_count_for_outcome(run))
+    socket =
+      socket
+      |> assign(:active_run, nil)
+      |> update(:active_runs_by_library, &Map.delete(&1, run.library_path_id))
+
+    if run.status == :done do
+      Process.send_after(
+        self(),
+        {:dismiss_scan_complete, run.id},
+        @scan_complete_display_ms
+      )
+
+      socket
+      |> assign(:outcome_run, nil)
+      |> assign(:scan_complete_run_id, run.id)
+    else
+      socket
+      |> assign(:outcome_run, persistent_outcome(run))
+      |> assign(:scan_complete_run_id, nil)
+    end
   end
 
   defp put_active_run(socket, run) do
@@ -810,27 +834,11 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     |> update(:active_runs_by_library, &Map.put(&1, run.library_path_id, run))
   end
 
-  # Queries the pending group count once when a run reaches a terminal state
-  # so the outcome summary never calls the DB from its component body.
-  #
-  # Deliberately `band_counts/1` (scoped to this run's own library path), not
-  # `ImportGroups.count_pending/0` (the global nav-badge total, see its own
-  # doc): this CTA reports what one specific run just found, and a global
-  # count would fold in every other library's backlog too, showing a number
-  # that could disagree with -- and in a multi-library install often would --
-  # what `/import` actually displays for the library this run touched.
-  #
-  # Was `Library.count_inbox_files/1`, a `MediaFile`/`MatchCandidate` query
-  # that has nothing to do with `import_groups`, the table the review page
-  # actually reads. That mismatch is Critical 1 from the whole-branch review:
-  # the CTA could say "review N files" while the page it linked to showed
-  # nothing at all. Sourcing both from the same table is what makes the
-  # number and the destination agree.
-  defp group_count_for_outcome(nil), do: 0
+  defp persistent_outcome(%ImportRun{status: status} = run)
+       when status in [:failed, :stopped],
+       do: run
 
-  defp group_count_for_outcome(run) do
-    ImportGroups.band_counts(run.library_path_id).total
-  end
+  defp persistent_outcome(_run), do: nil
 
   defp resolve_library_path_id(params, library_paths) do
     cond do
@@ -874,7 +882,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     previous_id = socket.assigns.selected_library_path_id
     previous_run = socket.assigns.active_run
     active_run = Library.active_import_run(id)
-    outcome_run = if active_run, do: nil, else: Library.last_import_run(id)
+    outcome_run = if active_run, do: nil, else: persistent_outcome(Library.last_import_run(id))
     selected_library_path = Enum.find(socket.assigns.importable_library_paths, &(&1.id == id))
 
     if connected?(socket) and previous_id != id do
@@ -897,7 +905,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       if active_run, do: Map.put(runs, id, active_run), else: Map.delete(runs, id)
     end)
     |> assign(:outcome_run, outcome_run)
-    |> assign(:outcome_group_count, group_count_for_outcome(outcome_run))
+    |> assign(:scan_complete_run_id, nil)
     |> assign(:cursor, nil)
     |> assign(:cursor_stack, [])
     |> assign(:expanded_ids, MapSet.new())

@@ -255,6 +255,14 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
     assert has_element?(view, "#group-#{group.id}")
     assert has_element?(view, "#band-all .badge", "1")
     assert has_element?(view, "#review-section")
+    assert has_element?(view, "#review-heading #scan-complete-status", "Scan complete")
+    refute has_element?(view, "#import-run-control", "Scan complete")
+
+    send(view.pid, {:dismiss_scan_complete, Ecto.UUID.generate()})
+    assert has_element?(view, "#scan-complete-status", "Scan complete")
+
+    Process.sleep(5_100)
+    refute has_element?(view, "#scan-complete-status")
   end
 
   test "starting a run while another tab already started one shows a friendly message and does not create a duplicate",
@@ -378,7 +386,7 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
     assert render(view) =~ ":not_found"
   end
 
-  test "outcome panel reports pending groups without a redundant review link",
+  test "a completed scan status is not restored on reload",
        %{
          conn: conn,
          library_path: lp,
@@ -414,16 +422,13 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
 
     {:ok, view, _html} = live(conn, ~p"/import")
 
-    assert has_element?(view, "#run-outcome", "Scan complete")
-    assert has_element?(view, "#run-outcome", "1 group ready to review")
-    refute has_element?(view, "#run-outcome", "Import finished")
-    refute has_element?(view, "#run-outcome", "Found")
-    refute has_element?(view, "#run-outcome", "Matched")
-    refute has_element?(view, "#run-outcome", "Added")
-    refute has_element?(view, "#run-outcome a[href='/import']")
+    refute has_element?(view, "#run-outcome")
+    refute has_element?(view, "#scan-complete-status")
+    assert has_element?(view, "#band-all .badge", "1")
+    assert has_element?(view, "#start-run-form")
   end
 
-  test "outcome panel omits the pending summary when there is nothing to review", %{
+  test "a completed scan with nothing to review restores neither outcome nor status", %{
     conn: conn,
     library_path: lp,
     user: user
@@ -442,8 +447,9 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
 
     {:ok, view, _html} = live(conn, ~p"/import")
 
-    assert has_element?(view, "#run-outcome")
-    refute has_element?(view, "#run-outcome a[href='/import']")
+    refute has_element?(view, "#run-outcome")
+    refute has_element?(view, "#scan-complete-status")
+    assert has_element?(view, "#start-run-form")
   end
 
   test "clear results removes the selected library's scan outcome and review groups", %{

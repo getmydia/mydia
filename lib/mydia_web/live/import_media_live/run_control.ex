@@ -11,7 +11,6 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
   attr :library_path, :map, default: nil
   attr :active_run, :map, default: nil
   attr :outcome_run, :map, default: nil
-  attr :outcome_group_count, :integer, default: 0
 
   def run_control(assigns) do
     ~H"""
@@ -44,11 +43,7 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
         </div>
 
         <div :if={is_nil(@active_run)} class="flex flex-col gap-5">
-          <.run_outcome
-            :if={@outcome_run}
-            run={@outcome_run}
-            pending_groups={@outcome_group_count}
-          />
+          <.run_outcome :if={@outcome_run} run={@outcome_run} />
           <.start_form library_path={@library_path} />
         </div>
       <% end %>
@@ -129,31 +124,14 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
     """
   end
 
-  # Shown in place of the start form once a run has reached a terminal
-  # state (:done, :failed, or :stopped). The run row stays exactly as the
-  # coordinator left it -- nothing here is socket state -- so this renders
-  # identically whether the outcome arrived over PubSub in-session or was
-  # read back from `Library.last_import_run/1` after a reload.
+  # Failed and stopped outcomes persist across reloads so recovery details
+  # remain visible. Successful completion is transient and belongs beside
+  # the review results instead of in the next scan's controls.
   attr :run, :map, required: true
-  attr :pending_groups, :integer, default: 0
 
   defp run_outcome(assigns) do
     ~H"""
     <div id="run-outcome" class="flex flex-col gap-3">
-      <div
-        :if={@run.status == :done}
-        class="flex items-center justify-between gap-3 rounded-xl border border-base-200 bg-base-200/40 px-4 py-3"
-      >
-        <div class="flex items-center gap-2.5 min-w-0">
-          <.icon name="hero-check-circle" class="w-5 h-5 shrink-0 text-success" />
-          <span class="font-semibold">Scan complete</span>
-        </div>
-
-        <span :if={@pending_groups > 0} class="badge badge-sm badge-ghost shrink-0">
-          {@pending_groups} {if @pending_groups == 1, do: "group", else: "groups"} ready to review
-        </span>
-      </div>
-
       <div
         :if={@run.status in [:failed, :stopped]}
         class={[
