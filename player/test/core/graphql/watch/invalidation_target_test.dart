@@ -31,7 +31,7 @@ void main() {
   group('FamilyTarget', () {
     test('two targets over the same operation are equal', () {
       expect(
-        const FamilyTarget('CollectionItems'),
+        FamilyTarget('CollectionItems'),
         const FamilyTarget('CollectionItems'),
       );
     });
@@ -46,8 +46,7 @@ void main() {
     test('equal targets collapse in a set', () {
       final targets = {
         const FamilyTarget('CollectionItems'),
-        // ignore: equal_elements_in_set
-        const FamilyTarget('CollectionItems'),
+        FamilyTarget('CollectionItems'),
       };
 
       expect(targets, hasLength(1));
