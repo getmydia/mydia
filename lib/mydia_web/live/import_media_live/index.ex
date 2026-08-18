@@ -395,6 +395,26 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     end
   end
 
+  # The escape hatch for a group no provider carries: build the show straight
+  # from its folder name instead of waiting on a match that will never come.
+  # `create_local_show/1` may leave a group with unresolved members (a file
+  # with no parsed episode number), in which case it stays "accepted" rather
+  # than "applied" -- load_groups/1 + refresh_counts/1 below reflect either
+  # outcome the same way accept_selected/2 and ignore_selected/2 already do.
+  def handle_event("create_local_show", %{"id" => id}, socket) do
+    case ImportGroups.create_local_show(id) do
+      {:ok, item} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Created #{item.title} from the folder name.")
+         |> load_groups()
+         |> refresh_counts()}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Could not create the show: #{inspect(reason)}")}
+    end
+  end
+
   @impl true
   def handle_info({:import_run_progress, run}, socket) do
     socket =

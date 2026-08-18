@@ -210,8 +210,17 @@ defmodule MydiaWeb.ImportMediaLive.Components do
         <span class={["badge badge-sm", band_class(@band)]}>{band_label(@band)}</span>
       </div>
 
-      <p class="pl-10 text-sm opacity-70">
+      <p class="pl-10 text-sm opacity-70 flex items-center gap-2">
         {suggestion_line(@group)}
+        <button
+          :if={@band == :no_match}
+          id={"create-local-#{@group.id}"}
+          class="btn btn-xs btn-outline"
+          phx-click="create_local_show"
+          phx-value-id={@group.id}
+        >
+          Create show from folder
+        </button>
       </p>
 
       <ul :if={@expanded} id={"members-#{@group.id}"} phx-update="stream" class="pl-10 pt-2">

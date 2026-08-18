@@ -95,6 +95,60 @@ defmodule MydiaWeb.ImportMediaReviewTest do
     assert has_element?(view, "#band-no-match", "1")
   end
 
+  test "the create-local-show button only appears on a no-match group's row", %{conn: conn} do
+    lp = library_path_fixture(%{type: "series"})
+    matched = seed_group(lp, cluster_key: "matched", min_confidence: 1.0)
+    no_match = seed_group(lp, cluster_key: "no-match", provider_id: nil, min_confidence: nil)
+
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    refute has_element?(view, "#create-local-#{matched.id}")
+    assert has_element?(view, "#create-local-#{no_match.id}")
+  end
+
+  test "creating a local show from a no-match group's folder links its files and clears it from the queue",
+       %{conn: conn} do
+    lp = library_path_fixture(%{type: "series"})
+
+    group =
+      seed_group(lp,
+        cluster_key: "local",
+        display_title: "Les mots de Passe-Partout (2023)",
+        file_count: 1,
+        unresolved_count: 1,
+        provider_id: nil,
+        min_confidence: nil
+      )
+
+    file =
+      orphaned_media_file_fixture(%{
+        library_path_id: lp.id,
+        relative_path: "Les mots de Passe-Partout (2023)/Season 01/ep1.mkv"
+      })
+
+    Repo.update_all(from(f in Mydia.Library.MediaFile, where: f.id == ^file.id),
+      set: [import_group_id: group.id]
+    )
+
+    %Mydia.Library.MatchCandidate{}
+    |> Mydia.Library.MatchCandidate.changeset(%{
+      media_file_id: file.id,
+      rank: 0,
+      parsed_info: %{"season" => 1, "episodes" => [1]}
+    })
+    |> Repo.insert!()
+
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    view |> element("#create-local-#{group.id}") |> render_click()
+
+    assert has_element?(view, "#flash-info", "Les mots de Passe-Partout")
+    refute has_element?(view, "#group-#{group.id}")
+
+    assert Repo.reload!(group).status == "applied"
+    assert Repo.reload!(file).episode_id
+  end
+
   test "a ready group renders collapsed and expands on click", %{conn: conn} do
     lp = library_path_fixture(%{type: "series"})
     group = seed_group(lp, min_confidence: 1.0)

@@ -305,4 +305,82 @@ defmodule Mydia.ImportGroupsTest do
       assert stamped_count == count
     end
   end
+
+  describe "create_local_show/1" do
+    test "builds a media item from the folder name and links the members" do
+      lp = library_path_fixture(%{type: "series", path: "/media/Series"})
+
+      for n <- 1..3 do
+        file =
+          orphaned_media_file_fixture(%{
+            library_path_id: lp.id,
+            relative_path: "Les mots de Passe-Partout (2023)/Season 01/ep#{n}.mkv"
+          })
+
+        %MatchCandidate{}
+        |> MatchCandidate.changeset(%{
+          media_file_id: file.id,
+          rank: 0,
+          last_error: "no_match",
+          parsed_info: %{"season" => 1, "episodes" => [n]}
+        })
+        |> Repo.insert!()
+      end
+
+      {:ok, _} = ImportGroups.upsert_for_library(lp)
+      group = Repo.one!(ImportGroup)
+      assert ImportGroups.band(group) == :no_match
+
+      assert {:ok, item} = ImportGroups.create_local_show(group.id)
+
+      assert item.title == "Les mots de Passe-Partout"
+      assert item.year == 2023
+      assert item.type == "tv_show"
+      # A local show has no provider identity at all. MediaItem has no
+      # provider_type column; metadata_source is an Ecto.Enum limited to
+      # [:tvdb, :tmdb], so "not from a provider" is expressed as nil.
+      assert item.metadata_source == nil
+      assert item.tmdb_id == nil
+      assert item.tvdb_id == nil
+
+      # The files are linked to real episodes here, not queued for the worker,
+      # because there is no provider match for FileIngest to enrich from.
+      episodes = Repo.all(from e in Mydia.Media.Episode, where: e.media_item_id == ^item.id)
+      assert length(episodes) == 3
+      assert Enum.sort(Enum.map(episodes, & &1.episode_number)) == [1, 2, 3]
+      assert Enum.all?(episodes, &(&1.season_number == 1))
+
+      assert Repo.aggregate(
+               from(f in MediaFile, where: is_nil(f.episode_id)),
+               :count
+             ) == 0
+
+      assert Repo.reload!(group).status == "applied"
+      assert Repo.reload!(group).unresolved_count == 0
+    end
+
+    test "refuses a group that already has a provider match" do
+      lp = library_path_fixture(%{type: "series", path: "/media/Series"})
+
+      file =
+        orphaned_media_file_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "Show/Season 01/a.mkv"
+        })
+
+      %MatchCandidate{}
+      |> MatchCandidate.changeset(%{
+        media_file_id: file.id,
+        rank: 0,
+        provider_id: "1",
+        confidence: 1.0
+      })
+      |> Repo.insert!()
+
+      {:ok, _} = ImportGroups.upsert_for_library(lp)
+      group = Repo.one!(ImportGroup)
+
+      assert {:error, :already_matched} = ImportGroups.create_local_show(group.id)
+    end
+  end
 end

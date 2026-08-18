@@ -15,6 +15,8 @@ defmodule Mydia.ImportGroups do
   alias Mydia.Library.MediaFile
   alias Mydia.Library.PathAnchor
   alias Mydia.Library.SelectionScope
+  alias Mydia.Media
+  alias Mydia.Media.Episode
   alias Mydia.Repo
 
   @auto_accept_threshold 0.85
@@ -514,6 +516,112 @@ defmodule Mydia.ImportGroups do
     |> where([f], f.import_group_id == ^group_id)
     |> where([f], is_nil(f.media_item_id) and is_nil(f.episode_id) and is_nil(f.trashed_at))
     |> Repo.aggregate(:count)
+  end
+
+  @doc """
+  Creates a local show from a group's folder name, for media no provider carries.
+
+  Some libraries hold shows that TVDB and TMDB simply do not have. Without this
+  those files can never leave the queue, however good the matcher gets, so an
+  empty inbox would be unreachable.
+
+  This does the linking itself rather than going through
+  `Mydia.Jobs.ApplyImportGroups`, because that worker's whole job is to hand a
+  provider match to `FileIngest`, and there is no provider match here. Episodes
+  come from each file's parsed season and episode numbers instead.
+
+  The show carries no provider identity: `MediaItem` has no `provider_type`
+  column and its `metadata_source` is an `Ecto.Enum` limited to `[:tvdb, :tmdb]`,
+  so a local show simply leaves `metadata_source`, `tmdb_id` and `tvdb_id` nil. A
+  later re-match fills them in.
+
+  `skip_episode_refresh: true` is passed to `Media.create_media_item/2`: its
+  default behaviour for a `"tv_show"` is to fetch episodes from a metadata
+  provider, which would spend a relay round-trip (and, in tests, an
+  unstubbed HTTP call) trying to resolve a provider id that, by construction,
+  does not exist for this show. Episodes come from the parsed file names
+  instead, via `link_local_member/2` below.
+
+  A member with no parsed episode number is left alone rather than guessed
+  at: it stays unresolved, which keeps `unresolved_count` honest and the
+  group visible instead of silently half-done.
+  """
+  @spec create_local_show(binary()) :: {:ok, Media.MediaItem.t()} | {:error, term()}
+  def create_local_show(group_id) do
+    group = Repo.get!(ImportGroup, group_id)
+
+    if group.provider_id do
+      {:error, :already_matched}
+    else
+      {title, year} = title_and_year(group)
+
+      with {:ok, item} <-
+             Media.create_media_item(
+               %{title: title, year: year, type: "tv_show", monitored: false},
+               skip_episode_refresh: true
+             ) do
+        group_id
+        |> members(limit: 100_000)
+        |> Enum.each(&link_local_member(&1, item))
+
+        remaining = member_count(group_id)
+        now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+        group
+        |> Ecto.Changeset.change(
+          suggested_title: title,
+          suggested_year: year,
+          unresolved_count: remaining,
+          status: if(remaining == 0, do: "applied", else: "accepted"),
+          decided_at: now
+        )
+        |> Repo.update!()
+
+        {:ok, item}
+      end
+    end
+  end
+
+  # Finds or creates the episode this file's parsed numbering points at, then
+  # links the file to it. A file with no parsed episode number is left alone: it
+  # stays in the group, which keeps `unresolved_count` honest and the group
+  # visible rather than silently half-done.
+  defp link_local_member(%{media_file: media_file, candidate: candidate}, item) do
+    with %{} = parsed <- candidate && candidate.parsed_info,
+         season when is_integer(season) <- Map.get(parsed, "season"),
+         [number | _] <- Map.get(parsed, "episodes") || [] do
+      episode =
+        Repo.get_by(Episode,
+          media_item_id: item.id,
+          season_number: season,
+          episode_number: number
+        ) ||
+          case Media.create_episode(%{
+                 media_item_id: item.id,
+                 season_number: season,
+                 episode_number: number,
+                 title: Path.rootname(Path.basename(media_file.relative_path))
+               }) do
+            {:ok, episode} -> episode
+            {:error, _} -> nil
+          end
+
+      if episode do
+        media_file
+        |> Ecto.Changeset.change(episode_id: episode.id, import_group_id: nil)
+        |> Repo.update()
+      end
+    else
+      _ -> :ok
+    end
+  end
+
+  # "Les mots de Passe-Partout (2023)" -> {"Les mots de Passe-Partout", 2023}
+  defp title_and_year(%ImportGroup{display_title: display_title}) do
+    case Regex.run(~r/^(.*?)\s*\((\d{4})\)\s*$/, display_title || "") do
+      [_, title, year] -> {String.trim(title), String.to_integer(year)}
+      _ -> {display_title, nil}
+    end
   end
 
   # Insert an Oban job, falling back to a direct Repo insert when Oban's engine
