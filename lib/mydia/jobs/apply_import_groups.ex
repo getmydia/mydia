@@ -135,11 +135,14 @@ defmodule Mydia.Jobs.ApplyImportGroups do
   # `safe_ingest/2`'s rescue only covers an Elixir-level exception raised
   # before any DB write lands, which is the dominant failure class: the
   # connection stays healthy, the page's transaction commits, and one bad
-  # member costs only itself. A genuine database error (a real constraint
-  # violation) is different — Postgres marks the *whole* transaction aborted
-  # regardless of that rescue, so `Repo.transaction/1` comes back
-  # `{:error, :rollback}` and every member in the page is lost, including ones
-  # that had already linked successfully earlier in the same page.
+  # member costs only itself. Every write on this path is changeset-mapped, so
+  # an ordinary constraint violation comes back as `{:error, changeset}`, not a
+  # raise -- what actually reaches here is a deadlock, a statement timeout, or
+  # a lost connection, none of which a changeset can catch. Postgres marks the
+  # *whole* transaction aborted regardless of that rescue, so
+  # `Repo.transaction/1` comes back `{:error, :rollback}` and every member in
+  # the page is lost, including ones that had already linked successfully
+  # earlier in the same page.
   #
   # So the result is inspected: on a clean commit the page is done. On a
   # rollback, the page is replayed one member at a time, each in its own
