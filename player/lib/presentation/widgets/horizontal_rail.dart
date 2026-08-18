@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/layout/breakpoints.dart';
 import '../../core/theme/colors.dart';
+import 'horizontal_wheel_scroll.dart';
 
 /// The scroll-and-fade shell shared by the app's horizontal rails.
 ///
@@ -104,19 +105,24 @@ class _HorizontalRailState extends State<HorizontalRail> {
       height: widget.height,
       child: Stack(
         children: [
-          ListView.builder(
+          // The wrapper is what makes a plain mouse wheel move the rail; the
+          // controller stays owned here because the edge fades listen to it.
+          HorizontalWheelScroll(
             controller: _scrollController,
-            scrollDirection: Axis.horizontal,
-            padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-            itemCount: widget.itemCount,
-            itemBuilder: (context, index) {
-              return Padding(
-                padding: EdgeInsets.only(
-                  right: index < widget.itemCount - 1 ? cardSpacing : 0,
-                ),
-                child: widget.itemBuilder(context, index),
-              );
-            },
+            builder: (context, controller) => ListView.builder(
+              controller: controller,
+              scrollDirection: Axis.horizontal,
+              padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+              itemCount: widget.itemCount,
+              itemBuilder: (context, index) {
+                return Padding(
+                  padding: EdgeInsets.only(
+                    right: index < widget.itemCount - 1 ? cardSpacing : 0,
+                  ),
+                  child: widget.itemBuilder(context, index),
+                );
+              },
+            ),
           ),
           if (_showLeftFade) _buildFade(widget.leftFadeKey, atStart: true),
           if (_showRightFade) _buildFade(widget.rightFadeKey, atStart: false),

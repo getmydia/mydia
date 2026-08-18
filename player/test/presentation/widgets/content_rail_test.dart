@@ -6,6 +6,7 @@
 // id-based keys (player key convention), and the scroll-edge fade gradients
 // still render.
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -76,6 +77,24 @@ void main() {
       await tester.pump();
 
       expect(find.byType(MediaCard), findsNothing);
+    });
+
+    testWidgets('a vertical wheel scrolls the rail', (tester) async {
+      await tester.pumpWidget(
+        _host(ContentRail(title: 'Recently Added', items: _items(30))),
+      );
+
+      final position = tester
+          .stateList<ScrollableState>(find.byType(Scrollable))
+          .map((s) => s.position)
+          .firstWhere((p) => p.axis == Axis.horizontal);
+
+      final pointer = TestPointer(1, PointerDeviceKind.mouse);
+      pointer.hover(tester.getCenter(find.byType(ContentRail)));
+      await tester.sendEventToBinding(pointer.scroll(const Offset(0, 200)));
+      await tester.pumpAndSettle();
+
+      expect(position.pixels, greaterThan(0));
     });
   });
 
