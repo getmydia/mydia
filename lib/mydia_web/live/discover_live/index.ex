@@ -217,19 +217,27 @@ defmodule MydiaWeb.DiscoverLive.Index do
       ) do
     case parse_event_media_type(media_type) do
       {:ok, media_type_atom} ->
-        socket =
-          assign(
-            socket,
-            :adding_item_ids,
-            MapSet.put(socket.assigns.adding_item_ids, provider_id)
+        # An impatient double-click sends the event twice before the first
+        # handle_info runs. Without this guard the second add lands on a title
+        # the first just created, and resolves to :already_in_library, flashing
+        # a false failure for a title the user only meant to add once.
+        if MapSet.member?(socket.assigns.adding_item_ids, provider_id) do
+          {:noreply, socket}
+        else
+          socket =
+            assign(
+              socket,
+              :adding_item_ids,
+              MapSet.put(socket.assigns.adding_item_ids, provider_id)
+            )
+
+          send(
+            self(),
+            {:add_media_to_library, provider_id, media_type_atom, params["library_path_id"]}
           )
 
-        send(
-          self(),
-          {:add_media_to_library, provider_id, media_type_atom, params["library_path_id"]}
-        )
-
-        {:noreply, socket}
+          {:noreply, socket}
+        end
 
       :error ->
         {:noreply, put_flash(socket, :error, @unsupported_media_type)}
