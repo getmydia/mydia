@@ -55,6 +55,37 @@ class _CallOrderFetchLog implements FetchLog {
   }
 }
 
+/// A [FetchLog] that reports when `clearFamily()` runs, delegating everything
+/// else to [_inner]. Same technique as [_CallOrderFetchLog], for the same
+/// reason: pins the clear-before-refetch order for a family target without
+/// depending on the timing of `QueryWatcher`'s unawaited fetch-log write.
+class _FamilyClearOrderFetchLog implements FetchLog {
+  _FamilyClearOrderFetchLog(this._inner,
+      {required void Function() onClearFamily})
+      : _onClearFamily = onClearFamily;
+
+  final FetchLog _inner;
+  final void Function() _onClearFamily;
+
+  @override
+  DateTime? lastFetchedAt(QueryKey key) => _inner.lastFetchedAt(key);
+
+  @override
+  Future<void> record(QueryKey key, DateTime when) => _inner.record(key, when);
+
+  @override
+  Future<void> clear(QueryKey key) => _inner.clear(key);
+
+  @override
+  Future<void> clearFamily(String operationName) {
+    _onClearFamily();
+    return _inner.clearFamily(operationName);
+  }
+
+  @override
+  Future<void> clearAll() => _inner.clearAll();
+}
+
 /// A [FetchLog] whose `clear` throws for one designated key and records
 /// every key it was actually asked to clear (successes only) — used to prove
 /// that one failing key in a batch does not block its siblings.
@@ -526,24 +557,57 @@ void main() {
 
     test('a live family member keeps the record its refetch just wrote',
         () async {
-      // Pins the clear-before-refetch ordering. Clearing afterwards would wipe
-      // the record a successful refetch had just written and leave a screen
-      // that refreshed a moment ago cold on its next mount.
-      final log = InMemoryFetchLog();
+      // The isNotNull assertion below alone does not pin the
+      // clear-before-refetch order: QueryWatcher dispatches its fetch-log
+      // write via `unawaited(...)` inside `_onResult` (see
+      // `query_watcher.dart`), so that write is not guaranteed to have
+      // landed by the time the refetch's own awaited call returns — a
+      // reordered `_invalidateFamily` that refetches first and clears after
+      // could still leave the entry non-null if the unawaited write races
+      // back in ahead of the clear. What is not racy is exactly when the
+      // network request itself is dispatched: `link.requests` grows
+      // synchronously, strictly before the refetch's awaited call can
+      // return. Snapshotting the request count at the moment
+      // `clearFamily()` runs (via `_FamilyClearOrderFetchLog`, the same
+      // technique `_CallOrderFetchLog` uses for `invalidateAll`) pins the
+      // true ordering contract without depending on the unawaited write's
+      // timing.
+      final innerLog = InMemoryFetchLog();
       final link = StubLink((_, __) => _pingData('v1'));
-      final watcher =
-          makeWatcher(link, log, key: QueryKeys.collectionItems('c1'));
+      int? requestCountAtClear;
+      final orderTrackingLog = _FamilyClearOrderFetchLog(
+        innerLog,
+        onClearFamily: () => requestCountAtClear = link.requests.length,
+      );
+      final watcher = makeWatcher(
+        link,
+        orderTrackingLog,
+        key: QueryKeys.collectionItems('c1'),
+      );
       addTearDown(watcher.close);
 
       final registry = WatcherRegistry()
         ..register(QueryKeys.collectionItems('c1'), watcher);
-      final invalidator = Invalidator(registry: registry, fetchLog: log);
+      final invalidator =
+          Invalidator(registry: registry, fetchLog: orderTrackingLog);
 
       await watcher.stream.first;
+      final requestsBeforeInvalidate = link.requests.length;
+
       await invalidator.invalidate([Families.collectionItems]);
       await Future<void>.delayed(const Duration(milliseconds: 50));
 
-      expect(log.lastFetchedAt(QueryKeys.collectionItems('c1')), isNotNull);
+      expect(requestCountAtClear, requestsBeforeInvalidate,
+          reason: 'clearFamily() must run before any live family member is '
+              'refetched, not after');
+      // A distinct property from the ordering above: clearing first must
+      // not permanently lose the record — the live watcher's own refetch
+      // has to restamp it, so a screen that refreshed a moment ago does not
+      // stay (or become) cold on its next mount.
+      expect(
+        orderTrackingLog.lastFetchedAt(QueryKeys.collectionItems('c1')),
+        isNotNull,
+      );
     });
 
     test(
