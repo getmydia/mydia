@@ -439,4 +439,119 @@ defmodule MydiaWeb.MediaLive.Show.SeasonOrderUiTest do
     |> Plug.Conn.put_resp_content_type("application/json")
     |> Plug.Conn.resp(200, Jason.encode!(body))
   end
+
+  describe "authorization" do
+    test "a readonly user cannot switch the season ordering" do
+      tvdb_id = System.unique_integer([:positive])
+      show = oversized_show(tvdb_id)
+      stub_tvdb_orderings(tvdb_id, official: 170, dvd: [51, 51, 52, 16])
+
+      readonly = user_fixture(%{role: "readonly"})
+      conn = log_in_user(build_conn(), readonly)
+
+      {:ok, view, _html} = live(conn, ~p"/media/#{show.id}")
+      render_async(view, 5000)
+
+      # Fired directly against the LiveView rather than through the form
+      # element: the render gate already hides the control for this role
+      # (covered below), so this proves the *event* handler itself refuses,
+      # not just that the UI happens not to offer the button.
+      render_change(view, "change_season_order", %{"order" => "dvd"})
+
+      assert has_element?(
+               view,
+               "#flash-error",
+               "You do not have permission to modify media items"
+             )
+
+      # The database must be untouched, not merely flashed at: a gate that
+      # flashes but still mutates would pass a flash-only assertion.
+      reloaded = Media.get_media_item!(show.id)
+      assert reloaded.season_order == nil
+
+      episode_numbers =
+        Episode
+        |> where([e], e.media_item_id == ^show.id)
+        |> select([e], e.episode_number)
+        |> Repo.all()
+        |> Enum.sort()
+
+      assert episode_numbers == Enum.to_list(1..170)
+    end
+
+    test "a guest user cannot switch the season ordering" do
+      tvdb_id = System.unique_integer([:positive])
+      show = oversized_show(tvdb_id)
+      stub_tvdb_orderings(tvdb_id, official: 170, dvd: [51, 51, 52, 16])
+
+      guest = user_fixture(%{role: "guest"})
+      conn = log_in_user(build_conn(), guest)
+
+      {:ok, view, _html} = live(conn, ~p"/media/#{show.id}")
+      render_async(view, 5000)
+
+      render_change(view, "change_season_order", %{"order" => "dvd"})
+
+      assert has_element?(
+               view,
+               "#flash-error",
+               "You do not have permission to modify media items"
+             )
+
+      reloaded = Media.get_media_item!(show.id)
+      assert reloaded.season_order == nil
+
+      episode_numbers =
+        Episode
+        |> where([e], e.media_item_id == ^show.id)
+        |> select([e], e.episode_number)
+        |> Repo.all()
+        |> Enum.sort()
+
+      assert episode_numbers == Enum.to_list(1..170)
+    end
+
+    test "the ordering controls do not render for a readonly user" do
+      show = media_item_fixture(%{type: "tv_show", title: "Normal", metadata_source: :tvdb})
+
+      for n <- 1..12 do
+        episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: n})
+      end
+
+      readonly = user_fixture(%{role: "readonly"})
+      conn = log_in_user(build_conn(), readonly)
+
+      {:ok, view, _html} = live(conn, ~p"/media/#{show.id}")
+
+      refute has_element?(view, "#season-order-select")
+      refute has_element?(view, "#season-order-suggestion")
+    end
+
+    test "the ordering controls still render for an admin", %{conn: conn} do
+      show = media_item_fixture(%{type: "tv_show", title: "Normal", metadata_source: :tvdb})
+
+      for n <- 1..12 do
+        episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: n})
+      end
+
+      {:ok, view, _html} = live(conn, ~p"/media/#{show.id}")
+
+      assert has_element?(view, "#season-order-select")
+    end
+
+    test "a malformed change_season_order payload flashes instead of crashing", %{conn: conn} do
+      show = media_item_fixture(%{type: "tv_show", title: "Normal", metadata_source: :tvdb})
+
+      for n <- 1..12 do
+        episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: n})
+      end
+
+      {:ok, view, _html} = live(conn, ~p"/media/#{show.id}")
+
+      # No "order" key at all — a payload the "order" clause cannot match.
+      render_change(view, "change_season_order", %{})
+
+      assert has_element?(view, "#flash-error", "Unknown episode ordering")
+    end
+  end
 end

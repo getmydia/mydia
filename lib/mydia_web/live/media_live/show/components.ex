@@ -452,6 +452,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :segment_statuses, :map, default: %{}
   attr :segment_detection_available, :boolean, default: true
   attr :season_order_suggestion, :any, default: nil
+  attr :can_update_media, :boolean, required: true
 
   def episodes_section(assigns) do
     assigns = assign(assigns, :monitoring_presets, @monitoring_presets)
@@ -534,6 +535,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
           <SeasonComponents.season_order_controls
             media_item={@media_item}
             season_order_suggestion={@season_order_suggestion}
+            can_update_media={@can_update_media}
           />
         </div>
 

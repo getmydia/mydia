@@ -1707,6 +1707,26 @@ defmodule Mydia.MediaTest do
       assert Mydia.Repo.get(Mydia.Media.Episode, ctx.old_episode.id)
     end
 
+    test "clears a stale season_order picked under the old provider", ctx do
+      # The item is switching providers entirely, so whatever ordering the
+      # user picked under the old provider's TVDB ids describes nothing on
+      # the new provider — it must not survive the switch.
+      {:ok, item} = Media.update_media_item(ctx.item, %{season_order: :dvd})
+
+      stub_tmdb_show(ctx.bypass, ctx.new_id, "Switch Show", 2010)
+      stub_tmdb_season(ctx.bypass, ctx.new_id, 1, [1, 2])
+
+      assert {:ok, reconciled} =
+               Mydia.Media.ProviderSwitch.adopt_provider_switch(
+                 item,
+                 ctx.candidate,
+                 :tmdb,
+                 ctx.config
+               )
+
+      assert is_nil(reconciled.season_order)
+    end
+
     defp stub_tmdb_show(bypass, id, name, year) do
       body = %{
         "id" => id,
@@ -1832,6 +1852,24 @@ defmodule Mydia.MediaTest do
       media_file = Mydia.Repo.get(Mydia.Library.MediaFile, ctx.media_file.id)
       refute is_nil(media_file)
       assert not is_nil(media_file.episode_id)
+    end
+
+    test "clears a stale season_order picked under the old provider", ctx do
+      {:ok, item} = Media.update_media_item(ctx.item, %{season_order: :dvd})
+
+      tvdb_season_id = System.unique_integer([:positive])
+      stub_tvdb_show(ctx.bypass, ctx.new_id, "TVDB Show", 2010, [{1, tvdb_season_id}])
+      stub_tvdb_season(ctx.bypass, tvdb_season_id, 1, [1, 2])
+
+      assert {:ok, reconciled} =
+               Mydia.Media.ProviderSwitch.adopt_provider_switch(
+                 item,
+                 ctx.candidate,
+                 :tvdb,
+                 ctx.config
+               )
+
+      assert is_nil(reconciled.season_order)
     end
 
     test "a season missing tvdb_season_id aborts without wiping episodes", ctx do

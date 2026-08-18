@@ -148,6 +148,10 @@ defmodule MydiaWeb.MediaLive.Show do
        :can_create_media,
        Mydia.Accounts.Authorization.can_create_media?(socket.assigns.current_user)
      )
+     |> assign(
+       :can_update_media,
+       Mydia.Accounts.Authorization.can_update_media?(socket.assigns.current_user)
+     )
      |> assign(:raw_search_results, [])
      # Untruncated, undeduplicated pool of every release seen so far in the
      # current manual search, keyed by download_url. Progress messages fold

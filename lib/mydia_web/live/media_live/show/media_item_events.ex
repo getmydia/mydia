@@ -157,10 +157,21 @@ defmodule MydiaWeb.MediaLive.Show.MediaItemEvents do
   retires the suggestion banner: it only ever shows for `season_order: nil`.
   """
   def change_season_order(%{"order" => order_param}, socket) do
-    case Enum.find(SeasonOrder.values(), &(Atom.to_string(&1) == order_param)) do
-      nil -> {:noreply, put_flash(socket, :error, "Unknown episode ordering: #{order_param}")}
-      target -> do_change_season_order(target, socket)
+    with :ok <- Authorization.authorize_update_media(socket) do
+      case Enum.find(SeasonOrder.values(), &(Atom.to_string(&1) == order_param)) do
+        nil -> {:noreply, put_flash(socket, :error, "Unknown episode ordering: #{order_param}")}
+        target -> do_change_season_order(target, socket)
+      end
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
     end
+  end
+
+  # No "order" key at all — a malformed or hand-crafted payload the clause
+  # above cannot match. Without this, it takes the whole LiveView down with a
+  # FunctionClauseError instead of a flash.
+  def change_season_order(_params, socket) do
+    {:noreply, put_flash(socket, :error, "Unknown episode ordering: missing order parameter")}
   end
 
   defp do_change_season_order(target, socket) do

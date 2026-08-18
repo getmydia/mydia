@@ -18,14 +18,18 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
   (any TVDB show, any time) and a dismissible suggestion banner (only when
   the show has never been asked and its official season looks wrong).
 
-  Absent entirely for non-TVDB shows — there is nothing to switch between.
+  Absent entirely for non-TVDB shows — there is nothing to switch between —
+  and for a viewer who cannot update media, since `change_season_order` is
+  authorization-gated: showing a control that will be refused is worse than
+  not showing it.
   """
   attr :media_item, :map, required: true
   attr :season_order_suggestion, :any, default: nil
+  attr :can_update_media, :boolean, required: true
 
   def season_order_controls(assigns) do
     ~H"""
-    <div :if={tvdb_show?(@media_item)} class="mb-4 space-y-3">
+    <div :if={tvdb_show?(@media_item) and @can_update_media} class="mb-4 space-y-3">
       <div
         :if={@season_order_suggestion}
         id="season-order-suggestion"
