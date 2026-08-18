@@ -556,7 +556,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
 
   # Re-inserts one group, purely to force LiveView to redraw its row.
   # `group_row/1`'s `selected` and `expanded` attributes are derived from
-  # `@selection`/`@expanded_group_id`, not from the group struct itself, and a
+  # `@selection`/`@expanded_ids`, not from the group struct itself, and a
   # stream only redraws an item on an explicit insert/delete/reset -- so a
   # handler that only reassigns those has nothing else that would make the
   # checkbox or chevron move. A stream's contents can only be walked from

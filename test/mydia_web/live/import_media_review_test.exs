@@ -263,10 +263,27 @@ defmodule MydiaWeb.ImportMediaReviewTest do
     ready = seed_group(lp, cluster_key: "ready", min_confidence: 1.0)
     attention = seed_group(lp, cluster_key: "attention", min_confidence: 0.7, file_count: 9)
 
+    attention_file =
+      orphaned_media_file_fixture(%{
+        library_path_id: lp.id,
+        relative_path: "Attention Show/Season 01/a.mkv"
+      })
+
+    Repo.update_all(
+      from(f in Mydia.Library.MediaFile, where: f.id == ^attention_file.id),
+      set: [import_group_id: attention.id]
+    )
+
     {:ok, view, _html} = live(conn, ~p"/import")
 
     assert has_element?(view, "#group-toggle-#{ready.id} .hero-chevron-right")
     assert has_element?(view, "#group-toggle-#{attention.id} .hero-chevron-down")
+
+    # The attention group is visually open (chevron-down, asserted above),
+    # but the page is bounded to loading members for only one group at a
+    # time -- the one most recently clicked. Auto-expanding it on load must
+    # not eagerly load its members, or the whole point of the bound is lost.
+    refute has_element?(view, "#member-row-#{attention_file.id}")
   end
 
   test "the nav badge shows the pending group count", %{conn: conn} do
