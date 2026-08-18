@@ -1,69 +1,91 @@
 <Layouts.app {assigns}>
   <div class="max-w-5xl mx-auto p-4 flex flex-col gap-6">
-    <h1 class="text-3xl font-bold">Import</h1>
+    <div class="flex items-center justify-between gap-4">
+      <div>
+        <h1 class="text-3xl font-bold">Import</h1>
+        <p class="text-sm text-base-content/70 mt-1">
+          Scan media folders, match titles against metadata providers, and organize into your library
+        </p>
+      </div>
+    </div>
 
     <RunControl.run_control
       library_paths={@importable_library_paths}
+      selected_library_path_id={@selected_library_path_id}
       active_run={@active_run}
       outcome_run={@outcome_run}
       outcome_group_count={@outcome_group_count}
+      open={@run_control_open}
     />
 
-    <Components.library_picker
-      :if={length(@importable_library_paths) > 1}
-      library_paths={@importable_library_paths}
-      selected_id={@selected_library_path_id}
-      counts={@library_group_counts}
-    />
-
-    <Components.band_filter band={@band} counts={@band_counts} search={@search} />
-
-    <Components.bulk_bar
-      :if={
-        SelectionScope.count(@selection) > 0 or (@band != :all and @band != :ignored) or
-          @search != ""
-      }
-      count={SelectionScope.count(@selection)}
-      matching_count={@matching_count}
-    />
-
-    <div id="groups" phx-update="stream" class="flex flex-col divide-y divide-base-300">
-      <div id="no-groups" class="hidden only:block p-8 text-center opacity-70">
-        Nothing to review. Every file in this library is linked.
+    <div class="flex flex-col gap-4 mt-2">
+      <div class="flex items-center justify-between gap-4 flex-wrap">
+        <Components.library_picker
+          :if={length(@importable_library_paths) > 1}
+          library_paths={@importable_library_paths}
+          selected_id={@selected_library_path_id}
+          counts={@library_group_counts}
+        />
       </div>
-      <%= for {dom_id, group} <- @streams.groups do %>
-        <%= if group.status == "ignored" do %>
-          <Components.ignored_group_row id={dom_id} group={group} />
-        <% else %>
-          <Components.group_row
-            id={dom_id}
-            group={group}
-            band={ImportGroups.band(group)}
-            selected={SelectionScope.selected?(@selection, group.id)}
-            expanded={MapSet.member?(@expanded_ids, group.id)}
-            members={if @expanded_group_id == group.id, do: @streams.members, else: []}
-          />
-        <% end %>
-      <% end %>
-    </div>
 
-    <div class="join self-center">
-      <button
-        id="prev-page"
-        class="join-item btn btn-sm"
-        disabled={@cursor_stack == []}
-        phx-click="prev_page"
+      <Components.band_filter band={@band} counts={@band_counts} search={@search} />
+
+      <Components.bulk_bar
+        :if={SelectionScope.count(@selection) > 0 or @band != :all or @search != ""}
+        count={SelectionScope.count(@selection)}
+        matching_count={@matching_count}
+        page_count={length(@page_group_ids)}
+        band={@band}
+      />
+
+      <div
+        id="groups"
+        phx-update="stream"
+        class="list bg-base-100 rounded-box shadow-md border border-base-200 divide-y divide-base-200 overflow-hidden"
       >
-        Previous
-      </button>
-      <button
-        id="next-page"
-        class="join-item btn btn-sm"
-        disabled={is_nil(@next_cursor)}
-        phx-click="next_page"
-      >
-        Next
-      </button>
+        <div id="no-groups" class="hidden only:block p-12 text-center text-base-content/60">
+          <.icon name="hero-check-circle" class="w-10 h-10 mx-auto mb-2 opacity-30 text-success" />
+          <p class="font-medium text-base text-base-content/80">Nothing to review</p>
+          <p class="text-xs text-base-content/50 mt-1">Every file in this library is linked.</p>
+        </div>
+        <%= for {dom_id, group} <- @streams.groups do %>
+          <%= if group.status == "ignored" do %>
+            <Components.ignored_group_row
+              id={dom_id}
+              group={group}
+              selected={SelectionScope.selected?(@selection, group.id)}
+            />
+          <% else %>
+            <Components.group_row
+              id={dom_id}
+              group={group}
+              band={ImportGroups.band(group)}
+              selected={SelectionScope.selected?(@selection, group.id)}
+              expanded={MapSet.member?(@expanded_ids, group.id)}
+              members={if @expanded_group_id == group.id, do: @streams.members, else: []}
+            />
+          <% end %>
+        <% end %>
+      </div>
+
+      <div class="join self-center pt-2">
+        <button
+          id="prev-page"
+          class="join-item btn btn-sm"
+          disabled={@cursor_stack == []}
+          phx-click="prev_page"
+        >
+          <.icon name="hero-chevron-left" class="w-4 h-4 mr-0.5" /> Previous
+        </button>
+        <button
+          id="next-page"
+          class="join-item btn btn-sm"
+          disabled={is_nil(@next_cursor)}
+          phx-click="next_page"
+        >
+          Next <.icon name="hero-chevron-right" class="w-4 h-4 ml-0.5" />
+        </button>
+      </div>
     </div>
 
     <Components.match_search_modal state={@match_search} />

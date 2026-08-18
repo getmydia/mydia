@@ -23,6 +23,7 @@ defmodule Mydia.Library.SelectionScope do
 
   defstruct mode: :none,
             library_path_id: nil,
+            status: "pending",
             filter: %{},
             included_ids: MapSet.new(),
             excluded_ids: MapSet.new()
@@ -30,18 +31,20 @@ defmodule Mydia.Library.SelectionScope do
   @type t :: %__MODULE__{
           mode: :none | :page | :filter,
           library_path_id: binary() | nil,
+          status: String.t(),
           filter: map(),
           included_ids: MapSet.t(),
           excluded_ids: MapSet.t()
         }
 
-  @doc "An empty selection for one library path."
-  @spec new(binary()) :: t()
-  def new(library_path_id), do: %__MODULE__{library_path_id: library_path_id}
+  @doc "An empty selection for one library path and optional status (defaults to pending)."
+  @spec new(binary(), String.t()) :: t()
+  def new(library_path_id, status \\ "pending"),
+    do: %__MODULE__{library_path_id: library_path_id, status: status}
 
-  @doc "Clears the selection, keeping the library path."
+  @doc "Clears the selection, keeping the library path and status."
   @spec clear(t()) :: t()
-  def clear(%__MODULE__{library_path_id: id}), do: new(id)
+  def clear(%__MODULE__{library_path_id: id, status: status}), do: new(id, status)
 
   @doc """
   Selects exactly the given ids, replacing any previous selection.
@@ -158,17 +161,20 @@ defmodule Mydia.Library.SelectionScope do
 
   def to_query(%__MODULE__{mode: :page} = scope) do
     ImportGroup
-    |> where([g], g.library_path_id == ^scope.library_path_id and g.status == "pending")
+    |> where([g], g.library_path_id == ^scope.library_path_id and g.status == ^scope.status)
     |> where([g], g.id in ^MapSet.to_list(scope.included_ids))
   end
 
   def to_query(%__MODULE__{mode: :filter} = scope) do
     ImportGroup
-    |> where([g], g.library_path_id == ^scope.library_path_id and g.status == "pending")
-    |> apply_band(scope.filter[:band])
+    |> where([g], g.library_path_id == ^scope.library_path_id and g.status == ^scope.status)
+    |> apply_band(scope.status, scope.filter[:band])
     |> apply_search(scope.filter[:q])
     |> exclude_ids(MapSet.to_list(scope.excluded_ids))
   end
+
+  defp apply_band(query, "pending", band), do: apply_band(query, band)
+  defp apply_band(query, _status, _band), do: query
 
   defp apply_band(query, nil), do: query
   defp apply_band(query, :all), do: query

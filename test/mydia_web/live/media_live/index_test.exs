@@ -83,6 +83,14 @@ defmodule MydiaWeb.MediaLive.IndexTest do
       assert has_element?(view, "input[name='search']")
     end
 
+    test "import files button includes type param on movies and tv pages", %{conn: conn} do
+      {:ok, movies_view, _html} = live(conn, ~p"/movies")
+      assert has_element?(movies_view, "a[href='/import?type=movies']", "Import Files")
+
+      {:ok, tv_view, _html} = live(conn, ~p"/tv")
+      assert has_element?(tv_view, "a[href='/import?type=tv']", "Import Files")
+    end
+
     test "search filters by title (case-insensitive)", %{
       conn: conn,
       movie1: _movie1,

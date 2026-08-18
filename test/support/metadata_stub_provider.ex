@@ -190,14 +190,20 @@ defmodule Mydia.MetadataStubProvider do
       poster_path: "/stub-series-poster.jpg",
       imdb_id: "tt0000081",
       original_language: "en",
-      number_of_seasons: 1,
-      number_of_episodes: 2,
+      number_of_seasons: 2,
+      number_of_episodes: 4,
       vote_average: 9.0,
       seasons: [
         %SeasonInfo{
           season_number: 1,
           name: "Season 1",
           overview: "Stub season.",
+          episode_count: 2
+        },
+        %SeasonInfo{
+          season_number: 2,
+          name: "Season 2",
+          overview: "Stub season 2.",
           episode_count: 2
         }
       ]

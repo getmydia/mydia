@@ -9,16 +9,44 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
   use MydiaWeb, :html
 
   attr :library_paths, :list, required: true
+  attr :selected_library_path_id, :string, default: nil
   attr :active_run, :map, default: nil
   attr :outcome_run, :map, default: nil
   attr :outcome_group_count, :integer, default: 0
+  attr :open, :boolean, default: true
 
   def run_control(assigns) do
     ~H"""
-    <section id="import-run-control" class="card bg-base-100 shadow-xl">
-      <div class="card-body">
-        <h2 class="card-title">Import a library</h2>
+    <details
+      id="import-run-control"
+      class="group collapse collapse-arrow bg-base-100 shadow-md border border-base-200 rounded-2xl"
+      open={@open}
+    >
+      <summary class="collapse-title p-4 sm:p-5 cursor-pointer select-none flex items-center justify-between gap-4">
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+            <.icon name="hero-arrow-down-tray" class="w-4 h-4" />
+          </div>
+          <div class="flex items-center gap-2.5 flex-wrap min-w-0">
+            <h2 class="text-lg sm:text-xl font-bold">Import a library</h2>
+            <%= cond do %>
+              <% @active_run -> %>
+                <span class="badge badge-primary badge-sm gap-1 font-medium">
+                  <span class="loading loading-spinner loading-xs"></span>
+                  {phase_label(@active_run.phase)}
+                </span>
+              <% @outcome_run -> %>
+                <span class={["badge badge-sm font-medium", outcome_badge_class(@outcome_run.status)]}>
+                  {outcome_label(@outcome_run.status)}
+                </span>
+              <% true -> %>
+                <span class="badge badge-ghost badge-sm text-xs font-normal">New Import</span>
+            <% end %>
+          </div>
+        </div>
+      </summary>
 
+      <div class="collapse-content px-4 pb-4 sm:px-6 sm:pb-6 flex flex-col gap-5 pt-1">
         <.run_outcome
           :if={@outcome_run}
           run={@outcome_run}
@@ -28,14 +56,18 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
         <%= if @active_run do %>
           <.run_progress run={@active_run} />
         <% else %>
-          <.start_form library_paths={@library_paths} />
+          <.start_form
+            library_paths={@library_paths}
+            selected_library_path_id={@selected_library_path_id}
+          />
         <% end %>
       </div>
-    </section>
+    </details>
     """
   end
 
   attr :library_paths, :list, required: true
+  attr :selected_library_path_id, :string, default: nil
 
   defp start_form(assigns) do
     ~H"""
@@ -50,68 +82,85 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
       :if={@library_paths != []}
       for={%{}}
       id="start-run-form"
+      phx-change="select_library"
       phx-submit="start_run"
-      class="flex flex-col gap-4"
+      class="flex flex-col gap-5"
     >
       <fieldset class="flex flex-col gap-2">
-        <legend class="text-sm font-medium opacity-80">Library</legend>
-        <div class="grid gap-3">
+        <legend class="text-sm font-semibold text-base-content/80">Select Library</legend>
+        <div class="grid gap-3 sm:grid-cols-2">
           <%= for path <- @library_paths do %>
             <label class={[
-              "group card card-compact bg-base-100 border border-base-300 cursor-pointer transition-all duration-200",
-              "hover:border-primary hover:shadow-lg",
-              "has-checked:border-primary has-checked:bg-primary/5 has-checked:ring-2 has-checked:ring-primary/40"
+              "group card card-compact bg-base-200/40 border border-base-200 cursor-pointer transition-all duration-150 rounded-xl",
+              "hover:border-base-300 hover:bg-base-200/80",
+              "has-checked:border-primary has-checked:bg-primary/5 has-checked:ring-1 has-checked:ring-primary"
             ]}>
               <input
                 type="radio"
                 name="library_path_id"
                 value={path.id}
                 class="sr-only"
-                checked={path.id == default_library_path_id(@library_paths)}
+                checked={
+                  path.id == (@selected_library_path_id || default_library_path_id(@library_paths))
+                }
               />
-              <div class="card-body flex-row items-center gap-4">
+              <div class="card-body flex-row items-center gap-3.5 p-3.5">
                 <div class={[
-                  "flex items-center justify-center w-12 h-12 rounded-lg shrink-0 transition-transform group-hover:scale-105",
+                  "flex items-center justify-center w-10 h-10 rounded-lg shrink-0 transition-transform group-hover:scale-105",
                   library_type_bg_class(path.type)
                 ]}>
-                  <.icon name={library_type_icon(path.type)} class="w-6 h-6" />
+                  <.icon name={library_type_icon(path.type)} class="w-5 h-5" />
                 </div>
                 <div class="flex-1 min-w-0">
-                  <span class={["badge badge-sm mb-1", library_type_badge_class(path.type)]}>
+                  <span class={[
+                    "badge badge-xs font-medium mb-1",
+                    library_type_badge_class(path.type)
+                  ]}>
                     {library_type_display(path.type)}
                   </span>
-                  <p class="font-mono text-sm truncate text-base-content/80 group-has-checked:text-base-content">
+                  <p class="font-mono text-xs truncate text-base-content/70 group-has-checked:text-base-content group-has-checked:font-semibold">
                     {path.path}
                   </p>
                 </div>
-                <.icon
-                  name="hero-check"
-                  class="w-5 h-5 text-primary shrink-0 opacity-0 group-has-checked:opacity-100 transition-opacity"
-                />
+                <div class="shrink-0 flex items-center justify-center w-5 h-5 rounded-full border border-base-300 group-has-checked:border-primary group-has-checked:bg-primary text-primary-content transition-all">
+                  <.icon
+                    name="hero-check"
+                    class="w-3.5 h-3.5 opacity-0 group-has-checked:opacity-100 transition-opacity"
+                  />
+                </div>
               </div>
             </label>
           <% end %>
         </div>
       </fieldset>
 
-      <.input
-        id="start-run-mode"
-        name="mode"
-        type="select"
-        label="Mode"
-        value="review"
-        options={[
-          {"Review every match before it is added", "review"},
-          {"Add confident matches automatically", "unattended"}
-        ]}
-      />
+      <div class="max-w-md">
+        <.input
+          id="start-run-mode"
+          name="mode"
+          type="select"
+          label="Mode"
+          value="review"
+          options={[
+            {"Review every match before it is added", "review"},
+            {"Add confident matches automatically", "unattended"}
+          ]}
+        />
+      </div>
 
-      <p class="text-sm opacity-70">
-        The run keeps going if you close this page. You can stop it at any point and keep
-        everything it has already done.
+      <p class="text-xs text-base-content/60 flex items-center gap-1.5">
+        <.icon name="hero-information-circle" class="w-4 h-4 shrink-0 text-base-content/40" />
+        <span>
+          The run keeps going if you close this page. You can stop it at any point and keep
+          everything it has already done.
+        </span>
       </p>
 
-      <.button id="start-run-button" type="submit" variant="primary">Start</.button>
+      <div>
+        <.button id="start-run-button" type="submit" variant="primary">
+          <.icon name="hero-play" class="w-4 h-4 mr-1.5" /> Start
+        </.button>
+      </div>
     </.form>
     """
   end
@@ -126,25 +175,36 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
 
   defp run_progress(assigns) do
     ~H"""
-    <div id="run-progress" class="flex flex-col gap-3">
-      <div class="flex items-center gap-2">
-        <span class="loading loading-spinner loading-sm" />
-        <span class="font-medium">{phase_label(@run.phase)}</span>
-        <span :if={@run.status == :stopping} class="badge badge-warning">Stopping</span>
+    <div id="run-progress" class="flex flex-col gap-4">
+      <div class="flex items-center justify-between gap-3 flex-wrap">
+        <div class="flex items-center gap-2.5">
+          <span class="loading loading-spinner loading-sm text-primary" />
+          <span class="font-semibold text-base">{phase_label(@run.phase)}</span>
+          <span :if={@run.status == :stopping} class="badge badge-warning badge-sm">Stopping</span>
+        </div>
+        <span class="badge badge-ghost badge-sm">{mode_label(@run.mode)} mode</span>
       </div>
 
       <.run_stats run={@run} />
 
-      <p :if={@run.current_file} class="text-sm opacity-70 truncate">{@run.current_file}</p>
-
-      <.button
-        id="stop-run-button"
-        phx-click="stop_run"
-        disabled={@run.status == :stopping}
-        class="btn btn-outline btn-warning"
+      <div
+        :if={@run.current_file}
+        class="bg-base-200/50 rounded-lg px-3 py-2 text-xs font-mono text-base-content/70 truncate flex items-center gap-2 border border-base-200"
       >
-        Stop and keep progress
-      </.button>
+        <.icon name="hero-document" class="w-3.5 h-3.5 shrink-0 opacity-50" />
+        <span class="truncate">{@run.current_file}</span>
+      </div>
+
+      <div class="pt-1">
+        <.button
+          id="stop-run-button"
+          phx-click="stop_run"
+          disabled={@run.status == :stopping}
+          class="btn btn-sm btn-outline btn-warning"
+        >
+          <.icon name="hero-stop" class="w-4 h-4 mr-1" /> Stop and keep progress
+        </.button>
+      </div>
     </div>
     """
   end
@@ -159,19 +219,21 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
 
   defp run_outcome(assigns) do
     ~H"""
-    <div
-      id="run-outcome"
-      class={["alert flex-col items-start gap-3", outcome_alert_class(@run.status)]}
-    >
-      <div class="flex items-center gap-2 w-full">
-        <.icon name={outcome_icon(@run.status)} class="w-5 h-5 shrink-0" />
-        <span class="font-medium">{outcome_label(@run.status)}</span>
-        <span class="badge badge-ghost">{mode_label(@run.mode)}</span>
+    <div id="run-outcome" class="flex flex-col gap-4">
+      <div class={[
+        "alert flex items-center justify-between gap-3 py-3 px-4 shadow-sm",
+        outcome_alert_class(@run.status)
+      ]}>
+        <div class="flex items-center gap-2.5 min-w-0">
+          <.icon name={outcome_icon(@run.status)} class="w-5 h-5 shrink-0" />
+          <span class="font-semibold">{outcome_label(@run.status)}</span>
+          <span class="badge badge-sm badge-ghost opacity-80">{mode_label(@run.mode)}</span>
+        </div>
+
+        <.outcome_review_cta pending_groups={@pending_groups} />
       </div>
 
       <.run_stats run={@run} />
-
-      <.outcome_review_cta pending_groups={@pending_groups} />
 
       <%!--
         Rendered for any status that carries an error, not only :failed. A run
@@ -179,9 +241,12 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
         lands on :stopped with the explanation in this field, and hiding it
         would leave the user with a bare "Import stopped" and no reason.
       --%>
-      <div :if={@run.error} class="w-full">
-        <p class="text-sm opacity-70 mb-1">{error_label(@run.status)}</p>
-        <pre class="text-xs whitespace-pre-wrap break-all bg-base-100/60 rounded-lg p-2">{@run.error}</pre>
+      <div :if={@run.error} class="bg-error/10 border border-error/20 rounded-xl p-3.5 text-xs">
+        <p class="font-semibold text-error mb-1.5 flex items-center gap-1.5">
+          <.icon name="hero-exclamation-triangle" class="w-4 h-4 shrink-0" />
+          {error_label(@run.status)}
+        </p>
+        <pre class="font-mono text-xs whitespace-pre-wrap break-all bg-base-100/90 rounded-lg p-2.5 text-base-content/90 border border-base-200">{@run.error}</pre>
       </div>
     </div>
     """
@@ -197,9 +262,9 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
 
   defp outcome_review_cta(assigns) do
     ~H"""
-    <div :if={@pending_groups > 0} class="w-full">
-      <.link navigate={~p"/import"} class="btn btn-sm btn-outline">
-        <.icon name="hero-inbox-stack" class="w-4 h-4" />
+    <div :if={@pending_groups > 0} class="shrink-0">
+      <.link navigate={~p"/import"} class="btn btn-xs sm:btn-sm btn-primary shadow-sm">
+        <.icon name="hero-inbox-stack" class="w-4 h-4 mr-1" />
         Review {@pending_groups} group(s) that need attention
       </.link>
     </div>
@@ -210,18 +275,20 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
 
   defp run_stats(assigns) do
     ~H"""
-    <div class="stats stats-horizontal shadow">
-      <div class="stat">
-        <div class="stat-title">Found</div>
-        <div class="stat-value text-2xl">{number(@run.files_discovered)}</div>
+    <div class="stats stats-horizontal bg-base-200/50 border border-base-200 w-full grid grid-cols-3 divide-x divide-base-200 rounded-xl overflow-hidden">
+      <div class="stat px-4 py-3">
+        <div class="stat-title text-xs font-medium text-base-content/60">Found</div>
+        <div class="stat-value text-xl font-bold text-base-content">
+          {number(@run.files_discovered)}
+        </div>
       </div>
-      <div class="stat">
-        <div class="stat-title">Matched</div>
-        <div class="stat-value text-2xl">{number(@run.files_matched)}</div>
+      <div class="stat px-4 py-3">
+        <div class="stat-title text-xs font-medium text-base-content/60">Matched</div>
+        <div class="stat-value text-xl font-bold text-base-content">{number(@run.files_matched)}</div>
       </div>
-      <div class="stat">
-        <div class="stat-title">Added</div>
-        <div class="stat-value text-2xl">{number(@run.files_linked)}</div>
+      <div class="stat px-4 py-3">
+        <div class="stat-title text-xs font-medium text-base-content/60">Added</div>
+        <div class="stat-value text-xl font-bold text-success">{number(@run.files_linked)}</div>
       </div>
     </div>
     """
@@ -241,6 +308,10 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
   defp outcome_alert_class(:done), do: "alert-success"
   defp outcome_alert_class(:failed), do: "alert-error"
   defp outcome_alert_class(:stopped), do: "alert-warning"
+
+  defp outcome_badge_class(:done), do: "badge-success"
+  defp outcome_badge_class(:failed), do: "badge-error"
+  defp outcome_badge_class(:stopped), do: "badge-warning"
 
   defp outcome_icon(:done), do: "hero-check-circle"
   defp outcome_icon(:failed), do: "hero-exclamation-triangle"

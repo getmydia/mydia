@@ -323,6 +323,47 @@ defmodule MydiaWeb.ImportMediaReviewTest do
     assert has_element?(view, "#member-#{file.id}")
   end
 
+  test "expanding another group collapses the previously expanded group", %{conn: conn} do
+    lp = library_path_fixture(%{type: "series"})
+    group_a = seed_group(lp, cluster_key: "a", display_title: "Show A", min_confidence: 1.0)
+    group_b = seed_group(lp, cluster_key: "b", display_title: "Show B", min_confidence: 1.0)
+
+    file_a =
+      orphaned_media_file_fixture(%{
+        library_path_id: lp.id,
+        relative_path: "Show A/Season 01/a.mkv"
+      })
+
+    file_b =
+      orphaned_media_file_fixture(%{
+        library_path_id: lp.id,
+        relative_path: "Show B/Season 01/b.mkv"
+      })
+
+    Repo.update_all(from(f in Mydia.Library.MediaFile, where: f.id == ^file_a.id),
+      set: [import_group_id: group_a.id]
+    )
+
+    Repo.update_all(from(f in Mydia.Library.MediaFile, where: f.id == ^file_b.id),
+      set: [import_group_id: group_b.id]
+    )
+
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    # Expand Group A
+    view |> element("#group-toggle-#{group_a.id}") |> render_click()
+    assert has_element?(view, "#member-#{file_a.id}")
+    assert has_element?(view, "#group-toggle-#{group_a.id} .hero-chevron-down")
+    assert has_element?(view, "#group-toggle-#{group_b.id} .hero-chevron-right")
+
+    # Expand Group B -> Group A collapses, Group B expands
+    view |> element("#group-toggle-#{group_b.id}") |> render_click()
+    assert has_element?(view, "#member-#{file_b.id}")
+    refute has_element?(view, "#member-#{file_a.id}")
+    assert has_element?(view, "#group-toggle-#{group_a.id} .hero-chevron-right")
+    assert has_element?(view, "#group-toggle-#{group_b.id} .hero-chevron-down")
+  end
+
   test "select all matching the filter accepts every ready group", %{conn: conn} do
     lp = library_path_fixture(%{type: "series"})
     for n <- 1..3, do: seed_group(lp, cluster_key: "r#{n}", min_confidence: 1.0)
@@ -443,6 +484,52 @@ defmodule MydiaWeb.ImportMediaReviewTest do
 
     assert has_element?(view, "#group-#{b.id}")
     refute has_element?(view, "#group-#{a.id}")
+  end
+
+  test "navigating with type=movies selects the movie library in review panel", %{conn: conn} do
+    lp1 =
+      library_path_fixture(%{
+        type: "series",
+        path: "/tmp/import_review_lib_a_#{System.unique_integer([:positive])}"
+      })
+
+    lp2 =
+      library_path_fixture(%{
+        type: "movies",
+        path: "/tmp/import_review_lib_b_#{System.unique_integer([:positive])}"
+      })
+
+    a = seed_group(lp1, cluster_key: "a", display_title: "Library A Group")
+    b = seed_group(lp2, cluster_key: "b", display_title: "Library B Group")
+
+    {:ok, view, _html} = live(conn, ~p"/import?type=movies")
+
+    assert has_element?(view, "#group-#{b.id}")
+    refute has_element?(view, "#group-#{a.id}")
+    assert has_element?(view, "#library-picker-#{lp2.id}.btn-primary")
+  end
+
+  test "navigating with type=tv selects the tv library in review panel", %{conn: conn} do
+    lp1 =
+      library_path_fixture(%{
+        type: "movies",
+        path: "/tmp/import_review_lib_a_#{System.unique_integer([:positive])}"
+      })
+
+    lp2 =
+      library_path_fixture(%{
+        type: "series",
+        path: "/tmp/import_review_lib_b_#{System.unique_integer([:positive])}"
+      })
+
+    a = seed_group(lp1, cluster_key: "a", display_title: "Library A Group")
+    b = seed_group(lp2, cluster_key: "b", display_title: "Library B Group")
+
+    {:ok, view, _html} = live(conn, ~p"/import?type=tv")
+
+    assert has_element?(view, "#group-#{b.id}")
+    refute has_element?(view, "#group-#{a.id}")
+    assert has_element?(view, "#library-picker-#{lp2.id}.btn-primary")
   end
 
   test "the page issues no query on the disconnected render", %{conn: conn} do
@@ -636,6 +723,33 @@ defmodule MydiaWeb.ImportMediaReviewTest do
     assert Repo.aggregate(Mydia.Media.MediaItem, :count) == 0
     refute Repo.reload!(file).episode_id
     assert Repo.reload!(group).provider_type != "local"
+  end
+
+  test "readonly users cannot restore selected ignored groups", %{conn: conn} do
+    lp = library_path_fixture(%{type: "series"})
+    group = seed_group(lp, cluster_key: "readonly-restore", status: "ignored")
+
+    readonly_conn = log_in_user(conn, user_fixture(%{role: "readonly"}))
+    {:ok, view, _html} = live(readonly_conn, ~p"/import")
+
+    render_click(view, "select_band", %{"band" => "ignored"})
+    render_click(view, "toggle_group", %{"id" => group.id})
+    render_click(view, "restore_selected", %{})
+
+    assert Repo.reload!(group).status == "ignored"
+  end
+
+  test "readonly users cannot batch rematch", %{conn: conn} do
+    lp = library_path_fixture(%{type: "series"})
+    group = seed_group(lp, cluster_key: "readonly-batch-rematch", provider_id: nil)
+
+    readonly_conn = log_in_user(conn, user_fixture(%{role: "readonly"}))
+    {:ok, view, _html} = live(readonly_conn, ~p"/import")
+
+    render_click(view, "toggle_group", %{"id" => group.id})
+    render_click(view, "rematch_selected", %{})
+
+    assert Repo.reload!(group).provider_id == nil
   end
 
   describe "Change match" do
@@ -867,7 +981,9 @@ defmodule MydiaWeb.ImportMediaReviewTest do
       view |> element("#band-ignored") |> render_click()
 
       assert has_element?(view, "#restore-#{ignored.id}")
-      refute has_element?(view, "#group-#{ignored.id} input[type=checkbox]")
+      assert has_element?(view, "#group-#{ignored.id} input[type=checkbox]")
+      refute has_element?(view, "#change-match-#{ignored.id}")
+      refute has_element?(view, "#create-local-#{ignored.id}")
     end
 
     test "restoring a group returns it to pending and moves it back off the Ignored view",
@@ -912,5 +1028,246 @@ defmodule MydiaWeb.ImportMediaReviewTest do
     render_click(view, "restore_group", %{"id" => group.id})
 
     assert Repo.reload!(group).status == "ignored"
+  end
+
+  describe "member episode editing" do
+    test "renders filename, folder, matched episode badge, and inline S/E inputs", %{conn: conn} do
+      lp = library_path_fixture(%{type: "series"})
+
+      group =
+        seed_group(lp, cluster_key: "ep-edit", display_title: "My Show", min_confidence: 1.0)
+
+      file =
+        orphaned_media_file_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "My Show/Season 01/My.Show.S01E03.1080p.mkv"
+        })
+
+      %Mydia.Library.MatchCandidate{}
+      |> Mydia.Library.MatchCandidate.changeset(%{
+        media_file_id: file.id,
+        rank: 0,
+        provider_type: "tvdb",
+        provider_id: "1",
+        title: "My Show",
+        confidence: 1.0,
+        parsed_info: %{"season" => 1, "episodes" => [3]}
+      })
+      |> Repo.insert!()
+
+      Repo.update_all(from(f in Mydia.Library.MediaFile, where: f.id == ^file.id),
+        set: [import_group_id: group.id]
+      )
+
+      {:ok, view, _html} = live(conn, ~p"/import")
+
+      view |> element("#group-toggle-#{group.id}") |> render_click()
+
+      assert has_element?(view, "#member-#{file.id}", "My.Show.S01E03.1080p.mkv")
+      assert has_element?(view, "#member-row-#{file.id}", "My Show/Season 01")
+      assert has_element?(view, "#member-row-#{file.id}", "S01E03")
+      assert has_element?(view, "#member-form-#{file.id} input[name=season][value='1']")
+      assert has_element?(view, "#member-form-#{file.id} input[name=episode][value='3']")
+    end
+
+    test "changing season and episode updates candidate parsed_info and LiveView UI", %{
+      conn: conn
+    } do
+      lp = library_path_fixture(%{type: "series"})
+
+      group =
+        seed_group(lp, cluster_key: "ep-change", display_title: "My Show", min_confidence: 1.0)
+
+      file =
+        orphaned_media_file_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "My Show/Season 01/ep.mkv"
+        })
+
+      Repo.update_all(from(f in Mydia.Library.MediaFile, where: f.id == ^file.id),
+        set: [import_group_id: group.id]
+      )
+
+      {:ok, view, _html} = live(conn, ~p"/import")
+      view |> element("#group-toggle-#{group.id}") |> render_click()
+
+      assert has_element?(view, "#member-row-#{file.id}", "No episode")
+
+      view
+      |> element("#member-form-#{file.id}")
+      |> render_change(%{"file_id" => file.id, "season" => "2", "episode" => "8"})
+
+      assert has_element?(view, "#member-row-#{file.id}", "S02E08")
+
+      candidate = Repo.get_by!(Mydia.Library.MatchCandidate, media_file_id: file.id, rank: 0)
+      assert candidate.parsed_info["season"] == 2
+      assert candidate.parsed_info["episodes"] == [8]
+    end
+
+    test "readonly users cannot update member episodes", %{conn: conn} do
+      lp = library_path_fixture(%{type: "series"})
+
+      group =
+        seed_group(lp, cluster_key: "readonly-ep", display_title: "Show", min_confidence: 1.0)
+
+      file =
+        orphaned_media_file_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "Show/Season 01/a.mkv"
+        })
+
+      Repo.update_all(from(f in Mydia.Library.MediaFile, where: f.id == ^file.id),
+        set: [import_group_id: group.id]
+      )
+
+      readonly_conn = log_in_user(conn, user_fixture(%{role: "readonly"}))
+      {:ok, view, _html} = live(readonly_conn, ~p"/import")
+
+      render_change(view, "update_member_episode", %{
+        "file_id" => file.id,
+        "season" => "1",
+        "episode" => "1"
+      })
+
+      assert is_nil(Repo.get_by(Mydia.Library.MatchCandidate, media_file_id: file.id, rank: 0))
+    end
+
+    test "movie groups do not render season span badges or episode editing forms", %{conn: conn} do
+      lp = library_path_fixture(%{type: "movies"})
+
+      group =
+        seed_group(lp,
+          cluster_key: "movie-1",
+          display_title: "Inception",
+          media_type: "movie",
+          min_confidence: 1.0
+        )
+
+      file =
+        orphaned_media_file_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "Inception (2010)/Inception.2010.1080p.mkv"
+        })
+
+      Repo.update_all(from(f in Mydia.Library.MediaFile, where: f.id == ^file.id),
+        set: [import_group_id: group.id]
+      )
+
+      {:ok, view, _html} = live(conn, ~p"/import")
+      view |> element("#group-toggle-#{group.id}") |> render_click()
+
+      assert has_element?(view, "#member-#{file.id}", "Inception.2010.1080p.mkv")
+      refute has_element?(view, "#member-form-#{file.id}")
+      refute has_element?(view, "#member-row-#{file.id}", "No episode")
+      refute has_element?(view, "#group-toggle-#{group.id}", "S1")
+    end
+  end
+
+  describe "batch actions" do
+    test "select page selects all visible groups on current page", %{conn: conn} do
+      lp = library_path_fixture(%{type: "series"})
+      g1 = seed_group(lp, cluster_key: "g1", display_title: "Show 1")
+      g2 = seed_group(lp, cluster_key: "g2", display_title: "Show 2")
+
+      {:ok, view, _html} = live(conn, ~p"/import")
+
+      render_click(view, "select_band", %{"band" => "all"})
+      # Clicking select current page
+      render_click(view, "select_current_page", %{})
+
+      assert has_element?(view, "#bulk-bar", "2 group(s) selected")
+      assert has_element?(view, "#group-#{g1.id} input[type=checkbox]:checked")
+      assert has_element?(view, "#group-#{g2.id} input[type=checkbox]:checked")
+    end
+
+    test "ignored view supports selection, select-all, and batch restore", %{conn: conn} do
+      lp = library_path_fixture(%{type: "series"})
+      g1 = seed_group(lp, cluster_key: "ig1", display_title: "Ignored 1", status: "ignored")
+      g2 = seed_group(lp, cluster_key: "ig2", display_title: "Ignored 2", status: "ignored")
+
+      {:ok, view, _html} = live(conn, ~p"/import")
+
+      render_click(view, "select_band", %{"band" => "ignored"})
+
+      assert has_element?(view, "#restore-#{g1.id}")
+      assert has_element?(view, "#restore-#{g2.id}")
+
+      # Toggle individual ignored group
+      render_click(view, "toggle_group", %{"id" => g1.id})
+      assert has_element?(view, "#bulk-bar", "1 group(s) selected")
+      assert has_element?(view, "#restore-selected", "Restore 1")
+      refute has_element?(view, "#accept-selected")
+
+      # Select all matching
+      render_click(view, "select_all_matching", %{})
+      assert has_element?(view, "#bulk-bar", "2 group(s) selected")
+      assert has_element?(view, "#restore-selected", "Restore 2")
+
+      # Click restore selected
+      render_click(view, "restore_selected", %{})
+
+      assert render(view) =~ "Restored 2 group(s) to pending."
+      assert Repo.reload!(g1).status == "pending"
+      assert Repo.reload!(g2).status == "pending"
+    end
+
+    test "local show creation is available per row, not as a batch action", %{conn: conn} do
+      lp = library_path_fixture(%{type: "series", path: "/media/Series"})
+
+      g1 =
+        seed_group(lp,
+          cluster_key: "no-match-1",
+          display_title: "Custom Show One (2020)",
+          provider_id: nil,
+          min_confidence: nil
+        )
+
+      {:ok, view, _html} = live(conn, ~p"/import")
+
+      render_click(view, "select_band", %{"band" => "no_match"})
+      render_click(view, "toggle_group", %{"id" => g1.id})
+
+      refute has_element?(view, "#create-local-selected")
+      assert has_element?(view, "#create-local-#{g1.id}", "Create show from folder")
+    end
+
+    test "batch rematch re-runs matcher on selected groups", %{conn: conn} do
+      lp = library_path_fixture(%{type: "series", path: "/media/Series"})
+
+      g1 =
+        seed_group(lp,
+          cluster_key: "rematch-1",
+          display_title: "Doctor Who (2005)",
+          provider_id: nil,
+          min_confidence: nil
+        )
+
+      file =
+        orphaned_media_file_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "Doctor Who (2005)/Season 01/Doctor Who - S01E01.mkv"
+        })
+
+      %Mydia.Library.MatchCandidate{}
+      |> Mydia.Library.MatchCandidate.changeset(%{
+        media_file_id: file.id,
+        rank: 0,
+        last_error: "no_match"
+      })
+      |> Repo.insert!()
+
+      Repo.update_all(from(f in Mydia.Library.MediaFile, where: f.id == ^file.id),
+        set: [import_group_id: g1.id]
+      )
+
+      {:ok, view, _html} = live(conn, ~p"/import")
+
+      render_click(view, "toggle_group", %{"id" => g1.id})
+      assert has_element?(view, "#rematch-selected")
+
+      render_click(view, "rematch_selected", %{})
+
+      assert render(view) =~ "Re-matched 1 group(s)."
+    end
   end
 end

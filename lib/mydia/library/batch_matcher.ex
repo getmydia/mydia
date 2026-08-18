@@ -128,8 +128,17 @@ defmodule Mydia.Library.BatchMatcher do
   # names the media, not the filename: two hundred episodes of one show are
   # one decision, and the grouping holds even when filenames are noisy, which
   # is exactly when per-filename grouping falls apart.
+  #
+  # Loose files (those with no enclosing folder under library_root, or whose
+  # folders were denylisted) do not share an anchor folder and must not share
+  # a single resolution. Each loose file gets its own path as the key so it
+  # is matched independently on its own filename.
   defp group_key(path, library_root) do
-    PathAnchor.anchor_for(path, library_root).cluster_key
+    case PathAnchor.anchor_for(path, library_root) do
+      %{anchor_path: ""} -> path
+      %{cluster_key: "__root__"} -> path
+      anchor -> anchor.cluster_key
+    end
   end
 
   ## Matching

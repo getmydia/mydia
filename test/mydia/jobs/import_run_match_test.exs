@@ -144,6 +144,66 @@ defmodule Mydia.Jobs.ImportRunMatchTest do
     assert :counters.get(counter, 1) > 0
   end
 
+  test "loose files in root match independently against metadata relay", %{
+    bypass: bypass,
+    config: config
+  } do
+    Bypass.stub(bypass, "GET", "/tmdb/movies/search", fn conn ->
+      conn = Plug.Conn.fetch_query_params(conn)
+      query = conn.query_params["query"]
+
+      results =
+        case query do
+          "The Matrix" ->
+            [%{"id" => 603, "title" => "The Matrix", "release_date" => "1999-03-30"}]
+
+          "Inception" ->
+            [%{"id" => 27205, "title" => "Inception", "release_date" => "2010-07-15"}]
+
+          _ ->
+            []
+        end
+
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, Jason.encode!(%{"results" => results}))
+    end)
+
+    dir = Path.join(System.tmp_dir!(), "loose_match_#{System.unique_integer([:positive])}")
+    File.mkdir_p!(dir)
+    File.write!(Path.join(dir, "The.Matrix.1999.1080p.mkv"), "x")
+    File.write!(Path.join(dir, "Inception.2010.1080p.mkv"), "x")
+    on_exit(fn -> File.rm_rf!(dir) end)
+
+    lp = library_path_fixture(%{path: dir, type: "movies"})
+
+    {:ok, run} =
+      Library.create_import_run(%{
+        library_path_id: lp.id,
+        user_id: user_fixture().id,
+        mode: :review
+      })
+
+    :ok = ImportRunJob.run_scan_phase(Library.get_import_run(run.id))
+    :ok = ImportRunJob.run_match_phase(Library.get_import_run(run.id), config: config)
+
+    matrix_file =
+      Library.list_media_files_by_relative_path(lp.id, "The.Matrix.1999.1080p.mkv")
+      |> List.first()
+
+    inception_file =
+      Library.list_media_files_by_relative_path(lp.id, "Inception.2010.1080p.mkv") |> List.first()
+
+    matrix_candidate = Library.list_match_candidates(matrix_file.id) |> List.first()
+    inception_candidate = Library.list_match_candidates(inception_file.id) |> List.first()
+
+    assert matrix_candidate.title == "The Matrix"
+    assert matrix_candidate.provider_id == "603"
+
+    assert inception_candidate.title == "Inception"
+    assert inception_candidate.provider_id == "27205"
+  end
+
   test "stops at the chunk boundary when asked", %{run: run, config: config, counter: counter} do
     {:ok, _} = Library.request_import_run_stop(Library.get_import_run(run.id))
 

@@ -230,50 +230,53 @@ defmodule Mydia.Jobs.ApplyImportGroupsTest do
   # `drain/2`'s recursive branch never runs there. This test forces it with a
   # tiny `member_page` job arg instead of inserting a thousand rows: three
   # resolvable members, paged two at a time, so applying the group takes two
-  # `drain/2` calls, not one. Movie files are used (rather than a second TV
-  # season) because a movie's association is per-file, not per-episode, so
-  # three separate files can all resolve against the stub's single movie
-  # without running into the stub's two-episode-per-season ceiling.
+  # `drain/2` calls, not one.
   test "drains a group across multiple pages when member_page caps below its size" do
-    movie_lp = library_path_fixture(%{type: "movies", path: "/media/Movies"})
-    movie_title = MetadataStubProvider.movie_title()
-    movie_id = MetadataStubProvider.movie_tmdb_id() |> to_string()
+    series_lp = library_path_fixture(%{type: "series", path: "/media/TV"})
+    series_title = MetadataStubProvider.series_title()
+    series_id = MetadataStubProvider.series_tvdb_id() |> to_string()
 
-    for n <- 1..3 do
+    episodes = [
+      {"Season 01/S01E01.mkv", 1, 1},
+      {"Season 01/S01E02.mkv", 1, 2},
+      {"Season 02/S02E01.mkv", 2, 1}
+    ]
+
+    for {rel_path, season, ep} <- episodes do
       file =
         orphaned_media_file_fixture(%{
-          library_path_id: movie_lp.id,
-          relative_path: "#{movie_title} (1999)/copy#{n}.mkv"
+          library_path_id: series_lp.id,
+          relative_path: "#{series_title} (2020)/#{rel_path}"
         })
 
       %Mydia.Library.MatchCandidate{}
       |> Mydia.Library.MatchCandidate.changeset(%{
         media_file_id: file.id,
         rank: 0,
-        provider_id: movie_id,
-        provider_type: "tmdb",
-        title: movie_title,
-        media_type: "movie",
+        provider_id: series_id,
+        provider_type: "tvdb",
+        title: series_title,
+        media_type: "tv_show",
         confidence: 1.0,
-        parsed_info: %{}
+        parsed_info: %{"season" => season, "episodes" => [ep]}
       })
       |> Repo.insert!()
     end
 
-    {:ok, _} = ImportGroups.upsert_for_library(movie_lp)
+    {:ok, _} = ImportGroups.upsert_for_library(series_lp)
 
     scope =
-      movie_lp.id |> SelectionScope.new() |> SelectionScope.select_all_matching(%{band: :ready})
+      series_lp.id |> SelectionScope.new() |> SelectionScope.select_all_matching(%{band: :ready})
 
     assert {:ok, 1} = ImportGroups.accept(scope)
 
     assert :ok =
              perform_job(ApplyImportGroups, %{
-               "library_path_id" => movie_lp.id,
+               "library_path_id" => series_lp.id,
                "member_page" => 2
              })
 
-    group = Repo.get_by!(ImportGroup, library_path_id: movie_lp.id)
+    group = Repo.get_by!(ImportGroup, library_path_id: series_lp.id)
     assert group.status == "applied"
     assert group.unresolved_count == 0
   end

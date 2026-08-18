@@ -83,6 +83,43 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
     assert render(view) =~ "4,200"
   end
 
+  test "a completed run immediately refreshes the review groups", %{
+    conn: conn,
+    library_path: lp,
+    user: user
+  } do
+    {:ok, run} =
+      Library.create_import_run(%{library_path_id: lp.id, user_id: user.id, mode: :review})
+
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    media_file = orphaned_media_file_fixture(%{library_path_id: lp.id})
+
+    {:ok, _} =
+      Library.upsert_match_candidate(%{
+        media_file_id: media_file.id,
+        rank: 0,
+        provider_type: "tmdb",
+        provider_id: "603",
+        title: "The Matrix",
+        confidence: 0.95
+      })
+
+    {:ok, _} = ImportGroups.upsert_for_library(lp, import_run_id: run.id)
+    {[group], nil} = ImportGroups.page(lp.id)
+
+    refute has_element?(view, "#group-#{group.id}")
+
+    {:ok, finished} =
+      Library.update_import_run(run, %{status: :done, phase: :finished, files_matched: 1})
+
+    send(view.pid, {:import_run_progress, finished})
+
+    assert has_element?(view, "#group-#{group.id}")
+    assert has_element?(view, "#band-all .badge", "1")
+    refute has_element?(view, "details#import-run-control[open]")
+  end
+
   test "starting a run while another tab already started one shows a friendly message and does not create a duplicate",
        %{conn: conn, library_path: lp, user: user} do
     {:ok, view, _html} = live(conn, ~p"/import")
@@ -286,5 +323,114 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
 
     assert has_element?(view, "#run-outcome")
     refute has_element?(view, "#run-outcome a[href='/import']")
+  end
+
+  test "import control is open by default when there are no items to review", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    assert has_element?(view, "details#import-run-control[open]")
+  end
+
+  test "import control is collapsed by default when there are items to review", %{
+    conn: conn,
+    library_path: lp
+  } do
+    media_file = orphaned_media_file_fixture(%{library_path_id: lp.id})
+
+    {:ok, _} =
+      Library.upsert_match_candidate(%{
+        media_file_id: media_file.id,
+        rank: 0,
+        provider_type: "tmdb",
+        provider_id: "603",
+        title: "The Matrix",
+        confidence: 0.95
+      })
+
+    {:ok, _} = ImportGroups.upsert_for_library(lp)
+
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    assert has_element?(view, "details#import-run-control")
+    refute has_element?(view, "details#import-run-control[open]")
+  end
+
+  test "import control is open by default when an active run is in flight", %{
+    conn: conn,
+    library_path: lp,
+    user: user
+  } do
+    {:ok, _run} =
+      Library.create_import_run(%{library_path_id: lp.id, user_id: user.id, mode: :review})
+
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    assert has_element?(view, "details#import-run-control[open]")
+  end
+
+  test "pre-selects movie library in start form when type=movies query param is provided", %{
+    conn: conn
+  } do
+    lp_tv =
+      library_path_fixture(%{
+        type: "series",
+        path: "/tmp/lib_tv_#{System.unique_integer([:positive])}"
+      })
+
+    lp_movie =
+      library_path_fixture(%{
+        type: "movies",
+        path: "/tmp/lib_movie_#{System.unique_integer([:positive])}"
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/import?type=movies")
+
+    assert has_element?(view, "input[name='library_path_id'][value='#{lp_movie.id}'][checked]")
+    refute has_element?(view, "input[name='library_path_id'][value='#{lp_tv.id}'][checked]")
+  end
+
+  test "pre-selects tv library in start form when type=tv query param is provided", %{
+    conn: conn
+  } do
+    lp_movie =
+      library_path_fixture(%{
+        type: "movies",
+        path: "/tmp/lib_movie_#{System.unique_integer([:positive])}"
+      })
+
+    lp_tv =
+      library_path_fixture(%{
+        type: "series",
+        path: "/tmp/lib_tv_#{System.unique_integer([:positive])}"
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/import?type=tv")
+
+    assert has_element?(view, "input[name='library_path_id'][value='#{lp_tv.id}'][checked]")
+    refute has_element?(view, "input[name='library_path_id'][value='#{lp_movie.id}'][checked]")
+  end
+
+  test "changing library in start form triggers select_library and updates selected library", %{
+    conn: conn
+  } do
+    lp1 =
+      library_path_fixture(%{
+        type: "series",
+        path: "/tmp/lib_1_#{System.unique_integer([:positive])}"
+      })
+
+    lp2 =
+      library_path_fixture(%{
+        type: "movies",
+        path: "/tmp/lib_2_#{System.unique_integer([:positive])}"
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    view
+    |> element("#start-run-form")
+    |> render_change(%{"library_path_id" => lp2.id})
+
+    assert has_element?(view, "input[name='library_path_id'][value='#{lp2.id}'][checked]")
   end
 end

@@ -28,17 +28,35 @@ defmodule MydiaWeb.ImportMediaLive.Components do
 
   def library_picker(assigns) do
     ~H"""
-    <div class="flex items-center gap-2 flex-wrap">
+    <div class="flex items-center gap-1.5 flex-wrap bg-base-200/50 p-1 rounded-xl border border-base-200">
       <button
         :for={path <- @library_paths}
         type="button"
         id={"library-picker-#{path.id}"}
-        class={["btn btn-sm", if(path.id == @selected_id, do: "btn-primary", else: "btn-ghost")]}
+        class={[
+          "btn btn-sm transition-all",
+          if(path.id == @selected_id,
+            do: "btn-primary shadow-sm",
+            else: "btn-ghost text-base-content/70 hover:text-base-content"
+          )
+        ]}
         phx-click="select_library"
         phx-value-library_path_id={path.id}
       >
+        <.icon
+          name={if(path.type == :movies, do: "hero-film", else: "hero-tv")}
+          class="w-4 h-4 mr-1 opacity-70"
+        />
         {path.path}
-        <span class="badge badge-sm">{Map.get(@counts, path.id, 0)}</span>
+        <span class={[
+          "badge badge-sm ml-1",
+          if(path.id == @selected_id,
+            do: "badge-primary-content text-primary font-bold",
+            else: "badge-ghost"
+          )
+        ]}>
+          {Map.get(@counts, path.id, 0)}
+        </span>
       </button>
     </div>
     """
@@ -64,8 +82,8 @@ defmodule MydiaWeb.ImportMediaLive.Components do
 
   def band_filter(assigns) do
     ~H"""
-    <div class="flex items-center gap-2 flex-wrap">
-      <div class="filter">
+    <div class="flex items-center justify-between gap-3 flex-wrap">
+      <div class="filter flex items-center gap-1.5 flex-wrap">
         <label
           :for={
             {band, id, label} <- [
@@ -77,25 +95,42 @@ defmodule MydiaWeb.ImportMediaLive.Components do
             ]
           }
           id={id}
-          class={["btn btn-sm gap-1.5", @band == band && "btn-active"]}
+          class={[
+            "btn btn-sm gap-1.5 rounded-lg border cursor-pointer",
+            if(@band == band,
+              do: "btn-active btn-primary border-primary",
+              else: "btn-ghost border-base-200 bg-base-100 hover:bg-base-200"
+            )
+          ]}
           phx-click="select_band"
           phx-value-band={band}
         >
-          <input type="checkbox" class="checkbox checkbox-xs" checked={@band == band} tabindex="-1" />
+          <input type="checkbox" class="sr-only" checked={@band == band} tabindex="-1" />
           {label}
-          <span class="badge badge-sm">{count_for(@counts, band)}</span>
+          <span class={[
+            "badge badge-sm font-semibold",
+            if(@band == band, do: "badge-primary-content text-primary", else: "badge-ghost")
+          ]}>
+            {count_for(@counts, band)}
+          </span>
         </label>
       </div>
 
-      <form phx-change="search" id="import-search-form" class="ml-auto">
-        <input
-          type="text"
-          name="q"
-          value={@search}
-          placeholder="Search folder…"
-          phx-debounce="300"
-          class="input input-sm input-bordered"
-        />
+      <form phx-change="search" id="import-search-form" class="ml-auto w-full sm:w-auto">
+        <div class="relative">
+          <.icon
+            name="hero-magnifying-glass"
+            class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 opacity-50"
+          />
+          <input
+            type="text"
+            name="q"
+            value={@search}
+            placeholder="Search folder…"
+            phx-debounce="300"
+            class="input input-sm input-bordered pl-9 w-full sm:w-64"
+          />
+        </div>
       </form>
     </div>
     """
@@ -121,41 +156,80 @@ defmodule MydiaWeb.ImportMediaLive.Components do
   """
   attr :count, :integer, required: true
   attr :matching_count, :integer, required: true
+  attr :page_count, :integer, default: 0
+  attr :band, :atom, default: :all
 
   def bulk_bar(assigns) do
     ~H"""
-    <div class="alert alert-info flex-wrap gap-2" id="bulk-bar">
-      <span>{@count} group(s) selected.</span>
+    <div
+      class="alert alert-info shadow-sm flex items-center justify-between flex-wrap gap-3 py-2.5 px-4"
+      id="bulk-bar"
+    >
+      <div class="flex items-center gap-2.5 flex-wrap">
+        <.icon name="hero-check-circle" class="w-5 h-5 shrink-0" />
+        <span class="font-medium text-sm">{@count} group(s) selected</span>
 
-      <button
-        :if={@matching_count > @count}
-        id="select-all-matching"
-        class="btn btn-xs btn-ghost"
-        phx-click="select_all_matching"
-      >
-        Select all {@matching_count} matching this filter
-      </button>
+        <button
+          :if={@page_count > 0 and @count < @page_count}
+          id="select-current-page"
+          class="btn btn-xs btn-ghost underline hover:no-underline"
+          phx-click="select_current_page"
+        >
+          Select page ({@page_count})
+        </button>
 
-      <div class="ml-auto flex gap-2">
         <button
-          id="accept-selected"
-          class="btn btn-sm btn-primary"
-          disabled={@count == 0}
-          phx-click="accept_selected"
+          :if={@matching_count > @count}
+          id="select-all-matching"
+          class="btn btn-xs btn-ghost underline hover:no-underline"
+          phx-click="select_all_matching"
         >
-          Accept {@count}
+          Select all {@matching_count} matching this filter
         </button>
-        <button
-          id="ignore-selected"
-          class="btn btn-sm btn-ghost"
-          disabled={@count == 0}
-          phx-click="ignore_selected"
-        >
-          Ignore
-        </button>
-        <button id="clear-selection" class="btn btn-sm btn-ghost" phx-click="clear_selection">
-          Clear
-        </button>
+      </div>
+
+      <div class="flex items-center gap-2 ml-auto flex-wrap">
+        <%= if @band == :ignored do %>
+          <button
+            id="restore-selected"
+            class="btn btn-sm btn-primary"
+            disabled={@count == 0}
+            phx-click="restore_selected"
+          >
+            <.icon name="hero-arrow-uturn-left" class="w-4 h-4 mr-1" /> Restore {@count}
+          </button>
+          <button id="clear-selection" class="btn btn-sm btn-ghost" phx-click="clear_selection">
+            Clear
+          </button>
+        <% else %>
+          <button
+            id="accept-selected"
+            class="btn btn-sm btn-primary"
+            disabled={@count == 0}
+            phx-click="accept_selected"
+          >
+            <.icon name="hero-check" class="w-4 h-4 mr-1" /> Accept {@count}
+          </button>
+          <button
+            id="rematch-selected"
+            class="btn btn-sm btn-outline"
+            disabled={@count == 0}
+            phx-click="rematch_selected"
+          >
+            <.icon name="hero-arrow-path" class="w-4 h-4 mr-1" /> Re-match
+          </button>
+          <button
+            id="ignore-selected"
+            class="btn btn-sm btn-ghost"
+            disabled={@count == 0}
+            phx-click="ignore_selected"
+          >
+            Ignore
+          </button>
+          <button id="clear-selection" class="btn btn-sm btn-ghost" phx-click="clear_selection">
+            Clear
+          </button>
+        <% end %>
       </div>
     </div>
     """
@@ -181,11 +255,11 @@ defmodule MydiaWeb.ImportMediaLive.Components do
 
   def group_row(assigns) do
     ~H"""
-    <div id={@id} class="py-3">
-      <div class="flex items-center gap-3">
+    <div id={@id} class="p-3.5 sm:p-4 hover:bg-base-200/40 transition-colors flex flex-col gap-2">
+      <div class="flex items-center gap-3 min-w-0">
         <input
           type="checkbox"
-          class="checkbox checkbox-sm"
+          class="checkbox checkbox-primary checkbox-sm shrink-0"
           checked={@selected}
           aria-label={"Select #{@group.display_title}"}
           phx-click="toggle_group"
@@ -195,81 +269,190 @@ defmodule MydiaWeb.ImportMediaLive.Components do
         <button
           type="button"
           id={"group-toggle-#{@group.id}"}
-          class="flex-1 flex items-center gap-2 text-left"
+          class="flex-1 flex items-center gap-2 min-w-0 text-left cursor-pointer group/title"
           phx-click="expand_group"
           phx-value-id={@group.id}
         >
           <.icon
             name={if(@expanded, do: "hero-chevron-down", else: "hero-chevron-right")}
-            class="w-4 h-4 opacity-60"
+            class="w-4 h-4 opacity-50 group-hover/title:opacity-100 transition-opacity shrink-0"
           />
-          <span class="font-semibold">{@group.display_title}</span>
-          <span class="badge badge-sm">{@group.file_count} files</span>
-          <span :if={season_label(@group)} class="badge badge-ghost badge-sm">
+          <span class="font-semibold text-sm truncate group-hover/title:text-primary transition-colors">
+            {@group.display_title}
+          </span>
+          <span class="badge badge-ghost badge-sm shrink-0 font-normal">
+            {@group.file_count} file{if @group.file_count == 1, do: "", else: "s"}
+          </span>
+          <span :if={season_label(@group)} class="badge badge-ghost badge-sm shrink-0">
             {season_label(@group)}
           </span>
         </button>
 
-        <span class={["badge badge-sm", band_class(@band)]}>{band_label(@band)}</span>
+        <span class={["badge badge-sm shrink-0 font-medium", band_class(@band)]}>
+          {band_label(@band)}
+        </span>
       </div>
 
-      <p class="pl-10 text-sm opacity-70 flex items-center gap-2 flex-wrap">
-        {suggestion_line(@group)}
-        <span :if={evidence_label(@group.evidence)} class="badge badge-ghost badge-xs">
-          {evidence_label(@group.evidence)}
-        </span>
-        <button
-          id={"change-match-#{@group.id}"}
-          class="btn btn-xs btn-outline"
-          phx-click="open_match_search"
-          phx-value-id={@group.id}
-        >
-          {if @band == :no_match, do: "Identify", else: "Change match"}
-        </button>
-        <button
-          :if={@band == :no_match}
-          id={"create-local-#{@group.id}"}
-          class="btn btn-xs btn-outline"
-          phx-click="create_local_show"
-          phx-value-id={@group.id}
-        >
-          Create show from folder
-        </button>
-      </p>
+      <div class="pl-7 sm:pl-9 flex items-center justify-between gap-3 flex-wrap">
+        <div class="flex items-center gap-2 flex-wrap min-w-0 text-xs text-base-content/70">
+          <span class="font-medium text-base-content/90 truncate max-w-md">
+            {suggestion_line(@group)}
+          </span>
+          <span
+            :if={evidence_label(@group.evidence)}
+            class="badge badge-ghost badge-xs text-base-content/60"
+          >
+            {evidence_label(@group.evidence)}
+          </span>
+        </div>
 
-      <ul :if={@expanded} id={"members-#{@group.id}"} phx-update="stream" class="pl-10 pt-2">
-        <li :for={{member_dom_id, member} <- @members} id={member_dom_id} class="text-sm py-1">
-          <span id={"member-#{member.media_file.id}"}>{member.media_file.relative_path}</span>
-        </li>
-      </ul>
+        <div class="flex items-center gap-2 shrink-0">
+          <button
+            id={"change-match-#{@group.id}"}
+            class="btn btn-xs btn-outline"
+            phx-click="open_match_search"
+            phx-value-id={@group.id}
+          >
+            <.icon name="hero-pencil-square" class="w-3.5 h-3.5 mr-1 opacity-70" />
+            {if @band == :no_match, do: "Identify", else: "Change match"}
+          </button>
+          <button
+            :if={@band == :no_match}
+            id={"create-local-#{@group.id}"}
+            class="btn btn-xs btn-outline"
+            phx-click="create_local_show"
+            phx-value-id={@group.id}
+          >
+            <.icon name="hero-folder-plus" class="w-3.5 h-3.5 mr-1 opacity-70" />
+            Create show from folder
+          </button>
+        </div>
+      </div>
+
+      <div :if={@expanded} class="pl-7 sm:pl-9 pt-1">
+        <ul
+          id={"members-#{@group.id}"}
+          phx-update="stream"
+          class="bg-base-200/50 rounded-xl p-3 divide-y divide-base-200/60 max-h-80 overflow-y-auto"
+        >
+          <li
+            :for={{member_dom_id, member} <- @members}
+            id={member_dom_id}
+            class="py-2 first:pt-0 last:pb-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
+          >
+            <div class="flex items-center gap-2.5 min-w-0 flex-1">
+              <.icon name="hero-film" class="w-4 h-4 shrink-0 opacity-40 text-base-content" />
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2 flex-wrap min-w-0">
+                  <span
+                    id={"member-#{member.media_file.id}"}
+                    class="font-mono font-medium text-xs text-base-content/90 truncate"
+                    title={member.media_file.relative_path}
+                  >
+                    {member_filename(member)}
+                  </span>
+                  <span
+                    :if={@group.media_type != "movie"}
+                    class={[
+                      "badge badge-xs font-mono font-medium shrink-0",
+                      if(member_episode_badge(member) != "No episode",
+                        do: "badge-primary/20 text-primary",
+                        else: "badge-warning/20 text-warning"
+                      )
+                    ]}
+                  >
+                    {member_episode_badge(member)}
+                  </span>
+                </div>
+                <p
+                  :if={member_folder(member)}
+                  class="text-[11px] font-mono text-base-content/50 truncate mt-0.5"
+                >
+                  {member_folder(member)}
+                </p>
+              </div>
+            </div>
+
+            <form
+              :if={@group.media_type != "movie"}
+              id={"member-form-#{member.media_file.id}"}
+              phx-change="update_member_episode"
+              phx-submit="update_member_episode"
+              class="flex items-center gap-1.5 shrink-0 self-end sm:self-center"
+            >
+              <input type="hidden" name="file_id" value={member.media_file.id} />
+              <div class="join items-center bg-base-100 rounded-lg border border-base-300 shadow-xs">
+                <span class="join-item px-1.5 text-[11px] text-base-content/60 font-mono font-bold">
+                  S
+                </span>
+                <input
+                  type="number"
+                  name="season"
+                  value={member_season(member)}
+                  placeholder="--"
+                  min="0"
+                  max="999"
+                  phx-debounce="400"
+                  class="join-item input input-xs w-12 text-center font-mono border-0 focus:outline-none"
+                  aria-label={"Season for #{member_filename(member)}"}
+                />
+                <span class="join-item px-1.5 text-[11px] text-base-content/60 font-mono font-bold">
+                  E
+                </span>
+                <input
+                  type="number"
+                  name="episode"
+                  value={member_episode(member)}
+                  placeholder="--"
+                  min="0"
+                  max="9999"
+                  phx-debounce="400"
+                  class="join-item input input-xs w-14 text-center font-mono border-0 focus:outline-none"
+                  aria-label={"Episode for #{member_filename(member)}"}
+                />
+              </div>
+            </form>
+          </li>
+        </ul>
+      </div>
     </div>
     """
   end
 
   @doc """
   One row on the Ignored view.
-
-  Deliberately not a variant of `group_row/1`: an ignored group has nothing
-  to select, accept, change or expand -- accept/ignore/change_match all
-  refuse a non-"pending" group, and `SelectionScope`'s own query is hardcoded
-  to `status == "pending"`, so a checkbox here would either do nothing or
-  lie about what it does. The one thing this view offers is the way back.
   """
   attr :id, :string, required: true
   attr :group, :map, required: true
+  attr :selected, :boolean, default: false
 
   def ignored_group_row(assigns) do
     ~H"""
-    <div id={@id} class="py-3 flex items-center gap-3">
-      <span class="flex-1 flex items-center gap-2 min-w-0">
-        <span class="font-semibold truncate">{@group.display_title}</span>
-        <span class="badge badge-sm">{@group.file_count} files</span>
-        <span :if={season_label(@group)} class="badge badge-ghost badge-sm">
-          {season_label(@group)}
-        </span>
-      </span>
+    <div
+      id={@id}
+      class="p-3.5 sm:p-4 hover:bg-base-200/40 transition-colors flex items-center justify-between gap-3"
+    >
+      <div class="flex items-center gap-3 min-w-0 flex-1">
+        <input
+          type="checkbox"
+          class="checkbox checkbox-primary checkbox-sm shrink-0"
+          checked={@selected}
+          aria-label={"Select #{@group.display_title}"}
+          phx-click="toggle_group"
+          phx-value-id={@group.id}
+        />
 
-      <p class="text-sm opacity-70 truncate">{suggestion_line(@group)}</p>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="font-semibold text-sm truncate opacity-70">{@group.display_title}</span>
+            <span class="badge badge-ghost badge-sm shrink-0">{@group.file_count} files</span>
+            <span :if={season_label(@group)} class="badge badge-ghost badge-sm shrink-0">
+              {season_label(@group)}
+            </span>
+          </div>
+          <p class="text-xs text-base-content/50 truncate mt-0.5">{suggestion_line(@group)}</p>
+        </div>
+      </div>
 
       <button
         id={"restore-#{@group.id}"}
@@ -277,7 +460,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
         phx-click="restore_group"
         phx-value-id={@group.id}
       >
-        Restore
+        <.icon name="hero-arrow-uturn-left" class="w-3.5 h-3.5 mr-1" /> Restore
       </button>
     </div>
     """
@@ -298,39 +481,58 @@ defmodule MydiaWeb.ImportMediaLive.Components do
   def match_search_modal(assigns) do
     ~H"""
     <.modal id="match-search-modal" show={not is_nil(@state)} on_cancel="close_match_search">
-      <:title>Change match</:title>
+      <:title>
+        <div class="flex items-center gap-2">
+          <.icon name="hero-magnifying-glass" class="w-5 h-5 text-primary" />
+          <span>Change match</span>
+        </div>
+      </:title>
 
-      <form phx-change="match_search_query" id="match-search-form">
-        <input
-          type="text"
-          name="q"
-          value={@state && @state.query}
-          placeholder="Search by title…"
-          phx-debounce="300"
-          class="input input-bordered w-full"
-        />
+      <form phx-change="match_search_query" id="match-search-form" class="mt-3">
+        <div class="relative">
+          <.icon
+            name="hero-magnifying-glass"
+            class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 opacity-50"
+          />
+          <input
+            type="text"
+            name="q"
+            value={@state && @state.query}
+            placeholder="Search by title…"
+            phx-debounce="300"
+            class="input input-bordered w-full pl-10"
+          />
+        </div>
       </form>
 
-      <div :if={@state} class="mt-4 flex flex-col gap-1 max-h-96 overflow-y-auto" id="match-results">
-        <div :if={@state.searching} class="flex justify-center py-6">
-          <span class="loading loading-spinner loading-md"></span>
+      <div
+        :if={@state}
+        class="mt-4 flex flex-col gap-1.5 max-h-96 overflow-y-auto"
+        id="match-results"
+      >
+        <div :if={@state.searching} class="flex justify-center py-8">
+          <span class="loading loading-spinner loading-md text-primary"></span>
         </div>
 
         <div :if={!@state.searching}>
-          <p :if={@state.error} class="text-error text-sm py-2">{@state.error}</p>
+          <div :if={@state.error} class="alert alert-error text-xs py-2 mb-2">
+            <.icon name="hero-exclamation-triangle" class="w-4 h-4 shrink-0" />
+            <span>{@state.error}</span>
+          </div>
 
-          <p
+          <div
             :if={!@state.error && @state.results == []}
-            class="text-sm opacity-70 text-center py-6"
+            class="text-sm text-base-content/60 text-center py-10"
           >
-            No results.
-          </p>
+            <.icon name="hero-film" class="w-8 h-8 mx-auto mb-2 opacity-30" />
+            <p>No results found.</p>
+          </div>
 
           <button
             :for={result <- @state.results}
             type="button"
             id={"match-result-#{result.provider_id}-#{result.provider}"}
-            class="flex items-center gap-3 p-2 rounded-lg hover:bg-base-200 text-left w-full"
+            class="flex items-center gap-3.5 p-2.5 rounded-xl hover:bg-base-200 text-left w-full transition-colors border border-transparent hover:border-base-300"
             phx-click="select_match"
             phx-value-provider_id={result.provider_id}
             phx-value-provider={result.provider}
@@ -338,21 +540,24 @@ defmodule MydiaWeb.ImportMediaLive.Components do
             <img
               :if={result.poster_path}
               src={ImageUrl.image_url(result.poster_path, "w92")}
-              class="w-10 h-14 object-cover rounded shrink-0"
+              class="w-12 h-16 object-cover rounded-lg shrink-0 shadow-sm"
             />
             <div
               :if={!result.poster_path}
-              class="w-10 h-14 bg-base-300 rounded flex items-center justify-center shrink-0"
+              class="w-12 h-16 bg-base-300 rounded-lg flex items-center justify-center shrink-0"
             >
-              <.icon name="hero-film" class="w-5 h-5 opacity-40" />
+              <.icon name="hero-film" class="w-6 h-6 opacity-30" />
             </div>
             <div class="flex-1 min-w-0">
-              <p class="font-medium truncate">{result.title}</p>
-              <p class="text-xs opacity-60 flex items-center gap-1.5">
-                <span :if={result.year}>{result.year}</span>
-                <span class="badge badge-ghost badge-xs">{media_type_label(result.media_type)}</span>
+              <p class="font-semibold text-sm truncate">{result.title}</p>
+              <p class="text-xs text-base-content/60 flex items-center gap-1.5 mt-1">
+                <span :if={result.year} class="font-mono">{result.year}</span>
+                <span class="badge badge-ghost badge-xs font-medium">
+                  {media_type_label(result.media_type)}
+                </span>
               </p>
             </div>
+            <.icon name="hero-chevron-right" class="w-4 h-4 opacity-40 shrink-0" />
           </button>
         </div>
       </div>
@@ -375,6 +580,8 @@ defmodule MydiaWeb.ImportMediaLive.Components do
   defp band_label(:ready), do: "ready"
   defp band_label(:needs_attention), do: "needs attention"
   defp band_label(:no_match), do: "no match"
+
+  defp season_label(%{media_type: "movie"}), do: nil
 
   defp season_label(group) do
     case Mydia.Library.ImportGroup.season_span(group) do
@@ -419,4 +626,52 @@ defmodule MydiaWeb.ImportMediaLive.Components do
   defp evidence_label(%{"kind" => "none"}), do: nil
   defp evidence_label(%{"kind" => kind}) when is_binary(kind), do: kind
   defp evidence_label(_), do: nil
+
+  defp member_filename(member) do
+    Path.basename(member.media_file.relative_path || member.media_file.path || "")
+  end
+
+  defp member_folder(member) do
+    dir = Path.dirname(member.media_file.relative_path || member.media_file.path || "")
+    if dir in [".", "", "/"], do: nil, else: dir
+  end
+
+  defp member_season(%{candidate: %{parsed_info: %{} = info}}) do
+    case Map.get(info, "season") || Map.get(info, :season) do
+      s when is_integer(s) -> s
+      _ -> nil
+    end
+  end
+
+  defp member_season(_), do: nil
+
+  defp member_episode(%{candidate: %{parsed_info: %{} = info}}) do
+    episodes = Map.get(info, "episodes") || Map.get(info, :episodes) || []
+
+    case episodes do
+      [ep | _] when is_integer(ep) -> ep
+      _ -> nil
+    end
+  end
+
+  defp member_episode(_), do: nil
+
+  defp member_episode_badge(member) do
+    season = member_season(member)
+    episode = member_episode(member)
+
+    cond do
+      season != nil and episode != nil ->
+        "S#{String.pad_leading(to_string(season), 2, "0")}E#{String.pad_leading(to_string(episode), 2, "0")}"
+
+      season != nil ->
+        "S#{String.pad_leading(to_string(season), 2, "0")}"
+
+      episode != nil ->
+        "E#{String.pad_leading(to_string(episode), 2, "0")}"
+
+      true ->
+        "No episode"
+    end
+  end
 end
