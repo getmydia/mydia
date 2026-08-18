@@ -141,6 +141,8 @@ void main() {
         QueryKeys.tvShowsList,
         QueryKeys.favoritesList,
         QueryKeys.unwatchedList,
+        QueryKeys.continueWatchingList,
+        QueryKeys.recentlyAdded,
         QueryKeys.showDetail('7'),
       });
     });
@@ -161,6 +163,8 @@ void main() {
         QueryKeys.moviesList,
         QueryKeys.favoritesList,
         QueryKeys.unwatchedList,
+        QueryKeys.continueWatchingList,
+        QueryKeys.recentlyAdded,
         QueryKeys.movieDetail('m1'),
       });
     });
@@ -191,6 +195,8 @@ void main() {
         QueryKeys.moviesList,
         QueryKeys.favoritesList,
         QueryKeys.unwatchedList,
+        QueryKeys.continueWatchingList,
+        QueryKeys.recentlyAdded,
         QueryKeys.movieDetail('m1'),
       });
     });

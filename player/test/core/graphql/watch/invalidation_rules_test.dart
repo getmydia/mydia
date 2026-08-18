@@ -47,4 +47,51 @@ void main() {
       expect(InvalidationRules.progressSynced, isEmpty);
     });
   });
+
+  group('the Continue Watching screen', () {
+    test('is refreshed when an episode is marked watched', () {
+      final keys = InvalidationRules.watchedChanged(showId: 's1');
+
+      expect(keys, contains(QueryKeys.continueWatchingList));
+    });
+
+    test('is refreshed when a movie is marked watched', () {
+      final keys = InvalidationRules.movieWatchedChanged(movieId: 'm1');
+
+      expect(keys, contains(QueryKeys.continueWatchingList));
+    });
+
+    test('is refreshed when playback finishes', () {
+      final keys = InvalidationRules.playbackFinished(
+        mediaType: 'episode',
+        mediaId: 'e1',
+        showId: 's1',
+      );
+
+      expect(keys, contains(QueryKeys.continueWatchingList));
+    });
+  });
+
+  group('the Recently Added screen', () {
+    test('is refreshed when an episode is marked watched', () {
+      final keys = InvalidationRules.watchedChanged(showId: 's1');
+
+      expect(keys, contains(QueryKeys.recentlyAdded));
+    });
+
+    test('is refreshed when a movie is marked watched', () {
+      final keys = InvalidationRules.movieWatchedChanged(movieId: 'm1');
+
+      expect(keys, contains(QueryKeys.recentlyAdded));
+    });
+
+    test('is refreshed when playback finishes', () {
+      final keys = InvalidationRules.playbackFinished(
+        mediaType: 'movie',
+        mediaId: 'm1',
+      );
+
+      expect(keys, contains(QueryKeys.recentlyAdded));
+    });
+  });
 }

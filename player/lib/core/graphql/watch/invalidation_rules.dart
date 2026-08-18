@@ -30,6 +30,13 @@ abstract final class InvalidationRules {
   /// those grids render unwatched counts. `QueryKeys.unwatched` and
   /// `QueryKeys.unwatchedList` are different keys, and the library grid uses
   /// the latter, so listing only the former left the grid stale.
+  ///
+  /// `continueWatchingList` and `recentlyAdded` are here because both render
+  /// watch state and both were missing. `/continue-watching` sits in a plain
+  /// `ShellRoute`, so pushing a detail route on top leaves it mounted
+  /// offstage with its watcher registered and popping back never rebuilds
+  /// it: a card marked watched stayed on that screen for the life of the
+  /// screen. `RecentlyAddedFull` selects `watchStatus` and had the same hole.
   static Set<QueryKey> watchedChanged({
     required String showId,
     int? seasonNumber,
@@ -40,6 +47,8 @@ abstract final class InvalidationRules {
         QueryKeys.tvShowsList,
         QueryKeys.favoritesList,
         QueryKeys.unwatchedList,
+        QueryKeys.continueWatchingList,
+        QueryKeys.recentlyAdded,
         QueryKeys.showDetail(showId),
         if (seasonNumber != null)
           QueryKeys.seasonEpisodes(showId, seasonNumber),
@@ -59,6 +68,8 @@ abstract final class InvalidationRules {
         QueryKeys.moviesList,
         QueryKeys.favoritesList,
         QueryKeys.unwatchedList,
+        QueryKeys.continueWatchingList,
+        QueryKeys.recentlyAdded,
         QueryKeys.movieDetail(movieId),
       };
 
@@ -78,6 +89,8 @@ abstract final class InvalidationRules {
         QueryKeys.moviesList,
         QueryKeys.favoritesList,
         QueryKeys.unwatchedList,
+        QueryKeys.continueWatchingList,
+        QueryKeys.recentlyAdded,
         if (mediaType == 'movie') QueryKeys.movieDetail(mediaId),
         if (mediaType == 'episode') QueryKeys.episodeDetail(mediaId),
         if (mediaType == 'episode' && showId != null)
