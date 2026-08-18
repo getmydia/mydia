@@ -43,6 +43,10 @@ defmodule MydiaWeb.Layouts do
   attr :downloads_count, :integer, default: 0, doc: "number of active downloads"
   attr :pending_requests_count, :integer, default: 0, doc: "number of pending requests"
 
+  attr :import_group_count, :integer,
+    default: 0,
+    doc: "number of pending import groups awaiting review"
+
   attr :executing_jobs, :list, default: [], doc: "list of currently executing background jobs"
   attr :feedback_enabled?, :boolean, default: false, doc: "whether to render feedback UI"
   attr :show_feedback_modal, :boolean, default: false, doc: "whether the feedback modal is open"

@@ -160,6 +160,54 @@ defmodule Mydia.Jobs.ApplyImportGroupsTest do
     assert Enum.all?(linked_files, & &1.episode_id)
   end
 
+  # Regression: `provider_type/2` used to call `String.to_existing_atom/1` on
+  # this free-text column. A value the VM had never interned as an atom
+  # raised `ArgumentError`, which `safe_ingest/2` caught -- so the member
+  # never got a fair shot at ingesting even with a perfectly valid
+  # provider_id, and the group sat "accepted" until `max_attempts` exhausted
+  # it. Proves the fallback by using a *real* tvdb id (resolvable by the
+  # stub) alongside a provider_type value guaranteed to never already be an
+  # atom: the group must still reach "applied", which only happens if
+  # provider_type/2 maps the garbage value to :tvdb instead of raising on it.
+  test "an unrecognized provider_type on the candidate falls back instead of raising" do
+    lp = library_path_fixture(%{type: "series", path: "/media/BogusProviderType"})
+    title = MetadataStubProvider.series_title()
+    series_id = MetadataStubProvider.series_tvdb_id() |> to_string()
+    bogus_provider_type = "not_a_real_provider_#{System.unique_integer([:positive])}"
+
+    for n <- 1..2 do
+      file =
+        orphaned_media_file_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "#{title}/Season 01/ep#{n}.mkv"
+        })
+
+      %Mydia.Library.MatchCandidate{}
+      |> Mydia.Library.MatchCandidate.changeset(%{
+        media_file_id: file.id,
+        rank: 0,
+        provider_id: series_id,
+        provider_type: bogus_provider_type,
+        title: title,
+        media_type: "tv_show",
+        confidence: 1.0,
+        parsed_info: %{"season" => 1, "episodes" => [n]}
+      })
+      |> Repo.insert!()
+    end
+
+    {:ok, _} = ImportGroups.upsert_for_library(lp)
+
+    scope = lp.id |> SelectionScope.new() |> SelectionScope.select_all_matching(%{band: :ready})
+    assert {:ok, 1} = ImportGroups.accept(scope)
+
+    assert :ok = perform_job(ApplyImportGroups, %{"library_path_id" => lp.id})
+
+    group = Repo.get_by!(ImportGroup, library_path_id: lp.id)
+    assert group.status == "applied"
+    assert group.unresolved_count == 0
+  end
+
   test "a group whose files vanished still completes", %{library_path: lp} do
     scope = lp.id |> SelectionScope.new() |> SelectionScope.select_all_matching(%{band: :ready})
     {:ok, 1} = ImportGroups.accept(scope)

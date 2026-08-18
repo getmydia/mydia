@@ -209,13 +209,21 @@ defmodule Mydia.Jobs.ApplyImportGroups do
     FileIngest.ingest(media_file, match, policy: :create_items)
   end
 
-  defp provider_type(%{provider_type: type}, _group) when is_binary(type),
-    do: String.to_existing_atom(type)
+  # `provider_type` is a free-text database column with no inclusion
+  # validation, so `String.to_existing_atom/1` on it could raise for a value
+  # this VM has never interned as an atom. That would leave `safe_ingest/2`
+  # catching the raise, the member unresolved, and the group stuck
+  # "accepted" until `max_attempts` strands it -- rather than trust the
+  # column, map the two providers this ever legitimately holds and fall back
+  # to the same default a `nil` value already took.
+  defp provider_type(candidate, group),
+    do:
+      known_provider(Map.get(candidate, :provider_type)) || known_provider(group.provider_type) ||
+        :tvdb
 
-  defp provider_type(_, %{provider_type: type}) when is_binary(type),
-    do: String.to_existing_atom(type)
-
-  defp provider_type(_, _), do: :tvdb
+  defp known_provider("tmdb"), do: :tmdb
+  defp known_provider("tvdb"), do: :tvdb
+  defp known_provider(_), do: nil
 
   # `candidate.parsed_info` round-trips through JSON (`MatchCandidate`'s
   # `parsed_info` column is `Mydia.Settings.JsonMapType`), so its keys and its

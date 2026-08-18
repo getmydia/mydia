@@ -45,6 +45,17 @@ defmodule MydiaWeb.ImportMediaLive.Index do
 
   @empty_band_counts %{ready: 0, needs_attention: 0, no_match: 0, ignored: 0, total: 0}
 
+  # How long an :import_groups_changed burst is allowed to coalesce into one
+  # refresh. ApplyImportGroups.broadcast/1 fires once per Oban job, and an
+  # active run can enqueue and complete many of those jobs in quick
+  # succession -- each one otherwise re-triggering refresh_counts/1's full
+  # band_counts/1 read (every pending group row, once per importable library
+  # path) on every open page. Mirrors Jobs.ImportRun's own
+  # @broadcast_ms_interval for progress updates, just applied on the
+  # receiving end here instead of the sending end there, since this
+  # broadcast has no single producer to throttle.
+  @refresh_debounce_ms 500
+
   @impl true
   def mount(_params, _session, socket) do
     library_paths = Settings.list_library_paths()
@@ -103,6 +114,11 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       |> assign(:matching_count, 0)
       |> assign(:selected_library_path_id, selected_library_path_id)
       |> assign(:selection, SelectionScope.new(selected_library_path_id))
+      # Guards the :import_groups_changed debounce below: true while a
+      # deferred refresh is already scheduled, so a burst of broadcasts
+      # schedules exactly one Process.send_after/3 rather than one per
+      # message.
+      |> assign(:refresh_scheduled?, false)
       # The "Change match" / "Identify" search modal's state, nil when
       # closed. `match_search_token` is a monotonic counter (mirrors
       # SearchLive's own `search_id`) captured by each `start_async` search
@@ -250,6 +266,13 @@ defmodule MydiaWeb.ImportMediaLive.Index do
      |> assign(:search, q)
      |> assign(:cursor, nil)
      |> assign(:cursor_stack, [])
+     # A selection made under one search must not survive into another: in
+     # :filter mode select_all_matching/1 captures the current :q, and both
+     # SelectionScope.selected?/2 (checkbox state) and to_query/1 (what
+     # accept_selected/ignore_selected act on) would otherwise disagree with
+     # what is actually on screen after the search changes. select_band/1
+     # resets the selection for the same reason.
+     |> assign(:selection, SelectionScope.new(socket.assigns.selected_library_path_id))
      |> load_groups()}
   end
 
@@ -644,7 +667,25 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     # Only ever arrives for the currently selected library: switch_library/2
     # unsubscribes from the old topic and subscribes to the new one in the
     # same step, so there is nothing to filter on here.
-    {:noreply, socket |> load_groups() |> refresh_counts()}
+    #
+    # Coalesced rather than acted on immediately: see @refresh_debounce_ms.
+    # A refresh already scheduled means a broadcast earlier in this burst
+    # already queued one, so this message is dropped -- it will be covered
+    # by that refresh once it fires.
+    if socket.assigns.refresh_scheduled? do
+      {:noreply, socket}
+    else
+      Process.send_after(self(), :run_deferred_group_refresh, @refresh_debounce_ms)
+      {:noreply, assign(socket, :refresh_scheduled?, true)}
+    end
+  end
+
+  def handle_info(:run_deferred_group_refresh, socket) do
+    {:noreply,
+     socket
+     |> assign(:refresh_scheduled?, false)
+     |> load_groups()
+     |> refresh_counts()}
   end
 
   defp importable?(library_path), do: ImportRun.importable_type?(library_path.type)
@@ -919,6 +960,14 @@ defmodule MydiaWeb.ImportMediaLive.Index do
          socket
          |> assign(:match_search, nil)
          |> put_flash(:error, "That group has already been decided.")
+         |> load_groups()
+         |> refresh_counts()}
+
+      {:error, :not_found} ->
+        {:noreply,
+         socket
+         |> assign(:match_search, nil)
+         |> put_flash(:error, "That group is no longer available.")
          |> load_groups()
          |> refresh_counts()}
     end

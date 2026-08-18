@@ -493,6 +493,60 @@ defmodule MydiaWeb.ImportMediaReviewTest do
     refute has_element?(view, "#member-row-#{attention_file.id}")
   end
 
+  test "changing the search resets the selection", %{conn: conn} do
+    # Regression: select_library and select_band both reset the selection
+    # because a selection made under one scope must not leak into another --
+    # in :filter mode select_all_matching/1 captures the current :q, so a
+    # stale selection would make SelectionScope.selected?/2 mark newly listed
+    # rows as checked and accept_selected/ignore_selected would act on
+    # groups the search has already narrowed past. "search" had no such
+    # reset.
+    lp = library_path_fixture(%{type: "series"})
+    group = seed_group(lp, cluster_key: "search-reset")
+    seed_members(group, lp, 1)
+
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    render_click(view, "toggle_group", %{"id" => group.id})
+    assert has_element?(view, "#bulk-bar", "1 group(s) selected")
+
+    render_change(view, "search", %{"q" => "something else"})
+
+    assert has_element?(view, "#bulk-bar", "0 group(s) selected")
+  end
+
+  test "a burst of import_groups_changed broadcasts coalesces into one deferred refresh",
+       %{conn: conn} do
+    # ApplyImportGroups.broadcast/1 fires once per Oban job, and an active
+    # run can complete many jobs in quick succession -- each one otherwise
+    # re-triggering refresh_counts/1's full band_counts/1 read on every open
+    # page. Prove the fix black-box: two broadcasts arriving back to back
+    # must not update the counts until the debounce window elapses, and must
+    # then reflect state exactly once, not twice.
+    lp = library_path_fixture(%{type: "series"})
+    seed_group(lp, cluster_key: "initial")
+
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    assert has_element?(view, "#band-all .badge", "1")
+
+    seed_group(lp, cluster_key: "second")
+
+    send(view.pid, {:import_groups_changed, lp.id})
+    send(view.pid, {:import_groups_changed, lp.id})
+
+    # Still coalescing: the deferred refresh has not fired yet, so the second
+    # group is not reflected in the badge count.
+    assert has_element?(view, "#band-all .badge", "1")
+    assert :sys.get_state(view.pid).socket.assigns.refresh_scheduled?
+
+    Process.sleep(600)
+    render(view)
+
+    refute :sys.get_state(view.pid).socket.assigns.refresh_scheduled?
+    assert has_element?(view, "#band-all .badge", "2")
+  end
+
   test "the nav badge shows the pending group count", %{conn: conn} do
     lp = library_path_fixture(%{type: "series"})
     seed_group(lp, cluster_key: "a")
@@ -688,6 +742,32 @@ defmodule MydiaWeb.ImportMediaReviewTest do
       assert candidate.provider_id == to_string(series_id)
       assert candidate.title == series_title
       assert candidate.parsed_info == %{"season" => 1, "episodes" => [1]}
+    end
+
+    test "selecting a result for a group that vanished mid-review flashes instead of crashing",
+         %{conn: conn} do
+      # The render-then-click race this project has already fixed elsewhere
+      # (open_match_search/2 uses the same nil-safe Repo.get/2): another
+      # session or a concurrent run removes the group between opening the
+      # modal and picking a result. ImportGroups.change_match/2 used to call
+      # Repo.get!/2, which would raise Ecto.NoResultsError here and take the
+      # whole LiveView process down with it.
+      lp = library_path_fixture(%{type: "series"})
+      {group, _file} = seed_wrong_match(lp)
+      series_id = MetadataStubProvider.series_tvdb_id()
+
+      {:ok, view, _html} = live(conn, ~p"/import")
+
+      view |> element("#change-match-#{group.id}") |> render_click()
+      render_async(view)
+
+      Repo.delete!(group)
+
+      view |> element("#match-result-#{series_id}-tvdb") |> render_click()
+
+      assert Process.alive?(view.pid)
+      assert has_element?(view, "#flash-error", "no longer available")
+      refute has_element?(view, "#match-results")
     end
 
     test "closing without selecting leaves the group untouched", %{conn: conn} do
