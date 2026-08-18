@@ -5,10 +5,14 @@ defmodule MydiaWeb.ImportMediaReviewTest do
   import Phoenix.LiveViewTest
   import Mydia.AccountsFixtures
   import Mydia.MediaFixtures
+  import Mydia.MetadataStub
   import Mydia.SettingsFixtures
 
   alias Mydia.Library.ImportGroup
+  alias Mydia.MetadataStubProvider
   alias Mydia.Repo
+
+  setup :setup_metadata_stub
 
   setup %{conn: conn} do
     user = user_fixture()
@@ -578,6 +582,145 @@ defmodule MydiaWeb.ImportMediaReviewTest do
     assert Repo.aggregate(Mydia.Media.MediaItem, :count) == 0
     refute Repo.reload!(file).episode_id
     assert Repo.reload!(group).provider_type != "local"
+  end
+
+  describe "Change match" do
+    defp seed_wrong_match(lp) do
+      group =
+        seed_group(lp,
+          cluster_key: "patamuse",
+          display_title: "Patamuse (2018)",
+          provider_id: "9999",
+          provider_type: "tvdb",
+          suggested_title: "The Peter Potamus Show",
+          suggested_year: 1964,
+          min_confidence: 0.703
+        )
+
+      file =
+        orphaned_media_file_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "Patamuse (2018)/Season 01/ep1.mkv"
+        })
+
+      %Mydia.Library.MatchCandidate{}
+      |> Mydia.Library.MatchCandidate.changeset(%{
+        media_file_id: file.id,
+        rank: 0,
+        provider_id: "9999",
+        provider_type: "tvdb",
+        title: "The Peter Potamus Show",
+        confidence: 0.703,
+        parsed_info: %{"season" => 1, "episodes" => [1]}
+      })
+      |> Repo.insert!()
+
+      Repo.update_all(from(f in Mydia.Library.MediaFile, where: f.id == ^file.id),
+        set: [import_group_id: group.id]
+      )
+
+      {group, file}
+    end
+
+    test "the button reads Change match on a matched group and Identify on a no-match one",
+         %{conn: conn} do
+      lp = library_path_fixture(%{type: "series"})
+      {matched, _file} = seed_wrong_match(lp)
+      no_match = seed_group(lp, cluster_key: "no-match", provider_id: nil, min_confidence: nil)
+
+      {:ok, view, _html} = live(conn, ~p"/import")
+
+      assert has_element?(view, "#change-match-#{matched.id}", "Change match")
+      assert has_element?(view, "#change-match-#{no_match.id}", "Identify")
+    end
+
+    test "opens prefilled with the group's suggested title and shows relay results",
+         %{conn: conn} do
+      lp = library_path_fixture(%{type: "series"})
+      {group, _file} = seed_wrong_match(lp)
+
+      {:ok, view, _html} = live(conn, ~p"/import")
+
+      view |> element("#change-match-#{group.id}") |> render_click()
+      render_async(view)
+
+      assert has_element?(
+               view,
+               ~s(#match-search-form input[value="The Peter Potamus Show"])
+             )
+
+      series_id = MetadataStubProvider.series_tvdb_id()
+
+      assert has_element?(
+               view,
+               "#match-result-#{series_id}-tvdb",
+               MetadataStubProvider.series_title()
+             )
+    end
+
+    test "selecting a result applies it to the group and every unresolved member",
+         %{conn: conn} do
+      lp = library_path_fixture(%{type: "series"})
+      {group, file} = seed_wrong_match(lp)
+      series_id = MetadataStubProvider.series_tvdb_id()
+      series_title = MetadataStubProvider.series_title()
+
+      {:ok, view, _html} = live(conn, ~p"/import")
+
+      view |> element("#change-match-#{group.id}") |> render_click()
+      render_async(view)
+
+      view |> element("#match-result-#{series_id}-tvdb") |> render_click()
+
+      assert has_element?(view, "#flash-info", "Updated the match")
+      refute has_element?(view, "#match-results")
+
+      # The group's row re-renders as :ready once the correction lands --
+      # a human's pick is at least as trustworthy as an automatic match.
+      assert has_element?(view, "#group-#{group.id} .badge-success")
+
+      reloaded_group = Repo.reload!(group)
+      assert reloaded_group.provider_id == to_string(series_id)
+      assert reloaded_group.provider_type == "tvdb"
+      assert reloaded_group.suggested_title == series_title
+
+      candidate = Repo.get_by!(Mydia.Library.MatchCandidate, media_file_id: file.id, rank: 0)
+      assert candidate.provider_id == to_string(series_id)
+      assert candidate.title == series_title
+      assert candidate.parsed_info == %{"season" => 1, "episodes" => [1]}
+    end
+
+    test "closing without selecting leaves the group untouched", %{conn: conn} do
+      lp = library_path_fixture(%{type: "series"})
+      {group, _file} = seed_wrong_match(lp)
+
+      {:ok, view, _html} = live(conn, ~p"/import")
+
+      view |> element("#change-match-#{group.id}") |> render_click()
+      render_async(view)
+
+      view |> element("#match-search-modal button", "Cancel") |> render_click()
+
+      refute has_element?(view, "#match-results")
+      assert Repo.reload!(group).provider_id == "9999"
+    end
+  end
+
+  test "readonly users cannot apply a chosen match", %{conn: conn} do
+    lp = library_path_fixture(%{type: "series"})
+    {group, _file} = seed_wrong_match(lp)
+
+    readonly_conn = log_in_user(conn, user_fixture(%{role: "readonly"}))
+
+    {:ok, view, _html} = live(readonly_conn, ~p"/import")
+
+    view |> element("#change-match-#{group.id}") |> render_click()
+    render_async(view)
+
+    series_id = MetadataStubProvider.series_tvdb_id()
+    view |> element("#match-result-#{series_id}-tvdb") |> render_click()
+
+    assert Repo.reload!(group).provider_id == "9999"
   end
 
   describe "the Ignored view" do

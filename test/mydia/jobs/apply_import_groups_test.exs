@@ -15,6 +15,7 @@ defmodule Mydia.Jobs.ApplyImportGroupsTest do
   use Mydia.DataCase, async: false
   use Oban.Testing, repo: Mydia.Repo
 
+  import Ecto.Query
   import Mydia.MediaFixtures
   import Mydia.MetadataStub
   import Mydia.SettingsFixtures
@@ -84,6 +85,79 @@ defmodule Mydia.Jobs.ApplyImportGroupsTest do
     group = Repo.one!(ImportGroup)
     assert group.status == "applied"
     assert group.unresolved_count == 0
+  end
+
+  # The load-bearing regression guard for `ImportGroups.change_match/2`:
+  # `ingest_member/2` builds each file's match from `candidate.provider_id ||
+  # group.provider_id` -- candidate first. If change_match/2 only rewrote the
+  # group's own row and left each member's stale candidate in place, this
+  # worker would still commit the *wrong* match, and a reviewer's correction
+  # would silently do nothing.
+  #
+  # The wrong candidate is deliberately seeded with provider_id "999999" --
+  # `MetadataStubProvider.missing_id/0`, the id its `fetch_by_id/3` always
+  # fails on. That makes the two outcomes cleanly distinguishable: if the
+  # member candidate never got corrected, `FileIngest.ingest/3` still tries
+  # to fetch the missing id, the member stays unresolved, and the group never
+  # reaches "applied" at all.
+  test "the worker commits a human-corrected match, not the stale candidate it replaced" do
+    lp = library_path_fixture(%{type: "series", path: "/media/WrongMatch"})
+    correct_title = MetadataStubProvider.series_title()
+    correct_id = MetadataStubProvider.series_tvdb_id()
+
+    for n <- 1..2 do
+      file =
+        orphaned_media_file_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "Wrong Folder (2018)/Season 01/ep#{n}.mkv"
+        })
+
+      %Mydia.Library.MatchCandidate{}
+      |> Mydia.Library.MatchCandidate.changeset(%{
+        media_file_id: file.id,
+        rank: 0,
+        provider_id: to_string(MetadataStubProvider.missing_id()),
+        provider_type: "tvdb",
+        title: "Totally Wrong Show",
+        media_type: "tv_show",
+        confidence: 0.703,
+        parsed_info: %{"season" => 1, "episodes" => [n]}
+      })
+      |> Repo.insert!()
+    end
+
+    {:ok, _} = ImportGroups.upsert_for_library(lp)
+    group = Repo.get_by!(ImportGroup, library_path_id: lp.id)
+    assert group.provider_id == to_string(MetadataStubProvider.missing_id())
+
+    assert {:ok, _} =
+             ImportGroups.change_match(group.id, %{
+               provider_id: correct_id,
+               provider_type: :tvdb,
+               title: correct_title,
+               year: 2008,
+               media_type: :tv_show
+             })
+
+    scope = lp.id |> SelectionScope.new() |> SelectionScope.select_all_matching(%{band: :ready})
+    assert {:ok, 1} = ImportGroups.accept(scope)
+
+    assert :ok = perform_job(ApplyImportGroups, %{"library_path_id" => lp.id})
+
+    reloaded_group = Repo.get_by!(ImportGroup, library_path_id: lp.id)
+    assert reloaded_group.status == "applied"
+    assert reloaded_group.unresolved_count == 0
+
+    media_item = Repo.get_by!(Mydia.Media.MediaItem, title: correct_title)
+    assert media_item.tvdb_id == correct_id
+
+    linked_files =
+      Mydia.Library.MediaFile
+      |> where([f], f.library_path_id == ^lp.id)
+      |> Repo.all()
+
+    assert length(linked_files) == 2
+    assert Enum.all?(linked_files, & &1.episode_id)
   end
 
   test "a group whose files vanished still completes", %{library_path: lp} do

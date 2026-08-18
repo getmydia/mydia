@@ -1,6 +1,7 @@
 defmodule Mydia.ImportGroupsTest do
   use Mydia.DataCase, async: true
 
+  import Ecto.Query
   import Mydia.MediaFixtures
   import Mydia.SettingsFixtures
 
@@ -104,6 +105,171 @@ defmodule Mydia.ImportGroupsTest do
 
       assert {:ok, 0} = ImportGroups.restore(g.id)
       assert Repo.reload!(g).status == "applied"
+    end
+  end
+
+  describe "change_match/2" do
+    # A group and two unresolved members, each carrying the kind of wrong
+    # candidate the design's own evidence calls out: a real provider match,
+    # just for the wrong show (Patamuse -> The Peter Potamus Show, at 0.703).
+    # `parsed_info` carries a season/episode per member, exactly what
+    # `ApplyImportGroups.parsed_info/2` reads later, so preserving it across
+    # the correction is something these tests can actually observe.
+    defp seed_wrong_match_group(lp) do
+      g =
+        group(lp,
+          cluster_key: "patamuse",
+          display_title: "Patamuse (2018)",
+          file_count: 2,
+          unresolved_count: 2,
+          provider_id: "9999",
+          provider_type: "tvdb",
+          suggested_title: "The Peter Potamus Show",
+          suggested_year: 1964,
+          media_type: "tv_show",
+          min_confidence: 0.703
+        )
+
+      members =
+        for n <- 1..2 do
+          file =
+            orphaned_media_file_fixture(%{
+              library_path_id: lp.id,
+              relative_path: "Patamuse (2018)/Season 01/ep#{n}.mkv"
+            })
+
+          %MatchCandidate{}
+          |> MatchCandidate.changeset(%{
+            media_file_id: file.id,
+            rank: 0,
+            provider_id: "9999",
+            provider_type: "tvdb",
+            title: "The Peter Potamus Show",
+            year: 1964,
+            media_type: "tv_show",
+            confidence: 0.703,
+            parsed_info: %{"season" => 1, "episodes" => [n]}
+          })
+          |> Repo.insert!()
+
+          Repo.update_all(from(f in MediaFile, where: f.id == ^file.id),
+            set: [import_group_id: g.id]
+          )
+
+          file
+        end
+
+      {g, members}
+    end
+
+    defp match do
+      %{
+        provider_id: "12345",
+        provider_type: :tvdb,
+        title: "Patamuse",
+        year: 2018,
+        media_type: :tv_show
+      }
+    end
+
+    test "updates the group's suggested match, confidence, and evidence" do
+      lp = library_path_fixture(%{type: "series"})
+      {group, _members} = seed_wrong_match_group(lp)
+
+      assert ImportGroups.band(group) == :needs_attention
+
+      assert {:ok, updated} = ImportGroups.change_match(group.id, match())
+
+      assert updated.provider_id == "12345"
+      assert updated.provider_type == "tvdb"
+      assert updated.suggested_title == "Patamuse"
+      assert updated.suggested_year == 2018
+      assert updated.min_confidence == 1.0
+      assert updated.evidence["kind"] == "manual"
+      assert ImportGroups.band(updated) == :ready
+    end
+
+    # The load-bearing assertion: ApplyImportGroups.ingest_member/2 builds
+    # each file's match from `candidate.provider_id || group.provider_id` --
+    # candidate first. Updating only the group's own row would leave every
+    # member's stale, wrong candidate taking precedence, and the correction
+    # would never actually reach FileIngest.
+    test "updates every unresolved member's rank-0 candidate, not just the group" do
+      lp = library_path_fixture(%{type: "series"})
+      {group, [file1, file2]} = seed_wrong_match_group(lp)
+
+      assert {:ok, _} = ImportGroups.change_match(group.id, match())
+
+      for file <- [file1, file2] do
+        candidate = Repo.get_by!(MatchCandidate, media_file_id: file.id, rank: 0)
+        assert candidate.provider_id == "12345"
+        assert candidate.provider_type == "tvdb"
+        assert candidate.title == "Patamuse"
+        assert candidate.year == 2018
+        assert candidate.media_type == "tv_show"
+        assert candidate.confidence == 1.0
+      end
+
+      # Each member's own season/episode survives the correction untouched --
+      # only the provider identity and title/year/media_type changed.
+      c1 = Repo.get_by!(MatchCandidate, media_file_id: file1.id, rank: 0)
+      c2 = Repo.get_by!(MatchCandidate, media_file_id: file2.id, rank: 0)
+      assert c1.parsed_info == %{"season" => 1, "episodes" => [1]}
+      assert c2.parsed_info == %{"season" => 1, "episodes" => [2]}
+    end
+
+    test "works for a :no_match group, turning it into :ready" do
+      lp = library_path_fixture(%{type: "series"})
+
+      g =
+        group(lp,
+          cluster_key: "no-match",
+          display_title: "Les contes de la tortue (2025)",
+          provider_id: nil,
+          min_confidence: nil
+        )
+
+      file =
+        orphaned_media_file_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "Les contes de la tortue (2025)/Season 01/ep1.mkv"
+        })
+
+      %MatchCandidate{}
+      |> MatchCandidate.changeset(%{
+        media_file_id: file.id,
+        rank: 0,
+        last_error: "no_match",
+        parsed_info: %{"season" => 1, "episodes" => [1]}
+      })
+      |> Repo.insert!()
+
+      Repo.update_all(from(f in MediaFile, where: f.id == ^file.id), set: [import_group_id: g.id])
+
+      assert ImportGroups.band(g) == :no_match
+
+      assert {:ok, updated} = ImportGroups.change_match(g.id, match())
+      assert ImportGroups.band(updated) == :ready
+
+      candidate = Repo.get_by!(MatchCandidate, media_file_id: file.id, rank: 0)
+      assert candidate.provider_id == "12345"
+      assert candidate.parsed_info == %{"season" => 1, "episodes" => [1]}
+    end
+
+    test "refuses a group that is not pending, leaving it and its members untouched" do
+      lp = library_path_fixture(%{type: "series"})
+      {group, [file | _]} = seed_wrong_match_group(lp)
+
+      Repo.update!(Ecto.Changeset.change(group, status: "accepted"))
+
+      assert {:error, :not_pending} = ImportGroups.change_match(group.id, match())
+
+      reloaded = Repo.reload!(group)
+      assert reloaded.provider_id == "9999"
+      assert reloaded.status == "accepted"
+
+      candidate = Repo.get_by!(MatchCandidate, media_file_id: file.id, rank: 0)
+      assert candidate.provider_id == "9999"
     end
   end
 

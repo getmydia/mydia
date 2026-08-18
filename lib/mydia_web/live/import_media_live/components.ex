@@ -10,6 +10,8 @@ defmodule MydiaWeb.ImportMediaLive.Components do
   use Phoenix.Component
   import MydiaWeb.CoreComponents
 
+  alias Mydia.Metadata.ImageUrl
+
   @doc """
   A row of buttons for switching which library the review section shows.
 
@@ -217,6 +219,14 @@ defmodule MydiaWeb.ImportMediaLive.Components do
           {evidence_label(@group.evidence)}
         </span>
         <button
+          id={"change-match-#{@group.id}"}
+          class="btn btn-xs btn-outline"
+          phx-click="open_match_search"
+          phx-value-id={@group.id}
+        >
+          {if @band == :no_match, do: "Identify", else: "Change match"}
+        </button>
+        <button
           :if={@band == :no_match}
           id={"create-local-#{@group.id}"}
           class="btn btn-xs btn-outline"
@@ -273,6 +283,91 @@ defmodule MydiaWeb.ImportMediaLive.Components do
     """
   end
 
+  @doc """
+  The "Change match" / "Identify" search modal.
+
+  `state` is `ImportMediaLive.Index`'s `@match_search` assign -- nil when
+  closed, otherwise `%{group_id:, media_type:, query:, results:, searching:,
+  error:}`. Selecting a result submits `provider_id` *and* `provider`
+  together (a result's own provider tag, `:tvdb` or `:metadata_relay`/etc for
+  TMDB), which is what lets the handler tell two providers' ids apart rather
+  than trusting `provider_id` alone to be unique.
+  """
+  attr :state, :any, default: nil
+
+  def match_search_modal(assigns) do
+    ~H"""
+    <.modal id="match-search-modal" show={not is_nil(@state)} on_cancel="close_match_search">
+      <:title>Change match</:title>
+
+      <form phx-change="match_search_query" id="match-search-form">
+        <input
+          type="text"
+          name="q"
+          value={@state && @state.query}
+          placeholder="Search by title…"
+          phx-debounce="300"
+          class="input input-bordered w-full"
+        />
+      </form>
+
+      <div :if={@state} class="mt-4 flex flex-col gap-1 max-h-96 overflow-y-auto" id="match-results">
+        <div :if={@state.searching} class="flex justify-center py-6">
+          <span class="loading loading-spinner loading-md"></span>
+        </div>
+
+        <div :if={!@state.searching}>
+          <p :if={@state.error} class="text-error text-sm py-2">{@state.error}</p>
+
+          <p
+            :if={!@state.error && @state.results == []}
+            class="text-sm opacity-70 text-center py-6"
+          >
+            No results.
+          </p>
+
+          <button
+            :for={result <- @state.results}
+            type="button"
+            id={"match-result-#{result.provider_id}-#{result.provider}"}
+            class="flex items-center gap-3 p-2 rounded-lg hover:bg-base-200 text-left w-full"
+            phx-click="select_match"
+            phx-value-provider_id={result.provider_id}
+            phx-value-provider={result.provider}
+          >
+            <img
+              :if={result.poster_path}
+              src={ImageUrl.image_url(result.poster_path, "w92")}
+              class="w-10 h-14 object-cover rounded shrink-0"
+            />
+            <div
+              :if={!result.poster_path}
+              class="w-10 h-14 bg-base-300 rounded flex items-center justify-center shrink-0"
+            >
+              <.icon name="hero-film" class="w-5 h-5 opacity-40" />
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="font-medium truncate">{result.title}</p>
+              <p class="text-xs opacity-60 flex items-center gap-1.5">
+                <span :if={result.year}>{result.year}</span>
+                <span class="badge badge-ghost badge-xs">{media_type_label(result.media_type)}</span>
+              </p>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      <:actions>
+        <button class="btn btn-ghost" phx-click="close_match_search">Cancel</button>
+      </:actions>
+    </.modal>
+    """
+  end
+
+  defp media_type_label(:tv_show), do: "TV Show"
+  defp media_type_label(:movie), do: "Movie"
+  defp media_type_label(_), do: "Unknown"
+
   defp band_class(:ready), do: "badge-success"
   defp band_class(:needs_attention), do: "badge-warning"
   defp band_class(:no_match), do: "badge-error"
@@ -305,10 +400,11 @@ defmodule MydiaWeb.ImportMediaLive.Components do
   # Only `"none"`, `"exact_title"` and `"fuzzy"` are emitted by
   # `ImportGroups`'s `evidence_kind/2` today; `"external_id"` and `"reused"`
   # are the spec's own table for a future matcher pass, and `"manual"` is
-  # this module's own change_match/2. Every other kind (including one this
-  # module has never heard of) falls through to the raw string rather than
-  # crashing, so a future evidence kind renders as *something* immediately,
-  # with no LiveView deploy required just to stop erroring.
+  # `ImportGroups.change_match/2`'s own kind for a human-picked match. Every
+  # other kind (including one this module has never heard of) falls through
+  # to the raw string rather than crashing, so a future evidence kind renders
+  # as *something* immediately, with no LiveView deploy required just to stop
+  # erroring.
   defp evidence_label(%{"kind" => "external_id"}), do: "tvdb id in folder name"
   defp evidence_label(%{"kind" => "reused"}), do: "matched before"
   defp evidence_label(%{"kind" => "exact_title"}), do: "exact title match"

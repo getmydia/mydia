@@ -12,7 +12,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
 
   require Logger
 
-  alias Mydia.{Library, Repo, Settings}
+  alias Mydia.{Library, Metadata, Repo, Settings}
   alias Mydia.ImportGroups
   alias Mydia.Jobs.ImportRun, as: ImportRunJob
   alias Mydia.Library.{ImportGroup, ImportRun, SelectionScope}
@@ -103,6 +103,15 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       |> assign(:matching_count, 0)
       |> assign(:selected_library_path_id, selected_library_path_id)
       |> assign(:selection, SelectionScope.new(selected_library_path_id))
+      # The "Change match" / "Identify" search modal's state, nil when
+      # closed. `match_search_token` is a monotonic counter (mirrors
+      # SearchLive's own `search_id`) captured by each `start_async` search
+      # closure, so a slow response from an earlier keystroke can never
+      # overwrite a newer one -- LiveView cancels the previous `start_async`
+      # call under the same name, but the result message can already be in
+      # flight by the time it does, so the token is the actual guard.
+      |> assign(:match_search, nil)
+      |> assign(:match_search_token, 0)
       # `ImportGroup` rows carry an `:id` field, so the default `"groups-<id>"`
       # naming would be adequate, but the page's key elements are addressed as
       # `#group-<id>` (singular). `ImportGroups.members/2` rows are plain
@@ -493,6 +502,118 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     end
   end
 
+  # Opens the "Change match" / "Identify" modal for one group and kicks off
+  # its first search, prefilled from the group's own suggested (or folder)
+  # title -- a reviewer correcting a wrong match almost always wants to see
+  # alternatives immediately, not type the title back in from scratch. Not
+  # authorization-guarded: this only reads from the metadata relay and opens
+  # UI state, it writes nothing. `select_match/2` below is the mutation, and
+  # that is where the guard and the readonly-user test live, matching how
+  # `create_local_show`'s button is rendered for every viewer but its handler
+  # is the one that checks.
+  def handle_event("open_match_search", %{"id" => id}, socket) do
+    case Repo.get(ImportGroup, id) do
+      nil ->
+        {:noreply, put_flash(socket, :error, "That group is no longer available.")}
+
+      group ->
+        query = group.suggested_title || group.display_title || ""
+
+        state = %{
+          group_id: group.id,
+          media_type: group.media_type,
+          query: query,
+          results: [],
+          searching: true,
+          error: nil
+        }
+
+        {:noreply, socket |> assign(:match_search, state) |> run_match_search(query)}
+    end
+  end
+
+  def handle_event("match_search_query", %{"q" => query}, socket) do
+    case socket.assigns.match_search do
+      nil ->
+        {:noreply, socket}
+
+      state ->
+        {:noreply,
+         socket
+         |> assign(:match_search, %{state | query: query, searching: true, error: nil})
+         |> run_match_search(query)}
+    end
+  end
+
+  def handle_event("close_match_search", _params, socket) do
+    {:noreply, assign(socket, :match_search, nil)}
+  end
+
+  # The mutation: applies one chosen search result to the whole group. Keyed
+  # by `provider_id` *and* `provider` together (not `provider_id` alone) so a
+  # numeric collision between two different providers' ids can never resolve
+  # to the wrong result -- within one search both always agree (the query is
+  # scoped to a single provider, see run_match_search/2), but nothing here
+  # depends on that staying true.
+  def handle_event(
+        "select_match",
+        %{"provider_id" => provider_id, "provider" => provider},
+        socket
+      ) do
+    with :ok <- Authorization.authorize_import_media(socket) do
+      state = socket.assigns.match_search
+
+      result =
+        state &&
+          Enum.find(state.results, fn r ->
+            to_string(r.provider_id) == provider_id and to_string(r.provider) == provider
+          end)
+
+      case {state, result} do
+        {nil, _} ->
+          {:noreply, socket}
+
+        {_, nil} ->
+          {:noreply,
+           put_flash(socket, :error, "That result is no longer available. Search again.")}
+
+        {%{group_id: group_id}, result} ->
+          apply_selected_match(socket, group_id, result)
+      end
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
+  @impl true
+  def handle_async(:group_match_search, {:ok, {token, group_id, result}}, socket) do
+    if stale_match_search?(socket, token, group_id) do
+      {:noreply, socket}
+    else
+      {:noreply,
+       assign(socket, :match_search, apply_search_result(socket.assigns.match_search, result))}
+    end
+  end
+
+  def handle_async(:group_match_search, {:exit, reason}, socket) do
+    Logger.warning("Group match search crashed", reason: inspect(reason))
+
+    socket =
+      case socket.assigns.match_search do
+        nil ->
+          socket
+
+        state ->
+          assign(socket, :match_search, %{
+            state
+            | searching: false,
+              error: "Search failed. Try again."
+          })
+      end
+
+    {:noreply, socket}
+  end
+
   @impl true
   def handle_info({:import_run_progress, run}, socket) do
     socket =
@@ -706,5 +827,118 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       nil -> socket
       group -> stream_insert(socket, :groups, group)
     end
+  end
+
+  # Fires (or re-fires) the group match search asynchronously -- the page
+  # this replaced ran two synchronous relay calls inline in a keystroke
+  # handler and froze while they were in flight, which is exactly what
+  # `start_async/3` exists to avoid. `phx-debounce="300"` on the modal's
+  # input (see Components.match_search_modal/1) keeps every keystroke from
+  # spawning its own request; the token here is what keeps a slow response
+  # from an earlier one from clobbering a newer one that already landed.
+  #
+  # A blank query (the group's own display title, `PathAnchor`'s
+  # "Loose files" fallback, or an emptied search box) is refused before
+  # spawning a task at all: `Metadata.search/3`'s relay adapter treats an
+  # empty query as invalid, so there is nothing useful to send.
+  defp run_match_search(socket, query) do
+    if String.trim(query) == "" do
+      assign(socket, :match_search, %{socket.assigns.match_search | results: [], searching: false})
+    else
+      token = socket.assigns.match_search_token + 1
+      group_id = socket.assigns.match_search.group_id
+      media_type_hint = socket.assigns.match_search.media_type
+
+      library_path =
+        Enum.find(
+          socket.assigns.library_paths,
+          &(&1.id == socket.assigns.selected_library_path_id)
+        )
+
+      media_type = search_media_type(library_path, media_type_hint)
+      provider = library_path && library_path.tv_metadata_source
+      config = Metadata.default_relay_config()
+
+      socket
+      |> assign(:match_search_token, token)
+      |> start_async(:group_match_search, fn ->
+        opts =
+          if media_type == :tv_show do
+            [media_type: media_type, provider: provider]
+          else
+            [media_type: media_type]
+          end
+
+        {token, group_id, Metadata.search(config, query, opts)}
+      end)
+    end
+  end
+
+  # Scopes the search to the library's own media type where one is knowable,
+  # per the design note this feature shipped against: a series library
+  # should never offer movie results. A `:mixed` library has no single type
+  # to scope by, so this falls back to the group's own `media_type` (already
+  # known from its rollup) when the group has one, and otherwise leaves the
+  # search unscoped -- `Metadata.search/3` defaults an unscoped query to a
+  # movie search.
+  defp search_media_type(%{type: :movies}, _hint), do: :movie
+  defp search_media_type(%{type: :series}, _hint), do: :tv_show
+  defp search_media_type(%{type: :mixed}, "tv_show"), do: :tv_show
+  defp search_media_type(%{type: :mixed}, "movie"), do: :movie
+  defp search_media_type(_library_path, _hint), do: nil
+
+  defp stale_match_search?(socket, token, group_id) do
+    case socket.assigns.match_search do
+      nil -> true
+      %{group_id: ^group_id} -> socket.assigns.match_search_token != token
+      _different_group -> true
+    end
+  end
+
+  defp apply_search_result(state, {:ok, results}) do
+    %{state | results: results, searching: false, error: nil}
+  end
+
+  defp apply_search_result(state, {:error, reason}) do
+    Logger.warning("Group match search failed", reason: inspect(reason))
+    %{state | results: [], searching: false, error: "Search failed. Try again."}
+  end
+
+  defp apply_selected_match(socket, group_id, result) do
+    case ImportGroups.change_match(group_id, match_from_result(result)) do
+      {:ok, _group} ->
+        {:noreply,
+         socket
+         |> assign(:match_search, nil)
+         |> put_flash(:info, "Updated the match for this group.")
+         |> refresh_group_row(group_id)
+         |> refresh_counts()}
+
+      {:error, :not_pending} ->
+        {:noreply,
+         socket
+         |> assign(:match_search, nil)
+         |> put_flash(:error, "That group has already been decided.")
+         |> load_groups()
+         |> refresh_counts()}
+    end
+  end
+
+  # `result.provider` is the search result's own provider tag -- `:tvdb` for
+  # a TVDB result, `:metadata_relay` for a TMDB one (the relay's TMDB search
+  # stamps every result that way; see `SearchResult.from_api_response/2`) --
+  # so this mirrors `MetadataMatcher`'s own `if result.provider == :tvdb, do:
+  # :tvdb, else: :tmdb` convention rather than trusting the tag's literal
+  # value. This, not a hardcoded `"tmdb"`, is what closes the bug the design
+  # flagged in the code this replaced: a TVDB library's corrected match must
+  # not get mis-stamped as TMDB.
+  defp match_from_result(result) do
+    %{
+      provider_id: result.provider_id,
+      provider_type: if(result.provider == :tvdb, do: :tvdb, else: :tmdb),
+      title: result.title,
+      year: result.year,
+      media_type: result.media_type
+    }
   end
 end

@@ -605,6 +605,120 @@ defmodule Mydia.ImportGroups do
   end
 
   @doc """
+  Applies a human-picked metadata match to a whole group: the "Change match"
+  / "Identify" action.
+
+  On galactica -- the library the whole 0.85 threshold is calibrated against
+  -- `Patamuse (2018)` matched "The Peter Potamus Show" at 0.703 and
+  `Les contes de la tortue (2025)` matched "Eat the Rich: The GameStop Saga"
+  at 0.699. Before this there was no way to correct either without either
+  accepting the wrong show or hiding the folder forever with Ignore.
+
+  `match` is a plain map built from a chosen
+  `Mydia.Metadata.Structs.SearchResult`: `%{provider_id:, provider_type:,
+  title:, year:, media_type:}`. Every value is stringified here regardless of
+  what the caller passed (an atom `provider_type`/`media_type` is the normal
+  case, mirroring `MetadataMatcher`'s own `if result.provider == :tvdb, do:
+  :tvdb, else: :tmdb` convention), since both `ImportGroup` and
+  `MatchCandidate` store these as text columns.
+
+  This updates two things, not one:
+
+    * The group's own suggested fields, `min_confidence` (set to 1.0 -- a
+      human's pick is at least as trustworthy as an automatic match, and the
+      whole point of correcting a group is that it reads `:ready`
+      afterwards, not merely "still needs attention, differently") and
+      `evidence` (kind `"manual"`).
+    * Every unresolved member's rank-0 `MatchCandidate`. This is not
+      optional: `ApplyImportGroups.ingest_member/2` builds each file's match
+      from `candidate.provider_id || group.provider_id` -- candidate first --
+      so updating only the group would leave the worker reading each
+      member's stale, wrong candidate and committing that instead of the
+      correction. `parsed_info` (each member's own season/episode) is left
+      alone; only the provider identity and title/year/media_type change.
+
+  Refuses (`{:error, :not_pending}`) a group that is not `"pending"`:
+  `accept/1`, `ignore/1` and the worker have all already moved a
+  non-pending group somewhere a rewritten match would race.
+  """
+  @spec change_match(binary(), map()) ::
+          {:ok, ImportGroup.t()} | {:error, :not_pending}
+  def change_match(group_id, match) do
+    case Repo.get!(ImportGroup, group_id) do
+      %ImportGroup{status: "pending"} = group -> apply_change_match(group, match)
+      %ImportGroup{} -> {:error, :not_pending}
+    end
+  end
+
+  defp apply_change_match(group, match) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    match = stringify_match(match)
+
+    update_member_candidates(group.id, match, now)
+
+    group
+    |> Ecto.Changeset.change(
+      provider_type: match.provider_type,
+      provider_id: match.provider_id,
+      suggested_title: match.title,
+      suggested_year: match.year,
+      media_type: match.media_type,
+      min_confidence: 1.0,
+      evidence: %{"kind" => "manual", "candidates" => 1, "disagreement" => false},
+      updated_at: now
+    )
+    |> Repo.update()
+  end
+
+  defp stringify_match(match) do
+    %{
+      provider_id: to_string(match.provider_id),
+      provider_type: to_string(match.provider_type),
+      title: match.title,
+      year: match.year,
+      media_type: to_string(match.media_type)
+    }
+  end
+
+  # Chunked the same way stamp_members/2 is: the `id in ^ids` list this
+  # builds for the WHERE clause is capped at @id_bind_chunk, so even a group
+  # the size of galactica's largest (299 files) issues a handful of updates
+  # rather than one query per member. `members(group_id, limit: 100_000)`
+  # mirrors create_local_show/1's own choice for "walk every member of one
+  # group" -- these unresolved files carry no analysis blobs yet (those are
+  # written after a file links), so the blob-column cost `ImportGroups`'s own
+  # moduledoc warns about elsewhere does not apply here.
+  #
+  # A member with no rank-0 candidate row at all (the ~1-in-1000 case the
+  # design doc's own evidence section measured) is left untouched: it was
+  # already unreachable by ApplyImportGroups.ingest_member/2's `candidate:
+  # nil` clause before this ran, and correcting the group's match does not
+  # change that.
+  defp update_member_candidates(group_id, match, now) do
+    group_id
+    |> members(limit: 100_000)
+    |> Enum.map(& &1.media_file.id)
+    |> Enum.chunk_every(@id_bind_chunk)
+    |> Enum.each(fn ids ->
+      MatchCandidate
+      |> where([c], c.media_file_id in ^ids and c.rank == 0)
+      |> Repo.update_all(
+        set: [
+          provider_id: match.provider_id,
+          provider_type: match.provider_type,
+          title: match.title,
+          year: match.year,
+          media_type: match.media_type,
+          confidence: 1.0,
+          last_error: nil,
+          attempts: 0,
+          updated_at: now
+        ]
+      )
+    end)
+  end
+
+  @doc """
   One group's member files, for lazy expansion in the UI.
 
   Capped by `:limit` (default 200). A group can hold tens of thousands of files
