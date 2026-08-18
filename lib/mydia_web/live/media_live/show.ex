@@ -141,7 +141,6 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:recommendations, [])
      |> assign(:recommendations_expanded, false)
      |> assign(:adding_recommendation_tmdb_ids, MapSet.new())
-     |> assign(:adding_recommendation_id, nil)
      |> assign(:requesting_recommendation_id, nil)
      |> assign_new(:metadata_config, fn -> Mydia.Metadata.default_relay_config() end)
      |> assign(
