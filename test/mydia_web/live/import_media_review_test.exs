@@ -37,10 +37,44 @@ defmodule MydiaWeb.ImportMediaReviewTest do
     |> Repo.insert!()
   end
 
-  test "renders one row per group, not one per file", %{conn: conn} do
+  # Stamps `count` real, unresolved member files onto `group` (rather than
+  # just trusting its `file_count` rollup column), so a test that claims to
+  # show one row per group instead of one per file actually has files to
+  # prove that with.
+  defp seed_members(group, lp, count) do
+    for n <- 1..count do
+      file =
+        orphaned_media_file_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "#{group.display_title}/file-#{n}.mkv"
+        })
+
+      Repo.update_all(from(f in Mydia.Library.MediaFile, where: f.id == ^file.id),
+        set: [import_group_id: group.id]
+      )
+
+      file
+    end
+  end
+
+  # Extracts the ids of every rendered group row from the `#groups` stream
+  # container, in DOM order. Used by the paging test to compare pages without
+  # asserting on raw HTML.
+  defp rendered_group_ids(view) do
+    view
+    |> render()
+    |> LazyHTML.from_fragment()
+    |> LazyHTML.query("#groups > div")
+    |> LazyHTML.attribute("id")
+    |> Enum.reject(&(&1 == "no-groups"))
+  end
+
+  test "renders one row per group, not one row per member file", %{conn: conn} do
     lp = library_path_fixture(%{type: "series"})
-    a = seed_group(lp, cluster_key: "a", display_title: "Cornemuse", file_count: 65)
-    b = seed_group(lp, cluster_key: "b", display_title: "Pin-Pon", file_count: 64)
+    a = seed_group(lp, cluster_key: "a", display_title: "Cornemuse", file_count: 3)
+    b = seed_group(lp, cluster_key: "b", display_title: "Pin-Pon", file_count: 3)
+    seed_members(a, lp, 3)
+    seed_members(b, lp, 3)
 
     {:ok, view, _html} = live(conn, ~p"/import")
 
@@ -97,6 +131,111 @@ defmodule MydiaWeb.ImportMediaReviewTest do
              from(g in ImportGroup, where: g.status == "accepted"),
              :count
            ) == 3
+  end
+
+  test "select all matching and clear both redraw every checkbox on screen", %{conn: conn} do
+    lp = library_path_fixture(%{type: "series"})
+    a = seed_group(lp, cluster_key: "a", min_confidence: 1.0)
+    b = seed_group(lp, cluster_key: "b", min_confidence: 1.0)
+
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    refute has_element?(view, "#group-#{a.id} input[type=checkbox][checked]")
+    refute has_element?(view, "#group-#{b.id} input[type=checkbox][checked]")
+
+    view |> element("#band-ready") |> render_click()
+    view |> element("#select-all-matching") |> render_click()
+
+    # A `:filter`-mode selection touches no per-row state at all, so the only
+    # way either checkbox can reflect it is if the handler re-inserts every
+    # currently-rendered row into the stream. Asserting on the checkbox
+    # itself (rather than just SelectionScope.count/1) is the point: the
+    # count can be right in the socket while every box on screen stays
+    # unchecked if that re-insert never happens.
+    assert has_element?(view, "#group-#{a.id} input[type=checkbox][checked]")
+    assert has_element?(view, "#group-#{b.id} input[type=checkbox][checked]")
+
+    view |> element("#clear-selection") |> render_click()
+
+    refute has_element?(view, "#group-#{a.id} input[type=checkbox][checked]")
+    refute has_element?(view, "#group-#{b.id} input[type=checkbox][checked]")
+  end
+
+  test "accepting select-all-matching covers every matching group, not just one page",
+       %{conn: conn} do
+    lp = library_path_fixture(%{type: "series"})
+    # ImportGroups' default page size is 50; 55 forces the filter-mode accept
+    # to reach past a single page or this assertion catches it at 50.
+    for n <- 1..55, do: seed_group(lp, cluster_key: "g#{n}", file_count: n, min_confidence: 1.0)
+
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    view |> element("#band-ready") |> render_click()
+    view |> element("#select-all-matching") |> render_click()
+    view |> element("#accept-selected") |> render_click()
+
+    assert Repo.aggregate(
+             from(g in ImportGroup, where: g.status == "accepted"),
+             :count
+           ) == 55
+  end
+
+  test "keyset paging: next, next, prev covers the full set with no repeats", %{conn: conn} do
+    lp = library_path_fixture(%{type: "series"})
+    # 105 forces three pages at the default page size of 50 (50, 50, 5), so
+    # next -> next lands on a genuinely different third page rather than
+    # bouncing between two.
+    for n <- 1..105, do: seed_group(lp, cluster_key: "p#{n}", file_count: n, min_confidence: 1.0)
+
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    page1 = rendered_group_ids(view)
+    assert length(page1) == 50
+
+    view |> element("#next-page") |> render_click()
+    page2 = rendered_group_ids(view)
+    assert length(page2) == 50
+
+    view |> element("#next-page") |> render_click()
+    page3 = rendered_group_ids(view)
+    assert length(page3) == 5
+
+    view |> element("#prev-page") |> render_click()
+    assert rendered_group_ids(view) == page2
+
+    all_ids = page1 ++ page2 ++ page3
+    assert length(Enum.uniq(all_ids)) == 105
+  end
+
+  test "the picker shows only the selected library's groups and switches on click", %{
+    conn: conn
+  } do
+    lp1 =
+      library_path_fixture(%{
+        type: "series",
+        path: "/tmp/import_review_lib_a_#{System.unique_integer([:positive])}"
+      })
+
+    lp2 =
+      library_path_fixture(%{
+        type: "movies",
+        path: "/tmp/import_review_lib_b_#{System.unique_integer([:positive])}"
+      })
+
+    a = seed_group(lp1, cluster_key: "a", display_title: "Library A Group")
+    b = seed_group(lp2, cluster_key: "b", display_title: "Library B Group")
+
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    # `asc: path` breaks the tie between two otherwise-equal library paths,
+    # so lib_a is the default selection.
+    assert has_element?(view, "#group-#{a.id}")
+    refute has_element?(view, "#group-#{b.id}")
+
+    view |> element("#library-picker-#{lp2.id}") |> render_click()
+
+    assert has_element?(view, "#group-#{b.id}")
+    refute has_element?(view, "#group-#{a.id}")
   end
 
   test "the page issues no query on the disconnected render", %{conn: conn} do

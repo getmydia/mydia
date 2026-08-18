@@ -251,7 +251,7 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
 
     assert has_element?(
              view,
-             "#run-outcome a[href='/review']",
+             "#run-outcome a[href='/import']",
              "Review 1 file(s) that need attention"
            )
   end
@@ -276,6 +276,6 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
     {:ok, view, _html} = live(conn, ~p"/import")
 
     assert has_element?(view, "#run-outcome")
-    refute has_element?(view, "#run-outcome a[href='/review']")
+    refute has_element?(view, "#run-outcome a[href='/import']")
   end
 end

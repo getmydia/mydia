@@ -26,6 +26,19 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   # crafted one would close the page instead of getting an answer back.
   @modes %{"review" => :review, "unattended" => :unattended}
 
+  # Same reasoning as @modes: `phx-value-band` is client-controlled, so the
+  # atom it names is looked up rather than converted. An unknown value is a
+  # silent no-op -- unlike an unknown mode, there is no form state to explain
+  # a rejection to, so there is nothing useful to flash.
+  @bands %{
+    "all" => :all,
+    "ready" => :ready,
+    "needs_attention" => :needs_attention,
+    "no_match" => :no_match
+  }
+
+  @empty_band_counts %{ready: 0, needs_attention: 0, no_match: 0, total: 0}
+
   @impl true
   def mount(_params, _session, socket) do
     library_paths = Settings.list_library_paths()
@@ -74,7 +87,13 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       |> assign(:next_cursor, nil)
       |> assign(:cursor_stack, [])
       |> assign(:expanded_group_id, nil)
-      |> assign(:band_counts, %{ready: 0, needs_attention: 0, no_match: 0, total: 0})
+      |> assign(:band_counts, @empty_band_counts)
+      # Per-library pending totals for the picker, keyed by library_path_id.
+      # Populated by refresh_counts/1 alongside band_counts, not here: an
+      # empty map is the correct disconnected-render value (no query at all),
+      # matching band_counts's own placeholder above.
+      |> assign(:library_group_counts, %{})
+      |> assign(:matching_count, 0)
       |> assign(:selected_library_path_id, selected_library_path_id)
       |> assign(:selection, SelectionScope.new(selected_library_path_id))
       # `ImportGroup` rows carry an `:id` field, so the default `"groups-<id>"`
@@ -95,7 +114,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     # response fast on a large library, and it is the property pinned by the
     # "issues no query on the disconnected render" test.
     if connected?(socket) do
-      {:ok, load_groups(socket)}
+      {:ok, socket |> load_groups() |> refresh_counts()}
     else
       {:ok, socket}
     end
@@ -103,10 +122,10 @@ defmodule MydiaWeb.ImportMediaLive.Index do
 
   @impl true
   def handle_params(_params, uri, socket) do
-    # `/review` is kept as a redirect for old bookmarks and links (including
-    # the outcome CTA below, which still points there on purpose -- see its
-    # moduledoc). The module it used to point to is gone; this page is the
-    # only one there is now.
+    # `/review` is kept as a redirect for old bookmarks and links -- the
+    # module it used to point to is gone, and this page is the only one there
+    # is now. Nothing still links here on purpose; `RunControl`'s outcome CTA
+    # points straight at `/import` to avoid this exact round trip.
     if URI.parse(uri).path == "/review" do
       {:noreply, push_navigate(socket, to: ~p"/import")}
     else
@@ -182,14 +201,31 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     end
   end
 
+  # A stale bookmark, an id from before a path was removed, or a crafted
+  # event can still name any id -- same guard shape as
+  # authorize_library_path/2 above.
+  def handle_event("select_library", %{"library_path_id" => id}, socket) do
+    if Enum.any?(socket.assigns.importable_library_paths, &(&1.id == id)) do
+      {:noreply, switch_library(socket, id)}
+    else
+      {:noreply, socket}
+    end
+  end
+
   def handle_event("select_band", %{"band" => band}, socket) do
-    {:noreply,
-     socket
-     |> assign(:band, String.to_existing_atom(band))
-     |> assign(:cursor, nil)
-     |> assign(:cursor_stack, [])
-     |> assign(:selection, SelectionScope.new(socket.assigns.selected_library_path_id))
-     |> load_groups()}
+    case Map.fetch(@bands, band) do
+      {:ok, band} ->
+        {:noreply,
+         socket
+         |> assign(:band, band)
+         |> assign(:cursor, nil)
+         |> assign(:cursor_stack, [])
+         |> assign(:selection, SelectionScope.new(socket.assigns.selected_library_path_id))
+         |> load_groups()}
+
+      :error ->
+        {:noreply, socket}
+    end
   end
 
   def handle_event("search", %{"q" => q}, socket) do
@@ -202,11 +238,17 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   end
 
   def handle_event("next_page", _params, socket) do
-    {:noreply,
-     socket
-     |> assign(:cursor_stack, [socket.assigns.cursor | socket.assigns.cursor_stack])
-     |> assign(:cursor, socket.assigns.next_cursor)
-     |> load_groups()}
+    case socket.assigns.next_cursor do
+      nil ->
+        {:noreply, socket}
+
+      next_cursor ->
+        {:noreply,
+         socket
+         |> assign(:cursor_stack, [socket.assigns.cursor | socket.assigns.cursor_stack])
+         |> assign(:cursor, next_cursor)
+         |> load_groups()}
+    end
   end
 
   def handle_event("prev_page", _params, socket) do
@@ -236,11 +278,21 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       |> SelectionScope.new()
       |> SelectionScope.select_all_matching(filter)
 
-    {:noreply, assign(socket, :selection, selection)}
+    # `selected?/2` reads `:selection` fresh on every render, but a stream
+    # item's rendered body does not: switching to :filter mode here selects
+    # every matching row in the database without touching the `:groups`
+    # stream, so every checkbox currently on screen would stay visually
+    # unchecked. load_groups/1 re-inserts the whole current page, which is
+    # the only thing that makes a stream item's `selected` attribute
+    # re-evaluate -- see refresh_group_row/2's comment for the general rule.
+    {:noreply, socket |> assign(:selection, selection) |> load_groups()}
   end
 
   def handle_event("clear_selection", _params, socket) do
-    {:noreply, assign(socket, :selection, SelectionScope.clear(socket.assigns.selection))}
+    {:noreply,
+     socket
+     |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
+     |> load_groups()}
   end
 
   def handle_event("accept_selected", _params, socket) do
@@ -253,17 +305,32 @@ defmodule MydiaWeb.ImportMediaLive.Index do
          socket
          |> put_flash(:info, "Accepted #{count} group(s). Linking in the background.")
          |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
-         |> load_groups()}
+         |> load_groups()
+         |> refresh_counts()}
 
       {:error, reason} ->
         Logger.error("Could not enqueue the import group apply job", reason: inspect(reason))
 
+        # accept/1 flips status to "accepted" *before* it tries to enqueue,
+        # so the affected rows are already gone from the "pending" set both
+        # page/2 and SelectionScope filter on -- regardless of whether the
+        # enqueue itself succeeded. Reload so the stream (and the counts)
+        # match the database instead of continuing to show rows that no
+        # longer match the query, and clear the selection: it names ids that
+        # can no longer be acted on, and re-running accept/1 against them
+        # would select nothing, short-circuit, and return {:ok, 0} -- a
+        # second, silent "success" for a selection that already failed once.
         {:noreply,
-         put_flash(
-           socket,
+         socket
+         |> put_flash(
            :error,
-           "Marked for import, but the background job could not be started. Try again."
-         )}
+           "Marked for import, but the background job could not be started. " <>
+             "They are not lost: the next successful accept for this library " <>
+             "will pick them up."
+         )
+         |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
+         |> load_groups()
+         |> refresh_counts()}
     end
   end
 
@@ -274,7 +341,8 @@ defmodule MydiaWeb.ImportMediaLive.Index do
      socket
      |> put_flash(:info, "Ignored #{count} group(s).")
      |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
-     |> load_groups()}
+     |> load_groups()
+     |> refresh_counts()}
   end
 
   def handle_event("expand_group", %{"id" => id}, socket) do
@@ -337,7 +405,10 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   end
 
   def handle_info({:import_groups_changed, _library_path_id}, socket) do
-    {:noreply, load_groups(socket)}
+    # Only ever arrives for the currently selected library: switch_library/2
+    # unsubscribes from the old topic and subscribes to the new one in the
+    # same step, so there is nothing to filter on here.
+    {:noreply, socket |> load_groups() |> refresh_counts()}
   end
 
   defp importable?(library_path), do: ImportRun.importable_type?(library_path.type)
@@ -372,26 +443,87 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     Library.count_inbox_files(library_path_id: run.library_path_id)
   end
 
-  # The review section works one library path at a time and, unlike the start
-  # form, has no picker of its own yet -- so it defaults to the first
-  # importable path, same as the start form's own radio default.
+  # The review section works one library path at a time. On mount it defaults
+  # to the first importable path, same as the start form's own radio default;
+  # after that, select_library/2 (via the picker) is what changes it.
   defp default_library_path_id([%{id: id} | _rest]), do: id
   defp default_library_path_id([]), do: nil
 
+  # Switches which library path the review section shows. Every piece of
+  # state the review section owns is either library-scoped (selection,
+  # paging, expansion) or would silently act on rows no longer on screen if
+  # left as-is (a filter-mode selection built against the old library's
+  # groups, most of all) -- so all of it resets here rather than only the
+  # pieces that would visibly break.
+  defp switch_library(socket, id) do
+    previous_id = socket.assigns.selected_library_path_id
+
+    if connected?(socket) and previous_id != id do
+      if previous_id, do: Phoenix.PubSub.unsubscribe(Mydia.PubSub, "import_groups:#{previous_id}")
+      Phoenix.PubSub.subscribe(Mydia.PubSub, "import_groups:#{id}")
+    end
+
+    socket
+    |> assign(:selected_library_path_id, id)
+    |> assign(:cursor, nil)
+    |> assign(:cursor_stack, [])
+    |> assign(:expanded_group_id, nil)
+    |> assign(:selection, SelectionScope.new(id))
+    |> stream(:members, [], reset: true)
+    |> load_groups()
+    |> refresh_counts()
+  end
+
+  # Paging and filtering (band, search, cursor) never change how many groups
+  # exist in each band or in any other library -- only accepting, ignoring,
+  # switching libraries, or another session's own accept/ignore (over
+  # PubSub) do. So this reloads only the current page of groups; callers
+  # that know the counts actually changed also call refresh_counts/1.
   defp load_groups(socket) do
     library_path_id = socket.assigns.selected_library_path_id
+    filter = %{band: socket.assigns.band, q: socket.assigns.search}
 
     {groups, next_cursor} =
       ImportGroups.page(library_path_id,
-        band: socket.assigns.band,
-        q: socket.assigns.search,
+        band: filter.band,
+        q: filter.q,
         after: socket.assigns.cursor
       )
+
+    # What "select all matching this filter" would actually select, right
+    # now, under the active band and search -- not band_counts/1's total,
+    # which only accounts for the band and knows nothing about the search
+    # box. A `SelectionScope.count/1` in :filter mode is a single SQL COUNT
+    # against the same predicate select_all_matching/1 itself would use, so
+    # this stays correct without duplicating that predicate here.
+    matching_count =
+      library_path_id
+      |> SelectionScope.new()
+      |> SelectionScope.select_all_matching(filter)
+      |> SelectionScope.count()
 
     socket
     |> stream(:groups, groups, reset: true)
     |> assign(:next_cursor, next_cursor)
-    |> assign(:band_counts, ImportGroups.band_counts(library_path_id))
+    |> assign(:matching_count, matching_count)
+  end
+
+  # Recomputes the counts that only change when a group's status changes,
+  # not on every page move or search keystroke: the current library's band
+  # breakdown for the filter chips, and every importable library's pending
+  # total for the picker. band_counts/1 loads every pending group row for
+  # each library path it is asked about, so this is deliberately called only
+  # from mount/1, switch_library/2, accept/ignore, and the PubSub handler --
+  # never from load_groups/1, which paging and search both go through.
+  defp refresh_counts(socket) do
+    socket
+    |> assign(:band_counts, ImportGroups.band_counts(socket.assigns.selected_library_path_id))
+    |> assign(
+      :library_group_counts,
+      Map.new(socket.assigns.importable_library_paths, fn path ->
+        {path.id, ImportGroups.band_counts(path.id).total}
+      end)
+    )
   end
 
   # Re-inserts one group, purely to force LiveView to redraw its row.

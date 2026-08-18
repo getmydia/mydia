@@ -11,6 +11,38 @@ defmodule MydiaWeb.ImportMediaLive.Components do
   import MydiaWeb.CoreComponents
 
   @doc """
+  A row of buttons for switching which library the review section shows.
+
+  Only meaningful with more than one importable library path -- the caller
+  is expected to gate rendering on that, same as the `filter` this row of
+  buttons resembles. `counts` maps `library_path_id` to its pending group
+  total (`ImportGroups.band_counts/1`'s `:total`, one call per path), so a
+  user picking between two libraries can see where the work actually is
+  before switching to it.
+  """
+  attr :library_paths, :list, required: true
+  attr :selected_id, :string, required: true
+  attr :counts, :map, required: true
+
+  def library_picker(assigns) do
+    ~H"""
+    <div class="flex items-center gap-2 flex-wrap">
+      <button
+        :for={path <- @library_paths}
+        type="button"
+        id={"library-picker-#{path.id}"}
+        class={["btn btn-sm", if(path.id == @selected_id, do: "btn-primary", else: "btn-ghost")]}
+        phx-click="select_library"
+        phx-value-library_path_id={path.id}
+      >
+        {path.path}
+        <span class="badge badge-sm">{Map.get(@counts, path.id, 0)}</span>
+      </button>
+    </div>
+    """
+  end
+
+  @doc """
   The band filter chips plus the folder search box.
 
   `counts` is `ImportGroups.band_counts/1`'s return shape: `:ready`,
@@ -76,10 +108,16 @@ defmodule MydiaWeb.ImportMediaLive.Components do
   Shown whenever there is something to act on -- either a group is already
   selected, or the band/search filter narrows the page to a subset a user
   would plausibly want to select in bulk without touching every checkbox.
+
+  `matching_count` is how many groups the active band *and* search actually
+  match, library-wide -- not `band_counts/1`'s total, which knows nothing
+  about the search box and would offer to "select all" a number the search
+  has already narrowed past. The caller computes it with the same
+  `SelectionScope` predicate `select_all_matching/1` itself uses, so the two
+  can never disagree.
   """
   attr :count, :integer, required: true
-  attr :band_total, :integer, required: true
-  attr :mode, :atom, required: true
+  attr :matching_count, :integer, required: true
 
   def bulk_bar(assigns) do
     ~H"""
@@ -87,19 +125,29 @@ defmodule MydiaWeb.ImportMediaLive.Components do
       <span>{@count} group(s) selected.</span>
 
       <button
-        :if={@band_total > @count}
+        :if={@matching_count > @count}
         id="select-all-matching"
         class="btn btn-xs btn-ghost"
         phx-click="select_all_matching"
       >
-        Select all {@band_total} matching this filter
+        Select all {@matching_count} matching this filter
       </button>
 
       <div class="ml-auto flex gap-2">
-        <button id="accept-selected" class="btn btn-sm btn-primary" phx-click="accept_selected">
+        <button
+          id="accept-selected"
+          class="btn btn-sm btn-primary"
+          disabled={@count == 0}
+          phx-click="accept_selected"
+        >
           Accept {@count}
         </button>
-        <button id="ignore-selected" class="btn btn-sm btn-ghost" phx-click="ignore_selected">
+        <button
+          id="ignore-selected"
+          class="btn btn-sm btn-ghost"
+          disabled={@count == 0}
+          phx-click="ignore_selected"
+        >
           Ignore
         </button>
         <button id="clear-selection" class="btn btn-sm btn-ghost" phx-click="clear_selection">

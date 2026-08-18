@@ -188,7 +188,7 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
   defp outcome_review_cta(assigns) do
     ~H"""
     <div :if={@unresolved > 0} class="w-full">
-      <.link navigate={~p"/review"} class="btn btn-sm btn-outline">
+      <.link navigate={~p"/import"} class="btn btn-sm btn-outline">
         <.icon name="hero-inbox-stack" class="w-4 h-4" />
         Review {@unresolved} file(s) that need attention
       </.link>

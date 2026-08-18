@@ -9,13 +9,19 @@
       outcome_inbox_count={@outcome_inbox_count}
     />
 
+    <Components.library_picker
+      :if={length(@importable_library_paths) > 1}
+      library_paths={@importable_library_paths}
+      selected_id={@selected_library_path_id}
+      counts={@library_group_counts}
+    />
+
     <Components.band_filter band={@band} counts={@band_counts} search={@search} />
 
     <Components.bulk_bar
       :if={SelectionScope.count(@selection) > 0 or @band != :all or @search != ""}
       count={SelectionScope.count(@selection)}
-      band_total={Map.get(@band_counts, @band, @band_counts.total)}
-      mode={@selection.mode}
+      matching_count={@matching_count}
     />
 
     <div id="groups" phx-update="stream" class="flex flex-col divide-y divide-base-300">
