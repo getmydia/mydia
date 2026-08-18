@@ -19,7 +19,10 @@
     <Components.band_filter band={@band} counts={@band_counts} search={@search} />
 
     <Components.bulk_bar
-      :if={SelectionScope.count(@selection) > 0 or @band != :all or @search != ""}
+      :if={
+        SelectionScope.count(@selection) > 0 or (@band != :all and @band != :ignored) or
+          @search != ""
+      }
       count={SelectionScope.count(@selection)}
       matching_count={@matching_count}
     />
@@ -28,15 +31,20 @@
       <div id="no-groups" class="hidden only:block p-8 text-center opacity-70">
         Nothing to review. Every file in this library is linked.
       </div>
-      <Components.group_row
-        :for={{dom_id, group} <- @streams.groups}
-        id={dom_id}
-        group={group}
-        band={ImportGroups.band(group)}
-        selected={SelectionScope.selected?(@selection, group.id)}
-        expanded={MapSet.member?(@expanded_ids, group.id)}
-        members={if @expanded_group_id == group.id, do: @streams.members, else: []}
-      />
+      <%= for {dom_id, group} <- @streams.groups do %>
+        <%= if group.status == "ignored" do %>
+          <Components.ignored_group_row id={dom_id} group={group} />
+        <% else %>
+          <Components.group_row
+            id={dom_id}
+            group={group}
+            band={ImportGroups.band(group)}
+            selected={SelectionScope.selected?(@selection, group.id)}
+            expanded={MapSet.member?(@expanded_ids, group.id)}
+            members={if @expanded_group_id == group.id, do: @streams.members, else: []}
+          />
+        <% end %>
+      <% end %>
     </div>
 
     <div class="join self-center">

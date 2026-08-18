@@ -85,8 +85,15 @@ defmodule Mydia.ImportGroups do
     # Folded in Elixir rather than aggregated in SQL: `band/1` reads the JSON
     # evidence column, and CLAUDE.md forbids SQL aggregates over the kinds of
     # values this would otherwise need to CASE over on two adapters.
+    #
+    # Deliberately hardcodes "pending" rather than taking a status: this is
+    # the number the nav badge and the Ready/Needs attention/No match chips
+    # are built from, and both have to keep meaning "needs a decision".
+    # `count_by_status/2` below is the Ignored chip's own count, kept
+    # separate rather than folded in here for exactly that reason.
     ImportGroup
-    |> where([g], g.library_path_id == ^library_path_id and g.status == "pending")
+    |> for_status("pending")
+    |> for_library(library_path_id)
     |> select([g], %{
       provider_id: g.provider_id,
       min_confidence: g.min_confidence,
@@ -107,30 +114,55 @@ defmodule Mydia.ImportGroups do
 
   A plain SQL count, deliberately not `band_counts/1`: that one loads every
   pending row to fold bands in Elixir, and this runs on every authenticated
-  LiveView mount.
+  LiveView mount. Hardcodes "pending" for the same reason `band_counts/1`
+  does -- the badge means "needs a decision", not "every group that exists".
   """
   @spec count_pending() :: non_neg_integer()
   def count_pending do
     ImportGroup
-    |> where([g], g.status == "pending")
+    |> for_status("pending")
     |> Repo.aggregate(:count)
   end
 
   @doc """
-  One keyset page of pending groups, newest-largest first.
+  How many groups of one status exist for a library path.
+
+  Used for the Ignored filter chip's count, which has to stay a call of its
+  own rather than a key `band_counts/1` folds in: `band/1`'s bands are a
+  partition of confidence, not of status, and an ignored group's own band is
+  usually still meaningful (an ignored :ready group is still :ready) --
+  conflating the two would make "how many groups are ignored" depend on
+  which bands happened to exist among them.
+  """
+  @spec count_by_status(binary(), String.t()) :: non_neg_integer()
+  def count_by_status(library_path_id, status) do
+    ImportGroup
+    |> for_library(library_path_id)
+    |> for_status(status)
+    |> Repo.aggregate(:count)
+  end
+
+  @doc """
+  One keyset page of groups, newest-largest first.
 
   Returns `{groups, cursor}`; `cursor` is nil when the page is the last one.
   Pass the cursor back as `:after`. Ordering is `{file_count desc, id asc}`, so
   the biggest blast radius is decided first and the first screenful of
   decisions covers most of the library's files.
+
+  `:status` defaults to `"pending"`, the review page's normal view. The
+  Ignored filter passes `status: "ignored"` to read the same page shape back
+  for groups a human has already dismissed -- see `ImportGroups.restore/1`
+  for how one of them gets back out.
   """
   @spec page(binary(), keyword()) :: {[ImportGroup.t()], term() | nil}
   def page(library_path_id, opts \\ []) do
     limit = Keyword.get(opts, :limit, @default_page_size)
+    status = Keyword.get(opts, :status, "pending")
 
     groups =
       library_path_id
-      |> base_query()
+      |> base_query(status)
       |> apply_band(Keyword.get(opts, :band))
       |> apply_search(Keyword.get(opts, :q))
       |> apply_cursor(Keyword.get(opts, :after))
@@ -173,10 +205,21 @@ defmodule Mydia.ImportGroups do
     {:ok, %{groups: map_size(group_ids), files: file_count}}
   end
 
-  defp base_query(library_path_id) do
+  defp base_query(library_path_id, status) do
     ImportGroup
-    |> where([g], g.library_path_id == ^library_path_id and g.status == "pending")
+    |> for_library(library_path_id)
+    |> for_status(status)
   end
+
+  # Shared by base_query/2, band_counts/1, count_pending/0 and
+  # count_by_status/2, which each used to spell `g.status == "..."` out
+  # separately -- threading the value through here instead of duplicating the
+  # predicate is what makes it possible to tell at a glance that "pending"
+  # means the same thing in all four places.
+  defp for_status(query, status), do: where(query, [g], g.status == ^status)
+
+  defp for_library(query, library_path_id),
+    do: where(query, [g], g.library_path_id == ^library_path_id)
 
   defp apply_band(query, nil), do: query
   defp apply_band(query, :all), do: query
@@ -531,6 +574,32 @@ defmodule Mydia.ImportGroups do
       scope
       |> SelectionScope.to_query()
       |> Repo.update_all(set: [status: "ignored", decided_at: now, updated_at: now])
+
+    {:ok, count}
+  end
+
+  @doc """
+  Restores one ignored group to "pending".
+
+  `ignore/1` used to be a one-way door: `write_group/4` preserves an
+  existing group's `status` across every rescan (that is the whole
+  rescan-stability mechanism), so nothing short of this function could ever
+  bring an ignored group back, and there was no UI that could even see one
+  to reconsider it.
+
+  Guarded on `status == "ignored"` rather than an unconditional update, so a
+  stale or double-clicked Restore -- the group was already restored by
+  another tab, or reached some other status in between -- is a silent no-op
+  (`{:ok, 0}`) instead of clobbering whatever decided it in the meantime.
+  """
+  @spec restore(binary()) :: {:ok, non_neg_integer()}
+  def restore(group_id) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    {count, _} =
+      ImportGroup
+      |> where([g], g.id == ^group_id and g.status == "ignored")
+      |> Repo.update_all(set: [status: "pending", decided_at: nil, updated_at: now])
 
     {:ok, count}
   end

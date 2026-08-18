@@ -30,14 +30,20 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   # atom it names is looked up rather than converted. An unknown value is a
   # silent no-op -- unlike an unknown mode, there is no form state to explain
   # a rejection to, so there is nothing useful to flash.
+  # `:ignored` is not a confidence band -- it is a status -- but it rides the
+  # same chip row and the same client-controlled atom lookup as the real
+  # bands, and load_groups/1 translates it into ImportGroups.page/2's
+  # `:status` option rather than its `:band` option (which has no clause for
+  # it and would raise).
   @bands %{
     "all" => :all,
     "ready" => :ready,
     "needs_attention" => :needs_attention,
-    "no_match" => :no_match
+    "no_match" => :no_match,
+    "ignored" => :ignored
   }
 
-  @empty_band_counts %{ready: 0, needs_attention: 0, no_match: 0, total: 0}
+  @empty_band_counts %{ready: 0, needs_attention: 0, no_match: 0, ignored: 0, total: 0}
 
   @impl true
   def mount(_params, _session, socket) do
@@ -271,22 +277,33 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     {:noreply, refresh_group_row(socket, id)}
   end
 
+  # The button this responds to is never rendered on the Ignored view (see
+  # ignored_group_row/1 -- ignored rows carry no checkbox at all), but the
+  # event name itself is still a valid target for a crafted or stale request.
+  # `SelectionScope.apply_band/2` has no clause for `:ignored` (it is a
+  # status, not a real band), so building a filter-mode scope with it would
+  # raise the first time anything read the scope back -- refusing here instead
+  # keeps that a routine no-op rather than a crash.
   def handle_event("select_all_matching", _params, socket) do
-    filter = %{band: socket.assigns.band, q: socket.assigns.search}
+    if socket.assigns.band == :ignored do
+      {:noreply, socket}
+    else
+      filter = %{band: socket.assigns.band, q: socket.assigns.search}
 
-    selection =
-      socket.assigns.selected_library_path_id
-      |> SelectionScope.new()
-      |> SelectionScope.select_all_matching(filter)
+      selection =
+        socket.assigns.selected_library_path_id
+        |> SelectionScope.new()
+        |> SelectionScope.select_all_matching(filter)
 
-    # `selected?/2` reads `:selection` fresh on every render, but a stream
-    # item's rendered body does not: switching to :filter mode here selects
-    # every matching row in the database without touching the `:groups`
-    # stream, so every checkbox currently on screen would stay visually
-    # unchecked. load_groups/1 re-inserts the whole current page, which is
-    # the only thing that makes a stream item's `selected` attribute
-    # re-evaluate -- see refresh_group_row/2's comment for the general rule.
-    {:noreply, socket |> assign(:selection, selection) |> load_groups()}
+      # `selected?/2` reads `:selection` fresh on every render, but a stream
+      # item's rendered body does not: switching to :filter mode here selects
+      # every matching row in the database without touching the `:groups`
+      # stream, so every checkbox currently on screen would stay visually
+      # unchecked. load_groups/1 re-inserts the whole current page, which is
+      # the only thing that makes a stream item's `selected` attribute
+      # re-evaluate -- see refresh_group_row/2's comment for the general rule.
+      {:noreply, socket |> assign(:selection, selection) |> load_groups()}
+    end
   end
 
   def handle_event("clear_selection", _params, socket) do
@@ -452,6 +469,30 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     end
   end
 
+  # Ignore used to be a one-way door: a rescan can never bring a group back
+  # (write_group/4 preserves status on purpose), and until now there was no
+  # UI that could even see an ignored group to reconsider it. This is the way
+  # back -- only reachable from the Ignored view's own row, which is the only
+  # place `restore_group` is rendered, but a stale click after another tab
+  # already restored the same group is a normal, silent `{:ok, 0}`.
+  def handle_event("restore_group", %{"id" => id}, socket) do
+    with :ok <- Authorization.authorize_import_media(socket) do
+      case ImportGroups.restore(id) do
+        {:ok, count} when count > 0 ->
+          {:noreply,
+           socket
+           |> put_flash(:info, "Restored to pending.")
+           |> load_groups()
+           |> refresh_counts()}
+
+        {:ok, 0} ->
+          {:noreply, put_flash(socket, :info, "That group is no longer ignored.")}
+      end
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
   @impl true
   def handle_info({:import_run_progress, run}, socket) do
     socket =
@@ -571,12 +612,19 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   # that know the counts actually changed also call refresh_counts/1.
   defp load_groups(socket) do
     library_path_id = socket.assigns.selected_library_path_id
-    filter = %{band: socket.assigns.band, q: socket.assigns.search}
+    band = socket.assigns.band
+    # `:ignored` is a status, not a real band -- ImportGroups.page/2's :band
+    # option has no clause for it, so it goes through :status instead and the
+    # band filter itself is left at :all (an ignored group's own confidence
+    # band plays no part in the Ignored view).
+    {status, page_band} = if band == :ignored, do: {"ignored", :all}, else: {"pending", band}
+    filter = %{band: page_band, q: socket.assigns.search}
 
     {groups, next_cursor} =
       ImportGroups.page(library_path_id,
         band: filter.band,
         q: filter.q,
+        status: status,
         after: socket.assigns.cursor
       )
 
@@ -586,11 +634,19 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     # box. A `SelectionScope.count/1` in :filter mode is a single SQL COUNT
     # against the same predicate select_all_matching/1 itself would use, so
     # this stays correct without duplicating that predicate here.
+    #
+    # Skipped entirely on the Ignored view: SelectionScope's own query is
+    # hardcoded to `status == "pending"` (nothing there is selectable), and
+    # its `apply_band/2` has no `:ignored` clause to run in the first place.
     matching_count =
-      library_path_id
-      |> SelectionScope.new()
-      |> SelectionScope.select_all_matching(filter)
-      |> SelectionScope.count()
+      if band == :ignored do
+        0
+      else
+        library_path_id
+        |> SelectionScope.new()
+        |> SelectionScope.select_all_matching(filter)
+        |> SelectionScope.count()
+      end
 
     # The wizard pre-collapsed any season whose episodes all matched confidently,
     # and losing that is why the rewritten page read as one huge list. Same rule,
@@ -610,14 +666,22 @@ defmodule MydiaWeb.ImportMediaLive.Index do
 
   # Recomputes the counts that only change when a group's status changes,
   # not on every page move or search keystroke: the current library's band
-  # breakdown for the filter chips, and every importable library's pending
-  # total for the picker. band_counts/1 loads every pending group row for
-  # each library path it is asked about, so this is deliberately called only
-  # from mount/1, switch_library/2, accept/ignore, and the PubSub handler --
-  # never from load_groups/1, which paging and search both go through.
+  # breakdown for the filter chips, the Ignored chip's own count, and every
+  # importable library's pending total for the picker. band_counts/1 loads
+  # every pending group row for each library path it is asked about, so this
+  # is deliberately called only from mount/1, switch_library/2,
+  # accept/ignore/restore, and the PubSub handler -- never from load_groups/1,
+  # which paging and search both go through.
   defp refresh_counts(socket) do
+    library_path_id = socket.assigns.selected_library_path_id
+
+    band_counts =
+      library_path_id
+      |> ImportGroups.band_counts()
+      |> Map.put(:ignored, ImportGroups.count_by_status(library_path_id, "ignored"))
+
     socket
-    |> assign(:band_counts, ImportGroups.band_counts(socket.assigns.selected_library_path_id))
+    |> assign(:band_counts, band_counts)
     |> assign(
       :library_group_counts,
       Map.new(socket.assigns.importable_library_paths, fn path ->

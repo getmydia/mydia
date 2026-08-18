@@ -70,7 +70,8 @@ defmodule MydiaWeb.ImportMediaLive.Components do
               {:all, "band-all", "All"},
               {:ready, "band-ready", "Ready"},
               {:needs_attention, "band-needs-attention", "Needs attention"},
-              {:no_match, "band-no-match", "No match"}
+              {:no_match, "band-no-match", "No match"},
+              {:ignored, "band-ignored", "Ignored"}
             ]
           }
           id={id}
@@ -231,6 +232,43 @@ defmodule MydiaWeb.ImportMediaLive.Components do
           <span id={"member-#{member.media_file.id}"}>{member.media_file.relative_path}</span>
         </li>
       </ul>
+    </div>
+    """
+  end
+
+  @doc """
+  One row on the Ignored view.
+
+  Deliberately not a variant of `group_row/1`: an ignored group has nothing
+  to select, accept, change or expand -- accept/ignore/change_match all
+  refuse a non-"pending" group, and `SelectionScope`'s own query is hardcoded
+  to `status == "pending"`, so a checkbox here would either do nothing or
+  lie about what it does. The one thing this view offers is the way back.
+  """
+  attr :id, :string, required: true
+  attr :group, :map, required: true
+
+  def ignored_group_row(assigns) do
+    ~H"""
+    <div id={@id} class="py-3 flex items-center gap-3">
+      <span class="flex-1 flex items-center gap-2 min-w-0">
+        <span class="font-semibold truncate">{@group.display_title}</span>
+        <span class="badge badge-sm">{@group.file_count} files</span>
+        <span :if={season_label(@group)} class="badge badge-ghost badge-sm">
+          {season_label(@group)}
+        </span>
+      </span>
+
+      <p class="text-sm opacity-70 truncate">{suggestion_line(@group)}</p>
+
+      <button
+        id={"restore-#{@group.id}"}
+        class="btn btn-xs btn-outline shrink-0"
+        phx-click="restore_group"
+        phx-value-id={@group.id}
+      >
+        Restore
+      </button>
     </div>
     """
   end

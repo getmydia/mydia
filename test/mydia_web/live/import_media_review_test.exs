@@ -579,4 +579,92 @@ defmodule MydiaWeb.ImportMediaReviewTest do
     refute Repo.reload!(file).episode_id
     assert Repo.reload!(group).provider_type != "local"
   end
+
+  describe "the Ignored view" do
+    test "the Ignored chip counts ignored groups and the pending chips exclude them",
+         %{conn: conn} do
+      lp = library_path_fixture(%{type: "series"})
+      seed_group(lp, cluster_key: "pending", min_confidence: 1.0)
+      seed_group(lp, cluster_key: "ignored-one", status: "ignored")
+      seed_group(lp, cluster_key: "ignored-two", status: "ignored")
+
+      {:ok, view, _html} = live(conn, ~p"/import")
+
+      assert has_element?(view, "#band-ignored", "2")
+      assert has_element?(view, "#band-all", "1")
+      assert has_element?(view, "#band-ready", "1")
+    end
+
+    test "selecting the Ignored chip shows ignored groups and hides pending ones",
+         %{conn: conn} do
+      lp = library_path_fixture(%{type: "series"})
+      pending = seed_group(lp, cluster_key: "pending", min_confidence: 1.0)
+      ignored = seed_group(lp, cluster_key: "ignored", status: "ignored")
+
+      {:ok, view, _html} = live(conn, ~p"/import")
+
+      assert has_element?(view, "#group-#{pending.id}")
+      refute has_element?(view, "#group-#{ignored.id}")
+
+      view |> element("#band-ignored") |> render_click()
+
+      refute has_element?(view, "#group-#{pending.id}")
+      assert has_element?(view, "#group-#{ignored.id}")
+    end
+
+    test "an ignored row offers Restore instead of the normal group controls",
+         %{conn: conn} do
+      lp = library_path_fixture(%{type: "series"})
+      ignored = seed_group(lp, cluster_key: "ignored", status: "ignored")
+
+      {:ok, view, _html} = live(conn, ~p"/import")
+      view |> element("#band-ignored") |> render_click()
+
+      assert has_element?(view, "#restore-#{ignored.id}")
+      refute has_element?(view, "#group-#{ignored.id} input[type=checkbox]")
+    end
+
+    test "restoring a group returns it to pending and moves it back off the Ignored view",
+         %{conn: conn} do
+      lp = library_path_fixture(%{type: "series"})
+      ignored = seed_group(lp, cluster_key: "ignored", status: "ignored")
+
+      {:ok, view, _html} = live(conn, ~p"/import")
+      view |> element("#band-ignored") |> render_click()
+
+      view |> element("#restore-#{ignored.id}") |> render_click()
+
+      assert has_element?(view, "#flash-info", "Restored")
+      refute has_element?(view, "#group-#{ignored.id}")
+      assert Repo.reload!(ignored).status == "pending"
+    end
+
+    test "an ignored group accepted then re-viewed as pending shows normal controls again",
+         %{conn: conn} do
+      lp = library_path_fixture(%{type: "series"})
+      group = seed_group(lp, cluster_key: "roundtrip", status: "ignored", min_confidence: 1.0)
+
+      {:ok, view, _html} = live(conn, ~p"/import")
+      view |> element("#band-ignored") |> render_click()
+      view |> element("#restore-#{group.id}") |> render_click()
+
+      view |> element("#band-all") |> render_click()
+
+      assert has_element?(view, "#group-#{group.id} input[type=checkbox]")
+    end
+  end
+
+  test "readonly users cannot restore an ignored group", %{conn: conn} do
+    lp = library_path_fixture(%{type: "series"})
+    group = seed_group(lp, cluster_key: "readonly-restore", status: "ignored")
+
+    readonly_conn = log_in_user(conn, user_fixture(%{role: "readonly"}))
+
+    {:ok, view, _html} = live(readonly_conn, ~p"/import")
+    view |> element("#band-ignored") |> render_click()
+
+    render_click(view, "restore_group", %{"id" => group.id})
+
+    assert Repo.reload!(group).status == "ignored"
+  end
 end

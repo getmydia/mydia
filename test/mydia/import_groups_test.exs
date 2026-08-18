@@ -71,7 +71,52 @@ defmodule Mydia.ImportGroupsTest do
     end
   end
 
+  describe "count_by_status/2" do
+    test "counts only the requested status, scoped to the library path" do
+      lp = library_path_fixture(%{type: "series"})
+      other_lp = library_path_fixture(%{type: "series"})
+
+      group(lp, cluster_key: "a", status: "ignored")
+      group(lp, cluster_key: "b", status: "ignored")
+      group(lp, cluster_key: "c", status: "pending")
+      group(other_lp, cluster_key: "d", status: "ignored")
+
+      assert ImportGroups.count_by_status(lp.id, "ignored") == 2
+      assert ImportGroups.count_by_status(lp.id, "pending") == 1
+    end
+  end
+
+  describe "restore/1" do
+    test "returns an ignored group to pending and clears decided_at" do
+      lp = library_path_fixture(%{type: "series"})
+      g = group(lp, cluster_key: "a", status: "ignored", decided_at: DateTime.utc_now())
+
+      assert {:ok, 1} = ImportGroups.restore(g.id)
+
+      reloaded = Repo.reload!(g)
+      assert reloaded.status == "pending"
+      assert reloaded.decided_at == nil
+    end
+
+    test "a group that is not ignored is left untouched" do
+      lp = library_path_fixture(%{type: "series"})
+      g = group(lp, cluster_key: "a", status: "applied")
+
+      assert {:ok, 0} = ImportGroups.restore(g.id)
+      assert Repo.reload!(g).status == "applied"
+    end
+  end
+
   describe "page/2" do
+    test "status: \"ignored\" reads back only ignored groups" do
+      lp = library_path_fixture(%{type: "series"})
+      group(lp, cluster_key: "pending", file_count: 1)
+      ignored = group(lp, cluster_key: "ignored", file_count: 1, status: "ignored")
+
+      {page, _cursor} = ImportGroups.page(lp.id, status: "ignored")
+      assert Enum.map(page, & &1.id) == [ignored.id]
+    end
+
     test "pages by keyset on file_count descending and never repeats a row" do
       lp = library_path_fixture(%{type: "series"})
 
