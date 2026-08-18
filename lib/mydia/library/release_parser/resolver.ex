@@ -22,7 +22,6 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
         year: integer() | nil,
         season: integer() | nil,
         episodes: [integer()] | nil,
-        absolute_episode: integer() | nil,
         quality_tokens: [%{label: atom(), value: term(), token: %Token{}}],
         release_group: String.t() | nil,
         language: String.t() | nil,
@@ -121,9 +120,6 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
     {season, episodes, episode_token, episode_conf} =
       extract_episode_info(tokens, assignments_map)
 
-    absolute_episode =
-      resolve_absolute_episode(tokens, target, assignments_map, boundary, season, episodes)
-
     year_pick = pick_assignment(assignments, :year)
     year_value = pick_year_value(year_pick)
     year_confidence = pick_confidence(year_pick)
@@ -143,7 +139,6 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
       year: year_value,
       season: season,
       episodes: episodes,
-      absolute_episode: absolute_episode,
       quality_tokens: quality_tokens,
       release_group: release_group,
       language: language,
@@ -565,233 +560,6 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
 
   defp dedupe_sorted(list) when is_list(list) do
     list |> Enum.uniq() |> Enum.sort()
-  end
-
-  # ---- Absolute episode resolution (anime) ----
-  #
-  # Anime releases are numbered absolutely with no season marker
-  # ("Black Clover - 170"), which the tokenizer deliberately does not
-  # treat as an episode marker: a bare integer is far more often a
-  # year, a resolution or a part number. Resolving it here, gated
-  # behind an explicit anime target, keeps the parity suite green
-  # (target is always `nil` or non-anime there) while still matching
-  # the dominant anime naming convention.
-  #
-  # A numeric ceiling alone is not enough: numeric titles ("86",
-  # "91 Days") and sequel-numbered titles ("Log Horizon 2") put bare
-  # integers that are comfortably *below* `max_absolute_number` in the
-  # title zone itself (`170` and `2049` are safely out of range, but a
-  # title's `2` or `24` is not). An exclusion list can't close that —
-  # audio channel layouts (`2.0`, `5.1`), frame rates (`24 fps`), and
-  # bit depths tokenize into bare digits with no distinguishing
-  # candidate to exclude on.
-  #
-  # `title_boundary_for/1` (computed once in `resolve/3` and threaded
-  # in here) turns out NOT to separate these cases the way it might
-  # look like it should: it is the position of the earliest
-  # year/resolution/episode_marker anchor, and in the dominant
-  # `Title - NN (Quality)` convention the episode number sits *before*
-  # that anchor, in the same "title zone" as `86` or `Log Horizon`'s
-  # `2`. Verified by instrumenting `title_boundary_for/1` directly
-  # against the corpus below — every correct episode number and every
-  # false-positive title digit land on the *same* side of the
-  # boundary. A raw ">= boundary" filter was tried and rejected: it
-  # excludes every positive case, including the originally required
-  # `[SubsPlease] Black Clover - 170 (1080p) [A1B2C3].mkv`.
-  #
-  # So this uses two anchors, tried in order:
-  #
-  #   1. Dash-adjacency (`dash_adjacent_candidates/2`): bare integers
-  #      immediately preceded by a standalone `-` token
-  #      (`Title - NN`). This is precise — it's what correctly rejects
-  #      `86` in `86 - Eighty Six - 12` (not dash-preceded) while
-  #      accepting `12` (is), and rejects the embedded `12` in
-  #      `Black Clover - 05 - The Title 12 [1080p]` (preceded by
-  #      `Title`, not `-`) while accepting `05`.
-  #   2. Only when (1) finds *nothing at all*: the sole bare-digit
-  #      token inside the title zone
-  #      (`unambiguous_title_zone_candidate/3`) — this is what recovers
-  #      filenames with no dash at all
-  #      (`Black Clover 170.mkv`, `Black Clover.170.1080p.mkv`,
-  #      `[SubsPlease] Black Clover 170 (1080p) [A1B2C3].mkv`) and the
-  #      case where the dash sits *after* the episode number instead
-  #      of before it (`Black Clover 05 - 1080p.mkv`).
-  #
-  # Both anchors are cardinality-bounded: each selects a *set* of
-  # candidates on evidence, then declines unless that set has exactly
-  # one member. Neither ever picks a winner among several. See
-  # `only_if_unambiguous/1` for why.
-  #
-  # The dash anchor's three outcomes are kept distinct by the `case`
-  # below rather than collapsed by that helper, and the difference
-  # matters: "found several and declined" must suppress the match, not
-  # fall through to the zone anchor. Collapsing both to `[]` let a
-  # declining dash anchor promote the zone's answer, and when a year or
-  # resolution token sits *between* the two dash candidates the zone
-  # holds exactly one digit — the title's. That resolved
-  # `86 (2021) - 12 - 5 Reasons [1080p].mkv` to `86`, reviving the
-  # original false positive dash-adjacency exists to kill. An ambiguous
-  # dash set now means nil, full stop.
-  #
-  # A bare integer token only qualifies when:
-  #
-  #   1. No season/episode marker was already resolved from the
-  #      filename (guarded by the first clause below).
-  #   2. The target is bound, its `category` is `"anime_series"`, and
-  #      it carries a `max_absolute_number` (nil disables the feature,
-  #      per `TargetContext` — every non-anime show has nil).
-  #   3. It is selected by one of the two anchors above.
-  #   4. The token itself hasn't already won a singleton-label fight
-  #      (`:year`, `:resolution`, `:release_group`, etc.) — a token
-  #      already claimed as the release year or a quality/group value
-  #      is not re-read as an episode number.
-  #   5. The token sits outside brackets/parens/braces — real absolute
-  #      episode numbers appear bare (`Show - 170`), while brackets and
-  #      parens are where quality annotations, hash-style release tags
-  #      (`[A1B2C3]`), and bracketed episode numbers (`[170]`, out of
-  #      scope for this feature) live.
-  #   6. The value falls within `1..max_absolute_number` — this is
-  #      what keeps `1080`, `2049` and other large bare numbers from
-  #      ever matching.
-  defp resolve_absolute_episode(_tokens, _target, _assignments_map, _boundary, season, episodes)
-       when not is_nil(season) or episodes not in [nil, []],
-       do: nil
-
-  defp resolve_absolute_episode(
-         tokens,
-         %TargetContext{category: "anime_series", max_absolute_number: max},
-         assignments_map,
-         boundary,
-         _season,
-         _episodes
-       )
-       when is_integer(max) do
-    candidates =
-      case dash_adjacent_candidates(tokens, assignments_map) do
-        [] -> unambiguous_title_zone_candidate(tokens, boundary, assignments_map)
-        [only] -> [only]
-        _ambiguous -> []
-      end
-
-    candidates
-    |> Enum.map(&String.to_integer(&1.value))
-    |> Enum.filter(fn n -> n >= 1 and n <= max end)
-    |> List.first()
-  end
-
-  defp resolve_absolute_episode(
-         _tokens,
-         _target,
-         _assignments_map,
-         _boundary,
-         _season,
-         _episodes
-       ),
-       do: nil
-
-  # Tokens immediately preceded, in filename order, by a standalone `-`
-  # token (`Title - NN`). Dash isn't a tokenizer separator (it stays
-  # attached inside compound words like `Spider-Man`), so a `-`
-  # surrounded by whitespace on both sides survives as its own token —
-  # exactly the shape this naming convention produces.
-  #
-  # Dash-adjacency is strong evidence but not unique evidence: a
-  # filename can carry two of them (`Black Clover - 2 - 170 HEVC.mkv`,
-  # where `2` is a cour/part number, or
-  # `[Group] Black Clover - 05 - 12 Days Later.mkv`, where `12` opens a
-  # numeric episode title). Taking the first resolved the former to `2`
-  # and taking the last would break the latter — no positional rule
-  # satisfies both, which is why the caller bounds this by cardinality.
-  #
-  # This returns *all* candidates rather than pre-collapsing to a
-  # singleton, deliberately: the caller has to tell "no dash candidate,
-  # try the zone anchor" apart from "several dash candidates, decline",
-  # and a helper that answered `[]` to both made the second case fall
-  # through to the weaker rule.
-  defp dash_adjacent_candidates(tokens, assignments_map) do
-    tokens
-    |> Enum.chunk_every(2, 1, :discard)
-    |> Enum.filter(fn [prev, _curr] -> dash_token?(prev) end)
-    |> Enum.map(fn [_prev, curr] -> curr end)
-    |> Enum.filter(&bare_episode_candidate?(&1, assignments_map))
-  end
-
-  # Fallback for filenames with no (or a misplaced) dash: the sole
-  # qualifying bare-digit token in the title zone
-  # (`byte_offset < boundary`).
-  #
-  # Recall survives the cardinality bound because a real
-  # absolute-numbered release with no dash carries exactly one bare
-  # integer: quality tags that sit between the number and the boundary
-  # are words, not digits (`Black Clover 170 DTS-HD 1080p.mkv` splits
-  # into `..., 170, DTS, HD, 1080p`, and `1080p` is the boundary
-  # itself), and filenames whose numeric noise *does* tokenize into
-  # bare digits (`FLAC 2.0`, `24 fps`) are dash-marked shapes that this
-  # fallback never sees.
-  #
-  # `boundary` may be the atom `:infinity` (no year/resolution/
-  # episode_marker anchor at all) — `byte_offset < :infinity` is
-  # always true for an integer offset under Erlang term ordering, so
-  # every token counts as title zone, matching the classifier's own
-  # `zone_for/2` convention for the same boundary value.
-  defp unambiguous_title_zone_candidate(tokens, boundary, assignments_map) do
-    tokens
-    |> Enum.filter(fn %Token{byte_offset: o} -> o < boundary end)
-    |> Enum.filter(&bare_episode_candidate?(&1, assignments_map))
-    |> only_if_unambiguous()
-  end
-
-  # **When the filename is ambiguous, decline.** An anchor gathers
-  # candidates on positive evidence; one survivor is an answer, two or
-  # more is a guess, and this returns nothing rather than guess.
-  #
-  # Only the zone anchor pipes through here, because it is the last
-  # rule in the chain: for it, "found nothing" and "found several" both
-  # mean nil, so collapsing them is safe. The dash anchor applies the
-  # same rule at its call site, where the two outcomes must stay
-  # distinguishable — see `resolve_absolute_episode/6`.
-  #
-  # The two outcomes do not cost the same. A missed match costs the
-  # user one manual action and is exactly what happens with the feature
-  # off. A wrong match silently files episode 170 as episode 2 and is
-  # discovered much later, if at all — on someone's media library, by
-  # an opt-in feature.
-  #
-  # Every positional rule tried here produced a wrong match somewhere:
-  # first-in-stream read `[Erai-raws] 86 - ...` as episode 86; the
-  # title-zone tail (literal last token, then backward search) read
-  # `Black Clover 170 2 HEVC.mkv` as episode 2; first-dash-adjacent
-  # read `Black Clover - 2 - 170 HEVC.mkv` as episode 2. Last-adjacent
-  # would fix that one and break
-  # `[Group] Black Clover - 05 - 12 Days Later.mkv`, which wants the
-  # first. No positional rule satisfies both directions, because the
-  # filename genuinely does not say which digit is the episode.
-  # Cardinality is the honest answer, and it fails toward nil.
-  #
-  # The accepted price: an episode whose *title* starts with a number
-  # (`- 05 - 12 Days Later`) no longer resolves. That is a recall loss
-  # taken deliberately, in exchange for never inventing an episode
-  # number.
-  defp only_if_unambiguous([only]), do: [only]
-  defp only_if_unambiguous(_ambiguous_or_empty), do: []
-
-  defp dash_token?(%Token{value: "-"}), do: true
-  defp dash_token?(%Token{}), do: false
-
-  defp bare_episode_candidate?(
-         %Token{bracket_context: nil, value: value} = token,
-         assignments_map
-       ) do
-    Regex.match?(~r/^\d{1,4}$/, value) and not singleton_claimed?(token, assignments_map)
-  end
-
-  defp bare_episode_candidate?(%Token{}, _assignments_map), do: false
-
-  defp singleton_claimed?(%Token{} = token, assignments_map) do
-    case assignments_map_get(assignments_map, token) do
-      nil -> false
-      cands -> Enum.any?(cands, &(&1.label in @singleton_labels))
-    end
   end
 
   # ---- Type inference ----

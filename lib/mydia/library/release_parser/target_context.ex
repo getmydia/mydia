@@ -21,9 +21,7 @@ defmodule Mydia.Library.ReleaseParser.TargetContext do
     :year,
     alt_titles: [],
     known_seasons: [],
-    external_ids: %{tmdb: nil, tvdb: nil, imdb: nil},
-    category: nil,
-    max_absolute_number: nil
+    external_ids: %{tmdb: nil, tvdb: nil, imdb: nil}
   ]
 
   @type media_type :: :movie | :tv_show
@@ -34,9 +32,7 @@ defmodule Mydia.Library.ReleaseParser.TargetContext do
           alt_titles: [String.t()],
           year: integer() | nil,
           known_seasons: [integer()],
-          external_ids: %{tmdb: integer() | nil, tvdb: integer() | nil, imdb: String.t() | nil},
-          category: String.t() | nil,
-          max_absolute_number: integer() | nil
+          external_ids: %{tmdb: integer() | nil, tvdb: integer() | nil, imdb: String.t() | nil}
         }
 
   @doc """
@@ -66,9 +62,7 @@ defmodule Mydia.Library.ReleaseParser.TargetContext do
       year: item.year,
       alt_titles: build_alt_titles(item),
       known_seasons: extract_known_seasons(item.episodes),
-      external_ids: %{tmdb: item.tmdb_id, tvdb: item.tvdb_id, imdb: item.imdb_id},
-      category: item.category && to_string(item.category),
-      max_absolute_number: extract_max_absolute(item.episodes)
+      external_ids: %{tmdb: item.tmdb_id, tvdb: item.tvdb_id, imdb: item.imdb_id}
     }
   end
 
@@ -94,15 +88,5 @@ defmodule Mydia.Library.ReleaseParser.TargetContext do
     |> Enum.reject(&is_nil/1)
     |> Enum.uniq()
     |> Enum.sort()
-  end
-
-  defp extract_max_absolute(episodes) when is_list(episodes) do
-    episodes
-    |> Enum.map(& &1.absolute_number)
-    |> Enum.reject(&is_nil/1)
-    |> case do
-      [] -> nil
-      numbers -> Enum.max(numbers)
-    end
   end
 end
