@@ -1712,6 +1712,7 @@ defmodule Mydia.MediaTest do
       # user picked under the old provider's TVDB ids describes nothing on
       # the new provider — it must not survive the switch.
       {:ok, item} = Media.update_media_item(ctx.item, %{season_order: :dvd})
+      assert item.season_order == :dvd
 
       stub_tmdb_show(ctx.bypass, ctx.new_id, "Switch Show", 2010)
       stub_tmdb_season(ctx.bypass, ctx.new_id, 1, [1, 2])
@@ -1856,6 +1857,7 @@ defmodule Mydia.MediaTest do
 
     test "clears a stale season_order picked under the old provider", ctx do
       {:ok, item} = Media.update_media_item(ctx.item, %{season_order: :dvd})
+      assert item.season_order == :dvd
 
       tvdb_season_id = System.unique_integer([:positive])
       stub_tvdb_show(ctx.bypass, ctx.new_id, "TVDB Show", 2010, [{1, tvdb_season_id}])

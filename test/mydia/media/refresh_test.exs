@@ -430,7 +430,6 @@ defmodule Mydia.Media.RefreshTest do
 
   describe "run/2 reclassification" do
     alias Mydia.Media
-    alias Mydia.Media.CategoryClassifier
     alias Mydia.Repo
 
     test "category agrees with the refreshed metadata" do
@@ -444,7 +443,7 @@ defmodule Mydia.Media.RefreshTest do
             "name" => "Reclassify Me",
             "overview" => "x",
             "first_air_date" => "2017-10-03",
-            "genres" => [%{"id" => 1, "name" => "Animation"}, %{"id" => 2, "name" => "Anime"}],
+            "genres" => [%{"id" => 1, "name" => "Animation"}],
             "originalCountry" => "jpn",
             "originalLanguage" => "jpn",
             "seasons" => []
@@ -481,8 +480,10 @@ defmodule Mydia.Media.RefreshTest do
 
       reloaded = Repo.get!(MediaItem, item.id)
 
-      assert to_string(reloaded.category) == to_string(CategoryClassifier.classify(reloaded))
-      refute to_string(reloaded.category) == "tv_show"
+      # "Animation" alone is not an anime signal (animated?/1 only), so the
+      # refreshed genres could not tip classify/1 into :anime_series without
+      # the alpha-3/ISO 639-2 "jpn" codes being read as Japanese-origin.
+      assert reloaded.category == "anime_series"
     end
 
     test "category_override survives a refresh" do
