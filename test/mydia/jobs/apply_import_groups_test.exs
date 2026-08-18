@@ -238,6 +238,45 @@ defmodule Mydia.Jobs.ApplyImportGroupsTest do
     assert reloaded.unresolved_count == 1
   end
 
+  # A locally-created group (`ImportGroups.create_local_show/1`) carries a
+  # synthetic `provider_id` (`"local-" <> item.id`) precisely so a second call
+  # against it is refused -- but that same synthetic id would otherwise slip
+  # past `accepted_groups/1`'s `not is_nil(g.provider_id)` filter and get
+  # handed to `FileIngest`, which recognises no provider with that id. This is
+  # the regression guard for that: a group with a non-nil `provider_id` but
+  # `provider_type: "local"` must still never be picked up.
+  test "the worker never picks up an accepted group created locally", %{library_path: lp} do
+    group =
+      %ImportGroup{}
+      |> ImportGroup.changeset(%{
+        library_path_id: lp.id,
+        anchor_path: "LocalShow",
+        cluster_key: "local-show-direct-seed",
+        status: "accepted",
+        provider_type: "local",
+        provider_id: "local-deadbeef",
+        file_count: 1,
+        unresolved_count: 1
+      })
+      |> Repo.insert!()
+
+    file =
+      orphaned_media_file_fixture(%{
+        library_path_id: lp.id,
+        relative_path: "LocalShow/reel.mkv"
+      })
+
+    Repo.update_all(from(f in Mydia.Library.MediaFile, where: f.id == ^file.id),
+      set: [import_group_id: group.id]
+    )
+
+    assert :ok = perform_job(ApplyImportGroups, %{"library_path_id" => lp.id})
+
+    reloaded = Repo.get!(ImportGroup, group.id)
+    assert reloaded.status == "accepted"
+    assert reloaded.unresolved_count == 1
+  end
+
   # Restores the coverage the previous two tests lost for `drain/2`'s
   # no-progress-halt guard: that guard was a Task 11 review finding
   # ("without it a group whose members can never link would spin forever"),

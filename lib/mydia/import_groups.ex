@@ -544,50 +544,74 @@ defmodule Mydia.ImportGroups do
 
   A member with no parsed episode number is left alone rather than guessed
   at: it stays an orphaned `MediaFile` (no `episode_id`, no `media_item_id`)
-  and `unresolved_count` records how many. The group itself is still marked
-  `"applied"` unconditionally rather than left `"accepted"` for a future
-  retry: unlike `Mydia.Jobs.ApplyImportGroups`, there is no provider match
-  here for a later attempt to succeed against, so nothing changes by trying
-  again. Leaving it `"accepted"` would instead be a trap --
-  `ApplyImportGroups.accepted_groups/1` sweeps every `"accepted"` group for
-  the library, so this one would eventually be handed to `FileIngest` with a
-  nil `provider_id`, fail every member, and burn the worker's retry budget on
-  work that can never succeed. A leftover orphaned file is picked up again by
-  the next library rescan instead.
+  and `unresolved_count` records how many. The group is marked `"applied"`
+  only when every member linked. Otherwise it stays `"pending"`, so it keeps
+  showing up on the review page, in the band counts, and in the nav badge --
+  `write_group/4` deliberately preserves an existing group's status across a
+  rescan, and this folder produces the same `cluster_key` every time, so a
+  group (and its leftover file) marked "done" here would otherwise vanish for
+  good the moment a human next looked for it. There is no provider match for
+  a worker to retry against, so staying visible and human-actionable is what
+  a partially-linked group gets instead of a retry.
+
+  The group is stamped `provider_type: "local"` and a synthetic `provider_id`
+  (`"local-" <> item.id`) so a second call against the same group -- a
+  double-click (there is no `phx-disable-with` on the button), or a retry
+  after a crash partway through the link loop -- is refused with
+  `{:error, :already_created}` rather than building a second `MediaItem` and
+  finding every member already detached from the first call. This has two
+  knock-on effects:
+
+    * The group leaves the `:no_match` band (see `band/1`): with
+      `min_confidence` still nil it now lands in `:needs_attention`, so it
+      stays visible on the unfiltered page and in the counts. It will not,
+      however, appear under the `:needs_attention` *filter* specifically --
+      a NULL `min_confidence` fails that band's SQL comparison in `page/2`.
+      That asymmetry is accepted rather than fixed here.
+    * `ApplyImportGroups.accepted_groups/1` excludes `provider_type: "local"`
+      groups alongside its existing `provider_id` filter, so a group a human
+      later accepts by hand can never hand `FileIngest` this synthetic id.
   """
   @spec create_local_show(binary()) :: {:ok, Media.MediaItem.t()} | {:error, term()}
   def create_local_show(group_id) do
     group = Repo.get!(ImportGroup, group_id)
 
-    if group.provider_id do
-      {:error, :already_matched}
-    else
-      {title, year} = title_and_year(group)
+    cond do
+      group.provider_type == "local" ->
+        {:error, :already_created}
 
-      with {:ok, item} <-
-             Media.create_media_item(
-               %{title: title, year: year, type: "tv_show", monitored: false},
-               skip_episode_refresh: true
-             ) do
-        group_id
-        |> members(limit: 100_000)
-        |> Enum.each(&link_local_member(&1, item))
+      group.provider_id ->
+        {:error, :already_matched}
 
-        remaining = member_count(group_id)
-        now = DateTime.utc_now() |> DateTime.truncate(:second)
+      true ->
+        {title, year} = title_and_year(group)
 
-        group
-        |> Ecto.Changeset.change(
-          suggested_title: title,
-          suggested_year: year,
-          unresolved_count: remaining,
-          status: "applied",
-          decided_at: now
-        )
-        |> Repo.update!()
+        with {:ok, item} <-
+               Media.create_media_item(
+                 %{title: title, year: year, type: "tv_show", monitored: false},
+                 skip_episode_refresh: true
+               ) do
+          group_id
+          |> members(limit: 100_000)
+          |> Enum.each(&link_local_member(&1, item))
 
-        {:ok, item}
-      end
+          remaining = member_count(group_id)
+          now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+          group
+          |> Ecto.Changeset.change(
+            suggested_title: title,
+            suggested_year: year,
+            unresolved_count: remaining,
+            status: if(remaining == 0, do: "applied", else: "pending"),
+            provider_type: "local",
+            provider_id: "local-" <> item.id,
+            decided_at: now
+          )
+          |> Repo.update!()
+
+          {:ok, item}
+        end
     end
   end
 

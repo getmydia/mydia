@@ -145,7 +145,9 @@ defmodule MydiaWeb.ImportMediaReviewTest do
     assert has_element?(view, "#flash-info", "Les mots de Passe-Partout")
     refute has_element?(view, "#group-#{group.id}")
 
-    assert Repo.reload!(group).status == "applied"
+    reloaded_group = Repo.reload!(group)
+    assert reloaded_group.status == "applied"
+    assert reloaded_group.provider_type == "local"
     assert Repo.reload!(file).episode_id
   end
 
@@ -202,12 +204,67 @@ defmodule MydiaWeb.ImportMediaReviewTest do
 
     assert has_element?(view, "#flash-info", "linked 1 of 2 files")
     assert has_element?(view, "#flash-info", "1 had no episode number")
-    refute has_element?(view, "#group-#{group.id}")
 
-    assert Repo.reload!(group).status == "applied"
-    assert Repo.reload!(group).unresolved_count == 1
+    # A partially-linked group stays "pending" (see ImportGroups.create_local_show/1),
+    # precisely so it stays visible here instead of vanishing along with the file it
+    # could not link -- it just no longer offers the same button, since it is no
+    # longer :no_match (it now carries a provider identity, so it bands as
+    # :needs_attention with min_confidence still nil).
+    assert has_element?(view, "#group-#{group.id}")
+    refute has_element?(view, "#create-local-#{group.id}")
+
+    reloaded_group = Repo.reload!(group)
+    assert reloaded_group.status == "pending"
+    assert reloaded_group.unresolved_count == 1
+    assert reloaded_group.provider_type == "local"
     assert Repo.reload!(numbered_file).episode_id
     refute Repo.reload!(unnumbered_file).episode_id
+  end
+
+  test "a second click on create-local-show is refused instead of creating a duplicate show",
+       %{conn: conn} do
+    lp = library_path_fixture(%{type: "series"})
+
+    group =
+      seed_group(lp,
+        cluster_key: "local-double-click",
+        display_title: "Les mots de Passe-Partout (2023)",
+        file_count: 1,
+        unresolved_count: 1,
+        provider_id: nil,
+        min_confidence: nil
+      )
+
+    file =
+      orphaned_media_file_fixture(%{
+        library_path_id: lp.id,
+        relative_path: "Les mots de Passe-Partout (2023)/Season 01/ep1.mkv"
+      })
+
+    Repo.update_all(from(f in Mydia.Library.MediaFile, where: f.id == ^file.id),
+      set: [import_group_id: group.id]
+    )
+
+    %Mydia.Library.MatchCandidate{}
+    |> Mydia.Library.MatchCandidate.changeset(%{
+      media_file_id: file.id,
+      rank: 0,
+      parsed_info: %{"season" => 1, "episodes" => [1]}
+    })
+    |> Repo.insert!()
+
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    view |> element("#create-local-#{group.id}") |> render_click()
+    assert has_element?(view, "#flash-info", "Les mots de Passe-Partout")
+
+    # No `phx-disable-with` guards the button, so the id is still a valid
+    # target for a stale or replayed event even though the row itself has
+    # already dropped out of the stream.
+    render_click(view, "create_local_show", %{"id" => group.id})
+
+    assert has_element?(view, "#flash-info", "already created")
+    assert Repo.aggregate(Mydia.Media.MediaItem, :count) == 1
   end
 
   test "a ready group renders collapsed and expands on click", %{conn: conn} do

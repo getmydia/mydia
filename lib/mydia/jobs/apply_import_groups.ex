@@ -24,13 +24,17 @@ defmodule Mydia.Jobs.ApplyImportGroups do
   retries it, rather than stranding it `accepted` with nothing to re-enqueue
   the worker.
 
-  `accepted_groups/1` skips a group with no `provider_id`: it has nothing for
+  `accepted_groups/1` skips a group with no `provider_id`, and separately
+  skips one with `provider_type: "local"`: neither has anything for
   `FileIngest` to apply, so every member would fail identically on every
-  retry, burning the retry budget on work that can never succeed. Such a
-  group can still exist -- `accept/1` does not check the band of what it
-  accepts, so a "select all" spanning `:no_match` marks one `"accepted"` the
-  same as any other -- it just is not this worker's job to touch it.
-  `Mydia.ImportGroups.create_local_show/1` is the intended way to resolve one.
+  retry, burning the retry budget on work that can never succeed. A
+  provider-less group can still reach `"accepted"` -- `accept/1` does not
+  check the band of what it accepts, so a "select all" spanning `:no_match`
+  marks one `"accepted"` the same as any other. A `provider_type: "local"`
+  group carries a synthetic `provider_id` (`Mydia.ImportGroups.create_local_show/1`
+  stamps one so a second call against the same group is refused), which would
+  otherwise slip past the first filter and get handed to `FileIngest` with an
+  id no provider recognises.
   """
 
   use Oban.Worker,
@@ -69,9 +73,11 @@ defmodule Mydia.Jobs.ApplyImportGroups do
   defp accepted_groups(library_path_id) do
     ImportGroup
     |> where([g], g.library_path_id == ^library_path_id and g.status == "accepted")
-    # A group with no provider match has nothing for FileIngest to apply --
-    # see the moduledoc note on accepted_groups/1 above.
+    # A group with no provider match, or a synthetic local-show provider
+    # match, has nothing for FileIngest to apply -- see the moduledoc note
+    # above.
     |> where([g], not is_nil(g.provider_id))
+    |> where([g], is_nil(g.provider_type) or g.provider_type != "local")
     |> order_by([g], desc: g.file_count, asc: g.id)
     |> Repo.all()
   end

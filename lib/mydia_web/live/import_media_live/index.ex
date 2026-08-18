@@ -397,11 +397,11 @@ defmodule MydiaWeb.ImportMediaLive.Index do
 
   # The escape hatch for a group no provider carries: build the show straight
   # from its folder name instead of waiting on a match that will never come.
-  # `total` is read before the call, not after: `create_local_show/1` always
-  # marks the group "applied" (there is no provider match for a later retry
-  # to succeed against), so its own `unresolved_count` is the only trace of
-  # how many members it started with. A file with no parsed episode number
-  # stays orphaned rather than guessed at, and the flash says so rather than
+  # `total` is read before the call, not after: on success `create_local_show/1`
+  # stamps the group with a synthetic provider identity so a second call is
+  # refused, and its own `unresolved_count` is the only trace of how many
+  # members it started with. A file with no parsed episode number stays
+  # orphaned rather than guessed at, and the flash says so rather than
   # reporting a clean success for a partially-done action -- the failure mode
   # this project has already corrected twice.
   def handle_event("create_local_show", %{"id" => id}, socket) do
@@ -425,6 +425,14 @@ defmodule MydiaWeb.ImportMediaLive.Index do
          |> put_flash(:info, message)
          |> load_groups()
          |> refresh_counts()}
+
+      # No `phx-disable-with` guards this button, and a crash partway through
+      # a previous call would leave nothing else to retry against -- so this
+      # is a routine double-click or a stale click on an already-handled row,
+      # not a system failure. Say so plainly rather than the generic error
+      # message below.
+      {:error, :already_created} ->
+        {:noreply, put_flash(socket, :info, "That show was already created from this folder.")}
 
       {:error, reason} ->
         {:noreply, put_flash(socket, :error, "Could not create the show: #{inspect(reason)}")}

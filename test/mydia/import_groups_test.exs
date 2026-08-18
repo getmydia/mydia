@@ -355,8 +355,46 @@ defmodule Mydia.ImportGroupsTest do
                :count
              ) == 0
 
-      assert Repo.reload!(group).status == "applied"
-      assert Repo.reload!(group).unresolved_count == 0
+      reloaded_group = Repo.reload!(group)
+      assert reloaded_group.status == "applied"
+      assert reloaded_group.unresolved_count == 0
+      # The synthetic provider identity is what makes a second call refuse
+      # instead of building a duplicate show -- see "a second call refuses..."
+      # below.
+      assert reloaded_group.provider_type == "local"
+      assert reloaded_group.provider_id == "local-" <> item.id
+    end
+
+    test "a second call refuses rather than creating a duplicate show" do
+      lp = library_path_fixture(%{type: "series", path: "/media/Series"})
+
+      file =
+        orphaned_media_file_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "Les mots de Passe-Partout (2023)/Season 01/ep1.mkv"
+        })
+
+      %MatchCandidate{}
+      |> MatchCandidate.changeset(%{
+        media_file_id: file.id,
+        rank: 0,
+        last_error: "no_match",
+        parsed_info: %{"season" => 1, "episodes" => [1]}
+      })
+      |> Repo.insert!()
+
+      {:ok, _} = ImportGroups.upsert_for_library(lp)
+      group = Repo.one!(ImportGroup)
+
+      assert {:ok, _item} = ImportGroups.create_local_show(group.id)
+      # Same failure whether it is a genuine double-click (no `phx-disable-with`
+      # guards the button) or a retry after a crash partway through the first
+      # call's link loop -- there is nothing left the second call could do
+      # differently, since every member the first call could link is already
+      # detached from the group.
+      assert {:error, :already_created} = ImportGroups.create_local_show(group.id)
+
+      assert Repo.aggregate(Mydia.Media.MediaItem, :count) == 1
     end
 
     test "refuses a group that already has a provider match" do
@@ -383,7 +421,7 @@ defmodule Mydia.ImportGroupsTest do
       assert {:error, :already_matched} = ImportGroups.create_local_show(group.id)
     end
 
-    test "leaves an unnumbered member orphaned but still marks the group applied" do
+    test "leaves an unnumbered member orphaned and keeps the group pending and visible" do
       lp = library_path_fixture(%{type: "series", path: "/media/Series"})
 
       numbered_files =
@@ -437,9 +475,21 @@ defmodule Mydia.ImportGroupsTest do
       assert reloaded_unnumbered.episode_id == nil
       assert reloaded_unnumbered.media_item_id == nil
 
+      # Staying "pending" (not "applied") is what keeps this group -- and the
+      # orphaned file inside it -- reachable at all: write_group/4 preserves
+      # an existing group's status across a rescan, and this folder produces
+      # the same cluster_key every time, so an "applied" group here would
+      # vanish from the review page, the band counts, and the nav badge for
+      # good, with no worker able to hand it back (there is no provider match
+      # to retry against).
       reloaded_group = Repo.reload!(group)
-      assert reloaded_group.status == "applied"
+      assert reloaded_group.status == "pending"
       assert reloaded_group.unresolved_count == 1
+
+      {page, _cursor} = ImportGroups.page(lp.id)
+      assert Enum.any?(page, &(&1.id == group.id))
+
+      assert ImportGroups.count_pending() == 1
     end
   end
 end
