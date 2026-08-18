@@ -52,9 +52,15 @@ Widget _host({
   );
 }
 
+/// `skipOffstage: false` because reading a scroll offset must not depend on
+/// whether that scrollable is currently on screen. Several tests below assert
+/// the rail did NOT move while the page scrolled instead, and a page scroll
+/// large enough to carry the rail off the top would otherwise make the rail
+/// unfindable and throw `StateError` out of `firstWhere` — a fixture failure
+/// wearing the costume of a behavior failure.
 ScrollPosition _positionOn(WidgetTester tester, Axis axis) {
   return tester
-      .stateList<ScrollableState>(find.byType(Scrollable))
+      .stateList<ScrollableState>(find.byType(Scrollable, skipOffstage: false))
       .map((s) => s.position)
       .firstWhere((p) => p.axis == axis);
 }
@@ -155,5 +161,95 @@ void main() {
 
     expect(rail.offset, greaterThan(0));
     expect(rail.offset, _rail(tester).pixels);
+  });
+
+  testWidgets('a rail that fits on screen leaves the wheel to the page',
+      (tester) async {
+    final page = ScrollController();
+    addTearDown(page.dispose);
+
+    // Two cards at 100px in a 400px viewport: nothing to scroll.
+    await tester.pumpWidget(_host(pageController: page, cards: 2));
+
+    expect(_rail(tester).maxScrollExtent, 0);
+
+    await _wheelOverRail(tester, 120);
+    await tester.pumpAndSettle();
+
+    expect(_rail(tester).pixels, 0);
+    expect(_page(tester).pixels, greaterThan(0));
+  });
+
+  testWidgets('a rail at its end hands the wheel to the page', (tester) async {
+    final page = ScrollController();
+    final rail = ScrollController();
+    addTearDown(page.dispose);
+    addTearDown(rail.dispose);
+
+    await tester.pumpWidget(_host(pageController: page, railController: rail));
+    rail.jumpTo(rail.position.maxScrollExtent);
+    await tester.pump();
+
+    final atEnd = rail.offset;
+
+    await _wheelOverRail(tester, 120);
+    await tester.pumpAndSettle();
+
+    expect(rail.offset, atEnd);
+    expect(_page(tester).pixels, greaterThan(0));
+  });
+
+  testWidgets('a rail at its end still scrolls back the other way',
+      (tester) async {
+    final page = ScrollController();
+    final rail = ScrollController();
+    addTearDown(page.dispose);
+    addTearDown(rail.dispose);
+
+    await tester.pumpWidget(_host(pageController: page, railController: rail));
+    rail.jumpTo(rail.position.maxScrollExtent);
+    await tester.pump();
+
+    final atEnd = rail.offset;
+
+    await _wheelOverRail(tester, -120);
+    await tester.pumpAndSettle();
+
+    expect(rail.offset, lessThan(atEnd));
+    expect(_page(tester).pixels, 0);
+  });
+
+  testWidgets('an unscrollable rail leaves the wheel to the page',
+      (tester) async {
+    final page = ScrollController();
+    addTearDown(page.dispose);
+
+    await tester.pumpWidget(_host(
+      pageController: page,
+      railPhysics: const NeverScrollableScrollPhysics(),
+    ));
+
+    await _wheelOverRail(tester, 120);
+    await tester.pumpAndSettle();
+
+    expect(_rail(tester).pixels, 0);
+    expect(_page(tester).pixels, greaterThan(0));
+  });
+
+  testWidgets('a horizontal wheel is left to the rail itself', (tester) async {
+    final page = ScrollController();
+    addTearDown(page.dispose);
+
+    await tester.pumpWidget(_host(pageController: page));
+
+    final pointer = TestPointer(1, PointerDeviceKind.mouse);
+    pointer.hover(tester.getCenter(find.byType(HorizontalWheelScroll)));
+    await tester.sendEventToBinding(pointer.scroll(const Offset(30, 0)));
+    await tester.pump();
+
+    // Flutter's own handling is instant, so the offset is already exact one
+    // frame in. An intercepted event would still be mid-glide here.
+    expect(_rail(tester).pixels, 30);
+    expect(_page(tester).pixels, 0);
   });
 }

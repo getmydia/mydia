@@ -64,18 +64,32 @@ class _HorizontalWheelScrollState extends State<HorizontalWheelScroll> {
   }
 
   void _onPointerSignal(PointerSignalEvent event) {
+    // Trackpads arrive as pan-zoom events and already scroll both axes.
     if (event is! PointerScrollEvent) return;
+    // A tilt or horizontal wheel already lands on the rail's own axis.
+    if (event.scrollDelta.dy == 0) return;
 
     final controller = _controller;
     if (!controller.hasClients) return;
 
     final position = controller.position;
+    // A rail that fits on screen has no business eating the page's wheel.
+    if (position.maxScrollExtent <= 0) return;
+    // Mirrors Scrollable's own guard, so a NeverScrollableScrollPhysics rail
+    // stays inert instead of being scrolled from here.
+    if (!position.physics.shouldAcceptUserOffset(position)) return;
+
+    // `pixels` is direction-normalised, so `dy` maps onto it unsigned in both
+    // LTR and RTL: down always means further through the list.
     final base = _target ?? position.pixels;
     final next = clampDouble(
       base + event.scrollDelta.dy,
       position.minScrollExtent,
       position.maxScrollExtent,
     );
+    // Already at that end. Declining, rather than registering a no-op, is what
+    // lets the page take the event.
+    if (next == base) return;
 
     GestureBinding.instance.pointerSignalResolver
         .register(event, (_) => _glideTo(next));
