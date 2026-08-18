@@ -87,6 +87,34 @@ defmodule Mydia.Jobs.ApplyImportGroupsTest do
     assert group.unresolved_count == 0
   end
 
+  test "slow metadata fetches do not hold SQLite's write lock", %{library_path: lp} do
+    if Mydia.DB.sqlite?() do
+      scope = lp.id |> SelectionScope.new() |> SelectionScope.select_all_matching(%{band: :ready})
+      {:ok, 1} = ImportGroups.accept(scope)
+
+      block_ref = MetadataStubProvider.block_next_season_fetch(self())
+      on_exit(fn -> MetadataStubProvider.clear_season_fetch_block(block_ref) end)
+
+      import_task =
+        Task.async(fn ->
+          perform_job(ApplyImportGroups, %{"library_path_id" => lp.id})
+        end)
+
+      assert_receive {:metadata_season_fetch_started, ^block_ref, fetch_pid}, 5_000
+
+      writer_task = Task.async(&probe_unrelated_sqlite_write/0)
+      writer_result = Task.yield(writer_task, 500)
+
+      send(fetch_pid, {:release_metadata_season_fetch, block_ref})
+      import_result = Task.await(import_task, 5_000)
+
+      if is_nil(writer_result), do: Task.await(writer_task, 5_000)
+
+      assert writer_result == {:ok, :ok}
+      assert import_result == :ok
+    end
+  end
+
   # The load-bearing regression guard for `ImportGroups.change_match/2`:
   # `ingest_member/2` builds each file's match from `candidate.provider_id ||
   # group.provider_id` -- candidate first. If change_match/2 only rewrote the
@@ -206,6 +234,13 @@ defmodule Mydia.Jobs.ApplyImportGroupsTest do
     group = Repo.get_by!(ImportGroup, library_path_id: lp.id)
     assert group.status == "applied"
     assert group.unresolved_count == 0
+  end
+
+  defp probe_unrelated_sqlite_write do
+    case Repo.query("UPDATE schema_migrations SET version = version WHERE 0") do
+      {:ok, _result} -> :ok
+      {:error, error} -> {:error, Exception.message(error)}
+    end
   end
 
   test "a group whose files vanished still completes", %{library_path: lp} do

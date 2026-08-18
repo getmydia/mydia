@@ -51,6 +51,36 @@ defmodule Mydia.ImportGroupsTest do
     end
   end
 
+  describe "clear_for_library/1" do
+    test "clears only the selected library's review groups and finished scan history" do
+      selected = library_path_fixture(%{type: "movies"})
+      other = library_path_fixture(%{type: "series"})
+      selected_group = group(selected, cluster_key: "selected")
+      other_group = group(other, cluster_key: "other")
+
+      {:ok, run} =
+        Mydia.Library.create_import_run(%{library_path_id: selected.id, mode: :review})
+
+      {:ok, _run} = Mydia.Library.update_import_run(run, %{status: :done, phase: :finished})
+
+      assert {:ok, 1} = ImportGroups.clear_for_library(selected.id)
+      refute Repo.get(ImportGroup, selected_group.id)
+      assert Repo.get(ImportGroup, other_group.id)
+      refute Mydia.Library.last_import_run(selected.id)
+    end
+
+    test "refuses to clear while the selected library is scanning" do
+      library_path = library_path_fixture(%{type: "movies"})
+      import_group = group(library_path, cluster_key: "active")
+
+      {:ok, _run} =
+        Mydia.Library.create_import_run(%{library_path_id: library_path.id, mode: :review})
+
+      assert {:error, :active_run} = ImportGroups.clear_for_library(library_path.id)
+      assert Repo.get(ImportGroup, import_group.id)
+    end
+  end
+
   describe "band_counts/1" do
     test "counts each band" do
       lp = library_path_fixture(%{type: "series"})

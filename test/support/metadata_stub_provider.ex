@@ -33,6 +33,7 @@ defmodule Mydia.MetadataStubProvider do
 
   @movie_title "Stub Movie"
   @series_title "Stub Series"
+  @season_fetch_block_key {__MODULE__, :season_fetch_block}
 
   @doc "TMDB id of the catalog movie."
   def movie_tmdb_id, do: @movie_tmdb_id
@@ -48,6 +49,21 @@ defmodule Mydia.MetadataStubProvider do
 
   @doc "Title of the catalog series."
   def series_title, do: @series_title
+
+  @doc "Blocks the next season fetch until the calling test releases it."
+  def block_next_season_fetch(owner) when is_pid(owner) do
+    ref = make_ref()
+    :persistent_term.put(@season_fetch_block_key, {owner, ref})
+    ref
+  end
+
+  @doc "Clears a pending season-fetch block installed by a test."
+  def clear_season_fetch_block(ref) do
+    case :persistent_term.get(@season_fetch_block_key, nil) do
+      {_owner, ^ref} -> :persistent_term.erase(@season_fetch_block_key)
+      _other -> :ok
+    end
+  end
 
   @impl true
   def test_connection(_config), do: {:ok, %{status: "ok"}}
@@ -81,6 +97,8 @@ defmodule Mydia.MetadataStubProvider do
 
   @impl true
   def fetch_season(_config, _provider_id, season_number, _opts) do
+    maybe_block_season_fetch()
+
     {:ok,
      %SeasonData{
        season_number: season_number,
@@ -110,6 +128,23 @@ defmodule Mydia.MetadataStubProvider do
   def fetch_trending(_config, _opts), do: {:ok, []}
 
   ## Catalog
+
+  defp maybe_block_season_fetch do
+    case :persistent_term.get(@season_fetch_block_key, nil) do
+      {owner, ref} ->
+        :persistent_term.erase(@season_fetch_block_key)
+        send(owner, {:metadata_season_fetch_started, ref, self()})
+
+        receive do
+          {:release_metadata_season_fetch, ^ref} -> :ok
+        after
+          5_000 -> raise "timed out waiting to release the blocked metadata season fetch"
+        end
+
+      nil ->
+        :ok
+    end
+  end
 
   defp movie_search_result do
     %SearchResult{

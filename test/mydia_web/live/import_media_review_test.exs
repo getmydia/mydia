@@ -480,7 +480,7 @@ defmodule MydiaWeb.ImportMediaReviewTest do
     assert has_element?(view, "#group-#{a.id}")
     refute has_element?(view, "#group-#{b.id}")
 
-    view |> element("#library-picker-#{lp2.id}") |> render_click()
+    view |> element("#library-tab-#{lp2.id}") |> render_click()
 
     assert has_element?(view, "#group-#{b.id}")
     refute has_element?(view, "#group-#{a.id}")
@@ -506,7 +506,7 @@ defmodule MydiaWeb.ImportMediaReviewTest do
 
     assert has_element?(view, "#group-#{b.id}")
     refute has_element?(view, "#group-#{a.id}")
-    assert has_element?(view, "#library-picker-#{lp2.id}.btn-primary")
+    assert has_element?(view, "#library-tab-#{lp2.id}.tab-active")
   end
 
   test "navigating with type=tv selects the tv library in review panel", %{conn: conn} do
@@ -529,7 +529,7 @@ defmodule MydiaWeb.ImportMediaReviewTest do
 
     assert has_element?(view, "#group-#{b.id}")
     refute has_element?(view, "#group-#{a.id}")
-    assert has_element?(view, "#library-picker-#{lp2.id}.btn-primary")
+    assert has_element?(view, "#library-tab-#{lp2.id}.tab-active")
   end
 
   test "the page issues no query on the disconnected render", %{conn: conn} do

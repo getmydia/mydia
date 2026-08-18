@@ -11,6 +11,8 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
 
   alias Mydia.ImportGroups
   alias Mydia.Library
+  alias Mydia.Library.ImportGroup
+  alias Mydia.Repo
 
   setup %{conn: conn} do
     # The app skips Oban entirely in test env (see Mydia.Application), so
@@ -27,11 +29,143 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
     {:ok, conn: log_in_user(conn, user), user: user, library_path: library_path}
   end
 
+  defp import_group(library_path, attrs) do
+    defaults = %{
+      library_path_id: library_path.id,
+      anchor_path: "Show",
+      cluster_key: Ecto.UUID.generate(),
+      display_title: "Show",
+      file_count: 1,
+      unresolved_count: 1,
+      status: "pending"
+    }
+
+    %ImportGroup{}
+    |> ImportGroup.changeset(Map.merge(defaults, Map.new(attrs)))
+    |> Repo.insert!()
+  end
+
   test "renders the run control", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/import")
 
     assert has_element?(view, "#import-run-control")
     assert has_element?(view, "#start-run-button")
+  end
+
+  test "uses one library selector for both scanning and review", %{
+    conn: conn,
+    library_path: lp
+  } do
+    {:ok, view, _html} = live(conn, ~p"/import?library_path_id=#{lp.id}")
+
+    assert has_element?(view, "#library-tabs")
+    assert has_element?(view, "#library-tab-#{lp.id}.tab-active")
+
+    assert has_element?(
+             view,
+             "#start-run-form input[type=hidden][name=library_path_id][value='#{lp.id}']"
+           )
+
+    refute has_element?(view, "#start-run-form input[type=radio][name=library_path_id]")
+  end
+
+  test "automatic import is an on-by-default toggle instead of a mode dropdown", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    assert has_element?(
+             view,
+             "#auto-import-toggle[type=checkbox][name=auto_import][value=true][checked]"
+           )
+
+    refute has_element?(view, "#start-run-mode")
+  end
+
+  test "checked automatic import starts an unattended run", %{
+    conn: conn,
+    library_path: lp
+  } do
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    view
+    |> element("#start-run-form")
+    |> render_submit(%{
+      "library_path_id" => lp.id,
+      "mode" => "review",
+      "auto_import" => "true"
+    })
+
+    assert Library.active_import_run(lp.id).mode == :unattended
+  end
+
+  test "disabled automatic import starts a review run", %{
+    conn: conn,
+    library_path: lp
+  } do
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    view
+    |> element("#start-run-form")
+    |> render_submit(%{"library_path_id" => lp.id, "auto_import" => "false"})
+
+    assert Library.active_import_run(lp.id).mode == :review
+  end
+
+  test "an active scan takes focus and hides review controls", %{
+    conn: conn,
+    library_path: lp,
+    user: user
+  } do
+    {:ok, _run} =
+      Library.create_import_run(%{library_path_id: lp.id, user_id: user.id, mode: :review})
+
+    {:ok, view, _html} = live(conn, ~p"/import?library_path_id=#{lp.id}")
+
+    assert has_element?(view, "#run-progress")
+    refute has_element?(view, "#band-all")
+  end
+
+  test "scan state is scoped to the selected library", %{
+    conn: conn,
+    library_path: selected,
+    user: user
+  } do
+    other =
+      library_path_fixture(%{
+        type: "movies",
+        path: "/tmp/other_import_library_#{System.unique_integer([:positive])}"
+      })
+
+    {:ok, _run} =
+      Library.create_import_run(%{
+        library_path_id: other.id,
+        user_id: user.id,
+        mode: :unattended
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/import?library_path_id=#{selected.id}")
+
+    assert has_element?(view, "#start-run-button")
+    refute has_element?(view, "#run-progress")
+  end
+
+  test "start scan cannot target a different library than the selected tab", %{
+    conn: conn,
+    library_path: selected
+  } do
+    other =
+      library_path_fixture(%{
+        type: "series",
+        path: "/tmp/unselected_import_library_#{System.unique_integer([:positive])}"
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/import?library_path_id=#{selected.id}")
+
+    view
+    |> element("#start-run-form")
+    |> render_submit(%{"library_path_id" => other.id, "auto_import" => "true"})
+
+    refute Library.active_import_run(other.id)
+    refute Library.active_import_run(selected.id)
   end
 
   test "starting a run creates it and enqueues the coordinator", %{
@@ -68,7 +202,7 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
     assert Library.get_import_run(run.id).status == :stopping
   end
 
-  test "re-attaches to a run in flight after a reload", %{
+  test "re-attaches to a run in flight after a reload without noisy counters", %{
     conn: conn,
     library_path: lp,
     user: user
@@ -80,7 +214,10 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
 
     {:ok, view, _html} = live(conn, ~p"/import")
 
-    assert render(view) =~ "4,200"
+    assert has_element?(view, "#run-progress", "Finding files")
+    refute has_element?(view, "#run-progress", "Found")
+    refute has_element?(view, "#run-progress", "Matched")
+    refute has_element?(view, "#run-progress", "Added")
   end
 
   test "a completed run immediately refreshes the review groups", %{
@@ -117,7 +254,7 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
 
     assert has_element?(view, "#group-#{group.id}")
     assert has_element?(view, "#band-all .badge", "1")
-    refute has_element?(view, "details#import-run-control[open]")
+    assert has_element?(view, "#review-section")
   end
 
   test "starting a run while another tab already started one shows a friendly message and does not create a duplicate",
@@ -145,23 +282,17 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
     assert Library.active_import_run(lp.id).id == existing.id
   end
 
-  test "a mode the server does not recognise is refused instead of killing the page", %{
+  test "an unrecognised automatic import value safely falls back to review mode", %{
     conn: conn,
     library_path: lp
   } do
     {:ok, view, _html} = live(conn, ~p"/import")
 
-    # A tab left open across a deploy that renamed a mode, a replayed event, or
-    # a crafted one. Converting this straight to an atom raises, and a raise in
-    # a handler takes the LiveView process with it: the user's page closes
-    # instead of answering them.
-    html =
-      view
-      |> element("#start-run-form")
-      |> render_submit(%{"library_path_id" => lp.id, "mode" => "not_a_real_mode_9f3"})
+    view
+    |> element("#start-run-form")
+    |> render_submit(%{"library_path_id" => lp.id, "auto_import" => "not-a-boolean"})
 
-    assert html =~ "That import mode is not available."
-    refute Library.active_import_run(lp.id)
+    assert Library.active_import_run(lp.id).mode == :review
   end
 
   test "stopping a run that finished in the meantime does not lock the path", %{
@@ -185,22 +316,13 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
     refute Library.active_import_run(lp.id)
   end
 
-  test "renders one selectable library card per path, with an icon", %{
+  test "renders one selectable library tab per path, with an icon", %{
     conn: conn,
     library_path: lp
   } do
     {:ok, view, _html} = live(conn, ~p"/import")
 
-    assert has_element?(
-             view,
-             "label.card input[type=radio][name=library_path_id][value='#{lp.id}']"
-           )
-
-    # The first path is preselected so the form always submits a real id.
-    assert has_element?(
-             view,
-             "input[type=radio][name=library_path_id][value='#{lp.id}'][checked]"
-           )
+    assert has_element?(view, "#library-tab-#{lp.id}.tab-active .hero-film")
   end
 
   describe "library types that cannot be imported" do
@@ -210,7 +332,7 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
     # built -- library_path_fixture validates against the same enum the form
     # reads. What survives is the shape of the check: every type the schema
     # allows is offered, and an id outside the offered set is still refused.
-    test "every type the schema allows is offered in the start form", %{conn: conn} do
+    test "every type the schema allows is offered in the library tabs", %{conn: conn} do
       paths =
         for type <- Ecto.Enum.values(Mydia.Settings.LibraryPath, :type) do
           library_path_fixture(%{type: to_string(type), name: "Lib #{type}"})
@@ -256,7 +378,7 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
     assert render(view) =~ ":not_found"
   end
 
-  test "outcome panel shows review CTA when a pending import group exists for the library path",
+  test "outcome panel reports pending groups without a redundant review link",
        %{
          conn: conn,
          library_path: lp,
@@ -274,11 +396,8 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
         confidence: 0.95
       })
 
-    # The CTA reads `import_groups`, same as the page it links to, so the
-    # group has to actually exist -- a bare MatchCandidate (what the old,
-    # `count_inbox_files`-backed CTA read) is no longer enough. This is the
-    # same call `Jobs.ImportRun.execute/2` makes once a real run's match
-    # phase finishes.
+    # The summary reads `import_groups`, same as the review section beneath it,
+    # so a bare MatchCandidate is not enough to produce a review count.
     {:ok, _} = ImportGroups.upsert_for_library(lp)
 
     {:ok, run} =
@@ -295,14 +414,16 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
 
     {:ok, view, _html} = live(conn, ~p"/import")
 
-    assert has_element?(
-             view,
-             "#run-outcome a[href='/import']",
-             "Review 1 group(s) that need attention"
-           )
+    assert has_element?(view, "#run-outcome", "Scan complete")
+    assert has_element?(view, "#run-outcome", "1 group ready to review")
+    refute has_element?(view, "#run-outcome", "Import finished")
+    refute has_element?(view, "#run-outcome", "Found")
+    refute has_element?(view, "#run-outcome", "Matched")
+    refute has_element?(view, "#run-outcome", "Added")
+    refute has_element?(view, "#run-outcome a[href='/import']")
   end
 
-  test "outcome panel hides review CTA when no pending import group exists", %{
+  test "outcome panel omits the pending summary when there is nothing to review", %{
     conn: conn,
     library_path: lp,
     user: user
@@ -325,13 +446,115 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
     refute has_element?(view, "#run-outcome a[href='/import']")
   end
 
-  test "import control is open by default when there are no items to review", %{conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/import")
+  test "clear results removes the selected library's scan outcome and review groups", %{
+    conn: conn,
+    library_path: lp,
+    user: user
+  } do
+    media_file = orphaned_media_file_fixture(%{library_path_id: lp.id})
 
-    assert has_element?(view, "details#import-run-control[open]")
+    {:ok, _} =
+      Library.upsert_match_candidate(%{
+        media_file_id: media_file.id,
+        rank: 0,
+        provider_type: "tmdb",
+        provider_id: "603",
+        title: "The Matrix",
+        confidence: 0.95
+      })
+
+    {:ok, _} = ImportGroups.upsert_for_library(lp)
+    {[group], nil} = ImportGroups.page(lp.id)
+
+    {:ok, run} =
+      Library.create_import_run(%{library_path_id: lp.id, user_id: user.id, mode: :review})
+
+    {:ok, _} = Library.update_import_run(run, %{status: :done, phase: :finished})
+
+    {:ok, view, _html} = live(conn, ~p"/import?library_path_id=#{lp.id}")
+
+    assert has_element?(view, "#group-#{group.id}")
+    assert has_element?(view, "#review-section #clear-scan-results")
+    refute has_element?(view, "#start-run-form #clear-scan-results")
+
+    view
+    |> element("#clear-scan-results")
+    |> render_click()
+
+    refute has_element?(view, "#run-outcome")
+    refute has_element?(view, "#group-#{group.id}")
+    assert has_element?(view, "#no-groups", "Nothing to review")
+    refute Library.last_import_run(lp.id)
   end
 
-  test "import control is collapsed by default when there are items to review", %{
+  test "import all accepts every provider-matched result only for the selected library", %{
+    conn: conn,
+    library_path: selected
+  } do
+    confident =
+      import_group(selected,
+        display_title: "Confident",
+        provider_type: "tmdb",
+        provider_id: "1",
+        min_confidence: 0.99
+      )
+
+    uncertain =
+      import_group(selected,
+        display_title: "Uncertain",
+        provider_type: "tmdb",
+        provider_id: "2",
+        min_confidence: 0.55
+      )
+
+    unmatched = import_group(selected, display_title: "Unmatched")
+
+    local =
+      import_group(selected,
+        display_title: "Local",
+        provider_type: "local",
+        provider_id: "local-item"
+      )
+
+    other_library = library_path_fixture(%{type: "movies"})
+
+    other =
+      import_group(other_library,
+        display_title: "Other library",
+        provider_type: "tmdb",
+        provider_id: "3",
+        min_confidence: 0.99
+      )
+
+    {:ok, view, _html} = live(conn, ~p"/import?library_path_id=#{selected.id}")
+
+    assert has_element?(view, "#review-actions #import-all-results")
+    assert has_element?(view, "#review-actions #clear-scan-results")
+
+    view
+    |> element("#import-all-results")
+    |> render_click()
+
+    assert Repo.reload!(confident).status == "accepted"
+    assert Repo.reload!(uncertain).status == "accepted"
+    assert Repo.reload!(unmatched).status == "pending"
+    assert Repo.reload!(local).status == "pending"
+    assert Repo.reload!(other).status == "pending"
+
+    assert_enqueued(
+      worker: Mydia.Jobs.ApplyImportGroups,
+      args: %{"library_path_id" => selected.id}
+    )
+  end
+
+  test "scan controls and review are both visible while idle", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    assert has_element?(view, "#start-run-button")
+    assert has_element?(view, "#review-section")
+  end
+
+  test "scan controls stay compact above review items", %{
     conn: conn,
     library_path: lp
   } do
@@ -351,11 +574,11 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
 
     {:ok, view, _html} = live(conn, ~p"/import")
 
-    assert has_element?(view, "details#import-run-control")
-    refute has_element?(view, "details#import-run-control[open]")
+    assert has_element?(view, "#start-run-button")
+    assert has_element?(view, "#review-section")
   end
 
-  test "import control is open by default when an active run is in flight", %{
+  test "an active library tab shows scan activity", %{
     conn: conn,
     library_path: lp,
     user: user
@@ -365,10 +588,10 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
 
     {:ok, view, _html} = live(conn, ~p"/import")
 
-    assert has_element?(view, "details#import-run-control[open]")
+    assert has_element?(view, "#library-tab-#{lp.id} .loading-spinner")
   end
 
-  test "pre-selects movie library in start form when type=movies query param is provided", %{
+  test "pre-selects movie library tab when type=movies query param is provided", %{
     conn: conn
   } do
     lp_tv =
@@ -385,11 +608,12 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
 
     {:ok, view, _html} = live(conn, ~p"/import?type=movies")
 
-    assert has_element?(view, "input[name='library_path_id'][value='#{lp_movie.id}'][checked]")
-    refute has_element?(view, "input[name='library_path_id'][value='#{lp_tv.id}'][checked]")
+    assert has_element?(view, "#library-tab-#{lp_movie.id}.tab-active")
+    refute has_element?(view, "#library-tab-#{lp_tv.id}.tab-active")
+    assert has_element?(view, "input[name='library_path_id'][value='#{lp_movie.id}']")
   end
 
-  test "pre-selects tv library in start form when type=tv query param is provided", %{
+  test "pre-selects tv library tab when type=tv query param is provided", %{
     conn: conn
   } do
     lp_movie =
@@ -406,14 +630,15 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
 
     {:ok, view, _html} = live(conn, ~p"/import?type=tv")
 
-    assert has_element?(view, "input[name='library_path_id'][value='#{lp_tv.id}'][checked]")
-    refute has_element?(view, "input[name='library_path_id'][value='#{lp_movie.id}'][checked]")
+    assert has_element?(view, "#library-tab-#{lp_tv.id}.tab-active")
+    refute has_element?(view, "#library-tab-#{lp_movie.id}.tab-active")
+    assert has_element?(view, "input[name='library_path_id'][value='#{lp_tv.id}']")
   end
 
-  test "changing library in start form triggers select_library and updates selected library", %{
+  test "changing the library tab updates scan and review selection", %{
     conn: conn
   } do
-    lp1 =
+    _lp1 =
       library_path_fixture(%{
         type: "series",
         path: "/tmp/lib_1_#{System.unique_integer([:positive])}"
@@ -427,10 +652,9 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
 
     {:ok, view, _html} = live(conn, ~p"/import")
 
-    view
-    |> element("#start-run-form")
-    |> render_change(%{"library_path_id" => lp2.id})
+    view |> element("#library-tab-#{lp2.id}") |> render_click()
 
-    assert has_element?(view, "input[name='library_path_id'][value='#{lp2.id}'][checked]")
+    assert has_element?(view, "#library-tab-#{lp2.id}.tab-active")
+    assert has_element?(view, "input[name='library_path_id'][value='#{lp2.id}']")
   end
 end

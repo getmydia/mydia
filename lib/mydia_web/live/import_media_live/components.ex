@@ -13,45 +13,60 @@ defmodule MydiaWeb.ImportMediaLive.Components do
   alias Mydia.Metadata.ImageUrl
 
   @doc """
-  A row of buttons for switching which library the review section shows.
+  Page-level tabs for switching the library shared by scanning and review.
 
-  Only meaningful with more than one importable library path -- the caller
-  is expected to gate rendering on that, same as the `filter` this row of
-  buttons resembles. `counts` maps `library_path_id` to its pending group
-  total (`ImportGroups.band_counts/1`'s `:total`, one call per path), so a
-  user picking between two libraries can see where the work actually is
-  before switching to it.
+  `counts` maps `library_path_id` to its pending group total, while
+  `active_library_ids` marks tabs with scans in flight. The tab remains
+  useful with one path because it makes the page's scope explicit.
   """
   attr :library_paths, :list, required: true
   attr :selected_id, :string, required: true
   attr :counts, :map, required: true
+  attr :active_library_ids, :list, default: []
 
   def library_picker(assigns) do
     ~H"""
-    <div class="flex items-center gap-1.5 flex-wrap bg-base-200/50 p-1 rounded-xl border border-base-200">
+    <div
+      id="library-tabs"
+      role="tablist"
+      class="tabs tabs-box bg-base-200/60 p-1.5 rounded-xl border border-base-200 flex flex-wrap h-auto gap-1"
+    >
       <button
         :for={path <- @library_paths}
         type="button"
-        id={"library-picker-#{path.id}"}
+        id={"library-tab-#{path.id}"}
+        role="tab"
+        aria-selected={to_string(path.id == @selected_id)}
         class={[
-          "btn btn-sm transition-all",
+          "tab h-auto min-h-10 px-3 py-2 gap-2 rounded-lg transition-all",
           if(path.id == @selected_id,
-            do: "btn-primary shadow-sm",
-            else: "btn-ghost text-base-content/70 hover:text-base-content"
+            do: "tab-active bg-base-100 shadow-sm font-semibold text-primary",
+            else: "text-base-content/65 hover:text-base-content hover:bg-base-100/60"
           )
         ]}
         phx-click="select_library"
         phx-value-library_path_id={path.id}
       >
         <.icon
-          name={if(path.type == :movies, do: "hero-film", else: "hero-tv")}
-          class="w-4 h-4 mr-1 opacity-70"
+          name={
+            case path.type do
+              :movies -> "hero-film"
+              :series -> "hero-tv"
+              _ -> "hero-square-3-stack-3d"
+            end
+          }
+          class="w-4 h-4 opacity-70"
         />
-        {path.path}
+        <span class="max-w-52 truncate">{path.path}</span>
+        <span
+          :if={path.id in @active_library_ids}
+          class="loading loading-spinner loading-xs text-primary"
+          aria-label="Scan in progress"
+        />
         <span class={[
-          "badge badge-sm ml-1",
+          "badge badge-sm",
           if(path.id == @selected_id,
-            do: "badge-primary-content text-primary font-bold",
+            do: "badge-primary text-primary-content font-bold",
             else: "badge-ghost"
           )
         ]}>

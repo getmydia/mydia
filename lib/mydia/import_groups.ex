@@ -11,6 +11,7 @@ defmodule Mydia.ImportGroups do
   import Ecto.Query
 
   alias Mydia.Library.ImportGroup
+  alias Mydia.Library.ImportRun
   alias Mydia.Library.MatchCandidate
   alias Mydia.Library.MediaFile
   alias Mydia.Library.PathAnchor
@@ -40,6 +41,49 @@ defmodule Mydia.ImportGroups do
   """
   @spec auto_accept_threshold() :: float()
   def auto_accept_threshold, do: @auto_accept_threshold
+
+  @doc """
+  Clears the derived scan and review state for one library path.
+
+  Imported media files are preserved. Active scans are refused so their
+  coordinator cannot recreate groups while the clear is in progress.
+  """
+  @spec clear_for_library(binary()) ::
+          {:ok, non_neg_integer()} | {:error, :active_run}
+  def clear_for_library(library_path_id) do
+    result =
+      Repo.transaction(fn ->
+        active_statuses = ImportRun.active_statuses()
+
+        if Repo.exists?(
+             from(r in ImportRun,
+               where: r.library_path_id == ^library_path_id and r.status in ^active_statuses
+             )
+           ) do
+          Repo.rollback(:active_run)
+        end
+
+        {group_count, _} =
+          ImportGroup
+          |> where([g], g.library_path_id == ^library_path_id)
+          |> Repo.delete_all()
+
+        ImportRun
+        |> where([r], r.library_path_id == ^library_path_id)
+        |> Repo.delete_all()
+
+        group_count
+      end)
+
+    with {:ok, group_count} <- result do
+      Phoenix.PubSub.broadcast(Mydia.PubSub, "import_groups:#{library_path_id}", {
+        :import_groups_changed,
+        library_path_id
+      })
+
+      {:ok, group_count}
+    end
+  end
 
   @doc """
   Which review band a group falls into.
@@ -610,15 +654,39 @@ defmodule Mydia.ImportGroups do
   """
   @spec accept(SelectionScope.t()) :: {:ok, non_neg_integer()} | {:error, term()}
   def accept(%SelectionScope{} = scope) do
+    scope
+    |> SelectionScope.to_query()
+    |> accept_query(scope.library_path_id)
+  end
+
+  @doc """
+  Accepts every pending provider-matched group for one library path.
+
+  Unmatched and synthetic local groups are excluded because the apply worker
+  cannot link them. Confidence is deliberately not filtered: this is the
+  explicit human override represented by the Import All control.
+  """
+  @spec accept_all_matched(binary()) :: {:ok, non_neg_integer()} | {:error, term()}
+  def accept_all_matched(library_path_id) do
+    ImportGroup
+    |> where(
+      [g],
+      g.library_path_id == ^library_path_id and g.status == "pending" and
+        not is_nil(g.provider_id) and
+        (is_nil(g.provider_type) or g.provider_type != "local")
+    )
+    |> accept_query(library_path_id)
+  end
+
+  defp accept_query(query, library_path_id) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 
     {count, _} =
-      scope
-      |> SelectionScope.to_query()
+      query
       |> Repo.update_all(set: [status: "accepted", decided_at: now, updated_at: now])
 
     if count > 0 do
-      case %{"library_path_id" => scope.library_path_id}
+      case %{"library_path_id" => library_path_id}
            |> Mydia.Jobs.ApplyImportGroups.new()
            |> insert_job() do
         {:ok, _job} -> {:ok, count}

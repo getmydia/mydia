@@ -19,17 +19,9 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.ImportMediaLive.{Components, RunControl}
 
-  # Everything a client can name is mapped from an explicit table rather than
-  # converted. `String.to_existing_atom/1` and `String.to_integer/1` both raise
-  # on anything unexpected, and a raise inside a handler takes the LiveView
-  # process down: a tab left open across a deploy, a replayed event, or a
-  # crafted one would close the page instead of getting an answer back.
-  @modes %{"review" => :review, "unattended" => :unattended}
-
-  # Same reasoning as @modes: `phx-value-band` is client-controlled, so the
-  # atom it names is looked up rather than converted. An unknown value is a
-  # silent no-op -- unlike an unknown mode, there is no form state to explain
-  # a rejection to, so there is nothing useful to flash.
+  # `phx-value-band` is client-controlled, so the atom it names is looked up
+  # rather than converted. An unknown value is a silent no-op because there is
+  # no form state to explain a rejection to.
   # `:ignored` is not a confidence band -- it is a status -- but it rides the
   # same chip row and the same client-controlled atom lookup as the real
   # bands, and load_groups/1 translates it into ImportGroups.page/2's
@@ -59,27 +51,31 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   @impl true
   def mount(params, _session, socket) do
     library_paths = Settings.list_library_paths()
-    active_run = Enum.find_value(library_paths, &Library.active_import_run(&1.id))
-
-    # No run in flight: fall back to the most recent one so a finished,
-    # failed, or stopped run stays visible after a reload instead of the
-    # panel silently reverting to a blank start form. active_import_run/1
-    # itself stays untouched -- Task 6's coordinator and Task 2's uniqueness
-    # guard both depend on it excluding terminal states.
-    outcome_run =
-      if active_run do
-        nil
-      else
-        Enum.find_value(library_paths, &Library.last_import_run(&1.id))
-      end
-
-    run_to_watch = active_run || outcome_run
     importable_library_paths = Enum.filter(library_paths, &importable?/1)
     selected_library_path_id = resolve_library_path_id(params, importable_library_paths)
 
+    selected_library_path =
+      Enum.find(importable_library_paths, &(&1.id == selected_library_path_id))
+
+    active_runs_by_library =
+      Library.list_active_import_runs()
+      |> Map.new(&{&1.library_path_id, &1})
+
+    active_run = Map.get(active_runs_by_library, selected_library_path_id)
+
+    # Run state follows the one library selected by the page-level tabs. A
+    # scan on another path is represented by that tab's activity indicator,
+    # not by replacing the selected library's scan controls and review list.
+    outcome_run =
+      if active_run || is_nil(selected_library_path_id) do
+        nil
+      else
+        Library.last_import_run(selected_library_path_id)
+      end
+
     if connected?(socket) do
-      if run_to_watch do
-        Phoenix.PubSub.subscribe(Mydia.PubSub, ImportRunJob.progress_topic(run_to_watch.id))
+      if active_run do
+        Phoenix.PubSub.subscribe(Mydia.PubSub, ImportRunJob.progress_topic(active_run.id))
       end
 
       if selected_library_path_id do
@@ -88,13 +84,6 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     end
 
     outcome_group_count = group_count_for_outcome(outcome_run)
-
-    run_control_open =
-      cond do
-        active_run != nil -> true
-        outcome_group_count > 0 -> false
-        true -> true
-      end
 
     socket =
       socket
@@ -105,9 +94,9 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       # music path by an older build is still found, shown, and stoppable.
       |> assign(:importable_library_paths, importable_library_paths)
       |> assign(:active_run, active_run)
+      |> assign(:active_runs_by_library, active_runs_by_library)
       |> assign(:outcome_run, outcome_run)
       |> assign(:outcome_group_count, outcome_group_count)
-      |> assign(:run_control_open, run_control_open)
       |> assign(:band, :all)
       |> assign(:search, "")
       |> assign(:cursor, nil)
@@ -124,6 +113,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       |> assign(:matching_count, 0)
       |> assign(:page_group_ids, [])
       |> assign(:selected_library_path_id, selected_library_path_id)
+      |> assign(:selected_library_path, selected_library_path)
       |> assign(:selection, SelectionScope.new(selected_library_path_id))
       # Guards the :import_groups_changed debounce below: true while a
       # deferred refresh is already scheduled, so a burst of broadcasts
@@ -186,10 +176,11 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   end
 
   @impl true
-  def handle_event("start_run", %{"library_path_id" => path_id, "mode" => mode}, socket) do
+  def handle_event("start_run", %{"library_path_id" => path_id} = params, socket) do
+    mode = if params["auto_import"] == "true", do: :unattended, else: :review
+
     with :ok <- Authorization.authorize_import_media(socket),
-         :ok <- authorize_library_path(socket, path_id),
-         {:ok, mode} <- Map.fetch(@modes, mode) do
+         :ok <- authorize_library_path(socket, path_id) do
       attrs = %{
         library_path_id: path_id,
         user_id: socket.assigns.current_user.id,
@@ -208,10 +199,9 @@ defmodule MydiaWeb.ImportMediaLive.Index do
 
           {:noreply,
            socket
-           |> assign(:active_run, run)
+           |> put_active_run(run)
            |> assign(:outcome_run, nil)
-           |> assign(:outcome_group_count, 0)
-           |> assign(:run_control_open, true)}
+           |> assign(:outcome_group_count, 0)}
 
         {:error, _changeset} ->
           {:noreply, put_flash(socket, :error, "That library is already being imported.")}
@@ -222,12 +212,44 @@ defmodule MydiaWeb.ImportMediaLive.Index do
 
       {:unsupported_type, socket} ->
         {:noreply, socket}
+    end
+  end
 
-      # Map.fetch/2 on an unknown mode. Only reachable from a stale or crafted
-      # form, so the sentence is deliberately vague rather than echoing back
-      # whatever string arrived.
-      :error ->
-        {:noreply, put_flash(socket, :error, "That import mode is not available.")}
+  def handle_event("clear_scan_results", %{"library_path_id" => path_id}, socket) do
+    with :ok <- Authorization.authorize_import_media(socket),
+         :ok <- authorize_library_path(socket, path_id),
+         {:ok, count} <- ImportGroups.clear_for_library(path_id) do
+      {:noreply,
+       socket
+       |> put_flash(:info, "Cleared #{count} scan result group(s).")
+       |> assign(:outcome_run, nil)
+       |> assign(:outcome_group_count, 0)
+       |> assign(:selection, SelectionScope.new(path_id))
+       |> assign(:match_search, nil)
+       |> load_groups()
+       |> refresh_counts()}
+    else
+      {:unauthorized, socket} ->
+        {:noreply, socket}
+
+      {:unsupported_type, socket} ->
+        {:noreply, socket}
+
+      {:error, :active_run} ->
+        {:noreply, put_flash(socket, :error, "Stop this library's scan before clearing results.")}
+    end
+  end
+
+  def handle_event("import_all_results", _params, socket) do
+    with :ok <- Authorization.authorize_import_media(socket),
+         library_path_id when is_binary(library_path_id) <-
+           socket.assigns.selected_library_path_id do
+      {:noreply,
+       socket
+       |> accept_result(ImportGroups.accept_all_matched(library_path_id))}
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+      nil -> {:noreply, put_flash(socket, :error, "Select a library before importing results.")}
     end
   end
 
@@ -240,7 +262,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
         run ->
           case Library.request_import_run_stop(run.id) do
             {:ok, stopping} ->
-              {:noreply, assign(socket, :active_run, stopping)}
+              {:noreply, put_active_run(socket, stopping)}
 
             # The run reached a terminal state between this page rendering and
             # the click landing. Show what it actually did rather than forcing
@@ -378,43 +400,9 @@ defmodule MydiaWeb.ImportMediaLive.Index do
 
   def handle_event("accept_selected", _params, socket) do
     with :ok <- Authorization.authorize_import_media(socket) do
-      # accept/1 can fail at the enqueue step, in which case the groups are
-      # marked accepted but nothing will apply them. Say so rather than
-      # reporting success.
-      case ImportGroups.accept(socket.assigns.selection) do
-        {:ok, count} ->
-          {:noreply,
-           socket
-           |> put_flash(:info, "Accepted #{count} group(s). Linking in the background.")
-           |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
-           |> load_groups()
-           |> refresh_counts()}
-
-        {:error, reason} ->
-          Logger.error("Could not enqueue the import group apply job", reason: inspect(reason))
-
-          # accept/1 flips status to "accepted" *before* it tries to enqueue,
-          # so the affected rows are already gone from the "pending" set both
-          # page/2 and SelectionScope filter on -- regardless of whether the
-          # enqueue itself succeeded. Reload so the stream (and the counts)
-          # match the database instead of continuing to show rows that no
-          # longer match the query, and clear the selection: it names ids
-          # that can no longer be acted on, and re-running accept/1 against
-          # them would select nothing, short-circuit, and return {:ok, 0} --
-          # a second, silent "success" for a selection that already failed
-          # once.
-          {:noreply,
-           socket
-           |> put_flash(
-             :error,
-             "Marked for import, but the background job could not be started. " <>
-               "They are not lost: the next successful accept for this library " <>
-               "will pick them up."
-           )
-           |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
-           |> load_groups()
-           |> refresh_counts()}
-      end
+      {:noreply,
+       socket
+       |> accept_result(ImportGroups.accept(socket.assigns.selection))}
     else
       {:unauthorized, socket} -> {:noreply, socket}
     end
@@ -452,18 +440,14 @@ defmodule MydiaWeb.ImportMediaLive.Index do
 
   def handle_event("rematch_selected", _params, socket) do
     with :ok <- Authorization.authorize_import_media(socket) do
-      case ImportGroups.rematch(socket.assigns.selection) do
-        {:ok, count} ->
-          {:noreply,
-           socket
-           |> put_flash(:info, "Re-matched #{count} group(s).")
-           |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
-           |> load_groups()
-           |> refresh_counts()}
+      {:ok, count} = ImportGroups.rematch(socket.assigns.selection)
 
-        {:error, reason} ->
-          {:noreply, put_flash(socket, :error, "Could not rematch: #{inspect(reason)}")}
-      end
+      {:noreply,
+       socket
+       |> put_flash(:info, "Re-matched #{count} group(s).")
+       |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
+       |> load_groups()
+       |> refresh_counts()}
     else
       {:unauthorized, socket} -> {:noreply, socket}
     end
@@ -716,14 +700,11 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   def handle_info({:import_run_progress, run}, socket) do
     socket =
       if run.status in [:running, :stopping] do
-        socket
-        |> assign(:active_run, run)
-        |> assign(:run_control_open, true)
+        put_active_run(socket, run)
       else
         # Terminal: don't just clear the panel. Keep the run visible as an
-        # outcome so a user who walked away comes back to "it finished" /
-        # "it failed" / "it stopped", not a blank start form that looks like
-        # nothing ever happened.
+        # outcome so a user who walked away comes back to the scan result, not
+        # a blank start form that looks like nothing ever happened.
         socket
         |> show_outcome(run)
         |> load_groups()
@@ -772,12 +753,45 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   # set; this layer only exists so the user gets a sentence instead of a run
   # that starts and immediately fails.
   defp authorize_library_path(socket, path_id) do
-    if Enum.any?(socket.assigns.importable_library_paths, &(&1.id == path_id)) do
-      :ok
-    else
-      {:unsupported_type,
-       put_flash(socket, :error, "Only movie, TV and mixed libraries can be imported.")}
+    cond do
+      path_id != socket.assigns.selected_library_path_id ->
+        {:unsupported_type,
+         put_flash(socket, :error, "Select that library before starting its scan.")}
+
+      Enum.any?(socket.assigns.importable_library_paths, &(&1.id == path_id)) ->
+        :ok
+
+      true ->
+        {:unsupported_type,
+         put_flash(socket, :error, "Only movie, TV and mixed libraries can be imported.")}
     end
+  end
+
+  defp accept_result(socket, {:ok, count}) do
+    socket
+    |> put_flash(:info, "Accepted #{count} group(s). Linking in the background.")
+    |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
+    |> load_groups()
+    |> refresh_counts()
+  end
+
+  defp accept_result(socket, {:error, reason}) do
+    Logger.error("Could not enqueue the import group apply job", reason: inspect(reason))
+
+    # The status update commits before the enqueue is attempted, so affected
+    # rows are already outside the pending review query even on this error.
+    # Refresh the page and keep the recovery guidance consistent for selected
+    # accepts and Import All.
+    socket
+    |> put_flash(
+      :error,
+      "Marked for import, but the background job could not be started. " <>
+        "They are not lost: the next successful accept for this library " <>
+        "will pick them up."
+    )
+    |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
+    |> load_groups()
+    |> refresh_counts()
   end
 
   # A terminal run stays on screen as an outcome rather than reverting the
@@ -785,13 +799,19 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   defp show_outcome(socket, run) do
     socket
     |> assign(:active_run, nil)
+    |> update(:active_runs_by_library, &Map.delete(&1, run.library_path_id))
     |> assign(:outcome_run, run)
     |> assign(:outcome_group_count, group_count_for_outcome(run))
   end
 
+  defp put_active_run(socket, run) do
+    socket
+    |> assign(:active_run, run)
+    |> update(:active_runs_by_library, &Map.put(&1, run.library_path_id, run))
+  end
+
   # Queries the pending group count once when a run reaches a terminal state
-  # so the outcome_review_cta component never calls the DB directly from its
-  # body.
+  # so the outcome summary never calls the DB from its component body.
   #
   # Deliberately `band_counts/1` (scoped to this run's own library path), not
   # `ImportGroups.count_pending/0` (the global nav-badge total, see its own
@@ -841,28 +861,43 @@ defmodule MydiaWeb.ImportMediaLive.Index do
 
   defp resolve_library_by_type(_type, _library_paths), do: nil
 
-  # The review section works one library path at a time. On mount it defaults
-  # to the first importable path, same as the start form's own radio default;
-  # after that, select_library/2 (via the picker) is what changes it.
+  # Scanning and review work on one library path at a time. On mount the
+  # page-level tabs default to the first importable path; after that,
+  # select_library/2 changes the shared page context.
   defp default_library_path_id([%{id: id} | _rest]), do: id
   defp default_library_path_id([]), do: nil
 
-  # Switches which library path the review section shows. Every piece of
-  # state the review section owns is either library-scoped (selection,
-  # paging, expansion) or would silently act on rows no longer on screen if
-  # left as-is (a filter-mode selection built against the old library's
-  # groups, most of all) -- so all of it resets here rather than only the
-  # pieces that would visibly break.
+  # Switches the library shared by scan controls and review. Every piece of
+  # review state is library-scoped, and run subscriptions must move with the
+  # same selection so another library's progress never takes over this tab.
   defp switch_library(socket, id) do
     previous_id = socket.assigns.selected_library_path_id
+    previous_run = socket.assigns.active_run
+    active_run = Library.active_import_run(id)
+    outcome_run = if active_run, do: nil, else: Library.last_import_run(id)
+    selected_library_path = Enum.find(socket.assigns.importable_library_paths, &(&1.id == id))
 
     if connected?(socket) and previous_id != id do
       if previous_id, do: Phoenix.PubSub.unsubscribe(Mydia.PubSub, "import_groups:#{previous_id}")
+
+      if previous_run,
+        do: Phoenix.PubSub.unsubscribe(Mydia.PubSub, ImportRunJob.progress_topic(previous_run.id))
+
       Phoenix.PubSub.subscribe(Mydia.PubSub, "import_groups:#{id}")
+
+      if active_run,
+        do: Phoenix.PubSub.subscribe(Mydia.PubSub, ImportRunJob.progress_topic(active_run.id))
     end
 
     socket
     |> assign(:selected_library_path_id, id)
+    |> assign(:selected_library_path, selected_library_path)
+    |> assign(:active_run, active_run)
+    |> update(:active_runs_by_library, fn runs ->
+      if active_run, do: Map.put(runs, id, active_run), else: Map.delete(runs, id)
+    end)
+    |> assign(:outcome_run, outcome_run)
+    |> assign(:outcome_group_count, group_count_for_outcome(outcome_run))
     |> assign(:cursor, nil)
     |> assign(:cursor_stack, [])
     |> assign(:expanded_ids, MapSet.new())
@@ -917,20 +952,12 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       |> Enum.map(& &1.id)
       |> MapSet.new()
 
-    run_control_open =
-      cond do
-        socket.assigns.active_run != nil -> true
-        groups != [] or socket.assigns.outcome_group_count > 0 -> false
-        true -> true
-      end
-
     socket
     |> stream(:groups, groups, reset: true)
     |> assign(:page_group_ids, Enum.map(groups, & &1.id))
     |> assign(:next_cursor, next_cursor)
     |> assign(:matching_count, matching_count)
     |> assign(:expanded_ids, expanded)
-    |> assign(:run_control_open, run_control_open)
   end
 
   # Recomputes the counts that only change when a group's status changes,

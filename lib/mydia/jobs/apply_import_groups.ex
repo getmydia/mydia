@@ -6,10 +6,11 @@ defmodule Mydia.Jobs.ApplyImportGroups do
   for the duration of a library scan. An accept queued behind a multi-hour run
   would look like the button did nothing.
 
-  One transaction per page, never one for the group. On SQLite a single
-  transaction over a whole group holds the global write lock for its duration
-  and blocks the scanner; on Postgres it overflows the 64-entry subxid cache.
-  Per-page also means a crash loses at most one page's progress, and
+  Members are fetched in bounded pages, but the worker does not wrap a page in
+  a transaction. `FileIngest` performs metadata network requests while linking
+  a member, so a worker-owned transaction would hold SQLite's global write lock
+  across slow external I/O and make unrelated pages unavailable. The contexts
+  called by `FileIngest` own their individual, short database writes, while
   `unresolved_count` tells a restarted job where it got to.
 
   `unique` is keyed on `library_path_id` alone (not the full args, so a custom
@@ -110,8 +111,8 @@ defmodule Mydia.Jobs.ApplyImportGroups do
   # status because members remain, and then stalls forever: nothing re-enqueues
   # the job.
   #
-  # One transaction per page, never one for the group: on SQLite a single
-  # transaction over a whole show holds the global write lock for its duration.
+  # The page is only a bound on fetched work. It must not become a transaction
+  # boundary because ingesting a member includes external metadata requests.
   defp drain(group, remaining_before, page) do
     commit_page(group, page)
 
@@ -132,50 +133,19 @@ defmodule Mydia.Jobs.ApplyImportGroups do
     end
   end
 
-  # `safe_ingest/2`'s rescue only covers an Elixir-level exception raised
-  # before any DB write lands, which is the dominant failure class: the
-  # connection stays healthy, the page's transaction commits, and one bad
-  # member costs only itself. Every write on this path is changeset-mapped, so
-  # an ordinary constraint violation comes back as `{:error, changeset}`, not a
-  # raise -- what actually reaches here is a deadlock, a statement timeout, or
-  # a lost connection, none of which a changeset can catch. Postgres marks the
-  # *whole* transaction aborted regardless of that rescue, so
-  # `Repo.transaction/1` comes back `{:error, :rollback}` and every member in
-  # the page is lost, including ones that had already linked successfully
-  # earlier in the same page.
-  #
-  # So the result is inspected: on a clean commit the page is done. On a
-  # rollback, the page is replayed one member at a time, each in its own
-  # transaction, so a poisoned member costs only itself and its page-mates
-  # still commit. The fast path stays per-page deliberately — per-member
-  # transactions on SQLite mean one global write-lock acquisition per file, so
-  # the slow path is only paid on a page that actually failed.
+  # Do not add an outer transaction here. `safe_ingest/2` reaches metadata
+  # providers and can spend seconds waiting on the network after an earlier
+  # write. Keeping each member outside a worker-owned transaction lets the
+  # lower-level contexts acquire SQLite's write lock only for their actual DB
+  # operations, and one failed member does not roll back its page-mates.
   defp commit_page(group, page) do
-    members = ImportGroups.members(group.id, limit: page)
-
-    case Repo.transaction(fn -> Enum.each(members, &safe_ingest(&1, group)) end) do
-      {:ok, _} ->
-        :ok
-
-      {:error, reason} ->
-        Logger.warning("An import group page failed to commit, replaying it per member",
-          import_group_id: group.id,
-          members: length(members),
-          reason: inspect(reason)
-        )
-
-        Enum.each(members, fn member ->
-          Repo.transaction(fn -> safe_ingest(member, group) end)
-        end)
-
-        :ok
-    end
+    group.id
+    |> ImportGroups.members(limit: page)
+    |> Enum.each(&safe_ingest(&1, group))
   end
 
-  # One member's exception must not roll back the page's whole transaction:
-  # without this, a single bad member discards every link that already
-  # succeeded in the same page, and the log carries no member-level detail to
-  # act on.
+  # One member's exception must not stop the rest of the page, and the log must
+  # carry enough member-level detail to act on it.
   defp safe_ingest(member, group) do
     ingest_member(member, group)
   rescue

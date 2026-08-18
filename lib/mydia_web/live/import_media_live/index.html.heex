@@ -9,25 +9,58 @@
       </div>
     </div>
 
-    <RunControl.run_control
+    <Components.library_picker
+      :if={@importable_library_paths != []}
       library_paths={@importable_library_paths}
-      selected_library_path_id={@selected_library_path_id}
+      selected_id={@selected_library_path_id}
+      counts={@library_group_counts}
+      active_library_ids={Map.keys(@active_runs_by_library)}
+    />
+
+    <RunControl.run_control
+      library_path={@selected_library_path}
       active_run={@active_run}
       outcome_run={@outcome_run}
       outcome_group_count={@outcome_group_count}
-      open={@run_control_open}
     />
 
-    <div class="flex flex-col gap-4 mt-2">
-      <div class="flex items-center justify-between gap-4 flex-wrap">
-        <Components.library_picker
-          :if={length(@importable_library_paths) > 1}
-          library_paths={@importable_library_paths}
-          selected_id={@selected_library_path_id}
-          counts={@library_group_counts}
-        />
-      </div>
+    <section :if={is_nil(@active_run)} id="review-section" class="flex flex-col gap-4 mt-2">
+      <div class="flex items-center justify-between gap-4">
+        <div>
+          <h2 class="text-xl font-bold">Review</h2>
+          <p class="text-sm text-base-content/60 mt-0.5">
+            Confirm matches before they are added to the selected library.
+          </p>
+        </div>
 
+        <div
+          :if={@selected_library_path}
+          id="review-actions"
+          class="flex items-center gap-2 shrink-0"
+        >
+          <button
+            id="import-all-results"
+            type="button"
+            class="btn btn-primary btn-sm"
+            phx-click="import_all_results"
+            phx-disable-with="Importing…"
+            data-confirm="Import every matched result for this library? This includes lower-confidence matches."
+          >
+            <.icon name="hero-check-circle" class="w-4 h-4" /> Import All
+          </button>
+
+          <button
+            id="clear-scan-results"
+            type="button"
+            class="btn btn-ghost btn-sm text-error"
+            phx-click="clear_scan_results"
+            phx-value-library_path_id={@selected_library_path.id}
+            data-confirm="Clear all scan and review results for this library? Imported media will not be removed."
+          >
+            <.icon name="hero-trash" class="w-4 h-4" /> Clear
+          </button>
+        </div>
+      </div>
       <Components.band_filter band={@band} counts={@band_counts} search={@search} />
 
       <Components.bulk_bar
@@ -86,7 +119,7 @@
           Next <.icon name="hero-chevron-right" class="w-4 h-4 ml-0.5" />
         </button>
       </div>
-    </div>
+    </section>
 
     <Components.match_search_modal state={@match_search} />
   </div>
