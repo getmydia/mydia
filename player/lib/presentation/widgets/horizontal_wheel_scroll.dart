@@ -60,15 +60,12 @@ class _HorizontalWheelScrollState extends State<HorizontalWheelScroll> {
   /// is replaced, so this dependency costs nothing per frame.
   ScrollableState? _verticalAncestor;
 
-  ScrollController get _controller => widget.controller ?? _ownedController!;
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.controller == null) {
-      _ownedController = ScrollController();
-    }
-  }
+  /// Creates the owned controller on first use rather than in `initState`, so
+  /// a rebuild that swaps a caller's controller for null still has one to hand
+  /// back. No call site does that today; creating it lazily just means the
+  /// widget cannot be crashed by one that later does.
+  ScrollController get _controller =>
+      widget.controller ?? (_ownedController ??= ScrollController());
 
   @override
   void didChangeDependencies() {

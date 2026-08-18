@@ -277,10 +277,12 @@ class DownloadsScreen extends ConsumerWidget {
               scrollDirection: Axis.horizontal,
               itemCount: failed.length,
               itemBuilder: (context, index) {
+                final task = failed[index];
                 return Container(
+                  key: ValueKey('failed-download-${task.id}'),
                   width: 300,
                   margin: const EdgeInsets.only(right: 12),
-                  child: _buildFailedDownloadCard(context, ref, failed[index]),
+                  child: _buildFailedDownloadCard(context, ref, task),
                 );
               },
             ),

@@ -944,6 +944,7 @@ class ShowDetailScreen extends ConsumerWidget {
                 final isSelected = season.seasonNumber == selectedSeason;
 
                 return Padding(
+                  key: ValueKey('season-chip-${season.seasonNumber}'),
                   padding: const EdgeInsets.only(right: 10),
                   child: _SeasonChip(
                     label: 'Season ${season.seasonNumber}',
