@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../../core/theme/colors.dart';
 import '../../domain/models/cast_member.dart';
+import 'horizontal_wheel_scroll.dart';
 
 /// Horizontal rail of cast members below the detail hero. Renders nothing
 /// when [members] is empty — there is no empty state, the section just
@@ -43,18 +44,21 @@ class CastRail extends StatelessWidget {
         const SizedBox(height: 14),
         SizedBox(
           height: 128,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            itemCount: members.length,
-            itemBuilder: (context, index) {
-              final member = members[index];
-              return Padding(
-                key: ValueKey('cast-${member.name}-$index'),
-                padding: const EdgeInsets.only(right: 14),
-                child: _CastCard(member: member),
-              );
-            },
+          child: HorizontalWheelScroll(
+            builder: (context, controller) => ListView.builder(
+              controller: controller,
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              itemCount: members.length,
+              itemBuilder: (context, index) {
+                final member = members[index];
+                return Padding(
+                  key: ValueKey('cast-${member.name}-$index'),
+                  padding: const EdgeInsets.only(right: 14),
+                  child: _CastCard(member: member),
+                );
+              },
+            ),
           ),
         ),
       ],

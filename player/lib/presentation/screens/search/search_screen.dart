@@ -9,6 +9,7 @@ import '../../../core/layout/dock_insets.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/models/search_result.dart';
 import '../../widgets/browse_scaffold.dart';
+import '../../widgets/horizontal_wheel_scroll.dart';
 import 'search_controller.dart';
 import 'widgets/episode_result_row.dart';
 import 'widgets/search_filter_chip.dart';
@@ -195,31 +196,34 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   };
 
   Widget _buildFilterChips(SearchState searchState) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
-        children: [
-          for (final type in SearchResultType.values) ...[
-            SearchFilterChip(
-              label: type.sectionTitle,
-              icon: _chipIcons[type] ?? Icons.search_rounded,
-              isSelected: searchState.selectedTypes.contains(type),
-              onTap: () => _onToggleType(searchState, type),
-            ),
-            const SizedBox(width: 8),
+    return HorizontalWheelScroll(
+      builder: (context, controller) => SingleChildScrollView(
+        controller: controller,
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          children: [
+            for (final type in SearchResultType.values) ...[
+              SearchFilterChip(
+                label: type.sectionTitle,
+                icon: _chipIcons[type] ?? Icons.search_rounded,
+                isSelected: searchState.selectedTypes.contains(type),
+                onTap: () => _onToggleType(searchState, type),
+              ),
+              const SizedBox(width: 8),
+            ],
+            if (searchState.selectedTypes.isNotEmpty)
+              TextButton(
+                onPressed: () {
+                  ref.read(searchControllerProvider.notifier).clearFilters();
+                  if (searchState.query.isNotEmpty) {
+                    ref.read(searchControllerProvider.notifier).search();
+                  }
+                },
+                child: const Text('Clear filters'),
+              ),
           ],
-          if (searchState.selectedTypes.isNotEmpty)
-            TextButton(
-              onPressed: () {
-                ref.read(searchControllerProvider.notifier).clearFilters();
-                if (searchState.query.isNotEmpty) {
-                  ref.read(searchControllerProvider.notifier).search();
-                }
-              },
-              child: const Text('Clear filters'),
-            ),
-        ],
+        ),
       ),
     );
   }
