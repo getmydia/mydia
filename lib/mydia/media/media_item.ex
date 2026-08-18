@@ -18,6 +18,7 @@ defmodule Mydia.Media.MediaItem do
           tvdb_id: integer() | nil,
           imdb_id: String.t() | nil,
           metadata_source: atom() | nil,
+          season_order: :official | :dvd | :absolute | nil,
           metadata: Mydia.Metadata.Structs.MediaMetadata.t() | nil,
           monitored: boolean(),
           monitor_new_seasons: :all | :none,
@@ -51,6 +52,12 @@ defmodule Mydia.Media.MediaItem do
     # (tv_show only; movies stay nil). Source of truth for provider-aware
     # refresh — not inferred from tvdb_id/tmdb_id presence.
     field :metadata_source, Ecto.Enum, values: [:tvdb, :tmdb]
+    # Which TVDB season ordering this show uses. nil means the user has never
+    # been asked and the show behaves as :official; an explicit :official
+    # means they were offered a split and chose aired order. That distinction
+    # is what lets the suggestion banner key on "never asked" without being
+    # retired by every show that simply has no alternative ordering.
+    field :season_order, Ecto.Enum, values: [:official, :dvd, :absolute]
     field :metadata, Mydia.Media.MetadataType
     field :monitored, :boolean, default: true
 
@@ -96,6 +103,7 @@ defmodule Mydia.Media.MediaItem do
       :tvdb_id,
       :imdb_id,
       :metadata_source,
+      :season_order,
       :metadata,
       :monitored,
       :monitor_new_seasons,
