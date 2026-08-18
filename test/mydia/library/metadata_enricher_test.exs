@@ -879,6 +879,99 @@ defmodule Mydia.Library.MetadataEnricherTest do
     end
   end
 
+  # This path runs against items that are already in the library, so it is the
+  # one an ordinary rescan takes. Before season_order was threaded here, a
+  # rescan of a DVD-ordered show overwrote its metadata blob with the official
+  # season list while its episode rows stayed DVD-grouped, and the show page
+  # rendered one season list over the other's episodes.
+  describe "season ordering on the enrichment update path" do
+    setup do
+      bypass = Bypass.open()
+
+      config = %{
+        type: :metadata_relay,
+        base_url: "http://localhost:#{bypass.port}",
+        options: %{language: "en-US", include_adult: false}
+      }
+
+      %{bypass: bypass, config: config}
+    end
+
+    test "a rescan follows the show's recorded ordering", %{bypass: bypass, config: config} do
+      series_id = System.unique_integer([:positive])
+      official_id = System.unique_integer([:positive])
+      dvd_one = System.unique_integer([:positive])
+      dvd_two = System.unique_integer([:positive])
+
+      # One TVDB response carrying both orderings of the same series, which is
+      # how TVDB actually returns them.
+      Bypass.stub(bypass, "GET", "/tvdb/series/#{series_id}/extended", fn conn ->
+        respond_json(conn, %{
+          "data" => %{
+            "id" => series_id,
+            "tvdb_id" => series_id,
+            "name" => "Ordered Rescan",
+            "overview" => "ov",
+            "firstAired" => "2010-01-01",
+            "genres" => [],
+            "seasons" => [
+              ordering_season(official_id, 1, "official", 4),
+              ordering_season(dvd_one, 1, "dvd", 2),
+              ordering_season(dvd_two, 2, "dvd", 2)
+            ]
+          }
+        })
+      end)
+
+      media_item_fixture(%{
+        type: "tv_show",
+        title: "Ordered Rescan",
+        tvdb_id: series_id,
+        metadata_source: :tvdb
+      })
+      |> backdate()
+
+      match = tv_match(series_id, :tvdb, "Ordered Rescan")
+
+      # No recorded ordering yet, so the official list is what gets stored: one
+      # season of four. (Seasons are compared by number and episode count, not
+      # by tvdb_season_id: MetadataType.parse_seasons_list/1 drops that field
+      # when it rebuilds SeasonInfo structs out of the stored blob.)
+      assert {:ok, official} =
+               MetadataEnricher.enrich(match, config: config, fetch_episodes: false)
+
+      assert stored_seasons(official) == [{1, 4}]
+
+      # Switch the show to the DVD ordering and rescan the same series id. The
+      # second pass must not read the first pass's cached official grouping:
+      # fetch_by_id_cached/3 keys on the ordering precisely so it cannot.
+      {:ok, switched} = Media.update_media_item(official, %{season_order: :dvd})
+      backdate(switched)
+
+      assert {:ok, dvd} = MetadataEnricher.enrich(match, config: config, fetch_episodes: false)
+      assert stored_seasons(dvd) == [{1, 2}, {2, 2}]
+      assert Media.get_media_item!(dvd.id).season_order == :dvd
+    end
+  end
+
+  defp ordering_season(id, number, type, episode_count) do
+    %{
+      "id" => id,
+      "number" => number,
+      "name" => "Season #{number}",
+      "type" => %{"type" => type},
+      "episodeCount" => episode_count
+    }
+  end
+
+  defp stored_seasons(%MediaItem{} = item) do
+    item.id
+    |> Media.get_media_item!()
+    |> Map.fetch!(:metadata)
+    |> Map.fetch!(:seasons)
+    |> Enum.map(&{&1.season_number, &1.episode_count})
+  end
+
   defp tv_match(id, provider_type, title) do
     %{
       provider_id: to_string(id),

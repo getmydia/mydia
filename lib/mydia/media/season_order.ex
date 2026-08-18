@@ -18,7 +18,15 @@ defmodule Mydia.Media.SeasonOrder do
   @values [:official, :dvd, :absolute]
 
   # Season numbers are validated non-negative and no real series approaches
-  # 1000 seasons, so parking rows here cannot collide with live data.
+  # 1000 seasons, so parking rows here cannot collide with live data. What
+  # actually carries the correctness is that one statement parks every row in
+  # the set at once: the parked coordinates stay unique because the originals
+  # were, and no unparked row of that set remains to collide with.
+  #
+  # It also bounds the target range this function accepts. A mapping asking for
+  # a season >= @offset would collide with the parked rows, and `conflicting?/2`
+  # compares final coordinates only, so it cannot see that. The consequence is a
+  # rolled-back transaction and an adapter-specific exception, not corruption.
   @offset 1000
 
   @spec values() :: [atom()]
@@ -82,12 +90,22 @@ defmodule Mydia.Media.SeasonOrder do
   end
 
   defp write_ordering(id, episodes, target, mapping) do
-    # Pass one: park every row out of the way. The unique index on
+    # Pass one: park the rows we read out of the way. The unique index on
     # (media_item_id, season_number, episode_number) is not deferrable on
     # SQLite, so a single-pass update trips it the moment the target numbering
     # overlaps the current one — swapping two episodes is enough.
+    #
+    # Scoped to the ids we actually read, not to the whole show. An episode
+    # inserted between the read above and this transaction is absent from
+    # `episodes`, so pass two would never restore it: a blanket park would
+    # leave it sitting at season 1001 after a clean commit, which is precisely
+    # the silent damage the refusals above exist to prevent. Leaving it
+    # unparked instead means a mapped write onto its slot raises and rolls the
+    # whole transaction back — loud, and recoverable by retrying.
+    episode_ids = Enum.map(episodes, & &1.id)
+
     Repo.update_all(
-      from(e in Episode, where: e.media_item_id == ^id),
+      from(e in Episode, where: e.id in ^episode_ids),
       inc: [season_number: @offset]
     )
 
