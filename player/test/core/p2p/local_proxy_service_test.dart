@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -28,13 +29,19 @@ void main() {
     late LocalProxyService proxy;
     late TestP2pService p2p;
 
+    /// The call site these tests hold the proxy as. Ownership itself is
+    /// covered by the conformance suite; here it is just the one holder every
+    /// test needs so the proxy comes up and goes away again.
+    late Object owner;
+
     setUp(() {
       p2p = TestP2pService();
       proxy = LocalProxyService(p2p);
+      owner = Object();
     });
 
     tearDown(() async {
-      await proxy.stop();
+      await proxy.shutdown();
     });
 
     Future<HttpResult> makeRequest(String path, {String? rangeHeader}) async {
@@ -65,7 +72,8 @@ void main() {
 
     group('initialization', () {
       test('starts on loopback address', () async {
-        await proxy.start(targetPeer: 'test-peer-id', authToken: 'test-token');
+        await proxy.start(
+            owner: owner, targetPeer: 'test-peer-id', authToken: 'test-token');
 
         expect(proxy.isRunning, isTrue);
         expect(proxy.port, greaterThan(0));
@@ -83,18 +91,21 @@ void main() {
       });
 
       test('can update target peer when already running', () async {
-        await proxy.start(targetPeer: 'peer1', authToken: 'token1');
-        await proxy.start(targetPeer: 'peer2', authToken: 'token2');
+        await proxy.start(
+            owner: owner, targetPeer: 'peer1', authToken: 'token1');
+        await proxy.start(
+            owner: owner, targetPeer: 'peer2', authToken: 'token2');
 
         expect(proxy.isRunning, isTrue);
       });
 
       test('stop clears all state', () async {
-        await proxy.start(targetPeer: 'test-peer', authToken: 'test-token');
+        await proxy.start(
+            owner: owner, targetPeer: 'test-peer', authToken: 'test-token');
 
         expect(proxy.isRunning, isTrue);
 
-        await proxy.stop();
+        await proxy.stop(owner);
 
         expect(proxy.isRunning, isFalse);
         expect(proxy.port, equals(0));
@@ -103,7 +114,8 @@ void main() {
 
     group('HTTP behavior', () {
       test('returns 404 for non-HLS paths with CORS', () async {
-        await proxy.start(targetPeer: 'test-peer', authToken: 'test-token');
+        await proxy.start(
+            owner: owner, targetPeer: 'test-peer', authToken: 'test-token');
 
         final response = await makeRequest('/not-hls/path');
 
@@ -114,7 +126,8 @@ void main() {
       });
 
       test('returns 400 for invalid HLS path format with CORS', () async {
-        await proxy.start(targetPeer: 'test-peer', authToken: 'test-token');
+        await proxy.start(
+            owner: owner, targetPeer: 'test-peer', authToken: 'test-token');
 
         final response = await makeRequest('/hls/');
 
@@ -126,6 +139,7 @@ void main() {
 
       test('forwards HLS request to P2P and serves payload', () async {
         await proxy.start(
+          owner: owner,
           targetPeer: 'target-peer-id',
           authToken: 'test-auth-token',
         );
@@ -160,6 +174,7 @@ void main() {
 
       test('parses and forwards range headers', () async {
         await proxy.start(
+          owner: owner,
           targetPeer: 'target-peer-id',
           authToken: 'test-auth-token',
         );
@@ -182,6 +197,7 @@ void main() {
 
       test('invalid range header forwards null range values', () async {
         await proxy.start(
+          owner: owner,
           targetPeer: 'target-peer-id',
           authToken: 'test-auth-token',
         );
@@ -203,6 +219,7 @@ void main() {
 
       test('returns 500 with CORS when P2P request fails', () async {
         await proxy.start(
+          owner: owner,
           targetPeer: 'target-peer-id',
           authToken: 'test-auth-token',
         );
@@ -221,6 +238,7 @@ void main() {
       test('recovers after write error and serves subsequent requests',
           () async {
         await proxy.start(
+          owner: owner,
           targetPeer: 'target-peer-id',
           authToken: 'test-auth-token',
         );
@@ -249,6 +267,49 @@ void main() {
         final second = await makeRequest('/hls/session123/index.m3u8');
         expect(second.statusCode, equals(HttpStatus.ok));
         expect(second.body, contains('#EXTM3U'));
+      });
+    });
+
+    group('teardown', () {
+      // An unforced `HttpServer.close()` stops the listener and returns, but
+      // leaves connections already accepted to carry on being served — by a
+      // proxy whose target peer and auth token this has just nulled out.
+      // mpv holds one such connection for the whole file, so without the
+      // forced close the video pipeline is left waiting on a socket nobody
+      // will ever answer, instead of seeing its stream end and reporting it.
+      test('drops the connections it was serving rather than orphaning them',
+          () async {
+        final started = Completer<void>();
+
+        // A response that never arrives, standing in for a request still
+        // being served when the screen goes away.
+        p2p.onSendHlsRequest = (_) async {
+          started.complete();
+          await Completer<void>().future;
+          return testHlsResponse(
+            status: HttpStatus.ok,
+            contentType: 'video/mp2t',
+            data: const [],
+          );
+        };
+
+        await proxy.start(owner: owner, targetPeer: 'peer-1');
+
+        // Deliberately not awaited yet: this request is still open when the
+        // teardown runs, which is the state under test.
+        final inFlight = makeRequest('/hls/session123/segment_001.ts');
+        await started.future;
+
+        await proxy.stop(owner);
+        expect(proxy.isRunning, isFalse);
+
+        await expectLater(
+          inFlight,
+          throwsA(anything),
+          reason: 'the teardown closed the socket, so the client in flight '
+              'finds out; an unforced close would leave it hanging on a '
+              'connection the proxy no longer has the state to answer',
+        );
       });
     });
   });

@@ -957,7 +957,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         }
 
         final proxy = ref.read(mediaProxyProvider);
+        // Held against this State, and released by [_terminateHlsSession] at
+        // dispose. This method re-runs within one screen's life (a session
+        // restart past the transcoded end, a cast rebind); the hold is per
+        // owner, so those re-runs re-target the proxy without stacking up a
+        // debt that a single stop could not settle.
         await proxy.start(
+          owner: this,
           targetPeer: serverNodeAddr,
           authToken: token,
         );
@@ -2722,8 +2728,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     // Stop local proxy if P2P mode
     if (_isP2PMode) {
       try {
-        await _mediaProxy.stop();
-        debugPrint('[PlayerScreen] Media proxy stopped');
+        // Releases this screen's hold rather than stopping the proxy
+        // outright. On a next-episode navigation the incoming screen has
+        // already started it — Flutter mounts the new route before disposing
+        // the old one — so an unconditional stop here closed the server the
+        // episode now playing was streaming from.
+        await _mediaProxy.stop(this);
+        debugPrint('[PlayerScreen] Media proxy released');
       } catch (e) {
         debugPrint('[PlayerScreen] Error stopping local proxy: $e');
       }
