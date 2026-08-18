@@ -8,6 +8,7 @@
     "deploy": "cd .. && mix assets.deploy && rm -f _build/esbuild*",
     "screenshots": "node screenshots.js",
     "populate-media": "node populate-media.js",
+    "test:unit": "node --test test/unit/*.test.mjs",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:debug": "playwright test --debug",

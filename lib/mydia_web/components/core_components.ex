@@ -161,6 +161,11 @@ defmodule MydiaWeb.CoreComponents do
   attr :options, :list, doc: "the options to pass to Phoenix.HTML.Form.options_for_select/2"
   attr :multiple, :boolean, default: false, doc: "the multiple flag for select inputs"
   attr :class, :string, default: nil, doc: "the input class to use over defaults"
+
+  attr :container_class, :string,
+    default: "fieldset mb-2",
+    doc: "the class for the input's outer container"
+
   attr :error_class, :string, default: nil, doc: "the input error class to use over defaults"
 
   attr :hint, :string,
@@ -189,7 +194,7 @@ defmodule MydiaWeb.CoreComponents do
       end)
 
     ~H"""
-    <div class="fieldset mb-2">
+    <div class={@container_class}>
       <label>
         <input type="hidden" name={@name} value="false" disabled={@rest[:disabled]} />
         <span class="label">
@@ -211,7 +216,7 @@ defmodule MydiaWeb.CoreComponents do
 
   def input(%{type: "select"} = assigns) do
     ~H"""
-    <div class="fieldset mb-2">
+    <div class={@container_class}>
       <label>
         <span :if={@label} class="label mb-1 text-sm font-medium text-base-content/80">{@label}</span>
         <select
@@ -236,7 +241,7 @@ defmodule MydiaWeb.CoreComponents do
 
   def input(%{type: "textarea"} = assigns) do
     ~H"""
-    <div class="fieldset mb-2">
+    <div class={@container_class}>
       <label>
         <span :if={@label} class="label mb-1 text-sm font-medium text-base-content/80">{@label}</span>
         <textarea
@@ -259,7 +264,7 @@ defmodule MydiaWeb.CoreComponents do
   # All other inputs text, datetime-local, url, password, etc. are handled here...
   def input(assigns) do
     ~H"""
-    <div class="fieldset mb-2">
+    <div class={@container_class}>
       <label>
         <span :if={@label} class="label mb-1 text-sm font-medium text-base-content/80">{@label}</span>
         <input

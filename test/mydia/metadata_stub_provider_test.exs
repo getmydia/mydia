@@ -38,8 +38,9 @@ defmodule Mydia.MetadataStubProviderTest do
         Metadata.fetch_by_id(config, result.provider_id, media_type: :tv_show, provider: :tvdb)
 
       assert metadata.title == MetadataStubProvider.series_title()
-      assert [season] = metadata.seasons
-      assert season.season_number == 1
+      assert [season1, season2] = metadata.seasons
+      assert season1.season_number == 1
+      assert season2.season_number == 2
     end
 
     test "the reserved missing id always fails the fetch" do

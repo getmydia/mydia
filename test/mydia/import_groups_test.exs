@@ -51,6 +51,36 @@ defmodule Mydia.ImportGroupsTest do
     end
   end
 
+  describe "clear_for_library/1" do
+    test "clears only the selected library's review groups and finished scan history" do
+      selected = library_path_fixture(%{type: "movies"})
+      other = library_path_fixture(%{type: "series"})
+      selected_group = group(selected, cluster_key: "selected")
+      other_group = group(other, cluster_key: "other")
+
+      {:ok, run} =
+        Mydia.Library.create_import_run(%{library_path_id: selected.id, mode: :review})
+
+      {:ok, _run} = Mydia.Library.update_import_run(run, %{status: :done, phase: :finished})
+
+      assert {:ok, 1} = ImportGroups.clear_for_library(selected.id)
+      refute Repo.get(ImportGroup, selected_group.id)
+      assert Repo.get(ImportGroup, other_group.id)
+      refute Mydia.Library.last_import_run(selected.id)
+    end
+
+    test "refuses to clear while the selected library is scanning" do
+      library_path = library_path_fixture(%{type: "movies"})
+      import_group = group(library_path, cluster_key: "active")
+
+      {:ok, _run} =
+        Mydia.Library.create_import_run(%{library_path_id: library_path.id, mode: :review})
+
+      assert {:error, :active_run} = ImportGroups.clear_for_library(library_path.id)
+      assert Repo.get(ImportGroup, import_group.id)
+    end
+  end
+
   describe "band_counts/1" do
     test "counts each band" do
       lp = library_path_fixture(%{type: "series"})
@@ -578,6 +608,41 @@ defmodule Mydia.ImportGroupsTest do
 
       assert Repo.reload!(group).provider_id == "222"
     end
+
+    test "an applied group with newly unresolved files reverts to pending", %{
+      library_path: lp
+    } do
+      _f1 =
+        unresolved_file(
+          lp,
+          "Show (2023)/Season 01/ep1.mkv",
+          provider_id: "111",
+          provider_type: "tvdb",
+          confidence: 0.9
+        )
+
+      {:ok, _} = ImportGroups.upsert_for_library(lp)
+      group = Repo.one!(ImportGroup)
+      assert group.status == "pending"
+
+      # Simulate previous files having linked and group marked applied
+      group |> Ecto.Changeset.change(status: "applied", unresolved_count: 0) |> Repo.update!()
+
+      # A new unresolved file arrives in the folder
+      _f2 =
+        unresolved_file(
+          lp,
+          "Show (2023)/Season 01/ep2.mkv",
+          provider_id: "111",
+          provider_type: "tvdb",
+          confidence: 0.9
+        )
+
+      {:ok, _} = ImportGroups.upsert_for_library(lp)
+      reloaded = Repo.reload!(group)
+      assert reloaded.status == "pending"
+      assert reloaded.unresolved_count == 2
+    end
   end
 
   describe "create_local_show/1" do
@@ -926,6 +991,293 @@ defmodule Mydia.ImportGroupsTest do
       # own exclusion and left permanently stuck. Staying "pending" is what
       # keeps it reachable.
       assert Repo.reload!(group).status == "pending"
+    end
+  end
+
+  describe "update_member_episode/3" do
+    test "updates existing candidate season and episode, updating group season_span and numbered_count" do
+      lp = library_path_fixture(%{type: "series"})
+
+      file =
+        orphaned_media_file_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "Show/Season 01/S01E01.mkv"
+        })
+
+      %MatchCandidate{}
+      |> MatchCandidate.changeset(%{
+        media_file_id: file.id,
+        rank: 0,
+        provider_type: "tvdb",
+        provider_id: "123",
+        title: "Show",
+        confidence: 1.0,
+        parsed_info: %{"season" => 1, "episodes" => [1]}
+      })
+      |> Repo.insert!()
+
+      {:ok, _} = ImportGroups.upsert_for_library(lp)
+      group = Repo.one!(ImportGroup)
+      assert ImportGroup.season_span(group) == [1]
+      assert group.numbered_count == 1
+
+      assert {:ok, result} = ImportGroups.update_member_episode(file.id, 2, 5)
+      assert result.media_file.id == file.id
+      assert result.candidate.parsed_info["season"] == 2
+      assert result.candidate.parsed_info["episodes"] == [5]
+
+      reloaded_group = Repo.reload!(group)
+      assert ImportGroup.season_span(reloaded_group) == [2]
+      assert reloaded_group.numbered_count == 1
+    end
+
+    test "creates a rank-0 candidate if none existed and accepts string inputs" do
+      lp = library_path_fixture(%{type: "series"})
+
+      file =
+        orphaned_media_file_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "Unmatched/sample.mkv"
+        })
+
+      {:ok, _} = ImportGroups.upsert_for_library(lp)
+      group = Repo.one!(ImportGroup)
+      assert group.numbered_count == 0
+
+      assert {:ok, result} = ImportGroups.update_member_episode(file.id, "3", "12")
+      assert result.candidate.parsed_info["season"] == 3
+      assert result.candidate.parsed_info["episodes"] == [12]
+
+      reloaded_group = Repo.reload!(group)
+      assert ImportGroup.season_span(reloaded_group) == [3]
+      assert reloaded_group.numbered_count == 1
+    end
+
+    test "clears episode when passed empty strings or nil" do
+      lp = library_path_fixture(%{type: "series"})
+
+      file =
+        orphaned_media_file_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "Show/Season 01/S01E01.mkv"
+        })
+
+      assert {:ok, result} = ImportGroups.update_member_episode(file.id, 1, 1)
+      assert result.candidate.parsed_info["episodes"] == [1]
+
+      assert {:ok, cleared} = ImportGroups.update_member_episode(file.id, "", "")
+      assert is_nil(cleared.candidate.parsed_info["season"])
+      assert cleared.candidate.parsed_info["episodes"] == []
+    end
+
+    test "returns {:error, :not_found} for unknown media file" do
+      assert {:error, :not_found} =
+               ImportGroups.update_member_episode(Ecto.UUID.generate(), 1, 1)
+    end
+  end
+
+  describe "movie library independence" do
+    test "each movie file gets its own independent group with no season span" do
+      lp = library_path_fixture(%{type: "movies"})
+
+      f1 =
+        orphaned_media_file_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "Inception (2010)/Inception.2010.1080p.mkv"
+        })
+
+      f2 =
+        orphaned_media_file_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "Inception (2010)/Inception.2010.720p.mkv"
+        })
+
+      f3 =
+        orphaned_media_file_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "Loose_Movie.mkv"
+        })
+
+      {:ok, %{groups: 3, files: 3}} = ImportGroups.upsert_for_library(lp)
+
+      groups = Repo.all(ImportGroup)
+      assert length(groups) == 3
+
+      for group <- groups do
+        assert group.file_count == 1
+        assert group.media_type == "movie"
+        assert ImportGroup.season_span(group) == []
+      end
+
+      # Each file is stamped to its own group
+      f1_reloaded = Repo.reload!(f1)
+      f2_reloaded = Repo.reload!(f2)
+      f3_reloaded = Repo.reload!(f3)
+
+      refute is_nil(f1_reloaded.import_group_id)
+      refute is_nil(f2_reloaded.import_group_id)
+      refute is_nil(f3_reloaded.import_group_id)
+
+      assert f1_reloaded.import_group_id != f2_reloaded.import_group_id
+      assert f1_reloaded.import_group_id != f3_reloaded.import_group_id
+    end
+
+    test "prunes obsolete pending groups that have no remaining unresolved files" do
+      lp = library_path_fixture(%{type: "movies"})
+
+      # Seed an obsolete group directly
+      obsolete_group =
+        %ImportGroup{}
+        |> ImportGroup.changeset(%{
+          library_path_id: lp.id,
+          anchor_path: "",
+          cluster_key: "__root__",
+          display_title: "Loose files",
+          file_count: 3,
+          unresolved_count: 3,
+          status: "pending"
+        })
+        |> Repo.insert!()
+
+      file =
+        orphaned_media_file_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "Inception.mkv"
+        })
+
+      {:ok, %{groups: 1, files: 1}} = ImportGroups.upsert_for_library(lp)
+
+      # Obsolete group is deleted; new group exists for the file
+      assert is_nil(Repo.get(ImportGroup, obsolete_group.id))
+      assert [active_group] = Repo.all(ImportGroup)
+      assert active_group.display_title == "Inception"
+      assert Repo.reload!(file).import_group_id == active_group.id
+    end
+  end
+
+  describe "restore/1 with SelectionScope" do
+    test "restores selected ignored groups back to pending" do
+      lp = library_path_fixture(%{type: "series"})
+
+      g1 = group(lp, cluster_key: "g1", status: "ignored")
+      g2 = group(lp, cluster_key: "g2", status: "ignored")
+      g3 = group(lp, cluster_key: "g3", status: "ignored")
+
+      scope =
+        lp.id
+        |> SelectionScope.new("ignored")
+        |> SelectionScope.select_page([g1.id, g2.id])
+
+      assert {:ok, 2} = ImportGroups.restore(scope)
+
+      assert Repo.reload!(g1).status == "pending"
+      assert Repo.reload!(g2).status == "pending"
+      assert Repo.reload!(g3).status == "ignored"
+    end
+
+    test "does not rewrite a pending group selected by a stale ignored scope" do
+      lp = library_path_fixture(%{type: "series"})
+      decided_at = ~U[2026-01-01 12:00:00Z]
+      pending = group(lp, cluster_key: "pending", status: "pending", decided_at: decided_at)
+
+      scope =
+        lp.id
+        |> SelectionScope.new("ignored")
+        |> SelectionScope.select_page([pending.id])
+
+      assert {:ok, 0} = ImportGroups.restore(scope)
+      assert Repo.reload!(pending).decided_at == decided_at
+    end
+  end
+
+  describe "create_local_shows/1" do
+    test "creates local shows for unmatched groups in selection" do
+      lp = library_path_fixture(%{type: "series", path: "/media/Series"})
+
+      file1 =
+        orphaned_media_file_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "Show One (2020)/Season 01/ep1.mkv"
+        })
+
+      %MatchCandidate{}
+      |> MatchCandidate.changeset(%{
+        media_file_id: file1.id,
+        rank: 0,
+        last_error: "no_match",
+        parsed_info: %{"season" => 1, "episodes" => [1]}
+      })
+      |> Repo.insert!()
+
+      file2 =
+        orphaned_media_file_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "Show Two (2021)/Season 01/ep1.mkv"
+        })
+
+      %MatchCandidate{}
+      |> MatchCandidate.changeset(%{
+        media_file_id: file2.id,
+        rank: 0,
+        last_error: "no_match",
+        parsed_info: %{"season" => 1, "episodes" => [1]}
+      })
+      |> Repo.insert!()
+
+      {:ok, _} = ImportGroups.upsert_for_library(lp)
+      groups = Repo.all(ImportGroup)
+      assert length(groups) == 2
+
+      scope =
+        lp.id
+        |> SelectionScope.new()
+        |> SelectionScope.select_page(Enum.map(groups, & &1.id))
+
+      assert {:ok, %{created: 2, skipped: 0}} = ImportGroups.create_local_shows(scope)
+
+      for g <- groups do
+        reloaded = Repo.reload!(g)
+        assert reloaded.status == "applied"
+        assert reloaded.provider_type == "local"
+      end
+
+      assert Repo.aggregate(Mydia.Media.MediaItem, :count) == 2
+    end
+  end
+
+  describe "rematch/2" do
+    test "re-runs matcher on selected groups and updates candidates and group rollups" do
+      lp = library_path_fixture(%{type: "series", path: "/media/Series"})
+
+      file =
+        orphaned_media_file_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "Doctor Who (2005)/Season 01/Doctor Who - S01E01.mkv"
+        })
+
+      %MatchCandidate{}
+      |> MatchCandidate.changeset(%{
+        media_file_id: file.id,
+        rank: 0,
+        last_error: "no_match"
+      })
+      |> Repo.insert!()
+
+      {:ok, _} = ImportGroups.upsert_for_library(lp)
+      group = Repo.one!(ImportGroup)
+      assert group.provider_id == nil
+
+      scope =
+        lp.id
+        |> SelectionScope.new()
+        |> SelectionScope.select_page([group.id])
+
+      assert {:ok, 1} = ImportGroups.rematch(scope, matcher: Mydia.Library.ParsedInfoMatcher)
+
+      reloaded_group = Repo.reload!(group)
+      assert reloaded_group.provider_id == "stub"
+      assert reloaded_group.suggested_title == "Doctor Who"
+      assert reloaded_group.min_confidence == 1.0
     end
   end
 end

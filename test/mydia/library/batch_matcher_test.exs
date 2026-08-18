@@ -356,6 +356,27 @@ defmodule Mydia.Library.BatchMatcherTest do
       assert length(Enum.uniq(titles)) == 2
     end
 
+    test "loose files in the library root resolve independently" do
+      root = "/media/Movies"
+
+      paths = [
+        "#{root}/The Matrix (1999).mkv",
+        "#{root}/Inception (2010).mkv",
+        "#{root}/Interstellar (2014).mkv"
+      ]
+
+      results = BatchMatcher.match_paths(paths, library_root: root, matcher: EchoMatcher)
+
+      titles = for {_path, {:ok, match}} <- results, do: match.title
+
+      # Loose files have no shared folder anchor, so each must resolve on its own
+      # rather than reusing the first file's match for the others.
+      assert length(Enum.uniq(titles)) == 3
+      assert "The Matrix (1999).mkv" in titles
+      assert "Inception (2010).mkv" in titles
+      assert "Interstellar (2014).mkv" in titles
+    end
+
     test "every input path still gets exactly one result when the anchor match fails" do
       root = "/media/Series"
 

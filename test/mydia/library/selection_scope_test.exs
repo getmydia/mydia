@@ -89,11 +89,9 @@ defmodule Mydia.Library.SelectionScopeTest do
     {sql, small_params} = Repo.to_sql(:all, SelectionScope.to_query(scope))
 
     assert is_binary(sql)
-    # library_path_id and the band threshold are the only pinned (^) values in
-    # the query; the "pending" status literal is unpinned, so Ecto compiles it
-    # directly into the SQL text rather than binding it. Two params, none of
-    # them per-row.
-    assert length(small_params) == 2
+    # library_path_id, status, and the band threshold are the pinned (^) values in
+    # the query. Three params, none of them per-row.
+    assert length(small_params) == 3
 
     # Prove it's a shape property, not an artifact of the 3-row fixture: adding
     # hundreds more matching rows (well past `max_id_binds/0`) must not change
@@ -108,16 +106,64 @@ defmodule Mydia.Library.SelectionScopeTest do
     refute sql =~ ~r/\bIN\s*\(/i
   end
 
-  test "clear resets to none" do
+  test "selection scope works for status: 'ignored'" do
+    lp = library_path_fixture(%{type: "series"})
+
+    ignored1 =
+      insert_group(%{
+        library_path_id: lp.id,
+        anchor_path: "Ignored1",
+        cluster_key: "ig-1",
+        status: "ignored"
+      })
+
+    ignored2 =
+      insert_group(%{
+        library_path_id: lp.id,
+        anchor_path: "Ignored2",
+        cluster_key: "ig-2",
+        status: "ignored"
+      })
+
+    _pending =
+      insert_group(%{
+        library_path_id: lp.id,
+        anchor_path: "Pending",
+        cluster_key: "pend",
+        status: "pending"
+      })
+
+    # page mode
+    page_scope =
+      lp.id
+      |> SelectionScope.new("ignored")
+      |> SelectionScope.select_page([ignored1.id])
+
+    assert SelectionScope.selected?(page_scope, ignored1.id)
+    refute SelectionScope.selected?(page_scope, ignored2.id)
+    assert SelectionScope.count(page_scope) == 1
+
+    # filter mode (select all ignored)
+    filter_scope =
+      lp.id
+      |> SelectionScope.new("ignored")
+      |> SelectionScope.select_all_matching(%{})
+
+    assert SelectionScope.count(filter_scope) == 2
+    assert query_ids(filter_scope) == MapSet.new([ignored1.id, ignored2.id])
+  end
+
+  test "clear resets to none and preserves status" do
     lp = library_path_fixture(%{type: "series"})
     [a | _] = seed(lp, 2, 1.0)
 
     scope =
       lp.id
-      |> SelectionScope.new()
+      |> SelectionScope.new("ignored")
       |> SelectionScope.select_page([a.id])
       |> SelectionScope.clear()
 
+    assert scope.status == "ignored"
     assert SelectionScope.count(scope) == 0
     assert Repo.aggregate(SelectionScope.to_query(scope), :count) == 0
   end

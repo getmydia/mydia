@@ -72,7 +72,12 @@
 
         <%!-- Import button (shown on Movies and TV Shows pages) --%>
         <%= if @filter_type in ["movie", "tv_show"] do %>
-          <.link navigate={~p"/import"} class="btn btn-secondary btn-sm">
+          <.link
+            navigate={
+              if @filter_type == "movie", do: ~p"/import?type=movies", else: ~p"/import?type=tv"
+            }
+            class="btn btn-secondary btn-sm"
+          >
             <.icon name="hero-arrow-down-tray" class="w-5 h-5" />
             <span class="hidden sm:inline ml-1">Import Files</span>
           </.link>
