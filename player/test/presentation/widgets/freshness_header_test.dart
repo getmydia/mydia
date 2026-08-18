@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/graphql/watch/freshness.dart';
+import 'package:player/core/graphql/watch/invalidation_target.dart';
 import 'package:player/core/graphql/watch/query_key.dart';
 import 'package:player/core/graphql/watch/watcher_registry.dart';
 import 'package:player/presentation/widgets/freshness_header.dart';
@@ -30,14 +31,14 @@ class _StubAuthState extends AuthStateNotifier {
   AsyncValue<AuthStatus> build() => AsyncValue.data(_status);
 }
 
-/// Records exactly which keys the widget asked to be invalidated, so tests
-/// can tell a correct wiring from a hardcoded or mismatched one.
+/// Records exactly which targets the widget asked to be invalidated, so
+/// tests can tell a correct wiring from a hardcoded or mismatched one.
 class _RecordingInvalidator implements Invalidator {
-  final List<QueryKey> invalidatedKeys = [];
+  final List<InvalidationTarget> invalidatedTargets = [];
 
   @override
-  Future<void> invalidate(Iterable<QueryKey> keys) async {
-    invalidatedKeys.addAll(keys);
+  Future<void> invalidate(Iterable<InvalidationTarget> targets) async {
+    invalidatedTargets.addAll(targets);
   }
 
   @override
@@ -249,6 +250,9 @@ void main() {
     await tester.tap(find.byKey(const Key('freshness-action')));
     await tester.pump();
 
-    expect(recorder.invalidatedKeys, equals(keys));
+    expect(
+      recorder.invalidatedTargets,
+      equals(keys.map((key) => key.target)),
+    );
   });
 }

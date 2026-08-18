@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:player/core/graphql/watch/fetch_log.dart';
 import 'package:player/core/graphql/watch/invalidation_rules.dart';
+import 'package:player/core/graphql/watch/invalidation_target.dart';
 import 'package:player/core/graphql/watch/query_key.dart';
 import 'package:player/core/graphql/watch/query_watcher.dart';
 import 'package:player/core/graphql/watch/watcher_registry.dart';
@@ -106,6 +107,36 @@ class _ClearAllFailingFetchLog implements FetchLog {
   }
 }
 
+/// A [FetchLog] whose `clearFamily` always throws — used to prove that a
+/// transient storage failure degrades to "live screens still refresh" rather
+/// than skipping the refetches for that target entirely.
+class _FamilyClearFailingFetchLog implements FetchLog {
+  final Map<QueryKey, DateTime> _entries = {};
+
+  @override
+  DateTime? lastFetchedAt(QueryKey key) => _entries[key];
+
+  @override
+  Future<void> record(QueryKey key, DateTime when) async {
+    _entries[key] = when;
+  }
+
+  @override
+  Future<void> clear(QueryKey key) async {
+    _entries.remove(key);
+  }
+
+  @override
+  Future<void> clearAll() async {
+    _entries.clear();
+  }
+
+  @override
+  Future<void> clearFamily(String operationName) async {
+    throw StateError('simulated storage failure clearing $operationName');
+  }
+}
+
 QueryWatcher<String> makeWatcher(
   StubLink link,
   FetchLog log, {
@@ -128,48 +159,49 @@ void main() {
         () {
       final keys = InvalidationRules.favoriteToggled(isMovie: false);
 
-      expect(keys, contains(QueryKeys.favorites));
-      expect(keys, contains(QueryKeys.home));
-      expect(keys, contains(QueryKeys.tvShowsList));
-      expect(keys, isNot(contains(QueryKeys.moviesList)));
+      expect(keys, contains(QueryKeys.favorites.target));
+      expect(keys, contains(QueryKeys.home.target));
+      expect(keys, contains(QueryKeys.tvShowsList.target));
+      expect(keys, isNot(contains(QueryKeys.moviesList.target)));
     });
 
     test('toggling a movie favorite refreshes the movie list, not the shows',
         () {
       final keys = InvalidationRules.favoriteToggled(isMovie: true);
 
-      expect(keys, contains(QueryKeys.moviesList));
-      expect(keys, isNot(contains(QueryKeys.tvShowsList)));
+      expect(keys, contains(QueryKeys.moviesList.target));
+      expect(keys, isNot(contains(QueryKeys.tvShowsList.target)));
     });
 
     test('toggling a show favorite with an id also refreshes its own detail',
         () {
       final keys = InvalidationRules.favoriteToggled(isMovie: false, id: 's1');
 
-      expect(keys, contains(QueryKeys.showDetail('s1')));
-      expect(keys, isNot(contains(QueryKeys.movieDetail('s1'))));
+      expect(keys, contains(QueryKeys.showDetail('s1').target));
+      expect(keys, isNot(contains(QueryKeys.movieDetail('s1').target)));
     });
 
     test('toggling a movie favorite with an id also refreshes its own detail',
         () {
       final keys = InvalidationRules.favoriteToggled(isMovie: true, id: 'm1');
 
-      expect(keys, contains(QueryKeys.movieDetail('m1')));
-      expect(keys, isNot(contains(QueryKeys.showDetail('m1'))));
+      expect(keys, contains(QueryKeys.movieDetail('m1').target));
+      expect(keys, isNot(contains(QueryKeys.showDetail('m1').target)));
     });
 
     test('marking watched refreshes home, unwatched and that show', () {
       final keys = InvalidationRules.watchedChanged(showId: '7');
 
       expect(keys, {
-        QueryKeys.home,
-        QueryKeys.unwatched,
-        QueryKeys.tvShowsList,
-        QueryKeys.favoritesList,
-        QueryKeys.unwatchedList,
-        QueryKeys.continueWatchingList,
-        QueryKeys.recentlyAdded,
-        QueryKeys.showDetail('7'),
+        QueryKeys.home.target,
+        QueryKeys.unwatched.target,
+        QueryKeys.tvShowsList.target,
+        QueryKeys.favoritesList.target,
+        QueryKeys.unwatchedList.target,
+        QueryKeys.continueWatchingList.target,
+        QueryKeys.recentlyAdded.target,
+        Families.collectionItems,
+        QueryKeys.showDetail('7').target,
       });
     });
 
@@ -177,29 +209,30 @@ void main() {
       final keys =
           InvalidationRules.watchedChanged(showId: '7', seasonNumber: 2);
 
-      expect(keys, contains(QueryKeys.seasonEpisodes('7', 2)));
+      expect(keys, contains(QueryKeys.seasonEpisodes('7', 2).target));
     });
 
     test('marking a movie watched refreshes home, unwatched and the list', () {
       final keys = InvalidationRules.movieWatchedChanged(movieId: 'm1');
 
       expect(keys, {
-        QueryKeys.home,
-        QueryKeys.unwatched,
-        QueryKeys.moviesList,
-        QueryKeys.favoritesList,
-        QueryKeys.unwatchedList,
-        QueryKeys.continueWatchingList,
-        QueryKeys.recentlyAdded,
-        QueryKeys.movieDetail('m1'),
+        QueryKeys.home.target,
+        QueryKeys.unwatched.target,
+        QueryKeys.moviesList.target,
+        QueryKeys.favoritesList.target,
+        QueryKeys.unwatchedList.target,
+        QueryKeys.continueWatchingList.target,
+        QueryKeys.recentlyAdded.target,
+        Families.collectionItems,
+        QueryKeys.movieDetail('m1').target,
       });
     });
 
     test('marking a movie watched touches no show keys', () {
       final keys = InvalidationRules.movieWatchedChanged(movieId: 'm1');
 
-      expect(keys, isNot(contains(QueryKeys.tvShowsList)));
-      expect(keys, isNot(contains(QueryKeys.showDetail('m1'))));
+      expect(keys, isNot(contains(QueryKeys.tvShowsList.target)));
+      expect(keys, isNot(contains(QueryKeys.showDetail('m1').target)));
     });
 
     test('progress sync invalidates nothing', () {
@@ -215,15 +248,16 @@ void main() {
       );
 
       expect(keys, {
-        QueryKeys.home,
-        QueryKeys.unwatched,
-        QueryKeys.tvShowsList,
-        QueryKeys.moviesList,
-        QueryKeys.favoritesList,
-        QueryKeys.unwatchedList,
-        QueryKeys.continueWatchingList,
-        QueryKeys.recentlyAdded,
-        QueryKeys.movieDetail('m1'),
+        QueryKeys.home.target,
+        QueryKeys.unwatched.target,
+        QueryKeys.tvShowsList.target,
+        QueryKeys.moviesList.target,
+        QueryKeys.favoritesList.target,
+        QueryKeys.unwatchedList.target,
+        QueryKeys.continueWatchingList.target,
+        QueryKeys.recentlyAdded.target,
+        Families.collectionItems,
+        QueryKeys.movieDetail('m1').target,
       });
     });
 
@@ -234,8 +268,8 @@ void main() {
         showId: 's1',
       );
 
-      expect(keys, contains(QueryKeys.episodeDetail('e1')));
-      expect(keys, contains(QueryKeys.showDetail('s1')));
+      expect(keys, contains(QueryKeys.episodeDetail('e1').target));
+      expect(keys, contains(QueryKeys.showDetail('s1').target));
     });
   });
 
@@ -254,7 +288,7 @@ void main() {
       final invalidator = Invalidator(registry: registry, fetchLog: log);
 
       await watcher.stream.first;
-      await invalidator.invalidate([QueryKeys.home]);
+      await invalidator.invalidate([QueryKeys.home.target]);
       await Future<void>.delayed(const Duration(milliseconds: 50));
 
       expect(link.requests.length, greaterThanOrEqualTo(2));
@@ -277,7 +311,7 @@ void main() {
       final invalidator = Invalidator(registry: registry, fetchLog: log);
 
       await watcher.stream.first;
-      await invalidator.invalidate([QueryKeys.home]);
+      await invalidator.invalidate([QueryKeys.home.target]);
       await Future<void>.delayed(const Duration(milliseconds: 50));
 
       expect(link.requests.length, greaterThanOrEqualTo(2));
@@ -310,7 +344,7 @@ void main() {
       await watcher.stream.first;
       final requestsBeforeInvalidate = link.requests.length;
 
-      await invalidator.invalidate([QueryKeys.home]);
+      await invalidator.invalidate([QueryKeys.home.target]);
 
       expect(
         link.requests.length,
@@ -327,7 +361,7 @@ void main() {
       final invalidator =
           Invalidator(registry: WatcherRegistry(), fetchLog: log);
 
-      await invalidator.invalidate([QueryKeys.unwatched]);
+      await invalidator.invalidate([QueryKeys.unwatched.target]);
 
       expect(log.lastFetchedAt(QueryKeys.unwatched), isNull);
     });
@@ -409,9 +443,9 @@ void main() {
           Invalidator(registry: WatcherRegistry(), fetchLog: log);
 
       await invalidator.invalidate([
-        QueryKeys.favorites,
-        QueryKeys.home,
-        QueryKeys.tvShowsList,
+        QueryKeys.favorites.target,
+        QueryKeys.home.target,
+        QueryKeys.tvShowsList.target,
       ]);
 
       expect(log.clearedKeys, [QueryKeys.home, QueryKeys.tvShowsList]);
@@ -437,6 +471,117 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 50));
 
       expect(link.requests.length, greaterThan(requestsBeforeInvalidateAll));
+    });
+
+    test('a family target refetches every live watcher of that operation',
+        () async {
+      final log = InMemoryFetchLog();
+      var calls = 0;
+      final link = StubLink((_, __) {
+        calls++;
+        return _pingData('v$calls');
+      });
+      final one = makeWatcher(link, log, key: QueryKeys.collectionItems('c1'));
+      final two = makeWatcher(link, log, key: QueryKeys.collectionItems('c2'));
+      addTearDown(one.close);
+      addTearDown(two.close);
+
+      final registry = WatcherRegistry()
+        ..register(QueryKeys.collectionItems('c1'), one)
+        ..register(QueryKeys.collectionItems('c2'), two);
+      final invalidator = Invalidator(registry: registry, fetchLog: log);
+
+      // `Future.wait` rather than two sequential awaits: both watchers'
+      // initial fetches race the same synchronous stub link, and each
+      // `QueryWatcher._controller` is a broadcast stream that drops a value
+      // pushed while nothing is listening yet. Awaiting `one` to completion
+      // first leaves `two`'s subscription attached too late to catch a
+      // result that already landed, hanging `two.stream.first` forever.
+      // Subscribing to both in the same synchronous step closes that gap.
+      await Future.wait([one.stream.first, two.stream.first]);
+      final before = link.requests.length;
+
+      await invalidator.invalidate([Families.collectionItems]);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(link.requests.length, greaterThanOrEqualTo(before + 2));
+    });
+
+    test('a dormant family member has its fetch-log entry cleared', () async {
+      final log = InMemoryFetchLog({
+        QueryKeys.collectionItems('c1'): DateTime(2026, 7, 28),
+        QueryKeys.home: DateTime(2026, 7, 28),
+      });
+      final invalidator =
+          Invalidator(registry: WatcherRegistry(), fetchLog: log);
+
+      await invalidator.invalidate([Families.collectionItems]);
+
+      expect(log.lastFetchedAt(QueryKeys.collectionItems('c1')), isNull);
+      expect(log.lastFetchedAt(QueryKeys.home), isNotNull);
+    });
+
+    test('a live family member keeps the record its refetch just wrote',
+        () async {
+      // Pins the clear-before-refetch ordering. Clearing afterwards would wipe
+      // the record a successful refetch had just written and leave a screen
+      // that refreshed a moment ago cold on its next mount.
+      final log = InMemoryFetchLog();
+      final link = StubLink((_, __) => _pingData('v1'));
+      final watcher =
+          makeWatcher(link, log, key: QueryKeys.collectionItems('c1'));
+      addTearDown(watcher.close);
+
+      final registry = WatcherRegistry()
+        ..register(QueryKeys.collectionItems('c1'), watcher);
+      final invalidator = Invalidator(registry: registry, fetchLog: log);
+
+      await watcher.stream.first;
+      await invalidator.invalidate([Families.collectionItems]);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(log.lastFetchedAt(QueryKeys.collectionItems('c1')), isNotNull);
+    });
+
+    test(
+        'a family target does not touch another operation with the same prefix',
+        () async {
+      final log = InMemoryFetchLog({
+        QueryKeys.collectionItems('c1'): DateTime(2026, 7, 28),
+        QueryKeys.collections: DateTime(2026, 7, 28),
+      });
+      final invalidator =
+          Invalidator(registry: WatcherRegistry(), fetchLog: log);
+
+      await invalidator.invalidate([const FamilyTarget('Collection')]);
+
+      expect(log.lastFetchedAt(QueryKeys.collectionItems('c1')), isNotNull);
+      expect(log.lastFetchedAt(QueryKeys.collections), isNotNull);
+    });
+
+    test('a family clear that throws still refetches the live watchers',
+        () async {
+      final log = _FamilyClearFailingFetchLog();
+      var calls = 0;
+      final link = StubLink((_, __) {
+        calls++;
+        return _pingData('v$calls');
+      });
+      final watcher =
+          makeWatcher(link, log, key: QueryKeys.collectionItems('c1'));
+      addTearDown(watcher.close);
+
+      final registry = WatcherRegistry()
+        ..register(QueryKeys.collectionItems('c1'), watcher);
+      final invalidator = Invalidator(registry: registry, fetchLog: log);
+
+      await watcher.stream.first;
+      final before = link.requests.length;
+
+      await invalidator.invalidate([Families.collectionItems]);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(link.requests.length, greaterThanOrEqualTo(before + 1));
     });
 
     test('unregister only removes the watcher it was given', () async {
