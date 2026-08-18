@@ -8,7 +8,6 @@ defmodule Mydia.Library do
   import Mydia.QueryHelpers
   alias Mydia.Repo
   alias Mydia.Library.{MediaFile, FileAnalyzer, Text, TrashStore}
-  alias Mydia.Library.FileGrouper
   alias Mydia.Library.ReleaseParser, as: FileParser
   alias Mydia.Library.Structs.FileMetadata
 
@@ -2562,15 +2561,25 @@ defmodule Mydia.Library do
   permanently strand that entire pre-existing backlog, since being excluded
   here is exactly what stops `record_failure/2` from ever running on the file
   again to populate the column.
+
+  ## Options
+
+    * `:after_id` - keyset cursor. When set, only rows with `id` greater than
+      this are considered, so a caller working chunk by chunk in `id` order
+      (`Jobs.ImportRun`'s match loop) never re-scans rows an earlier chunk
+      already passed.
   """
-  @spec list_unmatched_media_file_paths(binary(), pos_integer()) :: [{binary(), String.t()}]
-  def list_unmatched_media_file_paths(library_path_id, limit) do
+  @spec list_unmatched_media_file_paths(binary(), pos_integer(), keyword()) :: [
+          {binary(), String.t()}
+        ]
+  def list_unmatched_media_file_paths(library_path_id, limit, opts \\ []) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 
     MediaFile
     |> where([f], f.library_path_id == ^library_path_id)
     |> where([f], is_nil(f.media_item_id) and is_nil(f.episode_id))
     |> where([f], is_nil(f.trashed_at))
+    |> maybe_after_id(opts[:after_id])
     |> join(:left, [f], c in MatchCandidate, on: c.media_file_id == f.id)
     |> where(
       [_f, c],
@@ -2586,9 +2595,13 @@ defmodule Mydia.Library do
     |> drop_unresolvable_paths()
   end
 
+  defp maybe_after_id(query, nil), do: query
+
+  defp maybe_after_id(query, after_id), do: where(query, [f], f.id > ^after_id)
+
   # `limit/2` runs in SQL and this rejection runs after it, so a chunk made
   # entirely of rows whose absolute path cannot be resolved comes back empty --
-  # which `Jobs.ImportRun`'s match_loop/5 reads as "nothing left to match".
+  # which `Jobs.ImportRun`'s match_loop/4 reads as "nothing left to match".
   # Those files then never get a candidate, never reach the inbox, and the run
   # still reports success. The return contract is unchanged (resolvable pairs
   # only); logging is what makes the condition observable at all, since the
@@ -2611,53 +2624,6 @@ defmodule Mydia.Library do
   @low_confidence_ceiling 0.8
 
   @doc """
-  Lists unresolved files with their cached match candidate.
-
-  "Unresolved" means orphaned, untrashed, and carrying a candidate row at rank
-  0 (the only rank the match phase writes today, see `file_ingest.ex`). This
-  is the permanent inbox that replaced the old per-session review list: it is
-  a live query, so approving a file removes it from these results with no
-  session state to persist.
-
-  ## Options
-
-    * `:library_path_id` - restrict to one library
-    * `:filter` - `:all` (default), `:unidentified`, or `:low_confidence`
-    * `:limit` - default 100, or `:all` for every unresolved row
-    * `:offset` - default 0 (ignored when `:limit` is `:all`)
-  """
-  @spec list_inbox_files(keyword()) :: [
-          %{media_file: MediaFile.t(), candidate: MatchCandidate.t()}
-        ]
-  def list_inbox_files(opts \\ []) do
-    limit = Keyword.get(opts, :limit, 100)
-    offset = Keyword.get(opts, :offset, 0)
-
-    rows =
-      MediaFile
-      |> maybe_scope_library(opts[:library_path_id])
-      |> inbox_base_query()
-      |> apply_inbox_filter(opts[:filter] || :all)
-      |> order_by([f, c], asc_nulls_last: c.title, asc: f.relative_path)
-      |> apply_inbox_page(limit, offset)
-      |> select([f, c], %{media_file: f, candidate: c})
-      |> Repo.all()
-
-    # Preloaded explicitly (rather than via a query-level `preload`) because
-    # the query above already carries a custom `select` map; the two structs
-    # in each row are re-associated by position after the batch preload,
-    # which `Repo.preload/2` guarantees preserves list order.
-    media_files =
-      rows
-      |> Enum.map(& &1.media_file)
-      |> Repo.preload(:library_path)
-
-    rows
-    |> Enum.zip(media_files)
-    |> Enum.map(fn {row, media_file} -> %{row | media_file: media_file} end)
-  end
-
-  @doc """
   Counts files awaiting review in the import inbox.
 
   A file becomes inbox work once it carries a match candidate (a real match or
@@ -2676,22 +2642,14 @@ defmodule Mydia.Library do
     |> maybe_scope_library(opts[:library_path_id])
     |> inbox_base_query()
     |> apply_inbox_filter(opts[:filter] || :all)
-    |> select([f, _c], count(f.id, :distinct))
+    |> select([f, _c], count(f.id))
     |> Repo.one()
   end
 
-  # `:all` drops both clauses rather than only the limit: SQLite rejects an
-  # OFFSET with no LIMIT, so an unbounded query has to carry neither.
-  defp apply_inbox_page(query, :all, _offset), do: query
-
-  defp apply_inbox_page(query, limit, offset) do
-    query |> limit(^limit) |> offset(^offset)
-  end
-
-  # Shared by list_inbox_files/1 and count_inbox_files/1 so the two can never
-  # drift on what "unresolved" means: orphaned, untrashed, and joined to its
-  # rank-0 candidate (an inner join, so a file with no candidate at all drops
-  # out entirely -- that set is list_unmatched_media_file_paths/2 instead).
+  # Shared by count_inbox_files/1. Defines what "unresolved" means: orphaned,
+  # untrashed, and joined to its rank-0 candidate (an inner join, so a file
+  # with no candidate at all drops out entirely -- that set is
+  # list_unmatched_media_file_paths/2 instead).
   defp inbox_base_query(query) do
     query
     |> where([f], is_nil(f.media_item_id) and is_nil(f.episode_id))
@@ -2716,78 +2674,4 @@ defmodule Mydia.Library do
       not is_nil(c.provider_id) and c.confidence < ^@low_confidence_ceiling
     )
   end
-
-  @doc """
-  Groups one library's unresolved inbox files for the Review page.
-
-  Returns `%{series:, movies:, unmatched:, wrong_library:}`. Each grouped
-  entry's `file` field is `%{media_file: MediaFile.t(), candidate:
-  MatchCandidate.t()}` so the Review page can render the row without a second
-  query. `series` is the `FileGrouper` hierarchy; `movies`, `unmatched` and
-  `wrong_library` are flat `GroupedFile` lists. `wrong_library` is the subset
-  of otherwise-unmatched files whose candidate recorded a library/media-type
-  mismatch in `last_error`.
-
-  Every unresolved row is returned, not `list_inbox_files/1`'s default page of
-  100. The Review page renders one tree with no pagination, and its per-library
-  badge comes from the uncapped `count_inbox_files/1`, so a page would show a
-  silently truncated tree next to a total it does not add up to.
-  """
-  @spec group_inbox_files(binary()) :: %{
-          series: [Mydia.Library.Structs.GroupedSeries.t()],
-          movies: [Mydia.Library.Structs.GroupedFile.t()],
-          unmatched: [Mydia.Library.Structs.GroupedFile.t()],
-          wrong_library: [Mydia.Library.Structs.GroupedFile.t()]
-        }
-  def group_inbox_files(library_path_id) do
-    grouped =
-      list_inbox_files(library_path_id: library_path_id, filter: :all, limit: :all)
-      |> Enum.map(&to_matched_file/1)
-      |> FileGrouper.group_files()
-
-    {wrong_library, unmatched} =
-      Enum.split_with(grouped.ungrouped, fn entry ->
-        library_type_mismatch?(entry.file.candidate)
-      end)
-
-    %{
-      series: grouped.series,
-      movies: grouped.movies,
-      unmatched: unmatched,
-      wrong_library: wrong_library
-    }
-  end
-
-  # FileGrouper's input is %{file: map(), match_result: map() | nil, import_status:
-  # atom()}. It only reads match_result.title/provider_id/year and
-  # match_result.parsed_info.type/season; it passes `file` through untouched.
-  defp to_matched_file(%{media_file: media_file, candidate: candidate}) do
-    %{
-      file: %{media_file: media_file, candidate: candidate},
-      match_result: match_result_from_candidate(candidate),
-      import_status: :unresolved
-    }
-  end
-
-  defp match_result_from_candidate(%{provider_id: nil}), do: nil
-
-  defp match_result_from_candidate(candidate) do
-    parsed = candidate.parsed_info || %{}
-
-    %{
-      title: candidate.title,
-      provider_id: candidate.provider_id,
-      year: candidate.year,
-      parsed_info: %{
-        type: if(candidate.media_type == "tv_show", do: :tv_show, else: :movie),
-        season: Map.get(parsed, "season"),
-        episodes: Map.get(parsed, "episodes") || []
-      }
-    }
-  end
-
-  defp library_type_mismatch?(%{last_error: nil}), do: false
-
-  defp library_type_mismatch?(%{last_error: last_error}),
-    do: String.starts_with?(last_error, "{:library_type_mismatch,")
 end

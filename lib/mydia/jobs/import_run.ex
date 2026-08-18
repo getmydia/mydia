@@ -19,7 +19,7 @@ defmodule Mydia.Jobs.ImportRun do
 
   Because the database is the cursor, phase 2 terminates only if every file it
   processes leaves the outstanding set. That is `Library.FileIngest`'s progress
-  contract, documented on that module; `match_loop/5` carries a no-progress
+  contract, documented on that module; `match_loop/4` carries a no-progress
   guard as a backstop rather than as the primary mechanism.
 
   Crash recovery is `reconcile_interrupted_runs/0`, called once at boot.
@@ -245,12 +245,7 @@ defmodule Mydia.Jobs.ImportRun do
   end
 
   defp scan_tree(run, library_path, extensions, after_batch) do
-    path_callback = fn path -> note_scan_path(run, library_path, path) end
-
-    case Scanner.scan(library_path.path,
-           video_extensions: extensions,
-           path_callback: path_callback
-         ) do
+    case Scanner.scan(library_path.path, video_extensions: extensions) do
       {:ok, scan_result} ->
         scan_result.files
         |> Enum.reject(&sample_or_extra?/1)
@@ -360,11 +355,21 @@ defmodule Mydia.Jobs.ImportRun do
     match_loop(run, library_path, config, after_chunk)
   end
 
-  defp match_loop(run, library_path, config, after_chunk, previous_ids \\ nil) do
+  defp match_loop(
+         run,
+         library_path,
+         config,
+         after_chunk,
+         after_id \\ nil,
+         previous_ids \\ nil,
+         broadcast_state \\ initial_broadcast_state()
+       ) do
     if Library.import_run_stopping?(run.id) do
       :stopped
     else
-      case Library.list_unmatched_media_file_paths(library_path.id, @match_chunk_size) do
+      case Library.list_unmatched_media_file_paths(library_path.id, @match_chunk_size,
+             after_id: after_id
+           ) do
         [] ->
           :ok
 
@@ -374,9 +379,12 @@ defmodule Mydia.Jobs.ImportRun do
           if ids == previous_ids do
             no_progress(run, library_path, chunk)
           else
-            process_match_chunk(chunk, run, library_path, config)
+            broadcast_state =
+              process_match_chunk(chunk, run, library_path, config, broadcast_state)
+
             after_chunk.()
-            match_loop(run, library_path, config, after_chunk, ids)
+            {last_id, _path} = List.last(chunk)
+            match_loop(run, library_path, config, after_chunk, last_id, ids, broadcast_state)
           end
       end
     end
@@ -387,6 +395,17 @@ defmodule Mydia.Jobs.ImportRun do
   # it from this query's result set. Kept because the cost of being wrong is
   # an import that spins forever on the queue's only slot, writing NFOs on
   # every pass and permanently blocking any further import of that path.
+  #
+  # Since the keyset conversion this is unreachable by construction, not just
+  # by contract: `match_loop/7` advances `:after_id` past every id in a
+  # processed chunk, so the next query can never return an id this branch's
+  # `ids == previous_ids` check would need to see repeated -- `ids` and
+  # `previous_ids` can no longer intersect at all, let alone be equal. A
+  # `FileIngest` bug that left a file with neither a parent nor a candidate
+  # would now advance past it silently (report `:ok` with the file still
+  # stuck) rather than halt loudly here. Reinstating a real backstop needs a
+  # per-file completion check, not this comparison; flagged rather than fixed
+  # because it is a design decision outside a scale-only change.
   defp no_progress(run, library_path, chunk) do
     {_id, example} = hd(chunk)
 
@@ -402,7 +421,7 @@ defmodule Mydia.Jobs.ImportRun do
       "The import stopped because #{length(chunk)} file(s) could not be resolved and kept coming back, starting with #{Path.basename(example)}. This is a bug, please report it."}}
   end
 
-  defp process_match_chunk(chunk, run, library_path, config) do
+  defp process_match_chunk(chunk, run, library_path, config, broadcast_state) do
     by_path = Map.new(chunk, fn {file_id, path} -> {path, file_id} end)
     policy = policy_for(run.mode)
 
@@ -413,8 +432,7 @@ defmodule Mydia.Jobs.ImportRun do
         library_root: library_path.path,
         matcher: MetadataMatcher,
         config: config,
-        provider: library_path.tv_metadata_source,
-        on_result: fn path, _result -> note_current_file(run, path) end
+        provider: library_path.tv_metadata_source
       )
 
     linked =
@@ -431,6 +449,13 @@ defmodule Mydia.Jobs.ImportRun do
       })
 
     broadcast(updated)
+
+    # `BatchMatcher.match_paths/2` runs its groups concurrently (see its
+    # moduledoc), so per-file progress can only be folded safely here, back on
+    # the single-threaded match loop, after every worker has already returned.
+    Enum.reduce(results, broadcast_state, fn {path, _result}, state ->
+      maybe_broadcast(state, run, path)
+    end)
   end
 
   defp ingest_result(by_path, path, result, policy, config) do
@@ -455,30 +480,33 @@ defmodule Mydia.Jobs.ImportRun do
   defp policy_for(:review), do: :local_only
   defp policy_for(:unattended), do: :create_items
 
+  @broadcast_file_interval 1_000
+  @broadcast_ms_interval 1_000
+
+  defp initial_broadcast_state do
+    %{since_broadcast: 0, last_broadcast_at: System.monotonic_time(:millisecond)}
+  end
+
+  # A 200k run at one broadcast per file is 200k LiveView renders, each
+  # preceded by a run-row read and followed by a write. Coalescing makes
+  # progress cost O(seconds) instead of O(files).
+  defp maybe_broadcast(state, run, path) do
+    now = System.monotonic_time(:millisecond)
+
+    if state.since_broadcast >= @broadcast_file_interval or
+         now - state.last_broadcast_at >= @broadcast_ms_interval do
+      note_current_file(run, path)
+      %{state | since_broadcast: 0, last_broadcast_at: now}
+    else
+      %{state | since_broadcast: state.since_broadcast + 1}
+    end
+  end
+
   defp note_current_file(run, path) do
     Phoenix.PubSub.broadcast(
       Mydia.PubSub,
       progress_topic(run.id),
       {:import_run_current_file, Path.basename(path)}
-    )
-  end
-
-  # Reports the directory or file the scanner is walking, relative to the
-  # library root, so "Finding files" shows *what* it is looking at rather than
-  # an anonymous spinner. The scan phase writes no run row per path (a full
-  # library would turn this into a write storm), so this is PubSub-only, the
-  # same contract `note_current_file/2` uses during matching.
-  defp note_scan_path(run, library_path, path) do
-    relative =
-      case Path.relative_to(path, library_path.path) do
-        "." -> Path.basename(library_path.path)
-        rel -> rel
-      end
-
-    Phoenix.PubSub.broadcast(
-      Mydia.PubSub,
-      progress_topic(run.id),
-      {:import_run_current_file, relative}
     )
   end
 
