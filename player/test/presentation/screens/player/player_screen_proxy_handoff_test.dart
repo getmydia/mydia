@@ -92,6 +92,44 @@ void main() {
             'it');
   });
 
+  // `_isP2PMode` tracks the *current* connection mode, not the one this
+  // screen took the proxy under, and a reconnect can move a viewer between
+  // the two mid-episode. Gating the release on it means a screen that started
+  // the proxy over p2p and ended up on a direct connection never lets go —
+  // and because the hold is keyed on a State that is now gone, nothing can
+  // ever release it and the proxy is stuck up for the rest of the session.
+  testWidgets('dispose() releases its hold even if the mode changed since',
+      (tester) async {
+    final proxyService = TrackingLocalProxyService();
+
+    final container = buildPlayerScreenContainer(
+      link: _link(),
+      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
+      castManager: CapturingCastSessionManager(),
+      proxyService: proxyService,
+    );
+    addTearDown(container.dispose);
+
+    await pumpPlayerScreen(tester, container);
+    await pumpUntil(tester, () => proxyService.directStreamFileIds.isNotEmpty);
+    expect(proxyService.isRunning, isTrue,
+        reason: 'sanity check: the screen took the proxy while on p2p');
+
+    // The viewer reconnects onto a direct connection mid-playback.
+    (container.read(conn.connectionProvider.notifier)
+            as FixedConnectionNotifier)
+        .switchTo(conn.ConnectionState.direct());
+    await tester.pump();
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+
+    expect(proxyService.isRunning, isFalse,
+        reason: 'the hold is keyed on a State that no longer exists, so a '
+            'release skipped here can never happen at all');
+    expect(proxyService.stopped, isTrue);
+  });
+
   testWidgets('dispose() stops the proxy when nothing else holds it',
       (tester) async {
     final proxyService = TrackingLocalProxyService();

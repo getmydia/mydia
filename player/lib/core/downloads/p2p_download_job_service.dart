@@ -162,22 +162,30 @@ class P2pDownloadJobService implements DownloadJobService {
 
   @override
   Future<String> getDownloadUrl(String jobId) async {
-    // Take a hold on the shared proxy, rather than only starting it when it
-    // happens to be down. Downloads and playback serve from one proxy, and
-    // the old `if (!isRunning)` guard left this holding nothing in the common
-    // case — playback already had it up — which is exactly when the player's
-    // `dispose()` could stop it out from under a transfer in progress.
-    // Starting an already-running proxy just re-targets it.
+    // Take a hold on the shared proxy either way, but only configure it when
+    // nothing else has. Downloads and playback serve from one proxy, and
+    // holding nothing is what let the player's `dispose()` stop it out from
+    // under a transfer in progress.
+    //
+    // The split matters: `start` re-targets a proxy that is already running,
+    // and the peer and token here were captured when this service was built.
+    // A token refresh since then leaves them stale, so configuring a proxy
+    // playback is already streaming through would point it at the wrong token
+    // and get playback's own range requests rejected.
     //
     // The hold outlives an individual job: nothing here observes a download
     // finishing, so once any download has run the proxy stays up for the rest
     // of the session. That is a loopback listener with no traffic on it,
     // which beats a download dying mid-transfer.
-    await _localProxy.start(
-      owner: this,
-      targetPeer: _serverNodeAddr,
-      authToken: _authToken,
-    );
+    if (_localProxy.isRunning) {
+      _localProxy.acquireLease(this);
+    } else {
+      await _localProxy.start(
+        owner: this,
+        targetPeer: _serverNodeAddr,
+        authToken: _authToken,
+      );
+    }
     return 'http://127.0.0.1:${_localProxy.port}/download/$jobId/file';
   }
 }

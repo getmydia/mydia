@@ -59,6 +59,15 @@ class FixedConnectionNotifier extends conn.ConnectionNotifier {
 
   @override
   conn.ConnectionState build() => _state;
+
+  /// Switches the reported mode mid-test.
+  ///
+  /// The connection a viewer is on is not fixed for the life of a player
+  /// screen — a reconnect can move them between p2p and direct while the
+  /// episode plays — and `PlayerScreen` tracks that through a
+  /// `ref.listenManual`. Anything in `dispose()` keyed on the *current* mode
+  /// therefore has to be exercised against a mode that changed.
+  void switchTo(conn.ConnectionState next) => state = next;
 }
 
 class FakeDownloadService extends Fake implements DownloadService {
