@@ -8,6 +8,7 @@ import 'dart:async';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/presentation/widgets/horizontal_wheel_scroll.dart';
 
@@ -408,5 +409,25 @@ void main() {
     expect(_rail(tester).pixels, greaterThan(0),
         reason: 'pixels are direction-normalised, so down means further '
             'through the list in both directions');
+  });
+
+  testWidgets('the rail shows a grab cursor', (tester) async {
+    final page = ScrollController();
+    addTearDown(page.dispose);
+
+    await tester.pumpWidget(_host(pageController: page));
+
+    final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await gesture.addPointer(location: Offset.zero);
+    addTearDown(gesture.removePointer);
+    await tester.pump();
+
+    await gesture.moveTo(tester.getCenter(find.byType(HorizontalWheelScroll)));
+    await tester.pump();
+
+    expect(
+      RendererBinding.instance.mouseTracker.debugDeviceActiveCursor(1),
+      SystemMouseCursors.grab,
+    );
   });
 }

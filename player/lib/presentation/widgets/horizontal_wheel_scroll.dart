@@ -140,7 +140,14 @@ class _HorizontalWheelScrollState extends State<HorizontalWheelScroll> {
   Widget build(BuildContext context) {
     return Listener(
       onPointerSignal: _onPointerSignal,
-      child: widget.builder(context, _controller),
+      // Says the rail is draggable, now that AppScrollBehavior makes it so.
+      // The cards' own InkWells set `click` on their own regions and are
+      // descendants, so a card reads as clickable and the gaps read as
+      // grabbable.
+      child: MouseRegion(
+        cursor: SystemMouseCursors.grab,
+        child: widget.builder(context, _controller),
+      ),
     );
   }
 }
