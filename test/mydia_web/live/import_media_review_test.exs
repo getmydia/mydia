@@ -467,4 +467,85 @@ defmodule MydiaWeb.ImportMediaReviewTest do
 
     assert has_element?(view, "#nav-import-badge", "2")
   end
+
+  # `accept_selected`, `ignore_selected` and `create_local_show` all write to
+  # the library (flip a group's status, link a file, or create a MediaItem),
+  # same as `start_run`/`stop_run` on this same LiveView -- but, unlike those
+  # two, shipped with no authorization guard at all. `/import` sits behind
+  # `:require_authenticated` only, not a role check, so a readonly or guest
+  # account could reach any of them. This mirrors the dedicated readonly
+  # coverage the deleted ReviewMediaLive had for its equivalent handlers
+  # (`test/mydia_web/live/review_media_live_test.exs`, removed alongside the
+  # module by this branch with nothing put back in its place).
+  test "readonly users cannot accept selected groups", %{conn: conn} do
+    lp = library_path_fixture(%{type: "series"})
+    group = seed_group(lp, cluster_key: "readonly-accept", min_confidence: 1.0)
+    seed_members(group, lp, 1)
+
+    readonly_conn = log_in_user(conn, user_fixture(%{role: "readonly"}))
+
+    {:ok, view, _html} = live(readonly_conn, ~p"/import")
+
+    render_click(view, "toggle_group", %{"id" => group.id})
+    render_click(view, "accept_selected", %{})
+
+    assert Repo.reload!(group).status == "pending"
+  end
+
+  test "readonly users cannot ignore selected groups", %{conn: conn} do
+    lp = library_path_fixture(%{type: "series"})
+    group = seed_group(lp, cluster_key: "readonly-ignore")
+    seed_members(group, lp, 1)
+
+    readonly_conn = log_in_user(conn, user_fixture(%{role: "readonly"}))
+
+    {:ok, view, _html} = live(readonly_conn, ~p"/import")
+
+    render_click(view, "toggle_group", %{"id" => group.id})
+    render_click(view, "ignore_selected", %{})
+
+    assert Repo.reload!(group).status == "pending"
+  end
+
+  test "readonly users cannot create a local show from a no-match folder", %{conn: conn} do
+    lp = library_path_fixture(%{type: "series"})
+
+    group =
+      seed_group(lp,
+        cluster_key: "readonly-local",
+        display_title: "Readonly Show (2023)",
+        file_count: 1,
+        unresolved_count: 1,
+        provider_id: nil,
+        min_confidence: nil
+      )
+
+    file =
+      orphaned_media_file_fixture(%{
+        library_path_id: lp.id,
+        relative_path: "Readonly Show (2023)/Season 01/ep1.mkv"
+      })
+
+    Repo.update_all(from(f in Mydia.Library.MediaFile, where: f.id == ^file.id),
+      set: [import_group_id: group.id]
+    )
+
+    %Mydia.Library.MatchCandidate{}
+    |> Mydia.Library.MatchCandidate.changeset(%{
+      media_file_id: file.id,
+      rank: 0,
+      parsed_info: %{"season" => 1, "episodes" => [1]}
+    })
+    |> Repo.insert!()
+
+    readonly_conn = log_in_user(conn, user_fixture(%{role: "readonly"}))
+
+    {:ok, view, _html} = live(readonly_conn, ~p"/import")
+
+    render_click(view, "create_local_show", %{"id" => group.id})
+
+    assert Repo.aggregate(Mydia.Media.MediaItem, :count) == 0
+    refute Repo.reload!(file).episode_id
+    assert Repo.reload!(group).provider_type != "local"
+  end
 end

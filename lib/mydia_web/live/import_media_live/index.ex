@@ -297,53 +297,62 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   end
 
   def handle_event("accept_selected", _params, socket) do
-    # accept/1 can fail at the enqueue step, in which case the groups are
-    # marked accepted but nothing will apply them. Say so rather than
-    # reporting success.
-    case ImportGroups.accept(socket.assigns.selection) do
-      {:ok, count} ->
-        {:noreply,
-         socket
-         |> put_flash(:info, "Accepted #{count} group(s). Linking in the background.")
-         |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
-         |> load_groups()
-         |> refresh_counts()}
+    with :ok <- Authorization.authorize_import_media(socket) do
+      # accept/1 can fail at the enqueue step, in which case the groups are
+      # marked accepted but nothing will apply them. Say so rather than
+      # reporting success.
+      case ImportGroups.accept(socket.assigns.selection) do
+        {:ok, count} ->
+          {:noreply,
+           socket
+           |> put_flash(:info, "Accepted #{count} group(s). Linking in the background.")
+           |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
+           |> load_groups()
+           |> refresh_counts()}
 
-      {:error, reason} ->
-        Logger.error("Could not enqueue the import group apply job", reason: inspect(reason))
+        {:error, reason} ->
+          Logger.error("Could not enqueue the import group apply job", reason: inspect(reason))
 
-        # accept/1 flips status to "accepted" *before* it tries to enqueue,
-        # so the affected rows are already gone from the "pending" set both
-        # page/2 and SelectionScope filter on -- regardless of whether the
-        # enqueue itself succeeded. Reload so the stream (and the counts)
-        # match the database instead of continuing to show rows that no
-        # longer match the query, and clear the selection: it names ids that
-        # can no longer be acted on, and re-running accept/1 against them
-        # would select nothing, short-circuit, and return {:ok, 0} -- a
-        # second, silent "success" for a selection that already failed once.
-        {:noreply,
-         socket
-         |> put_flash(
-           :error,
-           "Marked for import, but the background job could not be started. " <>
-             "They are not lost: the next successful accept for this library " <>
-             "will pick them up."
-         )
-         |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
-         |> load_groups()
-         |> refresh_counts()}
+          # accept/1 flips status to "accepted" *before* it tries to enqueue,
+          # so the affected rows are already gone from the "pending" set both
+          # page/2 and SelectionScope filter on -- regardless of whether the
+          # enqueue itself succeeded. Reload so the stream (and the counts)
+          # match the database instead of continuing to show rows that no
+          # longer match the query, and clear the selection: it names ids
+          # that can no longer be acted on, and re-running accept/1 against
+          # them would select nothing, short-circuit, and return {:ok, 0} --
+          # a second, silent "success" for a selection that already failed
+          # once.
+          {:noreply,
+           socket
+           |> put_flash(
+             :error,
+             "Marked for import, but the background job could not be started. " <>
+               "They are not lost: the next successful accept for this library " <>
+               "will pick them up."
+           )
+           |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
+           |> load_groups()
+           |> refresh_counts()}
+      end
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
     end
   end
 
   def handle_event("ignore_selected", _params, socket) do
-    {:ok, count} = ImportGroups.ignore(socket.assigns.selection)
+    with :ok <- Authorization.authorize_import_media(socket) do
+      {:ok, count} = ImportGroups.ignore(socket.assigns.selection)
 
-    {:noreply,
-     socket
-     |> put_flash(:info, "Ignored #{count} group(s).")
-     |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
-     |> load_groups()
-     |> refresh_counts()}
+      {:noreply,
+       socket
+       |> put_flash(:info, "Ignored #{count} group(s).")
+       |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
+       |> load_groups()
+       |> refresh_counts()}
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
   end
 
   # `expanded_ids` tracks which groups are visually open (the chevron); a
@@ -405,37 +414,41 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   # reporting a clean success for a partially-done action -- the failure mode
   # this project has already corrected twice.
   def handle_event("create_local_show", %{"id" => id}, socket) do
-    total = ImportGroups.member_count(id)
+    with :ok <- Authorization.authorize_import_media(socket) do
+      total = ImportGroups.member_count(id)
 
-    case ImportGroups.create_local_show(id) do
-      {:ok, item} ->
-        remaining = ImportGroups.member_count(id)
-        linked = total - remaining
+      case ImportGroups.create_local_show(id) do
+        {:ok, item} ->
+          remaining = ImportGroups.member_count(id)
+          linked = total - remaining
 
-        message =
-          if remaining > 0 do
-            "Created #{item.title} and linked #{linked} of #{total} files. " <>
-              "#{remaining} had no episode number."
-          else
-            "Created #{item.title} from the folder name."
-          end
+          message =
+            if remaining > 0 do
+              "Created #{item.title} and linked #{linked} of #{total} files. " <>
+                "#{remaining} had no episode number."
+            else
+              "Created #{item.title} from the folder name."
+            end
 
-        {:noreply,
-         socket
-         |> put_flash(:info, message)
-         |> load_groups()
-         |> refresh_counts()}
+          {:noreply,
+           socket
+           |> put_flash(:info, message)
+           |> load_groups()
+           |> refresh_counts()}
 
-      # No `phx-disable-with` guards this button, and a crash partway through
-      # a previous call would leave nothing else to retry against -- so this
-      # is a routine double-click or a stale click on an already-handled row,
-      # not a system failure. Say so plainly rather than the generic error
-      # message below.
-      {:error, :already_created} ->
-        {:noreply, put_flash(socket, :info, "That show was already created from this folder.")}
+        # No `phx-disable-with` guards this button, and a crash partway
+        # through a previous call would leave nothing else to retry against
+        # -- so this is a routine double-click or a stale click on an
+        # already-handled row, not a system failure. Say so plainly rather
+        # than the generic error message below.
+        {:error, :already_created} ->
+          {:noreply, put_flash(socket, :info, "That show was already created from this folder.")}
 
-      {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Could not create the show: #{inspect(reason)}")}
+        {:error, reason} ->
+          {:noreply, put_flash(socket, :error, "Could not create the show: #{inspect(reason)}")}
+      end
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
     end
   end
 
