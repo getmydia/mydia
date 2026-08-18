@@ -106,6 +106,22 @@ class _ClearAllFailingFetchLog implements FetchLog {
   }
 }
 
+QueryWatcher<String> makeWatcher(
+  StubLink link,
+  FetchLog log, {
+  bool Function()? canRefetch,
+  QueryKey? key,
+}) {
+  return QueryWatcher<String>(
+    key: key ?? QueryKeys.home,
+    client: Future<GraphQLClient>.value(stubClient(link)),
+    fetchLog: log,
+    document: gql(_pingQuery),
+    parse: (data) => (data['ping'] as Map<String, dynamic>)['value'] as String,
+    canRefetch: canRefetch,
+  );
+}
+
 void main() {
   group('InvalidationRules', () {
     test('toggling a show favorite refreshes favorites, home and the show list',
@@ -224,22 +240,6 @@ void main() {
   });
 
   group('Invalidator', () {
-    QueryWatcher<String> makeWatcher(
-      StubLink link,
-      FetchLog log, {
-      bool Function()? canRefetch,
-    }) {
-      return QueryWatcher<String>(
-        key: QueryKeys.home,
-        client: Future<GraphQLClient>.value(stubClient(link)),
-        fetchLog: log,
-        document: gql(_pingQuery),
-        parse: (data) =>
-            (data['ping'] as Map<String, dynamic>)['value'] as String,
-        canRefetch: canRefetch,
-      );
-    }
-
     test('a live watcher is refetched', () async {
       final log = InMemoryFetchLog();
       var call = 0;
@@ -458,6 +458,45 @@ void main() {
 
       expect(container.read(invalidatorProvider), isA<Invalidator>());
       expect(container.read(watcherRegistryProvider), isA<WatcherRegistry>());
+    });
+  });
+
+  group('WatcherRegistry.family', () {
+    test('returns every live watcher for the operation', () {
+      final log = InMemoryFetchLog();
+      final link = StubLink((_, __) => _pingData('v1'));
+      final one = makeWatcher(link, log, key: QueryKeys.collectionItems('c1'));
+      final two = makeWatcher(link, log, key: QueryKeys.collectionItems('c2'));
+      final other = makeWatcher(link, log);
+      addTearDown(one.close);
+      addTearDown(two.close);
+      addTearDown(other.close);
+
+      final registry = WatcherRegistry()
+        ..register(QueryKeys.collectionItems('c1'), one)
+        ..register(QueryKeys.collectionItems('c2'), two)
+        ..register(QueryKeys.home, other);
+
+      expect(registry.family('CollectionItems'), hasLength(2));
+      expect(registry.family('CollectionItems'), containsAll([one, two]));
+    });
+
+    test('an operation name that prefixes another does not match it', () {
+      final log = InMemoryFetchLog();
+      final link = StubLink((_, __) => _pingData('v1'));
+      final watcher =
+          makeWatcher(link, log, key: QueryKeys.collectionItems('c1'));
+      addTearDown(watcher.close);
+
+      final registry = WatcherRegistry()
+        ..register(QueryKeys.collectionItems('c1'), watcher);
+
+      expect(registry.family('Collection'), isEmpty);
+      expect(registry.family('Collections'), isEmpty);
+    });
+
+    test('an operation with no live watcher returns empty', () {
+      expect(WatcherRegistry().family('CollectionItems'), isEmpty);
     });
   });
 }

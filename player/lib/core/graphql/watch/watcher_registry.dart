@@ -33,6 +33,16 @@ class WatcherRegistry {
 
   QueryWatcher<dynamic>? find(QueryKey key) => _watchers[key];
 
+  /// The live watchers for [operationName], whatever their variables.
+  ///
+  /// Materialised with `toList()` for the same reason as [watchers]: a
+  /// refetch can dispose a watcher and mutate `_watchers` mid-iteration.
+  Iterable<QueryWatcher<dynamic>> family(String operationName) =>
+      _watchers.entries
+          .where((entry) => entry.key.operationName == operationName)
+          .map((entry) => entry.value)
+          .toList();
+
   Iterable<QueryWatcher<dynamic>> get watchers => _watchers.values.toList();
 }
 
