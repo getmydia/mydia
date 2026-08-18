@@ -404,6 +404,166 @@ defmodule Mydia.MediaTest do
         Media.upsert_episodes_from_season(media_item, season_data)
       end
     end
+
+    test "upsert_episodes_from_season/3 persists absolute numbers and provider ids" do
+      show = media_item_fixture(%{type: "tv_show", title: "Absolute"})
+
+      season_data = %Mydia.Metadata.Structs.SeasonData{
+        season_number: 1,
+        episodes: [
+          %Mydia.Metadata.Structs.EpisodeData{
+            season_number: 1,
+            episode_number: 52,
+            absolute_number: 52,
+            provider_episode_id: "6832458",
+            name: "Whoever's Strongest Wins"
+          }
+        ]
+      }
+
+      {:ok, 1} = Media.upsert_episodes_from_season(show, season_data, monitor_new?: true)
+
+      episode = Media.find_episode(show.id, 1, 52)
+      assert episode.absolute_number == 52
+      assert episode.provider_episode_id == "6832458"
+    end
+
+    test "upsert_episodes_from_season/3 moves an episode rather than duplicating it" do
+      show = media_item_fixture(%{type: "tv_show", title: "Reordered"})
+
+      official = %Mydia.Metadata.Structs.SeasonData{
+        season_number: 1,
+        episodes: [
+          %Mydia.Metadata.Structs.EpisodeData{
+            season_number: 1,
+            episode_number: 52,
+            absolute_number: 52,
+            provider_episode_id: "6832458"
+          }
+        ]
+      }
+
+      {:ok, 1} = Media.upsert_episodes_from_season(show, official, monitor_new?: true)
+      original_id = Media.find_episode(show.id, 1, 52).id
+
+      # The same provider episode, presented under DVD ordering as S2E1.
+      dvd = %Mydia.Metadata.Structs.SeasonData{
+        season_number: 2,
+        episodes: [
+          %Mydia.Metadata.Structs.EpisodeData{
+            season_number: 2,
+            episode_number: 1,
+            absolute_number: 52,
+            provider_episode_id: "6832458"
+          }
+        ]
+      }
+
+      {:ok, 1} = Media.upsert_episodes_from_season(show, dvd, monitor_new?: true)
+
+      assert Media.find_episode(show.id, 1, 52) == nil
+
+      moved = Media.find_episode(show.id, 2, 1)
+      assert moved.provider_episode_id == "6832458"
+
+      # Same row moved in place, not deleted-and-recreated: an implementation
+      # that dropped S1E52 and inserted a fresh S2E1 row would satisfy every
+      # assertion above while destroying that row's file links, watch
+      # history and monitored flag — the entire reason to key on provider id.
+      assert moved.id == original_id
+      assert length(Media.list_episodes(show.id)) == 1
+    end
+
+    test "upsert_episodes_from_season/3 does not retag a row already tagged with a different provider id" do
+      show = media_item_fixture(%{type: "tv_show", title: "Renumbered"})
+
+      original = %Mydia.Metadata.Structs.SeasonData{
+        season_number: 1,
+        episodes: [
+          %Mydia.Metadata.Structs.EpisodeData{
+            season_number: 1,
+            episode_number: 52,
+            provider_episode_id: "X"
+          }
+        ]
+      }
+
+      {:ok, 1} = Media.upsert_episodes_from_season(show, original, monitor_new?: true)
+
+      # A genuinely different provider episode ("Y") arrives at the same
+      # coordinates row "X" currently occupies — e.g. an upstream renumber
+      # mid-season. The (season_number, episode_number) fallback must not
+      # silently adopt "X"'s row and overwrite its identity with "Y": that
+      # would permanently strand "X"'s file links and watch history under
+      # the wrong episode the next time a payload moves "Y" elsewhere.
+      renumbered = %Mydia.Metadata.Structs.SeasonData{
+        season_number: 1,
+        episodes: [
+          %Mydia.Metadata.Structs.EpisodeData{
+            season_number: 1,
+            episode_number: 52,
+            provider_episode_id: "Y"
+          }
+        ]
+      }
+
+      # The fallback refuses to adopt the tagged row, so "Y" falls to create,
+      # which collides with the season/episode unique index ("X" still sits
+      # there) and is discarded. Noisy and self-correcting via the returned
+      # count, rather than silently transferring "X"'s identity to "Y".
+      assert {:ok, 0} = Media.upsert_episodes_from_season(show, renumbered, monitor_new?: true)
+
+      assert %{provider_episode_id: "X"} = Media.find_episode(show.id, 1, 52)
+    end
+
+    test "upsert_episodes_from_season/3 rejects a move onto coordinates another episode already occupies" do
+      # KNOWN LIMITATION: a single-pass positional write cannot move an
+      # episode onto coordinates a different episode currently occupies
+      # without a transient unique-index collision. A later task in this
+      # plan performs ordering switches through a dedicated two-pass remap
+      # inside a transaction for exactly this reason; this upsert path does
+      # not attempt to handle it, and this test documents that boundary
+      # rather than treating it as incidental.
+      show = media_item_fixture(%{type: "tv_show", title: "Collision"})
+
+      both = %Mydia.Metadata.Structs.SeasonData{
+        season_number: 1,
+        episodes: [
+          %Mydia.Metadata.Structs.EpisodeData{
+            season_number: 1,
+            episode_number: 1,
+            provider_episode_id: "A"
+          },
+          %Mydia.Metadata.Structs.EpisodeData{
+            season_number: 1,
+            episode_number: 2,
+            provider_episode_id: "B"
+          }
+        ]
+      }
+
+      {:ok, 2} = Media.upsert_episodes_from_season(show, both, monitor_new?: true)
+
+      # Episode "B" tries to move onto S1E1, which "A" still occupies.
+      swapped = %Mydia.Metadata.Structs.SeasonData{
+        season_number: 1,
+        episodes: [
+          %Mydia.Metadata.Structs.EpisodeData{
+            season_number: 1,
+            episode_number: 1,
+            provider_episode_id: "B"
+          }
+        ]
+      }
+
+      # The move is rejected and the count reflects it — not silent.
+      assert {:ok, 0} = Media.upsert_episodes_from_season(show, swapped, monitor_new?: true)
+
+      # Neither episode moved: "A" is untouched, and "B" stayed at its
+      # original coordinates rather than landing somewhere unexpected.
+      assert %{provider_episode_id: "A"} = Media.find_episode(show.id, 1, 1)
+      assert %{provider_episode_id: "B"} = Media.find_episode(show.id, 1, 2)
+    end
   end
 
   describe "episodes" do
@@ -459,6 +619,87 @@ defmodule Mydia.MediaTest do
       episode = episode_fixture(media_item_id: media_item.id)
       assert {:ok, %Episode{}} = Media.delete_episode(episode)
       assert_raise Ecto.NoResultsError, fn -> Media.get_episode!(episode.id) end
+    end
+
+    test "create_episode/1 casts and persists absolute_number and provider_episode_id" do
+      media_item = media_item_fixture(%{type: "tv_show"})
+
+      attrs = %{
+        media_item_id: media_item.id,
+        season_number: 1,
+        episode_number: 52,
+        absolute_number: 52,
+        provider_episode_id: "6832458"
+      }
+
+      assert {:ok, %Episode{} = episode} = Media.create_episode(attrs)
+      assert episode.absolute_number == 52
+      assert episode.provider_episode_id == "6832458"
+
+      # Round-trip through the database, not just the in-memory struct.
+      reloaded = Media.get_episode!(episode.id)
+      assert reloaded.absolute_number == 52
+      assert reloaded.provider_episode_id == "6832458"
+    end
+
+    test "duplicate provider_episode_id under the same media_item is rejected" do
+      media_item = media_item_fixture(%{type: "tv_show"})
+
+      assert {:ok, _first} =
+               Media.create_episode(%{
+                 media_item_id: media_item.id,
+                 season_number: 1,
+                 episode_number: 1,
+                 provider_episode_id: "tvdb-6832458"
+               })
+
+      # No unique_constraint/3 maps this index yet (deferred to a later task),
+      # so the DB-level violation surfaces as a raise rather than an error
+      # changeset. Assert the behavior that exists today.
+      assert_raise Ecto.ConstraintError, fn ->
+        Media.create_episode(%{
+          media_item_id: media_item.id,
+          season_number: 2,
+          episode_number: 1,
+          provider_episode_id: "tvdb-6832458"
+        })
+      end
+    end
+
+    test "create_episode/1 allows multiple episodes with no provider_episode_id under the same media_item" do
+      # Every existing episode is in this state until the backfill (a later
+      # task) runs, so create_episode/1 must not treat an unset
+      # provider_episode_id as a value that has to be unique. This does not
+      # exercise the migration's `where:` clause specifically — a plain,
+      # non-partial unique index already permits unlimited NULLs per
+      # media_item_id, since SQL treats NULL as distinct from NULL on both
+      # adapters. The `where:` clause is a size optimization for the index,
+      # not a correctness requirement, so there is no behavior here that
+      # pins it.
+      media_item = media_item_fixture(%{type: "tv_show"})
+
+      assert {:ok, _} =
+               Media.create_episode(%{
+                 media_item_id: media_item.id,
+                 season_number: 1,
+                 episode_number: 1
+               })
+
+      assert {:ok, _} =
+               Media.create_episode(%{
+                 media_item_id: media_item.id,
+                 season_number: 1,
+                 episode_number: 2
+               })
+
+      assert {:ok, _} =
+               Media.create_episode(%{
+                 media_item_id: media_item.id,
+                 season_number: 1,
+                 episode_number: 3
+               })
+
+      assert length(Media.list_episodes(media_item.id)) == 3
     end
   end
 
@@ -1466,6 +1707,27 @@ defmodule Mydia.MediaTest do
       assert Mydia.Repo.get(Mydia.Media.Episode, ctx.old_episode.id)
     end
 
+    test "clears a stale season_order picked under the old provider", ctx do
+      # The item is switching providers entirely, so whatever ordering the
+      # user picked under the old provider's TVDB ids describes nothing on
+      # the new provider — it must not survive the switch.
+      {:ok, item} = Media.update_media_item(ctx.item, %{season_order: :dvd})
+      assert item.season_order == :dvd
+
+      stub_tmdb_show(ctx.bypass, ctx.new_id, "Switch Show", 2010)
+      stub_tmdb_season(ctx.bypass, ctx.new_id, 1, [1, 2])
+
+      assert {:ok, reconciled} =
+               Mydia.Media.ProviderSwitch.adopt_provider_switch(
+                 item,
+                 ctx.candidate,
+                 :tmdb,
+                 ctx.config
+               )
+
+      assert is_nil(reconciled.season_order)
+    end
+
     defp stub_tmdb_show(bypass, id, name, year) do
       body = %{
         "id" => id,
@@ -1591,6 +1853,25 @@ defmodule Mydia.MediaTest do
       media_file = Mydia.Repo.get(Mydia.Library.MediaFile, ctx.media_file.id)
       refute is_nil(media_file)
       assert not is_nil(media_file.episode_id)
+    end
+
+    test "clears a stale season_order picked under the old provider", ctx do
+      {:ok, item} = Media.update_media_item(ctx.item, %{season_order: :dvd})
+      assert item.season_order == :dvd
+
+      tvdb_season_id = System.unique_integer([:positive])
+      stub_tvdb_show(ctx.bypass, ctx.new_id, "TVDB Show", 2010, [{1, tvdb_season_id}])
+      stub_tvdb_season(ctx.bypass, tvdb_season_id, 1, [1, 2])
+
+      assert {:ok, reconciled} =
+               Mydia.Media.ProviderSwitch.adopt_provider_switch(
+                 item,
+                 ctx.candidate,
+                 :tvdb,
+                 ctx.config
+               )
+
+      assert is_nil(reconciled.season_order)
     end
 
     test "a season missing tvdb_season_id aborts without wiping episodes", ctx do

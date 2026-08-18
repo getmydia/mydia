@@ -390,12 +390,20 @@ defmodule Mydia.Media.ProviderSwitch do
   # seasons_refreshed_at is deliberately absent: it is not castable, so passing
   # it here was a silent no-op. Media.stamp_seasons_refreshed/1 sets it once the
   # switch has actually re-seeded the episodes.
+  #
+  # season_order: nil resets whatever TVDB ordering the user had picked.
+  # Re-identifying against a new provider recreates every episode at the new
+  # provider's official coordinates, so "which ordering did the user pick"
+  # stops meaning anything the old provider's ids described — nil correctly
+  # means "never asked" again, rather than leaving a stale ordering that a
+  # later refresh would try (and partially fail) to reconcile toward.
   defp provider_switch_attrs(:tvdb, new_id, metadata) do
     %{
       tvdb_id: String.to_integer(new_id),
       tmdb_id: nil,
       metadata_source: :tvdb,
-      metadata: metadata
+      metadata: metadata,
+      season_order: nil
     }
   end
 
@@ -404,7 +412,8 @@ defmodule Mydia.Media.ProviderSwitch do
       tmdb_id: String.to_integer(new_id),
       tvdb_id: nil,
       metadata_source: :tmdb,
-      metadata: metadata
+      metadata: metadata,
+      season_order: nil
     }
   end
 end

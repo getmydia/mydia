@@ -580,4 +580,43 @@ defmodule MydiaWeb.MediaLive.Show.Helpers do
   def season_monitoring_tooltip(:all), do: "Unmonitor season"
   def season_monitoring_tooltip(:partial), do: "Monitor all episodes"
   def season_monitoring_tooltip(:none), do: "Monitor season"
+
+  # Above this many episodes in one season, the list is split into labelled
+  # ranges. TVDB's official ordering puts 170 episodes of Black Clover in a
+  # single season, and long-running anime is not the only case: TVDB season 0
+  # accumulates every promo and recap, which is 113 entries on Rick and Morty.
+  @chunk_threshold 50
+  @chunk_size 50
+
+  @doc """
+  Groups a season's episodes into labelled ranges for rendering.
+
+  Returns `[{label, episodes}]` newest first. A season at or below the
+  threshold returns a single `{nil, episodes}` chunk so callers can render it
+  without a disclosure wrapper.
+  """
+  @spec episode_chunks([Mydia.Media.Episode.t()]) ::
+          [{String.t() | nil, [Mydia.Media.Episode.t()]}]
+  def episode_chunks(episodes) when is_list(episodes) do
+    sorted = Enum.sort_by(episodes, & &1.episode_number, :desc)
+
+    if length(sorted) <= @chunk_threshold do
+      [{nil, sorted}]
+    else
+      sorted
+      |> Enum.group_by(&chunk_index/1)
+      |> Enum.sort_by(fn {index, _eps} -> index end, :desc)
+      |> Enum.map(fn {index, eps} ->
+        {chunk_label(index, eps), Enum.sort_by(eps, & &1.episode_number, :desc)}
+      end)
+    end
+  end
+
+  defp chunk_index(%{episode_number: number}), do: div(number - 1, @chunk_size)
+
+  defp chunk_label(index, eps) do
+    lower = index * @chunk_size + 1
+    upper = Enum.max_by(eps, & &1.episode_number).episode_number
+    "#{lower}-#{upper}"
+  end
 end

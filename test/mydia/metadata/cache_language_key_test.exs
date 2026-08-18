@@ -62,8 +62,8 @@ defmodule Mydia.Metadata.CacheLanguageKeyTest do
 
   describe "fetch_by_id_cached/3 cache key" do
     test "varies by the config's language" do
-      es_key = "fetch_by_id:metadata_relay:603:tv_show:es-ES:"
-      en_key = "fetch_by_id:metadata_relay:603:tv_show:en-US:"
+      es_key = "fetch_by_id:metadata_relay:603:tv_show:es-ES::official"
+      en_key = "fetch_by_id:metadata_relay:603:tv_show:en-US::official"
 
       Cache.put(es_key, :spanish_show)
       Cache.put(en_key, :english_show)
@@ -73,6 +73,32 @@ defmodule Mydia.Metadata.CacheLanguageKeyTest do
 
       assert {:ok, :english_show} =
                Metadata.fetch_by_id_cached(config("en-US"), "603", media_type: :tv_show)
+    end
+
+    # TVDB's orderings of one series describe the same episodes grouped
+    # differently, so without the ordering in the key the second caller reads
+    # the first caller's grouping and never notices: the payload is well formed,
+    # just the wrong shape.
+    test "varies by the requested season ordering" do
+      official_key = "fetch_by_id:metadata_relay:603:tv_show:en-US::official"
+      dvd_key = "fetch_by_id:metadata_relay:603:tv_show:en-US::dvd"
+
+      Cache.put(official_key, :official_show)
+      Cache.put(dvd_key, :dvd_show)
+
+      assert {:ok, :dvd_show} =
+               Metadata.fetch_by_id_cached(config("en-US"), "603",
+                 media_type: :tv_show,
+                 season_order: :dvd
+               )
+
+      # nil means "never asked" and resolves to the official ordering, so it
+      # shares the key with an explicit :official rather than getting its own.
+      assert {:ok, :official_show} =
+               Metadata.fetch_by_id_cached(config("en-US"), "603",
+                 media_type: :tv_show,
+                 season_order: nil
+               )
     end
   end
 end

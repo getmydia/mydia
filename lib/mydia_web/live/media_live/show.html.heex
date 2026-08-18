@@ -222,6 +222,7 @@
             media_item={@media_item}
             expanded_seasons={@expanded_seasons}
             expanded_episodes={@expanded_episodes}
+            expanded_chunks={@expanded_chunks}
             auto_searching_season={@auto_searching_season}
             rescanning_season={@rescanning_season}
             auto_searching_episode={@auto_searching_episode}
@@ -229,6 +230,8 @@
             transcode_jobs={@transcode_jobs}
             segment_statuses={@segment_statuses}
             segment_detection_available={@segment_detection_available}
+            season_order_suggestion={@season_order_suggestion}
+            can_update_media={@can_update_media}
           />
           <%!-- Media Files Section --%>
           <Components.media_files_section

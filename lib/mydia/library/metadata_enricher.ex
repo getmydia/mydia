@@ -174,7 +174,9 @@ defmodule Mydia.Library.MetadataEnricher do
 
     provider_type = Map.get(match_result, :provider_type, :tmdb)
 
-    case fetch_full_metadata(provider_id, media_type, config, provider_type) do
+    # No row exists yet, so there is no recorded ordering: the item is created
+    # with season_order nil, which is the official ordering.
+    case fetch_full_metadata(provider_id, media_type, config, provider_type, nil) do
       {:ok, full_metadata} ->
         attrs = build_media_item_attrs(full_metadata, media_type, match_result)
 
@@ -216,7 +218,13 @@ defmodule Mydia.Library.MetadataEnricher do
       # id-inference would mis-stamp dual-id rows.
       provider_type = existing_item.metadata_source || match_provider_type
 
-      case fetch_full_metadata(provider_id, media_type, config, provider_type) do
+      case fetch_full_metadata(
+             provider_id,
+             media_type,
+             config,
+             provider_type,
+             existing_item.season_order
+           ) do
         {:ok, full_metadata} ->
           # `exclude_id` matters only here: the row already exists and usually
           # already owns the cross-referenced id, so without it the item is
@@ -265,7 +273,7 @@ defmodule Mydia.Library.MetadataEnricher do
     {:ok, existing_item}
   end
 
-  defp fetch_full_metadata(provider_id, media_type, config, provider_type) do
+  defp fetch_full_metadata(provider_id, media_type, config, provider_type, season_order) do
     fetch_opts = [
       media_type: media_type,
       append_to_response: Metadata.default_append_to_response(media_type)
@@ -276,6 +284,18 @@ defmodule Mydia.Library.MetadataEnricher do
     fetch_opts =
       if media_type == :tv_show && provider_type in [:tvdb, :tmdb] do
         Keyword.put(fetch_opts, :provider, provider_type)
+      else
+        fetch_opts
+      end
+
+    # The show's recorded season ordering. This path runs against items that are
+    # already in the library, so without it an ordinary rescan of a DVD-ordered
+    # show overwrites its metadata blob with the official season list — the same
+    # defect the refresh path was fixed for. nil (a brand new item, or a show
+    # never asked) resolves to "official" in SeasonOrder.tvdb_type/1.
+    fetch_opts =
+      if media_type == :tv_show do
+        Keyword.put(fetch_opts, :season_order, season_order)
       else
         fetch_opts
       end
