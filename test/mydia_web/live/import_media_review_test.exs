@@ -149,6 +149,67 @@ defmodule MydiaWeb.ImportMediaReviewTest do
     assert Repo.reload!(file).episode_id
   end
 
+  test "creating a local show reports leftover unnumbered files rather than a clean success",
+       %{conn: conn} do
+    lp = library_path_fixture(%{type: "series"})
+
+    group =
+      seed_group(lp,
+        cluster_key: "local-partial",
+        display_title: "L'univers des Coucou (2023)",
+        file_count: 2,
+        unresolved_count: 2,
+        provider_id: nil,
+        min_confidence: nil
+      )
+
+    numbered_file =
+      orphaned_media_file_fixture(%{
+        library_path_id: lp.id,
+        relative_path: "L'univers des Coucou (2023)/Season 01/ep1.mkv"
+      })
+
+    unnumbered_file =
+      orphaned_media_file_fixture(%{
+        library_path_id: lp.id,
+        relative_path: "L'univers des Coucou (2023)/Season 01/bonus.mkv"
+      })
+
+    Repo.update_all(
+      from(f in Mydia.Library.MediaFile, where: f.id in [^numbered_file.id, ^unnumbered_file.id]),
+      set: [import_group_id: group.id]
+    )
+
+    %Mydia.Library.MatchCandidate{}
+    |> Mydia.Library.MatchCandidate.changeset(%{
+      media_file_id: numbered_file.id,
+      rank: 0,
+      parsed_info: %{"season" => 1, "episodes" => [1]}
+    })
+    |> Repo.insert!()
+
+    %Mydia.Library.MatchCandidate{}
+    |> Mydia.Library.MatchCandidate.changeset(%{
+      media_file_id: unnumbered_file.id,
+      rank: 0,
+      parsed_info: %{}
+    })
+    |> Repo.insert!()
+
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    view |> element("#create-local-#{group.id}") |> render_click()
+
+    assert has_element?(view, "#flash-info", "linked 1 of 2 files")
+    assert has_element?(view, "#flash-info", "1 had no episode number")
+    refute has_element?(view, "#group-#{group.id}")
+
+    assert Repo.reload!(group).status == "applied"
+    assert Repo.reload!(group).unresolved_count == 1
+    assert Repo.reload!(numbered_file).episode_id
+    refute Repo.reload!(unnumbered_file).episode_id
+  end
+
   test "a ready group renders collapsed and expands on click", %{conn: conn} do
     lp = library_path_fixture(%{type: "series"})
     group = seed_group(lp, min_confidence: 1.0)

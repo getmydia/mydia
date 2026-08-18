@@ -543,8 +543,17 @@ defmodule Mydia.ImportGroups do
   instead, via `link_local_member/2` below.
 
   A member with no parsed episode number is left alone rather than guessed
-  at: it stays unresolved, which keeps `unresolved_count` honest and the
-  group visible instead of silently half-done.
+  at: it stays an orphaned `MediaFile` (no `episode_id`, no `media_item_id`)
+  and `unresolved_count` records how many. The group itself is still marked
+  `"applied"` unconditionally rather than left `"accepted"` for a future
+  retry: unlike `Mydia.Jobs.ApplyImportGroups`, there is no provider match
+  here for a later attempt to succeed against, so nothing changes by trying
+  again. Leaving it `"accepted"` would instead be a trap --
+  `ApplyImportGroups.accepted_groups/1` sweeps every `"accepted"` group for
+  the library, so this one would eventually be handed to `FileIngest` with a
+  nil `provider_id`, fail every member, and burn the worker's retry budget on
+  work that can never succeed. A leftover orphaned file is picked up again by
+  the next library rescan instead.
   """
   @spec create_local_show(binary()) :: {:ok, Media.MediaItem.t()} | {:error, term()}
   def create_local_show(group_id) do
@@ -572,7 +581,7 @@ defmodule Mydia.ImportGroups do
           suggested_title: title,
           suggested_year: year,
           unresolved_count: remaining,
-          status: if(remaining == 0, do: "applied", else: "accepted"),
+          status: "applied",
           decided_at: now
         )
         |> Repo.update!()

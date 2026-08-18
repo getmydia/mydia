@@ -156,11 +156,17 @@ defmodule Mydia.Jobs.ApplyImportGroupsTest do
     assert group.unresolved_count == 0
   end
 
-  # A member with no candidate at all can never link (`ingest_member/2`'s
-  # `candidate: nil` clause is a deliberate no-op), so this is the cheapest way
-  # to make a page make zero progress. Without the no-progress guard, `drain/2`
-  # would refetch the same unresolved member forever.
-  test "a page that links nothing halts instead of spinning" do
+  # A group with no candidate at all has no provider_id, which now keeps it
+  # out of `accepted_groups/1` entirely (see the test below): the worker never
+  # attempts it, so there is nothing left here to make zero progress on. This
+  # used to reach `drain/2`'s no-progress guard and come back `{:error, _}`,
+  # burning the retry budget on a group that could never succeed -- exactly
+  # the interaction the `not is_nil(g.provider_id)` filter in
+  # `accepted_groups/1` closes off. `accept/1` can still mark a `:no_match`
+  # group "accepted" (a manual "select all" that spans every band, as here),
+  # so this is still worth covering end to end through `accept/1` and not just
+  # via the focused seed below.
+  test "an accepted group with no provider match is skipped, not retried forever" do
     lp = library_path_fixture(%{type: "movies", path: "/media/NoMatch"})
 
     orphaned_media_file_fixture(%{
@@ -175,10 +181,60 @@ defmodule Mydia.Jobs.ApplyImportGroupsTest do
     scope = lp.id |> SelectionScope.new() |> SelectionScope.select_all_matching(%{band: :all})
     assert {:ok, 1} = ImportGroups.accept(scope)
 
-    assert {:error, _reason} = perform_job(ApplyImportGroups, %{"library_path_id" => lp.id})
+    assert :ok = perform_job(ApplyImportGroups, %{"library_path_id" => lp.id})
 
     group = Repo.get_by!(ImportGroup, library_path_id: lp.id)
     assert group.status == "accepted"
     assert group.unresolved_count == 1
+  end
+
+  # Focused regression guard for the interaction above: a group can reach
+  # `status: "accepted"` with `provider_id: nil` through `accept/1` (see the
+  # test above) or through `ImportGroups.create_local_show/1` leaving a
+  # partially-linked group behind -- except create_local_show/1 now always
+  # marks its group "applied", specifically so it can never hand this worker
+  # an "accepted" group with no provider match. This test seeds that state
+  # directly, bypassing both call sites, so it stays a guard against the
+  # underlying interaction even if a future caller reintroduces it some other
+  # way. Without the `not is_nil(g.provider_id)` filter in
+  # `accepted_groups/1`, this group would be swept up, handed to `FileIngest`
+  # with a nil `provider_id` on its only member, fail to link, and return
+  # `{:error, _}` from `perform/1`.
+  test "the worker never picks up an accepted group with no provider match", %{
+    library_path: lp
+  } do
+    group =
+      %ImportGroup{}
+      |> ImportGroup.changeset(%{
+        library_path_id: lp.id,
+        anchor_path: "Unidentified",
+        cluster_key: "unidentified-direct-seed",
+        status: "accepted",
+        provider_id: nil,
+        file_count: 1,
+        unresolved_count: 1
+      })
+      |> Repo.insert!()
+
+    # A real, unresolved member is what makes this a genuine regression guard:
+    # with no member at all `drain/2` sees zero remaining immediately and
+    # marks the group "applied" regardless of the filter under test (the same
+    # shape as "a group whose files vanished still completes" above), which
+    # would pass even without the fix.
+    file =
+      orphaned_media_file_fixture(%{
+        library_path_id: lp.id,
+        relative_path: "Unidentified/reel.mkv"
+      })
+
+    Repo.update_all(from(f in Mydia.Library.MediaFile, where: f.id == ^file.id),
+      set: [import_group_id: group.id]
+    )
+
+    assert :ok = perform_job(ApplyImportGroups, %{"library_path_id" => lp.id})
+
+    reloaded = Repo.get!(ImportGroup, group.id)
+    assert reloaded.status == "accepted"
+    assert reloaded.unresolved_count == 1
   end
 end

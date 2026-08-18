@@ -382,5 +382,64 @@ defmodule Mydia.ImportGroupsTest do
 
       assert {:error, :already_matched} = ImportGroups.create_local_show(group.id)
     end
+
+    test "leaves an unnumbered member orphaned but still marks the group applied" do
+      lp = library_path_fixture(%{type: "series", path: "/media/Series"})
+
+      numbered_files =
+        for n <- 1..2 do
+          file =
+            orphaned_media_file_fixture(%{
+              library_path_id: lp.id,
+              relative_path: "L'univers des Coucou (2023)/Season 01/ep#{n}.mkv"
+            })
+
+          %MatchCandidate{}
+          |> MatchCandidate.changeset(%{
+            media_file_id: file.id,
+            rank: 0,
+            last_error: "no_match",
+            parsed_info: %{"season" => 1, "episodes" => [n]}
+          })
+          |> Repo.insert!()
+
+          file
+        end
+
+      unnumbered_file =
+        orphaned_media_file_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "L'univers des Coucou (2023)/Season 01/bonus.mkv"
+        })
+
+      %MatchCandidate{}
+      |> MatchCandidate.changeset(%{
+        media_file_id: unnumbered_file.id,
+        rank: 0,
+        last_error: "no_match",
+        parsed_info: %{}
+      })
+      |> Repo.insert!()
+
+      {:ok, _} = ImportGroups.upsert_for_library(lp)
+      group = Repo.one!(ImportGroup)
+
+      assert {:ok, item} = ImportGroups.create_local_show(group.id)
+
+      episodes = Repo.all(from e in Mydia.Media.Episode, where: e.media_item_id == ^item.id)
+      assert length(episodes) == 2
+
+      for file <- numbered_files do
+        assert Repo.reload!(file).episode_id
+      end
+
+      reloaded_unnumbered = Repo.reload!(unnumbered_file)
+      assert reloaded_unnumbered.episode_id == nil
+      assert reloaded_unnumbered.media_item_id == nil
+
+      reloaded_group = Repo.reload!(group)
+      assert reloaded_group.status == "applied"
+      assert reloaded_group.unresolved_count == 1
+    end
   end
 end
