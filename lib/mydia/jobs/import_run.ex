@@ -17,10 +17,16 @@ defmodule Mydia.Jobs.ImportRun do
   skips files that already have a candidate or a parent. The database is the
   cursor.
 
-  Because the database is the cursor, phase 2 terminates only if every file it
-  processes leaves the outstanding set. That is `Library.FileIngest`'s progress
-  contract, documented on that module; `match_loop/4` carries a no-progress
-  guard as a backstop rather than as the primary mechanism.
+  Phase 2's walk (`match_loop/4`) is a one-way keyset scan over `id`, so it
+  always terminates on its own -- each chunk advances the cursor past
+  whatever it just processed, and the table is finite -- regardless of
+  whether every file in a chunk actually left the outstanding set. Reaching
+  the end of the walk is therefore not the same as the phase having
+  succeeded: `Library.FileIngest`'s progress contract (documented on that
+  module) says every file must leave the outstanding set, and
+  `verify_match_phase_complete/2` is what actually checks that, once the walk
+  is done, failing the run rather than reporting success over files the walk
+  quietly passed by.
 
   Crash recovery is `reconcile_interrupted_runs/0`, called once at boot.
   `Oban.Plugins.Lifeline` is deliberately not configured: its `rescue_after`
@@ -337,6 +343,11 @@ defmodule Mydia.Jobs.ImportRun do
       Lets a test point relay traffic at a local Bypass server without
       mutating the global `METADATA_RELAY_URL` env var (which would race any
       concurrently running async test that also resolves the default config).
+    * `:matcher` - a `Mydia.Library.Matcher` implementation, defaults to
+      `MetadataMatcher`. Same seam `BatchMatcher.match_paths/2` already takes;
+      exposed here too so a test can drive `FileIngest`'s decision (link,
+      candidate, or a genuine write failure) directly, without needing a
+      Bypass payload shaped to provoke it.
     * `:after_chunk` - a 0-arity function invoked once a chunk has committed,
       before the next chunk's stop check. Mirrors the `:after_batch` seam on
       `run_scan_phase/2`, for the same reason: it makes the stop boundary
@@ -348,20 +359,24 @@ defmodule Mydia.Jobs.ImportRun do
   def run_match_phase(%ImportRun{} = run, opts \\ []) do
     library_path = Settings.get_library_path!(run.library_path_id)
     config = Keyword.get(opts, :config) || Metadata.default_relay_config()
+    matcher = Keyword.get(opts, :matcher, MetadataMatcher)
     after_chunk = Keyword.get(opts, :after_chunk, fn -> :ok end)
 
     {:ok, _} = Library.update_import_run(run, %{phase: :matching})
 
-    match_loop(run, library_path, config, after_chunk)
+    case match_loop(run, library_path, config, matcher, after_chunk) do
+      :ok -> verify_match_phase_complete(run, library_path)
+      other -> other
+    end
   end
 
   defp match_loop(
          run,
          library_path,
          config,
+         matcher,
          after_chunk,
          after_id \\ nil,
-         previous_ids \\ nil,
          broadcast_state \\ initial_broadcast_state()
        ) do
     if Library.import_run_stopping?(run.id) do
@@ -374,54 +389,59 @@ defmodule Mydia.Jobs.ImportRun do
           :ok
 
         chunk ->
-          ids = chunk |> Enum.map(&elem(&1, 0)) |> MapSet.new()
+          broadcast_state =
+            process_match_chunk(chunk, run, library_path, config, matcher, broadcast_state)
 
-          if ids == previous_ids do
-            no_progress(run, library_path, chunk)
-          else
-            broadcast_state =
-              process_match_chunk(chunk, run, library_path, config, broadcast_state)
-
-            after_chunk.()
-            {last_id, _path} = List.last(chunk)
-            match_loop(run, library_path, config, after_chunk, last_id, ids, broadcast_state)
-          end
+          after_chunk.()
+          {last_id, _path} = List.last(chunk)
+          match_loop(run, library_path, config, matcher, after_chunk, last_id, broadcast_state)
       end
     end
   end
 
-  # Unreachable while `FileIngest`'s progress contract holds: every ingest
-  # outcome leaves the file with a parent or a candidate, and either removes
-  # it from this query's result set. Kept because the cost of being wrong is
-  # an import that spins forever on the queue's only slot, writing NFOs on
-  # every pass and permanently blocking any further import of that path.
-  #
-  # Since the keyset conversion this is unreachable by construction, not just
-  # by contract: `match_loop/7` advances `:after_id` past every id in a
-  # processed chunk, so the next query can never return an id this branch's
-  # `ids == previous_ids` check would need to see repeated -- `ids` and
-  # `previous_ids` can no longer intersect at all, let alone be equal. A
-  # `FileIngest` bug that left a file with neither a parent nor a candidate
-  # would now advance past it silently (report `:ok` with the file still
-  # stuck) rather than halt loudly here. Reinstating a real backstop needs a
-  # per-file completion check, not this comparison; flagged rather than fixed
-  # because it is a design decision outside a scale-only change.
-  defp no_progress(run, library_path, chunk) do
-    {_id, example} = hd(chunk)
+  # The keyset walk above can only prove it saw no unresolved row above its
+  # cursor; it cannot prove none remain below it. A `FileIngest` bug that
+  # leaves a file matching neither a parent nor a rank-0 candidate (breaking
+  # the progress contract documented on that module) keeps whatever `id` it
+  # already had, so once the walk's cursor passes it, the walk never selects
+  # that file again and still reports the phase done. This unrestricted
+  # count, taken once the walk believes it has finished, is the real backstop
+  # for that contract now. It is strictly better than the per-chunk equality
+  # check it replaces (deleted -- see this function's history if it's needed
+  # again): that guard only fired once the stuck rows happened to be the
+  # entire remaining window, in effect only once they sat at the head of
+  # what was left to scan, while this catches them wherever they are.
+  defp verify_match_phase_complete(run, library_path) do
+    case Library.count_unmatched_media_files(library_path.id) do
+      0 ->
+        :ok
 
-    Logger.error("Import run made no progress on a chunk, halting",
-      import_run_id: run.id,
-      library_path_id: library_path.id,
-      chunk_size: length(chunk),
-      example_path: example
-    )
+      count ->
+        sample_ids =
+          library_path.id
+          |> Library.list_unmatched_media_file_paths(5)
+          |> Enum.map(&elem(&1, 0))
 
-    {:error,
-     {:no_progress,
-      "The import stopped because #{length(chunk)} file(s) could not be resolved and kept coming back, starting with #{Path.basename(example)}. This is a bug, please report it."}}
+        # `count:`/`media_file_ids:` (a comma-joined string, not a raw list)
+        # match `Library.drop_unresolvable_paths/1`'s convention for the same
+        # reason: neither key is in `config :logger, :default_formatter`'s
+        # metadata allowlist under those other names, so anything else here
+        # renders nowhere -- silently, the same failure mode this whole check
+        # exists to stop happening one layer up.
+        Logger.error("Import run finished matching but files are still outstanding",
+          import_run_id: run.id,
+          library_path_id: library_path.id,
+          count: count,
+          media_file_ids: Enum.map_join(sample_ids, ",", & &1)
+        )
+
+        {:error,
+         {:files_outstanding,
+          "The import finished but #{count} file(s) never got a match result and are still outstanding. This is a bug, please report it."}}
+    end
   end
 
-  defp process_match_chunk(chunk, run, library_path, config, broadcast_state) do
+  defp process_match_chunk(chunk, run, library_path, config, matcher, broadcast_state) do
     by_path = Map.new(chunk, fn {file_id, path} -> {path, file_id} end)
     policy = policy_for(run.mode)
 
@@ -430,7 +450,7 @@ defmodule Mydia.Jobs.ImportRun do
       |> Map.keys()
       |> BatchMatcher.match_paths(
         library_root: library_path.path,
-        matcher: MetadataMatcher,
+        matcher: matcher,
         config: config,
         provider: library_path.tv_metadata_source
       )

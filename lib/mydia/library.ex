@@ -2573,13 +2573,52 @@ defmodule Mydia.Library do
           {binary(), String.t()}
         ]
   def list_unmatched_media_file_paths(library_path_id, limit, opts \\ []) do
+    library_path_id
+    |> unmatched_media_files_query(opts[:after_id])
+    |> order_by([f], asc: f.id)
+    |> limit(^limit)
+    |> preload(:library_path)
+    |> Repo.all()
+    |> Enum.map(fn file -> {file.id, MediaFile.absolute_path(file)} end)
+    |> drop_unresolvable_paths()
+  end
+
+  @doc """
+  Counts files still needing a match for a library path, with no keyset cutoff.
+
+  `Jobs.ImportRun`'s match loop walks `list_unmatched_media_file_paths/3` with
+  an ever-advancing `:after_id`, so a query for "what's still unmatched" scoped
+  to `id > after_id` can only prove nothing remains *above* the cursor. It
+  cannot prove nothing remains below it: a `FileIngest` bug that leaves a file
+  matching neither a parent nor a rank-0 candidate (breaking the progress
+  contract documented on that module) keeps whatever `id` it already had, so
+  once the walk's cursor passes it, that query never selects it again and the
+  walk still reports the phase done.
+
+  This is the check that actually closes that gap: an unrestricted count, with
+  no `:after_id`, run once the walk believes it has finished. `Jobs.ImportRun`
+  fails the run rather than reporting success when this is non-zero.
+  """
+  @spec count_unmatched_media_files(binary()) :: non_neg_integer()
+  def count_unmatched_media_files(library_path_id) do
+    library_path_id
+    |> unmatched_media_files_query(nil)
+    |> select([f, _c], count(f.id))
+    |> Repo.one()
+  end
+
+  # Shared by list_unmatched_media_file_paths/3 and count_unmatched_media_files/1
+  # so the two can never disagree about what "still needs a match" means --
+  # the count would otherwise silently drift from the set the loop actually
+  # walks, defeating the point of using it as that walk's own backstop.
+  defp unmatched_media_files_query(library_path_id, after_id) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 
     MediaFile
     |> where([f], f.library_path_id == ^library_path_id)
     |> where([f], is_nil(f.media_item_id) and is_nil(f.episode_id))
     |> where([f], is_nil(f.trashed_at))
-    |> maybe_after_id(opts[:after_id])
+    |> maybe_after_id(after_id)
     |> join(:left, [f], c in MatchCandidate, on: c.media_file_id == f.id)
     |> where(
       [_f, c],
@@ -2587,12 +2626,6 @@ defmodule Mydia.Library do
         (is_nil(c.provider_id) and
            (is_nil(c.next_retry_at) or c.next_retry_at <= ^now))
     )
-    |> order_by([f], asc: f.id)
-    |> limit(^limit)
-    |> preload(:library_path)
-    |> Repo.all()
-    |> Enum.map(fn file -> {file.id, MediaFile.absolute_path(file)} end)
-    |> drop_unresolvable_paths()
   end
 
   defp maybe_after_id(query, nil), do: query
