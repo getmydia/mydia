@@ -24,7 +24,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseComponents do
   attr :current_user, :map, required: true
 
   def franchise_section(assigns) do
-    assigns = assign(assigns, :items, items(assigns.franchise, assigns.adding_tmdb_ids))
+    assigns = assign(assigns, :items, items(assigns.franchise))
 
     ~H"""
     <DiscoverComponents.media_rail
@@ -34,6 +34,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseComponents do
       media_type={:movie}
       current_user={@current_user}
       can_add={@can_add}
+      adding_ids={@adding_tmdb_ids}
       on_select={nil}
       add_event="add_franchise_movie"
       request_event="request_franchise_movie"
@@ -53,7 +54,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseComponents do
     """
   end
 
-  defp items(franchise, adding_tmdb_ids) do
+  defp items(franchise) do
     Enum.map(franchise.entries, fn entry ->
       %{
         provider_id: entry.tmdb_id,
@@ -66,7 +67,6 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseComponents do
         id: entry.media_item_id,
         navigate: navigate_to(entry),
         current: entry.current?,
-        adding: MapSet.member?(adding_tmdb_ids, entry.tmdb_id),
         request_status: entry.request_status
       }
     end)

@@ -5,8 +5,8 @@ defmodule MydiaWeb.Components.MediaRailComponentTest do
   where neither applies. The detail page has no `show_details` handler, so the
   inert case is what keeps a poster click from crashing that LiveView.
 
-  Also covers the two per-item keys the franchise adapter depends on, `:current`
-  and `:adding`.
+  Also covers `:current`, the per-item key the franchise adapter depends on, and
+  the shared `adding_ids` set.
   """
 
   use MydiaWeb.ConnCase, async: true
@@ -234,38 +234,64 @@ defmodule MydiaWeb.Components.MediaRailComponentTest do
       refute html =~ "Add to Library"
     end
 
-    # `adding_item_id` can only name one in-flight add. The franchise strip
-    # routinely has several, so an item may carry its own flag.
-    test "an item's own adding flag beats the single adding_item_id" do
+    # Regression for #459. Two adds can be in flight at once on the
+    # recommendations rail, and the old contract could only name one of them:
+    # when the first finished, an arbitrary survivor was chosen and the other
+    # still-running card silently lost its spinner.
+    test "every id in the set draws a spinner, and nothing else does" do
       html =
         render_component(&DiscoverComponents.media_rail/1,
           items: [
-            item(%{provider_id: "201", title: "Busy", adding: true}),
-            item(%{provider_id: "202", title: "Idle", adding: false})
+            item(%{provider_id: "201", title: "Busy One"}),
+            item(%{provider_id: "202", title: "Busy Two"}),
+            item(%{provider_id: "203", title: "Idle"})
           ],
+          media_type: :movie,
+          current_user: user(),
+          adding_ids: MapSet.new(["201", "202"])
+        )
+
+      first = extract_item(html, "media-rail", "201")
+      second = extract_item(html, "media-rail", "202")
+      idle = extract_item(html, "media-rail", "203")
+
+      assert first =~ "loading-spinner"
+      assert first =~ "disabled"
+      assert second =~ "loading-spinner"
+      assert second =~ "disabled"
+      refute idle =~ "loading-spinner"
+    end
+
+    # The hosts do not agree on id types and cannot be made to. The two detail
+    # page sets hold parsed integers because dispatch_add/2 dedupes on the
+    # integer and keys start_async with it, while a SearchResult's provider_id
+    # is a string. A strict MapSet.member?/2 across that mix would match
+    # nothing and draw no spinner, with no compile-time signal.
+    test "matches an integer set against string provider ids" do
+      html =
+        render_component(&DiscoverComponents.media_rail/1,
+          items: [
+            item(%{provider_id: "201", title: "Busy"}),
+            item(%{provider_id: "202", title: "Idle"})
+          ],
+          media_type: :movie,
+          current_user: user(),
+          adding_ids: MapSet.new([201])
+        )
+
+      assert extract_item(html, "media-rail", "201") =~ "loading-spinner"
+      refute extract_item(html, "media-rail", "202") =~ "loading-spinner"
+    end
+
+    test "an omitted adding_ids draws no spinners" do
+      html =
+        render_component(&DiscoverComponents.media_rail/1,
+          items: [item(%{provider_id: "201"})],
           media_type: :movie,
           current_user: user()
         )
 
-      busy = extract_item(html, "media-rail", "201")
-      idle = extract_item(html, "media-rail", "202")
-
-      assert busy =~ "loading-spinner"
-      assert busy =~ "disabled"
-      refute idle =~ "loading-spinner"
-    end
-
-    test "falls back to adding_item_id when an item carries no flag" do
-      html =
-        render_component(&DiscoverComponents.media_rail/1,
-          items: [item(%{provider_id: "301"}), item(%{provider_id: "302"})],
-          media_type: :movie,
-          current_user: user(),
-          adding_item_id: "301"
-        )
-
-      assert extract_item(html, "media-rail", "301") =~ "loading-spinner"
-      refute extract_item(html, "media-rail", "302") =~ "loading-spinner"
+      refute html =~ "loading-spinner"
     end
 
     # Regression: an unowned card for a user who may neither add nor request
@@ -294,5 +320,94 @@ defmodule MydiaWeb.Components.MediaRailComponentTest do
     |> LazyHTML.from_fragment()
     |> LazyHTML.query(~s(##{rail_id}-item-#{provider_id}))
     |> LazyHTML.to_html()
+  end
+
+  defp collapsible(opts) do
+    render_component(
+      &DiscoverComponents.media_rail/1,
+      Keyword.merge(
+        [
+          items: [item(), item(%{provider_id: "102", title: "Janet Planet"})],
+          media_type: :movie,
+          current_user: user(),
+          collapsible: true,
+          toggle_event: "toggle_recommendations"
+        ],
+        opts
+      )
+    )
+  end
+
+  describe "collapsible rail" do
+    test "a collapsed rail renders its header and none of its cards" do
+      html = collapsible(expanded: false)
+
+      assert html =~ ~s(id="media-rail-toggle")
+      assert html =~ ~s(aria-expanded="false")
+      refute html =~ ~s(id="media-rail-items")
+      refute html =~ ~s(id="media-rail-item-101")
+      refute html =~ "The Eternal Daughter"
+    end
+
+    test "an expanded rail renders its cards under the strip id" do
+      html = collapsible(expanded: true)
+
+      assert html =~ ~s(aria-expanded="true")
+      assert html =~ ~s(id="media-rail-items")
+      assert html =~ ~s(id="media-rail-item-101")
+      assert html =~ "The Eternal Daughter"
+    end
+
+    # aria-controls must name an element that is actually in the document. The
+    # strip is removed entirely while collapsed, not hidden, so the attribute has
+    # to come and go with it.
+    test "aria-controls is present only while the strip is in the document" do
+      refute collapsible(expanded: false) =~ "aria-controls"
+      assert collapsible(expanded: true) =~ ~s(aria-controls="media-rail-items")
+    end
+
+    # `button` takes phrasing content, and a heading is not phrasing content, so
+    # the heading has to wrap the button rather than sit inside it.
+    test "the disclosure button is nested inside the heading, not the reverse" do
+      doc = collapsible(expanded: false) |> LazyHTML.from_fragment()
+
+      assert [_] = Enum.to_list(LazyHTML.query(doc, "h2 > button#media-rail-toggle"))
+      assert [] = Enum.to_list(LazyHTML.query(doc, "button h2"))
+    end
+
+    test "the header carries the item count" do
+      count =
+        collapsible(expanded: false)
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query("#media-rail-toggle .badge")
+        |> LazyHTML.text()
+
+      assert count == "2"
+    end
+
+    test "a non-collapsible rail renders no toggle and no strip id" do
+      html =
+        render_component(&DiscoverComponents.media_rail/1,
+          items: [item()],
+          media_type: :movie,
+          current_user: user()
+        )
+
+      assert html =~ ~s(id="media-rail")
+      refute html =~ ~s(id="media-rail-toggle")
+      refute html =~ ~s(id="media-rail-items")
+      refute html =~ "aria-expanded"
+    end
+
+    test "a collapsible rail with no toggle_event raises" do
+      assert_raise ArgumentError, ~r/toggle_event/, fn ->
+        render_component(&DiscoverComponents.media_rail/1,
+          items: [item()],
+          media_type: :movie,
+          current_user: user(),
+          collapsible: true
+        )
+      end
+    end
   end
 end

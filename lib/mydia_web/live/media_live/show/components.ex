@@ -443,6 +443,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :media_item, :map, required: true
   attr :expanded_seasons, :any, required: true
   attr :expanded_episodes, :map, default: MapSet.new()
+  attr :expanded_chunks, :any, default: MapSet.new()
   attr :auto_searching_season, :any, default: nil
   attr :rescanning_season, :any, default: nil
   attr :auto_searching_episode, :any, default: nil
@@ -450,6 +451,8 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :transcode_jobs, :map, default: %{}
   attr :segment_statuses, :map, default: %{}
   attr :segment_detection_available, :boolean, default: true
+  attr :season_order_suggestion, :any, default: nil
+  attr :can_update_media, :boolean, required: true
 
   def episodes_section(assigns) do
     assigns = assign(assigns, :monitoring_presets, @monitoring_presets)
@@ -528,6 +531,14 @@ defmodule MydiaWeb.MediaLive.Show.Components do
           <SegmentComponents.segment_unavailable_note :if={!@segment_detection_available} />
         </div>
 
+        <div class="card-body p-4 pb-0 pt-0">
+          <SeasonComponents.season_order_controls
+            media_item={@media_item}
+            season_order_suggestion={@season_order_suggestion}
+            can_update_media={@can_update_media}
+          />
+        </div>
+
         <%!-- All seasons in one container --%>
         <div class="divide-y divide-base-300">
           <%= for {season_num, episodes} <- grouped_seasons do %>
@@ -536,6 +547,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
               episodes={episodes}
               expanded?={MapSet.member?(@expanded_seasons, season_num)}
               expanded_episodes={@expanded_episodes}
+              expanded_chunks={@expanded_chunks}
               auto_searching_season={@auto_searching_season}
               rescanning_season={@rescanning_season}
               auto_searching_episode={@auto_searching_episode}

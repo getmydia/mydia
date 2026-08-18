@@ -107,6 +107,7 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:auto_searching, false)
      |> assign(:auto_searching_season, nil)
      |> assign(:auto_searching_episode, nil)
+     |> assign(:expanded_chunks, MapSet.new())
      # Pre-transcode state
      |> assign(:transcode_jobs, load_transcode_jobs(media_item))
      # File metadata refresh state
@@ -139,13 +140,17 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:adding_franchise_tmdb_ids, MapSet.new())
      # Recommendations rail state
      |> assign(:recommendations, [])
+     |> assign(:recommendations_expanded, false)
      |> assign(:adding_recommendation_tmdb_ids, MapSet.new())
-     |> assign(:adding_recommendation_id, nil)
      |> assign(:requesting_recommendation_id, nil)
      |> assign_new(:metadata_config, fn -> Mydia.Metadata.default_relay_config() end)
      |> assign(
        :can_create_media,
        Mydia.Accounts.Authorization.can_create_media?(socket.assigns.current_user)
+     )
+     |> assign(
+       :can_update_media,
+       Mydia.Accounts.Authorization.can_update_media?(socket.assigns.current_user)
      )
      |> assign(:raw_search_results, [])
      # Untruncated, undeduplicated pool of every release seen so far in the
@@ -172,6 +177,7 @@ defmodule MydiaWeb.MediaLive.Show do
      |> SegmentEvents.assign_segment_status(media_item)
      |> FranchiseEvents.maybe_load()
      |> RecommendationEvents.maybe_load()
+     |> MediaItemEvents.maybe_load_season_order_suggestion()
      |> assign_target_library(media_item)
      |> stream_configure(:search_results, dom_id: &generate_positioned_id/1)
      |> stream(:search_results, [])}
@@ -238,6 +244,9 @@ defmodule MydiaWeb.MediaLive.Show do
   def handle_event("delete_media", params, socket),
     do: MediaItemEvents.delete_media(params, socket)
 
+  def handle_event("change_season_order", params, socket),
+    do: MediaItemEvents.change_season_order(params, socket)
+
   def handle_event("toggle_episode_monitored", params, socket),
     do: EpisodeEvents.toggle_episode_monitored(params, socket)
 
@@ -261,6 +270,9 @@ defmodule MydiaWeb.MediaLive.Show do
 
   def handle_event("auto_search_season", params, socket),
     do: SearchEvents.auto_search_season(params, socket)
+
+  def handle_event("toggle_episode_chunk", params, socket),
+    do: EpisodeEvents.toggle_episode_chunk(params, socket)
 
   def handle_event("auto_search_episode", params, socket),
     do: SearchEvents.auto_search_episode(params, socket)
@@ -425,6 +437,10 @@ defmodule MydiaWeb.MediaLive.Show do
 
   def handle_event("request_franchise_movie", params, socket),
     do: FranchiseEvents.request_franchise_movie(params, socket)
+
+  @impl true
+  def handle_event("toggle_recommendations", params, socket),
+    do: RecommendationEvents.toggle_expanded(params, socket)
 
   @impl true
   def handle_event("add_recommendation", params, socket),
@@ -671,6 +687,9 @@ defmodule MydiaWeb.MediaLive.Show do
 
   def handle_async(:load_recommendations, result, socket),
     do: RecommendationEvents.handle_load_result(result, socket)
+
+  def handle_async(:load_season_order_suggestion, result, socket),
+    do: MediaItemEvents.handle_season_order_suggestion_result(result, socket)
 
   def handle_async({:add_recommendation, tmdb_id}, result, socket),
     do: RecommendationEvents.handle_add_result(tmdb_id, result, socket)

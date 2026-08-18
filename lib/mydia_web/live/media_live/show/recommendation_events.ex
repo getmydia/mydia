@@ -62,6 +62,18 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   end
 
   @doc """
+  Flips the rail open or closed.
+
+  The rail opens collapsed on TV shows so the episode list is not pushed below a
+  strip of other titles. State is per mount and deliberately not persisted, so
+  every visit starts closed.
+  """
+  def toggle_expanded(_params, socket) do
+    {:noreply,
+     assign(socket, :recommendations_expanded, !socket.assigns.recommendations_expanded)}
+  end
+
+  @doc """
   Adds a recommended title, inheriting the viewed item's quality profile and
   monitored flag.
 
@@ -246,26 +258,19 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
     ArgumentError -> nil
   end
 
-  # The MapSet is the source of truth for "is this id already in flight" and is
-  # what prevents a double-click from racing two adds. The single id alongside
-  # it is only what the card compares against to show its spinner.
   defp mark_in_flight(socket, tmdb_id) do
-    socket
-    |> assign(
+    assign(
+      socket,
       :adding_recommendation_tmdb_ids,
       MapSet.put(socket.assigns.adding_recommendation_tmdb_ids, tmdb_id)
     )
-    |> assign(:adding_recommendation_id, to_string(tmdb_id))
   end
 
   defp clear_in_flight(socket, tmdb_id) do
-    remaining = MapSet.delete(socket.assigns.adding_recommendation_tmdb_ids, tmdb_id)
-
-    socket
-    |> assign(:adding_recommendation_tmdb_ids, remaining)
-    |> assign(
-      :adding_recommendation_id,
-      remaining |> Enum.at(0) |> then(&if(&1, do: to_string(&1)))
+    assign(
+      socket,
+      :adding_recommendation_tmdb_ids,
+      MapSet.delete(socket.assigns.adding_recommendation_tmdb_ids, tmdb_id)
     )
   end
 

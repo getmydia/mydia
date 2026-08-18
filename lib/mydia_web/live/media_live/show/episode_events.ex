@@ -164,6 +164,28 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeEvents do
     {:noreply, assign(socket, :expanded_seasons, updated_seasons)}
   end
 
+  @doc """
+  Toggles one labelled episode range within a season.
+
+  Keyed on `{season_number, label}` rather than the label alone, so the same
+  range label in two different seasons does not toggle in lockstep.
+  """
+  def toggle_episode_chunk(
+        %{"season-number" => season_str, "chunk-label" => label},
+        socket
+      ) do
+    key = {String.to_integer(season_str), label}
+
+    expanded =
+      if MapSet.member?(socket.assigns.expanded_chunks, key) do
+        MapSet.delete(socket.assigns.expanded_chunks, key)
+      else
+        MapSet.put(socket.assigns.expanded_chunks, key)
+      end
+
+    {:noreply, assign(socket, :expanded_chunks, expanded)}
+  end
+
   def toggle_episode_expanded(%{"episode-id" => episode_id}, socket) do
     expanded_episodes = socket.assigns.expanded_episodes
 

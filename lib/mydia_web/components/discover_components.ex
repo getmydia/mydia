@@ -25,12 +25,17 @@ defmodule MydiaWeb.DiscoverComponents do
       `id`, `provider_id`, `poster_path`, `title`, `year` fields.
     * `media_type` - `:movie` or `:tv_show`.
     * `current_user` - current user struct (for guest vs admin logic).
-    * `adding_item_id` - provider_id (string) of the item currently being added.
+    * `adding_ids` - MapSet of provider ids whose add is in flight.
   """
   attr :item, :map, required: true
   attr :media_type, :atom, required: true
   attr :current_user, :map, required: true
-  attr :adding_item_id, :string, default: nil
+  # The ids whose add is in flight. A MapSet rather than a single id because
+  # every rail can have several adds running at once, and a single id has to
+  # pick an arbitrary survivor when one of them finishes (#459). Members are
+  # compared as strings: the detail page sets hold parsed integers while a
+  # SearchResult's provider_id is a string.
+  attr :adding_ids, MapSet, default: MapSet.new()
   attr :requesting_item_id, :string, default: nil
   attr :libraries, :list, default: []
   # :any rather than :string because nil is a meaningful value here: it renders
@@ -51,10 +56,6 @@ defmodule MydiaWeb.DiscoverComponents do
   # renders no action, because a "Go to Movie" pointing at the current page is
   # nonsense.
   attr :current, :boolean, default: false
-  # nil means "fall back to comparing against adding_item_id", which is what
-  # Discover and Dashboard rely on. A host that can have several adds in flight
-  # at once passes a boolean per card instead.
-  attr :adding, :boolean, default: nil
   # "lazy" is the safe default: eagerly fetching every card, including the
   # ones below the fold, is what starved the Dashboard's actual LCP poster
   # under 40 competing requests. A caller with a poster above the fold
@@ -154,13 +155,13 @@ defmodule MydiaWeb.DiscoverComponents do
     """
   end
 
-  # Discover and Dashboard track a single in-flight add and pass `adding_item_id`.
-  # The franchise strip can have several running at once, so a card may carry its
-  # own flag; that wins when it is set.
-  defp adding?(%{adding: adding}) when is_boolean(adding), do: adding
-
-  defp adding?(%{item: item, adding_item_id: adding_item_id}),
-    do: adding_item_id != nil and adding_item_id == to_string(item.provider_id)
+  # Members and provider ids are normalised to strings on both sides. The hosts
+  # genuinely disagree about the type and cannot cheaply be made to agree, and a
+  # mismatch under MapSet.member?/2 would silently draw no spinner at all.
+  defp adding?(%{item: item, adding_ids: adding_ids}) do
+    provider_id = to_string(item.provider_id)
+    Enum.any?(adding_ids, &(to_string(&1) == provider_id))
+  end
 
   @doc """
   Renders a horizontal strip of media cards under a heading.
@@ -178,13 +179,11 @@ defmodule MydiaWeb.DiscoverComponents do
       `show_details` handler.
     * `:current` - the card draws the primary ring and renders no action,
       because this is the title whose page the user is already on.
-    * `:adding` - overrides the `adding_item_id` comparison for hosts that can
-      have several adds in flight at once.
   """
   attr :items, :list, required: true
   attr :media_type, :atom, required: true
   attr :current_user, :map, required: true
-  attr :adding_item_id, :string, default: nil
+  attr :adding_ids, MapSet, default: MapSet.new()
   attr :requesting_item_id, :string, default: nil
   # No libraries attr on purpose. The rail is a horizontal scroll container, so
   # a library picker dropdown cannot escape it at any placement (#465). Rail
@@ -202,17 +201,57 @@ defmodule MydiaWeb.DiscoverComponents do
   attr :request_event, :string, default: "request_media"
   attr :can_add, :boolean, default: true
 
+  # Opt-in disclosure, off by default so Discover, Dashboard and the franchise
+  # strip keep rendering exactly as before. A function component cannot hold
+  # state, so the host LiveView owns `expanded` and handles `toggle_event`.
+  attr :collapsible, :boolean, default: false
+  attr :expanded, :boolean, default: true
+  attr :toggle_event, :string, default: nil
+
   slot :badge
 
   def media_rail(assigns) do
+    if assigns.collapsible and is_nil(assigns.toggle_event) do
+      raise ArgumentError,
+            "media_rail #{inspect(assigns.id)} is collapsible but was given no " <>
+              "toggle_event, so its header would render a chevron nothing can open"
+    end
+
+    assigns = assign(assigns, :open?, not assigns.collapsible or assigns.expanded)
+
     ~H"""
     <div :if={@items != []} id={@id} class="mb-6 md:mb-8">
       <div class="flex items-center justify-between gap-3 mb-3">
-        <h2 class="text-lg md:text-xl font-semibold truncate">{@title}</h2>
+        <%!-- The heading is repeated across both branches on purpose: HEEx cannot
+              swap a tag name. The collapsible branch puts the button inside the
+              heading rather than the other way around, because `button` takes
+              phrasing content and a heading is not phrasing content. --%>
+        <h2 :if={@collapsible} class="min-w-0">
+          <button
+            type="button"
+            id={"#{@id}-toggle"}
+            class="flex items-center gap-2 min-w-0 w-full cursor-pointer text-left"
+            phx-click={@toggle_event}
+            aria-expanded={to_string(@open?)}
+            aria-controls={if @open?, do: "#{@id}-items"}
+          >
+            <.icon
+              name={if @open?, do: "hero-chevron-down", else: "hero-chevron-right"}
+              class="w-4 h-4 text-base-content/40 shrink-0"
+            />
+            <span class="text-lg md:text-xl font-semibold truncate">{@title}</span>
+            <span class="badge badge-ghost badge-sm shrink-0">{length(@items)}</span>
+          </button>
+        </h2>
+        <h2 :if={not @collapsible} class="text-lg md:text-xl font-semibold truncate">{@title}</h2>
         <div :if={@badge != []} class="flex-shrink-0">{render_slot(@badge)}</div>
       </div>
 
-      <div class="flex gap-3 overflow-x-auto snap-x scroll-smooth pb-2">
+      <div
+        :if={@open?}
+        id={if @collapsible, do: "#{@id}-items"}
+        class="flex gap-3 overflow-x-auto snap-x scroll-smooth pb-2"
+      >
         <div
           :for={item <- @items}
           id={"#{@id}-item-#{item.provider_id}"}
@@ -222,8 +261,7 @@ defmodule MydiaWeb.DiscoverComponents do
             item={item}
             media_type={@media_type}
             current_user={@current_user}
-            adding_item_id={@adding_item_id}
-            adding={Map.get(item, :adding)}
+            adding_ids={@adding_ids}
             current={Map.get(item, :current, false)}
             requesting_item_id={@requesting_item_id}
             on_select={@on_select}

@@ -12,6 +12,8 @@ defmodule Mydia.Media.Episode do
           id: binary(),
           season_number: integer() | nil,
           episode_number: integer() | nil,
+          absolute_number: integer() | nil,
+          provider_episode_id: String.t() | nil,
           title: String.t() | nil,
           air_date: Date.t() | nil,
           metadata: map() | nil,
@@ -27,6 +29,8 @@ defmodule Mydia.Media.Episode do
   schema "episodes" do
     field :season_number, :integer
     field :episode_number, :integer
+    field :absolute_number, :integer
+    field :provider_episode_id, :string
     field :title, :string
     field :air_date, :date
     field :metadata, Mydia.Media.EpisodeDataType
@@ -50,6 +54,8 @@ defmodule Mydia.Media.Episode do
       :media_item_id,
       :season_number,
       :episode_number,
+      :absolute_number,
+      :provider_episode_id,
       :title,
       :air_date,
       :metadata,

@@ -46,11 +46,27 @@ defmodule Mydia.Media.Refresh do
         {:error, :missing_provider_id}
 
       {provider_id, source, item} ->
-        with {:ok, metadata} <- fetch(provider_id, media_type, source, config),
+        with {:ok, metadata} <- fetch(item, provider_id, media_type, source, config),
              {:ok, updated} <- apply_metadata(item, metadata, source) do
-          post_update(updated, media_type, fetch_episodes, config)
-          {:ok, updated}
+          reclassified = reclassify_after_refresh(updated)
+          post_update(reclassified, media_type, fetch_episodes, config)
+          {:ok, reclassified}
         end
+    end
+  end
+
+  # Classification was computed once at creation and never again, so a provider
+  # that later added or removed a genre left the category stale forever. The
+  # hook belongs here rather than in Media.refresh_metadata/2, which is a bare
+  # delegate: every other caller of run/2, including the weekly MetadataRefresh
+  # sweep, has to get the same treatment.
+  #
+  # A classification failure must not fail the refresh, matching how
+  # Media.auto_classify_media_item/1 already degrades.
+  defp reclassify_after_refresh(%MediaItem{} = media_item) do
+    case Media.reclassify_media_item(media_item) do
+      {:ok, reclassified} -> reclassified
+      {:error, _changeset} -> media_item
     end
   end
 
@@ -96,11 +112,16 @@ defmodule Mydia.Media.Refresh do
   defp media_type(%MediaItem{type: "tv_show"}), do: :tv_show
   defp media_type(%MediaItem{}), do: :movie
 
-  defp fetch(provider_id, media_type, source, config) do
+  # `season_order` rides along so the seasons stored in the metadata blob
+  # describe the same ordering the episode rows use. Dropping it here would let
+  # the show page render the official season list over DVD-ordered episodes.
+  # nil means "never asked" and resolves to TVDB's official ordering.
+  defp fetch(%MediaItem{} = media_item, provider_id, media_type, source, config) do
     fetch_opts = [
       media_type: media_type,
       provider: source,
-      append_to_response: Metadata.default_append_to_response(media_type)
+      append_to_response: Metadata.default_append_to_response(media_type),
+      season_order: media_item.season_order
     ]
 
     Metadata.fetch_by_id(config, to_string(provider_id), fetch_opts)

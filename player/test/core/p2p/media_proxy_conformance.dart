@@ -31,14 +31,23 @@ void mediaProxyConformanceTests(
     late TestP2pService p2p;
     late MediaProxy proxy;
 
+    /// The call site these tests hold the proxy as. Identity is all an owner
+    /// is, so a bare object is the honest stand-in for a screen or a service.
+    late Object owner;
+
     setUp(() {
       p2p = TestP2pService();
       proxy = create(p2p);
+      owner = Object();
     });
 
     Future<void> startProxy() async {
-      await proxy.start(targetPeer: 'peer-1', authToken: 'token-1');
-      addTearDown(proxy.stop);
+      await proxy.start(
+        owner: owner,
+        targetPeer: 'peer-1',
+        authToken: 'token-1',
+      );
+      addTearDown(proxy.shutdown);
     }
 
     test('is not running before start', () {
@@ -65,10 +74,107 @@ void mediaProxyConformanceTests(
     });
 
     test('stop is idempotent', () async {
-      await proxy.start(targetPeer: 'peer-1', authToken: 'token-1');
-      await proxy.stop();
-      await proxy.stop();
+      await proxy.start(
+        owner: owner,
+        targetPeer: 'peer-1',
+        authToken: 'token-1',
+      );
+      await proxy.stop(owner);
+      await proxy.stop(owner);
       expect(proxy.isRunning, isFalse);
+    });
+
+    group('ownership', () {
+      late Object other;
+
+      setUp(() => other = Object());
+
+      Future<void> startAs(Object who) => proxy.start(
+            owner: who,
+            targetPeer: 'peer-1',
+            authToken: 'token-1',
+          );
+
+      // The next-episode handoff, in the order Flutter actually runs it: the
+      // incoming screen mounts and starts the proxy, then the outgoing
+      // screen's dispose releases its own hold. Before ownership, that
+      // release closed the server the new episode was already streaming
+      // from, and mpv opened a dead URL.
+      test('keeps serving when one of two owners lets go', () async {
+        await startAs(owner);
+        await startAs(other);
+        addTearDown(proxy.shutdown);
+
+        await proxy.stop(owner);
+
+        expect(proxy.isRunning, isTrue);
+      });
+
+      test('stops serving once the last owner lets go', () async {
+        await startAs(owner);
+        await startAs(other);
+
+        await proxy.stop(owner);
+        await proxy.stop(other);
+
+        expect(proxy.isRunning, isFalse);
+      });
+
+      // `_initializePlayer` re-runs within a single screen's life — a session
+      // restart past the transcoded end, a cast rebind — so one owner starts
+      // the proxy several times and still releases it exactly once. A
+      // reference count would strand the proxy up forever here.
+      test('an owner that starts twice still releases with one stop', () async {
+        await startAs(owner);
+        await startAs(owner);
+
+        await proxy.stop(owner);
+
+        expect(proxy.isRunning, isFalse);
+      });
+
+      test('a stop from something that never started it changes nothing',
+          () async {
+        await startAs(owner);
+        addTearDown(proxy.shutdown);
+
+        await proxy.stop(other);
+
+        expect(proxy.isRunning, isTrue);
+      });
+
+      test('shutdown stops serving even while owners remain', () async {
+        await startAs(owner);
+        await startAs(other);
+
+        await proxy.shutdown();
+
+        expect(proxy.isRunning, isFalse);
+      });
+
+      // Whoever is left keeps a working proxy, not a husk that reports
+      // running while its target is gone.
+      test('still serves the remaining owner after the other lets go',
+          () async {
+        await startAs(owner);
+        await startAs(other);
+        addTearDown(proxy.shutdown);
+
+        await proxy.stop(owner);
+
+        p2p.onSendHlsRequest = (_) async => testHlsResponse(
+              status: 200,
+              contentType: 'application/vnd.apple.mpegurl',
+              data: utf8.encode(manifest),
+            );
+
+        final response =
+            await proxyGet('${proxy.baseUrl}/hls/$sessionId/index.m3u8');
+
+        expect(response.status, 200);
+        expect(utf8.decode(response.body), manifest);
+        expect(p2p.calls.single.authToken, 'token-1');
+      });
     });
 
     test('serves the manifest bytes the peer returned', () async {

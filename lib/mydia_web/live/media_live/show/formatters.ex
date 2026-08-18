@@ -122,4 +122,30 @@ defmodule MydiaWeb.MediaLive.Show.Formatters do
   def format_episode_number(episode) do
     "S#{String.pad_leading(to_string(episode.season_number), 2, "0")}E#{String.pad_leading(to_string(episode.episode_number), 2, "0")}"
   end
+
+  @doc """
+  Names an alternative season ordering's per-season episode counts in
+  prose, e.g. `[51, 51, 52, 16]` -> `"four seasons of 51, 51, 52 and 16"`.
+  Used by the season-order suggestion banner to name the concrete
+  alternative TVDB offers, rather than an abstract choice.
+  """
+  def format_season_ordering_counts([single]), do: "one season of #{single}"
+
+  def format_season_ordering_counts(counts) do
+    "#{season_count_word(length(counts))} seasons of #{join_with_and(counts)}"
+  end
+
+  defp join_with_and([last]), do: to_string(last)
+
+  defp join_with_and(counts) do
+    {init, [last]} = Enum.split(counts, -1)
+    Enum.join(init, ", ") <> " and #{last}"
+  end
+
+  defp season_count_word(2), do: "two"
+  defp season_count_word(3), do: "three"
+  defp season_count_word(4), do: "four"
+  defp season_count_word(5), do: "five"
+  defp season_count_word(6), do: "six"
+  defp season_count_word(n), do: to_string(n)
 end

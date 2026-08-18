@@ -26,6 +26,7 @@ import 'package:player/core/downloads/download_providers.dart';
 import 'package:player/core/downloads/download_service.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/p2p/local_proxy_service.dart';
+import 'package:player/core/p2p/media_proxy.dart';
 import 'package:player/core/playback/local_playback_progress.dart';
 import 'package:player/core/playback/playback_progress_providers.dart';
 import 'package:player/core/playback/playback_progress_store.dart';
@@ -58,6 +59,15 @@ class FixedConnectionNotifier extends conn.ConnectionNotifier {
 
   @override
   conn.ConnectionState build() => _state;
+
+  /// Switches the reported mode mid-test.
+  ///
+  /// The connection a viewer is on is not fixed for the life of a player
+  /// screen — a reconnect can move them between p2p and direct while the
+  /// episode plays — and `PlayerScreen` tracks that through a
+  /// `ref.listenManual`. Anything in `dispose()` keyed on the *current* mode
+  /// therefore has to be exercised against a mode that changed.
+  void switchTo(conn.ConnectionState next) => state = next;
 }
 
 class FakeDownloadService extends Fake implements DownloadService {
@@ -171,10 +181,23 @@ class FakeSettingsService extends Fake implements SettingsService {
   Future<bool> getAutoSkipSegments() async => autoSkipSegments;
 }
 
-/// Tracks whether `stop()` ran, without touching a real P2P/HTTP stack.
-class TrackingLocalProxyService extends Fake implements LocalProxyService {
+/// Tracks whether the proxy was torn down, without touching a real P2P/HTTP
+/// stack.
+///
+/// Mixes in the production [MediaProxyLeases], so ownership behaves here
+/// exactly as it does in `LocalProxyService`: a test that mounts two screens
+/// and unmounts one is asserting against the real rule, not a fake that was
+/// taught the answer.
+class TrackingLocalProxyService extends Fake
+    with MediaProxyLeases
+    implements LocalProxyService {
+  /// Whether the proxy was actually torn down — the last owner let go, or
+  /// something shut it down outright. Not merely "stop() was called": a stop
+  /// from one of two owners is meant to be a no-op.
   bool stopped = false;
   bool startCalled = false;
+
+  bool _running = false;
 
   /// Every file id direct playback has been pointed at, in order.
   ///
@@ -191,14 +214,20 @@ class TrackingLocalProxyService extends Fake implements LocalProxyService {
   @override
   String get baseUrl => 'http://127.0.0.1:$port';
 
-  /// The screen asks this before building a URL against [baseUrl], and `Fake`
-  /// throws on any member it is not given.
+  /// Reflects real state rather than a hardcoded `true`, so a test can tell
+  /// "still serving the screen that replaced me" from "torn down".
   @override
-  bool get isRunning => true;
+  bool get isRunning => _running;
 
   @override
-  Future<void> start({required String targetPeer, String? authToken}) async {
+  Future<void> start({
+    required Object owner,
+    required String targetPeer,
+    String? authToken,
+  }) async {
+    acquireLease(owner);
     startCalled = true;
+    _running = true;
   }
 
   @override
@@ -212,8 +241,17 @@ class TrackingLocalProxyService extends Fake implements LocalProxyService {
   }
 
   @override
-  Future<void> stop() async {
+  Future<void> stop(Object owner) async {
+    if (!releaseLease(owner)) return;
     stopped = true;
+    _running = false;
+  }
+
+  @override
+  Future<void> shutdown() async {
+    clearLeases();
+    stopped = true;
+    _running = false;
   }
 }
 

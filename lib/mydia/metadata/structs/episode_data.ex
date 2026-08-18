@@ -20,7 +20,9 @@ defmodule Mydia.Metadata.Structs.EpisodeData do
     :runtime,
     :still_path,
     :vote_average,
-    :vote_count
+    :vote_count,
+    :absolute_number,
+    :provider_episode_id
   ]
 
   @type t :: %__MODULE__{
@@ -32,7 +34,9 @@ defmodule Mydia.Metadata.Structs.EpisodeData do
           runtime: integer() | nil,
           still_path: String.t() | nil,
           vote_average: float() | nil,
-          vote_count: integer() | nil
+          vote_count: integer() | nil,
+          absolute_number: integer() | nil,
+          provider_episode_id: String.t() | nil
         }
 
   @doc """
@@ -53,7 +57,9 @@ defmodule Mydia.Metadata.Structs.EpisodeData do
       runtime: data["runtime"],
       still_path: data["still_path"],
       vote_average: data["vote_average"],
-      vote_count: data["vote_count"]
+      vote_count: data["vote_count"],
+      absolute_number: nil,
+      provider_episode_id: nil
     }
   end
 
@@ -89,7 +95,9 @@ defmodule Mydia.Metadata.Structs.EpisodeData do
       overview: localized_overview || data["overview"],
       air_date: parse_date(data["aired"]),
       runtime: data["runtime"],
-      still_path: data["image"]
+      still_path: data["image"],
+      absolute_number: data["absoluteNumber"],
+      provider_episode_id: stringify_id(data["id"])
     }
   end
 
@@ -102,4 +110,11 @@ defmodule Mydia.Metadata.Structs.EpisodeData do
       _ -> nil
     end
   end
+
+  # TVDB ids arrive as integers; they are stored as text so the column can hold
+  # a TMDB id later without a type change.
+  defp stringify_id(nil), do: nil
+  defp stringify_id(""), do: nil
+  defp stringify_id(id) when is_integer(id), do: Integer.to_string(id)
+  defp stringify_id(id) when is_binary(id), do: id
 end

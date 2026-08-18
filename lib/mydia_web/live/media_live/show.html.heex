@@ -200,12 +200,17 @@
             current_user={@current_user}
             adding_tmdb_ids={@adding_franchise_tmdb_ids}
           />
+          <%!-- Collapsed by default on shows, so the episode list below is not
+                pushed under a strip of other titles. Movies render it open. --%>
           <DiscoverComponents.media_rail
             id="recommendations-rail"
+            collapsible={@media_item.type == "tv_show"}
+            expanded={@recommendations_expanded}
+            toggle_event="toggle_recommendations"
             items={@recommendations}
             media_type={if @media_item.type == "tv_show", do: :tv_show, else: :movie}
             current_user={@current_user}
-            adding_item_id={@adding_recommendation_id}
+            adding_ids={@adding_recommendation_tmdb_ids}
             requesting_item_id={@requesting_recommendation_id}
             can_add={@can_create_media}
             on_select={nil}
@@ -217,6 +222,7 @@
             media_item={@media_item}
             expanded_seasons={@expanded_seasons}
             expanded_episodes={@expanded_episodes}
+            expanded_chunks={@expanded_chunks}
             auto_searching_season={@auto_searching_season}
             rescanning_season={@rescanning_season}
             auto_searching_episode={@auto_searching_episode}
@@ -224,6 +230,8 @@
             transcode_jobs={@transcode_jobs}
             segment_statuses={@segment_statuses}
             segment_detection_available={@segment_detection_available}
+            season_order_suggestion={@season_order_suggestion}
+            can_update_media={@can_update_media}
           />
           <%!-- Media Files Section --%>
           <Components.media_files_section

@@ -44,7 +44,7 @@ const _scriptPath = 'sw.js';
 /// purpose: the browser is free to terminate an idle Service Worker, and a
 /// QUIC connection living there would go with it mid-playback. This object,
 /// which lives in the page, owns the connection.
-class ServiceWorkerMediaProxy implements MediaProxy {
+class ServiceWorkerMediaProxy with MediaProxyLeases implements MediaProxy {
   ServiceWorkerMediaProxy(this._p2p);
 
   final P2pService _p2p;
@@ -81,7 +81,13 @@ class ServiceWorkerMediaProxy implements MediaProxy {
       MediaRoutes.directStream(baseUrl, fileId);
 
   @override
-  Future<void> start({required String targetPeer, String? authToken}) async {
+  Future<void> start({
+    required Object owner,
+    required String targetPeer,
+    String? authToken,
+  }) async {
+    acquireLease(owner);
+
     // Assigned before the await so a request that arrives while an already
     // running proxy is being retargeted uses the new peer, matching
     // LocalProxyService's "update config if already running" behavior.
@@ -104,7 +110,18 @@ class ServiceWorkerMediaProxy implements MediaProxy {
   }
 
   @override
-  Future<void> stop() async {
+  Future<void> stop(Object owner) async {
+    if (!releaseLease(owner)) return;
+    await _tearDown();
+  }
+
+  @override
+  Future<void> shutdown() async {
+    clearLeases();
+    await _tearDown();
+  }
+
+  Future<void> _tearDown() async {
     final registration = _registration;
     _registration = null;
     _targetPeer = null;
@@ -350,6 +367,6 @@ class _Exchange {
 
 MediaProxy createMediaProxy(Ref ref) {
   final proxy = ServiceWorkerMediaProxy(ref.watch(p2pServiceProvider));
-  ref.onDispose(() => proxy.stop());
+  ref.onDispose(() => proxy.shutdown());
   return proxy;
 }

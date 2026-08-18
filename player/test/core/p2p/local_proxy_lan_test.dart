@@ -1,9 +1,15 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/p2p/local_proxy_service.dart';
 
+/// The call site these tests hold the proxy as. Each test builds its own
+/// service, so one shared identity is enough to stand for "somebody needs
+/// this up"; none of them is about ownership itself.
+final testOwner = Object();
+
 void main() {
   group('LocalProxyService LAN access', () {
-    test('resolveLanAddress returns a non-loopback IPv4 address or null', () async {
+    test('resolveLanAddress returns a non-loopback IPv4 address or null',
+        () async {
       final address = await LocalProxyService.resolveLanAddress();
 
       if (address != null) {
@@ -21,8 +27,8 @@ void main() {
 
     test('buildHlsUrl uses loopback with no token prefix by default', () async {
       final service = LocalProxyService.forTesting();
-      await service.start(targetPeer: 'peer-1');
-      addTearDown(service.stop);
+      await service.start(owner: testOwner, targetPeer: 'peer-1');
+      addTearDown(service.shutdown);
 
       final url = service.buildHlsUrl('sess-1');
 
@@ -31,10 +37,11 @@ void main() {
       expect(url, isNot(contains('/g/')));
     });
 
-    test('enabling LAN access exposes a token-prefixed non-loopback URL', () async {
+    test('enabling LAN access exposes a token-prefixed non-loopback URL',
+        () async {
       final service = LocalProxyService.forTesting();
-      await service.start(targetPeer: 'peer-1');
-      addTearDown(service.stop);
+      await service.start(owner: testOwner, targetPeer: 'peer-1');
+      addTearDown(service.shutdown);
 
       await service.setLanAccess(true);
 
@@ -53,8 +60,8 @@ void main() {
     test('requests without the token prefix are rejected when LAN-exposed',
         () async {
       final service = LocalProxyService.forTesting();
-      await service.start(targetPeer: 'peer-1');
-      addTearDown(service.stop);
+      await service.start(owner: testOwner, targetPeer: 'peer-1');
+      addTearDown(service.shutdown);
 
       await service.setLanAccess(true);
       if (!service.isLanAccessible) return;
@@ -112,8 +119,8 @@ void main() {
 
     test('disabling LAN access returns the proxy to loopback', () async {
       final service = LocalProxyService.forTesting();
-      await service.start(targetPeer: 'peer-1');
-      addTearDown(service.stop);
+      await service.start(owner: testOwner, targetPeer: 'peer-1');
+      addTearDown(service.shutdown);
 
       await service.setLanAccess(true);
       await service.setLanAccess(false);

@@ -39,8 +39,13 @@ defmodule Mydia.Media.CategoryClassifier do
 
   @animation_genres ["Animation", "Anime"]
   @anime_genre "Anime"
-  @japan_country_code "JP"
-  @japanese_language_code "ja"
+  # TMDB uses ISO 3166-1 alpha-2 and ISO 639-1; TVDB uses alpha-3 and
+  # ISO 639-2/T. Both providers feed this classifier, so both vocabularies are
+  # accepted. Before this, every TVDB item classified through the "Anime"
+  # genre branch alone and a TVDB anime lacking that genre silently landed as
+  # :cartoon_series.
+  @japan_country_codes ["JP", "JPN"]
+  @japanese_language_codes ["ja", "jpn"]
 
   @doc """
   Classifies a media item based on its metadata.
@@ -118,9 +123,12 @@ defmodule Mydia.Media.CategoryClassifier do
   @doc """
   Checks if metadata indicates Japanese origin (anime).
 
+  Accepts both TMDB (ISO 3166-1 alpha-2 and ISO 639-1) and TVDB
+  (ISO 3166-1 alpha-3 and ISO 639-2/T) vocabularies.
+
   Returns true if any of these conditions are met:
-  - `origin_country` includes "JP"
-  - `original_language` is "ja"
+  - `origin_country` includes "JP" (TMDB) or "JPN" (TVDB)
+  - `original_language` is "ja" (TMDB) or "jpn" (TVDB)
   - Genre contains "Anime" (explicit signal)
 
   ## Examples
@@ -215,11 +223,22 @@ defmodule Mydia.Media.CategoryClassifier do
   end
 
   defp country_is_japan?(nil), do: false
-  defp country_is_japan?(countries) when is_list(countries), do: @japan_country_code in countries
+
+  defp country_is_japan?(countries) when is_list(countries) do
+    Enum.any?(countries, fn country ->
+      is_binary(country) and String.upcase(country) in @japan_country_codes
+    end)
+  end
+
   defp country_is_japan?(_), do: false
 
   defp language_is_japanese?(nil), do: false
-  defp language_is_japanese?(language), do: language == @japanese_language_code
+
+  defp language_is_japanese?(language) when is_binary(language) do
+    String.downcase(language) in @japanese_language_codes
+  end
+
+  defp language_is_japanese?(_), do: false
 
   defp genre_is_anime?(nil), do: false
   defp genre_is_anime?(genres) when is_list(genres), do: @anime_genre in genres
