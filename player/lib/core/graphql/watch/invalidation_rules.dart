@@ -48,6 +48,14 @@ abstract final class InvalidationRules {
   /// `CollectionItems` is parameterized by a collection id this screen cannot
   /// know: nothing here says which collections contain the show. `Collections`
   /// itself is deliberately absent, since that list selects no watch state.
+  ///
+  /// `QueryKeys.favorites` is a third instance of the `unwatched`/
+  /// `unwatchedList` trap above: it is a different key from `favoritesList`,
+  /// which was already here. The standalone Favorites screen uses `favorites`,
+  /// selects `watchStatus`, and sits in the same `ShellRoute` as Continue
+  /// Watching, so it went stale the same way. The coverage guard test caught
+  /// it on first run; a hand audit had grepped for `QueryKeys.favorites` and
+  /// matched `favoritesList` too, so the screen looked covered when it wasn't.
   static Set<InvalidationTarget> watchedChanged({
     required String showId,
     int? seasonNumber,
@@ -56,6 +64,7 @@ abstract final class InvalidationRules {
         QueryKeys.home.target,
         QueryKeys.unwatched.target,
         QueryKeys.tvShowsList.target,
+        QueryKeys.favorites.target,
         QueryKeys.favoritesList.target,
         QueryKeys.unwatchedList.target,
         QueryKeys.continueWatchingList.target,
@@ -81,6 +90,7 @@ abstract final class InvalidationRules {
         QueryKeys.home.target,
         QueryKeys.unwatched.target,
         QueryKeys.moviesList.target,
+        QueryKeys.favorites.target,
         QueryKeys.favoritesList.target,
         QueryKeys.unwatchedList.target,
         QueryKeys.continueWatchingList.target,
@@ -103,6 +113,7 @@ abstract final class InvalidationRules {
         QueryKeys.unwatched.target,
         QueryKeys.tvShowsList.target,
         QueryKeys.moviesList.target,
+        QueryKeys.favorites.target,
         QueryKeys.favoritesList.target,
         QueryKeys.unwatchedList.target,
         QueryKeys.continueWatchingList.target,

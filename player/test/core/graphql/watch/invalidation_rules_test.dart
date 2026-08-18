@@ -96,6 +96,30 @@ void main() {
     });
   });
 
+  group('the Favorites screen', () {
+    test('is refreshed when an episode is marked watched', () {
+      final keys = InvalidationRules.watchedChanged(showId: 's1');
+
+      expect(keys, contains(QueryKeys.favorites.target));
+    });
+
+    test('is refreshed when a movie is marked watched', () {
+      final keys = InvalidationRules.movieWatchedChanged(movieId: 'm1');
+
+      expect(keys, contains(QueryKeys.favorites.target));
+    });
+
+    test('is refreshed when playback finishes', () {
+      final keys = InvalidationRules.playbackFinished(
+        mediaType: 'episode',
+        mediaId: 'e1',
+        showId: 's1',
+      );
+
+      expect(keys, contains(QueryKeys.favorites.target));
+    });
+  });
+
   group('the collection items family', () {
     test('is invalidated when an episode is marked watched', () {
       final targets = InvalidationRules.watchedChanged(showId: 's1');
