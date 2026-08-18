@@ -224,7 +224,7 @@
               item={movie}
               media_type={:movie}
               current_user={@current_user}
-              adding_item_id={@adding_item_id}
+              adding_ids={@adding_item_ids}
               requesting_item_id={@requesting_item_id}
               libraries={@movie_libraries}
               loading={if(index < 6, do: nil, else: "lazy")}
@@ -260,7 +260,7 @@
               item={show}
               media_type={:tv_show}
               current_user={@current_user}
-              adding_item_id={@adding_item_id}
+              adding_ids={@adding_item_ids}
               requesting_item_id={@requesting_item_id}
               libraries={@show_libraries}
               loading={if(index < 6, do: nil, else: "lazy")}

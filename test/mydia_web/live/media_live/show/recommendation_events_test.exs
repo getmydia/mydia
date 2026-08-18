@@ -23,7 +23,6 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEventsTest do
       flash: %{},
       recommendations: [],
       adding_recommendation_tmdb_ids: MapSet.new(),
-      adding_recommendation_id: nil,
       requesting_recommendation_id: nil,
       current_user: user_fixture()
     }
@@ -160,6 +159,31 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEventsTest do
       assert updated.assigns.recommendations == recommendations
       assert updated.assigns.requesting_recommendation_id == nil
       assert MediaRequests.list_requests(status: "pending") == []
+    end
+  end
+
+  describe "handle_add_result/3" do
+    # A completion must retire exactly its own id. The old code also derived a
+    # single :adding_recommendation_id from whatever survived, via Enum.at(0),
+    # which is how a still-running card lost its spinner (#459). This asserts
+    # the set itself, which is now the only in-flight state there is.
+    test "retires only the finished id and leaves the other in-flight adds" do
+      socket =
+        stub_socket(%{adding_recommendation_tmdb_ids: MapSet.new([11, 22, 33])})
+
+      {:noreply, socket} =
+        RecommendationEvents.handle_add_result(11, {:ok, {:error, :boom}}, socket)
+
+      assert socket.assigns.adding_recommendation_tmdb_ids == MapSet.new([22, 33])
+    end
+
+    test "an exit retires its id like any other completion" do
+      socket = stub_socket(%{adding_recommendation_tmdb_ids: MapSet.new([11, 22])})
+
+      {:noreply, socket} =
+        RecommendationEvents.handle_add_result(22, {:exit, :killed}, socket)
+
+      assert socket.assigns.adding_recommendation_tmdb_ids == MapSet.new([11])
     end
   end
 end

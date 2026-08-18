@@ -170,7 +170,7 @@
               item={item}
               media_type={item.media_type || @media_type}
               current_user={@current_user}
-              adding_item_id={@adding_item_id}
+              adding_ids={@adding_item_ids}
               requesting_item_id={@requesting_item_id}
               libraries={@libraries}
               loading={if(index < 6, do: nil, else: "lazy")}
@@ -215,7 +215,7 @@
         items={@selected_recommendations}
         media_type={@selected_item.media_type}
         current_user={@current_user}
-        adding_item_id={@adding_item_id}
+        adding_ids={@adding_item_ids}
         requesting_item_id={@requesting_item_id}
       />
     </:rail>

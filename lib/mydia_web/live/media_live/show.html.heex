@@ -210,7 +210,7 @@
             items={@recommendations}
             media_type={if @media_item.type == "tv_show", do: :tv_show, else: :movie}
             current_user={@current_user}
-            adding_item_id={@adding_recommendation_id}
+            adding_ids={@adding_recommendation_tmdb_ids}
             requesting_item_id={@requesting_recommendation_id}
             can_add={@can_create_media}
             on_select={nil}

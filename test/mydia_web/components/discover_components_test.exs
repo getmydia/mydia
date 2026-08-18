@@ -28,7 +28,7 @@ defmodule MydiaWeb.DiscoverComponentsTest do
         item: item,
         media_type: :movie,
         current_user: guest(),
-        adding_item_id: nil,
+        adding_ids: MapSet.new(),
         requesting_item_id: nil,
         libraries: []
       }
@@ -71,7 +71,8 @@ defmodule MydiaWeb.DiscoverComponentsTest do
         %{
           items: [item],
           media_type: :movie,
-          current_user: %{role: "admin", id: "admin-1"}
+          current_user: %{role: "admin", id: "admin-1"},
+          adding_ids: MapSet.new()
         },
         overrides
       )

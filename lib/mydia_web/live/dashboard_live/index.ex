@@ -31,7 +31,7 @@ defmodule MydiaWeb.DashboardLive.Index do
         |> assign(:trending_movies, [])
         |> assign(:trending_tv, [])
         |> assign(:library_status_map, %{})
-        |> assign(:adding_item_id, nil)
+        |> assign(:adding_item_ids, MapSet.new())
         |> assign(:requesting_item_id, nil)
         |> assign(:request_status_map, %{})
         |> assign(:selected_item, nil)
@@ -54,7 +54,7 @@ defmodule MydiaWeb.DashboardLive.Index do
         |> assign(:upcoming_episodes, [])
         |> assign(:recently_added, [])
         |> assign(:library_status_map, %{})
-        |> assign(:adding_item_id, nil)
+        |> assign(:adding_item_ids, MapSet.new())
         |> assign(:requesting_item_id, nil)
         |> assign(:request_status_map, %{})
         |> assign(:pending_requests_count, 0)
@@ -137,16 +137,28 @@ defmodule MydiaWeb.DashboardLive.Index do
       ) do
     case parse_event_media_type(media_type) do
       {:ok, media_type_atom} ->
-        # Set the adding state
-        socket = assign(socket, :adding_item_id, provider_id)
+        # An impatient double-click sends the event twice before the first
+        # handle_info runs. Without this guard the second add lands on a title
+        # the first just created, and resolves to :already_in_library, flashing
+        # a false failure for a title the user only meant to add once.
+        if MapSet.member?(socket.assigns.adding_item_ids, provider_id) do
+          {:noreply, socket}
+        else
+          socket =
+            assign(
+              socket,
+              :adding_item_ids,
+              MapSet.put(socket.assigns.adding_item_ids, provider_id)
+            )
 
-        # Start async task to add media
-        send(
-          self(),
-          {:add_media_to_library, provider_id, media_type_atom, params["library_path_id"]}
-        )
+          # Start async task to add media
+          send(
+            self(),
+            {:add_media_to_library, provider_id, media_type_atom, params["library_path_id"]}
+          )
 
-        {:noreply, socket}
+          {:noreply, socket}
+        end
 
       :error ->
         {:noreply, put_flash(socket, :error, @unsupported_media_type)}
@@ -289,7 +301,7 @@ defmodule MydiaWeb.DashboardLive.Index do
 
         {:noreply,
          socket
-         |> assign(:adding_item_id, nil)
+         |> clear_adding(provider_id)
          |> assign(:library_status_map, updated_map)
          |> assign(:trending_movies, trending_movies)
          |> assign(:trending_tv, trending_tv)
@@ -308,7 +320,7 @@ defmodule MydiaWeb.DashboardLive.Index do
 
         {:noreply,
          socket
-         |> assign(:adding_item_id, nil)
+         |> clear_adding(provider_id)
          |> assign(:library_status_map, updated_map)
          |> assign(:trending_movies, trending_movies)
          |> assign(:trending_tv, trending_tv)
@@ -317,7 +329,7 @@ defmodule MydiaWeb.DashboardLive.Index do
       {:error, {:changeset, changeset}} ->
         {:noreply,
          socket
-         |> assign(:adding_item_id, nil)
+         |> clear_adding(provider_id)
          |> put_flash(
            :error,
            "Failed to add: #{MediaAddHelpers.format_changeset_errors(changeset)}"
@@ -326,7 +338,7 @@ defmodule MydiaWeb.DashboardLive.Index do
       {:error, {:metadata, reason}} ->
         {:noreply,
          socket
-         |> assign(:adding_item_id, nil)
+         |> clear_adding(provider_id)
          |> put_flash(:error, "Failed to fetch metadata: #{inspect(reason)}")}
     end
   end
@@ -357,6 +369,12 @@ defmodule MydiaWeb.DashboardLive.Index do
   end
 
   ## Private Helpers
+
+  # Four completion clauses all retire the same id. A MapSet rather than a
+  # single id so a second add cannot blank the first one's spinner (#459).
+  defp clear_adding(socket, provider_id) do
+    assign(socket, :adding_item_ids, MapSet.delete(socket.assigns.adding_item_ids, provider_id))
+  end
 
   defp format_bytes(bytes) when bytes < 1024, do: "#{bytes} B"
 
