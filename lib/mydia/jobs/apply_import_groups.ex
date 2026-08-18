@@ -96,11 +96,7 @@ defmodule Mydia.Jobs.ApplyImportGroups do
   # One transaction per page, never one for the group: on SQLite a single
   # transaction over a whole show holds the global write lock for its duration.
   defp drain(group, remaining_before, page) do
-    Repo.transaction(fn ->
-      group.id
-      |> ImportGroups.members(limit: page)
-      |> Enum.each(&safe_ingest(&1, group))
-    end)
+    commit_page(group, page)
 
     remaining = ImportGroups.member_count(group.id)
 
@@ -116,6 +112,43 @@ defmodule Mydia.Jobs.ApplyImportGroups do
       # `accepted` so a later run can retry it, rather than spinning.
       true ->
         remaining
+    end
+  end
+
+  # `safe_ingest/2`'s rescue only covers an Elixir-level exception raised
+  # before any DB write lands, which is the dominant failure class: the
+  # connection stays healthy, the page's transaction commits, and one bad
+  # member costs only itself. A genuine database error (a real constraint
+  # violation) is different — Postgres marks the *whole* transaction aborted
+  # regardless of that rescue, so `Repo.transaction/1` comes back
+  # `{:error, :rollback}` and every member in the page is lost, including ones
+  # that had already linked successfully earlier in the same page.
+  #
+  # So the result is inspected: on a clean commit the page is done. On a
+  # rollback, the page is replayed one member at a time, each in its own
+  # transaction, so a poisoned member costs only itself and its page-mates
+  # still commit. The fast path stays per-page deliberately — per-member
+  # transactions on SQLite mean one global write-lock acquisition per file, so
+  # the slow path is only paid on a page that actually failed.
+  defp commit_page(group, page) do
+    members = ImportGroups.members(group.id, limit: page)
+
+    case Repo.transaction(fn -> Enum.each(members, &safe_ingest(&1, group)) end) do
+      {:ok, _} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning("An import group page failed to commit, replaying it per member",
+          import_group_id: group.id,
+          members: length(members),
+          reason: inspect(reason)
+        )
+
+        Enum.each(members, fn member ->
+          Repo.transaction(fn -> safe_ingest(member, group) end)
+        end)
+
+        :ok
     end
   end
 
