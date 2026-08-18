@@ -221,8 +221,14 @@ defmodule Mydia.Metadata do
     # Include the provider so numerically-overlapping TVDB/TMDB ids never share a
     # cache entry (e.g. TVDB series 603 vs TMDB movie 603).
     provider = Keyword.get(opts, :provider, type)
+    # The TVDB orderings of one series differ only in how the seasons list
+    # groups the same episodes, so two orderings of the same show would
+    # otherwise share a cache entry and the second caller would silently get
+    # the first one's grouping.
+    season_order = Mydia.Media.SeasonOrder.tvdb_type(Keyword.get(opts, :season_order))
 
-    cache_key = "fetch_by_id:#{provider}:#{provider_id}:#{media_type}:#{language}:#{append}"
+    cache_key =
+      "fetch_by_id:#{provider}:#{provider_id}:#{media_type}:#{language}:#{append}:#{season_order}"
 
     Cache.fetch(
       cache_key,

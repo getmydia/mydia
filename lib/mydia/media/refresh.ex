@@ -46,7 +46,7 @@ defmodule Mydia.Media.Refresh do
         {:error, :missing_provider_id}
 
       {provider_id, source, item} ->
-        with {:ok, metadata} <- fetch(provider_id, media_type, source, config),
+        with {:ok, metadata} <- fetch(item, provider_id, media_type, source, config),
              {:ok, updated} <- apply_metadata(item, metadata, source) do
           reclassified = reclassify_after_refresh(updated)
           post_update(reclassified, media_type, fetch_episodes, config)
@@ -112,11 +112,16 @@ defmodule Mydia.Media.Refresh do
   defp media_type(%MediaItem{type: "tv_show"}), do: :tv_show
   defp media_type(%MediaItem{}), do: :movie
 
-  defp fetch(provider_id, media_type, source, config) do
+  # `season_order` rides along so the seasons stored in the metadata blob
+  # describe the same ordering the episode rows use. Dropping it here would let
+  # the show page render the official season list over DVD-ordered episodes.
+  # nil means "never asked" and resolves to TVDB's official ordering.
+  defp fetch(%MediaItem{} = media_item, provider_id, media_type, source, config) do
     fetch_opts = [
       media_type: media_type,
       provider: source,
-      append_to_response: Metadata.default_append_to_response(media_type)
+      append_to_response: Metadata.default_append_to_response(media_type),
+      season_order: media_item.season_order
     ]
 
     Metadata.fetch_by_id(config, to_string(provider_id), fetch_opts)

@@ -1363,9 +1363,15 @@ defmodule Mydia.Media do
 
         {:ok, episode_count}
       else
+        # `season_order` selects which of TVDB's parallel orderings the seasons
+        # list describes. Without it the column is inert: a show switched to the
+        # DVD ordering would refetch the official one and drift straight back to
+        # a single 170-episode season. nil resolves to "official" inside
+        # SeasonOrder.tvdb_type/1, so passing it through unguarded is correct.
         case Metadata.fetch_by_id(config, provider_id,
                media_type: :tv_show,
-               provider: provider_source
+               provider: provider_source,
+               season_order: media_item.season_order
              ) do
           {:ok, metadata} ->
             # Get seasons from metadata struct
