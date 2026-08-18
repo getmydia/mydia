@@ -78,7 +78,7 @@ defmodule Mydia.Repo.Migrations.BackfillImportGroupsTest do
       Code.require_file("priv/repo/migrations/20260817143638_backfill_import_groups.exs")
     end
 
-    test "up/0 creates a group and stamps members; down/0 clears both" do
+    test "up/0 creates a group and stamps members; down/0 is a no-op that leaves them" do
       lp = library_path_fixture(%{type: "series", path: "/media/Migrator"})
 
       files =
@@ -99,12 +99,16 @@ defmodule Mydia.Repo.Migrations.BackfillImportGroupsTest do
         assert Repo.reload!(file).import_group_id == group.id
       end
 
+      # down/0 is deliberately a no-op: by the time anyone rolls this back,
+      # groups carry live human decisions (accepted, ignored, local shows)
+      # that a blanket DELETE would destroy alongside the backfill. Rolling
+      # back must not touch what up/0 created.
       run_migration_down()
 
-      assert Repo.aggregate(ImportGroup, :count) == 0
+      assert Repo.aggregate(ImportGroup, :count) == 1
 
       for file <- files do
-        assert Repo.reload!(file).import_group_id == nil
+        assert Repo.reload!(file).import_group_id == group.id
       end
     end
 

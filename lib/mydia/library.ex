@@ -2596,7 +2596,7 @@ defmodule Mydia.Library do
     |> where([f], is_nil(f.media_item_id) and is_nil(f.episode_id))
     |> where([f], is_nil(f.trashed_at))
     |> maybe_after_id(after_id)
-    |> join(:left, [f], c in MatchCandidate, on: c.media_file_id == f.id)
+    |> join(:left, [f], c in MatchCandidate, on: c.media_file_id == f.id and c.rank == 0)
     |> where(
       [_f, c],
       is_nil(c.id) or
@@ -2658,7 +2658,7 @@ defmodule Mydia.Library do
     |> where([f], f.library_path_id == ^library_path_id)
     |> where([f], is_nil(f.media_item_id) and is_nil(f.episode_id))
     |> where([f], is_nil(f.trashed_at))
-    |> join(:left, [f], c in MatchCandidate, on: c.media_file_id == f.id)
+    |> join(:left, [f], c in MatchCandidate, on: c.media_file_id == f.id and c.rank == 0)
     |> where([_f, c], is_nil(c.id))
   end
 

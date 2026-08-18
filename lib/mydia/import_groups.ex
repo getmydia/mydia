@@ -96,6 +96,7 @@ defmodule Mydia.ImportGroups do
     |> for_library(library_path_id)
     |> select([g], %{
       provider_id: g.provider_id,
+      provider_type: g.provider_type,
       min_confidence: g.min_confidence,
       evidence: g.evidence
     })
@@ -640,11 +641,18 @@ defmodule Mydia.ImportGroups do
   Refuses (`{:error, :not_pending}`) a group that is not `"pending"`:
   `accept/1`, `ignore/1` and the worker have all already moved a
   non-pending group somewhere a rewritten match would race.
+
+  Refuses (`{:error, :not_found}`), rather than raising, a group id that no
+  longer exists -- the render-then-click race also handled by
+  `open_match_search`'s `Repo.get/2`: another session or a concurrent run can
+  remove the group between the page rendering the "Change match" button and
+  the reviewer picking a result.
   """
   @spec change_match(binary(), map()) ::
-          {:ok, ImportGroup.t()} | {:error, :not_pending}
+          {:ok, ImportGroup.t()} | {:error, :not_pending} | {:error, :not_found}
   def change_match(group_id, match) do
-    case Repo.get!(ImportGroup, group_id) do
+    case Repo.get(ImportGroup, group_id) do
+      nil -> {:error, :not_found}
       %ImportGroup{status: "pending"} = group -> apply_change_match(group, match)
       %ImportGroup{} -> {:error, :not_pending}
     end

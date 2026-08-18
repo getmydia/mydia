@@ -161,6 +161,56 @@ defmodule Mydia.Library.InboxTest do
       assert after_first_ids == rest_ids
     end
 
+    test "a file with only a rank-1 candidate is still eligible, not excluded or duplicated", %{
+      lp: lp
+    } do
+      # Regression: the join here did not constrain rank, so a rank-1-only
+      # candidate (no rank-0 row) matched the join and its non-nil id excluded
+      # the file entirely, silently stranding it with no parent and no way to
+      # be retried. And a file with *both* a rank-0 and a rank-1 candidate
+      # would fan out into two rows from the unconstrained join. Cover both.
+      rank1_only = orphaned_media_file_fixture(%{library_path_id: lp.id})
+
+      {:ok, _} =
+        Library.upsert_match_candidate(%{
+          media_file_id: rank1_only.id,
+          rank: 1,
+          provider_type: "tmdb",
+          provider_id: "42",
+          title: "Second guess",
+          media_type: "movie",
+          confidence: 0.4
+        })
+
+      both_ranks = orphaned_media_file_fixture(%{library_path_id: lp.id})
+
+      {:ok, _} =
+        Library.upsert_match_candidate(%{
+          media_file_id: both_ranks.id,
+          rank: 0,
+          attempts: 1,
+          last_error: "no_match"
+        })
+
+      {:ok, _} =
+        Library.upsert_match_candidate(%{
+          media_file_id: both_ranks.id,
+          rank: 1,
+          provider_type: "tmdb",
+          provider_id: "43",
+          title: "Second guess",
+          media_type: "movie",
+          confidence: 0.4
+        })
+
+      results = Library.list_unmatched_media_file_paths(lp.id, 50)
+      ids = Enum.map(results, &elem(&1, 0))
+
+      assert rank1_only.id in ids
+      assert both_ranks.id in ids
+      assert Enum.count(ids, &(&1 == both_ranks.id)) == 1
+    end
+
     test "logs the files it drops for having no resolvable location", %{lp: lp} do
       # A row with no relative_path resolves to a nil absolute path. The
       # rejection runs after the SQL LIMIT, so a chunk made only of these comes
@@ -229,6 +279,28 @@ defmodule Mydia.Library.InboxTest do
 
     test "counts a file with no candidate row at all", %{lp: lp} do
       file = orphaned_media_file_fixture(%{library_path_id: lp.id})
+
+      assert Library.count_files_without_parent_or_candidate(lp.id) == 1
+      assert Library.list_file_ids_without_parent_or_candidate(lp.id, 5) == [file.id]
+    end
+
+    test "counts a file that has only a rank-1 candidate as a contract violation", %{lp: lp} do
+      # Regression: the join here did not constrain rank, so a rank-1-only
+      # candidate matched it and the file was wrongly reported as healthy --
+      # it has no parent and no rank-0 candidate to retry, exactly the
+      # condition this function exists to surface.
+      file = orphaned_media_file_fixture(%{library_path_id: lp.id})
+
+      {:ok, _} =
+        Library.upsert_match_candidate(%{
+          media_file_id: file.id,
+          rank: 1,
+          provider_type: "tmdb",
+          provider_id: "42",
+          title: "Second guess",
+          media_type: "movie",
+          confidence: 0.4
+        })
 
       assert Library.count_files_without_parent_or_candidate(lp.id) == 1
       assert Library.list_file_ids_without_parent_or_candidate(lp.id, 5) == [file.id]

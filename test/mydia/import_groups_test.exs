@@ -70,6 +70,25 @@ defmodule Mydia.ImportGroupsTest do
 
       assert %{total: 0} = ImportGroups.band_counts(lp.id)
     end
+
+    test "a local group counts as needs_attention, agreeing with band/1" do
+      # Regression: band_counts/1 selected only provider_id, min_confidence,
+      # and evidence, so struct(ImportGroup, row) always had provider_type:
+      # nil and band/1's `provider_type: "local"` clause never fired here. A
+      # high-confidence local group was miscounted as :ready even though
+      # band/1 (and page/2's :ready filter) both call it :needs_attention.
+      lp = library_path_fixture(%{type: "series"})
+
+      group(lp,
+        cluster_key: "a",
+        provider_id: "local-abc",
+        provider_type: "local",
+        min_confidence: 1.0
+      )
+
+      assert %{ready: 0, needs_attention: 1, no_match: 0, total: 1} =
+               ImportGroups.band_counts(lp.id)
+    end
   end
 
   describe "count_by_status/2" do
@@ -270,6 +289,14 @@ defmodule Mydia.ImportGroupsTest do
 
       candidate = Repo.get_by!(MatchCandidate, media_file_id: file.id, rank: 0)
       assert candidate.provider_id == "9999"
+    end
+
+    test "returns :not_found instead of raising for a group id that no longer exists" do
+      # The render-then-click race: another session or a concurrent run can
+      # delete the group between the page rendering the "Change match"
+      # button and the reviewer picking a result. Repo.get!/2 would crash
+      # the LiveView process here; the caller must get an error tuple.
+      assert {:error, :not_found} = ImportGroups.change_match(Ecto.UUID.generate(), match())
     end
   end
 

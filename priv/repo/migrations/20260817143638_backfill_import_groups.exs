@@ -51,8 +51,13 @@ defmodule Mydia.Repo.Migrations.BackfillImportGroups do
   end
 
   def down do
-    execute("DELETE FROM import_groups")
-    execute("UPDATE media_files SET import_group_id = NULL")
+    # Deliberately a no-op. up/0 stamps no marker distinguishing rows it
+    # created from rows created afterward, and by the time anyone rolls this
+    # back the import pipeline creates a group on every run -- groups now
+    # carry human decisions (accepted, ignored, local shows). A DELETE FROM
+    # import_groups here would destroy that live state, not just undo a
+    # backfill, so there is no rollback that is both selective and correct.
+    :ok
   end
 
   # SQLite returns binary_id columns as raw strings, Postgres as 16-byte
