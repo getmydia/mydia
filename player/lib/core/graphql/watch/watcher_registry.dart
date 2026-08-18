@@ -76,6 +76,12 @@ class Invalidator {
   /// has to keep going even if the first key's write fails, or the other two
   /// silently stay stale. The loop stays sequential on purpose: concurrent
   /// refetches over what may be a p2p relay are not wanted here.
+  ///
+  /// A `FamilyTarget` carries a second, inner level of isolation: each of its
+  /// live watchers is refetched inside its own try/catch too (see
+  /// [_invalidateFamily]), so one collection screen's failing refetch cannot
+  /// starve every other open collection screen in the same family the way a
+  /// single family-wide try/catch would.
   Future<void> invalidate(Iterable<InvalidationTarget> targets) async {
     for (final target in targets) {
       try {
@@ -130,9 +136,20 @@ class Invalidator {
     }
 
     for (final watcher in _registry.family(operationName)) {
-      final refetched = await watcher.refetchAutomatically();
-      if (!refetched) {
-        await _fetchLog.clear(watcher.key);
+      // Isolated per watcher, same as `invalidateAll`: one collection
+      // screen's refetch throwing (e.g. a cache-layer exception inside the
+      // `graphql` package's own network resolution) must not stop every
+      // other live watcher in this family from refreshing.
+      try {
+        final refetched = await watcher.refetchAutomatically();
+        if (!refetched) {
+          await _fetchLog.clear(watcher.key);
+        }
+      } catch (error, stackTrace) {
+        debugPrint(
+          'Invalidator.invalidate: failed to refetch ${watcher.key}: '
+          '$error\n$stackTrace',
+        );
       }
     }
   }

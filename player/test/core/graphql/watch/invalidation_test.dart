@@ -584,6 +584,50 @@ void main() {
       expect(link.requests.length, greaterThanOrEqualTo(before + 1));
     });
 
+    test(
+        'a watcher whose refetch throws does not block the rest of the '
+        'family', () async {
+      // Registration order controls iteration order here: `WatcherRegistry`
+      // stores watchers in a plain `Map` (a `LinkedHashMap`, which Dart
+      // guarantees iterates in insertion order as long as nothing is
+      // removed and reinserted), and `family()` iterates `_watchers.entries`
+      // directly with no reordering. Registering the throwing watcher first
+      // means it is the one `_invalidateFamily`'s loop reaches first, so
+      // this test actually exercises the failure mode an unisolated loop
+      // hits: a throwing watcher processed *second* would let the healthy
+      // one succeed regardless of isolation, proving nothing.
+      final log = InMemoryFetchLog();
+      final throwingLink = StubLink((_, __) => _pingData('bad'));
+      final healthyLink = StubLink((_, __) => _pingData('good'));
+
+      final throwing = makeWatcher(
+        throwingLink,
+        log,
+        key: QueryKeys.collectionItems('c1'),
+        canRefetch: () => throw StateError('simulated refetch failure'),
+      );
+      final healthy = makeWatcher(
+        healthyLink,
+        log,
+        key: QueryKeys.collectionItems('c2'),
+      );
+      addTearDown(throwing.close);
+      addTearDown(healthy.close);
+
+      final registry = WatcherRegistry()
+        ..register(QueryKeys.collectionItems('c1'), throwing)
+        ..register(QueryKeys.collectionItems('c2'), healthy);
+      final invalidator = Invalidator(registry: registry, fetchLog: log);
+
+      await Future.wait([throwing.stream.first, healthy.stream.first]);
+      final before = healthyLink.requests.length;
+
+      await invalidator.invalidate([Families.collectionItems]);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(healthyLink.requests.length, greaterThan(before));
+    });
+
     test('unregister only removes the watcher it was given', () async {
       final log = InMemoryFetchLog();
       final first = makeWatcher(StubLink((_, __) => _pingData('a')), log);
