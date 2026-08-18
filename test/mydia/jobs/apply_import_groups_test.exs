@@ -237,4 +237,46 @@ defmodule Mydia.Jobs.ApplyImportGroupsTest do
     assert reloaded.status == "accepted"
     assert reloaded.unresolved_count == 1
   end
+
+  # Restores the coverage the previous two tests lost for `drain/2`'s
+  # no-progress-halt guard: that guard was a Task 11 review finding
+  # ("without it a group whose members can never link would spin forever"),
+  # and the test that used to reach it did so through a provider-less group --
+  # exactly the shape `accepted_groups/1`'s new filter now excludes before
+  # `drain/2` ever runs. The guard still matters for a provider-*matched*
+  # group, so this reaches it that way instead: two members link for real
+  # against the stub (giving the group a genuine `provider_id`, so it survives
+  # the filter), and a third has no candidate at all -- the cheapest way to
+  # make a member permanently unlinkable, since `ingest_member/2`'s
+  # `candidate: nil` clause is a deliberate no-op. The first `drain/2` pass
+  # makes progress (2 of 3 link) and recurses; the second makes none and
+  # halts, so this also exercises the recursive branch on the way to the
+  # no-progress one.
+  test "a page that makes partial progress still halts once the rest can't link", %{
+    library_path: lp
+  } do
+    title = MetadataStubProvider.series_title()
+
+    stuck_file =
+      orphaned_media_file_fixture(%{
+        library_path_id: lp.id,
+        relative_path: "#{title}/Season 01/ep3.mkv"
+      })
+
+    {:ok, _} = ImportGroups.upsert_for_library(lp)
+
+    scope = lp.id |> SelectionScope.new() |> SelectionScope.select_all_matching(%{band: :all})
+    assert {:ok, 1} = ImportGroups.accept(scope)
+
+    group = Repo.get_by!(ImportGroup, library_path_id: lp.id)
+    assert group.provider_id
+
+    assert {:error, _reason} = perform_job(ApplyImportGroups, %{"library_path_id" => lp.id})
+
+    reloaded = Repo.get_by!(ImportGroup, library_path_id: lp.id)
+    assert reloaded.status == "accepted"
+    assert reloaded.unresolved_count == 1
+
+    refute Repo.reload!(stuck_file).episode_id
+  end
 end
