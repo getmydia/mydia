@@ -13,24 +13,26 @@
       <div class="card-body p-3 md:p-4 space-y-3">
         <%!-- Media type toggle + category tabs --%>
         <div class="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-3">
-          <div class="join">
-            <button
-              phx-click="switch_media_type"
-              phx-value-type="movie"
-              class={["join-item btn btn-sm gap-1.5", @media_type == :movie && "btn-active"]}
-            >
-              <.icon name="hero-film" class="w-4 h-4" /> Movies
-            </button>
-            <button
-              phx-click="switch_media_type"
-              phx-value-type="tv_show"
-              class={["join-item btn btn-sm gap-1.5", @media_type == :tv_show && "btn-active"]}
-            >
-              <.icon name="hero-tv" class="w-4 h-4" /> TV Shows
-            </button>
-          </div>
+          <div id="discover-view-controls" class="flex flex-wrap items-center gap-3">
+            <div class="join">
+              <button
+                phx-click="switch_media_type"
+                phx-value-type="movie"
+                class={["join-item btn btn-sm gap-1.5", @media_type == :movie && "btn-active"]}
+              >
+                <.icon name="hero-film" class="w-4 h-4" /> Movies
+              </button>
+              <button
+                phx-click="switch_media_type"
+                phx-value-type="tv_show"
+                class={["join-item btn btn-sm gap-1.5", @media_type == :tv_show && "btn-active"]}
+              >
+                <.icon name="hero-tv" class="w-4 h-4" /> TV Shows
+              </button>
+            </div>
 
-          <.grid_density_toggle id="discover-density-toggle" density={@grid_density} />
+            <.grid_density_toggle id="discover-density-toggle" density={@grid_density} />
+          </div>
 
           <div role="tablist" class="tabs tabs-box w-fit">
             <%= for {cat_key, cat_label} <- @categories do %>
