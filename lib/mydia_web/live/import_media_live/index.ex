@@ -863,15 +863,15 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   end
 
   defp resolve_library_by_type(type, library_paths) when type in ["movies", "movie"] do
-    Enum.find_value(library_paths, fn lp -> lp.type == :movies && lp.id end) ||
-      Enum.find_value(library_paths, fn lp -> lp.default_for_movies && lp.id end) ||
+    Enum.find_value(library_paths, fn lp -> lp.default_for_movies && lp.id end) ||
+      Enum.find_value(library_paths, fn lp -> lp.type == :movies && lp.id end) ||
       Enum.find_value(library_paths, fn lp -> lp.type == :mixed && lp.id end)
   end
 
   defp resolve_library_by_type(type, library_paths)
        when type in ["tv", "series", "tv_show", "shows"] do
-    Enum.find_value(library_paths, fn lp -> lp.type == :series && lp.id end) ||
-      Enum.find_value(library_paths, fn lp -> lp.default_for_series && lp.id end) ||
+    Enum.find_value(library_paths, fn lp -> lp.default_for_series && lp.id end) ||
+      Enum.find_value(library_paths, fn lp -> lp.type == :series && lp.id end) ||
       Enum.find_value(library_paths, fn lp -> lp.type == :mixed && lp.id end)
   end
 

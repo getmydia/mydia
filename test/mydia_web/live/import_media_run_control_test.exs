@@ -599,14 +599,10 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
   end
 
   test "pre-selects movie library tab when type=movies query param is provided", %{
-    conn: conn
+    conn: conn,
+    library_path: setup_library
   } do
-    _default_mixed =
-      library_path_fixture(%{
-        type: "mixed",
-        default_for_movies: true,
-        path: "/tmp/aaa_default_mixed_#{System.unique_integer([:positive])}"
-      })
+    {:ok, _setup_library} = Mydia.Settings.update_library_path(setup_library, %{type: "series"})
 
     lp_tv =
       library_path_fixture(%{
