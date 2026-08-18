@@ -162,11 +162,26 @@ class P2pDownloadJobService implements DownloadJobService {
 
   @override
   Future<String> getDownloadUrl(String jobId) async {
-    // Ensure the local proxy is running for download requests.
-    // The proxy may not have been started yet if the user hasn't played
-    // any media in this session (it's normally started by PlayerScreen).
-    if (!_localProxy.isRunning) {
+    // Take a hold on the shared proxy either way, but only configure it when
+    // nothing else has. Downloads and playback serve from one proxy, and
+    // holding nothing is what let the player's `dispose()` stop it out from
+    // under a transfer in progress.
+    //
+    // The split matters: `start` re-targets a proxy that is already running,
+    // and the peer and token here were captured when this service was built.
+    // A token refresh since then leaves them stale, so configuring a proxy
+    // playback is already streaming through would point it at the wrong token
+    // and get playback's own range requests rejected.
+    //
+    // The hold outlives an individual job: nothing here observes a download
+    // finishing, so once any download has run the proxy stays up for the rest
+    // of the session. That is a loopback listener with no traffic on it,
+    // which beats a download dying mid-transfer.
+    if (_localProxy.isRunning) {
+      _localProxy.acquireLease(this);
+    } else {
       await _localProxy.start(
+        owner: this,
         targetPeer: _serverNodeAddr,
         authToken: _authToken,
       );

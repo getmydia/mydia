@@ -185,25 +185,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// [_terminateHlsSession] instead of a `dispose()`-time `ref.read`.
   late final MediaProxy _mediaProxy;
 
-  /// The current P2P connection mode, kept in sync via `ref.listenManual`
-  /// (set up in [initState]) rather than read in `dispose()`:
-  /// `ref.read`/`ref.watch` are unsafe there — `BuildContext.mounted` is
-  /// already `false` throughout `State.dispose()`, a core Flutter
-  /// invariant, not a Riverpod-specific one. [_terminateHlsSession] needs
-  /// the *current* mode at termination time, and the user can switch modes
-  /// mid-session, so a one-time capture (at [initState] or anywhere else)
-  /// would risk going stale; the listener keeps it live for the whole
-  /// widget lifetime instead, matching what a fresh `ref.read` would have
-  /// returned at any given moment.
-  ///
-  /// The `ref.listenManual` subscription itself is set up in [initState] but
-  /// not stored: `ConsumerStatefulElement` already keeps its own reference
-  /// (to close automatically at unmount) whether or not the caller keeps
-  /// one too, and this widget never needs to cancel it early.
-  bool _isP2PMode = false;
-
   /// The most recently resolved GraphQL client, kept in sync via
-  /// `ref.listenManual` for the same reason as [_isP2PMode]: a long
+  /// `ref.listenManual` rather than read in `dispose()`: a long
   /// playback session can outlive a token refresh or reconnect that
   /// produces a new client, so this is refreshed continuously rather than
   /// captured once. Null until the first resolution completes;
@@ -551,15 +534,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     // initialization branches must honour that, not just the streaming one.
     _resumeOverrideSeconds = widget.resumeSeconds;
 
-    // Set up before `_initializePlayer` so both are live for the whole
-    // widget lifetime, regardless of which playback branch runs (offline,
+    // Set up before `_initializePlayer` so it is live for the whole widget
+    // lifetime, regardless of which playback branch runs (offline,
     // already-downloaded, or streaming) — `_terminateHlsSession` is called
     // unconditionally from `dispose()` no matter which branch was taken.
-    ref.listenManual<conn.ConnectionState>(
-      conn.connectionProvider,
-      (previous, next) => _isP2PMode = next.isP2PMode,
-      fireImmediately: true,
-    );
     ref.listenManual<AsyncValue<GraphQLClient>>(
       asyncGraphqlClientProvider,
       (previous, next) => next.whenData((client) => _graphqlClient = client),
@@ -957,7 +935,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         }
 
         final proxy = ref.read(mediaProxyProvider);
+        // Held against this State, and released by [_terminateHlsSession] at
+        // dispose. This method re-runs within one screen's life (a session
+        // restart past the transcoded end, a cast rebind); the hold is per
+        // owner, so those re-runs re-target the proxy without stacking up a
+        // debt that a single stop could not settle.
         await proxy.start(
+          owner: this,
           targetPeer: serverNodeAddr,
           authToken: token,
         );
@@ -2711,22 +2695,33 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// Terminate the HLS session on the server and clean up P2P resources.
   /// This stops FFmpeg and cleans up server-side resources.
   ///
-  /// Reads only the fields captured in [initState] ([_isP2PMode],
-  /// [_mediaProxy], [_graphqlClient]) — never `ref` directly. This
+  /// Reads only the fields captured in [initState] ([_mediaProxy],
+  /// [_graphqlClient]) — never `ref` directly. This
   /// runs from `dispose()` (as well as the web beforeunload handler), and
   /// `ref.read`/`ref.watch` unconditionally throw once `dispose()` has
   /// started: `BuildContext.mounted` is already `false` throughout it, a
   /// core Flutter invariant. Before this, every call from `dispose()` threw
   /// on its very first line, before doing any of the cleanup below.
   Future<void> _terminateHlsSession() async {
-    // Stop local proxy if P2P mode
-    if (_isP2PMode) {
-      try {
-        await _mediaProxy.stop();
-        debugPrint('[PlayerScreen] Media proxy stopped');
-      } catch (e) {
-        debugPrint('[PlayerScreen] Error stopping local proxy: $e');
-      }
+    // Releases this screen's hold rather than stopping the proxy outright.
+    // On a next-episode navigation the incoming screen has already started
+    // it — Flutter mounts the new route before disposing the old one — so an
+    // unconditional stop here closed the server the episode now playing was
+    // streaming from.
+    //
+    // Deliberately unconditional. This used to run only while the connection
+    // was still in p2p mode, which tracked the *current* mode rather than the
+    // one this screen took the proxy under — and a reconnect can move a
+    // viewer between the two mid-episode. Skipping the release then stranded
+    // the hold for good: it is keyed on a State that is about to stop
+    // existing, so nothing could ever let go of it and the proxy stayed up
+    // for the rest of the session. Releasing a hold that was never taken is
+    // a no-op, so there is nothing to guard against.
+    try {
+      await _mediaProxy.stop(this);
+      debugPrint('[PlayerScreen] Media proxy released');
+    } catch (e) {
+      debugPrint('[PlayerScreen] Error stopping local proxy: $e');
     }
 
     // End HLS session via GraphQL (works for both modes)

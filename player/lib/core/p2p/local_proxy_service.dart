@@ -16,7 +16,7 @@ import 'package:player/native/lib.dart'
 final localProxyServiceProvider = Provider<LocalProxyService>((ref) {
   final p2p = ref.watch(p2pServiceProvider);
   final service = LocalProxyService(p2p);
-  ref.onDispose(() => service.stop());
+  ref.onDispose(() => service.shutdown());
   return service;
 });
 
@@ -32,7 +32,7 @@ final localProxyServiceProvider = Provider<LocalProxyService>((ref) {
 ///
 /// Direct stream: /direct/{file_id}/stream
 /// Download: /download/{job_id}/file
-class LocalProxyService implements MediaProxy {
+class LocalProxyService with MediaProxyLeases implements MediaProxy {
   final P2pService _p2p;
   HttpServer? _server;
 
@@ -98,9 +98,12 @@ class LocalProxyService implements MediaProxy {
   /// [authToken] - Optional auth token for HLS requests.
   @override
   Future<void> start({
+    required Object owner,
     required String targetPeer,
     String? authToken,
   }) async {
+    acquireLease(owner);
+
     if (_server != null) {
       // Update config if already running
       _targetPeer = targetPeer;
@@ -121,8 +124,25 @@ class LocalProxyService implements MediaProxy {
   }
 
   @override
-  Future<void> stop() async {
-    await _server?.close();
+  Future<void> stop(Object owner) async {
+    if (!releaseLease(owner)) return;
+    await _tearDown();
+  }
+
+  @override
+  Future<void> shutdown() async {
+    clearLeases();
+    await _tearDown();
+  }
+
+  Future<void> _tearDown() async {
+    // Forced. An ordinary close stops the listener and returns, but leaves
+    // connections already accepted to carry on being served — by a proxy
+    // whose target peer and auth token the next few lines null out. The
+    // connection open here is the video pipeline's own: mpv holds a range
+    // request for the whole file, so unforced it is left waiting on a socket
+    // nothing will ever answer instead of seeing its stream end.
+    await _server?.close(force: true);
     _server = null;
     _targetPeer = null;
     _authToken = null;
@@ -236,7 +256,11 @@ class LocalProxyService implements MediaProxy {
       _lanToken = null;
     }
 
-    await _server?.close();
+    // Forced for the same reason as [_tearDown]: rebinding on a fresh port
+    // invalidates whatever URL the video pipeline is holding regardless, and
+    // the caller restarts local playback afterwards. Left unforced, the
+    // request in flight against the old port would hang rather than end.
+    await _server?.close(force: true);
     _server = null;
 
     if (peer == null) {

@@ -5,6 +5,9 @@ import 'package:player/core/p2p/local_proxy_service.dart';
 import 'package:player/core/p2p/p2p_service.dart';
 import 'package:player/domain/models/download_option.dart';
 
+import '../p2p/proxy_fetch.dart';
+import '../p2p/test_p2p_service.dart';
+
 class GraphqlCall {
   final String peer;
   final String query;
@@ -239,6 +242,65 @@ void main() {
     test('getDownloadUrl returns local proxy URL', () async {
       final url = await service.getDownloadUrl('job-42');
       expect(url, equals('http://127.0.0.1:12345/download/job-42/file'));
+    });
+
+    // Downloads and playback serve from one proxy, but each captured its own
+    // peer and token — this service at construction, the player when it
+    // initialised. A token refresh between the two leaves this one holding a
+    // stale value, and `start` re-targets a proxy that is already running, so
+    // asking for a download URL could point live playback at the wrong token
+    // and get its range requests rejected.
+    group('sharing the proxy with playback', () {
+      late TestP2pService proxyPeer;
+      late LocalProxyService sharedProxy;
+      late Object playback;
+      late P2pDownloadJobService downloads;
+
+      setUp(() async {
+        proxyPeer = TestP2pService();
+        sharedProxy = LocalProxyService(proxyPeer);
+        playback = Object();
+
+        await sharedProxy.start(
+          owner: playback,
+          targetPeer: 'playback-peer',
+          authToken: 'fresh-token',
+        );
+        addTearDown(sharedProxy.shutdown);
+
+        downloads = P2pDownloadJobService(
+          p2pService: p2p,
+          localProxy: sharedProxy,
+          serverNodeAddr: 'stale-peer',
+          authToken: 'stale-token',
+        );
+      });
+
+      test('a download leaves playback\'s peer and token alone', () async {
+        await downloads.getDownloadUrl('job-42');
+
+        proxyPeer.onSendHlsRequest = (_) async => testHlsResponse(
+              status: 200,
+              contentType: 'application/vnd.apple.mpegurl',
+              data: const [],
+            );
+        await proxyGet(
+          'http://127.0.0.1:${sharedProxy.port}/hls/sess-1/index.m3u8',
+        );
+
+        final call = proxyPeer.calls.single;
+        expect(call.peer, 'playback-peer');
+        expect(call.authToken, 'fresh-token');
+      });
+
+      test('a download still holds the proxy when playback lets go', () async {
+        await downloads.getDownloadUrl('job-42');
+
+        await sharedProxy.stop(playback);
+
+        expect(sharedProxy.isRunning, isTrue,
+            reason: 'the transfer is still pulling bytes through this proxy');
+      });
     });
   });
 }
