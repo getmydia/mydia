@@ -3,8 +3,15 @@ defmodule Mydia.Metadata.Provider.RelaySeasonOrderingsTest do
 
   alias Mydia.Metadata.Provider.Relay
 
-  # Shape captured from https://relay.mydia.dev/tvdb/series/331753/extended
-  # (Black Clover). Eight season records across three orderings.
+  # Synthetic — NOT a real relay response. `episodeCount` is included here
+  # purely to exercise `transform_tvdb_seasons/2`'s field mapping; the real
+  # `/tvdb/series/{id}/extended` endpoint never populates that key (verified
+  # live, 2026-08-17 — see `relay_season_orderings_test.exs`'s
+  # `real_seasons/0` below for what TVDB actually sends). Every TVDB show's
+  # stored `SeasonInfo.episode_count` is therefore 0 in production
+  # (`relay.ex`'s `transform_tvdb_seasons/2`, `"episode_count" => s["episodeCount"] || 0`)
+  # — a known, pre-existing, out-of-scope bug, not something these three
+  # tests are claiming is real.
   defp seasons do
     [
       %{"id" => 720_594, "number" => 0, "type" => %{"type" => "official"}, "episodeCount" => 19},
@@ -46,11 +53,29 @@ defmodule Mydia.Metadata.Provider.RelaySeasonOrderingsTest do
     assert Enum.find(result, &(&1["season_number"] == 2))["tvdb_season_id"] == 1_837_386
   end
 
-  test "available_orderings/1 summarises every ordering" do
-    assert Relay.available_orderings(seasons()) == %{
-             "official" => [19, 170],
-             "dvd" => [27, 51, 51, 52, 16],
-             "absolute" => [170]
+  # Real payload — captured live from
+  # https://relay.mydia.dev/tvdb/series/331753/extended?meta=translations
+  # (Black Clover) on 2026-08-17. Same ids/numbers/types as `seasons/0`
+  # above, with the fabricated `episodeCount` keys removed: TVDB does not
+  # send that field on this endpoint, for any season, in any ordering.
+  defp real_seasons do
+    [
+      %{"id" => 720_594, "number" => 0, "type" => %{"type" => "official"}},
+      %{"id" => 720_595, "number" => 1, "type" => %{"type" => "official"}},
+      %{"id" => 1_750_419, "number" => 0, "type" => %{"type" => "dvd"}},
+      %{"id" => 1_750_420, "number" => 1, "type" => %{"type" => "dvd"}},
+      %{"id" => 1_837_386, "number" => 2, "type" => %{"type" => "dvd"}},
+      %{"id" => 1_837_387, "number" => 3, "type" => %{"type" => "dvd"}},
+      %{"id" => 1_892_353, "number" => 4, "type" => %{"type" => "dvd"}},
+      %{"id" => 1_750_418, "number" => 1, "type" => %{"type" => "absolute"}}
+    ]
+  end
+
+  test "available_orderings/1 reports season counts per ordering, not episode counts" do
+    assert Relay.available_orderings(real_seasons()) == %{
+             "official" => 2,
+             "dvd" => 5,
+             "absolute" => 1
            }
   end
 end

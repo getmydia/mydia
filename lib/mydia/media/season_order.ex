@@ -50,6 +50,15 @@ defmodule Mydia.Media.SeasonOrder do
   def label(:absolute), do: "Absolute order"
 
   @doc """
+  The ordering a show is actually using right now: its recorded
+  `season_order`, or `:official` when it has never been asked (a fresh
+  import, or one nobody has touched) — matching `tvdb_type/1`'s default.
+  """
+  @spec effective(MediaItem.t()) :: atom()
+  def effective(%MediaItem{season_order: nil}), do: :official
+  def effective(%MediaItem{season_order: order}), do: order
+
+  @doc """
   Looks up TVDB's alternative ("dvd") ordering for a show and, if it exists,
   the real per-season episode counts (specials excluded) — the numbers a
   suggestion banner needs to name the alternative concretely rather than
@@ -104,18 +113,50 @@ defmodule Mydia.Media.SeasonOrder do
   ordering (from the banner, or a manual pick), it does the same kind of
   fetch and builds the `provider_episode_id => {season, episode}` mapping
   `remap/3` needs.
+
+  Short-circuits to `{:ok, :confirmed}` — no fetch, no remap — when `target`
+  is already the show's `effective/1` ordering. "The user was asked and
+  chose what they already have" is a bookkeeping write, not a data move: it
+  must succeed even for a show with no TVDB id, no reachable relay, or
+  episodes with no provider id (all of which would otherwise refuse via
+  `remap/3`'s own guards), because those are exactly the shows the banner
+  exists for — the ones where the aired-order confirmation option can't be
+  allowed to depend on the network working.
+
+  When it isn't a no-op, refuses (without writing anything) if the fetched
+  ordering does not account for every one of the show's episodes —
+  `{:error, {:incomplete_ordering, missing_count}}`. TVDB sometimes lists an
+  ordering that only covers part of a series; remapping just the covered
+  subset would silently strand the rest at their old numbers under a
+  `season_order` that claims otherwise, which is the "half-remapped show"
+  `remap/3`'s docs already warn is worse than declining.
   """
   @spec switch(MediaItem.t(), atom(), map()) ::
           {:ok, non_neg_integer()}
+          | {:ok, :confirmed}
           | {:error,
              :missing_tvdb_id
              | :no_alternative_ordering
              | :missing_provider_ids
              | :conflicting_mapping
+             | {:incomplete_ordering, pos_integer()}
              | term()}
-  def switch(%MediaItem{tvdb_id: nil}, _target, _config), do: {:error, :missing_tvdb_id}
-
   def switch(%MediaItem{} = media_item, target, config) when target in @values do
+    if target == effective(media_item) do
+      confirm_current(media_item, target)
+    else
+      do_switch(media_item, target, config)
+    end
+  end
+
+  defp confirm_current(%MediaItem{id: id}, target) do
+    Repo.update_all(from(m in MediaItem, where: m.id == ^id), set: [season_order: target])
+    {:ok, :confirmed}
+  end
+
+  defp do_switch(%MediaItem{tvdb_id: nil}, _target, _config), do: {:error, :missing_tvdb_id}
+
+  defp do_switch(%MediaItem{} = media_item, target, config) do
     provider_id = to_string(media_item.tvdb_id)
 
     with {:ok, raw_seasons} <- Relay.fetch_raw_seasons(config, provider_id),
@@ -131,9 +172,25 @@ defmodule Mydia.Media.SeasonOrder do
             |> Enum.filter(& &1.provider_episode_id)
             |> Map.new(&{&1.provider_episode_id, {&1.season_number, &1.episode_number}})
 
-          remap(media_item, target, mapping)
+          case missing_from_mapping(media_item, mapping) do
+            [] -> remap(media_item, target, mapping)
+            missing -> {:error, {:incomplete_ordering, length(missing)}}
+          end
       end
     end
+  end
+
+  # Local episodes with a provider id that the fetched ordering never
+  # mentioned. Episodes with no provider id at all are excluded here on
+  # purpose — that is `remap/3`'s own `:missing_provider_ids` refusal to
+  # raise, not this one's, and counting them here would misreport a
+  # provider-id problem as an incomplete-ordering problem.
+  defp missing_from_mapping(%MediaItem{id: id}, mapping) do
+    Episode
+    |> where([e], e.media_item_id == ^id)
+    |> select([e], e.provider_episode_id)
+    |> Repo.all()
+    |> Enum.reject(&(is_nil(&1) or Map.has_key?(mapping, &1)))
   end
 
   @doc """

@@ -19,7 +19,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonOrderUiTest do
     %{conn: log_in_user(conn, admin)}
   end
 
-  defp oversized_show(tvdb_id \\ 331_753) do
+  defp oversized_show(tvdb_id) do
     show =
       media_item_fixture(%{
         type: "tv_show",
@@ -59,23 +59,60 @@ defmodule MydiaWeb.MediaLive.Show.SeasonOrderUiTest do
            )
   end
 
-  test "no suggestion once an ordering has been chosen", %{conn: conn} do
-    show = oversized_show()
+  # These three "no suggestion" tests each stub a real, fetchable "dvd"
+  # alternative for an otherwise-oversized TVDB show, so that if the
+  # condition each test names were deleted from
+  # `eligible_for_season_order_suggestion?/1`, the lookup would actually run
+  # and find a real alternative — making the banner appear and the test
+  # fail. Without the stub (and the matching `render_async`), a passing
+  # `refute` would prove nothing: it would pass identically whether the
+  # guard worked or the async lookup simply hadn't run yet.
+  test "no suggestion once an ordering has been chosen, even with a real alternative available",
+       %{conn: conn} do
+    tvdb_id = System.unique_integer([:positive])
+    show = oversized_show(tvdb_id)
     {:ok, show} = Media.update_media_item(show, %{season_order: :official})
+    stub_tvdb_orderings(tvdb_id, official: 170, dvd: [51, 51, 52, 16])
 
     {:ok, view, _html} = live(conn, ~p"/media/#{show.id}")
+    render_async(view, 5000)
 
     refute has_element?(view, "#season-order-suggestion")
   end
 
-  test "no suggestion for a normally sized show", %{conn: conn} do
-    show = media_item_fixture(%{type: "tv_show", title: "Normal", metadata_source: :tvdb})
+  test "no suggestion for a normally sized show, even with a real alternative available", %{
+    conn: conn
+  } do
+    tvdb_id = System.unique_integer([:positive])
+
+    show =
+      media_item_fixture(%{
+        type: "tv_show",
+        title: "Normal",
+        tvdb_id: tvdb_id,
+        metadata_source: :tvdb,
+        season_order: nil
+      })
 
     for n <- 1..12 do
       episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: n})
     end
 
+    stub_tvdb_orderings(tvdb_id, official: 170, dvd: [51, 51, 52, 16])
+
     {:ok, view, _html} = live(conn, ~p"/media/#{show.id}")
+    render_async(view, 5000)
+
+    refute has_element?(view, "#season-order-suggestion")
+  end
+
+  test "no suggestion when TVDB has no alternative ordering to offer", %{conn: conn} do
+    tvdb_id = System.unique_integer([:positive])
+    show = oversized_show(tvdb_id)
+    stub_tvdb_orderings(tvdb_id, official: 170, dvd: [])
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{show.id}")
+    render_async(view, 5000)
 
     refute has_element?(view, "#season-order-suggestion")
   end
@@ -185,6 +222,80 @@ defmodule MydiaWeb.MediaLive.Show.SeasonOrderUiTest do
 
     # Aired order describes the same single season it started with — nothing
     # about the episodes' actual numbering should have moved.
+    episode_numbers =
+      Episode
+      |> where([e], e.media_item_id == ^show.id)
+      |> select([e], e.episode_number)
+      |> Repo.all()
+      |> Enum.sort()
+
+    assert episode_numbers == Enum.to_list(1..170)
+  end
+
+  test "the dismiss button retires the banner even when episodes are missing provider ids", %{
+    conn: conn
+  } do
+    tvdb_id = System.unique_integer([:positive])
+
+    show =
+      media_item_fixture(%{
+        type: "tv_show",
+        title: "No Provider Ids Dismiss",
+        tvdb_id: tvdb_id,
+        metadata_source: :tvdb,
+        season_order: nil
+      })
+
+    for n <- 1..170 do
+      episode_fixture(%{
+        media_item_id: show.id,
+        season_number: 1,
+        episode_number: n,
+        provider_episode_id: nil
+      })
+    end
+
+    stub_tvdb_orderings(tvdb_id, official: 170, dvd: [51, 51, 52, 16])
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{show.id}")
+    render_async(view, 5000)
+
+    assert has_element?(view, "#season-order-suggestion")
+
+    # "Keep aired order" is a bookkeeping write (target already equals the
+    # show's effective ordering), so it must succeed without ever touching
+    # the relay or `remap/3` — unlike "Use DVD ordering" on this same show,
+    # which needs a real mapping and would hit :missing_provider_ids.
+    view |> element("#season-order-dismiss") |> render_click()
+
+    refute has_element?(view, "#season-order-suggestion")
+    assert has_element?(view, "#flash-info", "Keeping Aired order")
+
+    reloaded = Media.get_media_item!(show.id)
+    assert reloaded.season_order == :official
+  end
+
+  test "a DVD ordering covering fewer episodes than the show refuses instead of partially remapping",
+       %{conn: conn} do
+    tvdb_id = System.unique_integer([:positive])
+    show = oversized_show(tvdb_id)
+    # Only the first 51 of the show's 170 episodes appear anywhere in the
+    # stubbed "dvd" ordering — the other 119 have no target coordinates.
+    stub_tvdb_orderings(tvdb_id, official: 170, dvd: [51])
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{show.id}")
+    render_async(view, 5000)
+
+    view |> element("#season-order-accept") |> render_click()
+
+    assert has_element?(view, "#flash-error", "missing 119")
+
+    reloaded = Media.get_media_item!(show.id)
+    assert reloaded.season_order == nil
+
+    # Nothing moved: refusing must be all-or-nothing, not "remap the covered
+    # 51 and strand the rest" — a half-remapped show under a season_order
+    # that claims otherwise is worse than declining.
     episode_numbers =
       Episode
       |> where([e], e.media_item_id == ^show.id)

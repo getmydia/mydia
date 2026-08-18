@@ -168,6 +168,13 @@ defmodule MydiaWeb.MediaLive.Show.MediaItemEvents do
     config = socket.assigns.metadata_config
 
     case SeasonOrder.switch(media_item, target, config) do
+      {:ok, :confirmed} ->
+        {:noreply,
+         socket
+         |> assign(:media_item, Loaders.load_media_item(media_item.id))
+         |> assign(:season_order_suggestion, nil)
+         |> put_flash(:info, "Keeping #{SeasonOrder.label(target)}.")}
+
       {:ok, count} ->
         {:noreply,
          socket
@@ -176,6 +183,15 @@ defmodule MydiaWeb.MediaLive.Show.MediaItemEvents do
          |> put_flash(
            :info,
            "Switched to #{SeasonOrder.label(target)} — #{count} episode(s) remapped."
+         )}
+
+      {:error, {:incomplete_ordering, missing_count}} ->
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           "TVDB's #{SeasonOrder.label(target)} is missing #{missing_count} of this show's " <>
+             "episodes, so nothing was changed."
          )}
 
       {:error, :missing_provider_ids} ->

@@ -552,22 +552,27 @@ defmodule Mydia.Metadata.Provider.Relay do
 
   @doc """
   Summarises every ordering TVDB offers for a series, as
-  `%{"official" => [episode_count, ...], "dvd" => [...], ...}`, sorted by
-  season number within each ordering.
+  `%{"official" => season_count, "dvd" => season_count, ...}`.
 
-  Meant to drive an ordering picker: the caller can show what switching to
-  `"dvd"` would actually produce (four real seasons plus specials) rather
-  than an opaque ordering name.
+  Meant to drive an ordering picker: the caller can tell which orderings
+  exist and how many seasons each has before deciding which one to fetch in
+  full via `fetch_ordering_episodes/4`.
+
+  Deliberately does *not* report per-season episode counts. An earlier
+  version read `s["episodeCount"]` off these same season records, but the
+  real TVDB `/series/{id}/extended` response never populates that field —
+  verified live against `relay.mydia.dev` — so every count came back `0`.
+  Season *counts* are the one thing this raw payload gets right; real
+  episode counts require `fetch_ordering_episodes/4`, which fetches each
+  season individually.
   """
-  @spec available_orderings(list() | nil) :: %{String.t() => [integer()]}
+  @spec available_orderings(list() | nil) :: %{String.t() => pos_integer()}
   def available_orderings(nil), do: %{}
 
   def available_orderings(seasons) when is_list(seasons) do
     seasons
     |> Enum.group_by(fn s -> s["type"]["type"] end)
-    |> Map.new(fn {type, group} ->
-      {type, group |> Enum.sort_by(& &1["number"]) |> Enum.map(&(&1["episodeCount"] || 0))}
-    end)
+    |> Map.new(fn {type, group} -> {type, length(group)} end)
   end
 
   @doc """
@@ -647,11 +652,32 @@ defmodule Mydia.Metadata.Provider.Relay do
       season_stubs
       |> Task.async_stream(
         fn stub ->
-          fetch_season_episode_ids_cached(config, provider_id, stub["id"], stub["number"])
+          # `Task.async_stream/3` links each task to the caller (unlike
+          # `Task.Supervisor.async_stream_nolink/...`), so an *uncaught*
+          # exception in here does not arrive as a graceful `{:exit, reason}`
+          # stream element — it crashes the caller via the link, before the
+          # `Enum.map/2` below ever runs. This runs synchronously inside a
+          # LiveView `handle_event` (via `SeasonOrder.switch/3`), so that
+          # crash would take the LiveView process down instead of reaching
+          # its generic `{:error, reason}` flash. Catch it here, at the one
+          # place a malformed upstream response could raise (a non-list
+          # "episodes" value hitting `Enum.reject/2`/`Enum.map/2`), and fold
+          # it into the same shape as any other fetch failure.
+          try do
+            fetch_season_episode_ids_cached(config, provider_id, stub["id"], stub["number"])
+          rescue
+            exception -> {:error, {:season_fetch_crashed, exception}}
+          end
         end,
         timeout: :infinity
       )
-      |> Enum.map(fn {:ok, result} -> result end)
+      |> Enum.map(fn
+        {:ok, result} -> result
+        # Belt-and-braces: a task that exits for a reason other than a
+        # caught exception above (e.g. killed externally) still can't crash
+        # the caller unhandled.
+        {:exit, reason} -> {:error, {:season_task_exited, reason}}
+      end)
 
     if Enum.all?(results, &match?({:ok, _}, &1)) do
       {:ok, Enum.flat_map(results, fn {:ok, episodes} -> episodes end)}
@@ -668,15 +694,26 @@ defmodule Mydia.Metadata.Provider.Relay do
     )
   end
 
+  # Episode records under `/tvdb/seasons/{id}/extended` carry the coordinates
+  # of the ordering *they were fetched from*, not the aired ones — verified
+  # live against relay.mydia.dev on 2026-08-17, Black Clover DVD season 2
+  # (tvdb_season_id 1837386): episode id 6832458 has seasonNumber=2, number=1
+  # (absoluteNumber=52, its aired-order episode number); id 6840619 has
+  # seasonNumber=2, number=2 (absoluteNumber=53). So `ep["seasonNumber"]` is
+  # safe to trust directly for building a `SeasonOrder.remap/3` mapping. The
+  # `|| season_number` fallback stays anyway: it costs nothing, and guards a
+  # sparse/malformed episode record (no `seasonNumber` at all) rather than
+  # ordinary TVDB data, which always sets it.
   defp fetch_season_episode_ids(config, tvdb_season_id, season_number) do
     req = HTTP.new_request(config)
 
-    case HTTP.get(req, "/tvdb/seasons/#{tvdb_season_id}/extended", params: [meta: "translations"]) do
+    case HTTP.get(req, "/tvdb/seasons/#{tvdb_season_id}/extended") do
       {:ok, %{status: 200, body: body}} ->
         data = body["data"] || body
 
         episodes =
           (data["episodes"] || [])
+          |> Enum.reject(&is_nil(&1["number"]))
           |> Enum.map(fn ep ->
             %{
               provider_episode_id: ordering_episode_id(ep["id"]),

@@ -35,7 +35,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
         <div class="flex-1">
           <p class="text-sm">
             One season here has {season_episode_max(@media_item)} episodes. TVDB also splits
-            this show into {describe_counts(@season_order_suggestion.counts)} as a DVD ordering.
+            this show into {format_season_ordering_counts(@season_order_suggestion.counts)} as a DVD ordering.
           </p>
           <div class="flex gap-2 mt-2">
             <button
@@ -85,7 +85,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
   defp tvdb_show?(media_item),
     do: media_item.type == "tv_show" and media_item.metadata_source == :tvdb
 
-  defp current_season_order(media_item), do: media_item.season_order || :official
+  defp current_season_order(media_item), do: SeasonOrder.effective(media_item)
 
   defp season_episode_max(media_item) do
     media_item.episodes
@@ -93,26 +93,6 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
     |> Enum.map(fn {_season_number, eps} -> length(eps) end)
     |> Enum.max(fn -> 0 end)
   end
-
-  defp describe_counts([single]), do: "one season of #{single}"
-
-  defp describe_counts(counts) do
-    "#{season_count_word(length(counts))} seasons of #{join_with_and(counts)}"
-  end
-
-  defp join_with_and([last]), do: to_string(last)
-
-  defp join_with_and(counts) do
-    {init, [last]} = Enum.split(counts, -1)
-    Enum.join(init, ", ") <> " and #{last}"
-  end
-
-  defp season_count_word(2), do: "two"
-  defp season_count_word(3), do: "three"
-  defp season_count_word(4), do: "four"
-  defp season_count_word(5), do: "five"
-  defp season_count_word(6), do: "six"
-  defp season_count_word(n), do: to_string(n)
 
   @doc """
   One season: the disclosure header, the segment status row, and the episode
