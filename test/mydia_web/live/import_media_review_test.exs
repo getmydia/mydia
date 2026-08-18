@@ -255,4 +255,27 @@ defmodule MydiaWeb.ImportMediaReviewTest do
   test "/review redirects to /import", %{conn: conn} do
     assert {:error, {:live_redirect, %{to: "/import"}}} = live(conn, "/review")
   end
+
+  test "a ready group is collapsed and a needs-attention group is expanded on load", %{
+    conn: conn
+  } do
+    lp = library_path_fixture(%{type: "series"})
+    ready = seed_group(lp, cluster_key: "ready", min_confidence: 1.0)
+    attention = seed_group(lp, cluster_key: "attention", min_confidence: 0.7, file_count: 9)
+
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    assert has_element?(view, "#group-toggle-#{ready.id} .hero-chevron-right")
+    assert has_element?(view, "#group-toggle-#{attention.id} .hero-chevron-down")
+  end
+
+  test "the nav badge shows the pending group count", %{conn: conn} do
+    lp = library_path_fixture(%{type: "series"})
+    seed_group(lp, cluster_key: "a")
+    seed_group(lp, cluster_key: "b")
+
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    assert has_element?(view, "#nav-import-badge", "2")
+  end
 end

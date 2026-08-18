@@ -88,6 +88,20 @@ defmodule Mydia.ImportGroups do
   end
 
   @doc """
+  Total pending groups across every library, for the navigation badge.
+
+  A plain SQL count, deliberately not `band_counts/1`: that one loads every
+  pending row to fold bands in Elixir, and this runs on every authenticated
+  LiveView mount.
+  """
+  @spec count_pending() :: non_neg_integer()
+  def count_pending do
+    ImportGroup
+    |> where([g], g.status == "pending")
+    |> Repo.aggregate(:count)
+  end
+
+  @doc """
   One keyset page of pending groups, newest-largest first.
 
   Returns `{groups, cursor}`; `cursor` is nil when the page is the last one.

@@ -34,8 +34,8 @@
         group={group}
         band={ImportGroups.band(group)}
         selected={SelectionScope.selected?(@selection, group.id)}
-        expanded={@expanded_group_id == group.id}
-        members={@streams.members}
+        expanded={MapSet.member?(@expanded_ids, group.id)}
+        members={if @expanded_group_id == group.id, do: @streams.members, else: []}
       />
     </div>
 

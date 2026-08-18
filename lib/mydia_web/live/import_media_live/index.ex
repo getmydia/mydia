@@ -86,6 +86,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       |> assign(:cursor, nil)
       |> assign(:next_cursor, nil)
       |> assign(:cursor_stack, [])
+      |> assign(:expanded_ids, MapSet.new())
       |> assign(:expanded_group_id, nil)
       |> assign(:band_counts, @empty_band_counts)
       # Per-library pending totals for the picker, keyed by library_path_id.
@@ -345,37 +346,53 @@ defmodule MydiaWeb.ImportMediaLive.Index do
      |> refresh_counts()}
   end
 
+  # `expanded_ids` tracks which groups are visually open (the chevron); a
+  # settled group starts absent from it, an unsettled one starts present
+  # (seeded in load_groups/1). `expanded_group_id` is a separate, single
+  # value tracking which one group's members are actually loaded into
+  # `@streams.members` -- auto-expanding every unsettled group on the page
+  # must not mean eagerly loading members for all of them, so opening a
+  # group only ever populates the member list for the group most recently
+  # clicked; every other open group renders its `<ul>` with an empty member
+  # list until it, too, is clicked.
   def handle_event("expand_group", %{"id" => id}, socket) do
-    previously_expanded = socket.assigns.expanded_group_id
+    expanded = socket.assigns.expanded_ids
 
-    socket =
-      if previously_expanded == id do
-        socket
-        |> assign(:expanded_group_id, nil)
-        |> stream(:members, [], reset: true)
-      else
-        members = ImportGroups.members(id, limit: 200)
+    # A group row's `expanded` and `members` are computed from assigns
+    # outside the `:groups` stream itself. Stream items only redraw when
+    # explicitly re-inserted -- LiveView diffs a stream by its own
+    # insert/delete/reset operations, not by the outer assigns a `:for` over
+    # it happens to close over -- so every row whose derived output just
+    # changed must be re-inserted, or neither its chevron nor its member
+    # list would ever change on screen.
+    if MapSet.member?(expanded, id) do
+      {:noreply,
+       socket
+       |> assign(:expanded_ids, MapSet.delete(expanded, id))
+       |> refresh_group_row(id)}
+    else
+      previously_loaded = socket.assigns.expanded_group_id
 
+      socket =
         socket
+        |> assign(:expanded_ids, MapSet.put(expanded, id))
         |> assign(:expanded_group_id, id)
-        |> stream(:members, members, reset: true)
-      end
+        |> stream(:members, ImportGroups.members(id, limit: 200), reset: true)
+        |> refresh_group_row(id)
 
-    # A group row's `expanded` (and, on toggle, `selected`) attribute is
-    # computed from assigns outside the `:groups` stream itself. Stream items
-    # only redraw when explicitly re-inserted -- LiveView diffs a stream by
-    # its own insert/delete/reset operations, not by the outer assigns a
-    # `:for` over it happens to close over -- so both the row losing focus
-    # and the row gaining it must be re-inserted, or neither's chevron or
-    # member list would ever change on screen.
-    socket =
-      if previously_expanded && previously_expanded != id do
-        refresh_group_row(socket, previously_expanded)
-      else
-        socket
-      end
+      # The group that previously held the loaded member list, if any and if
+      # different, just lost it (its `@members` prop now evaluates to `[]`)
+      # even though it may still be visually open -- that row needs
+      # re-inserting too.
+      socket =
+        if previously_loaded && previously_loaded != id do
+          refresh_group_row(socket, previously_loaded)
+        else
+          socket
+        end
 
-    {:noreply, refresh_group_row(socket, id)}
+      {:noreply, socket}
+    end
   end
 
   @impl true
@@ -467,6 +484,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     |> assign(:selected_library_path_id, id)
     |> assign(:cursor, nil)
     |> assign(:cursor_stack, [])
+    |> assign(:expanded_ids, MapSet.new())
     |> assign(:expanded_group_id, nil)
     |> assign(:selection, SelectionScope.new(id))
     |> stream(:members, [], reset: true)
@@ -502,10 +520,20 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       |> SelectionScope.select_all_matching(filter)
       |> SelectionScope.count()
 
+    # The wizard pre-collapsed any season whose episodes all matched confidently,
+    # and losing that is why the rewritten page read as one huge list. Same rule,
+    # one level up: a settled group starts closed, an unsettled one starts open.
+    expanded =
+      groups
+      |> Enum.reject(&(ImportGroups.band(&1) == :ready))
+      |> Enum.map(& &1.id)
+      |> MapSet.new()
+
     socket
     |> stream(:groups, groups, reset: true)
     |> assign(:next_cursor, next_cursor)
     |> assign(:matching_count, matching_count)
+    |> assign(:expanded_ids, expanded)
   end
 
   # Recomputes the counts that only change when a group's status changes,

@@ -162,11 +162,12 @@ defmodule MydiaWeb.ImportMediaLive.Components do
   One group row: a checkbox, the collapsed summary, and (when expanded) its
   member files.
 
-  `members` is the LiveView's whole `@streams.members` stream, shared across
-  every row because only one group is ever expanded at a time
-  (`expanded_group_id` is a single value on the socket). The `phx-update`
-  container id is per-group, so LiveView discards the old member list's DOM
-  the moment expansion moves to a different row.
+  `expanded` is per-row (any number of rows can be open at once -- a settled
+  group starts closed, an unsettled one starts open). `members` is not: only
+  the one group most recently clicked ever gets `@streams.members`, every
+  other open row is passed `[]` so its `<ul>` renders with nothing in it
+  until it, too, is clicked. That is what keeps the page bounded even when
+  every group on it is unsettled and auto-expanded.
   """
   attr :id, :string, required: true
   attr :group, :map, required: true

@@ -182,6 +182,13 @@ defmodule MydiaWeb.Layouts do
                   class={nav_active?(@current_path, "/import", false) && "active"}
                 >
                   <.icon name="hero-inbox-stack" class="w-5 h-5" /> Import
+                  <span
+                    :if={@import_group_count > 0}
+                    id="nav-import-badge"
+                    class="badge badge-primary badge-sm"
+                  >
+                    {@import_group_count}
+                  </span>
                 </.link>
               </li>
               <li>
