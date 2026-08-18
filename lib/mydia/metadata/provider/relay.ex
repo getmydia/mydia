@@ -66,6 +66,7 @@ defmodule Mydia.Metadata.Provider.Relay do
   @behaviour Mydia.Metadata.Provider
 
   require Logger
+  alias Mydia.Media.SeasonOrder
   alias Mydia.Metadata.Cache
   alias Mydia.Metadata.Provider.{Error, HTTP}
   alias Mydia.Metadata.LanguageCode
@@ -313,7 +314,7 @@ defmodule Mydia.Metadata.Provider.Relay do
         # TVDB wraps response in "data" key
         data = body["data"] || body
         # Transform TVDB response to TMDB-like format for parsing
-        transformed = transform_tvdb_to_tmdb_format(data, media_type, language)
+        transformed = transform_tvdb_to_tmdb_format(data, media_type, language, opts)
         metadata = parse_metadata(transformed, media_type, provider_id)
         # Override provider to :tvdb. Trailers live outside the transformed
         # payload, so videos are resolved separately.
@@ -429,12 +430,15 @@ defmodule Mydia.Metadata.Provider.Relay do
   defp find_remote_id(_remote_ids, _source), do: nil
 
   # Transform TVDB API response to match TMDB format for consistent parsing
-  defp transform_tvdb_to_tmdb_format(data, _media_type, language) when is_map(data) do
+  defp transform_tvdb_to_tmdb_format(data, _media_type, language, opts) when is_map(data) do
     # Extract year from firstAired date or year field
     year = extract_tvdb_year(data)
 
-    # Transform seasons if present
-    seasons = transform_tvdb_seasons(data["seasons"])
+    # Transform seasons using the caller's requested ordering (an atom from
+    # `Mydia.Media.SeasonOrder.values/0`, carried on the show), defaulting to
+    # TVDB's "official" ordering when the caller doesn't specify one.
+    order_type = opts |> Keyword.get(:season_order) |> SeasonOrder.tvdb_type()
+    seasons = transform_tvdb_seasons(data["seasons"], order_type)
 
     # Transform genres
     genres = transform_tvdb_genres(data["genres"])
@@ -486,7 +490,7 @@ defmodule Mydia.Metadata.Provider.Relay do
     }
   end
 
-  defp transform_tvdb_to_tmdb_format(data, _media_type, _language), do: data
+  defp transform_tvdb_to_tmdb_format(data, _media_type, _language, _opts), do: data
 
   defp extract_tvdb_year(%{"year" => year}) when is_binary(year) do
     case Integer.parse(year) do
@@ -510,11 +514,26 @@ defmodule Mydia.Metadata.Provider.Relay do
 
   defp extract_tvdb_year(_), do: nil
 
-  defp transform_tvdb_seasons(nil), do: []
+  @doc """
+  Selects one TVDB season ordering from the extended series response.
 
-  defp transform_tvdb_seasons(seasons) when is_list(seasons) do
+  TVDB returns every ordering of a series in the same `seasons` list,
+  distinguished by `type.type` (`"official"`, `"dvd"`, `"absolute"`, and
+  others depending on the show). Keeping only `"official"` is what put all
+  170 episodes of Black Clover in a single season; its `"dvd"` ordering
+  describes the same episodes as four real seasons of 51 / 51 / 52 / 16 plus
+  a specials season. `order_type` defaults to `"official"` so existing
+  callers keep their current behavior unchanged.
+  """
+  @spec transform_tvdb_seasons(list() | nil, String.t()) :: [map()]
+  def transform_tvdb_seasons(seasons, order_type \\ "official")
+
+  def transform_tvdb_seasons(nil, _order_type), do: []
+
+  def transform_tvdb_seasons(seasons, order_type) when is_list(seasons) do
     seasons
-    |> Enum.filter(fn s -> s["type"]["type"] == "official" end)
+    |> Enum.filter(fn s -> s["type"]["type"] == order_type end)
+    |> Enum.sort_by(& &1["number"])
     |> Enum.map(fn s ->
       %{
         "id" => s["id"],
@@ -529,7 +548,27 @@ defmodule Mydia.Metadata.Provider.Relay do
     end)
   end
 
-  defp transform_tvdb_seasons(_), do: []
+  def transform_tvdb_seasons(_, _), do: []
+
+  @doc """
+  Summarises every ordering TVDB offers for a series, as
+  `%{"official" => [episode_count, ...], "dvd" => [...], ...}`, sorted by
+  season number within each ordering.
+
+  Meant to drive an ordering picker: the caller can show what switching to
+  `"dvd"` would actually produce (four real seasons plus specials) rather
+  than an opaque ordering name.
+  """
+  @spec available_orderings(list() | nil) :: %{String.t() => [integer()]}
+  def available_orderings(nil), do: %{}
+
+  def available_orderings(seasons) when is_list(seasons) do
+    seasons
+    |> Enum.group_by(fn s -> s["type"]["type"] end)
+    |> Map.new(fn {type, group} ->
+      {type, group |> Enum.sort_by(& &1["number"]) |> Enum.map(&(&1["episodeCount"] || 0))}
+    end)
+  end
 
   defp transform_tvdb_genres(nil), do: []
 
