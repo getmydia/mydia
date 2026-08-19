@@ -400,8 +400,16 @@ defmodule Mydia.Downloads.Seedbox.Fetcher do
         new_metadata = Map.merge(download.metadata || %{}, %{"save_path" => save_path})
 
         case History.update_download(download, %{metadata: new_metadata}) do
-          {:ok, _} -> {:ok, :done}
-          {:error, changeset} -> {:error, {:finalize_failed, changeset}}
+          {:ok, _} ->
+            {:ok, :done}
+
+          # Deleted between the lookup above and this write — same race, narrower
+          # window, and just as terminal (issue #281). An ordinary changeset
+          # error still surfaces as retryable.
+          {:error, changeset} ->
+            if History.stale_changeset?(changeset),
+              do: :download_deleted,
+              else: {:error, {:finalize_failed, changeset}}
         end
     end
   end

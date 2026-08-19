@@ -289,8 +289,23 @@ defmodule Mydia.Downloads.Client.Debrid.Fetcher do
     end
   end
 
+  # Writes `attrs` into the row's metadata, collapsing "the row was deleted
+  # between the lookup above and this write" into the same terminal
+  # `:download_deleted` the nil lookup returns. Same race, narrower window, and
+  # retrying it is just as pointless (issue #281). An ordinary changeset error
+  # still surfaces as `{:error, _}` and stays retryable.
   defp persist_metadata(download, attrs) do
-    History.update_download(download, %{metadata: Map.merge(download.metadata || %{}, attrs)})
+    case History.update_download(download, %{
+           metadata: Map.merge(download.metadata || %{}, attrs)
+         }) do
+      {:error, %Ecto.Changeset{} = changeset} ->
+        if History.stale_changeset?(changeset),
+          do: :download_deleted,
+          else: {:error, changeset}
+
+      ok ->
+        ok
+    end
   end
 
   defp stream_all(urls, download_dir, state, download) do
@@ -484,6 +499,7 @@ defmodule Mydia.Downloads.Client.Debrid.Fetcher do
       download ->
         case persist_metadata(download, %{"save_path" => download_dir!(state)}) do
           {:ok, _} -> {:ok, state}
+          :download_deleted -> :download_deleted
           {:error, cs} -> {:error, Error.unknown("failed to finalize download: #{inspect(cs)}")}
         end
     end

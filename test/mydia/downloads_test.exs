@@ -539,6 +539,31 @@ defmodule Mydia.DownloadsTest do
     end
   end
 
+  describe "stale_changeset?/1" do
+    # Callers have to tell "this row is gone" apart from "this write was
+    # invalid": retrying the first is pointless and, in the fetchers, expensive
+    # enough to re-download a whole payload. Reads Ecto's `stale: true` tag
+    # rather than the message text, so rewording the error cannot break it.
+    test "is true for a write against a deleted row" do
+      download = download_fixture()
+      Repo.delete_all(from(d in Download, where: d.id == ^download.id))
+
+      {:error, changeset} = Downloads.update_download(download, %{title: "Nope"})
+
+      assert Downloads.stale_changeset?(changeset)
+    end
+
+    test "is false for an ordinary validation failure" do
+      download = download_fixture()
+
+      # `title` is required, so blanking it is a plain validation error on a row
+      # that is still very much present.
+      {:error, changeset} = Downloads.update_download(download, %{title: nil})
+
+      refute Downloads.stale_changeset?(changeset)
+    end
+  end
+
   describe "mark_download_completed/1 and mark_download_failed/2" do
     # These two write through `Repo.update/2` directly rather than through
     # `update_download/2`, so they need the same stale handling. `DownloadMonitor`

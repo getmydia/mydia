@@ -210,6 +210,24 @@ defmodule Mydia.Downloads.History do
     end
   end
 
+  @doc """
+  Whether a changeset from a download write failed because the row was gone.
+
+  The companion to `@stale_opts`: those turn Ecto's `Ecto.StaleEntryError` into a
+  changeset error, and this tells that error apart from an ordinary validation
+  failure. Ecto tags it `stale: true` (see `Ecto.Repo.Schema.apply/4`), which is
+  what this reads — not the message text, so rewording `@stale_opts` cannot
+  silently break it.
+
+  Callers that must distinguish "this download no longer exists" from "this write
+  was invalid" need it: retrying the first is pointless and sometimes expensive,
+  while retrying the second may be right (issue #281).
+  """
+  @spec stale_changeset?(Ecto.Changeset.t()) :: boolean()
+  def stale_changeset?(%Ecto.Changeset{errors: errors}) do
+    Enum.any?(errors, fn {_field, {_message, opts}} -> Keyword.get(opts, :stale, false) end)
+  end
+
   def get_download(id, opts \\ []), do: opts |> download_query() |> Repo.get(id)
 
   def get_download!(id, opts \\ []), do: opts |> download_query() |> Repo.get!(id)

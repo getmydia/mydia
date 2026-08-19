@@ -122,6 +122,15 @@ defmodule Mydia.Downloads do
   defdelegate get_download(id, opts \\ []), to: Mydia.Downloads.History
 
   @doc """
+  Whether a changeset from a download write failed because the row was gone,
+  rather than because the write was invalid.
+
+  See `Mydia.Downloads.History.stale_changeset?/1`.
+  """
+  @spec stale_changeset?(Ecto.Changeset.t()) :: boolean()
+  defdelegate stale_changeset?(changeset), to: Mydia.Downloads.History
+
+  @doc """
   Gets a single download.
 
   ## Options
