@@ -266,7 +266,14 @@ defmodule Mydia.Events do
   @spec unsubscribe() :: :ok
   def unsubscribe, do: PubSub.unsubscribe(@pubsub_name, @events_topic)
 
-  defp broadcast_event(event) do
+  @doc """
+  Broadcasts an event to subscribers of the global event feed.
+
+  Public because `Mydia.Events.Writer` broadcasts the rows it inserts, and
+  duplicating the topic name in two modules is how they drift apart.
+  """
+  @spec broadcast_event(Event.t()) :: :ok | {:error, term()}
+  def broadcast_event(event) do
     PubSub.broadcast(@pubsub_name, @events_topic, {:event_created, event})
   end
 
