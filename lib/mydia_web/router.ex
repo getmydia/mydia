@@ -156,6 +156,10 @@ defmodule MydiaWeb.Router do
 
       # Integrations (third-party plugin connections)
       live "/integrations", IntegrationsLive.Index, :index
+
+      # Paired players and player downloads. Deliberately user-scoped: pairing a
+      # device is a user's own action, not an administrator's.
+      live "/devices", DevicesLive.Index, :index
     end
   end
 
