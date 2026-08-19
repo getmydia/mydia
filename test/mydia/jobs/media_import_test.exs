@@ -2465,6 +2465,9 @@ defmodule Mydia.Jobs.MediaImportTest do
       # disappearance exactly in the window the stamp writes into. Telemetry
       # fires after the query runs, so the reload still returns a row and it is
       # the write that finds it gone.
+      #
+      # The SQL match stops at `."id" = ` because the placeholder that follows is
+      # adapter-specific (`?` on SQLite, `$1` on Postgres).
       handler_id = {__MODULE__, :delete_after_files_land, download.id}
       test_pid = self()
       reads = :counters.new(1, [])
@@ -2474,7 +2477,7 @@ defmodule Mydia.Jobs.MediaImportTest do
         [:mydia, :repo, :query],
         fn _event, _measurements, metadata, _config ->
           if self() == test_pid and metadata.source == "downloads" and
-               String.contains?(metadata.query, ~s|."id" = ?|) do
+               String.contains?(metadata.query, ~s|."id" = |) do
             :counters.add(reads, 1, 1)
 
             if :counters.get(reads, 1) == 2 do

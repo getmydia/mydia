@@ -132,6 +132,60 @@ defmodule Mydia.Downloads.Client.Debrid.FetcherTest do
     end
   end
 
+  describe "download cancelled mid-fetch" do
+    # Regression for #281/#285. A row deleted while the fetcher is working must
+    # be terminal, not retryable: the missing-row branch used to return a bare
+    # `:ok`, which is neither of `handle_info/2`'s clauses and crashed the
+    # GenServer with CaseClauseError. Returning `{:error, _}` instead would be
+    # just as wrong — it would burn the retry budget re-resolving provider URLs
+    # and re-transferring a payload nothing is tracking any more.
+    test "stops the fetcher without streaming or retrying", %{staging: staging} do
+      bypass = Bypass.open()
+
+      # If the fetcher retried instead of stopping, it would resolve URLs again
+      # and hit this endpoint. Never being called is the assertion.
+      Bypass.stub(bypass, "GET", "/file.bin", fn conn ->
+        send(self(), :unexpected_stream)
+        Plug.Conn.resp(conn, 200, "payload")
+      end)
+
+      download = insert_download()
+      url = "http://127.0.0.1:#{bypass.port}/file.bin"
+      StubProvider.set(:get_download_urls, {:ok, [url]})
+      StubProvider.set(:rate_limit_budget, {100, 60})
+
+      # The operator cancels before the fetcher gets to persist its URLs.
+      Repo.delete!(download)
+
+      # A crash and a clean stop both deregister the process, so "it exited" is
+      # not the assertion — the exit *reason* is. The small jitter leaves room to
+      # attach the monitor before `:begin` is handled.
+      :ok =
+        Fetcher.claim(
+          download_id: download.id,
+          config: config(staging),
+          provider_job: fake_provider_job(download.download_client_id),
+          provider_module: StubProvider,
+          jitter_ms: 50,
+          download_dir: staging
+        )
+
+      {:ok, pid} = Fetcher.whereis(download.id)
+      ref = Process.monitor(pid)
+
+      # Generous window: a retry would only fire after 5s, so anything within it
+      # also proves the fetcher did not schedule one.
+      assert_receive {:DOWN, ^ref, :process, ^pid, reason}, 4_000
+      assert reason == :normal
+
+      refute_received :unexpected_stream
+
+      # Registry deregistration trails process death, so poll rather than
+      # reading `whereis/1` straight after the :DOWN.
+      :ok = wait_for_fetcher_exit(download.id)
+    end
+  end
+
   describe "atomic claim" do
     test "two concurrent claim calls produce one running fetcher", %{staging: staging} do
       bypass = Bypass.open()

@@ -149,6 +149,15 @@ defmodule Mydia.Downloads.Client.Debrid.Fetcher do
       {:ok, new_state} ->
         {:stop, :normal, new_state}
 
+      # The download was cancelled while this fetcher was working. Terminal, not
+      # retryable: there is nothing left to fetch for (issue #281).
+      :deleted ->
+        Logger.info(
+          "Debrid fetch stopping: download_id=#{state.download_id} was removed mid-fetch"
+        )
+
+        {:stop, :normal, state}
+
       {:error, reason} when state.retries_left > 0 ->
         Logger.warning(
           "Debrid fetcher attempt failed for download_id=#{state.download_id} " <>
@@ -270,13 +279,25 @@ defmodule Mydia.Downloads.Client.Debrid.Fetcher do
     # The operator can cancel a download while its fetcher is still running, so a
     # missing row is an ordinary outcome here, not a reason to crash the
     # GenServer mid-fetch (issue #281).
+    #
+    # `:deleted` is deliberately neither `{:ok, _}` nor `{:error, _}`: it exits
+    # `run/1`'s `with` and lands on the terminal clause in `handle_info/2`. An
+    # `{:error, _}` here would instead be retried, re-resolving provider URLs and
+    # re-transferring a payload for a download nobody is tracking any more.
     case History.get_download(state.download_id) do
       nil ->
-        :ok
+        :deleted
 
       download ->
         new_metadata = Map.merge(download.metadata || %{}, %{"debrid_urls" => persisted})
-        History.update_download(download, %{metadata: new_metadata})
+
+        case History.update_download(download, %{metadata: new_metadata}) do
+          {:error, changeset} ->
+            if History.stale_error?(changeset), do: :deleted, else: {:error, changeset}
+
+          ok ->
+            ok
+        end
     end
   end
 
@@ -464,7 +485,7 @@ defmodule Mydia.Downloads.Client.Debrid.Fetcher do
       # Cancelled mid-fetch. The bytes are staged but nothing tracks them any
       # more, so stop cleanly rather than crashing the fetcher (issue #281).
       nil ->
-        {:ok, state}
+        :deleted
 
       download ->
         save_path = download_dir!(state)
@@ -477,7 +498,7 @@ defmodule Mydia.Downloads.Client.Debrid.Fetcher do
 
           {:error, cs} ->
             if History.stale_error?(cs) do
-              {:ok, state}
+              :deleted
             else
               {:error, Error.unknown("failed to finalize download: #{inspect(cs)}")}
             end

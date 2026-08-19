@@ -102,6 +102,15 @@ defmodule Mydia.Downloads.Seedbox.Fetcher do
       {:ok, _} ->
         {:stop, :normal, state}
 
+      # The download was cancelled while this fetcher was working. Terminal, not
+      # retryable: there is nothing left to fetch for (issue #281).
+      :deleted ->
+        Logger.info(
+          "Seedbox fetch stopping: download_id=#{state.download_id} was removed mid-fetch"
+        )
+
+        {:stop, :normal, state}
+
       {:error, reason} when state.retries_left > 0 ->
         Logger.warning(
           "Seedbox fetch attempt failed for download_id=#{state.download_id} " <>
@@ -374,10 +383,15 @@ defmodule Mydia.Downloads.Seedbox.Fetcher do
   end
 
   defp finalize(state) do
+    # `:deleted` is deliberately neither `{:ok, _}` nor `{:error, _}` so it lands
+    # on the terminal clause in `handle_info/2`. An `{:error, _}` would be
+    # retried, opening fresh SFTP sessions for a download nobody tracks any more
+    # — and the first successful transfer may already have deleted the remote
+    # source (issue #281).
     case History.get_download(state.download_id) do
-      # Cancelled mid-fetch — nothing left to finalize against (issue #281).
+      # Cancelled mid-fetch — nothing left to finalize against.
       nil ->
-        {:ok, :done}
+        :deleted
 
       download ->
         save_path = local_download_dir(state)
@@ -389,7 +403,7 @@ defmodule Mydia.Downloads.Seedbox.Fetcher do
 
           {:error, changeset} ->
             if History.stale_error?(changeset) do
-              {:ok, :done}
+              :deleted
             else
               {:error, {:finalize_failed, changeset}}
             end

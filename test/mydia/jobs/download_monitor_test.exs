@@ -2340,6 +2340,10 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
   # Telemetry handlers are global and run in the emitting process, so the pid
   # guard stops a concurrent Postgres test from stealing the handler and
   # deleting on a sandbox connection where this row does not exist.
+  #
+  # The SQL match stops at `."id" = ` because the placeholder that follows is
+  # adapter-specific — `?` on SQLite, `$1` on Postgres. Matching the SQLite form
+  # would leave these tests silently never firing on the Postgres CI job.
   defp delete_on_primary_key_read(download, tag) do
     handler_id = {__MODULE__, tag, download.id}
     test_pid = self()
@@ -2349,7 +2353,7 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
       [:mydia, :repo, :query],
       fn _event, _measurements, metadata, _config ->
         if self() == test_pid and metadata.source == "downloads" and
-             String.contains?(metadata.query, ~s|."id" = ?|) do
+             String.contains?(metadata.query, ~s|."id" = |) do
           :telemetry.detach(handler_id)
           {:ok, _} = Downloads.delete_download(download)
           send(test_pid, {:deleted_mid_poll, download.id})
