@@ -33,7 +33,7 @@ defmodule Mydia.RemoteAccess do
       nil ->
         %Config{}
         # Note: relay_url is read from METADATA_RELAY_URL env var at runtime
-        |> Config.changeset(%{instance_id: Ecto.UUID.generate(), enabled: false})
+        |> Config.changeset(%{instance_id: Ecto.UUID.generate(), enabled: true})
         |> Repo.insert()
 
       config ->

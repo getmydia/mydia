@@ -17,7 +17,7 @@ defmodule Mydia.RemoteAccess.EnabledTest do
     end
 
     test "reflects a config row created as enabled" do
-      {:ok, _config} = RemoteAccess.initialize_keypair()
+      {:ok, _config} = RemoteAccess.initialize_config()
       {:ok, _config} = RemoteAccess.toggle_remote_access(true)
 
       reset_remote_access()
@@ -26,7 +26,7 @@ defmodule Mydia.RemoteAccess.EnabledTest do
     end
 
     test "picks up toggle_remote_access/1 without a cache reset" do
-      {:ok, _config} = RemoteAccess.initialize_keypair()
+      {:ok, _config} = RemoteAccess.initialize_config()
       {:ok, _config} = RemoteAccess.toggle_remote_access(true)
       assert RemoteAccess.enabled?()
 
@@ -35,15 +35,13 @@ defmodule Mydia.RemoteAccess.EnabledTest do
     end
 
     test "picks up upsert_config/1 without a cache reset" do
-      {:ok, config} = RemoteAccess.initialize_keypair()
+      {:ok, config} = RemoteAccess.initialize_config()
       {:ok, _config} = RemoteAccess.toggle_remote_access(false)
       refute RemoteAccess.enabled?()
 
       {:ok, _config} =
         RemoteAccess.upsert_config(%{
           instance_id: config.instance_id,
-          static_public_key: config.static_public_key,
-          static_private_key_encrypted: config.static_private_key_encrypted,
           enabled: true
         })
 
@@ -72,7 +70,7 @@ defmodule Mydia.RemoteAccess.EnabledTest do
 
   describe "refresh_enabled_cache/0" do
     test "returns the value it stored" do
-      {:ok, _config} = RemoteAccess.initialize_keypair()
+      {:ok, _config} = RemoteAccess.initialize_config()
       {:ok, _config} = RemoteAccess.toggle_remote_access(true)
 
       set_remote_access(false)
