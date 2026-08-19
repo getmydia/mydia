@@ -26,8 +26,11 @@ defmodule Mydia.Downloads.NoRaisingDownloadGetterTest do
   """
   use ExUnit.Case, async: true
 
-  # The definition, its delegate, and its `@spec` — the only places the name may
-  # legitimately appear under lib/. Everything else is a call site.
+  # Where the definition, its delegate, and its `@spec` live. Only the second
+  # test below uses this: the scan itself covers these files too, since
+  # `raising_calls/1` matches a *qualified* call and so cannot be tripped by
+  # `def`, `defdelegate`, or `@spec`. Excluding them would have blinded the guard
+  # to a real call added to either file later.
   @definition_sites [
     "lib/mydia/downloads.ex",
     "lib/mydia/downloads/history.ex"
@@ -37,7 +40,6 @@ defmodule Mydia.Downloads.NoRaisingDownloadGetterTest do
     offenders =
       "lib/**/*.ex"
       |> Path.wildcard()
-      |> Enum.reject(&(&1 in @definition_sites))
       |> Enum.flat_map(&raising_calls/1)
 
     assert offenders == [], """

@@ -102,6 +102,19 @@ defmodule Mydia.Downloads.Seedbox.Fetcher do
       {:ok, _} ->
         {:stop, :normal, state}
 
+      # The row was deleted while we were pulling (cancelled from the UI, an
+      # import that cleaned up). Terminal, and deliberately ahead of the retry
+      # clause: there is nothing left to fetch for and nothing to mark failed,
+      # and `run/1` has already deleted the remote source by this point, so a
+      # retry would re-open SFTP for a path that is gone (issue #281).
+      :download_deleted ->
+        Logger.info(
+          "Seedbox fetcher stopping: download row no longer exists " <>
+            "(download_id=#{state.download_id})"
+        )
+
+        {:stop, :normal, state}
+
       {:error, reason} when state.retries_left > 0 ->
         Logger.warning(
           "Seedbox fetch attempt failed for download_id=#{state.download_id} " <>
@@ -376,10 +389,11 @@ defmodule Mydia.Downloads.Seedbox.Fetcher do
   defp finalize(state) do
     case History.get_download(state.download_id) do
       # Cancelled or deleted while the payload was being pulled (issue #281).
-      # There is no row left to point at the staging directory, so report it
-      # rather than raising out of the GenServer and skipping `fail_download/2`.
+      # Terminal rather than an error: this runs after `transfer_all/2` has
+      # copied everything and `maybe_delete_remote/2` has removed the source, so
+      # a retry would re-open SFTP for a remote path that no longer exists.
       nil ->
-        {:error, :download_deleted}
+        :download_deleted
 
       download ->
         save_path = local_download_dir(state)

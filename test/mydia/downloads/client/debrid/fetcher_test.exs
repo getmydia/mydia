@@ -272,6 +272,38 @@ defmodule Mydia.Downloads.Client.Debrid.FetcherTest do
     end
   end
 
+  describe "the download row is deleted mid-fetch" do
+    # Issue #281. A missing row must be terminal, not a retryable error: every
+    # retry re-runs run/1 from the top, which makes a fresh provider call to
+    # re-resolve URLs, and past finalize/2 would re-download the entire payload
+    # — all against a row that no longer exists.
+    test "stops instead of consuming the retry budget", %{staging: staging} do
+      download = insert_download()
+
+      StubProvider.set(:get_download_urls, {:ok, ["http://127.0.0.1:65535/never-fetched.bin"]})
+      StubProvider.set(:rate_limit_budget, {100, 60})
+
+      # persist_urls/2 runs before any streaming, so the URL above is never
+      # fetched — the fetcher should be gone before it gets that far.
+      Repo.delete!(download)
+
+      :ok =
+        Fetcher.claim(
+          download_id: download.id,
+          config: config(staging),
+          provider_job: fake_provider_job(download.download_client_id),
+          provider_module: StubProvider,
+          jitter_ms: 0,
+          download_dir: staging
+        )
+
+      # 20 attempts × 100ms = a 2s budget. The first retry sleeps 5s before
+      # re-running, so exiting inside this window is the proof that the missing
+      # row was treated as terminal rather than retried.
+      :ok = wait_for_fetcher_exit(download.id, 20)
+    end
+  end
+
   # Polls the Fetcher's Registry entry until it's gone (or times out.)
   # Default budget is 30s — the Fetcher's retry-with-exponential-backoff
   # path (max_retries=3 with growing waits) needs more than the original

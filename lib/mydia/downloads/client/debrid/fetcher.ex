@@ -149,6 +149,20 @@ defmodule Mydia.Downloads.Client.Debrid.Fetcher do
       {:ok, new_state} ->
         {:stop, :normal, new_state}
 
+      # The row was deleted while we were fetching (cancelled from the UI, an
+      # import that cleaned up). Terminal, and deliberately ahead of the retry
+      # clause: there is nothing left to fetch for and nothing to mark failed,
+      # while each retry would re-resolve provider URLs — and past `finalize/2`,
+      # re-download the entire payload — against a row that is already gone
+      # (issue #281).
+      :download_deleted ->
+        Logger.info(
+          "Debrid fetcher stopping: download row no longer exists " <>
+            "(download_id=#{state.download_id})"
+        )
+
+        {:stop, :normal, state}
+
       {:error, reason} when state.retries_left > 0 ->
         Logger.warning(
           "Debrid fetcher attempt failed for download_id=#{state.download_id} " <>
@@ -268,17 +282,15 @@ defmodule Mydia.Downloads.Client.Debrid.Fetcher do
       end)
 
     case History.get_download(state.download_id) do
-      nil ->
-        # Cancelled or deleted while we were resolving. Report it as an ordinary
-        # fetch failure so the caller's error path runs, rather than raising out
-        # of the GenServer and bypassing both the retry back-off and
-        # `fail_download/2` (issue #281).
-        {:error, Error.api_error("download row no longer exists")}
-
-      download ->
-        new_metadata = Map.merge(download.metadata || %{}, %{"debrid_urls" => persisted})
-        History.update_download(download, %{metadata: new_metadata})
+      # Cancelled or deleted while we were resolving (issue #281). Terminal, not
+      # an error: see the `:download_deleted` clause in `handle_info/2`.
+      nil -> :download_deleted
+      download -> persist_metadata(download, %{"debrid_urls" => persisted})
     end
+  end
+
+  defp persist_metadata(download, attrs) do
+    History.update_download(download, %{metadata: Map.merge(download.metadata || %{}, attrs)})
   end
 
   defp stream_all(urls, download_dir, state, download) do
@@ -463,17 +475,14 @@ defmodule Mydia.Downloads.Client.Debrid.Fetcher do
     # completed_at — right before it enqueues the import job.
     case History.get_download(state.download_id) do
       # Cancelled or deleted while the payload was streaming (issue #281). There
-      # is no row left to point at the staging directory, so report it rather
-      # than raising out of the GenServer.
+      # is no row left to point at the staging directory. Terminal rather than
+      # an error, because this runs *after* the whole payload has transferred:
+      # a retry would re-resolve provider URLs and download all of it again.
       nil ->
-        {:error, Error.api_error("download row no longer exists")}
+        :download_deleted
 
       download ->
-        save_path = download_dir!(state)
-
-        new_metadata = Map.merge(download.metadata || %{}, %{"save_path" => save_path})
-
-        case History.update_download(download, %{metadata: new_metadata}) do
+        case persist_metadata(download, %{"save_path" => download_dir!(state)}) do
           {:ok, _} -> {:ok, state}
           {:error, cs} -> {:error, Error.unknown("failed to finalize download: #{inspect(cs)}")}
         end

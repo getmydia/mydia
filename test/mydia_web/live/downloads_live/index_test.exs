@@ -677,11 +677,16 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
 
       # Opens from the stored candidate snapshot — no live listing needed.
       render_click(view, "open_match_files", %{"id" => download.id})
+      assert has_element?(view, "#match-files-modal")
 
       {:ok, _} = Downloads.delete_download(download)
 
       assert render_click(view, "match_files_import", %{}) =~
                "That download no longer exists."
+
+      # The flash alone would pass even if the modal stayed open on a download
+      # that no longer exists, leaving the operator submitting into nothing.
+      refute has_element?(view, "#match-files-modal")
     end
   end
 end
