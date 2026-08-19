@@ -23,7 +23,7 @@ defmodule Mydia.Playback.OnDeck do
 
   alias Mydia.Library.MediaFile
   alias Mydia.Media.{Episode, MediaItem}
-  alias Mydia.Playback.{NextEpisode, OnDeckEntry, Progress}
+  alias Mydia.Playback.{Dismissal, NextEpisode, OnDeckEntry, Progress}
   alias Mydia.Repo
 
   @default_min_position_seconds 120
@@ -54,9 +54,33 @@ defmodule Mydia.Playback.OnDeck do
       |> Repo.all()
       |> Enum.filter(&counting_row?(&1, min_position, cutoff))
 
+    dismissals = load_dismissals(user_id)
+
     (movie_entries(counting) ++ show_entries(counting, user_id))
+    |> Enum.reject(&dismissed?(&1, dismissals))
     |> Enum.sort_by(&sort_key/1, :desc)
     |> Enum.take(limit)
+  end
+
+  # Rejected before `Enum.take/2`, so a hidden title does not silently eat one
+  # of the caller's slots and leave a short rail.
+  #
+  # The comparison is against `sort_at`, the entry's most recent watch, which
+  # is what makes the hide expire without a sweep: playing the title pushes
+  # `sort_at` past `dismissed_at` and the card comes back. For a series
+  # `sort_at` is the newest watch across the whole show, so finishing any
+  # episode brings it back, not only the one the card happens to name.
+  #
+  # `:eq` counts as dismissed. Both columns are `:utc_datetime`, so two actions
+  # in the same second are indistinguishable and one of them has to win. Giving
+  # it to the dismissal keeps the gesture the viewer just made from appearing
+  # to do nothing; the losing case (dismiss, then resume the same title inside
+  # one second) rights itself on the next progress write a few seconds later.
+  defp dismissed?(entry, dismissals) do
+    case Map.get(dismissals, OnDeckEntry.dismissal_key(entry)) do
+      nil -> false
+      dismissed_at -> DateTime.compare(dismissed_at, entry.sort_at) != :lt
+    end
   end
 
   # Sorted on a tuple so entries sharing a timestamp, which a bulk watched
@@ -173,6 +197,18 @@ defmodule Mydia.Playback.OnDeck do
       files: episode.media_files,
       sort_at: sort_at
     }
+  end
+
+  # One query for the whole user, never one per entry: the rail's query count
+  # has to stay flat as a library grows, which `on_deck_query_count_test.exs`
+  # pins down.
+  defp load_dismissals(user_id) do
+    from(d in Dismissal,
+      where: d.user_id == ^user_id,
+      select: {d.media_item_id, d.dismissed_at}
+    )
+    |> Repo.all()
+    |> Map.new()
   end
 
   defp load_media_items([]), do: []

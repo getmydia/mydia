@@ -223,6 +223,36 @@ defmodule MydiaWeb.Schema.Resolvers.PlaybackResolver do
     end
   end
 
+  @doc """
+  Hides a movie or show from the viewer's Continue Watching rail.
+
+  `media_item_id` is the movie, or for a series the *show*. The rail carries
+  one card per show, so an episode id is not a thing this can take.
+
+  A hide, not an unwatch: progress survives, so the title still offers Resume
+  from its detail page, and nothing is pushed out to a media server.
+  """
+  def remove_from_continue_watching(_parent, %{media_item_id: media_item_id}, %{context: context}) do
+    case context[:current_user] do
+      nil ->
+        {:error, "Authentication required"}
+
+      user ->
+        case Playback.dismiss_from_on_deck(user.id, media_item_id) do
+          {:ok, _dismissal} ->
+            {:ok, %{media_item_id: media_item_id, removed: true}}
+
+          # Most often an episode id: the rail's cards are episodes, but a
+          # card stands for its whole show and that is what gets hidden.
+          {:error, :not_found} ->
+            {:error, "Media item not found"}
+
+          {:error, changeset} ->
+            {:error, format_changeset_errors(changeset)}
+        end
+    end
+  end
+
   # Private helper functions
 
   # Safe loaders return an error tuple (not a raised 500) for unknown ids.

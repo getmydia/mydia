@@ -200,6 +200,98 @@ defmodule MydiaWeb.Schema.ContinueWatchingTest do
     end
   end
 
+  describe "removeFromContinueWatching" do
+    @remove_mutation """
+    mutation Remove($mediaItemId: ID!) {
+      removeFromContinueWatching(mediaItemId: $mediaItemId) {
+        mediaItemId
+        removed
+      }
+    }
+    """
+
+    test "hides the show behind an episode card", ctx do
+      [e1, _e2, _e3] = ctx.episodes
+      :changed = Playback.ensure_watched(ctx.user.id, episode_id: e1.id)
+
+      assert {:ok, %{data: %{"continueWatching" => [_]}}} =
+               run_query(@query, %{"first" => 10}, ctx.user)
+
+      assert {:ok, %{data: %{"removeFromContinueWatching" => result}}} =
+               run_query(@remove_mutation, %{"mediaItemId" => ctx.show.id}, ctx.user)
+
+      assert result["mediaItemId"] == ctx.show.id
+      assert result["removed"] == true
+
+      assert {:ok, %{data: %{"continueWatching" => []}}} =
+               run_query(@query, %{"first" => 10}, ctx.user)
+    end
+
+    # The rail's own ids are episode ids, so a client that passes the card's id
+    # straight back is the mistake most likely to be made here.
+    test "refuses an episode id rather than silently doing nothing", ctx do
+      [e1, _e2, _e3] = ctx.episodes
+      :changed = Playback.ensure_watched(ctx.user.id, episode_id: e1.id)
+
+      assert {:ok, %{errors: [%{message: message}]}} =
+               run_query(@remove_mutation, %{"mediaItemId" => e1.id}, ctx.user)
+
+      assert message =~ "not found"
+
+      assert {:ok, %{data: %{"continueWatching" => [_]}}} =
+               run_query(@query, %{"first" => 10}, ctx.user)
+    end
+
+    test "the hidden title returns once it is played again", ctx do
+      movie = MediaFixtures.media_item_fixture(%{type: "movie", title: "Some Movie"})
+      MediaFixtures.media_file_fixture(%{media_item_id: movie.id})
+
+      {:ok, _} =
+        Playback.save_progress(
+          ctx.user.id,
+          [media_item_id: movie.id],
+          %{
+            position_seconds: 900,
+            duration_seconds: 7200,
+            last_watched_at: DateTime.add(DateTime.utc_now(), -600, :second)
+          }
+        )
+
+      assert {:ok, %{data: %{"removeFromContinueWatching" => _}}} =
+               run_query(@remove_mutation, %{"mediaItemId" => movie.id}, ctx.user)
+
+      assert {:ok, %{data: %{"continueWatching" => []}}} =
+               run_query(@query, %{"first" => 10}, ctx.user)
+
+      # Stamped a second past the dismissal rather than left to default. The
+      # mutation stamps with the real clock and both columns are
+      # second-granularity, so a test fast enough to replay inside the same
+      # second would be asserting the tie-break, not the return.
+      {:ok, _} =
+        Playback.save_progress(
+          ctx.user.id,
+          [media_item_id: movie.id],
+          %{
+            position_seconds: 1200,
+            duration_seconds: 7200,
+            last_watched_at: DateTime.add(DateTime.utc_now(), 1, :second)
+          }
+        )
+
+      assert {:ok, %{data: %{"continueWatching" => [item]}}} =
+               run_query(@query, %{"first" => 10}, ctx.user)
+
+      assert item["id"] == movie.id
+    end
+
+    test "requires authentication", ctx do
+      assert {:ok, %{errors: [%{message: message}]}} =
+               run_query(@remove_mutation, %{"mediaItemId" => ctx.show.id}, nil)
+
+      assert message =~ "Authentication required"
+    end
+  end
+
   defp run_query(query, variables, user) do
     context = if user, do: %{current_user: user}, else: %{}
     Absinthe.run(query, MydiaWeb.Schema, variables: variables, context: context)

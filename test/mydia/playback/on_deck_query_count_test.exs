@@ -114,7 +114,7 @@ defmodule Mydia.Playback.OnDeckQueryCountTest do
       assert small == large,
              "expected a constant query count, got #{small} for 3 shows and #{large} for 15"
 
-      assert large <= 8, "expected at most 8 queries, got #{large}"
+      assert large <= 9, "expected at most 9 queries, got #{large}"
     end
   end
 end

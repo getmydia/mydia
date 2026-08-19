@@ -78,6 +78,12 @@ defmodule MydiaWeb.Schema.MutationTypes do
       arg(:media_item_id, non_null(:id))
       resolve(&PlaybackResolver.toggle_favorite/3)
     end
+
+    @desc "Hide a movie or show from Continue Watching until it is played again"
+    field :remove_from_continue_watching, :remove_from_continue_watching_result do
+      arg(:media_item_id, non_null(:id))
+      resolve(&PlaybackResolver.remove_from_continue_watching/3)
+    end
   end
 
   object :remote_access_mutations do

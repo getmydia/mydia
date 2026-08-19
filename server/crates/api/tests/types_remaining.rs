@@ -31,6 +31,7 @@ const OWNED_STREAMING: &[&str] = &[
 
 const OWNED_DISCOVERY: &[&str] = &[
     "ContinueWatchingItem",
+    "RemoveFromContinueWatchingResult",
     "RecentlyAddedItem",
     "UpNextItem",
     "Collection",
