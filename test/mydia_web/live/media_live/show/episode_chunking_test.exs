@@ -40,6 +40,39 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeChunkingTest do
 
       assert Enum.map(chunks, &elem(&1, 0)) == ["251-270", "201-250", "151-200", "101-150"]
     end
+
+    test "labels a partial leading chunk from the episodes it holds, not the grid" do
+      # 25..100 fills the second grid cell (51-100) but only half the first.
+      # A label of "1-50" would advertise 24 episodes the season does not have.
+      chunks = Helpers.episode_chunks(episodes(25..100))
+
+      assert Enum.map(chunks, &elem(&1, 0)) == ["51-100", "25-50"]
+    end
+
+    test "tolerates an unnumbered episode rather than raising" do
+      episodes = [%Episode{season_number: 1, episode_number: nil} | episodes(1..60)]
+
+      chunks = Helpers.episode_chunks(episodes)
+
+      assert Enum.map(chunks, &elem(&1, 0)) == ["51-60", "1-50"]
+
+      numbers =
+        chunks
+        |> Enum.flat_map(fn {_label, eps} -> eps end)
+        |> Enum.map(& &1.episode_number)
+
+      # Kept, not dropped: the row still renders, it just has no place on the grid.
+      assert nil in numbers
+      assert length(numbers) == 61
+    end
+
+    test "labels a chunk of nothing but unnumbered episodes from the grid" do
+      episodes =
+        for _ <- 1..51, do: %Episode{season_number: 1, episode_number: nil}
+
+      assert [{"1-50", eps}] = Helpers.episode_chunks(episodes)
+      assert length(eps) == 51
+    end
   end
 
   describe "rendered chunking" do

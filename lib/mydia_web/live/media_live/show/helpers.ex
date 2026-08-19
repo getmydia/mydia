@@ -612,11 +612,24 @@ defmodule MydiaWeb.MediaLive.Show.Helpers do
     end
   end
 
-  defp chunk_index(%{episode_number: number}), do: div(number - 1, @chunk_size)
+  defp chunk_index(%{episode_number: number}) when is_integer(number),
+    do: div(number - 1, @chunk_size)
 
+  # An episode with no number has no place on the grid. `validate_required/2`
+  # and a NOT NULL column mean no persisted row reaches here, but the `sort_by`
+  # above tolerates nil and `div(nil - 1, _)` does not, so the two disagreed
+  # about the same input. Group them with the first chunk rather than raising:
+  # dropping the row would hide an episode the season really has.
+  defp chunk_index(_episode), do: 0
+
+  # Both bounds read off the episodes the chunk actually holds. Deriving the
+  # lower bound from the grid instead (`index * @chunk_size + 1`) labels a
+  # season whose episodes start at 25 "1-50", promising 24 episodes that do not
+  # exist. The grid is only the fallback for a chunk with no numbers to read.
   defp chunk_label(index, eps) do
-    lower = index * @chunk_size + 1
-    upper = Enum.max_by(eps, & &1.episode_number).episode_number
-    "#{lower}-#{upper}"
+    case eps |> Enum.map(& &1.episode_number) |> Enum.reject(&is_nil/1) do
+      [] -> "#{index * @chunk_size + 1}-#{(index + 1) * @chunk_size}"
+      numbers -> "#{Enum.min(numbers)}-#{Enum.max(numbers)}"
+    end
   end
 end
