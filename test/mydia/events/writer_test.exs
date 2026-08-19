@@ -127,6 +127,26 @@ defmodule Mydia.Events.WriterTest do
     end
   end
 
+  describe "supervision" do
+    test "starts after the repo and PubSub" do
+      children = Mydia.Application.children()
+
+      repo = Enum.find_index(children, &(&1 == Mydia.Repo))
+      pubsub = Enum.find_index(children, &match?({Phoenix.PubSub, _}, &1))
+      writer = Enum.find_index(children, &(&1 == Mydia.Events.Writer))
+
+      assert repo, "expected a Mydia.Repo child"
+      assert pubsub, "expected a Phoenix.PubSub child"
+      assert writer, "expected a Mydia.Events.Writer child"
+
+      # It inserts through the repo and broadcasts through PubSub, so both must
+      # already be up when it starts, and it must stop before them on shutdown
+      # so terminate/2 can still flush.
+      assert repo < writer
+      assert pubsub < writer
+    end
+  end
+
   # The writer inserts from its own process, so a cast is not observable the
   # instant enqueue/2 returns. Poll instead of sleeping a fixed amount.
   defp eventually(fun, attempts \\ 100) do
