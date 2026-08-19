@@ -168,18 +168,28 @@ defmodule MydiaWeb.MediaLive.Show.DownloadEvents do
     with :ok <- Authorization.authorize_manage_downloads(socket) do
       # `delete_download/1` is idempotent, so a row another process already
       # removed still succeeds here; only a row gone before the read needs a
-      # guard.
-      case Downloads.get_download(id) do
-        nil -> :already_gone
-        download -> Downloads.delete_download(download)
-      end
+      # guard. A genuine delete failure is still worth surfacing — silently
+      # reloading would leave the row on screen with no explanation.
+      result =
+        case Downloads.get_download(id) do
+          nil -> :already_gone
+          download -> Downloads.delete_download(download)
+        end
 
-      {:noreply,
-       assign(
-         socket,
-         :downloads_with_status,
-         load_downloads_with_status(socket.assigns.media_item)
-       )}
+      socket =
+        assign(
+          socket,
+          :downloads_with_status,
+          load_downloads_with_status(socket.assigns.media_item)
+        )
+
+      case result do
+        {:error, _changeset} ->
+          {:noreply, put_flash(socket, :error, "Failed to dismiss download")}
+
+        _ok_or_already_gone ->
+          {:noreply, socket}
+      end
     else
       {:unauthorized, socket} -> {:noreply, socket}
     end

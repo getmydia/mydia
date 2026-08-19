@@ -289,8 +289,12 @@ defmodule MydiaWeb.DownloadsLive.Index do
                put_flash(socket, :error, "Failed to retry download: #{inspect(reason)}")}
           end
 
-        {:error, _changeset} ->
-          {:noreply, put_flash(socket, :error, "Failed to update download")}
+        {:error, changeset} ->
+          if Downloads.stale_error?(changeset) do
+            download_gone(socket)
+          else
+            {:noreply, put_flash(socket, :error, "Failed to update download")}
+          end
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
@@ -362,8 +366,12 @@ defmodule MydiaWeb.DownloadsLive.Index do
            |> put_flash(:info, "Import retry initiated")
            |> load_downloads()}
 
-        {:error, _changeset} ->
-          {:noreply, put_flash(socket, :error, "Failed to retry import")}
+        {:error, changeset} ->
+          if Downloads.stale_error?(changeset) do
+            download_gone(socket)
+          else
+            {:noreply, put_flash(socket, :error, "Failed to retry import")}
+          end
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
@@ -922,8 +930,12 @@ defmodule MydiaWeb.DownloadsLive.Index do
            |> put_flash(:info, "Stall timer reset. Mydia will keep waiting on this download.")
            |> load_downloads()}
 
-        {:error, _changeset} ->
-          {:noreply, put_flash(socket, :error, "Could not reset the stall timer")}
+        {:error, changeset} ->
+          if Downloads.stale_error?(changeset) do
+            download_gone(socket)
+          else
+            {:noreply, put_flash(socket, :error, "Could not reset the stall timer")}
+          end
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
@@ -1807,9 +1819,15 @@ defmodule MydiaWeb.DownloadsLive.Index do
   end
 
   defp download_gone(socket) do
+    # `match_files_import` and `submit_match` land here from an open modal, so
+    # the modal state has to go with the row — otherwise the operator is left
+    # looking at a match dialog for a download that no longer exists.
     {:noreply,
      socket
      |> put_flash(:info, "That download is no longer in the queue")
+     |> assign(:match_files_modal, nil)
+     |> assign(:match_files_error, nil)
+     |> assign(:match_modal, nil)
      |> load_downloads()}
   end
 end

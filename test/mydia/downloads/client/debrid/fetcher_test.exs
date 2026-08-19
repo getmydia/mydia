@@ -142,10 +142,14 @@ defmodule Mydia.Downloads.Client.Debrid.FetcherTest do
     test "stops the fetcher without streaming or retrying", %{staging: staging} do
       bypass = Bypass.open()
 
+      # Bound out here on purpose: the stub runs in Bypass's handler process, so
+      # `self()` inside it is that process and the refute below would never fail.
+      test_pid = self()
+
       # If the fetcher retried instead of stopping, it would resolve URLs again
       # and hit this endpoint. Never being called is the assertion.
       Bypass.stub(bypass, "GET", "/file.bin", fn conn ->
-        send(self(), :unexpected_stream)
+        send(test_pid, :unexpected_stream)
         Plug.Conn.resp(conn, 200, "payload")
       end)
 
