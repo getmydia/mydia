@@ -26,7 +26,20 @@ spec:
     spec:
       containers:
         - name: iroh-relay
-          image: n0computer/iroh-relay:v1.0.3@sha256:e9a7ba14287dd9693aca61c339b0d154456d6609f3818a0ef358b07b36aab9cc
+          # Pinned by digest as well as tag: a re-published tag cannot swap the
+          # binary underneath us.
+          #
+          # Held back from v1.0.3. That image is a static musl build carrying
+          # noq-udp 1.1.0, which panics on the FIRST received datagram
+          # (n0-computer/noq#774: musl declares cmsghdr with align 4, but the
+          # SCM_TIMESTAMPNS path decodes a timespec with align 8, and
+          # SO_TIMESTAMPNS is set unconditionally on Linux). Rolling it out on
+          # 2026-08-19 put the relay into CrashLoopBackOff and was rolled back.
+          # Only iroh 1.0.3 took noq 1.1.0; 1.0.1 and 1.0.2 are on noq 1.0.x.
+          #
+          # Before changing this line, run ./verify-image.sh <image>. A plain
+          # boot test cannot catch this: the panic needs real UDP traffic.
+          image: n0computer/iroh-relay:v1.0.0@sha256:0124f8c335d9ad6618db13dc580b597ad5f1be0c987b6742696f4c1f5e325720
           args: ["--config-path", "/config/config.toml"]
           ports:
             - name: http
