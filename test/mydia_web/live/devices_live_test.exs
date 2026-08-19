@@ -159,4 +159,40 @@ defmodule MydiaWeb.DevicesLiveTest do
       refute has_element?(view, "#claim-code")
     end
   end
+
+  describe "player downloads" do
+    setup %{conn: conn} do
+      user = create_test_user()
+      %{conn: log_in_user_session(conn, user)}
+    end
+
+    test "links every platform at the download redirector", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/devices")
+
+      assert has_element?(view, "#download-card")
+
+      for {id, href} <- [
+            {"download-android", "https://mydia.dev/download/android"},
+            {"download-ios", "https://mydia.dev/download/ios"},
+            {"download-macos", "https://mydia.dev/download/macos"},
+            {"download-windows", "https://mydia.dev/download/windows"},
+            {"download-flatpak", "https://mydia.dev/download/flatpak"},
+            {"download-linux", "https://mydia.dev/download/linux"}
+          ] do
+        assert has_element?(view, "##{id}[href=\"#{href}\"]")
+      end
+    end
+
+    test "links the web player at this instance", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/devices")
+
+      assert has_element?(view, "#download-web[href=\"/player\"]")
+    end
+
+    test "opens external downloads in a new tab without window.opener", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/devices")
+
+      assert has_element?(view, "#download-android[target=\"_blank\"][rel=\"noopener\"]")
+    end
+  end
 end

@@ -444,6 +444,83 @@ defmodule MydiaWeb.DevicesLive.Components do
     """
   end
 
+  # mydia.dev/download/<platform> resolves the newest release asset per platform
+  # and redirects ios to TestFlight and flatpak to the flatpakrepo. Linking it
+  # rather than resolving assets here keeps the release naming scheme in one
+  # place, next to release.yml, where drift gets caught.
+  @downloads [
+    %{id: "android", name: "Android", icon: "hero-device-phone-mobile", label: "Download APK"},
+    %{
+      id: "ios",
+      name: "iOS",
+      icon: "hero-device-phone-mobile",
+      label: "Join the TestFlight beta"
+    },
+    %{id: "macos", name: "macOS", icon: "hero-computer-desktop", label: "Download .dmg"},
+    %{id: "windows", name: "Windows", icon: "hero-computer-desktop", label: "Download installer"},
+    %{id: "flatpak", name: "Linux", icon: "hero-computer-desktop", label: "Get the Flatpak repo"},
+    %{id: "linux", name: "Linux tarball", icon: "hero-archive-box", label: "Download .tar.gz"}
+  ]
+
+  def download_card(assigns) do
+    assigns = assign(assigns, :downloads, @downloads)
+
+    ~H"""
+    <div id="download-card" class="card bg-base-100 shadow-sm">
+      <div class="card-body">
+        <h2 class="card-title text-lg mb-1">
+          <.icon name="hero-arrow-down-tray" class="w-5 h-5" /> Get the app
+        </h2>
+        <p class="text-base-content/70 mb-4">
+          Install the Mydia player, then connect it with a pairing code above.
+        </p>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <a
+            :for={platform <- @downloads}
+            id={"download-#{platform.id}"}
+            href={"https://mydia.dev/download/#{platform.id}"}
+            target="_blank"
+            rel="noopener"
+            class="flex items-center gap-3 p-4 rounded-xl border border-base-300 hover:border-primary/40 hover:shadow-md transition-all"
+          >
+            <div class="w-10 h-10 rounded-lg bg-base-200 flex items-center justify-center shrink-0">
+              <.icon name={platform.icon} class="w-5 h-5" />
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="font-semibold truncate">{platform.name}</div>
+              <div class="text-xs text-base-content/50 truncate">{platform.label}</div>
+            </div>
+            <.icon
+              name="hero-arrow-top-right-on-square"
+              class="w-4 h-4 text-base-content/30 shrink-0"
+            />
+          </a>
+
+          <.link
+            id="download-web"
+            navigate={~p"/player"}
+            class="flex items-center gap-3 p-4 rounded-xl border border-base-300 hover:border-primary/40 hover:shadow-md transition-all"
+          >
+            <div class="w-10 h-10 rounded-lg bg-base-200 flex items-center justify-center shrink-0">
+              <.icon name="hero-globe-alt" class="w-5 h-5" />
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="font-semibold truncate">Web</div>
+              <div class="text-xs text-base-content/50 truncate">Play in this browser</div>
+            </div>
+            <.icon name="hero-chevron-right" class="w-4 h-4 text-base-content/30 shrink-0" />
+          </.link>
+        </div>
+
+        <p class="text-xs text-base-content/50 mt-4">
+          Downloads are served from mydia.dev, so this device needs internet access.
+        </p>
+      </div>
+    </div>
+    """
+  end
+
   # Consider a device "active" (online now) if seen within the last 10 minutes.
   @active_threshold_seconds 600
 
