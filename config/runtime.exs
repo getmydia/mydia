@@ -222,16 +222,6 @@ if config_env() == :prod do
   config :mydia, Mydia.Auth.Guardian, secret_key: guardian_secret_key
   config :mydia, Mydia.RemoteAccess.MediaToken, secret_key: guardian_secret_key
 
-  # Relay tunnel shared secret
-  # Uses dedicated env var if provided, otherwise derives from secret_key_base
-  # for zero-configuration security
-  relay_tunnel_secret =
-    System.get_env("RELAY_TUNNEL_SECRET") ||
-      :crypto.mac(:hmac, :sha256, secret_key_base, "relay_tunnel_secret")
-      |> Base.encode64()
-
-  config :mydia, :relay_tunnel_secret, relay_tunnel_secret
-
   # Configure Logger level based on environment variable
   # Supports: debug, info, warning, error
   log_level =

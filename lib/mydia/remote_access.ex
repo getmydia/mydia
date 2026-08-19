@@ -262,28 +262,6 @@ defmodule Mydia.RemoteAccess do
   end
 
   @doc """
-  Gets an active (non-revoked) device by ID, preloading the user.
-
-  Returns `{:ok, device}` if found and active.
-  Returns `{:error, :not_found}` if device doesn't exist.
-  Returns `{:error, :revoked}` if device is revoked.
-  """
-  @spec get_active_device(String.t()) :: {:ok, RemoteDevice.t()} | {:error, :not_found | :revoked}
-  def get_active_device(device_id) do
-    case Repo.get(RemoteDevice, device_id) |> Repo.preload(:user) do
-      nil ->
-        {:error, :not_found}
-
-      device ->
-        if RemoteDevice.revoked?(device) do
-          {:error, :revoked}
-        else
-          {:ok, device}
-        end
-    end
-  end
-
-  @doc """
   Gets a device by token hash.
   """
   def get_device_by_token_hash(token_hash) do
@@ -337,26 +315,8 @@ defmodule Mydia.RemoteAccess do
     |> Repo.update()
   end
 
-  # Throttle interval for touch_device_async (5 minutes)
+  # Throttle interval for device liveness writes (5 minutes)
   @touch_throttle_seconds 300
-
-  @doc """
-  Asynchronously updates the last seen timestamp for a device if needed.
-
-  This function throttles updates to avoid hitting the database on every request.
-  The timestamp is only updated if:
-  - `last_seen_at` is nil (device never seen)
-  - `last_seen_at` is older than #{@touch_throttle_seconds} seconds
-
-  The update runs asynchronously to avoid blocking the request.
-  """
-  def touch_device_async(device) do
-    if should_touch_device?(device) do
-      Task.start(fn -> touch_device(device) end)
-    end
-
-    :ok
-  end
 
   @doc """
   Records liveness for the device named in a verified access token's claims.
@@ -403,13 +363,6 @@ defmodule Mydia.RemoteAccess do
       {0, _} -> :skipped
       {_updated, _} -> :recorded
     end
-  end
-
-  defp should_touch_device?(%{last_seen_at: nil}), do: true
-
-  defp should_touch_device?(%{last_seen_at: last_seen_at}) do
-    threshold = DateTime.utc_now() |> DateTime.add(-@touch_throttle_seconds, :second)
-    DateTime.compare(last_seen_at, threshold) == :lt
   end
 
   @doc """

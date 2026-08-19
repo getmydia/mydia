@@ -324,10 +324,6 @@ config :mydia, Mydia.RemoteAccess.MediaToken,
   secret_key: guardian_secret,
   ttl: {24, :hours}
 
-# Relay tunnel shared secret for development
-# This secret is used to sign internal relay tunnel requests with HMAC-SHA256
-config :mydia, :relay_tunnel_secret, "dev-relay-tunnel-secret-not-for-production"
-
 # P2P keypair path for persistent node identity in development
 # This ensures the node ID stays the same across restarts so paired devices can reconnect
 config :mydia, :p2p_keypair_path, "priv/p2p_keypair.bin"
