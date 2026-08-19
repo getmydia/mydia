@@ -220,10 +220,10 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   def handle_event("clear_scan_results", %{"library_path_id" => path_id}, socket) do
     with :ok <- Authorization.authorize_import_media(socket),
          :ok <- authorize_library_path(socket, path_id),
-         {:ok, count} <- ImportGroups.clear_for_library(path_id) do
+         {:ok, counts} <- ImportGroups.clear_for_library(path_id) do
       {:noreply,
        socket
-       |> put_flash(:info, "Cleared #{count} scan result group(s).")
+       |> put_flash(:info, cleared_message(counts))
        |> assign(:outcome_run, nil)
        |> assign(:scan_complete_run_id, nil)
        |> assign(:selection, SelectionScope.new(path_id))
@@ -784,6 +784,18 @@ defmodule MydiaWeb.ImportMediaLive.Index do
         {:unsupported_type,
          put_flash(socket, :error, "Only movie, TV and mixed libraries can be imported.")}
     end
+  end
+
+  # Naming the cached matches matters: without it the operator reads a small
+  # group count and has no idea the next scan will re-match every file and take
+  # as long as the first one did.
+  defp cleared_message(%{groups: groups, candidates: 0}) do
+    "Cleared #{groups} scan result group(s)."
+  end
+
+  defp cleared_message(%{groups: groups, candidates: candidates}) do
+    "Cleared #{groups} scan result group(s) and #{candidates} cached match(es). " <>
+      "The next scan will re-match every file."
   end
 
   defp accept_result(socket, {:ok, count}) do

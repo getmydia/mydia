@@ -2314,6 +2314,29 @@ defmodule Mydia.Library do
   end
 
   @doc """
+  Deletes every cached candidate belonging to one library path, at every rank.
+
+  This is what makes "clear scan results" mean it. Dropping the groups alone
+  leaves each file's verdict behind, and `unmatched_media_files_query/2` skips
+  any file holding a successful rank-0 candidate, so the next scan matches
+  nothing and `ImportGroups.upsert_for_library/2` rebuilds the same groups from
+  the same stale rows -- quickly, which is what makes it look like it worked.
+  A matcher fix cannot reach an already-scanned library without this.
+
+  Scoped with a subquery rather than a join because PostgreSQL has
+  `DELETE ... USING` and SQLite does not, and this repo targets both.
+  """
+  @spec delete_match_candidates_for_library(binary()) :: {integer(), nil}
+  def delete_match_candidates_for_library(library_path_id) do
+    file_ids =
+      from(f in MediaFile, where: f.library_path_id == ^library_path_id, select: f.id)
+
+    MatchCandidate
+    |> where([c], c.media_file_id in subquery(file_ids))
+    |> Repo.delete_all()
+  end
+
+  @doc """
   Applies one match and/or season to the rank-0 candidate of many files.
 
   This is the review inbox's batch edit. It merges into each file's existing

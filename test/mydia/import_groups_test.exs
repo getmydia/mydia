@@ -63,7 +63,7 @@ defmodule Mydia.ImportGroupsTest do
 
       {:ok, _run} = Mydia.Library.update_import_run(run, %{status: :done, phase: :finished})
 
-      assert {:ok, 1} = ImportGroups.clear_for_library(selected.id)
+      assert {:ok, %{groups: 1}} = ImportGroups.clear_for_library(selected.id)
       refute Repo.get(ImportGroup, selected_group.id)
       assert Repo.get(ImportGroup, other_group.id)
       refute Mydia.Library.last_import_run(selected.id)
@@ -78,6 +78,77 @@ defmodule Mydia.ImportGroupsTest do
 
       assert {:error, :active_run} = ImportGroups.clear_for_library(library_path.id)
       assert Repo.get(ImportGroup, import_group.id)
+    end
+
+    test "a cleared library re-matches every file on the next scan" do
+      # The property that matters. Deleting the groups alone leaves each file's
+      # cached verdict behind, and `unmatched_media_files_query/2` skips any
+      # file holding a successful rank-0 candidate -- so the next scan matched
+      # nothing and `upsert_for_library/2` rebuilt the same groups from the same
+      # stale rows. A row count would not catch that; asking the inbox query
+      # whether the file is outstanding again does.
+      lp = library_path_fixture(%{type: "series"})
+      file = matched_file(lp, "Passe-Partout (2018)/Season 01/ep1.mkv", "117091")
+
+      assert Mydia.Library.list_unmatched_media_file_paths(lp.id, 10) == []
+
+      assert {:ok, %{candidates: 1}} = ImportGroups.clear_for_library(lp.id)
+
+      file_id = file.id
+      assert [{^file_id, _path}] = Mydia.Library.list_unmatched_media_file_paths(lp.id, 10)
+    end
+
+    test "clears candidates of every rank, not just the one the inbox reads" do
+      lp = library_path_fixture(%{type: "series"})
+      file = matched_file(lp, "Show/Season 01/ep1.mkv", "111")
+      candidate(file, 1, "222")
+
+      assert {:ok, %{candidates: 2}} = ImportGroups.clear_for_library(lp.id)
+      assert Repo.all(from(c in MatchCandidate, where: c.media_file_id == ^file.id)) == []
+    end
+
+    test "leaves another library's cached matches alone" do
+      selected = library_path_fixture(%{type: "series"})
+      other = library_path_fixture(%{type: "movies"})
+      matched_file(selected, "Show/Season 01/ep1.mkv", "111")
+      kept = matched_file(other, "Film (2020)/film.mkv", "222")
+
+      assert {:ok, %{candidates: 1}} = ImportGroups.clear_for_library(selected.id)
+      assert [%MatchCandidate{provider_id: "222"}] = Mydia.Library.list_match_candidates(kept.id)
+    end
+
+    test "refusing to clear an active library keeps its cached matches" do
+      lp = library_path_fixture(%{type: "series"})
+      file = matched_file(lp, "Show/Season 01/ep1.mkv", "111")
+
+      {:ok, _run} = Mydia.Library.create_import_run(%{library_path_id: lp.id, mode: :review})
+
+      assert {:error, :active_run} = ImportGroups.clear_for_library(lp.id)
+      assert [%MatchCandidate{provider_id: "111"}] = Mydia.Library.list_match_candidates(file.id)
+    end
+
+    defp matched_file(library_path, relative_path, provider_id) do
+      file =
+        orphaned_media_file_fixture(%{
+          library_path_id: library_path.id,
+          relative_path: relative_path
+        })
+
+      candidate(file, 0, provider_id)
+      file
+    end
+
+    defp candidate(file, rank, provider_id) do
+      %MatchCandidate{}
+      |> MatchCandidate.changeset(%{
+        media_file_id: file.id,
+        rank: rank,
+        provider_type: "tvdb",
+        provider_id: provider_id,
+        title: "Cached",
+        confidence: 0.95
+      })
+      |> Repo.insert!()
     end
   end
 

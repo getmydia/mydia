@@ -12,6 +12,7 @@ defmodule Mydia.ImportGroups do
 
   require Logger
 
+  alias Mydia.Library
   alias Mydia.Library.ImportGroup
   alias Mydia.Library.ImportRun
   alias Mydia.Library.MatchCandidate
@@ -47,11 +48,20 @@ defmodule Mydia.ImportGroups do
   @doc """
   Clears the derived scan and review state for one library path.
 
-  Imported media files are preserved. Active scans are refused so their
-  coordinator cannot recreate groups while the clear is in progress.
+  That means the cached match candidates as well as the groups rolled up from
+  them, so the next scan re-matches from scratch instead of reproducing the
+  previous scan's verdicts. Clearing the groups alone did the latter, which is
+  how a shipped matcher fix could fail to reach an already-scanned library.
+
+  Imported media files are preserved, links and all: a completed import is not
+  scan state. Active scans are refused so their coordinator cannot recreate
+  groups while the clear is in progress.
+
+  Returns the number of groups and candidates removed.
   """
   @spec clear_for_library(binary()) ::
-          {:ok, non_neg_integer()} | {:error, :active_run}
+          {:ok, %{groups: non_neg_integer(), candidates: non_neg_integer()}}
+          | {:error, :active_run}
   def clear_for_library(library_path_id) do
     result =
       Repo.transaction(fn ->
@@ -65,6 +75,12 @@ defmodule Mydia.ImportGroups do
           Repo.rollback(:active_run)
         end
 
+        # Before the groups, because the groups are only a rollup of these.
+        # Leaving them behind is what made a clear-then-rescan reproduce the
+        # previous scan's verdicts exactly -- see
+        # `Library.delete_match_candidates_for_library/1`.
+        {candidate_count, _} = Library.delete_match_candidates_for_library(library_path_id)
+
         {group_count, _} =
           ImportGroup
           |> where([g], g.library_path_id == ^library_path_id)
@@ -74,16 +90,16 @@ defmodule Mydia.ImportGroups do
         |> where([r], r.library_path_id == ^library_path_id)
         |> Repo.delete_all()
 
-        group_count
+        %{groups: group_count, candidates: candidate_count}
       end)
 
-    with {:ok, group_count} <- result do
+    with {:ok, counts} <- result do
       Phoenix.PubSub.broadcast(Mydia.PubSub, "import_groups:#{library_path_id}", {
         :import_groups_changed,
         library_path_id
       })
 
-      {:ok, group_count}
+      {:ok, counts}
     end
   end
 
