@@ -26,7 +26,7 @@ spec:
     spec:
       containers:
         - name: iroh-relay
-          image: n0computer/iroh-relay:v1.0.0
+          image: n0computer/iroh-relay:v1.0.3@sha256:e9a7ba14287dd9693aca61c339b0d154456d6609f3818a0ef358b07b36aab9cc
           args: ["--config-path", "/config/config.toml"]
           ports:
             - name: http
