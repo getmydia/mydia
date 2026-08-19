@@ -65,6 +65,32 @@ defmodule Mydia.Events.WriterTest do
       types = Event |> Repo.all() |> Enum.map(& &1.type) |> Enum.sort()
       assert types == ["download.completed", "download.failed"]
     end
+
+    test "drops newly enqueued events once the mailbox is full" do
+      writer = start_writer(max_batch: 100, flush_interval_ms: 60_000, max_mailbox: 2)
+
+      # :sys.suspend/1 halts the writer's own receive loop without touching
+      # its real mailbox, so casts pile up there exactly as they would while
+      # the writer is genuinely blocked inside Repo.insert_all/2.
+      :sys.suspend(writer)
+
+      Writer.enqueue(attrs("download.initiated"), writer)
+      Writer.enqueue(attrs("download.completed"), writer)
+      Writer.enqueue(attrs("download.failed"), writer)
+      Writer.enqueue(attrs("download.paused"), writer)
+
+      # The mailbox bound held: only the first two casts made it in, the rest
+      # were shed at enqueue/2 instead of piling up further.
+      assert Process.info(writer, :message_queue_len) == {:message_queue_len, 2}
+
+      :sys.resume(writer)
+
+      log = capture_log(fn -> Writer.flush(writer) end)
+
+      assert log =~ "Events.Writer mailbox full, dropped 2 event(s)"
+      types = Event |> Repo.all() |> Enum.map(& &1.type) |> Enum.sort()
+      assert types == ["download.completed", "download.initiated"]
+    end
   end
 
   describe "flush/1" do
