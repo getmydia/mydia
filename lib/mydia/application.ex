@@ -120,8 +120,6 @@ defmodule Mydia.Application do
       Mydia.Metadata.Cache,
       Mydia.Metadata.ProviderIDRegistry,
       {Task.Supervisor, name: Mydia.TaskSupervisor},
-      # Request task supervisor for multiplexed request handling with independent timeouts
-      {Task.Supervisor, name: Mydia.RequestTaskSupervisor},
       # Supervises optimistic manual-grab pipelines (Mydia.Downloads.Grabber)
       # so grabs survive the LiveView that started them.
       {Task.Supervisor, name: Mydia.Downloads.GrabSupervisor},
