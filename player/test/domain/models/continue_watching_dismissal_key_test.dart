@@ -89,4 +89,87 @@ void main() {
       expect(episode.dismissedBy('show-2'), isFalse);
     });
   });
+
+  group('restoreFailedRemoval', () {
+    ContinueWatchingItem movie(String id) =>
+        ContinueWatchingItem(id: id, type: 'movie', title: id);
+
+    test('puts the failed card back where it was', () {
+      final snapshot = [movie('a'), movie('b'), movie('c')];
+      final latest = [movie('a'), movie('c')];
+
+      final restored = restoreFailedRemoval(
+        snapshot: snapshot,
+        latest: latest,
+        key: 'b',
+      );
+
+      expect(restored.map((item) => item.id), ['a', 'b', 'c']);
+    });
+
+    // The defect a whole-snapshot restore has: the viewer removed b and then
+    // c, c succeeded, b failed. Restoring the snapshot would bring c back too.
+    test('does not resurrect a card another removal has since dismissed', () {
+      final snapshot = [movie('a'), movie('b'), movie('c')];
+      final latest = [movie('a')];
+
+      final restored = restoreFailedRemoval(
+        snapshot: snapshot,
+        latest: latest,
+        key: 'b',
+      );
+
+      expect(restored.map((item) => item.id), ['a', 'b']);
+      expect(restored.map((item) => item.id), isNot(contains('c')));
+    });
+
+    // A successful removal invalidates and refetches, so the list can gain
+    // cards while a failing mutation is still in flight.
+    test('keeps a card a refetch added meanwhile', () {
+      final snapshot = [movie('a'), movie('b')];
+      final latest = [movie('a'), movie('d')];
+
+      final restored = restoreFailedRemoval(
+        snapshot: snapshot,
+        latest: latest,
+        key: 'b',
+      );
+
+      expect(restored.map((item) => item.id), ['a', 'b', 'd']);
+    });
+
+    test('an episode is restored by its show key', () {
+      final snapshot = [
+        movie('a'),
+        const ContinueWatchingItem(
+          id: 'ep-1',
+          type: 'episode',
+          title: 'System',
+          showId: 'show-1',
+        ),
+      ];
+      final latest = [movie('a')];
+
+      final restored = restoreFailedRemoval(
+        snapshot: snapshot,
+        latest: latest,
+        key: 'show-1',
+      );
+
+      expect(restored.map((item) => item.id), ['a', 'ep-1']);
+    });
+
+    test('nothing to restore leaves the latest list alone', () {
+      final snapshot = [movie('a'), movie('b')];
+      final latest = [movie('a'), movie('b')];
+
+      final restored = restoreFailedRemoval(
+        snapshot: snapshot,
+        latest: latest,
+        key: 'zzz',
+      );
+
+      expect(restored.map((item) => item.id), ['a', 'b']);
+    });
+  });
 }

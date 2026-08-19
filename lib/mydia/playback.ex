@@ -503,15 +503,37 @@ defmodule Mydia.Playback do
         |> Keyword.get(:now, DateTime.utc_now())
         |> DateTime.truncate(:second)
 
-      %Dismissal{user_id: user_id, media_item_id: media_item_id}
-      |> Dismissal.changeset(%{dismissed_at: now})
-      |> Repo.insert(
-        on_conflict: {:replace, [:dismissed_at, :updated_at]},
-        conflict_target: [:user_id, :media_item_id]
-      )
+      insert_dismissal(user_id, media_item_id, now)
     else
       {:error, :not_found}
     end
+  end
+
+  # The lookup above cannot close the window on its own: a media item deleted
+  # between the check and this insert takes the foreign key with it. Postgres
+  # names the constraint so the changeset carries the error, SQLite does not and
+  # `Repo.insert/2` raises, so the rescue is what makes the two agree. Either
+  # way the answer is the one the check gives for an id that never existed.
+  defp insert_dismissal(user_id, media_item_id, now) do
+    %Dismissal{user_id: user_id, media_item_id: media_item_id}
+    |> Dismissal.changeset(%{dismissed_at: now})
+    |> Repo.insert(
+      on_conflict: {:replace, [:dismissed_at, :updated_at]},
+      conflict_target: [:user_id, :media_item_id]
+    )
+    |> case do
+      {:error, %Ecto.Changeset{} = changeset} ->
+        if missing_parent?(changeset), do: {:error, :not_found}, else: {:error, changeset}
+
+      other ->
+        other
+    end
+  rescue
+    Ecto.ConstraintError -> {:error, :not_found}
+  end
+
+  defp missing_parent?(%Ecto.Changeset{errors: errors}) do
+    Keyword.has_key?(errors, :media_item_id) or Keyword.has_key?(errors, :user_id)
   end
 
   # Checked here rather than left to the foreign key, because the two adapters

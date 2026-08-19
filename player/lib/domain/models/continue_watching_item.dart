@@ -2,6 +2,38 @@ import 'artwork.dart';
 import 'media_file.dart';
 import 'progress.dart';
 
+/// Puts the cards a failed removal took back, without undoing anything that
+/// happened while its mutation was in flight.
+///
+/// [snapshot] is the list as it stood before the removal, [latest] the list as
+/// it stands now, and [key] the title whose removal failed.
+///
+/// Restoring [snapshot] wholesale is the obvious move and is wrong: a viewer
+/// can remove a second card before the first mutation answers, and a
+/// successful removal also triggers a refetch, so by the time a failure lands
+/// the snapshot can be several changes stale. Putting it back resurrects cards
+/// the server has since hidden.
+///
+/// So the snapshot is used only for ordering. A card survives if it is still
+/// in [latest] (nothing else has removed it) or if it is one this failure has
+/// to return. Anything [latest] gained meanwhile — a refetch landing mid-flight
+/// — is kept on the end rather than dropped.
+List<ContinueWatchingItem> restoreFailedRemoval({
+  required List<ContinueWatchingItem> snapshot,
+  required List<ContinueWatchingItem> latest,
+  required String key,
+}) {
+  final latestIds = latest.map((item) => item.id).toSet();
+  final snapshotIds = snapshot.map((item) => item.id).toSet();
+
+  return [
+    ...snapshot.where(
+      (item) => latestIds.contains(item.id) || item.dismissedBy(key),
+    ),
+    ...latest.where((item) => !snapshotIds.contains(item.id)),
+  ];
+}
+
 class ContinueWatchingItem {
   final String id;
   final String type;

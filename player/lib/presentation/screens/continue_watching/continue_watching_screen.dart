@@ -139,8 +139,12 @@ class _ContinueWatchingScreenState
                 // `tapPlays` stays false here: this grid opens the title, it
                 // does not play it. That suppresses the navigation entries,
                 // which would only repeat the tap, and leaves the removal.
-                onContextMenu: (posterContext) =>
-                    _openMenu(posterContext, item),
+                // Null when there is nothing to hide, rather than installing a
+                // gesture that opens an empty menu. An episode the server sent
+                // without a show id is the only card in that position.
+                onContextMenu: item.continueWatchingKey == null
+                    ? null
+                    : (posterContext) => _openMenu(posterContext, item),
                 showMenuButton: item.continueWatchingKey != null,
               );
             },

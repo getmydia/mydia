@@ -249,7 +249,16 @@ class ContinueWatchingController extends _$ContinueWatchingController {
     try {
       await actions.removeFromContinueWatching(ref, key);
     } catch (_) {
-      state = AsyncValue.data(currentState);
+      final latest = state.value ?? currentState;
+      state = AsyncValue.data(
+        latest.copyWith(
+          items: restoreFailedRemoval(
+            snapshot: currentState.items,
+            latest: latest.items,
+            key: key,
+          ),
+        ),
+      );
       rethrow;
     }
   }

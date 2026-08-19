@@ -43,6 +43,18 @@ defmodule Mydia.Playback.DismissalTest do
       assert Repo.aggregate(Dismissal, :count) == 0
     end
 
+    # The lookup and the insert are two statements, so a media item deleted
+    # between them still reaches the foreign key. Postgres names the constraint
+    # and the changeset carries it; SQLite reports no name and Ecto raises. The
+    # caller sees one answer either way.
+    test "a media item deleted before the insert is refused, not raised", ctx do
+      Repo.delete!(ctx.movie)
+
+      assert {:error, :not_found} = Playback.dismiss_from_on_deck(ctx.user.id, ctx.movie.id)
+
+      assert Repo.aggregate(Dismissal, :count) == 0
+    end
+
     test "an id that is not even a UUID is refused, not raised", ctx do
       assert {:error, :not_found} = Playback.dismiss_from_on_deck(ctx.user.id, "not-a-uuid")
 

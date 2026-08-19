@@ -1,9 +1,12 @@
 // The optimistic removal, on the controller that owns the home rail.
 //
-// Two things here are easy to get wrong and silent when wrong: the splice has
-// to match on the show id for an episode card (matching the card's own id
-// removes nothing), and the revert has to put back the whole HomeData, not
-// just the rail it edited.
+// Three things here are easy to get wrong and silent when wrong: the splice
+// has to match on the show id for an episode card (matching the card's own id
+// removes nothing), the revert has to carry the rest of HomeData forward, and
+// the revert has to be scoped to the failed key rather than restoring a
+// snapshot that a concurrent removal has already made stale.
+
+import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -100,7 +103,37 @@ Map<String, dynamic> _removalResult(String mediaItemId) => {
 StubLink _link(Object Function() onMutation) => StubLink((request, _) =>
     request.variables.containsKey('mediaItemId') ? onMutation() : _homeData());
 
-ProviderContainer _container(StubLink link) {
+/// Holds the `mv-1` mutation open until [gate] completes, so a second removal
+/// can finish while the first is still in flight. `StubLink`'s handler is
+/// synchronous and cannot await, so this test needs its own link.
+class _GatedLink extends Link {
+  _GatedLink(this.gate);
+
+  final Future<void> gate;
+
+  @override
+  Stream<Response> request(Request request, [NextLink? forward]) async* {
+    final variables = request.variables;
+
+    if (!variables.containsKey('mediaItemId')) {
+      yield Response(data: _homeData(), response: const <String, dynamic>{});
+      return;
+    }
+
+    if (variables['mediaItemId'] == 'mv-1') {
+      await gate;
+      yield graphqlErrorResponse('nope');
+      return;
+    }
+
+    yield Response(
+      data: _removalResult('show-1'),
+      response: const <String, dynamic>{},
+    );
+  }
+}
+
+ProviderContainer _container(Link link) {
   final container = ProviderContainer(
     overrides: [
       asyncGraphqlClientProvider.overrideWith((ref) async => stubClient(link)),
@@ -199,6 +232,31 @@ void main() {
           .continueWatching
           .map((item) => item.id);
       expect(ids, ['mv-1', 'ep-1']);
+    });
+
+    // Two removals in flight at once, the first failing after the second
+    // succeeds. Restoring the pre-removal snapshot would put the second card
+    // back on the rail even though the server has hidden it.
+    test('a failure does not resurrect a card removed since', () async {
+      final gate = Completer<void>();
+      final container = _container(_GatedLink(gate.future));
+      await _settle(container);
+
+      final notifier = container.read(homeControllerProvider.notifier);
+
+      // The movie's mutation is still in flight while the show's completes.
+      final pending = notifier.removeFromContinueWatching('mv-1');
+      await notifier.removeFromContinueWatching('show-1');
+
+      gate.complete();
+      await pending.catchError((_) {});
+
+      final ids = container
+          .read(homeControllerProvider)
+          .value!
+          .continueWatching
+          .map((item) => item.id);
+      expect(ids, ['mv-1'], reason: 'the show stays hidden, the movie returns');
     });
 
     test('the other rails are restored intact, not emptied', () async {

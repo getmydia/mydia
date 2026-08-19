@@ -3,6 +3,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../core/graphql/watch/controller_watcher.dart';
 import '../../../core/graphql/watch/query_key.dart';
 import '../../../core/graphql/watch/query_watcher.dart';
+import '../../../domain/models/continue_watching_item.dart';
 import '../../../domain/models/home_data.dart';
 import '../continue_watching/continue_watching_actions.dart' as actions;
 
@@ -195,7 +196,16 @@ class HomeController extends _$HomeController {
     try {
       await actions.removeFromContinueWatching(ref, key);
     } catch (_) {
-      state = AsyncValue.data(currentState);
+      final latest = state.value ?? currentState;
+      state = AsyncValue.data(
+        latest.copyWith(
+          continueWatching: restoreFailedRemoval(
+            snapshot: currentState.continueWatching,
+            latest: latest.continueWatching,
+            key: key,
+          ),
+        ),
+      );
       rethrow;
     }
   }
