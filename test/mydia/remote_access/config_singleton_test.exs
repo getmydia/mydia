@@ -1,9 +1,13 @@
 defmodule Mydia.RemoteAccess.ConfigSingletonTest do
   @moduledoc """
-  Enabling remote access is an admin toggle, so two tabs can both find no
+  Enabling remote access is an admin toggle, so two tabs could both find no
   config and both insert one. Each insert mints its own instance ID, which the
-  unique index on that column cannot collide, so the second row lands and every
-  later read of the config raises on the admin page.
+  unique index on that column cannot collide, so the second row landed and
+  every later read raised on the admin page that would have let you fix it.
+
+  These cover both halves of the guard against that: initialization hands back
+  an existing row instead of inserting past it, and a read survives a pair of
+  rows by taking the older one.
   """
   use Mydia.DataCase, async: false
 
