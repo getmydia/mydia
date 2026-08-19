@@ -36,19 +36,19 @@ enum ClaimCodeStatus {
   /// Resolving claim code via Relay HTTP API
   resolving,
 
-  /// Looking up claim code on relay (Legacy) or Connecting to rendezvous point
+  /// Looking up the claim code on the relay
   lookingUp,
 
-  /// Connecting to instance via relay
+  /// Connecting to the instance, possibly via an iroh relay
   connecting,
 
-  /// Discovering server via rendezvous
+  /// Resolving the server's node address
   discovering,
 
   /// Dialing server
   dialing,
 
-  /// Performing Noise handshake / sending pairing request
+  /// Establishing the p2p session and sending the pairing request
   handshaking,
 
   /// Pairing complete
@@ -126,9 +126,9 @@ class LoginController extends _$LoginController {
   /// Attempt to pair using a claim code.
   ///
   /// Uses the PairingService to:
-  /// 1. Look up the claim code via the relay service
-  /// 2. Get the instance's direct URLs and public key
-  /// 3. Connect to the instance and submit the claim code
+  /// 1. Resolve the claim code on the relay to get the server's node address
+  /// 2. Dial that node over p2p
+  /// 3. Submit the claim code and register this device
   /// 4. Store credentials and complete pairing
   Future<void> pairWithClaimCode(String claimCode) async {
     state = state.copyWith(

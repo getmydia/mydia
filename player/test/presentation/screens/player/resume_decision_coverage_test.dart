@@ -80,9 +80,9 @@ void main() {
       // AuthStatus.offlineMode is reachable here only because the harness
       // overrides authStateProvider directly. As of this writing nothing in
       // player/lib actually writes that status in production — the three
-      // writers were dropped by the libp2p migration and never reinstated,
-      // a known, separately tracked gap. This case still guards the offline
-      // branch itself against a future regression; it is not proof the
+      // writers were dropped during the p2p transport migration and never
+      // reinstated, a known, separately tracked gap. This case still guards
+      // the offline branch against a future regression; it is not proof the
       // status is reachable end to end today.
       final tempDir =
           Directory.systemTemp.createTempSync('mydia_resume_coverage_test_');
