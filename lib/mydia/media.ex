@@ -1421,10 +1421,10 @@ defmodule Mydia.Media do
             # partial pass would hide the seasons that failed until the
             # threshold expires.
             {episode_count, failed_seasons} =
-              Enum.reduce(seasons_to_fetch, {0, 0}, fn season, {count, failed} ->
+              Enum.reduce_while(seasons_to_fetch, {0, 0}, fn season, {count, failed} ->
                 # Skip season 0 (specials) unless explicitly monitoring all
                 if season.season_number == 0 and season_monitoring != "all" do
-                  {count, failed}
+                  {:cont, {count, failed}}
                 else
                   Logger.info("Processing episodes for season #{season.season_number}")
 
@@ -1434,14 +1434,29 @@ defmodule Mydia.Media do
                         "Processed #{created} episodes for season #{season.season_number}"
                       )
 
-                      {count + created, failed}
+                      {:cont, {count + created, failed}}
+
+                    # A `SeasonOrder.switch/3` landed while this pass was
+                    # fetching. Every season still to come was fetched under
+                    # the same now-stale ordering, so stop rather than log one
+                    # error per remaining season. Counting it as a failure is
+                    # what leaves `seasons_refreshed_at` unstamped, which is
+                    # what makes the next refresh re-fetch under the ordering
+                    # the show is actually in.
+                    {:error, :season_order_changed} ->
+                      Logger.warning(
+                        "Aborting season refresh: season order changed mid-refresh",
+                        media_item_id: media_item.id
+                      )
+
+                      {:halt, {count, failed + 1}}
 
                     {:error, reason} ->
                       Logger.error(
                         "Failed to create episodes for season #{season.season_number}: #{inspect(reason)}"
                       )
 
-                      {count, failed + 1}
+                      {:cont, {count, failed + 1}}
                   end
                 end
               end)
@@ -1798,29 +1813,70 @@ defmodule Mydia.Media do
            fetch_opts
          ) do
       {:ok, season_data} ->
-        # upsert_episodes_from_season/3 swallows per-episode changeset errors and
-        # still reports {:ok, count}, so a season can persist fewer episodes than
-        # the provider returned and look clean. That must not stamp
-        # seasons_refreshed_at, or the dropped episodes stay stale until the
-        # throttle expires. Compare against what was actually upsertable.
-        expected =
-          Enum.count(
-            season_data.episodes || [],
-            &(not is_nil(&1.season_number) and not is_nil(&1.episode_number))
-          )
-
-        case upsert_episodes_from_season(media_item, season_data,
-               monitor_new?: should_monitor_new_episode?(media_item, season.season_number)
-             ) do
-          {:ok, count} when count < expected ->
-            {:error, {:incomplete_episode_upsert, expected, count}}
-
-          other ->
-            other
+        # Checked here, between the fetch and the write, rather than trusting
+        # the `season_order` on the struct the caller loaded. See
+        # `season_order_current?/1`.
+        if season_order_current?(media_item) do
+          upsert_season(media_item, season, season_data)
+        else
+          {:error, :season_order_changed}
         end
 
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  defp upsert_season(media_item, season, season_data) do
+    # upsert_episodes_from_season/3 swallows per-episode changeset errors and
+    # still reports {:ok, count}, so a season can persist fewer episodes than
+    # the provider returned and look clean. That must not stamp
+    # seasons_refreshed_at, or the dropped episodes stay stale until the
+    # throttle expires. Compare against what was actually upsertable.
+    expected =
+      Enum.count(
+        season_data.episodes || [],
+        &(not is_nil(&1.season_number) and not is_nil(&1.episode_number))
+      )
+
+    case upsert_episodes_from_season(media_item, season_data,
+           monitor_new?: should_monitor_new_episode?(media_item, season.season_number)
+         ) do
+      {:ok, count} when count < expected ->
+        {:error, {:incomplete_episode_upsert, expected, count}}
+
+      other ->
+        other
+    end
+  end
+
+  # Whether the show is still in the ordering the in-flight season data
+  # describes.
+  #
+  # A refresh reads `season_order` once, fetches every season under it, then
+  # writes. A `SeasonOrder.switch/3` landing in between leaves the show
+  # remapped onto new coordinates while this pass still holds the old
+  # ordering's -- and writing those back mixes the two under a `season_order`
+  # column that claims one. Row identity survives (the upsert keys on
+  # `provider_episode_id`), so nothing is lost and switching orderings through
+  # the UI repairs it, but the show reads as scrambled until someone does.
+  #
+  # Re-reading immediately before the write narrows the window from every HTTP
+  # fetch the refresh makes to the handful of statements between this check and
+  # the upsert. It does not eliminate it: that would mean holding the show's
+  # row for the duration of the writes, and a write transaction per season on
+  # a hot path is a worse trade than a race this self-heals from.
+  defp season_order_current?(%MediaItem{id: id, season_order: expected}) do
+    MediaItem
+    |> where([m], m.id == ^id)
+    |> select([m], {m.id, m.season_order})
+    |> Repo.one()
+    |> case do
+      # Matched as a pair so that a deleted show reads as "not current" rather
+      # than colliding with a live show whose `season_order` is legitimately
+      # NULL -- both of which `Repo.one/1` would otherwise answer with nil.
+      {^id, ^expected} -> true
+      _ -> false
     end
   end
 
