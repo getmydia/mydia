@@ -14,123 +14,40 @@ defmodule Mydia.RemoteAccess do
   # Config management
 
   @doc """
-  Initializes the instance keypair and generates a unique instance ID.
+  Creates the remote access configuration with a fresh instance ID.
 
-  This function should be called when remote access is first enabled.
-  It generates a new Noise protocol keypair, encrypts the private key using
-  the application secret, and stores both keys along with a unique instance ID.
+  Called when remote access is first enabled. The instance ID is a UUID v4
+  that uniquely identifies this Mydia instance. The node identity used to
+  reach it lives in the iroh keypair file, not here.
 
-  Returns {:ok, config} with the initialized configuration, or {:error, changeset}
-  if the operation fails.
-
-  ## Security Notes
-
-  - The private key is encrypted using the application's secret_key_base
-  - The instance ID is a UUID v4 that uniquely identifies this Mydia instance
-  - This should only be called once per instance, typically when enabling remote access
-
-  ## Examples
-
-      iex> {:ok, config} = Mydia.RemoteAccess.initialize_keypair()
-      iex> byte_size(config.static_public_key)
-      32
-      iex> is_binary(config.static_private_key_encrypted)
-      true
-      iex> is_binary(config.instance_id)
-      true
-
+  Returns `{:ok, config}`, or `{:error, changeset}` if the insert fails.
   """
-  def initialize_keypair do
-    # Generate X25519 keypair for Noise protocol
-    {public_key, private_key} = generate_x25519_keypair()
-
-    # Generate a unique instance ID
-    instance_id = Ecto.UUID.generate()
-
-    # Create the config with the keypair
-    # Note: relay_url is read from METADATA_RELAY_URL env var at runtime
-    %Config{}
-    |> Config.changeset(%{
-      instance_id: instance_id,
-      static_public_key: public_key,
-      static_private_key_encrypted: encrypt_private_key(private_key),
-      enabled: false
-    })
-    |> Repo.insert()
-  end
-
-  @doc """
-  Generates an X25519 keypair for the Noise protocol.
-
-  Returns `{public_key, private_key}` as 32-byte binaries.
-  """
-  def generate_x25519_keypair do
-    # Use Erlang crypto to generate a valid X25519 keypair
-    :crypto.generate_key(:ecdh, :x25519)
-  end
-
-  @doc """
-  Gets the public key for the instance.
-
-  Returns the instance's static public key, which can be safely shared with clients
-  for configuration and pairing.
-
-  Returns the public key as a 32-byte binary, or nil if not configured.
-
-  ## Examples
-
-      iex> Mydia.RemoteAccess.get_public_key()
-      <<1, 2, 3, ...>>  # 32-byte public key
-
-  """
-  def get_public_key do
-    case get_config() do
-      nil -> nil
-      config -> config.static_public_key
-    end
-  end
-
-  @doc """
-  Gets the private key for the instance.
-
-  Returns `{:ok, private_key}` where private_key is a 32-byte binary,
-  or `{:error, :not_configured}` if not configured.
-  """
-  def get_private_key do
+  def initialize_config do
+    # Enabling remote access is an admin toggle, so two tabs can reach this at
+    # once. Each insert would mint its own instance ID, which the unique index
+    # on that column cannot collide, leaving two config rows behind.
     case get_config() do
       nil ->
-        {:error, :not_configured}
+        %Config{}
+        # Note: relay_url is read from METADATA_RELAY_URL env var at runtime
+        |> Config.changeset(%{instance_id: Ecto.UUID.generate(), enabled: false})
+        |> Repo.insert()
 
       config ->
-        decrypt_private_key(config.static_private_key_encrypted)
-    end
-  end
-
-  @doc """
-  Gets the static keypair for the Noise protocol.
-
-  Returns `{:ok, {public_key, private_key}}` where each key is a 32-byte binary,
-  or `{:error, :not_configured}` if not configured.
-  """
-  @spec get_static_keypair() :: {:ok, {binary(), binary()}} | {:error, :not_configured}
-  def get_static_keypair do
-    case get_config() do
-      nil ->
-        {:error, :not_configured}
-
-      config ->
-        with {:ok, private_key} <- decrypt_private_key(config.static_private_key_encrypted) do
-          {:ok, {config.static_public_key, private_key}}
-        end
+        {:ok, config}
     end
   end
 
   @doc """
   Gets the remote access configuration.
   Returns nil if not configured.
+
+  Oldest row wins rather than `Repo.one/1`, which raises on a second row. The
+  instance ID is what a paired device was introduced to, so if two rows ever do
+  race in, the one devices already know is the one to keep answering with.
   """
   def get_config do
-    Repo.one(Config)
+    Repo.one(from c in Config, order_by: [asc: c.inserted_at, asc: c.id], limit: 1)
   end
 
   @doc """
@@ -160,58 +77,6 @@ defmodule Mydia.RemoteAccess do
         |> Repo.update()
     end
   end
-
-  defp encrypt_private_key(private_key)
-       when is_binary(private_key) and byte_size(private_key) == 32 do
-    secret_key_base = MydiaWeb.Endpoint.config(:secret_key_base)
-
-    secret =
-      Plug.Crypto.KeyGenerator.generate(secret_key_base, "remote_access_private_key", length: 32)
-
-    iv = :crypto.strong_rand_bytes(12)
-
-    {ciphertext, tag} =
-      :crypto.crypto_one_time_aead(:aes_256_gcm, secret, iv, private_key, <<>>, true)
-
-    # Format: version(1) || iv(12) || tag(16) || ciphertext(32)
-    <<1, iv::binary, tag::binary, ciphertext::binary>>
-  end
-
-  # Versioned v1 format: version(1) || iv(12) || tag(16) || ciphertext(32)
-  defp decrypt_private_key(
-         <<1, iv::binary-size(12), tag::binary-size(16), ciphertext::binary-size(32)>>
-       ) do
-    decrypt_private_key(<<iv::binary, tag::binary, ciphertext::binary>>)
-  end
-
-  defp decrypt_private_key(
-         <<iv::binary-size(12), tag::binary-size(16), ciphertext::binary-size(32)>>
-       ) do
-    secret_key_base = MydiaWeb.Endpoint.config(:secret_key_base)
-
-    secret =
-      Plug.Crypto.KeyGenerator.generate(secret_key_base, "remote_access_private_key", length: 32)
-
-    case :crypto.crypto_one_time_aead(:aes_256_gcm, secret, iv, ciphertext, <<>>, tag, false) do
-      :error -> {:error, :invalid_private_key}
-      private_key -> {:ok, private_key}
-    end
-  end
-
-  # Versioned v1 format: version(1) || iv(12) || tag(16) || ciphertext(32)
-  defp decrypt_private_key(
-         <<1, iv::binary-size(12), tag::binary-size(16), ciphertext::binary-size(32)>>
-       ) do
-    decrypt_private_key(<<iv::binary, tag::binary, ciphertext::binary>>)
-  end
-
-  # Legacy (unencrypted) format
-  defp decrypt_private_key(private_key)
-       when is_binary(private_key) and byte_size(private_key) == 32 do
-    {:ok, private_key}
-  end
-
-  defp decrypt_private_key(_), do: {:error, :invalid_private_key}
 
   def toggle_remote_access(enabled) when is_boolean(enabled) do
     case get_config() do
@@ -259,28 +124,6 @@ defmodule Mydia.RemoteAccess do
   """
   def get_device!(id) do
     Repo.get!(RemoteDevice, id)
-  end
-
-  @doc """
-  Gets an active (non-revoked) device by ID, preloading the user.
-
-  Returns `{:ok, device}` if found and active.
-  Returns `{:error, :not_found}` if device doesn't exist.
-  Returns `{:error, :revoked}` if device is revoked.
-  """
-  @spec get_active_device(String.t()) :: {:ok, RemoteDevice.t()} | {:error, :not_found | :revoked}
-  def get_active_device(device_id) do
-    case Repo.get(RemoteDevice, device_id) |> Repo.preload(:user) do
-      nil ->
-        {:error, :not_found}
-
-      device ->
-        if RemoteDevice.revoked?(device) do
-          {:error, :revoked}
-        else
-          {:ok, device}
-        end
-    end
   end
 
   @doc """
@@ -337,26 +180,8 @@ defmodule Mydia.RemoteAccess do
     |> Repo.update()
   end
 
-  # Throttle interval for touch_device_async (5 minutes)
+  # Throttle interval for device liveness writes (5 minutes)
   @touch_throttle_seconds 300
-
-  @doc """
-  Asynchronously updates the last seen timestamp for a device if needed.
-
-  This function throttles updates to avoid hitting the database on every request.
-  The timestamp is only updated if:
-  - `last_seen_at` is nil (device never seen)
-  - `last_seen_at` is older than #{@touch_throttle_seconds} seconds
-
-  The update runs asynchronously to avoid blocking the request.
-  """
-  def touch_device_async(device) do
-    if should_touch_device?(device) do
-      Task.start(fn -> touch_device(device) end)
-    end
-
-    :ok
-  end
 
   @doc """
   Records liveness for the device named in a verified access token's claims.
@@ -403,13 +228,6 @@ defmodule Mydia.RemoteAccess do
       {0, _} -> :skipped
       {_updated, _} -> :recorded
     end
-  end
-
-  defp should_touch_device?(%{last_seen_at: nil}), do: true
-
-  defp should_touch_device?(%{last_seen_at: last_seen_at}) do
-    threshold = DateTime.utc_now() |> DateTime.add(-@touch_throttle_seconds, :second)
-    DateTime.compare(last_seen_at, threshold) == :lt
   end
 
   @doc """

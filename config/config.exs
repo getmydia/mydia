@@ -247,11 +247,6 @@ config :mydia, Mydia.RemoteAccess.MediaToken,
   verify_issuer: true,
   secret_key: "REPLACE_IN_RUNTIME_CONFIG"
 
-# Relay tunnel shared secret for defense-in-depth authentication
-# Used to sign internal relay tunnel requests with HMAC-SHA256
-# This provides additional security beyond localhost IP checks
-config :mydia, :relay_tunnel_secret, "REPLACE_IN_RUNTIME_CONFIG"
-
 # Configure Oban for background job processing
 # Use Lite engine for SQLite, Basic engine for PostgreSQL
 oban_engine =

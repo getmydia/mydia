@@ -59,7 +59,7 @@ defmodule MydiaWeb.AdminRemoteAccessLiveTest do
     setup %{conn: conn, token: token} do
       start_supervised!(Mydia.Indexers.Health)
 
-      {:ok, _config} = RemoteAccess.initialize_keypair()
+      {:ok, _config} = RemoteAccess.initialize_config()
       {:ok, _config} = RemoteAccess.toggle_remote_access(true)
 
       conn =
@@ -106,7 +106,7 @@ defmodule MydiaWeb.AdminRemoteAccessLiveTest do
       start_supervised!(Mydia.Indexers.Health)
 
       # The devices section only renders once remote access is on.
-      {:ok, _config} = RemoteAccess.initialize_keypair()
+      {:ok, _config} = RemoteAccess.initialize_config()
       {:ok, _config} = RemoteAccess.toggle_remote_access(true)
 
       conn =
@@ -156,7 +156,6 @@ defmodule MydiaWeb.AdminRemoteAccessLiveTest do
     |> Mydia.RemoteAccess.RemoteDevice.changeset(%{
       device_name: "Liveness Device #{System.unique_integer([:positive])}",
       platform: "ios",
-      device_static_public_key: :crypto.strong_rand_bytes(32),
       token: "device-token-#{System.unique_integer([:positive])}",
       user_id: user.id
     })

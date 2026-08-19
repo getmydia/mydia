@@ -14,14 +14,12 @@ defmodule MydiaWeb.Router do
   pipeline :api do
     plug :accepts, ["json"]
     plug :fetch_session
-    plug MydiaWeb.Plugs.RelayDeviceAuth
   end
 
   # Base graphql pipeline - authentication handled separately
   pipeline :graphql do
     plug :accepts, ["json"]
     plug :fetch_session
-    plug MydiaWeb.Plugs.RelayDeviceAuth
     plug MydiaWeb.Plugs.GraphQLLogger
   end
 

@@ -32,7 +32,7 @@ defmodule Mydia.RemoteAccess.DirectUrlRefresherTest do
   describe "refresh_direct_urls/0" do
     test "detects URLs and stores them in config" do
       # Initialize remote access config
-      {:ok, _config} = RemoteAccess.initialize_keypair()
+      {:ok, _config} = RemoteAccess.initialize_config()
 
       # Simulate refresh by detecting URLs and updating config
       direct_urls = Mydia.RemoteAccess.DirectUrls.detect_all()
@@ -56,7 +56,7 @@ defmodule Mydia.RemoteAccess.DirectUrlRefresherTest do
 
     test "generates certificate and stores fingerprint" do
       # Initialize remote access config
-      {:ok, _config} = RemoteAccess.initialize_keypair()
+      {:ok, _config} = RemoteAccess.initialize_config()
 
       # Simulate refresh
       direct_urls = Mydia.RemoteAccess.DirectUrls.detect_all()
@@ -75,7 +75,7 @@ defmodule Mydia.RemoteAccess.DirectUrlRefresherTest do
 
     test "creates certificate files in data directory" do
       # Initialize remote access config
-      {:ok, _config} = RemoteAccess.initialize_keypair()
+      {:ok, _config} = RemoteAccess.initialize_config()
 
       # Generate certificate
       {:ok, _cert_path, _key_path, _fingerprint} =
@@ -91,7 +91,7 @@ defmodule Mydia.RemoteAccess.DirectUrlRefresherTest do
 
     test "fingerprint is idempotent on repeated calls" do
       # Initialize remote access config
-      {:ok, _config} = RemoteAccess.initialize_keypair()
+      {:ok, _config} = RemoteAccess.initialize_config()
 
       # First generation
       {:ok, _cert_path1, _key_path1, fingerprint1} =
@@ -114,7 +114,7 @@ defmodule Mydia.RemoteAccess.DirectUrlRefresherTest do
       )
 
       # Initialize remote access config
-      {:ok, _config} = RemoteAccess.initialize_keypair()
+      {:ok, _config} = RemoteAccess.initialize_config()
 
       # Detect URLs
       direct_urls = Mydia.RemoteAccess.DirectUrls.detect_all()
@@ -135,7 +135,7 @@ defmodule Mydia.RemoteAccess.DirectUrlRefresherTest do
       )
 
       # Initialize remote access config
-      {:ok, _config} = RemoteAccess.initialize_keypair()
+      {:ok, _config} = RemoteAccess.initialize_config()
 
       # Detect URLs
       direct_urls = Mydia.RemoteAccess.DirectUrls.detect_all()
@@ -159,7 +159,7 @@ defmodule Mydia.RemoteAccess.DirectUrlRefresherTest do
       )
 
       # Initialize remote access config
-      {:ok, _config} = RemoteAccess.initialize_keypair()
+      {:ok, _config} = RemoteAccess.initialize_config()
 
       # Detect URLs
       direct_urls = Mydia.RemoteAccess.DirectUrls.detect_all()
@@ -177,7 +177,7 @@ defmodule Mydia.RemoteAccess.DirectUrlRefresherTest do
 
     test "complete refresh flow" do
       # Initialize remote access config
-      {:ok, _config} = RemoteAccess.initialize_keypair()
+      {:ok, _config} = RemoteAccess.initialize_config()
 
       # Detect URLs
       direct_urls = Mydia.RemoteAccess.DirectUrls.detect_all()
@@ -202,7 +202,7 @@ defmodule Mydia.RemoteAccess.DirectUrlRefresherTest do
   describe "update_direct_urls/3" do
     test "updates config with URLs and fingerprint" do
       # Initialize remote access config
-      {:ok, _config} = RemoteAccess.initialize_keypair()
+      {:ok, _config} = RemoteAccess.initialize_config()
 
       direct_urls = [
         "https://192-168-1-100.sslip.io:4000",
@@ -227,7 +227,7 @@ defmodule Mydia.RemoteAccess.DirectUrlRefresherTest do
     end
 
     test "requires list of URLs" do
-      {:ok, _config} = RemoteAccess.initialize_keypair()
+      {:ok, _config} = RemoteAccess.initialize_config()
 
       # Should raise FunctionClauseError for non-list
       assert_raise FunctionClauseError, fn ->
@@ -236,7 +236,7 @@ defmodule Mydia.RemoteAccess.DirectUrlRefresherTest do
     end
 
     test "requires binary fingerprint" do
-      {:ok, _config} = RemoteAccess.initialize_keypair()
+      {:ok, _config} = RemoteAccess.initialize_config()
 
       # Should raise FunctionClauseError for non-binary
       assert_raise FunctionClauseError, fn ->

@@ -144,8 +144,8 @@ defmodule MydiaWeb.Schema.Resolvers.RemoteAccessResolver do
   defp expires_at_from_claims(%{"exp" => exp}) when is_integer(exp), do: DateTime.from_unix(exp)
   defp expires_at_from_claims(_), do: {:error, :missing_expiry}
 
-  # P2P callers have no IP, but reaching that transport already requires a Noise
-  # session with the node, so they share one bucket.
+  # P2P callers have no IP, but reaching that transport already requires an
+  # established QUIC session with the node, so they share one bucket.
   defp rate_limit_bucket(context) do
     case context[:remote_ip] do
       ip when is_binary(ip) -> "refresh_access_token:#{ip}"

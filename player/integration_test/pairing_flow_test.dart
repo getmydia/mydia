@@ -134,7 +134,7 @@ void main() {
       await tester.tap(connectButton);
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Wait for pairing to complete (this involves Noise handshake)
+      // Wait for pairing to complete (this involves the p2p handshake)
       final pairingSucceeded = await waitForPairingComplete(tester);
 
       // Cleanup first - replace app widget to stop all pending async operations

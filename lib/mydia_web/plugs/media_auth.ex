@@ -40,7 +40,7 @@ defmodule MydiaWeb.Plugs.MediaAuth do
   def init(opts), do: opts
 
   def call(conn, opts) do
-    # Check if a user is already authenticated (e.g., via RelayDeviceAuth or AuthPipeline)
+    # Check if a user is already authenticated (e.g., via AuthPipeline)
     # If so, skip media token authentication
     if user_already_authenticated?(conn) do
       conn
@@ -60,7 +60,7 @@ defmodule MydiaWeb.Plugs.MediaAuth do
   end
 
   defp user_already_authenticated?(conn) do
-    # Check both assigns (set by RelayDeviceAuth) and Guardian resource (set by AuthPipeline)
+    # Check both assigns and the Guardian resource (set by AuthPipeline)
     conn.assigns[:current_user] != nil ||
       Mydia.Auth.Guardian.Plug.current_resource(conn) != nil
   end

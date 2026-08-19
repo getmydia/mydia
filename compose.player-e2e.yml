@@ -37,7 +37,6 @@ services:
       SQLITE_DB_PATH: /data/relay.db
       DASHBOARD_USERNAME: "admin"
       DASHBOARD_PASSWORD: "admin"
-      LIBP2P_RENDEZVOUS_ENABLED: "true"
       RENDEZVOUS_MASTER_PEPPER: "test-pepper-not-for-production"
       # No API keys needed for E2E tests (not testing metadata fetching)
     volumes:

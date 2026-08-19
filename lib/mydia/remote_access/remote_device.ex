@@ -13,7 +13,6 @@ defmodule Mydia.RemoteAccess.RemoteDevice do
           id: binary(),
           device_name: String.t() | nil,
           platform: String.t() | nil,
-          device_static_public_key: binary() | nil,
           token_hash: String.t() | nil,
           token: String.t() | nil,
           last_seen_at: DateTime.t() | nil,
@@ -27,7 +26,6 @@ defmodule Mydia.RemoteAccess.RemoteDevice do
   schema "remote_devices" do
     field :device_name, :string
     field :platform, :string
-    field :device_static_public_key, :binary
     field :token_hash, :string
     field :token, :string, virtual: true
     field :last_seen_at, :utc_datetime
@@ -46,14 +44,12 @@ defmodule Mydia.RemoteAccess.RemoteDevice do
     |> cast(attrs, [
       :device_name,
       :platform,
-      :device_static_public_key,
       :token,
       :user_id
     ])
     |> validate_required([
       :device_name,
       :platform,
-      :device_static_public_key,
       :token,
       :user_id
     ])

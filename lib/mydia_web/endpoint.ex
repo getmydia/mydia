@@ -28,11 +28,6 @@ defmodule MydiaWeb.Endpoint do
     websocket: [connect_info: [session: @session_options]],
     longpoll: [connect_info: [session: @session_options]]
 
-  # WebSocket for device reconnection
-  socket "/ws", MydiaWeb.UserSocket,
-    websocket: true,
-    longpoll: false
-
   # WebSocket for GraphQL subscriptions
   socket "/api/graphql/socket", Absinthe.Phoenix.Socket,
     websocket: true,

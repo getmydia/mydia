@@ -224,13 +224,9 @@ defmodule Mydia.RemoteAccess.MediaTokenTest do
   end
 
   defp create_device(user, attrs \\ %{}) do
-    # Generate a random 32-byte public key
-    public_key = :crypto.strong_rand_bytes(32)
-
     default_attrs = %{
       device_name: "Test Device #{System.unique_integer([:positive])}",
       platform: "ios",
-      device_static_public_key: public_key,
       token: "device-token-#{System.unique_integer([:positive])}",
       user_id: user.id
     }

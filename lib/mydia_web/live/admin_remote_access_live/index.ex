@@ -98,7 +98,7 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Index do
     enabled = enabled_str == "true"
     config = socket.assigns.ra_config
 
-    with {:ok, socket} <- maybe_initialize_keypair(socket, config, enabled),
+    with {:ok, socket} <- maybe_initialize_config(socket, config, enabled),
          {:ok, updated_config} <- RemoteAccess.toggle_remote_access(enabled),
          :ok <- maybe_start_or_stop_p2p(enabled) do
       {:noreply,
@@ -430,8 +430,8 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Index do
     end
   end
 
-  defp maybe_initialize_keypair(socket, nil, true) do
-    case RemoteAccess.initialize_keypair() do
+  defp maybe_initialize_config(socket, nil, true) do
+    case RemoteAccess.initialize_config() do
       {:ok, new_config} ->
         {:ok, assign(socket, :ra_config, new_config)}
 
@@ -440,7 +440,7 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Index do
     end
   end
 
-  defp maybe_initialize_keypair(socket, _config, _enabled), do: {:ok, socket}
+  defp maybe_initialize_config(socket, _config, _enabled), do: {:ok, socket}
 
   # P2P is started automatically by the application supervision tree
   # These are effectively no-ops now but kept for API compatibility
