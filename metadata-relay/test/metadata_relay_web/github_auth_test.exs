@@ -104,6 +104,24 @@ defmodule MetadataRelayWeb.GitHubAuthTest do
     assert get_session(conn, :github_login) == nil
   end
 
+  test "callback rejects non-binary code and state params without raising" do
+    stub_successful_github("arsfeld")
+
+    for params <- [
+          %{"code" => "ok", "state" => ["st4te"]},
+          %{"code" => ["ok"], "state" => "st4te"},
+          %{"code" => %{"a" => "b"}, "state" => %{"a" => "b"}}
+        ] do
+      conn =
+        build_conn()
+        |> init_test_session(oauth_state: "st4te")
+        |> get("/auth/github/callback", params)
+
+      assert redirected_to(conn) == "/auth/login?error=failed"
+      assert get_session(conn, :github_login) == nil
+    end
+  end
+
   test "callback refuses a login outside the allowlist" do
     stub_successful_github("stranger")
 

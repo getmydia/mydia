@@ -29,7 +29,11 @@ defmodule MetadataRelayWeb.AuthController do
     end
   end
 
-  def callback(conn, %{"code" => code, "state" => state}) do
+  # Nested query params (`?state[]=x`) arrive as lists, and both
+  # `secure_compare/2` and `exchange_code/1` only accept binaries. Guarding here
+  # sends malformed callbacks to the catch-all clause below instead of raising.
+  def callback(conn, %{"code" => code, "state" => state})
+      when is_binary(code) and is_binary(state) do
     expected = get_session(conn, :oauth_state)
 
     with true <- is_binary(expected) and Plug.Crypto.secure_compare(state, expected),
