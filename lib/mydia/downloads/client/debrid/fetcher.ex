@@ -267,9 +267,17 @@ defmodule Mydia.Downloads.Client.Debrid.Fetcher do
           descriptor
       end)
 
-    download = History.get_download!(state.download_id)
-    new_metadata = Map.merge(download.metadata || %{}, %{"debrid_urls" => persisted})
-    History.update_download(download, %{metadata: new_metadata})
+    # The operator can cancel a download while its fetcher is still running, so a
+    # missing row is an ordinary outcome here, not a reason to crash the
+    # GenServer mid-fetch (issue #281).
+    case History.get_download(state.download_id) do
+      nil ->
+        :ok
+
+      download ->
+        new_metadata = Map.merge(download.metadata || %{}, %{"debrid_urls" => persisted})
+        History.update_download(download, %{metadata: new_metadata})
+    end
   end
 
   defp stream_all(urls, download_dir, state, download) do
@@ -452,15 +460,28 @@ defmodule Mydia.Downloads.Client.Debrid.Fetcher do
     # forever and the file sits in staging without ever being imported.
     # The cron's `handle_completed_download/2` is what should stamp
     # completed_at — right before it enqueues the import job.
-    download = History.get_download!(state.download_id)
+    case History.get_download(state.download_id) do
+      # Cancelled mid-fetch. The bytes are staged but nothing tracks them any
+      # more, so stop cleanly rather than crashing the fetcher (issue #281).
+      nil ->
+        {:ok, state}
 
-    save_path = download_dir!(state)
+      download ->
+        save_path = download_dir!(state)
 
-    new_metadata = Map.merge(download.metadata || %{}, %{"save_path" => save_path})
+        new_metadata = Map.merge(download.metadata || %{}, %{"save_path" => save_path})
 
-    case History.update_download(download, %{metadata: new_metadata}) do
-      {:ok, _} -> {:ok, state}
-      {:error, cs} -> {:error, Error.unknown("failed to finalize download: #{inspect(cs)}")}
+        case History.update_download(download, %{metadata: new_metadata}) do
+          {:ok, _} ->
+            {:ok, state}
+
+          {:error, cs} ->
+            if History.stale_error?(cs) do
+              {:ok, state}
+            else
+              {:error, Error.unknown("failed to finalize download: #{inspect(cs)}")}
+            end
+        end
     end
   end
 
@@ -517,7 +538,7 @@ defmodule Mydia.Downloads.Client.Debrid.Fetcher do
       "Debrid fetcher failed for download_id=#{state.download_id}: #{Error.message(error)}"
     )
 
-    case History.get_download!(state.download_id) do
+    case History.get_download(state.download_id) do
       %Download{} = d ->
         History.update_download(d, %{
           import_failed_at: DateTime.utc_now(),

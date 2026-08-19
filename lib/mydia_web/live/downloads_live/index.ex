@@ -192,9 +192,8 @@ defmodule MydiaWeb.DownloadsLive.Index do
   end
 
   def handle_event("cancel_download", %{"id" => id}, socket) do
-    with :ok <- Authorization.authorize_manage_downloads(socket) do
-      download = Downloads.get_download!(id)
-
+    with :ok <- Authorization.authorize_manage_downloads(socket),
+         {:ok, download} <- fetch_download(id) do
       case Downloads.cancel_download(download, delete_files: false) do
         {:ok, _} ->
           {:noreply,
@@ -207,13 +206,13 @@ defmodule MydiaWeb.DownloadsLive.Index do
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
+      :gone -> download_gone(socket)
     end
   end
 
   def handle_event("pause_download", %{"id" => id}, socket) do
-    with :ok <- Authorization.authorize_manage_downloads(socket) do
-      download = Downloads.get_download!(id)
-
+    with :ok <- Authorization.authorize_manage_downloads(socket),
+         {:ok, download} <- fetch_download(id) do
       case Downloads.pause_download(download) do
         {:ok, _} ->
           {:noreply,
@@ -226,13 +225,13 @@ defmodule MydiaWeb.DownloadsLive.Index do
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
+      :gone -> download_gone(socket)
     end
   end
 
   def handle_event("resume_download", %{"id" => id}, socket) do
-    with :ok <- Authorization.authorize_manage_downloads(socket) do
-      download = Downloads.get_download!(id)
-
+    with :ok <- Authorization.authorize_manage_downloads(socket),
+         {:ok, download} <- fetch_download(id) do
       case Downloads.resume_download(download) do
         {:ok, _} ->
           {:noreply,
@@ -245,13 +244,13 @@ defmodule MydiaWeb.DownloadsLive.Index do
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
+      :gone -> download_gone(socket)
     end
   end
 
   def handle_event("retry_download", %{"id" => id}, socket) do
-    with :ok <- Authorization.authorize_manage_downloads(socket) do
-      download = Downloads.get_download!(id, preload: [:media_item, :episode])
-
+    with :ok <- Authorization.authorize_manage_downloads(socket),
+         {:ok, download} <- fetch_download(id, preload: [:media_item, :episode]) do
       # Clear error message if any
       case Downloads.update_download(download, %{error_message: nil}) do
         {:ok, updated} ->
@@ -295,6 +294,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
+      :gone -> download_gone(socket)
     end
   end
 
@@ -336,9 +336,8 @@ defmodule MydiaWeb.DownloadsLive.Index do
   end
 
   def handle_event("retry_import", %{"id" => id}, socket) do
-    with :ok <- Authorization.authorize_manage_downloads(socket) do
-      download = Downloads.get_download!(id, preload: [:media_item, :episode])
-
+    with :ok <- Authorization.authorize_manage_downloads(socket),
+         {:ok, download} <- fetch_download(id, preload: [:media_item, :episode]) do
       # Clear retry metadata and trigger immediate import
       case Downloads.update_download(download, %{
              import_retry_count: 0,
@@ -368,13 +367,13 @@ defmodule MydiaWeb.DownloadsLive.Index do
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
+      :gone -> download_gone(socket)
     end
   end
 
   def handle_event("delete_download", %{"id" => id}, socket) do
-    with :ok <- Authorization.authorize_manage_downloads(socket) do
-      download = Downloads.get_download!(id)
-
+    with :ok <- Authorization.authorize_manage_downloads(socket),
+         {:ok, download} <- fetch_download(id) do
       # First try to remove from client (ignore errors if already removed)
       _ = Downloads.cancel_download(download, delete_files: true)
 
@@ -391,6 +390,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
+      :gone -> download_gone(socket)
     end
   end
 
@@ -544,9 +544,8 @@ defmodule MydiaWeb.DownloadsLive.Index do
   end
 
   def handle_event("clear_single_completed", %{"id" => id}, socket) do
-    with :ok <- Authorization.authorize_manage_downloads(socket) do
-      download = Downloads.get_download!(id)
-
+    with :ok <- Authorization.authorize_manage_downloads(socket),
+         {:ok, download} <- fetch_download(id) do
       case Downloads.clear_completed(download) do
         {:ok, _} ->
           {:noreply,
@@ -559,6 +558,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
+      :gone -> download_gone(socket)
     end
   end
 
@@ -722,9 +722,8 @@ defmodule MydiaWeb.DownloadsLive.Index do
   # --- Match files modal (manual file matching on import failure) ---
 
   def handle_event("open_match_files", %{"id" => id}, socket) do
-    with :ok <- Authorization.authorize_manage_downloads(socket) do
-      download = Downloads.get_download!(id, preload: [:media_item, :library_path])
-
+    with :ok <- Authorization.authorize_manage_downloads(socket),
+         {:ok, download} <- fetch_download(id, preload: [:media_item, :library_path]) do
       case ImportCandidates.load(download) do
         {:ok, source, candidates} ->
           episodes =
@@ -754,6 +753,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
+      :gone -> download_gone(socket)
     end
   end
 
@@ -765,17 +765,19 @@ defmodule MydiaWeb.DownloadsLive.Index do
   end
 
   def handle_event("match_files_import", params, socket) do
-    with :ok <- Authorization.authorize_manage_downloads(socket) do
-      %{download: modal_download, candidates: candidates} = socket.assigns.match_files_modal
+    %{download: modal_download} = socket.assigns.match_files_modal
 
-      # Re-read the download at submit time rather than trusting the assign
-      # captured when the modal opened. The modal has no way to notice a
+    with :ok <- Authorization.authorize_manage_downloads(socket),
+         {:ok, download} <- fetch_download(modal_download.id, preload: [:media_item]) do
+      %{candidates: candidates} = socket.assigns.match_files_modal
+
+      # `download` above is re-read at submit time rather than trusting the
+      # assign captured when the modal opened. The modal has no way to notice a
       # re-bind: the separate match/re-match modal can rebind this download to
       # a different show while this one stays open, and process_targeted_import/3
       # must build destinations from the CURRENT media_item — trusting the
       # stale struct would link an episode from the OLD show onto files
       # imported under the NEW one.
-      download = Downloads.get_download!(modal_download.id, preload: [:media_item])
 
       # Defense in depth: a disabled <select> only stops a normal browser. Never
       # trust a submitted path or target purely from client state — re-derive
@@ -870,13 +872,13 @@ defmodule MydiaWeb.DownloadsLive.Index do
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
+      :gone -> download_gone(socket)
     end
   end
 
   def handle_event("reject_release", %{"id" => id}, socket) do
-    with :ok <- Authorization.authorize_manage_downloads(socket) do
-      download = Downloads.get_download!(id)
-
+    with :ok <- Authorization.authorize_manage_downloads(socket),
+         {:ok, download} <- fetch_download(id) do
       case Downloads.reject_release(download) do
         {:ok, :rejected} ->
           flash =
@@ -900,6 +902,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
+      :gone -> download_gone(socket)
     end
   end
 
@@ -907,9 +910,8 @@ defmodule MydiaWeb.DownloadsLive.Index do
   # buys a full fresh grace-then-escalation window. If it stalls again the
   # operator gets warned again.
   def handle_event("keep_waiting", %{"id" => id}, socket) do
-    with :ok <- Authorization.authorize_manage_downloads(socket) do
-      download = Downloads.get_download!(id)
-
+    with :ok <- Authorization.authorize_manage_downloads(socket),
+         {:ok, download} <- fetch_download(id) do
       case Downloads.update_download(download, %{
              stalled_since: nil,
              last_progress_at: DateTime.utc_now()
@@ -925,13 +927,13 @@ defmodule MydiaWeb.DownloadsLive.Index do
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
+      :gone -> download_gone(socket)
     end
   end
 
   def handle_event("dismiss_download", %{"id" => id}, socket) do
-    with :ok <- Authorization.authorize_manage_downloads(socket) do
-      download = Downloads.get_download!(id)
-
+    with :ok <- Authorization.authorize_manage_downloads(socket),
+         {:ok, download} <- fetch_download(id) do
       case Downloads.dismiss_download(download) do
         {:ok, _} ->
           {:noreply, load_downloads(socket)}
@@ -941,6 +943,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
+      :gone -> download_gone(socket)
     end
   end
 
@@ -1340,10 +1343,10 @@ defmodule MydiaWeb.DownloadsLive.Index do
   end
 
   defp submit_match(socket, media_item_id, episode_id) do
-    with :ok <- Authorization.authorize_manage_downloads(socket) do
-      modal = socket.assigns.match_modal
-      download = Downloads.get_download!(modal.download_id)
+    modal = socket.assigns.match_modal
 
+    with :ok <- Authorization.authorize_manage_downloads(socket),
+         {:ok, download} <- fetch_download(modal.download_id) do
       {flash_kind, message} =
         case modal.mode do
           :inflight ->
@@ -1372,6 +1375,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
        |> load_downloads()}
     else
       {:unauthorized, socket} -> {:noreply, socket}
+      :gone -> download_gone(socket)
     end
   end
 
@@ -1789,5 +1793,23 @@ defmodule MydiaWeb.DownloadsLive.Index do
       diff < 86400 -> "in #{div(diff, 3600)}h"
       true -> "in #{div(diff, 86400)}d"
     end
+  end
+
+  # A row the operator clicked can be gone by the time the click lands: the
+  # monitor deletes rows the client reported failed, and an import deletes the
+  # row it just imported. Nothing went wrong, so re-render and say so plainly
+  # rather than crashing the LiveView (issue #281).
+  defp fetch_download(id, opts \\ []) do
+    case Downloads.get_download(id, opts) do
+      nil -> :gone
+      download -> {:ok, download}
+    end
+  end
+
+  defp download_gone(socket) do
+    {:noreply,
+     socket
+     |> put_flash(:info, "That download is no longer in the queue")
+     |> load_downloads()}
   end
 end

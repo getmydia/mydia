@@ -16,12 +16,16 @@ defmodule MydiaWeb.MediaLive.Show.DownloadEvents do
   require Logger
 
   def show_download_cancel_confirm(%{"download-id" => download_id}, socket) do
-    download = Downloads.get_download!(download_id)
+    case Downloads.get_download(download_id) do
+      nil ->
+        download_gone(socket)
 
-    {:noreply,
-     socket
-     |> assign(:show_download_cancel_confirm, true)
-     |> assign(:download_to_cancel, download)}
+      download ->
+        {:noreply,
+         socket
+         |> assign(:show_download_cancel_confirm, true)
+         |> assign(:download_to_cancel, download)}
+    end
   end
 
   def hide_download_cancel_confirm(_params, socket) do
@@ -52,12 +56,16 @@ defmodule MydiaWeb.MediaLive.Show.DownloadEvents do
   end
 
   def show_download_delete_confirm(%{"download-id" => download_id}, socket) do
-    download = Downloads.get_download!(download_id)
+    case Downloads.get_download(download_id) do
+      nil ->
+        download_gone(socket)
 
-    {:noreply,
-     socket
-     |> assign(:show_download_delete_confirm, true)
-     |> assign(:download_to_delete, download)}
+      download ->
+        {:noreply,
+         socket
+         |> assign(:show_download_delete_confirm, true)
+         |> assign(:download_to_delete, download)}
+    end
   end
 
   def hide_download_delete_confirm(_params, socket) do
@@ -89,12 +97,16 @@ defmodule MydiaWeb.MediaLive.Show.DownloadEvents do
   end
 
   def show_download_details(%{"download-id" => download_id}, socket) do
-    download = Downloads.get_download!(download_id)
+    case Downloads.get_download(download_id) do
+      nil ->
+        download_gone(socket)
 
-    {:noreply,
-     socket
-     |> assign(:show_download_details_modal, true)
-     |> assign(:download_details, download)}
+      download ->
+        {:noreply,
+         socket
+         |> assign(:show_download_details_modal, true)
+         |> assign(:download_details, download)}
+    end
   end
 
   def hide_download_details(_params, socket) do
@@ -105,8 +117,13 @@ defmodule MydiaWeb.MediaLive.Show.DownloadEvents do
   end
 
   def retry_download(%{"download-id" => download_id}, socket) do
-    download = Downloads.get_download!(download_id, preload: [:media_item, :episode])
+    case Downloads.get_download(download_id, preload: [:media_item, :episode]) do
+      nil -> download_gone(socket)
+      download -> do_retry_download(download, socket)
+    end
+  end
 
+  defp do_retry_download(download, socket) do
     case Downloads.update_download(download, %{error_message: nil}) do
       {:ok, updated} ->
         search_result = %SearchResult{
@@ -135,8 +152,12 @@ defmodule MydiaWeb.MediaLive.Show.DownloadEvents do
             {:noreply, put_flash(socket, :error, "Failed to retry download: #{inspect(reason)}")}
         end
 
-      {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Failed to update download")}
+      {:error, changeset} ->
+        if Downloads.stale_error?(changeset) do
+          download_gone(socket)
+        else
+          {:noreply, put_flash(socket, :error, "Failed to update download")}
+        end
     end
   end
 
@@ -145,8 +166,13 @@ defmodule MydiaWeb.MediaLive.Show.DownloadEvents do
   # record never reached a client, so there is nothing to clean up remotely.
   def dismiss_failed_grab(%{"id" => id}, socket) do
     with :ok <- Authorization.authorize_manage_downloads(socket) do
-      download = Downloads.get_download!(id)
-      {:ok, _} = Downloads.delete_download(download)
+      # `delete_download/1` is idempotent, so a row another process already
+      # removed still succeeds here; only a row gone before the read needs a
+      # guard.
+      case Downloads.get_download(id) do
+        nil -> :already_gone
+        download -> Downloads.delete_download(download)
+      end
 
       {:noreply,
        assign(
@@ -157,5 +183,23 @@ defmodule MydiaWeb.MediaLive.Show.DownloadEvents do
     else
       {:unauthorized, socket} -> {:noreply, socket}
     end
+  end
+
+  # A download the operator clicked can be gone by the time the click lands: the
+  # monitor deletes rows the client reported failed, and an import deletes the
+  # row it just imported. Nothing went wrong, so say so plainly and re-render
+  # rather than showing an error (issue #281).
+  defp download_gone(socket) do
+    {:noreply,
+     socket
+     |> put_flash(:info, "That download is no longer in the queue")
+     |> assign(:show_download_cancel_confirm, false)
+     |> assign(:download_to_cancel, nil)
+     |> assign(:show_download_delete_confirm, false)
+     |> assign(:download_to_delete, nil)
+     |> assign(
+       :downloads_with_status,
+       load_downloads_with_status(socket.assigns.media_item)
+     )}
   end
 end

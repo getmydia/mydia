@@ -118,6 +118,24 @@ defmodule Mydia.Downloads do
   defdelegate get_download!(id, opts \\ []), to: Mydia.Downloads.History
 
   @doc """
+  Gets a single download, or `nil` if it no longer exists.
+
+  Prefer this over `get_download!/2` in background jobs and LiveView handlers,
+  which act on an id captured earlier and must tolerate the row having been
+  imported, cleared, or deleted in the meantime (issue #281).
+  """
+  @spec get_download(binary(), keyword()) :: Download.t() | nil
+  defdelegate get_download(id, opts \\ []), to: Mydia.Downloads.History
+
+  @doc """
+  True when a write failed because the download row no longer exists.
+
+  See `Mydia.Downloads.History.stale_error?/1`.
+  """
+  @spec stale_error?(term()) :: boolean()
+  defdelegate stale_error?(changeset), to: Mydia.Downloads.History
+
+  @doc """
   Creates a download.
   """
   @spec create_download(map()) :: {:ok, Download.t()} | {:error, Ecto.Changeset.t()}
@@ -125,6 +143,9 @@ defmodule Mydia.Downloads do
 
   @doc """
   Updates a download.
+
+  Returns `{:error, changeset}` if the row no longer exists; `stale_error?/1`
+  distinguishes that from a validation failure.
   """
   @spec update_download(Download.t(), map()) :: {:ok, Download.t()} | {:error, Ecto.Changeset.t()}
   defdelegate update_download(download, attrs), to: Mydia.Downloads.History
@@ -148,6 +169,8 @@ defmodule Mydia.Downloads do
 
   @doc """
   Marks a download as completed by storing the completion time.
+
+  Returns `{:error, changeset}` if the row no longer exists; see `stale_error?/1`.
   """
   @spec mark_download_completed(Download.t()) ::
           {:ok, Download.t()} | {:error, Ecto.Changeset.t()}
@@ -155,6 +178,8 @@ defmodule Mydia.Downloads do
 
   @doc """
   Records an error message for a download.
+
+  Returns `{:error, changeset}` if the row no longer exists; see `stale_error?/1`.
   """
   @spec mark_download_failed(Download.t(), String.t()) ::
           {:ok, Download.t()} | {:error, Ecto.Changeset.t()}
@@ -162,6 +187,8 @@ defmodule Mydia.Downloads do
 
   @doc """
   Deletes a download.
+
+  Idempotent: a row another process already deleted still returns `{:ok, download}`.
   """
   @spec delete_download(Download.t()) :: {:ok, Download.t()} | {:error, Ecto.Changeset.t()}
   defdelegate delete_download(download), to: Mydia.Downloads.History

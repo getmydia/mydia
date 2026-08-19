@@ -2421,5 +2421,86 @@ defmodule Mydia.Jobs.MediaImportTest do
 
       refute Mydia.Search.get_backoff_info("auto_reject", media_item.id)
     end
+
+    test "an import whose download row is deleted after the files land still succeeds",
+         %{tmp_dir: tmp_dir} do
+      # Regression for #285. `do_process_import/4` stamps `imported_at` *after*
+      # `organize_and_import_files/4` has already moved the bytes into the
+      # library. If an operator clears the download in that window, the stamp
+      # used to raise Ecto.StaleEntryError and crash the job — so Oban retried
+      # and imported the same files a second time.
+      _library_path = create_test_library_path(tmp_dir, :movies)
+
+      download_dir = Path.join(tmp_dir, "downloads")
+      File.mkdir_p!(download_dir)
+      video_file = Path.join(download_dir, "Vanishing.Row.2024.1080p.mkv")
+      File.write!(video_file, "fake video content")
+
+      media_item = media_item_fixture(%{type: "movie", title: "Vanishing Row Movie", year: 2024})
+
+      {:ok, _} =
+        Settings.create_download_client_config(%{
+          name: "VanishingImportClient",
+          type: :qbittorrent,
+          host: "nonexistent.invalid",
+          port: 9999,
+          username: "test",
+          password: "test",
+          enabled: true,
+          priority: 1
+        })
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          status: "completed",
+          completed_at: DateTime.utc_now(),
+          download_client: "VanishingImportClient",
+          download_client_id: "vanishing-import"
+        })
+
+      # The job reads the download by primary key twice: once at start
+      # (`fetch_download/1`) and once as `do_process_import/4`'s reload, after the
+      # files are on disk. Deleting on the *second* read puts the row's
+      # disappearance exactly in the window the stamp writes into. Telemetry
+      # fires after the query runs, so the reload still returns a row and it is
+      # the write that finds it gone.
+      handler_id = {__MODULE__, :delete_after_files_land, download.id}
+      test_pid = self()
+      reads = :counters.new(1, [])
+
+      :telemetry.attach(
+        handler_id,
+        [:mydia, :repo, :query],
+        fn _event, _measurements, metadata, _config ->
+          if self() == test_pid and metadata.source == "downloads" and
+               String.contains?(metadata.query, ~s|."id" = ?|) do
+            :counters.add(reads, 1, 1)
+
+            if :counters.get(reads, 1) == 2 do
+              :telemetry.detach(handler_id)
+              {:ok, _} = Mydia.Downloads.delete_download(download)
+              send(test_pid, :deleted_after_files_landed)
+            end
+          end
+        end,
+        nil
+      )
+
+      on_exit(fn -> :telemetry.detach(handler_id) end)
+
+      assert {:ok, :imported} =
+               perform_job(MediaImport, %{
+                 "download_id" => download.id,
+                 "save_path" => download_dir
+               })
+
+      # Without this the test would pass even if the delete never fired, and so
+      # would never have exercised the race.
+      assert_received :deleted_after_files_landed
+
+      # The import itself must still have completed: the file is in the library.
+      assert [_media_file] = Mydia.Library.list_media_files(media_item_id: media_item.id)
+    end
   end
 end

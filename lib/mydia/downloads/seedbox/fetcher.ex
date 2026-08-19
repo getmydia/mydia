@@ -374,13 +374,26 @@ defmodule Mydia.Downloads.Seedbox.Fetcher do
   end
 
   defp finalize(state) do
-    download = History.get_download!(state.download_id)
-    save_path = local_download_dir(state)
-    new_metadata = Map.merge(download.metadata || %{}, %{"save_path" => save_path})
+    case History.get_download(state.download_id) do
+      # Cancelled mid-fetch — nothing left to finalize against (issue #281).
+      nil ->
+        {:ok, :done}
 
-    case History.update_download(download, %{metadata: new_metadata}) do
-      {:ok, _} -> {:ok, :done}
-      {:error, changeset} -> {:error, {:finalize_failed, changeset}}
+      download ->
+        save_path = local_download_dir(state)
+        new_metadata = Map.merge(download.metadata || %{}, %{"save_path" => save_path})
+
+        case History.update_download(download, %{metadata: new_metadata}) do
+          {:ok, _} ->
+            {:ok, :done}
+
+          {:error, changeset} ->
+            if History.stale_error?(changeset) do
+              {:ok, :done}
+            else
+              {:error, {:finalize_failed, changeset}}
+            end
+        end
     end
   end
 
@@ -392,7 +405,7 @@ defmodule Mydia.Downloads.Seedbox.Fetcher do
       "Seedbox fetch failed for download_id=#{state.download_id}: #{inspect(reason)}"
     )
 
-    case History.get_download!(state.download_id) do
+    case History.get_download(state.download_id) do
       %Download{} = d ->
         History.update_download(d, %{
           import_failed_at: DateTime.utc_now(),

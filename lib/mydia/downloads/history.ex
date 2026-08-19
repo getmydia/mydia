@@ -26,6 +26,25 @@ defmodule Mydia.Downloads.History do
   # considered a crashed/abandoned grab and derives to "failed".
   @grab_timeout_minutes 10
 
+  # A download row can be deleted while another process still holds a struct for
+  # it: DownloadMonitor's own failure pass deletes rows, MediaImport deletes on
+  # successful import, and an operator can delete/cancel/dismiss from the UI at
+  # any moment. `Repo.update/2` and `Repo.delete/2` filter on the primary key and
+  # raise `Ecto.StaleEntryError` when that filter matches zero rows — the default
+  # for every write, not something `optimistic_lock` opts you into.
+  #
+  # `downloads` has no `lock_version` and no `optimistic_lock`, so a stale error
+  # on this table has exactly one meaning: the row is gone. That is the same
+  # condition `Ecto.NoResultsError` reports on the read side (issue #281), which
+  # is why both are handled here at the choke point rather than at the ~40 call
+  # sites (issues #285, #281).
+  #
+  # `:id` is a safe sentinel field: it is never cast, and the changeset's
+  # constraints are on `media_item_id`/`episode_id`/`library_path_id`. The error
+  # Ecto adds carries `stale: true` metadata, which `stale_error?/1` matches —
+  # never match on the message text, which is configurable.
+  @stale_update_opts [stale_error_field: :id, stale_error_message: "no longer exists"]
+
   ## Public Functions
 
   @doc """
@@ -203,6 +222,38 @@ defmodule Mydia.Downloads.History do
     |> Repo.get!(id)
   end
 
+  @doc """
+  Non-raising sibling of `get_download!/2`, returning `nil` when the row is gone.
+
+  Background jobs and LiveView handlers routinely act on a download id captured
+  moments earlier — a poll snapshot, an Oban job arg, a clicked table row. By the
+  time they run, the row may already have been imported and deleted, or removed
+  by the operator. That is an ordinary outcome, not a fault, so those callers use
+  this and skip cleanly instead of crashing the job (issue #281).
+
+  Use `get_download!/2` only where a missing row genuinely is a bug.
+  """
+  def get_download(id, opts \\ []) do
+    Download
+    |> maybe_preload(opts[:preload])
+    |> Repo.get(id)
+  end
+
+  @doc """
+  True when a write returned `{:error, changeset}` because the row no longer exists.
+
+  Most callers do not need this: the stale result keeps the ordinary
+  `{:error, changeset}` shape, so existing error branches log and continue
+  unchanged. It exists for the call sites whose *behavior* must differ — where
+  the success branch would otherwise emit an event, enqueue a job, or roll back a
+  transaction for a download that is already gone.
+  """
+  def stale_error?(%Ecto.Changeset{errors: errors}) do
+    Enum.any?(errors, fn {_field, {_message, opts}} -> Keyword.get(opts, :stale) == true end)
+  end
+
+  def stale_error?(_other), do: false
+
   def create_download(attrs \\ %{}) do
     result =
       %Download{}
@@ -223,7 +274,7 @@ defmodule Mydia.Downloads.History do
     result =
       download
       |> Download.changeset(attrs)
-      |> Repo.update()
+      |> Repo.update(@stale_update_opts)
 
     case result do
       {:ok, updated_download} ->
@@ -289,17 +340,26 @@ defmodule Mydia.Downloads.History do
   def mark_download_completed(%Download{} = download) do
     download
     |> Download.changeset(%{completed_at: DateTime.utc_now()})
-    |> Repo.update()
+    |> Repo.update(@stale_update_opts)
   end
 
   def mark_download_failed(%Download{} = download, error_message) do
     download
     |> Download.changeset(%{error_message: error_message})
-    |> Repo.update()
+    |> Repo.update(@stale_update_opts)
   end
 
+  @doc """
+  Deletes a download. Idempotent: a row another process already deleted still
+  returns `{:ok, download}`.
+
+  `allow_stale: true` is Ecto's own option for "the struct was deleted from the
+  database before this deletion" — the caller's desired end state is reached
+  either way, so reporting it as a failure would be noise callers cannot act on.
+  The broadcast still fires, so open LiveViews drop the row (issue #285).
+  """
   def delete_download(%Download{} = download) do
-    result = Repo.delete(download)
+    result = Repo.delete(download, allow_stale: true)
 
     case result do
       {:ok, deleted_download} ->

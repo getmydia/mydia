@@ -985,6 +985,111 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
     end
   end
 
+  # Two monitor passes can execute at once: the adaptive fast-followup carries a
+  # distinct `fast_chain_position` arg, so Oban's uniqueness deliberately does
+  # not treat it as a duplicate of the cron tick. One pass deleting a row the
+  # other is writing used to abort the whole poll with Ecto.StaleEntryError
+  # (#285) or Ecto.NoResultsError (#281).
+  describe "a download deleted mid-poll" do
+    test "does not crash the completion pass" do
+      {bypass, client_config} = start_sabnzbd_bypass()
+
+      mock_sabnzbd_queue(bypass, [],
+        history: [
+          sabnzbd_history_item("nzo-vanish-complete", "Show.S01E01.nzb", "Completed")
+        ]
+      )
+
+      media_item = media_item_fixture()
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          title: "Show.S01E01",
+          download_client: client_config.name,
+          download_client_id: "nzo-vanish-complete"
+        })
+
+      delete_on_primary_key_read(download, :vanish_during_completion)
+
+      assert :ok = perform_job(DownloadMonitor, %{})
+      assert_raced(download)
+      assert Downloads.get_download(download.id) == nil
+    end
+
+    test "does not crash the failure pass" do
+      {bypass, client_config} = start_sabnzbd_bypass()
+
+      mock_sabnzbd_queue(bypass, [],
+        history: [
+          sabnzbd_history_item("nzo-vanish-failed", "Show.S01E02.nzb", "Failed")
+        ]
+      )
+
+      media_item = media_item_fixture()
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          title: "Show.S01E02",
+          indexer: "nzbhydra2",
+          download_client: client_config.name,
+          download_client_id: "nzo-vanish-failed",
+          metadata: %{indexer: "nzbhydra2", guid: "vanishing-guid"}
+        })
+
+      delete_on_primary_key_read(download, :vanish_during_failure)
+
+      assert :ok = perform_job(DownloadMonitor, %{})
+      assert_raced(download)
+      assert Downloads.get_download(download.id) == nil
+    end
+
+    test "one vanished row does not stop the rest of the poll" do
+      {bypass, client_config} = start_sabnzbd_bypass()
+
+      mock_sabnzbd_queue(bypass, [],
+        history: [
+          sabnzbd_history_item("nzo-vanish-first", "Vanishing.S01E01.nzb", "Failed"),
+          sabnzbd_history_item("nzo-survivor", "Survivor.S01E01.nzb", "Failed")
+        ]
+      )
+
+      media_item = media_item_fixture()
+
+      vanishing =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          title: "Vanishing.S01E01",
+          indexer: "nzbhydra2",
+          download_client: client_config.name,
+          download_client_id: "nzo-vanish-first",
+          metadata: %{indexer: "nzbhydra2", guid: "vanishing-guid"}
+        })
+
+      survivor =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          title: "Survivor.S01E01",
+          indexer: "nzbhydra2",
+          download_client: client_config.name,
+          download_client_id: "nzo-survivor",
+          metadata: %{indexer: "nzbhydra2", guid: "survivor-guid"}
+        })
+
+      delete_on_primary_key_read(vanishing, :vanish_mid_pass)
+
+      assert :ok = perform_job(DownloadMonitor, %{})
+      assert_raced(vanishing)
+
+      # The survivor still went through the full failure path: blacklisted and
+      # removed from the queue. Before the fix, the vanished row raised out of
+      # `Enum.each` and every later row in the pass was skipped.
+      assert Blacklists.blacklisted?("nzbhydra2", "survivor-guid")
+      assert Downloads.get_download(survivor.id) == nil
+    end
+  end
+
   describe "release blacklist on failure (#123)" do
     test "writes a (indexer, guid) row when a download is reported failed" do
       {bypass, client_config} = start_sabnzbd_bypass()
@@ -2220,6 +2325,48 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
       "storage" => "/downloads",
       "added" => System.system_time(:second)
     }
+  end
+
+  # Deletes `download` the moment the poll re-reads it by primary key — the
+  # `Downloads.get_download/2` inside `handle_completion/1` / `handle_failure/1`.
+  #
+  # Telemetry fires *after* the query executes, so the handler still receives the
+  # row and the very next write is the one that finds it gone. That is exactly
+  # the production race in #285, and it is targeted by matching the SQL rather
+  # than by counting `downloads` queries: `perform/1` issues several of those
+  # (the status listing, stale grabs, stuck downloads) and their order shifts
+  # with the fixtures, so a counter silently tests the wrong window.
+  #
+  # Telemetry handlers are global and run in the emitting process, so the pid
+  # guard stops a concurrent Postgres test from stealing the handler and
+  # deleting on a sandbox connection where this row does not exist.
+  defp delete_on_primary_key_read(download, tag) do
+    handler_id = {__MODULE__, tag, download.id}
+    test_pid = self()
+
+    :telemetry.attach(
+      handler_id,
+      [:mydia, :repo, :query],
+      fn _event, _measurements, metadata, _config ->
+        if self() == test_pid and metadata.source == "downloads" and
+             String.contains?(metadata.query, ~s|."id" = ?|) do
+          :telemetry.detach(handler_id)
+          {:ok, _} = Downloads.delete_download(download)
+          send(test_pid, {:deleted_mid_poll, download.id})
+        end
+      end,
+      nil
+    )
+
+    on_exit(fn -> :telemetry.detach(handler_id) end)
+  end
+
+  # The handlers under test delete the row themselves on some paths, so
+  # "the row is gone afterwards" proves nothing. Assert the injected delete
+  # actually fired, or these tests pass without ever exercising the race.
+  defp assert_raced(download) do
+    assert_received {:deleted_mid_poll, id}
+    assert id == download.id
   end
 
   defp sabnzbd_history_item(nzo_id, filename, status) do

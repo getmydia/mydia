@@ -57,11 +57,7 @@ defmodule Mydia.Jobs.MediaRematch do
   end
 
   defp fetch_download(download_id) do
-    Downloads.get_download!(download_id,
-      preload: [:media_item, :episode, :library_path]
-    )
-  rescue
-    Ecto.NoResultsError -> nil
+    Downloads.get_download(download_id, preload: [:media_item, :episode, :library_path])
   end
 
   defp run(download) do
@@ -176,9 +172,26 @@ defmodule Mydia.Jobs.MediaRematch do
       {:ok, updated} ->
         # Provenance is part of the re-match contract; a failed stamp must roll
         # back the relink so callers can retry rather than half-update.
+        #
+        # The one exception is the download row having been deleted underneath
+        # us: the stamp is an audit trail, and there is nothing left to attach it
+        # to. Rolling back would discard a correct, disk-verified relink over
+        # bookkeeping, and every retry would fail identically until the job is
+        # discarded — leaving the media file permanently mis-linked (issue #285).
         case stamp_provenance(download, old_media_file) do
-          {:ok, _} -> updated
-          {:error, changeset} -> Repo.rollback({:provenance_failed, changeset})
+          {:ok, _} ->
+            updated
+
+          {:error, changeset} ->
+            if Downloads.stale_error?(changeset) do
+              Logger.info("Download row removed before provenance stamp; keeping the relink",
+                download_id: download.id
+              )
+
+              updated
+            else
+              Repo.rollback({:provenance_failed, changeset})
+            end
         end
 
       {:error, changeset} ->
@@ -232,7 +245,7 @@ defmodule Mydia.Jobs.MediaRematch do
   end
 
   defp record_pending_source_delete(download_id, source_path) do
-    with %_{} = download <- Downloads.get_download!(download_id) do
+    with %_{} = download <- Downloads.get_download(download_id) do
       metadata = Map.put(download.metadata || %{}, "rematch_pending_source_delete", source_path)
       Downloads.update_download(download, %{metadata: metadata})
     end

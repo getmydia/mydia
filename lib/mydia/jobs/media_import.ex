@@ -229,12 +229,12 @@ defmodule Mydia.Jobs.MediaImport do
   defp terminal_failure?(_reason, _attempt), do: false
 
   defp fetch_download(download_id) do
-    {:ok,
-     Downloads.get_download!(download_id,
-       preload: [{:media_item, :episodes}, :episode, :library_path]
-     )}
-  rescue
-    Ecto.NoResultsError -> :not_found
+    case Downloads.get_download(download_id,
+           preload: [{:media_item, :episodes}, :episode, :library_path]
+         ) do
+      nil -> :not_found
+      download -> {:ok, download}
+    end
   end
 
   defp handle_incomplete_download(download, args, attempt, raw_args) do
@@ -465,9 +465,10 @@ defmodule Mydia.Jobs.MediaImport do
   defp snapshot_candidates_on_failure(result, _download, _files, _library_path), do: result
 
   defp fetch_current_download(download_id) do
-    {:ok, Downloads.get_download!(download_id)}
-  rescue
-    Ecto.NoResultsError -> :not_found
+    case Downloads.get_download(download_id) do
+      nil -> :not_found
+      download -> {:ok, download}
+    end
   end
 
   defp do_process_import(download, files, library_path, args) do
@@ -483,11 +484,14 @@ defmodule Mydia.Jobs.MediaImport do
         # so future re-imports and reporting can recognize it.
         partial_pack_status = detect_partial_pack(download, imported_files)
 
-        # Reload download to check if it was flagged as having unresolved files
+        # Reload download to check if it was flagged as having unresolved files.
+        # The files are already on disk at this point, so a row deleted mid-import
+        # must not crash the job: Oban would retry and import them a second time.
+        # Fall back to the struct we already hold (issue #281).
         updated_download =
-          Downloads.get_download!(download.id,
+          Downloads.get_download(download.id,
             preload: [{:media_item, :episodes}, :episode, :library_path]
-          )
+          ) || download
 
         has_unresolved = updated_download.match_status == "unresolved_files"
 
@@ -553,10 +557,20 @@ defmodule Mydia.Jobs.MediaImport do
             )
 
           {:error, changeset} ->
-            Logger.warning("Failed to mark download as imported",
-              download_id: download.id,
-              errors: inspect(changeset.errors)
-            )
+            # The import itself succeeded — the files are on disk. Losing the
+            # bookkeeping stamp because an operator cleared the row mid-import
+            # must not read as an import failure (issue #285).
+            if Downloads.stale_error?(changeset) do
+              Logger.info(
+                "Import succeeded but the download row was removed before it could be marked imported",
+                download_id: download.id
+              )
+            else
+              Logger.warning("Failed to mark download as imported",
+                download_id: download.id,
+                errors: inspect(changeset.errors)
+              )
+            end
         end
 
         # Write NFO metadata files if enabled for this library path
@@ -1937,7 +1951,7 @@ defmodule Mydia.Jobs.MediaImport do
       import_failed_at: import_failed_at
     }
 
-    case update_retry_metadata(download, attrs) do
+    case Downloads.update_download(download, attrs) do
       {:ok, _updated} ->
         if terminal? do
           Logger.warning("Import failed terminally — no further retries",
@@ -1957,32 +1971,23 @@ defmodule Mydia.Jobs.MediaImport do
         :ok
 
       {:error, changeset} ->
-        Logger.error("Failed to update retry metadata",
-          download_id: download.id,
-          errors: inspect(changeset.errors)
-        )
-
-        :ok
-
-      :not_found ->
-        # The row this whole job is about was deleted while the job was
-        # running (e.g. an operator dismissed it mid-import). `Repo.update/1`
-        # raises `Ecto.StaleEntryError` when the struct's primary key no
-        # longer matches any row — there is no retry metadata left to
-        # attach it to, and the job already self-heals next attempt via
+        # The row this whole job is about can be deleted while the job runs
+        # (e.g. an operator dismissed it mid-import). There is no retry metadata
+        # left to attach it to, and the job self-heals next attempt via
         # `fetch_download/1`'s `:not_found` guard, so skip rather than crash.
-        Logger.info("Skipping retry-metadata update: download row no longer exists",
-          download_id: download.id
-        )
+        if Downloads.stale_error?(changeset) do
+          Logger.info("Skipping retry-metadata update: download row no longer exists",
+            download_id: download.id
+          )
+        else
+          Logger.error("Failed to update retry metadata",
+            download_id: download.id,
+            errors: inspect(changeset.errors)
+          )
+        end
 
         :ok
     end
-  end
-
-  defp update_retry_metadata(download, attrs) do
-    Downloads.update_download(download, attrs)
-  rescue
-    Ecto.StaleEntryError -> :not_found
   end
 
   # Structured failure classification persisted alongside the human message, so
@@ -2195,10 +2200,18 @@ defmodule Mydia.Jobs.MediaImport do
           :ok
 
         {:error, changeset} ->
-          Logger.warning("Failed to clear retry metadata",
-            download_id: download.id,
-            errors: inspect(changeset.errors)
-          )
+          # Same race as the retry-metadata write above: the import finished and
+          # the row was cleared before the bookkeeping could be reset.
+          if Downloads.stale_error?(changeset) do
+            Logger.info("Skipping retry-metadata clear: download row no longer exists",
+              download_id: download.id
+            )
+          else
+            Logger.warning("Failed to clear retry metadata",
+              download_id: download.id,
+              errors: inspect(changeset.errors)
+            )
+          end
 
           :ok
       end

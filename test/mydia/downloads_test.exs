@@ -452,6 +452,20 @@ defmodule Mydia.DownloadsTest do
     end
   end
 
+  describe "get_download/2" do
+    test "returns the download with given id" do
+      download = download_fixture()
+      assert Downloads.get_download(download.id).id == download.id
+    end
+
+    test "returns nil instead of raising when the row no longer exists (#281)" do
+      download = download_fixture()
+      {:ok, _} = Downloads.delete_download(download)
+
+      assert Downloads.get_download(download.id) == nil
+    end
+  end
+
   describe "create_download/1" do
     test "creates a download with valid attributes" do
       attrs = %{
@@ -474,6 +488,43 @@ defmodule Mydia.DownloadsTest do
 
       assert updated.title == "Updated Title"
     end
+
+    # Before #285 this raised Ecto.StaleEntryError and crashed whichever job or
+    # LiveView happened to be holding the struct.
+    test "returns a stale changeset instead of raising when the row was deleted" do
+      download = download_fixture()
+      {:ok, _} = Downloads.delete_download(download)
+
+      assert {:error, changeset} = Downloads.update_download(download, %{title: "Updated"})
+      assert Downloads.stale_error?(changeset)
+    end
+
+    test "a validation failure is not reported as stale" do
+      download = download_fixture()
+
+      assert {:error, changeset} = Downloads.update_download(download, %{title: nil})
+      refute Downloads.stale_error?(changeset)
+    end
+  end
+
+  describe "mark_download_completed/1" do
+    test "returns a stale changeset instead of raising when the row was deleted" do
+      download = download_fixture()
+      {:ok, _} = Downloads.delete_download(download)
+
+      assert {:error, changeset} = Downloads.mark_download_completed(download)
+      assert Downloads.stale_error?(changeset)
+    end
+  end
+
+  describe "mark_download_failed/2" do
+    test "returns a stale changeset instead of raising when the row was deleted" do
+      download = download_fixture()
+      {:ok, _} = Downloads.delete_download(download)
+
+      assert {:error, changeset} = Downloads.mark_download_failed(download, "boom")
+      assert Downloads.stale_error?(changeset)
+    end
   end
 
   describe "delete_download/1" do
@@ -482,6 +533,20 @@ defmodule Mydia.DownloadsTest do
 
       assert {:ok, %Download{}} = Downloads.delete_download(download)
       assert_raise Ecto.NoResultsError, fn -> Downloads.get_download!(download.id) end
+    end
+
+    # Two DownloadMonitor passes can both decide to delete the same failed row.
+    # The second one has still achieved what it asked for (#285).
+    test "is idempotent when the row was already deleted, and still broadcasts" do
+      download = download_fixture()
+      {:ok, _} = Downloads.delete_download(download)
+
+      Phoenix.PubSub.subscribe(Mydia.PubSub, "downloads")
+
+      assert {:ok, %Download{} = deleted} = Downloads.delete_download(download)
+      assert deleted.id == download.id
+      assert_received {:download_updated, download_id}
+      assert download_id == download.id
     end
   end
 

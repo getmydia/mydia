@@ -138,7 +138,18 @@ defmodule Mydia.Downloads.Grabber do
 
       {:error, changeset} ->
         # The torrent IS in the client, but we couldn't persist the link.
-        fail_grab(download, {:record_update_failed, changeset.errors})
+        if History.stale_error?(changeset) do
+          # Nothing left to mark failed, and broadcasting `:grab_failed` for a row
+          # the operator already removed would resurrect it in the UI as an error.
+          Logger.warning(
+            "Download row removed mid-grab; the torrent is in the client but is no longer tracked",
+            download_id: download.id
+          )
+
+          :error
+        else
+          fail_grab(download, {:record_update_failed, changeset.errors})
+        end
     end
   end
 
@@ -152,19 +163,30 @@ defmodule Mydia.Downloads.Grabber do
         {:ok, updated}
 
       {:error, changeset} ->
-        case find_conflicting_download(client_name, client_id, download.id) do
-          nil ->
-            {:error, changeset}
-
-          stale ->
-            Logger.info("Deleting stale download record before grab finalize",
-              download_id: stale.id,
-              title: stale.title
-            )
-
-            History.delete_download(stale)
-            History.update_download(download, attrs)
+        # Our own row is gone (cancelled from the UI, or reaped as a stale grab).
+        # There is no unique-constraint conflict to resolve, and deleting some
+        # other row on its behalf would be destructive — bail out (issue #285).
+        if History.stale_error?(changeset) do
+          {:error, changeset}
+        else
+          resolve_client_assignment_conflict(download, attrs, client_name, client_id, changeset)
         end
+    end
+  end
+
+  defp resolve_client_assignment_conflict(download, attrs, client_name, client_id, changeset) do
+    case find_conflicting_download(client_name, client_id, download.id) do
+      nil ->
+        {:error, changeset}
+
+      stale ->
+        Logger.info("Deleting stale download record before grab finalize",
+          download_id: stale.id,
+          title: stale.title
+        )
+
+        History.delete_download(stale)
+        History.update_download(download, attrs)
     end
   end
 

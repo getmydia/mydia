@@ -289,29 +289,63 @@ defmodule Mydia.Jobs.DownloadMonitor do
       save_path: download_map.save_path
     )
 
-    # Get the download struct from database (with media_item preloaded)
-    download = Downloads.get_download!(download_map.id, preload: [:media_item])
-
-    # Mark download as completed in database (prevents reprocessing on next monitor run)
-    {:ok, download} = Downloads.mark_download_completed(download)
-
-    # Track completion event
-    Events.download_completed(download, media_item: download.media_item)
-
-    # Enqueue import job - it will delete the download record after successful import
-    case enqueue_import_job(download, download_map) do
-      {:ok, _job} ->
-        Logger.info("Import job enqueued for completed download",
-          download_id: download.id
+    # `downloads` is a snapshot taken at the top of `perform/1`, before minutes of
+    # client polling. The row may already have been imported and deleted, or
+    # removed by the operator, by the time we get here — an ordinary outcome, so
+    # fetch without raising and skip (issue #281).
+    case Downloads.get_download(download_map.id, preload: [:media_item]) do
+      nil ->
+        Logger.debug("Download vanished before completion could be handled",
+          download_id: download_map.id
         )
 
         :ok
 
-      {:error, reason} ->
-        Logger.error("Failed to enqueue import job",
-          download_id: download.id,
-          reason: inspect(reason)
-        )
+      download ->
+        complete_download(download, download_map)
+    end
+  end
+
+  defp complete_download(download, download_map) do
+    # Mark download as completed in database (prevents reprocessing on next monitor run)
+    case Downloads.mark_download_completed(download) do
+      {:ok, download} ->
+        # Track completion event
+        Events.download_completed(download, media_item: download.media_item)
+
+        # Enqueue import job - it will delete the download record after successful import
+        case enqueue_import_job(download, download_map) do
+          {:ok, _job} ->
+            Logger.info("Import job enqueued for completed download",
+              download_id: download.id
+            )
+
+            :ok
+
+          {:error, reason} ->
+            Logger.error("Failed to enqueue import job",
+              download_id: download.id,
+              reason: inspect(reason)
+            )
+
+            :ok
+        end
+
+      {:error, changeset} ->
+        # A concurrent pass deleted the row between the fetch above and this
+        # write. Emitting a completion event or enqueueing an import job for a
+        # row that no longer exists would fabricate history and queue a job that
+        # can only no-op, so stop here (issue #285).
+        if Downloads.stale_error?(changeset) do
+          Logger.debug("Download vanished before it could be marked completed",
+            download_id: download.id
+          )
+        else
+          Logger.error("Failed to mark download as completed",
+            download_id: download.id,
+            errors: inspect(changeset.errors)
+          )
+        end
 
         :ok
     end
@@ -337,9 +371,24 @@ defmodule Mydia.Jobs.DownloadMonitor do
       error: error_msg
     )
 
-    # Get the download struct from database (with media_item preloaded)
-    download = Downloads.get_download!(download_map.id, preload: [:media_item])
+    # Get the download struct from database (with media_item preloaded). A
+    # concurrent pass or an operator may already have removed it, in which case
+    # this failure has been dealt with and there is nothing left to record
+    # (issue #281).
+    case Downloads.get_download(download_map.id, preload: [:media_item]) do
+      nil ->
+        Logger.debug("Download vanished before failure could be handled",
+          download_id: download_map.id
+        )
 
+        :ok
+
+      download ->
+        record_failure(download, download_map, error_msg)
+    end
+  end
+
+  defp record_failure(download, download_map, error_msg) do
     # Bound once and used for both the event and the blacklist row below, so
     # the activity feed and the admin blacklist page can never disagree about
     # why this release failed (issue #237).
@@ -606,11 +655,7 @@ defmodule Mydia.Jobs.DownloadMonitor do
         :ok
 
       {:error, changeset} ->
-        Logger.error("Failed to persist stale grab timeout",
-          download_id: download.id,
-          errors: inspect(changeset.errors)
-        )
-
+        log_write_failure(changeset, download.id, "Failed to persist stale grab timeout")
         :ok
     end
   end
@@ -627,8 +672,13 @@ defmodule Mydia.Jobs.DownloadMonitor do
   # `Mydia.Downloads.History`). The `download_client` write is then a no-op and
   # only the orphan state clears.
   defp adopt_download(download_map) do
-    download = Downloads.get_download!(download_map.id)
+    case Downloads.get_download(download_map.id) do
+      nil -> skip_vanished(download_map.id, "adoption")
+      download -> do_adopt_download(download, download_map)
+    end
+  end
 
+  defp do_adopt_download(download, download_map) do
     attrs =
       %{download_client: download_map.adoptable_client}
       |> maybe_clear_orphan_state(download)
@@ -657,9 +707,11 @@ defmodule Mydia.Jobs.DownloadMonitor do
         :ok
 
       {:error, changeset} ->
-        Logger.warning("Failed to adopt download onto new client",
-          download_id: download_map.id,
-          errors: inspect(changeset.errors)
+        log_write_failure(
+          changeset,
+          download_map.id,
+          "Failed to adopt download onto new client",
+          :warning
         )
 
         :ok
@@ -713,19 +765,25 @@ defmodule Mydia.Jobs.DownloadMonitor do
       client_config_state: download_map.client_config_state
     )
 
-    download = Downloads.get_download!(download_map.id)
+    case Downloads.get_download(download_map.id) do
+      nil ->
+        skip_vanished(download_map.id, "legacy-orphan tagging")
 
-    case Downloads.update_download(download, %{import_failure_reason: "no_client"}) do
-      {:ok, _updated} ->
-        :ok
+      download ->
+        case Downloads.update_download(download, %{import_failure_reason: "no_client"}) do
+          {:ok, _updated} ->
+            :ok
 
-      {:error, changeset} ->
-        Logger.warning("Failed to tag pre-existing orphaned download",
-          download_id: download_map.id,
-          errors: inspect(changeset.errors)
-        )
+          {:error, changeset} ->
+            log_write_failure(
+              changeset,
+              download_map.id,
+              "Failed to tag pre-existing orphaned download",
+              :warning
+            )
 
-        :ok
+            :ok
+        end
     end
   end
 
@@ -737,9 +795,16 @@ defmodule Mydia.Jobs.DownloadMonitor do
       client_config_state: download_map.client_config_state
     )
 
-    # Get the download struct from database (with media_item preloaded)
-    download = Downloads.get_download!(download_map.id, preload: [:media_item])
+    # Get the download struct from database (with media_item preloaded). A row
+    # that is gone is no longer "missing", just absent — nothing to preserve for
+    # the Issues tab (issue #281).
+    case Downloads.get_download(download_map.id, preload: [:media_item]) do
+      nil -> skip_vanished(download_map.id, "missing-download handling")
+      download -> record_missing(download, download_map)
+    end
+  end
 
+  defp record_missing(download, download_map) do
     error_msg = missing_error_message(download_map)
 
     # `Download` has no `:status` field — status is derived at read time from the
@@ -772,11 +837,7 @@ defmodule Mydia.Jobs.DownloadMonitor do
         :ok
 
       {:error, changeset} ->
-        Logger.error("Failed to mark download as missing",
-          download_id: download.id,
-          errors: inspect(changeset.errors)
-        )
-
+        log_write_failure(changeset, download.id, "Failed to mark download as missing")
         :ok
     end
   end
@@ -846,10 +907,10 @@ defmodule Mydia.Jobs.DownloadMonitor do
         enqueue_import_job(updated)
 
       {:error, changeset} ->
-        Logger.error("Failed to flag stuck download",
-          download_id: download.id,
-          errors: inspect(changeset.errors)
-        )
+        # `stuck` is a snapshot from `list_stuck_downloads/1` that is never
+        # re-fetched, so a row resolved in the meantime lands here. Nothing is
+        # stuck any more — skip the failure event and the retry enqueue.
+        log_write_failure(changeset, download.id, "Failed to flag stuck download")
     end
   end
 
@@ -1024,11 +1085,7 @@ defmodule Mydia.Jobs.DownloadMonitor do
         1
 
       {:error, changeset} ->
-        Logger.error("Failed to flag soft-stalled download",
-          download_id: download.id,
-          errors: inspect(changeset.errors)
-        )
-
+        log_write_failure(changeset, download.id, "Failed to flag soft-stalled download")
         0
     end
   end
@@ -1126,9 +1183,10 @@ defmodule Mydia.Jobs.DownloadMonitor do
         :ok
 
       {:error, changeset} ->
-        Logger.error("Failed to reset the stall clock on a suppressed download",
-          download_id: download.id,
-          errors: inspect(changeset.errors)
+        log_write_failure(
+          changeset,
+          download.id,
+          "Failed to reset the stall clock on a suppressed download"
         )
     end
 
@@ -1149,9 +1207,11 @@ defmodule Mydia.Jobs.DownloadMonitor do
           :ok
 
         {:error, changeset} ->
-          Logger.warning("Failed to clear soft-stall on download",
-            download_id: download.id,
-            errors: inspect(changeset.errors)
+          log_write_failure(
+            changeset,
+            download.id,
+            "Failed to clear soft-stall on download",
+            :warning
           )
 
           :ok
@@ -1177,13 +1237,39 @@ defmodule Mydia.Jobs.DownloadMonitor do
         :ok
 
       {:error, changeset} ->
-        Logger.warning("Failed to update download progress tracking",
-          download_id: download.id,
-          errors: inspect(changeset.errors)
+        log_write_failure(
+          changeset,
+          download.id,
+          "Failed to update download progress tracking",
+          :warning
         )
 
         :ok
     end
+  end
+
+  # `perform/1` iterates a snapshot taken before minutes of client polling, and a
+  # second monitor pass (the adaptive fast-followup is deliberately not a
+  # uniqueness duplicate of the cron tick), an import, or the operator can delete
+  # any row in the meantime. That race is expected, so it is logged at :debug and
+  # never counted as a failure — otherwise every handler would report faults for
+  # ordinary concurrency, and the poll would abort partway through its passes
+  # (issues #285, #281).
+  #
+  # A genuine write failure still logs at its original level with the changeset
+  # errors, so `evaluate_and_apply/3`'s broad rescue stays reserved for real bugs.
+  defp log_write_failure(changeset, download_id, message, level \\ :error) do
+    if Downloads.stale_error?(changeset) do
+      Logger.debug("#{message}: download row no longer exists", download_id: download_id)
+    else
+      Logger.log(level, message, download_id: download_id, errors: inspect(changeset.errors))
+    end
+  end
+
+  # The row was gone before we could even read it back.
+  defp skip_vanished(download_id, what) do
+    Logger.debug("Download vanished mid-poll; skipping #{what}", download_id: download_id)
+    :ok
   end
 
   # Resolve the current time from job args (test injection) or fall back to
