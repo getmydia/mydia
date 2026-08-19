@@ -103,4 +103,60 @@ defmodule MydiaWeb.DevicesLiveTest do
       assert RemoteAccess.get_device(other_device.id) != nil
     end
   end
+
+  describe "pairing" do
+    setup %{conn: conn} do
+      user = create_test_user()
+      %{conn: log_in_user_session(conn, user), user: user}
+    end
+
+    test "shows the pairing card", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/devices")
+
+      assert has_element?(view, "#pairing-card")
+    end
+
+    test "explains itself when remote access is disabled", %{conn: conn} do
+      set_remote_access(false)
+
+      {:ok, view, html} = live(conn, ~p"/devices")
+
+      assert has_element?(view, "#pairing-disabled-notice")
+      refute has_element?(view, "#pair-device-button")
+      assert html =~ "Ask an administrator"
+    end
+
+    test "explains itself when the relay is not connected", %{conn: conn} do
+      # Remote access is on (setup), but no p2p server runs under MIX_ENV=test,
+      # so p2p_status/0 reports running: false.
+      {:ok, view, html} = live(conn, ~p"/devices")
+
+      assert has_element?(view, "#pairing-disabled-notice")
+      refute has_element?(view, "#pair-device-button")
+      assert html =~ "Connecting to the relay"
+    end
+
+    test "surfaces a pairing failure rather than crashing", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/devices")
+
+      # Driven directly: the button only renders once the relay is connected,
+      # which never happens in the test environment.
+      html = render_click(view, "open_pairing_modal", %{})
+
+      assert has_element?(view, "#pairing-error")
+      assert html =~ "P2P service is still starting up"
+      refute has_element?(view, "#claim-code")
+    end
+
+    test "reports remote access being off when generating a code", %{conn: conn} do
+      set_remote_access(false)
+
+      {:ok, view, _html} = live(conn, ~p"/devices")
+
+      html = render_click(view, "open_pairing_modal", %{})
+
+      assert html =~ "Remote access is turned off"
+      refute has_element?(view, "#claim-code")
+    end
+  end
 end

@@ -10,6 +10,18 @@
     </div>
 
     <div class="space-y-6">
+      <MydiaWeb.DevicesLive.Components.pairing_card
+        ra_config={@ra_config}
+        p2p_status={@p2p_status}
+        remote_access_enabled={@remote_access_enabled}
+        claim_code={@claim_code}
+        claim_code_rendezvous_status={@claim_code_rendezvous_status}
+        claim_expires_at={@claim_expires_at}
+        countdown_seconds={@countdown_seconds}
+        pairing_error={@pairing_error}
+        show_pairing_modal={@show_pairing_modal}
+      />
+
       <MydiaWeb.DevicesLive.Components.device_list
         devices={@devices}
         show_all_devices={@show_all_devices}

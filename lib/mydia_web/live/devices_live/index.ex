@@ -19,7 +19,10 @@ defmodule MydiaWeb.DevicesLive.Index do
 
   @impl true
   def mount(_params, _session, socket) do
-    if connected?(socket), do: schedule_refresh()
+    if connected?(socket) do
+      Phoenix.PubSub.subscribe(Mydia.PubSub, "remote_access:claims")
+      schedule_refresh()
+    end
 
     {:ok,
      socket
@@ -30,13 +33,51 @@ defmodule MydiaWeb.DevicesLive.Index do
      |> assign(:device_to_delete, nil)
      |> assign(:show_all_devices, false)
      |> assign(:show_clear_inactive_modal, false)
+     |> assign(:claim_code, nil)
+     |> assign(:claim_expires_at, nil)
+     |> assign(:countdown_seconds, 0)
+     |> assign(:claim_code_rendezvous_status, nil)
+     |> assign(:pairing_error, nil)
+     |> assign(:show_pairing_modal, false)
+     |> assign(:remote_access_enabled, RemoteAccess.enabled?())
+     |> assign(:ra_config, RemoteAccess.get_config())
+     |> load_p2p_status()
      |> load_devices()}
   end
 
   @impl true
   def handle_info(:refresh_devices, socket) do
     schedule_refresh()
-    {:noreply, load_devices(socket)}
+    {:noreply, socket |> load_p2p_status() |> load_devices()}
+  end
+
+  def handle_info(:countdown_tick, socket) do
+    Process.send_after(self(), :do_countdown_tick, 1000)
+    {:noreply, socket}
+  end
+
+  def handle_info(:do_countdown_tick, socket) do
+    {:noreply, handle_countdown_tick(socket)}
+  end
+
+  def handle_info({:claim_consumed, %{code: code, user_id: user_id}}, socket) do
+    current_code = socket.assigns.claim_code
+
+    socket =
+      if user_id == socket.assigns.current_user.id && current_code &&
+           normalize_code(current_code) == normalize_code(code) do
+        socket
+        |> assign(:claim_code, nil)
+        |> assign(:claim_expires_at, nil)
+        |> assign(:countdown_seconds, 0)
+        |> assign(:show_pairing_modal, false)
+        |> load_devices()
+        |> put_flash(:info, "Device connected.")
+      else
+        socket
+      end
+
+    {:noreply, socket}
   end
 
   @impl true
@@ -129,7 +170,111 @@ defmodule MydiaWeb.DevicesLive.Index do
     {:noreply, assign(socket, :show_all_devices, !socket.assigns.show_all_devices)}
   end
 
+  def handle_event("open_pairing_modal", _params, socket) do
+    socket = assign(socket, :show_pairing_modal, true)
+
+    socket =
+      if is_nil(socket.assigns.claim_code) do
+        do_generate_claim_code(socket)
+      else
+        socket
+      end
+
+    {:noreply, socket}
+  end
+
+  def handle_event("close_pairing_modal", _params, socket) do
+    {:noreply, assign(socket, :show_pairing_modal, false)}
+  end
+
+  def handle_event("generate_claim_code", _params, socket) do
+    {:noreply, do_generate_claim_code(socket)}
+  end
+
+  def handle_event("copy_claim_code", _params, socket) do
+    {:noreply, put_flash(socket, :info, "Code copied to clipboard")}
+  end
+
   ## Private helpers
+
+  defp do_generate_claim_code(socket) do
+    case RemoteAccess.generate_claim_code(socket.assigns.current_user.id) do
+      {:ok, claim} ->
+        send(self(), :countdown_tick)
+
+        socket
+        |> assign(:pairing_error, nil)
+        |> assign(:claim_code, claim.code)
+        |> assign(:claim_code_rendezvous_status, :registered)
+        |> assign(:claim_expires_at, claim.expires_at)
+        |> assign(:countdown_seconds, max(0, DateTime.diff(claim.expires_at, DateTime.utc_now())))
+
+      {:error, :disabled} ->
+        socket
+        |> assign(:remote_access_enabled, false)
+        |> assign(
+          :pairing_error,
+          "Remote access is turned off on this server. Ask an administrator to turn it on."
+        )
+
+      {:error, :p2p_not_running} ->
+        assign(socket, :pairing_error, "P2P service is not running. Please try again.")
+
+      {:error, :p2p_not_ready} ->
+        assign(
+          socket,
+          :pairing_error,
+          "P2P service is still starting up. Please try again in a moment."
+        )
+
+      {:error, :rate_limited} ->
+        assign(socket, :pairing_error, "Too many requests. Please wait a minute and try again.")
+
+      {:error, :create_claim_failed} ->
+        assign(socket, :pairing_error, "Relay service returned an error. Please try again.")
+
+      {:error, reason} ->
+        Logger.error("Failed to generate pairing code: #{inspect(reason)}")
+
+        assign(
+          socket,
+          :pairing_error,
+          "Could not connect to the relay service. Check your connection and try again."
+        )
+    end
+  end
+
+  defp handle_countdown_tick(socket) do
+    case socket.assigns.claim_expires_at do
+      nil ->
+        socket
+
+      expires_at ->
+        remaining = DateTime.diff(expires_at, DateTime.utc_now())
+
+        if remaining > 0 do
+          send(self(), :countdown_tick)
+          assign(socket, :countdown_seconds, remaining)
+        else
+          socket
+          |> assign(:claim_code, nil)
+          |> assign(:claim_expires_at, nil)
+          |> assign(:countdown_seconds, 0)
+          |> put_flash(:info, "Pairing code expired")
+        end
+    end
+  end
+
+  defp load_p2p_status(socket) do
+    {:ok, status} = RemoteAccess.p2p_status()
+    assign(socket, :p2p_status, status)
+  end
+
+  defp normalize_code(nil), do: nil
+
+  defp normalize_code(code) when is_binary(code) do
+    code |> String.replace(~r/[\s-]/, "") |> String.upcase()
+  end
 
   # Every device action is addressed by an id from the client, so it is resolved
   # against this user's own list rather than fetched by id. Otherwise any user
