@@ -244,37 +244,16 @@ defmodule Mydia.P2p.Server do
   def handle_info({:ok, "request_received", "pairing", request_id, req}, state) do
     Logger.info("P2P Request: Pairing from #{req.device_name}")
 
-    device_attrs = %{
-      device_name: req.device_name,
-      platform: req.device_type || req.device_os || "unknown"
-    }
-
-    # Get direct URLs from config for the client to use
-    direct_urls =
-      case Mydia.RemoteAccess.get_config() do
-        {:ok, config} -> config.direct_urls || []
-        _ -> []
-      end
-
     response =
-      case Pairing.complete_pairing(req.claim_code, device_attrs) do
-        {:ok, _device, media_token, access_token, device_token} ->
-          %P2p.PairingResponse{
-            success: true,
-            media_token: media_token,
-            access_token: access_token,
-            device_token: device_token,
-            error: nil,
-            direct_urls: direct_urls
-          }
+      if RemoteAccess.enabled?() do
+        handle_pairing_request(req)
+      else
+        Logger.info("P2P Request: Pairing refused, remote access is disabled")
 
-        {:error, reason} ->
-          Logger.warning("Pairing failed: #{inspect(reason)}")
-
-          %P2p.PairingResponse{
-            success: false,
-            error: inspect(reason)
-          }
+        %P2p.PairingResponse{
+          success: false,
+          error: "Remote access is disabled on this server"
+        }
       end
 
     # Wrap in tagged enum tuple as expected by NIF
@@ -290,26 +269,130 @@ defmodule Mydia.P2p.Server do
   end
 
   def handle_info({:ok, "request_received", "read_media", request_id, req}, state) do
-    # Validate file path exists
-    # SECURITY: In production, verify path is within allowed directories!
-    if File.exists?(req.file_path) do
-      # Use the optimized NIF to read chunk and respond
-      P2p.respond_with_file_chunk(
-        state.resource,
-        request_id,
-        req.file_path,
-        req.offset,
-        req.length
-      )
-    else
-      Logger.warning("Requested file not found: #{req.file_path}")
-      P2p.send_response(state.resource, request_id, {:error, "File not found"})
+    cond do
+      not RemoteAccess.enabled?() ->
+        P2p.send_response(state.resource, request_id, {:error, "Remote access is disabled"})
+
+      # Validate file path exists
+      # SECURITY: In production, verify path is within allowed directories!
+      File.exists?(req.file_path) ->
+        # Use the optimized NIF to read chunk and respond
+        P2p.respond_with_file_chunk(
+          state.resource,
+          request_id,
+          req.file_path,
+          req.offset,
+          req.length
+        )
+
+      true ->
+        Logger.warning("Requested file not found: #{req.file_path}")
+        P2p.send_response(state.resource, request_id, {:error, "File not found"})
     end
 
     {:noreply, state}
   end
 
   def handle_info({:ok, "request_received", "graphql", request_id, req}, state) do
+    if RemoteAccess.enabled?() do
+      handle_graphql_request(request_id, req, state)
+    else
+      Logger.debug("P2P Request: GraphQL refused, remote access is disabled")
+
+      response = %P2p.GraphQLResponse{
+        data: nil,
+        errors: encode_graphql_errors([%{message: "Remote access is disabled on this server"}])
+      }
+
+      P2p.send_response(state.resource, request_id, {:graphql, response})
+      {:noreply, state}
+    end
+  end
+
+  def handle_info({:ok, "unknown_request"}, state) do
+    Logger.debug("P2P: Unknown request type received")
+    {:noreply, state}
+  end
+
+  def handle_info({:ok, "hls_stream", stream_id, req}, state) do
+    Logger.debug("P2P Request: HLS stream session=#{req.session_id} path=#{req.path}")
+
+    resource = state.resource
+
+    # Spawn a task to handle the streaming so we don't block the GenServer
+    Task.start(fn ->
+      t0 = System.monotonic_time(:millisecond)
+      handle_hls_stream(resource, stream_id, req)
+      elapsed = System.monotonic_time(:millisecond) - t0
+
+      Logger.info(
+        "p2p_metrics_elixir: handler_complete total_ms=#{elapsed} session=#{req.session_id} path=#{req.path}"
+      )
+    end)
+
+    {:noreply, state}
+  end
+
+  # Handle Rust/iroh log messages
+  def handle_info({:ok, "log", level, target, message}, state) do
+    # Forward Rust logs to Elixir Logger with appropriate level
+    log_message = "[#{target}] #{message}"
+
+    case level do
+      "trace" -> Logger.debug(log_message, rust_target: target)
+      "debug" -> Logger.debug(log_message, rust_target: target)
+      "info" -> Logger.info(log_message, rust_target: target)
+      "warn" -> Logger.warning(log_message, rust_target: target)
+      "error" -> Logger.error(log_message, rust_target: target)
+      _ -> Logger.debug(log_message, rust_target: target)
+    end
+
+    {:noreply, state}
+  end
+
+  def handle_info(msg, state) do
+    Logger.warning("P2P Unhandled Event: #{inspect(msg)}")
+    {:noreply, state}
+  end
+
+  # HLS streaming handler
+
+  defp handle_pairing_request(req) do
+    device_attrs = %{
+      device_name: req.device_name,
+      platform: req.device_type || req.device_os || "unknown"
+    }
+
+    # Get direct URLs from config for the client to use.
+    # get_config/0 returns the struct or nil, never {:ok, config}.
+    direct_urls =
+      case RemoteAccess.get_config() do
+        nil -> []
+        config -> config.direct_urls || []
+      end
+
+    case Pairing.complete_pairing(req.claim_code, device_attrs) do
+      {:ok, _device, media_token, access_token, device_token} ->
+        %P2p.PairingResponse{
+          success: true,
+          media_token: media_token,
+          access_token: access_token,
+          device_token: device_token,
+          error: nil,
+          direct_urls: direct_urls
+        }
+
+      {:error, reason} ->
+        Logger.warning("Pairing failed: #{inspect(reason)}")
+
+        %P2p.PairingResponse{
+          success: false,
+          error: inspect(reason)
+        }
+    end
+  end
+
+  defp handle_graphql_request(request_id, req, state) do
     Logger.debug("P2P Request: GraphQL query")
 
     # Parse variables from JSON
@@ -365,54 +448,6 @@ defmodule Mydia.P2p.Server do
     P2p.send_response(state.resource, request_id, {:graphql, response})
     {:noreply, state}
   end
-
-  def handle_info({:ok, "unknown_request"}, state) do
-    Logger.debug("P2P: Unknown request type received")
-    {:noreply, state}
-  end
-
-  def handle_info({:ok, "hls_stream", stream_id, req}, state) do
-    Logger.debug("P2P Request: HLS stream session=#{req.session_id} path=#{req.path}")
-
-    resource = state.resource
-
-    # Spawn a task to handle the streaming so we don't block the GenServer
-    Task.start(fn ->
-      t0 = System.monotonic_time(:millisecond)
-      handle_hls_stream(resource, stream_id, req)
-      elapsed = System.monotonic_time(:millisecond) - t0
-
-      Logger.info(
-        "p2p_metrics_elixir: handler_complete total_ms=#{elapsed} session=#{req.session_id} path=#{req.path}"
-      )
-    end)
-
-    {:noreply, state}
-  end
-
-  # Handle Rust/iroh log messages
-  def handle_info({:ok, "log", level, target, message}, state) do
-    # Forward Rust logs to Elixir Logger with appropriate level
-    log_message = "[#{target}] #{message}"
-
-    case level do
-      "trace" -> Logger.debug(log_message, rust_target: target)
-      "debug" -> Logger.debug(log_message, rust_target: target)
-      "info" -> Logger.info(log_message, rust_target: target)
-      "warn" -> Logger.warning(log_message, rust_target: target)
-      "error" -> Logger.error(log_message, rust_target: target)
-      _ -> Logger.debug(log_message, rust_target: target)
-    end
-
-    {:noreply, state}
-  end
-
-  def handle_info(msg, state) do
-    Logger.warning("P2P Unhandled Event: #{inspect(msg)}")
-    {:noreply, state}
-  end
-
-  # HLS streaming handler
 
   defp handle_hls_stream(resource, stream_id, req) do
     t0 = System.monotonic_time(:millisecond)
