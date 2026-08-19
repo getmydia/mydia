@@ -68,6 +68,19 @@ src, dst = sys.argv[1], sys.argv[2]
 open(dst, "w").write(yaml.safe_load(open(src))["data"]["config.toml"])
 PY
 
+# Fetch the candidate before running it. `docker run` reuses a matching local
+# tag, so without this the script can verify a months-old image and report PASS
+# for bits nobody is about to deploy. Tags also get re-published; digests do not,
+# which is why the deployment pins one and why the run below prints the digest it
+# actually tested.
+echo "==> pulling $IMG"
+if ! docker pull -q "$IMG" >/dev/null; then
+  echo "FAIL: could not pull $IMG" >&2
+  echo "      (a problem with this machine or the reference, not a verdict on the image)" >&2
+  exit 2
+fi
+docker image inspect --format '{{if .RepoDigests}}    tested: {{index .RepoDigests 0}}{{end}}' "$IMG" 2>/dev/null || true
+
 echo "==> booting $IMG"
 if ! docker run -d --name "$NAME" \
   -v "$WORK:/config:ro" -v "$WORK:/certs:ro" \
@@ -77,26 +90,52 @@ if ! docker run -d --name "$NAME" \
   exit 1
 fi
 
-sleep 4
-BEFORE="$(docker ps -a --filter "name=$NAME" --format '{{.Status}}')"
+# Wait for the relay to actually serve before sending it anything. A container in
+# state Up has a process, not a bound socket, and a datagram that arrives before
+# the listeners come up is dropped rather than queued: the panic never fires and
+# a bad image is reported as PASS. The UDP path cannot be probed first, because
+# on a bad image the probe is the thing that kills it, so /generate_204 stands in
+# as the readiness signal.
+echo "==> waiting for the relay to serve HTTP"
+BEFORE=""
+READY=""
+for _ in $(seq 1 30); do
+  BEFORE="$(docker ps -a --filter "name=$NAME" --format '{{.Status}}')"
+  case "$BEFORE" in
+    Up*) ;;
+    *) break ;;
+  esac
+  if [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 http://127.0.0.1:18080/generate_204 || true)" = "204" ]; then
+    READY=1
+    break
+  fi
+  sleep 1
+done
+
 echo "    before datagrams: $BEFORE"
-case "$BEFORE" in
-  Up*) ;;
-  *)
-    echo "FAIL: died before receiving any traffic"
-    docker logs "$NAME" 2>&1 | tail -20 || true
-    exit 1
-    ;;
-esac
+if [ -z "$READY" ]; then
+  case "$BEFORE" in
+    Up*) echo "FAIL: never served /generate_204, so it never got to receive traffic" ;;
+    *) echo "FAIL: died before receiving any traffic" ;;
+  esac
+  docker logs "$NAME" 2>&1 | tail -20 || true
+  exit 1
+fi
 
 echo "==> sending UDP datagrams to the QUIC and STUN listeners"
 python3 - <<'PY'
-import socket
-for port in (17842, 13478):
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    for _ in range(5):
-        s.sendto(b"\x00" * 64, ("127.0.0.1", port))
-    s.close()
+import socket, time
+
+# Two rounds, a second apart. Serving HTTP does not strictly prove the UDP
+# listeners are bound, and a datagram that lands a moment too early is lost
+# rather than queued, which would let a bad image through unscathed.
+for _ in range(2):
+    for port in (17842, 13478):
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        for _ in range(5):
+            s.sendto(b"\x00" * 64, ("127.0.0.1", port))
+        s.close()
+    time.sleep(1)
 PY
 
 sleep 4
