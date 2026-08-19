@@ -75,8 +75,92 @@ defmodule MydiaWeb.IndexerComponentsTest do
 
     document = LazyHTML.from_fragment(html)
 
-    assert LazyHTML.query(document, "#indexer-search-status .loading") |> Enum.count() == 1
+    assert LazyHTML.query(document, "#indexer-search-status ul li .loading") |> Enum.count() == 1
     assert LazyHTML.query(document, "#indexer-search-status button") |> Enum.empty?()
+  end
+
+  test "the summary spins and shows a determinate progress bar while indexers are outstanding" do
+    progress =
+      progress_map([
+        %IndexerProgress{
+          indexer: "Alpha",
+          indexer_id: "a",
+          status: :ok,
+          result_count: 5,
+          duration_ms: 400,
+          total: 3
+        },
+        %IndexerProgress{indexer: "Beta", indexer_id: "b", status: :pending, total: 3},
+        %IndexerProgress{
+          indexer: "Gamma",
+          indexer_id: "c",
+          status: :error,
+          error: "boom",
+          total: 3
+        }
+      ])
+
+    html =
+      render_component(&MydiaWeb.IndexerComponents.indexer_search_status/1, progress: progress)
+
+    document = LazyHTML.from_fragment(html)
+
+    assert LazyHTML.query(document, "#indexer-search-status summary .loading-spinner")
+           |> Enum.count() == 1
+
+    bar = LazyHTML.query(document, "#indexer-search-status summary progress")
+
+    assert LazyHTML.attribute(bar, "value") == ["2"]
+    assert LazyHTML.attribute(bar, "max") == ["3"]
+
+    # The success check belongs to the settled state, not this one.
+    assert LazyHTML.query(document, "#indexer-search-status summary .hero-check-circle")
+           |> Enum.empty?()
+
+    assert LazyHTML.query(document, "#indexer-search-status")
+           |> LazyHTML.attribute("aria-busy") == ["true"]
+  end
+
+  test "the summary drops the spinner and progress bar once every indexer settles" do
+    progress =
+      progress_map([
+        %IndexerProgress{
+          indexer: "Alpha",
+          indexer_id: "a",
+          status: :ok,
+          result_count: 5,
+          duration_ms: 400,
+          total: 3
+        },
+        %IndexerProgress{
+          indexer: "Beta",
+          indexer_id: "b",
+          status: :timeout,
+          error: "Timed out",
+          total: 3
+        },
+        %IndexerProgress{
+          indexer: "Gamma",
+          indexer_id: "c",
+          status: :error,
+          error: "boom",
+          total: 3
+        }
+      ])
+
+    html =
+      render_component(&MydiaWeb.IndexerComponents.indexer_search_status/1, progress: progress)
+
+    document = LazyHTML.from_fragment(html)
+
+    assert LazyHTML.query(document, "#indexer-search-status summary .loading") |> Enum.empty?()
+    assert LazyHTML.query(document, "#indexer-search-status summary progress") |> Enum.empty?()
+
+    assert LazyHTML.query(document, "#indexer-search-status summary .hero-check-circle")
+           |> Enum.count() == 1
+
+    assert LazyHTML.query(document, "#indexer-search-status")
+           |> LazyHTML.attribute("aria-busy") == ["false"]
   end
 
   test "a failed indexer shows its error and a retry button when the event is given" do
