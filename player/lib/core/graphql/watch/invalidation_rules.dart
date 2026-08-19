@@ -125,6 +125,28 @@ abstract final class InvalidationRules {
           QueryKeys.showDetail(showId).target,
       };
 
+  /// A title was hidden from Continue Watching.
+  ///
+  /// Only the two surfaces that render the rail. Nothing else changes: the
+  /// dismissal leaves the progress row alone, so watched state, resume
+  /// positions and unwatched counts everywhere else are exactly as they were,
+  /// and listing the wider set [watchedChanged] carries would refetch a dozen
+  /// screens to show them what they already display.
+  ///
+  /// `home` is here as well as `continueWatchingList` because Continue
+  /// Watching feeds the home hero, not only the rail: removing the first card
+  /// changes which title the backdrop is showing.
+  ///
+  /// Worth knowing at the call site: on `/continue-watching` this is a no-op
+  /// once the viewer has paged, since that watcher sets
+  /// `canRefetch: () => !_hasPaginated` and `refetchAutomatically` then only
+  /// clears the fetch log. The optimistic removal in the controller is what
+  /// the viewer actually sees there.
+  static Set<InvalidationTarget> continueWatchingRemoved() => {
+        QueryKeys.home.target,
+        QueryKeys.continueWatchingList.target,
+      };
+
   /// The 10-second progress sync timer invalidates nothing.
   ///
   /// Wiring it up looks correct, since progress is what `continueWatching`

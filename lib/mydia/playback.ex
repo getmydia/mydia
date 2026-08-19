@@ -8,6 +8,7 @@ defmodule Mydia.Playback do
   alias Mydia.Media.Episode
   alias Mydia.Media.MediaItem
   alias Mydia.Repo
+  alias Mydia.Playback.Dismissal
   alias Mydia.Playback.Progress
 
   # Throttle for `playback.progressed` emission (R19): a `progressed` event is
@@ -465,6 +466,91 @@ defmodule Mydia.Playback do
   """
   @spec on_deck(binary(), keyword()) :: [Mydia.Playback.OnDeckEntry.t()]
   defdelegate on_deck(user_id, opts \\ []), to: Mydia.Playback.OnDeck, as: :list
+
+  @doc """
+  Hides a title from the user's Continue Watching rail.
+
+  `media_item_id` is the movie, or for a series the *show* — never an episode.
+  `Mydia.Playback.OnDeck` emits one card per show, so the show is the only unit
+  a "remove this card" gesture can mean.
+
+  This hides; it does not unwatch. The progress row is left alone, so the
+  resume point survives, and **no event is emitted**. That silence is
+  deliberate: `delete_progress/3` emits `playback.unwatched`, which
+  `Mydia.WatchSync` forwards to Plex and Jellyfin, and taking a card off a rail
+  must not tell another media server that a watched title was unwatched.
+
+  An upsert rather than an insert. A dismissed show comes back the moment it is
+  played again, so dismissing the same title twice is ordinary use and has to
+  re-stamp rather than fail on the unique index.
+
+  ## Options
+
+    * `:now` - the clock, injectable so tests need not manipulate real time
+
+  ## Examples
+
+      iex> dismiss_from_on_deck(user_id, movie_id)
+      {:ok, %Dismissal{}}
+
+  """
+  @spec dismiss_from_on_deck(binary(), binary(), keyword()) ::
+          {:ok, Dismissal.t()} | {:error, :not_found} | {:error, Ecto.Changeset.t()}
+  def dismiss_from_on_deck(user_id, media_item_id, opts \\ []) do
+    if media_item_exists?(media_item_id) do
+      now =
+        opts
+        |> Keyword.get(:now, DateTime.utc_now())
+        |> DateTime.truncate(:second)
+
+      insert_dismissal(user_id, media_item_id, now)
+    else
+      {:error, :not_found}
+    end
+  end
+
+  # The lookup above cannot close the window on its own: a media item deleted
+  # between the check and this insert takes the foreign key with it. Postgres
+  # names the constraint so the changeset carries the error, SQLite does not and
+  # `Repo.insert/2` raises, so the rescue is what makes the two agree. Either
+  # way the answer is the one the check gives for an id that never existed.
+  defp insert_dismissal(user_id, media_item_id, now) do
+    %Dismissal{user_id: user_id, media_item_id: media_item_id}
+    |> Dismissal.changeset(%{dismissed_at: now})
+    |> Repo.insert(
+      on_conflict: {:replace, [:dismissed_at, :updated_at]},
+      conflict_target: [:user_id, :media_item_id]
+    )
+    |> case do
+      {:error, %Ecto.Changeset{} = changeset} ->
+        if missing_parent?(changeset), do: {:error, :not_found}, else: {:error, changeset}
+
+      other ->
+        other
+    end
+  rescue
+    Ecto.ConstraintError -> {:error, :not_found}
+  end
+
+  defp missing_parent?(%Ecto.Changeset{errors: errors}) do
+    Keyword.has_key?(errors, :media_item_id) or Keyword.has_key?(errors, :user_id)
+  end
+
+  # Checked here rather than left to the foreign key, because the two adapters
+  # disagree about what a violation looks like: Postgres names the constraint
+  # so Ecto can turn it into a changeset error, while SQLite reports no name at
+  # all and `Repo.insert/2` raises `Ecto.ConstraintError` straight through the
+  # resolver. An explicit lookup behaves the same on both.
+  #
+  # The near miss this guards is an episode id, which the rail invites: its
+  # cards are episodes but its dismissals are shows.
+  defp media_item_exists?(media_item_id) do
+    Repo.exists?(from(m in MediaItem, where: m.id == ^media_item_id))
+  rescue
+    # A client is free to send any string as a GraphQL ID. One that is not a
+    # UUID names nothing, which is the same answer as a UUID that names nothing.
+    Ecto.Query.CastError -> false
+  end
 
   @doc """
   Lists recent watch history for all users.

@@ -1,9 +1,9 @@
 //! Discovery, search and remote access types.
 //!
 //! Types owned by this module (keep in sync with tests/types_remaining.rs):
-//! ContinueWatchingItem, RecentlyAddedItem, UpNextItem, Collection,
-//! SearchResult, SearchSection, SearchResults, RemoteAccessStatus,
-//! ServerCompatibility.
+//! ContinueWatchingItem, RemoveFromContinueWatchingResult, RecentlyAddedItem,
+//! UpNextItem, Collection, SearchResult, SearchSection, SearchResults,
+//! RemoteAccessStatus, ServerCompatibility.
 
 use async_graphql::{SimpleObject, ID};
 
@@ -28,6 +28,12 @@ pub struct ContinueWatchingItem {
     /// Why this item is on the rail: continue for a resume point, next for the
     /// successor of a finished episode.
     pub state: Option<String>,
+}
+
+#[derive(SimpleObject)]
+pub struct RemoveFromContinueWatchingResult {
+    pub media_item_id: ID,
+    pub removed: bool,
 }
 
 #[derive(SimpleObject)]
@@ -107,6 +113,10 @@ pub fn sdl_fragment() -> String {
     #[Object]
     impl FragmentQuery {
         async fn continue_watching_item(&self) -> ContinueWatchingItem {
+            std::future::pending().await
+        }
+
+        async fn remove_from_continue_watching_result(&self) -> RemoveFromContinueWatchingResult {
             std::future::pending().await
         }
 

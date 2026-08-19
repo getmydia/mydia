@@ -1,0 +1,6 @@
+mutation RemoveFromContinueWatching($mediaItemId: ID!) {
+  removeFromContinueWatching(mediaItemId: $mediaItemId) {
+    mediaItemId
+    removed
+  }
+}

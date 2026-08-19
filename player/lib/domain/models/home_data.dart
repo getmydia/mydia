@@ -32,6 +32,22 @@ class HomeData {
     );
   }
 
+  /// Exists so an optimistic edit to one rail cannot silently drop the others.
+  /// Hand-constructing a replacement means remembering to carry two unrelated
+  /// lists forward, and forgetting either empties a rail the viewer is looking
+  /// at.
+  HomeData copyWith({
+    List<ContinueWatchingItem>? continueWatching,
+    List<RecentlyAddedItem>? recentlyAdded,
+    List<RecentlyAddedItem>? favorites,
+  }) {
+    return HomeData(
+      continueWatching: continueWatching ?? this.continueWatching,
+      recentlyAdded: recentlyAdded ?? this.recentlyAdded,
+      favorites: favorites ?? this.favorites,
+    );
+  }
+
   bool get isEmpty =>
       continueWatching.isEmpty && recentlyAdded.isEmpty && favorites.isEmpty;
 }

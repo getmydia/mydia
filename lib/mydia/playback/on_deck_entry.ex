@@ -37,4 +37,19 @@ defmodule Mydia.Playback.OnDeckEntry do
   @spec id(t()) :: binary()
   def id(%__MODULE__{kind: :movie, media_item: %{id: id}}), do: id
   def id(%__MODULE__{kind: :episode, episode: %{id: id}}), do: id
+
+  @doc """
+  The media item a "remove from Continue Watching" gesture on this entry hides:
+  the movie itself, or for an episode entry the **show** it belongs to.
+
+  Deliberately not `id/1`, which returns the episode id. An episode entry is
+  the one card its whole series gets, and both of the states it can be in
+  (`:continue`, `:next`) name a different episode as the series moves along, so
+  a dismissal keyed on the episode would be handing the show back with the next
+  one. Keying on the show is also what lets a `:next` entry be dismissed at
+  all, since it has no progress row of its own to hang anything off.
+  """
+  @spec dismissal_key(t()) :: binary()
+  def dismissal_key(%__MODULE__{kind: :movie, media_item: %{id: id}}), do: id
+  def dismissal_key(%__MODULE__{kind: :episode, show: %{id: id}}), do: id
 end

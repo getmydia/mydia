@@ -119,6 +119,9 @@ type RootMutationType {
   "Toggle favorite status for a media item"
   toggleFavorite(mediaItemId: ID!): ToggleFavoriteResult
 
+  "Hide a movie or show from Continue Watching until it is played again"
+  removeFromContinueWatching(mediaItemId: ID!): RemoveFromContinueWatchingResult
+
   "Refresh a media access token before it expires"
   refreshMediaToken(token: String!): MediaToken
 
@@ -954,6 +957,15 @@ type ToggleFavoriteResult {
 
   "ID of the media item"
   mediaItemId: ID!
+}
+
+"Outcome of hiding a title from Continue Watching"
+type RemoveFromContinueWatchingResult {
+  "ID of the hidden movie or show"
+  mediaItemId: ID!
+
+  "Whether the title is now hidden from Continue Watching"
+  removed: Boolean!
 }
 
 "Media access token for direct media requests"

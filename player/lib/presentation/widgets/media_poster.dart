@@ -4,6 +4,7 @@ import '../../core/theme/colors.dart';
 import '../../domain/models/watch_status.dart';
 import 'poster_badge_corner.dart';
 import 'poster_frame.dart';
+import 'poster_menu_button.dart';
 import 'progress_overlay.dart';
 import 'rating_badge.dart';
 import 'watch_indicator.dart';
@@ -30,6 +31,16 @@ class MediaPoster extends StatelessWidget {
   final VoidCallback? onTap;
   final bool showTitle;
 
+  /// Called on long press and on secondary tap, with a context inside this
+  /// poster so the menu can anchor to it. Null means the poster has no menu.
+  final void Function(BuildContext posterContext)? onContextMenu;
+
+  /// Whether to show a persistent kebab that opens the same menu as
+  /// [onContextMenu]. Ignored when there is no menu to open. See
+  /// [PosterMenuButton] for why a grid that carries a removal action needs a
+  /// visible affordance and one that does not should stay clean.
+  final bool showMenuButton;
+
   const MediaPoster({
     super.key,
     this.posterUrl,
@@ -41,6 +52,8 @@ class MediaPoster extends StatelessWidget {
     this.isFavorite = false,
     this.onTap,
     this.showTitle = true,
+    this.onContextMenu,
+    this.showMenuButton = false,
   });
 
   static const Widget _placeholder = ColoredBox(
@@ -69,10 +82,16 @@ class MediaPoster extends StatelessWidget {
     //
     // A click cursor and nothing more: tapping opens the title, it does not
     // start playback, so there is no play glyph and no hoverOverlay here.
+    final contextMenu = onContextMenu;
+
     return MouseRegion(
       cursor: onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
       child: GestureDetector(
         onTap: onTap,
+        // Long press for touch, secondary tap for a desktop right-click, the
+        // same pairing `MediaCard` uses on the rails.
+        onLongPress: contextMenu == null ? null : () => contextMenu(context),
+        onSecondaryTap: contextMenu == null ? null : () => contextMenu(context),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -112,6 +131,14 @@ class MediaPoster extends StatelessWidget {
                         ),
                     ],
                   ),
+                  // Routed through the same callback as the long-press, so the
+                  // button and the gesture can never offer different menus.
+                  if (showMenuButton && contextMenu != null)
+                    Builder(
+                      builder: (buttonContext) => PosterMenuButton(
+                        onPressed: () => contextMenu(buttonContext),
+                      ),
+                    ),
                 ],
               ),
             ),

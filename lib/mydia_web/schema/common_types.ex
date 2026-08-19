@@ -288,6 +288,14 @@ defmodule MydiaWeb.Schema.CommonTypes do
     field :media_item_id, non_null(:id), description: "ID of the media item"
   end
 
+  @desc "Outcome of hiding a title from Continue Watching"
+  object :remove_from_continue_watching_result do
+    field :media_item_id, non_null(:id), description: "ID of the hidden movie or show"
+
+    field :removed, non_null(:boolean),
+      description: "Whether the title is now hidden from Continue Watching"
+  end
+
   @desc "Media access token for direct media requests"
   object :media_token do
     field :token, non_null(:string), description: "JWT token for media access"

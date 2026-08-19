@@ -14,6 +14,7 @@ use crate::types::auth::{
     LoginResult, MediaToken, RevokeDeviceResult, ToggleFavoriteResult, User,
 };
 use crate::types::common::StreamingStrategy;
+use crate::types::discovery::RemoveFromContinueWatchingResult;
 use crate::types::media::{Episode, Movie, Progress, SubtitleTrack, TvShow};
 use crate::types::streaming::{
     AudioLanguagePreferenceResult, CancelDownloadResult, DownloadJobStatus, DownloadOption,
@@ -150,6 +151,21 @@ impl RootMutationType {
         _media_item_id: ID,
     ) -> Result<Option<ToggleFavoriteResult>> {
         Ok(None)
+    }
+
+    /// Hide a movie or show from Continue Watching until it is played again
+    ///
+    /// An explicit error rather than the `Ok(None)` most stubs here return.
+    /// A caller cannot tell a null from a success: the player removes the card
+    /// optimistically and only reverts on an exception, so a silent null would
+    /// leave the card gone, the rail unchanged on the server, and the title
+    /// back on the next refetch with nothing to explain it.
+    async fn remove_from_continue_watching(
+        &self,
+        _ctx: &Context<'_>,
+        _media_item_id: ID,
+    ) -> Result<Option<RemoveFromContinueWatchingResult>> {
+        Err(not_implemented("removeFromContinueWatching"))
     }
 
     /// Refresh a media access token before it expires

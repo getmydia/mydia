@@ -61,6 +61,21 @@ defmodule Mydia.Playback.OnDeckTest do
     progress
   end
 
+  # A movie with a file, left partway through at `at`.
+  defp in_progress_movie(user, at) do
+    movie = MediaFixtures.media_item_fixture(%{type: "movie"})
+    MediaFixtures.media_file_fixture(%{media_item_id: movie.id})
+
+    {:ok, _} =
+      Playback.save_progress(
+        user.id,
+        [media_item_id: movie.id],
+        %{position_seconds: 900, duration_seconds: 7200, last_watched_at: at}
+      )
+
+    movie
+  end
+
   defp now, do: ~U[2026-08-12 20:00:00Z]
   defp ago(seconds), do: DateTime.add(now(), -seconds, :second)
   defp days_ago(days), do: DateTime.add(now(), -days, :day)
@@ -341,6 +356,156 @@ defmodule Mydia.Playback.OnDeckTest do
       assert [entry] = OnDeck.list(ctx.user.id, now: now())
       assert entry.state == :next
       assert entry.episode.id == e2.id
+    end
+  end
+
+  describe "list/2 dismissals" do
+    test "a dismissed movie is hidden", ctx do
+      movie = in_progress_movie(ctx.user, ago(60))
+      assert [_] = OnDeck.list(ctx.user.id, now: now())
+
+      {:ok, _} = Playback.dismiss_from_on_deck(ctx.user.id, movie.id, now: now())
+
+      assert [] = OnDeck.list(ctx.user.id, now: now())
+    end
+
+    test "a dismissed show is hidden in the :continue state", ctx do
+      {show, [e1, _e2]} = show_with_episodes(2)
+      start_watching(ctx.user, e1, 900, ago(60))
+
+      assert [%{state: :continue}] = OnDeck.list(ctx.user.id, now: now())
+
+      {:ok, _} = Playback.dismiss_from_on_deck(ctx.user.id, show.id, now: now())
+
+      assert [] = OnDeck.list(ctx.user.id, now: now())
+    end
+
+    # The case a progress-row deletion could never have covered: a `:next`
+    # entry has no progress row of its own, so the show id is the only handle
+    # on it.
+    test "a dismissed show is hidden in the :next state", ctx do
+      {show, [e1, _e2]} = show_with_episodes(2)
+      watch(ctx.user, e1, ago(60))
+
+      assert [%{state: :next}] = OnDeck.list(ctx.user.id, now: now())
+
+      {:ok, _} = Playback.dismiss_from_on_deck(ctx.user.id, show.id, now: now())
+
+      assert [] = OnDeck.list(ctx.user.id, now: now())
+    end
+
+    test "dismissing the show, not the episode, is what hides an episode entry", ctx do
+      {_show, [e1, _e2]} = show_with_episodes(2)
+      watch(ctx.user, e1, ago(60))
+
+      assert [entry] = OnDeck.list(ctx.user.id, now: now())
+
+      # `OnDeckEntry.id/1` is the episode id and is only a sort tiebreak. An
+      # episode id names no media item, so it is refused outright rather than
+      # writing a dismissal that would never match anything.
+      assert {:error, :not_found} =
+               Playback.dismiss_from_on_deck(ctx.user.id, OnDeckEntry.id(entry), now: now())
+
+      assert [_] = OnDeck.list(ctx.user.id, now: now())
+    end
+
+    test "a dismissal older than the last watch does not hide", ctx do
+      movie = in_progress_movie(ctx.user, ago(60))
+
+      {:ok, _} = Playback.dismiss_from_on_deck(ctx.user.id, movie.id, now: ago(600))
+
+      assert [_] = OnDeck.list(ctx.user.id, now: now())
+    end
+
+    # Both columns are second-granularity, so a tie has to break one way. It
+    # breaks toward the dismissal: the gesture the viewer just made always
+    # takes effect, and the losing case rights itself on the next progress
+    # write. Flipping this to a strict `>` would make removal silently no-op.
+    test "a dismissal in the same second as the last watch hides", ctx do
+      movie = in_progress_movie(ctx.user, ago(60))
+
+      {:ok, _} = Playback.dismiss_from_on_deck(ctx.user.id, movie.id, now: ago(60))
+
+      assert [] = OnDeck.list(ctx.user.id, now: now())
+    end
+
+    test "playing a dismissed movie again brings it back", ctx do
+      movie = in_progress_movie(ctx.user, ago(600))
+      {:ok, _} = Playback.dismiss_from_on_deck(ctx.user.id, movie.id, now: ago(300))
+
+      assert [] = OnDeck.list(ctx.user.id, now: now())
+
+      {:ok, _} =
+        Playback.save_progress(
+          ctx.user.id,
+          [media_item_id: movie.id],
+          %{position_seconds: 1200, duration_seconds: 7200, last_watched_at: ago(30)}
+        )
+
+      assert [_] = OnDeck.list(ctx.user.id, now: now())
+    end
+
+    # `sort_at` for a show is the newest watch across all its episodes, not
+    # just the one the card names, so any episode brings the series back.
+    test "watching a different episode of a dismissed show brings it back", ctx do
+      {show, [e1, e2, _e3]} = show_with_episodes(3)
+      watch(ctx.user, e1, ago(600))
+      {:ok, _} = Playback.dismiss_from_on_deck(ctx.user.id, show.id, now: ago(300))
+
+      assert [] = OnDeck.list(ctx.user.id, now: now())
+
+      start_watching(ctx.user, e2, 900, ago(30))
+
+      assert [_] = OnDeck.list(ctx.user.id, now: now())
+    end
+
+    test "a dismissal only hides its own title", ctx do
+      kept = in_progress_movie(ctx.user, ago(120))
+      dismissed = in_progress_movie(ctx.user, ago(60))
+
+      {:ok, _} = Playback.dismiss_from_on_deck(ctx.user.id, dismissed.id, now: now())
+
+      assert [entry] = OnDeck.list(ctx.user.id, now: now())
+      assert entry.media_item.id == kept.id
+    end
+
+    test "one user's dismissal does not hide another user's card", ctx do
+      movie = in_progress_movie(ctx.user, ago(60))
+      other = AccountsFixtures.user_fixture()
+
+      {:ok, _} =
+        Playback.save_progress(
+          other.id,
+          [media_item_id: movie.id],
+          %{position_seconds: 900, duration_seconds: 7200, last_watched_at: ago(60)}
+        )
+
+      {:ok, _} = Playback.dismiss_from_on_deck(ctx.user.id, movie.id, now: now())
+
+      assert [] = OnDeck.list(ctx.user.id, now: now())
+      assert [_] = OnDeck.list(other.id, now: now())
+    end
+
+    # Rejected before the take, so a hidden title does not eat a slot and hand
+    # back a rail one card shorter than the caller asked for.
+    test "a hidden title does not consume a limit slot", ctx do
+      _oldest = in_progress_movie(ctx.user, ago(300))
+      middle = in_progress_movie(ctx.user, ago(200))
+      newest = in_progress_movie(ctx.user, ago(100))
+
+      {:ok, _} = Playback.dismiss_from_on_deck(ctx.user.id, newest.id, now: now())
+
+      assert [entry] = OnDeck.list(ctx.user.id, now: now(), limit: 1)
+      assert entry.media_item.id == middle.id
+    end
+
+    test "dismissing leaves the progress row and its resume point alone", ctx do
+      movie = in_progress_movie(ctx.user, ago(60))
+
+      {:ok, _} = Playback.dismiss_from_on_deck(ctx.user.id, movie.id, now: now())
+
+      progress = Playback.get_progress(ctx.user.id, media_item_id: movie.id)
+      assert progress.position_seconds == 900
     end
   end
 end

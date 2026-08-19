@@ -116,4 +116,72 @@ void main() {
       }
     });
   });
+
+  group('mediaContextActionsFor removal', () {
+    test('a card with no dismissal target is offered no removal', () {
+      const target = MediaContextTarget(
+        id: 'mv-1',
+        type: 'movie',
+        hasFile: true,
+        tapPlays: true,
+      );
+
+      expect(
+        mediaContextActionsFor(target),
+        isNot(contains(MediaContextAction.removeFromContinueWatching)),
+      );
+    });
+
+    // The case the tapPlays early return used to swallow. The
+    // `/continue-watching` grid opens the title on tap rather than playing it,
+    // so every target it builds has tapPlays false — and it is the surface
+    // where removal matters most.
+    test('a card that navigates on tap is still offered removal', () {
+      const target = MediaContextTarget(
+        id: 'ep-1',
+        type: 'episode',
+        showId: 'show-1',
+        hasFile: true,
+        continueWatchingId: 'show-1',
+      );
+
+      expect(mediaContextActionsFor(target), [
+        MediaContextAction.removeFromContinueWatching,
+      ]);
+    });
+
+    test('removal comes last, after the navigation entries', () {
+      const target = MediaContextTarget(
+        id: 'ep-1',
+        type: 'episode',
+        showId: 'show-1',
+        hasFile: true,
+        tapPlays: true,
+        continueWatchingId: 'show-1',
+      );
+
+      expect(mediaContextActionsFor(target), [
+        MediaContextAction.play,
+        MediaContextAction.goToShow,
+        MediaContextAction.episodeDetails,
+        MediaContextAction.removeFromContinueWatching,
+      ]);
+    });
+
+    test('a movie card is offered removal keyed on itself', () {
+      const target = MediaContextTarget(
+        id: 'mv-1',
+        type: 'movie',
+        hasFile: true,
+        tapPlays: true,
+        continueWatchingId: 'mv-1',
+      );
+
+      expect(mediaContextActionsFor(target), [
+        MediaContextAction.play,
+        MediaContextAction.movieDetails,
+        MediaContextAction.removeFromContinueWatching,
+      ]);
+    });
+  });
 }
