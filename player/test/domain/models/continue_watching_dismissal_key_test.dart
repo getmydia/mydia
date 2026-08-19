@@ -8,6 +8,7 @@
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/models/continue_watching_item.dart';
+import 'package:player/domain/models/progress.dart';
 
 void main() {
   group('ContinueWatchingItem.continueWatchingKey', () {
@@ -157,6 +158,73 @@ void main() {
       );
 
       expect(restored.map((item) => item.id), ['a', 'ep-1']);
+    });
+
+    // A refetch can land while the mutation is in flight, carrying fresher
+    // progress. Keeping the snapshot's copy would roll that back along with
+    // the removal.
+    test('keeps the latest copy of a card, not the snapshot copy', () {
+      const stale = ContinueWatchingItem(
+        id: 'a',
+        type: 'movie',
+        title: 'Heat',
+        progress: Progress(
+          positionSeconds: 100,
+          durationSeconds: 7200,
+          percentage: 1.4,
+          watched: false,
+        ),
+      );
+      const fresh = ContinueWatchingItem(
+        id: 'a',
+        type: 'movie',
+        title: 'Heat',
+        progress: Progress(
+          positionSeconds: 900,
+          durationSeconds: 7200,
+          percentage: 12.5,
+          watched: false,
+        ),
+      );
+
+      final restored = restoreFailedRemoval(
+        snapshot: [stale, movie('b')],
+        latest: [fresh],
+        key: 'b',
+      );
+
+      expect(restored.first.progress?.positionSeconds, 900);
+    });
+
+    // The rail carries one card per show, but not always the same episode. If
+    // a refetch has already replaced the snapshot's episode with its
+    // successor, putting the snapshot's copy back would show the series twice.
+    test('does not restore a show the latest list already covers', () {
+      const episodeOne = ContinueWatchingItem(
+        id: 'ep-1',
+        type: 'episode',
+        title: 'System',
+        showId: 'show-1',
+      );
+      const episodeTwo = ContinueWatchingItem(
+        id: 'ep-2',
+        type: 'episode',
+        title: 'Sheridan',
+        showId: 'show-1',
+      );
+
+      final restored = restoreFailedRemoval(
+        snapshot: [movie('a'), episodeOne],
+        latest: [movie('a'), episodeTwo],
+        key: 'show-1',
+      );
+
+      expect(restored.map((item) => item.id), ['a', 'ep-2']);
+      expect(
+        restored.where((item) => item.continueWatchingKey == 'show-1'),
+        hasLength(1),
+        reason: 'the rail carries one card per show',
+      );
     });
 
     test('nothing to restore leaves the latest list alone', () {

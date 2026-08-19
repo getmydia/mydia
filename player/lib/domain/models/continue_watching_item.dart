@@ -14,22 +14,38 @@ import 'progress.dart';
 /// the snapshot can be several changes stale. Putting it back resurrects cards
 /// the server has since hidden.
 ///
-/// So the snapshot is used only for ordering. A card survives if it is still
+/// So the snapshot is used only for *ordering*. A card survives if it is still
 /// in [latest] (nothing else has removed it) or if it is one this failure has
 /// to return. Anything [latest] gained meanwhile — a refetch landing mid-flight
 /// — is kept on the end rather than dropped.
+///
+/// Two details the ordering role makes easy to get wrong:
+///
+/// The card that survives is [latest]'s copy, never the snapshot's. They share
+/// an id but not necessarily a position or a watch state, and preferring the
+/// snapshot would roll a refetch's fresher progress back along with the
+/// removal.
+///
+/// And the failed card goes back only if [latest] has nothing under [key]
+/// already. A show gets one card on the rail, but not always the same episode:
+/// a refetch can replace the one this snapshot holds with its successor, and
+/// restoring the snapshot's copy on top would leave the series showing twice.
 List<ContinueWatchingItem> restoreFailedRemoval({
   required List<ContinueWatchingItem> snapshot,
   required List<ContinueWatchingItem> latest,
   required String key,
 }) {
-  final latestIds = latest.map((item) => item.id).toSet();
+  final latestById = {for (final item in latest) item.id: item};
   final snapshotIds = snapshot.map((item) => item.id).toSet();
+  final latestHasKey = latest.any((item) => item.dismissedBy(key));
 
   return [
-    ...snapshot.where(
-      (item) => latestIds.contains(item.id) || item.dismissedBy(key),
-    ),
+    ...snapshot.expand((item) {
+      final current = latestById[item.id];
+      if (current != null) return [current];
+      if (!latestHasKey && item.dismissedBy(key)) return [item];
+      return const <ContinueWatchingItem>[];
+    }),
     ...latest.where((item) => !snapshotIds.contains(item.id)),
   ];
 }
