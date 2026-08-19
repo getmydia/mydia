@@ -10,6 +10,7 @@ defmodule Mydia.Events do
   alias Mydia.Repo
   alias Mydia.Events.Event
   alias Mydia.Events.Presentation
+  alias Mydia.Events.Writer
   alias Phoenix.PubSub
 
   @pubsub_name Mydia.PubSub
@@ -47,8 +48,10 @@ defmodule Mydia.Events do
   @doc """
   Creates an event asynchronously without blocking the caller.
 
-  This is a fire-and-forget operation that returns immediately.
-  Errors are logged but don't affect the calling process.
+  This is a fire-and-forget operation that returns immediately. Outside the SQL
+  sandbox the event is validated in the caller and handed to
+  `Mydia.Events.Writer`, which batches inserts. Errors are logged but never
+  affect the caller.
 
   Useful for tracking events in hot code paths where performance matters.
 
@@ -58,10 +61,10 @@ defmodule Mydia.Events do
       :ok
   """
   def create_event_async(attrs) do
-    repo_config = Mydia.Repo.config()
-
-    if repo_config[:pool] == Ecto.Adapters.SQL.Sandbox do
-      # In test environment with sandbox, run synchronously to avoid connection issues
+    if sandbox_pool?() do
+      # Under the SQL sandbox the test process owns the connection. A cast to
+      # the long-lived writer would insert on a connection the test cannot see
+      # or roll back, so stay synchronous here.
       case create_event(attrs) do
         {:ok, event} ->
           Logger.debug("Event created asynchronously: #{event.type}")
@@ -69,21 +72,14 @@ defmodule Mydia.Events do
         {:error, changeset} ->
           Logger.error("Failed to create event asynchronously: #{inspect(changeset.errors)}")
       end
+
+      :ok
     else
-      # In production, run asynchronously
-      Task.Supervisor.start_child(Mydia.TaskSupervisor, fn ->
-        case create_event(attrs) do
-          {:ok, event} ->
-            Logger.debug("Event created asynchronously: #{event.type}")
-
-          {:error, changeset} ->
-            Logger.error("Failed to create event asynchronously: #{inspect(changeset.errors)}")
-        end
-      end)
+      Writer.enqueue(attrs)
     end
-
-    :ok
   end
+
+  defp sandbox_pool?, do: Repo.config()[:pool] == Ecto.Adapters.SQL.Sandbox
 
   ## Event Queries
 
@@ -266,7 +262,14 @@ defmodule Mydia.Events do
   @spec unsubscribe() :: :ok
   def unsubscribe, do: PubSub.unsubscribe(@pubsub_name, @events_topic)
 
-  defp broadcast_event(event) do
+  @doc """
+  Broadcasts an event to subscribers of the global event feed.
+
+  Public because `Mydia.Events.Writer` broadcasts the rows it inserts, and
+  duplicating the topic name in two modules is how they drift apart.
+  """
+  @spec broadcast_event(Event.t()) :: :ok | {:error, term()}
+  def broadcast_event(event) do
     PubSub.broadcast(@pubsub_name, @events_topic, {:event_created, event})
   end
 
