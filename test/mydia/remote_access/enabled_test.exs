@@ -51,6 +51,25 @@ defmodule Mydia.RemoteAccess.EnabledTest do
     end
   end
 
+  describe "generate_claim_code/1 with remote access disabled" do
+    setup do
+      user =
+        Mydia.Repo.insert!(%Mydia.Accounts.User{
+          username: "pairing_user_#{System.unique_integer([:positive])}",
+          email: "pairing_#{System.unique_integer([:positive])}@example.com",
+          role: "user"
+        })
+
+      %{user: user}
+    end
+
+    test "returns {:error, :disabled} without contacting the relay", %{user: user} do
+      set_remote_access(false)
+
+      assert {:error, :disabled} = RemoteAccess.generate_claim_code(user.id)
+    end
+  end
+
   describe "refresh_enabled_cache/0" do
     test "returns the value it stored" do
       {:ok, _config} = RemoteAccess.initialize_keypair()

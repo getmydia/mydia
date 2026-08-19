@@ -326,6 +326,14 @@ defmodule Mydia.RemoteAccess do
   Returns {:ok, claim} if successful, {:error, reason} otherwise.
   """
   def generate_claim_code(user_id) do
+    if enabled?() do
+      do_generate_claim_code(user_id)
+    else
+      {:error, :disabled}
+    end
+  end
+
+  defp do_generate_claim_code(user_id) do
     # Get the P2P server's node address
     with {:ok, node_addr} <- get_p2p_node_addr(),
          {:ok, %{"claim_code" => code}} <- create_pairing_claim(node_addr) do
