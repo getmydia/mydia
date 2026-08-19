@@ -14,4 +14,11 @@ defmodule MydiaWeb.RedirectController do
   def profile(conn, _params) do
     redirect(conn, to: ~p"/profile")
   end
+
+  @doc """
+  Redirects /admin/devices to /devices (pairing is a user action, not an admin one).
+  """
+  def devices(conn, _params) do
+    redirect(conn, to: ~p"/devices")
+  end
 end

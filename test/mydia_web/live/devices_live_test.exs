@@ -195,4 +195,24 @@ defmodule MydiaWeb.DevicesLiveTest do
       assert has_element?(view, "#download-android[target=\"_blank\"][rel=\"noopener\"]")
     end
   end
+
+  describe "navigation" do
+    test "the sidebar links to /devices", %{conn: conn} do
+      user = create_test_user()
+      conn = log_in_user_session(conn, user)
+
+      {:ok, view, _html} = live(conn, ~p"/devices")
+
+      assert has_element?(view, "a[href=\"/devices\"]")
+    end
+
+    test "/admin/devices redirects to /devices", %{conn: conn} do
+      admin = create_admin_user()
+      conn = log_in_user_session(conn, admin)
+
+      conn = get(conn, ~p"/admin/devices")
+
+      assert redirected_to(conn) == ~p"/devices"
+    end
+  end
 end

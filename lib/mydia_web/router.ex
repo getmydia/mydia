@@ -170,6 +170,10 @@ defmodule MydiaWeb.Router do
     # Redirect old status routes to consolidated config page
     get "/", RedirectController, :admin_config
     get "/status", RedirectController, :admin_config
+
+    # Device management is a user action now. This kept old bookmarks working;
+    # the page it replaced only ever listed the signed-in admin's own devices.
+    get "/devices", RedirectController, :devices
   end
 
   # Admin LiveView routes
@@ -201,7 +205,6 @@ defmodule MydiaWeb.Router do
       live "/transcodes", TranscodesLive.Index, :index
       live "/requests", AdminRequestsLive.Index, :index
       live "/users", AdminUsersLive.Index, :index
-      live "/devices", AdminDevicesLive.Index, :index
       live "/release-blacklist", AdminReleaseBlacklistLive.Index, :index
     end
   end
