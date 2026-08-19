@@ -18,6 +18,24 @@ defmodule Mydia.Media.SeasonOrder do
 
   @values [:official, :dvd, :absolute]
 
+  # Specials. TVDB files them under every ordering separately and the lists do
+  # not agree: Black Clover has 19 specials in its official ordering, 27 in its
+  # DVD ordering and none at all in its absolute one, while all three agree on
+  # the same 170 numbered episodes. Treating specials as part of a switch
+  # therefore refuses the switch outright — an ordering that "does not account
+  # for every episode" — for a disagreement that has nothing to do with the
+  # seasons the user is choosing between. Worse, two orderings' specials lists
+  # routinely assign the same (0, n) coordinates to different episodes, so
+  # remapping them anyway collides.
+  #
+  # So a switch reorders the numbered seasons and leaves specials exactly where
+  # they are, on both sides: no special is moved, and no ordering is asked to
+  # account for one. This is the same line `fetch_alternative_counts/3` already
+  # draws when it counts the seasons the suggestion banner offers — the banner
+  # promises "51, 51, 52, 16", never anything about specials, and the switch now
+  # delivers exactly that.
+  @specials_season 0
+
   # Season numbers are validated non-negative and no real series approaches
   # 1000 seasons, so parking rows here cannot collide with live data. What
   # actually carries the correctness is that one statement parks every row in
@@ -123,8 +141,17 @@ defmodule Mydia.Media.SeasonOrder do
   exists for — the ones where the aired-order confirmation option can't be
   allowed to depend on the network working.
 
+  Episodes whose `provider_episode_id` is still NULL — every row written
+  before that column existed — are tagged first, from the ordering the show
+  is already in. Without that, this refuses via `remap/3` and sends the user
+  to a metadata refresh that a throttle can silently decline to run for a
+  week. See `backfill_provider_ids/4`.
+
+  Specials are out of scope on both sides: no ordering is asked to account for
+  one, and an untagged one cannot block the switch. See `@specials_season`.
+
   When it isn't a no-op, refuses (without writing anything) if the fetched
-  ordering does not account for every one of the show's episodes —
+  ordering does not account for every one of the show's numbered episodes —
   `{:error, {:incomplete_ordering, missing_count}}`. TVDB sometimes lists an
   ordering that only covers part of a series; remapping just the covered
   subset would silently strand the rest at their old numbers under a
@@ -160,6 +187,7 @@ defmodule Mydia.Media.SeasonOrder do
     provider_id = to_string(media_item.tvdb_id)
 
     with {:ok, raw_seasons} <- Relay.fetch_raw_seasons(config, provider_id),
+         :ok <- backfill_provider_ids(media_item, provider_id, raw_seasons, config),
          {:ok, episodes} <-
            Relay.fetch_ordering_episodes(config, provider_id, tvdb_type(target), raw_seasons) do
       case episodes do
@@ -169,10 +197,23 @@ defmodule Mydia.Media.SeasonOrder do
         episodes ->
           mapping =
             episodes
-            |> Enum.filter(& &1.provider_episode_id)
+            |> Enum.filter(&(&1.provider_episode_id && &1.season_number != @specials_season))
             |> Map.new(&{&1.provider_episode_id, {&1.season_number, &1.episode_number}})
 
-          case missing_from_mapping(media_item, mapping) do
+          # "Accounted for" and "moved" are different questions, so they are
+          # asked of different sets. An episode the target ordering files as a
+          # special is accounted for — the ordering knows about it — but is not
+          # moved, because `mapping` holds only numbered destinations. Judging
+          # completeness against `mapping` instead would report every such
+          # episode as missing and refuse the switch over a reclassification the
+          # user did not ask about.
+          accounted =
+            episodes
+            |> Enum.map(& &1.provider_episode_id)
+            |> Enum.reject(&is_nil/1)
+            |> MapSet.new()
+
+          case unaccounted_episodes(media_item, accounted) do
             [] -> remap(media_item, target, mapping)
             missing -> {:error, {:incomplete_ordering, length(missing)}}
           end
@@ -180,17 +221,117 @@ defmodule Mydia.Media.SeasonOrder do
     end
   end
 
+  # Tags episodes that have no `provider_episode_id`, using the ordering the
+  # show's rows are already in.
+  #
+  # Every episode row written before that column existed holds NULL, and the
+  # only other writer is a metadata refresh, which
+  # `Media.should_skip_season_refresh?/1` throttles for up to a week on an
+  # ended show. So `remap/3`'s `:missing_provider_ids` refusal used to send the
+  # user to a "refresh the metadata" remedy that silently does nothing, with no
+  # way out of it from the UI — the state every show imported before the column
+  # shipped is in, which is to say nearly all of them.
+  #
+  # Identifying an untagged row by its coordinates is the same call
+  # `Media.find_existing_episode/2` already makes on every refresh: an untagged
+  # row at a given (season, episode) is that ordering's episode at those
+  # coordinates. It reads the *current* ordering, not the target, precisely so
+  # that identification holds — the local rows are laid out in the ordering
+  # `effective/1` names.
+  #
+  # A failed fetch propagates rather than falling through to an untagged remap:
+  # a partially tagged show must not be moved, and `remap/3`'s refusal is the
+  # only thing standing between a half-identified show and a silent half-remap.
+  defp backfill_provider_ids(%MediaItem{} = media_item, provider_id, raw_seasons, config) do
+    case untagged_episodes(media_item) do
+      [] ->
+        :ok
+
+      untagged ->
+        tag_from_current_ordering(media_item, untagged, provider_id, raw_seasons, config)
+    end
+  end
+
+  defp untagged_episodes(%MediaItem{id: id}) do
+    Repo.all(from(e in Episode, where: e.media_item_id == ^id and is_nil(e.provider_episode_id)))
+  end
+
+  defp tag_from_current_ordering(media_item, untagged, provider_id, raw_seasons, config) do
+    current = tvdb_type(effective(media_item))
+
+    case Relay.fetch_ordering_episodes(config, provider_id, current, raw_seasons) do
+      {:ok, ordering} ->
+        write_tags(media_item, untagged, ordering)
+        :ok
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp write_tags(media_item, untagged, ordering) do
+    by_coordinates =
+      ordering
+      |> Enum.filter(& &1.provider_episode_id)
+      |> Map.new(&{{&1.season_number, &1.episode_number}, &1.provider_episode_id})
+
+    # An id another row of this show already carries is skipped rather than
+    # written. Reachable only when the rows have drifted out of the ordering
+    # `season_order` claims they are in, and the unique index on
+    # (media_item_id, provider_episode_id) turns it into a raised constraint
+    # error inside a LiveView `handle_event` rather than a flash. Leaving the
+    # row untagged instead lands on `remap/3`'s refusal, which is the outcome
+    # this whole path is here to make honest.
+    taken = MapSet.new(tagged_ids(media_item))
+
+    Repo.transaction(fn ->
+      Enum.reduce(untagged, taken, fn episode, seen ->
+        case Map.get(by_coordinates, {episode.season_number, episode.episode_number}) do
+          nil ->
+            seen
+
+          id ->
+            if MapSet.member?(seen, id) do
+              seen
+            else
+              tag(episode, id)
+              MapSet.put(seen, id)
+            end
+        end
+      end)
+    end)
+  end
+
+  defp tagged_ids(%MediaItem{id: id}) do
+    Episode
+    |> where([e], e.media_item_id == ^id and not is_nil(e.provider_episode_id))
+    |> select([e], e.provider_episode_id)
+    |> Repo.all()
+  end
+
+  defp tag(%Episode{id: id}, provider_episode_id) do
+    Repo.update_all(
+      from(e in Episode, where: e.id == ^id),
+      set: [provider_episode_id: provider_episode_id]
+    )
+  end
+
   # Local episodes with a provider id that the fetched ordering never
   # mentioned. Episodes with no provider id at all are excluded here on
   # purpose — that is `remap/3`'s own `:missing_provider_ids` refusal to
   # raise, not this one's, and counting them here would misreport a
   # provider-id problem as an incomplete-ordering problem.
-  defp missing_from_mapping(%MediaItem{id: id}, mapping) do
+  #
+  # Specials are excluded for the reason `@specials_season` gives: they are not
+  # part of what a switch moves, so an ordering is not incomplete for omitting
+  # them. A special the target ordering *does* place in a numbered season still
+  # moves — it is in `mapping` — it just is not required to be there.
+  defp unaccounted_episodes(%MediaItem{id: id}, accounted) do
     Episode
-    |> where([e], e.media_item_id == ^id)
+    |> where([e], e.media_item_id == ^id and e.season_number != @specials_season)
     |> select([e], e.provider_episode_id)
     |> Repo.all()
-    |> Enum.reject(&(is_nil(&1) or Map.has_key?(mapping, &1)))
+    |> Enum.reject(&(is_nil(&1) or MapSet.member?(accounted, &1)))
   end
 
   @doc """
@@ -207,8 +348,14 @@ defmodule Mydia.Media.SeasonOrder do
   worse than one that declines to move: the damage is silent and the user
   cannot tell which episodes shifted.
 
-    * `{:error, :missing_provider_ids}` - some episode has no provider id, so
-      there is no stable identity to remap it by.
+    * `{:error, :missing_provider_ids}` - some numbered episode has no provider
+      id, so there is no stable identity to remap it by. Specials are exempt
+      for the reason `@specials_season` gives: an untagged special is not a row
+      this failed to identify, it is a row that was never in scope, and an
+      importer that created one from a filename would otherwise block every
+      ordering switch on the show for good. Untagged rows still keep their
+      coordinates and are still counted by `conflicting?/2`, so exempting them
+      from identity cannot let one move or collide.
     * `{:error, :conflicting_mapping}` - two episodes would land on the same
       `{season_number, episode_number}`, which the unique index forbids.
   """
@@ -218,7 +365,7 @@ defmodule Mydia.Media.SeasonOrder do
     episodes = Repo.all(from(e in Episode, where: e.media_item_id == ^id))
 
     cond do
-      Enum.any?(episodes, &is_nil(&1.provider_episode_id)) ->
+      Enum.any?(episodes, &untagged_numbered?/1) ->
         {:error, :missing_provider_ids}
 
       conflicting?(episodes, mapping) ->
@@ -228,6 +375,10 @@ defmodule Mydia.Media.SeasonOrder do
         Repo.transaction(fn -> write_ordering(id, episodes, target, mapping) end)
     end
   end
+
+  defp untagged_numbered?(%Episode{season_number: @specials_season}), do: false
+  defp untagged_numbered?(%Episode{provider_episode_id: nil}), do: true
+  defp untagged_numbered?(%Episode{}), do: false
 
   defp conflicting?(episodes, mapping) do
     coordinates = Enum.map(episodes, &target_coordinates(&1, mapping))

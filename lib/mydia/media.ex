@@ -1276,6 +1276,10 @@ defmodule Mydia.Media do
       - `:config` - Metadata relay config. Defaults to `Metadata.default_relay_config/0`.
         Callers that inject a Bypass (or any non-default relay) must pass it;
         otherwise the refresh silently uses the global default.
+      - `:force` - Fetch even when `seasons_refreshed_at` is inside the throttle
+        window. Defaults to `false`. Pass it whenever a person asked for this
+        show specifically; leave it off for sweeps. See
+        `should_skip_season_refresh?/1`.
 
   ## Returns
     - `{:ok, count}` - Number of episodes created
@@ -1350,7 +1354,7 @@ defmodule Mydia.Media do
       {:error, :missing_provider_id}
     else
       # Check if we should skip season refresh based on threshold
-      if should_skip_season_refresh?(media_item) do
+      if not Keyword.get(opts, :force, false) and should_skip_season_refresh?(media_item) do
         Logger.info(
           "Skipping season refresh for #{media_item.title} - recently refreshed at #{media_item.seasons_refreshed_at}"
         )

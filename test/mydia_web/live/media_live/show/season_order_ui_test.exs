@@ -306,7 +306,13 @@ defmodule MydiaWeb.MediaLive.Show.SeasonOrderUiTest do
     assert episode_numbers == Enum.to_list(1..170)
   end
 
-  test "missing provider ids produce an actionable flash instead of a crash", %{conn: conn} do
+  # This used to assert the "refresh this show's metadata" flash, which was the
+  # honest thing to say when nothing could tag these rows. It is the wrong
+  # assertion now: every row written before the `provider_episode_id` column
+  # existed holds NULL, which is nearly every show in an existing library, and
+  # the refresh that flash asked for is throttled for up to a week. The switch
+  # tags them from the ordering they are already in and goes through.
+  test "a show whose episodes predate provider ids switches anyway", %{conn: conn} do
     tvdb_id = System.unique_integer([:positive])
 
     show =
@@ -319,6 +325,52 @@ defmodule MydiaWeb.MediaLive.Show.SeasonOrderUiTest do
       })
 
     for n <- 1..170 do
+      episode_fixture(%{
+        media_item_id: show.id,
+        season_number: 1,
+        episode_number: n,
+        provider_episode_id: nil
+      })
+    end
+
+    stub_tvdb_orderings(tvdb_id, official: 170, dvd: [51, 51, 52, 16])
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{show.id}")
+    render_async(view, 5000)
+
+    view |> element("#season-order-accept") |> render_click()
+
+    assert has_element?(view, "#flash-info", "Switched to DVD order")
+
+    reloaded = Media.get_media_item!(show.id)
+    assert reloaded.season_order == :dvd
+
+    tagged =
+      Episode
+      |> where([e], e.media_item_id == ^show.id and is_nil(e.provider_episode_id))
+      |> Repo.aggregate(:count)
+
+    assert tagged == 0
+  end
+
+  # The flash still has to exist, and still has to be reachable: an episode the
+  # current ordering never mentions cannot be tagged by anything, and moving a
+  # partially identified show is worse than declining to.
+  test "an episode no ordering can tag still produces an actionable flash", %{conn: conn} do
+    tvdb_id = System.unique_integer([:positive])
+
+    show =
+      media_item_fixture(%{
+        type: "tv_show",
+        title: "Untaggable Episode",
+        tvdb_id: tvdb_id,
+        metadata_source: :tvdb,
+        season_order: nil
+      })
+
+    # 171 local episodes against an official ordering that lists 170, so the
+    # last one sits at coordinates nothing describes.
+    for n <- 1..171 do
       episode_fixture(%{
         media_item_id: show.id,
         season_number: 1,
