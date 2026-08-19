@@ -402,28 +402,32 @@ class PairingService {
 
   /// Clears stored pairing credentials.
   ///
-  /// The deletes run concurrently, not sequentially. A sequence of awaits
-  /// means one refused delete aborts every delete after it, and
+  /// The deletes run concurrently, not sequentially, and each is wrapped in
+  /// [Future.sync] so a delete that throws before it even returns a Future
+  /// cannot abort the list before it starts. Either failure mode, sequential
+  /// awaits or an eagerly-built list that a synchronous throw cuts short,
+  /// would let one bad delete strand every key after it, and
   /// [_StorageKeys.deviceToken] mints fresh access tokens through a
   /// deliberately unauthenticated server mutation, so stranding it would
   /// leave the server reachable after the user signed out. `Future.wait`
   /// starts every delete and, with its default `eagerError: false`, waits
-  /// for all of them to settle before reporting failure, so a refused key
-  /// cannot strand the rest.
+  /// for all of them to settle before reporting failure, so neither an
+  /// asynchronous rejection nor a synchronous throw from any one key can
+  /// strand the rest.
   Future<void> clearCredentials() async {
     await Future.wait([
-      _authStorage.delete(_StorageKeys.serverUrl),
-      _authStorage.delete(_StorageKeys.deviceId),
-      _authStorage.delete(_StorageKeys.mediaToken),
-      _authStorage.delete(_StorageKeys.mediaTokenExpiry),
-      _authStorage.delete(_StorageKeys.accessToken),
-      _authStorage.delete(_StorageKeys.deviceToken),
-      _authStorage.delete(_StorageKeys.directUrls),
-      _authStorage.delete(_StorageKeys.certFingerprint),
-      _authStorage.delete(_StorageKeys.instanceName),
-      _authStorage.delete(_StorageKeys.serverPublicKey),
-      _authStorage.delete(_StorageKeys.instanceId),
-      _authStorage.delete(_StorageKeys.serverNodeAddr),
+      Future.sync(() => _authStorage.delete(_StorageKeys.serverUrl)),
+      Future.sync(() => _authStorage.delete(_StorageKeys.deviceId)),
+      Future.sync(() => _authStorage.delete(_StorageKeys.mediaToken)),
+      Future.sync(() => _authStorage.delete(_StorageKeys.mediaTokenExpiry)),
+      Future.sync(() => _authStorage.delete(_StorageKeys.accessToken)),
+      Future.sync(() => _authStorage.delete(_StorageKeys.deviceToken)),
+      Future.sync(() => _authStorage.delete(_StorageKeys.directUrls)),
+      Future.sync(() => _authStorage.delete(_StorageKeys.certFingerprint)),
+      Future.sync(() => _authStorage.delete(_StorageKeys.instanceName)),
+      Future.sync(() => _authStorage.delete(_StorageKeys.serverPublicKey)),
+      Future.sync(() => _authStorage.delete(_StorageKeys.instanceId)),
+      Future.sync(() => _authStorage.delete(_StorageKeys.serverNodeAddr)),
     ]);
   }
 }
