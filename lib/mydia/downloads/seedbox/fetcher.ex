@@ -102,6 +102,19 @@ defmodule Mydia.Downloads.Seedbox.Fetcher do
       {:ok, _} ->
         {:stop, :normal, state}
 
+      # The row was deleted while we were pulling (cancelled from the UI, an
+      # import that cleaned up). Terminal, and deliberately ahead of the retry
+      # clause: there is nothing left to fetch for and nothing to mark failed,
+      # and `run/1` has already deleted the remote source by this point, so a
+      # retry would re-open SFTP for a path that is gone (issue #281).
+      :download_deleted ->
+        Logger.info(
+          "Seedbox fetcher stopping: download row no longer exists " <>
+            "(download_id=#{state.download_id})"
+        )
+
+        {:stop, :normal, state}
+
       {:error, reason} when state.retries_left > 0 ->
         Logger.warning(
           "Seedbox fetch attempt failed for download_id=#{state.download_id} " <>
@@ -374,13 +387,30 @@ defmodule Mydia.Downloads.Seedbox.Fetcher do
   end
 
   defp finalize(state) do
-    download = History.get_download!(state.download_id)
-    save_path = local_download_dir(state)
-    new_metadata = Map.merge(download.metadata || %{}, %{"save_path" => save_path})
+    case History.get_download(state.download_id) do
+      # Cancelled or deleted while the payload was being pulled (issue #281).
+      # Terminal rather than an error: this runs after `transfer_all/2` has
+      # copied everything and `maybe_delete_remote/2` has removed the source, so
+      # a retry would re-open SFTP for a remote path that no longer exists.
+      nil ->
+        :download_deleted
 
-    case History.update_download(download, %{metadata: new_metadata}) do
-      {:ok, _} -> {:ok, :done}
-      {:error, changeset} -> {:error, {:finalize_failed, changeset}}
+      download ->
+        save_path = local_download_dir(state)
+        new_metadata = Map.merge(download.metadata || %{}, %{"save_path" => save_path})
+
+        case History.update_download(download, %{metadata: new_metadata}) do
+          {:ok, _} ->
+            {:ok, :done}
+
+          # Deleted between the lookup above and this write — same race, narrower
+          # window, and just as terminal (issue #281). An ordinary changeset
+          # error still surfaces as retryable.
+          {:error, changeset} ->
+            if History.stale_changeset?(changeset),
+              do: :download_deleted,
+              else: {:error, {:finalize_failed, changeset}}
+        end
     end
   end
 
@@ -392,17 +422,19 @@ defmodule Mydia.Downloads.Seedbox.Fetcher do
       "Seedbox fetch failed for download_id=#{state.download_id}: #{inspect(reason)}"
     )
 
-    case History.get_download!(state.download_id) do
+    case History.get_download(state.download_id) do
       %Download{} = d ->
         History.update_download(d, %{
           import_failed_at: DateTime.utc_now(),
           import_last_error: "seedbox_fetch_failed: #{inspect(reason)}"
         })
 
-      _ ->
+      # The row is already gone — nothing to record the failure on.
+      nil ->
         :ok
     end
   rescue
+    # Recording the failure must never itself fail the fetcher.
     _ -> :ok
   end
 end

@@ -57,11 +57,9 @@ defmodule Mydia.Jobs.MediaRematch do
   end
 
   defp fetch_download(download_id) do
-    Downloads.get_download!(download_id,
+    Downloads.get_download(download_id,
       preload: [:media_item, :episode, :library_path]
     )
-  rescue
-    Ecto.NoResultsError -> nil
   end
 
   defp run(download) do
@@ -232,11 +230,17 @@ defmodule Mydia.Jobs.MediaRematch do
   end
 
   defp record_pending_source_delete(download_id, source_path) do
-    with %_{} = download <- Downloads.get_download!(download_id) do
-      metadata = Map.put(download.metadata || %{}, "rematch_pending_source_delete", source_path)
-      Downloads.update_download(download, %{metadata: metadata})
+    case Downloads.get_download(download_id) do
+      nil ->
+        :ok
+
+      download ->
+        metadata = Map.put(download.metadata || %{}, "rematch_pending_source_delete", source_path)
+        Downloads.update_download(download, %{metadata: metadata})
     end
   rescue
+    # Best-effort bookkeeping: the reload's missing-row case is handled above,
+    # but this must never take down a re-match that otherwise succeeded.
     _ -> :ok
   end
 

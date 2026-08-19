@@ -107,12 +107,40 @@ defmodule Mydia.Downloads do
   defdelegate list_downloads_with_status(opts \\ []), to: Mydia.Downloads.History
 
   @doc """
+  Gets a single download, or `nil` if it no longer exists.
+
+  ## Options
+    - `:preload` - List of associations to preload
+
+  Prefer this over `get_download!/2` anywhere the row can be deleted underneath
+  you: background jobs, client pollers, PubSub handlers, and any LiveView event
+  handler acting on an id the browser sent. A download disappearing between the
+  read that produced its id and the read that acts on it is an ordinary race, not
+  an exceptional condition (issue #281).
+  """
+  @spec get_download(binary(), keyword()) :: Download.t() | nil
+  defdelegate get_download(id, opts \\ []), to: Mydia.Downloads.History
+
+  @doc """
+  Whether a changeset from a download write failed because the row was gone,
+  rather than because the write was invalid.
+
+  See `Mydia.Downloads.History.stale_changeset?/1`.
+  """
+  @spec stale_changeset?(Ecto.Changeset.t()) :: boolean()
+  defdelegate stale_changeset?(changeset), to: Mydia.Downloads.History
+
+  @doc """
   Gets a single download.
 
   ## Options
     - `:preload` - List of associations to preload
 
   Raises `Ecto.NoResultsError` if the download does not exist.
+
+  This is for tests and assertions, where a missing row should fail loudly.
+  Application code under `lib/` must use `get_download/2` instead — enforced by
+  `Mydia.Downloads.NoRaisingDownloadGetterTest`.
   """
   @spec get_download!(binary(), keyword()) :: Download.t()
   defdelegate get_download!(id, opts \\ []), to: Mydia.Downloads.History

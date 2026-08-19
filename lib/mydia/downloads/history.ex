@@ -26,6 +26,19 @@ defmodule Mydia.Downloads.History do
   # considered a crashed/abandoned grab and derives to "failed".
   @grab_timeout_minutes 10
 
+  # A download row can be deleted between a caller reading it and writing it back:
+  # an operator deleting from the UI, a concurrent import, or DownloadMonitor's own
+  # reject path. `Repo.update/2` and `Repo.delete/2` filter by primary key
+  # unconditionally, and raise `Ecto.StaleEntryError` when that filter matches zero
+  # rows — this is the default for every write, not something `optimistic_lock`
+  # opts you into, and the non-bang variants raise just the same.
+  #
+  # `:stale_error_field` turns that raise into the `{:error, changeset}` shape every
+  # caller here already handles, so a vanished row reads as an ordinary failed write
+  # instead of crashing the job that happened to be holding the struct. Applied at
+  # this choke point rather than at the ~40 call sites (issue #281).
+  @stale_opts [stale_error_field: :id, stale_error_message: "no longer exists"]
+
   ## Public Functions
 
   @doc """
@@ -197,11 +210,29 @@ defmodule Mydia.Downloads.History do
     end
   end
 
-  def get_download!(id, opts \\ []) do
-    Download
-    |> maybe_preload(opts[:preload])
-    |> Repo.get!(id)
+  @doc """
+  Whether a changeset from a download write failed because the row was gone.
+
+  The companion to `@stale_opts`: those turn Ecto's `Ecto.StaleEntryError` into a
+  changeset error, and this tells that error apart from an ordinary validation
+  failure. Ecto tags it `stale: true` (see `Ecto.Repo.Schema.apply/4`), which is
+  what this reads — not the message text, so rewording `@stale_opts` cannot
+  silently break it.
+
+  Callers that must distinguish "this download no longer exists" from "this write
+  was invalid" need it: retrying the first is pointless and sometimes expensive,
+  while retrying the second may be right (issue #281).
+  """
+  @spec stale_changeset?(Ecto.Changeset.t()) :: boolean()
+  def stale_changeset?(%Ecto.Changeset{errors: errors}) do
+    Enum.any?(errors, fn {_field, {_message, opts}} -> Keyword.get(opts, :stale, false) end)
   end
+
+  def get_download(id, opts \\ []), do: opts |> download_query() |> Repo.get(id)
+
+  def get_download!(id, opts \\ []), do: opts |> download_query() |> Repo.get!(id)
+
+  defp download_query(opts), do: maybe_preload(Download, opts[:preload])
 
   def create_download(attrs \\ %{}) do
     result =
@@ -223,7 +254,7 @@ defmodule Mydia.Downloads.History do
     result =
       download
       |> Download.changeset(attrs)
-      |> Repo.update()
+      |> Repo.update(@stale_opts)
 
     case result do
       {:ok, updated_download} ->
@@ -289,17 +320,17 @@ defmodule Mydia.Downloads.History do
   def mark_download_completed(%Download{} = download) do
     download
     |> Download.changeset(%{completed_at: DateTime.utc_now()})
-    |> Repo.update()
+    |> Repo.update(@stale_opts)
   end
 
   def mark_download_failed(%Download{} = download, error_message) do
     download
     |> Download.changeset(%{error_message: error_message})
-    |> Repo.update()
+    |> Repo.update(@stale_opts)
   end
 
   def delete_download(%Download{} = download) do
-    result = Repo.delete(download)
+    result = Repo.delete(download, @stale_opts)
 
     case result do
       {:ok, deleted_download} ->

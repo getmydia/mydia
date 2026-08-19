@@ -229,12 +229,12 @@ defmodule Mydia.Jobs.MediaImport do
   defp terminal_failure?(_reason, _attempt), do: false
 
   defp fetch_download(download_id) do
-    {:ok,
-     Downloads.get_download!(download_id,
-       preload: [{:media_item, :episodes}, :episode, :library_path]
-     )}
-  rescue
-    Ecto.NoResultsError -> :not_found
+    case Downloads.get_download(download_id,
+           preload: [{:media_item, :episodes}, :episode, :library_path]
+         ) do
+      nil -> :not_found
+      download -> {:ok, download}
+    end
   end
 
   defp handle_incomplete_download(download, args, attempt, raw_args) do
@@ -465,9 +465,10 @@ defmodule Mydia.Jobs.MediaImport do
   defp snapshot_candidates_on_failure(result, _download, _files, _library_path), do: result
 
   defp fetch_current_download(download_id) do
-    {:ok, Downloads.get_download!(download_id)}
-  rescue
-    Ecto.NoResultsError -> :not_found
+    case Downloads.get_download(download_id) do
+      nil -> :not_found
+      download -> {:ok, download}
+    end
   end
 
   defp do_process_import(download, files, library_path, args) do
@@ -483,11 +484,15 @@ defmodule Mydia.Jobs.MediaImport do
         # so future re-imports and reporting can recognize it.
         partial_pack_status = detect_partial_pack(download, imported_files)
 
-        # Reload download to check if it was flagged as having unresolved files
+        # Reload download to check if it was flagged as having unresolved files.
+        # Falling back to the pre-import struct covers the row being deleted
+        # between the file placement above and this read (issue #281): the files
+        # are already on disk, so aborting here would be strictly worse than
+        # reading a `match_status` written seconds ago by this same call stack.
         updated_download =
-          Downloads.get_download!(download.id,
+          Downloads.get_download(download.id,
             preload: [{:media_item, :episodes}, :episode, :library_path]
-          )
+          ) || download
 
         has_unresolved = updated_download.match_status == "unresolved_files"
 

@@ -397,6 +397,35 @@ defmodule Mydia.Downloads.Seedbox.FetcherTest do
     assert File.exists?(remote_file)
   end
 
+  # Issue #281. finalize/1 runs after transfer_all/2 has copied everything and
+  # maybe_delete_remote/2 has removed the source, so a missing row must be
+  # terminal: retrying would re-open SFTP for a remote path that no longer
+  # exists, three times over.
+  test "a download deleted mid-fetch stops the fetcher instead of retrying", %{
+    remote_root: remote_root,
+    local_root: local_root,
+    port: port
+  } do
+    download = insert_download!("seedbox-qbit")
+    remote_file = Path.join(remote_root, "release.mkv")
+    File.write!(remote_file, "hello world")
+
+    Repo.delete!(download)
+
+    assert :ok =
+             Fetcher.claim(
+               download_id: download.id,
+               client_name: "seedbox-qbit",
+               remote_fetch: remote_fetch_config(port),
+               remote_path: remote_file,
+               download_directory: local_root
+             )
+
+    # 20 attempts × 100ms = a 2s budget, against a 5s first retry delay. Exiting
+    # inside this window is the proof that the missing row was terminal.
+    wait_for_fetcher_exit(download.id, 20)
+  end
+
   defp wait_for_fetcher_exit(download_id, attempts \\ 100)
   defp wait_for_fetcher_exit(_download_id, 0), do: flunk("fetcher did not exit in time")
 

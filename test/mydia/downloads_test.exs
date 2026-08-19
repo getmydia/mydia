@@ -452,6 +452,36 @@ defmodule Mydia.DownloadsTest do
     end
   end
 
+  describe "get_download/2" do
+    test "returns the download with given id" do
+      download = download_fixture()
+      assert Downloads.get_download(download.id).id == download.id
+    end
+
+    # The whole point of the non-bang getter (issue #281): every caller in lib/
+    # holds an id across a gap during which the row can be deleted, so "gone" has
+    # to be an ordinary return value rather than an exception.
+    test "returns nil rather than raising when the row no longer exists" do
+      download = download_fixture()
+      {:ok, _} = Downloads.delete_download(download)
+
+      assert Downloads.get_download(download.id) == nil
+      assert Downloads.get_download(Ecto.UUID.generate()) == nil
+    end
+
+    test "applies the requested preloads" do
+      # The local `download_fixture/1` leaves `media_item_id` nil, so bind one
+      # explicitly — otherwise a preloaded association reads as nil whether or
+      # not the preload was applied, and the assertion proves nothing.
+      media_item = media_item_fixture()
+      download = download_fixture(%{media_item_id: media_item.id})
+
+      loaded = Downloads.get_download(download.id, preload: [:media_item])
+
+      assert loaded.media_item.id == media_item.id
+    end
+  end
+
   describe "create_download/1" do
     test "creates a download with valid attributes" do
       attrs = %{
@@ -474,6 +504,22 @@ defmodule Mydia.DownloadsTest do
 
       assert updated.title == "Updated Title"
     end
+
+    # The write half of issue #281. `Repo.update/2` filters by primary key on
+    # every write and raises `Ecto.StaleEntryError` when that matches no rows —
+    # this is the default, not something `optimistic_lock` opts you into. Holding
+    # a struct across a delete is routine here (a poll's snapshot, a confirm
+    # modal), so the context converts it to the `{:error, changeset}` callers
+    # already handle.
+    test "returns an error rather than raising when the row was deleted" do
+      download = download_fixture()
+      Repo.delete_all(from(d in Download, where: d.id == ^download.id))
+
+      assert {:error, %Ecto.Changeset{} = changeset} =
+               Downloads.update_download(download, %{title: "Updated Title"})
+
+      assert "no longer exists" in errors_on(changeset).id
+    end
   end
 
   describe "delete_download/1" do
@@ -482,6 +528,53 @@ defmodule Mydia.DownloadsTest do
 
       assert {:ok, %Download{}} = Downloads.delete_download(download)
       assert_raise Ecto.NoResultsError, fn -> Downloads.get_download!(download.id) end
+    end
+
+    test "returns an error rather than raising when the row is already gone" do
+      download = download_fixture()
+      Repo.delete_all(from(d in Download, where: d.id == ^download.id))
+
+      assert {:error, %Ecto.Changeset{} = changeset} = Downloads.delete_download(download)
+      assert "no longer exists" in errors_on(changeset).id
+    end
+  end
+
+  describe "stale_changeset?/1" do
+    # Callers have to tell "this row is gone" apart from "this write was
+    # invalid": retrying the first is pointless and, in the fetchers, expensive
+    # enough to re-download a whole payload. Reads Ecto's `stale: true` tag
+    # rather than the message text, so rewording the error cannot break it.
+    test "is true for a write against a deleted row" do
+      download = download_fixture()
+      Repo.delete_all(from(d in Download, where: d.id == ^download.id))
+
+      {:error, changeset} = Downloads.update_download(download, %{title: "Nope"})
+
+      assert Downloads.stale_changeset?(changeset)
+    end
+
+    test "is false for an ordinary validation failure" do
+      download = download_fixture()
+
+      # `title` is required, so blanking it is a plain validation error on a row
+      # that is still very much present.
+      {:error, changeset} = Downloads.update_download(download, %{title: nil})
+
+      refute Downloads.stale_changeset?(changeset)
+    end
+  end
+
+  describe "mark_download_completed/1 and mark_download_failed/2" do
+    # These two write through `Repo.update/2` directly rather than through
+    # `update_download/2`, so they need the same stale handling. `DownloadMonitor`
+    # calls `mark_download_completed/1` on every download a client reports
+    # finished, which is exactly where the race bites.
+    test "return an error rather than raising when the row was deleted" do
+      download = download_fixture()
+      Repo.delete_all(from(d in Download, where: d.id == ^download.id))
+
+      assert {:error, %Ecto.Changeset{}} = Downloads.mark_download_completed(download)
+      assert {:error, %Ecto.Changeset{}} = Downloads.mark_download_failed(download, "boom")
     end
   end
 

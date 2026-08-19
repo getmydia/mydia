@@ -604,4 +604,89 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
         updated
     end
   end
+
+  # Issue #281: every one of these handlers loaded the download with the raising
+  # `get_download!/2`, so clicking a row that had been deleted since the page
+  # rendered — by an import that finished, by DownloadMonitor's reject path, or
+  # from another tab — took down the LiveView process instead of saying so. The
+  # row is deleted in setup, which is exactly the state a stale browser is in.
+  describe "acting on a download that no longer exists" do
+    setup do
+      media_item = media_item_fixture()
+      download = download_fixture(%{media_item_id: media_item.id})
+      {:ok, _} = Downloads.delete_download(download)
+
+      %{stale_id: download.id}
+    end
+
+    for event <- ~w(
+          cancel_download pause_download resume_download retry_download retry_import
+          delete_download clear_single_completed open_match_files reject_release
+          keep_waiting dismiss_download
+        ) do
+      test "#{event} tells the operator instead of crashing the socket", %{
+        conn: conn,
+        stale_id: stale_id
+      } do
+        {:ok, view, _html} = live(conn, ~p"/downloads")
+
+        assert render_click(view, unquote(event), %{"id" => stale_id}) =~
+                 "That download no longer exists."
+      end
+    end
+
+    test "batch_delete counts an already-deleted row rather than failing it", %{
+      conn: conn,
+      stale_id: stale_id
+    } do
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+
+      render_click(view, "toggle_select", %{"id" => stale_id})
+
+      # The operator asked for it removed and it is removed, so it counts.
+      assert render_click(view, "batch_delete", %{}) =~ "1 download(s) removed"
+    end
+
+    test "batch_retry does not count an already-deleted row", %{conn: conn, stale_id: stale_id} do
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+
+      render_click(view, "toggle_select", %{"id" => stale_id})
+
+      # Nothing left to retry, so it is not reported as retried.
+      assert render_click(view, "batch_retry", %{}) =~ "0 item(s) retried"
+    end
+
+    # `match_files_import` is the one handler that already re-read its download
+    # at submit time (so a re-bind from the other modal cannot strand it on a
+    # stale media_item). That same re-read is where the row can turn out to be
+    # gone: the modal can sit open across an import that deletes it.
+    test "match_files_import closes the modal instead of crashing", %{conn: conn} do
+      media_item = media_item_fixture()
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          metadata: %{
+            "import_candidates" => [
+              %{"path" => "/nope/ep01.mkv", "name" => "ep01.mkv", "size" => 1}
+            ]
+          }
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+
+      # Opens from the stored candidate snapshot — no live listing needed.
+      render_click(view, "open_match_files", %{"id" => download.id})
+      assert has_element?(view, "#match-files-modal")
+
+      {:ok, _} = Downloads.delete_download(download)
+
+      assert render_click(view, "match_files_import", %{}) =~
+               "That download no longer exists."
+
+      # The flash alone would pass even if the modal stayed open on a download
+      # that no longer exists, leaving the operator submitting into nothing.
+      refute has_element?(view, "#match-files-modal")
+    end
+  end
 end
