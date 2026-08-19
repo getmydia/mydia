@@ -185,8 +185,10 @@ class PairingService {
     try {
       final devicePlatform = platform ?? _detectPlatform();
       debugPrint('[PairingService] === PAIRING VIA CLAIM CODE ===');
+      // The claim code authenticates a pairing request, so it stays out of
+      // the logs. Device metadata is enough to follow a pairing through.
       debugPrint(
-          '[PairingService] claimCode=$claimCode, deviceName=$deviceName, platform=$devicePlatform');
+          '[PairingService] deviceName=$deviceName, platform=$devicePlatform');
 
       // Use the injected P2P service - it must be provided and initialized
       final p2pService = _p2pService;
@@ -296,8 +298,8 @@ class PairingService {
       final devicePlatform = platform ?? _detectPlatform();
       debugPrint('[PairingService] === PAIRING VIA QR CODE ===');
       debugPrint('[PairingService] instanceId=${qrData.instanceId}');
-      debugPrint(
-          '[PairingService] claimCode=${qrData.claimCode}, deviceName=$deviceName');
+      // Claim code deliberately omitted; see the note in the claim-code path.
+      debugPrint('[PairingService] deviceName=$deviceName');
 
       final p2pService = _p2pService;
       if (p2pService == null) {
