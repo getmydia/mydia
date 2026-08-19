@@ -341,6 +341,38 @@ defmodule Mydia.Library.MetadataMatcherScoringTest do
       assert {:ok, match} = MetadataMatcher.match_tv_show(tv("Cornemuse", 1999), config)
       assert match.match_confidence >= ImportGroups.auto_accept_threshold()
     end
+
+    test "counts a year the provider only put in the title", %{bypass: bypass, config: config} do
+      # No "year" field and no "first_air_time", so the (2019) suffix is the
+      # only year available. Without the fallback the result year is nil, there
+      # is no contradiction to find, and this exact title auto-accepts at 0.9
+      # against a folder that says 2005.
+      stub(bypass, @tvdb_search, data([%{"tvdb_id" => 999_001, "name" => "Cornemuse (2019)"}]))
+
+      assert {:ok, match} = MetadataMatcher.match_tv_show(tv("Cornemuse", 2005), config)
+
+      assert match.match_confidence < ImportGroups.auto_accept_threshold(),
+             "the title's own (2019) contradicts the folder's 2005, but it scored " <>
+               "#{match.match_confidence}"
+    end
+
+    test "keeps a wrong-year movie below the auto-accept threshold", %{
+      bypass: bypass,
+      config: config
+    } do
+      # The Dune cases below pick the right remake with or without the movie
+      # penalty, because the correct-year candidate wins on year_match? alone.
+      # This is the case that needs it: one candidate, exact title, popular
+      # enough that title + popularity alone reach 0.869 and auto-accept a
+      # remake as its original.
+      stub(bypass, @tmdb_movie_search, results([tmdb_movie(841, "Dune", "1984-12-14", 120.0)]))
+
+      assert {:ok, match} = MetadataMatcher.match_movie(movie("Dune", 2021), config)
+      assert match.provider_id == "841"
+
+      assert match.match_confidence < ImportGroups.auto_accept_threshold(),
+             "a 37-year year contradiction scored #{match.match_confidence}"
+    end
   end
 
   describe "a movie remake" do
