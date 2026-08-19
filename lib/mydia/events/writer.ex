@@ -17,8 +17,19 @@ defmodule Mydia.Events.Writer do
   drops oldest on overflow, and a failed insert is logged and dropped rather
   than retried, because retrying reintroduces the contention this module exists
   to remove.
+
+  On shutdown, `terminate/2` makes a best-effort flush of the buffer through
+  `Repo.insert_all/2`. A shutdown that lands during heavy write contention can
+  still exceed the shutdown timeout and drop the buffer, which is consistent
+  with the activity-log contract above: these events are not a durable
+  record.
   """
-  use GenServer
+  # terminate/2 flushes through Repo.insert_all, which can block on the
+  # SQLite write lock, so the default 5 second shutdown timeout is too tight.
+  # 30 seconds would match busy_timeout exactly, but that would hold a
+  # container restart hostage well past the typical grace period for what is
+  # an activity log, so 10 seconds is the compromise.
+  use GenServer, shutdown: 10_000
 
   require Logger
 

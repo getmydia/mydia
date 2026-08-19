@@ -103,7 +103,8 @@ defmodule Mydia.Application do
       {Phoenix.PubSub, name: Mydia.PubSub},
       # Owns every asynchronous event insert. Must sit after the repo and
       # PubSub, which it uses, and therefore stops before them on shutdown so
-      # its terminate/2 can flush what is still buffered.
+      # its terminate/2 has a chance to flush what is still buffered (best
+      # effort, not a guarantee; see the writer's moduledoc).
       Mydia.Events.Writer,
       Mydia.Downloads.Client.Registry,
       # Owns the ETS table holding the derived set of client torrents Mydia
