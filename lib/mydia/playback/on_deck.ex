@@ -17,6 +17,11 @@ defmodule Mydia.Playback.OnDeck do
 
   The exact thresholds are the `@default_min_position_seconds` and
   `@default_max_age_days` attributes below, overridable per call.
+
+  On top of that, a viewer can take a title off the rail by hand, which writes
+  a `Mydia.Playback.Dismissal` and hides the entry while the dismissal is newer
+  than its most recent watch. Playing the title again is what brings it back,
+  so nothing has to expire these. See `dismissed?/2`.
   """
 
   import Ecto.Query
