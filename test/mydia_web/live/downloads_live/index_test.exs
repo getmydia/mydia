@@ -655,5 +655,33 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
       # Nothing left to retry, so it is not reported as retried.
       assert render_click(view, "batch_retry", %{}) =~ "0 item(s) retried"
     end
+
+    # `match_files_import` is the one handler that already re-read its download
+    # at submit time (so a re-bind from the other modal cannot strand it on a
+    # stale media_item). That same re-read is where the row can turn out to be
+    # gone: the modal can sit open across an import that deletes it.
+    test "match_files_import closes the modal instead of crashing", %{conn: conn} do
+      media_item = media_item_fixture()
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          metadata: %{
+            "import_candidates" => [
+              %{"path" => "/nope/ep01.mkv", "name" => "ep01.mkv", "size" => 1}
+            ]
+          }
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+
+      # Opens from the stored candidate snapshot — no live listing needed.
+      render_click(view, "open_match_files", %{"id" => download.id})
+
+      {:ok, _} = Downloads.delete_download(download)
+
+      assert render_click(view, "match_files_import", %{}) =~
+               "That download no longer exists."
+    end
   end
 end
