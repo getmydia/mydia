@@ -29,6 +29,18 @@ relay_tmdb_api_key: "your-tmdb-api-key"
 # Key from: https://subdl.com/panel/api
 relay_subdl_api_key: ""
 
+# Maintainer dashboard GitHub sign-in (optional)
+# Only used when DASHBOARD_GITHUB_USERS is set in the metadata-relay ConfigMap.
+# Leave blank and the dashboards stay on basic auth.
+# The session key is the Phoenix one, unrelated to relay_secret_key_base above,
+# which is written as RELAY_TOKEN_SECRET. Generate with:
+#   head -c 48 /dev/urandom | base64
+# Credentials come from the "Mydia Relay" GitHub App:
+#   https://github.com/organizations/getmydia/settings/apps
+relay_dashboard_secret_key_base: ""
+relay_github_app_client_id: ""
+relay_github_app_client_secret: ""
+
 # Feedback email notifications (optional)
 # All six fields below must be set together for the relay to send feedback emails.
 # Leave blank to disable. Stored locally only — never committed to git.
