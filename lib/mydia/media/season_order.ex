@@ -362,18 +362,25 @@ defmodule Mydia.Media.SeasonOrder do
   @spec remap(MediaItem.t(), atom(), %{String.t() => {integer(), integer()}}) ::
           {:ok, non_neg_integer()} | {:error, :missing_provider_ids | :conflicting_mapping}
   def remap(%MediaItem{id: id}, target, mapping) when target in @values and is_map(mapping) do
-    episodes = Repo.all(from(e in Episode, where: e.media_item_id == ^id))
+    # The read is inside the transaction, not before it. Both refusals below
+    # are judgements about the episode set, and judging a set read outside the
+    # transaction that then writes it means judging one set and writing
+    # another. `Repo.rollback/1` reproduces the pre-transaction return shape
+    # exactly, so refusing still costs nothing and still writes nothing.
+    Repo.transaction(fn ->
+      episodes = Repo.all(from(e in Episode, where: e.media_item_id == ^id))
 
-    cond do
-      Enum.any?(episodes, &untagged_numbered?/1) ->
-        {:error, :missing_provider_ids}
+      cond do
+        Enum.any?(episodes, &untagged_numbered?/1) ->
+          Repo.rollback(:missing_provider_ids)
 
-      conflicting?(episodes, mapping) ->
-        {:error, :conflicting_mapping}
+        conflicting?(episodes, mapping) ->
+          Repo.rollback(:conflicting_mapping)
 
-      true ->
-        Repo.transaction(fn -> write_ordering(id, episodes, target, mapping) end)
-    end
+        true ->
+          write_ordering(id, episodes, target, mapping)
+      end
+    end)
   end
 
   defp untagged_numbered?(%Episode{season_number: @specials_season}), do: false
@@ -401,8 +408,8 @@ defmodule Mydia.Media.SeasonOrder do
     # overlaps the current one — swapping two episodes is enough.
     #
     # Scoped to the ids we actually read, not to the whole show. An episode
-    # inserted between the read above and this transaction is absent from
-    # `episodes`, so pass two would never restore it: a blanket park would
+    # committed by another connection after this transaction's read is absent
+    # from `episodes`, so pass two would never restore it: a blanket park would
     # leave it sitting at season 1001 after a clean commit, which is precisely
     # the silent damage the refusals above exist to prevent. Leaving it
     # unparked instead means a mapped write onto its slot raises and rolls the

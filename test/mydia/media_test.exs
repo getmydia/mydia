@@ -1578,6 +1578,8 @@ defmodule Mydia.MediaTest do
   end
 
   describe "adopt_provider_switch/4 (U7)" do
+    alias Mydia.Media.MediaItem
+
     import Mydia.MediaFixtures
     import Mydia.SettingsFixtures
 
@@ -1632,6 +1634,34 @@ defmodule Mydia.MediaTest do
         candidate: candidate,
         new_id: new_id
       }
+    end
+
+    # A provider switch re-identifies the show, so whichever of TVDB's parallel
+    # orderings the user had picked describes a series record this no longer
+    # is. The show goes back to "never asked", which is also what lets the
+    # suggestion banner re-offer the new provider's alternative.
+    test "clears the season ordering the old provider's record was in", ctx do
+      stub_tmdb_show(ctx.bypass, ctx.new_id, "Switch Show", 2010)
+      stub_tmdb_season(ctx.bypass, ctx.new_id, 1, [1, 2])
+
+      Mydia.Repo.update_all(
+        from(m in MediaItem, where: m.id == ^ctx.item.id),
+        set: [season_order: :dvd]
+      )
+
+      picked = Mydia.Repo.get!(MediaItem, ctx.item.id)
+      assert picked.season_order == :dvd
+
+      assert {:ok, reconciled} =
+               Mydia.Media.ProviderSwitch.adopt_provider_switch(
+                 picked,
+                 ctx.candidate,
+                 :tmdb,
+                 ctx.config
+               )
+
+      assert is_nil(reconciled.season_order)
+      assert is_nil(Mydia.Repo.get!(MediaItem, reconciled.id).season_order)
     end
 
     test "swaps provider ids, recreates episodes, and re-links files", ctx do

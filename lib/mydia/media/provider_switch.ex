@@ -205,6 +205,25 @@ defmodule Mydia.Media.ProviderSwitch do
 
     # Step 1 + 2 (no mutation): validate the new show metadata and pre-fetch all
     # season episode data into memory.
+    #
+    # No `season_order:` is threaded, and that is the decision rather than an
+    # omission: a provider switch re-identifies the show, so the new provider's
+    # official ordering is the only one that can mean anything here.
+    #
+    #   * An ordering is a choice about one series record. This replaces that
+    #     record, so the old choice describes seasons that are no longer the
+    #     show's -- including TVDB-to-TVDB, where the new series id has its own
+    #     DVD ordering covering its own seasons.
+    #   * Only TVDB has parallel orderings at all. Carrying `:dvd` into a TMDB
+    #     switch would ask for something TMDB cannot answer.
+    #   * There is nothing to remap onto anyway. `SeasonOrder.remap/3` is
+    #     lossless because it renumbers rows in place; this path deletes every
+    #     episode row and recreates it, so the identity a remap keys on is gone
+    #     before an ordering could be applied.
+    #
+    # `provider_switch_attrs/3` clears `season_order` to match, which puts the
+    # show back at "never asked" and lets the suggestion banner re-offer the
+    # new provider's alternative ordering if it has one.
     with {:ok, metadata} <-
            Mydia.Metadata.fetch_by_id(config, new_id,
              media_type: :tv_show,

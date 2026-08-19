@@ -29,9 +29,16 @@ defmodule Mydia.Media.CategoryClassifier do
   - Genre contains "Anime" (TVDB native genre)
 
   **Japanese origin detection:**
-  - `origin_country` includes "JP"
-  - `original_language` == "ja"
+
+  Both provider vocabularies are accepted, because both providers feed this
+  classifier. TMDB sends ISO 3166-1 alpha-2 countries and ISO 639-1 languages;
+  TVDB sends alpha-3 and ISO 639-2/T. See `japanese_origin?/1`.
+
+  - `origin_country` includes "JP" (TMDB) or "JPN" (TVDB)
+  - `original_language` is "ja" (TMDB) or "jpn" (TVDB)
   - Genre contains "Anime" (explicit signal from TVDB)
+
+  Country and language comparisons are case-insensitive.
   """
 
   alias Mydia.Media.{MediaCategory, MediaItem}
@@ -54,12 +61,23 @@ defmodule Mydia.Media.CategoryClassifier do
 
   ## Examples
 
-      iex> item = %MediaItem{type: "movie", metadata: %MediaMetadata{genres: ["Animation"], origin_country: ["JP"]}}
-      iex> CategoryClassifier.classify(item)
+      iex> metadata = %MediaMetadata{
+      ...>   provider_id: "1",
+      ...>   provider: :tmdb,
+      ...>   media_type: :movie,
+      ...>   genres: ["Animation"],
+      ...>   origin_country: ["JP"]
+      ...> }
+      iex> CategoryClassifier.classify(%MediaItem{type: "movie", metadata: metadata})
       :anime_movie
 
-      iex> item = %MediaItem{type: "tv_show", metadata: %MediaMetadata{genres: ["Drama"]}}
-      iex> CategoryClassifier.classify(item)
+      iex> metadata = %MediaMetadata{
+      ...>   provider_id: "1",
+      ...>   provider: :tmdb,
+      ...>   media_type: :tv_show,
+      ...>   genres: ["Drama"]
+      ...> }
+      iex> CategoryClassifier.classify(%MediaItem{type: "tv_show", metadata: metadata})
       :tv_show
   """
   @spec classify(MediaItem.t()) :: MediaCategory.t()
@@ -86,7 +104,14 @@ defmodule Mydia.Media.CategoryClassifier do
 
   ## Examples
 
-      iex> CategoryClassifier.classify_from_metadata(:movie, %MediaMetadata{genres: ["Animation"], origin_country: ["JP"]})
+      iex> metadata = %MediaMetadata{
+      ...>   provider_id: "1",
+      ...>   provider: :tmdb,
+      ...>   media_type: :movie,
+      ...>   genres: ["Animation"],
+      ...>   origin_country: ["JP"]
+      ...> }
+      iex> CategoryClassifier.classify_from_metadata(:movie, metadata)
       :anime_movie
   """
   @spec classify_from_metadata(atom(), MediaMetadata.t() | map() | nil) :: MediaCategory.t()
@@ -101,10 +126,10 @@ defmodule Mydia.Media.CategoryClassifier do
 
   ## Examples
 
-      iex> CategoryClassifier.animated?(%MediaMetadata{genres: ["Animation", "Comedy"]})
+      iex> CategoryClassifier.animated?(%{genres: ["Animation", "Comedy"]})
       true
 
-      iex> CategoryClassifier.animated?(%MediaMetadata{genres: ["Drama"]})
+      iex> CategoryClassifier.animated?(%{genres: ["Drama"]})
       false
   """
   @spec animated?(MediaMetadata.t() | map() | nil) :: boolean()
@@ -133,16 +158,22 @@ defmodule Mydia.Media.CategoryClassifier do
 
   ## Examples
 
-      iex> CategoryClassifier.japanese_origin?(%MediaMetadata{origin_country: ["JP"]})
+      iex> CategoryClassifier.japanese_origin?(%{origin_country: ["JP"]})
       true
 
-      iex> CategoryClassifier.japanese_origin?(%MediaMetadata{original_language: "ja"})
+      iex> CategoryClassifier.japanese_origin?(%{origin_country: ["JPN"]})
       true
 
-      iex> CategoryClassifier.japanese_origin?(%MediaMetadata{genres: ["Anime"]})
+      iex> CategoryClassifier.japanese_origin?(%{original_language: "ja"})
       true
 
-      iex> CategoryClassifier.japanese_origin?(%MediaMetadata{origin_country: ["US"]})
+      iex> CategoryClassifier.japanese_origin?(%{original_language: "jpn"})
+      true
+
+      iex> CategoryClassifier.japanese_origin?(%{genres: ["Anime"]})
+      true
+
+      iex> CategoryClassifier.japanese_origin?(%{origin_country: ["US"]})
       false
   """
   @spec japanese_origin?(MediaMetadata.t() | map() | nil) :: boolean()
@@ -173,10 +204,10 @@ defmodule Mydia.Media.CategoryClassifier do
 
   ## Examples
 
-      iex> CategoryClassifier.has_anime_genre?(%MediaMetadata{genres: ["Anime", "Action"]})
+      iex> CategoryClassifier.has_anime_genre?(%{genres: ["Anime", "Action"]})
       true
 
-      iex> CategoryClassifier.has_anime_genre?(%MediaMetadata{genres: ["Animation"]})
+      iex> CategoryClassifier.has_anime_genre?(%{genres: ["Animation"]})
       false
   """
   @spec has_anime_genre?(MediaMetadata.t() | map() | nil) :: boolean()

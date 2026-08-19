@@ -4,6 +4,8 @@ defmodule Mydia.Media.RefreshSeasonOrderTest do
   import Mydia.MediaFixtures
 
   alias Mydia.Media
+  alias Mydia.Media.Episode
+  alias Mydia.Media.MediaItem
 
   # TVDB returns every ordering of a series in one `seasons` list, and
   # `Relay.transform_tvdb_seasons/2` picks one of them. Nothing in `lib/` used
@@ -101,6 +103,64 @@ defmodule Mydia.Media.RefreshSeasonOrderTest do
     end
   end
 
+  # A refresh reads the show's ordering once, fetches every season under it,
+  # then writes. A `SeasonOrder.switch/3` committing in between used to leave
+  # the refresh writing the old ordering's coordinates back over the freshly
+  # remapped rows, mixing two orderings under a `season_order` column that
+  # claims one.
+  describe "refresh_episodes_for_tv_show/2 racing an ordering switch" do
+    setup :ordering_stubs
+
+    test "declines to write season data fetched under an ordering the show has left", ctx do
+      item = show(ctx.tvdb_id, %{})
+
+      # The switch commits after this pass loaded `item`: the row moves to
+      # :dvd while the struct in hand still describes the official ordering.
+      Repo.update_all(
+        from(m in MediaItem, where: m.id == ^item.id),
+        set: [season_order: :dvd]
+      )
+
+      assert {:ok, 0} = Media.refresh_episodes_for_tv_show(item, config: ctx.config)
+
+      # The fetch did happen, so it is the freshness check that declined the
+      # write and not the throttle quietly skipping the whole pass.
+      assert ctx.official_id in ctx.fetched.()
+      assert episode_count(item) == 0
+
+      # Unstamped, so the next refresh re-fetches under :dvd rather than
+      # waiting out the throttle in a half-written state.
+      assert is_nil(Repo.get!(MediaItem, item.id).seasons_refreshed_at)
+    end
+
+    # `provider_switch_attrs/3` also clears `season_order`, so comparing only
+    # that column reads nil == nil and calls a provider switch "unchanged" --
+    # for the overwhelmingly common show that was already nil. The payload in
+    # hand belongs to a series this no longer is, ids and all.
+    test "declines to write season data fetched for a provider the show has left", ctx do
+      item = show(ctx.tvdb_id, %{})
+
+      Repo.update_all(
+        from(m in MediaItem, where: m.id == ^item.id),
+        set: [metadata_source: :tmdb, tvdb_id: nil, tmdb_id: 4242, season_order: nil]
+      )
+
+      assert {:ok, 0} = Media.refresh_episodes_for_tv_show(item, config: ctx.config)
+
+      assert episode_count(item) == 0
+      assert is_nil(Repo.get!(MediaItem, item.id).seasons_refreshed_at)
+    end
+
+    test "writes and stamps when no switch intervenes", ctx do
+      item = show(ctx.tvdb_id, %{})
+
+      assert {:ok, 1} = Media.refresh_episodes_for_tv_show(item, config: ctx.config)
+
+      assert episode_count(item) == 1
+      refute is_nil(Repo.get!(MediaItem, item.id).seasons_refreshed_at)
+    end
+  end
+
   # `should_skip_season_refresh?/1` reads the struct it is handed, not the row,
   # so the stamp has to be reloaded or every one of these tests passes for the
   # wrong reason.
@@ -112,6 +172,10 @@ defmodule Mydia.Media.RefreshSeasonOrderTest do
     refute is_nil(reloaded.seasons_refreshed_at)
 
     reloaded
+  end
+
+  defp episode_count(item) do
+    Repo.aggregate(from(e in Episode, where: e.media_item_id == ^item.id), :count)
   end
 
   defp ordering_stubs(_context) do
@@ -141,10 +205,32 @@ defmodule Mydia.Media.RefreshSeasonOrderTest do
       })
     end)
 
+    # A TVDB season payload carries no per-episode translations, so the provider
+    # fetches each episode on its own. Unstubbed, every season fetch above turns
+    # into three retried 500s and Bypass fails the test on the unexpected call.
+    Bypass.stub(bypass, "GET", "/tvdb/episodes/:episode_id/extended", fn conn ->
+      json(conn, %{"data" => %{"translations" => %{}}})
+    end)
+
     for {id, number} <- [{official_id, 1}, {dvd_one, 1}, {dvd_two, 2}] do
       Bypass.stub(bypass, "GET", "/tvdb/seasons/#{id}/extended", fn conn ->
         Agent.update(hits, &[id | &1])
-        json(conn, %{"data" => %{"id" => id, "number" => number, "episodes" => []}})
+
+        json(conn, %{
+          "data" => %{
+            "id" => id,
+            "number" => number,
+            "episodes" => [
+              %{
+                "id" => id * 10 + 1,
+                "seasonNumber" => number,
+                "number" => 1,
+                "name" => "Episode 1",
+                "aired" => "2023-01-01"
+              }
+            ]
+          }
+        })
       end)
     end
 

@@ -9,6 +9,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   alias MydiaWeb.MediaLive.Show.LibraryComponents
   alias MydiaWeb.MediaLive.Show.SegmentComponents
   alias MydiaWeb.MediaLive.Show.SeasonComponents
+  alias MydiaWeb.MediaLive.Show.SeasonOrderComponents
 
   @doc """
   Hero section with backdrop image, poster, and quick action buttons.
@@ -532,7 +533,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
         </div>
 
         <div class="card-body p-4 pb-0 pt-0">
-          <SeasonComponents.season_order_controls
+          <SeasonOrderComponents.season_order_controls
             media_item={@media_item}
             season_order_suggestion={@season_order_suggestion}
             can_update_media={@can_update_media}
