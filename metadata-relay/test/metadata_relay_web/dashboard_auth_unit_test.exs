@@ -85,6 +85,68 @@ defmodule MetadataRelayWeb.DashboardAuthUnitTest do
     assert DashboardAuth.safe_return_to(nil) == "/feedback"
   end
 
+  describe "on_mount/4" do
+    test "basic mode mounts with no GitHub identity" do
+      put_dashboard_org(nil)
+
+      assert {:cont, socket} = mount_with(%{})
+      assert socket.assigns.github_login == nil
+      assert socket.assigns.github_token == nil
+    end
+
+    test "a fresh session mounts without calling GitHub" do
+      put_dashboard_org("getmydia")
+      set_github_adapter(fn _request -> raise "GitHub must not be called for a fresh session" end)
+
+      assert {:cont, socket} = mount_with(session())
+      assert socket.assigns.github_login == "arsfeld"
+      assert socket.assigns.github_token == "gho_token"
+    end
+
+    test "a session without a login or token is turned away" do
+      put_dashboard_org("getmydia")
+
+      assert {:halt, _} = mount_with(%{})
+      assert {:halt, _} = mount_with(session(login: nil))
+      assert {:halt, _} = mount_with(session(login: ""))
+      assert {:halt, _} = mount_with(session(token: nil))
+    end
+
+    test "a stale session is turned away once GitHub refuses" do
+      put_dashboard_org("getmydia")
+      stub_membership(Req.Response.new(status: 404, body: %{}))
+
+      assert {:halt, _} = mount_with(session(verified_at: stale()))
+    end
+
+    test "a stale session survives an unreachable GitHub" do
+      put_dashboard_org("getmydia")
+      stub_membership(Req.Response.new(status: 500, body: %{}))
+
+      assert {:cont, socket} = mount_with(session(verified_at: stale()))
+      assert socket.assigns.github_login == "arsfeld"
+    end
+
+    defp mount_with(session) do
+      DashboardAuth.on_mount(
+        :require_github_login,
+        %{},
+        session,
+        %Phoenix.LiveView.Socket{}
+      )
+    end
+
+    defp session(opts \\ []) do
+      %{
+        "github_login" => Keyword.get(opts, :login, "arsfeld"),
+        "github_token" => Keyword.get(opts, :token, "gho_token"),
+        "github_verified_at" => Keyword.get(opts, :verified_at, DashboardAuth.verified_now())
+      }
+    end
+
+    defp stale, do: DashboardAuth.verified_now() - 100_000
+  end
+
   defp stub_membership(response) do
     set_github_adapter(fn request -> {request, response} end)
   end
