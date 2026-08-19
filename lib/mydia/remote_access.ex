@@ -374,24 +374,34 @@ defmodule Mydia.RemoteAccess do
   def touch_device_from_claims(_claims), do: :ok
 
   @doc """
-  Updates `last_seen_at` unless it was already written inside the throttle window.
+  Records that a device was seen, unless the throttle window has not elapsed.
 
-  Accepts a loaded device or a device id. Synchronous: callers on a request path
-  are already holding a database connection, and the throttle keeps this to one
-  write per device per #{@touch_throttle_seconds} seconds.
+  Accepts a loaded device or a device id. Returns `:recorded` when it wrote and
+  `:skipped` when it did not, which covers both a device seen moments ago and
+  one that no longer exists.
+
+  One conditional `UPDATE` rather than a read followed by a write. A p2p player
+  holds a GraphQL and an HLS connection at once and they are handled in separate
+  processes, so a read-then-write pair lets both sides clear the throttle and
+  write together; here the throttle window is part of the statement, so exactly
+  one of them matches a row. It also keeps the common throttled case to a single
+  statement that touches nothing.
   """
-  def touch_device_if_stale(device_id) when is_binary(device_id) do
-    case get_device(device_id) do
-      nil -> {:error, :not_found}
-      device -> touch_device_if_stale(device)
-    end
-  end
+  @spec touch_device_if_stale(RemoteDevice.t() | binary()) :: :recorded | :skipped
+  def touch_device_if_stale(%RemoteDevice{id: device_id}), do: touch_device_if_stale(device_id)
 
-  def touch_device_if_stale(%RemoteDevice{} = device) do
-    if should_touch_device?(device) do
-      touch_device(device)
-    else
-      {:ok, device}
+  def touch_device_if_stale(device_id) when is_binary(device_id) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    threshold = DateTime.add(now, -@touch_throttle_seconds, :second)
+
+    query =
+      from d in RemoteDevice,
+        where: d.id == ^device_id,
+        where: is_nil(d.last_seen_at) or d.last_seen_at < ^threshold
+
+    case Repo.update_all(query, set: [last_seen_at: now, updated_at: now]) do
+      {0, _} -> :skipped
+      {_updated, _} -> :recorded
     end
   end
 

@@ -24,7 +24,7 @@ defmodule Mydia.RemoteAccess.DeviceLivenessTest do
     test "records liveness for a device that has never been seen", %{device: device} do
       assert is_nil(device.last_seen_at)
 
-      assert {:ok, _} = RemoteAccess.touch_device_if_stale(device.id)
+      assert :recorded = RemoteAccess.touch_device_if_stale(device.id)
 
       assert Repo.reload!(device).last_seen_at != nil
     end
@@ -33,7 +33,7 @@ defmodule Mydia.RemoteAccess.DeviceLivenessTest do
       stale = DateTime.utc_now() |> DateTime.add(-3600, :second) |> DateTime.truncate(:second)
       device = device |> Ecto.Changeset.change(last_seen_at: stale) |> Repo.update!()
 
-      assert {:ok, _} = RemoteAccess.touch_device_if_stale(device.id)
+      assert :recorded = RemoteAccess.touch_device_if_stale(device.id)
 
       assert DateTime.compare(Repo.reload!(device).last_seen_at, stale) == :gt
     end
@@ -42,19 +42,34 @@ defmodule Mydia.RemoteAccess.DeviceLivenessTest do
       fresh = DateTime.utc_now() |> DateTime.truncate(:second)
       device = device |> Ecto.Changeset.change(last_seen_at: fresh) |> Repo.update!()
 
-      assert {:ok, _} = RemoteAccess.touch_device_if_stale(device.id)
+      assert :skipped = RemoteAccess.touch_device_if_stale(device.id)
 
       assert DateTime.compare(Repo.reload!(device).last_seen_at, fresh) == :eq
     end
 
     test "accepts a loaded device as well as an id", %{device: device} do
-      assert {:ok, _} = RemoteAccess.touch_device_if_stale(device)
+      assert :recorded = RemoteAccess.touch_device_if_stale(device)
 
       assert Repo.reload!(device).last_seen_at != nil
     end
 
-    test "reports an unknown device id rather than raising" do
-      assert {:error, :not_found} = RemoteAccess.touch_device_if_stale(Ecto.UUID.generate())
+    test "skips an unknown device id rather than raising" do
+      assert :skipped = RemoteAccess.touch_device_if_stale(Ecto.UUID.generate())
+    end
+
+    test "concurrent requests for one device write exactly once", %{device: device} do
+      # A paired player holds a GraphQL and an HLS connection at once, handled in
+      # separate processes. The throttle window lives inside the UPDATE, so only
+      # one of them can match a row however the two interleave.
+      results =
+        1..4
+        |> Enum.map(fn _ ->
+          Task.async(fn -> RemoteAccess.touch_device_if_stale(device.id) end)
+        end)
+        |> Task.await_many(5_000)
+
+      assert Enum.count(results, &(&1 == :recorded)) == 1
+      assert Enum.count(results, &(&1 == :skipped)) == 3
     end
   end
 
