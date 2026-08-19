@@ -49,11 +49,15 @@ if config_env() != :test do
     end
   end
 
+  # normalize_env, not System.get_env: an empty variable is truthy in Elixir, so
+  # `System.get_env("X") || raise(...)` happily yields "". Plug.BasicAuth then
+  # accepts an empty username and password, which opens the dashboards to
+  # anyone sending `Authorization: Basic <base64(":")>`.
   dashboard_username =
-    System.get_env("DASHBOARD_USERNAME") || require_dashboard_credential.("DASHBOARD_USERNAME")
+    normalize_env.("DASHBOARD_USERNAME") || require_dashboard_credential.("DASHBOARD_USERNAME")
 
   dashboard_password =
-    System.get_env("DASHBOARD_PASSWORD") || require_dashboard_credential.("DASHBOARD_PASSWORD")
+    normalize_env.("DASHBOARD_PASSWORD") || require_dashboard_credential.("DASHBOARD_PASSWORD")
 
   config :metadata_relay,
     dashboard_auth: [username: dashboard_username, password: dashboard_password],
@@ -117,10 +121,27 @@ if config_env() != :test do
     end
   end
 
+  github_client_id = normalize_env.("GITHUB_APP_CLIENT_ID")
+  github_client_secret = normalize_env.("GITHUB_APP_CLIENT_SECRET")
+
   config :metadata_relay, MetadataRelay.GitHub,
-    client_id: normalize_env.("GITHUB_APP_CLIENT_ID"),
-    client_secret: normalize_env.("GITHUB_APP_CLIENT_SECRET"),
+    client_id: github_client_id,
+    client_secret: github_client_secret,
     repo: normalize_env.("FEEDBACK_GITHUB_REPO") || "getmydia/mydia"
+
+  # GitHub mode with no App credentials leaves the dashboards unreachable: basic
+  # auth is off and sign-in cannot complete. Say so loudly rather than raising,
+  # because raising would crashloop the relay and take the TMDB/TVDB proxy down
+  # for every install over a maintainer-only feature. Failing this way is closed,
+  # not open, so the dashboards are shut rather than exposed.
+  if github_dashboard? and (is_nil(github_client_id) or is_nil(github_client_secret)) do
+    IO.puts(
+      :stderr,
+      "[metadata_relay] DASHBOARD_GITHUB_ORG is set but GITHUB_APP_CLIENT_ID/GITHUB_APP_CLIENT_SECRET " <>
+        "are not. Basic auth is disabled and GitHub sign-in cannot complete, so /feedback and /errors " <>
+        "are unreachable until both are set."
+    )
+  end
 
   if config_env() == :prod do
     # API keys from environment
