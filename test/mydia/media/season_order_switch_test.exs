@@ -304,6 +304,68 @@ defmodule Mydia.Media.SeasonOrderSwitchTest do
       assert Repo.get!(MediaItem, show.id).season_order == :absolute
     end
 
+    # The importer creates episode rows from parsed filenames with no provider
+    # id (`ImportGroups.link_local_member/2`), so a stray S00E99 file is enough
+    # to produce a special that nothing can ever tag. Letting that block the
+    # switch would put the show back behind the same unactionable message, for
+    # good this time, over a row the switch does not touch.
+    test "an untagged special does not block the switch" do
+      bypass = Bypass.open()
+      {tvdb_id, official_id, dvd_ids} = unique_ids()
+      stub_series(bypass, tvdb_id, official_id, dvd_ids)
+
+      show = untagged_show(tvdb_id)
+
+      episode_fixture(%{
+        media_item_id: show.id,
+        season_number: 0,
+        episode_number: 99,
+        provider_episode_id: nil
+      })
+
+      assert {:ok, 4} = SeasonOrder.switch(show, :dvd, config(bypass))
+
+      assert coordinates(show) == [{0, 99}, {1, 1}, {1, 2}, {2, 1}, {2, 2}]
+      assert provider_ids(show) == [nil, "1001", "1002", "1003", "1004"]
+      assert Repo.get!(MediaItem, show.id).season_order == :dvd
+    end
+
+    # Accounted for is not the same question as moved. The target ordering knows
+    # this episode, it just files it as a special, and `mapping` holds only
+    # numbered destinations — so judging completeness against `mapping` would
+    # refuse the whole switch over a reclassification nobody asked about.
+    test "an episode the target ordering files as a special is accounted for" do
+      bypass = Bypass.open()
+      {tvdb_id, official_id, dvd_ids} = unique_ids()
+      [dvd1, dvd2] = dvd_ids
+
+      stub_seasons_list(bypass, tvdb_id, official_id, dvd_ids)
+
+      stub_season(bypass, official_id, [
+        %{"id" => 1001, "seasonNumber" => 1, "number" => 1},
+        %{"id" => 1002, "seasonNumber" => 1, "number" => 2},
+        %{"id" => 1003, "seasonNumber" => 1, "number" => 3},
+        %{"id" => 1004, "seasonNumber" => 1, "number" => 4}
+      ])
+
+      # 1004 is a numbered episode locally, and a special in the DVD ordering.
+      stub_season(bypass, dvd1, [
+        %{"id" => 1001, "seasonNumber" => 1, "number" => 1},
+        %{"id" => 1002, "seasonNumber" => 1, "number" => 2},
+        %{"id" => 1004, "seasonNumber" => 0, "number" => 3}
+      ])
+
+      stub_season(bypass, dvd2, [%{"id" => 1003, "seasonNumber" => 2, "number" => 1}])
+
+      show = untagged_show(tvdb_id)
+
+      assert {:ok, 3} = SeasonOrder.switch(show, :dvd, config(bypass))
+
+      # It stays where it is rather than being renumbered into specials.
+      assert coordinates(show) == [{1, 1}, {1, 2}, {1, 4}, {2, 1}]
+      assert Repo.get!(MediaItem, show.id).season_order == :dvd
+    end
+
     test "still refuses when the target ordering drops a numbered episode" do
       bypass = Bypass.open()
       {tvdb_id, official_id, dvd_ids} = unique_ids()

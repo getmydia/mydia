@@ -147,8 +147,8 @@ defmodule Mydia.Media.SeasonOrder do
   to a metadata refresh that a throttle can silently decline to run for a
   week. See `backfill_provider_ids/4`.
 
-  Specials are out of scope on both sides: none is moved, and no ordering is
-  asked to account for one. See `@specials_season`.
+  Specials are out of scope on both sides: no ordering is asked to account for
+  one, and an untagged one cannot block the switch. See `@specials_season`.
 
   When it isn't a no-op, refuses (without writing anything) if the fetched
   ordering does not account for every one of the show's numbered episodes —
@@ -200,7 +200,20 @@ defmodule Mydia.Media.SeasonOrder do
             |> Enum.filter(&(&1.provider_episode_id && &1.season_number != @specials_season))
             |> Map.new(&{&1.provider_episode_id, {&1.season_number, &1.episode_number}})
 
-          case missing_from_mapping(media_item, mapping) do
+          # "Accounted for" and "moved" are different questions, so they are
+          # asked of different sets. An episode the target ordering files as a
+          # special is accounted for — the ordering knows about it — but is not
+          # moved, because `mapping` holds only numbered destinations. Judging
+          # completeness against `mapping` instead would report every such
+          # episode as missing and refuse the switch over a reclassification the
+          # user did not ask about.
+          accounted =
+            episodes
+            |> Enum.map(& &1.provider_episode_id)
+            |> Enum.reject(&is_nil/1)
+            |> MapSet.new()
+
+          case unaccounted_episodes(media_item, accounted) do
             [] -> remap(media_item, target, mapping)
             missing -> {:error, {:incomplete_ordering, length(missing)}}
           end
@@ -313,12 +326,12 @@ defmodule Mydia.Media.SeasonOrder do
   # part of what a switch moves, so an ordering is not incomplete for omitting
   # them. A special the target ordering *does* place in a numbered season still
   # moves — it is in `mapping` — it just is not required to be there.
-  defp missing_from_mapping(%MediaItem{id: id}, mapping) do
+  defp unaccounted_episodes(%MediaItem{id: id}, accounted) do
     Episode
     |> where([e], e.media_item_id == ^id and e.season_number != @specials_season)
     |> select([e], e.provider_episode_id)
     |> Repo.all()
-    |> Enum.reject(&(is_nil(&1) or Map.has_key?(mapping, &1)))
+    |> Enum.reject(&(is_nil(&1) or MapSet.member?(accounted, &1)))
   end
 
   @doc """
@@ -335,8 +348,14 @@ defmodule Mydia.Media.SeasonOrder do
   worse than one that declines to move: the damage is silent and the user
   cannot tell which episodes shifted.
 
-    * `{:error, :missing_provider_ids}` - some episode has no provider id, so
-      there is no stable identity to remap it by.
+    * `{:error, :missing_provider_ids}` - some numbered episode has no provider
+      id, so there is no stable identity to remap it by. Specials are exempt
+      for the reason `@specials_season` gives: an untagged special is not a row
+      this failed to identify, it is a row that was never in scope, and an
+      importer that created one from a filename would otherwise block every
+      ordering switch on the show for good. Untagged rows still keep their
+      coordinates and are still counted by `conflicting?/2`, so exempting them
+      from identity cannot let one move or collide.
     * `{:error, :conflicting_mapping}` - two episodes would land on the same
       `{season_number, episode_number}`, which the unique index forbids.
   """
@@ -346,7 +365,7 @@ defmodule Mydia.Media.SeasonOrder do
     episodes = Repo.all(from(e in Episode, where: e.media_item_id == ^id))
 
     cond do
-      Enum.any?(episodes, &is_nil(&1.provider_episode_id)) ->
+      Enum.any?(episodes, &untagged_numbered?/1) ->
         {:error, :missing_provider_ids}
 
       conflicting?(episodes, mapping) ->
@@ -356,6 +375,10 @@ defmodule Mydia.Media.SeasonOrder do
         Repo.transaction(fn -> write_ordering(id, episodes, target, mapping) end)
     end
   end
+
+  defp untagged_numbered?(%Episode{season_number: @specials_season}), do: false
+  defp untagged_numbered?(%Episode{provider_episode_id: nil}), do: true
+  defp untagged_numbered?(%Episode{}), do: false
 
   defp conflicting?(episodes, mapping) do
     coordinates = Enum.map(episodes, &target_coordinates(&1, mapping))

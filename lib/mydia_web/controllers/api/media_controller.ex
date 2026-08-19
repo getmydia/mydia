@@ -7,7 +7,7 @@ defmodule MydiaWeb.Api.MediaController do
 
   use MydiaWeb, :controller
 
-  alias Mydia.{Media, Metadata, Repo}
+  alias Mydia.{Media, Metadata}
   alias Mydia.Accounts.Authorization
   alias Mydia.Auth.Guardian
   require Logger
@@ -214,41 +214,43 @@ defmodule MydiaWeb.Api.MediaController do
       })
       |> Map.reject(fn {_k, v} -> is_nil(v) end)
 
-    Repo.transaction(fn ->
-      # Update the media item
-      case Media.update_media_item(media_item, attrs, reason: "Manually matched") do
-        {:ok, updated_media_item} ->
-          # For TV shows, refresh episodes if requested
-          if media_item.type == "tv_show" and fetch_episodes do
-            # `force: true`: the show was just pointed at a different series, so
-            # its episodes are now the wrong ones. Letting the season-refresh
-            # throttle skip them would leave a manually matched show carrying
-            # the previous match's episodes for up to a week.
-            case Media.refresh_episodes_for_tv_show(updated_media_item,
-                   config: config,
-                   force: true
-                 ) do
-              {:ok, _episodes} ->
-                updated_media_item
+    # The episode refresh deliberately runs after the update commits, not inside
+    # a transaction with it. It fetches the series and every one of its seasons
+    # over the network, and SQLite admits one writer at a time, so holding the
+    # write open across that blocks every other writer for the duration. The
+    # transaction that used to wrap both bought nothing anyway: it covered a
+    # single write plus a side effect whose failures are swallowed here, so it
+    # could never roll back for the reason it appeared to guard.
+    case Media.update_media_item(media_item, attrs, reason: "Manually matched") do
+      {:ok, updated_media_item} ->
+        maybe_refresh_episodes(updated_media_item, fetch_episodes, config)
+        {:ok, updated_media_item}
 
-              {:error, reason} ->
-                Logger.warning("Failed to refresh episodes during manual match",
-                  media_item_id: media_item.id,
-                  reason: inspect(reason)
-                )
-
-                # Don't fail the whole operation if episode refresh fails
-                updated_media_item
-            end
-          else
-            updated_media_item
-          end
-
-        {:error, changeset} ->
-          Repo.rollback(changeset)
-      end
-    end)
+      {:error, changeset} ->
+        {:error, changeset}
+    end
   end
+
+  # `force: true`: the show was just pointed at a different series, so its
+  # episodes are now the wrong ones. Letting the season-refresh throttle skip
+  # them would leave a manually matched show carrying the previous match's
+  # episodes for up to a week.
+  defp maybe_refresh_episodes(%{type: "tv_show"} = media_item, true, config) do
+    case Media.refresh_episodes_for_tv_show(media_item, config: config, force: true) do
+      {:ok, _episodes} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning("Failed to refresh episodes during manual match",
+          media_item_id: media_item.id,
+          reason: inspect(reason)
+        )
+
+        :ok
+    end
+  end
+
+  defp maybe_refresh_episodes(_media_item, _fetch_episodes, _config), do: :ok
 
   defp extract_year(metadata) do
     cond do
