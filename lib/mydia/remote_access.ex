@@ -23,18 +23,31 @@ defmodule Mydia.RemoteAccess do
   Returns `{:ok, config}`, or `{:error, changeset}` if the insert fails.
   """
   def initialize_config do
-    # Note: relay_url is read from METADATA_RELAY_URL env var at runtime
-    %Config{}
-    |> Config.changeset(%{instance_id: Ecto.UUID.generate(), enabled: false})
-    |> Repo.insert()
+    # Enabling remote access is an admin toggle, so two tabs can reach this at
+    # once. Each insert would mint its own instance ID, which the unique index
+    # on that column cannot collide, leaving two config rows behind.
+    case get_config() do
+      nil ->
+        %Config{}
+        # Note: relay_url is read from METADATA_RELAY_URL env var at runtime
+        |> Config.changeset(%{instance_id: Ecto.UUID.generate(), enabled: false})
+        |> Repo.insert()
+
+      config ->
+        {:ok, config}
+    end
   end
 
   @doc """
   Gets the remote access configuration.
   Returns nil if not configured.
+
+  Oldest row wins rather than `Repo.one/1`, which raises on a second row. The
+  instance ID is what a paired device was introduced to, so if two rows ever do
+  race in, the one devices already know is the one to keep answering with.
   """
   def get_config do
-    Repo.one(Config)
+    Repo.one(from c in Config, order_by: [asc: c.inserted_at, asc: c.id], limit: 1)
   end
 
   @doc """
