@@ -149,8 +149,13 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
   # this no longer hand-rolls the two-call sequence. Episode-refresh failures
   # are logged there rather than surfaced as a flash: they are best-effort and
   # must not read as a failed metadata refresh.
+  #
+  # `force: true` because a person clicked the button. The season-refresh
+  # throttle is sized for the weekly sweep, and without this it silently
+  # declines the episode half of the refresh for 24 hours — 168 once the show
+  # has ended — while this still flashes "Metadata refreshed".
   defp do_standard_refresh(media_item, socket) do
-    case Media.Refresh.run(media_item) do
+    case Media.Refresh.run(media_item, force: true) do
       {:ok, _updated_item} ->
         {:noreply,
          socket

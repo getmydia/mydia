@@ -220,7 +220,14 @@ defmodule MydiaWeb.Api.MediaController do
         {:ok, updated_media_item} ->
           # For TV shows, refresh episodes if requested
           if media_item.type == "tv_show" and fetch_episodes do
-            case Media.refresh_episodes_for_tv_show(updated_media_item, config: config) do
+            # `force: true`: the show was just pointed at a different series, so
+            # its episodes are now the wrong ones. Letting the season-refresh
+            # throttle skip them would leave a manually matched show carrying
+            # the previous match's episodes for up to a week.
+            case Media.refresh_episodes_for_tv_show(updated_media_item,
+                   config: config,
+                   force: true
+                 ) do
               {:ok, _episodes} ->
                 updated_media_item
 

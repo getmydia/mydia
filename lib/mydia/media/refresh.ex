@@ -32,6 +32,15 @@ defmodule Mydia.Media.Refresh do
     * `:recover_by_title` - when no provider id can be resolved, search the
       provider by title to re-identify the item. Defaults to `false`, because
       fuzzy re-identification is surprising when triggered from a UI button.
+    * `:force` - refresh episodes even when `seasons_refreshed_at` is inside
+      the throttle window. Defaults to `false`.
+
+      The throttle exists to keep the weekly sweep off the relay, and it is
+      right for a sweep. It is wrong for a person: someone who clicked
+      "Refresh metadata" is asking for the work to happen now, and the throttle
+      silently declines the episode half of it for 24 hours, or 168 once the
+      show has ended, while the item row still updates and the flash still
+      says it worked. Every UI-initiated refresh passes `force: true`.
   """
   @spec run(MediaItem.t(), keyword()) :: {:ok, MediaItem.t()} | {:error, term()}
   def run(%MediaItem{} = media_item, opts \\ []) do
@@ -49,7 +58,7 @@ defmodule Mydia.Media.Refresh do
         with {:ok, metadata} <- fetch(item, provider_id, media_type, source, config),
              {:ok, updated} <- apply_metadata(item, metadata, source) do
           reclassified = reclassify_after_refresh(updated)
-          post_update(reclassified, media_type, fetch_episodes, config)
+          post_update(reclassified, media_type, fetch_episodes, config, opts)
           {:ok, reclassified}
         end
     end
@@ -169,8 +178,10 @@ defmodule Mydia.Media.Refresh do
   # `config` is threaded through rather than re-derived: refresh_episodes_for_tv_show/2
   # falls back to Metadata.default_relay_config/0, so dropping it here sent the
   # episode leg of an injected-config refresh at the real relay.
-  defp post_update(updated, :tv_show, true, config) do
-    case Media.refresh_episodes_for_tv_show(updated, config: config) do
+  defp post_update(updated, :tv_show, true, config, opts) do
+    force = Keyword.get(opts, :force, false)
+
+    case Media.refresh_episodes_for_tv_show(updated, config: config, force: force) do
       {:ok, _count} ->
         :ok
 
@@ -185,7 +196,7 @@ defmodule Mydia.Media.Refresh do
     :ok
   end
 
-  defp post_update(updated, _media_type, _fetch_episodes, _config) do
+  defp post_update(updated, _media_type, _fetch_episodes, _config, _opts) do
     NfoWriter.maybe_write_nfos(updated)
     :ok
   end
