@@ -158,6 +158,18 @@ defmodule Mydia.EventsTest do
       end)
       |> Task.await()
     end
+
+    test "returns :ok and inserts nothing for an invalid changeset" do
+      before = Repo.aggregate(Event, :count)
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert :ok = Events.create_event_async(%{category: "Invalid"})
+        end)
+
+      assert log =~ "Failed to create event asynchronously"
+      assert Repo.aggregate(Event, :count) == before
+    end
   end
 
   describe "list_events/1" do
