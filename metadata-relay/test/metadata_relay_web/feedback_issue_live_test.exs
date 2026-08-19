@@ -19,21 +19,15 @@ defmodule MetadataRelayWeb.FeedbackIssueLiveTest do
     Ecto.Adapters.SQL.Sandbox.mode(Repo, {:shared, self()})
     Repo.delete_all(Submission)
 
-    previous_users = Application.get_env(:metadata_relay, :dashboard_github_users)
+    previous_org = put_dashboard_org("getmydia")
 
     previous_github =
       put_github_config(client_id: "cid", client_secret: "csecret", repo: "getmydia/mydia")
 
-    Application.put_env(:metadata_relay, :dashboard_github_users, ["arsfeld"])
-
     on_exit(fn ->
       Ecto.Adapters.SQL.Sandbox.mode(Repo, :manual)
 
-      case previous_users do
-        nil -> Application.delete_env(:metadata_relay, :dashboard_github_users)
-        value -> Application.put_env(:metadata_relay, :dashboard_github_users, value)
-      end
-
+      restore_dashboard_org(previous_org)
       restore_github_config(previous_github)
       clear_github_adapter()
     end)
@@ -42,7 +36,7 @@ defmodule MetadataRelayWeb.FeedbackIssueLiveTest do
   end
 
   test "the file issue button is absent without a GitHub token" do
-    Application.delete_env(:metadata_relay, :dashboard_github_users)
+    put_dashboard_org(nil)
     {:ok, submission} = Feedback.create_submission(%{type: "bug", message: "It broke"})
 
     {:ok, view, _html} = live(basic_conn(), "/feedback")
@@ -182,7 +176,7 @@ defmodule MetadataRelayWeb.FeedbackIssueLiveTest do
   end
 
   test "submitting without a GitHub token reports a sign-in error, not a transport error" do
-    Application.delete_env(:metadata_relay, :dashboard_github_users)
+    put_dashboard_org(nil)
     {:ok, submission} = Feedback.create_submission(%{type: "bug", message: "Playback stalls"})
 
     {:ok, view, _html} = live(basic_conn(), "/feedback")
@@ -197,7 +191,11 @@ defmodule MetadataRelayWeb.FeedbackIssueLiveTest do
 
   defp signed_in_conn do
     build_conn()
-    |> init_test_session(github_login: "arsfeld", github_token: "gho_token")
+    |> init_test_session(
+      github_login: "arsfeld",
+      github_token: "gho_token",
+      github_verified_at: MetadataRelayWeb.DashboardAuth.verified_now()
+    )
   end
 
   defp basic_conn do

@@ -34,27 +34,17 @@ if config_env() != :test do
         value
     end
 
-  dashboard_github_users =
-    case normalize_env.("DASHBOARD_GITHUB_USERS") do
-      nil ->
-        []
-
-      value ->
-        value
-        |> String.split(",")
-        |> Enum.map(&String.trim/1)
-        |> Enum.reject(&(&1 == ""))
-    end
+  dashboard_github_org = normalize_env.("DASHBOARD_GITHUB_ORG")
 
   # Basic auth credentials are only required when GitHub sign-in is not
   # configured. The two modes are mutually exclusive, so demanding unused
   # basic-auth credentials from a GitHub-only deployment would be busywork.
-  github_dashboard? = dashboard_github_users != []
+  github_dashboard? = dashboard_github_org != nil
 
   require_dashboard_credential = fn name ->
     cond do
       github_dashboard? -> nil
-      config_env() == :prod -> raise("#{name} not set, and DASHBOARD_GITHUB_USERS is empty")
+      config_env() == :prod -> raise("#{name} not set, and DASHBOARD_GITHUB_ORG is empty")
       true -> "admin"
     end
   end
@@ -67,7 +57,7 @@ if config_env() != :test do
 
   config :metadata_relay,
     dashboard_auth: [username: dashboard_username, password: dashboard_password],
-    dashboard_github_users: dashboard_github_users
+    dashboard_github_org: dashboard_github_org
 
   # Database configuration (all environments except test)
   db_path = System.get_env("SQLITE_DB_PATH") || "./metadata_relay.db"

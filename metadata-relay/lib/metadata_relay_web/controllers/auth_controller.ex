@@ -11,7 +11,8 @@ defmodule MetadataRelayWeb.AuthController do
   alias MetadataRelayWeb.DashboardAuth
 
   @generic_failure "GitHub sign-in failed. Try again."
-  @not_authorized "That GitHub account is not authorized for this dashboard."
+  @not_authorized "That GitHub account is not an active member of the organization."
+  @unavailable "GitHub could not confirm your membership right now. Try again."
 
   def login(conn, params) do
     render(conn, :login, error: error_message(params["error"]))
@@ -39,10 +40,10 @@ defmodule MetadataRelayWeb.AuthController do
     with true <- is_binary(expected) and Plug.Crypto.secure_compare(state, expected),
          {:ok, token} <- OAuth.exchange_code(code),
          {:ok, %{login: login}} <- OAuth.fetch_user(token) do
-      if DashboardAuth.allowed?(login) do
-        sign_in(conn, login, token)
-      else
-        deny(conn, "denied")
+      case DashboardAuth.verify_membership(token) do
+        :ok -> sign_in(conn, login, token)
+        {:error, :denied} -> deny(conn, "denied")
+        {:error, :unavailable} -> deny(conn, "unavailable")
       end
     else
       _ -> deny(conn, "failed")
@@ -69,6 +70,7 @@ defmodule MetadataRelayWeb.AuthController do
     |> delete_session(:return_to)
     |> put_session(:github_login, login)
     |> put_session(:github_token, token)
+    |> put_session(:github_verified_at, DashboardAuth.verified_now())
     |> redirect(to: return_to)
   end
 
@@ -80,6 +82,7 @@ defmodule MetadataRelayWeb.AuthController do
   end
 
   defp error_message("denied"), do: @not_authorized
+  defp error_message("unavailable"), do: @unavailable
   defp error_message("failed"), do: @generic_failure
   defp error_message(_), do: nil
 end

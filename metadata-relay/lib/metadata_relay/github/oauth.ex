@@ -84,6 +84,49 @@ defmodule MetadataRelay.GitHub.OAuth do
     end
   end
 
+  @doc """
+  Checks the authenticated user's membership of `org`.
+
+  The endpoint is scoped to the caller's own membership, so it sees private
+  membership without the App needing to read the org's member list.
+
+  A pending invitation also answers 200, with `state` set to `"pending"`. Only
+  `"active"` counts, otherwise merely inviting someone would hand them the
+  dashboard.
+  """
+  def fetch_org_membership(token, org) when is_binary(token) and is_binary(org) do
+    request =
+      req_new(
+        url: @api_url <> "/user/memberships/orgs/" <> URI.encode(org),
+        method: :get,
+        headers: [
+          {"accept", "application/vnd.github+json"},
+          {"authorization", "Bearer " <> token},
+          {"x-github-api-version", "2022-11-28"}
+        ]
+      )
+
+    case Req.request(request) do
+      {:ok, %{status: 200, body: %{"state" => "active"}}} ->
+        {:ok, :active}
+
+      {:ok, %{status: 200, body: %{"state" => state}}} ->
+        {:error, {:membership, state}}
+
+      {:ok, %{status: 200}} ->
+        {:error, {:membership, "unknown"}}
+
+      {:ok, %{status: 404}} ->
+        {:error, :not_a_member}
+
+      {:ok, %{status: status}} ->
+        {:error, {:http, status}}
+
+      {:error, reason} ->
+        {:error, {:transport, reason}}
+    end
+  end
+
   defp req_new(opts) do
     adapter = Application.get_env(:metadata_relay, :github_http_adapter)
     opts = if adapter, do: Keyword.put(opts, :adapter, adapter), else: opts

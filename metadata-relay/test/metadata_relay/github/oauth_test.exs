@@ -95,6 +95,61 @@ defmodule MetadataRelay.GitHub.OAuthTest do
     assert {:error, {:http, 401}} = OAuth.fetch_user("nope")
   end
 
+  test "fetch_org_membership asks the caller-scoped endpoint and accepts an active member" do
+    set_github_adapter(fn request ->
+      assert URI.to_string(request.url) ==
+               "https://api.github.com/user/memberships/orgs/getmydia"
+
+      assert {"authorization", "Bearer gho_token"} in flat_headers(request)
+
+      {request, Req.Response.new(status: 200, body: %{"state" => "active", "role" => "admin"})}
+    end)
+
+    assert {:ok, :active} = OAuth.fetch_org_membership("gho_token", "getmydia")
+  end
+
+  test "fetch_org_membership reports a pending invitation as its own state" do
+    set_github_adapter(fn request ->
+      {request, Req.Response.new(status: 200, body: %{"state" => "pending"})}
+    end)
+
+    assert {:error, {:membership, "pending"}} =
+             OAuth.fetch_org_membership("gho_token", "getmydia")
+  end
+
+  test "fetch_org_membership reports a non-member" do
+    set_github_adapter(fn request ->
+      {request, Req.Response.new(status: 404, body: %{"message" => "Not Found"})}
+    end)
+
+    assert {:error, :not_a_member} = OAuth.fetch_org_membership("gho_token", "getmydia")
+  end
+
+  test "fetch_org_membership reports a blocked app and a transport failure separately" do
+    set_github_adapter(fn request ->
+      {request, Req.Response.new(status: 403, body: %{"message" => "Blocked"})}
+    end)
+
+    assert {:error, {:http, 403}} = OAuth.fetch_org_membership("gho_token", "getmydia")
+
+    set_github_adapter(fn request ->
+      {request, %Req.TransportError{reason: :econnrefused}}
+    end)
+
+    assert {:error, {:transport, _}} = OAuth.fetch_org_membership("gho_token", "getmydia")
+  end
+
+  test "fetch_org_membership escapes the organization in the path" do
+    set_github_adapter(fn request ->
+      assert URI.to_string(request.url) ==
+               "https://api.github.com/user/memberships/orgs/weird%20org"
+
+      {request, Req.Response.new(status: 404, body: %{})}
+    end)
+
+    assert {:error, :not_a_member} = OAuth.fetch_org_membership("gho_token", "weird org")
+  end
+
   defp flat_headers(request) do
     Enum.flat_map(request.headers, fn {name, values} ->
       Enum.map(List.wrap(values), &{name, &1})
