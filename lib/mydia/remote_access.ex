@@ -11,6 +11,9 @@ defmodule Mydia.RemoteAccess do
   alias Mydia.Repo
   alias Mydia.RemoteAccess.{Config, PairingClaim, RemoteDevice}
 
+  # Cache key for the enabled flag. See enabled?/0.
+  @enabled_key {__MODULE__, :enabled}
+
   # Config management
 
   @doc """
@@ -61,20 +64,63 @@ defmodule Mydia.RemoteAccess do
   end
 
   @doc """
+  Whether remote access is enabled on this instance.
+
+  Read from `:persistent_term` rather than the database. This sits on
+  request-serving paths (`MydiaWeb.Plugs.MediaAuth`, `MydiaWeb.Plugs.RelayDeviceAuth`
+  and the `Mydia.P2p.Server` request handlers), so a query per call is not
+  affordable. `:persistent_term` suits a value written a handful of times in a
+  server's lifetime and read constantly.
+
+  Fails closed: with no config row there is no instance identity for a remote
+  device to authenticate against, so the answer is `false`.
+  """
+  @spec enabled?() :: boolean()
+  def enabled? do
+    case :persistent_term.get(@enabled_key, :unset) do
+      :unset -> refresh_enabled_cache()
+      enabled -> enabled
+    end
+  end
+
+  @doc """
+  Re-reads the enabled flag from the database and reseeds the cache.
+
+  Returns the value it stored. Called at boot and by every writer.
+  """
+  @spec refresh_enabled_cache() :: boolean()
+  def refresh_enabled_cache do
+    enabled =
+      case get_config() do
+        nil -> false
+        config -> config.enabled
+      end
+
+    :persistent_term.put(@enabled_key, enabled)
+    enabled
+  end
+
+  @doc """
   Creates or updates the remote access configuration.
   Since there should only be one config, this upserts.
   """
   def upsert_config(attrs) do
-    case get_config() do
-      nil ->
-        %Config{}
-        |> Config.changeset(attrs)
-        |> Repo.insert()
+    result =
+      case get_config() do
+        nil ->
+          %Config{}
+          |> Config.changeset(attrs)
+          |> Repo.insert()
 
-      config ->
-        config
-        |> Config.changeset(attrs)
-        |> Repo.update()
+        config ->
+          config
+          |> Config.changeset(attrs)
+          |> Repo.update()
+      end
+
+    with {:ok, config} <- result do
+      :persistent_term.put(@enabled_key, config.enabled)
+      {:ok, config}
     end
   end
 
@@ -84,9 +130,13 @@ defmodule Mydia.RemoteAccess do
         {:error, :not_configured}
 
       config ->
-        config
-        |> Config.toggle_enabled_changeset(enabled)
-        |> Repo.update()
+        with {:ok, updated} <-
+               config
+               |> Config.toggle_enabled_changeset(enabled)
+               |> Repo.update() do
+          :persistent_term.put(@enabled_key, updated.enabled)
+          {:ok, updated}
+        end
     end
   end
 

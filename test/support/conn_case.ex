@@ -31,6 +31,7 @@ defmodule MydiaWeb.ConnCase do
       import MydiaWeb.AuthHelpers
       import Mydia.ConfigHelpers
       import Mydia.Factory
+      import Mydia.RemoteAccessHelpers
     end
   end
 
