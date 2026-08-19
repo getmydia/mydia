@@ -69,17 +69,25 @@ open(dst, "w").write(yaml.safe_load(open(src))["data"]["config.toml"])
 PY
 
 # Fetch the candidate before running it. `docker run` reuses a matching local
-# tag, so without this the script can verify a months-old image and report PASS
-# for bits nobody is about to deploy. Tags also get re-published; digests do not,
-# which is why the deployment pins one and why the run below prints the digest it
-# actually tested.
+# tag, so without this the script can verify months-old bits and report PASS for
+# an image nobody is about to deploy. Tags also get re-published; digests do not.
 echo "==> pulling $IMG"
-if ! docker pull -q "$IMG" >/dev/null; then
+if ! docker pull "$IMG" >"$WORK/pull.log" 2>&1; then
+  tail -3 "$WORK/pull.log" >&2
   echo "FAIL: could not pull $IMG" >&2
   echo "      (a problem with this machine or the reference, not a verdict on the image)" >&2
   exit 2
 fi
-docker image inspect --format '{{if .RepoDigests}}    tested: {{index .RepoDigests 0}}{{end}}' "$IMG" 2>/dev/null || true
+# Take the digest from the pull itself. `docker pull -q` swallows this line, and
+# an image's .RepoDigests can hold several references, so indexing that list is
+# not guaranteed to name the thing that was just pulled.
+DIGEST="$(sed -n 's/^Digest: //p' "$WORK/pull.log" | tail -1)"
+if [ -z "$DIGEST" ]; then
+  echo "FAIL: docker pull reported no digest for $IMG" >&2
+  echo "      (a problem with this machine or the reference, not a verdict on the image)" >&2
+  exit 2
+fi
+echo "    tested: $DIGEST"
 
 echo "==> booting $IMG"
 if ! docker run -d --name "$NAME" \
@@ -93,9 +101,9 @@ fi
 # Wait for the relay to actually serve before sending it anything. A container in
 # state Up has a process, not a bound socket, and a datagram that arrives before
 # the listeners come up is dropped rather than queued: the panic never fires and
-# a bad image is reported as PASS. The UDP path cannot be probed first, because
-# on a bad image the probe is the thing that kills it, so /generate_204 stands in
-# as the readiness signal.
+# a bad image is reported as PASS. The UDP path cannot be probed for readiness
+# first, because on a bad image the probe is the thing that kills it, so
+# /generate_204 stands in as the readiness signal.
 echo "==> waiting for the relay to serve HTTP"
 BEFORE=""
 READY=""
@@ -112,7 +120,7 @@ for _ in $(seq 1 30); do
   sleep 1
 done
 
-echo "    before datagrams: $BEFORE"
+echo "    before traffic: $BEFORE"
 if [ -z "$READY" ]; then
   case "$BEFORE" in
     Up*) echo "FAIL: never served /generate_204, so it never got to receive traffic" ;;
@@ -122,13 +130,56 @@ if [ -z "$READY" ]; then
   exit 1
 fi
 
-echo "==> sending UDP datagrams to the QUIC and STUN listeners"
+# Make the relay prove it received a datagram rather than inferring it from a
+# still-running container. Under RFC 9000 a server that gets a long-header packet
+# carrying a version it does not support answers with a Version Negotiation
+# packet, so an answer here means the QUIC listener took the datagram off the
+# socket, which is exactly the path noq-udp panics on.
+#
+# This has to be a positive check. Surviving unanswered proves nothing: on
+# 2026-08-19 the datagrams this script aimed at port 3478 turned out to land on
+# nothing at all, because with enable_quic_addr_discovery the relay binds only
+# 7842 and the STUN port in deployment.yaml is left over from an older config.
+# Silence and safety look identical from the outside.
+echo "==> proving the QUIC listener receives traffic"
+PROBE=0
+python3 - <<'PY' || PROBE=$?
+import os, socket, struct, sys
+
+dcid, scid = os.urandom(8), os.urandom(8)
+pkt = (
+    b"\xc0"                           # long header, fixed bit set
+    + struct.pack(">I", 0x1A2A3A4A)   # deliberately unsupported version
+    + bytes([len(dcid)]) + dcid
+    + bytes([len(scid)]) + scid
+)
+pkt += b"\x00" * (1200 - len(pkt))    # short Initials may be discarded
+
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+s.settimeout(5)
+s.sendto(pkt, ("127.0.0.1", 17842))
+try:
+    data, _ = s.recvfrom(2048)
+except socket.timeout:
+    print("    no answer from the QUIC listener")
+    sys.exit(1)
+finally:
+    s.close()
+
+if len(data) >= 5 and data[0] & 0x80 and struct.unpack(">I", data[1:5])[0] == 0:
+    print("    version negotiation answered: the datagram was received")
+    sys.exit(0)
+print(f"    answered with {len(data)} bytes, but not a version negotiation packet")
+sys.exit(1)
+PY
+
+# Then spray every UDP port the deployment exposes, so a listener added to the
+# config later is covered too. Two rounds a second apart, since a datagram that
+# lands a moment early is lost rather than queued.
+echo "==> sending plain datagrams to every exposed UDP port"
 python3 - <<'PY'
 import socket, time
 
-# Two rounds, a second apart. Serving HTTP does not strictly prove the UDP
-# listeners are bound, and a datagram that lands a moment too early is lost
-# rather than queued, which would let a bad image through unscathed.
 for _ in range(2):
     for port in (17842, 13478):
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -143,8 +194,8 @@ AFTER="$(docker ps -a --filter "name=$NAME" --format '{{.Status}}')"
 # curl exits non-zero on connection refused, which is exactly the crash case this
 # script reports on, so it must not abort under set -e.
 CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:18080/generate_204 || true)"
-echo "    after datagrams:  $AFTER"
-echo "    generate_204:     $CODE"
+echo "    after traffic:  $AFTER"
+echo "    generate_204:   $CODE"
 
 case "$AFTER" in
   Up*) ;;
@@ -155,10 +206,16 @@ case "$AFTER" in
     ;;
 esac
 
+if [ "$PROBE" -ne 0 ]; then
+  echo "FAIL: still up, but never proved it received a datagram"
+  docker logs "$NAME" 2>&1 | tail -20 || true
+  exit 1
+fi
+
 if [ "$CODE" != "204" ]; then
   echo "FAIL: expected 204 from /generate_204, got $CODE"
   docker logs "$NAME" 2>&1 | tail -20
   exit 1
 fi
 
-echo "PASS: $IMG survived real traffic"
+echo "PASS: $IMG received real traffic and survived it"
