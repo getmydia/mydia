@@ -9,6 +9,12 @@ class MockAuthStorage implements AuthStorage {
   /// Set by tests that need to simulate storage that cannot persist.
   bool degradedValue = false;
 
+  /// Keys whose delete throws, simulating a keychain that refuses the call.
+  final Set<String> failDeleteKeys = <String>{};
+
+  /// When true, every delete throws.
+  bool failAllDeletes = false;
+
   @override
   bool get degraded => degradedValue;
 
@@ -24,6 +30,9 @@ class MockAuthStorage implements AuthStorage {
 
   @override
   Future<void> delete(String key) async {
+    if (failAllDeletes || failDeleteKeys.contains(key)) {
+      throw Exception('keyring refused delete of $key');
+    }
     _storage.remove(key);
   }
 

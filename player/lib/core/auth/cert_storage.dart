@@ -8,7 +8,11 @@ import 'auth_storage.dart';
 /// certificate fingerprints for each Mydia instance. This enables
 /// certificate pinning for self-signed certificates.
 class CertStorage {
-  final AuthStorage _storage = getAuthStorage();
+  /// [storage] is injectable for tests and for session teardown, which builds
+  /// every credential store over one storage instance.
+  CertStorage({AuthStorage? storage}) : _storage = storage ?? getAuthStorage();
+
+  final AuthStorage _storage;
 
   static const _fingerprintsKey = 'cert_fingerprints';
 

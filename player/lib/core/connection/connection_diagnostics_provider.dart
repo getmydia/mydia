@@ -22,6 +22,21 @@ abstract class _DiagnosticsKeys {
   static const directUrlErrors = 'diagnostics_direct_url_errors';
 }
 
+/// Erases stored connection diagnostics.
+///
+/// Called from sign-out teardown: the recorded attempts include the
+/// server's direct URLs, which should not outlive the session that
+/// produced them.
+Future<void> clearConnectionDiagnostics(AuthStorage storage) async {
+  // Concurrent, not sequential, and each delete is wrapped in Future.sync:
+  // one refused delete, whether it rejects its Future or throws before
+  // returning one at all, must not strand the other key.
+  await Future.wait([
+    Future.sync(() => storage.delete(_DiagnosticsKeys.lastDirectAttempt)),
+    Future.sync(() => storage.delete(_DiagnosticsKeys.directUrlErrors)),
+  ]);
+}
+
 /// Simple result type for URL attempts.
 class UrlProbeResult {
   final String url;

@@ -4,6 +4,7 @@ import 'package:graphql_flutter/graphql_flutter.dart';
 import '../auth/auth_service.dart';
 import '../auth/auth_status.dart';
 import '../auth/media_token_service.dart';
+import '../auth/session_teardown.dart';
 import '../config/web_config.dart';
 import '../connection/connection_provider.dart';
 import '../p2p/p2p_service.dart';
@@ -280,9 +281,25 @@ class AuthStateNotifier extends Notifier<AsyncValue<AuthStatus>> {
     await _checkAuth();
   }
 
-  /// Logout and clear all session data.
+  /// Sign out: erase this device's credentials, then send the router to login.
+  ///
+  /// This used to be sequenced from the Settings widget with the state flip
+  /// last, so one refused keychain delete left the user signed in with nothing
+  /// shown. It lives here because this notifier outlives the redirect that
+  /// unmounts that screen.
   Future<void> logout() async {
-    await authService.clearSession();
+    await SessionTeardown().run();
+
+    // Read through the provider rather than the teardown: clear() also resets
+    // the in-memory connection state, which wiping storage alone would not.
+    // The read happens inside the closure, not while building the argument
+    // list, so a throw from it is caught by bestEffort too.
+    await bestEffort(
+      'connection',
+      () => ref.read(connectionProvider.notifier).clear(),
+    );
+
+    // Last, because this is what redirects the router to /login.
     state = const AsyncValue.data(AuthStatus.unauthenticated);
   }
 

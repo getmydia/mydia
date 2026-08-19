@@ -4,7 +4,9 @@ import 'package:flutter/material.dart' hide ConnectionState;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/connection/connection_provider.dart';
+import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/p2p/p2p_service.dart';
 import 'package:player/core/update/update_provider.dart';
 import 'package:player/domain/models/user_settings.dart';
@@ -19,6 +21,26 @@ class _FakeConnectionNotifier extends ConnectionNotifier {
 
   @override
   ConnectionState build() => _state;
+
+  /// Sign-out used to call this before ending the session, so a throw here
+  /// left the user signed in. Nothing else on this screen calls it.
+  @override
+  Future<void> clear() async => throw Exception('keyring unavailable');
+}
+
+/// Reports a signed-in session and records logout calls, without touching
+/// storage. The real teardown is covered in session_teardown_test.dart.
+class _RecordingAuthNotifier extends AuthStateNotifier {
+  static int logoutCalls = 0;
+
+  @override
+  AsyncValue<AuthStatus> build() =>
+      const AsyncValue.data(AuthStatus.authenticated);
+
+  @override
+  Future<void> logout() async {
+    logoutCalls++;
+  }
 }
 
 class _FakeP2pStatusNotifier extends P2pStatusNotifier {
@@ -100,6 +122,7 @@ Future<void> _pump(
         updateProvider.overrideWith(
           () => _FakeUpdateNotifier(UpdateState(currentVersion: version)),
         ),
+        authStateProvider.overrideWith(_RecordingAuthNotifier.new),
       ],
       child: MaterialApp.router(
         routerConfig: GoRouter(
@@ -159,6 +182,37 @@ void main() {
     final title = tester.widget<Text>(find.text('Sign out'));
 
     expect(title.style?.color, Theme.of(context).colorScheme.error);
+  });
+
+  testWidgets('confirming sign out signs the user out', (tester) async {
+    _RecordingAuthNotifier.logoutCalls = 0;
+    await _pump(tester);
+
+    await tester.ensureVisible(find.byKey(const Key('settings-sign-out')));
+    await tester.tap(find.byKey(const Key('settings-sign-out')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.widgetWithText(TextButton, 'Sign out'),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(_RecordingAuthNotifier.logoutCalls, 1);
+  });
+
+  testWidgets('cancelling sign out leaves the session alone', (tester) async {
+    _RecordingAuthNotifier.logoutCalls = 0;
+    await _pump(tester);
+
+    await tester.ensureVisible(find.byKey(const Key('settings-sign-out')));
+    await tester.tap(find.byKey(const Key('settings-sign-out')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(_RecordingAuthNotifier.logoutCalls, 0);
   });
 
   testWidgets('the footer names the running version', (tester) async {

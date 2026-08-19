@@ -127,13 +127,10 @@ class SettingsScreen extends ConsumerWidget {
 
     if (confirmed != true || !context.mounted) return;
 
-    // Clear settings and connection state BEFORE changing auth state, since the
-    // auth state change triggers a router redirect that unmounts this widget.
-    await ref.read(settingsServiceProvider).clearSettings();
-    await ref.read(connectionProvider.notifier).clear();
-
-    // Last, because this sets auth state to unauthenticated, which redirects to
-    // /login. No explicit context.go() needed.
+    // One call. AuthStateNotifier.logout() owns the whole teardown and
+    // outlives the router redirect that unmounts this screen, which is why
+    // the ordering this used to juggle no longer matters. No explicit
+    // context.go() needed.
     await ref.read(authStateProvider.notifier).logout();
   }
 }

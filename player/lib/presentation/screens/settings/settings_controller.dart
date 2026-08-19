@@ -60,18 +60,4 @@ class SettingsController extends _$SettingsController {
       return currentSettings.copyWith(autoSkipSegments: enabled);
     });
   }
-
-  /// Logout the user and clear all data.
-  Future<void> logout() async {
-    final authService = AuthService();
-    final settingsService = ref.read(settingsServiceProvider);
-
-    await Future.wait([
-      authService.clearSession(),
-      settingsService.clearSettings(),
-    ]);
-
-    // Invalidate the auth state to trigger navigation
-    ref.invalidate(settingsControllerProvider);
-  }
 }
