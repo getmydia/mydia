@@ -133,6 +133,24 @@ defmodule Mydia.Media.RefreshSeasonOrderTest do
       assert is_nil(Repo.get!(MediaItem, item.id).seasons_refreshed_at)
     end
 
+    # `provider_switch_attrs/3` also clears `season_order`, so comparing only
+    # that column reads nil == nil and calls a provider switch "unchanged" --
+    # for the overwhelmingly common show that was already nil. The payload in
+    # hand belongs to a series this no longer is, ids and all.
+    test "declines to write season data fetched for a provider the show has left", ctx do
+      item = show(ctx.tvdb_id, %{})
+
+      Repo.update_all(
+        from(m in MediaItem, where: m.id == ^item.id),
+        set: [metadata_source: :tmdb, tvdb_id: nil, tmdb_id: 4242, season_order: nil]
+      )
+
+      assert {:ok, 0} = Media.refresh_episodes_for_tv_show(item, config: ctx.config)
+
+      assert episode_count(item) == 0
+      assert is_nil(Repo.get!(MediaItem, item.id).seasons_refreshed_at)
+    end
+
     test "writes and stamps when no switch intervenes", ctx do
       item = show(ctx.tvdb_id, %{})
 
