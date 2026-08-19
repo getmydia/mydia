@@ -91,6 +91,68 @@ defmodule Mydia.Events.WriterTest do
       types = Event |> Repo.all() |> Enum.map(& &1.type) |> Enum.sort()
       assert types == ["download.completed", "download.initiated"]
     end
+
+    test "the mailbox bound is soft under concurrent enqueue/2 callers" do
+      # cast_or_drop/2 reads Process.info/2 and then calls GenServer.cast/2 as
+      # two separate steps. That is fine against a single caller looping,
+      # since each iteration re-reads the mailbox length before casting, but
+      # concurrent callers can each observe room under max_mailbox before any
+      # of them casts. The result is not a hard cap: it can overshoot by up
+      # to one event per caller enqueuing at the same instant. Closing that
+      # gap exactly would need something like :atomics.compare_exchange/4
+      # (a plain :counters get-then-add is just as racy) plus reconciling
+      # that counter against buffer-overflow drops and writer restarts, and a
+      # bug in that accounting either wedges every future event or silently
+      # removes the bound, which is worse than a small overshoot for a
+      # droppable activity log. So this test documents the real, soft
+      # guarantee instead of asserting a hard cap the implementation does
+      # not provide.
+      #
+      # caller_count is deliberately much larger than this machine's core
+      # count. A small burst (say 32) can race entirely within one wave of
+      # true parallelism and land every event, which would make the "some
+      # events get dropped" assertion below flaky. A few hundred concurrent
+      # callers cannot all be scheduled at once, so later callers reliably
+      # observe an already-elevated mailbox length and get dropped, even
+      # though which ones do is nondeterministic.
+      caller_count = 300
+      max_mailbox = 2
+      writer = start_writer(max_batch: 1000, flush_interval_ms: 60_000, max_mailbox: max_mailbox)
+
+      # :sys.suspend/1 halts the writer's own receive loop without touching
+      # its real mailbox, so casts pile up there exactly as they would while
+      # the writer is genuinely blocked inside Repo.insert_all/2.
+      :sys.suspend(writer)
+
+      test_pid = self()
+
+      callers =
+        for n <- 1..caller_count do
+          spawn(fn ->
+            send(test_pid, :ready)
+            receive do: (:go -> :ok)
+            Writer.enqueue(attrs("download.initiated"), writer)
+            send(test_pid, {:done, n})
+          end)
+        end
+
+      for _ <- callers, do: assert_receive(:ready)
+      for pid <- callers, do: send(pid, :go)
+      for _ <- callers, do: assert_receive({:done, _}, 5_000)
+
+      {:message_queue_len, len} = Process.info(writer, :message_queue_len)
+
+      # The bound still did real work: well under every offered event landed.
+      assert len < caller_count
+      # The bound is soft, not exact: the theoretical worst case is every
+      # caller landing between the check and the cast, i.e. max_mailbox
+      # plus caller_count. Actual runs land nowhere near that, but the test
+      # only asserts what is actually guaranteed.
+      assert len <= max_mailbox + caller_count
+
+      :sys.resume(writer)
+      Writer.flush(writer)
+    end
   end
 
   describe "flush/1" do

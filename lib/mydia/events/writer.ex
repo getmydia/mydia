@@ -17,14 +17,22 @@ defmodule Mydia.Events.Writer do
   bounded by two limits stacked in front of each other. The mailbox limit
   caps messages waiting in the writer's own inbox, which matters because
   `Repo.insert_all/2` can block the writer for the SQLite busy_timeout under
-  write contention while callers keep casting. The buffer limit caps
-  validated events waiting to be flushed once the writer has caught up on its
-  inbox. On overflow the buffer drops the oldest event, since the writer owns
-  the buffer and can pop from either end; the mailbox limit instead drops the
-  newest event, the one a caller is trying to enqueue right now, because a
-  caller has no way to reach into another process's mailbox and evict an
-  older message. A failed insert is logged and dropped rather than retried,
-  because retrying reintroduces the contention this module exists to remove.
+  write contention while callers keep casting. That check and the cast it
+  guards run as separate steps, so the bound is soft rather than exact:
+  callers enqueuing at the same instant can each observe room under the
+  limit and all cast, overshooting by at most one event per concurrent
+  caller. What it reliably closes is the unbounded case, a single process
+  casting in a loop while the writer is stalled, since a serial loop
+  re-reads the mailbox length on every iteration; the residual overshoot is
+  bounded by concurrency, not by how long the writer stays blocked. The
+  buffer limit caps validated events waiting to be flushed once the writer
+  has caught up on its inbox. On overflow the buffer drops the oldest event,
+  since the writer owns the buffer and can pop from either end; the mailbox
+  limit instead drops the newest event, the one a caller is trying to
+  enqueue right now, because a caller has no way to reach into another
+  process's mailbox and evict an older message. A failed insert is logged
+  and dropped rather than retried, because retrying reintroduces the
+  contention this module exists to remove.
 
   On shutdown, `terminate/2` makes a best-effort flush of the buffer through
   `Repo.insert_all/2`. A shutdown that lands during heavy write contention can
@@ -80,9 +88,13 @@ defmodule Mydia.Events.Writer do
   contract of `Mydia.Events.create_event_async/1`.
 
   The event is dropped instead of cast when the writer's mailbox is already
-  at its configured limit. This bounds total pending events (mailbox plus
-  buffer) even though the writer can be blocked in `Repo.insert_all/2` for
-  seconds at a time under write contention while casts keep arriving.
+  at its configured limit. This bound is soft, not exact: the mailbox check
+  and the cast it guards are separate steps, so callers enqueuing at the
+  same instant can each see room under the limit and all cast, overshooting
+  by at most one event per concurrent caller. What it reliably prevents is
+  the unbounded case, a single process casting in a loop while the writer is
+  blocked in `Repo.insert_all/2` for seconds under write contention, because
+  that loop re-reads the mailbox length before every cast.
   """
   @spec enqueue(map(), GenServer.server()) :: :ok
   def enqueue(attrs, server \\ __MODULE__) do
