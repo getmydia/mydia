@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:player/core/auth/auth_storage_native.dart';
 import 'package:player/core/settings/settings_service.dart';
 
 void main() {
@@ -7,6 +8,7 @@ void main() {
 
   setUp(() {
     FlutterSecureStorage.setMockInitialValues({});
+    NativeAuthStorage.resetForTest();
   });
 
   test('an unset library sort reads back as null', () async {
