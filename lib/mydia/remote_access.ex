@@ -358,6 +358,53 @@ defmodule Mydia.RemoteAccess do
     :ok
   end
 
+  @doc """
+  Records liveness for the device named in a verified access token's claims.
+
+  The remote access admin page derives "online" entirely from `last_seen_at`,
+  so without this a player streaming over p2p right now still reads as never
+  connected. Claims without a `"device_id"` (a plain user login rather than a
+  paired device) are ignored.
+  """
+  def touch_device_from_claims(%{"device_id" => device_id}) when is_binary(device_id) do
+    touch_device_if_stale(device_id)
+    :ok
+  end
+
+  def touch_device_from_claims(_claims), do: :ok
+
+  @doc """
+  Records that a device was seen, unless the throttle window has not elapsed.
+
+  Accepts a loaded device or a device id. Returns `:recorded` when it wrote and
+  `:skipped` when it did not, which covers both a device seen moments ago and
+  one that no longer exists.
+
+  One conditional `UPDATE` rather than a read followed by a write. A p2p player
+  holds a GraphQL and an HLS connection at once and they are handled in separate
+  processes, so a read-then-write pair lets both sides clear the throttle and
+  write together; here the throttle window is part of the statement, so exactly
+  one of them matches a row. It also keeps the common throttled case to a single
+  statement that touches nothing.
+  """
+  @spec touch_device_if_stale(RemoteDevice.t() | binary()) :: :recorded | :skipped
+  def touch_device_if_stale(%RemoteDevice{id: device_id}), do: touch_device_if_stale(device_id)
+
+  def touch_device_if_stale(device_id) when is_binary(device_id) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    threshold = DateTime.add(now, -@touch_throttle_seconds, :second)
+
+    query =
+      from d in RemoteDevice,
+        where: d.id == ^device_id,
+        where: is_nil(d.last_seen_at) or d.last_seen_at < ^threshold
+
+    case Repo.update_all(query, set: [last_seen_at: now, updated_at: now]) do
+      {0, _} -> :skipped
+      {_updated, _} -> :recorded
+    end
+  end
+
   defp should_touch_device?(%{last_seen_at: nil}), do: true
 
   defp should_touch_device?(%{last_seen_at: last_seen_at}) do

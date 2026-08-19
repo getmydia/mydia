@@ -8,7 +8,9 @@ defmodule Mydia.P2p.Server do
   use GenServer
   require Logger
 
+  alias Mydia.Auth.Guardian
   alias Mydia.P2p
+  alias Mydia.RemoteAccess
   alias Mydia.RemoteAccess.DirectUrls
   alias Mydia.RemoteAccess.Pairing
   alias Mydia.Streaming.HlsSession
@@ -550,7 +552,14 @@ defmodule Mydia.P2p.Server do
   defp verify_hls_auth(nil), do: {:error, :no_token}
 
   defp verify_hls_auth(auth_token) when is_binary(auth_token) do
-    Mydia.Auth.Guardian.verify_token(auth_token)
+    case Guardian.verify_token_with_claims(auth_token) do
+      {:ok, user, claims} ->
+        RemoteAccess.touch_device_from_claims(claims)
+        {:ok, user}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   defp lookup_hls_session(session_id) do
@@ -787,8 +796,13 @@ defmodule Mydia.P2p.Server do
   defp build_graphql_context(auth_token, source, peer_connection_type)
        when is_binary(auth_token) do
     # Use Guardian to verify the token and get the user
-    case Mydia.Auth.Guardian.verify_token(auth_token) do
-      {:ok, user} ->
+    case Guardian.verify_token_with_claims(auth_token) do
+      {:ok, user, claims} ->
+        # Paired players reach the backend over p2p and nowhere else, so this is
+        # the only place device liveness can be observed. The remote access admin
+        # page reads it back as "Online now".
+        RemoteAccess.touch_device_from_claims(claims)
+
         %{current_user: user, source: source, peer_connection_type: peer_connection_type}
 
       {:error, _reason} ->
