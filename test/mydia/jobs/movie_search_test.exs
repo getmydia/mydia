@@ -594,6 +594,59 @@ defmodule Mydia.Jobs.MovieSearchTest do
       assert download.media_item_id == movie.id
     end
 
+    test "a grab whose row is deleted before the upgrade tag lands is not reported as failed", %{
+      library_path: library_path
+    } do
+      # Regression for #285. `attach_upgrade_target/2` runs as `after_grab`,
+      # inside a `with` whose else branch logs "Failed to initiate download".
+      # The grab itself has already succeeded by then — a torrent is in the
+      # client — so if the row vanishes before the bookkeeping stamp lands,
+      # returning an error is a lie that can send the caller off to grab a
+      # second copy of the same release.
+      {movie, media_file} = upgrade_target(library_path)
+
+      # Delete the row the instant it is inserted, which is after the grab and
+      # before the tag write. The match avoids the bind placeholder because that
+      # is adapter-specific (`?` on SQLite, `$1` on Postgres).
+      handler_id = {__MODULE__, :delete_before_upgrade_tag}
+      test_pid = self()
+
+      :telemetry.attach(
+        handler_id,
+        [:mydia, :repo, :query],
+        fn _event, _measurements, metadata, _config ->
+          if self() == test_pid and metadata.source == "downloads" and
+               String.starts_with?(metadata.query, "INSERT") do
+            :telemetry.detach(handler_id)
+
+            Enum.each(Mydia.Downloads.list_downloads(), &Mydia.Downloads.delete_download/1)
+            send(test_pid, :download_deleted_before_tag)
+          end
+        end,
+        nil
+      )
+
+      on_exit(fn -> :telemetry.detach(handler_id) end)
+
+      # The job returns `:ok` down both paths, so the return value proves
+      # nothing here — the misreport is what to assert on, and it logs at
+      # :error, which the test logger's :warning threshold does let through.
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert :ok =
+                   perform_job(MovieSearch, %{
+                     "mode" => "upgrade",
+                     "media_item_id" => movie.id,
+                     "media_file_id" => media_file.id
+                   })
+        end)
+
+      # Without this the test would pass even if the delete never fired.
+      assert_received :download_deleted_before_tag
+
+      refute log =~ "Failed to initiate download"
+    end
+
     # Proves the Comparator genuinely gates the grab rather than merely being
     # called for show: same movie, same file, same mocked indexer results as
     # the "grabs a genuine upgrade candidate" test above (proven there to

@@ -174,9 +174,26 @@ defmodule Mydia.Jobs.MediaRematch do
       {:ok, updated} ->
         # Provenance is part of the re-match contract; a failed stamp must roll
         # back the relink so callers can retry rather than half-update.
+        #
+        # One exception: the download row being gone. The stamp is an audit
+        # trail, and there is nothing left to attach it to. Rolling back would
+        # discard a correct, disk-verified relink over bookkeeping, and since the
+        # row stays gone every retry fails identically until the job is
+        # discarded — leaving the media file permanently mis-linked (issue #285).
         case stamp_provenance(download, old_media_file) do
-          {:ok, _} -> updated
-          {:error, changeset} -> Repo.rollback({:provenance_failed, changeset})
+          {:ok, _} ->
+            updated
+
+          {:error, changeset} ->
+            if Downloads.stale_changeset?(changeset) do
+              Logger.info("Download row removed before provenance stamp; keeping the relink",
+                download_id: download.id
+              )
+
+              updated
+            else
+              Repo.rollback({:provenance_failed, changeset})
+            end
         end
 
       {:error, changeset} ->

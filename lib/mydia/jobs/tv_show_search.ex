@@ -1742,7 +1742,27 @@ defmodule Mydia.Jobs.TVShowSearch do
   # one it supersedes. Mirrors Mydia.Jobs.MovieSearch.attach_upgrade_target/2.
   defp attach_upgrade_target(%Download{} = download, %MediaFile{} = file) do
     metadata = Map.put(download.metadata || %{}, "upgrade_target_media_file_id", file.id)
-    Downloads.update_download(download, %{metadata: metadata})
+
+    case Downloads.update_download(download, %{metadata: metadata}) do
+      {:error, changeset} ->
+        # This runs as `after_grab`, inside a `with` whose else branch reports
+        # "Failed to initiate download". The grab already succeeded — a torrent
+        # is in the client. If the row vanished before this bookkeeping stamp
+        # landed, reporting failure would be a lie, and one that invites the
+        # caller to grab a second copy of the same release (issue #285).
+        if Downloads.stale_changeset?(changeset) do
+          Logger.debug("Download row removed before the upgrade target could be stamped",
+            download_id: download.id
+          )
+
+          {:ok, download}
+        else
+          {:error, changeset}
+        end
+
+      other ->
+        other
+    end
   end
 
   ## Private Functions - Helpers

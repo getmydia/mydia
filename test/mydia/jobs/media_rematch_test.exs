@@ -129,6 +129,71 @@ defmodule Mydia.Jobs.MediaRematchTest do
     end
   end
 
+  describe "download deleted mid-job" do
+    test "keeps the relink when the provenance stamp finds no row", %{tmp_dir: tmp} do
+      # Regression for #285. The provenance stamp is an audit trail written at
+      # the end of the relink transaction. If an operator clears the download
+      # while the job is moving the file, that write finds no row — and rolling
+      # the transaction back would throw away a correct, disk-verified relink
+      # over bookkeeping. Because the row stays gone, every retry would fail the
+      # same way until the job is discarded, leaving the file mis-linked for good.
+      library = movies_library(tmp)
+      old_movie = media_item_fixture(%{type: "movie", title: "Wrong Movie", year: 2020})
+      new_movie = media_item_fixture(%{type: "movie", title: "Right Movie", year: 2021})
+
+      {_abs, size} = write_source(library, "Wrong Movie (2020)/movie.mkv", "video-bytes")
+
+      download =
+        download_fixture(%{
+          media_item_id: new_movie.id,
+          imported_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      {:ok, media_file} =
+        Library.create_media_file(%{
+          relative_path: "Wrong Movie (2020)/movie.mkv",
+          library_path_id: library.id,
+          media_item_id: old_movie.id,
+          size: size,
+          metadata: %{"imported_from_download_id" => download.id}
+        })
+
+      # Delete the row on the job's opening read of it, which is well before the
+      # relink transaction opens. The match stops before the placeholder because
+      # that is adapter-specific (`?` on SQLite, `$1` on Postgres) — matching one
+      # form would leave this test silently inert on the other adapter.
+      handler_id = {__MODULE__, :delete_before_provenance, download.id}
+      test_pid = self()
+
+      :telemetry.attach(
+        handler_id,
+        [:mydia, :repo, :query],
+        fn _event, _measurements, metadata, _config ->
+          if self() == test_pid and metadata.source == "downloads" and
+               String.contains?(metadata.query, ~s|."id" = |) do
+            :telemetry.detach(handler_id)
+            {:ok, _} = Mydia.Downloads.delete_download(download)
+            send(test_pid, :download_deleted_mid_job)
+          end
+        end,
+        nil
+      )
+
+      on_exit(fn -> :telemetry.detach(handler_id) end)
+
+      assert {:ok, :rematched} = perform_job(MediaRematch, %{"download_id" => download.id})
+
+      # Without this the test would pass even if the delete never fired.
+      assert_received :download_deleted_mid_job
+
+      # The relink survived: parent flipped and the bytes are at the new path.
+      reloaded = Repo.get(MediaFile, media_file.id)
+      assert reloaded.media_item_id == new_movie.id
+      assert reloaded.relative_path == "Right Movie (2021)/movie.mkv"
+      assert File.exists?(Path.join(library.path, "Right Movie (2021)/movie.mkv"))
+    end
+  end
+
   describe "concurrency + idempotency" do
     test "adopts a scanner-created duplicate at the destination (no duplicate row)", %{
       tmp_dir: tmp

@@ -750,7 +750,24 @@ defmodule Mydia.Jobs.MovieSearch do
   # an existing download.
   defp attach_upgrade_target(%Download{} = download, %MediaFile{} = file) do
     metadata = Map.put(download.metadata || %{}, "upgrade_target_media_file_id", file.id)
-    Downloads.update_download(download, %{metadata: metadata})
+
+    case Downloads.update_download(download, %{metadata: metadata}) do
+      {:error, changeset} ->
+        # See the twin in `Mydia.Jobs.TvShowSearch`: the grab already succeeded,
+        # so a vanished row must not be reported as a failed initiate (#285).
+        if Downloads.stale_changeset?(changeset) do
+          Logger.debug("Download row removed before the upgrade target could be stamped",
+            download_id: download.id
+          )
+
+          {:ok, download}
+        else
+          {:error, changeset}
+        end
+
+      other ->
+        other
+    end
   end
 
   ## Private Functions - Search Delay
