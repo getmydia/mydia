@@ -4,6 +4,8 @@ defmodule Mydia.Media.CategoryClassifierTest do
   alias Mydia.Media.{CategoryClassifier, MediaItem}
   alias Mydia.Metadata.Structs.MediaMetadata
 
+  doctest Mydia.Media.CategoryClassifier
+
   # Helper to build a MediaItem with metadata
   defp build_media_item(type, metadata_attrs) do
     metadata = build_metadata(metadata_attrs)
