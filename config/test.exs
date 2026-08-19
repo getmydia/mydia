@@ -42,7 +42,11 @@ case database_adapter do
       pool_timeout: 60_000,
       timeout: 60_000,
       # Increase busy timeout to handle concurrent writes
-      busy_timeout: 30_000
+      busy_timeout: 30_000,
+      # See config/dev.exs. The SQL sandbox begins with mode: :transaction,
+      # which exqlite maps to a plain BEGIN, so this does not change how the
+      # sandbox wraps tests.
+      default_transaction_mode: :immediate
 end
 
 # We run a server during test for Wallaby browser-based feature tests.

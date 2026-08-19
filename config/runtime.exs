@@ -96,7 +96,9 @@ if config_env() == :prod do
         synchronous: :normal,
         foreign_keys: :on,
         # Increased busy_timeout to handle concurrent writes during library scans
-        busy_timeout: 30_000
+        busy_timeout: 30_000,
+        # BEGIN IMMEDIATE rather than BEGIN DEFERRED. See #283.
+        default_transaction_mode: :immediate
   end
 
   # The secret key base is used to sign/encrypt cookies and other secrets.
