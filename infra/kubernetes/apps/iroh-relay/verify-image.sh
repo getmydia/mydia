@@ -146,30 +146,43 @@ PROBE=0
 python3 - <<'PY' || PROBE=$?
 import os, socket, struct, sys
 
-dcid, scid = os.urandom(8), os.urandom(8)
-pkt = (
-    b"\xc0"                           # long header, fixed bit set
-    + struct.pack(">I", 0x1A2A3A4A)   # deliberately unsupported version
-    + bytes([len(dcid)]) + dcid
-    + bytes([len(scid)]) + scid
-)
-pkt += b"\x00" * (1200 - len(pkt))    # short Initials may be discarded
 
-s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-s.settimeout(5)
-s.sendto(pkt, ("127.0.0.1", 17842))
-try:
-    data, _ = s.recvfrom(2048)
-except socket.timeout:
-    print("    no answer from the QUIC listener")
+def probe():
+    dcid, scid = os.urandom(8), os.urandom(8)
+    pkt = (
+        b"\xc0"                           # long header, fixed bit set
+        + struct.pack(">I", 0x1A2A3A4A)   # deliberately unsupported version
+        + bytes([len(dcid)]) + dcid
+        + bytes([len(scid)]) + scid
+    )
+    pkt += b"\x00" * (1200 - len(pkt))    # short Initials may be discarded
+
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.settimeout(3)
+    try:
+        s.sendto(pkt, ("127.0.0.1", 17842))
+        data, _ = s.recvfrom(2048)
+        return data
+    except socket.timeout:
+        return None
+    finally:
+        s.close()
+
+
+# Three attempts, because UDP is allowed to drop one and because HTTP coming up
+# does not prove 7842 is bound yet. A retry costs nothing on a bad image: the
+# first datagram has already killed it by then.
+for _ in range(3):
+    data = probe()
+    if data is None:
+        continue
+    if len(data) >= 5 and data[0] & 0x80 and struct.unpack(">I", data[1:5])[0] == 0:
+        print("    version negotiation answered: the datagram was received")
+        sys.exit(0)
+    print(f"    answered with {len(data)} bytes, but not a version negotiation packet")
     sys.exit(1)
-finally:
-    s.close()
 
-if len(data) >= 5 and data[0] & 0x80 and struct.unpack(">I", data[1:5])[0] == 0:
-    print("    version negotiation answered: the datagram was received")
-    sys.exit(0)
-print(f"    answered with {len(data)} bytes, but not a version negotiation packet")
+print("    no answer from the QUIC listener after 3 attempts")
 sys.exit(1)
 PY
 
