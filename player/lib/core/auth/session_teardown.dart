@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show debugPrint;
 
 import '../channels/pairing_service.dart';
+import '../connection/connection_diagnostics_provider.dart';
 import '../settings/settings_service.dart';
 import 'auth_service.dart';
 import 'auth_storage.dart';
@@ -43,10 +44,12 @@ class SessionTeardown {
 
   final AuthStorage _storage;
 
-  /// Wipes the session, the pairing, the pinned certificates and the settings.
+  /// Wipes the session, the pairing, the pinned certificates, the settings
+  /// and the connection diagnostics.
   ///
-  /// Steps are independent. The session goes first because it is the wipe that
-  /// matters most, so it lands before anything else can misbehave.
+  /// Each step is wrapped in [bestEffort], so no step's outcome depends on
+  /// any other's and none can block the ones after it. The order below is a
+  /// priority ordering only; it provides no safety guarantee on its own.
   Future<void> run() async {
     final auth = AuthService(storage: _storage);
 
@@ -60,6 +63,10 @@ class SessionTeardown {
     await bestEffort(
       'settings',
       SettingsService(storage: _storage).clearSettings,
+    );
+    await bestEffort(
+      'diagnostics',
+      () => clearConnectionDiagnostics(_storage),
     );
   }
 }

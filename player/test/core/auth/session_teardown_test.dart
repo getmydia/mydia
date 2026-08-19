@@ -29,6 +29,8 @@ const _signedIn = {
   'auto_skip_segments': 'true',
   'library_sort_movies': 'YEAR:ASC',
   'library_sort_tvShows': 'RATING:DESC',
+  'diagnostics_last_direct_attempt': '2026-01-01T00:00:00.000Z',
+  'diagnostics_direct_url_errors': '{"https://mydia.local":{}}',
   'device_id': 'stable-id',
 };
 

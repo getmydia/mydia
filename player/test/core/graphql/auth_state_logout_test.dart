@@ -23,6 +23,22 @@ class _ThrowingConnectionNotifier extends ConnectionNotifier {
   Future<void> clear() async => throw Exception('keyring unavailable');
 }
 
+/// A connection notifier whose construction itself throws, standing in for
+/// the failure mode where `ref.read(connectionProvider.notifier)` throws
+/// synchronously, before clear() ever runs. Riverpod calls the constructor
+/// while resolving `.notifier`, so this (unlike a throwing `build()`, which
+/// Riverpod defers until the provider's *value* is read) reproduces a throw
+/// from the read itself, which has to happen inside bestEffort's guard and
+/// not while building its argument list.
+class _ThrowingConstructorConnectionNotifier extends ConnectionNotifier {
+  _ThrowingConstructorConnectionNotifier() {
+    throw Exception('connection provider unavailable');
+  }
+
+  @override
+  ConnectionState build() => const ConnectionState(type: ConnectionType.direct);
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -56,6 +72,36 @@ void main() {
 
     expect(await storage.read('pairing_device_token'), isNull);
     // And the throwing connection step did not prevent the sign-out itself.
+    expect(container.read(authStateProvider).value, AuthStatus.unauthenticated);
+    expect(await storage.read('auth_token'), isNull);
+  });
+
+  test(
+      'logout still signs out when reading the connection notifier throws synchronously',
+      () async {
+    final container = ProviderContainer(overrides: [
+      connectionProvider
+          .overrideWith(_ThrowingConstructorConnectionNotifier.new),
+    ]);
+    addTearDown(container.dispose);
+
+    final storage = getAuthStorage();
+    await storage.write('pairing_device_token', 'device-tok');
+
+    final notifier = container.read(authStateProvider.notifier);
+    await notifier.login(
+      serverUrl: 'https://mydia.local',
+      token: 'tok',
+      userId: 'u1',
+      username: 'admin',
+    );
+    expect(container.read(authStateProvider).value, AuthStatus.authenticated);
+
+    await notifier.logout();
+
+    expect(await storage.read('pairing_device_token'), isNull);
+    // The connection notifier blew up on read, before clear() ever ran, and
+    // the state flip still has to land.
     expect(container.read(authStateProvider).value, AuthStatus.unauthenticated);
     expect(await storage.read('auth_token'), isNull);
   });

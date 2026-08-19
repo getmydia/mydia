@@ -292,9 +292,11 @@ class AuthStateNotifier extends Notifier<AsyncValue<AuthStatus>> {
 
     // Read through the provider rather than the teardown: clear() also resets
     // the in-memory connection state, which wiping storage alone would not.
+    // The read happens inside the closure, not while building the argument
+    // list, so a throw from it is caught by bestEffort too.
     await bestEffort(
       'connection',
-      ref.read(connectionProvider.notifier).clear,
+      () => ref.read(connectionProvider.notifier).clear(),
     );
 
     // Last, because this is what redirects the router to /login.
