@@ -19,6 +19,10 @@ defmodule MydiaWeb.IndexerComponents do
   completion count, and a failed count — with an expandable `<details>` list of
   one row per indexer.
 
+  While any indexer is still outstanding the summary carries a spinner and a
+  determinate progress bar, so an in-flight search is obvious without expanding
+  the list. Both are replaced by a success check once every indexer settles.
+
   `progress` is a map of `indexer_id => %IndexerProgress{}`. Pass `retry_event`
   to render a retry button on failed and timed-out indexers; the button sends
   that event with `phx-value-id` set to the indexer id.
@@ -45,13 +49,34 @@ defmodule MydiaWeb.IndexerComponents do
       |> assign(:done, done)
       |> assign(:total, total)
       |> assign(:failed, failed)
+      # Derived rather than passed in: a row is :pending until it settles, and
+      # a retry puts a settled row back to :pending, so this tracks a retry's
+      # in-flight window too.
+      |> assign(:searching, done < total)
 
     ~H"""
-    <div :if={@rows != []} id="indexer-search-status" class="mb-4">
+    <div :if={@rows != []} id="indexer-search-status" class="mb-4" aria-busy={to_string(@searching)}>
       <details class="collapse collapse-arrow bg-base-200/50 border border-base-300">
-        <summary class="collapse-title text-sm font-medium flex items-center gap-2">
+        <summary class="collapse-title text-sm font-medium flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span
+            :if={@searching}
+            class="loading loading-spinner loading-xs text-primary shrink-0"
+            aria-hidden="true"
+          ></span>
+          <.icon
+            :if={!@searching}
+            name="hero-check-circle"
+            class="w-4 h-4 shrink-0 text-success"
+          />
+          <span :if={@searching} class="sr-only">Searching indexers</span>
           <span>{@total_results} results · {@done}/{@total} indexers</span>
           <span :if={@failed > 0} class="badge badge-sm badge-error">{@failed} failed</span>
+          <progress
+            :if={@searching}
+            class="progress progress-primary w-full h-1"
+            value={@done}
+            max={@total}
+          ></progress>
         </summary>
         <div class="collapse-content">
           <ul class="menu w-full">
