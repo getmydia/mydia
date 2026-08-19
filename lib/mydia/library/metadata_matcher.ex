@@ -20,6 +20,17 @@ defmodule Mydia.Library.MetadataMatcher do
 
   @type match_result :: MatchResult.t()
 
+  # Cost of a known-wrong year on an otherwise plausible title. Sized against
+  # `Mydia.ImportGroups`' 0.85 auto-accept threshold: an exact title match
+  # cannot score below 0.9, so anything at or under 0.10 leaves a contradicted
+  # year auto-accepting silently. Sized from above too -- `select_best_tv_match/2`
+  # discards anything under 0.5, and a suggestion a reviewer can see and correct
+  # beats falling through to the series-level guess, so a contradicted exact
+  # title still lands around 0.65-0.7: queued for review, not thrown away. Only
+  # a weak title *and* a wrong year fall through entirely, which is the one
+  # combination carrying no evidence worth showing anyone.
+  @year_contradiction_penalty 0.25
+
   @doc """
   Normalizes a search query by removing metadata artifacts from filenames.
 
@@ -809,6 +820,13 @@ defmodule Mydia.Library.MetadataMatcher do
       base_score
       |> add_score(title_sim, 0.2)
       |> add_score(year_match?(result.year, parsed.year), 0.15)
+      # Movies cannot suffer the title-tie inversion the TV scorer did -- year
+      # outweighs the exact-title bonus here, so a correct-year candidate
+      # already outranks a same-title wrong-year one, and TMDB does not append
+      # "(YYYY)" to titles the way TVDB does. What they do share is the other
+      # half: an exact title with a popular but wrong-year result reaches 0.9
+      # and auto-accepts a remake as its original. Same penalty, same reason.
+      |> add_score(year_contradiction?(result.year, parsed.year), -@year_contradiction_penalty)
       |> add_score(popularity_score(result.popularity), 0.1)
       # Bonus for exact title match (when search exactly matches result title)
       |> add_score(exact_title_match?(result.title, parsed.title), 0.1)
@@ -819,19 +837,40 @@ defmodule Mydia.Library.MetadataMatcher do
   end
 
   defp calculate_tv_match_score(result, parsed) do
+    # TVDB disambiguates same-title reboots by appending the premiere year to
+    # the series name: the 2019 revival of "Passe-Partout" is filed as
+    # "Passe-Partout (2019)" alongside the 1977 original's bare
+    # "Passe-Partout". Compared verbatim, that suffix reads as a *derivative*
+    # title -- the "Bluey Cookalongs" shape -- so the revival lost the exact
+    # title bonus, dropped to 0.8 similarity and took the derivative penalty on
+    # top, a 0.25 swing against it. The one marker that identifies the right
+    # show was being scored as evidence against it. Strip it before comparing,
+    # and treat the year it carries as the result's year when the provider
+    # sends none of its own.
+    {result_title, title_year} = split_title_year(result.title)
+    result_year = result.year || title_year
+    title_sim = title_similarity(result_title, parsed.title)
     base_score = 0.5
-    title_sim = title_similarity(result.title, parsed.title)
 
     score =
       base_score
       |> add_score(title_sim, 0.25)
-      |> add_score(year_match?(result.year, parsed.year), 0.1)
+      |> add_score(year_match?(result_year, parsed.year), 0.1)
+      # A year we know to be wrong is not the same as a year we do not know,
+      # and scoring both as a missing 0.1 bonus is what let the original
+      # outrank the revival. An exact title alone floors the score at 0.9,
+      # comfortably over the 0.85 auto-accept threshold, so no bonus this
+      # scorer can withhold is able to overturn a title tie -- only a real
+      # penalty is. TVDB never sends `popularity`, so for the whole TV path
+      # the year is the *only* signal left that separates a show from its
+      # reboot.
+      |> add_score(year_contradiction?(result_year, parsed.year), -@year_contradiction_penalty)
       |> add_score(popularity_score(result.popularity), 0.1)
       |> add_score(result.first_air_date != nil, 0.05)
       # Bonus for exact title match (when search exactly matches result title)
-      |> add_score(exact_title_match?(result.title, parsed.title), 0.15)
+      |> add_score(exact_title_match?(result_title, parsed.title), 0.15)
       # Penalty for derivative titles (prefer "Bluey" over "Bluey Cookalongs")
-      |> add_score(title_derivative_penalty(result.title, parsed.title), 1.0)
+      |> add_score(title_derivative_penalty(result_title, parsed.title), 1.0)
 
     min(score, 1.0)
   end
@@ -908,6 +947,31 @@ defmodule Mydia.Library.MetadataMatcher do
   end
 
   defp year_match?(_result_year, _parsed_year), do: false
+
+  # True only when both years are known and disagree by more than the ±1
+  # release-date slack `year_match?/2` allows. Deliberately narrower than
+  # `not year_match?/2`: a year missing from either side is an absence of
+  # evidence and must stay unpenalised, or every show whose folder carries no
+  # year would be pushed into review.
+  defp year_contradiction?(result_year, parsed_year)
+       when is_integer(result_year) and is_integer(parsed_year) do
+    abs(result_year - parsed_year) > 1
+  end
+
+  defp year_contradiction?(_result_year, _parsed_year), do: false
+
+  # Splits a provider's disambiguating year suffix off a title:
+  # "Passe-Partout (2019)" -> {"Passe-Partout", 2019}, "Bluey" -> {"Bluey", nil}.
+  # Only a trailing parenthesised four-digit year is treated this way, so a
+  # genuine parenthetical ("The Office (US)") is left intact.
+  defp split_title_year(title) when is_binary(title) do
+    case Regex.run(~r/^(.*?)\s*\((\d{4})\)\s*$/u, title) do
+      [_, bare, year] when bare != "" -> {bare, String.to_integer(year)}
+      _ -> {title, nil}
+    end
+  end
+
+  defp split_title_year(title), do: {title, nil}
 
   # Convert database metadata to MediaMetadata struct
   # If metadata is nil, create a minimal struct from the media item
