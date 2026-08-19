@@ -55,6 +55,26 @@ class ContinueWatchingItem {
   bool get isEpisode => type.toLowerCase() == 'episode';
   bool get isMovie => type.toLowerCase() == 'movie';
 
+  /// The media item that "Remove from Continue Watching" hides for this card.
+  ///
+  /// For an episode that is the show, not [id]: the rail carries one card per
+  /// series, so the card stands for the series and hiding only this episode
+  /// would hand the show back with the next one. [id] is the episode's own id,
+  /// which the server refuses outright.
+  ///
+  /// Null for an episode whose `showId` the server did not send, which is the
+  /// only case with nothing to hide. Callers treat null as "no removal
+  /// offered" rather than falling back to [id], since falling back would send
+  /// the episode id the server rejects.
+  String? get continueWatchingKey => isEpisode ? showId : id;
+
+  /// Whether this card would be hidden by a dismissal of [key].
+  ///
+  /// The comparison every optimistic removal needs: matching on [id] would
+  /// never remove an episode card, because the id removal is keyed on is its
+  /// show's.
+  bool dismissedBy(String key) => continueWatchingKey == key;
+
   String get displayTitle {
     final show = showTitle;
     final season = seasonNumber;

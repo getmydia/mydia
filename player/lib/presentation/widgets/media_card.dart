@@ -6,6 +6,7 @@ import '../../domain/models/media_file.dart';
 import '../../domain/models/watch_status.dart';
 import 'poster_badge_corner.dart';
 import 'poster_frame.dart';
+import 'poster_menu_button.dart';
 import 'progress_overlay.dart';
 import 'quality_badge.dart';
 import 'watch_indicator.dart';
@@ -46,6 +47,15 @@ class MediaCard extends StatelessWidget {
   /// card so the menu can anchor to it. Null means the card has no menu.
   final void Function(BuildContext cardContext)? onContextMenu;
 
+  /// Whether to show a persistent kebab that opens the same menu as
+  /// [onContextMenu]. Ignored when there is no menu to open.
+  ///
+  /// Off by default: most rails offer only navigation entries a card's own tap
+  /// already reaches, so a visible affordance would be clutter pointing at
+  /// nothing new. Continue Watching turns it on, where the menu carries an
+  /// action nothing else on the card offers.
+  final bool showMenuButton;
+
   /// If true, uses responsive sizing based on screen width.
   final bool responsive;
 
@@ -62,6 +72,7 @@ class MediaCard extends StatelessWidget {
     this.files,
     required this.action,
     this.onContextMenu,
+    this.showMenuButton = false,
     this.responsive = false,
   });
 
@@ -156,6 +167,15 @@ class MediaCard extends StatelessWidget {
                           ),
                       ],
                     ),
+                    // Routed through the same callback as the long-press, so
+                    // the button and the gesture can never offer different
+                    // menus.
+                    if (showMenuButton && contextMenu != null)
+                      Builder(
+                        builder: (buttonContext) => PosterMenuButton(
+                          onPressed: () => contextMenu(buttonContext),
+                        ),
+                      ),
                   ],
                 ),
               ),

@@ -326,6 +326,143 @@ void main() {
     });
   });
 
+  group('ContentRail remove from Continue Watching', () {
+    const movie = ContinueWatchingItem(
+      id: 'mv-1',
+      type: 'movie',
+      title: 'Heat',
+      files: [MediaFile(id: 'f-1', directPlaySupported: true)],
+    );
+
+    const episode = ContinueWatchingItem(
+      id: 'ep-1',
+      type: 'episode',
+      title: 'Pilot',
+      showId: 'show-1',
+      showTitle: 'The Bear',
+      seasonNumber: 1,
+      episodeNumber: 1,
+      files: [MediaFile(id: 'f-2', directPlaySupported: true)],
+    );
+
+    testWidgets('the menu offers removal when the rail can act on it',
+        (tester) async {
+      await tester.pumpWidget(
+        _host(ContentRail(
+          title: 'Continue Watching',
+          items: const [movie],
+          onItemActivate: (_) {},
+          onRemoveFromContinueWatching: (_) {},
+        )),
+      );
+      await tester.pump();
+
+      await tester.longPress(find.byType(MediaCard));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Remove from Continue Watching'), findsOneWidget);
+    });
+
+    // Without a handler the entry would be there to be selected and then do
+    // nothing, which is the trap the Play entry fell into on rails with no
+    // activate handler.
+    testWidgets('the menu omits removal when the rail cannot act on it',
+        (tester) async {
+      await tester.pumpWidget(
+        _host(ContentRail(
+          title: 'Continue Watching',
+          items: const [movie],
+          onItemActivate: (_) {},
+        )),
+      );
+      await tester.pump();
+
+      await tester.longPress(find.byType(MediaCard));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Remove from Continue Watching'), findsNothing);
+    });
+
+    testWidgets('a movie card reports itself as the thing to hide',
+        (tester) async {
+      String? removed;
+
+      await tester.pumpWidget(
+        _host(ContentRail(
+          title: 'Continue Watching',
+          items: const [movie],
+          onItemActivate: (_) {},
+          onRemoveFromContinueWatching: (item) =>
+              removed = item.continueWatchingKey,
+        )),
+      );
+      await tester.pump();
+
+      await tester.longPress(find.byType(MediaCard));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Remove from Continue Watching'));
+      await tester.pumpAndSettle();
+
+      expect(removed, 'mv-1');
+    });
+
+    // The whole point of keying on the show: an episode card stands for its
+    // series, and hiding the episode alone would hand the show back with the
+    // next one.
+    testWidgets('an episode card reports its show as the thing to hide',
+        (tester) async {
+      String? removed;
+
+      await tester.pumpWidget(
+        _host(ContentRail(
+          title: 'Continue Watching',
+          items: const [episode],
+          onItemActivate: (_) {},
+          onRemoveFromContinueWatching: (item) =>
+              removed = item.continueWatchingKey,
+        )),
+      );
+      await tester.pump();
+
+      await tester.longPress(find.byType(MediaCard));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Remove from Continue Watching'));
+      await tester.pumpAndSettle();
+
+      expect(removed, 'show-1');
+      expect(removed, isNot('ep-1'));
+    });
+
+    testWidgets('the kebab opens the same menu as the long press',
+        (tester) async {
+      await tester.pumpWidget(
+        _host(ContentRail(
+          title: 'Continue Watching',
+          items: const [movie],
+          onItemActivate: (_) {},
+          onRemoveFromContinueWatching: (_) {},
+        )),
+      );
+      await tester.pump();
+
+      expect(find.byIcon(Icons.more_vert_rounded), findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.more_vert_rounded));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Remove from Continue Watching'), findsOneWidget);
+    });
+
+    testWidgets('a rail with nothing to remove draws no kebab', (tester) async {
+      await tester.pumpWidget(
+        _host(ContentRail(title: 'Recently Added', items: _items(1))),
+      );
+      await tester.pump();
+
+      expect(find.byIcon(Icons.more_vert_rounded), findsNothing);
+    });
+  });
+
   group('ContentRail watch indicators', () {
     testWidgets('draws an unwatched dot on a recently added movie',
         (tester) async {

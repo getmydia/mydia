@@ -9,7 +9,9 @@ import '../../../domain/models/continue_watching_item.dart';
 import '../../../domain/models/watch_status.dart';
 import '../../widgets/browse_grid.dart';
 import '../../widgets/browse_scaffold.dart';
+import '../../widgets/media_context_menu.dart';
 import '../../widgets/media_poster.dart';
+import 'continue_watching_actions.dart' as cw_actions;
 import 'continue_watching_controller.dart';
 
 class ContinueWatchingScreen extends ConsumerStatefulWidget {
@@ -43,6 +45,34 @@ class _ContinueWatchingScreenState
         _scrollController.position.maxScrollExtent - 200) {
       ref.read(continueWatchingControllerProvider.notifier).loadMore();
     }
+  }
+
+  void _openMenu(BuildContext posterContext, ContinueWatchingItem item) {
+    showMediaContextMenu(
+      posterContext,
+      target: MediaContextTarget(
+        id: item.id,
+        type: item.type,
+        showId: item.showId,
+        hasFile: item.files.isNotEmpty,
+        continueWatchingId: item.continueWatchingKey,
+      ),
+      // Unreachable: with `tapPlays` false the menu never offers Play.
+      onPlay: () {},
+      onRemoveFromContinueWatching: () => _handleRemove(item),
+    );
+  }
+
+  Future<void> _handleRemove(ContinueWatchingItem item) async {
+    final key = item.continueWatchingKey;
+    if (key == null) return;
+
+    await cw_actions.reportRemovalFailure(
+      context,
+      () => ref
+          .read(continueWatchingControllerProvider.notifier)
+          .removeFromContinueWatching(key),
+    );
   }
 
   void _handleItemTap(BuildContext context, ContinueWatchingItem item) {
@@ -106,6 +136,12 @@ class _ContinueWatchingScreenState
                     ? null
                     : WatchStatus.fromProgress(item.progress!),
                 onTap: () => _handleItemTap(context, item),
+                // `tapPlays` stays false here: this grid opens the title, it
+                // does not play it. That suppresses the navigation entries,
+                // which would only repeat the tap, and leaves the removal.
+                onContextMenu: (posterContext) =>
+                    _openMenu(posterContext, item),
+                showMenuButton: item.continueWatchingKey != null,
               );
             },
           );

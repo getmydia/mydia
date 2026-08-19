@@ -26,6 +26,13 @@ class ContentRail extends StatefulWidget {
   /// item's files and progress, which an (id, type) pair cannot carry.
   final void Function(Object item)? onItemActivate;
 
+  /// Called when a card's menu asks to hide its title from Continue Watching.
+  ///
+  /// Null means the rail offers no such entry, which is every rail but one.
+  /// Passing it is also what puts the visible kebab on these cards: a rail
+  /// whose menu only repeats where a tap already goes does not earn one.
+  final void Function(ContinueWatchingItem item)? onRemoveFromContinueWatching;
+
   /// Turns the header into a disclosure and starts the rail collapsed, so only
   /// the title line is drawn until it is tapped. For rails that are supporting
   /// context rather than the reason the page was opened, an always-open strip
@@ -41,6 +48,7 @@ class ContentRail extends StatefulWidget {
     this.onItemTap,
     this.onSeeAllTap,
     this.onItemActivate,
+    this.onRemoveFromContinueWatching,
     this.collapsible = false,
   });
 
@@ -284,6 +292,11 @@ class _ContentRailState extends State<ContentRail> {
         showId: item.showId,
         hasFile: item.files.isNotEmpty,
         tapPlays: widget.onItemActivate != null,
+        // Null unless this rail can actually act on it, so the entry never
+        // appears where selecting it would do nothing.
+        continueWatchingId: widget.onRemoveFromContinueWatching == null
+            ? null
+            : item.continueWatchingKey,
       );
       return MediaCard(
         posterUrl: item.posterUrl,
@@ -303,6 +316,11 @@ class _ContentRailState extends State<ContentRail> {
             ? widget.onItemActivate!(item)
             : widget.onItemTap?.call(item.id, item.type),
         onContextMenu: (cardContext) => _openMenu(cardContext, target, item),
+        // Asked of the same function that builds the menu, rather than
+        // recomputed from the rail's own state, so the button cannot end up
+        // advertising a menu entry that is not there.
+        showMenuButton: mediaContextActionsFor(target)
+            .contains(MediaContextAction.removeFromContinueWatching),
       );
     } else if (item is RecentlyAddedItem) {
       final target = MediaContextTarget(id: item.id, type: item.type);
@@ -363,6 +381,9 @@ class _ContentRailState extends State<ContentRail> {
       cardContext,
       target: target,
       onPlay: () => widget.onItemActivate?.call(item),
+      onRemoveFromContinueWatching: item is ContinueWatchingItem
+          ? () => widget.onRemoveFromContinueWatching?.call(item)
+          : null,
     );
   }
 }

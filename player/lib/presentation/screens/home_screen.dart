@@ -10,6 +10,7 @@ import '../../domain/models/continue_watching_item.dart';
 import '../../domain/models/media_file.dart';
 import '../widgets/ambient_backdrop_provider.dart';
 import '../widgets/content_rail.dart';
+import 'continue_watching/continue_watching_actions.dart' as cw_actions;
 import '../widgets/freshness_header.dart';
 import '../widgets/glass_surface.dart';
 import '../widgets/shimmer_card.dart';
@@ -115,6 +116,25 @@ class HomeScreen extends ConsumerWidget {
     }
   }
 
+  /// A card with no show id is an episode the server sent without one. There
+  /// is nothing to hide in that case, and the menu entry is already absent, so
+  /// this only guards the callback against being reached another way.
+  Future<void> _handleRemove(
+    BuildContext context,
+    WidgetRef ref,
+    ContinueWatchingItem item,
+  ) async {
+    final key = item.continueWatchingKey;
+    if (key == null) return;
+
+    await cw_actions.reportRemovalFailure(
+      context,
+      () => ref
+          .read(homeControllerProvider.notifier)
+          .removeFromContinueWatching(key),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final homeData = ref.watch(homeControllerProvider);
@@ -216,6 +236,8 @@ class HomeScreen extends ConsumerWidget {
                                   _handleItemTap(context, id, type),
                               onItemActivate: (item) =>
                                   _handlePlay(context, item),
+                              onRemoveFromContinueWatching: (item) =>
+                                  _handleRemove(context, ref, item),
                             ),
                           if (data.recentlyAdded.isNotEmpty)
                             ContentRail(

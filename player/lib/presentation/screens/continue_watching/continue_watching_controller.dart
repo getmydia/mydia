@@ -8,6 +8,7 @@ import '../../../core/graphql/watch/controller_watcher.dart';
 import '../../../core/graphql/watch/query_key.dart';
 import '../../../core/graphql/watch/query_watcher.dart';
 import '../../../domain/models/continue_watching_item.dart';
+import 'continue_watching_actions.dart' as actions;
 
 part 'continue_watching_controller.g.dart';
 
@@ -103,6 +104,20 @@ class ContinueWatchingData {
     required this.hasMore,
     this.endCursor,
   });
+
+  /// Exists so an optimistic edit to [items] cannot silently drop the paging
+  /// state, which would strand the viewer on page one with no way to load more.
+  ContinueWatchingData copyWith({
+    List<ContinueWatchingItem>? items,
+    bool? hasMore,
+    String? endCursor,
+  }) {
+    return ContinueWatchingData(
+      items: items ?? this.items,
+      hasMore: hasMore ?? this.hasMore,
+      endCursor: endCursor ?? this.endCursor,
+    );
+  }
 
   bool get isEmpty => items.isEmpty;
 }
@@ -207,6 +222,35 @@ class ContinueWatchingController extends _$ContinueWatchingController {
       debugPrint('ContinueWatchingController.loadMore failed: $error');
     } finally {
       _loadingMore = false;
+    }
+  }
+
+  /// Hides a title from Continue Watching and drops its card from the grid.
+  ///
+  /// [key] is `ContinueWatchingItem.continueWatchingKey`, the show for an
+  /// episode card. Matching on the item's own id would never remove an episode
+  /// card, since the id being hidden is its show's.
+  ///
+  /// The splice below is doing more work here than on the home rail. Once the
+  /// viewer has paged, `canRefetch` returns false and the invalidation only
+  /// clears the fetch log rather than refetching, so nothing on the server
+  /// side corrects a splice that misses until this screen is torn down.
+  Future<void> removeFromContinueWatching(String key) async {
+    final currentState = state.value;
+    if (currentState == null) return;
+
+    state = AsyncValue.data(
+      currentState.copyWith(
+        items:
+            currentState.items.where((item) => !item.dismissedBy(key)).toList(),
+      ),
+    );
+
+    try {
+      await actions.removeFromContinueWatching(ref, key);
+    } catch (_) {
+      state = AsyncValue.data(currentState);
+      rethrow;
     }
   }
 }
