@@ -36,4 +36,39 @@ void main() {
 
     expect(storage.contents, {'device_id': 'stable-id'});
   });
+
+  test(
+      'an early refused delete does not strand pairing_device_token '
+      '(the key that mints fresh access tokens)', () async {
+    final storage = MockAuthStorage()
+      ..seedData({
+        'pairing_server_url': 'p2p://server',
+        'pairing_device_id': 'dev-1',
+        'pairing_media_token': 'media-tok',
+        'pairing_media_token_expiry': '2026-01-01T00:00:00.000Z',
+        'pairing_access_token': 'access-tok',
+        'pairing_device_token': 'device-tok',
+        'pairing_direct_urls': '["https://mydia.local"]',
+        'pairing_cert_fingerprint': 'aa:bb:cc',
+        'pairing_instance_name': 'Home',
+        'server_public_key': 'pubkey',
+        'instance_id': 'inst-1',
+        'server_node_addr': 'node-addr',
+      })
+      // The first delete in the sequence refuses. Sequential awaits would
+      // abort here and strand every key after it, pairing_device_token
+      // included.
+      ..failDeleteKeys.add('pairing_server_url');
+
+    // The aggregate rejection is expected. Production wraps this call in
+    // bestEffort; the test only cares what happened to storage before the
+    // rejection surfaced.
+    await expectLater(
+      PairingService(authStorage: storage).clearCredentials(),
+      throwsA(anything),
+    );
+
+    expect(storage.containsKey('pairing_device_token'), isFalse);
+    expect(storage.contents.keys.toSet(), {'pairing_server_url'});
+  });
 }

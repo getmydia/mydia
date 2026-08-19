@@ -28,8 +28,12 @@ abstract class _DiagnosticsKeys {
 /// server's direct URLs, which should not outlive the session that
 /// produced them.
 Future<void> clearConnectionDiagnostics(AuthStorage storage) async {
-  await storage.delete(_DiagnosticsKeys.lastDirectAttempt);
-  await storage.delete(_DiagnosticsKeys.directUrlErrors);
+  // Concurrent, not sequential: one refused delete must not strand the
+  // other key.
+  await Future.wait([
+    storage.delete(_DiagnosticsKeys.lastDirectAttempt),
+    storage.delete(_DiagnosticsKeys.directUrlErrors),
+  ]);
 }
 
 /// Simple result type for URL attempts.

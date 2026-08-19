@@ -401,18 +401,29 @@ class PairingService {
   }
 
   /// Clears stored pairing credentials.
+  ///
+  /// The deletes run concurrently, not sequentially. A sequence of awaits
+  /// means one refused delete aborts every delete after it, and
+  /// [_StorageKeys.deviceToken] mints fresh access tokens through a
+  /// deliberately unauthenticated server mutation, so stranding it would
+  /// leave the server reachable after the user signed out. `Future.wait`
+  /// starts every delete and, with its default `eagerError: false`, waits
+  /// for all of them to settle before reporting failure, so a refused key
+  /// cannot strand the rest.
   Future<void> clearCredentials() async {
-    await _authStorage.delete(_StorageKeys.serverUrl);
-    await _authStorage.delete(_StorageKeys.deviceId);
-    await _authStorage.delete(_StorageKeys.mediaToken);
-    await _authStorage.delete(_StorageKeys.mediaTokenExpiry);
-    await _authStorage.delete(_StorageKeys.accessToken);
-    await _authStorage.delete(_StorageKeys.deviceToken);
-    await _authStorage.delete(_StorageKeys.directUrls);
-    await _authStorage.delete(_StorageKeys.certFingerprint);
-    await _authStorage.delete(_StorageKeys.instanceName);
-    await _authStorage.delete(_StorageKeys.serverPublicKey);
-    await _authStorage.delete(_StorageKeys.instanceId);
-    await _authStorage.delete(_StorageKeys.serverNodeAddr);
+    await Future.wait([
+      _authStorage.delete(_StorageKeys.serverUrl),
+      _authStorage.delete(_StorageKeys.deviceId),
+      _authStorage.delete(_StorageKeys.mediaToken),
+      _authStorage.delete(_StorageKeys.mediaTokenExpiry),
+      _authStorage.delete(_StorageKeys.accessToken),
+      _authStorage.delete(_StorageKeys.deviceToken),
+      _authStorage.delete(_StorageKeys.directUrls),
+      _authStorage.delete(_StorageKeys.certFingerprint),
+      _authStorage.delete(_StorageKeys.instanceName),
+      _authStorage.delete(_StorageKeys.serverPublicKey),
+      _authStorage.delete(_StorageKeys.instanceId),
+      _authStorage.delete(_StorageKeys.serverNodeAddr),
+    ]);
   }
 }
