@@ -15,13 +15,40 @@ defmodule MydiaWeb.MediaLive.Show.DownloadEvents do
 
   require Logger
 
-  def show_download_cancel_confirm(%{"download-id" => download_id}, socket) do
-    download = Downloads.get_download!(download_id)
+  # Loads the download an event names and hands it to `fun`.
+  #
+  # The id came from the rendered page, so it can name a row that is already
+  # gone by the time the click lands — an import that completed, another tab, or
+  # DownloadMonitor's own reject path. `get_download!/2` turned that ordinary
+  # race into a crashed LiveView; tell the operator and re-render (issue #281).
+  defp with_download(socket, id, opts \\ [], fun) do
+    case Downloads.get_download(id, opts) do
+      nil ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "That download no longer exists.")
+         |> refresh_downloads()}
 
-    {:noreply,
-     socket
-     |> assign(:show_download_cancel_confirm, true)
-     |> assign(:download_to_cancel, download)}
+      download ->
+        fun.(download)
+    end
+  end
+
+  defp refresh_downloads(socket) do
+    assign(
+      socket,
+      :downloads_with_status,
+      load_downloads_with_status(socket.assigns.media_item)
+    )
+  end
+
+  def show_download_cancel_confirm(%{"download-id" => download_id}, socket) do
+    with_download(socket, download_id, fn download ->
+      {:noreply,
+       socket
+       |> assign(:show_download_cancel_confirm, true)
+       |> assign(:download_to_cancel, download)}
+    end)
   end
 
   def hide_download_cancel_confirm(_params, socket) do
@@ -52,12 +79,12 @@ defmodule MydiaWeb.MediaLive.Show.DownloadEvents do
   end
 
   def show_download_delete_confirm(%{"download-id" => download_id}, socket) do
-    download = Downloads.get_download!(download_id)
-
-    {:noreply,
-     socket
-     |> assign(:show_download_delete_confirm, true)
-     |> assign(:download_to_delete, download)}
+    with_download(socket, download_id, fn download ->
+      {:noreply,
+       socket
+       |> assign(:show_download_delete_confirm, true)
+       |> assign(:download_to_delete, download)}
+    end)
   end
 
   def hide_download_delete_confirm(_params, socket) do
@@ -89,12 +116,12 @@ defmodule MydiaWeb.MediaLive.Show.DownloadEvents do
   end
 
   def show_download_details(%{"download-id" => download_id}, socket) do
-    download = Downloads.get_download!(download_id)
-
-    {:noreply,
-     socket
-     |> assign(:show_download_details_modal, true)
-     |> assign(:download_details, download)}
+    with_download(socket, download_id, fn download ->
+      {:noreply,
+       socket
+       |> assign(:show_download_details_modal, true)
+       |> assign(:download_details, download)}
+    end)
   end
 
   def hide_download_details(_params, socket) do
@@ -105,39 +132,40 @@ defmodule MydiaWeb.MediaLive.Show.DownloadEvents do
   end
 
   def retry_download(%{"download-id" => download_id}, socket) do
-    download = Downloads.get_download!(download_id, preload: [:media_item, :episode])
+    with_download(socket, download_id, [preload: [:media_item, :episode]], fn download ->
+      case Downloads.update_download(download, %{error_message: nil}) do
+        {:ok, updated} ->
+          search_result = %SearchResult{
+            download_url: updated.download_url,
+            title: updated.title,
+            indexer: updated.indexer,
+            size: updated.metadata["size"],
+            seeders: updated.metadata["seeders"],
+            leechers: updated.metadata["leechers"],
+            quality: updated.metadata["quality"]
+          }
 
-    case Downloads.update_download(download, %{error_message: nil}) do
-      {:ok, updated} ->
-        search_result = %SearchResult{
-          download_url: updated.download_url,
-          title: updated.title,
-          indexer: updated.indexer,
-          size: updated.metadata["size"],
-          seeders: updated.metadata["seeders"],
-          leechers: updated.metadata["leechers"],
-          quality: updated.metadata["quality"]
-        }
+          opts =
+            []
+            |> maybe_add_opt(:media_item_id, updated.media_item_id)
+            |> maybe_add_opt(:episode_id, updated.episode_id)
+            |> maybe_add_opt(:client_name, updated.download_client)
 
-        opts =
-          []
-          |> maybe_add_opt(:media_item_id, updated.media_item_id)
-          |> maybe_add_opt(:episode_id, updated.episode_id)
-          |> maybe_add_opt(:client_name, updated.download_client)
+          Downloads.delete_download(updated)
 
-        Downloads.delete_download(updated)
+          case Downloads.initiate_download(search_result, opts) do
+            {:ok, _new_download} ->
+              {:noreply, put_flash(socket, :info, "Download re-initiated")}
 
-        case Downloads.initiate_download(search_result, opts) do
-          {:ok, _new_download} ->
-            {:noreply, put_flash(socket, :info, "Download re-initiated")}
+            {:error, reason} ->
+              {:noreply,
+               put_flash(socket, :error, "Failed to retry download: #{inspect(reason)}")}
+          end
 
-          {:error, reason} ->
-            {:noreply, put_flash(socket, :error, "Failed to retry download: #{inspect(reason)}")}
-        end
-
-      {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Failed to update download")}
-    end
+        {:error, _changeset} ->
+          {:noreply, put_flash(socket, :error, "Failed to update download")}
+      end
+    end)
   end
 
   @doc false
@@ -145,15 +173,23 @@ defmodule MydiaWeb.MediaLive.Show.DownloadEvents do
   # record never reached a client, so there is nothing to clean up remotely.
   def dismiss_failed_grab(%{"id" => id}, socket) do
     with :ok <- Authorization.authorize_manage_downloads(socket) do
-      download = Downloads.get_download!(id)
-      {:ok, _} = Downloads.delete_download(download)
+      with_download(socket, id, fn download ->
+        # A failed grab another tab already dismissed reads as `{:error, _}` now
+        # that a vanished row no longer raises (issue #281). Either way the row
+        # is gone, which is what the operator asked for, so re-render and move on.
+        case Downloads.delete_download(download) do
+          {:ok, _} ->
+            :ok
 
-      {:noreply,
-       assign(
-         socket,
-         :downloads_with_status,
-         load_downloads_with_status(socket.assigns.media_item)
-       )}
+          {:error, changeset} ->
+            Logger.info("Failed grab already dismissed",
+              download_id: id,
+              errors: inspect(changeset.errors)
+            )
+        end
+
+        {:noreply, refresh_downloads(socket)}
+      end)
     else
       {:unauthorized, socket} -> {:noreply, socket}
     end
