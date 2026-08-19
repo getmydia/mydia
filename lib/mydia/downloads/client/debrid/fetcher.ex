@@ -267,9 +267,18 @@ defmodule Mydia.Downloads.Client.Debrid.Fetcher do
           descriptor
       end)
 
-    download = History.get_download!(state.download_id)
-    new_metadata = Map.merge(download.metadata || %{}, %{"debrid_urls" => persisted})
-    History.update_download(download, %{metadata: new_metadata})
+    case History.get_download(state.download_id) do
+      nil ->
+        # Cancelled or deleted while we were resolving. Report it as an ordinary
+        # fetch failure so the caller's error path runs, rather than raising out
+        # of the GenServer and bypassing both the retry back-off and
+        # `fail_download/2` (issue #281).
+        {:error, Error.api_error("download row no longer exists")}
+
+      download ->
+        new_metadata = Map.merge(download.metadata || %{}, %{"debrid_urls" => persisted})
+        History.update_download(download, %{metadata: new_metadata})
+    end
   end
 
   defp stream_all(urls, download_dir, state, download) do
@@ -452,15 +461,22 @@ defmodule Mydia.Downloads.Client.Debrid.Fetcher do
     # forever and the file sits in staging without ever being imported.
     # The cron's `handle_completed_download/2` is what should stamp
     # completed_at — right before it enqueues the import job.
-    download = History.get_download!(state.download_id)
+    case History.get_download(state.download_id) do
+      # Cancelled or deleted while the payload was streaming (issue #281). There
+      # is no row left to point at the staging directory, so report it rather
+      # than raising out of the GenServer.
+      nil ->
+        {:error, Error.api_error("download row no longer exists")}
 
-    save_path = download_dir!(state)
+      download ->
+        save_path = download_dir!(state)
 
-    new_metadata = Map.merge(download.metadata || %{}, %{"save_path" => save_path})
+        new_metadata = Map.merge(download.metadata || %{}, %{"save_path" => save_path})
 
-    case History.update_download(download, %{metadata: new_metadata}) do
-      {:ok, _} -> {:ok, state}
-      {:error, cs} -> {:error, Error.unknown("failed to finalize download: #{inspect(cs)}")}
+        case History.update_download(download, %{metadata: new_metadata}) do
+          {:ok, _} -> {:ok, state}
+          {:error, cs} -> {:error, Error.unknown("failed to finalize download: #{inspect(cs)}")}
+        end
     end
   end
 
@@ -517,17 +533,19 @@ defmodule Mydia.Downloads.Client.Debrid.Fetcher do
       "Debrid fetcher failed for download_id=#{state.download_id}: #{Error.message(error)}"
     )
 
-    case History.get_download!(state.download_id) do
+    case History.get_download(state.download_id) do
       %Download{} = d ->
         History.update_download(d, %{
           import_failed_at: DateTime.utc_now(),
           import_last_error: "fetch_failed: #{Error.message(error)}"
         })
 
-      _ ->
+      # The row is already gone — nothing to record the failure on.
+      nil ->
         :ok
     end
   rescue
+    # Recording the failure must never itself fail the fetcher.
     _ -> :ok
   end
 

@@ -374,13 +374,21 @@ defmodule Mydia.Downloads.Seedbox.Fetcher do
   end
 
   defp finalize(state) do
-    download = History.get_download!(state.download_id)
-    save_path = local_download_dir(state)
-    new_metadata = Map.merge(download.metadata || %{}, %{"save_path" => save_path})
+    case History.get_download(state.download_id) do
+      # Cancelled or deleted while the payload was being pulled (issue #281).
+      # There is no row left to point at the staging directory, so report it
+      # rather than raising out of the GenServer and skipping `fail_download/2`.
+      nil ->
+        {:error, :download_deleted}
 
-    case History.update_download(download, %{metadata: new_metadata}) do
-      {:ok, _} -> {:ok, :done}
-      {:error, changeset} -> {:error, {:finalize_failed, changeset}}
+      download ->
+        save_path = local_download_dir(state)
+        new_metadata = Map.merge(download.metadata || %{}, %{"save_path" => save_path})
+
+        case History.update_download(download, %{metadata: new_metadata}) do
+          {:ok, _} -> {:ok, :done}
+          {:error, changeset} -> {:error, {:finalize_failed, changeset}}
+        end
     end
   end
 
@@ -392,17 +400,19 @@ defmodule Mydia.Downloads.Seedbox.Fetcher do
       "Seedbox fetch failed for download_id=#{state.download_id}: #{inspect(reason)}"
     )
 
-    case History.get_download!(state.download_id) do
+    case History.get_download(state.download_id) do
       %Download{} = d ->
         History.update_download(d, %{
           import_failed_at: DateTime.utc_now(),
           import_last_error: "seedbox_fetch_failed: #{inspect(reason)}"
         })
 
-      _ ->
+      # The row is already gone — nothing to record the failure on.
+      nil ->
         :ok
     end
   rescue
+    # Recording the failure must never itself fail the fetcher.
     _ -> :ok
   end
 end
