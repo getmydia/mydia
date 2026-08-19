@@ -56,7 +56,7 @@ defmodule MetadataRelay.Feedback.IssueDraft do
 
   defp body(submission, dashboard_url) do
     [
-      submission.message,
+      defang(submission.message),
       "",
       "---",
       provenance(submission),
@@ -64,6 +64,21 @@ defmodule MetadataRelay.Feedback.IssueDraft do
     ]
     |> Enum.reject(&is_nil/1)
     |> Enum.join("\n")
+  end
+
+  @doc false
+  # Feedback is submitted anonymously and the issue is public, so a reporter
+  # could otherwise make a maintainer's account ping arbitrary people with
+  # `@someone` or backlink an unrelated issue with `#123`. GitHub's own escape
+  # is an empty HTML comment: it renders as the original text but stops the
+  # mention and the autolink.
+  def defang(nil), do: nil
+
+  def defang(message) do
+    message
+    |> to_string()
+    |> String.replace(~r/(?<![\w`])@(?=[A-Za-z0-9])/, "@<!---->")
+    |> String.replace(~r/(?<![\w`&])#(?=\d)/, "#<!---->")
   end
 
   defp provenance(%Submission{mydia_version: nil}), do: "Reported via in-app feedback."

@@ -60,6 +60,32 @@ defmodule MetadataRelay.Feedback.IssueDraftTest do
     assert draft.body =~ "Reported via in-app feedback"
   end
 
+  test "mentions and issue references in the message cannot ping or backlink" do
+    draft =
+      draft_for(%{
+        message: "cc @getmydia/maintainers and @someuser, same as #123 and issue #4"
+      })
+
+    refute draft.body =~ "@getmydia"
+    refute draft.body =~ "@someuser"
+    refute draft.body =~ ~r/(?<!<!---->)#123/
+
+    # The text still reads the same to a human.
+    assert draft.body =~ "@<!---->getmydia/maintainers"
+    assert draft.body =~ "@<!---->someuser"
+    assert draft.body =~ "#<!---->123"
+    assert draft.body =~ "#<!---->4"
+  end
+
+  test "defanging leaves text that GitHub would not linkify alone" do
+    draft = draft_for(%{message: "Email me at a@b.com, C# code, 100% broken, issue ##"})
+
+    assert draft.body =~ "a@b.com"
+    assert draft.body =~ "C# code"
+    assert draft.body =~ "100% broken"
+    assert draft.body =~ "issue ##"
+  end
+
   test "identifying fields never reach the draft" do
     draft =
       draft_for(%{
