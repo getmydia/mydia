@@ -358,6 +358,43 @@ defmodule Mydia.RemoteAccess do
     :ok
   end
 
+  @doc """
+  Records liveness for the device named in a verified access token's claims.
+
+  The remote access admin page derives "online" entirely from `last_seen_at`,
+  so without this a player streaming over p2p right now still reads as never
+  connected. Claims without a `"device_id"` (a plain user login rather than a
+  paired device) are ignored.
+  """
+  def touch_device_from_claims(%{"device_id" => device_id}) when is_binary(device_id) do
+    touch_device_if_stale(device_id)
+    :ok
+  end
+
+  def touch_device_from_claims(_claims), do: :ok
+
+  @doc """
+  Updates `last_seen_at` unless it was already written inside the throttle window.
+
+  Accepts a loaded device or a device id. Synchronous: callers on a request path
+  are already holding a database connection, and the throttle keeps this to one
+  write per device per #{@touch_throttle_seconds} seconds.
+  """
+  def touch_device_if_stale(device_id) when is_binary(device_id) do
+    case get_device(device_id) do
+      nil -> {:error, :not_found}
+      device -> touch_device_if_stale(device)
+    end
+  end
+
+  def touch_device_if_stale(%RemoteDevice{} = device) do
+    if should_touch_device?(device) do
+      touch_device(device)
+    else
+      {:ok, device}
+    end
+  end
+
   defp should_touch_device?(%{last_seen_at: nil}), do: true
 
   defp should_touch_device?(%{last_seen_at: last_seen_at}) do

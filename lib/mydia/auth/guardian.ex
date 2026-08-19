@@ -47,9 +47,24 @@ defmodule Mydia.Auth.Guardian do
   Verifies and decodes a token, returning the user.
   """
   def verify_token(token) do
-    case decode_and_verify(token) do
-      {:ok, claims} -> resource_from_claims(claims)
+    case verify_token_with_claims(token) do
+      {:ok, user, _claims} -> {:ok, user}
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Verifies and decodes a token, returning the user alongside the raw claims.
+
+  Device access tokens minted by `Mydia.RemoteAccess.Pairing` carry a
+  `"device_id"` claim, and `resource_from_claims/1` drops it on the way to a
+  `User`. Callers that need to know *which* paired device is talking, rather
+  than only who it belongs to, use this instead.
+  """
+  def verify_token_with_claims(token) do
+    with {:ok, claims} <- decode_and_verify(token),
+         {:ok, user} <- resource_from_claims(claims) do
+      {:ok, user, claims}
     end
   end
 

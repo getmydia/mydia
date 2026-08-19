@@ -5,10 +5,17 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Index do
 
   require Logger
 
+  # Which paired devices are online is derived from `last_seen_at` and from the
+  # live p2p peer count, and both move while this page sits open. Without a
+  # timer the page shows whatever was true at mount, so a device connecting a
+  # moment later never appears until someone clicks refresh.
+  @refresh_interval_ms 10_000
+
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket) do
       Phoenix.PubSub.subscribe(Mydia.PubSub, "remote_access:claims")
+      schedule_refresh()
     end
 
     {:ok,
@@ -55,7 +62,8 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Index do
 
   @impl true
   def handle_info(:refresh_p2p, socket) do
-    {:noreply, load_p2p_status(socket)}
+    schedule_refresh()
+    {:noreply, refresh_status(socket)}
   end
 
   @impl true
@@ -330,7 +338,7 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Index do
   def handle_event("refresh_p2p", _params, socket) do
     {:noreply,
      socket
-     |> load_p2p_status()
+     |> refresh_status()
      |> put_flash(:info, "Status refreshed")}
   end
 
@@ -449,6 +457,18 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Index do
   end
 
   defp format_errors(_), do: "unknown error"
+
+  defp schedule_refresh do
+    Process.send_after(self(), :refresh_p2p, @refresh_interval_ms)
+  end
+
+  # Device liveness lives in `last_seen_at`, so the device list has to be
+  # re-read alongside the p2p status for online badges to move.
+  defp refresh_status(socket) do
+    socket
+    |> load_p2p_status()
+    |> load_devices()
+  end
 
   defp load_config(socket) do
     config = RemoteAccess.get_config()
