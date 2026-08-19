@@ -484,14 +484,25 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
     assert has_element?(view, "#review-section #clear-scan-results")
     refute has_element?(view, "#start-run-form #clear-scan-results")
 
-    view
-    |> element("#clear-scan-results")
-    |> render_click()
+    assert Library.list_unmatched_media_file_paths(lp.id, 10) == []
+
+    html =
+      view
+      |> element("#clear-scan-results")
+      |> render_click()
 
     refute has_element?(view, "#run-outcome")
     refute has_element?(view, "#group-#{group.id}")
     assert has_element?(view, "#no-groups", "Nothing to review")
     refute Library.last_import_run(lp.id)
+
+    # The point of clearing: the cached verdict goes too, so the next scan
+    # re-matches this file instead of rebuilding the same group from it.
+    assert Library.list_match_candidates(media_file.id) == []
+    file_id = media_file.id
+    assert [{^file_id, _path}] = Library.list_unmatched_media_file_paths(lp.id, 10)
+
+    assert html =~ "cached match(es)"
   end
 
   test "import all accepts every provider-matched result only for the selected library", %{
