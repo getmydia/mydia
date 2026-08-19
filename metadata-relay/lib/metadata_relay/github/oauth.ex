@@ -119,6 +119,16 @@ defmodule MetadataRelay.GitHub.OAuth do
       {:ok, %{status: 404}} ->
         {:error, :not_a_member}
 
+      # GitHub answers 403 for rate limiting as well as for refusal, so the
+      # status alone cannot tell "you may not" from "not right now". Callers
+      # sign a session out on a refusal, and doing that to a rate-limited
+      # maintainer would be both wrong and confusing.
+      {:ok, %{status: 429}} ->
+        {:error, :rate_limited}
+
+      {:ok, %{status: 403} = response} ->
+        if rate_limited?(response), do: {:error, :rate_limited}, else: {:error, {:http, 403}}
+
       {:ok, %{status: status}} ->
         {:error, {:http, status}}
 
@@ -126,6 +136,16 @@ defmodule MetadataRelay.GitHub.OAuth do
         {:error, {:transport, reason}}
     end
   end
+
+  defp rate_limited?(%{headers: headers}) do
+    not is_nil(header(headers, "retry-after")) or header(headers, "x-ratelimit-remaining") == "0"
+  end
+
+  defp header(headers, name) when is_map(headers) do
+    headers |> Map.get(name, []) |> List.wrap() |> List.first()
+  end
+
+  defp header(_headers, _name), do: nil
 
   defp req_new(opts) do
     adapter = Application.get_env(:metadata_relay, :github_http_adapter)

@@ -59,6 +59,14 @@ defmodule MetadataRelayWeb.DashboardAuthUnitTest do
     assert DashboardAuth.verify_membership("gho_token") == {:error, :unavailable}
   end
 
+  test "a rate-limited 403 does not end a session the way a refusal does" do
+    put_dashboard_org("getmydia")
+
+    stub_membership(Req.Response.new(status: 403, body: %{}, headers: %{"retry-after" => ["60"]}))
+
+    assert DashboardAuth.verify_membership("gho_token") == {:error, :unavailable}
+  end
+
   test "verify_membership refuses without an organization or a token" do
     put_dashboard_org(nil)
     assert DashboardAuth.verify_membership("gho_token") == {:error, :denied}

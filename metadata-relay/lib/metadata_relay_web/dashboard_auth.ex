@@ -65,6 +65,8 @@ defmodule MetadataRelayWeb.DashboardAuth do
   defp classify({:ok, :active}), do: :ok
   defp classify({:error, :not_a_member}), do: {:error, :denied}
   defp classify({:error, {:membership, _state}}), do: {:error, :denied}
+  # Being throttled is not a refusal, so it must not end a verified session.
+  defp classify({:error, :rate_limited}), do: {:error, :unavailable}
   defp classify({:error, {:http, status}}) when status in 401..403, do: {:error, :denied}
   defp classify({:error, _reason}), do: {:error, :unavailable}
 

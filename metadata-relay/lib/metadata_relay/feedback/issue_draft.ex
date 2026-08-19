@@ -78,6 +78,10 @@ defmodule MetadataRelay.Feedback.IssueDraft do
     message
     |> to_string()
     |> String.replace(~r/(?<![\w`])@(?=[A-Za-z0-9])/, "@<!---->")
+    # owner/repo#123 cross-references another repository and backlinks it there.
+    # It has to come first: the bare rule below refuses to touch a `#` that
+    # follows a word character, which is exactly what this form looks like.
+    |> String.replace(~r"([\w.\-]+/[\w.\-]+)#(?=\d)", "\\1#<!---->")
     |> String.replace(~r/(?<![\w`&])#(?=\d)/, "#<!---->")
   end
 

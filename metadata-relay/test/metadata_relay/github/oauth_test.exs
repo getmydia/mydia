@@ -139,6 +139,36 @@ defmodule MetadataRelay.GitHub.OAuthTest do
     assert {:error, {:transport, _}} = OAuth.fetch_org_membership("gho_token", "getmydia")
   end
 
+  test "fetch_org_membership tells a rate-limited 403 from a refusal" do
+    # GitHub reuses 403 for throttling, so only the headers separate the two.
+    for headers <- [%{"retry-after" => ["60"]}, %{"x-ratelimit-remaining" => ["0"]}] do
+      set_github_adapter(fn request ->
+        {request, Req.Response.new(status: 403, body: %{}, headers: headers)}
+      end)
+
+      assert {:error, :rate_limited} = OAuth.fetch_org_membership("gho_token", "getmydia")
+    end
+
+    set_github_adapter(fn request ->
+      {request,
+       Req.Response.new(
+         status: 403,
+         body: %{"message" => "Blocked"},
+         headers: %{"x-ratelimit-remaining" => ["4999"]}
+       )}
+    end)
+
+    assert {:error, {:http, 403}} = OAuth.fetch_org_membership("gho_token", "getmydia")
+  end
+
+  test "fetch_org_membership treats 429 as rate limiting" do
+    set_github_adapter(fn request ->
+      {request, Req.Response.new(status: 429, body: %{})}
+    end)
+
+    assert {:error, :rate_limited} = OAuth.fetch_org_membership("gho_token", "getmydia")
+  end
+
   test "fetch_org_membership escapes the organization in the path" do
     set_github_adapter(fn request ->
       assert URI.to_string(request.url) ==

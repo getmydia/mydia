@@ -77,6 +77,17 @@ defmodule MetadataRelay.Feedback.IssueDraftTest do
     assert draft.body =~ "#<!---->4"
   end
 
+  test "cross-repository references cannot backlink another repo" do
+    draft =
+      draft_for(%{message: "same as getmydia/mydia#123 and elixir-lang/elixir#4567"})
+
+    refute draft.body =~ ~r"getmydia/mydia#\d"
+    refute draft.body =~ ~r"elixir-lang/elixir#\d"
+
+    assert draft.body =~ "getmydia/mydia#<!---->123"
+    assert draft.body =~ "elixir-lang/elixir#<!---->4567"
+  end
+
   test "defanging leaves text that GitHub would not linkify alone" do
     draft = draft_for(%{message: "Email me at a@b.com, C# code, 100% broken, issue ##"})
 
