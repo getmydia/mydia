@@ -104,6 +104,42 @@ defmodule MydiaWeb.DevicesLiveTest do
     end
   end
 
+  describe "device liveness display" do
+    setup %{conn: conn} do
+      user = create_test_user()
+      %{conn: log_in_user_session(conn, user), device: pair_device(user, "Liveness Device")}
+    end
+
+    defp touch(device, seconds_ago: seconds) do
+      seen = DateTime.utc_now() |> DateTime.add(-seconds, :second) |> DateTime.truncate(:second)
+
+      device
+      |> Ecto.Changeset.change(last_seen_at: seen)
+      |> Mydia.Repo.update!()
+    end
+
+    test "a device seen moments ago renders as online", %{conn: conn, device: device} do
+      touch(device, seconds_ago: 5)
+
+      {:ok, _view, html} = live(conn, ~p"/devices")
+
+      assert html =~ "Online now"
+    end
+
+    test "a device that comes online after mount is picked up without a manual refresh",
+         %{conn: conn, device: device} do
+      touch(device, seconds_ago: 86_400)
+
+      {:ok, view, html} = live(conn, ~p"/devices")
+      refute html =~ "Online now"
+
+      touch(device, seconds_ago: 5)
+      send(view.pid, :refresh_devices)
+
+      assert render(view) =~ "Online now"
+    end
+  end
+
   describe "pairing" do
     setup %{conn: conn} do
       user = create_test_user()
