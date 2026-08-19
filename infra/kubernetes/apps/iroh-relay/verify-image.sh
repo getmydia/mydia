@@ -15,13 +15,33 @@
 # Usage:
 #   ./verify-image.sh n0computer/iroh-relay:v1.0.2@sha256:<digest>
 #
-# Exits 0 if the image survives, 1 if it does not. Requires docker and openssl.
+# Exits 0 if the image survives, 1 if it does not, 2 on bad usage or a missing
+# dependency. Requires docker, openssl, curl, and python3 with PyYAML.
+#
+# Dependencies are preflighted rather than discovered mid-run. Without that, a
+# missing python3 or PyYAML leaves no config.toml, the relay exits for want of
+# config, and the script blames the candidate image for a broken harness. That
+# misattribution is the failure worth guarding against here: it would send
+# someone hunting a relay bug that does not exist.
 
-set -u
+set -euo pipefail
 
 IMG="${1:-}"
 if [ -z "$IMG" ]; then
   echo "usage: $0 <image[@digest]>" >&2
+  exit 2
+fi
+
+missing=""
+for bin in docker openssl curl python3; do
+  command -v "$bin" >/dev/null 2>&1 || missing="$missing $bin"
+done
+if ! python3 -c 'import yaml' >/dev/null 2>&1; then
+  missing="$missing python3-PyYAML"
+fi
+if [ -n "$missing" ]; then
+  echo "FAIL: missing dependencies:$missing" >&2
+  echo "      (this is a problem with this machine, not with $IMG)" >&2
   exit 2
 fi
 
@@ -30,8 +50,8 @@ WORK="$(mktemp -d)"
 NAME="iroh-relay-verify-$$"
 
 cleanup() {
-  docker rm -f "$NAME" >/dev/null 2>&1
-  rm -rf "$WORK"
+  docker rm -f "$NAME" >/dev/null 2>&1 || true
+  rm -rf "$WORK" || true
 }
 trap cleanup EXIT
 
@@ -64,7 +84,7 @@ case "$BEFORE" in
   Up*) ;;
   *)
     echo "FAIL: died before receiving any traffic"
-    docker logs "$NAME" 2>&1 | tail -20
+    docker logs "$NAME" 2>&1 | tail -20 || true
     exit 1
     ;;
 esac
@@ -81,7 +101,9 @@ PY
 
 sleep 4
 AFTER="$(docker ps -a --filter "name=$NAME" --format '{{.Status}}')"
-CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:18080/generate_204)"
+# curl exits non-zero on connection refused, which is exactly the crash case this
+# script reports on, so it must not abort under set -e.
+CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:18080/generate_204 || true)"
 echo "    after datagrams:  $AFTER"
 echo "    generate_204:     $CODE"
 
@@ -89,7 +111,7 @@ case "$AFTER" in
   Up*) ;;
   *)
     echo "FAIL: crashed on receiving traffic"
-    docker logs "$NAME" 2>&1 | tail -20
+    docker logs "$NAME" 2>&1 | tail -20 || true
     exit 1
     ;;
 esac
