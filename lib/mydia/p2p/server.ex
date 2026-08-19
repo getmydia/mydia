@@ -72,6 +72,10 @@ defmodule Mydia.P2p.Server do
         Or set the P2P_KEYPAIR_PATH environment variable.
         """
 
+    # The derived default lands under the data directory, which on a fresh
+    # install does not exist yet. The NIF cannot create it.
+    keypair_path |> Path.dirname() |> File.mkdir_p!()
+
     # Start the host - NIF returns {resource, node_id} directly (raises on error)
     {resource, node_id} = P2p.start_host(relay_url, bind_port, keypair_path)
 
