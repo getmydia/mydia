@@ -120,7 +120,6 @@ defmodule Mydia.RemoteAccess.DeviceLivenessTest do
     |> RemoteDevice.changeset(%{
       device_name: "Test Device #{System.unique_integer([:positive])}",
       platform: "ios",
-      device_static_public_key: :crypto.strong_rand_bytes(32),
       token: "device-token-#{System.unique_integer([:positive])}",
       user_id: user.id
     })

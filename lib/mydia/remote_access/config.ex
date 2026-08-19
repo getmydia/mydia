@@ -15,25 +15,18 @@ defmodule Mydia.RemoteAccess.Config do
   @type t :: %__MODULE__{
           id: binary(),
           instance_id: String.t() | nil,
-          static_public_key: binary() | nil,
-          static_private_key_encrypted: binary() | nil,
           enabled: boolean(),
           direct_urls: [String.t()],
           cert_fingerprint: String.t() | nil,
-          relay_token: String.t() | nil,
           inserted_at: DateTime.t(),
           updated_at: DateTime.t()
         }
 
   schema "remote_access_config" do
     field :instance_id, :string
-    field :static_public_key, :binary
-    field :static_private_key_encrypted, :binary
     field :enabled, :boolean, default: false
     field :direct_urls, {:array, :string}, default: []
     field :cert_fingerprint, :string
-    # Authentication token for the relay service
-    field :relay_token, :string
 
     timestamps(type: :utc_datetime)
   end
@@ -45,18 +38,11 @@ defmodule Mydia.RemoteAccess.Config do
     config
     |> cast(attrs, [
       :instance_id,
-      :static_public_key,
-      :static_private_key_encrypted,
       :enabled,
       :direct_urls,
-      :cert_fingerprint,
-      :relay_token
+      :cert_fingerprint
     ])
-    |> validate_required([
-      :instance_id,
-      :static_public_key,
-      :static_private_key_encrypted
-    ])
+    |> validate_required([:instance_id])
     |> validate_length(:instance_id, min: 1, max: 255)
     |> unique_constraint(:instance_id)
   end

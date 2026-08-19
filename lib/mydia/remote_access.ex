@@ -14,115 +14,19 @@ defmodule Mydia.RemoteAccess do
   # Config management
 
   @doc """
-  Initializes the instance keypair and generates a unique instance ID.
+  Creates the remote access configuration with a fresh instance ID.
 
-  This function should be called when remote access is first enabled.
-  It generates a new Noise protocol keypair, encrypts the private key using
-  the application secret, and stores both keys along with a unique instance ID.
+  Called when remote access is first enabled. The instance ID is a UUID v4
+  that uniquely identifies this Mydia instance. The node identity used to
+  reach it lives in the iroh keypair file, not here.
 
-  Returns {:ok, config} with the initialized configuration, or {:error, changeset}
-  if the operation fails.
-
-  ## Security Notes
-
-  - The private key is encrypted using the application's secret_key_base
-  - The instance ID is a UUID v4 that uniquely identifies this Mydia instance
-  - This should only be called once per instance, typically when enabling remote access
-
-  ## Examples
-
-      iex> {:ok, config} = Mydia.RemoteAccess.initialize_keypair()
-      iex> byte_size(config.static_public_key)
-      32
-      iex> is_binary(config.static_private_key_encrypted)
-      true
-      iex> is_binary(config.instance_id)
-      true
-
+  Returns `{:ok, config}`, or `{:error, changeset}` if the insert fails.
   """
-  def initialize_keypair do
-    # Generate X25519 keypair for Noise protocol
-    {public_key, private_key} = generate_x25519_keypair()
-
-    # Generate a unique instance ID
-    instance_id = Ecto.UUID.generate()
-
-    # Create the config with the keypair
+  def initialize_config do
     # Note: relay_url is read from METADATA_RELAY_URL env var at runtime
     %Config{}
-    |> Config.changeset(%{
-      instance_id: instance_id,
-      static_public_key: public_key,
-      static_private_key_encrypted: encrypt_private_key(private_key),
-      enabled: false
-    })
+    |> Config.changeset(%{instance_id: Ecto.UUID.generate(), enabled: false})
     |> Repo.insert()
-  end
-
-  @doc """
-  Generates an X25519 keypair for the Noise protocol.
-
-  Returns `{public_key, private_key}` as 32-byte binaries.
-  """
-  def generate_x25519_keypair do
-    # Use Erlang crypto to generate a valid X25519 keypair
-    :crypto.generate_key(:ecdh, :x25519)
-  end
-
-  @doc """
-  Gets the public key for the instance.
-
-  Returns the instance's static public key, which can be safely shared with clients
-  for configuration and pairing.
-
-  Returns the public key as a 32-byte binary, or nil if not configured.
-
-  ## Examples
-
-      iex> Mydia.RemoteAccess.get_public_key()
-      <<1, 2, 3, ...>>  # 32-byte public key
-
-  """
-  def get_public_key do
-    case get_config() do
-      nil -> nil
-      config -> config.static_public_key
-    end
-  end
-
-  @doc """
-  Gets the private key for the instance.
-
-  Returns `{:ok, private_key}` where private_key is a 32-byte binary,
-  or `{:error, :not_configured}` if not configured.
-  """
-  def get_private_key do
-    case get_config() do
-      nil ->
-        {:error, :not_configured}
-
-      config ->
-        decrypt_private_key(config.static_private_key_encrypted)
-    end
-  end
-
-  @doc """
-  Gets the static keypair for the Noise protocol.
-
-  Returns `{:ok, {public_key, private_key}}` where each key is a 32-byte binary,
-  or `{:error, :not_configured}` if not configured.
-  """
-  @spec get_static_keypair() :: {:ok, {binary(), binary()}} | {:error, :not_configured}
-  def get_static_keypair do
-    case get_config() do
-      nil ->
-        {:error, :not_configured}
-
-      config ->
-        with {:ok, private_key} <- decrypt_private_key(config.static_private_key_encrypted) do
-          {:ok, {config.static_public_key, private_key}}
-        end
-    end
   end
 
   @doc """
@@ -160,58 +64,6 @@ defmodule Mydia.RemoteAccess do
         |> Repo.update()
     end
   end
-
-  defp encrypt_private_key(private_key)
-       when is_binary(private_key) and byte_size(private_key) == 32 do
-    secret_key_base = MydiaWeb.Endpoint.config(:secret_key_base)
-
-    secret =
-      Plug.Crypto.KeyGenerator.generate(secret_key_base, "remote_access_private_key", length: 32)
-
-    iv = :crypto.strong_rand_bytes(12)
-
-    {ciphertext, tag} =
-      :crypto.crypto_one_time_aead(:aes_256_gcm, secret, iv, private_key, <<>>, true)
-
-    # Format: version(1) || iv(12) || tag(16) || ciphertext(32)
-    <<1, iv::binary, tag::binary, ciphertext::binary>>
-  end
-
-  # Versioned v1 format: version(1) || iv(12) || tag(16) || ciphertext(32)
-  defp decrypt_private_key(
-         <<1, iv::binary-size(12), tag::binary-size(16), ciphertext::binary-size(32)>>
-       ) do
-    decrypt_private_key(<<iv::binary, tag::binary, ciphertext::binary>>)
-  end
-
-  defp decrypt_private_key(
-         <<iv::binary-size(12), tag::binary-size(16), ciphertext::binary-size(32)>>
-       ) do
-    secret_key_base = MydiaWeb.Endpoint.config(:secret_key_base)
-
-    secret =
-      Plug.Crypto.KeyGenerator.generate(secret_key_base, "remote_access_private_key", length: 32)
-
-    case :crypto.crypto_one_time_aead(:aes_256_gcm, secret, iv, ciphertext, <<>>, tag, false) do
-      :error -> {:error, :invalid_private_key}
-      private_key -> {:ok, private_key}
-    end
-  end
-
-  # Versioned v1 format: version(1) || iv(12) || tag(16) || ciphertext(32)
-  defp decrypt_private_key(
-         <<1, iv::binary-size(12), tag::binary-size(16), ciphertext::binary-size(32)>>
-       ) do
-    decrypt_private_key(<<iv::binary, tag::binary, ciphertext::binary>>)
-  end
-
-  # Legacy (unencrypted) format
-  defp decrypt_private_key(private_key)
-       when is_binary(private_key) and byte_size(private_key) == 32 do
-    {:ok, private_key}
-  end
-
-  defp decrypt_private_key(_), do: {:error, :invalid_private_key}
 
   def toggle_remote_access(enabled) when is_boolean(enabled) do
     case get_config() do

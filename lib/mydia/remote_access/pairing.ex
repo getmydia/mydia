@@ -26,13 +26,8 @@ defmodule Mydia.RemoteAccess.Pairing do
          # Generate a unique device token
          device_token = generate_device_token(),
          # Register the device
-         # We use a dummy public key or the device token itself as the ID if schema requires it
          device_params =
-           Map.merge(device_attrs, %{
-             device_static_public_key: generate_dummy_key(),
-             token: device_token,
-             user_id: claim.user_id
-           }),
+           Map.merge(device_attrs, %{token: device_token, user_id: claim.user_id}),
          {:ok, device} <- RemoteAccess.create_device(device_params),
          # Set initial last_seen_at timestamp
          {:ok, device} <- RemoteAccess.touch_device(device),
@@ -86,10 +81,5 @@ defmodule Mydia.RemoteAccess.Pairing do
   # Generates a unique device token
   defp generate_device_token do
     :crypto.strong_rand_bytes(32) |> Base.encode64(padding: false)
-  end
-
-  # Generate a dummy 32-byte key to satisfy DB constraints if any
-  defp generate_dummy_key do
-    :crypto.strong_rand_bytes(32)
   end
 end
