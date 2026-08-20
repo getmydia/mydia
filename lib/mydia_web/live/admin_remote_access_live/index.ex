@@ -383,7 +383,7 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Index do
 
     case RemoteAccess.generate_claim_code(user_id) do
       {:ok, claim} ->
-        Logger.info("Pairing code generated successfully: #{claim.code}")
+        Logger.info("Pairing code generated, relay_registered=#{claim.relay_registered}")
         expires_at = claim.expires_at
         now = DateTime.utc_now()
         seconds = DateTime.diff(expires_at, now, :second)

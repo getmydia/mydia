@@ -264,40 +264,92 @@ defmodule Mydia.RemoteAccess do
 
   # Claim code management
 
+  @claim_ttl_seconds 300
+
   @doc """
   Generates a new pairing claim code for a user.
-  The code expires after 5 minutes.
 
-  This function:
-  1. Gets the P2P server's node_addr
-  2. Posts the node_addr to the relay to get a claim code
-  3. Creates a local claim record
+  The code is generated here, never by the relay. The relay receives only a
+  blinded lookup key and a sealed blob, so it can read neither the code nor the
+  server's node address.
 
-  Returns {:ok, claim} if successful, {:error, reason} otherwise.
+  Registration with the relay is best effort. Only manual code entry needs it;
+  QR pairing dials the node address directly and never performs a lookup. A
+  relay outage therefore degrades pairing rather than blocking it, and the
+  returned claim carries `relay_registered: false` so the UI can say so.
+
+  ## Options
+
+    * `:relay_url` - override the relay base URL. Exists so tests can point at
+      Bypass without mutating global environment variables.
+    * `:node_addr` - override the p2p node address, for tests.
+    * `:instance_id` - override the instance id, for tests.
   """
-  def generate_claim_code(user_id) do
-    # Get the P2P server's node address
-    with {:ok, node_addr} <- get_p2p_node_addr(),
-         {:ok, %{"claim_code" => code}} <- create_pairing_claim(node_addr) do
-      # Calculate expiration (5 minutes from now)
-      expires_at =
-        DateTime.utc_now()
-        |> DateTime.add(300, :second)
-        |> DateTime.truncate(:second)
+  def generate_claim_code(user_id, opts \\ []) do
+    with {:ok, node_addr} <- resolve_node_addr(opts),
+         {:ok, instance_id} <- resolve_instance_id(opts),
+         code = PairingClaim.generate_code(),
+         {:ok, {lookup_key, sealed}} <-
+           Mydia.P2p.seal_pairing_claim(code, node_addr, instance_id),
+         {:ok, claim} <- insert_claim(user_id, code, lookup_key) do
+      registered = register_sealed_claim(lookup_key, sealed, opts) == :ok
 
-      # Store local claim record
-      {:ok, claim} =
-        %PairingClaim{}
-        |> PairingClaim.changeset_with_code(%{
-          user_id: user_id,
-          code: code,
-          expires_at: expires_at
-        })
-        |> Repo.insert()
+      Logger.debug("Pairing claim created, relay_registered=#{registered}")
 
-      Logger.debug("Claim code #{code} created with node_addr")
+      {:ok, %{claim | relay_registered: registered}}
+    end
+  end
 
-      {:ok, claim}
+  defp insert_claim(user_id, code, lookup_key) do
+    expires_at =
+      DateTime.utc_now()
+      |> DateTime.add(@claim_ttl_seconds, :second)
+      |> DateTime.truncate(:second)
+
+    %PairingClaim{}
+    |> PairingClaim.changeset_with_code(%{
+      user_id: user_id,
+      code: code,
+      lookup_key: lookup_key,
+      expires_at: expires_at
+    })
+    |> Repo.insert()
+  end
+
+  defp resolve_node_addr(opts) do
+    case Keyword.get(opts, :node_addr) do
+      nil -> get_p2p_node_addr()
+      addr -> {:ok, addr}
+    end
+  end
+
+  defp resolve_instance_id(opts) do
+    case Keyword.get(opts, :instance_id) do
+      nil ->
+        case get_config() do
+          %{instance_id: id} when is_binary(id) -> {:ok, id}
+          _ -> {:ok, ""}
+        end
+
+      id ->
+        {:ok, id}
+    end
+  end
+
+  defp register_sealed_claim(lookup_key, sealed, opts) do
+    url = "#{get_relay_url(opts)}/pairing/v2/claim"
+
+    case Req.post(url, json: %{lookup_key: lookup_key, sealed: sealed}, retry: false) do
+      {:ok, %Req.Response{status: 204}} ->
+        :ok
+
+      {:ok, %Req.Response{status: status}} ->
+        Logger.warning("Pairing claim registration failed with status #{status}")
+        {:error, :relay_unavailable}
+
+      {:error, reason} ->
+        Logger.warning("Pairing claim registration error: #{inspect(reason)}")
+        {:error, :relay_unavailable}
     end
   end
 
@@ -332,30 +384,10 @@ defmodule Mydia.RemoteAccess do
     end
   end
 
-  defp create_pairing_claim(node_addr) do
-    url = "#{get_relay_url()}/pairing/claim"
-
-    body = %{node_addr: node_addr}
-
-    case Req.post(url, json: body) do
-      {:ok, %Req.Response{status: 200, body: body}} ->
-        {:ok, body}
-
-      {:ok, %Req.Response{status: 429}} ->
-        {:error, :rate_limited}
-
-      {:ok, %Req.Response{status: status, body: body}} ->
-        Logger.error("Create pairing claim failed: #{status} - #{inspect(body)}")
-        {:error, :create_claim_failed}
-
-      {:error, reason} ->
-        Logger.error("Create pairing claim error: #{inspect(reason)}")
-        {:error, reason}
-    end
-  end
-
-  defp get_relay_url do
-    System.get_env("METADATA_RELAY_URL") || System.get_env("RELAY_URL") ||
+  defp get_relay_url(opts) do
+    Keyword.get(opts, :relay_url) ||
+      Application.get_env(:mydia, :metadata_relay_url) ||
+      System.get_env("METADATA_RELAY_URL") || System.get_env("RELAY_URL") ||
       "https://relay.mydia.dev"
   end
 
