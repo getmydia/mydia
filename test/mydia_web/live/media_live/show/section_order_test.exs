@@ -98,6 +98,55 @@ defmodule MydiaWeb.MediaLive.Show.SectionOrderTest do
            ]
   end
 
+  test "a movie with a franchise renders both rails below its own files", %{conn: conn} do
+    collection_id = System.unique_integer([:positive])
+    owned_tmdb_id = System.unique_integer([:positive])
+    missing_tmdb_id = System.unique_integer([:positive])
+
+    movie =
+      media_item_fixture(%{
+        type: "movie",
+        title: "First",
+        year: 2001,
+        tmdb_id: owned_tmdb_id,
+        metadata: %{
+          "provider_id" => to_string(owned_tmdb_id),
+          "provider" => "metadata_relay",
+          "media_type" => "movie",
+          "title" => "First",
+          "collection_id" => collection_id,
+          "collection_name" => "Test Collection"
+        }
+      })
+
+    media_file_fixture(%{media_item_id: movie.id})
+
+    warm_collection_cache(collection_id, [
+      %{"id" => owned_tmdb_id, "title" => "First", "release_date" => "2001-01-01"},
+      %{"id" => missing_tmdb_id, "title" => "Second", "release_date" => "2004-01-01"}
+    ])
+
+    warm_recommendations_cache(owned_tmdb_id, :movie, [
+      %{
+        "id" => System.unique_integer([:positive]),
+        "title" => "Third",
+        "release_date" => "2010-01-01",
+        "poster_path" => "/p.jpg"
+      }
+    ])
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")
+    render_async(view, 5000)
+
+    assert section_ids(view) == [
+             "media-files-section",
+             "subtitles-section",
+             "timeline-section",
+             "franchise-section",
+             "recommendations-rail"
+           ]
+  end
+
   # LazyHTML.query/2, not filter/2: filter matches root nodes only, and these
   # cards are nested inside the layout. query returns matches in document order,
   # which is the whole point of the assertion.
@@ -147,6 +196,31 @@ defmodule MydiaWeb.MediaLive.Show.SectionOrderTest do
     {:ok, _results} =
       Metadata.fetch_recommendations_cached(config, to_string(tmdb_id), media_type: media_type)
 
+    :ok
+  end
+
+  # Same trick as warm_recommendations_cache/3, for the TMDB collection lookup
+  # behind the franchise strip. fetch_collection_cached/3 keys on the provider
+  # type, collection id and language but not the base URL, so the LiveView reads
+  # this entry back through its own default config with no outbound request.
+  defp warm_collection_cache(collection_id, parts) do
+    bypass = Bypass.open()
+    relay = Metadata.default_relay_config()
+    config = %{relay | base_url: "http://localhost:#{bypass.port}"}
+
+    on_exit(fn ->
+      Cache.delete("collection:#{relay.type}:#{collection_id}:#{relay.options.language}")
+    end)
+
+    Bypass.expect_once(bypass, "GET", "/tmdb/collections/#{collection_id}", fn conn ->
+      body = %{"id" => collection_id, "name" => "Test Collection", "parts" => parts}
+
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, Jason.encode!(body))
+    end)
+
+    {:ok, _collection} = Metadata.fetch_collection_cached(config, collection_id)
     :ok
   end
 end
