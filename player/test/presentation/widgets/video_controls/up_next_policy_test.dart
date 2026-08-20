@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/models/media_segment.dart';
-import 'package:player/presentation/widgets/up_next_overlay.dart';
+import 'package:player/presentation/widgets/video_controls/up_next_policy.dart';
 
 void main() {
   group('shouldOfferUpNext', () {

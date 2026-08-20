@@ -46,6 +46,7 @@ import '../../widgets/video_controls/custom_video_controls.dart';
 import '../../widgets/video_controls/skip_segment_button.dart';
 import '../../widgets/tap_to_play_overlay.dart';
 import '../../widgets/up_next_overlay.dart';
+import '../../widgets/video_controls/up_next_policy.dart';
 import '../../../domain/models/audio_track.dart' as app_models_audio;
 import '../../../domain/models/media_segment.dart';
 import '../../../domain/models/quality_delivery_subtitle.dart';
