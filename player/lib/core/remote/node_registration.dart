@@ -32,10 +32,10 @@ class NodeRegistration {
   /// which is a normal state for the web build and for anyone who turned the
   /// setting off, so it must not take down startup.
   Future<bool> register() async {
-    final id = await _nodeId();
-    if (id == null || id.isEmpty) return false;
-
     try {
+      final id = await _nodeId();
+      if (id == null || id.isEmpty) return false;
+
       final result = await _client.mutate(
         MutationOptions(
           document: gql(_mutation),

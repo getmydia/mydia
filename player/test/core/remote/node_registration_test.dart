@@ -56,5 +56,33 @@ void main() {
 
       expect(await registration.register(), isFalse);
     });
+
+    test('reports failure rather than throwing when nodeId() throws', () async {
+      // Never called: the exception surfaces before any request is built.
+      final link = StubLink.responses([
+        <String, dynamic>{'__typename': 'Mutation'},
+      ]);
+
+      final registration = NodeRegistration(
+        client: stubClient(link),
+        nodeId: () async => throw Exception('host not started'),
+      );
+
+      expect(await registration.register(), isFalse);
+      expect(link.requests, isEmpty,
+          reason: 'a throwing nodeId() means no round trip');
+    });
+
+    test('reports failure rather than throwing when the mutate call throws',
+        () async {
+      final link = StubLink.responses([Exception('boom')]);
+
+      final registration = NodeRegistration(
+        client: stubClient(link),
+        nodeId: () async => 'abc123',
+      );
+
+      expect(await registration.register(), isFalse);
+    });
   });
 }
