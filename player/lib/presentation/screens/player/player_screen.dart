@@ -518,6 +518,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   UpNextCountdown? _upNextCountdown;
 
+  /// Tracks `player.stream.playing` while the prompt is up, so a pause holds
+  /// the countdown and a resume releases it. Created alongside the countdown
+  /// in [_showUpNextOverlay] and torn down everywhere the countdown is:
+  /// [_cancelAutoPlay], [_playNextEpisode], [_playPreviousEpisode], and
+  /// [dispose]. There is no other `player.stream.playing` listener in this
+  /// file for it to piggyback on — the old countdown polled
+  /// `_player!.state.playing` inside its own tick, which is exactly the
+  /// coupling [UpNextCountdown] was built without.
+  StreamSubscription<bool>? _upNextPlayingSub;
+
   /// Reshapes the OS window to the video's aspect on desktop. A no-op
   /// everywhere else, so no platform check is needed at the call sites.
   ///
@@ -2288,9 +2298,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     });
 
     // Playback being paused is its own hold, so a viewer who pauses during
-    // the credits does not come back to a different episode.
-    if (!(_player?.state.playing ?? true)) {
-      countdown.hold(UpNextHold.paused);
+    // the credits does not come back to a different episode. A live
+    // subscription, not a one-shot check: a pause or resume that happens
+    // while the prompt is already up must reach the countdown too.
+    _upNextPlayingSub?.cancel();
+    final player = _player;
+    if (player != null) {
+      if (!player.state.playing) countdown.hold(UpNextHold.paused);
+      _upNextPlayingSub = player.stream.playing.listen((playing) {
+        playing
+            ? countdown.release(UpNextHold.paused)
+            : countdown.hold(UpNextHold.paused);
+      });
     }
     countdown.start();
   }
@@ -2300,6 +2319,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     // Synchronous, before any setState: a dismiss that only lands next frame
     // can lose to a fire scheduled this one.
     _upNextCountdown?.cancel();
+    _upNextPlayingSub?.cancel();
+    _upNextPlayingSub = null;
     if (mounted) {
       setState(() {
         _showUpNext = false;
@@ -2311,6 +2332,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// Play the next episode immediately.
   void _playNextEpisode() {
     _upNextCountdown?.cancel();
+    _upNextPlayingSub?.cancel();
+    _upNextPlayingSub = null;
 
     // Re-check after the countdown: `_cancelAutoPlay` may have run between
     // the fire being scheduled and this executing.
@@ -2345,6 +2368,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// Play the previous episode immediately.
   void _playPreviousEpisode() {
     _upNextCountdown?.cancel();
+    _upNextPlayingSub?.cancel();
+    _upNextPlayingSub = null;
 
     if (_seasonEpisodes == null || _currentEpisodeIndex == null) {
       return;
@@ -2579,6 +2604,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     if (_isRestartingSession) return;
 
     final clamped = target.isNegative ? Duration.zero : target;
+
+    // A viewer who scrubs back into the episode is plainly not finished with
+    // it. Free to read here, since every seek already routes through this.
+    if (_showUpNext) {
+      final current = _timeline.toReal(player.state.position);
+      if (clamped < current) _cancelAutoPlay();
+    }
+
     final local = _timeline.toPlayer(clamped);
 
     // `player.state.duration` is deliberately the RAW player duration here, not
@@ -3477,6 +3510,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       return KeyEventResult.ignored;
     }
 
+    _upNextCountdown?.noteInput();
+
     switch (event.logicalKey) {
       case LogicalKeyboardKey.space:
         // Play/Pause
@@ -3534,6 +3569,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         return KeyEventResult.handled;
 
       case LogicalKeyboardKey.escape:
+        // The prompt takes the first branch: while it is up, Escape means
+        // "not this", not "leave fullscreen". This case already returned
+        // `handled` unconditionally, so nothing downstream changes.
+        if (_showUpNext) {
+          _cancelAutoPlay();
+          return KeyEventResult.handled;
+        }
         if (_fullscreen.isFullscreen.value) {
           _fullscreen.exit();
         }
@@ -3649,6 +3691,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
     // Cancel auto-play countdown
     _upNextCountdown?.dispose();
+    _upNextPlayingSub?.cancel();
+    _upNextPlayingSub = null;
 
     // Stop progress tracking
     _progressService?.stopSync();
@@ -3832,6 +3876,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           onAlwaysOnTopTap: _toggleAlwaysOnTop,
           onPreviousEpisode: _hasPreviousEpisode ? _playPreviousEpisode : null,
           onNextEpisode: _hasNextEpisode ? _playNextEpisode : null,
+          onActivity: () => _upNextCountdown?.noteInput(),
           isFullscreen: _fullscreen.isFullscreen.value,
           isAlwaysOnTop: _isAlwaysOnTop,
           audioTrackCount: _audioTracks.length,
