@@ -24,7 +24,7 @@ defmodule Mydia.RemoteAccess.Config do
 
   schema "remote_access_config" do
     field :instance_id, :string
-    field :enabled, :boolean, default: false
+    field :enabled, :boolean, default: true
     field :direct_urls, {:array, :string}, default: []
     field :cert_fingerprint, :string
 

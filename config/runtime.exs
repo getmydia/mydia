@@ -454,9 +454,16 @@ p2p_keypair_path =
     value -> value
   end
 
-if p2p_keypair_path do
-  config :mydia, :p2p_keypair_path, p2p_keypair_path
-end
+# Falls back to a path under the data directory. P2p.Server.init/1 raises on a
+# nil path, and with remote access on by default that raise would take down boot
+# on any install that never set P2P_KEYPAIR_PATH. The env var wins, then anything
+# a compile-time config set (dev.exs and test.exs both do), then this default.
+resolved_p2p_keypair_path =
+  p2p_keypair_path ||
+    Application.get_env(:mydia, :p2p_keypair_path) ||
+    Path.join(System.get_env("MYDIA_DATA_DIR") || "priv/data", "p2p_keypair.bin")
+
+config :mydia, :p2p_keypair_path, resolved_p2p_keypair_path
 
 # Ueberauth OIDC configuration (all environments)
 # This runs at application startup, so environment variables are available

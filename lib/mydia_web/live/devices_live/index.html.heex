@@ -1,0 +1,38 @@
+<Layouts.app {assigns}>
+  <div id="devices-page" class="max-w-4xl mx-auto">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+      <div>
+        <h1 class="text-3xl font-bold">Devices</h1>
+        <p class="text-base-content/70 mt-1">
+          Players connected to your account, and where to get more.
+        </p>
+      </div>
+    </div>
+
+    <div class="space-y-6">
+      <MydiaWeb.DevicesLive.PairingComponents.pairing_card
+        ra_config={@ra_config}
+        p2p_status={@p2p_status}
+        remote_access_enabled={@remote_access_enabled}
+        claim_code={@claim_code}
+        claim_code_rendezvous_status={@claim_code_rendezvous_status}
+        claim_expires_at={@claim_expires_at}
+        countdown_seconds={@countdown_seconds}
+        pairing_error={@pairing_error}
+        show_pairing_modal={@show_pairing_modal}
+      />
+
+      <MydiaWeb.DevicesLive.Components.device_list
+        devices={@devices}
+        show_all_devices={@show_all_devices}
+        show_clear_inactive_modal={@show_clear_inactive_modal}
+        show_revoke_modal={@show_revoke_modal}
+        selected_device={@selected_device}
+        show_delete_modal={@show_delete_modal}
+        device_to_delete={@device_to_delete}
+      />
+
+      <MydiaWeb.DevicesLive.Components.download_card />
+    </div>
+  </div>
+</Layouts.app>

@@ -195,6 +195,9 @@ defmodule Mydia.Application do
     # Only start P2P server and related processes if remote access is enabled
     if Application.get_env(:mydia, :features)[:remote_access_enabled] do
       [
+        # Must precede P2p.Server: it creates the instance identity the p2p node
+        # and every pairing depend on, and seeds RemoteAccess.enabled?/0.
+        Mydia.RemoteAccess.Provision,
         Mydia.P2p.Server,
         # Resume active pairing claims on startup
         Mydia.RemoteAccess.ResumeClaims

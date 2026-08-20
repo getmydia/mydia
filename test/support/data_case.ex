@@ -38,6 +38,7 @@ defmodule Mydia.DataCase do
       import Ecto.Changeset
       import Ecto.Query
       import Mydia.DataCase
+      import Mydia.RemoteAccessHelpers
       import Mydia.Factory
       import Mydia.ConfigHelpers
     end

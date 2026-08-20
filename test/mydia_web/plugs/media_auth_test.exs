@@ -6,6 +6,16 @@ defmodule MydiaWeb.Plugs.MediaAuthTest do
   alias Mydia.Repo
   alias MydiaWeb.Plugs.MediaAuth
 
+  setup do
+    # A media token is only honoured while remote access is on, and the flag is
+    # cached in :persistent_term, so it has to be set explicitly here rather than
+    # inherited from whichever test file happened to run first.
+    reset_remote_access()
+    on_exit(&reset_remote_access/0)
+    set_remote_access(true)
+    :ok
+  end
+
   describe "call/2 with valid token in Authorization header" do
     setup do
       user = create_user()
