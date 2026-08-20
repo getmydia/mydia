@@ -413,6 +413,47 @@ void main() {
       expect(_opacity(tester), 1.0,
           reason: 'chrome hid underneath an open selector');
     });
+
+    testWidgets(
+        'reports activity on a pointer-down over already-visible content — '
+        'a touch device has no onEnter, and tapping a control that is '
+        'already shown never calls _show() either, so onPointerDown must be '
+        'its own activity signal or the race guard never arms on phones',
+        (tester) async {
+      var activityCount = 0;
+      await tester.pumpWidget(
+        _host(
+          ChromeVisibility(
+            isPlaying: true,
+            onActivity: () => activityCount++,
+            child: const Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(width: 100, height: 40, child: Text('chrome')),
+            ),
+          ),
+        ),
+      );
+
+      expect(_opacity(tester), 1.0);
+      expect(activityCount, 0);
+
+      // Tap inside the small top-left content box, not
+      // `ChromeVisibility.contentKey`'s own center — that key sits on a
+      // wrapper the surrounding `Stack.expand` stretches to fill the whole
+      // screen, so its geometric center falls on empty background instead
+      // of the content. `tap`/`tapAt` default to `PointerDeviceKind.touch`,
+      // unlike the mouse-only gestures used elsewhere in this file for
+      // onEnter/onExit coverage.
+      await tester.tapAt(const Offset(50, 20));
+      await tester.pump();
+
+      expect(
+        activityCount,
+        greaterThan(0),
+        reason: 'a touch tap on already-visible chrome content must report '
+            'activity directly, since neither onEnter nor _show() fires',
+      );
+    });
   });
 
   group('ChromeSlide', () {

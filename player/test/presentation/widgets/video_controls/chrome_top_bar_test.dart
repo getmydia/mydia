@@ -241,7 +241,7 @@ void main() {
       // Still renders without throwing and the back pill keeps its height.
       expect(
         tester.getSize(find.byKey(ChromeTopBar.backKey)).height,
-        GlassPill.height,
+        GlassPill.defaultHeight,
       );
     });
 
@@ -266,9 +266,9 @@ void main() {
       final castHeight =
           tester.getSize(find.byKey(ChromeTopBar.castKey)).height;
 
-      expect(backHeight, GlassPill.height);
-      expect(titleHeight, GlassPill.height);
-      expect(castHeight, GlassPill.height);
+      expect(backHeight, GlassPill.defaultHeight);
+      expect(titleHeight, GlassPill.defaultHeight);
+      expect(castHeight, GlassPill.defaultHeight);
     });
   });
 
@@ -306,6 +306,51 @@ void main() {
 
       await tester.tap(find.byType(GlassPill));
       expect(tapped, isTrue);
+    });
+  });
+
+  group('GlassPill height', () {
+    testWidgets('defaults to defaultHeight', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: GlassPill(
+                key: Key('default-pill'),
+                tier: PlayerGlassTier.faux,
+                child: Text('Back'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(
+        tester.getSize(find.byKey(const Key('default-pill'))).height,
+        GlassPill.defaultHeight,
+      );
+    });
+
+    testWidgets('honors an explicit height', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: GlassPill(
+                key: Key('tall-pill'),
+                tier: PlayerGlassTier.faux,
+                height: 44,
+                child: Text('Next up'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(
+        tester.getSize(find.byKey(const Key('tall-pill'))).height,
+        44.0,
+      );
     });
   });
 }

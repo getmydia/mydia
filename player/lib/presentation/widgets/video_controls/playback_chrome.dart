@@ -63,6 +63,12 @@ class ChromeVisibility extends StatefulWidget {
   /// (`setTrafficLightsHidden` from `core/window/traffic_lights.dart`).
   final void Function(bool hidden)? onTrafficLightsHidden;
 
+  /// Fired from [_show] and from the pointer entering the chrome — the two
+  /// places this widget already knows the viewer is doing something.
+  /// [PlaybackChrome] forwards its own `onActivity` here so both fire
+  /// through the one field.
+  final VoidCallback? onActivity;
+
   const ChromeVisibility({
     super.key,
     required this.isPlaying,
@@ -72,6 +78,7 @@ class ChromeVisibility extends StatefulWidget {
     this.onDoubleTap,
     this.onWindowDrag,
     this.onTrafficLightsHidden,
+    this.onActivity,
   });
 
   static const Key contentKey = Key('chrome-content');
@@ -213,6 +220,7 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
       widget.onTrafficLightsHidden ?? setTrafficLightsHidden;
 
   void _show() {
+    widget.onActivity?.call();
     if (!_visible) {
       setState(() => _visible = true);
       _setTrafficLightsHidden(false);
@@ -249,15 +257,26 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
             hitTestBehavior: HitTestBehavior.deferToChild,
             onEnter: (_) {
               _pointerOverChrome = true;
+              widget.onActivity?.call();
               _hideTimer?.cancel();
             },
             onExit: (_) {
               _pointerOverChrome = false;
               _restartTimer();
             },
-            child: KeyedSubtree(
-              key: ChromeVisibility.contentKey,
-              child: widget.child,
+            child: Listener(
+              // Touch devices have no hover, so `onEnter` above never fires,
+              // and tapping an already-visible control never calls `_show()`
+              // either (only a hidden -> visible transition does). Without
+              // this, `onActivity` never fires on touch at all, so
+              // `UpNextCountdown.noteInput()` is never called and the race
+              // guard never arms — on phones, exactly where a fat-finger
+              // race matters most.
+              onPointerDown: (_) => widget.onActivity?.call(),
+              child: KeyedSubtree(
+                key: ChromeVisibility.contentKey,
+                child: widget.child,
+              ),
             ),
           ),
         ),
@@ -413,6 +432,11 @@ class PlaybackChrome extends StatefulWidget {
   final VoidCallback? onPreviousEpisode;
   final VoidCallback? onNextEpisode;
 
+  /// Fired whenever the viewer does something — a pointer move, a tap, a
+  /// keypress routed through the chrome. `player_screen` forwards it to
+  /// `UpNextCountdown.noteInput`, which is what arms the race guard.
+  final VoidCallback? onActivity;
+
   final bool isFullscreen;
   final bool isAlwaysOnTop;
   final int audioTrackCount;
@@ -437,6 +461,7 @@ class PlaybackChrome extends StatefulWidget {
     this.onAlwaysOnTopTap,
     this.onPreviousEpisode,
     this.onNextEpisode,
+    this.onActivity,
     this.isFullscreen = false,
     this.isAlwaysOnTop = false,
     this.audioTrackCount = 0,
@@ -490,6 +515,7 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
           onWindowDrag: PlatformFeatures.isDesktop && !widget.isFullscreen
               ? startWindowDrag
               : null,
+          onActivity: widget.onActivity,
           child: SafeArea(
             child: Stack(
               children: [

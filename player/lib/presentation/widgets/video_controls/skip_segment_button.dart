@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/player/platform_features.dart';
 import '../../../domain/models/media_segment.dart';
+import 'chrome_panel.dart';
 import 'chrome_top_bar.dart';
 
 /// Records which segments have already been auto-skipped this playback session.
@@ -62,6 +63,7 @@ class SkipSegmentButton extends StatelessWidget {
     required this.segment,
     required this.position,
     required this.onSkip,
+    required this.metrics,
     this.tier,
   });
 
@@ -75,15 +77,15 @@ class SkipSegmentButton extends StatelessWidget {
   /// this widget deliberately holds no player reference.
   final void Function(MediaSegment segment) onSkip;
 
+  /// Corner geometry. Both insets come from here so this widget and
+  /// `UpNextPrompt` cannot drift apart; the old private constants cited
+  /// `UpNextOverlay`, which was the one widget not following the design
+  /// system.
+  final PanelMetrics metrics;
+
   /// Glass tier override, passed through to [GlassPill] so golden tests do not
   /// vary with the host platform.
   final PlayerGlassTier? tier;
-
-  /// Right inset. Matches `UpNextOverlay`, the other bottom-right overlay.
-  static const double _rightInset = 24;
-
-  /// Bottom inset, clearing the transport chrome. Matches `UpNextOverlay`.
-  static const double _bottomInset = 120;
 
   static const Key buttonKey = Key('skip-segment-button');
 
@@ -94,9 +96,9 @@ class SkipSegmentButton extends StatelessWidget {
     }
 
     return Padding(
-      padding: const EdgeInsets.only(
-        right: _rightInset,
-        bottom: _bottomInset,
+      padding: EdgeInsets.only(
+        right: PanelMetrics.cornerInsetRight,
+        bottom: metrics.cornerInsetBottom,
       ),
       child: Align(
         alignment: Alignment.bottomRight,
