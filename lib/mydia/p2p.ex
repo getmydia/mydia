@@ -35,6 +35,19 @@ defmodule Mydia.P2p do
   def get_node_addr(_resource), do: :erlang.nif_error(:nif_not_loaded)
 
   @doc """
+  Seal a pairing claim for storage on the metadata relay.
+
+  Returns `{:ok, {lookup_key, sealed}}`, where `lookup_key` is 64 lowercase hex
+  characters used as the relay's URL path segment, and `sealed` is a base64url
+  blob the relay cannot read.
+
+  The code is normalized (uppercased, dashes and whitespace stripped) inside the
+  Rust core, so callers pass raw user input straight through.
+  """
+  def seal_pairing_claim(_code, _node_addr, _instance_id),
+    do: :erlang.nif_error(:nif_not_loaded)
+
+  @doc """
   Start listening for p2p events.
   Events will be sent as messages to the given process.
   """
