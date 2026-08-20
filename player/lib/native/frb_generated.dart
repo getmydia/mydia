@@ -70,7 +70,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => -1482817765;
+  int get rustContentHash => 498053310;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -116,6 +116,13 @@ abstract class RustLibApi extends BaseApi {
       required FlutterPairingRequest req});
 
   Future<void> crateInitApp();
+
+  PairingKeys cratePairingKeysDerive({required String code});
+
+  Future<String> cratePairingKeysLookupKey({required PairingKeys that});
+
+  Future<ClaimPayload> cratePairingKeysOpen(
+      {required PairingKeys that, required String sealed});
 
   RustArcIncrementStrongCountFnType get rust_arc_increment_strong_count_P2PHost;
 
@@ -414,6 +421,79 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         argNames: [],
       );
 
+  @override
+  PairingKeys cratePairingKeysDerive({required String code}) {
+    return handler.executeSync(SyncTask(
+      callFfi: () {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(code, serializer);
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 11)!;
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_pairing_keys,
+        decodeErrorData: null,
+      ),
+      constMeta: kCratePairingKeysDeriveConstMeta,
+      argValues: [code],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCratePairingKeysDeriveConstMeta => const TaskConstMeta(
+        debugName: "pairing_keys_derive",
+        argNames: ["code"],
+      );
+
+  @override
+  Future<String> cratePairingKeysLookupKey({required PairingKeys that}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_box_autoadd_pairing_keys(that, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 12, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_String,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCratePairingKeysLookupKeyConstMeta,
+      argValues: [that],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCratePairingKeysLookupKeyConstMeta => const TaskConstMeta(
+        debugName: "pairing_keys_lookup_key",
+        argNames: ["that"],
+      );
+
+  @override
+  Future<ClaimPayload> cratePairingKeysOpen(
+      {required PairingKeys that, required String sealed}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_box_autoadd_pairing_keys(that, serializer);
+        sse_encode_String(sealed, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 13, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_claim_payload,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCratePairingKeysOpenConstMeta,
+      argValues: [that, sealed],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCratePairingKeysOpenConstMeta => const TaskConstMeta(
+        debugName: "pairing_keys_open",
+        argNames: ["that", "sealed"],
+      );
+
   RustArcIncrementStrongCountFnType
       get rust_arc_increment_strong_count_P2PHost => wire
           .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerP2pHost;
@@ -505,9 +585,27 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  PairingKeys dco_decode_box_autoadd_pairing_keys(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_pairing_keys(raw);
+  }
+
+  @protected
   BigInt dco_decode_box_autoadd_u_64(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_u_64(raw);
+  }
+
+  @protected
+  ClaimPayload dco_decode_claim_payload(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return ClaimPayload(
+      nodeAddr: dco_decode_String(arr[0]),
+      instanceId: dco_decode_String(arr[1]),
+    );
   }
 
   @protected
@@ -688,6 +786,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  PairingKeys dco_decode_pairing_keys(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 1)
+      throw Exception('unexpected arr length: expect 1 but see ${arr.length}');
+    return PairingKeys(
+      code: dco_decode_String(arr[0]),
+    );
+  }
+
+  @protected
   (
     P2PHost,
     String
@@ -826,9 +935,24 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  PairingKeys sse_decode_box_autoadd_pairing_keys(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_pairing_keys(deserializer));
+  }
+
+  @protected
   BigInt sse_decode_box_autoadd_u_64(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_u_64(deserializer));
+  }
+
+  @protected
+  ClaimPayload sse_decode_claim_payload(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_nodeAddr = sse_decode_String(deserializer);
+    var var_instanceId = sse_decode_String(deserializer);
+    return ClaimPayload(nodeAddr: var_nodeAddr, instanceId: var_instanceId);
   }
 
   @protected
@@ -1039,6 +1163,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  PairingKeys sse_decode_pairing_keys(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_code = sse_decode_String(deserializer);
+    return PairingKeys(code: var_code);
+  }
+
+  @protected
   (
     P2PHost,
     String
@@ -1182,9 +1313,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_pairing_keys(
+      PairingKeys self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_pairing_keys(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_u_64(BigInt self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_u_64(self, serializer);
+  }
+
+  @protected
+  void sse_encode_claim_payload(ClaimPayload self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.nodeAddr, serializer);
+    sse_encode_String(self.instanceId, serializer);
   }
 
   @protected
@@ -1345,6 +1490,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     if (self != null) {
       sse_encode_list_prim_u_8_strict(self, serializer);
     }
+  }
+
+  @protected
+  void sse_encode_pairing_keys(PairingKeys self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.code, serializer);
   }
 
   @protected

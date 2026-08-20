@@ -70,7 +70,13 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
       dynamic raw);
 
   @protected
+  PairingKeys dco_decode_box_autoadd_pairing_keys(dynamic raw);
+
+  @protected
   BigInt dco_decode_box_autoadd_u_64(dynamic raw);
+
+  @protected
+  ClaimPayload dco_decode_claim_payload(dynamic raw);
 
   @protected
   FlutterConnectionType dco_decode_flutter_connection_type(dynamic raw);
@@ -119,6 +125,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   Uint8List? dco_decode_opt_list_prim_u_8_strict(dynamic raw);
+
+  @protected
+  PairingKeys dco_decode_pairing_keys(dynamic raw);
 
   @protected
   (
@@ -192,7 +201,13 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  PairingKeys sse_decode_box_autoadd_pairing_keys(SseDeserializer deserializer);
+
+  @protected
   BigInt sse_decode_box_autoadd_u_64(SseDeserializer deserializer);
+
+  @protected
+  ClaimPayload sse_decode_claim_payload(SseDeserializer deserializer);
 
   @protected
   FlutterConnectionType sse_decode_flutter_connection_type(
@@ -251,6 +266,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   Uint8List? sse_decode_opt_list_prim_u_8_strict(SseDeserializer deserializer);
+
+  @protected
+  PairingKeys sse_decode_pairing_keys(SseDeserializer deserializer);
 
   @protected
   (
@@ -324,7 +342,14 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
       FlutterPairingRequest self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_pairing_keys(
+      PairingKeys self, SseSerializer serializer);
+
+  @protected
   void sse_encode_box_autoadd_u_64(BigInt self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_claim_payload(ClaimPayload self, SseSerializer serializer);
 
   @protected
   void sse_encode_flutter_connection_type(
@@ -385,6 +410,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_opt_list_prim_u_8_strict(
       Uint8List? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_pairing_keys(PairingKeys self, SseSerializer serializer);
 
   @protected
   void
