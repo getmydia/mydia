@@ -7,6 +7,8 @@ import 'package:player/presentation/widgets/video_controls/up_next_countdown.dar
 import 'package:player/presentation/widgets/video_controls/up_next_policy.dart';
 import 'package:player/presentation/widgets/video_controls/up_next_prompt.dart';
 
+import '../../../test_utils/mock_network_images.dart';
+
 const _target = UpNextTarget(
   episodeId: 'ep-8',
   fileId: 'file-8',
@@ -30,29 +32,56 @@ Future<void> _pump(
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
 
-  await tester.pumpWidget(
-    MaterialApp(
-      home: MediaQuery(
-        data: MediaQueryData(size: Size(width, 720)),
-        child: Scaffold(
-          body: Stack(
-            children: [
-              UpNextPrompt(
-                target: target,
-                countdown: countdown,
-                metrics: PanelMetrics.forWidth(width),
-                onPlayNow: onPlayNow ?? () {},
-                onDismiss: onDismiss ?? () {},
-                onEngagedChanged: onEngagedChanged ?? (_) {},
-                tier: PlayerGlassTier.faux,
+  // The still now goes through CachedNetworkImage (like every other
+  // thumbnail in the app), so a real HTTP fetch attempt would otherwise
+  // make `pumpAndSettle` time out in a test environment with no network.
+  await mockNetworkImages(() => tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: MediaQueryData(size: Size(width, 720)),
+            child: Scaffold(
+              body: Stack(
+                children: [
+                  UpNextPrompt(
+                    target: target,
+                    countdown: countdown,
+                    metrics: PanelMetrics.forWidth(width),
+                    onPlayNow: onPlayNow ?? () {},
+                    onDismiss: onDismiss ?? () {},
+                    onEngagedChanged: onEngagedChanged ?? (_) {},
+                    tier: PlayerGlassTier.faux,
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
-      ),
-    ),
-  );
+      ));
 }
+
+/// Taps the resting pill open. Deliberately not `pumpAndSettle`: on a
+/// target with a thumbnail, expanding mounts `_CardStill`'s
+/// `CachedNetworkImage`, whose placeholder is a `ShimmerCard` — an
+/// unbounded, repeating animation. Under `flutter test`'s fake-async pump,
+/// the underlying fetch (flutter_cache_manager doing real disk I/O) never
+/// actually resolves, so the shimmer keeps scheduling frames forever and
+/// `pumpAndSettle` times out waiting for zero pending frames. These tests
+/// don't need the image to finish loading, only the card's own expand
+/// transition (`AnimatedSize` over `DepthTokens.motionFast`, 150ms) to
+/// finish, so a handful of fixed pumps past that is enough — and avoids the
+/// trap.
+///
+/// Three separate 100ms pumps, not one 300ms pump: a single large-duration
+/// `pump()` still only processes one frame, which was not enough for
+/// `TapRegionSurface`/gesture-arena bookkeeping to settle — a subsequent tap
+/// on the card missed its target with a single big pump, but not across a
+/// few smaller ones.
+Future<void> _expandCard(WidgetTester tester) => mockNetworkImages(() async {
+      await tester.tap(find.byKey(UpNextPrompt.pillKey));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+    });
 
 void main() {
   late UpNextCountdown countdown;
@@ -140,8 +169,7 @@ void main() {
     testWidgets('expands on tap and shows the still, code, and title',
         (tester) async {
       await _pump(tester, countdown: countdown);
-      await tester.tap(find.byKey(UpNextPrompt.pillKey));
-      await tester.pumpAndSettle();
+      await _expandCard(tester);
       expect(find.byKey(UpNextPrompt.cardKey), findsOneWidget);
       expect(find.byKey(UpNextPrompt.stillKey), findsOneWidget);
       expect(find.text('S1E8'), findsOneWidget);
@@ -169,8 +197,7 @@ void main() {
     testWidgets('keeps a working dismiss while expanded', (tester) async {
       var dismissed = 0;
       await _pump(tester, countdown: countdown, onDismiss: () => dismissed++);
-      await tester.tap(find.byKey(UpNextPrompt.pillKey));
-      await tester.pumpAndSettle();
+      await _expandCard(tester);
       await tester.tap(find.byKey(UpNextPrompt.dismissKey));
       expect(dismissed, 1);
     });
@@ -181,8 +208,7 @@ void main() {
         (tester) async {
       final engaged = <bool>[];
       await _pump(tester, countdown: countdown, onEngagedChanged: engaged.add);
-      await tester.tap(find.byKey(UpNextPrompt.pillKey));
-      await tester.pumpAndSettle();
+      await _expandCard(tester);
       expect(engaged.last, isTrue);
       await tester.tap(find.byKey(UpNextPrompt.cardKey));
       await tester.pumpAndSettle();
@@ -207,8 +233,7 @@ void main() {
     testWidgets('does not re-report the same engagement value', (tester) async {
       final engaged = <bool>[];
       await _pump(tester, countdown: countdown, onEngagedChanged: engaged.add);
-      await tester.tap(find.byKey(UpNextPrompt.pillKey));
-      await tester.pumpAndSettle();
+      await _expandCard(tester);
       final afterExpand = engaged.length;
       await tester.pump(const Duration(seconds: 1));
       expect(engaged.length, afterExpand);
