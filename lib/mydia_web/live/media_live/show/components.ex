@@ -463,7 +463,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
       <% grouped_seasons = group_episodes_by_season(@media_item.episodes)
       derived_preset = Mydia.Media.derive_monitoring_preset(@media_item.episodes) %>
 
-      <div class="card bg-base-200 shadow-lg">
+      <div id="seasons-episodes-section" class="card bg-base-200 shadow-lg">
         <%!-- Card header with stats --%>
         <div class="card-body p-4 pb-0">
           <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
@@ -705,7 +705,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   def media_files_section(assigns) do
     ~H"""
     <%= if length(@media_item.media_files) > 0 do %>
-      <div class="card bg-base-200 shadow-lg mb-4 md:mb-6">
+      <div id="media-files-section" class="card bg-base-200 shadow-lg mb-4 md:mb-6">
         <div class="card-body p-4 md:p-6">
           <h2 class="card-title text-lg md:text-xl mb-3 md:mb-4">Media Files</h2>
           <%!-- DaisyUI list component --%>
@@ -912,7 +912,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   def timeline_section(assigns) do
     ~H"""
     <%= if length(@timeline_events) > 0 do %>
-      <div class="card bg-base-200 shadow-lg mb-4 md:mb-6">
+      <div id="timeline-section" class="card bg-base-200 shadow-lg mb-4 md:mb-6">
         <div class="card-body p-4 md:p-6">
           <h2 class="card-title text-lg md:text-xl mb-3 md:mb-4">History</h2>
           <%!-- Horizontal scrollable timeline container --%>
@@ -1007,7 +1007,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   def subtitles_section(assigns) do
     ~H"""
     <%= if length(@media_item.media_files) > 0 do %>
-      <div class="card bg-base-200 shadow-lg mb-4 md:mb-6">
+      <div id="subtitles-section" class="card bg-base-200 shadow-lg mb-4 md:mb-6">
         <div class="card-body p-4 md:p-6">
           <h2 class="card-title text-lg md:text-xl mb-3 md:mb-4">Subtitles</h2>
 
