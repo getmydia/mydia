@@ -118,4 +118,146 @@ void main() {
       );
     });
   });
+
+  group('UpNextTarget', () {
+    const target = UpNextTarget(
+      episodeId: 'ep-8',
+      fileId: 'file-8',
+      seasonNumber: 1,
+      episodeNumber: 8,
+      title: 'Narkina 5',
+    );
+
+    test('builds the episode code from season and episode numbers', () {
+      expect(target.episodeCode, 'S1E8');
+    });
+
+    test('reads "Next up" in-season and "Next season" when crossing', () {
+      expect(target.eyebrow, 'Next up');
+      expect(
+        const UpNextTarget(
+          episodeId: 'ep-1',
+          fileId: 'file-1',
+          seasonNumber: 2,
+          episodeNumber: 1,
+          title: 'Premiere',
+          crossesSeason: true,
+        ).eyebrow,
+        'Next season',
+      );
+    });
+
+    test('joins eyebrow and code with a middle dot for the pill', () {
+      expect(target.pillLabel, 'Next up · S1E8');
+    });
+  });
+
+  group('resolveInSeasonNext', () {
+    const withFile = UpNextCandidate(
+      id: 'ep-8',
+      seasonNumber: 1,
+      episodeNumber: 8,
+      title: 'Narkina 5',
+      fileIds: ['file-8'],
+      thumbnailUrl: 'https://example.test/8.jpg',
+    );
+    const noFile = UpNextCandidate(
+      id: 'ep-9',
+      seasonNumber: 1,
+      episodeNumber: 9,
+      title: 'Nobody Is Listening',
+      fileIds: [],
+    );
+    const current = UpNextCandidate(
+      id: 'ep-7',
+      seasonNumber: 1,
+      episodeNumber: 7,
+      title: 'Announcement',
+      fileIds: ['file-7'],
+    );
+
+    test('returns the following episode with its first file', () {
+      final target = resolveInSeasonNext([current, withFile], 0);
+      expect(target, isNotNull);
+      expect(target!.episodeId, 'ep-8');
+      expect(target.fileId, 'file-8');
+      expect(target.thumbnailUrl, 'https://example.test/8.jpg');
+      expect(target.crossesSeason, isFalse);
+    });
+
+    test('returns null when the following episode has no file', () {
+      // The defect this closes: the prompt used to appear here, count all
+      // the way down, and then play nothing at all.
+      expect(resolveInSeasonNext([current, noFile], 0), isNull);
+    });
+
+    test('returns null at the end of the season', () {
+      expect(resolveInSeasonNext([current, withFile], 1), isNull);
+    });
+
+    test('returns null for an out-of-range index', () {
+      expect(resolveInSeasonNext([current], -1), isNull);
+      expect(resolveInSeasonNext(const [], 0), isNull);
+    });
+  });
+
+  group('resolveSeasonPremiere', () {
+    const special = UpNextCandidate(
+      id: 'ep-sp',
+      seasonNumber: 2,
+      episodeNumber: 0,
+      title: 'Recap',
+      fileIds: ['file-sp'],
+    );
+    const premiere = UpNextCandidate(
+      id: 'ep-201',
+      seasonNumber: 2,
+      episodeNumber: 1,
+      title: 'One Year Later',
+      fileIds: ['file-201'],
+    );
+
+    test('marks the result as crossing a season', () {
+      final target = resolveSeasonPremiere([premiere]);
+      expect(target!.crossesSeason, isTrue);
+      expect(target.episodeCode, 'S2E1');
+      expect(target.eyebrow, 'Next season');
+    });
+
+    test('never mistakes a special numbered 0 for the premiere', () {
+      final target = resolveSeasonPremiere([special, premiere]);
+      expect(target!.episodeId, 'ep-201');
+    });
+
+    test('takes the lowest episode number at or above 1', () {
+      const second = UpNextCandidate(
+        id: 'ep-202',
+        seasonNumber: 2,
+        episodeNumber: 2,
+        title: 'Second',
+        fileIds: ['file-202'],
+      );
+      final target = resolveSeasonPremiere([second, premiere]);
+      expect(target!.episodeId, 'ep-201');
+    });
+
+    test('returns null when the premiere has no file', () {
+      const fileless = UpNextCandidate(
+        id: 'ep-201',
+        seasonNumber: 2,
+        episodeNumber: 1,
+        title: 'One Year Later',
+        fileIds: [],
+      );
+      expect(resolveSeasonPremiere([fileless]), isNull);
+    });
+
+    test('returns null for an empty season', () {
+      expect(resolveSeasonPremiere(const []), isNull);
+    });
+
+    test('returns null when the season holds only specials', () {
+      expect(resolveSeasonPremiere([special]), isNull);
+    });
+  });
 }
