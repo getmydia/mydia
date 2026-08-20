@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
@@ -183,7 +185,13 @@ class _UpNextPromptState extends State<UpNextPrompt> {
 
   Widget _buildCard(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
-    final cardWidth = width < 600 ? width - 32 : (width - 48).clamp(0.0, 320.0);
+    // Clamp both branches: below a 32px-wide viewport `width - 32` would
+    // otherwise go negative, which trips BoxConstraints' non-negative
+    // assert downstream — the same class of bug already guarded in
+    // `PanelMetrics.resolve` (chrome_panel.dart).
+    final cardWidth = width < 600
+        ? math.max(0.0, width - 32)
+        : (width - 48).clamp(0.0, 320.0);
     final still = widget.target.thumbnailUrl;
     final glassText = TextStyle(
         color: Colors.white.withValues(alpha: .80),

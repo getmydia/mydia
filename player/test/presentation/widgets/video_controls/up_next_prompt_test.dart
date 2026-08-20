@@ -201,6 +201,26 @@ void main() {
       await tester.tap(find.byKey(UpNextPrompt.dismissKey));
       expect(dismissed, 1);
     });
+
+    testWidgets(
+        'does not throw when the expanded card is rebuilt below the width '
+        'clamp floor — below 32px, `width - 32` used to go negative and '
+        "trip BoxConstraints' non-negative assert", (tester) async {
+      // Expand at a normal width first: the resting pill sizes to its own
+      // content rather than clamping to the viewport, so tapping it open at
+      // an already-tiny width is a separate, unrelated overflow. Once
+      // expanded, re-pumping at 20px updates (not replaces) the same
+      // element, preserving `_expanded == true` and forcing `_buildCard` to
+      // recompute `cardWidth` against the narrow viewport — exactly the
+      // path this fix clamps.
+      await _pump(tester, countdown: countdown);
+      await _expandCard(tester);
+      expect(find.byKey(UpNextPrompt.cardKey), findsOneWidget);
+
+      await _pump(tester, countdown: countdown, width: 20);
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(UpNextPrompt.cardKey), findsOneWidget);
+    });
   });
 
   group('engagement', () {
