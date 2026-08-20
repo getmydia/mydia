@@ -137,4 +137,60 @@ defmodule Mydia.Library.PruneTest do
       assert [{_id, :would_leave_no_file}] = result.aborted
     end
   end
+
+  describe "execute/3 with a keeper override" do
+    test "trashes the file the operator selected, honoring the override, not the ranked keeper" do
+      {episode, files} =
+        episode_with(
+          [
+            {"Rick and Morty/Season 02/Rick.and.Morty.S02E03.1080p.BluRay.x265.mp4",
+             %{resolution: "1080p", codec: "hevc", bitrate: 2_002_656}},
+            {"Rick and Morty/Season 02/Rick.and.Morty.S02E03.360p.WEBRip.x264.mp4",
+             %{resolution: "360p", codec: "h264", bitrate: 1_000_000}}
+          ],
+          1320.0
+        )
+
+      ranked_keeper = Enum.find(files, &(&1.relative_path =~ "1080p"))
+      overridden_keeper = Enum.find(files, &(&1.relative_path =~ "360p"))
+
+      # The operator overrode the keeper to the lower-quality file, then chose
+      # to trash the ranked (higher-quality) one.
+      keepers = %{episode.id => overridden_keeper.id}
+      result = Prune.execute([ranked_keeper.id], "admin", keepers)
+
+      assert Enum.map(result.trashed, & &1.id) == [ranked_keeper.id]
+      assert result.failed == []
+      assert result.aborted == []
+
+      assert Mydia.Repo.get!(Mydia.Library.MediaFile, ranked_keeper.id).trashed_at
+      refute Mydia.Repo.get!(Mydia.Library.MediaFile, overridden_keeper.id).trashed_at
+    end
+
+    test "still refuses to leave a group with zero files under an override" do
+      {episode, files} =
+        episode_with(
+          [
+            {"Rick and Morty/Season 02/Rick.and.Morty.S02E03.1080p.BluRay.x265.mp4",
+             %{resolution: "1080p", codec: "hevc", bitrate: 2_002_656}},
+            {"Rick and Morty/Season 02/Rick.and.Morty.S02E03.360p.WEBRip.x264.mp4",
+             %{resolution: "360p", codec: "h264", bitrate: 1_000_000}}
+          ],
+          1320.0
+        )
+
+      ranked_keeper = Enum.find(files, &(&1.relative_path =~ "1080p"))
+      overridden_keeper = Enum.find(files, &(&1.relative_path =~ "360p"))
+      keepers = %{episode.id => overridden_keeper.id}
+
+      ids = Enum.map(files, & &1.id)
+      result = Prune.execute(ids, "admin", keepers)
+
+      assert Enum.map(result.trashed, & &1.id) == [ranked_keeper.id]
+      assert result.aborted == [{overridden_keeper.id, :would_leave_no_file}]
+
+      assert Mydia.Repo.get!(Mydia.Library.MediaFile, ranked_keeper.id).trashed_at
+      refute Mydia.Repo.get!(Mydia.Library.MediaFile, overridden_keeper.id).trashed_at
+    end
+  end
 end

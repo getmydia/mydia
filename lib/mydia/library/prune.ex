@@ -9,13 +9,14 @@ defmodule Mydia.Library.Prune do
 
   Nothing here runs on a schedule. An operator reviews a plan and confirms it.
 
-  ## Why execute/2 re-verifies
+  ## Why execute/3 re-verifies
 
-  `execute/2` does not trust the ids it is handed. It rebuilds the plan and
-  drops any id that is not a current loser of a currently eligible group. The
-  page can be minutes stale, a scan can have changed the group underneath it,
-  and a caller can reach this function without going through the UI at all.
-  The UI is not the security boundary; this function is.
+  `execute/3` does not trust the ids it is handed. It rebuilds the plan
+  (honoring the same `keepers` overrides the operator's plan was built from)
+  and drops any id that is not a current loser of a currently eligible group.
+  The page can be minutes stale, a scan can have changed the group underneath
+  it, and a caller can reach this function without going through the UI at
+  all. The UI is not the security boundary; this function is.
   """
 
   alias Mydia.Events
@@ -53,19 +54,25 @@ defmodule Mydia.Library.Prune do
   Trashes the given files, after re-verifying that each one is a current loser
   of a currently eligible group.
 
+  `keepers` must be the same override map the operator's plan was built from
+  (see `plan/1`). Without it, `execute/3` would silently re-rank every group
+  with the default keeper, discarding whatever override the operator chose
+  before confirming.
+
   Returns which files were trashed, which failed to move, and which were
   aborted by re-verification. Partial failure is reported rather than rolled
   back: `Mydia.Library.TrashStore` has already moved bytes by the time a row
   update can fail, so a global rollback would be a lie.
   """
-  @spec execute([String.t()], String.t()) :: %{
+  @spec execute([String.t()], String.t(), %{optional(String.t()) => String.t()}) :: %{
           trashed: [MediaFile.t()],
           failed: [{String.t(), term()}],
           aborted: [{String.t(), atom()}]
         }
-  def execute(file_ids, actor_id) when is_list(file_ids) and is_binary(actor_id) do
+  def execute(file_ids, actor_id, keepers \\ %{})
+      when is_list(file_ids) and is_binary(actor_id) and is_map(keepers) do
     requested = MapSet.new(file_ids)
-    %{decisions: decisions, refusals: refusals} = plan()
+    %{decisions: decisions, refusals: refusals} = plan(keepers)
 
     refused_ids =
       for {group, reason, _detail} <- refusals,
