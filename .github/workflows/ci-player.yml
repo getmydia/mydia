@@ -91,6 +91,73 @@ jobs:
           echo "Browser tests: $files"
           flutter test --platform chrome $files
 
+  # Nothing compiled the player for the web until this job existed. The matrix
+  # below covers Windows, macOS, Linux and Android, and `icons` only diffs the
+  # generated SVG set, so 183 commits landed on player/ between the public web
+  # player merging and its first deploy without one of them being checked
+  # against the web target. That gap is only visible at deploy time, where it
+  # would now break a release: deploy-web-player.yml runs from release.yml.
+  #
+  # This builds the same bundle the deploy builds, with the same flags, minus
+  # the wasm module. The Rust half needs nix, wasm-pack and a
+  # flutter_rust_bridge codegen install (player/tool/build_web.sh), which is
+  # roughly twelve minutes and too much for every player PR. The split is
+  # deliberate rather than lazy: ci.yml already compiles
+  # native/mydia_p2p_core for wasm32-unknown-unknown, so the crate reaching
+  # wasm is covered, and what stays uncovered here is wasm-pack's packaging
+  # step, whose inputs are pinned toolchain versions that move only on a
+  # deliberate bump. Dart source, which every PR touches, is what this catches.
+  #
+  # MYDIA_WEB_P2P=true matters even without the module present: it selects the
+  # public-web branch in main.dart, so this compiles the code path the deploy
+  # actually ships rather than the instance-hosted one.
+  build-web:
+    name: Build / Web
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: player
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version-file: player/.fvmrc
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Run code generation
+        run: flutter pub run build_runner build
+
+      - name: Build the web bundle
+        run: |
+          flutter build web --release --base-href / \
+            --no-web-resources-cdn \
+            --pwa-strategy=none \
+            --dart-define=MYDIA_WEB_P2P=true
+
+      # Same assertion build_web.sh makes, moved forward to PR time. Without
+      # _headers the deployed page never becomes cross-origin isolated, there
+      # is no SharedArrayBuffer, and RustLib.init() throws in every browser.
+      # Flutter copies web/ across verbatim, so this fails only if that file
+      # is deleted or renamed, which is exactly the change worth catching in
+      # review rather than in a browser.
+      - name: Check _headers survived the build
+        run: |
+          [ -f build/web/_headers ] || {
+            echo "::error::_headers did not make it into build/web. The deployed page" >&2
+            echo "         would not be cross-origin isolated and the p2p module would" >&2
+            echo "         fail to instantiate in every browser." >&2
+            exit 1
+          }
+
   build:
     name: Build / ${{ matrix.platform }}
     strategy:

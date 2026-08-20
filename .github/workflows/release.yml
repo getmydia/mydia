@@ -1340,6 +1340,31 @@ jobs:
           uv run --project docs mike deploy --push --update-aliases "$VERSION" latest
           uv run --project docs mike set-default --push latest
 
+  web-player:
+    name: Deploy Web Player
+    # Stable only, matching `docs` above and the Docker :latest tag.
+    # web.mydia.dev is a single public surface with no staging copy, so a
+    # prerelease published there would reach every viewer with no way to opt
+    # in. Betas stay on the installable builds, which a user chooses.
+    if: needs.prepare.outputs.is_prerelease == 'false' && !inputs.dry_run
+    needs:
+      - prepare
+      - publish
+    # Builds and deploys the same bundle a manual dispatch would. Reused
+    # rather than restated here: the build is nine steps of nix, devenv,
+    # Cachix and a pinned flutter_rust_bridge install, and a second copy
+    # would drift from the one that gets exercised between releases.
+    uses: ./.github/workflows/deploy-web-player.yml
+    with:
+      # The commit the draft pins, so the bundle, the tag and the images all
+      # describe one commit even when master has moved past it.
+      ref: ${{ needs.prepare.outputs.sha }}
+      # Literal, and it must equal the `mydia-web` Pages project's production
+      # branch. Anything else deploys green to a preview URL and leaves
+      # web.mydia.dev on the previous release.
+      branch: master
+    secrets: inherit
+
   flatpak-publish:
     name: Publish Flatpak
     # Needs `publish`, which carries !inputs.dry_run, so this is skipped
