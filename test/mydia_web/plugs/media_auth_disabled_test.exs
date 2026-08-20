@@ -14,7 +14,6 @@ defmodule MydiaWeb.Plugs.MediaAuthDisabledTest do
       RemoteAccess.create_device(%{
         device_name: "Test Phone",
         platform: "android",
-        device_static_public_key: :crypto.strong_rand_bytes(32),
         token: Base.encode64(:crypto.strong_rand_bytes(32), padding: false),
         user_id: user.id
       })
