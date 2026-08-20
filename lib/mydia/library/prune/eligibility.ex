@@ -84,6 +84,11 @@ defmodule Mydia.Library.Prune.Eligibility do
     end
   end
 
+  # An empty group has no durations to compare. Deferring to
+  # check_enough_files/1 keeps the reported reason the documented
+  # :nothing_to_prune refusal instead of raising on Enum.max/1.
+  defp check_duration_agreement(%Group{files: []}), do: :ok
+
   defp check_duration_agreement(%Group{files: files}) do
     durations = Enum.map(files, &duration_of/1)
     longest = Enum.max(durations)

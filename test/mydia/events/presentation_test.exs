@@ -272,12 +272,13 @@ defmodule Mydia.Events.PresentationTest do
                event(
                  type: "media_file.pruned",
                  metadata: %{
+                   "title" => "Arrival",
                    "kept" => "Arrival/Arrival.2160p.mkv",
                    "trashed" => ["Arrival/Arrival.1080p.mkv"],
                    "bytes_reclaimed" => 2_147_483_648
                  }
                )
-             ) == "1 file trashed, 2.0 GB reclaimed"
+             ) == "Arrival, 1 file trashed, 2.0 GB reclaimed"
     end
 
     test "pruned pluralizes for more than one trashed file" do
@@ -285,6 +286,7 @@ defmodule Mydia.Events.PresentationTest do
                event(
                  type: "media_file.pruned",
                  metadata: %{
+                   "title" => "Arrival",
                    "kept" => "Arrival/Arrival.2160p.mkv",
                    "trashed" => [
                      "Arrival/Arrival.1080p.mkv",
@@ -293,27 +295,41 @@ defmodule Mydia.Events.PresentationTest do
                    "bytes_reclaimed" => 500_000
                  }
                )
-             ) == "2 files trashed, 500000 B reclaimed"
+             ) == "Arrival, 2 files trashed, 500000 B reclaimed"
     end
 
     test "pruned omits the reclaimed clause when bytes_reclaimed is absent or zero" do
       assert Presentation.detail(
                event(
                  type: "media_file.pruned",
-                 metadata: %{"kept" => "Arrival/Arrival.2160p.mkv", "trashed" => ["a.mkv"]}
+                 metadata: %{
+                   "title" => "Arrival",
+                   "kept" => "Arrival/Arrival.2160p.mkv",
+                   "trashed" => ["a.mkv"]
+                 }
                )
-             ) == "1 file trashed"
+             ) == "Arrival, 1 file trashed"
 
       assert Presentation.detail(
                event(
                  type: "media_file.pruned",
                  metadata: %{
+                   "title" => "Arrival",
                    "kept" => "Arrival/Arrival.2160p.mkv",
                    "trashed" => ["a.mkv"],
                    "bytes_reclaimed" => 0
                  }
                )
-             ) == "1 file trashed"
+             ) == "Arrival, 1 file trashed"
+    end
+
+    test "pruned falls back to Unknown when the title is missing" do
+      assert Presentation.detail(
+               event(
+                 type: "media_file.pruned",
+                 metadata: %{"kept" => "Arrival/Arrival.2160p.mkv", "trashed" => ["a.mkv"]}
+               )
+             ) == "Unknown, 1 file trashed"
     end
   end
 

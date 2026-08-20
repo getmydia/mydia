@@ -525,6 +525,8 @@ defmodule Mydia.Events do
       resource_id: resource_id,
       severity: :info,
       metadata: %{
+        "title" => media_item.title,
+        "media_type" => media_item.type,
         "kept" => keeper.relative_path,
         "kept_id" => keeper.id,
         "trashed" => Enum.map(losers, & &1.relative_path),

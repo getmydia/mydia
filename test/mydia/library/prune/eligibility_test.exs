@@ -116,6 +116,14 @@ defmodule Mydia.Library.Prune.EligibilityTest do
     end
   end
 
+  describe "check/1 empty group" do
+    test "refuses nothing_to_prune instead of raising on an empty file list" do
+      group = movie_group([])
+
+      assert {:refused, :nothing_to_prune, %{count: 0}} = Eligibility.check(group)
+    end
+  end
+
   describe "check/1 refusal ordering" do
     test "reports duplicate_registration ahead of duration agreement" do
       # Identical rows trivially agree on duration. The scanner bug is the

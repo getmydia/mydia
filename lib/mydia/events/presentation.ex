@@ -384,7 +384,7 @@ defmodule Mydia.Events.Presentation do
     trashed = metadata["trashed"] || []
     count = length(trashed)
     suffix = if count == 1, do: "file", else: "files"
-    base = "#{count} #{suffix} trashed"
+    base = "#{title_of(metadata)}, #{count} #{suffix} trashed"
 
     case metadata["bytes_reclaimed"] do
       bytes when is_integer(bytes) and bytes > 0 ->
