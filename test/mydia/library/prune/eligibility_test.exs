@@ -24,7 +24,7 @@ defmodule Mydia.Library.Prune.EligibilityTest do
       subject_type: :movie,
       subject_id: movie.id,
       subject: movie,
-      media_item: movie,
+      media_item: Mydia.Repo.preload(movie, :episodes),
       files: files
     }
   end
@@ -92,8 +92,14 @@ defmodule Mydia.Library.Prune.EligibilityTest do
     test "accepts durations inside the 2 percent tolerance" do
       group =
         movie_group([
-          %{relative_path: "a.mkv", metadata: duration(6000.0)},
-          %{relative_path: "b.mkv", metadata: duration(5900.0)}
+          %{
+            relative_path: "Muppets Most Wanted (2014) 1080p.mkv",
+            metadata: duration(6000.0)
+          },
+          %{
+            relative_path: "Muppets Most Wanted (2014) 720p.mkv",
+            metadata: duration(5900.0)
+          }
         ])
 
       assert {:ok, ^group} = Eligibility.check(group)
@@ -121,6 +127,67 @@ defmodule Mydia.Library.Prune.EligibilityTest do
         ])
 
       assert {:refused, :duplicate_registration, _} = Eligibility.check(group)
+    end
+  end
+
+  describe "check/1 name agreement" do
+    test "refuses the FROM Fray/Crepe shape where two names disagree" do
+      show = media_item_fixture(%{type: "tv_show", title: "FROM", year: 2022})
+      episode = episode_fixture(%{media_item_id: show.id, season_number: 4, episode_number: 2})
+      lp = library_path_fixture(%{type: "series"})
+
+      files =
+        for name <- [
+              "FROM/Season 04/From.S04E02.Fray.WEB-DL.1080p.UkrEng.mkv",
+              "FROM/Season 04/From.S04E03.Crepe.1080p.AMZN.WEB-DL.H.264-MeM.mkv"
+            ] do
+          media_file_fixture(%{
+            episode_id: episode.id,
+            library_path_id: lp.id,
+            relative_path: name,
+            metadata: %{"container" => "mkv", "duration" => 3246.0}
+          })
+        end
+
+      group = %Group{
+        subject_type: :episode,
+        subject_id: episode.id,
+        subject: episode,
+        media_item: Mydia.Repo.preload(show, :episodes),
+        files: Mydia.Repo.preload(files, :library_path)
+      }
+
+      assert {:refused, reason, _detail} = Eligibility.check(group)
+      assert reason in [:name_mismatch, :episode_mismatch]
+    end
+
+    test "accepts two releases of the same episode" do
+      show = media_item_fixture(%{type: "tv_show", title: "Rick and Morty", year: 2013})
+      episode = episode_fixture(%{media_item_id: show.id, season_number: 2, episode_number: 3})
+      lp = library_path_fixture(%{type: "series"})
+
+      files =
+        for name <- [
+              "Rick and Morty/Season 02/Rick.and.Morty.S02E03.1080p.BluRay.x265-RARBG.mp4",
+              "Rick and Morty/Season 02/Rick.and.Morty.S02E03.480p.WEBRip.x264.mp4"
+            ] do
+          media_file_fixture(%{
+            episode_id: episode.id,
+            library_path_id: lp.id,
+            relative_path: name,
+            metadata: %{"container" => "mp4", "duration" => 1320.0}
+          })
+        end
+
+      group = %Group{
+        subject_type: :episode,
+        subject_id: episode.id,
+        subject: episode,
+        media_item: Mydia.Repo.preload(show, :episodes),
+        files: Mydia.Repo.preload(files, :library_path)
+      }
+
+      assert {:ok, ^group} = Eligibility.check(group)
     end
   end
 end

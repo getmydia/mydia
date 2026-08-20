@@ -21,12 +21,13 @@ defmodule Mydia.Library.Prune.Eligibility do
     4. `:name_mismatch` - a filename does not bind to the subject
     5. `:episode_mismatch` - parsed season/episode disagrees with the row
     6. `:nothing_to_prune` - fewer than two files survive
-
-  Checks 4 and 5 live in this module too but are added by the parser task.
   """
 
   alias Mydia.Library.MediaFile
   alias Mydia.Library.Prune.Group
+  alias Mydia.Library.ReleaseParser
+  alias Mydia.Library.ReleaseParser.TargetContext
+  alias Mydia.Media.Episode
 
   # Measured against production: 1% admits 164 of 228 candidates, 2% admits
   # 177, 5% admits 199. The step from 2% to 5% is where extended cuts and
@@ -50,6 +51,8 @@ defmodule Mydia.Library.Prune.Eligibility do
     with :ok <- check_duplicate_registration(group),
          :ok <- check_analyzed(group),
          :ok <- check_duration_agreement(group),
+         :ok <- check_names(group),
+         :ok <- check_episode_numbers(group),
          :ok <- check_enough_files(group) do
       {:ok, group}
     end
@@ -100,6 +103,79 @@ defmodule Mydia.Library.Prune.Eligibility do
        %{spread: spread, tolerance: @duration_tolerance, longest: longest, shortest: shortest}}
     end
   end
+
+  # Binds every filename to the item the files are attached to. The parser
+  # already knows how to say "this release name does not belong to this show":
+  # `:binding_suspect` and `:parsed_title_unbound` are exactly that signal, and
+  # `Mydia.Downloads.TorrentMatcher` uses the same two flags as a wrong-show
+  # guard.
+  #
+  # `:season_out_of_range` is deliberately not consulted here. It fires when a
+  # season is absent from the item's known seasons, which check_episode_numbers/1
+  # below already covers more precisely against the actual episode row.
+  defp check_names(%Group{media_item: media_item, files: files}) do
+    target = TargetContext.from_media_item(media_item)
+
+    unbound =
+      Enum.filter(files, fn file ->
+        flags =
+          file.relative_path
+          |> Path.basename()
+          |> ReleaseParser.parse(target: target)
+          |> Map.get(:engine_flags)
+          |> Kernel.||(%{})
+
+        Map.get(flags, :binding_suspect) || Map.get(flags, :parsed_title_unbound)
+      end)
+
+    if unbound == [] do
+      :ok
+    else
+      {:refused, :name_mismatch, %{paths: Enum.map(unbound, & &1.relative_path)}}
+    end
+  end
+
+  # Movies have no season or episode number to compare, so this check applies
+  # to episodes only.
+  defp check_episode_numbers(%Group{subject_type: :movie}), do: :ok
+
+  defp check_episode_numbers(
+         %Group{subject_type: :episode, subject: %Episode{} = episode} = group
+       ) do
+    target = TargetContext.from_media_item(group.media_item)
+
+    mismatched =
+      Enum.filter(group.files, fn file ->
+        parsed =
+          file.relative_path
+          |> Path.basename()
+          |> ReleaseParser.parse(target: target)
+
+        season_disagrees?(parsed.season, episode.season_number) or
+          episode_disagrees?(parsed.episodes, episode.episode_number)
+      end)
+
+    if mismatched == [] do
+      :ok
+    else
+      {:refused, :episode_mismatch,
+       %{
+         expected: {episode.season_number, episode.episode_number},
+         paths: Enum.map(mismatched, & &1.relative_path)
+       }}
+    end
+  end
+
+  # A parse that produced no season or no episode number is not evidence of a
+  # mismatch, so it does not refuse here. `check_names/1` has already rejected
+  # the filenames that fail to bind at all.
+  defp season_disagrees?(nil, _expected), do: false
+  defp season_disagrees?(parsed, expected), do: parsed != expected
+
+  defp episode_disagrees?(nil, _expected), do: false
+  defp episode_disagrees?([], _expected), do: false
+  defp episode_disagrees?(parsed, expected) when is_list(parsed), do: expected not in parsed
+  defp episode_disagrees?(parsed, expected), do: parsed != expected
 
   defp check_enough_files(%Group{files: files}) do
     if length(files) >= 2, do: :ok, else: {:refused, :nothing_to_prune, %{count: length(files)}}

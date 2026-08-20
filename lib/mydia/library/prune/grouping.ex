@@ -34,7 +34,7 @@ defmodule Mydia.Library.Prune.Grouping do
       episodes =
         Episode
         |> where([e], e.id in ^ids)
-        |> preload([:media_item])
+        |> preload(media_item: :episodes)
         |> Repo.all()
 
       files_by_subject = files_for(:episode_id, ids)
@@ -57,7 +57,7 @@ defmodule Mydia.Library.Prune.Grouping do
     if ids == [] do
       []
     else
-      items = MediaItem |> where([m], m.id in ^ids) |> Repo.all()
+      items = MediaItem |> where([m], m.id in ^ids) |> preload([:episodes]) |> Repo.all()
       files_by_subject = files_for(:media_item_id, ids)
 
       for item <- items, files = Map.get(files_by_subject, item.id, []), files != [] do
