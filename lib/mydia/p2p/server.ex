@@ -859,12 +859,9 @@ defmodule Mydia.P2p.Server do
           peer_connection_type: peer_connection_type
         }
 
-        case claims do
-          %{"device_id" => device_id} when is_binary(device_id) ->
-            Map.put(context, :device_id, device_id)
-
-          _ ->
-            context
+        case RemoteAccess.device_id_from_claims(claims) do
+          nil -> context
+          device_id -> Map.put(context, :device_id, device_id)
         end
 
       {:error, _reason} ->

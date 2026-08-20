@@ -8,6 +8,7 @@ defmodule MydiaWeb.Plugs.AbsintheContext do
   @behaviour Plug
 
   alias Mydia.Auth.Guardian
+  alias Mydia.RemoteAccess
 
   def init(opts), do: opts
 
@@ -33,10 +34,12 @@ defmodule MydiaWeb.Plugs.AbsintheContext do
   end
 
   # A paired device's token carries device_id; a plain browser login does not.
-  defp put_device_id(context, %{"device_id" => device_id}) when is_binary(device_id),
-    do: Map.put(context, :device_id, device_id)
-
-  defp put_device_id(context, _claims), do: context
+  defp put_device_id(context, claims) do
+    case RemoteAccess.device_id_from_claims(claims) do
+      nil -> context
+      device_id -> Map.put(context, :device_id, device_id)
+    end
+  end
 
   defp format_ip({a, b, c, d}), do: "#{a}.#{b}.#{c}.#{d}"
   defp format_ip({a, b, c, d, e, f, g, h}), do: "#{a}:#{b}:#{c}:#{d}:#{e}:#{f}:#{g}:#{h}"
