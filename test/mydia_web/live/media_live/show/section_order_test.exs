@@ -254,12 +254,11 @@ defmodule MydiaWeb.MediaLive.Show.SectionOrderTest do
   # Any movie whose metadata carries no collection_id sends
   # Franchises.resolve_collection_id/2 down a movie-details lookup, and that has
   # its own cache key ("fetch_by_id:...") entirely separate from the
-  # recommendations one warmed above. Left unwarmed the lookup escapes to the
-  # real relay, and System.unique_integer/1 hands out small integers that collide
-  # with real TMDB movie ids: a movie that turns out to belong to a real
-  # collection sprouts a franchise strip and reorders the page under the test.
-  # Warming it with a collection-less payload makes the lookup resolve to :none
-  # offline, so these assertions depend on nothing but the fixtures.
+  # recommendations one warmed above. Left unwarmed that lookup leaves the VM for
+  # the real relay, which makes the section order depend on the network being up
+  # and on whatever TMDB says about the id. Warming it with a collection-less
+  # payload resolves it to :none offline, so the order under test comes from the
+  # fixtures alone.
   defp warm_movie_details_cache(tmdb_id) do
     bypass = Bypass.open()
     relay = Metadata.default_relay_config()
