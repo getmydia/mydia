@@ -92,6 +92,14 @@ getrandom = { version = "0.4", features = ["wasm_js"] }
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.15"
 
+# The `two_node_control` integration test drives `Host` from `#[tokio::test]`
+# and its own `tokio::spawn`. The native target dependency above already
+# carries the same features for the crate's own event loop, so this is
+# belt-and-suspenders rather than strictly required, but it keeps the test's
+# dependency on tokio's test harness explicit rather than borrowed.
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+
 [profile.release]
 lto = "thin"
 codegen-units = 1
