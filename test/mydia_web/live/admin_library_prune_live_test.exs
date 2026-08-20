@@ -25,18 +25,29 @@ defmodule MydiaWeb.AdminLibraryPruneLiveTest do
     %{user: user, token: token}
   end
 
-  defp prunable_episode do
+  @two_files [
+    {"Rick and Morty/Season 02/Rick.and.Morty.S02E03.1080p.BluRay.x265.mp4",
+     %{resolution: "1080p", codec: "hevc", bitrate: 2_002_656}},
+    {"Rick and Morty/Season 02/Rick.and.Morty.S02E03.360p.WEBRip.x264.mp4",
+     %{resolution: "360p", codec: "h264", bitrate: 1_000_000}}
+  ]
+
+  # A third copy, so a test can uncheck one duplicate and still have another
+  # left to trash. With only two files, unchecking the single loser empties
+  # the selection and there is nothing left to assert about.
+  @three_files @two_files ++
+                 [
+                   {"Rick and Morty/Season 02/Rick.and.Morty.S02E03.480p.WEBRip.x264.mp4",
+                    %{resolution: "480p", codec: "h264", bitrate: 500_000}}
+                 ]
+
+  defp prunable_episode(specs \\ @two_files) do
     show = media_item_fixture(%{type: "tv_show", title: "Rick and Morty", year: 2013})
     episode = episode_fixture(%{media_item_id: show.id, season_number: 2, episode_number: 3})
     lp = library_path_fixture(%{type: "series"})
 
     files =
-      for {name, attrs} <- [
-            {"Rick and Morty/Season 02/Rick.and.Morty.S02E03.1080p.BluRay.x265.mp4",
-             %{resolution: "1080p", codec: "hevc", bitrate: 2_002_656}},
-            {"Rick and Morty/Season 02/Rick.and.Morty.S02E03.360p.WEBRip.x264.mp4",
-             %{resolution: "360p", codec: "h264", bitrate: 1_000_000}}
-          ] do
+      for {name, attrs} <- specs do
         attrs
         |> Map.merge(%{
           episode_id: episode.id,
@@ -84,13 +95,13 @@ defmodule MydiaWeb.AdminLibraryPruneLiveTest do
       {_show, _episode, files} = prunable_episode()
       loser = Enum.find(files, &(&1.relative_path =~ "360p"))
 
-      {:ok, view, _html} = live(conn, ~p"/admin/library/prune")
+      {:ok, view, _html} = live(conn, ~p"/admin/config/prune")
 
       assert has_element?(view, "#prune-loser-#{loser.id}")
     end
 
     test "renders the admin tab strip with prune as the active tab", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/admin/library/prune")
+      {:ok, view, _html} = live(conn, ~p"/admin/config/prune")
 
       assert has_element?(view, "div[role=tablist]")
       assert has_element?(view, "a.tab-active", "Prune duplicates")
@@ -99,10 +110,26 @@ defmodule MydiaWeb.AdminLibraryPruneLiveTest do
       assert has_element?(view, "a[href='/admin/config/library-paths']", "Library")
     end
 
+    test "heads its sections with h2 and leaves the page h1 to the admin shell", %{conn: conn} do
+      prunable_episode()
+      refused_movie()
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/prune")
+
+      # <.admin_page> already renders the "Configuration" <h1> and the tab
+      # strip. Every other /admin/config tab opens its body with an <h2>
+      # section header carrying a count badge, and adds no <h1> of its own.
+      assert has_element?(view, "h2", "Duplicate Files")
+      assert has_element?(view, "h2", "Needs Attention")
+      assert has_element?(view, "h2 span.badge-ghost")
+      refute has_element?(view, "h1", "Prune")
+      refute has_element?(view, "h1", "Duplicate")
+    end
+
     test "renders a refused group without any selectable file", %{conn: conn} do
       movie = refused_movie()
 
-      {:ok, view, _html} = live(conn, ~p"/admin/library/prune")
+      {:ok, view, _html} = live(conn, ~p"/admin/config/prune")
 
       assert has_element?(view, "#prune-refusal-#{movie.id}")
       refute has_element?(view, "#prune-refusal-#{movie.id} input[type=checkbox]")
@@ -116,7 +143,7 @@ defmodule MydiaWeb.AdminLibraryPruneLiveTest do
       # that they disagreed.
       movie = refused_movie()
 
-      {:ok, view, _html} = live(conn, ~p"/admin/library/prune")
+      {:ok, view, _html} = live(conn, ~p"/admin/config/prune")
 
       group_html = view |> element("#prune-refusal-#{movie.id}") |> render()
 
@@ -124,30 +151,115 @@ defmodule MydiaWeb.AdminLibraryPruneLiveTest do
       assert group_html =~ "2.0%"
     end
 
-    test "trashes the selected loser on confirm", %{conn: conn} do
-      {_show, _episode, files} = prunable_episode()
-      loser = Enum.find(files, &(&1.relative_path =~ "360p"))
+    test "every lower-quality duplicate is checked on arrival", %{conn: conn} do
+      {_show, _episode, files} = prunable_episode(@three_files)
       keeper = Enum.find(files, &(&1.relative_path =~ "1080p"))
+      losers = Enum.reject(files, &(&1.id == keeper.id))
 
-      {:ok, view, _html} = live(conn, ~p"/admin/library/prune")
+      {:ok, view, _html} = live(conn, ~p"/admin/config/prune")
 
-      view |> element("#prune-loser-#{loser.id}") |> render_click()
+      for loser <- losers do
+        assert has_element?(view, "#prune-loser-#{loser.id}[checked]"),
+               "#{loser.relative_path} should be selected without the operator touching it"
+      end
+
+      refute has_element?(view, "#prune-loser-#{keeper.id}")
+    end
+
+    test "trashes every duplicate from a clean load with no checkbox clicks", %{conn: conn} do
+      # This is the one-click path: land on the page, press Trash, confirm.
+      # Nothing on the group is touched in between.
+      {_show, _episode, files} = prunable_episode(@three_files)
+      keeper = Enum.find(files, &(&1.relative_path =~ "1080p"))
+      losers = Enum.reject(files, &(&1.id == keeper.id))
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/prune")
+
+      view |> element("#prune-trash-selected") |> render_click()
       view |> element("#prune-confirm") |> render_click()
 
-      assert Mydia.Repo.get!(Mydia.Library.MediaFile, loser.id).trashed_at
+      for loser <- losers do
+        assert Mydia.Repo.get!(Mydia.Library.MediaFile, loser.id).trashed_at
+      end
+
       refute Mydia.Repo.get!(Mydia.Library.MediaFile, keeper.id).trashed_at
     end
 
-    test "changing the keeper re-derives the losers", %{conn: conn} do
+    test "unchecking a duplicate leaves it on disk while the rest are trashed", %{conn: conn} do
+      {_show, _episode, files} = prunable_episode(@three_files)
+      keeper = Enum.find(files, &(&1.relative_path =~ "1080p"))
+      spared = Enum.find(files, &(&1.relative_path =~ "480p"))
+      doomed = Enum.find(files, &(&1.relative_path =~ "360p"))
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/prune")
+
+      view |> element("#prune-loser-#{spared.id}") |> render_click()
+      refute has_element?(view, "#prune-loser-#{spared.id}[checked]")
+
+      view |> element("#prune-trash-selected") |> render_click()
+      view |> element("#prune-confirm") |> render_click()
+
+      assert Mydia.Repo.get!(Mydia.Library.MediaFile, doomed.id).trashed_at
+      refute Mydia.Repo.get!(Mydia.Library.MediaFile, spared.id).trashed_at
+      refute Mydia.Repo.get!(Mydia.Library.MediaFile, keeper.id).trashed_at
+    end
+
+    test "the group toggle skips the whole group, and pressing it again restores it",
+         %{conn: conn} do
+      {_show, episode, files} = prunable_episode(@three_files)
+      keeper = Enum.find(files, &(&1.relative_path =~ "1080p"))
+      losers = Enum.reject(files, &(&1.id == keeper.id))
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/prune")
+
+      view |> element("#prune-group-toggle-#{episode.id}") |> render_click()
+
+      for loser <- losers do
+        refute has_element?(view, "#prune-loser-#{loser.id}[checked]")
+      end
+
+      assert has_element?(view, "#prune-trash-selected[disabled]")
+
+      view |> element("#prune-group-toggle-#{episode.id}") |> render_click()
+
+      for loser <- losers do
+        assert has_element?(view, "#prune-loser-#{loser.id}[checked]")
+      end
+    end
+
+    test "the confirmation modal opens on Trash and closes on Cancel without trashing anything",
+         %{conn: conn} do
+      {_show, _episode, files} = prunable_episode()
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/prune")
+
+      refute has_element?(view, "#prune-confirm-modal")
+
+      view |> element("#prune-trash-selected") |> render_click()
+      assert has_element?(view, "#prune-confirm-modal")
+
+      view |> element("#prune-cancel") |> render_click()
+      refute has_element?(view, "#prune-confirm-modal")
+
+      for file <- files do
+        refute Mydia.Repo.get!(Mydia.Library.MediaFile, file.id).trashed_at
+      end
+    end
+
+    test "changing the keeper re-derives the losers and selects the demoted file",
+         %{conn: conn} do
       {_show, _episode, files} = prunable_episode()
       low = Enum.find(files, &(&1.relative_path =~ "360p"))
       high = Enum.find(files, &(&1.relative_path =~ "1080p"))
 
-      {:ok, view, _html} = live(conn, ~p"/admin/library/prune")
+      {:ok, view, _html} = live(conn, ~p"/admin/config/prune")
 
       view |> element("#prune-keeper-#{low.id}") |> render_click()
 
-      assert has_element?(view, "#prune-loser-#{high.id}")
+      # The file that stopped being the keeper has to come back selected, or
+      # overriding the keeper would silently leave the operator with an empty
+      # selection and a disabled Trash button.
+      assert has_element?(view, "#prune-loser-#{high.id}[checked]")
       refute has_element?(view, "#prune-loser-#{low.id}")
     end
 
@@ -157,15 +269,16 @@ defmodule MydiaWeb.AdminLibraryPruneLiveTest do
       ranked_keeper = Enum.find(files, &(&1.relative_path =~ "1080p"))
       overridden_keeper = Enum.find(files, &(&1.relative_path =~ "360p"))
 
-      {:ok, view, _html} = live(conn, ~p"/admin/library/prune")
+      {:ok, view, _html} = live(conn, ~p"/admin/config/prune")
 
-      # Override the keeper to the lower-quality file, then select the
-      # higher-quality (ranked) file for trashing. If `confirm` ever calls
-      # `Prune.execute/2` instead of `execute/3` with the keepers map, the
-      # ranked keeper gets silently re-derived as 1080p again and this
-      # trashing gets aborted as `:would_leave_no_file` instead of applied.
+      # Override the keeper to the lower-quality file. The higher-quality
+      # (ranked) file becomes the loser and is selected by default. If
+      # `confirm_prune` ever calls `Prune.execute/2` instead of `execute/3`
+      # with the keepers map, the ranked keeper gets silently re-derived as
+      # 1080p again and this trashing gets aborted as `:would_leave_no_file`
+      # instead of applied.
       view |> element("#prune-keeper-#{overridden_keeper.id}") |> render_click()
-      view |> element("#prune-loser-#{ranked_keeper.id}") |> render_click()
+      view |> element("#prune-trash-selected") |> render_click()
       view |> element("#prune-confirm") |> render_click()
 
       assert Mydia.Repo.get!(Mydia.Library.MediaFile, ranked_keeper.id).trashed_at
@@ -178,7 +291,7 @@ defmodule MydiaWeb.AdminLibraryPruneLiveTest do
       keeper = Enum.find(files, &(&1.relative_path =~ "1080p"))
       loser = Enum.find(files, &(&1.relative_path =~ "360p"))
 
-      {:ok, view, _html} = live(conn, ~p"/admin/library/prune")
+      {:ok, view, _html} = live(conn, ~p"/admin/config/prune")
 
       group_html = view |> element("#prune-group-#{episode.id}") |> render()
 
