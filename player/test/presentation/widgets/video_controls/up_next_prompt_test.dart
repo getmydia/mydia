@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/player/platform_features.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_panel.dart';
@@ -82,6 +83,13 @@ Future<void> _expandCard(WidgetTester tester) => mockNetworkImages(() async {
       await tester.pump(const Duration(milliseconds: 100));
       await tester.pump(const Duration(milliseconds: 100));
     });
+
+/// Sends a Tab key press and pumps a frame, moving focus one step along the
+/// default reading-order traversal.
+Future<void> _tab(WidgetTester tester) async {
+  await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+  await tester.pump();
+}
 
 void main() {
   late UpNextCountdown countdown;
@@ -257,6 +265,93 @@ void main() {
       final afterExpand = engaged.length;
       await tester.pump(const Duration(seconds: 1));
       expect(engaged.length, afterExpand);
+    });
+  });
+
+  group('keyboard accessibility', () {
+    testWidgets('focus traversal reaches Play and Dismiss on the resting pill',
+        (tester) async {
+      await _pump(tester, countdown: countdown);
+
+      await _tab(tester); // label
+      await _tab(tester); // Play
+      expect(
+        Focus.of(tester.element(find.byIcon(Icons.play_arrow_rounded)))
+            .hasPrimaryFocus,
+        isTrue,
+      );
+
+      await _tab(tester); // Dismiss
+      expect(
+        Focus.of(tester.element(find.byIcon(Icons.close_rounded)))
+            .hasPrimaryFocus,
+        isTrue,
+      );
+    });
+
+    testWidgets('Enter activates Play, Space activates Dismiss',
+        (tester) async {
+      var played = 0;
+      var dismissed = 0;
+      await _pump(tester,
+          countdown: countdown,
+          onPlayNow: () => played++,
+          onDismiss: () => dismissed++);
+
+      await _tab(tester); // label
+      await _tab(tester); // Play
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      expect(played, 1);
+
+      await _tab(tester); // Dismiss
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.pump();
+      expect(dismissed, 1);
+    });
+
+    testWidgets(
+        'focusing a control reports engaged, so the countdown stops for '
+        'keyboard users too', (tester) async {
+      // The regression this guards: `_setFocused` only fires from
+      // `FocusScope.onFocusChange`, which stays dead unless something inside
+      // can actually take focus. Before making the controls focusable,
+      // nothing in this widget could ever gain focus, so this never fired.
+      //
+      // Asserting `engaged` alone is not enough to catch that: an orphan Tab
+      // press with no focusable descendant still lands on the bare
+      // `FocusScope` itself (a scope node is its own fallback traversal
+      // target), which trivially satisfies `hasFocus` and would report
+      // "engaged" even on the broken widget. Pinning the assertion to the
+      // label's own `Focus` node actually having primary focus is what makes
+      // this fail on the old code and pass on the new.
+      final engaged = <bool>[];
+      await _pump(tester, countdown: countdown, onEngagedChanged: engaged.add);
+
+      await _tab(tester); // the pill label is first in tab order
+      expect(
+        Focus.of(tester.element(find.text('Next up · S1E8'))).hasPrimaryFocus,
+        isTrue,
+      );
+
+      expect(engaged, isNotEmpty);
+      expect(engaged.last, isTrue);
+    });
+
+    testWidgets("the expanded card's Play now is keyboard-activatable",
+        (tester) async {
+      var played = 0;
+      await _pump(tester, countdown: countdown, onPlayNow: () => played++);
+      await _expandCard(tester);
+
+      await _tab(tester); // Play now is first in the card's tab order
+      expect(
+        Focus.of(tester.element(find.text('Play now'))).hasPrimaryFocus,
+        isTrue,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      expect(played, 1);
     });
   });
 }

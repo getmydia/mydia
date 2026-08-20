@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../core/cache/poster_cache_manager.dart';
 import '../../../core/layout/breakpoints.dart';
@@ -151,8 +152,7 @@ class _UpNextPromptState extends State<UpNextPrompt> {
         children: [
           _CountdownRing(countdown: widget.countdown),
           const SizedBox(width: 8),
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
+          _FocusableTap(
             onTap: () => _setExpanded(true),
             child: Text(widget.target.pillLabel),
           ),
@@ -249,10 +249,17 @@ class _UpNextPromptState extends State<UpNextPrompt> {
                   const SizedBox(height: 11),
                   Row(children: [
                     Expanded(
-                      child: GestureDetector(
+                      child: _FocusableTap(
                         key: UpNextPrompt.playKey,
-                        behavior: HitTestBehavior.opaque,
                         onTap: widget.onPlayNow,
+                        // The fill is white, so a same-alpha ring painted at
+                        // its own edge would be invisible against it. A 2px
+                        // ring inset keeps the ring on the dark chrome behind
+                        // the pill, where it actually shows.
+                        ringPadding: 2,
+                        borderRadius: const BorderRadius.all(
+                          Radius.circular(DepthTokens.radiusPlayerPill + 2),
+                        ),
                         child: Container(
                           height: 28,
                           alignment: Alignment.center,
@@ -351,22 +358,98 @@ class _PillSegment extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Widget region = MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(
-            minWidth: UpNextPrompt.segmentHitWidth,
-          ),
-          child: Center(widthFactor: 1, child: child),
-        ),
+    final Widget region = _FocusableTap(
+      onTap: onTap,
+      constraints: const BoxConstraints(
+        minWidth: UpNextPrompt.segmentHitWidth,
       ),
+      child: Center(widthFactor: 1, child: child),
     );
     final message = tooltip;
     if (message == null) return region;
     return Tooltip(message: message, child: region);
+  }
+}
+
+/// A keyboard-activatable, focus-ringed tap target for the prompt's
+/// irregularly-shaped controls — the pill's label and segments, and the
+/// card's "Play now" button — none of which are the circular hit target
+/// [ControlButton] draws.
+///
+/// Mirrors [ControlButton]'s treatment: a 2px white ring at
+/// [ControlButton.focusRingOpacity], activated by Enter or Space. Built on
+/// [FocusableActionDetector] rather than a hand-rolled `Focus` +
+/// `onKeyEvent`, which lets this drop the separate `MouseRegion` its
+/// predecessor needed for the pointer cursor.
+class _FocusableTap extends StatefulWidget {
+  const _FocusableTap({
+    super.key,
+    required this.onTap,
+    required this.child,
+    this.borderRadius = const BorderRadius.all(Radius.circular(6)),
+    this.ringPadding = 0,
+    this.constraints,
+  });
+
+  final VoidCallback onTap;
+  final Widget child;
+  final BorderRadius borderRadius;
+
+  /// Gap between the ring and [child], so a ring drawn flush against a
+  /// light-filled child (the card's white "Play now" pill) doesn't paint
+  /// over its own fill.
+  final double ringPadding;
+  final BoxConstraints? constraints;
+
+  @override
+  State<_FocusableTap> createState() => _FocusableTapState();
+}
+
+class _FocusableTapState extends State<_FocusableTap> {
+  bool _focused = false;
+
+  static const _shortcuts = <ShortcutActivator, Intent>{
+    SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+    SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return FocusableActionDetector(
+      mouseCursor: SystemMouseCursors.click,
+      onShowFocusHighlight: (value) {
+        if (_focused == value) return;
+        setState(() => _focused = value);
+      },
+      shortcuts: _shortcuts,
+      actions: <Type, Action<Intent>>{
+        ActivateIntent: CallbackAction<ActivateIntent>(
+          onInvoke: (_) {
+            widget.onTap();
+            return null;
+          },
+        ),
+      },
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap,
+        child: Container(
+          padding: EdgeInsets.all(widget.ringPadding),
+          constraints: widget.constraints,
+          decoration: BoxDecoration(
+            borderRadius: widget.borderRadius,
+            border: _focused
+                ? Border.all(
+                    color: Colors.white
+                        .withValues(alpha: ControlButton.focusRingOpacity),
+                    width: 2,
+                  )
+                : null,
+          ),
+          child: widget.child,
+        ),
+      ),
+    );
   }
 }
 
