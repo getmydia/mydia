@@ -29,6 +29,16 @@ on:
           only when it matches the Pages project's production branch.
         type: string
         required: true
+    # Named rather than left to `secrets: inherit` at the call site, which
+    # would hand this workflow every secret the repository holds: Apple and
+    # Android signing keys, the Flatpak GPG key, R2 credentials. It needs two.
+    # These same names resolve to the repository secrets on a bare dispatch,
+    # so the steps below read `secrets.*` either way.
+    secrets:
+      CACHIX_AUTH_TOKEN:
+        required: true
+      CLOUDFLARE_API_TOKEN:
+        required: true
 
 concurrency:
   group: web-player
@@ -37,6 +47,13 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
+    # Checking out the tree is the only thing this needs from GitHub. Cachix
+    # and Cloudflare each authenticate with their own token, so nothing here
+    # wants a writable GITHUB_TOKEN. When release.yml calls this workflow, the
+    # caller's grant and this one intersect, and both are contents: read.
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout

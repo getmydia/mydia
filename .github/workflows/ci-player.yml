@@ -115,6 +115,13 @@ jobs:
     name: Build / Web
     runs-on: ubuntu-latest
 
+    # Reading the tree is all this job does. Scoped to this job rather than
+    # added file-wide, which would be its own sweep: the steps below run
+    # third-party code (pub packages, via `flutter pub get` and build_runner),
+    # so it is the one job here where least privilege has something to bite on.
+    permissions:
+      contents: read
+
     defaults:
       run:
         working-directory: player
@@ -122,6 +129,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Nothing in this job runs a git command, so the token has no reason
+          # to stay in .git/config where a package's build hook could read it.
+          persist-credentials: false
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -143,20 +154,31 @@ jobs:
             --pwa-strategy=none \
             --dart-define=MYDIA_WEB_P2P=true
 
-      # Same assertion build_web.sh makes, moved forward to PR time. Without
-      # _headers the deployed page never becomes cross-origin isolated, there
-      # is no SharedArrayBuffer, and RustLib.init() throws in every browser.
-      # Flutter copies web/ across verbatim, so this fails only if that file
-      # is deleted or renamed, which is exactly the change worth catching in
-      # review rather than in a browser.
+      # build_web.sh asserts this file reached build/web; this also asserts it
+      # still says what it has to say. Both directives are load-bearing:
+      # without them the deployed page is not cross-origin isolated, there is
+      # no SharedArrayBuffer, and RustLib.init() throws in every browser.
+      # Checking only for the file's presence would wave through a _headers
+      # whose directives had been edited away, which breaks identically and is
+      # the likelier edit of the two.
       - name: Check _headers survived the build
         run: |
-          [ -f build/web/_headers ] || {
-            echo "::error::_headers did not make it into build/web. The deployed page" >&2
-            echo "         would not be cross-origin isolated and the p2p module would" >&2
-            echo "         fail to instantiate in every browser." >&2
+          set -euo pipefail
+          headers=build/web/_headers
+          if [ ! -f "$headers" ]; then
+            echo "::error::_headers did not make it into build/web." >&2
             exit 1
-          }
+          fi
+          for directive in \
+            "Cross-Origin-Opener-Policy: same-origin" \
+            "Cross-Origin-Embedder-Policy: require-corp"; do
+            if ! grep -qF "$directive" "$headers"; then
+              echo "::error::$headers no longer sets '$directive'. The deployed page" >&2
+              echo "         would not be cross-origin isolated, so the p2p wasm module" >&2
+              echo "         could not instantiate in any browser." >&2
+              exit 1
+            fi
+          done
 
   build:
     name: Build / ${{ matrix.platform }}

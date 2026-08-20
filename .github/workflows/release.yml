@@ -1350,6 +1350,8 @@ jobs:
     needs:
       - prepare
       - publish
+    permissions:
+      contents: read
     # Builds and deploys the same bundle a manual dispatch would. Reused
     # rather than restated here: the build is nine steps of nix, devenv,
     # Cachix and a pinned flutter_rust_bridge install, and a second copy
@@ -1363,7 +1365,12 @@ jobs:
       # branch. Anything else deploys green to a preview URL and leaves
       # web.mydia.dev on the previous release.
       branch: master
-    secrets: inherit
+    # Named one by one instead of `secrets: inherit`, which would pass this
+    # workflow every secret the repository holds, signing keys included, to
+    # build a static bundle. These two are what it uses.
+    secrets:
+      CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
   flatpak-publish:
     name: Publish Flatpak
