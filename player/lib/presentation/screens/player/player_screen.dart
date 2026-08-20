@@ -46,8 +46,9 @@ import '../../widgets/video_controls/custom_video_controls.dart';
 import '../../widgets/video_controls/skip_segment_button.dart';
 import '../../widgets/video_controls/chrome_panel.dart';
 import '../../widgets/tap_to_play_overlay.dart';
-import '../../widgets/up_next_overlay.dart';
+import '../../widgets/video_controls/up_next_countdown.dart';
 import '../../widgets/video_controls/up_next_policy.dart';
+import '../../widgets/video_controls/up_next_prompt.dart';
 import '../../../domain/models/audio_track.dart' as app_models_audio;
 import '../../../domain/models/media_segment.dart';
 import '../../../domain/models/quality_delivery_subtitle.dart';
@@ -509,10 +510,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   // Auto-play next episode state
   bool _showUpNext = false;
-  int _autoPlayCountdown = 10;
   bool _autoPlayCancelled = false;
-  Timer? _upNextTimer;
-  static const _autoPlayCountdownDuration = 10;
+
+  /// The resolved next episode, or null when nothing is on offer. Non-null
+  /// implies playable: `UpNextTarget` cannot be built without a file id.
+  UpNextTarget? _upNextTarget;
+
+  UpNextCountdown? _upNextCountdown;
 
   /// Reshapes the OS window to the video's aspect on desktop. A no-op
   /// everywhere else, so no platform check is needed at the call sites.
@@ -2229,21 +2233,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       return;
     }
 
-    final hasNext = _currentEpisodeIndex! < _seasonEpisodes!.length - 1;
-    if (!hasNext) {
-      return;
-    }
+    final target = resolveInSeasonNext(
+      _upNextCandidates(_seasonEpisodes!),
+      _currentEpisodeIndex!,
+    );
+    if (target == null) return;
 
     // Offline/local playback can only ever autoplay into a next episode
     // that is itself already on disk — the next one existing in the season
     // is not enough, since there may be no connection to stream or fetch it
     // when the countdown lands.
     if (_isDownloadedSource) {
-      unawaited(_maybeShowUpNextForDownloadedNext());
+      unawaited(_maybeShowUpNextForDownloadedNext(target));
       return;
     }
 
-    _showUpNextOverlay();
+    _showUpNextOverlay(target);
   }
 
   /// The download-gated half of [_maybeShowUpNext].
@@ -2251,13 +2256,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// Re-checks [_showUpNext]/[_autoPlayCancelled] after the lookup: both can
   /// change while the (async) download-manager query is in flight, e.g. the
   /// viewer already dismissed a still-pending offer some other way.
-  Future<void> _maybeShowUpNextForDownloadedNext() async {
-    final nextEpisode = _seasonEpisodes![_currentEpisodeIndex! + 1];
-
+  Future<void> _maybeShowUpNextForDownloadedNext(UpNextTarget target) async {
     final DownloadedMedia? downloaded;
     try {
       final manager = await ref.read(downloadManagerProvider.future);
-      downloaded = manager.getDownloadedMediaById(nextEpisode.id);
+      downloaded = manager.getDownloadedMediaById(target.episodeId);
     } catch (e) {
       // Simply not offering Up Next is the right failure mode here: this
       // runs fired-and-forgotten off a position tick, with no return value
@@ -2270,47 +2273,33 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     if (!mounted || downloaded == null) return;
     if (_showUpNext || _autoPlayCancelled) return;
 
-    _showUpNextOverlay();
+    _showUpNextOverlay(target);
   }
 
-  void _showUpNextOverlay() {
+  void _showUpNextOverlay(UpNextTarget target) {
+    _upNextCountdown?.dispose();
+    final countdown = UpNextCountdown(onElapsed: _playNextEpisode);
+    _upNextCountdown = countdown;
+
+    if (!mounted) return;
     setState(() {
+      _upNextTarget = target;
       _showUpNext = true;
-      _autoPlayCountdown = _autoPlayCountdownDuration;
     });
 
-    _startAutoPlayCountdown();
+    // Playback being paused is its own hold, so a viewer who pauses during
+    // the credits does not come back to a different episode.
+    if (!(_player?.state.playing ?? true)) {
+      countdown.hold(UpNextHold.paused);
+    }
+    countdown.start();
   }
 
-  /// Start the auto-play countdown timer.
-  void _startAutoPlayCountdown() {
-    _upNextTimer?.cancel();
-    _upNextTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-
-      // Check if player is paused - pause the countdown
-      if (_player != null && !_player!.state.playing) {
-        return;
-      }
-
-      setState(() {
-        _autoPlayCountdown--;
-      });
-
-      if (_autoPlayCountdown <= 0) {
-        timer.cancel();
-        _playNextEpisode();
-      }
-    });
-  }
-
-  /// Cancel the auto-play overlay and countdown.
+  /// Cancel the prompt and the countdown, for the rest of this file.
   void _cancelAutoPlay() {
-    _upNextTimer?.cancel();
-    _upNextTimer = null;
+    // Synchronous, before any setState: a dismiss that only lands next frame
+    // can lose to a fire scheduled this one.
+    _upNextCountdown?.cancel();
     if (mounted) {
       setState(() {
         _showUpNext = false;
@@ -2321,38 +2310,41 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   /// Play the next episode immediately.
   void _playNextEpisode() {
-    _upNextTimer?.cancel();
-    _upNextTimer = null;
+    _upNextCountdown?.cancel();
 
-    if (_seasonEpisodes == null || _currentEpisodeIndex == null) {
+    // Re-check after the countdown: `_cancelAutoPlay` may have run between
+    // the fire being scheduled and this executing.
+    if (_autoPlayCancelled) return;
+
+    final target = _upNextTarget;
+    if (target != null) {
+      _navigateToEpisode(
+        target.episodeId,
+        target.fileId,
+        target.routeTitle,
+        seasonNumber: target.seasonNumber,
+      );
       return;
     }
 
-    final nextIndex = _currentEpisodeIndex! + 1;
-    if (nextIndex >= _seasonEpisodes!.length) {
-      return;
-    }
-
-    final nextEpisode = _seasonEpisodes![nextIndex];
-    final files = nextEpisode.files;
-    if (files == null || files.isEmpty) {
-      return;
-    }
-
-    final firstFile = files.first;
-    if (firstFile == null) {
-      return;
-    }
-
-    final title =
-        'S${nextEpisode.seasonNumber}E${nextEpisode.episodeNumber}${nextEpisode.title != null ? ' - ${nextEpisode.title}' : ''}';
-    _navigateToEpisode(nextEpisode.id, firstFile.id, title);
+    // Keyboard PageDown and the transport's next button reach this with no
+    // prompt showing, so the in-season lookup still has to happen here.
+    final episodes = _seasonEpisodes;
+    final index = _currentEpisodeIndex;
+    if (episodes == null || index == null) return;
+    final resolved = resolveInSeasonNext(_upNextCandidates(episodes), index);
+    if (resolved == null) return;
+    _navigateToEpisode(
+      resolved.episodeId,
+      resolved.fileId,
+      resolved.routeTitle,
+      seasonNumber: resolved.seasonNumber,
+    );
   }
 
   /// Play the previous episode immediately.
   void _playPreviousEpisode() {
-    _upNextTimer?.cancel();
-    _upNextTimer = null;
+    _upNextCountdown?.cancel();
 
     if (_seasonEpisodes == null || _currentEpisodeIndex == null) {
       return;
@@ -2376,22 +2368,35 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
     final title =
         'S${previousEpisode.seasonNumber}E${previousEpisode.episodeNumber}${previousEpisode.title != null ? ' - ${previousEpisode.title}' : ''}';
-    _navigateToEpisode(previousEpisode.id, firstFile.id, title);
+    _navigateToEpisode(
+      previousEpisode.id,
+      firstFile.id,
+      title,
+      seasonNumber: previousEpisode.seasonNumber,
+    );
   }
 
-  /// Get the title for the next episode (for display in Up Next overlay).
-  String? _getNextEpisodeTitle() {
-    if (_seasonEpisodes == null || _currentEpisodeIndex == null) {
-      return null;
-    }
-
-    final nextIndex = _currentEpisodeIndex! + 1;
-    if (nextIndex >= _seasonEpisodes!.length) {
-      return null;
-    }
-
-    final nextEpisode = _seasonEpisodes![nextIndex];
-    return 'S${nextEpisode.seasonNumber}E${nextEpisode.episodeNumber}${nextEpisode.title != null ? ' - ${nextEpisode.title}' : ''}';
+  /// Adapts the generated season-episode rows to the shape the resolvers in
+  /// `up_next_policy.dart` take. Keeping the resolvers off the GraphQL layer
+  /// is what makes them unit testable without codegen having run.
+  List<UpNextCandidate> _upNextCandidates(
+    List<Query$SeasonEpisodes$seasonEpisodes> episodes,
+  ) {
+    return episodes
+        .map(
+          (episode) => UpNextCandidate(
+            id: episode.id,
+            seasonNumber: episode.seasonNumber,
+            episodeNumber: episode.episodeNumber,
+            title: episode.title ?? 'Episode ${episode.episodeNumber}',
+            fileIds: (episode.files ?? const <Fragment$MediaFileFragment?>[])
+                .whereType<Fragment$MediaFileFragment>()
+                .map((file) => file.id)
+                .toList(),
+            thumbnailUrl: episode.thumbnailUrl,
+          ),
+        )
+        .toList();
   }
 
   /// Wait for HLS playlist to be ready with enough segments.
@@ -2481,15 +2486,24 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   }
 
   Future<void> _navigateToEpisode(
-      String episodeId, String fileId, String title) async {
+    String episodeId,
+    String fileId,
+    String title, {
+    required int seasonNumber,
+  }) async {
     // Save current progress before navigating
     await _saveProgress();
 
     if (!mounted) return;
 
-    // Navigate to new episode
+    // `seasonNumber` is the *target's*, not `widget.seasonNumber`. Passing the
+    // current screen's season would tell the next PlayerScreen it is in the
+    // season it just left, so its `_fetchSeasonEpisodes` would load the wrong
+    // list, `_currentEpisodeIndex` would resolve to -1, and up-next would be
+    // dead for that entire season. Only reachable once Task 10 lands, but
+    // wrong either way.
     context.go(
-      '/player/episode/$episodeId?fileId=$fileId&title=${Uri.encodeComponent(title)}&showId=${widget.showId}&seasonNumber=${widget.seasonNumber}',
+      '/player/episode/$episodeId?fileId=$fileId&title=${Uri.encodeComponent(title)}&showId=${widget.showId}&seasonNumber=$seasonNumber',
     );
   }
 
@@ -3633,8 +3647,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _tracksSubscription?.cancel();
     _errorSubscription?.cancel();
 
-    // Cancel auto-play timer
-    _upNextTimer?.cancel();
+    // Cancel auto-play countdown
+    _upNextCountdown?.dispose();
 
     // Stop progress tracking
     _progressService?.stopSync();
@@ -3873,13 +3887,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
               },
             ),
           ),
-        // Up Next overlay for auto-play (always interactive, not tied to controls)
-        if (_showUpNext && _getNextEpisodeTitle() != null)
-          UpNextOverlay(
-            nextEpisodeTitle: _getNextEpisodeTitle()!,
-            countdownSeconds: _autoPlayCountdown,
-            onPlayNow: _playNextEpisode,
-            onCancel: _cancelAutoPlay,
+        // Up Next. Always interactive, independent of chrome visibility.
+        if (_showUpNext && _upNextTarget != null && _upNextCountdown != null)
+          Positioned.fill(
+            child: UpNextPrompt(
+              target: _upNextTarget!,
+              countdown: _upNextCountdown!,
+              metrics: panelMetrics,
+              onPlayNow: _playNextEpisode,
+              onDismiss: _cancelAutoPlay,
+              onEngagedChanged: (engaged) => engaged
+                  ? _upNextCountdown?.hold(UpNextHold.engaged)
+                  : _upNextCountdown?.release(UpNextHold.engaged),
+            ),
           ),
         // Last in the stack, so the tap that starts playback reaches this and
         // not the seek gestures underneath. Nothing below it can do anything
