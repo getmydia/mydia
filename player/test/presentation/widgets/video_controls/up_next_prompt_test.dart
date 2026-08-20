@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/player/platform_features.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_panel.dart';
@@ -132,6 +133,85 @@ void main() {
       final pill = tester.getRect(find.byKey(UpNextPrompt.pillKey));
       expect(1280 - pill.right, closeTo(PanelMetrics.cornerInsetRight, 0.5));
       expect(720 - pill.bottom, closeTo(metrics.cornerInsetBottom, 0.5));
+    });
+  });
+
+  group('expanded card', () {
+    testWidgets('expands on tap and shows the still, code, and title',
+        (tester) async {
+      await _pump(tester, countdown: countdown);
+      await tester.tap(find.byKey(UpNextPrompt.pillKey));
+      await tester.pumpAndSettle();
+      expect(find.byKey(UpNextPrompt.cardKey), findsOneWidget);
+      expect(find.byKey(UpNextPrompt.stillKey), findsOneWidget);
+      expect(find.text('S1E8'), findsOneWidget);
+      expect(find.text('Narkina 5'), findsOneWidget);
+      expect(find.text('Play now'), findsOneWidget);
+    });
+
+    testWidgets('omits the still entirely when there is no thumbnail',
+        (tester) async {
+      await _pump(tester,
+          countdown: countdown,
+          target: const UpNextTarget(
+              episodeId: 'ep-8',
+              fileId: 'file-8',
+              seasonNumber: 1,
+              episodeNumber: 8,
+              title: 'Narkina 5'));
+      await tester.tap(find.byKey(UpNextPrompt.pillKey));
+      await tester.pumpAndSettle();
+      expect(find.byKey(UpNextPrompt.cardKey), findsOneWidget);
+      expect(find.byKey(UpNextPrompt.stillKey), findsNothing);
+      expect(find.text('Narkina 5'), findsOneWidget);
+    });
+
+    testWidgets('keeps a working dismiss while expanded', (tester) async {
+      var dismissed = 0;
+      await _pump(tester, countdown: countdown, onDismiss: () => dismissed++);
+      await tester.tap(find.byKey(UpNextPrompt.pillKey));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(UpNextPrompt.dismissKey));
+      expect(dismissed, 1);
+    });
+  });
+
+  group('engagement', () {
+    testWidgets('reports engaged while expanded and disengaged after collapse',
+        (tester) async {
+      final engaged = <bool>[];
+      await _pump(tester, countdown: countdown, onEngagedChanged: engaged.add);
+      await tester.tap(find.byKey(UpNextPrompt.pillKey));
+      await tester.pumpAndSettle();
+      expect(engaged.last, isTrue);
+      await tester.tap(find.byKey(UpNextPrompt.cardKey));
+      await tester.pumpAndSettle();
+      expect(engaged.last, isFalse);
+    });
+
+    testWidgets('reports engaged on pointer enter and disengaged on exit',
+        (tester) async {
+      final engaged = <bool>[];
+      await _pump(tester, countdown: countdown, onEngagedChanged: engaged.add);
+      final pointer = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await pointer.addPointer(location: Offset.zero);
+      addTearDown(pointer.removePointer);
+      await pointer.moveTo(tester.getCenter(find.byKey(UpNextPrompt.pillKey)));
+      await tester.pump();
+      expect(engaged.last, isTrue);
+      await pointer.moveTo(Offset.zero);
+      await tester.pump();
+      expect(engaged.last, isFalse);
+    });
+
+    testWidgets('does not re-report the same engagement value', (tester) async {
+      final engaged = <bool>[];
+      await _pump(tester, countdown: countdown, onEngagedChanged: engaged.add);
+      await tester.tap(find.byKey(UpNextPrompt.pillKey));
+      await tester.pumpAndSettle();
+      final afterExpand = engaged.length;
+      await tester.pump(const Duration(seconds: 1));
+      expect(engaged.length, afterExpand);
     });
   });
 }

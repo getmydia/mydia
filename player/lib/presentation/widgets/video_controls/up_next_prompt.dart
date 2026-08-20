@@ -3,8 +3,11 @@ import 'package:flutter/material.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/player/input_capabilities.dart';
 import '../../../core/player/platform_features.dart';
+import '../../../core/theme/depth_tokens.dart';
+import '../glass_surface.dart';
 import 'chrome_panel.dart';
 import 'chrome_top_bar.dart';
+import 'control_button.dart';
 import 'up_next_countdown.dart';
 import 'up_next_policy.dart';
 
@@ -64,6 +67,38 @@ class UpNextPrompt extends StatefulWidget {
 }
 
 class _UpNextPromptState extends State<UpNextPrompt> {
+  bool _expanded = false;
+  bool _hovering = false;
+  bool _focused = false;
+  bool _lastReportedEngaged = false;
+
+  bool get _engaged => _expanded || _hovering || _focused;
+
+  void _syncEngagement() {
+    final engaged = _engaged;
+    if (engaged == _lastReportedEngaged) return;
+    _lastReportedEngaged = engaged;
+    widget.onEngagedChanged(engaged);
+  }
+
+  void _setExpanded(bool value) {
+    if (_expanded == value) return;
+    setState(() => _expanded = value);
+    _syncEngagement();
+  }
+
+  void _setHovering(bool value) {
+    if (_hovering == value) return;
+    setState(() => _hovering = value);
+    _syncEngagement();
+  }
+
+  void _setFocused(bool value) {
+    if (_focused == value) return;
+    setState(() => _focused = value);
+    _syncEngagement();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -73,7 +108,21 @@ class _UpNextPromptState extends State<UpNextPrompt> {
       ),
       child: Align(
         alignment: Alignment.bottomRight,
-        child: _buildPill(context),
+        child: FocusScope(
+          onFocusChange: _setFocused,
+          child: MouseRegion(
+            onEnter: (_) => _setHovering(true),
+            onExit: (_) => _setHovering(false),
+            child: AnimatedSize(
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : DepthTokens.motionFast,
+              curve: DepthTokens.curveStandard,
+              alignment: Alignment.bottomRight,
+              child: _expanded ? _buildCard(context) : _buildPill(context),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -91,12 +140,17 @@ class _UpNextPromptState extends State<UpNextPrompt> {
       key: UpNextPrompt.pillKey,
       tier: widget.tier,
       height: touch ? 44 : GlassPill.defaultHeight,
+      onTap: () => _setExpanded(true),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           _CountdownRing(countdown: widget.countdown),
           const SizedBox(width: 8),
-          Text(widget.target.pillLabel),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _setExpanded(true),
+            child: Text(widget.target.pillLabel),
+          ),
           const _PillDivider(),
           _PillSegment(
             key: UpNextPrompt.playKey,
@@ -123,6 +177,128 @@ class _UpNextPromptState extends State<UpNextPrompt> {
       ),
     );
   }
+
+  Widget _buildCard(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    final cardWidth = width < 600 ? width - 32 : (width - 48).clamp(0.0, 320.0);
+    final still = widget.target.thumbnailUrl;
+    final glassText = TextStyle(
+        color: Colors.white.withValues(alpha: .80),
+        shadows: GlassPill.textShadow);
+    return GestureDetector(
+      key: UpNextPrompt.cardKey,
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _setExpanded(false),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: cardWidth.toDouble()),
+        child: GlassSurface.playerChrome(
+          tier: widget.tier,
+          borderRadius: const BorderRadius.all(
+              Radius.circular(DepthTokens.radiusPlayerPanel)),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(widget.target.eyebrow.toUpperCase(),
+                            style: glassText.copyWith(
+                                fontSize: 9,
+                                letterSpacing: 1.2,
+                                fontWeight: FontWeight.w500)),
+                        _CountdownRing(countdown: widget.countdown),
+                      ]),
+                  const SizedBox(height: 11),
+                  Row(children: [
+                    if (still != null) ...[
+                      _CardStill(url: still),
+                      const SizedBox(width: 10)
+                    ],
+                    Expanded(
+                        child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                          Text(widget.target.episodeCode,
+                              style: glassText.copyWith(fontSize: 9.5)),
+                          const SizedBox(height: 2),
+                          Text(widget.target.title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white.withValues(alpha: .94),
+                                  shadows: GlassPill.textShadow)),
+                        ])),
+                  ]),
+                  const SizedBox(height: 11),
+                  Row(children: [
+                    Expanded(
+                      child: GestureDetector(
+                        key: UpNextPrompt.playKey,
+                        behavior: HitTestBehavior.opaque,
+                        onTap: widget.onPlayNow,
+                        child: Container(
+                          height: 28,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: .92),
+                            borderRadius: const BorderRadius.all(
+                              Radius.circular(DepthTokens.radiusPlayerPill),
+                            ),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.play_arrow_rounded,
+                                  size: 16, color: Color(0xFF0B0B0C)),
+                              SizedBox(width: 4),
+                              Text('Play now',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF0B0B0C))),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    ControlButton(
+                        key: UpNextPrompt.dismissKey,
+                        icon: Icons.close_rounded,
+                        size: 32,
+                        iconSize: 18,
+                        tooltip: 'Dismiss',
+                        onTap: widget.onDismiss),
+                  ]),
+                ]),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CardStill extends StatelessWidget {
+  const _CardStill({required this.url});
+  final String url;
+  @override
+  Widget build(BuildContext context) => ClipRRect(
+        key: UpNextPrompt.stillKey,
+        borderRadius: BorderRadius.circular(6),
+        child: SizedBox(
+            width: 80,
+            height: 45,
+            child: Image.network(url,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) =>
+                    ColoredBox(color: Colors.white.withValues(alpha: .06)))),
+      );
 }
 
 /// A 1px hairline between pill segments.
