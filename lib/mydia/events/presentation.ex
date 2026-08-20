@@ -101,6 +101,12 @@ defmodule Mydia.Events.Presentation do
       color: "text-warning",
       title: "Upgrade rejected"
     },
+    %{
+      type: "media_file.pruned",
+      icon: "hero-trash",
+      color: "text-info",
+      title: "Duplicate pruned"
+    },
 
     # download.*
     %{
