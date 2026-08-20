@@ -157,6 +157,6 @@ defmodule MydiaWeb.MediaLive.Show.MonitoringControlsTest do
     {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
 
     assert has_element?(view, "#season-3-monitor-toggle[phx-click='monitor_season']")
-    assert has_element?(view, "#season-3-monitor-toggle.opacity-60")
+    assert has_element?(view, "#season-3-monitor-toggle.text-base-content\\/40")
   end
 end

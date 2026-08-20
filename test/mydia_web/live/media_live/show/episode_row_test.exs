@@ -129,4 +129,36 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeRowTest do
       assert html |> query(".join > .join-item") |> Enum.count() >= 4
     end
   end
+
+  describe "season header actions" do
+    defp render_header(opts \\ []) do
+      render_component(&SeasonComponents.season_header/1,
+        season_number: 2,
+        episodes: [episode()],
+        expanded?: false,
+        auto_searching_season: Keyword.get(opts, :auto_searching_season),
+        rescanning_season: Keyword.get(opts, :rescanning_season)
+      )
+    end
+
+    test "every header action carries a stable DOM id" do
+      html = render_header()
+
+      for id <- ~w(auto-search manual-search rescan monitor-toggle) do
+        assert has_selector?(html, "#season-2-#{id}"), "expected #season-2-#{id} to render"
+      end
+    end
+
+    test "the header actions sit in one join group" do
+      html = render_header()
+
+      assert html |> query(".join > .join-item") |> Enum.count() == 4
+    end
+
+    test "the season auto search keeps a text label, unlike the row-level bolt" do
+      label = render_header() |> query("#season-2-auto-search") |> LazyHTML.text()
+
+      assert label =~ "Auto"
+    end
+  end
 end

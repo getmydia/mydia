@@ -385,70 +385,75 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
         <% end %>
       </button>
 
-      <%!-- Season actions: siblings of the toggle, so they never collapse it --%>
-      <div class="flex items-center gap-1">
-        <div class="tooltip tooltip-bottom" data-tip="Auto search season">
-          <button
-            type="button"
-            id={"season-#{@season_number}-auto-search"}
-            phx-click="auto_search_season"
-            phx-value-season-number={@season_number}
-            aria-label="Auto search season"
-            class="btn btn-sm btn-primary"
-            disabled={@auto_searching_season == @season_number}
-          >
-            <%= if @auto_searching_season == @season_number do %>
-              <span class="loading loading-spinner loading-sm"></span>
-            <% else %>
-              <.icon name="hero-bolt" class="w-4 h-4" />
-            <% end %>
-          </button>
-        </div>
-        <div class="tooltip tooltip-bottom" data-tip="Manual search">
-          <button
-            type="button"
-            phx-click="manual_search_season"
-            phx-value-season-number={@season_number}
-            aria-label="Manual search"
-            class="btn btn-sm btn-ghost"
-          >
-            <.icon name="hero-magnifying-glass" class="w-4 h-4" />
-          </button>
-        </div>
-        <div class="tooltip tooltip-bottom" data-tip="Re-scan">
-          <button
-            type="button"
-            phx-click="rescan_season"
-            phx-value-season-number={@season_number}
-            aria-label="Re-scan"
-            class="btn btn-sm btn-ghost"
-            disabled={@rescanning_season == @season_number}
-          >
-            <%= if @rescanning_season == @season_number do %>
-              <span class="loading loading-spinner loading-sm"></span>
-            <% else %>
-              <.icon name="hero-arrow-path" class="w-4 h-4" />
-            <% end %>
-          </button>
-        </div>
-        <div
-          class="tooltip tooltip-bottom"
-          data-tip={season_monitoring_tooltip(@season_state)}
+      <%!-- Season actions: siblings of the toggle, so they never collapse it.
+            One join group, matching the per-episode toolbar. The tooltip wrappers
+            are gone — a div between `join` and its items becomes the join child
+            and breaks daisyUI's sibling radius handling — so the hint moves to
+            `title` beside each button's existing aria-label. --%>
+      <div class="join border border-base-300 rounded-lg [&>*:not(:first-child)]:border-l [&>*:not(:first-child)]:border-base-300">
+        <%!-- This one keeps a text label: it acts on a whole season, so it should
+              outrank the row-level bolt. --%>
+        <button
+          type="button"
+          id={"season-#{@season_number}-auto-search"}
+          phx-click="auto_search_season"
+          phx-value-season-number={@season_number}
+          aria-label="Auto search season"
+          title="Auto search season"
+          class="join-item btn btn-sm btn-ghost gap-1"
+          disabled={@auto_searching_season == @season_number}
         >
-          <button
-            type="button"
-            id={"season-#{@season_number}-monitor-toggle"}
-            phx-click={if @season_state == :all, do: "unmonitor_season", else: "monitor_season"}
-            phx-value-season-number={@season_number}
-            aria-label={season_monitoring_tooltip(@season_state)}
-            class={[
-              "btn btn-sm btn-ghost",
-              @season_state == :none && "opacity-60"
-            ]}
-          >
-            <.monitoring_icon state={@season_state} class="w-4 h-4" />
-          </button>
-        </div>
+          <%= if @auto_searching_season == @season_number do %>
+            <span class="loading loading-spinner loading-sm"></span>
+          <% else %>
+            <.icon name="hero-bolt" class="w-4 h-4 text-primary" />
+          <% end %>
+          Auto
+        </button>
+
+        <button
+          type="button"
+          id={"season-#{@season_number}-manual-search"}
+          phx-click="manual_search_season"
+          phx-value-season-number={@season_number}
+          aria-label="Manual search"
+          title="Manual search"
+          class="join-item btn btn-sm btn-square btn-ghost"
+        >
+          <.icon name="hero-magnifying-glass" class="w-4 h-4" />
+        </button>
+
+        <button
+          type="button"
+          id={"season-#{@season_number}-rescan"}
+          phx-click="rescan_season"
+          phx-value-season-number={@season_number}
+          aria-label="Re-scan"
+          title="Re-scan"
+          class="join-item btn btn-sm btn-square btn-ghost"
+          disabled={@rescanning_season == @season_number}
+        >
+          <%= if @rescanning_season == @season_number do %>
+            <span class="loading loading-spinner loading-sm"></span>
+          <% else %>
+            <.icon name="hero-arrow-path" class="w-4 h-4" />
+          <% end %>
+        </button>
+
+        <button
+          type="button"
+          id={"season-#{@season_number}-monitor-toggle"}
+          phx-click={if @season_state == :all, do: "unmonitor_season", else: "monitor_season"}
+          phx-value-season-number={@season_number}
+          aria-label={season_monitoring_tooltip(@season_state)}
+          title={season_monitoring_tooltip(@season_state)}
+          class={[
+            "join-item btn btn-sm btn-square btn-ghost",
+            @season_state == :none && "text-base-content/40"
+          ]}
+        >
+          <.monitoring_icon state={@season_state} class="w-4 h-4" />
+        </button>
       </div>
     </div>
     """
