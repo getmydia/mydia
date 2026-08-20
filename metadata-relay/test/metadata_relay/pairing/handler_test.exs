@@ -157,6 +157,73 @@ defmodule MetadataRelay.Pairing.HandlerTest do
     end
   end
 
+  describe "v2 sealed claims" do
+    setup do
+      MetadataRelay.Pairing.init_ets_table()
+      :ok
+    end
+
+    test "stores a valid sealed claim" do
+      params = %{"lookup_key" => String.duplicate("a", 64), "sealed" => "c2VhbGVk"}
+      assert {:ok, :no_content} = MetadataRelay.Pairing.Handler.store_sealed_claim(params)
+    end
+
+    test "rejects a lookup key that is not 64 hex characters" do
+      for bad <- ["short", String.duplicate("z", 64), String.duplicate("a", 63)] do
+        params = %{"lookup_key" => bad, "sealed" => "c2VhbGVk"}
+
+        assert {:error, {:validation, _}} =
+                 MetadataRelay.Pairing.Handler.store_sealed_claim(params)
+      end
+    end
+
+    test "rejects a missing or oversized sealed blob" do
+      key = String.duplicate("a", 64)
+
+      assert {:error, {:validation, _}} =
+               MetadataRelay.Pairing.Handler.store_sealed_claim(%{"lookup_key" => key})
+
+      oversized = String.duplicate("x", 8193)
+
+      assert {:error, {:validation, _}} =
+               MetadataRelay.Pairing.Handler.store_sealed_claim(%{
+                 "lookup_key" => key,
+                 "sealed" => oversized
+               })
+    end
+
+    test "fetches a stored sealed claim" do
+      key = String.duplicate("b", 64)
+
+      {:ok, :no_content} =
+        MetadataRelay.Pairing.Handler.store_sealed_claim(%{
+          "lookup_key" => key,
+          "sealed" => "c2VhbGVk"
+        })
+
+      assert {:ok, %{sealed: "c2VhbGVk"}} =
+               MetadataRelay.Pairing.Handler.get_sealed_claim(key)
+    end
+
+    test "returns not_found for an unknown lookup key" do
+      assert {:error, :not_found} =
+               MetadataRelay.Pairing.Handler.get_sealed_claim(String.duplicate("c", 64))
+    end
+
+    test "deletes a sealed claim" do
+      key = String.duplicate("d", 64)
+
+      {:ok, :no_content} =
+        MetadataRelay.Pairing.Handler.store_sealed_claim(%{
+          "lookup_key" => key,
+          "sealed" => "c2VhbGVk"
+        })
+
+      assert {:ok, :no_content} = MetadataRelay.Pairing.Handler.delete_sealed_claim(key)
+      assert {:error, :not_found} = MetadataRelay.Pairing.Handler.get_sealed_claim(key)
+    end
+  end
+
   describe "full pairing flow" do
     test "complete flow: create, get, delete" do
       # Step 1: Server creates claim with its node_addr
