@@ -11,6 +11,9 @@ defmodule Mydia.RemoteAccess do
   alias Mydia.Repo
   alias Mydia.RemoteAccess.{Config, PairingClaim, RemoteDevice}
 
+  # Cache key for the enabled flag. See enabled?/0.
+  @enabled_key {__MODULE__, :enabled}
+
   # Config management
 
   @doc """
@@ -30,7 +33,7 @@ defmodule Mydia.RemoteAccess do
       nil ->
         %Config{}
         # Note: relay_url is read from METADATA_RELAY_URL env var at runtime
-        |> Config.changeset(%{instance_id: Ecto.UUID.generate(), enabled: false})
+        |> Config.changeset(%{instance_id: Ecto.UUID.generate(), enabled: true})
         |> Repo.insert()
 
       config ->
@@ -61,20 +64,63 @@ defmodule Mydia.RemoteAccess do
   end
 
   @doc """
+  Whether remote access is enabled on this instance.
+
+  Read from `:persistent_term` rather than the database. This sits on
+  request-serving paths (`MydiaWeb.Plugs.MediaAuth`, `MydiaWeb.Plugs.RelayDeviceAuth`
+  and the `Mydia.P2p.Server` request handlers), so a query per call is not
+  affordable. `:persistent_term` suits a value written a handful of times in a
+  server's lifetime and read constantly.
+
+  Fails closed: with no config row there is no instance identity for a remote
+  device to authenticate against, so the answer is `false`.
+  """
+  @spec enabled?() :: boolean()
+  def enabled? do
+    case :persistent_term.get(@enabled_key, :unset) do
+      :unset -> refresh_enabled_cache()
+      enabled -> enabled
+    end
+  end
+
+  @doc """
+  Re-reads the enabled flag from the database and reseeds the cache.
+
+  Returns the value it stored. Called at boot and by every writer.
+  """
+  @spec refresh_enabled_cache() :: boolean()
+  def refresh_enabled_cache do
+    enabled =
+      case get_config() do
+        nil -> false
+        config -> config.enabled
+      end
+
+    :persistent_term.put(@enabled_key, enabled)
+    enabled
+  end
+
+  @doc """
   Creates or updates the remote access configuration.
   Since there should only be one config, this upserts.
   """
   def upsert_config(attrs) do
-    case get_config() do
-      nil ->
-        %Config{}
-        |> Config.changeset(attrs)
-        |> Repo.insert()
+    result =
+      case get_config() do
+        nil ->
+          %Config{}
+          |> Config.changeset(attrs)
+          |> Repo.insert()
 
-      config ->
-        config
-        |> Config.changeset(attrs)
-        |> Repo.update()
+        config ->
+          config
+          |> Config.changeset(attrs)
+          |> Repo.update()
+      end
+
+    with {:ok, config} <- result do
+      :persistent_term.put(@enabled_key, config.enabled)
+      {:ok, config}
     end
   end
 
@@ -84,9 +130,13 @@ defmodule Mydia.RemoteAccess do
         {:error, :not_configured}
 
       config ->
-        config
-        |> Config.toggle_enabled_changeset(enabled)
-        |> Repo.update()
+        with {:ok, updated} <-
+               config
+               |> Config.toggle_enabled_changeset(enabled)
+               |> Repo.update() do
+          :persistent_term.put(@enabled_key, updated.enabled)
+          {:ok, updated}
+        end
     end
   end
 
@@ -276,6 +326,14 @@ defmodule Mydia.RemoteAccess do
   Returns {:ok, claim} if successful, {:error, reason} otherwise.
   """
   def generate_claim_code(user_id) do
+    if enabled?() do
+      do_generate_claim_code(user_id)
+    else
+      {:error, :disabled}
+    end
+  end
+
+  defp do_generate_claim_code(user_id) do
     # Get the P2P server's node address
     with {:ok, node_addr} <- get_p2p_node_addr(),
          {:ok, %{"claim_code" => code}} <- create_pairing_claim(node_addr) do
@@ -656,10 +714,19 @@ defmodule Mydia.RemoteAccess do
   def publish_claim_consumed(claim) do
     Phoenix.PubSub.broadcast(
       Mydia.PubSub,
-      "remote_access:claims",
+      claims_topic(claim.user_id),
       {:claim_consumed, %{code: claim.code, user_id: claim.user_id}}
     )
   end
+
+  @doc """
+  PubSub topic carrying claim events for one user.
+
+  Scoped per user rather than instance-wide: the payload contains a live claim
+  code, and there is no reason for one user's session to be handed another's.
+  """
+  @spec claims_topic(binary()) :: String.t()
+  def claims_topic(user_id), do: "remote_access:claims:#{user_id}"
 
   # Format device struct for subscription payload
   defp format_device_for_subscription(device) do
