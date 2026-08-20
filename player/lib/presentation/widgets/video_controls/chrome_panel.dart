@@ -82,6 +82,19 @@ class PanelMetrics {
   /// `chrome_panel_overflow_test.dart` for the full per-width budget.
   final double horizontalPadding;
 
+  /// Bottom inset for a corner overlay — `SkipSegmentButton` and
+  /// `UpNextPrompt` — measured so the overlay always clears the panel.
+  ///
+  /// Both widgets previously hardcoded 120 at every tier, and
+  /// `SkipSegmentButton` documented its value as "Matches `UpNextOverlay`":
+  /// the widget that follows the design system took its geometry from the one
+  /// that did not. One value, read by both, guarded by
+  /// `chrome_corner_inset_test.dart`.
+  ///
+  /// This is [bottomOffset] plus the panel's rendered height plus a 12px gap,
+  /// so it tracks the panel automatically when a tier's offset changes.
+  final double cornerInsetBottom;
+
   /// Horizontal gap between `SecondaryCluster`'s buttons, supplied per tier.
   ///
   /// Desktop and tablet can afford real separation once the transport
@@ -99,7 +112,24 @@ class PanelMetrics {
     required this.showAlwaysOnTop,
     required this.secondaryGap,
     required this.horizontalPadding,
+    required this.cornerInsetBottom,
   });
+
+  /// Right inset for a corner overlay. Constant across tiers: unlike the
+  /// vertical inset, nothing sits to the right of these widgets.
+  static const double cornerInsetRight = 24.0;
+
+  /// The panel's rendered height at every tier: a 44px control row, the
+  /// scrubber row, [ChromePanel.rowGap] between them, and
+  /// [ChromePanel.verticalPadding] above and below.
+  static const double _panelHeight =
+      44 + ChromePanel.rowGap + 20 + (ChromePanel.verticalPadding * 2);
+
+  /// Gap between the panel's top edge and a corner overlay's bottom edge.
+  static const double _cornerGap = 12.0;
+
+  static double _cornerInset(double bottomOffset) =>
+      bottomOffset + _panelHeight + _cornerGap;
 
   /// Resolve metrics for a viewport [width] and the viewer's input type,
   /// using the breakpoints in `core/layout/breakpoints.dart`
@@ -121,6 +151,7 @@ class PanelMetrics {
       return PanelMetrics(
         maxWidth: math.min(720.0, width * 0.70),
         bottomOffset: 48,
+        cornerInsetBottom: _cornerInset(48),
         showVolume: true,
         touchTargets: touchTargets,
         compactTransport: compactTransport,
@@ -134,6 +165,7 @@ class PanelMetrics {
       return PanelMetrics(
         maxWidth: math.min(640.0, width * 0.90),
         bottomOffset: 32,
+        cornerInsetBottom: _cornerInset(32),
         showVolume: true,
         touchTargets: touchTargets,
         compactTransport: compactTransport,
@@ -153,6 +185,7 @@ class PanelMetrics {
       // which trips BoxConstraints' normalization assert downstream.
       maxWidth: math.max(0.0, width - 20),
       bottomOffset: 24,
+      cornerInsetBottom: _cornerInset(24),
       showVolume: false,
       touchTargets: touchTargets,
       compactTransport: compactTransport,

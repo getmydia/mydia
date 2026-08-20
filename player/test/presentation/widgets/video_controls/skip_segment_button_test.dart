@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/player/platform_features.dart';
 import 'package:player/domain/models/media_segment.dart';
+import 'package:player/presentation/widgets/video_controls/chrome_panel.dart';
 import 'package:player/presentation/widgets/video_controls/skip_segment_button.dart';
 
 void main() {
@@ -312,6 +313,7 @@ void main() {
           segment: segment,
           position: position,
           onSkip: onSkip ?? (_) {},
+          metrics: PanelMetrics.forWidth(1280),
           // Pinned so the surface does not vary with the host platform.
           tier: PlayerGlassTier.full,
         );

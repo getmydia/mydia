@@ -44,6 +44,7 @@ import '../../widgets/cast_device_picker.dart';
 import '../../widgets/video_controls/cast_chrome_icon.dart';
 import '../../widgets/video_controls/custom_video_controls.dart';
 import '../../widgets/video_controls/skip_segment_button.dart';
+import '../../widgets/video_controls/chrome_panel.dart';
 import '../../widgets/tap_to_play_overlay.dart';
 import '../../widgets/up_next_overlay.dart';
 import '../../widgets/video_controls/up_next_policy.dart';
@@ -3840,6 +3841,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       );
     }
 
+    final panelMetrics = PanelMetrics.resolve(
+      width: MediaQuery.sizeOf(context).width,
+      touchPrimary: InputCapabilities.touchPrimary,
+    );
+
     return Stack(
       children: [
         videoPlayer,
@@ -3862,6 +3868,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                   segment: segment,
                   position: position,
                   onSkip: (target) => seekToReal(target.end),
+                  metrics: panelMetrics,
                 );
               },
             ),
@@ -4044,6 +4051,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     // same false "connected" claim wearing a different hat.
     final castPosition = session.mediaInfo?.position ?? Duration.zero;
     final skipSegment = isStale ? null : _segmentAt(castPosition);
+    final panelMetrics = PanelMetrics.resolve(
+      width: MediaQuery.sizeOf(context).width,
+      touchPrimary: InputCapabilities.touchPrimary,
+    );
 
     return Stack(
       children: [
@@ -4099,6 +4110,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
               segment: skipSegment,
               position: castPosition,
               onSkip: (target) => _castSeekToReal(target.end),
+              metrics: panelMetrics,
             ),
           ),
         Positioned(
