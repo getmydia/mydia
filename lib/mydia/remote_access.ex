@@ -470,18 +470,38 @@ defmodule Mydia.RemoteAccess do
 
   @doc """
   Consumes a claim code, marking it as used and linking it to a device.
-  Returns {:ok, claim} if successful.
-  Returns {:error, reason} if the claim is invalid.
+
+  Also removes the sealed claim from the relay. That delete is fire and forget:
+  the relay expires the entry after #{@claim_ttl_seconds} seconds regardless, and
+  a failed cleanup must never fail a pairing that has already succeeded.
   """
-  def consume_claim_code(code, device_id) do
+  def consume_claim_code(code, device_id, opts \\ []) do
     code = normalize_code(code)
 
     with {:ok, claim} <- validate_claim_code(code),
          {:ok, consumed_claim} <-
            claim |> PairingClaim.consume_changeset(device_id) |> Repo.update() do
+      delete_sealed_claim(consumed_claim.lookup_key, opts)
       # Notify UI that claim has been consumed (for auto-closing pairing modal)
       publish_claim_consumed(consumed_claim)
       {:ok, consumed_claim}
+    end
+  end
+
+  # Claims created before the lookup_key column existed have none. Nothing to
+  # delete, and the entry was never stored under a v2 key anyway.
+  defp delete_sealed_claim(nil, _opts), do: :ok
+
+  defp delete_sealed_claim(lookup_key, opts) do
+    url = "#{get_relay_url(opts)}/pairing/v2/claim/#{lookup_key}"
+
+    case Req.delete(url, retry: false) do
+      {:ok, %Req.Response{status: status}} when status in [204, 404] ->
+        :ok
+
+      other ->
+        Logger.debug("Sealed claim cleanup did not complete: #{inspect(other)}")
+        :ok
     end
   end
 

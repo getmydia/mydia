@@ -92,4 +92,61 @@ defmodule Mydia.RemoteAccess.ClaimCodeTest do
       assert stored.user_id == user.id
     end
   end
+
+  describe "consume_claim_code/3" do
+    setup %{bypass: bypass, user: user, pairing_opts: pairing_opts} do
+      Bypass.expect_once(bypass, "POST", "/pairing/v2/claim", fn conn ->
+        Plug.Conn.resp(conn, 204, "")
+      end)
+
+      {:ok, claim} = RemoteAccess.generate_claim_code(user.id, pairing_opts)
+      {:ok, claim: claim}
+    end
+
+    test "deletes the sealed claim from the relay", %{
+      bypass: bypass,
+      claim: claim,
+      relay_url: relay_url
+    } do
+      test_pid = self()
+      device = device_fixture(claim.user_id)
+
+      Bypass.expect_once(bypass, "DELETE", "/pairing/v2/claim/#{claim.lookup_key}", fn conn ->
+        send(test_pid, :relay_deleted)
+        Plug.Conn.resp(conn, 204, "")
+      end)
+
+      assert {:ok, consumed} =
+               RemoteAccess.consume_claim_code(claim.code, device.id, relay_url: relay_url)
+
+      assert consumed.used_at
+      assert_receive :relay_deleted
+    end
+
+    test "still consumes the claim when the relay delete fails", %{
+      bypass: bypass,
+      claim: claim,
+      relay_url: relay_url
+    } do
+      Bypass.down(bypass)
+      device = device_fixture(claim.user_id)
+
+      assert {:ok, consumed} =
+               RemoteAccess.consume_claim_code(claim.code, device.id, relay_url: relay_url)
+
+      assert consumed.used_at
+    end
+  end
+
+  defp device_fixture(user_id) do
+    {:ok, device} =
+      RemoteAccess.create_device(%{
+        user_id: user_id,
+        device_name: "Pairing test device",
+        platform: "test",
+        token: Ecto.UUID.generate()
+      })
+
+    device
+  end
 end
