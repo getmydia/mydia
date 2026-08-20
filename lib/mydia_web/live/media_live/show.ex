@@ -177,7 +177,7 @@ defmodule MydiaWeb.MediaLive.Show do
      |> SegmentEvents.assign_segment_status(media_item)
      |> FranchiseEvents.maybe_load()
      |> RecommendationEvents.maybe_load()
-     |> MediaItemEvents.maybe_load_season_order_suggestion()
+     |> MediaItemEvents.maybe_load_season_order_info()
      |> assign_target_library(media_item)
      |> stream_configure(:search_results, dom_id: &generate_positioned_id/1)
      |> stream(:search_results, [])}
@@ -688,8 +688,8 @@ defmodule MydiaWeb.MediaLive.Show do
   def handle_async(:load_recommendations, result, socket),
     do: RecommendationEvents.handle_load_result(result, socket)
 
-  def handle_async(:load_season_order_suggestion, result, socket),
-    do: MediaItemEvents.handle_season_order_suggestion_result(result, socket)
+  def handle_async(:load_season_order_info, result, socket),
+    do: MediaItemEvents.handle_season_order_info_result(result, socket)
 
   def handle_async({:add_recommendation, tmdb_id}, result, socket),
     do: RecommendationEvents.handle_add_result(tmdb_id, result, socket)

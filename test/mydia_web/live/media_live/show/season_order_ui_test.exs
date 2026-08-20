@@ -117,25 +117,90 @@ defmodule MydiaWeb.MediaLive.Show.SeasonOrderUiTest do
     refute has_element?(view, "#season-order-suggestion")
   end
 
-  test "the persistent selector is present on a normally sized TVDB show", %{conn: conn} do
-    show = media_item_fixture(%{type: "tv_show", title: "Normal", metadata_source: :tvdb})
+  test "no selector when TVDB publishes only the official ordering", %{conn: conn} do
+    tvdb_id = System.unique_integer([:positive])
+
+    show =
+      media_item_fixture(%{
+        type: "tv_show",
+        title: "Official Only",
+        tvdb_id: tvdb_id,
+        metadata_source: :tvdb
+      })
+
+    for n <- 1..12 do
+      episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: n})
+    end
+
+    stub_tvdb_orderings(tvdb_id, official: 12)
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{show.id}")
+    render_async(view, 5000)
+
+    refute has_element?(view, "#season-order-suggestion")
+    refute has_element?(view, "#season-order-select")
+  end
+
+  test "the selector offers exactly the orderings TVDB publishes", %{conn: conn} do
+    tvdb_id = System.unique_integer([:positive])
+    show = oversized_show(tvdb_id)
+    stub_tvdb_orderings(tvdb_id, official: 170, dvd: [51, 51, 52, 16])
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{show.id}")
+    render_async(view, 5000)
+
+    assert has_element?(view, "#season-order-select option[value=official]", "Aired order")
+    assert has_element?(view, "#season-order-select option[value=dvd]", "DVD order")
+    assert has_element?(view, "#season-order-select option[value=official][selected]")
+
+    # The whole point: absolute is in SeasonOrder.values/0 but not in this
+    # show's TVDB payload, and picking it could only ever produce an error.
+    refute has_element?(view, "#season-order-select option[value=absolute]")
+  end
+
+  # The mirror of the test above. Without it, a filter that simply hard-coded
+  # "drop absolute" would pass everything else in this file.
+  test "an absolute ordering TVDB does publish is offered", %{conn: conn} do
+    tvdb_id = System.unique_integer([:positive])
+    show = oversized_show(tvdb_id)
+    stub_tvdb_orderings(tvdb_id, official: 170, absolute: [170])
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{show.id}")
+    render_async(view, 5000)
+
+    assert has_element?(view, "#season-order-select option[value=absolute]", "Absolute order")
+    refute has_element?(view, "#season-order-select option[value=dvd]")
+  end
+
+  # The failed-lookup branch, exercised through the one failure that needs no
+  # network: available/2 refuses a nil tvdb_id before it fetches anything. A
+  # relay outage lands on the same {:error, reason} handler. There is no seam
+  # to point the LiveView's own relay config at Bypass, so an outage cannot be
+  # simulated here without a real outbound request.
+  test "no selector when the show has no TVDB id to look orderings up with", %{conn: conn} do
+    show = media_item_fixture(%{type: "tv_show", title: "No Tvdb Id", metadata_source: :tvdb})
 
     for n <- 1..12 do
       episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: n})
     end
 
     {:ok, view, _html} = live(conn, ~p"/media/#{show.id}")
+    render_async(view, 5000)
 
-    refute has_element?(view, "#season-order-suggestion")
-    assert has_element?(view, "#season-order-select")
+    refute has_element?(view, "#season-order-select")
+  end
 
-    # The options' `value`s are the ordering atoms rendered as plain option
-    # values (`:official` -> "official", etc), and the show's nil
-    # `season_order` (never asked) selects "official", not nothing.
+  test "the selector still lists the ordering the show is already in", %{conn: conn} do
+    tvdb_id = System.unique_integer([:positive])
+    show = oversized_show(tvdb_id)
+    {:ok, _show} = Media.update_media_item(show, %{season_order: :dvd})
+    stub_tvdb_orderings(tvdb_id, official: 170)
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{show.id}")
+    render_async(view, 5000)
+
+    assert has_element?(view, "#season-order-select option[value=dvd][selected]", "DVD order")
     assert has_element?(view, "#season-order-select option[value=official]", "Aired order")
-    assert has_element?(view, "#season-order-select option[value=dvd]", "DVD order")
-    assert has_element?(view, "#season-order-select option[value=absolute]", "Absolute order")
-    assert has_element?(view, "#season-order-select option[value=official][selected]")
   end
 
   test "picking a different ordering from the persistent selector switches to it", %{conn: conn} do
@@ -407,21 +472,27 @@ defmodule MydiaWeb.MediaLive.Show.SeasonOrderUiTest do
   # do not include the base URL, so the LiveView's later call against the
   # real default config reads the stubbed data back with no outbound
   # request — same trick as `FranchiseSectionTest.warm_collection_cache/2`.
-  defp stub_tvdb_orderings(tvdb_id, official: official_count, dvd: dvd_counts) do
+  defp stub_tvdb_orderings(tvdb_id, opts) do
     bypass = Bypass.open()
 
     relay = Mydia.Metadata.default_relay_config()
     bypass_config = %{relay | base_url: "http://localhost:#{bypass.port}"}
 
+    official_count = Keyword.fetch!(opts, :official)
+    dvd_counts = Keyword.get(opts, :dvd, [])
+    absolute_counts = Keyword.get(opts, :absolute, [])
+
     official_season_id = System.unique_integer([:positive])
     dvd_season_ids = Enum.map(dvd_counts, fn _ -> System.unique_integer([:positive]) end)
+
+    absolute_season_ids =
+      Enum.map(absolute_counts, fn _ -> System.unique_integer([:positive]) end)
 
     Bypass.stub(bypass, "GET", "/tvdb/series/#{tvdb_id}/extended", fn conn ->
       seasons =
         [season_stub(official_season_id, 1, "official")] ++
-          (dvd_season_ids
-           |> Enum.with_index(1)
-           |> Enum.map(fn {id, number} -> season_stub(id, number, "dvd") end))
+          typed_season_stubs(dvd_season_ids, "dvd") ++
+          typed_season_stubs(absolute_season_ids, "absolute")
 
       json(conn, %{"data" => %{"id" => tvdb_id, "seasons" => seasons}})
     end)
@@ -434,25 +505,40 @@ defmodule MydiaWeb.MediaLive.Show.SeasonOrderUiTest do
       })
     end)
 
-    _final_episode_id =
-      dvd_season_ids
-      |> Enum.zip(dvd_counts)
-      |> Enum.with_index(1)
-      |> Enum.reduce(1, fn {{season_id, count}, season_number}, next_id ->
-        episode_ids = next_id..(next_id + count - 1)
-
-        Bypass.stub(bypass, "GET", "/tvdb/seasons/#{season_id}/extended", fn conn ->
-          episodes = episodes_json(episode_ids, season_number)
-
-          json(conn, %{
-            "data" => %{"id" => season_id, "number" => season_number, "episodes" => episodes}
-          })
-        end)
-
-        next_id + count
-      end)
+    stub_ordering_seasons(bypass, dvd_season_ids, dvd_counts)
+    stub_ordering_seasons(bypass, absolute_season_ids, absolute_counts)
 
     warm_ordering_cache(bypass_config, tvdb_id)
+
+    :ok
+  end
+
+  defp typed_season_stubs(season_ids, type) do
+    season_ids
+    |> Enum.with_index(1)
+    |> Enum.map(fn {id, number} -> season_stub(id, number, type) end)
+  end
+
+  # Every ordering describes the same episode ids (1..sum(counts)), grouped
+  # differently, which is what makes a real TVDB alternative ordering safe to
+  # switch to losslessly.
+  defp stub_ordering_seasons(bypass, season_ids, counts) do
+    season_ids
+    |> Enum.zip(counts)
+    |> Enum.with_index(1)
+    |> Enum.reduce(1, fn {{season_id, count}, season_number}, next_id ->
+      episode_ids = next_id..(next_id + count - 1)
+
+      Bypass.stub(bypass, "GET", "/tvdb/seasons/#{season_id}/extended", fn conn ->
+        episodes = episodes_json(episode_ids, season_number)
+
+        json(conn, %{
+          "data" => %{"id" => season_id, "number" => season_number, "episodes" => episodes}
+        })
+      end)
+
+      next_id + count
+    end)
 
     :ok
   end
@@ -463,8 +549,14 @@ defmodule MydiaWeb.MediaLive.Show.SeasonOrderUiTest do
     provider_id = to_string(tvdb_id)
 
     {:ok, raw_seasons} = Relay.fetch_raw_seasons(bypass_config, provider_id)
-    {:ok, _} = Relay.fetch_ordering_episodes(bypass_config, provider_id, "official", raw_seasons)
-    {:ok, _} = Relay.fetch_ordering_episodes(bypass_config, provider_id, "dvd", raw_seasons)
+
+    # An ordering with no season stubs short-circuits to {:ok, []} inside
+    # fetch_ordering_episodes/4 without making a request, so asking for all
+    # three is safe whatever the caller stubbed.
+    for type <- ["official", "dvd", "absolute"] do
+      {:ok, _episodes} =
+        Relay.fetch_ordering_episodes(bypass_config, provider_id, type, raw_seasons)
+    end
 
     :ok
   end
@@ -580,13 +672,12 @@ defmodule MydiaWeb.MediaLive.Show.SeasonOrderUiTest do
     end
 
     test "the ordering controls still render for an admin", %{conn: conn} do
-      show = media_item_fixture(%{type: "tv_show", title: "Normal", metadata_source: :tvdb})
-
-      for n <- 1..12 do
-        episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: n})
-      end
+      tvdb_id = System.unique_integer([:positive])
+      show = oversized_show(tvdb_id)
+      stub_tvdb_orderings(tvdb_id, official: 170, dvd: [51, 51, 52, 16])
 
       {:ok, view, _html} = live(conn, ~p"/media/#{show.id}")
+      render_async(view, 5000)
 
       assert has_element?(view, "#season-order-select")
     end
