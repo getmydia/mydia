@@ -44,6 +44,54 @@ class _AuthRefreshNotifier extends ChangeNotifier {
   }
 }
 
+/// The `PlayerScreen` constructor arguments encoded in `/player/:type/:id`'s
+/// query string.
+///
+/// Extracted out of the `GoRoute`'s `builder` so a test can assert this
+/// mapping directly against a plain [Uri] — `builder` itself needs a live
+/// `BuildContext`/`GoRouterState`, which is exactly the seam this avoids.
+/// This is the other half of the contract `resolveLoadContentRoute`
+/// (`app.dart`) writes to: whatever that function puts in a route's query
+/// string, this reads back out.
+@immutable
+class PlayerRouteParams {
+  final String? fileId;
+  final String? title;
+  final String? showId;
+  final int? seasonNumber;
+  final int? resumeSeconds;
+  final String? audioTrack;
+  final String? subtitleTrack;
+  final bool autoplay;
+
+  const PlayerRouteParams({
+    this.fileId,
+    this.title,
+    this.showId,
+    this.seasonNumber,
+    this.resumeSeconds,
+    this.audioTrack,
+    this.subtitleTrack,
+    this.autoplay = true,
+  });
+
+  factory PlayerRouteParams.fromUri(Uri uri) {
+    final query = uri.queryParameters;
+    return PlayerRouteParams(
+      fileId: query['fileId'],
+      title: query['title'],
+      showId: query['showId'],
+      seasonNumber: int.tryParse(query['seasonNumber'] ?? ''),
+      resumeSeconds: int.tryParse(query['resume'] ?? ''),
+      audioTrack: query['audioTrack'],
+      subtitleTrack: query['subtitleTrack'],
+      // Absent means the default (true, i.e. play). Only a remote
+      // `LoadContent` with `autoplay: false` ever sends this param.
+      autoplay: query['autoplay'] != 'false',
+    );
+  }
+}
+
 @Riverpod(keepAlive: true)
 GoRouter appRouter(Ref ref) {
   debugPrint('[AppRouter] Creating appRouter provider');
@@ -303,18 +351,8 @@ GoRouter appRouter(Ref ref) {
         builder: (context, state) {
           final type = state.pathParameters['type']!;
           final id = state.pathParameters['id']!;
-          final fileId = state.uri.queryParameters['fileId'];
-          final title = state.uri.queryParameters['title'];
-          final showId = state.uri.queryParameters['showId'];
-          final seasonNumber =
-              int.tryParse(state.uri.queryParameters['seasonNumber'] ?? '');
-          final resumeSeconds =
-              int.tryParse(state.uri.queryParameters['resume'] ?? '');
-          final audioTrack = state.uri.queryParameters['audioTrack'];
-          final subtitleTrack = state.uri.queryParameters['subtitleTrack'];
-          // Absent means the default (true, i.e. play). Only a remote
-          // `LoadContent` with `autoplay: false` ever sends this param.
-          final autoplay = state.uri.queryParameters['autoplay'] != 'false';
+          final params = PlayerRouteParams.fromUri(state.uri);
+          final fileId = params.fileId;
 
           if (fileId == null) {
             // If no fileId provided, show error
@@ -348,13 +386,13 @@ GoRouter appRouter(Ref ref) {
             mediaType: type,
             mediaId: id,
             fileId: fileId,
-            title: title,
-            showId: showId,
-            seasonNumber: seasonNumber,
-            resumeSeconds: resumeSeconds,
-            audioTrack: audioTrack,
-            subtitleTrack: subtitleTrack,
-            autoplay: autoplay,
+            title: params.title,
+            showId: params.showId,
+            seasonNumber: params.seasonNumber,
+            resumeSeconds: params.resumeSeconds,
+            audioTrack: params.audioTrack,
+            subtitleTrack: params.subtitleTrack,
+            autoplay: params.autoplay,
           );
         },
       ),

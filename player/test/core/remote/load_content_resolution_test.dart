@@ -10,9 +10,22 @@ MediaFile _file(String id, String resolution) => MediaFile(
       directPlaySupported: true,
     );
 
+LoadContentTarget _target(
+  List<MediaFile> files, {
+  String title = 'Untitled fixture',
+  String? showId,
+  int? seasonNumber,
+}) =>
+    LoadContentTarget(
+      files: files,
+      title: title,
+      showId: showId,
+      seasonNumber: seasonNumber,
+    );
+
 /// Fails the test outright if called: the movie side of a `LoadContent`
 /// resolution should never be reached for an intent carrying an episode id.
-Future<List<MediaFile>> _unreachable(String id) {
+Future<LoadContentTarget> _unreachable(String id) {
   fail('fetcher should not have been called for id $id');
 }
 
@@ -39,11 +52,11 @@ void main() {
       final route = await resolveLoadContentRoute(
         intent,
         screenWidth,
-        fetchMovieFiles: (id) async {
+        fetchMovieTarget: (id) async {
           expect(id, 'movie-1');
-          return files;
+          return _target(files, title: 'Arrival');
         },
-        fetchEpisodeFiles: _unreachable,
+        fetchEpisodeTarget: _unreachable,
       );
 
       expect(route, startsWith('/player/movie/movie-1?'));
@@ -64,15 +77,89 @@ void main() {
       final route = await resolveLoadContentRoute(
         intent,
         800,
-        fetchMovieFiles: _unreachable,
-        fetchEpisodeFiles: (id) async {
+        fetchMovieTarget: _unreachable,
+        fetchEpisodeTarget: (id) async {
           expect(id, 'ep-9');
-          return [_file('ep-file', '720p')];
+          return _target([_file('ep-file', '720p')], title: 'Half Loop');
         },
       );
 
       expect(route, startsWith('/player/episode/ep-9?'));
       expect(route, contains('fileId=ep-file'));
+    });
+
+    test(
+        'a movie carries its title, so describe() never falls back to '
+        "'Untitled'", () async {
+      const intent = LoadContentIntent(
+        mediaItemId: 'movie-title',
+        episodeId: null,
+        startAt: Duration.zero,
+        audioTrack: null,
+        subtitleTrack: null,
+        autoplay: true,
+      );
+
+      final route = await resolveLoadContentRoute(
+        intent,
+        800,
+        fetchMovieTarget: (id) async =>
+            _target([_file('only', '1080p')], title: 'Arrival'),
+        fetchEpisodeTarget: _unreachable,
+      );
+
+      expect(route, contains('title=Arrival'));
+    });
+
+    test(
+        'an episode carries showId and seasonNumber, so next/previous-episode '
+        'stays available on a remotely-started episode', () async {
+      const intent = LoadContentIntent(
+        mediaItemId: 'show-1',
+        episodeId: 'ep-9',
+        startAt: Duration.zero,
+        audioTrack: null,
+        subtitleTrack: null,
+        autoplay: true,
+      );
+
+      final route = await resolveLoadContentRoute(
+        intent,
+        800,
+        fetchMovieTarget: _unreachable,
+        fetchEpisodeTarget: (id) async => _target(
+          [_file('ep-file', '720p')],
+          title: 'Half Loop',
+          showId: 'show-1',
+          seasonNumber: 2,
+        ),
+      );
+
+      expect(route, contains('title=Half+Loop'));
+      expect(route, contains('showId=show-1'));
+      expect(route, contains('seasonNumber=2'));
+    });
+
+    test('a movie omits showId and seasonNumber, which a movie has no use for',
+        () async {
+      const intent = LoadContentIntent(
+        mediaItemId: 'movie-9',
+        episodeId: null,
+        startAt: Duration.zero,
+        audioTrack: null,
+        subtitleTrack: null,
+        autoplay: true,
+      );
+
+      final route = await resolveLoadContentRoute(
+        intent,
+        800,
+        fetchMovieTarget: (id) async => _target([_file('only', '1080p')]),
+        fetchEpisodeTarget: _unreachable,
+      );
+
+      expect(route, isNot(contains('showId')));
+      expect(route, isNot(contains('seasonNumber')));
     });
 
     test('startAt becomes resumeSeconds', () async {
@@ -88,8 +175,8 @@ void main() {
       final route = await resolveLoadContentRoute(
         intent,
         800,
-        fetchMovieFiles: (id) async => [_file('only', '1080p')],
-        fetchEpisodeFiles: _unreachable,
+        fetchMovieTarget: (id) async => _target([_file('only', '1080p')]),
+        fetchEpisodeTarget: _unreachable,
       );
 
       expect(route, contains('resume=754'));
@@ -109,8 +196,8 @@ void main() {
       final route = await resolveLoadContentRoute(
         intent,
         800,
-        fetchMovieFiles: (id) async => [_file('only', '1080p')],
-        fetchEpisodeFiles: _unreachable,
+        fetchMovieTarget: (id) async => _target([_file('only', '1080p')]),
+        fetchEpisodeTarget: _unreachable,
       );
 
       expect(route, contains('audioTrack=audio-eng'));
@@ -130,8 +217,8 @@ void main() {
       final route = await resolveLoadContentRoute(
         intent,
         800,
-        fetchMovieFiles: (id) async => [_file('only', '1080p')],
-        fetchEpisodeFiles: _unreachable,
+        fetchMovieTarget: (id) async => _target([_file('only', '1080p')]),
+        fetchEpisodeTarget: _unreachable,
       );
 
       expect(route, isNot(contains('audioTrack')));
@@ -152,8 +239,8 @@ void main() {
       final route = await resolveLoadContentRoute(
         skipsAutoplay,
         800,
-        fetchMovieFiles: (id) async => [_file('only', '1080p')],
-        fetchEpisodeFiles: _unreachable,
+        fetchMovieTarget: (id) async => _target([_file('only', '1080p')]),
+        fetchEpisodeTarget: _unreachable,
       );
 
       expect(route, contains('autoplay=false'));
@@ -170,8 +257,8 @@ void main() {
       final defaultRoute = await resolveLoadContentRoute(
         playsImmediately,
         800,
-        fetchMovieFiles: (id) async => [_file('only', '1080p')],
-        fetchEpisodeFiles: _unreachable,
+        fetchMovieTarget: (id) async => _target([_file('only', '1080p')]),
+        fetchEpisodeTarget: _unreachable,
       );
 
       expect(defaultRoute, isNot(contains('autoplay')));
@@ -190,8 +277,8 @@ void main() {
       final route = await resolveLoadContentRoute(
         intent,
         800,
-        fetchMovieFiles: (id) async => throw Exception('server unreachable'),
-        fetchEpisodeFiles: _unreachable,
+        fetchMovieTarget: (id) async => throw Exception('server unreachable'),
+        fetchEpisodeTarget: _unreachable,
       );
 
       expect(route, isNull);
@@ -210,11 +297,89 @@ void main() {
       final route = await resolveLoadContentRoute(
         intent,
         800,
-        fetchMovieFiles: (id) async => const [],
-        fetchEpisodeFiles: _unreachable,
+        fetchMovieTarget: (id) async => _target(const []),
+        fetchEpisodeTarget: _unreachable,
       );
 
       expect(route, isNull);
+    });
+  });
+
+  group('pushLoadContentDestination', () {
+    test('pushes the resolved player route when resolution succeeds', () async {
+      const intent = LoadContentIntent(
+        mediaItemId: 'movie-1',
+        episodeId: null,
+        startAt: Duration.zero,
+        audioTrack: null,
+        subtitleTrack: null,
+        autoplay: true,
+      );
+
+      String? pushed;
+
+      await pushLoadContentDestination(
+        intent,
+        800,
+        fetchMovieTarget: (id) async =>
+            _target([_file('only', '1080p')], title: 'Arrival'),
+        fetchEpisodeTarget: _unreachable,
+        push: (path) => pushed = path,
+      );
+
+      expect(pushed, isNotNull);
+      expect(pushed, startsWith('/player/movie/movie-1?'));
+      expect(pushed, contains('fileId=only'));
+    });
+
+    test(
+        'falls back to the movie detail screen — never throws — when '
+        'resolution fails', () async {
+      const intent = LoadContentIntent(
+        mediaItemId: 'movie-dead',
+        episodeId: null,
+        startAt: Duration.zero,
+        audioTrack: null,
+        subtitleTrack: null,
+        autoplay: true,
+      );
+
+      String? pushed;
+
+      await pushLoadContentDestination(
+        intent,
+        800,
+        fetchMovieTarget: (id) async => throw Exception('server unreachable'),
+        fetchEpisodeTarget: _unreachable,
+        push: (path) => pushed = path,
+      );
+
+      expect(pushed, '/movie/movie-dead');
+    });
+
+    test(
+        'falls back to the episode detail screen when nothing resolves to a '
+        'playable file', () async {
+      const intent = LoadContentIntent(
+        mediaItemId: 'show-1',
+        episodeId: 'ep-empty',
+        startAt: Duration.zero,
+        audioTrack: null,
+        subtitleTrack: null,
+        autoplay: true,
+      );
+
+      String? pushed;
+
+      await pushLoadContentDestination(
+        intent,
+        800,
+        fetchMovieTarget: _unreachable,
+        fetchEpisodeTarget: (id) async => _target(const []),
+        push: (path) => pushed = path,
+      );
+
+      expect(pushed, '/episode/ep-empty');
     });
   });
 }

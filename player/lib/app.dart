@@ -25,12 +25,38 @@ import 'presentation/screens/movie/movie_detail_controller.dart';
 import 'presentation/widgets/cast_mini_controller.dart';
 import 'package:player/core/p2p/p2p_service.dart';
 
-/// Fetches the files list for whichever half of a `LoadContentIntent`
-/// identifies content — an episode's own files, or a movie's. Kept as a
-/// function type rather than folded into [resolveLoadContentRoute] directly,
-/// so a test can substitute a fake fetcher and assert the resolution
-/// *decision* without a GraphQL client at all.
-typedef LoadContentFileFetcher = Future<List<MediaFile>> Function(String id);
+/// Everything `resolveLoadContentRoute` needs beyond the file list itself.
+///
+/// `title` backs `describe()`'s reporting back to controllers (it falls back
+/// to 'Untitled' with nothing supplied); `showId`/`seasonNumber` are what
+/// `PlayerScreen._hasNextEpisode`/`_hasPreviousEpisode` gate on — null either
+/// one and a remotely-started episode's next/previous-episode capability is
+/// silently dead, even though the exact same fetch this type is built from
+/// already has both fields on hand. Both are null for a movie, which has
+/// neither concept.
+@immutable
+class LoadContentTarget {
+  final List<MediaFile> files;
+  final String title;
+  final String? showId;
+  final int? seasonNumber;
+
+  const LoadContentTarget({
+    required this.files,
+    required this.title,
+    this.showId,
+    this.seasonNumber,
+  });
+}
+
+/// Fetches [LoadContentTarget] for whichever half of a `LoadContentIntent`
+/// identifies content — an episode's own files/title/show context, or a
+/// movie's. Kept as a function type rather than folded into
+/// [resolveLoadContentRoute] directly, so a test can substitute a fake
+/// fetcher and assert the resolution *decision* without a GraphQL client at
+/// all.
+typedef LoadContentTargetFetcher = Future<LoadContentTarget> Function(
+    String id);
 
 /// The `/player/...` route a `LoadContentIntent` should actually land on, or
 /// null when nothing here resolves to a playable file.
@@ -38,10 +64,15 @@ typedef LoadContentFileFetcher = Future<List<MediaFile>> Function(String id);
 /// This is the target side of the feature's primary use case: a controller
 /// on another device said "play this", and this device has to turn that
 /// reference into an actual stream against the server it is already paired
-/// to. Resolving means fetching the right files list — the episode's own,
+/// to. Resolving means fetching the right target — the episode's own,
 /// never the show's, when [LoadContentIntent.episodeId] is set — then
 /// running the same [pickBestFile] every local Play button uses, so a
 /// remote play and a local tap never disagree about which version plays.
+/// `title`/`showId`/`seasonNumber` ride along in the returned route's query
+/// string exactly as `playerRouteForContinueWatching`
+/// (`home_screen.dart:42-68`) already carries them for a local tap, so a
+/// remotely-started episode keeps its next/previous-episode capability
+/// instead of losing it.
 ///
 /// Runs off an inbound network command with no user-facing error path, so
 /// every failure here — a fetch that throws, [pickBestFile]'s own
@@ -51,17 +82,17 @@ typedef LoadContentFileFetcher = Future<List<MediaFile>> Function(String id);
 Future<String?> resolveLoadContentRoute(
   LoadContentIntent intent,
   double screenWidth, {
-  required LoadContentFileFetcher fetchMovieFiles,
-  required LoadContentFileFetcher fetchEpisodeFiles,
+  required LoadContentTargetFetcher fetchMovieTarget,
+  required LoadContentTargetFetcher fetchEpisodeTarget,
 }) async {
   final episodeId = intent.episodeId;
 
   try {
-    final files = episodeId != null
-        ? await fetchEpisodeFiles(episodeId)
-        : await fetchMovieFiles(intent.mediaItemId);
+    final target = episodeId != null
+        ? await fetchEpisodeTarget(episodeId)
+        : await fetchMovieTarget(intent.mediaItemId);
 
-    final file = await pickBestFile(files, screenWidth);
+    final file = await pickBestFile(target.files, screenWidth);
     if (file == null) return null;
 
     final type = episodeId != null ? 'episode' : 'movie';
@@ -69,7 +100,11 @@ Future<String?> resolveLoadContentRoute(
 
     final query = <String, String>{
       'fileId': file.id,
+      'title': target.title,
       'resume': intent.startAt.inSeconds.toString(),
+      if (target.showId != null) 'showId': target.showId!,
+      if (target.seasonNumber != null)
+        'seasonNumber': target.seasonNumber.toString(),
       if (intent.audioTrack != null) 'audioTrack': intent.audioTrack!,
       if (intent.subtitleTrack != null) 'subtitleTrack': intent.subtitleTrack!,
       // Absent means the player's own default (true, i.e. play).
@@ -82,6 +117,40 @@ Future<String?> resolveLoadContentRoute(
     debugPrintStack(stackTrace: stackTrace);
     return null;
   }
+}
+
+/// The detail-screen fallback for [intent] — the same "no file chosen yet"
+/// destination every other entry point in this app takes (see
+/// `home_screen.dart`'s `_handlePlay`) when nothing resolves to a playable
+/// file.
+String loadContentDetailFallback(LoadContentIntent intent) =>
+    intent.episodeId != null
+        ? '/episode/${intent.episodeId}'
+        : '/movie/${intent.mediaItemId}';
+
+/// Resolves [intent] and hands [push] the destination: the resolved player
+/// route, or [loadContentDetailFallback] when nothing resolves. [push] is
+/// the one side effect in this function, kept as an injected callback so a
+/// test can assert what gets pushed — including the fallback case, which
+/// [resolveLoadContentRoute] alone cannot exercise, since returning `null`
+/// from that function is the input to this decision, not the decision
+/// itself — without mounting a router at all. The real app wires [push] to
+/// `GoRouter.push`.
+Future<void> pushLoadContentDestination(
+  LoadContentIntent intent,
+  double screenWidth, {
+  required LoadContentTargetFetcher fetchMovieTarget,
+  required LoadContentTargetFetcher fetchEpisodeTarget,
+  required void Function(String path) push,
+}) async {
+  final path = await resolveLoadContentRoute(
+    intent,
+    screenWidth,
+    fetchMovieTarget: fetchMovieTarget,
+    fetchEpisodeTarget: fetchEpisodeTarget,
+  );
+
+  push(path ?? loadContentDetailFallback(intent));
 }
 
 class MyApp extends ConsumerStatefulWidget {
@@ -190,12 +259,11 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   /// Resolves [intent] to a playable file and pushes the player already
   /// playing it, falling back to the detail screen — the same "no file
   /// chosen yet" fallback every other entry point in this app takes (see
-  /// `continue_watching_actions.dart`'s `_handlePlay`) — when nothing
-  /// resolves.
+  /// `home_screen.dart`'s `_handlePlay`) — when nothing resolves.
   ///
   /// `router` and `screenWidth` are read from [context] before the only
   /// `await` in this method, never after: this device could navigate away
-  /// or tear down while [resolveLoadContentRoute] runs, and neither
+  /// or tear down while [pushLoadContentDestination] runs, and neither
   /// `context` nor anything derived from it would be safe to touch once
   /// that has happened. The whole body is wrapped in `try`/`catch` on top of
   /// [resolveLoadContentRoute]'s own — this runs off an inbound network
@@ -209,21 +277,29 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       final router = GoRouter.of(context);
       final screenWidth = MediaQuery.sizeOf(context).width;
 
-      final path = await resolveLoadContentRoute(
+      await pushLoadContentDestination(
         intent,
         screenWidth,
-        fetchMovieFiles: (id) async =>
-            (await ref.read(movieDetailControllerProvider(id).future)).files,
-        fetchEpisodeFiles: (id) async =>
-            (await ref.read(episodeDetailControllerProvider(id).future)).files,
+        fetchMovieTarget: (id) async {
+          final movie =
+              await ref.read(movieDetailControllerProvider(id).future);
+          return LoadContentTarget(files: movie.files, title: movie.title);
+        },
+        fetchEpisodeTarget: (id) async {
+          final episode =
+              await ref.read(episodeDetailControllerProvider(id).future);
+          return LoadContentTarget(
+            files: episode.files,
+            title: episode.title,
+            showId: episode.show.id,
+            seasonNumber: episode.seasonNumber,
+          );
+        },
+        push: (path) {
+          if (!mounted) return;
+          router.push(path);
+        },
       );
-
-      if (!mounted) return;
-
-      router.push(path ??
-          (intent.episodeId != null
-              ? '/episode/${intent.episodeId}'
-              : '/movie/${intent.mediaItemId}'));
     } catch (error, stackTrace) {
       debugPrint('[MyApp] Remote LoadContent handling failed: $error');
       debugPrintStack(stackTrace: stackTrace);
