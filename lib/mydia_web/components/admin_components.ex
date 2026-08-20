@@ -75,11 +75,11 @@ defmodule MydiaWeb.AdminComponents do
         Library
       </.tab_link>
       <.tab_link
-        active={@active_tab == :prune}
-        to="/admin/config/prune"
+        active={@active_tab == :duplicates}
+        to="/admin/config/duplicates"
         icon="hero-document-duplicate"
       >
-        Prune duplicates
+        Duplicates
       </.tab_link>
       <.tab_link
         active={@active_tab == :media_servers}

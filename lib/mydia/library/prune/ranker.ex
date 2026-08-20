@@ -53,7 +53,11 @@ defmodule Mydia.Library.Prune.Ranker do
     %Decision{
       group: group,
       keeper: keeper,
-      losers: Enum.reject(files, &(&1.id == keeper.id)),
+      # Rank order, not the order the files came back from the database. The
+      # review page lists `[keeper | losers]` and promotes the first loser
+      # when the operator trashes the keeper, so both depend on the best
+      # remaining copy coming first.
+      losers: Enum.reject(sorted, &(&1.id == keeper.id)),
       ranker: ranker,
       reason: reason_for(ranker, keeper)
     }
