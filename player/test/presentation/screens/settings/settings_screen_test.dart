@@ -1,6 +1,6 @@
 // material.dart exports its own ConnectionState (the async-widget one), which
 // clashes with the app's. Tasks 2 and 7 hit this too.
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart' hide ConnectionState;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -18,12 +18,19 @@ import 'package:player/presentation/screens/settings/settings_controller.dart';
 import 'package:player/presentation/screens/settings/settings_screen.dart';
 import 'package:player/presentation/screens/settings/widgets/settings_identity.dart';
 
-/// A real, isolated Hive box per test, matching
-/// `remote_control_settings_test.dart`: `RemoteControlSettings` takes a real
+/// A real, isolated Hive box per test: `RemoteControlSettings` takes a real
 /// `Box`, and the settings screen's row is the thing under test here, not a
 /// stand-in for it. A unique box name per test avoids Hive's open-box cache
 /// leaking a prior test's opt-out into the next one.
-late Directory _remoteControlTempDir;
+///
+/// Opened with `bytes:`, which selects Hive's in-memory backend, so every
+/// read and write is a completed `Future.value()` with no file touched. That
+/// is load-bearing rather than tidiness: `testWidgets` runs its body inside a
+/// fake-async zone, and tapping the toggle below calls
+/// `RemoteControlSettings.setControllable` -- a disk-backed box would leave a
+/// real file write outstanding that the zone never drives, so the round trip
+/// could never be asserted. `subtitle_track_selector_test.dart` hit the same
+/// wall and solved it the same way.
 late Box<dynamic> _remoteControlBox;
 var _remoteControlBoxCounter = 0;
 
@@ -171,17 +178,17 @@ void main() {
   setUp(_FakeSettingsController.skipCalls.clear);
 
   setUp(() async {
-    _remoteControlTempDir =
-        await Directory.systemTemp.createTemp('settings_screen_remote');
-    Hive.init(_remoteControlTempDir.path);
     _remoteControlBoxCounter += 1;
-    _remoteControlBox =
-        await Hive.openBox<dynamic>('remote_control_$_remoteControlBoxCounter');
+    _remoteControlBox = await Hive.openBox<dynamic>(
+      'remote_control_$_remoteControlBoxCounter',
+      bytes: Uint8List(0),
+    );
   });
 
+  // `deleteFromDisk` is unsupported on a memory box and there is nothing on
+  // disk to clean up; closing is what unregisters the name.
   tearDown(() async {
     await _remoteControlBox.close();
-    await _remoteControlTempDir.delete(recursive: true);
   });
 
   testWidgets('renders the identity band with the account and server',
@@ -283,18 +290,6 @@ void main() {
   testWidgets(
       'the remote control toggle is interactive and writes through '
       'RemoteControlSettings', (tester) async {
-    // The full tap -> persisted-value -> switch-reflects-it round trip needs
-    // real Hive disk I/O to complete, which `testWidgets`'s fake-async pump
-    // loop cannot service (confirmed directly: the write and the follow-up
-    // `ref.invalidate` both complete correctly, verified with instrumentation
-    // during development, but the rebuilt value never reliably lands back in
-    // this harness even wrapped in `tester.runAsync`). Persistence itself is
-    // covered end-to-end, including a real box reopen, by
-    // `remote_control_settings_test.dart`, a plain (non-widget) test where
-    // real async I/O runs normally. This test instead pins the two things
-    // that are specific to the settings screen: the row exists with the
-    // documented default, and the switch is wired to something live (not
-    // permanently disabled).
     await _pump(tester);
     await tester.pumpAndSettle();
 
@@ -305,6 +300,50 @@ void main() {
     expect(find.text('Allow this device to be controlled'), findsOneWidget);
     expect(tester.widget<Switch>(toggle).value, isTrue);
     expect(tester.widget<Switch>(toggle).onChanged, isNotNull);
+
+    await tester.ensureVisible(
+      find.byKey(const Key('remote-control-enabled-switch')),
+    );
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+
+    // Read back through a *separate* RemoteControlSettings over the same box,
+    // which proves the opt-out reached storage rather than only the widget's
+    // own state. Going through the class rather than the raw Hive key keeps
+    // the test off a private constant.
+    expect(
+      await RemoteControlSettings(box: _remoteControlBox).controllableEnabled(),
+      isFalse,
+    );
+    // And the switch itself reflects the stored value, which is the part that
+    // depends on `_setControllable` invalidating remoteControlEnabledProvider.
+    expect(tester.widget<Switch>(toggle).value, isFalse);
+  });
+
+  testWidgets('the remote control toggle turns back on', (tester) async {
+    // The off direction is the one that stops the endpoint, so it is the one
+    // that must not be one-way. Seeded opted-out so the screen starts there.
+    await RemoteControlSettings(box: _remoteControlBox).setControllable(false);
+    await _pump(tester);
+    await tester.pumpAndSettle();
+
+    final toggle = find.descendant(
+      of: find.byKey(const Key('remote-control-enabled-switch')),
+      matching: find.byType(Switch),
+    );
+    expect(tester.widget<Switch>(toggle).value, isFalse);
+
+    await tester.ensureVisible(
+      find.byKey(const Key('remote-control-enabled-switch')),
+    );
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+
+    expect(
+      await RemoteControlSettings(box: _remoteControlBox).controllableEnabled(),
+      isTrue,
+    );
+    expect(tester.widget<Switch>(toggle).value, isTrue);
   });
 
   testWidgets('paired devices navigates to the devices route', (tester) async {

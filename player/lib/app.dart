@@ -159,6 +159,49 @@ Future<void> pushLoadContentDestination(
   push(path ?? loadContentDetailFallback(intent));
 }
 
+/// Answers one inbound control [request], re-checking the opt-out first.
+///
+/// [RemoteControlReceiver] itself only knows the paired-device roster, not
+/// this device's own opt-out. Re-checking per request is what makes flipping
+/// the setting off refuse the very next request, instead of only taking
+/// effect after a restart, and it does so without tearing down and rebuilding
+/// the subscription.
+///
+/// Every collaborator arrives as a callback, the same way
+/// [pushLoadContentDestination] takes `push`, so this is reachable from a
+/// test. That is not stylistic: the startup path that builds the real
+/// collaborators awaits `DeviceInfoService.getDeviceName()`, and on Linux
+/// that never completes inside `testWidgets`' fake-async zone — verified by
+/// probe, where it hangs indefinitely rather than throwing. So no widget test
+/// can pump [MyApp] far enough to reach the subscription that calls this, and
+/// the recheck would otherwise be untestable. `player_screen.dart` extracts
+/// `shouldRestartForSeek` and `applyQualityChoice` for the same reason.
+///
+/// Nothing escapes: the caller is a stream listener with no error path of its
+/// own, so a throw from either callback would surface as an unhandled async
+/// error rather than anything a user could act on.
+@visibleForTesting
+Future<void> handleControlRequest({
+  required FlutterInboundControlRequest request,
+  required Future<bool> Function() controllableEnabled,
+  required Future<void> Function(String, FlutterRemoteControlResponse) respond,
+  required Future<void> Function(FlutterInboundControlRequest) handle,
+}) async {
+  try {
+    if (!await controllableEnabled()) {
+      await respond(
+        request.requestId,
+        const FlutterRemoteControlResponse_NotAuthorized(),
+      );
+      return;
+    }
+    await handle(request);
+  } catch (e, stackTrace) {
+    debugPrint('[MyApp] Remote control request handling failed: $e');
+    debugPrintStack(stackTrace: stackTrace);
+  }
+}
+
 class MyApp extends ConsumerStatefulWidget {
   const MyApp({super.key});
 
@@ -307,7 +350,12 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
 
       _controlRequestSubscription = p2pService.onControlRequest.listen(
         (request) => unawaited(
-          _handleControlRequest(p2pService, settings, receiver, request),
+          handleControlRequest(
+            request: request,
+            controllableEnabled: settings.controllableEnabled,
+            respond: p2pService.respondToControl,
+            handle: receiver.handle,
+          ),
         ),
       );
     } catch (e) {
@@ -315,33 +363,6 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       // with no reachable server, no auth, or (in tests) no initialized Hive
       // simply skips, same as opting out.
       debugPrint('[MyApp] Failed to start remote control: $e');
-    }
-  }
-
-  /// Answers one inbound [request], re-checking [settings] first.
-  ///
-  /// [receiver] itself only knows the paired-device roster, not the opt-out:
-  /// checking here means flipping the setting off mid-session refuses the
-  /// very next request instead of only taking effect after a restart, with no
-  /// need to tear down and rebuild the subscription above.
-  Future<void> _handleControlRequest(
-    P2pService p2pService,
-    RemoteControlSettings settings,
-    RemoteControlReceiver receiver,
-    FlutterInboundControlRequest request,
-  ) async {
-    try {
-      if (!await settings.controllableEnabled()) {
-        await p2pService.respondToControl(
-          request.requestId,
-          const FlutterRemoteControlResponse_NotAuthorized(),
-        );
-        return;
-      }
-      await receiver.handle(request);
-    } catch (e, stackTrace) {
-      debugPrint('[MyApp] Remote control request handling failed: $e');
-      debugPrintStack(stackTrace: stackTrace);
     }
   }
 
