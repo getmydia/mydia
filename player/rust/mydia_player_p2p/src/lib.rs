@@ -300,11 +300,10 @@ impl P2pHost {
         peer: String,
         req: FlutterPairingRequest,
     ) -> anyhow::Result<FlutterPairingResponse> {
-        log::info!(
-            "P2pHost::send_pairing_request() called for peer: {}, claim_code: {}",
-            peer,
-            req.claim_code
-        );
+        // Never log the claim code. It is a live pairing credential for five
+        // minutes, so anyone reading client logs could pair a device with it.
+        // Same class of leak as 518337412 on the Dart side.
+        log::info!("P2pHost::send_pairing_request() called for peer: {}", peer);
         let core_req = PairingRequest {
             claim_code: req.claim_code,
             device_name: req.device_name,

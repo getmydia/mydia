@@ -113,20 +113,28 @@ defmodule Mydia.RemoteAccess.PairingClaim do
     generate_code_string(@code_length)
   end
 
-  # Generate a cryptographically random string of the specified length using allowed characters
+  # Generate a cryptographically random string of the specified length.
+  #
+  # Rejection sampling rather than a plain `rem/2` over the raw bytes. 256 is
+  # not a multiple of 31, so `rem(byte, 31)` would make the first eight
+  # characters of the alphabet 12.5% more likely than the rest. That matters
+  # here more than it usually would: the code's entropy IS the security bound
+  # for the sealed relay entry, documented in
+  # docs/superpowers/specs/2026-08-19-e2e-pairing-design.md, so any avoidable
+  # loss comes straight off it.
   defp generate_code_string(length) do
     chars = String.graphemes(@code_chars)
     count = length(chars)
 
-    # Generate cryptographically secure random bytes
-    random_bytes = :crypto.strong_rand_bytes(length)
+    # Largest multiple of `count` that fits in a byte. Draws at or above this
+    # are discarded and redrawn, which keeps every character equally likely.
+    limit = div(256, count) * count
 
-    random_bytes
-    |> :binary.bin_to_list()
-    |> Enum.map_join("", fn byte ->
-      # Use modulo to map byte value to character index
-      Enum.at(chars, rem(byte, count))
-    end)
+    Stream.repeatedly(fn -> :crypto.strong_rand_bytes(1) end)
+    |> Stream.map(fn <<byte>> -> byte end)
+    |> Stream.filter(&(&1 < limit))
+    |> Enum.take(length)
+    |> Enum.map_join("", fn byte -> Enum.at(chars, rem(byte, count)) end)
   end
 
   # Put a generated code into the changeset

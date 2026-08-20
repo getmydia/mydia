@@ -251,6 +251,13 @@ defmodule MydiaWeb.DevicesLive.Index do
       {:error, :create_claim_failed} ->
         assign(socket, :pairing_error, "Relay service returned an error. Please try again.")
 
+      {:error, :not_configured} ->
+        assign(
+          socket,
+          :pairing_error,
+          "This server has no instance ID yet. Restart it, or ask an administrator to check the remote access settings."
+        )
+
       {:error, reason} ->
         Logger.error("Failed to generate pairing code: #{inspect(reason)}")
 

@@ -18,6 +18,23 @@ use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 
 /// Protocol constants. Changing any of these breaks every existing client.
+///
+/// # Offline security bound
+///
+/// The salt is a protocol constant rather than per-entry random, because the
+/// player must derive the lookup key from the typed code alone, with nothing
+/// else to go on. So a stolen relay dump can be attacked offline: one Argon2id
+/// search over the code space opens every entry in that snapshot at once.
+///
+/// Six characters from a 31-symbol alphabet is 31^6 = 887,503,681 candidates,
+/// about 29.7 bits. At 64 MiB and t=3 that search costs on the order of ten
+/// CPU-years, and the 300-second TTL means a snapshot holds very few live
+/// claims. What it yields is one node ID and an already-expired code.
+///
+/// The p2p guess limiter does not help here; it bounds online guessing only.
+/// This bound is accepted deliberately for an honest-but-curious relay. Raising
+/// it needs a longer code or a PAKE, both considered and set aside in
+/// docs/superpowers/specs/2026-08-19-e2e-pairing-design.md.
 const ARGON2_SALT: &[u8] = b"mydia-pairing-v1";
 const ARGON2_MEMORY_KIB: u32 = 65536;
 const ARGON2_ITERATIONS: u32 = 3;

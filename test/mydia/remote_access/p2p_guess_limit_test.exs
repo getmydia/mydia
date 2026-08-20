@@ -6,12 +6,20 @@ defmodule Mydia.RemoteAccess.P2pGuessLimitTest do
   alias Mydia.RemoteAccess
   alias Mydia.RemoteAccess.ClaimRateLimiter
 
+  import Mydia.RemoteAccessHelpers
+
   setup do
     bypass = Bypass.open()
 
     Bypass.stub(bypass, "POST", "/pairing/v2/claim", fn conn ->
       Plug.Conn.resp(conn, 204, "")
     end)
+
+    # The enabled flag lives in :persistent_term, which the Ecto sandbox does
+    # not roll back, so ambient state from another file decides these tests
+    # unless they set it themselves.
+    set_remote_access(true)
+    on_exit(&reset_remote_access/0)
 
     ClaimRateLimiter.reset_rate_limit("p2p:pairing")
 

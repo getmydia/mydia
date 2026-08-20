@@ -159,6 +159,13 @@ defmodule MydiaWeb.DevicesLive.PairingComponents do
                     <.icon name="hero-check-circle" class="w-4 h-4 text-success" />
                     <span class="text-success">Ready for pairing</span>
                   </div>
+                  <%!-- Typing a code resolves it through the relay, and the
+                  lookup changed shape in this release. Players older than it
+                  will report the code as invalid. Scanning skips the relay
+                  entirely, so it keeps working on any version. --%>
+                  <p class="mt-2 text-xs text-base-content/50">
+                    Typing the code needs a recent player. On an older one, scan the QR instead.
+                  </p>
                 <% @claim_code_rendezvous_status == :unregistered -> %>
                   <div
                     id="pairing-relay-warning"

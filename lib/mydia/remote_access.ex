@@ -388,9 +388,13 @@ defmodule Mydia.RemoteAccess do
   defp resolve_instance_id(opts) do
     case Keyword.get(opts, :instance_id) do
       nil ->
+        # Fail here rather than sealing an empty id. The blob would fetch and
+        # open perfectly, and the player would only discover the payload was
+        # unusable later in the pairing flow, where the cause is much harder to
+        # see. Note `is_binary/1` alone would let "" through.
         case get_config() do
-          %{instance_id: id} when is_binary(id) -> {:ok, id}
-          _ -> {:ok, ""}
+          %{instance_id: id} when is_binary(id) and id != "" -> {:ok, id}
+          _ -> {:error, :not_configured}
         end
 
       id ->
@@ -597,12 +601,30 @@ defmodule Mydia.RemoteAccess do
     code = normalize_code(code)
 
     with {:ok, claim} <- validate_claim_code(code),
-         {:ok, consumed_claim} <-
-           claim |> PairingClaim.consume_changeset(device_id) |> Repo.update() do
+         {:ok, consumed_claim} <- mark_claim_used(claim, device_id) do
       delete_sealed_claim(consumed_claim.lookup_key, opts)
       # Notify UI that claim has been consumed (for auto-closing pairing modal)
       publish_claim_consumed(consumed_claim)
       {:ok, consumed_claim}
+    end
+  end
+
+  # Single use has to be a property of the write, not of a prior read.
+  # Validating and then updating leaves a window where two concurrent pairing
+  # requests both pass validation and both consume the same code, pairing two
+  # devices off one claim. The `is_nil(used_at)` guard in the UPDATE means
+  # exactly one caller matches a row.
+  defp mark_claim_used(claim, device_id) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    query =
+      from(c in PairingClaim,
+        where: c.id == ^claim.id and is_nil(c.used_at)
+      )
+
+    case Repo.update_all(query, set: [used_at: now, device_id: device_id, updated_at: now]) do
+      {1, _} -> {:ok, %{claim | used_at: now, device_id: device_id}}
+      {0, _} -> {:error, :already_used}
     end
   end
 

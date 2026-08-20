@@ -1,13 +1,21 @@
 defmodule Mydia.RemoteAccess.ClaimCodeTest do
-  use Mydia.DataCase, async: true
+  # async: false — generate_claim_code/2 reads the remote-access enabled flag,
+  # which lives in :persistent_term and is not rolled back by the Ecto sandbox.
+  # Mydia.RemoteAccessHelpers documents that any test touching it must be
+  # serial and must set and reset it, or another file's value decides these.
+  use Mydia.DataCase, async: false
 
   import Mydia.AccountsFixtures
+  import Mydia.RemoteAccessHelpers
 
   alias Mydia.RemoteAccess
 
   setup do
     bypass = Bypass.open()
     user = user_fixture()
+
+    set_remote_access(true)
+    on_exit(&reset_remote_access/0)
 
     {:ok,
      bypass: bypass,
