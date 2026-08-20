@@ -31,7 +31,13 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 #[cfg(not(target_arch = "wasm32"))]
 pub mod blocking;
 pub mod pairing_seal;
+pub mod remote_control;
 pub mod runtime;
+
+pub use remote_control::{
+    LoadContentRequest, PlaybackSnapshot, PlaybackState, RemoteControlRequest,
+    RemoteControlResponse, TargetCapabilities, TrackInfo, PROTOCOL_VERSION,
+};
 
 // Protocol identifier for mydia connections
 const ALPN: &[u8] = b"/mydia/1.0.0";
@@ -45,6 +51,7 @@ pub enum MydiaRequest {
     GraphQL(GraphQLRequest),
     HlsStream(HlsRequest),
     Custom(Vec<u8>),
+    RemoteControl(remote_control::RemoteControlRequest),
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -105,6 +112,7 @@ pub enum MydiaResponse {
     HlsHeader(HlsResponseHeader),
     Custom(Vec<u8>),
     Error(String),
+    RemoteControl(remote_control::RemoteControlResponse),
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
