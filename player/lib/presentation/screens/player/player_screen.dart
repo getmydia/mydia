@@ -76,6 +76,9 @@ import '../../../core/p2p/media_proxy_factory.dart';
 import '../../../core/window/desktop_window.dart';
 import '../../../core/window/player_window_sizer.dart';
 import '../../../core/player/resume_plan.dart';
+import '../../../core/remote/remote_control_intent.dart';
+import '../../../core/remote/remote_target_controller.dart';
+import '../../../native/lib.dart';
 import '../settings/settings_controller.dart';
 import 'subtitle_track_builder.dart';
 
@@ -154,10 +157,18 @@ class PlayerScreen extends ConsumerStatefulWidget {
       );
 }
 
-class _PlayerScreenState extends ConsumerState<PlayerScreen> {
+class _PlayerScreenState extends ConsumerState<PlayerScreen>
+    implements RemotePlayerBinding {
   Player? _player;
   VideoController? _videoController;
   ProgressService? _progressService;
+
+  /// Captured in [initState] rather than read from `dispose()`, for the same
+  /// reason as [_invalidator]: `remoteTargetControllerProvider` is a plain
+  /// (non-autoDispose) provider, so this stays the same live instance for
+  /// the container's lifetime and is safe to call after the widget's
+  /// element is defunct.
+  late final RemoteTargetController _remoteTargetController;
 
   /// Set once the offline or already-downloaded branch of
   /// [_initializePlayer] resolves [playbackProgressStoreProvider]. Null
@@ -560,6 +571,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     super.initState();
     _invalidator = ref.read(invalidatorProvider);
     _mediaProxy = ref.read(mediaProxyProvider);
+    _remoteTargetController = ref.read(remoteTargetControllerProvider);
+    _remoteTargetController.attachPlayer(this);
 
     // Seeded here rather than read at each branch: an entry-point that already
     // said "Continue" has answered the resume question, and all three
@@ -3694,6 +3707,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   @override
   void dispose() {
+    // Detached first, before anything below can run: a remote command that
+    // lands mid-teardown must find no player attached rather than reach a
+    // `_player` that is about to be disposed out from under it.
+    _remoteTargetController.detachPlayer();
+
     // Order matters twice over. Stop listening *first*: in `systemUi` mode
     // `exit()` reports the transition synchronously, and the resulting
     // `setState` would assert — by the time `State.dispose` runs, the element
@@ -3767,6 +3785,153 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _player?.dispose();
     _focusNode.dispose();
     super.dispose();
+  }
+
+  // ---------------------------------------------------------------------
+  // RemotePlayerBinding
+  //
+  // Forwards each command to the media_kit `Player` this screen already
+  // owns. Nothing here duplicates playback logic: `seek` reuses `seekToReal`
+  // (the same entry point the keyboard and gesture controls use), and
+  // episode stepping reuses `_playNextEpisode`/`_playPreviousEpisode`. Track
+  // selection is the one place this does less than the on-screen pickers —
+  // it applies a track by id directly and skips their loading-snackbar and
+  // remembered-language-preference side effects, which are UI concerns a
+  // remote command has no use for.
+  // ---------------------------------------------------------------------
+
+  @override
+  Future<void> play() async => _player?.play();
+
+  @override
+  Future<void> pause() async => _player?.pause();
+
+  @override
+  Future<void> stop() async => _player?.stop();
+
+  @override
+  Future<void> seek(Duration to) => seekToReal(to);
+
+  /// [level] is 0.0-1.0 on the wire; media_kit's `Player.setVolume` is 0-100.
+  @override
+  Future<void> setVolume(double level) async =>
+      _player?.setVolume(level.clamp(0.0, 1.0) * 100);
+
+  /// Mirrors the existing keyboard M-key handler: this player has no
+  /// separate mute flag, only volume, so muting snaps to 0 and unmuting
+  /// snaps to full rather than restoring whatever was set before muting.
+  @override
+  Future<void> setMuted(bool muted) async =>
+      _player?.setVolume(muted ? 0.0 : 100.0);
+
+  @override
+  Future<void> selectTrack(TrackKind kind, String? id) async {
+    switch (kind) {
+      case TrackKind.audio:
+        if (id == null) return;
+        final track = _audioTracks.where((t) => t.id == id).firstOrNull;
+        final mkTrack = _mediaKitAudioTrackMap[id];
+        final player = _player;
+        if (track == null || mkTrack == null || player == null) return;
+        await player.setAudioTrack(mkTrack);
+        if (mounted) setState(() => _selectedAudioTrack = track);
+
+      case TrackKind.subtitle:
+        if (id == null) {
+          final player = _player;
+          if (player == null) return;
+          await player.setSubtitleTrack(SubtitleTrack.no());
+          if (mounted) setState(() => _selectedSubtitleTrack = null);
+          return;
+        }
+        final track = _subtitleTracks.where((t) => t.id == id).firstOrNull;
+        if (track == null) return;
+        final mkTrack = await _resolveMediaKitSubtitleTrack(track);
+        if (mkTrack == null || !mounted) return;
+        // Captured fresh here, after the fetch above, not before it: a
+        // restart can swap `_player` out from under an in-flight fetch, the
+        // same hazard `_showSubtitleSelector` documents at its own
+        // `setSubtitleTrack` call.
+        final player = _player;
+        if (player == null) return;
+        await player.setSubtitleTrack(mkTrack);
+        if (mounted) setState(() => _selectedSubtitleTrack = track);
+    }
+  }
+
+  @override
+  Future<void> stepEpisode(EpisodeStep step) async {
+    switch (step) {
+      case EpisodeStep.next:
+        _playNextEpisode();
+      case EpisodeStep.previous:
+        _playPreviousEpisode();
+    }
+  }
+
+  @override
+  FlutterPlaybackSnapshot describe(int sequence) {
+    final player = _player;
+    final position = player == null
+        ? Duration.zero
+        : _timeline.toReal(player.state.position);
+    final duration = player == null
+        ? (_timeline.totalDuration ?? Duration.zero)
+        : _timeline.resolveDuration(player.state.duration);
+
+    return FlutterPlaybackSnapshot(
+      state: _remoteControlPlaybackState(player),
+      // For an episode `widget.mediaId` is the episode's own id and
+      // `widget.showId` is the underlying media item; for a movie
+      // `widget.mediaId` is the media item itself and there is no episode.
+      mediaItemId:
+          widget.mediaType == 'episode' ? widget.showId : widget.mediaId,
+      episodeId: widget.mediaType == 'episode' ? widget.mediaId : null,
+      title: widget.title ?? 'Untitled',
+      subtitle: null,
+      imageUrl: null,
+      positionMs: BigInt.from(position.inMilliseconds),
+      durationMs: BigInt.from(duration.inMilliseconds),
+      volume: player == null ? null : player.state.volume / 100,
+      muted: player?.state.volume == 0,
+      audioTracks: _audioTracks
+          .map((t) => FlutterTrackInfo(
+              id: t.id, label: t.displayName, language: t.language))
+          .toList(),
+      subtitleTracks: _subtitleTracks
+          .map((t) => FlutterTrackInfo(
+              id: t.id, label: t.displayName, language: t.language))
+          .toList(),
+      selectedAudio: _selectedAudioTrack?.id,
+      selectedSubtitle: _selectedSubtitleTrack?.id,
+      capabilities: FlutterTargetCapabilities(
+        // App-level output volume through media_kit, which works on every
+        // platform this ships on. System volume is a different, harder
+        // problem this target does not attempt.
+        volume: true,
+        trackSelection: true,
+        // Reported per-title rather than unconditionally: a movie, or an
+        // episode with no adjacent episode in this season, has nothing for
+        // Next/Previous to do, and claiming the capability anyway would show
+        // a controller a button that silently does nothing.
+        nextPrevious: _hasNextEpisode || _hasPreviousEpisode,
+      ),
+      sequence: BigInt.from(sequence),
+    );
+  }
+
+  /// Maps this screen's own loading/error flags and the `Player`'s state
+  /// onto the wire's [FlutterPlaybackState]. Checked in this order because
+  /// `_isLoading`/`_error` describe phases where `_player` may not exist yet
+  /// or may already be stale.
+  FlutterPlaybackState _remoteControlPlaybackState(Player? player) {
+    if (_error != null) return FlutterPlaybackState.error;
+    if (_isLoading || player == null) return FlutterPlaybackState.loading;
+    if (player.state.buffering) return FlutterPlaybackState.buffering;
+    if (player.state.completed) return FlutterPlaybackState.ended;
+    return player.state.playing
+        ? FlutterPlaybackState.playing
+        : FlutterPlaybackState.paused;
   }
 
   @override

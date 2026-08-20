@@ -1,8 +1,9 @@
-import 'dart:async' show unawaited;
+import 'dart:async' show StreamSubscription, unawaited;
 
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'core/auth/auth_status.dart';
 import 'core/layout/window_chrome_inset.dart';
 import 'core/theme/app_theme.dart';
@@ -13,6 +14,9 @@ import 'core/graphql/watch/watcher_registry.dart';
 import 'core/cast/cast_providers.dart';
 import 'core/downloads/download_providers.dart';
 import 'core/downloads/download_service.dart';
+import 'core/remote/remote_control_intent.dart';
+import 'core/remote/remote_target_controller.dart';
+import 'core/router/navigator_keys.dart';
 import 'core/scroll/app_scroll_behavior.dart';
 import 'presentation/widgets/cast_mini_controller.dart';
 import 'package:player/core/p2p/p2p_service.dart';
@@ -27,10 +31,21 @@ class MyApp extends ConsumerStatefulWidget {
 class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   final ResumeGate _resumeGate = ResumeGate();
 
+  /// Subscribed once here, for the app's whole lifetime, rather than by
+  /// whichever screen happens to be mounted: `LoadContent` is the one intent
+  /// `RemoteTargetController` cannot hand to a player, because it is what
+  /// starts a player in the first place. See
+  /// `RemoteTargetController.intents`'s dartdoc.
+  StreamSubscription<RemoteControlIntent>? _remoteIntentsSubscription;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _remoteIntentsSubscription = ref
+        .read(remoteTargetControllerProvider)
+        .intents
+        .listen(_handleRemoteIntent);
     // Initialize P2P services
     Future.microtask(() async {
       try {
@@ -87,7 +102,38 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _remoteIntentsSubscription?.cancel();
     super.dispose();
+  }
+
+  /// The only intent `RemoteTargetController` ever puts on [Stream]
+  /// `intents` is `LoadContentIntent` — everything else goes straight to a
+  /// mounted player, if any — but the match is written out rather than
+  /// assumed, since a bare cast would silently misbehave if that ever
+  /// changed.
+  void _handleRemoteIntent(RemoteControlIntent intent) {
+    if (intent is! LoadContentIntent) return;
+
+    final context = rootNavigatorKey.currentContext;
+    if (context == null) {
+      debugPrint(
+          '[MyApp] Remote LoadContent arrived before the router mounted');
+      return;
+    }
+
+    // The player route needs a resolved `fileId`, which nothing in this
+    // intent carries — a remote controller knows what title to play, not
+    // which encoded version this device should fetch. Route to the detail
+    // screen instead, the same fallback every other "no file chosen yet"
+    // entry point in this app takes (see `continue_watching_actions.dart`'s
+    // `_handlePlay`); the viewer picks a version from there. Autoplay,
+    // `startAt` and the requested audio/subtitle tracks are not applied by
+    // this navigation — carrying them through to a running player is the
+    // end-to-end task's job, not this one's.
+    final path = intent.episodeId != null
+        ? '/episode/${intent.episodeId}'
+        : '/movie/${intent.mediaItemId}';
+    GoRouter.of(context).push(path);
   }
 
   @override
