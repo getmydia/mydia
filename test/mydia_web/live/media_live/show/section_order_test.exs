@@ -63,6 +63,41 @@ defmodule MydiaWeb.MediaLive.Show.SectionOrderTest do
            ]
   end
 
+  test "a tv show keeps the rail above its episode list", %{conn: conn} do
+    source_tmdb_id = System.unique_integer([:positive])
+
+    show =
+      media_item_fixture(%{
+        type: "tv_show",
+        title: "Detectorists",
+        year: 2014,
+        tmdb_id: source_tmdb_id
+      })
+
+    episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
+
+    warm_recommendations_cache(source_tmdb_id, :tv_show, [
+      %{
+        "id" => System.unique_integer([:positive]),
+        "name" => "Rev.",
+        "first_air_date" => "2010-06-28",
+        "poster_path" => "/p.jpg"
+      }
+    ])
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{show.id}")
+    render_async(view, 5000)
+
+    # No media-files-section or subtitles-section: a show's files hang off its
+    # episodes, so media_item.media_files is always empty here and both cards
+    # guard themselves out.
+    assert section_ids(view) == [
+             "recommendations-rail",
+             "seasons-episodes-section",
+             "timeline-section"
+           ]
+  end
+
   # LazyHTML.query/2, not filter/2: filter matches root nodes only, and these
   # cards are nested inside the layout. query returns matches in document order,
   # which is the whole point of the assertion.
