@@ -1,5 +1,17 @@
 // native/mydia_p2p_core/tests/two_node_control.rs
 use mydia_p2p_core::{Event, Host, HostConfig, MydiaRequest, MydiaResponse};
+use std::time::Duration;
+
+/// This task already hit an unbounded 8+ minute hang once (see the module
+/// doc on `two_hosts_exchange_a_request`). Some of the calls below are
+/// transitively bounded by timeouts inside the crate — `wait_for_ready` by
+/// the 30s relay-connect timeout in `run_event_loop`, `send_request`'s round
+/// trip by the 30s response timeout in `handle_connection` — but
+/// `Host::dial`'s `endpoint.connect(...)` (`handle_dial` in lib.rs) has no
+/// bound anywhere in the crate. Rather than depend on that scattered,
+/// implicit, and change-able set of internal timeouts, the test declares its
+/// own explicit bound over the whole exchange.
+const TEST_TIMEOUT: Duration = Duration::from_secs(60);
 
 fn test_config() -> HostConfig {
     HostConfig {
@@ -29,6 +41,16 @@ fn test_config() -> HostConfig {
 /// `MydiaRequest`/`MydiaResponse`.
 #[tokio::test]
 async fn two_hosts_exchange_a_request() {
+    tokio::time::timeout(TEST_TIMEOUT, two_hosts_exchange_a_request_body())
+        .await
+        .expect(
+            "two_hosts_exchange_a_request timed out after 60s — dial() or send_request() \
+             never completed; see the TEST_TIMEOUT doc comment for why this test carries its \
+             own bound instead of relying on the crate's internal timeouts",
+        );
+}
+
+async fn two_hosts_exchange_a_request_body() {
     let (responder, responder_id) = Host::new(test_config());
     let (dialer, _dialer_id) = Host::new(test_config());
 
