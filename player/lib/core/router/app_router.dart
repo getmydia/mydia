@@ -310,6 +310,11 @@ GoRouter appRouter(Ref ref) {
               int.tryParse(state.uri.queryParameters['seasonNumber'] ?? '');
           final resumeSeconds =
               int.tryParse(state.uri.queryParameters['resume'] ?? '');
+          final audioTrack = state.uri.queryParameters['audioTrack'];
+          final subtitleTrack = state.uri.queryParameters['subtitleTrack'];
+          // Absent means the default (true, i.e. play). Only a remote
+          // `LoadContent` with `autoplay: false` ever sends this param.
+          final autoplay = state.uri.queryParameters['autoplay'] != 'false';
 
           if (fileId == null) {
             // If no fileId provided, show error
@@ -347,6 +352,9 @@ GoRouter appRouter(Ref ref) {
             showId: showId,
             seasonNumber: seasonNumber,
             resumeSeconds: resumeSeconds,
+            audioTrack: audioTrack,
+            subtitleTrack: subtitleTrack,
+            autoplay: autoplay,
           );
         },
       ),

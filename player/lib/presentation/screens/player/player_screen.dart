@@ -114,6 +114,20 @@ class PlayerScreen extends ConsumerStatefulWidget {
   final int? seasonNumber;
   final int? resumeSeconds;
 
+  /// Track ids to select once playback opens, in the same id space
+  /// [selectTrack] already accepts. Null means "leave whatever this file
+  /// opens on" — the existing behaviour for every call site that predates
+  /// remote control, where nothing ever requested a specific track.
+  final String? audioTrack;
+  final String? subtitleTrack;
+
+  /// Whether to start playing once the media opens. Defaults to true, which
+  /// is what every call site did before this field existed: opening this
+  /// screen has always meant "play now". A remote `LoadContent` with
+  /// `autoplay: false` is the one caller that passes false, to load a title
+  /// cued up without starting it.
+  final bool autoplay;
+
   const PlayerScreen({
     super.key,
     required this.mediaId,
@@ -123,6 +137,9 @@ class PlayerScreen extends ConsumerStatefulWidget {
     this.showId,
     this.seasonNumber,
     this.resumeSeconds,
+    this.audioTrack,
+    this.subtitleTrack,
+    this.autoplay = true,
   });
 
   @override
@@ -1548,6 +1565,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // later arrives through that subscription instead.
     _detectTracks();
 
+    // Applied through the same `selectTrack` a remote `SelectAudioTrack`/
+    // `SelectSubtitleTrack` command uses, right after detection so both
+    // `_audioTracks`/`_subtitleTracks` and their media_kit id maps are
+    // populated. Only ever non-null for a `LoadContent`-originated screen —
+    // every other call site leaves these null, which is a no-op here.
+    if (widget.audioTrack != null) {
+      await selectTrack(TrackKind.audio, widget.audioTrack);
+    }
+    if (widget.subtitleTrack != null) {
+      await selectTrack(TrackKind.subtitle, widget.subtitleTrack);
+    }
+
     // A plain seek, not a `seekToReal`: these paths hold the whole file, so
     // the player's own coordinates already are the real ones and there is no
     // session that could need restarting.
@@ -1561,8 +1590,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // coordinates genuinely do start at zero.
     _furthestPosition = plan.position;
 
-    // Start playback
-    await player.play();
+    // Start playback, unless a remote `LoadContent` asked to load without
+    // playing. Every other caller leaves `autoplay` at its default of true.
+    if (widget.autoplay) {
+      await player.play();
+    }
 
     // Start progress tracking
     if (_progressService != null) {

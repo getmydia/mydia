@@ -14,12 +14,75 @@ import 'core/graphql/watch/watcher_registry.dart';
 import 'core/cast/cast_providers.dart';
 import 'core/downloads/download_providers.dart';
 import 'core/downloads/download_service.dart';
+import 'core/player/best_file.dart';
 import 'core/remote/remote_control_intent.dart';
 import 'core/remote/remote_target_controller.dart';
 import 'core/router/navigator_keys.dart';
 import 'core/scroll/app_scroll_behavior.dart';
+import 'domain/models/media_file.dart';
+import 'presentation/screens/episode/episode_detail_controller.dart';
+import 'presentation/screens/movie/movie_detail_controller.dart';
 import 'presentation/widgets/cast_mini_controller.dart';
 import 'package:player/core/p2p/p2p_service.dart';
+
+/// Fetches the files list for whichever half of a `LoadContentIntent`
+/// identifies content — an episode's own files, or a movie's. Kept as a
+/// function type rather than folded into [resolveLoadContentRoute] directly,
+/// so a test can substitute a fake fetcher and assert the resolution
+/// *decision* without a GraphQL client at all.
+typedef LoadContentFileFetcher = Future<List<MediaFile>> Function(String id);
+
+/// The `/player/...` route a `LoadContentIntent` should actually land on, or
+/// null when nothing here resolves to a playable file.
+///
+/// This is the target side of the feature's primary use case: a controller
+/// on another device said "play this", and this device has to turn that
+/// reference into an actual stream against the server it is already paired
+/// to. Resolving means fetching the right files list — the episode's own,
+/// never the show's, when [LoadContentIntent.episodeId] is set — then
+/// running the same [pickBestFile] every local Play button uses, so a
+/// remote play and a local tap never disagree about which version plays.
+///
+/// Runs off an inbound network command with no user-facing error path, so
+/// every failure here — a fetch that throws, [pickBestFile]'s own
+/// device/network probe throwing — is caught and turned into null rather
+/// than left to propagate. The caller's job is only to fall back to the
+/// detail screen when this returns null.
+Future<String?> resolveLoadContentRoute(
+  LoadContentIntent intent,
+  double screenWidth, {
+  required LoadContentFileFetcher fetchMovieFiles,
+  required LoadContentFileFetcher fetchEpisodeFiles,
+}) async {
+  final episodeId = intent.episodeId;
+
+  try {
+    final files = episodeId != null
+        ? await fetchEpisodeFiles(episodeId)
+        : await fetchMovieFiles(intent.mediaItemId);
+
+    final file = await pickBestFile(files, screenWidth);
+    if (file == null) return null;
+
+    final type = episodeId != null ? 'episode' : 'movie';
+    final id = episodeId ?? intent.mediaItemId;
+
+    final query = <String, String>{
+      'fileId': file.id,
+      'resume': intent.startAt.inSeconds.toString(),
+      if (intent.audioTrack != null) 'audioTrack': intent.audioTrack!,
+      if (intent.subtitleTrack != null) 'subtitleTrack': intent.subtitleTrack!,
+      // Absent means the player's own default (true, i.e. play).
+      if (!intent.autoplay) 'autoplay': 'false',
+    };
+
+    return Uri(path: '/player/$type/$id', queryParameters: query).toString();
+  } catch (error, stackTrace) {
+    debugPrint('[MyApp] Remote LoadContent resolution failed: $error');
+    debugPrintStack(stackTrace: stackTrace);
+    return null;
+  }
+}
 
 class MyApp extends ConsumerStatefulWidget {
   const MyApp({super.key});
@@ -121,19 +184,50 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       return;
     }
 
-    // The player route needs a resolved `fileId`, which nothing in this
-    // intent carries — a remote controller knows what title to play, not
-    // which encoded version this device should fetch. Route to the detail
-    // screen instead, the same fallback every other "no file chosen yet"
-    // entry point in this app takes (see `continue_watching_actions.dart`'s
-    // `_handlePlay`); the viewer picks a version from there. Autoplay,
-    // `startAt` and the requested audio/subtitle tracks are not applied by
-    // this navigation — carrying them through to a running player is the
-    // end-to-end task's job, not this one's.
-    final path = intent.episodeId != null
-        ? '/episode/${intent.episodeId}'
-        : '/movie/${intent.mediaItemId}';
-    GoRouter.of(context).push(path);
+    unawaited(_pushLoadContent(context, intent));
+  }
+
+  /// Resolves [intent] to a playable file and pushes the player already
+  /// playing it, falling back to the detail screen — the same "no file
+  /// chosen yet" fallback every other entry point in this app takes (see
+  /// `continue_watching_actions.dart`'s `_handlePlay`) — when nothing
+  /// resolves.
+  ///
+  /// `router` and `screenWidth` are read from [context] before the only
+  /// `await` in this method, never after: this device could navigate away
+  /// or tear down while [resolveLoadContentRoute] runs, and neither
+  /// `context` nor anything derived from it would be safe to touch once
+  /// that has happened. The whole body is wrapped in `try`/`catch` on top of
+  /// [resolveLoadContentRoute]'s own — this runs off an inbound network
+  /// command with no caller able to catch an escaping exception, so nothing
+  /// here may ever throw, not even a `push` on a torn-down router.
+  Future<void> _pushLoadContent(
+    BuildContext context,
+    LoadContentIntent intent,
+  ) async {
+    try {
+      final router = GoRouter.of(context);
+      final screenWidth = MediaQuery.sizeOf(context).width;
+
+      final path = await resolveLoadContentRoute(
+        intent,
+        screenWidth,
+        fetchMovieFiles: (id) async =>
+            (await ref.read(movieDetailControllerProvider(id).future)).files,
+        fetchEpisodeFiles: (id) async =>
+            (await ref.read(episodeDetailControllerProvider(id).future)).files,
+      );
+
+      if (!mounted) return;
+
+      router.push(path ??
+          (intent.episodeId != null
+              ? '/episode/${intent.episodeId}'
+              : '/movie/${intent.mediaItemId}'));
+    } catch (error, stackTrace) {
+      debugPrint('[MyApp] Remote LoadContent handling failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
   }
 
   @override
