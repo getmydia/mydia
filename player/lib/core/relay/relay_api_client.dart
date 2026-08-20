@@ -2,8 +2,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
-import '../../native/lib.dart';
 import 'claim_resolve_result.dart';
+import 'pairing_key_handle.dart';
 
 export 'claim_resolve_result.dart'
     show ServerNotOnlineException, TamperedClaimException;
@@ -16,11 +16,14 @@ const _defaultRelayUrl = String.fromEnvironment(
 class RelayApiClient {
   final String baseUrl;
   final http.Client _client;
+  final PairingKeyFactory _pairingKeys;
 
   RelayApiClient({
     this.baseUrl = _defaultRelayUrl,
     http.Client? client,
-  }) : _client = client ?? http.Client();
+    PairingKeyFactory? pairingKeys,
+  })  : _client = client ?? http.Client(),
+        _pairingKeys = pairingKeys ?? defaultPairingKeyFactory;
 
   /// Resolves a claim code to the server's node address.
   ///
@@ -29,7 +32,7 @@ class RelayApiClient {
   /// endpoint when the relay has no v2 entry, which happens when the server has
   /// not been updated yet. Remove the fallback after one minor release.
   Future<ClaimResolveResult> resolveClaimCode(String code) async {
-    final keys = PairingKeys.derive(code: code);
+    final keys = _pairingKeys(code);
     final lookupKey = await keys.lookupKey();
 
     final response = await _get('$baseUrl/pairing/v2/claim/$lookupKey');
@@ -46,9 +49,9 @@ class RelayApiClient {
       throw Exception('Invalid response from relay: missing sealed blob');
     }
 
-    final ClaimPayload payload;
+    final ({String nodeAddr, String instanceId}) payload;
     try {
-      payload = await keys.open(sealed: sealed);
+      payload = await keys.open(sealed);
     } catch (_) {
       throw TamperedClaimException();
     }
