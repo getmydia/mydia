@@ -505,6 +505,38 @@ defmodule Mydia.Events do
   end
 
   @doc """
+  Records a media_file.pruned event: redundant copies were trashed and one file
+  was kept.
+
+  ## Examples
+
+      iex> files_pruned(keeper, [loser], media_item, "admin")
+      :ok
+  """
+  def files_pruned(keeper, losers, media_item, actor_id) do
+    {resource_type, resource_id} = upgrade_resource(keeper, media_item)
+
+    create_event_async(%{
+      category: "media",
+      type: "media_file.pruned",
+      actor_type: :user,
+      actor_id: actor_id,
+      resource_type: resource_type,
+      resource_id: resource_id,
+      severity: :info,
+      metadata: %{
+        "title" => media_item.title,
+        "media_type" => media_item.type,
+        "kept" => keeper.relative_path,
+        "kept_id" => keeper.id,
+        "trashed" => Enum.map(losers, & &1.relative_path),
+        "trashed_ids" => Enum.map(losers, & &1.id),
+        "bytes_reclaimed" => losers |> Enum.map(&(&1.size || 0)) |> Enum.sum()
+      }
+    })
+  end
+
+  @doc """
   Records a media_file.upgrade_rejected event — the counterpart to
   `file_upgraded/4` for when the candidate release did not actually deliver
   the quality it claimed. The originating release is blacklisted separately

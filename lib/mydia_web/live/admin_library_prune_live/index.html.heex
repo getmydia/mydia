@@ -1,0 +1,50 @@
+<Layouts.app {assigns}>
+  <.admin_page active_tab={@active_tab}>
+    <div class="space-y-6">
+      <div>
+        <h1 class="text-2xl font-semibold">Prune duplicate files</h1>
+        <p class="text-sm opacity-70 mt-1">
+          Items holding more than one file. Only groups proven to be the same content
+          can be pruned. Trashed files are kept for {@retention_days} days before permanent deletion.
+        </p>
+      </div>
+
+      <div :if={@decisions == [] and @refusals == []} class="alert alert-success">
+        <.icon name="hero-check-circle" class="w-5 h-5" />
+        <span>No item has more than one file.</span>
+      </div>
+
+      <section :if={@decisions != []} class="space-y-3">
+        <div class="flex items-center justify-between">
+          <h2 class="text-lg font-medium">Ready to prune ({length(@decisions)})</h2>
+          <button
+            id="prune-confirm"
+            class="btn btn-error btn-sm"
+            disabled={MapSet.size(@selected) == 0}
+            phx-click="confirm"
+            data-confirm={"Move #{MapSet.size(@selected)} file(s) to trash, reclaiming #{humanize_bytes(@reclaimable)}? They are kept for #{@retention_days} days before permanent deletion."}
+          >
+            Trash selected ({MapSet.size(@selected)}, {humanize_bytes(@reclaimable)})
+          </button>
+        </div>
+
+        <.decision_group :for={decision <- @decisions} decision={decision} selected={@selected} />
+      </section>
+
+      <section :if={@refusals != []} class="space-y-3">
+        <h2 class="text-lg font-medium">Needs attention ({length(@refusals)})</h2>
+        <p class="text-sm opacity-70">
+          These were not pruned. Each one is a matching or scanning problem rather than
+          a duplicate, and acting on them would remove real media.
+        </p>
+
+        <.refusal_group
+          :for={{group, reason, detail} <- @refusals}
+          group={group}
+          reason={reason}
+          detail={detail}
+        />
+      </section>
+    </div>
+  </.admin_page>
+</Layouts.app>
