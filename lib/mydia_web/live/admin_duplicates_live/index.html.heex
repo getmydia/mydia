@@ -1,6 +1,6 @@
 <Layouts.app {assigns}>
   <.admin_page active_tab={@active_tab}>
-    <MydiaWeb.AdminLibraryPruneLive.Components.prune_tab
+    <MydiaWeb.AdminDuplicatesLive.Components.duplicates_tab
       decisions={@decisions}
       refusals={@refusals}
       selected={@selected}
@@ -9,8 +9,8 @@
     />
 
     <%!-- Trash Confirmation Modal --%>
-    <%= if @show_prune_modal do %>
-      <MydiaWeb.AdminLibraryPruneLive.Components.prune_confirm_modal
+    <%= if @show_trash_modal do %>
+      <MydiaWeb.AdminDuplicatesLive.Components.trash_confirm_modal
         count={MapSet.size(@selected)}
         items={@affected_items}
         bytes={@reclaimable}
