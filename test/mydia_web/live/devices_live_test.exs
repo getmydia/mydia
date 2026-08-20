@@ -73,9 +73,16 @@ defmodule MydiaWeb.DevicesLiveTest do
       {:ok, view, _html} = live(conn, ~p"/devices")
 
       view |> element("#revoke-device-#{device.id}") |> render_click()
+
+      # <.modal> is a native <dialog>, so the element is always in the DOM and
+      # only the `open` attribute says whether it is showing. Asserting on the
+      # attribute keeps this from passing when the modal never opened.
+      assert has_element?(view, "#revoke-modal[open]")
+
       view |> element("#confirm-revoke") |> render_click()
 
       assert RemoteAccess.get_device!(device.id).revoked_at != nil
+      refute has_element?(view, "#revoke-modal[open]")
     end
 
     test "deletes a device", %{conn: conn, user: user} do
@@ -84,6 +91,8 @@ defmodule MydiaWeb.DevicesLiveTest do
       {:ok, view, _html} = live(conn, ~p"/devices")
 
       view |> element("#delete-device-#{device.id}") |> render_click()
+      assert has_element?(view, "#delete-modal[open]")
+
       view |> element("#confirm-delete") |> render_click()
 
       refute has_element?(view, "#device-#{device.id}")
@@ -98,8 +107,36 @@ defmodule MydiaWeb.DevicesLiveTest do
 
       render_click(view, "open_delete_modal", %{"id" => other_device.id})
 
-      refute has_element?(view, "#delete-modal")
+      refute has_element?(view, "#delete-modal[open]")
       assert RemoteAccess.get_device(other_device.id) != nil
+    end
+
+    test "survives a submit pushed without opening a modal", %{conn: conn, user: user} do
+      device = pair_device(user, "Untouched")
+
+      {:ok, view, _html} = live(conn, ~p"/devices")
+
+      # A client can push these directly. Nothing is selected, so they must be
+      # no-ops rather than calling the context with nil and taking the view down.
+      render_click(view, "submit_revoke", %{})
+      render_click(view, "submit_delete", %{})
+
+      assert has_element?(view, "#devices-page")
+      assert RemoteAccess.get_device(device.id) != nil
+      assert RemoteAccess.get_device!(device.id).revoked_at == nil
+    end
+
+    test "ignores a submit for a device this user does not own", %{conn: conn} do
+      other = create_test_user()
+      other_device = pair_device(other, "Someone Else's")
+
+      {:ok, view, _html} = live(conn, ~p"/devices")
+
+      render_click(view, "open_revoke_modal", %{"id" => other_device.id})
+      render_click(view, "submit_revoke", %{})
+
+      assert has_element?(view, "#devices-page")
+      assert RemoteAccess.get_device!(other_device.id).revoked_at == nil
     end
   end
 

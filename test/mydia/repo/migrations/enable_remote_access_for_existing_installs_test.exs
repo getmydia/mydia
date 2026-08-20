@@ -39,12 +39,14 @@ defmodule Mydia.Repo.Migrations.EnableRemoteAccessForExistingInstallsTest do
   end
 
   @tag :tmp_dir
-  test "rolls back to disabled" do
+  test "rolling back leaves remote access alone" do
     build_schema()
 
     run_migration!(EnableRemoteAccessForExistingInstalls, 20_260_819_171_533)
     rollback_migration!(EnableRemoteAccessForExistingInstalls, 20_260_819_171_533)
 
-    assert %{rows: [[0]]} = sql!("SELECT enabled FROM remote_access_config WHERE id = 'cfg1'")
+    # up/0 does not record which rows it touched, so down/0 must not guess. A
+    # blanket disable would switch off installs that were already enabled.
+    assert %{rows: [[1]]} = sql!("SELECT enabled FROM remote_access_config WHERE id = 'cfg1'")
   end
 end

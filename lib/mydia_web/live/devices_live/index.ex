@@ -20,7 +20,11 @@ defmodule MydiaWeb.DevicesLive.Index do
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket) do
-      Phoenix.PubSub.subscribe(Mydia.PubSub, "remote_access:claims")
+      Phoenix.PubSub.subscribe(
+        Mydia.PubSub,
+        RemoteAccess.claims_topic(socket.assigns.current_user.id)
+      )
+
       schedule_refresh()
     end
 
@@ -97,6 +101,13 @@ defmodule MydiaWeb.DevicesLive.Index do
      |> assign(:selected_device, nil)}
   end
 
+  # A client can push submit_* without ever opening the modal, and owned_device/2
+  # leaves the selection nil for an id this user does not own. Answering that with
+  # a no-op keeps the LiveView alive instead of calling the context with nil.
+  def handle_event("submit_revoke", _params, %{assigns: %{selected_device: nil}} = socket) do
+    {:noreply, assign(socket, :show_revoke_modal, false)}
+  end
+
   def handle_event("submit_revoke", _params, socket) do
     case RemoteAccess.revoke_device(socket.assigns.selected_device) do
       {:ok, _device} ->
@@ -126,6 +137,10 @@ defmodule MydiaWeb.DevicesLive.Index do
      socket
      |> assign(:show_delete_modal, false)
      |> assign(:device_to_delete, nil)}
+  end
+
+  def handle_event("submit_delete", _params, %{assigns: %{device_to_delete: nil}} = socket) do
+    {:noreply, assign(socket, :show_delete_modal, false)}
   end
 
   def handle_event("submit_delete", _params, socket) do

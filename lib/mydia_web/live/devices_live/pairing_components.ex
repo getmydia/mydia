@@ -8,6 +8,13 @@ defmodule MydiaWeb.DevicesLive.PairingComponents do
   """
   use MydiaWeb, :html
 
+  require Logger
+
+  # Mirrors the claim lifetime in Mydia.RemoteAccess.generate_claim_code/1. The
+  # countdown ring is a percentage of this, so a literal divisor here would go
+  # wrong the moment that TTL changed.
+  @claim_lifetime_seconds 300
+
   attr :ra_config, :map, default: nil
   attr :p2p_status, :map, default: nil
   attr :remote_access_enabled, :boolean, required: true
@@ -36,9 +43,10 @@ defmodule MydiaWeb.DevicesLive.PairingComponents do
         </p>
 
         <%= if @pairing_available do %>
-          <div
+          <button
+            type="button"
             id="pair-device-button"
-            class="group flex items-center gap-3 p-4 bg-gradient-to-br from-primary/5 via-base-200 to-secondary/5 rounded-xl border border-primary/20 cursor-pointer hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5 transition-all"
+            class="group flex w-full items-center gap-3 p-4 text-left bg-gradient-to-br from-primary/5 via-base-200 to-secondary/5 rounded-xl border border-primary/20 cursor-pointer hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5 transition-all"
             phx-click="open_pairing_modal"
           >
             <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-md group-hover:scale-105 transition-transform">
@@ -56,7 +64,7 @@ defmodule MydiaWeb.DevicesLive.PairingComponents do
               name="hero-chevron-right"
               class="w-5 h-5 text-base-content/30 group-hover:text-primary group-hover:translate-x-0.5 transition-all"
             />
-          </div>
+          </button>
         <% else %>
           <div
             id="pairing-disabled-notice"
@@ -80,137 +88,136 @@ defmodule MydiaWeb.DevicesLive.PairingComponents do
         <% end %>
       </div>
 
-      <%!-- Pair New Device Modal --%>
-      <%= if @show_pairing_modal do %>
-        <div class="modal modal-open" id="pairing-modal">
-          <div class="modal-box max-w-md shadow-2xl">
-            <%!-- Header --%>
-            <div class="flex items-center justify-between mb-2">
+      <.modal
+        id="pairing-modal"
+        show={@show_pairing_modal}
+        on_cancel={JS.push("close_pairing_modal")}
+      >
+        <:title>
+          <span class="flex items-center gap-3">
+            <span class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+              <.icon name="hero-device-phone-mobile" class="w-5 h-5 text-primary" />
+            </span>
+            <span>
+              <span class="block text-lg font-semibold">Pair a new device</span>
+              <span class="block text-sm font-normal text-base-content/50">
+                Open the Mydia app to connect
+              </span>
+            </span>
+          </span>
+        </:title>
+        <%= if @claim_code do %>
+          <%!-- Active pairing code --%>
+          <div class="space-y-5 pt-4">
+            <%!-- QR Code - only show when registered on rendezvous --%>
+            <%= if @claim_code_rendezvous_status == :registered do %>
+              <% qr_svg = generate_qr_code(@ra_config, @p2p_status, @claim_code) %>
+              <%= if qr_svg do %>
+                <div class="flex flex-col items-center gap-2">
+                  <div class="p-3 bg-white rounded-xl shadow-md">
+                    {Phoenix.HTML.raw(qr_svg)}
+                  </div>
+                </div>
+              <% end %>
+
               <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                  <.icon name="hero-device-phone-mobile" class="w-5 h-5 text-primary" />
-                </div>
-                <div>
-                  <h3 class="text-lg font-semibold">Pair a new device</h3>
-                  <p class="text-sm text-base-content/50">Open the Mydia app to connect</p>
-                </div>
-              </div>
-              <button class="btn btn-sm btn-circle btn-ghost" phx-click="close_pairing_modal">
-                <.icon name="hero-x-mark" class="w-5 h-5" />
-              </button>
-            </div>
-
-            <%= if @claim_code do %>
-              <%!-- Active pairing code --%>
-              <div class="space-y-5 pt-4">
-                <%!-- QR Code - only show when registered on rendezvous --%>
-                <%= if @claim_code_rendezvous_status == :registered do %>
-                  <% qr_svg = generate_qr_code(@ra_config, @p2p_status, @claim_code) %>
-                  <%= if qr_svg do %>
-                    <div class="flex flex-col items-center gap-2">
-                      <div class="p-3 bg-white rounded-xl shadow-md">
-                        {Phoenix.HTML.raw(qr_svg)}
-                      </div>
-                    </div>
-                  <% end %>
-
-                  <div class="flex items-center gap-3">
-                    <div class="flex-1 h-px bg-base-300"></div>
-                    <span class="text-xs text-base-content/40 uppercase tracking-wider">
-                      or enter code
-                    </span>
-                    <div class="flex-1 h-px bg-base-300"></div>
-                  </div>
-                <% end %>
-
-                <%!-- Pairing Code --%>
-                <div class="text-center">
-                  <%= if @claim_code_rendezvous_status == :registered do %>
-                    <div class="inline-flex items-center gap-2 bg-base-200 rounded-xl px-5 py-3">
-                      <code id="claim-code" class="text-2xl font-bold tracking-[0.25em] font-mono">
-                        {@claim_code}
-                      </code>
-                      <button
-                        class="btn btn-ghost btn-sm btn-square"
-                        phx-click="copy_claim_code"
-                        onclick={"navigator.clipboard.writeText('#{@claim_code}')"}
-                        title="Copy code"
-                      >
-                        <.icon name="hero-clipboard-document" class="w-4 h-4 opacity-50" />
-                      </button>
-                    </div>
-                    <div class="mt-2 flex items-center justify-center gap-1.5 text-xs">
-                      <.icon name="hero-check-circle" class="w-4 h-4 text-success" />
-                      <span class="text-success">Ready for pairing</span>
-                    </div>
-                  <% else %>
-                    <div class="inline-flex flex-col items-center gap-3 bg-base-200 rounded-xl px-8 py-5">
-                      <span class="loading loading-spinner loading-lg text-primary"></span>
-                      <div class="text-sm text-base-content/60">Preparing pairing code...</div>
-                    </div>
-                  <% end %>
-                </div>
-
-                <%!-- Countdown & Regenerate --%>
-                <div class="flex items-center justify-center gap-4">
-                  <div class="flex items-center gap-3">
-                    <div
-                      class={[
-                        "radial-progress text-xs",
-                        if(@countdown_seconds > 60, do: "text-success", else: "text-warning")
-                      ]}
-                      style={"--value:#{min(100, @countdown_seconds / 3)}; --size:2.5rem; --thickness:3px;"}
-                      role="progressbar"
-                    >
-                      <.icon name="hero-clock" class="w-4 h-4" />
-                    </div>
-                    <div class="text-sm">
-                      <span class="text-base-content/60">Expires in</span>
-                      <span class={[
-                        "font-mono font-semibold ml-1",
-                        if(@countdown_seconds > 60, do: "text-base-content", else: "text-warning")
-                      ]}>
-                        {format_countdown(@countdown_seconds)}
-                      </span>
-                    </div>
-                  </div>
-                  <span class="text-base-content/20">•</span>
-                  <button
-                    id="regenerate-pairing-code-btn"
-                    class="link link-hover text-sm text-base-content/60"
-                    phx-click="generate_claim_code"
-                    phx-disable-with="..."
-                  >
-                    New Code
-                  </button>
-                </div>
-              </div>
-            <% else %>
-              <%!-- Error or loading state --%>
-              <div class="text-center py-8 space-y-4">
-                <%= if @pairing_error do %>
-                  <div id="pairing-error" class="alert alert-error text-left text-sm">
-                    <.icon name="hero-exclamation-circle" class="w-4 h-4" />
-                    <span>{@pairing_error}</span>
-                  </div>
-                <% else %>
-                  <div class="flex justify-center">
-                    <span class="loading loading-spinner loading-lg text-primary/50"></span>
-                  </div>
-                  <p class="text-sm text-base-content/50">Generating pairing code...</p>
-                <% end %>
+                <div class="flex-1 h-px bg-base-300"></div>
+                <span class="text-xs text-base-content/40 uppercase tracking-wider">
+                  or enter code
+                </span>
+                <div class="flex-1 h-px bg-base-300"></div>
               </div>
             <% end %>
+
+            <%!-- Pairing Code --%>
+            <div class="text-center">
+              <%= if @claim_code_rendezvous_status == :registered do %>
+                <div class="inline-flex items-center gap-2 bg-base-200 rounded-xl px-5 py-3">
+                  <code id="claim-code" class="text-2xl font-bold tracking-[0.25em] font-mono">
+                    {@claim_code}
+                  </code>
+                  <button
+                    class="btn btn-ghost btn-sm btn-square"
+                    phx-click="copy_claim_code"
+                    onclick={"navigator.clipboard.writeText('#{@claim_code}')"}
+                    title="Copy code"
+                  >
+                    <.icon name="hero-clipboard-document" class="w-4 h-4 opacity-50" />
+                  </button>
+                </div>
+                <div class="mt-2 flex items-center justify-center gap-1.5 text-xs">
+                  <.icon name="hero-check-circle" class="w-4 h-4 text-success" />
+                  <span class="text-success">Ready for pairing</span>
+                </div>
+              <% else %>
+                <div class="inline-flex flex-col items-center gap-3 bg-base-200 rounded-xl px-8 py-5">
+                  <span class="loading loading-spinner loading-lg text-primary"></span>
+                  <div class="text-sm text-base-content/60">Preparing pairing code...</div>
+                </div>
+              <% end %>
+            </div>
+
+            <%!-- Countdown & Regenerate --%>
+            <div class="flex items-center justify-center gap-4">
+              <div class="flex items-center gap-3">
+                <div
+                  class={[
+                    "radial-progress text-xs",
+                    if(@countdown_seconds > 60, do: "text-success", else: "text-warning")
+                  ]}
+                  style={"--value:#{countdown_percent(@countdown_seconds)}; --size:2.5rem; --thickness:3px;"}
+                  role="progressbar"
+                >
+                  <.icon name="hero-clock" class="w-4 h-4" />
+                </div>
+                <div class="text-sm">
+                  <span class="text-base-content/60">Expires in</span>
+                  <span class={[
+                    "font-mono font-semibold ml-1",
+                    if(@countdown_seconds > 60, do: "text-base-content", else: "text-warning")
+                  ]}>
+                    {format_countdown(@countdown_seconds)}
+                  </span>
+                </div>
+              </div>
+              <span class="text-base-content/20">•</span>
+              <button
+                id="regenerate-pairing-code-btn"
+                class="link link-hover text-sm text-base-content/60"
+                phx-click="generate_claim_code"
+                phx-disable-with="..."
+              >
+                New Code
+              </button>
+            </div>
           </div>
-          <div
-            class="modal-backdrop bg-base-300/60 backdrop-blur-sm"
-            phx-click="close_pairing_modal"
-          >
+        <% else %>
+          <%!-- Error or loading state --%>
+          <div class="text-center py-8 space-y-4">
+            <%= if @pairing_error do %>
+              <div id="pairing-error" class="alert alert-error text-left text-sm">
+                <.icon name="hero-exclamation-circle" class="w-4 h-4" />
+                <span>{@pairing_error}</span>
+              </div>
+            <% else %>
+              <div class="flex justify-center">
+                <span class="loading loading-spinner loading-lg text-primary/50"></span>
+              </div>
+              <p class="text-sm text-base-content/50">Generating pairing code...</p>
+            <% end %>
           </div>
-        </div>
-      <% end %>
+        <% end %>
+      </.modal>
     </div>
     """
+  end
+
+  # Whole numbers only: `/` yields a float, which renders as
+  # `--value:99.66666666666667` in the style attribute.
+  defp countdown_percent(seconds) when seconds <= 0, do: 0
+
+  defp countdown_percent(seconds) do
+    min(100, round(seconds / @claim_lifetime_seconds * 100))
   end
 
   defp format_countdown(seconds) when seconds <= 0, do: "Expired"
@@ -230,10 +237,23 @@ defmodule MydiaWeb.DevicesLive.PairingComponents do
           claim_code: claim_code
         })
 
-      qr_code = EQRCode.encode(content)
-      EQRCode.svg(qr_code, width: 180)
+      encode_qr_svg(content)
     else
       nil
     end
+  end
+
+  # A node_addr carrying many candidate addresses can push the payload past what
+  # a QR code holds, and EQRCode raises rather than returning an error. The modal
+  # still shows the claim code, so falling back to nil costs the QR and nothing
+  # else, where raising would take down the whole LiveView.
+  defp encode_qr_svg(content) do
+    content
+    |> EQRCode.encode()
+    |> EQRCode.svg(width: 180)
+  rescue
+    error ->
+      Logger.warning("Could not render pairing QR code: #{Exception.message(error)}")
+      nil
   end
 end

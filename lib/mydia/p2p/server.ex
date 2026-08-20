@@ -323,16 +323,12 @@ defmodule Mydia.P2p.Server do
 
     resource = state.resource
 
-    # Spawn a task to handle the streaming so we don't block the GenServer
-    Task.start(fn ->
-      t0 = System.monotonic_time(:millisecond)
-      handle_hls_stream(resource, stream_id, req)
-      elapsed = System.monotonic_time(:millisecond) - t0
-
-      Logger.info(
-        "p2p_metrics_elixir: handler_complete total_ms=#{elapsed} session=#{req.session_id} path=#{req.path}"
-      )
-    end)
+    if RemoteAccess.enabled?() do
+      stream_hls_response(resource, stream_id, req)
+    else
+      Logger.info("P2P Request: HLS stream refused, remote access is disabled")
+      send_hls_error(resource, stream_id, 403, "Remote access is disabled")
+    end
 
     {:noreply, state}
   end
@@ -451,6 +447,21 @@ defmodule Mydia.P2p.Server do
 
     P2p.send_response(state.resource, request_id, {:graphql, response})
     {:noreply, state}
+  end
+
+  defp stream_hls_response(resource, stream_id, req) do
+    # Spawn a task to handle the streaming so we don't block the GenServer
+    Task.start(fn ->
+      t0 = System.monotonic_time(:millisecond)
+      handle_hls_stream(resource, stream_id, req)
+      elapsed = System.monotonic_time(:millisecond) - t0
+
+      Logger.info(
+        "p2p_metrics_elixir: handler_complete total_ms=#{elapsed} session=#{req.session_id} path=#{req.path}"
+      )
+    end)
+
+    :ok
   end
 
   defp handle_hls_stream(resource, stream_id, req) do

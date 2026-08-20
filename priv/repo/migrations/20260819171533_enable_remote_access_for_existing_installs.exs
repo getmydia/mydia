@@ -22,7 +22,9 @@ defmodule Mydia.Repo.Migrations.EnableRemoteAccessForExistingInstalls do
     execute_update(:remote_access_config, enabled: true)
   end
 
-  def down do
-    execute_update(:remote_access_config, enabled: false)
-  end
+  # Deliberately a no-op. `up/0` does not record which rows it changed, so
+  # disabling everything on the way down would switch off installs that were
+  # enabled before this ever ran. Rolling back leaves remote access as it is;
+  # turn it off from Settings > Remote Access if that is what you want.
+  def down, do: :ok
 end

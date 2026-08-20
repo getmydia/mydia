@@ -153,88 +153,72 @@ defmodule MydiaWeb.DevicesLive.Components do
         <% end %>
       </div>
 
-      <%!-- Revoke Device Modal --%>
-      <%= if @show_revoke_modal && @selected_device do %>
-        <div class="modal modal-open" id="revoke-modal">
-          <div class="modal-box">
-            <h3 class="font-bold text-lg mb-4">Revoke Access?</h3>
-            <p class="text-base-content/70">
-              <strong>{@selected_device.device_name}</strong>
-              will be disconnected and won't be able to access your library until paired again.
-            </p>
-            <div class="modal-action">
-              <button phx-click="close_revoke_modal" class="btn btn-ghost">
-                Cancel
-              </button>
-              <button id="confirm-revoke" phx-click="submit_revoke" class="btn btn-warning">
-                Revoke
-              </button>
-            </div>
-          </div>
-          <div class="modal-backdrop" phx-click="close_revoke_modal"></div>
-        </div>
-      <% end %>
+      <%!-- Device modals. `<.modal>` is a native <dialog>, so escape-to-close and
+      focus handling come from the platform rather than being hand-rolled. --%>
+      <.modal
+        id="revoke-modal"
+        show={@show_revoke_modal && @selected_device != nil}
+        on_cancel={JS.push("close_revoke_modal")}
+      >
+        <:title>Revoke Access?</:title>
+        <p :if={@selected_device} class="text-base-content/70">
+          <strong>{@selected_device.device_name}</strong>
+          will be disconnected and won't be able to access your library until paired again.
+        </p>
+        <:actions>
+          <button phx-click="close_revoke_modal" class="btn btn-ghost">Cancel</button>
+          <button id="confirm-revoke" phx-click="submit_revoke" class="btn btn-warning">
+            Revoke
+          </button>
+        </:actions>
+      </.modal>
 
-      <%!-- Delete Device Modal --%>
-      <%= if @show_delete_modal && @device_to_delete do %>
-        <div class="modal modal-open" id="delete-modal">
-          <div class="modal-box">
-            <h3 class="font-bold text-lg mb-4">Remove Device?</h3>
-            <p class="text-base-content/70">
-              <strong>{@device_to_delete.device_name}</strong>
-              will be removed. You'll need to pair it again to reconnect.
-            </p>
-            <div class="modal-action">
-              <button phx-click="close_delete_modal" class="btn btn-ghost">
-                Cancel
-              </button>
-              <button id="confirm-delete" phx-click="submit_delete" class="btn btn-error">
-                Remove
-              </button>
-            </div>
-          </div>
-          <div class="modal-backdrop" phx-click="close_delete_modal"></div>
-        </div>
-      <% end %>
+      <.modal
+        id="delete-modal"
+        show={@show_delete_modal && @device_to_delete != nil}
+        on_cancel={JS.push("close_delete_modal")}
+      >
+        <:title>Remove Device?</:title>
+        <p :if={@device_to_delete} class="text-base-content/70">
+          <strong>{@device_to_delete.device_name}</strong>
+          will be removed. You'll need to pair it again to reconnect.
+        </p>
+        <:actions>
+          <button phx-click="close_delete_modal" class="btn btn-ghost">Cancel</button>
+          <button id="confirm-delete" phx-click="submit_delete" class="btn btn-error">
+            Remove
+          </button>
+        </:actions>
+      </.modal>
 
-      <%!-- Clear Inactive Devices Modal --%>
-      <%= if @show_clear_inactive_modal do %>
-        <% inactive_to_clear =
-          Enum.reject(@devices, fn d ->
-            recent_activity?(d.last_seen_at) && is_nil(d.revoked_at)
-          end) %>
-        <div class="modal modal-open" id="clear-inactive-modal">
-          <div class="modal-box">
-            <h3 class="font-bold text-lg mb-4">Clear Inactive Devices?</h3>
-            <p class="text-base-content/70 mb-3">
-              This will remove <strong>{length(inactive_to_clear)}</strong>
-              inactive device{if length(inactive_to_clear) == 1, do: "", else: "s"}.
-              They will need to be paired again to reconnect.
-            </p>
-            <div class="text-sm text-base-content/50 max-h-32 overflow-y-auto">
-              <%= for device <- inactive_to_clear do %>
-                <div class="flex items-center gap-2 py-1">
-                  <.icon name={platform_icon(device.platform)} class="w-3 h-3 opacity-60" />
-                  <span class="truncate">{device.device_name}</span>
-                </div>
-              <% end %>
-            </div>
-            <div class="modal-action">
-              <button phx-click="close_clear_inactive_modal" class="btn btn-ghost">
-                Cancel
-              </button>
-              <button
-                id="confirm-clear-inactive"
-                phx-click="submit_clear_inactive"
-                class="btn btn-error"
-              >
-                Clear All
-              </button>
-            </div>
+      <% inactive_to_clear =
+        Enum.reject(@devices, fn d ->
+          recent_activity?(d.last_seen_at) && is_nil(d.revoked_at)
+        end) %>
+      <.modal
+        id="clear-inactive-modal"
+        show={@show_clear_inactive_modal}
+        on_cancel={JS.push("close_clear_inactive_modal")}
+      >
+        <:title>Clear Inactive Devices?</:title>
+        <p class="text-base-content/70 mb-3">
+          This will remove <strong>{length(inactive_to_clear)}</strong>
+          inactive device{if length(inactive_to_clear) == 1, do: "", else: "s"}.
+          They will need to be paired again to reconnect.
+        </p>
+        <div class="text-sm text-base-content/50 max-h-32 overflow-y-auto">
+          <div :for={device <- inactive_to_clear} class="flex items-center gap-2 py-1">
+            <.icon name={platform_icon(device.platform)} class="w-3 h-3 opacity-60" />
+            <span class="truncate">{device.device_name}</span>
           </div>
-          <div class="modal-backdrop" phx-click="close_clear_inactive_modal"></div>
         </div>
-      <% end %>
+        <:actions>
+          <button phx-click="close_clear_inactive_modal" class="btn btn-ghost">Cancel</button>
+          <button id="confirm-clear-inactive" phx-click="submit_clear_inactive" class="btn btn-error">
+            Clear All
+          </button>
+        </:actions>
+      </.modal>
     </div>
     """
   end

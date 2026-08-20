@@ -714,10 +714,19 @@ defmodule Mydia.RemoteAccess do
   def publish_claim_consumed(claim) do
     Phoenix.PubSub.broadcast(
       Mydia.PubSub,
-      "remote_access:claims",
+      claims_topic(claim.user_id),
       {:claim_consumed, %{code: claim.code, user_id: claim.user_id}}
     )
   end
+
+  @doc """
+  PubSub topic carrying claim events for one user.
+
+  Scoped per user rather than instance-wide: the payload contains a live claim
+  code, and there is no reason for one user's session to be handed another's.
+  """
+  @spec claims_topic(binary()) :: String.t()
+  def claims_topic(user_id), do: "remote_access:claims:#{user_id}"
 
   # Format device struct for subscription payload
   defp format_device_for_subscription(device) do
