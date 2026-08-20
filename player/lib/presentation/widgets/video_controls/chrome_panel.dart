@@ -119,11 +119,25 @@ class PanelMetrics {
   /// vertical inset, nothing sits to the right of these widgets.
   static const double cornerInsetRight = 24.0;
 
-  /// The panel's rendered height at every tier: a 44px control row, the
-  /// scrubber row, [ChromePanel.rowGap] between them, and
-  /// [ChromePanel.verticalPadding] above and below.
+  /// The panel's worst-case rendered height, measured directly (see
+  /// `chrome_corner_inset_test.dart`, which pumps a real [ChromePanel] and
+  /// reads [ChromePanel]'s own [RenderBox] rather than recomputing this
+  /// arithmetic) rather than assumed: a 40px control row (the transport's
+  /// play/pause button — the tallest control in row 1, both compact and
+  /// full — not 44), the scrubber row at its 44px touch-target height (not
+  /// a flat 20; `ProgressBarSurface` is only 32px with a fine pointer),
+  /// [ChromePanel.rowGap] between them, and [ChromePanel.verticalPadding]
+  /// above and below.
+  ///
+  /// This used to read `44 + rowGap + 20 + verticalPadding*2` = 94, which
+  /// undershot the real height at every tier — by 12px where the scrubber
+  /// renders at its 32px pointer height, by 20px where it renders at 44px
+  /// touch height — so `cornerInsetBottom` was quietly promising more
+  /// clearance than the panel actually left. Pinned to the touch-target
+  /// scrubber height (the taller of the two) so one constant covers every
+  /// tier, matching every other tier-independent use of this field.
   static const double _panelHeight =
-      44 + ChromePanel.rowGap + 20 + (ChromePanel.verticalPadding * 2);
+      40 + ChromePanel.rowGap + 44 + (ChromePanel.verticalPadding * 2);
 
   /// Gap between the panel's top edge and a corner overlay's bottom edge.
   static const double _cornerGap = 12.0;
