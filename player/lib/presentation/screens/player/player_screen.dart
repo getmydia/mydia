@@ -293,6 +293,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   List<Query$SeasonEpisodes$seasonEpisodes>? _seasonEpisodes;
   int? _currentEpisodeIndex;
 
+  /// The next season's episodes, fetched lazily the first time the viewer
+  /// reaches the end of the current season.
+  List<Query$SeasonEpisodes$seasonEpisodes>? _nextSeasonEpisodes;
+
+  /// Whether the next-season lookup has run, whatever its outcome.
+  ///
+  /// Separate from [_nextSeasonEpisodes] being null, because "fetched and
+  /// there is no next season" and "not fetched yet" must not look the same:
+  /// `_maybeShowUpNext` runs on every position tick, so conflating them
+  /// would refetch a missing season several times a second.
+  bool _nextSeasonResolved = false;
+
+  /// The client `_fetchSeasonEpisodes` was handed, kept so the next-season
+  /// lookup can run from a position tick, where no client is in scope.
+  GraphQLClient? _graphQLClient;
+
   // Track selection state
   List<app_models.SubtitleTrack> _subtitleTracks = [];
   app_models.SubtitleTrack? _selectedSubtitleTrack;
@@ -1820,6 +1836,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _skipTrackerMediaKey = mediaKey;
     _segments = const [];
     _skipTracker.reset();
+    _nextSeasonEpisodes = null;
+    _nextSeasonResolved = false;
   }
 
   /// Fetch the skippable segments for the file now playing.
@@ -2029,6 +2047,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   }
 
   Future<void> _fetchSeasonEpisodes(GraphQLClient client) async {
+    _graphQLClient = client;
     if (widget.showId == null || widget.seasonNumber == null) return;
 
     try {
@@ -2057,6 +2076,41 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       }
     } catch (e) {
       debugPrint('Error fetching season episodes: $e');
+    }
+  }
+
+  Future<void> _fetchNextSeason() async {
+    if (_nextSeasonResolved) return;
+    if (widget.showId == null || widget.seasonNumber == null) {
+      _nextSeasonResolved = true;
+      return;
+    }
+    _nextSeasonResolved = true;
+
+    final client = _graphQLClient;
+    if (client == null) return;
+
+    try {
+      final result = await client.query(
+        QueryOptions(
+          document: documentNodeQuerySeasonEpisodes,
+          variables: Variables$Query$SeasonEpisodes(
+            showId: widget.showId!,
+            seasonNumber: widget.seasonNumber! + 1,
+          ).toJson(),
+        ),
+      );
+
+      if (result.data == null || !mounted) return;
+      final episodes =
+          Query$SeasonEpisodes.fromJson(result.data!).seasonEpisodes;
+      if (episodes == null) return;
+      _nextSeasonEpisodes =
+          episodes.whereType<Query$SeasonEpisodes$seasonEpisodes>().toList();
+    } catch (e) {
+      // No offer is the right failure mode: this runs fired-and-forgotten off
+      // a position tick, with no caller waiting on a result.
+      debugPrint('[PlayerScreen] Could not fetch next season: $e');
     }
   }
 
@@ -2243,11 +2297,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       return;
     }
 
-    final target = resolveInSeasonNext(
+    var target = resolveInSeasonNext(
       _upNextCandidates(_seasonEpisodes!),
       _currentEpisodeIndex!,
     );
-    if (target == null) return;
+
+    if (target == null) {
+      // End of the season. Offer the next season's premiere, if there is one.
+      if (!_nextSeasonResolved) {
+        unawaited(_fetchNextSeason());
+        return; // The next position tick picks it up.
+      }
+      final nextSeason = _nextSeasonEpisodes;
+      if (nextSeason == null || nextSeason.isEmpty) return;
+      target = resolveSeasonPremiere(_upNextCandidates(nextSeason));
+      if (target == null) return;
+    }
 
     // Offline/local playback can only ever autoplay into a next episode
     // that is itself already on disk — the next one existing in the season

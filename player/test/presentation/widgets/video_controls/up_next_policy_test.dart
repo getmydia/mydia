@@ -260,4 +260,41 @@ void main() {
       expect(resolveSeasonPremiere([special]), isNull);
     });
   });
+
+  group('season crossing end to end', () {
+    const finale = UpNextCandidate(
+      id: 'ep-112',
+      seasonNumber: 1,
+      episodeNumber: 12,
+      title: 'Rix Road',
+      fileIds: ['file-112'],
+    );
+    const premiere = UpNextCandidate(
+      id: 'ep-201',
+      seasonNumber: 2,
+      episodeNumber: 1,
+      title: 'One Year Later',
+      fileIds: ['file-201'],
+      thumbnailUrl: 'https://example.test/201.jpg',
+    );
+
+    test('a finale has no in-season next but does have a premiere', () {
+      expect(resolveInSeasonNext([finale], 0), isNull);
+
+      final crossing = resolveSeasonPremiere([premiere]);
+      expect(crossing, isNotNull);
+      expect(crossing!.seasonNumber, 2);
+      expect(crossing.pillLabel, 'Next season · S2E1');
+      expect(crossing.thumbnailUrl, 'https://example.test/201.jpg');
+    });
+
+    test('the route title uses the target season, not the current one', () {
+      // The bug this guards: `_navigateToEpisode` used to hardcode
+      // `widget.seasonNumber`, so the premiere would load believing it was
+      // still in season 1 and up-next would be dead for all of season 2.
+      final crossing = resolveSeasonPremiere([premiere])!;
+      expect(crossing.routeTitle, 'S2E1 - One Year Later');
+      expect(crossing.seasonNumber, isNot(finale.seasonNumber));
+    });
+  });
 }
