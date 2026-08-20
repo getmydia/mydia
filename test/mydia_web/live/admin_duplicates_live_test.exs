@@ -260,6 +260,26 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
       for file <- files, do: refute(trashed?(file))
     end
 
+    test "a Keep event naming a file outside the group changes nothing", %{conn: conn} do
+      # Both row handlers resolve the decision before trusting the id the
+      # client sent. Without that, keep_file would bank any id at all in the
+      # Keep set, where it would sit for the life of the socket.
+      {_show, episode, files} = duplicated_episode(@three_files)
+      keeper = Enum.find(files, &(&1.relative_path =~ "1080p"))
+      losers = Enum.reject(files, &(&1.id == keeper.id))
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+
+      render_click(view, "keep_file", %{"subject" => episode.id, "file" => Ecto.UUID.generate()})
+      render_click(view, "keep_file", %{"subject" => Ecto.UUID.generate(), "file" => keeper.id})
+
+      for loser <- losers do
+        assert has_element?(view, "#duplicates-trash-#{loser.id}[checked]")
+      end
+
+      refute has_element?(view, "#duplicates-trash-selected[disabled]")
+    end
+
     test "a file set to Keep is still on Keep after the run that trashed the others",
          %{conn: conn} do
       # The group still holds two files afterwards (the keeper and the spared

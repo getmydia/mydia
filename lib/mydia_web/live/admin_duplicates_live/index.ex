@@ -58,13 +58,22 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
   end
 
   @impl true
-  def handle_event("keep_file", %{"file" => file_id}, socket) do
-    # Only losers can move: the keeper is already kept, and marking it again
-    # would be a no-op that still costs a re-plan.
-    {:noreply,
-     socket
-     |> assign(:kept, MapSet.put(socket.assigns.kept, file_id))
-     |> assign_selection()}
+  def handle_event("keep_file", %{"subject" => subject_id, "file" => file_id}, socket) do
+    # Only a loser of a live decision can move. The keeper is already kept, so
+    # marking it again is a no-op, and admitting its id here would seed `:kept`
+    # with an entry that outlives the group it came from. Resolving the
+    # decision the way `trash_file` does keeps both handlers honest about
+    # client-supplied ids.
+    decision = find_decision(socket, subject_id)
+
+    if decision && Enum.any?(decision.losers, &(&1.id == file_id)) do
+      {:noreply,
+       socket
+       |> assign(:kept, MapSet.put(socket.assigns.kept, file_id))
+       |> assign_selection()}
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_event("trash_file", %{"subject" => subject_id, "file" => file_id}, socket) do
@@ -148,10 +157,15 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
   # it. Preference order: the best-ranked loser the operator has already set
   # to Keep, then the best-ranked loser overall. `losers` arrives in rank
   # order from `Mydia.Library.Prune.Ranker`, so `Enum.find/2` walks it
-  # best-first. Both the promoted file and the demoted keeper leave `:kept`:
-  # the successor stops being a loser at all, and the demoted keeper has to be
-  # clear of the Keep set or it would come back as a kept loser and quietly
-  # ignore the click that demoted it.
+  # best-first.
+  #
+  # Both the promoted file and the demoted keeper leave `:kept`. The successor
+  # must, since it stops being a loser and would otherwise sit in the set as a
+  # keeper. The demoted keeper is belt and braces: `keep_file` only admits
+  # losers, so a current keeper cannot be in the set, and dropping it here
+  # keeps that true no matter which handler grows the set later. Were it left
+  # behind it would return as a kept loser and silently swallow the click that
+  # demoted it.
   defp promote_successor(socket, decision, keeper_id) do
     kept = socket.assigns.kept
 

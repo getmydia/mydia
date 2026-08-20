@@ -224,6 +224,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
           aria-label="Keep"
           checked={not @trashing?}
           phx-click="keep_file"
+          phx-value-subject={@subject_id}
           phx-value-file={@file.id}
         />
         <%!--
