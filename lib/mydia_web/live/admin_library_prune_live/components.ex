@@ -8,49 +8,181 @@ defmodule MydiaWeb.AdminLibraryPruneLive.Components do
 
   alias Mydia.Library.MediaFile
 
+  @doc """
+  Renders the Prune Duplicates tab content.
+  """
+  attr :decisions, :list, required: true
+  attr :refusals, :list, required: true
+  attr :selected, :any, required: true
+  attr :reclaimable, :integer, required: true
+  attr :retention_days, :integer, required: true
+
+  def prune_tab(assigns) do
+    total_losers =
+      Enum.reduce(assigns.decisions, 0, fn decision, acc -> acc + length(decision.losers) end)
+
+    assigns = assign(assigns, :all_selected?, MapSet.size(assigns.selected) == total_losers)
+
+    ~H"""
+    <div class="p-4 sm:p-6 space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <h2 class="text-lg font-semibold flex items-center gap-2">
+          <.icon name="hero-document-duplicate" class="w-5 h-5 opacity-60" /> Duplicate Files
+          <span class="badge badge-ghost">{length(@decisions)}</span>
+        </h2>
+        <div class="join">
+          <button
+            :if={not @all_selected?}
+            id="prune-select-all"
+            type="button"
+            class="btn btn-sm btn-ghost join-item"
+            phx-click="select_all_prune_files"
+          >
+            <.icon name="hero-check-circle" class="w-4 h-4" /> Select all
+          </button>
+          <button
+            id="prune-trash-selected"
+            type="button"
+            class="btn btn-sm btn-error join-item"
+            disabled={MapSet.size(@selected) == 0}
+            phx-click="open_prune_modal"
+          >
+            <.icon name="hero-trash" class="w-4 h-4" />
+            Trash {file_count(MapSet.size(@selected))} ({humanize_bytes(@reclaimable)})
+          </button>
+        </div>
+      </div>
+
+      <p class="text-sm text-base-content/60">
+        Items holding more than one file, where every copy is proven to be the same content.
+        The lower-quality copies are already selected, so one click on Trash clears them all.
+        The radio marks the file that stays. Trashed files are kept for {@retention_days} days before permanent deletion.
+      </p>
+
+      <%= if @decisions == [] do %>
+        <div class="alert alert-info">
+          <.icon name="hero-information-circle" class="w-5 h-5" />
+          <span :if={@refusals == []}>
+            No item holds more than one file. There is nothing to prune.
+          </span>
+          <span :if={@refusals != []}>
+            Nothing can be pruned safely right now. Every item below needs attention first.
+          </span>
+        </div>
+      <% else %>
+        <div class="bg-base-200 rounded-box divide-y divide-base-300">
+          <.decision_row :for={decision <- @decisions} decision={decision} selected={@selected} />
+        </div>
+      <% end %>
+
+      <%= if @refusals != [] do %>
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+          <h2 class="text-lg font-semibold flex items-center gap-2">
+            <.icon name="hero-exclamation-triangle" class="w-5 h-5 opacity-60" /> Needs Attention
+            <span class="badge badge-ghost">{length(@refusals)}</span>
+          </h2>
+        </div>
+
+        <p class="text-sm text-base-content/60">
+          These were not pruned. Each one is a matching or scanning problem rather than a
+          duplicate, and acting on them would remove real media.
+        </p>
+
+        <div class="bg-base-200 rounded-box divide-y divide-base-300">
+          <.refusal_row
+            :for={{group, reason, detail} <- @refusals}
+            group={group}
+            reason={reason}
+            detail={detail}
+          />
+        </div>
+      <% end %>
+    </div>
+    """
+  end
+
   attr :decision, :map, required: true
   attr :selected, :any, required: true
 
-  def decision_group(assigns) do
-    ~H"""
-    <div
-      class="card bg-base-100 border border-base-300"
-      id={"prune-group-#{@decision.group.subject_id}"}
-    >
-      <div class="card-body gap-3">
-        <h3 class="card-title text-base">{subject_label(@decision.group)}</h3>
-        <p class="text-sm opacity-70">{@decision.reason}</p>
+  defp decision_row(assigns) do
+    selected_count = Enum.count(assigns.decision.losers, &MapSet.member?(assigns.selected, &1.id))
 
-        <ul class="menu bg-base-200 rounded-box w-full">
-          <li :for={file <- [@decision.keeper | @decision.losers]}>
-            <div class="flex items-center gap-3">
-              <input
-                type="radio"
-                class="radio radio-sm radio-primary"
-                id={"prune-keeper-#{file.id}"}
-                name={"keeper-#{@decision.group.subject_id}"}
-                checked={file.id == @decision.keeper.id}
-                aria-label={"Keep #{file.relative_path}"}
-                phx-click="choose_keeper"
-                phx-value-subject={@decision.group.subject_id}
-                phx-value-file={file.id}
-              />
-              <span class="flex-1 truncate">{file.relative_path}</span>
-              <span class="badge badge-ghost badge-sm">{quality_label(file)}</span>
-              <span class="text-xs opacity-60">{humanize_bytes(file.size)}</span>
-              <input
-                :if={file.id != @decision.keeper.id}
-                type="checkbox"
-                class="checkbox checkbox-sm checkbox-error"
-                id={"prune-loser-#{file.id}"}
-                checked={MapSet.member?(@selected, file.id)}
-                aria-label={"Trash #{file.relative_path}"}
-                phx-click="toggle_loser"
-                phx-value-file={file.id}
-              />
-            </div>
-          </li>
-        </ul>
+    assigns = assign(assigns, :selected_count, selected_count)
+
+    ~H"""
+    <div class="p-3 sm:p-4" id={"prune-group-#{@decision.group.subject_id}"}>
+      <div class="flex items-center gap-3">
+        <div class="flex-1 min-w-0">
+          <div class="font-medium truncate">{subject_label(@decision.group)}</div>
+          <div class="text-xs opacity-60 truncate">{@decision.reason}</div>
+        </div>
+
+        <span class="badge badge-sm badge-outline hidden sm:inline-flex">
+          {file_count(length(@decision.losers) + 1)}
+        </span>
+        <span :if={@selected_count > 0} class="badge badge-sm badge-outline badge-error">
+          {@selected_count} to trash
+        </span>
+        <span :if={@selected_count == 0} class="badge badge-sm badge-outline">Skipped</span>
+
+        <div class="join ml-auto sm:ml-2">
+          <button
+            id={"prune-group-toggle-#{@decision.group.subject_id}"}
+            type="button"
+            class="btn btn-sm btn-ghost join-item"
+            title={
+              if @selected_count > 0,
+                do: "Keep every file in this group",
+                else: "Trash every duplicate in this group"
+            }
+            aria-label={
+              if @selected_count > 0,
+                do: "Keep every file in #{subject_label(@decision.group)}",
+                else: "Trash every duplicate in #{subject_label(@decision.group)}"
+            }
+            phx-click="toggle_prune_group"
+            phx-value-subject={@decision.group.subject_id}
+          >
+            <.icon
+              name={if @selected_count > 0, do: "hero-x-mark", else: "hero-check"}
+              class="w-4 h-4"
+            />
+          </button>
+        </div>
+      </div>
+
+      <div class="bg-base-100 rounded-box divide-y divide-base-300 mt-3">
+        <div
+          :for={file <- [@decision.keeper | @decision.losers]}
+          class="flex items-center gap-3 px-3 py-2"
+        >
+          <input
+            type="radio"
+            class="radio radio-sm radio-primary shrink-0"
+            id={"prune-keeper-#{file.id}"}
+            name={"keeper-#{@decision.group.subject_id}"}
+            checked={file.id == @decision.keeper.id}
+            aria-label={"Keep #{file.relative_path}"}
+            phx-click="choose_prune_keeper"
+            phx-value-subject={@decision.group.subject_id}
+            phx-value-file={file.id}
+          />
+          <span class="flex-1 min-w-0 truncate text-sm">{file.relative_path}</span>
+          <span class="badge badge-ghost badge-sm">{quality_label(file)}</span>
+          <span class="text-xs opacity-60 whitespace-nowrap">{humanize_bytes(file.size)}</span>
+          <div class="w-5 flex justify-end shrink-0">
+            <input
+              :if={file.id != @decision.keeper.id}
+              type="checkbox"
+              class="checkbox checkbox-sm checkbox-error"
+              id={"prune-loser-#{file.id}"}
+              checked={MapSet.member?(@selected, file.id)}
+              aria-label={"Trash #{file.relative_path}"}
+              phx-click="toggle_prune_file"
+              phx-value-file={file.id}
+            />
+          </div>
+        </div>
       </div>
     </div>
     """
@@ -60,23 +192,76 @@ defmodule MydiaWeb.AdminLibraryPruneLive.Components do
   attr :reason, :atom, required: true
   attr :detail, :map, required: true
 
-  def refusal_group(assigns) do
+  defp refusal_row(assigns) do
     ~H"""
-    <div
-      class="card bg-base-100 border border-warning/40"
-      id={"prune-refusal-#{@group.subject_id}"}
-    >
-      <div class="card-body gap-2">
-        <div class="flex items-center gap-2">
-          <.icon name="hero-exclamation-triangle" class="w-4 h-4 text-warning" />
-          <h3 class="card-title text-base">{subject_label(@group)}</h3>
-          <span class="badge badge-warning badge-sm">{refusal_label(@reason)}</span>
+    <div class="p-3 sm:p-4" id={"prune-refusal-#{@group.subject_id}"}>
+      <div class="flex items-center gap-3">
+        <div class="flex-1 min-w-0">
+          <div class="font-medium truncate">{subject_label(@group)}</div>
+          <div class="text-xs opacity-60 truncate">{file_count(length(@group.files))}</div>
         </div>
-        <p class="text-sm opacity-70">{refusal_explanation(@reason, @detail)}</p>
-        <ul class="text-xs opacity-60 list-disc pl-5">
-          <li :for={file <- @group.files}>{file.relative_path}</li>
-        </ul>
+        <span class="badge badge-sm badge-outline badge-warning">{refusal_label(@reason)}</span>
       </div>
+
+      <p class="text-sm text-base-content/60 mt-2">{refusal_explanation(@reason, @detail)}</p>
+
+      <ul class="text-xs opacity-60 list-disc pl-5 mt-1">
+        <li :for={file <- @group.files}>{file.relative_path}</li>
+      </ul>
+    </div>
+    """
+  end
+
+  @doc """
+  Renders the trash confirmation modal.
+
+  A `data-confirm` would be enough for a single row, but this button moves
+  every selected duplicate across the whole library in one go. The blast
+  radius (files, items, bytes) is worth showing before it runs.
+  """
+  attr :count, :integer, required: true
+  attr :items, :integer, required: true
+  attr :bytes, :integer, required: true
+  attr :retention_days, :integer, required: true
+
+  def prune_confirm_modal(assigns) do
+    ~H"""
+    <div id="prune-confirm-modal" class="modal modal-open">
+      <div class="modal-box">
+        <div class="flex items-center gap-3 mb-5">
+          <div class="w-10 h-10 rounded-xl bg-error/20 flex items-center justify-center">
+            <.icon name="hero-trash" class="w-5 h-5 text-error" />
+          </div>
+          <div>
+            <h3 class="font-bold text-lg">Trash {file_count(@count)}?</h3>
+            <p class="text-sm text-base-content/60">
+              Across {item_count(@items)}, reclaiming {humanize_bytes(@bytes)}.
+            </p>
+          </div>
+        </div>
+
+        <p class="py-2">
+          Every selected file is a redundant copy of one that stays behind, so each item keeps
+          a playable file. Trashed files are kept for {@retention_days} days before permanent
+          deletion.
+        </p>
+
+        <div class="modal-action mt-6 pt-4 border-t border-base-300">
+          <button id="prune-cancel" type="button" class="btn btn-ghost" phx-click="close_prune_modal">
+            Cancel
+          </button>
+          <button
+            id="prune-confirm"
+            type="button"
+            class="btn btn-error"
+            phx-click="confirm_prune"
+            phx-disable-with="Trashing..."
+          >
+            <.icon name="hero-trash" class="w-4 h-4" /> Move to trash
+          </button>
+        </div>
+      </div>
+      <div class="modal-backdrop bg-black/50" phx-click="close_prune_modal"></div>
     </div>
     """
   end
@@ -93,6 +278,12 @@ defmodule MydiaWeb.AdminLibraryPruneLive.Components do
   defp quality_label(%MediaFile{} = file) do
     [file.resolution, file.codec] |> Enum.reject(&is_nil/1) |> Enum.join(" ")
   end
+
+  defp file_count(1), do: "1 file"
+  defp file_count(n), do: "#{n} files"
+
+  defp item_count(1), do: "1 item"
+  defp item_count(n), do: "#{n} items"
 
   defp refusal_label(:duplicate_registration), do: "Registered twice"
   defp refusal_label(:unanalyzed), do: "Not analyzed"
