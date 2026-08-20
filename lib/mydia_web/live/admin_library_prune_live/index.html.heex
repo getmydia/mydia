@@ -4,7 +4,7 @@
       <h1 class="text-2xl font-semibold">Prune duplicate files</h1>
       <p class="text-sm opacity-70 mt-1">
         Items holding more than one file. Only groups proven to be the same content
-        can be pruned. Trashed files are kept for 30 days before permanent deletion.
+        can be pruned. Trashed files are kept for {@retention_days} days before permanent deletion.
       </p>
     </div>
 
@@ -21,7 +21,7 @@
           class="btn btn-error btn-sm"
           disabled={MapSet.size(@selected) == 0}
           phx-click="confirm"
-          data-confirm={"Move #{MapSet.size(@selected)} file(s) to trash, reclaiming #{humanize_bytes(@reclaimable)}? They are kept for 30 days before permanent deletion."}
+          data-confirm={"Move #{MapSet.size(@selected)} file(s) to trash, reclaiming #{humanize_bytes(@reclaimable)}? They are kept for #{@retention_days} days before permanent deletion."}
         >
           Trash selected ({MapSet.size(@selected)}, {humanize_bytes(@reclaimable)})
         </button>

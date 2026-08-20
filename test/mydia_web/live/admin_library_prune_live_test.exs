@@ -145,5 +145,33 @@ defmodule MydiaWeb.AdminLibraryPruneLiveTest do
       assert Mydia.Repo.get!(Mydia.Library.MediaFile, ranked_keeper.id).trashed_at
       refute Mydia.Repo.get!(Mydia.Library.MediaFile, overridden_keeper.id).trashed_at
     end
+
+    test "the keeper radio and loser checkbox are independently and unambiguously operable",
+         %{conn: conn} do
+      {_show, episode, files} = prunable_episode()
+      keeper = Enum.find(files, &(&1.relative_path =~ "1080p"))
+      loser = Enum.find(files, &(&1.relative_path =~ "360p"))
+
+      {:ok, view, _html} = live(conn, ~p"/admin/library/prune")
+
+      group_html = view |> element("#prune-group-#{episode.id}") |> render()
+
+      # The keeper radio and the loser checkbox must not be governed by one
+      # shared <label>: a click anywhere in the row would otherwise only
+      # ever activate the first labelable descendant (the keeper radio),
+      # silently reassigning the keeper when the operator meant to toggle
+      # the trash checkbox.
+      refute group_html =~ "<label"
+
+      keeper_match =
+        Regex.run(~r/id="prune-keeper-#{keeper.id}"[^>]*aria-label="([^"]*)"/, group_html)
+
+      loser_match =
+        Regex.run(~r/id="prune-loser-#{loser.id}"[^>]*aria-label="([^"]*)"/, group_html)
+
+      assert [_, keeper_label] = keeper_match
+      assert [_, loser_label] = loser_match
+      assert keeper_label != loser_label
+    end
   end
 end

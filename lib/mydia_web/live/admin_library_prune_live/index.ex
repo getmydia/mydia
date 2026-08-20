@@ -13,13 +13,20 @@ defmodule MydiaWeb.AdminLibraryPruneLive.Index do
 
   alias Mydia.Library.Prune
 
+  # Mirrors Mydia.Jobs.TrashCleanup's default, so this page never quotes a
+  # retention period that disagrees with what actually purges trashed files.
+  @default_retention_days 30
+
   @impl true
   def mount(_params, _session, socket) do
+    retention_days = Application.get_env(:mydia, :trash_retention_days, @default_retention_days)
+
     {:ok,
      socket
      |> assign(:page_title, "Prune duplicate files")
      |> assign(:selected, MapSet.new())
      |> assign(:keepers, %{})
+     |> assign(:retention_days, retention_days)
      |> load_plan()}
   end
 

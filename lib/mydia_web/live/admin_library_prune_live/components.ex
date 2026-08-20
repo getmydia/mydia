@@ -23,13 +23,14 @@ defmodule MydiaWeb.AdminLibraryPruneLive.Components do
 
         <ul class="menu bg-base-200 rounded-box w-full">
           <li :for={file <- [@decision.keeper | @decision.losers]}>
-            <label class="flex items-center gap-3">
+            <div class="flex items-center gap-3">
               <input
                 type="radio"
                 class="radio radio-sm radio-primary"
                 id={"prune-keeper-#{file.id}"}
                 name={"keeper-#{@decision.group.subject_id}"}
                 checked={file.id == @decision.keeper.id}
+                aria-label={"Keep #{file.relative_path}"}
                 phx-click="choose_keeper"
                 phx-value-subject={@decision.group.subject_id}
                 phx-value-file={file.id}
@@ -43,10 +44,11 @@ defmodule MydiaWeb.AdminLibraryPruneLive.Components do
                 class="checkbox checkbox-sm checkbox-error"
                 id={"prune-loser-#{file.id}"}
                 checked={MapSet.member?(@selected, file.id)}
+                aria-label={"Trash #{file.relative_path}"}
                 phx-click="toggle_loser"
                 phx-value-file={file.id}
               />
-            </label>
+            </div>
           </li>
         </ul>
       </div>
