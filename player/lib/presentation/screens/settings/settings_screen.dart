@@ -7,6 +7,7 @@ import '../../../core/connection/connection_summary.dart';
 import '../../../core/graphql/graphql_provider.dart';
 import '../../../core/p2p/p2p_service.dart';
 import '../../../core/player/platform_features.dart';
+import '../../../core/remote/remote_control_settings.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/update/platform_updater.dart';
 import '../../../core/update/update_provider.dart';
@@ -222,6 +223,7 @@ class _ManageSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final updateState = ref.watch(updateProvider);
+    final controllableEnabled = ref.watch(remoteControlEnabledProvider).value;
 
     return SettingsSection(
       label: 'Manage',
@@ -238,6 +240,16 @@ class _ManageSection extends ConsumerWidget {
           subtitle: connection.label,
           subtitleDotColor: connectionToneColor(connection.tone),
           onTap: () => context.push('/settings/diagnostics'),
+        ),
+        SettingsRow.toggle(
+          key: const Key('remote-control-enabled-switch'),
+          icon: Icons.settings_remote,
+          title: 'Allow this device to be controlled',
+          subtitle: 'Lets another paired device see and drive playback here',
+          value: controllableEnabled ?? true,
+          onChanged: controllableEnabled == null
+              ? null
+              : (value) => _setControllable(ref, value),
         ),
         if (PlatformUpdater.supportedOnCurrentPlatform)
           SettingsRow.action(
@@ -259,6 +271,16 @@ class _ManageSection extends ConsumerWidget {
           ),
       ],
     );
+  }
+
+  /// Persists the opt-in/opt-out and invalidates [remoteControlEnabledProvider]
+  /// so the switch reflects it immediately. This only ever affects whether
+  /// this device *answers* as a target; it never touches pairing or this
+  /// device's own ability to control others.
+  Future<void> _setControllable(WidgetRef ref, bool value) async {
+    final settings = await ref.read(remoteControlSettingsProvider.future);
+    await settings.setControllable(value);
+    ref.invalidate(remoteControlEnabledProvider);
   }
 
   void _check(WidgetRef ref) {

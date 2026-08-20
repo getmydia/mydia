@@ -14,8 +14,13 @@ import 'core/graphql/watch/watcher_registry.dart';
 import 'core/cast/cast_providers.dart';
 import 'core/downloads/download_providers.dart';
 import 'core/downloads/download_service.dart';
+import 'core/auth/device_info_service.dart';
 import 'core/player/best_file.dart';
+import 'core/remote/node_registration.dart';
 import 'core/remote/remote_control_intent.dart';
+import 'core/remote/remote_control_receiver.dart';
+import 'core/remote/remote_control_settings.dart';
+import 'core/remote/remote_roster.dart';
 import 'core/remote/remote_target_controller.dart';
 import 'core/router/navigator_keys.dart';
 import 'core/scroll/app_scroll_behavior.dart';
@@ -24,6 +29,7 @@ import 'presentation/screens/episode/episode_detail_controller.dart';
 import 'presentation/screens/movie/movie_detail_controller.dart';
 import 'presentation/widgets/cast_mini_controller.dart';
 import 'package:player/core/p2p/p2p_service.dart';
+import 'package:player/native/lib.dart';
 
 /// Everything `resolveLoadContentRoute` needs beyond the file list itself.
 ///
@@ -170,6 +176,12 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   /// `RemoteTargetController.intents`'s dartdoc.
   StreamSubscription<RemoteControlIntent>? _remoteIntentsSubscription;
 
+  /// Subscribed once [_initRemoteControlIfEnabled] wires up a receiver.
+  /// Cancelled before `P2pService.dispose` can close the stream it reads
+  /// from, the same ordering `_remoteIntentsSubscription` follows relative to
+  /// `RemoteTargetController`.
+  StreamSubscription<FlutterInboundControlRequest>? _controlRequestSubscription;
+
   @override
   void initState() {
     super.initState();
@@ -202,11 +214,16 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     // body, where no caller can catch it. It surfaces as an unhandled async
     // error and fails the test run. Restoring a cast session before auth is
     // meaningless anyway: there is no reachable server yet.
+    //
+    // Starting remote control shares the same gate for the same reason:
+    // `NodeRegistration` and `RemoteRoster` both need a signed-in GraphQL
+    // client too.
     ref.listenManual<AsyncValue<AuthStatus>>(
       authStateProvider,
       (previous, next) {
         if (next.value != AuthStatus.authenticated) return;
         _restoreCastSession();
+        unawaited(_initRemoteControlIfEnabled());
       },
       fireImmediately: true,
     );
@@ -231,10 +248,108 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     }
   }
 
+  /// Whether the controllable-device startup path has already run this
+  /// launch. Same once-per-launch reasoning as [_castRestoreAttempted]:
+  /// `authStateProvider` can re-emit `authenticated`, and wiring a second
+  /// receiver onto [P2pService.onControlRequest] would answer every inbound
+  /// request twice.
+  bool _remoteControlInitAttempted = false;
+
+  /// Starts the iroh host if it is not already running, registers this
+  /// device's node ID with the server, and wires up a [RemoteControlReceiver]
+  /// so inbound requests get answered — all only when
+  /// [RemoteControlSettings.controllableEnabled] says this device should be
+  /// reachable.
+  ///
+  /// `p2pServiceProvider.initialize()` may already be running by the time
+  /// this reaches it — the unconditional call in [initState] starts it
+  /// purely so this device can dial its own paired server, independent of
+  /// whether it opts in to being a target — but `initialize()` is idempotent,
+  /// so calling it again here is always safe and is what actually starts the
+  /// host on a build where that unconditional call hasn't run yet (e.g. a
+  /// fresh pairing that lands here before the microtask above resolves).
+  Future<void> _initRemoteControlIfEnabled() async {
+    if (_remoteControlInitAttempted) return;
+    _remoteControlInitAttempted = true;
+
+    try {
+      final settings = await ref.read(remoteControlSettingsProvider.future);
+      if (!await settings.controllableEnabled()) {
+        debugPrint('[MyApp] Remote control opted out, not advertising');
+        return;
+      }
+
+      final p2pService = ref.read(p2pServiceProvider);
+      await p2pService.initialize();
+
+      final nodeId = p2pService.nodeId;
+      if (nodeId == null) {
+        debugPrint(
+            '[MyApp] Remote control: no node ID after initialize, skipping');
+        return;
+      }
+
+      final client = await ref.read(asyncGraphqlClientProvider.future);
+      final registered = await NodeRegistration(
+        client: client,
+        nodeId: () async => p2pService.nodeId,
+      ).register();
+      debugPrint('[MyApp] Remote control node registration: $registered');
+
+      final targetController = ref.read(remoteTargetControllerProvider);
+      final receiver = RemoteControlReceiver(
+        roster: RemoteRoster(client: client),
+        targetName: await DeviceInfoService().getDeviceName(),
+        snapshotSource: targetController.snapshot,
+        onIntent: targetController.submit,
+        respond: p2pService.respondToControl,
+      );
+
+      _controlRequestSubscription = p2pService.onControlRequest.listen(
+        (request) => unawaited(
+          _handleControlRequest(p2pService, settings, receiver, request),
+        ),
+      );
+    } catch (e) {
+      // Matches `_restoreCastSession`'s catch: a startup gate that a device
+      // with no reachable server, no auth, or (in tests) no initialized Hive
+      // simply skips, same as opting out.
+      debugPrint('[MyApp] Failed to start remote control: $e');
+    }
+  }
+
+  /// Answers one inbound [request], re-checking [settings] first.
+  ///
+  /// [receiver] itself only knows the paired-device roster, not the opt-out:
+  /// checking here means flipping the setting off mid-session refuses the
+  /// very next request instead of only taking effect after a restart, with no
+  /// need to tear down and rebuild the subscription above.
+  Future<void> _handleControlRequest(
+    P2pService p2pService,
+    RemoteControlSettings settings,
+    RemoteControlReceiver receiver,
+    FlutterInboundControlRequest request,
+  ) async {
+    try {
+      if (!await settings.controllableEnabled()) {
+        await p2pService.respondToControl(
+          request.requestId,
+          const FlutterRemoteControlResponse_NotAuthorized(),
+        );
+        return;
+      }
+      await receiver.handle(request);
+    } catch (e, stackTrace) {
+      debugPrint('[MyApp] Remote control request handling failed: $e');
+      debugPrintStack(stackTrace: stackTrace);
+    }
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _remoteIntentsSubscription?.cancel();
+    _controlRequestSubscription?.cancel();
     super.dispose();
   }
 
