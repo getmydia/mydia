@@ -273,7 +273,7 @@ defmodule MydiaWeb.MediaLive.Show.MediaItemEvents do
          put_flash(
            socket,
            :error,
-           "TVDB does not offer a #{SeasonOrder.label(target)} ordering for this show."
+           "TVDB does not list #{SeasonOrder.label(target)} for this show."
          )}
 
       {:error, :missing_tvdb_id} ->

@@ -222,6 +222,25 @@ defmodule MydiaWeb.MediaLive.Show.SeasonOrderUiTest do
     assert reloaded.season_order == :dvd
   end
 
+  test "picking an ordering TVDB does not publish flashes instead of switching", %{conn: conn} do
+    tvdb_id = System.unique_integer([:positive])
+    show = oversized_show(tvdb_id)
+    stub_tvdb_orderings(tvdb_id, official: 170, dvd: [51, 51, 52, 16])
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{show.id}")
+    render_async(view, 5000)
+
+    # Fired straight at the handler rather than through the select: the render
+    # gate no longer offers absolute for this show, so this is the stale-cache
+    # path, where TVDB's payload changed between render and submit.
+    render_change(view, "change_season_order", %{"order" => "absolute"})
+
+    assert has_element?(view, "#flash-error", "TVDB does not list Absolute order for this show.")
+
+    reloaded = Media.get_media_item!(show.id)
+    assert reloaded.season_order == nil
+  end
+
   test "no ordering controls for a TMDB-sourced show", %{conn: conn} do
     show = media_item_fixture(%{type: "tv_show", title: "Tmdb Only", metadata_source: :tmdb})
 
