@@ -9,7 +9,7 @@ defmodule Mydia.RemoteAccess do
   require Logger
 
   alias Mydia.Repo
-  alias Mydia.RemoteAccess.{Config, PairingClaim, RemoteDevice}
+  alias Mydia.RemoteAccess.{ClaimRateLimiter, Config, PairingClaim, RemoteDevice}
 
   # Config management
 
@@ -292,6 +292,10 @@ defmodule Mydia.RemoteAccess do
          {:ok, {lookup_key, sealed}} <-
            Mydia.P2p.seal_pairing_claim(code, node_addr, instance_id),
          {:ok, claim} <- insert_claim(user_id, code, lookup_key) do
+      # A fresh code clears the p2p guess counter, so a grinder who burned the
+      # previous claim cannot keep the admin locked out.
+      ClaimRateLimiter.reset_rate_limit(p2p_limiter_key())
+
       registered = register_sealed_claim(lookup_key, sealed, opts) == :ok
 
       Logger.debug("Pairing claim created, relay_registered=#{registered}")
@@ -431,6 +435,62 @@ defmodule Mydia.RemoteAccess do
     else
       do_validate_claim_code(code, nil)
     end
+  end
+
+  @p2p_max_guesses 10
+  @p2p_guess_window_seconds 300
+
+  @doc false
+  def p2p_limiter_key, do: "p2p:pairing"
+
+  @doc """
+  Validates a claim code presented over p2p, with guess limiting.
+
+  The counter is global rather than per peer because iroh node IDs are free to
+  mint, so a per-peer counter would be evaded by generating a fresh keypair for
+  each guess.
+
+  When no claim is live the request is rejected before the counter is touched,
+  so background grinding costs an attacker nothing and cannot drain the budget
+  ahead of a real pairing. The window equals the claim lifetime, so tripping the
+  limit burns the live claim without a separate invalidation step. Generating a
+  new code clears the counter.
+  """
+  def validate_claim_code_from_peer(code) do
+    if any_active_claim?() do
+      limited_validate_from_peer(code)
+    else
+      {:error, :not_found}
+    end
+  end
+
+  defp limited_validate_from_peer(code) do
+    case ClaimRateLimiter.check_and_record(p2p_limiter_key(),
+           max_attempts: @p2p_max_guesses,
+           window_seconds: @p2p_guess_window_seconds
+         ) do
+      :ok ->
+        case do_validate_claim_code(code, nil) do
+          {:ok, claim} ->
+            ClaimRateLimiter.reset_rate_limit(p2p_limiter_key())
+            {:ok, claim}
+
+          error ->
+            error
+        end
+
+      {:error, :rate_limited} ->
+        Logger.warning("P2P pairing blocked: too many failed claim code attempts")
+        {:error, :too_many_attempts}
+    end
+  end
+
+  defp any_active_claim? do
+    now = DateTime.utc_now()
+
+    PairingClaim
+    |> where([c], is_nil(c.used_at) and c.expires_at > ^now)
+    |> Repo.exists?()
   end
 
   defp do_validate_claim_code(code, ip_address) do

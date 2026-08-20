@@ -22,7 +22,7 @@ defmodule Mydia.RemoteAccess.Pairing do
   """
   def complete_pairing(claim_code, device_attrs) do
     # Validate the claim code
-    with {:ok, claim} <- RemoteAccess.validate_claim_code(claim_code),
+    with {:ok, claim} <- RemoteAccess.validate_claim_code_from_peer(claim_code),
          # Generate a unique device token
          device_token = generate_device_token(),
          # Register the device
