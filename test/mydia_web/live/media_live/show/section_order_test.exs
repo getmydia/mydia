@@ -17,6 +17,15 @@ defmodule MydiaWeb.MediaLive.Show.SectionOrderTest do
   @sections "#seasons-episodes-section, #media-files-section, #subtitles-section, " <>
               "#timeline-section, #franchise-section, #recommendations-rail"
 
+  # Provider ids here are offset past this floor rather than taken raw from
+  # System.unique_integer/1, which hands out small positive integers. Those
+  # collide two ways: with real TMDB ids, so any lookup this file forgets to stub
+  # would reach the live relay, and with the many hardcoded ids elsewhere in the
+  # suite, which share the same ETS-backed metadata cache and its keys. Real TMDB
+  # ids are seven digits, and no fixture in the suite reaches nine, so everything
+  # above this floor belongs to this file alone.
+  @provider_id_floor 900_000_000
+
   setup %{conn: conn} do
     # The app disables Oban in test (engine: false), so Oban.insert cannot run
     # from the LiveView process. Start an isolated, manual-mode instance so the
@@ -28,7 +37,7 @@ defmodule MydiaWeb.MediaLive.Show.SectionOrderTest do
   end
 
   test "a movie renders its own files above the recommendations rail", %{conn: conn} do
-    source_tmdb_id = System.unique_integer([:positive])
+    source_tmdb_id = unique_provider_id()
 
     movie =
       media_item_fixture(%{
@@ -42,7 +51,7 @@ defmodule MydiaWeb.MediaLive.Show.SectionOrderTest do
 
     warm_recommendations_cache(source_tmdb_id, :movie, [
       %{
-        "id" => System.unique_integer([:positive]),
+        "id" => unique_provider_id(),
         "title" => "The Eternal Daughter",
         "release_date" => "2022-12-02",
         "poster_path" => "/p.jpg"
@@ -66,7 +75,7 @@ defmodule MydiaWeb.MediaLive.Show.SectionOrderTest do
   end
 
   test "a tv show keeps the rail above its episode list", %{conn: conn} do
-    source_tmdb_id = System.unique_integer([:positive])
+    source_tmdb_id = unique_provider_id()
 
     show =
       media_item_fixture(%{
@@ -80,7 +89,7 @@ defmodule MydiaWeb.MediaLive.Show.SectionOrderTest do
 
     warm_recommendations_cache(source_tmdb_id, :tv_show, [
       %{
-        "id" => System.unique_integer([:positive]),
+        "id" => unique_provider_id(),
         "name" => "Rev.",
         "first_air_date" => "2010-06-28",
         "poster_path" => "/p.jpg"
@@ -101,9 +110,9 @@ defmodule MydiaWeb.MediaLive.Show.SectionOrderTest do
   end
 
   test "a movie with a franchise renders both rails below its own files", %{conn: conn} do
-    collection_id = System.unique_integer([:positive])
-    owned_tmdb_id = System.unique_integer([:positive])
-    missing_tmdb_id = System.unique_integer([:positive])
+    collection_id = unique_provider_id()
+    owned_tmdb_id = unique_provider_id()
+    missing_tmdb_id = unique_provider_id()
 
     movie =
       media_item_fixture(%{
@@ -130,7 +139,7 @@ defmodule MydiaWeb.MediaLive.Show.SectionOrderTest do
 
     warm_recommendations_cache(owned_tmdb_id, :movie, [
       %{
-        "id" => System.unique_integer([:positive]),
+        "id" => unique_provider_id(),
         "title" => "Third",
         "release_date" => "2010-01-01",
         "poster_path" => "/p.jpg"
@@ -156,7 +165,7 @@ defmodule MydiaWeb.MediaLive.Show.SectionOrderTest do
   # the first group. Pinned here so the placement stays a decision rather than a
   # side effect of the guards.
   test "a movie with no media files keeps its history above the rails", %{conn: conn} do
-    source_tmdb_id = System.unique_integer([:positive])
+    source_tmdb_id = unique_provider_id()
 
     movie =
       media_item_fixture(%{
@@ -168,7 +177,7 @@ defmodule MydiaWeb.MediaLive.Show.SectionOrderTest do
 
     warm_recommendations_cache(source_tmdb_id, :movie, [
       %{
-        "id" => System.unique_integer([:positive]),
+        "id" => unique_provider_id(),
         "title" => "Something Else",
         "release_date" => "2019-05-01",
         "poster_path" => "/p.jpg"
@@ -187,6 +196,8 @@ defmodule MydiaWeb.MediaLive.Show.SectionOrderTest do
              "recommendations-rail"
            ]
   end
+
+  defp unique_provider_id, do: @provider_id_floor + System.unique_integer([:positive])
 
   # LazyHTML.query/2, not filter/2: filter matches root nodes only, and these
   # cards are nested inside the layout. query returns matches in document order,
