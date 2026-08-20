@@ -542,22 +542,23 @@ defmodule MydiaWeb.MediaLive.Show.SeasonOrderUiTest do
   # differently, which is what makes a real TVDB alternative ordering safe to
   # switch to losslessly.
   defp stub_ordering_seasons(bypass, season_ids, counts) do
-    season_ids
-    |> Enum.zip(counts)
-    |> Enum.with_index(1)
-    |> Enum.reduce(1, fn {{season_id, count}, season_number}, next_id ->
-      episode_ids = next_id..(next_id + count - 1)
+    _final_episode_id =
+      season_ids
+      |> Enum.zip(counts)
+      |> Enum.with_index(1)
+      |> Enum.reduce(1, fn {{season_id, count}, season_number}, next_id ->
+        episode_ids = next_id..(next_id + count - 1)
 
-      Bypass.stub(bypass, "GET", "/tvdb/seasons/#{season_id}/extended", fn conn ->
-        episodes = episodes_json(episode_ids, season_number)
+        Bypass.stub(bypass, "GET", "/tvdb/seasons/#{season_id}/extended", fn conn ->
+          episodes = episodes_json(episode_ids, season_number)
 
-        json(conn, %{
-          "data" => %{"id" => season_id, "number" => season_number, "episodes" => episodes}
-        })
+          json(conn, %{
+            "data" => %{"id" => season_id, "number" => season_number, "episodes" => episodes}
+          })
+        end)
+
+        next_id + count
       end)
-
-      next_id + count
-    end)
 
     :ok
   end
