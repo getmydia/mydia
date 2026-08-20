@@ -375,8 +375,12 @@ defmodule MydiaWeb.Schema.CommonTypes do
 
   @desc "A pairing claim code for device pairing"
   object :claim_code do
-    field :code, non_null(:string), description: "The claim code (e.g., 'ABC-XYZ')"
+    field :code, non_null(:string), description: "The claim code (e.g., 'K7RPM2')"
     field :expires_at, non_null(:datetime), description: "When the code expires"
+
+    field :relay_registered, non_null(:boolean),
+      description:
+        "Whether the sealed claim reached the relay. False means QR pairing works but manual code entry does not."
   end
 
   @desc "Remote access / P2P connection status"

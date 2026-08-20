@@ -151,6 +151,30 @@ defmodule MydiaWeb.AdminRemoteAccessLiveTest do
     end
   end
 
+  test "warns that manual entry is unavailable when the relay is unreachable" do
+    html =
+      render_component(&MydiaWeb.AdminRemoteAccessLive.Components.remote_access_panel/1,
+        ra_config: %Mydia.RemoteAccess.Config{enabled: true, instance_id: "test-instance"},
+        p2p_status: %{
+          running: true,
+          relay_connected: true,
+          relay_url: "https://relay.test",
+          node_addr: ~s({"id":"test-node"}),
+          node_id: "test-node",
+          connected_peers: 0
+        },
+        devices: [],
+        claim_code: "K7RPM2",
+        claim_code_rendezvous_status: :unregistered,
+        claim_expires_at: DateTime.utc_now() |> DateTime.add(300, :second),
+        countdown_seconds: 300,
+        pairing_error: nil,
+        show_pairing_modal: true
+      )
+
+    assert html =~ "id=\"pairing-relay-warning\""
+  end
+
   defp create_device(user) do
     %Mydia.RemoteAccess.RemoteDevice{}
     |> Mydia.RemoteAccess.RemoteDevice.changeset(%{

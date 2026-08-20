@@ -10,7 +10,7 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
   attr :p2p_status, :map, required: true
   attr :devices, :list, required: true
   attr :claim_code, :string
-  attr :claim_code_rendezvous_status, :atom
+  attr :claim_code_rendezvous_status, :atom, default: nil
   attr :claim_expires_at, :any
   attr :countdown_seconds, :integer, default: 0
   attr :pairing_error, :string
@@ -646,40 +646,38 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
             <%= if @claim_code do %>
               <%!-- Active pairing code --%>
               <div class="space-y-5 pt-4">
-                <%!-- QR Code - only show when registered on rendezvous --%>
-                <%= if @claim_code_rendezvous_status == :registered do %>
-                  <% qr_svg = generate_qr_code(@ra_config, @p2p_status, @claim_code) %>
-                  <%= if qr_svg do %>
-                    <div class="flex flex-col items-center gap-2">
-                      <div class="p-3 bg-white rounded-xl shadow-md">
-                        {Phoenix.HTML.raw(qr_svg)}
-                      </div>
-                      <div class="flex flex-col items-center gap-1">
-                        <span class="text-xs text-base-content/40">QR Contents</span>
-                        <div class="flex flex-wrap justify-center gap-1.5">
-                          <div class="tooltip" data-tip="Instance ID">
+                <%!-- QR pairing never needs the relay, so it remains available. --%>
+                <% qr_svg = generate_qr_code(@ra_config, @p2p_status, @claim_code) %>
+                <%= if qr_svg do %>
+                  <div class="flex flex-col items-center gap-2">
+                    <div class="p-3 bg-white rounded-xl shadow-md">
+                      {Phoenix.HTML.raw(qr_svg)}
+                    </div>
+                    <div class="flex flex-col items-center gap-1">
+                      <span class="text-xs text-base-content/40">QR Contents</span>
+                      <div class="flex flex-wrap justify-center gap-1.5">
+                        <div class="tooltip" data-tip="Instance ID">
+                          <span class="badge badge-sm badge-ghost gap-1 font-mono">
+                            <.icon name="hero-server" class="w-3 h-3 opacity-50" />
+                            {String.slice(@ra_config.instance_id, 0..7)}
+                          </span>
+                        </div>
+                        <%= if @p2p_status && @p2p_status.node_id do %>
+                          <div class="tooltip" data-tip="Node ID (for P2P discovery)">
                             <span class="badge badge-sm badge-ghost gap-1 font-mono">
-                              <.icon name="hero-server" class="w-3 h-3 opacity-50" />
-                              {String.slice(@ra_config.instance_id, 0..7)}
+                              <.icon name="hero-signal" class="w-3 h-3 opacity-50" />
+                              {String.slice(@p2p_status.node_id, 0..7)}
                             </span>
                           </div>
-                          <%= if @p2p_status && @p2p_status.node_id do %>
-                            <div class="tooltip" data-tip="Node ID (for P2P discovery)">
-                              <span class="badge badge-sm badge-ghost gap-1 font-mono">
-                                <.icon name="hero-signal" class="w-3 h-3 opacity-50" />
-                                {String.slice(@p2p_status.node_id, 0..7)}
-                              </span>
-                            </div>
-                          <% end %>
-                          <div class="tooltip" data-tip="Claim Code (see below)">
-                            <span class="badge badge-sm badge-ghost gap-1">
-                              <.icon name="hero-ticket" class="w-3 h-3 opacity-50" /> Claim Code
-                            </span>
-                          </div>
+                        <% end %>
+                        <div class="tooltip" data-tip="Claim Code (see below)">
+                          <span class="badge badge-sm badge-ghost gap-1">
+                            <.icon name="hero-ticket" class="w-3 h-3 opacity-50" /> Claim Code
+                          </span>
                         </div>
                       </div>
                     </div>
-                  <% end %>
+                  </div>
                 <% end %>
 
                 <%!-- Divider - only show when registered --%>
@@ -695,41 +693,37 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
 
                 <%!-- Pairing Code --%>
                 <div class="text-center">
-                  <%= if @claim_code_rendezvous_status == :registered do %>
-                    <%!-- Code is registered and ready to use --%>
-                    <div class="inline-flex items-center gap-2 bg-base-200 rounded-xl px-5 py-3">
-                      <code class="text-2xl font-bold tracking-[0.25em] font-mono">
-                        {@claim_code}
-                      </code>
-                      <button
-                        class="btn btn-ghost btn-sm btn-square"
-                        phx-click="copy_claim_code"
-                        onclick={"navigator.clipboard.writeText('#{@claim_code}')"}
-                        title="Copy code"
-                      >
-                        <.icon name="hero-clipboard-document" class="w-4 h-4 opacity-50" />
-                      </button>
-                    </div>
-                    <div class="mt-2 flex items-center justify-center gap-1.5 text-xs">
-                      <.icon name="hero-check-circle" class="w-4 h-4 text-success" />
-                      <span class="text-success">Ready for pairing</span>
-                    </div>
-                  <% else %>
-                    <%!-- Code is being registered - show loading state --%>
-                    <div class="inline-flex flex-col items-center gap-3 bg-base-200 rounded-xl px-8 py-5">
-                      <span class="loading loading-spinner loading-lg text-primary"></span>
-                      <div class="text-sm text-base-content/60">
-                        <%= case @claim_code_rendezvous_status do %>
-                          <% :pending -> %>
-                            Registering pairing code...
-                          <% {:error, _reason} -> %>
-                            <span class="text-warning">Registration failed, retrying...</span>
-                          <% _ -> %>
-                            Preparing pairing code...
-                        <% end %>
-                      </div>
-                    </div>
-                  <% end %>
+                  <div class="inline-flex items-center gap-2 bg-base-200 rounded-xl px-5 py-3">
+                    <code class="text-2xl font-bold tracking-[0.25em] font-mono">
+                      {@claim_code}
+                    </code>
+                    <button
+                      class="btn btn-ghost btn-sm btn-square"
+                      phx-click="copy_claim_code"
+                      onclick={"navigator.clipboard.writeText('#{@claim_code}')"}
+                      title="Copy code"
+                    >
+                      <.icon name="hero-clipboard-document" class="w-4 h-4 opacity-50" />
+                    </button>
+                  </div>
+                  <div
+                    :if={@claim_code_rendezvous_status == :registered}
+                    class="mt-2 flex items-center justify-center gap-1.5 text-xs"
+                  >
+                    <.icon name="hero-check-circle" class="w-4 h-4 text-success" />
+                    <span class="text-success">Ready for pairing</span>
+                  </div>
+                  <div
+                    :if={@claim_code_rendezvous_status == :unregistered}
+                    id="pairing-relay-warning"
+                    class="alert alert-warning mt-3"
+                  >
+                    <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
+                    <span class="text-sm">
+                      The relay could not be reached, so typing this code will not work.
+                      Scan the QR code instead, or try again in a moment.
+                    </span>
+                  </div>
                 </div>
 
                 <%!-- Countdown & Regenerate --%>

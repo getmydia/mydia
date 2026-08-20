@@ -85,6 +85,7 @@ pub struct RevokeDeviceResult {
 pub struct ClaimCode {
     pub code: String,
     pub expires_at: DateTime<Utc>,
+    pub relay_registered: bool,
 }
 
 #[derive(SimpleObject)]

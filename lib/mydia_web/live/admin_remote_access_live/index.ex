@@ -394,7 +394,10 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Index do
         socket
         |> assign(:pairing_error, nil)
         |> assign(:claim_code, claim.code)
-        |> assign(:claim_code_rendezvous_status, :registered)
+        |> assign(
+          :claim_code_rendezvous_status,
+          if(claim.relay_registered, do: :registered, else: :unregistered)
+        )
         |> assign(:claim_expires_at, expires_at)
         |> assign(:countdown_seconds, max(0, seconds))
 
