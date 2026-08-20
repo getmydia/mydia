@@ -17,21 +17,30 @@ defmodule MydiaWeb.MediaLive.Show.SeasonOrderComponents do
 
   @doc """
   Season-ordering controls for a TVDB-sourced TV show: a persistent selector
-  (any TVDB show, any time) and a dismissible suggestion banner (only when
-  the show has never been asked and its official season looks wrong).
+  (whenever TVDB publishes more than one ordering for the show) and a
+  dismissible suggestion banner (only when the show has never been asked and
+  its official season looks wrong).
 
-  Absent entirely for non-TVDB shows — there is nothing to switch between —
-  and for a viewer who cannot update media, since `change_season_order` is
-  authorization-gated: showing a control that will be refused is worse than
-  not showing it.
+  Absent entirely for non-TVDB shows, for a viewer who cannot update media
+  (`change_season_order` is authorization-gated, and a control that will be
+  refused is worse than no control), and for a show whose `options` hold
+  fewer than two orderings, where every choice but the current one would
+  fail.
   """
   attr :media_item, :map, required: true
   attr :season_order_suggestion, :any, default: nil
+  attr :options, :any, default: nil
   attr :can_update_media, :boolean, required: true
 
   def season_order_controls(assigns) do
     ~H"""
-    <div :if={tvdb_show?(@media_item) and @can_update_media} class="mb-4 space-y-3">
+    <div
+      :if={
+        tvdb_show?(@media_item) and @can_update_media and
+          (@season_order_suggestion || switchable?(@options))
+      }
+      class="mb-4 space-y-3"
+    >
       <div
         :if={@season_order_suggestion}
         id="season-order-suggestion"
@@ -67,6 +76,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonOrderComponents do
       </div>
 
       <form
+        :if={switchable?(@options)}
         id="season-order-form"
         phx-change="change_season_order"
         class="flex items-center gap-2"
@@ -76,7 +86,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonOrderComponents do
         </label>
         <select id="season-order-select" name="order" class="select select-xs select-bordered w-auto">
           <option
-            :for={order <- SeasonOrder.values()}
+            :for={order <- @options}
             value={order}
             selected={current_season_order(@media_item) == order}
           >
@@ -90,6 +100,13 @@ defmodule MydiaWeb.MediaLive.Show.SeasonOrderComponents do
 
   defp tvdb_show?(media_item),
     do: media_item.type == "tv_show" and media_item.metadata_source == :tvdb
+
+  # nil means the lookup has not landed or has failed, which reads the same as
+  # "nothing to switch to": hide the control rather than offer a choice
+  # `switch/3` would refuse. A single-entry list is the show's current
+  # ordering and nothing else, so it is not a choice either.
+  defp switchable?(options) when is_list(options), do: length(options) > 1
+  defp switchable?(_options), do: false
 
   defp current_season_order(media_item), do: SeasonOrder.effective(media_item)
 

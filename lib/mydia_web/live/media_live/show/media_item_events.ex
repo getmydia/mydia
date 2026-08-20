@@ -91,35 +91,72 @@ defmodule MydiaWeb.MediaLive.Show.MediaItemEvents do
   # Season ordering
 
   @doc """
-  Starts the season-order-suggestion lookup on the connected mount.
+  Starts the season-ordering lookup on the connected mount.
 
-  Eligibility is checked entirely from local data (no network), so the
-  (multi-request) TVDB lookup only ever fires for a TVDB show with no
-  recorded ordering and an official season that actually looks wrong. Every
-  other show never pays for it, and the disconnected (dead) render never
-  does either — same convention as `FranchiseEvents.maybe_load/1`.
+  Two things come out of one TVDB round trip: which orderings the show can be
+  put into (always), and the suggestion banner's per-season counts (only for a
+  show that qualifies for a banner). Both read `Relay.fetch_raw_seasons/2`,
+  which is cached for 24 hours, so the second half costs no extra
+  series-level request.
+
+  One task rather than two: `Mydia.Metadata.Cache.fetch/3` is a plain
+  get/miss/put with no locking, so two concurrent tasks would both miss on a
+  cold cache and issue the same request twice.
+
+  Eligibility is checked entirely from local data (no network) and includes
+  `can_update_media`, because `change_season_order` is authorization-gated and
+  a viewer who cannot act on the result should not pay for the lookup. The
+  disconnected (dead) render never runs it either, same convention as
+  `FranchiseEvents.maybe_load/1`.
   """
-  def maybe_load_season_order_suggestion(socket) do
-    socket = assign(socket, :season_order_suggestion, nil)
+  def maybe_load_season_order_info(socket) do
+    socket =
+      socket
+      |> assign(:season_order_suggestion, nil)
+      |> assign(:season_order_options, nil)
+
     media_item = socket.assigns.media_item
 
-    if connected?(socket) and eligible_for_season_order_suggestion?(media_item) do
+    if connected?(socket) and eligible_for_season_order_lookup?(socket) do
       config = socket.assigns.metadata_config
+      suggest? = eligible_for_season_order_suggestion?(media_item)
 
-      start_async(socket, :load_season_order_suggestion, fn ->
-        SeasonOrder.suggest_alternative(media_item, config)
+      start_async(socket, :load_season_order_info, fn ->
+        load_season_order_info(media_item, config, suggest?)
       end)
     else
       socket
     end
   end
 
-  def handle_season_order_suggestion_result({:ok, {:ok, counts}}, socket) do
-    {:noreply, assign(socket, :season_order_suggestion, %{order: :dvd, counts: counts})}
+  defp load_season_order_info(media_item, config, suggest?) do
+    case SeasonOrder.available(media_item, config) do
+      {:ok, available} ->
+        {:ok, %{available: available, suggestion: suggestion(media_item, config, suggest?)}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
-  def handle_season_order_suggestion_result({:ok, {:error, reason}}, socket) do
-    Logger.debug("No season order suggestion",
+  defp suggestion(_media_item, _config, false), do: nil
+
+  defp suggestion(media_item, config, true) do
+    case SeasonOrder.suggest_alternative(media_item, config) do
+      {:ok, counts} -> %{order: :dvd, counts: counts}
+      {:error, _reason} -> nil
+    end
+  end
+
+  def handle_season_order_info_result({:ok, {:ok, info}}, socket) do
+    {:noreply,
+     socket
+     |> assign(:season_order_options, info.available)
+     |> assign(:season_order_suggestion, info.suggestion)}
+  end
+
+  def handle_season_order_info_result({:ok, {:error, reason}}, socket) do
+    Logger.debug("No season order info",
       media_item_id: socket.assigns.media_item.id,
       reason: inspect(reason)
     )
@@ -127,13 +164,21 @@ defmodule MydiaWeb.MediaLive.Show.MediaItemEvents do
     {:noreply, socket}
   end
 
-  def handle_season_order_suggestion_result({:exit, reason}, socket) do
-    Logger.warning("Season order suggestion lookup crashed",
+  def handle_season_order_info_result({:exit, reason}, socket) do
+    Logger.warning("Season order lookup crashed",
       media_item_id: socket.assigns.media_item.id,
       reason: inspect(reason)
     )
 
     {:noreply, socket}
+  end
+
+  defp eligible_for_season_order_lookup?(socket) do
+    media_item = socket.assigns.media_item
+
+    socket.assigns.can_update_media and
+      media_item.type == "tv_show" and
+      media_item.metadata_source == :tvdb
   end
 
   defp eligible_for_season_order_suggestion?(media_item) do
@@ -228,7 +273,7 @@ defmodule MydiaWeb.MediaLive.Show.MediaItemEvents do
          put_flash(
            socket,
            :error,
-           "TVDB does not offer a #{SeasonOrder.label(target)} ordering for this show."
+           "TVDB does not list #{SeasonOrder.label(target)} for this show."
          )}
 
       {:error, :missing_tvdb_id} ->
