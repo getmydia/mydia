@@ -196,6 +196,7 @@ defmodule MydiaWeb.Router do
       live "/config/indexers", AdminIndexersLive.Index, :index
       live "/subtitle-providers", AdminSubtitleProvidersLive, :index
       live "/config/library-paths", AdminLibraryPathsLive.Index, :index
+      live "/library/prune", AdminLibraryPruneLive.Index, :index
       live "/config/media-servers", AdminMediaServersLive.Index, :index
       live "/config/plugins", AdminPluginsLive.Index, :index
       live "/config/path-mappings", AdminPathMappingsLive.Index, :index
