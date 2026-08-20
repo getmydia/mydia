@@ -131,11 +131,16 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
     result =
       Prune.execute(MapSet.to_list(socket.assigns.selected), actor_id, socket.assigns.keepers)
 
+    # `:kept` survives the run. A group can still hold two files afterwards (a
+    # keeper plus a copy the operator set to Keep), and it stays eligible, so
+    # clearing the set would list that survivor as a loser and put it straight
+    # back on Trash — offering to trash the very file the operator just spared.
+    # Nothing needs pruning out of the set either: `:selected` is built from
+    # the losers *not* in `:kept`, so the ids just trashed were never in it.
     {:noreply,
      socket
      |> put_flash(:info, flash_for(result))
      |> assign(:show_trash_modal, false)
-     |> assign(:kept, MapSet.new())
      |> load_plan()}
   end
 

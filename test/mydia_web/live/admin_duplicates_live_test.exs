@@ -260,6 +260,35 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
       for file <- files, do: refute(trashed?(file))
     end
 
+    test "a file set to Keep is still on Keep after the run that trashed the others",
+         %{conn: conn} do
+      # The group still holds two files afterwards (the keeper and the spared
+      # copy) and stays eligible, so it re-plans with the spared file as a
+      # loser. If the Keep set were cleared on confirm, that file would come
+      # back on Trash and the page would offer to trash the very copy the
+      # operator just spared, one click away.
+      {_show, _episode, files} = duplicated_episode(@three_files)
+      keeper = Enum.find(files, &(&1.relative_path =~ "1080p"))
+      spared = Enum.find(files, &(&1.relative_path =~ "480p"))
+      doomed = Enum.find(files, &(&1.relative_path =~ "360p"))
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+
+      view |> element("#duplicates-keep-#{spared.id}") |> render_click()
+      view |> element("#duplicates-trash-selected") |> render_click()
+      view |> element("#duplicates-confirm") |> render_click()
+
+      assert trashed?(doomed)
+      refute trashed?(spared)
+      refute trashed?(keeper)
+
+      # The group is still on the page, and the spared file is still on Keep
+      # rather than queued up again.
+      assert has_element?(view, "#duplicates-keep-#{spared.id}[checked]")
+      refute has_element?(view, "#duplicates-trash-#{spared.id}[checked]")
+      assert has_element?(view, "#duplicates-trash-selected[disabled]")
+    end
+
     test "trashing the best copy promotes the next one instead of emptying the item",
          %{conn: conn} do
       # There is no separate keeper control any more, so Trash on the top row
