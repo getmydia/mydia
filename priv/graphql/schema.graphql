@@ -146,6 +146,9 @@ type RootMutationType {
   "Revoke a device"
   revokeDevice(id: ID!): RevokeDeviceResult
 
+  "Record the calling device's iroh node ID so other devices can reach it"
+  registerDeviceNode(nodeId: String!): RemoteDevice
+
   "Start an HLS streaming session for a media file"
   startStreamingSession(
     fileId: ID!
@@ -1089,6 +1092,9 @@ type RemoteDevice {
 
   "When device was paired"
   createdAt: DateTime!
+
+  "The device's iroh node ID, or null if it has never reported one. Present so a controller can dial it directly."
+  nodeId: String
 }
 
 "Result of revoking a device"

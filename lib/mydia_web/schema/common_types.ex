@@ -365,6 +365,10 @@ defmodule MydiaWeb.Schema.CommonTypes do
     field :last_seen_at, :datetime, description: "Last time device was active"
     field :is_revoked, non_null(:boolean), description: "Whether device has been revoked"
     field :created_at, non_null(:datetime), description: "When device was paired"
+
+    field :node_id, :string,
+      description:
+        "The device's iroh node ID, or null if it has never reported one. Present so a controller can dial it directly."
   end
 
   @desc "Result of revoking a device"

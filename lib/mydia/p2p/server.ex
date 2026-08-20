@@ -853,7 +853,19 @@ defmodule Mydia.P2p.Server do
         # page reads it back as "Online now".
         RemoteAccess.touch_device_from_claims(claims)
 
-        %{current_user: user, source: source, peer_connection_type: peer_connection_type}
+        context = %{
+          current_user: user,
+          source: source,
+          peer_connection_type: peer_connection_type
+        }
+
+        case claims do
+          %{"device_id" => device_id} when is_binary(device_id) ->
+            Map.put(context, :device_id, device_id)
+
+          _ ->
+            context
+        end
 
       {:error, _reason} ->
         Logger.debug("P2P GraphQL: Invalid auth token")

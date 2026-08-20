@@ -141,6 +141,12 @@ defmodule MydiaWeb.Schema.MutationTypes do
       arg(:id, non_null(:id))
       resolve(&MydiaWeb.Schema.Resolvers.DeviceResolver.revoke_device/3)
     end
+
+    @desc "Record the calling device's iroh node ID so other devices can reach it"
+    field :register_device_node, :remote_device do
+      arg(:node_id, non_null(:string))
+      resolve(&MydiaWeb.Schema.Resolvers.DeviceResolver.register_device_node/3)
+    end
   end
 
   object :streaming_mutations do
