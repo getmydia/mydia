@@ -115,25 +115,27 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeRowTest do
       assert has_selector?(html, "#episode-ep-1-auto-search")
     end
 
-    test "the status chip names the state instead of relying on its tooltip" do
+    test "the status chip stays a 16px dot, with no visible label" do
       html = render_season([episode(air_date: ~D[2024-01-01], media_files: [])])
 
-      label = html |> query("#episode-ep-1-status") |> LazyHTML.text()
+      # badge-xs, not badge-sm: a state word repeated down 170 rows is noise,
+      # and the tooltip already names it on hover.
+      [class] = html |> query("#episode-ep-1-status") |> LazyHTML.attribute("class")
 
-      assert label =~ "Missing"
+      assert class =~ "badge-xs"
+      refute class =~ "badge-sm"
     end
 
     test "the status label reaches assistive technology at every breakpoint" do
       html = render_season([episode(air_date: ~D[2024-01-01], media_files: [])])
 
-      # The visible label is `hidden lg:inline`, and `hidden` is display:none —
-      # it leaves the accessibility tree below lg. An sr-only copy carries the
-      # name at every width; the visible one is aria-hidden so lg does not
-      # announce it twice.
-      sr_only = html |> query("#episode-ep-1-status .sr-only") |> LazyHTML.text()
+      # The icon is a masked span and data-tip is CSS content, so neither names
+      # the state. The sr-only copy is the chip's only text node — asserting on
+      # the whole chip's text catches a visible label creeping back in.
+      chip_text = html |> query("#episode-ep-1-status") |> LazyHTML.text() |> String.trim()
 
-      assert sr_only =~ "Missing"
-      assert has_selector?(html, ~s(#episode-ep-1-status [aria-hidden="true"]))
+      assert chip_text == "Missing"
+      assert html |> query("#episode-ep-1-status .sr-only") |> LazyHTML.text() =~ "Missing"
     end
 
     test "the four actions sit in one join group" do
