@@ -44,8 +44,25 @@ defmodule Mydia.RemoteAccess.ClaimCodeTest do
       assert decoded["lookup_key"] =~ ~r/\A[0-9a-f]{64}\z/
 
       # The whole point: neither the code nor the node address leaves the host.
+      # Refute the node address VALUE, not just the field name. The field name
+      # never appears regardless of whether the seal works, so asserting on it
+      # alone would still pass if the address were posted under another key.
       refute body =~ claim.code
       refute body =~ "node_addr"
+      refute body =~ "test-node"
+      refute body =~ "test-instance"
+
+      # And prove the lookup key is genuinely derived from the claim code
+      # rather than an unrelated random value. That derivation is what lets the
+      # player find this entry from the code alone.
+      assert {:ok, {derived_lookup_key, _sealed}} =
+               Mydia.P2p.seal_pairing_claim(
+                 claim.code,
+                 ~s({"id":"test-node"}),
+                 "test-instance"
+               )
+
+      assert derived_lookup_key == decoded["lookup_key"]
     end
 
     test "returns a usable claim when the relay is unreachable", %{
