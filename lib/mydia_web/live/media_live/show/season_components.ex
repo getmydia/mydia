@@ -143,8 +143,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
         <div class={[
           "flex flex-col gap-1",
           "sm:grid sm:items-center sm:gap-x-3 sm:gap-y-0",
-          "sm:grid-cols-[2.75rem_minmax(0,1fr)_3.5rem_5.5rem_2rem_auto]",
-          "lg:grid-cols-[2.75rem_minmax(0,1fr)_3.5rem_5.5rem_7rem_auto]"
+          "sm:grid-cols-[2.75rem_minmax(0,1fr)_3.5rem_5.5rem_1.5rem_auto]"
         ]}>
           <div class="flex items-center gap-1 flex-1 min-w-0 sm:contents">
             <%!-- Chevron and number share one cell so they stay a single
@@ -197,29 +196,25 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
             </div>
 
             <div class="flex items-center gap-2 sm:contents">
-              <%!-- badge-sm (24px), not badge-xs (16px), and carrying its label at
-                    lg and up. The tooltip stays: the label names the state, the
-                    tooltip still lists the filenames. It wraps the chip from the
-                    outside, never a join-item. --%>
+              <%!-- A 16px dot of colour, at every width. A visible state label
+                    repeated down 170 rows is noise, and the row already says it
+                    twice: the left border is green when files exist, and the
+                    play control is live rather than disabled. The tooltip names
+                    the state and lists the filenames on hover; the sr-only copy
+                    names it for assistive technology, since the icon is a masked
+                    span and data-tip is CSS content, so neither carries text.
+                    The tooltip wraps the chip from the outside, never a
+                    join-item. --%>
               <div
-                class="tooltip tooltip-left min-w-0 sm:justify-self-end"
+                class="tooltip tooltip-left sm:justify-self-end"
                 data-tip={episode_status_tooltip(episode)}
               >
                 <span
                   id={"episode-#{episode.id}-status"}
-                  class={["badge badge-sm gap-1 max-w-full", episode_status_color(status)]}
+                  class={["badge badge-xs", episode_status_color(status)]}
                 >
                   <.icon name={episode_status_icon(status)} class="w-3 h-3 shrink-0" />
-                  <%!-- `hidden` is display:none, which drops the label out of the
-                        accessibility tree entirely below lg. The icon is a masked
-                        span and data-tip is CSS content, so neither names the
-                        status. Keep an sr-only copy at every breakpoint and hide
-                        the visible one from screen readers to avoid a double
-                        announcement at lg. --%>
                   <span class="sr-only">{episode_status_label(status)}</span>
-                  <span aria-hidden="true" class="hidden lg:inline truncate">
-                    {episode_status_label(status)}
-                  </span>
                 </span>
               </div>
 
