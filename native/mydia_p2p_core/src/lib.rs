@@ -30,6 +30,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 // empty.
 #[cfg(not(target_arch = "wasm32"))]
 pub mod blocking;
+pub mod pairing_seal;
 pub mod runtime;
 
 // Protocol identifier for mydia connections

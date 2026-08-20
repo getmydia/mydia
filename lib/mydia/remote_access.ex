@@ -9,7 +9,7 @@ defmodule Mydia.RemoteAccess do
   require Logger
 
   alias Mydia.Repo
-  alias Mydia.RemoteAccess.{Config, PairingClaim, RemoteDevice}
+  alias Mydia.RemoteAccess.{ClaimRateLimiter, Config, PairingClaim, RemoteDevice}
 
   # Cache key for the enabled flag. See enabled?/0.
   @enabled_key {__MODULE__, :enabled}
@@ -314,48 +314,108 @@ defmodule Mydia.RemoteAccess do
 
   # Claim code management
 
+  @claim_ttl_seconds 300
+
   @doc """
   Generates a new pairing claim code for a user.
-  The code expires after 5 minutes.
 
-  This function:
-  1. Gets the P2P server's node_addr
-  2. Posts the node_addr to the relay to get a claim code
-  3. Creates a local claim record
+  The code is generated here, never by the relay. The relay receives only a
+  blinded lookup key and a sealed blob, so it can read neither the code nor the
+  server's node address.
 
-  Returns {:ok, claim} if successful, {:error, reason} otherwise.
+  Registration with the relay is best effort. Only manual code entry needs it;
+  QR pairing dials the node address directly and never performs a lookup. A
+  relay outage therefore degrades pairing rather than blocking it, and the
+  returned claim carries `relay_registered: false` so the UI can say so.
+
+  ## Options
+
+    * `:relay_url` - override the relay base URL. Exists so tests can point at
+      Bypass without mutating global environment variables.
+    * `:node_addr` - override the p2p node address, for tests.
+    * `:instance_id` - override the instance id, for tests.
   """
-  def generate_claim_code(user_id) do
+  def generate_claim_code(user_id, opts \\ []) do
     if enabled?() do
-      do_generate_claim_code(user_id)
+      do_generate_claim_code(user_id, opts)
     else
       {:error, :disabled}
     end
   end
 
-  defp do_generate_claim_code(user_id) do
-    # Get the P2P server's node address
-    with {:ok, node_addr} <- get_p2p_node_addr(),
-         {:ok, %{"claim_code" => code}} <- create_pairing_claim(node_addr) do
-      # Calculate expiration (5 minutes from now)
-      expires_at =
-        DateTime.utc_now()
-        |> DateTime.add(300, :second)
-        |> DateTime.truncate(:second)
+  defp do_generate_claim_code(user_id, opts) do
+    with {:ok, node_addr} <- resolve_node_addr(opts),
+         {:ok, instance_id} <- resolve_instance_id(opts),
+         code = PairingClaim.generate_code(),
+         {:ok, {lookup_key, sealed}} <-
+           Mydia.P2p.seal_pairing_claim(code, node_addr, instance_id),
+         {:ok, claim} <- insert_claim(user_id, code, lookup_key) do
+      # A fresh code clears the p2p guess counter, so a grinder who burned the
+      # previous claim cannot keep the admin locked out.
+      ClaimRateLimiter.reset_rate_limit(p2p_limiter_key())
 
-      # Store local claim record
-      {:ok, claim} =
-        %PairingClaim{}
-        |> PairingClaim.changeset_with_code(%{
-          user_id: user_id,
-          code: code,
-          expires_at: expires_at
-        })
-        |> Repo.insert()
+      registered = register_sealed_claim(lookup_key, sealed, opts) == :ok
 
-      Logger.debug("Claim code #{code} created with node_addr")
+      Logger.debug("Pairing claim created, relay_registered=#{registered}")
 
-      {:ok, claim}
+      {:ok, %{claim | relay_registered: registered}}
+    end
+  end
+
+  defp insert_claim(user_id, code, lookup_key) do
+    expires_at =
+      DateTime.utc_now()
+      |> DateTime.add(@claim_ttl_seconds, :second)
+      |> DateTime.truncate(:second)
+
+    %PairingClaim{}
+    |> PairingClaim.changeset_with_code(%{
+      user_id: user_id,
+      code: code,
+      lookup_key: lookup_key,
+      expires_at: expires_at
+    })
+    |> Repo.insert()
+  end
+
+  defp resolve_node_addr(opts) do
+    case Keyword.get(opts, :node_addr) do
+      nil -> get_p2p_node_addr()
+      addr -> {:ok, addr}
+    end
+  end
+
+  defp resolve_instance_id(opts) do
+    case Keyword.get(opts, :instance_id) do
+      nil ->
+        # Fail here rather than sealing an empty id. The blob would fetch and
+        # open perfectly, and the player would only discover the payload was
+        # unusable later in the pairing flow, where the cause is much harder to
+        # see. Note `is_binary/1` alone would let "" through.
+        case get_config() do
+          %{instance_id: id} when is_binary(id) and id != "" -> {:ok, id}
+          _ -> {:error, :not_configured}
+        end
+
+      id ->
+        {:ok, id}
+    end
+  end
+
+  defp register_sealed_claim(lookup_key, sealed, opts) do
+    url = "#{get_relay_url(opts)}/pairing/v2/claim"
+
+    case Req.post(url, json: %{lookup_key: lookup_key, sealed: sealed}, retry: false) do
+      {:ok, %Req.Response{status: 204}} ->
+        :ok
+
+      {:ok, %Req.Response{status: status}} ->
+        Logger.warning("Pairing claim registration failed with status #{status}")
+        {:error, :relay_unavailable}
+
+      {:error, reason} ->
+        Logger.warning("Pairing claim registration error: #{inspect(reason)}")
+        {:error, :relay_unavailable}
     end
   end
 
@@ -390,30 +450,10 @@ defmodule Mydia.RemoteAccess do
     end
   end
 
-  defp create_pairing_claim(node_addr) do
-    url = "#{get_relay_url()}/pairing/claim"
-
-    body = %{node_addr: node_addr}
-
-    case Req.post(url, json: body) do
-      {:ok, %Req.Response{status: 200, body: body}} ->
-        {:ok, body}
-
-      {:ok, %Req.Response{status: 429}} ->
-        {:error, :rate_limited}
-
-      {:ok, %Req.Response{status: status, body: body}} ->
-        Logger.error("Create pairing claim failed: #{status} - #{inspect(body)}")
-        {:error, :create_claim_failed}
-
-      {:error, reason} ->
-        Logger.error("Create pairing claim error: #{inspect(reason)}")
-        {:error, reason}
-    end
-  end
-
-  defp get_relay_url do
-    System.get_env("METADATA_RELAY_URL") || System.get_env("RELAY_URL") ||
+  defp get_relay_url(opts) do
+    Keyword.get(opts, :relay_url) ||
+      Application.get_env(:mydia, :metadata_relay_url) ||
+      System.get_env("METADATA_RELAY_URL") || System.get_env("RELAY_URL") ||
       "https://relay.mydia.dev"
   end
 
@@ -459,6 +499,62 @@ defmodule Mydia.RemoteAccess do
     end
   end
 
+  @p2p_max_guesses 10
+  @p2p_guess_window_seconds 300
+
+  @doc false
+  def p2p_limiter_key, do: "p2p:pairing"
+
+  @doc """
+  Validates a claim code presented over p2p, with guess limiting.
+
+  The counter is global rather than per peer because iroh node IDs are free to
+  mint, so a per-peer counter would be evaded by generating a fresh keypair for
+  each guess.
+
+  When no claim is live the request is rejected before the counter is touched,
+  so background grinding costs an attacker nothing and cannot drain the budget
+  ahead of a real pairing. The window equals the claim lifetime, so tripping the
+  limit burns the live claim without a separate invalidation step. Generating a
+  new code clears the counter.
+  """
+  def validate_claim_code_from_peer(code) do
+    if any_active_claim?() do
+      limited_validate_from_peer(code)
+    else
+      {:error, :not_found}
+    end
+  end
+
+  defp limited_validate_from_peer(code) do
+    case ClaimRateLimiter.check_and_record(p2p_limiter_key(),
+           max_attempts: @p2p_max_guesses,
+           window_seconds: @p2p_guess_window_seconds
+         ) do
+      :ok ->
+        case do_validate_claim_code(code, nil) do
+          {:ok, claim} ->
+            ClaimRateLimiter.reset_rate_limit(p2p_limiter_key())
+            {:ok, claim}
+
+          error ->
+            error
+        end
+
+      {:error, :rate_limited} ->
+        Logger.warning("P2P pairing blocked: too many failed claim code attempts")
+        {:error, :too_many_attempts}
+    end
+  end
+
+  defp any_active_claim? do
+    now = DateTime.utc_now()
+
+    PairingClaim
+    |> where([c], is_nil(c.used_at) and c.expires_at > ^now)
+    |> Repo.exists?()
+  end
+
   defp do_validate_claim_code(code, ip_address) do
     code = normalize_code(code)
 
@@ -496,18 +592,98 @@ defmodule Mydia.RemoteAccess do
 
   @doc """
   Consumes a claim code, marking it as used and linking it to a device.
-  Returns {:ok, claim} if successful.
-  Returns {:error, reason} if the claim is invalid.
+
+  Also removes the sealed claim from the relay. That delete is fire and forget:
+  the relay expires the entry after #{@claim_ttl_seconds} seconds regardless, and
+  a failed cleanup must never fail a pairing that has already succeeded.
   """
-  def consume_claim_code(code, device_id) do
+  def consume_claim_code(code, device_id, opts \\ []) do
     code = normalize_code(code)
 
-    with {:ok, claim} <- validate_claim_code(code),
-         {:ok, consumed_claim} <-
-           claim |> PairingClaim.consume_changeset(device_id) |> Repo.update() do
-      # Notify UI that claim has been consumed (for auto-closing pairing modal)
-      publish_claim_consumed(consumed_claim)
+    with {:ok, consumed_claim} <- consume_claim_in_transaction(code, device_id) do
+      finish_claim_consumption(consumed_claim, opts)
       {:ok, consumed_claim}
+    end
+  end
+
+  @doc """
+  Consumes a claim inside the caller's transaction, with no side effects.
+
+  Split out so a caller that inserts rows before consuming can roll them back
+  when it loses the race. `Mydia.RemoteAccess.Pairing.complete_pairing/2`
+  creates a device first, and without a shared transaction the loser leaves an
+  orphaned device behind.
+
+  The side effects stay outside deliberately: the relay delete is an HTTP call
+  that would hold a row lock for a network round trip, and broadcasting a
+  consumption that later rolls back would be a lie. Run
+  `finish_claim_consumption/2` after the transaction commits.
+  """
+  def consume_claim_in_transaction(code, device_id) do
+    code = normalize_code(code)
+
+    with {:ok, claim} <- validate_claim_code(code) do
+      mark_claim_used(claim, device_id)
+    end
+  end
+
+  @doc """
+  Runs the side effects for a consumed claim. Call only after the transaction
+  that consumed it has committed.
+  """
+  def finish_claim_consumption(claim, opts \\ []) do
+    delete_sealed_claim(claim.lookup_key, opts)
+    # Notify UI that claim has been consumed (for auto-closing pairing modal)
+    publish_claim_consumed(claim)
+    :ok
+  end
+
+  # Single use has to be a property of the write, not of a prior read.
+  # Validating and then updating leaves a window where two concurrent pairing
+  # requests both pass validation and both consume the same code, pairing two
+  # devices off one claim. The `is_nil(used_at)` guard in the UPDATE means
+  # exactly one caller matches a row.
+  # Expiry is guarded here too, not just in the prior read. A claim can lapse
+  # between validation and this update, which would otherwise pair a device
+  # after the five-minute window had closed.
+  defp mark_claim_used(claim, device_id) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    query =
+      from(c in PairingClaim,
+        where: c.id == ^claim.id and is_nil(c.used_at) and c.expires_at > ^now
+      )
+
+    case Repo.update_all(query, set: [used_at: now, device_id: device_id, updated_at: now]) do
+      {1, _} -> {:ok, %{claim | used_at: now, device_id: device_id}}
+      {0, _} -> {:error, consume_failure_reason(claim.id)}
+    end
+  end
+
+  # Two guards can reject the write, so say which one did. This only runs on the
+  # losing path, so the extra read costs nothing in the normal case.
+  defp consume_failure_reason(claim_id) do
+    case Repo.get(PairingClaim, claim_id) do
+      nil -> :not_found
+      %PairingClaim{used_at: used_at} when not is_nil(used_at) -> :already_used
+      _ -> :expired
+    end
+  end
+
+  # Claims created before the lookup_key column existed have none. Nothing to
+  # delete, and the entry was never stored under a v2 key anyway.
+  defp delete_sealed_claim(nil, _opts), do: :ok
+
+  defp delete_sealed_claim(lookup_key, opts) do
+    url = "#{get_relay_url(opts)}/pairing/v2/claim/#{lookup_key}"
+
+    case Req.delete(url, retry: false) do
+      {:ok, %Req.Response{status: status}} when status in [204, 404] ->
+        :ok
+
+      other ->
+        Logger.debug("Sealed claim cleanup did not complete: #{inspect(other)}")
+        :ok
     end
   end
 

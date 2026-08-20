@@ -76,10 +76,24 @@ jobs:
       - name: Cache build
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
-          path: _build
-          key: ${{ runner.os }}-build-devenv-${{ hashFiles('**/mix.lock') }}-${{ hashFiles('lib/**/*.ex', 'test/**/*.exs') }}
+          # priv/native travels with _build, not separately. Rustler writes the
+          # NIF to priv/native (gitignored) and records "built" in a manifest
+          # under _build. Caching only _build restores the manifest without the
+          # .so, so `mix compile` skips the crate and every caller then fails
+          # with "module Mydia.P2p is not available", which points nowhere near
+          # the cache.
+          path: |
+            _build
+            priv/native
+          # The native hash is part of the key AND the restore prefix. _build
+          # holds the compiled Rustler NIF, so restoring a tree built from
+          # different Rust sources yields a stale .so. When that .so lacks a
+          # newly added export the whole module fails to load, and every caller
+          # reports "module Mydia.P2p is not available" rather than anything
+          # pointing at the cache.
+          key: ${{ runner.os }}-build-v2-devenv-${{ hashFiles('**/mix.lock') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-${{ hashFiles('lib/**/*.ex', 'test/**/*.exs') }}
           restore-keys: |
-            ${{ runner.os }}-build-devenv-${{ hashFiles('**/mix.lock') }}-
+            ${{ runner.os }}-build-v2-devenv-${{ hashFiles('**/mix.lock') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-
 
       # Materialize the devenv toolchain with a retry BEFORE the test step. Nix
       # evaluation can transiently fail with "path '…/test-timeout.patch' is not
@@ -302,10 +316,20 @@ jobs:
       - name: Cache build
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
-          path: _build
-          key: ${{ runner.os }}-build-devenv-postgres-${{ hashFiles('**/mix.lock') }}-${{ hashFiles('lib/**/*.ex', 'test/**/*.exs') }}
+          # priv/native travels with _build, not separately. Rustler writes the
+          # NIF to priv/native (gitignored) and records "built" in a manifest
+          # under _build. Caching only _build restores the manifest without the
+          # .so, so `mix compile` skips the crate and every caller then fails
+          # with "module Mydia.P2p is not available", which points nowhere near
+          # the cache.
+          path: |
+            _build
+            priv/native
+          # See the `test` job: the native hash must gate the restore too, or a
+          # stale NIF comes back and the module fails to load.
+          key: ${{ runner.os }}-build-v2-devenv-postgres-${{ hashFiles('**/mix.lock') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-${{ hashFiles('lib/**/*.ex', 'test/**/*.exs') }}
           restore-keys: |
-            ${{ runner.os }}-build-devenv-postgres-${{ hashFiles('**/mix.lock') }}-
+            ${{ runner.os }}-build-v2-devenv-postgres-${{ hashFiles('**/mix.lock') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-
 
       # See the `test` job for why the environment is warmed (with retry) before
       # the test step — guards against transient Nix substitution failures.
@@ -381,10 +405,24 @@ jobs:
       - name: Cache build
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
-          path: _build
-          key: ${{ runner.os }}-build-devenv-${{ hashFiles('**/mix.lock') }}-${{ hashFiles('lib/**/*.ex', 'test/**/*.exs') }}
+          # priv/native travels with _build, not separately. Rustler writes the
+          # NIF to priv/native (gitignored) and records "built" in a manifest
+          # under _build. Caching only _build restores the manifest without the
+          # .so, so `mix compile` skips the crate and every caller then fails
+          # with "module Mydia.P2p is not available", which points nowhere near
+          # the cache.
+          path: |
+            _build
+            priv/native
+          # The native hash is part of the key AND the restore prefix. _build
+          # holds the compiled Rustler NIF, so restoring a tree built from
+          # different Rust sources yields a stale .so. When that .so lacks a
+          # newly added export the whole module fails to load, and every caller
+          # reports "module Mydia.P2p is not available" rather than anything
+          # pointing at the cache.
+          key: ${{ runner.os }}-build-v2-devenv-${{ hashFiles('**/mix.lock') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-${{ hashFiles('lib/**/*.ex', 'test/**/*.exs') }}
           restore-keys: |
-            ${{ runner.os }}-build-devenv-${{ hashFiles('**/mix.lock') }}-
+            ${{ runner.os }}-build-v2-devenv-${{ hashFiles('**/mix.lock') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-
 
       # See the `test` job for why the environment is warmed (with retry) before
       # the test step — guards against transient Nix substitution failures (this

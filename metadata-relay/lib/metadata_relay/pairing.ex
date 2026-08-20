@@ -14,6 +14,7 @@ defmodule MetadataRelay.Pairing do
   require Logger
 
   @key_prefix "pairing:"
+  @sealed_key_prefix "pairing:v2:"
   @default_ttl_seconds 300
 
   # ETS table for fallback when Redis unavailable
@@ -46,7 +47,7 @@ defmodule MetadataRelay.Pairing do
 
     case store_claim(code, node_addr, ttl) do
       :ok ->
-        Logger.info("Pairing claim created", code_prefix: String.slice(code, 0, 2))
+        Logger.info("Pairing claim created")
         {:ok, %{code: code, node_addr: node_addr, expires_at: expires_at}}
 
       {:error, reason} ->
@@ -68,14 +69,11 @@ defmodule MetadataRelay.Pairing do
 
     case fetch_claim(code) do
       {:ok, node_addr} ->
-        Logger.info("Pairing claim lookup successful", code_prefix: String.slice(code, 0, 2))
+        Logger.info("Pairing claim lookup successful")
         {:ok, node_addr}
 
       {:error, :not_found} ->
-        Logger.warning("Pairing claim lookup failed",
-          code_prefix: String.slice(code, 0, 2),
-          reason: :not_found
-        )
+        Logger.warning("Pairing claim lookup failed", reason: :not_found)
 
         {:error, :not_found}
     end
@@ -95,9 +93,55 @@ defmodule MetadataRelay.Pairing do
     code = normalize_code(code)
     delete_stored_claim(code)
 
-    Logger.info("Pairing claim deleted", code_prefix: String.slice(code, 0, 2))
+    Logger.info("Pairing claim deleted")
     :ok
   end
+
+  @doc """
+  Stores a sealed pairing claim under its blinded lookup key.
+
+  The relay cannot read either value. `lookup_key` is derived from the claim
+  code by the server, and `sealed` is an AEAD blob whose key the relay never
+  sees. Expiry matches v1 at #{@default_ttl_seconds} seconds.
+  """
+  def store_sealed(lookup_key, sealed) do
+    key = @sealed_key_prefix <> lookup_key
+
+    case redis_conn() do
+      {:ok, conn} ->
+        case Redix.command(conn, ["SETEX", key, @default_ttl_seconds, sealed]) do
+          {:ok, "OK"} -> :ok
+          {:error, reason} -> {:error, reason}
+        end
+
+      :not_available ->
+        store_in_ets(key, sealed, @default_ttl_seconds)
+    end
+  end
+
+  @doc """
+  Fetches a sealed pairing claim by its blinded lookup key.
+  """
+  def fetch_sealed(lookup_key) do
+    key = @sealed_key_prefix <> lookup_key
+
+    case redis_conn() do
+      {:ok, conn} ->
+        case Redix.command(conn, ["GET", key]) do
+          {:ok, nil} -> {:error, :not_found}
+          {:ok, sealed} -> {:ok, sealed}
+          {:error, _reason} -> {:error, :not_found}
+        end
+
+      :not_available ->
+        fetch_from_ets(key)
+    end
+  end
+
+  @doc """
+  Deletes a sealed pairing claim. Called after a successful pairing.
+  """
+  def delete_sealed(lookup_key), do: delete_stored_claim_key(@sealed_key_prefix <> lookup_key)
 
   @doc """
   Initializes ETS table for fallback storage.
@@ -136,7 +180,7 @@ defmodule MetadataRelay.Pairing do
         end
 
       :not_available ->
-        store_in_ets(code, node_addr, ttl_seconds)
+        store_in_ets(key, node_addr, ttl_seconds)
     end
   end
 
@@ -152,19 +196,18 @@ defmodule MetadataRelay.Pairing do
         end
 
       :not_available ->
-        fetch_from_ets(code)
+        fetch_from_ets(key)
     end
   end
 
   defp delete_stored_claim(code) do
-    key = @key_prefix <> code
+    delete_stored_claim_key(@key_prefix <> code)
+  end
 
+  defp delete_stored_claim_key(key) do
     case redis_conn() do
-      {:ok, conn} ->
-        Redix.command(conn, ["DEL", key])
-
-      :not_available ->
-        delete_from_ets(code)
+      {:ok, conn} -> Redix.command(conn, ["DEL", key])
+      :not_available -> delete_from_ets(key)
     end
 
     :ok
@@ -180,23 +223,23 @@ defmodule MetadataRelay.Pairing do
 
   # ETS fallback storage
 
-  defp store_in_ets(code, node_addr, ttl_seconds) do
+  defp store_in_ets(key, value, ttl_seconds) do
     with :ok <- ensure_ets_table() do
       expires_at = System.system_time(:second) + ttl_seconds
-      :ets.insert(@ets_table, {code, node_addr, expires_at})
+      :ets.insert(@ets_table, {key, value, expires_at})
       :ok
     end
   end
 
-  defp fetch_from_ets(code) do
+  defp fetch_from_ets(key) do
     with :ok <- ensure_ets_table() do
-      case :ets.lookup(@ets_table, code) do
-        [{^code, node_addr, expires_at}] ->
+      case :ets.lookup(@ets_table, key) do
+        [{^key, value, expires_at}] ->
           if System.system_time(:second) < expires_at do
-            {:ok, node_addr}
+            {:ok, value}
           else
             # Expired - clean up
-            :ets.delete(@ets_table, code)
+            :ets.delete(@ets_table, key)
             {:error, :not_found}
           end
 
@@ -209,9 +252,9 @@ defmodule MetadataRelay.Pairing do
     end
   end
 
-  defp delete_from_ets(code) do
+  defp delete_from_ets(key) do
     if :ets.whereis(@ets_table) != :undefined do
-      :ets.delete(@ets_table, code)
+      :ets.delete(@ets_table, key)
     end
 
     :ok

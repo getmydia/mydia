@@ -1,7 +1,10 @@
 mod frb_generated; /* AUTO INJECTED BY flutter_rust_bridge. This line may not be accurate, and you can change it according to your needs. */
-use mydia_p2p_core::{runtime, Host, Event, MydiaRequest, MydiaResponse, PairingRequest, GraphQLRequest, HlsRequest, HlsRequester, HostConfig, PeerConnectionType};
-use flutter_rust_bridge::frb;
 use crate::frb_generated::StreamSink;
+use flutter_rust_bridge::frb;
+use mydia_p2p_core::{
+    runtime, Event, GraphQLRequest, HlsRequest, HlsRequester, Host, HostConfig, MydiaRequest,
+    MydiaResponse, PairingRequest, PeerConnectionType,
+};
 #[cfg(not(target_arch = "wasm32"))]
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
@@ -31,8 +34,9 @@ pub fn init_app() {
 /// Must run before `Host::new`, so iroh's startup logs are captured.
 #[cfg(not(target_arch = "wasm32"))]
 fn init_logging() {
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info,mydia_p2p_core=debug,iroh=info,noq=warn,rustls=warn"));
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        EnvFilter::new("info,mydia_p2p_core=debug,iroh=info,noq=warn,rustls=warn")
+    });
 
     #[cfg(target_os = "android")]
     {
@@ -204,7 +208,13 @@ impl P2pHost {
         let (host, node_id) = Host::new(config);
         let hls_requester = host.hls_requester();
         log::info!("P2pHost created with node_id: {}", node_id);
-        (P2pHost { inner: host, hls_requester }, node_id)
+        (
+            P2pHost {
+                inner: host,
+                hls_requester,
+            },
+            node_id,
+        )
     }
 
     /// Get this node's EndpointAddr as JSON for sharing.
@@ -243,7 +253,10 @@ impl P2pHost {
             log::info!("event_stream listening for events");
             while let Some(event) = rx.recv().await {
                 let msg = match event {
-                    Event::Connected { peer_id, connection_type } => format!("connected:{}:{}", peer_id, connection_type.as_str()),
+                    Event::Connected {
+                        peer_id,
+                        connection_type,
+                    } => format!("connected:{}:{}", peer_id, connection_type.as_str()),
                     Event::Disconnected(peer_id) => format!("disconnected:{}", peer_id),
                     Event::RelayConnected => "relay_connected".to_string(),
                     Event::Ready { node_addr } => format!("ready:{}", node_addr),
@@ -255,8 +268,15 @@ impl P2pHost {
                         // Client doesn't handle incoming HLS requests
                         continue;
                     }
-                    Event::ConnectionTypeChanged { peer_id, connection_type } => {
-                        format!("connection_type_changed:{}:{}", peer_id, connection_type.as_str())
+                    Event::ConnectionTypeChanged {
+                        peer_id,
+                        connection_type,
+                    } => {
+                        format!(
+                            "connection_type_changed:{}:{}",
+                            peer_id,
+                            connection_type.as_str()
+                        )
                     }
                     Event::Log { .. } => {
                         // Logs are handled separately via android_logger/tracing
@@ -275,9 +295,15 @@ impl P2pHost {
     }
 
     /// Send a pairing request to a specific peer.
-    pub async fn send_pairing_request(&self, peer: String, req: FlutterPairingRequest) -> anyhow::Result<FlutterPairingResponse> {
-        log::info!("P2pHost::send_pairing_request() called for peer: {}, claim_code: {}",
-            peer, req.claim_code);
+    pub async fn send_pairing_request(
+        &self,
+        peer: String,
+        req: FlutterPairingRequest,
+    ) -> anyhow::Result<FlutterPairingResponse> {
+        // Never log the claim code. It is a live pairing credential for five
+        // minutes, so anyone reading client logs could pair a device with it.
+        // Same class of leak as 518337412 on the Dart side.
+        log::info!("P2pHost::send_pairing_request() called for peer: {}", peer);
         let core_req = PairingRequest {
             claim_code: req.claim_code,
             device_name: req.device_name,
@@ -285,7 +311,11 @@ impl P2pHost {
             device_os: req.device_os,
         };
 
-        match self.inner.send_request(peer.clone(), MydiaRequest::Pairing(core_req)).await {
+        match self
+            .inner
+            .send_request(peer.clone(), MydiaRequest::Pairing(core_req))
+            .await
+        {
             Ok(MydiaResponse::Pairing(res)) => {
                 log::info!("send_pairing_request() succeeded: success={}", res.success);
                 Ok(FlutterPairingResponse {
@@ -302,7 +332,10 @@ impl P2pHost {
                 Err(anyhow::anyhow!("Server error: {}", e))
             }
             Ok(other) => {
-                log::error!("send_pairing_request() unexpected response type: {:?}", other);
+                log::error!(
+                    "send_pairing_request() unexpected response type: {:?}",
+                    other
+                );
                 Err(anyhow::anyhow!("Unexpected response type"))
             }
             Err(e) => {
@@ -313,7 +346,11 @@ impl P2pHost {
     }
 
     /// Send a GraphQL request to a specific peer.
-    pub async fn send_graphql_request(&self, peer: String, req: FlutterGraphQLRequest) -> anyhow::Result<FlutterGraphQLResponse> {
+    pub async fn send_graphql_request(
+        &self,
+        peer: String,
+        req: FlutterGraphQLRequest,
+    ) -> anyhow::Result<FlutterGraphQLResponse> {
         log::info!("P2pHost::send_graphql_request() called for peer: {}", peer);
         let core_req = GraphQLRequest {
             query: req.query,
@@ -322,7 +359,11 @@ impl P2pHost {
             auth_token: req.auth_token,
         };
 
-        match self.inner.send_request(peer.clone(), MydiaRequest::GraphQL(core_req)).await {
+        match self
+            .inner
+            .send_request(peer.clone(), MydiaRequest::GraphQL(core_req))
+            .await
+        {
             Ok(MydiaResponse::GraphQL(res)) => {
                 log::info!("send_graphql_request() succeeded");
                 Ok(FlutterGraphQLResponse {
@@ -335,7 +376,10 @@ impl P2pHost {
                 Err(anyhow::anyhow!("Server error: {}", e))
             }
             Ok(other) => {
-                log::error!("send_graphql_request() unexpected response type: {:?}", other);
+                log::error!(
+                    "send_graphql_request() unexpected response type: {:?}",
+                    other
+                );
                 Err(anyhow::anyhow!("Unexpected response type"))
             }
             Err(e) => {
@@ -371,7 +415,9 @@ impl P2pHost {
     ) -> anyhow::Result<()> {
         log::info!(
             "P2pHost::send_hls_request_streaming() called for peer: {}, session: {}, path: {}",
-            peer, req.session_id, req.path
+            peer,
+            req.session_id,
+            req.path
         );
 
         let core_req = HlsRequest {
@@ -417,7 +463,10 @@ impl P2pHost {
                 }
                 Err(e) => {
                     log::error!("HLS streaming request failed for peer {}: {}", peer, e);
-                    let _ = sink.add(FlutterHlsStreamEvent::Error(format!("HLS request failed: {}", e)));
+                    let _ = sink.add(FlutterHlsStreamEvent::Error(format!(
+                        "HLS request failed: {}",
+                        e
+                    )));
                 }
             }
         });
@@ -429,9 +478,17 @@ impl P2pHost {
     ///
     /// This is a non-streaming version that collects all chunks into a single buffer.
     /// For large files, consider using the local proxy service instead.
-    pub async fn send_hls_request(&self, peer: String, req: FlutterHlsRequest) -> anyhow::Result<FlutterHlsResponse> {
-        log::info!("P2pHost::send_hls_request() called for peer: {}, session: {}, path: {}",
-            peer, req.session_id, req.path);
+    pub async fn send_hls_request(
+        &self,
+        peer: String,
+        req: FlutterHlsRequest,
+    ) -> anyhow::Result<FlutterHlsResponse> {
+        log::info!(
+            "P2pHost::send_hls_request() called for peer: {}, session: {}, path: {}",
+            peer,
+            req.session_id,
+            req.path
+        );
 
         let core_req = HlsRequest {
             session_id: req.session_id,
@@ -459,7 +516,11 @@ impl P2pHost {
                     data.extend_from_slice(&chunk);
                 }
 
-                log::info!("HLS request completed for peer: {}, received {} bytes", peer, data.len());
+                log::info!(
+                    "HLS request completed for peer: {}, received {} bytes",
+                    peer,
+                    data.len()
+                );
                 Ok(FlutterHlsResponse {
                     header: flutter_header,
                     data,
@@ -471,5 +532,90 @@ impl P2pHost {
             }
         }
     }
+}
 
+/// The decrypted contents of a sealed pairing claim.
+pub struct ClaimPayload {
+    pub node_addr: String,
+    pub instance_id: String,
+}
+
+/// Keys derived from a pairing claim code.
+///
+/// Held as an object rather than exposed as two free functions so that Argon2id
+/// runs once per pairing attempt. At 64 MiB it costs a few hundred milliseconds
+/// on a phone and more in a browser, and the lookup and the open both need it.
+pub struct PairingKeys {
+    code: String,
+}
+
+impl PairingKeys {
+    /// Derive from a claim code as the user typed it. Case, dashes, and
+    /// whitespace are normalized inside the core crate.
+    #[frb(sync)]
+    pub fn derive(code: String) -> PairingKeys {
+        PairingKeys { code }
+    }
+
+    /// The relay URL path segment: 64 lowercase hex characters.
+    pub fn lookup_key(&self) -> anyhow::Result<String> {
+        mydia_p2p_core::pairing_seal::lookup_key_for(&self.code)
+            .map_err(|e| anyhow::anyhow!(e.to_string()))
+    }
+
+    /// Open a sealed blob fetched from the relay.
+    ///
+    /// A failure here is meaningful. A wrong code cannot produce a lookup hit
+    /// short of a 256-bit collision, so a blob that fetches but does not open
+    /// was altered in storage or in transit.
+    pub fn open(&self, sealed: String) -> anyhow::Result<ClaimPayload> {
+        let payload = mydia_p2p_core::pairing_seal::open_claim(&self.code, &sealed)
+            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+
+        Ok(ClaimPayload {
+            node_addr: payload.node_addr,
+            instance_id: payload.instance_id,
+        })
+    }
+}
+
+#[cfg(test)]
+mod pairing_keys_tests {
+    use super::*;
+
+    #[test]
+    fn opens_a_blob_sealed_by_the_core() {
+        let sealed = mydia_p2p_core::pairing_seal::seal_claim(
+            "K7RPM2",
+            &mydia_p2p_core::pairing_seal::ClaimPayload {
+                node_addr: "addr".to_string(),
+                instance_id: "inst".to_string(),
+            },
+        )
+        .unwrap();
+
+        let keys = PairingKeys::derive("k7r-pm2".to_string());
+
+        assert_eq!(keys.lookup_key().unwrap(), sealed.lookup_key);
+
+        let opened = keys.open(sealed.sealed).unwrap();
+        assert_eq!(opened.node_addr, "addr");
+        assert_eq!(opened.instance_id, "inst");
+    }
+
+    #[test]
+    fn a_wrong_code_fails_to_open() {
+        let sealed = mydia_p2p_core::pairing_seal::seal_claim(
+            "K7RPM2",
+            &mydia_p2p_core::pairing_seal::ClaimPayload {
+                node_addr: "addr".to_string(),
+                instance_id: "inst".to_string(),
+            },
+        )
+        .unwrap();
+
+        assert!(PairingKeys::derive("K7RPM3".to_string())
+            .open(sealed.sealed)
+            .is_err());
+    }
 }

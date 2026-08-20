@@ -109,17 +109,19 @@ defmodule MydiaWeb.DevicesLive.PairingComponents do
         <%= if @claim_code do %>
           <%!-- Active pairing code --%>
           <div class="space-y-5 pt-4">
-            <%!-- QR Code - only show when registered on rendezvous --%>
-            <%= if @claim_code_rendezvous_status == :registered do %>
-              <% qr_svg = generate_qr_code(@ra_config, @p2p_status, @claim_code) %>
-              <%= if qr_svg do %>
-                <div class="flex flex-col items-center gap-2">
-                  <div class="p-3 bg-white rounded-xl shadow-md">
-                    {Phoenix.HTML.raw(qr_svg)}
-                  </div>
+            <%!-- The QR carries the node address directly and the player dials
+            it without ever asking the relay, so it keeps working when relay
+            registration failed. Only the typed code needs the relay. --%>
+            <% qr_svg = generate_qr_code(@ra_config, @p2p_status, @claim_code) %>
+            <%= if qr_svg do %>
+              <div class="flex flex-col items-center gap-2">
+                <div class="p-3 bg-white rounded-xl shadow-md">
+                  {Phoenix.HTML.raw(qr_svg)}
                 </div>
-              <% end %>
+              </div>
+            <% end %>
 
+            <%= if @claim_code_rendezvous_status == :registered do %>
               <div class="flex items-center gap-3">
                 <div class="flex-1 h-px bg-base-300"></div>
                 <span class="text-xs text-base-content/40 uppercase tracking-wider">
@@ -131,35 +133,58 @@ defmodule MydiaWeb.DevicesLive.PairingComponents do
 
             <%!-- Pairing Code --%>
             <div class="text-center">
-              <%= if @claim_code_rendezvous_status == :registered do %>
-                <div class="inline-flex items-center gap-2 bg-base-200 rounded-xl px-5 py-3">
-                  <code id="claim-code" class="text-2xl font-bold tracking-[0.25em] font-mono">
-                    {@claim_code}
-                  </code>
-                  <%!-- The code comes back from the relay, so it never gets
-                  interpolated into JavaScript source: onclick is a fixed string
-                  and the value rides in a data attribute, where HEEx escaping
-                  actually protects it. An apostrophe in the code would otherwise
-                  close the string literal and run as script. --%>
-                  <button
-                    class="btn btn-ghost btn-sm btn-square"
-                    phx-click="copy_claim_code"
-                    data-claim-code={@claim_code}
-                    onclick="navigator.clipboard?.writeText(this.dataset.claimCode)"
-                    title="Copy code"
+              <%= cond do %>
+                <% @claim_code_rendezvous_status == :registered -> %>
+                  <div class="inline-flex items-center gap-2 bg-base-200 rounded-xl px-5 py-3">
+                    <code id="claim-code" class="text-2xl font-bold tracking-[0.25em] font-mono">
+                      {@claim_code}
+                    </code>
+                    <%!-- The code never gets interpolated into JavaScript
+                    source: onclick is a fixed string and the value rides in a
+                    data attribute, where HEEx escaping actually protects it. An
+                    apostrophe in the code would otherwise close the string
+                    literal and run as script. The alphabet excludes quotes, but
+                    the escaping is what makes that a defence rather than luck. --%>
+                    <button
+                      class="btn btn-ghost btn-sm btn-square"
+                      phx-click="copy_claim_code"
+                      data-claim-code={@claim_code}
+                      onclick="navigator.clipboard?.writeText(this.dataset.claimCode)"
+                      title="Copy code"
+                    >
+                      <.icon name="hero-clipboard-document" class="w-4 h-4 opacity-50" />
+                    </button>
+                  </div>
+                  <div class="mt-2 flex items-center justify-center gap-1.5 text-xs">
+                    <.icon name="hero-check-circle" class="w-4 h-4 text-success" />
+                    <span class="text-success">Ready for pairing</span>
+                  </div>
+                  <%!-- Typing a code resolves it through the relay, and the
+                  lookup changed shape in this release. Players older than it
+                  will report the code as invalid. Scanning skips the relay
+                  entirely, so it keeps working on any version. --%>
+                  <p class="mt-2 text-xs text-base-content/50">
+                    Typing the code needs a recent player. On an older one, scan the QR instead.
+                  </p>
+                <% @claim_code_rendezvous_status == :unregistered -> %>
+                  <div
+                    id="pairing-relay-warning"
+                    class="inline-flex flex-col items-center gap-2 bg-warning/10 border border-warning/30 rounded-xl px-6 py-4 max-w-sm"
                   >
-                    <.icon name="hero-clipboard-document" class="w-4 h-4 opacity-50" />
-                  </button>
-                </div>
-                <div class="mt-2 flex items-center justify-center gap-1.5 text-xs">
-                  <.icon name="hero-check-circle" class="w-4 h-4 text-success" />
-                  <span class="text-success">Ready for pairing</span>
-                </div>
-              <% else %>
-                <div class="inline-flex flex-col items-center gap-3 bg-base-200 rounded-xl px-8 py-5">
-                  <span class="loading loading-spinner loading-lg text-primary"></span>
-                  <div class="text-sm text-base-content/60">Preparing pairing code...</div>
-                </div>
+                    <div class="flex items-center gap-2">
+                      <.icon name="hero-exclamation-triangle" class="w-5 h-5 text-warning" />
+                      <span class="text-sm font-medium">Typed code unavailable</span>
+                    </div>
+                    <p class="text-xs text-base-content/70 text-center">
+                      The relay could not be reached, so entering a code by hand will not work.
+                      Scan the QR code above instead, or try again in a moment.
+                    </p>
+                  </div>
+                <% true -> %>
+                  <div class="inline-flex flex-col items-center gap-3 bg-base-200 rounded-xl px-8 py-5">
+                    <span class="loading loading-spinner loading-lg text-primary"></span>
+                    <div class="text-sm text-base-content/60">Preparing pairing code...</div>
+                  </div>
               <% end %>
             </div>
 

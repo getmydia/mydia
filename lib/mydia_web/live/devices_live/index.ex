@@ -220,7 +220,10 @@ defmodule MydiaWeb.DevicesLive.Index do
         socket
         |> assign(:pairing_error, nil)
         |> assign(:claim_code, claim.code)
-        |> assign(:claim_code_rendezvous_status, :registered)
+        |> assign(
+          :claim_code_rendezvous_status,
+          if(claim.relay_registered, do: :registered, else: :unregistered)
+        )
         |> assign(:claim_expires_at, claim.expires_at)
         |> assign(:countdown_seconds, max(0, DateTime.diff(claim.expires_at, DateTime.utc_now())))
 
@@ -247,6 +250,13 @@ defmodule MydiaWeb.DevicesLive.Index do
 
       {:error, :create_claim_failed} ->
         assign(socket, :pairing_error, "Relay service returned an error. Please try again.")
+
+      {:error, :not_configured} ->
+        assign(
+          socket,
+          :pairing_error,
+          "This server has no instance ID yet. Restart it, or ask an administrator to check the remote access settings."
+        )
 
       {:error, reason} ->
         Logger.error("Failed to generate pairing code: #{inspect(reason)}")

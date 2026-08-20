@@ -16,6 +16,7 @@ use std::thread;
 mod atoms {
     rustler::atoms! {
         ok,
+        error,
     }
 }
 
@@ -439,6 +440,29 @@ fn start_listening(
     });
 
     Ok("ok".to_string())
+}
+
+/// Seal a pairing claim for the relay.
+///
+/// `DirtyCpu` rather than the `DirtyIo` used by the networking NIFs above:
+/// Argon2id at 64 MiB is compute-bound and takes a few hundred milliseconds,
+/// which would stall a normal scheduler.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn seal_pairing_claim<'a>(
+    env: Env<'a>,
+    code: String,
+    node_addr: String,
+    instance_id: String,
+) -> Term<'a> {
+    let payload = mydia_p2p_core::pairing_seal::ClaimPayload {
+        node_addr,
+        instance_id,
+    };
+
+    match mydia_p2p_core::pairing_seal::seal_claim(&code, &payload) {
+        Ok(sealed) => (atoms::ok(), (sealed.lookup_key, sealed.sealed)).encode(env),
+        Err(e) => (atoms::error(), e.to_string()).encode(env),
+    }
 }
 
 rustler::init!("Elixir.Mydia.P2p");

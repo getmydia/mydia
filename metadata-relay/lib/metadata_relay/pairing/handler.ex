@@ -71,6 +71,70 @@ defmodule MetadataRelay.Pairing.Handler do
     {:ok, :no_content}
   end
 
+  @lookup_key_pattern ~r/\A[0-9a-f]{64}\z/
+  # A real payload is a few hundred bytes. The cap stops the store being used
+  # as free blob hosting.
+  @max_sealed_bytes 8192
+
+  @doc """
+  Stores a sealed claim under its blinded lookup key.
+
+  ## Request Body
+  ```json
+  {"lookup_key": "<64 lowercase hex chars>", "sealed": "<base64url blob>"}
+  ```
+
+  Responds 204 with no body. The server generated the claim code itself, so
+  there is nothing to hand back.
+  """
+  def store_sealed_claim(params) do
+    with :ok <- validate_lookup_key(params["lookup_key"]),
+         :ok <- validate_sealed(params["sealed"]),
+         :ok <- Pairing.store_sealed(params["lookup_key"], params["sealed"]) do
+      {:ok, :no_content}
+    end
+  end
+
+  @doc """
+  Returns the sealed blob for a lookup key, or 404 if it is unknown or expired.
+  """
+  def get_sealed_claim(lookup_key) do
+    with :ok <- validate_lookup_key(lookup_key),
+         {:ok, sealed} <- Pairing.fetch_sealed(lookup_key) do
+      {:ok, %{sealed: sealed}}
+    end
+  end
+
+  @doc """
+  Deletes a sealed claim after a successful pairing.
+  """
+  def delete_sealed_claim(lookup_key) do
+    with :ok <- validate_lookup_key(lookup_key) do
+      Pairing.delete_sealed(lookup_key)
+      {:ok, :no_content}
+    end
+  end
+
+  defp validate_lookup_key(key) when is_binary(key) do
+    if Regex.match?(@lookup_key_pattern, key) do
+      :ok
+    else
+      {:error, {:validation, "lookup_key must be 64 lowercase hex characters"}}
+    end
+  end
+
+  defp validate_lookup_key(_), do: {:error, {:validation, "lookup_key is required"}}
+
+  defp validate_sealed(sealed) when is_binary(sealed) and byte_size(sealed) > 0 do
+    if byte_size(sealed) <= @max_sealed_bytes do
+      :ok
+    else
+      {:error, {:validation, "sealed exceeds #{@max_sealed_bytes} bytes"}}
+    end
+  end
+
+  defp validate_sealed(_), do: {:error, {:validation, "sealed is required"}}
+
   # Private helpers
 
   defp validate_node_addr(nil), do: {:error, {:validation, "node_addr is required"}}

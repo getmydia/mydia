@@ -61,6 +61,28 @@ abstract class P2PHost implements RustOpaqueInterface {
       {required String peer, required FlutterPairingRequest req});
 }
 
+/// The decrypted contents of a sealed pairing claim.
+class ClaimPayload {
+  final String nodeAddr;
+  final String instanceId;
+
+  const ClaimPayload({
+    required this.nodeAddr,
+    required this.instanceId,
+  });
+
+  @override
+  int get hashCode => nodeAddr.hashCode ^ instanceId.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ClaimPayload &&
+          runtimeType == other.runtimeType &&
+          nodeAddr == other.nodeAddr &&
+          instanceId == other.instanceId;
+}
+
 /// Connection type for a peer (relay vs direct) for display in Flutter UI
 enum FlutterConnectionType {
   /// Direct peer-to-peer connection
@@ -345,4 +367,45 @@ class FlutterPairingResponse {
           deviceToken == other.deviceToken &&
           error == other.error &&
           directUrls == other.directUrls;
+}
+
+/// Keys derived from a pairing claim code.
+///
+/// Held as an object rather than exposed as two free functions so that Argon2id
+/// runs once per pairing attempt. At 64 MiB it costs a few hundred milliseconds
+/// on a phone and more in a browser, and the lookup and the open both need it.
+class PairingKeys {
+  final String code;
+
+  const PairingKeys({
+    required this.code,
+  });
+
+  /// Derive from a claim code as the user typed it. Case, dashes, and
+  /// whitespace are normalized inside the core crate.
+  static PairingKeys derive({required String code}) =>
+      RustLib.instance.api.cratePairingKeysDerive(code: code);
+
+  /// The relay URL path segment: 64 lowercase hex characters.
+  Future<String> lookupKey() => RustLib.instance.api.cratePairingKeysLookupKey(
+        that: this,
+      );
+
+  /// Open a sealed blob fetched from the relay.
+  ///
+  /// A failure here is meaningful. A wrong code cannot produce a lookup hit
+  /// short of a 256-bit collision, so a blob that fetches but does not open
+  /// was altered in storage or in transit.
+  Future<ClaimPayload> open({required String sealed}) =>
+      RustLib.instance.api.cratePairingKeysOpen(that: this, sealed: sealed);
+
+  @override
+  int get hashCode => code.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PairingKeys &&
+          runtimeType == other.runtimeType &&
+          code == other.code;
 }

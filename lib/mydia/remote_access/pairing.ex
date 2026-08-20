@@ -21,19 +21,32 @@ defmodule Mydia.RemoteAccess.Pairing do
   Returns `{:ok, device, media_token, access_token, device_token}` on success.
   """
   def complete_pairing(claim_code, device_attrs) do
-    # Validate the claim code
-    with {:ok, claim} <- RemoteAccess.validate_claim_code(claim_code),
-         # Generate a unique device token
-         device_token = generate_device_token(),
-         # Register the device
-         device_params =
-           Map.merge(device_attrs, %{token: device_token, user_id: claim.user_id}),
-         {:ok, device} <- RemoteAccess.create_device(device_params),
-         # Set initial last_seen_at timestamp
-         {:ok, device} <- RemoteAccess.touch_device(device),
-         # Consume the claim code
-         {:ok, _consumed_claim} <- RemoteAccess.consume_claim_code(claim_code, device.id) do
-      # Generate tokens
+    device_token = generate_device_token()
+
+    # The device insert and the claim consume share one transaction. Consuming
+    # is a conditional UPDATE that exactly one concurrent caller wins, and the
+    # device is created first, so without this the loser would leave a
+    # persisted device behind for a pairing that never completed.
+    transaction =
+      Mydia.Repo.transaction(fn ->
+        with {:ok, claim} <- RemoteAccess.validate_claim_code_from_peer(claim_code),
+             device_params =
+               Map.merge(device_attrs, %{token: device_token, user_id: claim.user_id}),
+             {:ok, device} <- RemoteAccess.create_device(device_params),
+             {:ok, device} <- RemoteAccess.touch_device(device),
+             {:ok, consumed_claim} <-
+               RemoteAccess.consume_claim_in_transaction(claim_code, device.id) do
+          {device, consumed_claim}
+        else
+          {:error, reason} -> Mydia.Repo.rollback(reason)
+        end
+      end)
+
+    with {:ok, {device, consumed_claim}} <- transaction do
+      # Side effects only once the rows are durable: the relay delete is an
+      # HTTP call, and the broadcast must not fire for a rolled-back pairing.
+      RemoteAccess.finish_claim_consumption(consumed_claim)
+
       media_token = generate_media_token(device)
       access_token = generate_access_token(device)
 

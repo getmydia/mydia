@@ -9,16 +9,20 @@ defmodule Mydia.RemoteAccess.PairingClaim do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
-  # Characters to use for claim codes - excludes ambiguous characters
-  @code_chars "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-  @code_length 8
+  # Excludes characters that are easy to misread: 0/O and 1/I/L.
+  # Must stay in step with the relay's historical alphabet so codes users have
+  # already seen keep the same shape.
+  @code_chars "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+  @code_length 6
   @expiry_minutes 5
 
   @type t :: %__MODULE__{
           id: binary(),
           code: String.t() | nil,
+          lookup_key: String.t() | nil,
           expires_at: DateTime.t() | nil,
           used_at: DateTime.t() | nil,
+          relay_registered: boolean(),
           user: Mydia.Accounts.User.t() | Ecto.Association.NotLoaded.t(),
           user_id: binary() | nil,
           device: Mydia.RemoteAccess.RemoteDevice.t() | nil | Ecto.Association.NotLoaded.t(),
@@ -29,8 +33,12 @@ defmodule Mydia.RemoteAccess.PairingClaim do
 
   schema "pairing_claims" do
     field :code, :string
+    field :lookup_key, :string
     field :expires_at, :utc_datetime
     field :used_at, :utc_datetime
+    # Whether the sealed claim reached the relay. Manual code entry needs the
+    # relay; QR pairing does not, so a failed registration is not fatal.
+    field :relay_registered, :boolean, virtual: true, default: false
 
     belongs_to :user, Mydia.Accounts.User
     belongs_to :device, Mydia.RemoteAccess.RemoteDevice
@@ -53,13 +61,12 @@ defmodule Mydia.RemoteAccess.PairingClaim do
   end
 
   @doc """
-  Changeset for creating a claim with a pre-generated code from the relay.
-  Used when the relay service generates the code.
+  Changeset for creating a claim with a locally generated code and lookup key.
   """
   def changeset_with_code(claim, attrs) do
     claim
-    |> cast(attrs, [:user_id, :code, :expires_at])
-    |> validate_required([:user_id, :code, :expires_at])
+    |> cast(attrs, [:user_id, :code, :lookup_key, :expires_at])
+    |> validate_required([:user_id, :code, :lookup_key, :expires_at])
     |> foreign_key_constraint(:user_id)
     |> unique_constraint(:code)
   end
@@ -97,35 +104,37 @@ defmodule Mydia.RemoteAccess.PairingClaim do
 
   @doc """
   Generates a random claim code.
+
+  Six characters, which is roughly 30 bits. That is deliberate: the code is
+  typed by hand, and the entropy budget is documented in
+  docs/superpowers/specs/2026-08-19-e2e-pairing-design.md.
   """
   def generate_code do
-    @code_length
-    |> generate_code_string()
-    |> format_code()
+    generate_code_string(@code_length)
   end
 
-  # Generate a cryptographically random string of the specified length using allowed characters
+  # Generate a cryptographically random string of the specified length.
+  #
+  # Rejection sampling rather than a plain `rem/2` over the raw bytes. 256 is
+  # not a multiple of 31, so `rem(byte, 31)` would make the first eight
+  # characters of the alphabet 12.5% more likely than the rest. That matters
+  # here more than it usually would: the code's entropy IS the security bound
+  # for the sealed relay entry, documented in
+  # docs/superpowers/specs/2026-08-19-e2e-pairing-design.md, so any avoidable
+  # loss comes straight off it.
   defp generate_code_string(length) do
     chars = String.graphemes(@code_chars)
     count = length(chars)
 
-    # Generate cryptographically secure random bytes
-    random_bytes = :crypto.strong_rand_bytes(length)
+    # Largest multiple of `count` that fits in a byte. Draws at or above this
+    # are discarded and redrawn, which keeps every character equally likely.
+    limit = div(256, count) * count
 
-    random_bytes
-    |> :binary.bin_to_list()
-    |> Enum.map_join("", fn byte ->
-      # Use modulo to map byte value to character index
-      Enum.at(chars, rem(byte, count))
-    end)
-  end
-
-  # Format code by inserting a dash in the middle for readability
-  # e.g., "ABCD1234" -> "ABCD-1234"
-  defp format_code(code) do
-    half = div(String.length(code), 2)
-    {first, second} = String.split_at(code, half)
-    "#{first}-#{second}"
+    Stream.repeatedly(fn -> :crypto.strong_rand_bytes(1) end)
+    |> Stream.map(fn <<byte>> -> byte end)
+    |> Stream.filter(&(&1 < limit))
+    |> Enum.take(length)
+    |> Enum.map_join("", fn byte -> Enum.at(chars, rem(byte, count)) end)
   end
 
   # Put a generated code into the changeset

@@ -22,7 +22,8 @@ defmodule MydiaWeb.Schema.Resolvers.RemoteAccessResolver do
         {:ok,
          %{
            code: claim.code,
-           expires_at: claim.expires_at
+           expires_at: claim.expires_at,
+           relay_registered: claim.relay_registered
          }}
 
       {:error, :relay_not_connected} ->

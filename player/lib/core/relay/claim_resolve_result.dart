@@ -9,18 +9,23 @@ class ServerNotOnlineException implements Exception {
 
 /// Result of resolving a claim code via the relay API.
 ///
-/// The /pairing/claim/:code endpoint returns the server's EndpointAddr directly,
-/// which can be used to dial the server.
+/// Under the v2 API the relay returns a sealed blob rather than a node address,
+/// and the player opens it locally with keys derived from the claim code.
 class ClaimResolveResult {
-  /// The server's EndpointAddr as JSON string.
-  /// This can be passed directly to P2pService.dial().
+  /// The server's EndpointAddr as a JSON string.
+  /// Can be passed directly to P2pService.dial().
   final String nodeAddr;
+
+  /// The server's instance ID, when the relay returned a sealed v2 claim.
+  /// Null on the v1 fallback path, which carried no instance ID.
+  final String? instanceId;
 
   ClaimResolveResult({
     required this.nodeAddr,
+    this.instanceId,
   });
 
-  factory ClaimResolveResult.fromJson(Map<String, dynamic> json) {
+  factory ClaimResolveResult.fromV1Json(Map<String, dynamic> json) {
     final nodeAddr = json['node_addr'] as String?;
     if (nodeAddr == null) {
       throw FormatException(
@@ -29,4 +34,15 @@ class ClaimResolveResult {
     }
     return ClaimResolveResult(nodeAddr: nodeAddr);
   }
+}
+
+/// Thrown when a sealed claim is found but fails to decrypt.
+///
+/// A wrong code cannot produce a lookup hit short of a 256-bit collision, so
+/// this means the stored blob was altered. It is the one condition that points
+/// at the relay rather than at the user.
+class TamperedClaimException implements Exception {
+  @override
+  String toString() =>
+      'The pairing data could not be verified. Generate a new code and try again.';
 }

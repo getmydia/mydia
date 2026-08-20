@@ -1102,11 +1102,14 @@ type RevokeDeviceResult {
 
 "A pairing claim code for device pairing"
 type ClaimCode {
-  "The claim code (e.g., 'ABC-XYZ')"
+  "The claim code (e.g., 'K7RPM2')"
   code: String!
 
   "When the code expires"
   expiresAt: DateTime!
+
+  "Whether the sealed claim reached the relay. False means QR pairing works but manual code entry does not."
+  relayRegistered: Boolean!
 }
 
 "Remote access \/ P2P connection status"

@@ -161,4 +161,35 @@ defmodule MetadataRelay.PairingTest do
       end
     end
   end
+
+  describe "sealed claims (v2)" do
+    setup do
+      MetadataRelay.Pairing.init_ets_table()
+      :ok
+    end
+
+    test "stores and fetches a sealed blob by lookup key" do
+      key = String.duplicate("a", 64)
+      assert :ok = MetadataRelay.Pairing.store_sealed(key, "c2VhbGVk")
+      assert {:ok, "c2VhbGVk"} = MetadataRelay.Pairing.fetch_sealed(key)
+    end
+
+    test "returns not_found for an unknown lookup key" do
+      assert {:error, :not_found} =
+               MetadataRelay.Pairing.fetch_sealed(String.duplicate("b", 64))
+    end
+
+    test "deletes a sealed blob" do
+      key = String.duplicate("c", 64)
+      :ok = MetadataRelay.Pairing.store_sealed(key, "c2VhbGVk")
+      assert :ok = MetadataRelay.Pairing.delete_sealed(key)
+      assert {:error, :not_found} = MetadataRelay.Pairing.fetch_sealed(key)
+    end
+
+    test "v1 and v2 namespaces do not collide" do
+      key = String.duplicate("d", 64)
+      :ok = MetadataRelay.Pairing.store_sealed(key, "sealed-value")
+      assert {:error, :not_found} = MetadataRelay.Pairing.get_claim(key)
+    end
+  end
 end

@@ -287,4 +287,63 @@ defmodule MydiaWeb.DevicesLiveTest do
       assert redirected_to(conn) == ~p"/devices"
     end
   end
+
+  describe "pairing card relay status" do
+    defp pairing_assigns(status) do
+      [
+        ra_config: %Mydia.RemoteAccess.Config{enabled: true, instance_id: "test-instance"},
+        p2p_status: %{
+          running: true,
+          relay_connected: true,
+          relay_url: "https://relay.test",
+          node_addr: ~s({"id":"test-node"}),
+          node_id: "test-node",
+          connected_peers: 0
+        },
+        remote_access_enabled: true,
+        claim_code: "K7RPM2",
+        claim_code_rendezvous_status: status,
+        claim_expires_at: DateTime.utc_now() |> DateTime.add(300, :second),
+        countdown_seconds: 300,
+        pairing_error: nil,
+        show_pairing_modal: true
+      ]
+    end
+
+    test "warns that typed entry is unavailable when the relay is unreachable" do
+      html =
+        render_component(
+          &MydiaWeb.DevicesLive.PairingComponents.pairing_card/1,
+          pairing_assigns(:unregistered)
+        )
+
+      assert html =~ ~s(id="pairing-relay-warning")
+      # The code itself must not be offered, since nothing can resolve it.
+      refute html =~ ~s(id="claim-code")
+    end
+
+    test "still renders the QR when the relay is unreachable" do
+      html =
+        render_component(
+          &MydiaWeb.DevicesLive.PairingComponents.pairing_card/1,
+          pairing_assigns(:unregistered)
+        )
+
+      # The QR carries the node address directly, so a relay outage must not
+      # take it down with the typed code. This is the bug the change fixes.
+      assert html =~ "<svg"
+    end
+
+    test "shows the code and no warning once registered" do
+      html =
+        render_component(
+          &MydiaWeb.DevicesLive.PairingComponents.pairing_card/1,
+          pairing_assigns(:registered)
+        )
+
+      assert html =~ ~s(id="claim-code")
+      assert html =~ "<svg"
+      refute html =~ ~s(id="pairing-relay-warning")
+    end
+  end
 end

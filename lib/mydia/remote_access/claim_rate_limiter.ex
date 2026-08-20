@@ -1,7 +1,8 @@
 defmodule Mydia.RemoteAccess.ClaimRateLimiter do
   @moduledoc """
   Rate limiter for claim code validation attempts.
-  Limits failed validation attempts per IP address to prevent brute force attacks.
+  Limits failed validation attempts per opaque key to prevent brute force
+  attacks. An IP address is one kind of key.
   """
   use GenServer
 
@@ -21,30 +22,36 @@ defmodule Mydia.RemoteAccess.ClaimRateLimiter do
   end
 
   @doc """
-  Atomically checks rate limit and records a failed attempt.
+  Atomically checks the rate limit and records an attempt.
 
-  Uses atomic ETS operations to prevent race conditions where concurrent
-  requests could bypass the rate limit.
+  ## Options
 
-  Returns :ok if the attempt is allowed, {:error, :rate_limited} if blocked.
+    * `:max_attempts` - defaults to #{@max_attempts}
+    * `:window_seconds` - defaults to #{@window_seconds}
+
+  The p2p pairing path passes its own bounds, because its window is tied to the
+  claim lifetime rather than to an hour of IP reputation.
+
   """
-  def check_and_record(ip_address) when is_binary(ip_address) do
-    key = rate_limit_key(ip_address)
+  def check_and_record(key, opts \\ []) when is_binary(key) do
+    max_attempts = Keyword.get(opts, :max_attempts, @max_attempts)
+    window_seconds = Keyword.get(opts, :window_seconds, @window_seconds)
+    storage_key = rate_limit_key(key)
     now = System.system_time(:second)
 
     try do
       # Atomically increment the attempt counter (position 2 in tuple)
-      new_count = :ets.update_counter(@table_name, key, {2, 1})
+      new_count = :ets.update_counter(@table_name, storage_key, {2, 1})
 
       # Lookup to check window expiration (safe to read after atomic increment)
-      [{^key, _count, first_attempt_at}] = :ets.lookup(@table_name, key)
+      [{^storage_key, _count, first_attempt_at}] = :ets.lookup(@table_name, storage_key)
 
-      if now - first_attempt_at > @window_seconds do
+      if now - first_attempt_at > window_seconds do
         # Window expired - reset atomically
-        :ets.insert(@table_name, {key, 1, now})
+        :ets.insert(@table_name, {storage_key, 1, now})
         :ok
       else
-        if new_count > @max_attempts do
+        if new_count > max_attempts do
           {:error, :rate_limited}
         else
           :ok
@@ -54,13 +61,13 @@ defmodule Mydia.RemoteAccess.ClaimRateLimiter do
       # Key doesn't exist - try to insert atomically
       :error, :badarg ->
         # insert_new returns false if key already exists (another process inserted)
-        case :ets.insert_new(@table_name, {key, 1, now}) do
+        case :ets.insert_new(@table_name, {storage_key, 1, now}) do
           true ->
             :ok
 
           false ->
             # Another process inserted first, retry with update_counter
-            check_and_record(ip_address)
+            check_and_record(key, opts)
         end
     end
   end

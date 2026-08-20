@@ -451,7 +451,42 @@ defmodule MetadataRelay.Router do
   # Delete claim code after successful pairing
   delete "/pairing/claim/:code" do
     conn = allow_web_player(conn)
-    handle_pairing_delete(conn, fn -> PairingHandler.delete_claim(code) end)
+    handle_pairing_no_content(conn, fn -> PairingHandler.delete_claim(code) end)
+  end
+
+  # Pairing API v2 - the relay stores a blinded lookup key against a sealed
+  # blob and can read neither the claim code nor the server's node address.
+
+  post "/pairing/v2/claim" do
+    with :ok <- check_pairing_rate_limit(conn, limit: 10, window_ms: 60_000) do
+      handle_pairing_no_content(conn, fn ->
+        PairingHandler.store_sealed_claim(conn.body_params)
+      end)
+    else
+      {:error, :rate_limited} -> send_rate_limited(conn, 60)
+    end
+  end
+
+  get "/pairing/v2/claim/:lookup_key" do
+    conn = allow_web_player(conn)
+
+    with :ok <- check_pairing_rate_limit(conn, limit: 30, window_ms: 60_000) do
+      handle_pairing_request(conn, fn -> PairingHandler.get_sealed_claim(lookup_key) end)
+    else
+      {:error, :rate_limited} -> send_rate_limited(conn, 60)
+    end
+  end
+
+  options "/pairing/v2/claim/:lookup_key" do
+    conn
+    |> allow_web_player()
+    |> put_resp_header("access-control-allow-methods", "GET, DELETE")
+    |> send_resp(204, "")
+  end
+
+  delete "/pairing/v2/claim/:lookup_key" do
+    conn = allow_web_player(conn)
+    handle_pairing_no_content(conn, fn -> PairingHandler.delete_sealed_claim(lookup_key) end)
   end
 
   # 404 catch-all
@@ -1260,11 +1295,19 @@ defmodule MetadataRelay.Router do
     end
   end
 
-  # Pairing delete handler (returns 204 No Content)
-  defp handle_pairing_delete(conn, handler_fn) do
+  # Pairing handler for endpoints that return 204 No Content
+  defp handle_pairing_no_content(conn, handler_fn) do
     case handler_fn.() do
       {:ok, :no_content} ->
+        MetadataRelay.Metrics.inc("metadata_relay_pairing_requests_total")
         send_resp(conn, 204, "")
+
+      {:error, {:validation, message}} ->
+        error_response = %{error: "Validation error", message: message}
+
+        conn
+        |> put_resp_content_type("application/json")
+        |> send_resp(400, Jason.encode!(error_response))
 
       {:error, reason} ->
         error_response = %{error: "Internal server error", message: inspect(reason)}
