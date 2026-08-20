@@ -228,7 +228,10 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
                     the first item varies: the play slot is absent whenever
                     playback is off. --%>
               <div class="flex-shrink-0 sm:justify-self-end sm:border-l sm:border-base-300 sm:pl-3">
-                <div class="join border border-base-300 rounded-lg [&>*:not(:first-child)]:border-l [&>*:not(:first-child)]:border-base-300">
+                <div
+                  id={"episode-#{episode.id}-actions"}
+                  class="join border border-base-300 rounded-lg [&>*:not(:first-child)]:border-l [&>*:not(:first-child)]:border-base-300"
+                >
                   <%= if @playback_enabled do %>
                     <%= if has_files do %>
                       <% best_file = get_best_media_file(episode.media_files) %>

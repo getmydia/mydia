@@ -139,7 +139,10 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeRowTest do
     test "the four actions sit in one join group" do
       html = render_season([episode(media_files: [media_file()])])
 
-      assert html |> query(".join > .join-item") |> Enum.count() >= 4
+      # Scoped to the episode toolbar's own id. `season_section/1` also renders
+      # the season header's join group, so an unscoped `.join > .join-item`
+      # count passes on the header alone even if this toolbar were removed.
+      assert html |> query("#episode-ep-1-actions > .join-item") |> Enum.count() == 4
     end
   end
 
