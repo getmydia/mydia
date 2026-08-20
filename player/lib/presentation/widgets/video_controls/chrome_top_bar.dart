@@ -23,19 +23,25 @@ class GlassPill extends StatelessWidget {
   final VoidCallback? onTap;
   final PlayerGlassTier? tier;
 
+  /// Pill height. Defaults to [defaultHeight]; `UpNextPrompt` passes 44 at the
+  /// touch tier so its two hit targets clear the 44px floor. The three
+  /// top-bar pills take the default and are unchanged.
+  final double height;
+
   const GlassPill({
     super.key,
     required this.child,
     this.onTap,
     this.tier,
+    this.height = defaultHeight,
   });
 
-  /// Pill height. Matched across all three top-bar pills.
-  static const double height = 36.0;
+  /// Default pill height. Matched across all three top-bar pills.
+  static const double defaultHeight = 36.0;
 
   /// Text shadow applied to pill text only (never to icons) — measured in
   /// `pill_legibility_test.dart` to bring worst-case text contrast from
-  /// 2.4671976733802308:1 (fill alone, over the pill's 36px gradient) to
+  /// 2.4671976733802308:1 (fill alone, over the pill's default 36px gradient) to
   /// 7.755850943957899:1, comfortably above the WCAG SC 1.4.3 floor of
   /// 4.5:1. Same alpha as the precedent set for `ChromePanel`'s row-2
   /// timecodes (`Colors.black` @ 0.6 — `Color(0x99000000)`, since

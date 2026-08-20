@@ -82,7 +82,7 @@ double _contrast(int fgR, int fgG, int fgB, int bgR, int bgG, int bgB) {
 
 /// Fill alpha at vertical fraction [frac] (0 = pill top, 1 = pill bottom) of
 /// the top-to-bottom gradient GlassSurface.playerChrome paints across
-/// whatever height it's given — here, the pill's full [GlassPill.height].
+/// whatever height it's given — here, the pill's full [GlassPill.defaultHeight].
 double _alphaAtFraction(double frac) =>
     DepthTokens.playerChromeFillTopAlpha +
     (DepthTokens.playerChromeFillBottomAlpha -
@@ -96,7 +96,7 @@ double _alphaAtFraction(double frac) =>
 const _textColor = Colors.white;
 const _textAlpha = 0.80;
 const _textHeight = 13.0;
-final _textTop = (GlassPill.height - _textHeight) / 2;
+final _textTop = (GlassPill.defaultHeight - _textHeight) / 2;
 final _textBottom = _textTop + _textHeight;
 
 // The shadow spec this file's measurement leads to (see test bodies below) —
@@ -113,7 +113,7 @@ double _minContrastNoShadow(double topY, double bottomY) {
   for (var y = topY; y <= bottomY; y += 0.5) {
     final bg = _overWhite(
       DepthTokens.playerChromeTint,
-      _alphaAtFraction(y / GlassPill.height),
+      _alphaAtFraction(y / GlassPill.defaultHeight),
     );
     final fg = _compositeOver(bg, _textColor, _textAlpha);
     final c = _contrast(fg.$1, fg.$2, fg.$3, bg.$1, bg.$2, bg.$3);
@@ -127,7 +127,7 @@ double _minContrastWithShadow(double topY, double bottomY) {
   for (var y = topY; y <= bottomY; y += 0.5) {
     final bg = _overWhite(
       DepthTokens.playerChromeTint,
-      _alphaAtFraction(y / GlassPill.height),
+      _alphaAtFraction(y / GlassPill.defaultHeight),
     );
     final shaded = _compositeOver(bg, pillTextShadowColor, pillTextShadowAlpha);
     final fg = _compositeOver(shaded, _textColor, _textAlpha);
