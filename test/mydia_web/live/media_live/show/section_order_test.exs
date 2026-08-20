@@ -49,6 +49,8 @@ defmodule MydiaWeb.MediaLive.Show.SectionOrderTest do
       }
     ])
 
+    warm_movie_details_cache(source_tmdb_id)
+
     {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")
     render_async(view, 5000)
 
@@ -147,6 +149,45 @@ defmodule MydiaWeb.MediaLive.Show.SectionOrderTest do
            ]
   end
 
+  # A movie with no file is not left untouched by this reorder: its timeline card
+  # moved above the rails along with the file and subtitle cards. That is the
+  # intended grouping - everything about this copy of the movie, then everything
+  # about other movies - and it holds even when the history is the only thing in
+  # the first group. Pinned here so the placement stays a decision rather than a
+  # side effect of the guards.
+  test "a movie with no media files keeps its history above the rails", %{conn: conn} do
+    source_tmdb_id = System.unique_integer([:positive])
+
+    movie =
+      media_item_fixture(%{
+        type: "movie",
+        title: "Unowned",
+        year: 2019,
+        tmdb_id: source_tmdb_id
+      })
+
+    warm_recommendations_cache(source_tmdb_id, :movie, [
+      %{
+        "id" => System.unique_integer([:positive]),
+        "title" => "Something Else",
+        "release_date" => "2019-05-01",
+        "poster_path" => "/p.jpg"
+      }
+    ])
+
+    warm_movie_details_cache(source_tmdb_id)
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")
+    render_async(view, 5000)
+
+    # No media-files-section or subtitles-section: both guard on a non-empty
+    # media_files. No franchise-section: the fixture carries no collection_id.
+    assert section_ids(view) == [
+             "timeline-section",
+             "recommendations-rail"
+           ]
+  end
+
   # LazyHTML.query/2, not filter/2: filter matches root nodes only, and these
   # cards are nested inside the layout. query returns matches in document order,
   # which is the whole point of the assertion.
@@ -195,6 +236,42 @@ defmodule MydiaWeb.MediaLive.Show.SectionOrderTest do
 
     {:ok, _results} =
       Metadata.fetch_recommendations_cached(config, to_string(tmdb_id), media_type: media_type)
+
+    :ok
+  end
+
+  # Any movie whose metadata carries no collection_id sends
+  # Franchises.resolve_collection_id/2 down a movie-details lookup, and that has
+  # its own cache key ("fetch_by_id:...") entirely separate from the
+  # recommendations one warmed above. Left unwarmed the lookup escapes to the
+  # real relay, and System.unique_integer/1 hands out small integers that collide
+  # with real TMDB movie ids: a movie that turns out to belong to a real
+  # collection sprouts a franchise strip and reorders the page under the test.
+  # Warming it with a collection-less payload makes the lookup resolve to :none
+  # offline, so these assertions depend on nothing but the fixtures.
+  defp warm_movie_details_cache(tmdb_id) do
+    bypass = Bypass.open()
+    relay = Metadata.default_relay_config()
+    config = %{relay | base_url: "http://localhost:#{bypass.port}"}
+
+    # Mirrors the key fetch_by_id_cached/3 builds for these opts: no
+    # append_to_response, so that segment is empty, and a nil season order
+    # normalises to "official".
+    on_exit(fn ->
+      Cache.delete(
+        "fetch_by_id:#{relay.type}:#{tmdb_id}:movie:#{relay.options.language}::official"
+      )
+    end)
+
+    Bypass.expect_once(bypass, "GET", "/tmdb/movies/#{tmdb_id}", fn conn ->
+      body = %{"id" => tmdb_id, "title" => "Source", "belongs_to_collection" => nil}
+
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, Jason.encode!(body))
+    end)
+
+    {:ok, _details} = Metadata.fetch_by_id_cached(config, to_string(tmdb_id), media_type: :movie)
 
     :ok
   end
