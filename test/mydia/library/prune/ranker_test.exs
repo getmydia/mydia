@@ -26,6 +26,49 @@ defmodule Mydia.Library.Prune.RankerTest do
     }
   end
 
+  # Mirrors Mydia.Upgrades.ComparatorTest's profile/1: a usable profile with
+  # every dimension filled in, so score_file/3 never bails out early.
+  defp quality_profile(overrides \\ %{}) do
+    default_standards = %{
+      preferred_resolutions: ["2160p", "1080p", "720p"],
+      preferred_video_codecs: ["h265", "h264"],
+      preferred_audio_codecs: ["aac", "eac3"],
+      preferred_audio_channels: ["5.1", "2.0"],
+      preferred_sources: ["BluRay", "WEB-DL"],
+      hdr_formats: ["dolby_vision", "hdr10"]
+    }
+
+    attrs =
+      Map.merge(
+        %{quality_standards: default_standards},
+        Map.new(overrides)
+      )
+
+    quality_profile_fixture(attrs)
+  end
+
+  # Like group_of/1, but the movie carries `profile` as its quality profile,
+  # so Ranker.decide/1 can take the :profile path.
+  defp group_with_profile(profile, file_attrs) do
+    movie = media_item_fixture(%{type: "movie", quality_profile_id: profile.id})
+    lp = library_path_fixture(%{type: "movies"})
+
+    files =
+      Enum.map(file_attrs, fn attrs ->
+        attrs
+        |> Map.merge(%{media_item_id: movie.id, library_path_id: lp.id})
+        |> media_file_fixture()
+      end)
+
+    %Group{
+      subject_type: :movie,
+      subject_id: movie.id,
+      subject: movie,
+      media_item: Mydia.Repo.preload(movie, [:episodes, :quality_profile]),
+      files: Mydia.Repo.preload(files, :library_path)
+    }
+  end
+
   describe "decide/1 fallback ranking" do
     test "prefers higher resolution" do
       group =
@@ -162,6 +205,71 @@ defmodule Mydia.Library.Prune.RankerTest do
         ])
 
       assert Ranker.decide(group).keeper.relative_path == "known.mkv"
+    end
+  end
+
+  describe "decide/1 profile ranking" do
+    test "ranks via Upgrades.Comparator when the media item has a quality profile" do
+      profile = quality_profile()
+
+      group =
+        group_with_profile(profile, [
+          %{
+            relative_path: "low.mkv",
+            resolution: "480p",
+            codec: "mpeg4",
+            audio_codec: nil,
+            hdr_format: nil,
+            size: 500_000_000
+          },
+          %{
+            relative_path: "high.mkv",
+            resolution: "4K",
+            codec: "hevc",
+            audio_codec: "aac",
+            hdr_format: "Dolby Vision",
+            size: 20_000_000_000
+          }
+        ])
+
+      decision = Ranker.decide(group)
+
+      assert decision.ranker == :profile
+      assert decision.keeper.relative_path == "high.mkv"
+      assert Enum.map(decision.losers, & &1.relative_path) == ["low.mkv"]
+    end
+
+    test "falls back for the whole group when any file is unscorable, rather than mixing scales" do
+      profile = quality_profile()
+
+      group =
+        group_with_profile(profile, [
+          %{
+            relative_path: "analyzed.mkv",
+            resolution: "1080p",
+            codec: "h264",
+            bitrate: 4_000_000,
+            size: 1_000_000
+          },
+          %{
+            relative_path: "unanalyzed.mkv",
+            resolution: "480p",
+            codec: "mpeg4",
+            bitrate: 500_000,
+            size: 400_000,
+            # No analyzed_at means Comparator.score_file/3 returns
+            # {:error, :unscorable} for this file. A group must never rank
+            # one file on the profile's 0-100 scale and another on the
+            # fallback's raw resolution/bitrate scale, so the whole group
+            # must drop to :fallback.
+            analyzed_at: nil
+          }
+        ])
+
+      decision = Ranker.decide(group)
+
+      assert decision.ranker == :fallback
+      assert decision.keeper.relative_path == "analyzed.mkv"
     end
   end
 

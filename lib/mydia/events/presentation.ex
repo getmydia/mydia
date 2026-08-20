@@ -380,6 +380,21 @@ defmodule Mydia.Events.Presentation do
     if metadata["blacklisted"], do: "#{base}, release blacklisted", else: base
   end
 
+  def detail(%Event{type: "media_file.pruned", metadata: metadata}) do
+    trashed = metadata["trashed"] || []
+    count = length(trashed)
+    suffix = if count == 1, do: "file", else: "files"
+    base = "#{count} #{suffix} trashed"
+
+    case metadata["bytes_reclaimed"] do
+      bytes when is_integer(bytes) and bytes > 0 ->
+        "#{base}, #{humanize_bytes(bytes)} reclaimed"
+
+      _ ->
+        base
+    end
+  end
+
   @plain_download_types ~w(
     download.initiated download.completed download.cancelled
     download.paused download.resumed download.unstalled
@@ -590,6 +605,14 @@ defmodule Mydia.Events.Presentation do
   end
 
   defp pad(number), do: String.pad_leading("#{number}", 2, "0")
+
+  defp humanize_bytes(bytes) when bytes >= 1_073_741_824,
+    do: "#{Float.round(bytes / 1_073_741_824, 1)} GB"
+
+  defp humanize_bytes(bytes) when bytes >= 1_048_576,
+    do: "#{Float.round(bytes / 1_048_576, 1)} MB"
+
+  defp humanize_bytes(bytes), do: "#{bytes} B"
 
   defp search_subject(metadata), do: title_of(metadata) <> episode_part(metadata)
 

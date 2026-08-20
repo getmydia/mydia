@@ -58,12 +58,6 @@ defmodule Mydia.Library.Prune.Eligibility do
     end
   end
 
-  @doc """
-  The duration tolerance, exposed so the UI can explain the refusal.
-  """
-  @spec duration_tolerance() :: float()
-  def duration_tolerance, do: @duration_tolerance
-
   defp check_duplicate_registration(%Group{files: files}) do
     keys = Enum.map(files, &{&1.library_path_id, &1.relative_path})
 
@@ -120,8 +114,7 @@ defmodule Mydia.Library.Prune.Eligibility do
       Enum.filter(files, fn file ->
         flags =
           file.relative_path
-          |> Path.basename()
-          |> ReleaseParser.parse(target: target)
+          |> ReleaseParser.parse_with_path(target: target)
           |> Map.get(:engine_flags)
           |> Kernel.||(%{})
 
@@ -146,10 +139,7 @@ defmodule Mydia.Library.Prune.Eligibility do
 
     mismatched =
       Enum.filter(group.files, fn file ->
-        parsed =
-          file.relative_path
-          |> Path.basename()
-          |> ReleaseParser.parse(target: target)
+        parsed = ReleaseParser.parse_with_path(file.relative_path, target: target)
 
         season_disagrees?(parsed.season, episode.season_number) or
           episode_disagrees?(parsed.episodes, episode.episode_number)

@@ -189,5 +189,43 @@ defmodule Mydia.Library.Prune.EligibilityTest do
 
       assert {:ok, ^group} = Eligibility.check(group)
     end
+
+    test "recovers the season from folder structure when the filename omits it" do
+      # "E05" alone is anime-style absolute episode numbering with no season
+      # marker: ReleaseParser.parse/2 on the basename defaults it to season 1
+      # (see Resolver.parse_absolute_episode/1), which disagrees with this
+      # episode's real season 3. Only the "Season 03" folder segment carries
+      # the true season, and only ReleaseParser.parse_with_path/2 (fed
+      # file.relative_path, not Path.basename/1) reads it. Before switching
+      # check_episode_numbers/1 to parse_with_path/2, this exact shape parsed
+      # season 1 from the basename and wrongly refused an eligible group as
+      # :episode_mismatch.
+      show = media_item_fixture(%{type: "tv_show", title: "Show Name"})
+      episode = episode_fixture(%{media_item_id: show.id, season_number: 3, episode_number: 5})
+      lp = library_path_fixture(%{type: "series"})
+
+      files =
+        for name <- [
+              "Show Name/Season 03/Show.Name.E05.1080p.WEB.mkv",
+              "Show Name/Season 03/Show.Name.E05.720p.WEB.mkv"
+            ] do
+          media_file_fixture(%{
+            episode_id: episode.id,
+            library_path_id: lp.id,
+            relative_path: name,
+            metadata: %{"container" => "mkv", "duration" => 1320.0}
+          })
+        end
+
+      group = %Group{
+        subject_type: :episode,
+        subject_id: episode.id,
+        subject: episode,
+        media_item: Mydia.Repo.preload(show, :episodes),
+        files: Mydia.Repo.preload(files, :library_path)
+      }
+
+      assert {:ok, ^group} = Eligibility.check(group)
+    end
   end
 end

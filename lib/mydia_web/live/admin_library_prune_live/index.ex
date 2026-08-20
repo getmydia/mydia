@@ -23,7 +23,8 @@ defmodule MydiaWeb.AdminLibraryPruneLive.Index do
 
     {:ok,
      socket
-     |> assign(:page_title, "Prune duplicate files")
+     |> assign(:page_title, "Configuration - Prune Duplicates")
+     |> assign(:active_tab, :prune)
      |> assign(:selected, MapSet.new())
      |> assign(:keepers, %{})
      |> assign(:retention_days, retention_days)

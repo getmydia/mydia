@@ -109,8 +109,8 @@ defmodule MydiaWeb.AdminLibraryPruneLive.Components do
     "#{detail.unanalyzed_count} file(s) have no duration, so they cannot be compared. Run analysis first."
   end
 
-  defp refusal_explanation(:duration_mismatch, _detail) do
-    "These files are different lengths, so they are not the same content. This is usually bonus features or a file matched to the wrong item."
+  defp refusal_explanation(:duration_mismatch, detail) do
+    "These files are #{percent(detail.spread)} apart in length, more than the #{percent(detail.tolerance)} allowed, so they are not the same content. This is usually bonus features or a file matched to the wrong item."
   end
 
   defp refusal_explanation(:name_mismatch, _detail) do
@@ -122,6 +122,10 @@ defmodule MydiaWeb.AdminLibraryPruneLive.Components do
   end
 
   defp refusal_explanation(:nothing_to_prune, _detail), do: "Only one file remains."
+
+  # Formats a fraction (0.093) as a percentage string ("9.3%") for the
+  # duration mismatch explanation.
+  defp percent(fraction), do: "#{Float.round(fraction * 100, 1)}%"
 
   @doc """
   Formats a byte count for display. Public because the page template uses it

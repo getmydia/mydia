@@ -89,6 +89,16 @@ defmodule MydiaWeb.AdminLibraryPruneLiveTest do
       assert has_element?(view, "#prune-loser-#{loser.id}")
     end
 
+    test "renders the admin tab strip with prune as the active tab", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/library/prune")
+
+      assert has_element?(view, "div[role=tablist]")
+      assert has_element?(view, "a.tab-active", "Prune duplicates")
+      # Every other admin page's tab must still be reachable from here, or an
+      # operator who lands on this page has no way back to the rest of admin.
+      assert has_element?(view, "a[href='/admin/config/library-paths']", "Library")
+    end
+
     test "renders a refused group without any selectable file", %{conn: conn} do
       movie = refused_movie()
 
@@ -96,6 +106,22 @@ defmodule MydiaWeb.AdminLibraryPruneLiveTest do
 
       assert has_element?(view, "#prune-refusal-#{movie.id}")
       refute has_element?(view, "#prune-refusal-#{movie.id} input[type=checkbox]")
+    end
+
+    test "explains a duration mismatch refusal with the actual spread and tolerance",
+         %{conn: conn} do
+      # refused_movie/0's durations are 6360.0s and 280.0s, a ~95.6% spread
+      # against the 2.0% tolerance. The explanation must show both numbers so
+      # an operator can see how far apart the files actually were, not just
+      # that they disagreed.
+      movie = refused_movie()
+
+      {:ok, view, _html} = live(conn, ~p"/admin/library/prune")
+
+      group_html = view |> element("#prune-refusal-#{movie.id}") |> render()
+
+      assert group_html =~ "95.6%"
+      assert group_html =~ "2.0%"
     end
 
     test "trashes the selected loser on confirm", %{conn: conn} do
