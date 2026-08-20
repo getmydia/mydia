@@ -161,6 +161,47 @@ defmodule Mydia.RemoteAccess.ClaimCodeTest do
 
       assert consumed.used_at
     end
+
+    test "a code can only ever pair one device", %{
+      bypass: bypass,
+      claim: claim,
+      relay_url: relay_url
+    } do
+      # The winning consume cleans up its relay entry.
+      Bypass.stub(bypass, "DELETE", "/pairing/v2/claim/#{claim.lookup_key}", fn conn ->
+        Plug.Conn.resp(conn, 204, "")
+      end)
+
+      first = device_fixture(claim.user_id)
+      second = device_fixture(claim.user_id)
+
+      assert {:ok, _} =
+               RemoteAccess.consume_claim_code(claim.code, first.id, relay_url: relay_url)
+
+      # Single use is enforced by the UPDATE predicate, not by the prior read,
+      # so a second consumer loses even if it validated concurrently.
+      assert {:error, :already_used} =
+               RemoteAccess.consume_claim_code(claim.code, second.id, relay_url: relay_url)
+    end
+
+    test "an expired claim cannot be consumed even after validation", %{
+      claim: claim,
+      relay_url: relay_url
+    } do
+      device = device_fixture(claim.user_id)
+
+      # Simulate the claim lapsing between validation and the write. The UPDATE
+      # guards expiry itself, so the window cannot pair a device late.
+      past = DateTime.utc_now() |> DateTime.add(-1, :second) |> DateTime.truncate(:second)
+
+      Mydia.Repo.update_all(
+        from(c in Mydia.RemoteAccess.PairingClaim, where: c.id == ^claim.id),
+        set: [expires_at: past]
+      )
+
+      assert {:error, :expired} =
+               RemoteAccess.consume_claim_code(claim.code, device.id, relay_url: relay_url)
+    end
   end
 
   defp device_fixture(user_id) do

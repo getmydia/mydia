@@ -614,17 +614,30 @@ defmodule Mydia.RemoteAccess do
   # requests both pass validation and both consume the same code, pairing two
   # devices off one claim. The `is_nil(used_at)` guard in the UPDATE means
   # exactly one caller matches a row.
+  # Expiry is guarded here too, not just in the prior read. A claim can lapse
+  # between validation and this update, which would otherwise pair a device
+  # after the five-minute window had closed.
   defp mark_claim_used(claim, device_id) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 
     query =
       from(c in PairingClaim,
-        where: c.id == ^claim.id and is_nil(c.used_at)
+        where: c.id == ^claim.id and is_nil(c.used_at) and c.expires_at > ^now
       )
 
     case Repo.update_all(query, set: [used_at: now, device_id: device_id, updated_at: now]) do
       {1, _} -> {:ok, %{claim | used_at: now, device_id: device_id}}
-      {0, _} -> {:error, :already_used}
+      {0, _} -> {:error, consume_failure_reason(claim.id)}
+    end
+  end
+
+  # Two guards can reject the write, so say which one did. This only runs on the
+  # losing path, so the extra read costs nothing in the normal case.
+  defp consume_failure_reason(claim_id) do
+    case Repo.get(PairingClaim, claim_id) do
+      nil -> :not_found
+      %PairingClaim{used_at: used_at} when not is_nil(used_at) -> :already_used
+      _ -> :expired
     end
   end
 
