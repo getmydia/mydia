@@ -32,14 +32,23 @@ const PREFIX = new URL('p2p/', self.registration.scope).pathname;
 // the handler while this worker keeps controlling the page, because
 // unregister() does not stop a worker already in control.
 //
-// 30s is chosen against what the page does before it replies with a head: one
+// 60s is chosen against what the page does before it replies with a head: one
 // p2p round trip to the instance, which for the first segment of a fresh
 // session waits on the instance's HLS session becoming ready (its own 30s
-// budget, in lib/mydia/p2p/server.ex). Anything under that would abort real,
-// working cold starts over a relay. Nothing legitimate waits on this: the
-// failures it catches are handler-is-missing states that would otherwise wait
-// forever.
-const REPLY_TIMEOUT_MS = 30_000;
+// budget, in lib/mydia/p2p/server.ex).
+//
+// It has to exceed that budget, not match it. At an equal 30s the two
+// deadlines race and a cold start that legitimately uses its full budget
+// loses: the instance answers at the moment this worker gives up, so a
+// working session returns 503. Worse, that 503 is indistinguishable from a
+// genuine transport fault, which makes it the most misleading failure this
+// file can produce. The headroom covers the instance's own wait plus the
+// relay round trip carrying the answer back, and a browser connection never
+// hole-punches, so it always pays relay latency.
+//
+// Nothing legitimate waits on the full 60s: the failures it catches are
+// handler-is-missing states that would otherwise wait forever.
+const REPLY_TIMEOUT_MS = 60_000;
 
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));

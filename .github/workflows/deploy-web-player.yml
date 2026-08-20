@@ -1,26 +1,44 @@
 name: Deploy Web Player
 
-# Manual dispatch only, on purpose. There is no `push` trigger yet.
+# web.mydia.dev ships on a release, plus manual dispatch for a hotfix or a
+# rehearsal. release.yml calls this workflow after it publishes, so the public
+# player moves in step with the tag, the Docker :latest image and the docs.
 #
-# Nothing in this stack has been exercised end to end even once: every browser
-# test covering it uses a fake P2pService, so the wasm iroh transport, dialing
-# over the relay, pairing, and GraphQL over p2p have never run anywhere. An
-# automatic deploy would publish that straight to web.mydia.dev, and merging
-# the branch that adds the workflow would be enough to do it.
+# Deliberately not `push: branches: [master]`, which an earlier revision of
+# this file carried. There is one public player and no staging copy of it, so
+# a push trigger would put every intermediate master commit in front of every
+# viewer, and the browser matrix that qualifies this stack is per-release work
+# (docs/superpowers/sdd-web-player/MANUAL-VERIFICATION.md) rather than
+# something CI can stand in for.
 #
-# Restoring it is one deliberate block, to be added back under `on:` once the
-# manual browser matrix has been run and relay capacity has been reviewed:
-#
-#   push:
-#     branches: [master]
-#     paths:
-#       - "player/**"
-#       # player/rust/mydia_player_p2p depends on ../../native/mydia_p2p_core
-#       # by relative path. A core change alters the wasm bundle even when no
-#       # Flutter file moves, so it must trigger a redeploy on its own.
-#       - "native/mydia_p2p_core/**"
+# The `ref` input exists because a release does not necessarily build master's
+# tip: release.yml pins its draft to a commit SHA and every job checks that
+# same SHA out, so the tag, the images and this bundle all describe one commit.
+# Defaulting to github.sha keeps a bare dispatch behaving as it always has.
 on:
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        description: Commit SHA to build and deploy.
+        type: string
+        required: true
+      branch:
+        description: >-
+          What wrangler reports as the deploy's branch. Reaches web.mydia.dev
+          only when it matches the Pages project's production branch.
+        type: string
+        required: true
+    # Named rather than left to `secrets: inherit` at the call site, which
+    # would hand this workflow every secret the repository holds: Apple and
+    # Android signing keys, the Flatpak GPG key, R2 credentials. It needs two.
+    # These same names resolve to the repository secrets on a bare dispatch,
+    # so the steps below read `secrets.*` either way.
+    secrets:
+      CACHIX_AUTH_TOKEN:
+        required: true
+      CLOUDFLARE_API_TOKEN:
+        required: true
 
 concurrency:
   group: web-player
@@ -30,9 +48,20 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
 
+    # Checking out the tree is the only thing this needs from GitHub. Cachix
+    # and Cloudflare each authenticate with their own token, so nothing here
+    # wants a writable GITHUB_TOKEN. When release.yml calls this workflow, the
+    # caller's grant and this one intersect, and both are contents: read.
+    permissions:
+      contents: read
+
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          # Empty on a bare dispatch, where github.sha is already the tip of
+          # whichever ref was picked, so this matches the previous behaviour.
+          ref: ${{ inputs.ref || github.sha }}
 
       # The devenv/Cachix/Nix steps below are copied from the `rust` job in
       # ci.yml, which already builds native/mydia_p2p_core for
@@ -119,18 +148,19 @@ jobs:
       # relying on it auto-detecting the checkout (which actions/checkout only
       # gives a real local branch for on a branch push; workflow_dispatch has
       # no branch of its own to detect). This deploy is only ever "production"
-      # if that value matches the Pages project's configured production
-      # branch, which does NOT default to master on a new project (see the
-      # human setup steps below), and a mismatch there still deploys
-      # successfully to a preview URL with no failure anywhere in this job,
-      # so getting the project setting right is what actually matters; this
-      # flag only removes the auto-detection half of the risk.
+      # if that value matches the `mydia-web` Pages project's production
+      # branch, which is `master`. A mismatch is the quiet failure worth
+      # knowing about: it still deploys successfully, to a preview URL, with
+      # nothing in this job reporting a problem and web.mydia.dev unchanged.
       #
-      # github.ref_name rather than a literal `master`: the dispatch UI lets a
-      # human pick any ref, and a hardcoded master would let a run from a
-      # feature branch claim to be production and overwrite web.mydia.dev with
-      # unreviewed code. A dispatch from a branch now deploys to that branch's
-      # preview URL, which is what a human picking it meant.
+      # The release path passes `master` explicitly. It cannot use
+      # github.ref_name, because a release checks out the SHA its draft pins
+      # rather than a branch, and it cannot infer the name from that SHA.
+      #
+      # A bare dispatch still falls back to github.ref_name so that a run from
+      # a feature branch publishes to that branch's preview instead of
+      # overwriting the public player with unreviewed code. A hardcoded
+      # `master` here would remove that protection.
       #
       # Passed through the environment rather than interpolated into the
       # command: a ref name is attacker-influencable text and git permits `$`,
@@ -140,4 +170,4 @@ jobs:
         run: npx wrangler pages deploy player/build/web --project-name=mydia-web --branch="$DEPLOY_BRANCH"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          DEPLOY_BRANCH: ${{ github.ref_name }}
+          DEPLOY_BRANCH: ${{ inputs.branch || github.ref_name }}
