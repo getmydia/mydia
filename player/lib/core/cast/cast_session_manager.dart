@@ -677,6 +677,11 @@ class CastSessionManager {
       // A block on our own side. No alternate media route reaches a receiver
       // the OS will not let us open a socket to.
       case CastFailureKind.localNetworkDenied:
+      // Both are Mydia-target-specific and neither is a media-route problem:
+      // a revoked pairing or an unmounted player is not fixed by retrying
+      // with a different URL or encoding.
+      case CastFailureKind.notAuthorized:
+      case CastFailureKind.notPlaying:
       case CastFailureKind.unknown:
         return null;
     }

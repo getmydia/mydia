@@ -1,5 +1,5 @@
 /// The wire protocol a cast receiver speaks.
-enum CastProtocolKind { chromecast, dlna }
+enum CastProtocolKind { chromecast, dlna, mydia }
 
 /// Represents a discovered cast receiver on the network.
 class CastDevice {
@@ -37,9 +37,11 @@ class CastDevice {
     return CastDevice(
       id: json['id'] as String,
       name: json['name'] as String,
-      protocol: json['protocol'] == 'dlna'
-          ? CastProtocolKind.dlna
-          : CastProtocolKind.chromecast,
+      protocol: switch (json['protocol']) {
+        'dlna' => CastProtocolKind.dlna,
+        'mydia' => CastProtocolKind.mydia,
+        _ => CastProtocolKind.chromecast,
+      },
       model: json['model'] as String?,
       host: json['host'] as String?,
       port: json['port'] as int?,
@@ -53,7 +55,7 @@ class CastDevice {
   Map<String, dynamic> toJson() => {
         'id': id,
         'name': name,
-        'protocol': protocol == CastProtocolKind.dlna ? 'dlna' : 'chromecast',
+        'protocol': protocol.name,
         'model': model,
         'host': host,
         'port': port,

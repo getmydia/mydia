@@ -12,9 +12,22 @@ class FakeCastBackend implements CastBackend {
   final _positions = StreamController<Duration>.broadcast();
   final _durations = StreamController<Duration>.broadcast();
   final _failures = StreamController<CastFailureKind>.broadcast();
+  final _volumes = StreamController<double>.broadcast();
 
   final List<CastMediaRequest> loadedRequests = [];
   final List<Duration> seeks = [];
+
+  /// Every `setVolume` call, in order.
+  final List<double> volumeChanges = [];
+
+  /// Every `setMuted` call, in order.
+  final List<bool> mutedChanges = [];
+
+  /// What [capabilities] reports. Settable so a test can declare a target
+  /// that supports volume (or track selection, or next/previous) without
+  /// needing a second fake.
+  @override
+  CastCapabilityFlags capabilities = const CastCapabilityFlags();
 
   /// Every `connect` call, so tests can prove an open connection is reused
   /// rather than torn down and rebuilt.
@@ -82,6 +95,7 @@ class FakeCastBackend implements CastBackend {
   void emitPosition(Duration position) => _positions.add(position);
   void emitDuration(Duration duration) => _durations.add(duration);
   void emitFailure(CastFailureKind kind) => _failures.add(kind);
+  void emitVolume(double level) => _volumes.add(level);
 
   /// Fail only the next [times] `loadMedia` call(s), consumed in order, so a
   /// later attempt can succeed. Calling this more than once (or with
@@ -190,11 +204,21 @@ class FakeCastBackend implements CastBackend {
   CastDevice? get connectedDevice => _connected;
 
   @override
+  Future<void> setVolume(double level) async => volumeChanges.add(level);
+
+  @override
+  Future<void> setMuted(bool muted) async => mutedChanges.add(muted);
+
+  @override
+  Stream<double> get volumeStream => _volumes.stream;
+
+  @override
   Future<void> dispose() async {
     await _devices.close();
     await _states.close();
     await _positions.close();
     await _durations.close();
     await _failures.close();
+    await _volumes.close();
   }
 }

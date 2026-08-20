@@ -56,6 +56,11 @@ String castErrorMessage(
       final os = (isIOS ?? PlatformFeatures.isIOS) ? 'iOS' : 'macOS';
       return 'Mydia could not reach the device. If it is powered on, $os may '
           'be blocking local network access for Mydia.';
+    case CastFailureKind.notAuthorized:
+      return 'This device no longer allows Mydia to control it. Pair with '
+          'it again.';
+    case CastFailureKind.notPlaying:
+      return 'Nothing is currently playing on that device.';
     case CastFailureKind.unknown:
       return 'Casting failed: ${e.message}';
   }
