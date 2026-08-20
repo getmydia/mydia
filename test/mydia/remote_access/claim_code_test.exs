@@ -184,47 +184,52 @@ defmodule Mydia.RemoteAccess.ClaimCodeTest do
                RemoteAccess.consume_claim_code(claim.code, second.id, relay_url: relay_url)
     end
 
-    test "a pairing that cannot consume its claim creates no device", %{
-      bypass: bypass,
-      claim: claim,
-      relay_url: relay_url
-    } do
-      Bypass.stub(bypass, "DELETE", "/pairing/v2/claim/#{claim.lookup_key}", fn conn ->
-        Plug.Conn.resp(conn, 204, "")
-      end)
-
-      device = device_fixture(claim.user_id)
-
-      assert {:ok, _} =
-               RemoteAccess.consume_claim_code(claim.code, device.id, relay_url: relay_url)
-
-      # A second live claim, so the "no active claim" gate does not short
-      # circuit before complete_pairing reaches device creation. Inserted
-      # directly to keep the relay out of it.
-      {:ok, _live} =
-        %Mydia.RemoteAccess.PairingClaim{}
-        |> Mydia.RemoteAccess.PairingClaim.changeset_with_code(%{
-          user_id: claim.user_id,
-          code: "ZZZZZZ",
-          lookup_key: String.duplicate("f", 64),
-          expires_at:
-            DateTime.utc_now() |> DateTime.add(300, :second) |> DateTime.truncate(:second)
-        })
-        |> Mydia.Repo.insert()
-
+    test "a consume failure after device creation rolls the device back", %{claim: claim} do
       before = length(RemoteAccess.list_devices(claim.user_id))
 
-      # complete_pairing inserts the device before consuming, so any failure on
-      # the consume must take the device with it. This exercises the shared
-      # transaction, though it reaches the failure through validation rather
-      # than through a genuine concurrent race, which is not reproducible here.
-      assert {:error, _} =
-               Mydia.RemoteAccess.Pairing.complete_pairing(claim.code, %{
-                 device_name: "Loser",
-                 platform: "test"
-               })
+      # Mirrors the sequence in complete_pairing/2: insert the device, then
+      # consume. Driving it here rather than through complete_pairing/2 is
+      # deliberate. That function validates before it creates the device, so any
+      # failure reachable from a single process happens before the insert and
+      # would leave nothing to roll back, making the assertion vacuous. The
+      # window the transaction actually protects needs a concurrent winner
+      # between the two validations, which is not reproducible deterministically.
+      #
+      # What is testable, and what the production code depends on, is that
+      # consume_claim_in_transaction/2 reports failure as a value the caller can
+      # roll back on, rather than raising or committing.
+      result =
+        Mydia.Repo.transaction(fn ->
+          {:ok, device} =
+            RemoteAccess.create_device(%{
+              user_id: claim.user_id,
+              device_name: "Loser",
+              platform: "test",
+              token: Ecto.UUID.generate()
+            })
 
+          case RemoteAccess.consume_claim_in_transaction("NOTACODE", device.id) do
+            {:error, reason} -> Mydia.Repo.rollback(reason)
+            {:ok, _} -> Mydia.Repo.rollback(:unexpectedly_consumed)
+          end
+        end)
+
+      assert {:error, :not_found} = result
       assert length(RemoteAccess.list_devices(claim.user_id)) == before
+    end
+
+    test "consuming inside a transaction performs no side effects", %{claim: claim} do
+      device = device_fixture(claim.user_id)
+
+      # No DELETE expectation is registered on purpose. The relay cleanup is an
+      # HTTP call, so it must not run inside the transaction: it would hold a
+      # row lock for a network round trip and could not be undone on rollback.
+      # Bypass fails the test if an unexpected request arrives, so this asserts
+      # the absence of that call rather than merely not checking for it.
+      assert {:ok, consumed} =
+               RemoteAccess.consume_claim_in_transaction(claim.code, device.id)
+
+      assert consumed.used_at
     end
 
     test "an expired claim cannot be consumed even after validation", %{
