@@ -281,6 +281,21 @@ defmodule Mydia.RemoteAccess do
   end
 
   @doc """
+  Records the iroh node ID a device is currently reachable at.
+
+  Called on every app start rather than only at pairing, so a device that
+  regenerated its keypair heals itself instead of silently dropping out of the
+  roster.
+  """
+  @spec register_node_id(RemoteDevice.t(), String.t()) ::
+          {:ok, RemoteDevice.t()} | {:error, Ecto.Changeset.t()}
+  def register_node_id(%RemoteDevice{} = device, node_id) do
+    device
+    |> RemoteDevice.node_id_changeset(node_id)
+    |> Repo.update()
+  end
+
+  @doc """
   Revokes a device, preventing future access.
   """
   def revoke_device(device) do

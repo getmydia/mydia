@@ -15,6 +15,7 @@ defmodule Mydia.RemoteAccess.RemoteDevice do
           platform: String.t() | nil,
           token_hash: String.t() | nil,
           token: String.t() | nil,
+          node_id: String.t() | nil,
           last_seen_at: DateTime.t() | nil,
           revoked_at: DateTime.t() | nil,
           user: Mydia.Accounts.User.t() | Ecto.Association.NotLoaded.t(),
@@ -28,6 +29,7 @@ defmodule Mydia.RemoteAccess.RemoteDevice do
     field :platform, :string
     field :token_hash, :string
     field :token, :string, virtual: true
+    field :node_id, :string
     field :last_seen_at, :utc_datetime
     field :revoked_at, :utc_datetime
 
@@ -76,6 +78,19 @@ defmodule Mydia.RemoteAccess.RemoteDevice do
     # SQLite doesn't support microseconds, so truncate to seconds
     now = DateTime.utc_now() |> DateTime.truncate(:second)
     change(device, revoked_at: now)
+  end
+
+  @doc """
+  Changeset for recording the device's iroh node ID.
+
+  Separate from `changeset/2` because a node ID arrives long after pairing, on
+  every app start, and must not require the pairing fields to be present.
+  """
+  def node_id_changeset(device, node_id) do
+    device
+    |> cast(%{node_id: node_id}, [:node_id])
+    |> validate_required([:node_id])
+    |> validate_length(:node_id, min: 32, max: 128)
   end
 
   @doc """
