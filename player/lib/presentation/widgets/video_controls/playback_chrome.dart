@@ -264,9 +264,19 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
               _pointerOverChrome = false;
               _restartTimer();
             },
-            child: KeyedSubtree(
-              key: ChromeVisibility.contentKey,
-              child: widget.child,
+            child: Listener(
+              // Touch devices have no hover, so `onEnter` above never fires,
+              // and tapping an already-visible control never calls `_show()`
+              // either (only a hidden -> visible transition does). Without
+              // this, `onActivity` never fires on touch at all, so
+              // `UpNextCountdown.noteInput()` is never called and the race
+              // guard never arms — on phones, exactly where a fat-finger
+              // race matters most.
+              onPointerDown: (_) => widget.onActivity?.call(),
+              child: KeyedSubtree(
+                key: ChromeVisibility.contentKey,
+                child: widget.child,
+              ),
             ),
           ),
         ),
