@@ -59,21 +59,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
 
   @impl true
   def handle_event("keep_file", %{"subject" => subject_id, "file" => file_id}, socket) do
-    # Only a loser of a live decision can move. The keeper is already kept, so
-    # marking it again is a no-op, and admitting its id here would seed `:kept`
-    # with an entry that outlives the group it came from. Resolving the
-    # decision the way `trash_file` does keeps both handlers honest about
-    # client-supplied ids.
-    decision = find_decision(socket, subject_id)
-
-    if decision && Enum.any?(decision.losers, &(&1.id == file_id)) do
-      {:noreply,
-       socket
-       |> assign(:kept, MapSet.put(socket.assigns.kept, file_id))
-       |> assign_selection()}
-    else
-      {:noreply, socket}
-    end
+    {:noreply, update_kept(socket, subject_id, file_id, &MapSet.put/2)}
   end
 
   def handle_event("trash_file", %{"subject" => subject_id, "file" => file_id}, socket) do
@@ -85,10 +71,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
         {:noreply, promote_successor(socket, decision, file_id)}
 
       _decision ->
-        {:noreply,
-         socket
-         |> assign(:kept, MapSet.delete(socket.assigns.kept, file_id))
-         |> assign_selection()}
+        {:noreply, update_kept(socket, subject_id, file_id, &MapSet.delete/2)}
     end
   end
 
@@ -181,6 +164,31 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
         |> assign(:keepers, Map.put(socket.assigns.keepers, decision.group.subject_id, file.id))
         |> assign(:kept, kept |> MapSet.delete(file.id) |> MapSet.delete(keeper_id))
         |> load_plan()
+    end
+  end
+
+  # Both row controls move one loser in or out of `:kept`, and both take the
+  # subject and the file from the event. The set only moves when the decision
+  # named by the event actually holds that file.
+  #
+  # The keeper is excluded on purpose: it is already kept, so `keep_file` on it
+  # is a no-op, and `trash_file` on it is a promotion handled before this is
+  # reached. Admitting it would leave the current keeper's id sitting in the
+  # set, outliving the group it came from.
+  #
+  # Pairing one group's subject with another group's file is not something the
+  # page can produce. It must not move the set either: on a page that trashes
+  # files, that is the difference between a spared copy staying spared and
+  # quietly going back on Trash under a group the operator was not looking at.
+  defp update_kept(socket, subject_id, file_id, fun) do
+    decision = find_decision(socket, subject_id)
+
+    if decision && Enum.any?(decision.losers, &(&1.id == file_id)) do
+      socket
+      |> assign(:kept, fun.(socket.assigns.kept, file_id))
+      |> assign_selection()
+    else
+      socket
     end
   end
 

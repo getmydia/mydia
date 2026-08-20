@@ -260,6 +260,29 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
       for file <- files, do: refute(trashed?(file))
     end
 
+    test "a Trash event pairing one group's subject with another group's file changes nothing",
+         %{conn: conn} do
+      # The dangerous direction of the same asymmetry: an unvalidated
+      # `trash_file` would drop the named file from the Keep set no matter
+      # which group it belongs to, putting a copy the operator spared back on
+      # Trash under a group they were not looking at.
+      {_show_a, episode_a, _files_a} = duplicated_episode(@three_files)
+      {_show_b, _episode_b, files_b} = duplicated_episode(@three_files)
+      keeper_b = Enum.find(files_b, &(&1.relative_path =~ "1080p"))
+      spared_b = Enum.find(files_b, &(&1.relative_path =~ "480p"))
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+
+      view |> element("#duplicates-keep-#{spared_b.id}") |> render_click()
+      assert has_element?(view, "#duplicates-keep-#{spared_b.id}[checked]")
+
+      render_click(view, "trash_file", %{"subject" => episode_a.id, "file" => spared_b.id})
+
+      assert has_element?(view, "#duplicates-keep-#{spared_b.id}[checked]")
+      refute has_element?(view, "#duplicates-trash-#{spared_b.id}[checked]")
+      refute has_element?(view, "#duplicates-trash-#{keeper_b.id}[checked]")
+    end
+
     test "a Keep event naming a file outside the group changes nothing", %{conn: conn} do
       # Both row handlers resolve the decision before trusting the id the
       # client sent. Without that, keep_file would bank any id at all in the
