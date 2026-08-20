@@ -77,6 +77,43 @@ defmodule Mydia.Media.SeasonOrder do
   def effective(%MediaItem{season_order: order}), do: order
 
   @doc """
+  The orderings this show can actually be put into: the ones TVDB publishes
+  for it, narrowed to the ones `season_order` can store, plus whichever one
+  the show is in right now.
+
+  Meant to drive the ordering selector. Offering an ordering TVDB does not
+  publish buys a guaranteed `{:error, :no_alternative_ordering}` from
+  `switch/3`, since `Relay.fetch_ordering_episodes/4` finds no season stubs
+  of that type and returns an empty list. Not offering it is the fix.
+
+  `effective/1` is included unconditionally. A show recorded as `:dvd` whose
+  TVDB payload no longer lists a dvd ordering would otherwise render a
+  selector with no matching option, which misreports where the show is and
+  leaves no way back.
+
+  TVDB publishes types outside `@values` for some series ("alternate",
+  "regional"). They are dropped: `media_items.season_order` is an
+  `Ecto.Enum` restricted to `@values` and cannot store them.
+  """
+  @spec available(MediaItem.t(), map()) :: {:ok, [atom()]} | {:error, term()}
+  def available(%MediaItem{tvdb_id: nil}, _config), do: {:error, :missing_tvdb_id}
+
+  def available(%MediaItem{} = media_item, config) do
+    provider_id = to_string(media_item.tvdb_id)
+    current = effective(media_item)
+
+    with {:ok, raw_seasons} <- Relay.fetch_raw_seasons(config, provider_id) do
+      published = raw_seasons |> Relay.available_orderings() |> Map.keys()
+
+      # Filtering `@values` rather than mapping the payload's keys does three
+      # jobs in one pass: it drops types the enum cannot store, it fixes the
+      # option order independently of the map's key order, and it never calls
+      # `String.to_atom/1` on a provider-supplied string.
+      {:ok, Enum.filter(@values, &(&1 == current or Atom.to_string(&1) in published))}
+    end
+  end
+
+  @doc """
   Looks up TVDB's alternative ("dvd") ordering for a show and, if it exists,
   the real per-season episode counts (specials excluded) — the numbers a
   suggestion banner needs to name the alternative concretely rather than

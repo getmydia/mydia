@@ -198,4 +198,87 @@ defmodule Mydia.Media.SeasonOrderTest do
     |> Enum.map(&{&1.provider_episode_id, &1.season_number, &1.episode_number})
     |> Enum.sort()
   end
+
+  describe "available/2" do
+    setup do
+      %{config: Mydia.Metadata.default_relay_config()}
+    end
+
+    test "offers the orderings TVDB publishes", %{config: config} do
+      tvdb_id = System.unique_integer([:positive])
+      show = tvdb_show(tvdb_id)
+      seed_raw_seasons(tvdb_id, [{"official", 1}, {"dvd", 4}])
+
+      assert {:ok, [:official, :dvd]} = SeasonOrder.available(show, config)
+    end
+
+    test "drops ordering types season_order cannot store", %{config: config} do
+      tvdb_id = System.unique_integer([:positive])
+      show = tvdb_show(tvdb_id)
+      seed_raw_seasons(tvdb_id, [{"official", 1}, {"alternate", 3}, {"regional", 2}])
+
+      assert {:ok, [:official]} = SeasonOrder.available(show, config)
+    end
+
+    # The option order must not depend on the payload's key order, or the
+    # selector would reshuffle itself between shows.
+    test "returns the orderings in values/0 order", %{config: config} do
+      tvdb_id = System.unique_integer([:positive])
+      show = tvdb_show(tvdb_id)
+      seed_raw_seasons(tvdb_id, [{"absolute", 1}, {"dvd", 4}, {"official", 1}])
+
+      assert {:ok, [:official, :dvd, :absolute]} = SeasonOrder.available(show, config)
+    end
+
+    # A show sitting on an ordering TVDB no longer publishes would otherwise
+    # render a selector with no matching option, misreporting where it is and
+    # offering no way back.
+    test "always includes the ordering the show is already in", %{config: config} do
+      tvdb_id = System.unique_integer([:positive])
+      show = tvdb_show(tvdb_id, %{season_order: :dvd})
+      seed_raw_seasons(tvdb_id, [{"official", 1}])
+
+      assert {:ok, [:official, :dvd]} = SeasonOrder.available(show, config)
+    end
+
+    test "refuses a show with no TVDB id", %{config: config} do
+      show = media_item_fixture(%{type: "tv_show", title: "No Id", metadata_source: :tvdb})
+
+      assert {:error, :missing_tvdb_id} = SeasonOrder.available(show, config)
+    end
+  end
+
+  defp tvdb_show(tvdb_id, attrs \\ %{}) do
+    media_item_fixture(
+      Map.merge(
+        %{
+          type: "tv_show",
+          title: "Ordering #{tvdb_id}",
+          tvdb_id: tvdb_id,
+          metadata_source: :tvdb
+        },
+        attrs
+      )
+    )
+  end
+
+  # Seeds the cache key `Relay.fetch_raw_seasons/2` reads, so the lookup never
+  # makes an HTTP request. `Mydia.Metadata.Cache` is a shared ETS table, but the
+  # key carries a unique tvdb_id per test, so this stays safe under async: true.
+  defp seed_raw_seasons(tvdb_id, types) do
+    seasons =
+      Enum.flat_map(types, fn {type, season_count} ->
+        Enum.map(1..season_count, fn number ->
+          %{
+            "id" => System.unique_integer([:positive]),
+            "number" => number,
+            "type" => %{"type" => type}
+          }
+        end)
+      end)
+
+    Mydia.Metadata.Cache.put("tvdb_raw_seasons:#{tvdb_id}", seasons, ttl: :timer.hours(1))
+
+    :ok
+  end
 end
