@@ -184,6 +184,49 @@ defmodule Mydia.RemoteAccess.ClaimCodeTest do
                RemoteAccess.consume_claim_code(claim.code, second.id, relay_url: relay_url)
     end
 
+    test "a pairing that cannot consume its claim creates no device", %{
+      bypass: bypass,
+      claim: claim,
+      relay_url: relay_url
+    } do
+      Bypass.stub(bypass, "DELETE", "/pairing/v2/claim/#{claim.lookup_key}", fn conn ->
+        Plug.Conn.resp(conn, 204, "")
+      end)
+
+      device = device_fixture(claim.user_id)
+
+      assert {:ok, _} =
+               RemoteAccess.consume_claim_code(claim.code, device.id, relay_url: relay_url)
+
+      # A second live claim, so the "no active claim" gate does not short
+      # circuit before complete_pairing reaches device creation. Inserted
+      # directly to keep the relay out of it.
+      {:ok, _live} =
+        %Mydia.RemoteAccess.PairingClaim{}
+        |> Mydia.RemoteAccess.PairingClaim.changeset_with_code(%{
+          user_id: claim.user_id,
+          code: "ZZZZZZ",
+          lookup_key: String.duplicate("f", 64),
+          expires_at:
+            DateTime.utc_now() |> DateTime.add(300, :second) |> DateTime.truncate(:second)
+        })
+        |> Mydia.Repo.insert()
+
+      before = length(RemoteAccess.list_devices(claim.user_id))
+
+      # complete_pairing inserts the device before consuming, so any failure on
+      # the consume must take the device with it. This exercises the shared
+      # transaction, though it reaches the failure through validation rather
+      # than through a genuine concurrent race, which is not reproducible here.
+      assert {:error, _} =
+               Mydia.RemoteAccess.Pairing.complete_pairing(claim.code, %{
+                 device_name: "Loser",
+                 platform: "test"
+               })
+
+      assert length(RemoteAccess.list_devices(claim.user_id)) == before
+    end
+
     test "an expired claim cannot be consumed even after validation", %{
       claim: claim,
       relay_url: relay_url

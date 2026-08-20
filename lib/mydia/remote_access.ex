@@ -600,13 +600,42 @@ defmodule Mydia.RemoteAccess do
   def consume_claim_code(code, device_id, opts \\ []) do
     code = normalize_code(code)
 
-    with {:ok, claim} <- validate_claim_code(code),
-         {:ok, consumed_claim} <- mark_claim_used(claim, device_id) do
-      delete_sealed_claim(consumed_claim.lookup_key, opts)
-      # Notify UI that claim has been consumed (for auto-closing pairing modal)
-      publish_claim_consumed(consumed_claim)
+    with {:ok, consumed_claim} <- consume_claim_in_transaction(code, device_id) do
+      finish_claim_consumption(consumed_claim, opts)
       {:ok, consumed_claim}
     end
+  end
+
+  @doc """
+  Consumes a claim inside the caller's transaction, with no side effects.
+
+  Split out so a caller that inserts rows before consuming can roll them back
+  when it loses the race. `Mydia.RemoteAccess.Pairing.complete_pairing/2`
+  creates a device first, and without a shared transaction the loser leaves an
+  orphaned device behind.
+
+  The side effects stay outside deliberately: the relay delete is an HTTP call
+  that would hold a row lock for a network round trip, and broadcasting a
+  consumption that later rolls back would be a lie. Run
+  `finish_claim_consumption/2` after the transaction commits.
+  """
+  def consume_claim_in_transaction(code, device_id) do
+    code = normalize_code(code)
+
+    with {:ok, claim} <- validate_claim_code(code) do
+      mark_claim_used(claim, device_id)
+    end
+  end
+
+  @doc """
+  Runs the side effects for a consumed claim. Call only after the transaction
+  that consumed it has committed.
+  """
+  def finish_claim_consumption(claim, opts \\ []) do
+    delete_sealed_claim(claim.lookup_key, opts)
+    # Notify UI that claim has been consumed (for auto-closing pairing modal)
+    publish_claim_consumed(claim)
+    :ok
   end
 
   # Single use has to be a property of the write, not of a prior read.
