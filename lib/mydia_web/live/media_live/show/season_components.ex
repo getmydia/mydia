@@ -210,7 +210,16 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
                   class={["badge badge-sm gap-1 max-w-full", episode_status_color(status)]}
                 >
                   <.icon name={episode_status_icon(status)} class="w-3 h-3 shrink-0" />
-                  <span class="hidden lg:inline truncate">{episode_status_label(status)}</span>
+                  <%!-- `hidden` is display:none, which drops the label out of the
+                        accessibility tree entirely below lg. The icon is a masked
+                        span and data-tip is CSS content, so neither names the
+                        status. Keep an sr-only copy at every breakpoint and hide
+                        the visible one from screen readers to avoid a double
+                        announcement at lg. --%>
+                  <span class="sr-only">{episode_status_label(status)}</span>
+                  <span aria-hidden="true" class="hidden lg:inline truncate">
+                    {episode_status_label(status)}
+                  </span>
                 </span>
               </div>
 

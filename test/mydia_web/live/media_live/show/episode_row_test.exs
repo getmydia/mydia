@@ -123,6 +123,19 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeRowTest do
       assert label =~ "Missing"
     end
 
+    test "the status label reaches assistive technology at every breakpoint" do
+      html = render_season([episode(air_date: ~D[2024-01-01], media_files: [])])
+
+      # The visible label is `hidden lg:inline`, and `hidden` is display:none —
+      # it leaves the accessibility tree below lg. An sr-only copy carries the
+      # name at every width; the visible one is aria-hidden so lg does not
+      # announce it twice.
+      sr_only = html |> query("#episode-ep-1-status .sr-only") |> LazyHTML.text()
+
+      assert sr_only =~ "Missing"
+      assert has_selector?(html, ~s(#episode-ep-1-status [aria-hidden="true"]))
+    end
+
     test "the four actions sit in one join group" do
       html = render_season([episode(media_files: [media_file()])])
 
