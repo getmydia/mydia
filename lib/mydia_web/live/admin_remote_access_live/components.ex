@@ -129,7 +129,8 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
                 <button
                   class="hidden lg:flex items-center gap-1.5 text-xs text-base-content/40 hover:text-base-content/60 transition-colors"
                   phx-click="copy_peer_id"
-                  onclick={"navigator.clipboard.writeText('#{@p2p_status.node_id}')"}
+                  data-node-id={@p2p_status.node_id}
+                  onclick="navigator.clipboard?.writeText(this.dataset.nodeId)"
                   title={"Copy Node ID: #{@p2p_status.node_id}"}
                 >
                   <code class="font-mono">{String.slice(@p2p_status.node_id, 0..7)}</code>

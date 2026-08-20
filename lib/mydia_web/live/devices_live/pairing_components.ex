@@ -136,10 +136,16 @@ defmodule MydiaWeb.DevicesLive.PairingComponents do
                   <code id="claim-code" class="text-2xl font-bold tracking-[0.25em] font-mono">
                     {@claim_code}
                   </code>
+                  <%!-- The code comes back from the relay, so it never gets
+                  interpolated into JavaScript source: onclick is a fixed string
+                  and the value rides in a data attribute, where HEEx escaping
+                  actually protects it. An apostrophe in the code would otherwise
+                  close the string literal and run as script. --%>
                   <button
                     class="btn btn-ghost btn-sm btn-square"
                     phx-click="copy_claim_code"
-                    onclick={"navigator.clipboard.writeText('#{@claim_code}')"}
+                    data-claim-code={@claim_code}
+                    onclick="navigator.clipboard?.writeText(this.dataset.claimCode)"
                     title="Copy code"
                   >
                     <.icon name="hero-clipboard-document" class="w-4 h-4 opacity-50" />
