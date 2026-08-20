@@ -192,30 +192,18 @@
           <% end %>
           <%!-- Overview Section --%>
           <Components.overview_section media_item={@media_item} />
-          <%!-- Franchise Section (Movies in the same TMDB collection) --%>
-          <FranchiseComponents.franchise_section
-            :if={@franchise}
-            franchise={@franchise}
-            can_add={@can_create_media}
-            current_user={@current_user}
-            adding_tmdb_ids={@adding_franchise_tmdb_ids}
-          />
-          <%!-- Collapsed by default on shows, so the episode list below is not
-                pushed under a strip of other titles. Movies render it open. --%>
-          <DiscoverComponents.media_rail
-            id="recommendations-rail"
-            collapsible={@media_item.type == "tv_show"}
-            expanded={@recommendations_expanded}
-            toggle_event="toggle_recommendations"
+          <%!-- Recommendations, TV placement. A show renders this collapsed, so
+                it costs one row and pushes the episode list down by nothing.
+                Movies get it at the bottom of the page instead: see below. --%>
+          <RecommendationComponents.recommendations_section
+            :if={@media_item.type == "tv_show"}
+            media_item={@media_item}
             items={@recommendations}
-            media_type={if @media_item.type == "tv_show", do: :tv_show, else: :movie}
+            expanded={@recommendations_expanded}
             current_user={@current_user}
             adding_ids={@adding_recommendation_tmdb_ids}
             requesting_item_id={@requesting_recommendation_id}
             can_add={@can_create_media}
-            on_select={nil}
-            add_event="add_recommendation"
-            request_event="request_recommendation"
           />
           <%!-- Episodes Section (TV Shows Only) --%>
           <Components.episodes_section
@@ -247,6 +235,30 @@
           />
           <%!-- Timeline Section --%>
           <Components.timeline_section timeline_events={@timeline_events} />
+          <%!-- Everything below here is about other titles, not this one.
+                Franchise Section (Movies in the same TMDB collection) --%>
+          <FranchiseComponents.franchise_section
+            :if={@franchise}
+            franchise={@franchise}
+            can_add={@can_create_media}
+            current_user={@current_user}
+            adding_tmdb_ids={@adding_franchise_tmdb_ids}
+          />
+          <%!-- Recommendations, movie placement. Expanded here, so it sits below
+                the file list: 500px of posters between the overview and the file
+                the user owns buried the thing they came to the page for. The two
+                guards are mutually exclusive and jointly total, so the rail
+                always renders in exactly one place. --%>
+          <RecommendationComponents.recommendations_section
+            :if={@media_item.type != "tv_show"}
+            media_item={@media_item}
+            items={@recommendations}
+            expanded={@recommendations_expanded}
+            current_user={@current_user}
+            adding_ids={@adding_recommendation_tmdb_ids}
+            requesting_item_id={@requesting_recommendation_id}
+            can_add={@can_create_media}
+          />
         </div>
       </div>
     </div>

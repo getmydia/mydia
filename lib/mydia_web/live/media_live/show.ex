@@ -17,7 +17,7 @@ defmodule MydiaWeb.MediaLive.Show do
   alias MydiaWeb.MediaLive.Show.SegmentEvents
   alias MydiaWeb.MediaLive.Show.FranchiseEvents
   alias MydiaWeb.MediaLive.Show.RecommendationEvents
-  alias MydiaWeb.DiscoverComponents
+  alias MydiaWeb.MediaLive.Show.RecommendationComponents
 
   # Import helper modules
   import MydiaWeb.MediaLive.Show.Formatters
