@@ -929,6 +929,20 @@ class CastSessionManager {
   /// target is selected by [CastSubtitleTrack.trackId] alone
   /// (`MydiaCastBackend.selectSubtitle` sends only `track?.trackId`), so
   /// there is no receiver URL to reconstruct and none is needed.
+  ///
+  /// ARTWORK IS A DEAD WIRE TODAY, and this is the only place that says so.
+  /// Subtitle tracks genuinely arrive; `imageUrl` does not, and no amount of
+  /// reading this method will reveal why. The consumer side below is correct
+  /// — the *producer* never fills it in. `PlayerScreen.describe()`
+  /// (`presentation/screens/player/player_screen.dart`, search `imageUrl:`)
+  /// hardcodes `imageUrl: null` in the snapshot a controlled device answers
+  /// `GetState` with, and it has no poster to send: neither `PlayerScreen`
+  /// nor `PlayerRouteParams` carries one. Populating it means threading a
+  /// poster URL through the route and every navigation call site, the same
+  /// shape of change that added `audioTrack`/`subtitleTrack`/`autoplay`.
+  /// So an adopted session shows no poster, and will keep showing none until
+  /// that is done. Do not delete this note because the code below looks
+  /// complete — it is complete, and the feature still does not work.
   void _applyAdoptedSnapshotExtras() {
     final snapshot = _snapshotFrom(_backend);
     final current = _current;
