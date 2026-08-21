@@ -192,6 +192,12 @@ class ConnectionDiagnosticsNotifier
         }
       }
 
+      // The container can be disposed while the reads above are in flight —
+      // `build` fires this off with an unawaited `Future.microtask`, so
+      // nothing holds the provider open for it. Same guard, same reason, as
+      // `connection_provider.dart` and `compatibility_provider.dart`.
+      if (!ref.mounted) return;
+
       // Get current connection state
       final connectionState = ref.read(connectionProvider);
 
@@ -204,6 +210,10 @@ class ConnectionDiagnosticsNotifier
       );
     } catch (e) {
       debugPrint('[ConnectionDiagnostics] Error loading diagnostics: $e');
+      // Guarded for a second reason beyond the one above: without it a
+      // disposal that threw out of the try lands here and throws again from
+      // the handler, which turns a caught error into an unhandled async one.
+      if (!ref.mounted) return;
       state = state.copyWith(isLoading: false);
     }
   }
@@ -236,6 +246,8 @@ class ConnectionDiagnosticsNotifier
       DateTime.now().toIso8601String(),
     );
 
+    if (!ref.mounted) return;
+
     state = state.copyWith(
       urlAttempts: newAttempts,
       lastDirectAttempt: DateTime.now(),
@@ -261,6 +273,8 @@ class ConnectionDiagnosticsNotifier
       DateTime.now().toIso8601String(),
     );
 
+    if (!ref.mounted) return;
+
     state = state.copyWith(
       urlAttempts: newAttempts,
       lastDirectAttempt: DateTime.now(),
@@ -271,6 +285,7 @@ class ConnectionDiagnosticsNotifier
   Future<void> clear() async {
     await _authStorage.delete(_DiagnosticsKeys.lastDirectAttempt);
     await _authStorage.delete(_DiagnosticsKeys.directUrlErrors);
+    if (!ref.mounted) return;
     state = const ConnectionDiagnosticsState(isLoading: false);
   }
 
