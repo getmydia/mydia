@@ -7,7 +7,14 @@ import '../../native/lib.dart';
 /// to at once. A large roster could easily have more than this playing
 /// something at once, but ambient awareness only needs "enough to be
 /// useful" — three is generous for "the number of rooms with a screen in
-/// them" while keeping the poll cost flat regardless of roster size.
+/// them".
+///
+/// This bounds the *recurring* poll cost, not [sweep]'s one-shot roster fan
+/// out: [sweep] still dials every rostered device once, same as
+/// `MydiaCastBackend._discover`. It is [AmbientTargets._refreshHeld] — the
+/// thing that repeats every [_pollInterval] for as long as something is
+/// held — that this cap actually keeps flat regardless of roster size, by
+/// dialing only the held IDs instead of re-running the whole sweep.
 const _maxHeldTargets = 3;
 
 /// How often a held connection's snapshot is refreshed. Matches
@@ -17,28 +24,38 @@ const _maxHeldTargets = 3;
 /// ever the foregrounded remote-control screen.
 const _pollInterval = Duration(seconds: 5);
 
-/// Sweeps every device on the roster and reports each one's current
-/// playback snapshot, or `null` for a device that is not playing.
+/// Answers one node's current playback snapshot, or `null` if it is idle,
+/// unreachable, or timed out.
 ///
 /// Unreachable, genuinely idle, and timed-out all fold into `null` —
 /// [AmbientTargets] only ever needs to tell "hold this" from "don't", not
 /// why a given device didn't qualify.
 ///
-/// Bulk (no node ID in, the whole roster's answers out) rather than
-/// per-node, and deliberately so: the real implementation already has to
-/// fan out across the whole roster in parallel to answer this at all — the
-/// same shape as `MydiaCastBackend._discover` — so that fan-out belongs
-/// behind one call rather than being redone inside [AmbientTargets]. It is
-/// also what lets [AmbientTargets] work from nothing but this one
-/// function: no `RemoteRoster`, no `MydiaControlTransport`, no iroh node,
-/// so a test can script it directly instead of standing up either.
-typedef AmbientProbe = Future<Map<String, FlutterPlaybackSnapshot?>> Function();
+/// Deliberately per-node rather than bulk. [AmbientTargets] fans this out
+/// itself in two different shapes with two different cost profiles: once
+/// over the *whole roster* in [AmbientTargets.sweep], and separately over
+/// only the *held* IDs (at most [_maxHeldTargets]) on every 5-second
+/// refresh. Giving [AmbientTargets] a per-node primitive instead of a bulk
+/// one is what lets the refresh's cost be bounded by the cap instead of by
+/// roster size. It also mirrors production shape one file over:
+/// `MydiaCastBackend`'s own poll timer re-dials only the single connected
+/// node (`_pollOnce`/`_send` against `_connectedNodeId`), never re-runs
+/// `_discover()`.
+typedef AmbientNodeProbe = Future<FlutterPlaybackSnapshot?> Function(
+  String nodeId,
+);
+
+/// Lists the roster's node IDs to sweep. Mirrors `RemoteRoster.entries()`
+/// mapped down to bare IDs — kept abstract, like [AmbientNodeProbe], so a
+/// test can script a roster directly instead of standing up a real
+/// `RemoteRoster`.
+typedef AmbientRosterSource = Future<List<String>> Function();
 
 /// One peer this app is holding an ambient connection to, because it is
 /// already playing something nobody here started.
 class AmbientTarget {
-  /// The peer. Only [CastDevice.id] comes from the sweep — an [AmbientProbe]
-  /// result carries a node ID and nothing else, so [CastDevice.name] here is
+  /// The peer. Only the node ID comes from the probe — an [AmbientNodeProbe]
+  /// answers with a snapshot and nothing else, so [CastDevice.name] here is
   /// just that same ID standing in for one. A caller that wants "Living
   /// Room" rather than a bare node ID has to resolve it itself, e.g.
   /// against the roster or the picker's already-discovered device list.
@@ -61,9 +78,10 @@ class AmbientTarget {
 /// fired by the caller on the next foreground transition — not a reconnect
 /// loop run from in here.
 class AmbientTargets {
-  final AmbientProbe probe;
+  final AmbientRosterSource rosterSource;
+  final AmbientNodeProbe probe;
 
-  AmbientTargets({required this.probe});
+  AmbientTargets({required this.rosterSource, required this.probe});
 
   List<AmbientTarget> _held = const [];
   final _updates = StreamController<List<AmbientTarget>>.broadcast();
@@ -74,18 +92,32 @@ class AmbientTargets {
   /// [sweep] would hang past that sweep's own result: nothing was listening
   /// on the broadcast stream while [sweep] ran, so a plain `.add` would have
   /// been dropped with no subscriber to deliver it to.
+  ///
+  /// This getter is `async*`, which makes every read a fresh
+  /// single-subscription `Stream` — listening to the *same* returned
+  /// `Stream` object twice throws `StateError`. Read `.playing` again for
+  /// each new subscriber (e.g. hand it straight to a `StreamBuilder`
+  /// rather than storing it in a field); never cache the `Stream` reference
+  /// and share it across listeners.
   Stream<List<AmbientTarget>> get playing async* {
     yield _held;
     yield* _updates.stream;
   }
 
-  /// Probes the whole roster once, holds a connection to whichever targets
-  /// answered playing — capped at three, taking the first three the probe
-  /// result reports in iteration order (roster order, for the production
-  /// probe) — and starts polling those.
+  /// Probes every rostered device once, in parallel, and holds a connection
+  /// to whichever ones answered playing — capped at [_maxHeldTargets],
+  /// taking the first three in roster order — then starts polling those.
+  ///
+  /// This is the expensive operation: it dials the whole roster, the same
+  /// shape as `MydiaCastBackend._discover`. The cap does not make *this*
+  /// cheaper; see [_refreshHeld] for the operation it actually bounds.
   Future<void> sweep() async {
-    final results = await probe();
-    _setHeld(_takePlaying(results));
+    final ids = await rosterSource();
+    final probed = await Future.wait(ids.map((id) async {
+      final snapshot = await probe(id);
+      return MapEntry(id, snapshot);
+    }));
+    _setHeld(_takePlaying(Map.fromEntries(probed)));
     _restartPolling();
   }
 
@@ -130,25 +162,40 @@ class AmbientTargets {
 
   void _restartPolling() {
     _pollTimer?.cancel();
-    _pollTimer = _held.isEmpty
+    // Guards against `sweep()` being called after `dispose()`: without the
+    // `isClosed` check, this would start a fresh, uncancellable
+    // `Timer.periodic` — `_setHeld`'s own `isClosed` guard only silences
+    // the emit, it does not stop the timer from existing.
+    _pollTimer = (_held.isEmpty || _updates.isClosed)
         ? null
         : Timer.periodic(_pollInterval, (_) => unawaited(_refreshHeld()));
   }
 
-  /// Refreshes the snapshot for each currently held target from a fresh
-  /// probe. Membership is only ever decided by [sweep]: this drops a target
-  /// that stops reporting playing, but never promotes a newly-playing one
-  /// into the held set, since that would make the poll timer a second,
-  /// undeclared discovery path running behind [sweep]'s back.
+  /// Refreshes the snapshot for each currently held target — genuinely
+  /// bounded to at most [_maxHeldTargets] calls to [probe] per tick, never
+  /// the whole roster, because it probes only the IDs already in [_held]
+  /// instead of re-running [sweep]'s roster-wide fan-out.
+  ///
+  /// Membership is only ever decided by [sweep]: this drops a target that
+  /// stops reporting playing, but never promotes a newly-playing one into
+  /// the held set. **That is a deliberate product decision, not an
+  /// oversight**: promoting here would make this poll timer a second,
+  /// undeclared discovery path running behind [sweep]'s back. The
+  /// consequence is a staleness window — a device that starts playing while
+  /// the user is looking at the ambient banner stays invisible until the
+  /// next [sweep] — and it is whoever drives [sweep]'s cadence (not this
+  /// class) that decides how wide that window gets.
   Future<void> _refreshHeld() async {
     if (_held.isEmpty) return;
-    final results = await probe();
-    final refreshed = <AmbientTarget>[];
-    for (final target in _held) {
-      final snapshot = results[target.device.id];
-      if (snapshot == null) continue;
-      refreshed.add(AmbientTarget(device: target.device, snapshot: snapshot));
-    }
+    final probed = await Future.wait(_held.map((target) async {
+      final snapshot = await probe(target.device.id);
+      return MapEntry(target, snapshot);
+    }));
+    final refreshed = <AmbientTarget>[
+      for (final entry in probed)
+        if (entry.value != null)
+          AmbientTarget(device: entry.key.device, snapshot: entry.value!),
+    ];
     _setHeld(refreshed);
     if (_held.isEmpty) {
       _pollTimer?.cancel();
