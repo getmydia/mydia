@@ -35,6 +35,43 @@ abstract class MydiaControlTransport {
   );
 }
 
+/// Exposes the full [FlutterPlaybackSnapshot] a [MydiaCastBackend] last
+/// received, for callers that need more than [CastBackend]'s
+/// protocol-agnostic streams carry.
+///
+/// [CastBackend] stays deliberately thin — state, position, duration, volume
+/// — because every implementation has to honestly support whatever it
+/// declares (see that interface's own dartdoc: it exists so `dart_cast` can
+/// be swapped for hand-written protocol code without touching the session
+/// manager or UI). A snapshot stream was considered for it directly and
+/// rejected: only a Mydia target could ever populate one meaningfully, so
+/// widening the shared interface would burden Chromecast and DLNA with a
+/// channel neither can honestly fill. This is the narrow, Mydia-only seam
+/// instead — two different callers reach through it for two different
+/// reasons:
+///
+/// - Adoption (`CastSessionManager._listenToBackendForAdoption`) wants
+///   artwork and subtitle tracks, which the generic streams don't carry at
+///   all.
+/// - Pulling a session back to this device
+///   (`CastSessionManager.pullToLocal`) wants an *exact* position — not
+///   [CastBackend.positionStream], which republishes an interpolated value
+///   between real polls (see `MydiaCastBackend._positionTicker`) purely to
+///   keep a scrubber moving, and not server-reported progress, which
+///   `CastSessionManager._syncProgress` throttles to once every 10 seconds.
+///
+/// `CastSessionManager` reaches through this via a plain `is` check rather
+/// than a cast to the concrete [MydiaCastBackend], which is what lets a test
+/// supply a lightweight fake instead of the real backend's
+/// roster/transport/timer machinery.
+abstract class MydiaSnapshotSource {
+  /// The most recent snapshot this backend actually received from the
+  /// target's own `Hello`/`GetState` answer — never the interpolated value
+  /// [CastBackend.positionStream] republishes between polls. Null before the
+  /// first one has landed.
+  FlutterPlaybackSnapshot? get lastSnapshot;
+}
+
 /// The production transport: wraps [P2PHost.sendRemoteControlRequest].
 class P2pControlTransport implements MydiaControlTransport {
   final P2PHost host;
@@ -57,7 +94,7 @@ class P2pControlTransport implements MydiaControlTransport {
 /// [MydiaContentRef] — see [loadMedia] — and it is the only backend that
 /// reports real [CastCapabilityFlags], because it is the only one whose
 /// receiver is a peer that can describe itself.
-class MydiaCastBackend implements CastBackend {
+class MydiaCastBackend implements CastBackend, MydiaSnapshotSource {
   final RemoteRoster roster;
   final MydiaControlTransport transport;
   final String selfNodeId;
@@ -167,8 +204,17 @@ class MydiaCastBackend implements CastBackend {
         entry.nodeId,
         const FlutterRemoteControlRequest.getState(),
       );
+      // Paused counts the same as playing here, not just playing: both mean
+      // something is actually loaded and mid-watch on this target, which is
+      // exactly what `isPlayingMydiaTarget` uses this field to decide is
+      // worth adopting rather than clobbering. Treating a paused target as
+      // idle let picking it from the device list silently restart whatever
+      // was paused — the adoption fork exists precisely so one player does
+      // not stomp what another is doing, and a paused-but-resumable session
+      // is exactly the kind of thing worth not stomping.
       if (state is FlutterRemoteControlResponse_State &&
-          state.field0.state == FlutterPlaybackState.playing) {
+          (state.field0.state == FlutterPlaybackState.playing ||
+              state.field0.state == FlutterPlaybackState.paused)) {
         metadata = {...metadata, 'nowPlayingTitle': state.field0.title};
       }
     } catch (_) {
@@ -327,6 +373,9 @@ class MydiaCastBackend implements CastBackend {
 
   @override
   CastCapabilityFlags get capabilities => _capabilities;
+
+  @override
+  FlutterPlaybackSnapshot? get lastSnapshot => _lastSnapshot;
 
   @override
   Future<void> dispose() async {

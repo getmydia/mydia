@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../domain/models/cast_device.dart';
+import '../../native/lib.dart';
 import '../player/progress_service.dart';
 import '../player/stream_timeline.dart';
 import 'cast_backend.dart';
@@ -11,6 +12,7 @@ import 'cast_route_resolver.dart';
 import 'cast_seek_restart.dart';
 import 'cast_session_store.dart';
 import 'cast_streaming_session_service.dart';
+import 'mydia_cast_backend.dart';
 
 /// The track list to hand to LOAD, with [selectedTrackId] first.
 ///
@@ -34,21 +36,41 @@ List<CastSubtitleTrack> orderSubtitlesForLoad(
   return [tracks[index], ...tracks]..removeAt(index + 1);
 }
 
-/// Whether picking [device] should *adopt* whatever is already playing on
-/// it, rather than connect media-less and wait for a `LoadContent`.
+/// Whether picking [device] should *adopt* whatever is already on it,
+/// rather than connect media-less and wait for a `LoadContent`.
 ///
 /// The signal is `metadata['nowPlayingTitle']`: `MydiaCastBackend`'s
-/// discovery probe (`_probeSequence`) sets it only when a `GetState` call
-/// made *during discovery* both succeeded and reported
-/// `FlutterPlaybackState.playing`. Everything else reads as false here —
-/// a non-Mydia device, a Mydia device the probe found idle, and one whose
-/// `GetState` failed during that same probe (`metadata['statusUnavailable']`,
-/// a target that answered `Hello` but not `GetState`) — and falls back to
-/// the existing media-less connect. Not knowing what a target is doing must
-/// never be read as "it's playing".
+/// discovery probe (`_probeSequence`) sets it when a `GetState` call made
+/// *during discovery* both succeeded and reported the target playing *or*
+/// paused. Paused counts deliberately, not just playing: the whole point of
+/// this fork is that one player must not stomp what another is doing, and a
+/// paused-but-resumable session is exactly the kind of thing worth not
+/// stomping — treating it as idle would let picking that device silently
+/// restart it. Everything else reads as false here — a non-Mydia device, a
+/// Mydia device the probe found genuinely idle, and one whose `GetState`
+/// failed during that same probe (`metadata['statusUnavailable']`, a target
+/// that answered `Hello` but not `GetState`) — and falls back to the
+/// existing media-less connect. Not knowing what a target is doing must
+/// never be read as "it has something loaded".
 bool isPlayingMydiaTarget(CastDevice device) =>
     device.protocol == CastProtocolKind.mydia &&
     device.metadata['nowPlayingTitle'] != null;
+
+/// Reaches through [backend]'s snapshot bridge — see [MydiaSnapshotSource]'s
+/// dartdoc for why this exists instead of a richer [CastBackend] — or null
+/// when it doesn't have one: a Chromecast/DLNA backend, or a Mydia one with
+/// nothing polled yet.
+///
+/// Paired with an explicit cast rather than a bare `is` check because Dart
+/// only promotes a variable's static type on a *narrowing* check — [backend]
+/// is declared [CastBackend], which shares no subtype relationship with
+/// [MydiaSnapshotSource], so `backend is MydiaSnapshotSource` alone leaves
+/// `backend.lastSnapshot` a compile error even in the branch that just
+/// proved it true.
+FlutterPlaybackSnapshot? _snapshotFrom(CastBackend backend) =>
+    backend is MydiaSnapshotSource
+        ? (backend as MydiaSnapshotSource).lastSnapshot
+        : null;
 
 /// Chooses which backend owns a device's protocol, and fans discovery out
 /// across every backend registered.
@@ -227,6 +249,31 @@ class CastLaunchRequest {
             ? null
             : (selectedSubtitleTrackId ?? this.selectedSubtitleTrackId),
       );
+}
+
+/// What [CastSessionManager.pullToLocal] hands back for a caller to resume
+/// playback locally with — the mirror of what a [CastLaunchRequest] carries
+/// *out* to a receiver, but read back from a Mydia target's own snapshot
+/// rather than assembled from what this app chose to load.
+///
+/// [mediaItemId] is null when the target had nothing usable to report (see
+/// [CastSessionManager.pullToLocal]'s dartdoc) — a caller with nothing to
+/// open should treat that as "there was nothing to pull", not open an item
+/// with no id.
+class PulledSession {
+  final String? mediaItemId;
+  final String? episodeId;
+  final Duration position;
+  final String? selectedAudioTrackId;
+  final String? selectedSubtitleTrackId;
+
+  const PulledSession({
+    required this.mediaItemId,
+    required this.episodeId,
+    required this.position,
+    required this.selectedAudioTrackId,
+    required this.selectedSubtitleTrackId,
+  });
 }
 
 /// Owns the active cast session: routing, playback, progress and persistence.
@@ -570,6 +617,59 @@ class CastSessionManager {
   /// Whether [retargetTo] has a request to move.
   bool get canRetarget => _lastRequest != null;
 
+  /// Pulls whatever is on the connected Mydia target back onto this device:
+  /// pauses and stops the target, ends this manager's own session, and
+  /// hands back what the target was actually at so a caller can resume
+  /// locally at the same spot.
+  ///
+  /// The target's exact position is read from its captured
+  /// [FlutterPlaybackSnapshot] — via [MydiaSnapshotSource], the same seam
+  /// [_applyAdoptedSnapshotExtras] uses — never from [CastBackend
+  /// .positionStream], whose interpolation exists purely to keep a scrubber
+  /// moving between real polls (see `MydiaCastBackend._positionTicker`), and
+  /// never from server-reported progress, which [_syncProgress] throttles to
+  /// once every 10 seconds. Either would routinely be seconds off, which
+  /// matters here: this is the one number a caller cannot re-derive once the
+  /// target has been told to stand down.
+  ///
+  /// Reads before it sends anything, deliberately: [_backend.pause] runs
+  /// first below, and the target's own follow-up `GetState` poll (or the
+  /// `disconnect` [stopCast] issues right after) can freely overwrite or
+  /// clear the cached snapshot once the target has actually been told to
+  /// pause or stop. Capturing [PulledSession] after either call risks
+  /// reading a position that is no longer the one the viewer was actually
+  /// watching from — or, once disconnected, no snapshot at all.
+  ///
+  /// Returns null, touching nothing, when [_backend] is not
+  /// [MydiaSnapshotSource] (a Chromecast or DLNA target — there is no
+  /// symmetric "pull" for either, since neither runs this app) or when
+  /// nothing has been polled from it yet.
+  Future<PulledSession?> pullToLocal() async {
+    final snapshot = _snapshotFrom(_backend);
+    if (snapshot == null) return null;
+
+    final pulled = PulledSession(
+      mediaItemId: snapshot.mediaItemId,
+      episodeId: snapshot.episodeId,
+      position: Duration(milliseconds: snapshot.positionMs.toInt()),
+      selectedAudioTrackId: snapshot.selectedAudio,
+      selectedSubtitleTrackId: snapshot.selectedSubtitle,
+    );
+
+    try {
+      await _backend.pause();
+    } catch (e) {
+      // Best-effort: a target that will not even answer `pause` is not one
+      // `stop` (via `stopCast` below) is likely to fare better with either,
+      // and the position that matters has already been captured above.
+      debugPrint('[CastSessionManager] Ignoring pause error during pull: $e');
+    }
+
+    await stopCast();
+
+    return pulled;
+  }
+
   /// Connect to [device] with no media on it.
   ///
   /// This is what makes the cast icon's "connected" claim true before anything
@@ -657,26 +757,11 @@ class CastSessionManager {
       // chose. See `_listenToBackendForAdoption`'s dartdoc for why this
       // needs its own subscription setup rather than reusing
       // `_listenForConnectionLoss` (no media, so nothing to track) or
-      // `_listenToBackend` (assumes this app is the one that loaded it).
-      //
-      // DELIBERATELY INCOMPLETE, and tracked rather than forgotten: the spec
-      // for this branch asks for title, artwork, duration and tracks from the
-      // target's snapshot. Only title (and duration/position, via the generic
-      // streams) are reachable from here. `CastBackend` is protocol-agnostic
-      // by design and surfaces no artwork or track channel, so an adopted
-      // session leaves `imageUrl` null and `subtitles`/`selectedSubtitle`
-      // empty — you get no poster and no subtitle picker on a screen whose
-      // whole job is controlling that session.
-      //
-      // The data is not missing, only unbridged: `MydiaCastBackend`'s poll
-      // loop already receives a full `FlutterPlaybackSnapshot` — imageUrl,
-      // audioTracks, subtitleTracks, selectedAudio, selectedSubtitle — every
-      // tick and discards all of it at `_applySnapshot`. Closing it here
-      // would mean widening the shared interface with a stream only one
-      // implementation could ever populate. The right home is whoever wires
-      // the per-node snapshot bridge that Pull already needs, since that
-      // settles the shape once instead of building a narrow adoption-only
-      // version first.
+      // `_listenToBackend` (assumes this app is the one that loaded it) —
+      // including how it backfills artwork and subtitle tracks from the
+      // target's own snapshot via `MydiaSnapshotSource`, which the generic
+      // `CastBackend` streams this manager otherwise reads from carry no
+      // channel for at all.
       _listenToBackendForAdoption();
 
       _publish(CastSession(
@@ -772,6 +857,11 @@ class CastSessionManager {
   ///   stays inert to progress sync even if something were ever wired up to
   ///   call it by mistake, rather than merely happening not to be called
   ///   today.
+  /// - Also backfills artwork and subtitle tracks from [_backend]'s captured
+  ///   [FlutterPlaybackSnapshot] (see [_applyAdoptedSnapshotExtras]), which
+  ///   [_listenToBackend] never needs to: a session this manager loaded
+  ///   itself already got both from the [CastLaunchRequest] at
+  ///   [_loadOnRoute] time.
   ///
   /// [_updateMediaInfo] still does the actual publishing — the same helper
   /// [_listenToBackend] uses — since both cases are "republish [_current]'s
@@ -792,6 +882,7 @@ class CastSessionManager {
       // Same "receiver says -1 for unknown" guard `_listenToBackend` uses.
       if (duration <= Duration.zero) return;
       _updateMediaInfo(duration: duration);
+      _applyAdoptedSnapshotExtras();
     });
 
     _positionSub = _backend.positionStream.listen((position) {
@@ -823,6 +914,45 @@ class CastSessionManager {
         playbackState: CastPlaybackState.idle,
       ));
     });
+  }
+
+  /// Fills in what an adopted session's generic streams cannot carry —
+  /// artwork and subtitle tracks — from [_backend]'s own captured snapshot.
+  ///
+  /// A no-op for anything that is not [MydiaSnapshotSource] (Chromecast,
+  /// DLNA, or a Mydia backend that has not polled yet) — exactly the
+  /// backends [isPlayingMydiaTarget] can never have flagged this session
+  /// adoptable from in the first place, so this only ever does real work on
+  /// the path that actually reaches it.
+  ///
+  /// `url` on the rebuilt [CastSubtitleTrack]s is always empty: a Mydia
+  /// target is selected by [CastSubtitleTrack.trackId] alone
+  /// (`MydiaCastBackend.selectSubtitle` sends only `track?.trackId`), so
+  /// there is no receiver URL to reconstruct and none is needed.
+  void _applyAdoptedSnapshotExtras() {
+    final snapshot = _snapshotFrom(_backend);
+    final current = _current;
+    if (snapshot == null || current == null) return;
+
+    _subtitles = [
+      for (final track in snapshot.subtitleTracks)
+        CastSubtitleTrack(
+          trackId: track.id,
+          url: '',
+          label: track.label,
+          language: track.language ?? '',
+        ),
+    ];
+    _selectedSubtitle = _subtitles
+        .where((t) => t.trackId == snapshot.selectedSubtitle)
+        .firstOrNull;
+
+    _publish(current.copyWith(
+      mediaInfo: current.mediaInfo?.copyWith(imageUrl: snapshot.imageUrl),
+      subtitles: _subtitles,
+      selectedSubtitle: _selectedSubtitle,
+      clearSelectedSubtitle: _selectedSubtitle == null,
+    ));
   }
 
   /// Resolve a route, enabling LAN access first when the route will be a

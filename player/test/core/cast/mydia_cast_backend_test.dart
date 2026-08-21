@@ -160,13 +160,13 @@ void main() {
     });
 
     test(
-        'omits nowPlayingTitle when the GetState follow-up says nothing is '
-        'playing', () async {
+        'omits nowPlayingTitle when the GetState follow-up confirms the '
+        'target genuinely idle', () async {
       final transport = FakeTransport(scripted: {
         'node-tv': [
           _welcome,
           FlutterRemoteControlResponse_State(
-            _snapshot(state: FlutterPlaybackState.paused),
+            _snapshot(state: FlutterPlaybackState.idle),
           ),
         ],
       });
@@ -182,8 +182,38 @@ void main() {
           .first;
 
       expect(devices.single.metadata.containsKey('nowPlayingTitle'), isFalse,
-          reason: 'GetState succeeded but the target is not actively '
-              'playing, so the fallback title never applies');
+          reason: 'GetState succeeded and confirmed nothing is loaded at '
+              'all, so the fallback title never applies');
+    });
+
+    test(
+        'sets nowPlayingTitle for a paused target too, so adopting it does '
+        'not clobber a resumable session', () async {
+      // Picking a device from the list dials `connectTo`, which restarts
+      // playback outright for anything this probe does not flag as
+      // adoptable (see `isPlayingMydiaTarget`). A paused target is just as
+      // mid-watch as a playing one — only a target confirmed genuinely idle
+      // (see the sibling test above) should read that way.
+      final transport = FakeTransport(scripted: {
+        'node-tv': [
+          _welcome,
+          FlutterRemoteControlResponse_State(
+            _snapshot(state: FlutterPlaybackState.paused, title: 'Arrival'),
+          ),
+        ],
+      });
+
+      final backend = MydiaCastBackend(
+        roster: rosterOf([('d1', 'node-tv')]),
+        transport: transport,
+        selfNodeId: 'node-self',
+      );
+
+      final devices = await backend
+          .startDiscovery(capabilities: const CastCapabilities.full())
+          .first;
+
+      expect(devices.single.metadata['nowPlayingTitle'], 'Arrival');
     });
 
     test(
@@ -423,6 +453,75 @@ void main() {
       // An old build cannot decode the new outer variant at all, so Hello
       // fails. The device is simply not offered.
       expect(devices, isEmpty);
+    });
+  });
+
+  group('MydiaCastBackend snapshot bridge', () {
+    test('lastSnapshot exposes what the generic streams collapse away',
+        () async {
+      final transport = FakeTransport(scripted: {
+        'node-tv': [
+          _welcome,
+          FlutterRemoteControlResponse_State(_snapshot(
+            state: FlutterPlaybackState.playing,
+            mediaItemId: 'item-1',
+            episodeId: 'ep-2',
+            title: 'Blade Runner',
+          )),
+        ],
+      });
+      final backend = MydiaCastBackend(
+        roster: rosterOf([('d1', 'node-tv')]),
+        transport: transport,
+        selfNodeId: 'node-self',
+      );
+
+      expect(backend.lastSnapshot, isNull,
+          reason: 'nothing has been polled yet');
+
+      await backend.connect(_connectedDevice);
+      await backend.play();
+
+      // `positionStream`/`durationStream`/`stateStream` only ever carry a
+      // `Duration` or an enum value — mediaItemId and episodeId have no
+      // channel of their own on `CastBackend` at all. This is the seam that
+      // closes that gap.
+      expect(backend.lastSnapshot?.mediaItemId, 'item-1');
+      expect(backend.lastSnapshot?.episodeId, 'ep-2');
+    });
+
+    test('a stale, lower-sequence snapshot never overwrites lastSnapshot',
+        () async {
+      final transport = FakeTransport(scripted: {
+        'node-tv': [
+          _welcome,
+          FlutterRemoteControlResponse_State(_snapshot(
+            mediaItemId: 'item-fresh',
+            sequence: BigInt.from(5),
+          )),
+          FlutterRemoteControlResponse_State(_snapshot(
+            mediaItemId: 'item-stale',
+            sequence: BigInt.from(3),
+          )),
+        ],
+      });
+      final backend = MydiaCastBackend(
+        roster: rosterOf([('d1', 'node-tv')]),
+        transport: transport,
+        selfNodeId: 'node-self',
+      );
+
+      await backend.connect(_connectedDevice);
+      // Same trigger `_applySnapshot`'s own sequence test uses: `play()`
+      // consumes the fresh snapshot as its own response, then its follow-up
+      // poll (`_sendCommand`) consumes the stale one.
+      await backend.play();
+
+      expect(backend.lastSnapshot?.mediaItemId, 'item-fresh',
+          reason: 'the same ordering guard `_applySnapshot` uses for the '
+              'generic streams also protects this seam — it is the same '
+              'cached field, not a second one a stale poll could desync '
+              'from the first');
     });
   });
 
