@@ -74,6 +74,45 @@ Future<void> handleControlRequest({
   }
 }
 
+/// Decides whether [_MyAppState._initRemoteControlIfEnabled] still needs to
+/// run.
+///
+/// Deliberately not "have we ever attempted" — an opt-out or a transient
+/// startup failure (no reachable server yet, a registration error) must stay
+/// retryable for the rest of the launch, not just for the first
+/// `authStateProvider` emission. What actually latches this closed is a
+/// receiver successfully wired ([succeed]): from then on every further call
+/// is a no-op, whether the setting flips off and back on or auth re-emits
+/// `authenticated` again.
+///
+/// Extracted as its own class — like [handleControlRequest] above — because
+/// `_initRemoteControlIfEnabled` itself cannot be exercised by a widget test
+/// (see that method's own dartdoc), but the state-transition bug this class
+/// fixes — a single failed or opted-out attempt permanently disabling this
+/// device as a target for the rest of the launch — is independent of the
+/// untestable collaborators (P2P, GraphQL, Hive, `DeviceInfoService`) and can
+/// be pinned down on its own.
+@visibleForTesting
+class RemoteControlInitGate {
+  bool _inFlight = false;
+  bool _succeeded = false;
+
+  /// Whether a call should actually do the work, rather than return early.
+  bool get shouldAttempt => !_succeeded && !_inFlight;
+
+  /// Call before starting the attempt.
+  void begin() => _inFlight = true;
+
+  /// Call once the receiver is actually wired — the only outcome that
+  /// should stop future attempts.
+  void succeed() => _succeeded = true;
+
+  /// Call when the attempt is over, however it ended (opted out, threw, or
+  /// succeeded) — clears [_inFlight] so a later call is not blocked forever
+  /// by one that already finished.
+  void end() => _inFlight = false;
+}
+
 class MyApp extends ConsumerStatefulWidget {
   const MyApp({super.key});
 
@@ -153,6 +192,28 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       },
       fireImmediately: true,
     );
+
+    // Enabling the setting after a launch that started opted out — or after
+    // a launch where startup itself failed (no reachable server yet, a
+    // registration error) — must not need a restart:
+    // `_initRemoteControlIfEnabled` no-ops once a receiver is actually
+    // wired (see `RemoteControlInitGate`), so re-invoking it here on every
+    // change is safe, and is what makes the settings switch take effect for
+    // the rest of this launch instead of only the next one. Gated on auth
+    // the same way `_initRemoteControlIfEnabled` itself is — see that
+    // method's own dartdoc for why reading `asyncGraphqlClientProvider`
+    // before authentication is not merely pointless but actively harmful in
+    // tests.
+    ref.listenManual<AsyncValue<bool>>(
+      remoteControlEnabledProvider,
+      (previous, next) {
+        if (next.value != true) return;
+        if (ref.read(authStateProvider).value != AuthStatus.authenticated) {
+          return;
+        }
+        unawaited(_initRemoteControlIfEnabled());
+      },
+    );
   }
 
   /// Whether a restore has already been attempted this launch. Auth state can
@@ -174,12 +235,15 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     }
   }
 
-  /// Whether the controllable-device startup path has already run this
-  /// launch. Same once-per-launch reasoning as [_castRestoreAttempted]:
-  /// `authStateProvider` can re-emit `authenticated`, and wiring a second
-  /// receiver onto [P2pService.onControlRequest] would answer every inbound
-  /// request twice.
-  bool _remoteControlInitAttempted = false;
+  /// Whether the controllable-device startup path still needs to run. Not a
+  /// once-per-launch flag: `authStateProvider` can re-emit `authenticated`
+  /// and [remoteControlEnabledProvider] can flip from off to on mid-launch,
+  /// and either must be able to retry an opt-out or a transient failure.
+  /// What actually stops wiring a second receiver onto
+  /// [P2pService.onControlRequest] is [RemoteControlInitGate.succeed] —
+  /// once one attempt actually wires [_controlRequestSubscription], every
+  /// later call is a no-op.
+  final _remoteControlInitGate = RemoteControlInitGate();
 
   /// Starts the iroh host if it is not already running, registers this
   /// device's node ID with the server, and wires up a [RemoteControlReceiver]
@@ -195,8 +259,8 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   /// host on a build where that unconditional call hasn't run yet (e.g. a
   /// fresh pairing that lands here before the microtask above resolves).
   Future<void> _initRemoteControlIfEnabled() async {
-    if (_remoteControlInitAttempted) return;
-    _remoteControlInitAttempted = true;
+    if (!_remoteControlInitGate.shouldAttempt) return;
+    _remoteControlInitGate.begin();
 
     try {
       final settings = await ref.read(remoteControlSettingsProvider.future);
@@ -241,11 +305,16 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
           ),
         ),
       );
+      _remoteControlInitGate.succeed();
     } catch (e) {
       // Matches `_restoreCastSession`'s catch: a startup gate that a device
       // with no reachable server, no auth, or (in tests) no initialized Hive
-      // simply skips, same as opting out.
+      // simply skips, same as opting out. Not latched via
+      // `RemoteControlInitGate.succeed` — a later retry (re-auth, or the
+      // setting itself flipping on) must be able to try again.
       debugPrint('[MyApp] Failed to start remote control: $e');
+    } finally {
+      _remoteControlInitGate.end();
     }
   }
 
