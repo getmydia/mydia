@@ -3742,7 +3742,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // Detached first, before anything below can run: a remote command that
     // lands mid-teardown must find no player attached rather than reach a
     // `_player` that is about to be disposed out from under it.
-    _remoteTargetController.detachPlayer();
+    //
+    // Passes `this` so a newer `PlayerScreen` that already attached over
+    // this one (a remote `LoadContent` mounts before the old screen
+    // disposes) is never clobbered by this late detach — see
+    // `detachPlayer`'s own dartdoc.
+    _remoteTargetController.detachPlayer(this);
 
     // Order matters twice over. Stop listening *first*: in `systemUi` mode
     // `exit()` reports the transition synchronously, and the resulting

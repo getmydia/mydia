@@ -41,7 +41,21 @@ class RemoteTargetController {
 
   void attachPlayer(RemotePlayerBinding binding) => _binding = binding;
 
-  void detachPlayer() => _binding = null;
+  /// Detaches [binding] — or, if none is given, whatever is currently
+  /// attached (for callers with nothing to identify themselves by).
+  ///
+  /// Ignores a detach from a binding that has already been replaced. Flutter
+  /// mounts a new `PlayerScreen` before it disposes the old one: a remote
+  /// `LoadContent` that pushes a second screen over an existing one runs
+  /// `attachPlayer(new)` first, then `detachPlayer()` from the *old* screen's
+  /// `dispose` some time later. Without the ownership check, that late
+  /// detach would null out the newer, live binding — every later transport
+  /// command would then be silently dropped and `snapshot()` would report
+  /// "not playing" while a player is actually on screen.
+  void detachPlayer([RemotePlayerBinding? binding]) {
+    if (binding != null && !identical(_binding, binding)) return;
+    _binding = null;
+  }
 
   /// Current playback state, or null when no player is mounted.
   ///

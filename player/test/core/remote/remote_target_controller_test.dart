@@ -159,5 +159,42 @@ void main() {
       expect(binding.calls, isEmpty);
       expect(controller.snapshot(), isNull);
     });
+
+    test(
+        'a late detach from a binding that was already replaced does not '
+        'clear the newer one', () async {
+      // Mirrors Flutter mounting a new PlayerScreen (a remote LoadContent
+      // pushing a second one over an existing screen) before the old one
+      // disposes: `attachPlayer(new)` runs first, then `detachPlayer()`
+      // from the old screen's `dispose` lands afterward.
+      final controller = RemoteTargetController();
+      final oldBinding = FakePlayerBinding();
+      final newBinding = FakePlayerBinding();
+
+      controller.attachPlayer(oldBinding);
+      controller.attachPlayer(newBinding);
+      controller.detachPlayer(oldBinding);
+
+      expect(controller.snapshot(), isNotNull,
+          reason: 'the newer binding must still be attached');
+
+      controller.submit(const TransportIntent(TransportAction.play));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(newBinding.calls, ['play'],
+          reason: 'commands must keep reaching the newer, still-attached '
+              'binding');
+      expect(oldBinding.calls, isEmpty);
+    });
+
+    test('a detach naming the current binding still clears it', () async {
+      final controller = RemoteTargetController();
+      final binding = FakePlayerBinding();
+      controller.attachPlayer(binding);
+
+      controller.detachPlayer(binding);
+
+      expect(controller.snapshot(), isNull);
+    });
   });
 }
