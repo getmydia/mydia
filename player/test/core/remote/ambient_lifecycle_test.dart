@@ -237,5 +237,63 @@ void main() {
       expect(() => binding.handle(AppLifecycleState.resumed), returnsNormally);
       await Future<void>.delayed(Duration.zero);
     });
+
+    test(
+        'a roster fetch that throws inside sweep() does not escape as an '
+        'unhandled async error', () async {
+      // `rosterSource` stands in for the real GraphQL roster fetch
+      // (`ambientTargetsProvider` in `core/cast/cast_providers.dart` builds
+      // it from `RemoteRoster.entries()`), which can throw on a network or
+      // auth failure. `sweep()`'s caller here is `unawaited(...)` with no
+      // error path of its own, so without a `catchError` this throw would
+      // become an unhandled async error and fail this test even though
+      // nothing in the test body itself is wrong.
+      final targets = AmbientTargets(
+        rosterSource: () async => throw StateError('roster fetch failed'),
+        probe: (nodeId) async => null,
+      );
+      addTearDown(targets.dispose);
+      final binding = AmbientLifecycleBinding(() => targets);
+
+      binding.handle(AppLifecycleState.resumed);
+
+      // Give the failing sweep's microtask chain a chance to run — and, if
+      // the error were unhandled, to fail this test on its own.
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(await targets.playing.first, isEmpty,
+          reason: 'a failed sweep leaves nothing held, but must not crash');
+    });
+
+    test(
+        'a background transition landing while a failing sweep is still in '
+        'flight still calls onBackground()', () async {
+      final rosterGate = Completer<List<String>>();
+      final targets = AmbientTargets(
+        rosterSource: () => rosterGate.future,
+        probe: (nodeId) async => playingSnapshot(title: 'Blade Runner'),
+      );
+      addTearDown(targets.dispose);
+      final binding = AmbientLifecycleBinding(() => targets);
+
+      binding.handle(AppLifecycleState.resumed);
+      await Future<void>.delayed(Duration.zero);
+
+      // The app backgrounds again while the sweep is still awaiting the
+      // roster fetch.
+      binding.handle(AppLifecycleState.paused);
+
+      // Now the roster fetch fails, well after the background transition
+      // landed.
+      rosterGate.completeError(StateError('roster fetch failed'));
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(await targets.playing.first, isEmpty,
+          reason: 'the background transition must still win even though '
+              'the sweep it interrupted went on to fail rather than '
+              'succeed');
+    });
   });
 }
