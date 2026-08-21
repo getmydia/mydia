@@ -385,7 +385,9 @@ void main() {
     await adminApi.login();
   });
 
-  testWidgets('one player drives another end to end', (tester) async {
+  testWidgets(
+      'QUARANTINED (no remote-control integration coverage) — '
+      'one player drives another end to end', (tester) async {
     final movie = await _fetchTestMovie(adminApi);
 
     // --- Player B: headless, real p2p host + real pairing (steps 1 & 2) ---
@@ -679,5 +681,10 @@ void main() {
       // and login_controller.dart), or give each suite its own isolate. Then
       // drop this `skip` and dispatch `CI / Player E2E` by hand — it does not
       // run on pull requests, only on push to master.
+      // `testWidgets` types `skip` as `bool?`, unlike plain `test()` where it
+      // is `dynamic` and a reason string would print in the run output. So the
+      // quarantine is carried in the test NAME above instead — a bare
+      // "skipped" line is exactly how a disabled test starts reading as a
+      // covered one.
       skip: true);
 }
