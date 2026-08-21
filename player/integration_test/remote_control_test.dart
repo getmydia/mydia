@@ -446,6 +446,24 @@ void main() {
     targetController.attachPlayer(fakePlayer);
 
     // --- Player A: the real, UI-driven app (step 1's A side) ---
+    //
+    // Clear the shared store first, or this test cannot run inside
+    // `all_tests.dart`. That aggregator runs every file in ONE isolate (see
+    // `helpers/test_bootstrap.dart`), so the app's default `AuthStorage` is
+    // process-wide — and `pairing_flow_test.dart`, which runs earlier, pairs a
+    // real device into it and never clears it. Player B sidesteps this with an
+    // injected in-memory store, but player A is a real `MyApp()` and uses the
+    // default one, so without this it boots ALREADY AUTHENTICATED, routes
+    // straight past the login screen, and `_waitForLoginScreen` times out
+    // looking for text that will never render. Verified exactly that way in
+    // CI run 32455230401: `[MyApp] authState=...AuthStatus.authenticated`
+    // immediately after mount, then `Login screen not found after 30 seconds`.
+    //
+    // Deliberately not in `setUpAll`: player B pairs above and stores its
+    // credentials in its own injected store, but clearing here rather than
+    // earlier keeps the reset adjacent to the mount it exists to protect.
+    await getAuthStorage().deleteAll();
+
     await tester.pumpWidget(const ProviderScope(child: MyApp()));
     final aClaimCode = await _generateClaimCode(adminApi, 'A');
     await _pairPlayerA(tester, aClaimCode);
