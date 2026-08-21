@@ -8,6 +8,7 @@ import 'package:player/app.dart';
 import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
+import 'package:player/core/cast/cast_session_manager.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/presentation/widgets/cast_mini_controller.dart';
 
@@ -117,6 +118,73 @@ void main() {
       expect(managerBuilt, isFalse,
           reason: 'the mini controller must not reach the cast stack while '
               'auth is unresolved');
+    });
+  });
+
+  /// `castSessionProvider` itself had the same hazard as `_restoreCastSession`
+  /// and `_initRemoteControlIfEnabled`, but with no guard: `CastMiniController`
+  /// starts it running (via `.value`, a plain sync watch — see the "the mini
+  /// controller must not reach the cast stack" test above for how little it
+  /// takes) the moment auth reports `authenticated`, on every screen, and its
+  /// body reads `castSessionManagerProvider.future` with no try/catch of its
+  /// own.
+  ///
+  /// A permanently-loading `Completer().future`, as the two groups above use,
+  /// cannot reproduce this one: nothing ever rejects, so nothing ever needs
+  /// to escape. What reproduces it is a rejection that arrives *after* the
+  /// container is already disposed — exactly what happens in production when
+  /// `asyncGraphqlClientProvider` is force-completed with a StateError by
+  /// `ElementWithFuture.dispose` (see that class in the riverpod package, and
+  /// `castSessionProvider`'s own dartdoc in cast_providers.dart). A `Future`
+  /// that resolves on a real delay stands in for that: the delay outlives the
+  /// dispose, so the rejection lands on an already-torn-down subscription,
+  /// the same way the real one does.
+  group('castSessionProvider disposal', () {
+    testWidgets('does not leak an unhandled error when disposed mid-loading',
+        (tester) async {
+      final flutterErrors = <FlutterErrorDetails>[];
+      final previousOnError = FlutterError.onError;
+      FlutterError.onError = flutterErrors.add;
+      addTearDown(() => FlutterError.onError = previousOnError);
+
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          castCapabilitiesProvider
+              .overrideWithValue(const CastCapabilities.full()),
+          authStateProvider.overrideWith(() => _FakeAuthNotifier(
+              const AsyncValue.data(AuthStatus.authenticated))),
+          // Rejects on a real delay chosen to land after this test disposes
+          // the tree below — the "late arrival" that has nowhere to go once
+          // `castSessionProvider`'s own subscription is already torn down.
+          castSessionManagerProvider.overrideWith((ref) {
+            return Future<CastSessionManager>.delayed(
+              const Duration(milliseconds: 60),
+              () => throw StateError('unreachable in this test'),
+            );
+          }),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(body: CastMiniController()),
+        ),
+      ));
+      await tester.pump();
+
+      // Dispose well before the 60ms rejection above fires.
+      await tester.pumpWidget(const SizedBox.shrink());
+
+      // `flutter test` runs every test inside a `FakeAsync` zone (see
+      // `AutomatedTestWidgetsFlutterBinding.runTest`), so a plain
+      // `Future.delayed` never elapses on its own — `tester.pump(duration)`
+      // is what actually advances that clock and lets the delayed rejection
+      // above land, well after the tree (and `castSessionProvider`'s own
+      // subscription) is already torn down.
+      await tester.pump(const Duration(milliseconds: 150));
+
+      expect(flutterErrors, isEmpty,
+          reason: 'castSessionProvider must catch its own read of '
+              'castSessionManagerProvider.future instead of letting a '
+              'disposal-time rejection escape as an unhandled async error: '
+              '${flutterErrors.map((d) => d.exceptionAsString()).toList()}');
     });
   });
 }

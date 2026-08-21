@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ce_flutter/hive_flutter.dart';
 
@@ -329,7 +330,38 @@ final castDiscoveryProvider =
 });
 
 final castSessionProvider = StreamProvider<CastSession?>((ref) async* {
-  final manager = await ref.watch(castSessionManagerProvider.future);
+  // `castSessionManagerProvider` awaits `asyncGraphqlClientProvider`, which
+  // does not resolve until the user is authenticated — see that provider's
+  // own dartdoc and `_restoreCastSession`'s in app.dart, which both guard
+  // the same await for the same reason. `CastMiniController` watches this
+  // provider (via `.value`, not `.future`) the moment auth reports
+  // `authenticated`, on every screen, which is what starts this generator
+  // running; it does not wait for `_restoreCastSession`/
+  // `_initRemoteControlIfEnabled` to have already finished with the same
+  // chain first.
+  //
+  // If the container is disposed while this await is still pending,
+  // Riverpod completes it with a StateError raised from inside
+  // `asyncGraphqlClientProvider`'s own disposal. A plain `FutureProvider`
+  // awaiting another `FutureProvider` is safe by construction — Riverpod
+  // preserves its in-flight future across disposal so a late result still
+  // resolves it cleanly (`ElementWithFuture.dispose`'s "preserve" branch).
+  // A `StreamProvider`'s generator has no equivalent: `handleStream` never
+  // records a "last future" for it, so its own `.future` is force-completed
+  // with that StateError on disposal instead — and, empirically, that
+  // still escapes as an unhandled async error even from inside this
+  // generator's own `try`-less await, rather than becoming this provider's
+  // `AsyncError` state the way a normal rejection would. Catching it here,
+  // the same way the other two entry points already catch their own reads
+  // of this chain, is what keeps it from escaping a third time.
+  final CastSessionManager manager;
+  try {
+    manager = await ref.watch(castSessionManagerProvider.future);
+  } catch (e) {
+    debugPrint('[castSessionProvider] Cast stack unavailable: $e');
+    yield null;
+    return;
+  }
   yield manager.currentSession;
   yield* manager.sessionStream;
 });
