@@ -15,6 +15,7 @@ import 'core/cast/cast_providers.dart';
 import 'core/downloads/download_providers.dart';
 import 'core/downloads/download_service.dart';
 import 'core/auth/device_info_service.dart';
+import 'core/remote/ambient_lifecycle.dart';
 import 'core/remote/load_content_navigation.dart';
 import 'core/remote/node_registration.dart';
 import 'core/remote/remote_control_intent.dart';
@@ -82,6 +83,17 @@ class MyApp extends ConsumerStatefulWidget {
 
 class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   final ResumeGate _resumeGate = ResumeGate();
+
+  /// Drops [ambientTargetsProvider]'s held connections on a real background
+  /// transition and re-sweeps on the way back — see
+  /// `core/remote/ambient_lifecycle.dart` for which [AppLifecycleState]
+  /// values count and why. `AmbientTargets.onBackground()`
+  /// (`core/remote/ambient_targets.dart`) otherwise only ever fires when
+  /// `ambientPlayingProvider`'s listener count reaches zero, which does not
+  /// happen merely because the OS backgrounded the app — `CastMiniController`
+  /// stays mounted and keeps watching it (`presentation/widgets/cast_mini_controller.dart`).
+  late final AmbientLifecycleBinding _ambientLifecycle =
+      AmbientLifecycleBinding(() => ref.read(ambientTargetsProvider));
 
   /// Subscribed once here, for the app's whole lifetime, rather than by
   /// whichever screen happens to be mounted: `LoadContent` is the one intent
@@ -315,6 +327,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    _ambientLifecycle.handle(state);
     if (applyAppLifecycleState(_resumeGate, state, DateTime.now())) {
       // Live screens refetch now; dormant ones become cold for their next
       // mount. Fire-and-forget: a lifecycle callback cannot await, so any
