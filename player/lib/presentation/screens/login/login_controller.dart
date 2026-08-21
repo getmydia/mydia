@@ -16,6 +16,30 @@ export '../../../core/p2p/p2p_service.dart'
 
 part 'login_controller.g.dart';
 
+/// Drops the cached reads of everything [AuthService.setSession] just wrote.
+///
+/// `serverUrlProvider`, `authTokenProvider` and `isAuthenticatedProvider` each
+/// read storage once and cache the result. Pairing writes that storage, so
+/// without this they keep serving the values from before the user paired.
+///
+/// Invalidating `asyncGraphqlClientProvider` alone is not enough and was the
+/// bug: it rebuilds, re-watches the *same cached* `serverUrlProvider`, sees
+/// null again, and can never produce a client for the rest of the session.
+/// Worse than a plain failure, it does not settle — the throw for a null
+/// server URL sits after another await, so the provider sits in `loading`,
+/// which is also what made teardown in the E2E suites raise from
+/// `ElementWithFuture.dispose`.
+///
+/// Ordered dependencies-first so the client rebuilds against fresh values
+/// rather than re-reading stale ones on its way past.
+void _invalidateStoredSessionProviders(Ref ref) {
+  ref.invalidate(serverUrlProvider);
+  ref.invalidate(authTokenProvider);
+  ref.invalidate(isAuthenticatedProvider);
+  ref.invalidate(graphqlClientProvider);
+  ref.invalidate(asyncGraphqlClientProvider);
+}
+
 /// Connection mode for the login flow.
 enum ConnectionMode {
   /// Initial mode selection screen
@@ -208,6 +232,16 @@ class LoginController extends _$LoginController {
         userId: credentials.deviceId, // Use device ID as user ID for now
         username: 'Device ${credentials.deviceId.substring(0, 8)}',
       );
+
+      // `setSession` awaits storage writes, so this Ref may have been disposed
+      // while it ran. Riverpod 3 throws `UnmountedRefException` on any use of a
+      // disposed Ref, invalidation included.
+      if (!ref.mounted) {
+        debugPrint(
+            '[LoginController] Not mounted after setSession, returning early');
+        return;
+      }
+      _invalidateStoredSessionProviders(ref);
       debugPrint('[LoginController] Credentials stored');
 
       // Set connection mode
@@ -392,6 +426,10 @@ class LoginController extends _$LoginController {
         userId: credentials.deviceId,
         username: 'Device ${credentials.deviceId.substring(0, 8)}',
       );
+
+      // See the claim-code path: a disposed Ref throws on invalidate too.
+      if (!ref.mounted) return;
+      _invalidateStoredSessionProviders(ref);
 
       // Set connection mode
       if (result.isP2PMode && credentials.serverNodeAddr != null) {
