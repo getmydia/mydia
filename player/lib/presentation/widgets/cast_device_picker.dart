@@ -201,6 +201,8 @@ class _DeviceListState extends State<_DeviceList> {
         .toList();
     final dlna =
         devices.where((d) => d.protocol == CastProtocolKind.dlna).toList();
+    final mydia =
+        devices.where((d) => d.protocol == CastProtocolKind.mydia).toList();
 
     return ListView(
       shrinkWrap: true,
@@ -218,6 +220,18 @@ class _DeviceListState extends State<_DeviceList> {
             key: const Key('cast-group-dlna'),
             label: 'DLNA / UPnP',
             devices: dlna,
+            currentDeviceId: currentDeviceId,
+            connected: connected,
+          ),
+        // Not gated on `capabilities`: a Mydia target is reached over the
+        // p2p host, not the platform's local-network entitlement, so it
+        // belongs in the list on every build that found one — including web,
+        // which reports no Chromecast/DLNA capability at all.
+        if (mydia.isNotEmpty)
+          _ProtocolGroup(
+            key: const Key('cast-group-mydia'),
+            label: 'Mydia Players',
+            devices: mydia,
             currentDeviceId: currentDeviceId,
             connected: connected,
           ),
@@ -261,6 +275,22 @@ class _ProtocolGroup extends StatelessWidget {
           // owns that receiver". A chosen device the app has not connected to
           // gets the accent colour but neither of those.
           final isConnected = isChosen && connected;
+          // Mydia targets have no `model`; the discovery probe fetches what
+          // they are playing instead (see `MydiaCastBackend`), which is what
+          // makes this list read like Spotify's rather than a bare name.
+          // `nowPlayingTitle` is only populated when the probe's follow-up
+          // `GetState` actually confirmed the target playing. When that
+          // follow-up fails or times out — the target answered `Hello` (it
+          // is reachable, so it stays listed) but never confirmed a state —
+          // `statusUnavailable` says so, and gets its own copy rather than
+          // being folded into "Nothing playing": that fallback is only
+          // honest for idle/paused targets whose state we actually know.
+          final subtitle = device.protocol == CastProtocolKind.mydia
+              ? (device.metadata['nowPlayingTitle'] ??
+                  (device.metadata['statusUnavailable'] == 'true'
+                      ? 'Status unavailable'
+                      : 'Nothing playing'))
+              : device.model;
           return ListTile(
             key: Key('cast-device-${device.id}'),
             leading: Icon(
@@ -268,7 +298,7 @@ class _ProtocolGroup extends StatelessWidget {
               color: isChosen ? AppColors.primary : AppColors.textSecondary,
             ),
             title: Text(device.name),
-            subtitle: device.model != null ? Text(device.model!) : null,
+            subtitle: subtitle != null ? Text(subtitle) : null,
             trailing: isConnected
                 ? const Icon(Icons.check, color: AppColors.primary)
                 : null,

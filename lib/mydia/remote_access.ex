@@ -249,6 +249,20 @@ defmodule Mydia.RemoteAccess do
   def touch_device_from_claims(_claims), do: :ok
 
   @doc """
+  Extracts the paired device id from a verified token's claims, or `nil`.
+
+  Both GraphQL context builders (HTTP in `MydiaWeb.Plugs.AbsintheContext`, p2p
+  in `Mydia.P2p.Server`) need this same check to populate `context[:device_id]`
+  for `registerDeviceNode` and friends. A plain browser login carries no
+  `"device_id"` claim, so it correctly yields `nil` here too.
+  """
+  @spec device_id_from_claims(map()) :: String.t() | nil
+  def device_id_from_claims(%{"device_id" => device_id}) when is_binary(device_id),
+    do: device_id
+
+  def device_id_from_claims(_claims), do: nil
+
+  @doc """
   Records that a device was seen, unless the throttle window has not elapsed.
 
   Accepts a loaded device or a device id. Returns `:recorded` when it wrote and
@@ -278,6 +292,21 @@ defmodule Mydia.RemoteAccess do
       {0, _} -> :skipped
       {_updated, _} -> :recorded
     end
+  end
+
+  @doc """
+  Records the iroh node ID a device is currently reachable at.
+
+  Called on every app start rather than only at pairing, so a device that
+  regenerated its keypair heals itself instead of silently dropping out of the
+  roster.
+  """
+  @spec register_node_id(RemoteDevice.t(), String.t()) ::
+          {:ok, RemoteDevice.t()} | {:error, Ecto.Changeset.t()}
+  def register_node_id(%RemoteDevice{} = device, node_id) do
+    device
+    |> RemoteDevice.node_id_changeset(node_id)
+    |> Repo.update()
   end
 
   @doc """

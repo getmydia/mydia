@@ -11,7 +11,7 @@ use mydia_auth::tokens::TokenKind;
 use crate::context::{authenticated_user, not_implemented, ApiContext};
 use crate::types::auth::{
     remote_device_from, AccessToken, ApiKey, ClaimCode, CreateApiKeyResult, LoginInput,
-    LoginResult, MediaToken, RevokeDeviceResult, ToggleFavoriteResult, User,
+    LoginResult, MediaToken, RemoteDevice, RevokeDeviceResult, ToggleFavoriteResult, User,
 };
 use crate::types::common::StreamingStrategy;
 use crate::types::discovery::RemoveFromContinueWatchingResult;
@@ -312,6 +312,19 @@ impl RootMutationType {
             success: true,
             device: Some(remote_device_from(device)?),
         }))
+    }
+
+    /// Register this device's p2p node id for remote control pairing.
+    ///
+    /// Remote access is not implemented on this server; the field exists so
+    /// the player's document validates against either server. See
+    /// `not_implemented`.
+    async fn register_device_node(
+        &self,
+        _ctx: &Context<'_>,
+        _node_id: String,
+    ) -> Result<Option<RemoteDevice>> {
+        Err(not_implemented("registerDeviceNode"))
     }
 
     /// Start an HLS streaming session for a media file

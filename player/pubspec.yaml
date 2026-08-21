@@ -80,6 +80,11 @@ dev_dependencies:
   riverpod_generator: ^4.0.0+1
   graphql_codegen: ^3.0.0
   mockito: ^5.4.0
+  # Used directly by five test files to drive Timer.periodic without real
+  # waits. It already arrived transitively via flutter_test, so declaring it
+  # pins the same resolved version and only stops the analyzer flagging every
+  # importer with depend_on_referenced_packages.
+  fake_async: ^1.3.3
   flutter_launcher_icons: ^0.14.3
   hive_ce_generator: ^1.10.0
   freezed: ^3.2.3

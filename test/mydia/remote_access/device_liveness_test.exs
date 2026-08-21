@@ -89,6 +89,22 @@ defmodule Mydia.RemoteAccess.DeviceLivenessTest do
     end
   end
 
+  describe "device_id_from_claims/1" do
+    test "returns the device id from a paired device's claims", %{device: device} do
+      assert RemoteAccess.device_id_from_claims(%{"device_id" => device.id}) == device.id
+    end
+
+    test "returns nil for a plain browser login's claims", %{user: user} do
+      assert RemoteAccess.device_id_from_claims(%{"sub" => user.id}) == nil
+    end
+
+    test "returns nil for a malformed or non-binary device id" do
+      assert RemoteAccess.device_id_from_claims(%{"device_id" => 123}) == nil
+      assert RemoteAccess.device_id_from_claims(%{"device_id" => nil}) == nil
+      assert RemoteAccess.device_id_from_claims(%{}) == nil
+    end
+  end
+
   describe "access token claims" do
     test "a device access token carries its device id through verification", %{
       user: user,

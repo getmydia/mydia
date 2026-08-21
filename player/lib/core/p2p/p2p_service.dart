@@ -192,6 +192,16 @@ class P2pService {
   // emitting events into an already-closed StreamController.
   StreamSubscription<String>? _eventSubscription;
 
+  // Subscription to the native host's control-request stream. Started and
+  // torn down at the exact same points as [_eventSubscription], for the same
+  // reason and one more: the dispatcher spawned in `P2PHost.init` fans both
+  // channels out of one sequential loop, and the control channel is bounded
+  // at 32 slots. Subscribing here unconditionally, rather than only once a
+  // settings-gated receiver wants requests, keeps that channel drained so a
+  // burst of inbound control requests can never block the loop and, with it,
+  // stall the unbounded generic channel `_eventSubscription` reads from.
+  StreamSubscription<FlutterInboundControlRequest>? _controlSubscription;
+
   // Stream of P2P status updates
   final _statusController = StreamController<P2pStatus>.broadcast();
   Stream<P2pStatus> get onStatusChanged => _statusController.stream;
@@ -199,6 +209,31 @@ class P2pService {
   // Stream of peer connection events
   final _peerConnectedController = StreamController<String>.broadcast();
   Stream<String> get onPeerConnected => _peerConnectedController.stream;
+
+  // Stream of inbound control requests from another player.
+  final _controlRequestController =
+      StreamController<FlutterInboundControlRequest>.broadcast();
+
+  /// Control commands arriving from another player.
+  ///
+  /// Separate from [onStatusChanged], which carries the colon-delimited event
+  /// strings and cannot express a structured command.
+  Stream<FlutterInboundControlRequest> get onControlRequest =>
+      _controlRequestController.stream;
+
+  /// Answer an inbound control request carried on [onControlRequest].
+  ///
+  /// A no-op host (never initialized, or torn down since the request arrived)
+  /// silently drops the response rather than throwing: by the time a caller
+  /// gets around to answering, the connection that asked may already be gone.
+  Future<void> respondToControl(
+    String requestId,
+    FlutterRemoteControlResponse response,
+  ) async {
+    final host = _host;
+    if (host == null) return;
+    await host.respondToRemoteControl(requestId: requestId, res: response);
+  }
 
   /// Returns true if the P2P host is initialized
   bool get isInitialized => _isInitialized;
@@ -211,6 +246,12 @@ class P2pService {
 
   /// This node's ID (PublicKey string)
   String? get nodeId => _nodeId;
+
+  /// The underlying host, for callers that need it directly rather than one
+  /// of this service's higher-level request wrappers — `MydiaCastBackend`'s
+  /// transport (see `cast_providers.dart`) sends `FlutterRemoteControlRequest`s
+  /// this service has no wrapper for. Null until [initialize] has completed.
+  P2PHost? get host => _host;
 
   /// Current P2P status (built from cached event data, no FFI calls)
   P2pStatus get status {
@@ -393,6 +434,16 @@ class P2pService {
           _cachedRelayUrl = _extractRelayUrlFromNodeAddr(nodeAddrJson);
           _emitStatus();
         }
+      });
+
+      // Start Control-Request Stream. Subscribed here, unconditionally,
+      // alongside the event stream above rather than lazily once a receiver
+      // wants requests: see the dartdoc on `_controlSubscription` for why
+      // that matters.
+      _controlSubscription = _host!.remoteControlStream().listen((request) {
+        debugPrint(
+            '[P2P] Control request: ${request.requestId} from ${request.peer}');
+        _controlRequestController.add(request);
       });
 
       _isInitialized = true;
@@ -718,6 +769,11 @@ class P2pService {
     unawaited(subscription?.cancel().catchError((Object e) {
       debugPrint('[P2P] Error cancelling event subscription on reset: $e');
     }));
+    final controlSubscription = _controlSubscription;
+    _controlSubscription = null;
+    unawaited(controlSubscription?.cancel().catchError((Object e) {
+      debugPrint('[P2P] Error cancelling control subscription on reset: $e');
+    }));
     _host = null;
     _isInitialized = false;
     _initializeFuture = null;
@@ -774,10 +830,13 @@ class P2pService {
     // live subscription can otherwise still fire into a closed controller.
     await _eventSubscription?.cancel();
     _eventSubscription = null;
+    await _controlSubscription?.cancel();
+    _controlSubscription = null;
     // Rust host is dropped when P2PHost is garbage collected
     _host = null;
     _isInitialized = false;
     await _statusController.close();
     await _peerConnectedController.close();
+    await _controlRequestController.close();
   }
 }

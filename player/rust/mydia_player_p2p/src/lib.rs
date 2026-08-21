@@ -2,9 +2,12 @@ mod frb_generated; /* AUTO INJECTED BY flutter_rust_bridge. This line may not be
 use crate::frb_generated::StreamSink;
 use flutter_rust_bridge::frb;
 use mydia_p2p_core::{
-    runtime, Event, GraphQLRequest, HlsRequest, HlsRequester, Host, HostConfig, MydiaRequest,
-    MydiaResponse, PairingRequest, PeerConnectionType,
+    runtime, Event, GraphQLRequest, HlsRequest, HlsRequester, Host, HostConfig, LoadContentRequest,
+    MydiaRequest, MydiaResponse, PairingRequest, PeerConnectionType, PlaybackSnapshot,
+    PlaybackState, RemoteControlRequest, RemoteControlResponse, TargetCapabilities, TrackInfo,
 };
+use std::sync::Arc;
+use tokio::sync::{mpsc, Mutex};
 #[cfg(not(target_arch = "wasm32"))]
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
@@ -75,6 +78,17 @@ fn init_logging() {
 pub struct P2pHost {
     inner: Host,
     hls_requester: HlsRequester,
+    /// Fed by a dispatcher spawned in `init`. `event_stream` reads from this
+    /// instead of `inner.event_rx` directly.
+    ///
+    /// Splitting it out of `inner.event_rx` is what makes control-request
+    /// routing (see `control_rx` below) independent of whether Dart ever
+    /// calls `event_stream()`. See the dispatcher in `init` for the full
+    /// reasoning.
+    generic_event_rx: Arc<Mutex<mpsc::UnboundedReceiver<Event>>>,
+    /// Inbound control requests, routed here by the same `init` dispatcher.
+    /// Drained by `remote_control_stream`.
+    control_rx: Arc<Mutex<mpsc::Receiver<FlutterInboundControlRequest>>>,
 }
 
 pub struct FlutterPairingRequest {
@@ -174,6 +188,444 @@ pub struct FlutterHlsResponse {
     pub data: Vec<u8>,
 }
 
+/// A control command, mirrored for the bridge.
+#[frb(non_opaque)]
+#[derive(Clone, Debug, PartialEq)]
+pub enum FlutterRemoteControlRequest {
+    Hello {
+        controller_name: String,
+        protocol_version: u32,
+    },
+    GetState,
+    Play,
+    Pause,
+    Stop,
+    Seek {
+        position_ms: u64,
+    },
+    SetVolume {
+        level: f32,
+    },
+    SetMute {
+        muted: bool,
+    },
+    SelectAudioTrack {
+        id: Option<String>,
+    },
+    SelectSubtitleTrack {
+        id: Option<String>,
+    },
+    NextEpisode,
+    PreviousEpisode,
+    LoadContent(FlutterLoadContentRequest),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct FlutterLoadContentRequest {
+    pub media_item_id: String,
+    pub episode_id: Option<String>,
+    pub position_ms: u64,
+    pub audio_track: Option<String>,
+    pub subtitle_track: Option<String>,
+    pub autoplay: bool,
+}
+
+#[frb(non_opaque)]
+#[derive(Clone, Debug, PartialEq)]
+pub enum FlutterRemoteControlResponse {
+    Welcome {
+        target_name: String,
+        protocol_version: u32,
+        capabilities: FlutterTargetCapabilities,
+    },
+    State(FlutterPlaybackSnapshot),
+    Accepted,
+    NotAuthorized,
+    NotPlaying,
+    Unsupported,
+    Error(String),
+}
+
+#[frb(non_opaque)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FlutterPlaybackState {
+    Idle,
+    Loading,
+    Buffering,
+    Playing,
+    Paused,
+    Ended,
+    Error,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FlutterTargetCapabilities {
+    pub volume: bool,
+    pub track_selection: bool,
+    pub next_previous: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct FlutterTrackInfo {
+    pub id: String,
+    pub label: String,
+    pub language: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct FlutterPlaybackSnapshot {
+    pub state: FlutterPlaybackState,
+    pub media_item_id: Option<String>,
+    pub episode_id: Option<String>,
+    pub title: String,
+    pub subtitle: Option<String>,
+    pub image_url: Option<String>,
+    pub position_ms: u64,
+    pub duration_ms: u64,
+    pub volume: Option<f32>,
+    pub muted: bool,
+    pub audio_tracks: Vec<FlutterTrackInfo>,
+    pub subtitle_tracks: Vec<FlutterTrackInfo>,
+    pub selected_audio: Option<String>,
+    pub selected_subtitle: Option<String>,
+    pub capabilities: FlutterTargetCapabilities,
+    pub sequence: u64,
+}
+
+/// An inbound command with the identifiers needed to answer it.
+///
+/// `peer` is the dialing node's ID, authenticated by iroh during the handshake.
+/// It is what the Dart roster check tests against, and it cannot be forged by
+/// the payload.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FlutterInboundControlRequest {
+    pub peer: String,
+    pub request_id: String,
+    pub request: FlutterRemoteControlRequest,
+}
+
+impl From<FlutterTargetCapabilities> for TargetCapabilities {
+    fn from(c: FlutterTargetCapabilities) -> Self {
+        TargetCapabilities {
+            volume: c.volume,
+            track_selection: c.track_selection,
+            next_previous: c.next_previous,
+        }
+    }
+}
+
+impl From<TargetCapabilities> for FlutterTargetCapabilities {
+    fn from(c: TargetCapabilities) -> Self {
+        FlutterTargetCapabilities {
+            volume: c.volume,
+            track_selection: c.track_selection,
+            next_previous: c.next_previous,
+        }
+    }
+}
+
+impl From<FlutterPlaybackState> for PlaybackState {
+    fn from(s: FlutterPlaybackState) -> Self {
+        match s {
+            FlutterPlaybackState::Idle => PlaybackState::Idle,
+            FlutterPlaybackState::Loading => PlaybackState::Loading,
+            FlutterPlaybackState::Buffering => PlaybackState::Buffering,
+            FlutterPlaybackState::Playing => PlaybackState::Playing,
+            FlutterPlaybackState::Paused => PlaybackState::Paused,
+            FlutterPlaybackState::Ended => PlaybackState::Ended,
+            FlutterPlaybackState::Error => PlaybackState::Error,
+        }
+    }
+}
+
+impl From<PlaybackState> for FlutterPlaybackState {
+    fn from(s: PlaybackState) -> Self {
+        match s {
+            PlaybackState::Idle => FlutterPlaybackState::Idle,
+            PlaybackState::Loading => FlutterPlaybackState::Loading,
+            PlaybackState::Buffering => FlutterPlaybackState::Buffering,
+            PlaybackState::Playing => FlutterPlaybackState::Playing,
+            PlaybackState::Paused => FlutterPlaybackState::Paused,
+            PlaybackState::Ended => FlutterPlaybackState::Ended,
+            PlaybackState::Error => FlutterPlaybackState::Error,
+        }
+    }
+}
+
+impl From<FlutterTrackInfo> for TrackInfo {
+    fn from(t: FlutterTrackInfo) -> Self {
+        TrackInfo {
+            id: t.id,
+            label: t.label,
+            language: t.language,
+        }
+    }
+}
+
+impl From<TrackInfo> for FlutterTrackInfo {
+    fn from(t: TrackInfo) -> Self {
+        FlutterTrackInfo {
+            id: t.id,
+            label: t.label,
+            language: t.language,
+        }
+    }
+}
+
+impl From<FlutterLoadContentRequest> for LoadContentRequest {
+    fn from(r: FlutterLoadContentRequest) -> Self {
+        LoadContentRequest {
+            media_item_id: r.media_item_id,
+            episode_id: r.episode_id,
+            position_ms: r.position_ms,
+            audio_track: r.audio_track,
+            subtitle_track: r.subtitle_track,
+            autoplay: r.autoplay,
+        }
+    }
+}
+
+impl From<LoadContentRequest> for FlutterLoadContentRequest {
+    fn from(r: LoadContentRequest) -> Self {
+        FlutterLoadContentRequest {
+            media_item_id: r.media_item_id,
+            episode_id: r.episode_id,
+            position_ms: r.position_ms,
+            audio_track: r.audio_track,
+            subtitle_track: r.subtitle_track,
+            autoplay: r.autoplay,
+        }
+    }
+}
+
+impl From<FlutterRemoteControlRequest> for RemoteControlRequest {
+    fn from(r: FlutterRemoteControlRequest) -> Self {
+        match r {
+            FlutterRemoteControlRequest::Hello {
+                controller_name,
+                protocol_version,
+            } => RemoteControlRequest::Hello {
+                controller_name,
+                protocol_version,
+            },
+            FlutterRemoteControlRequest::GetState => RemoteControlRequest::GetState,
+            FlutterRemoteControlRequest::Play => RemoteControlRequest::Play,
+            FlutterRemoteControlRequest::Pause => RemoteControlRequest::Pause,
+            FlutterRemoteControlRequest::Stop => RemoteControlRequest::Stop,
+            FlutterRemoteControlRequest::Seek { position_ms } => {
+                RemoteControlRequest::Seek { position_ms }
+            }
+            FlutterRemoteControlRequest::SetVolume { level } => {
+                RemoteControlRequest::SetVolume { level }
+            }
+            FlutterRemoteControlRequest::SetMute { muted } => {
+                RemoteControlRequest::SetMute { muted }
+            }
+            FlutterRemoteControlRequest::SelectAudioTrack { id } => {
+                RemoteControlRequest::SelectAudioTrack { id }
+            }
+            FlutterRemoteControlRequest::SelectSubtitleTrack { id } => {
+                RemoteControlRequest::SelectSubtitleTrack { id }
+            }
+            FlutterRemoteControlRequest::NextEpisode => RemoteControlRequest::NextEpisode,
+            FlutterRemoteControlRequest::PreviousEpisode => RemoteControlRequest::PreviousEpisode,
+            FlutterRemoteControlRequest::LoadContent(req) => {
+                RemoteControlRequest::LoadContent(req.into())
+            }
+        }
+    }
+}
+
+impl From<RemoteControlRequest> for FlutterRemoteControlRequest {
+    fn from(r: RemoteControlRequest) -> Self {
+        match r {
+            RemoteControlRequest::Hello {
+                controller_name,
+                protocol_version,
+            } => FlutterRemoteControlRequest::Hello {
+                controller_name,
+                protocol_version,
+            },
+            RemoteControlRequest::GetState => FlutterRemoteControlRequest::GetState,
+            RemoteControlRequest::Play => FlutterRemoteControlRequest::Play,
+            RemoteControlRequest::Pause => FlutterRemoteControlRequest::Pause,
+            RemoteControlRequest::Stop => FlutterRemoteControlRequest::Stop,
+            RemoteControlRequest::Seek { position_ms } => {
+                FlutterRemoteControlRequest::Seek { position_ms }
+            }
+            RemoteControlRequest::SetVolume { level } => {
+                FlutterRemoteControlRequest::SetVolume { level }
+            }
+            RemoteControlRequest::SetMute { muted } => {
+                FlutterRemoteControlRequest::SetMute { muted }
+            }
+            RemoteControlRequest::SelectAudioTrack { id } => {
+                FlutterRemoteControlRequest::SelectAudioTrack { id }
+            }
+            RemoteControlRequest::SelectSubtitleTrack { id } => {
+                FlutterRemoteControlRequest::SelectSubtitleTrack { id }
+            }
+            RemoteControlRequest::NextEpisode => FlutterRemoteControlRequest::NextEpisode,
+            RemoteControlRequest::PreviousEpisode => FlutterRemoteControlRequest::PreviousEpisode,
+            RemoteControlRequest::LoadContent(req) => {
+                FlutterRemoteControlRequest::LoadContent(req.into())
+            }
+        }
+    }
+}
+
+impl From<FlutterRemoteControlResponse> for RemoteControlResponse {
+    fn from(r: FlutterRemoteControlResponse) -> Self {
+        match r {
+            FlutterRemoteControlResponse::Welcome {
+                target_name,
+                protocol_version,
+                capabilities,
+            } => RemoteControlResponse::Welcome {
+                target_name,
+                protocol_version,
+                capabilities: capabilities.into(),
+            },
+            FlutterRemoteControlResponse::State(snapshot) => {
+                RemoteControlResponse::State(snapshot.into())
+            }
+            FlutterRemoteControlResponse::Accepted => RemoteControlResponse::Accepted,
+            FlutterRemoteControlResponse::NotAuthorized => RemoteControlResponse::NotAuthorized,
+            FlutterRemoteControlResponse::NotPlaying => RemoteControlResponse::NotPlaying,
+            FlutterRemoteControlResponse::Unsupported => RemoteControlResponse::Unsupported,
+            FlutterRemoteControlResponse::Error(e) => RemoteControlResponse::Error(e),
+        }
+    }
+}
+
+impl From<RemoteControlResponse> for FlutterRemoteControlResponse {
+    fn from(r: RemoteControlResponse) -> Self {
+        match r {
+            RemoteControlResponse::Welcome {
+                target_name,
+                protocol_version,
+                capabilities,
+            } => FlutterRemoteControlResponse::Welcome {
+                target_name,
+                protocol_version,
+                capabilities: capabilities.into(),
+            },
+            RemoteControlResponse::State(snapshot) => {
+                FlutterRemoteControlResponse::State(snapshot.into())
+            }
+            RemoteControlResponse::Accepted => FlutterRemoteControlResponse::Accepted,
+            RemoteControlResponse::NotAuthorized => FlutterRemoteControlResponse::NotAuthorized,
+            RemoteControlResponse::NotPlaying => FlutterRemoteControlResponse::NotPlaying,
+            RemoteControlResponse::Unsupported => FlutterRemoteControlResponse::Unsupported,
+            RemoteControlResponse::Error(e) => FlutterRemoteControlResponse::Error(e),
+        }
+    }
+}
+
+impl From<FlutterPlaybackSnapshot> for PlaybackSnapshot {
+    fn from(s: FlutterPlaybackSnapshot) -> Self {
+        PlaybackSnapshot {
+            state: s.state.into(),
+            media_item_id: s.media_item_id,
+            episode_id: s.episode_id,
+            title: s.title,
+            subtitle: s.subtitle,
+            image_url: s.image_url,
+            position_ms: s.position_ms,
+            duration_ms: s.duration_ms,
+            volume: s.volume,
+            muted: s.muted,
+            audio_tracks: s.audio_tracks.into_iter().map(Into::into).collect(),
+            subtitle_tracks: s.subtitle_tracks.into_iter().map(Into::into).collect(),
+            selected_audio: s.selected_audio,
+            selected_subtitle: s.selected_subtitle,
+            capabilities: s.capabilities.into(),
+            sequence: s.sequence,
+        }
+    }
+}
+
+impl From<PlaybackSnapshot> for FlutterPlaybackSnapshot {
+    fn from(s: PlaybackSnapshot) -> Self {
+        FlutterPlaybackSnapshot {
+            state: s.state.into(),
+            media_item_id: s.media_item_id,
+            episode_id: s.episode_id,
+            title: s.title,
+            subtitle: s.subtitle,
+            image_url: s.image_url,
+            position_ms: s.position_ms,
+            duration_ms: s.duration_ms,
+            volume: s.volume,
+            muted: s.muted,
+            audio_tracks: s.audio_tracks.into_iter().map(Into::into).collect(),
+            subtitle_tracks: s.subtitle_tracks.into_iter().map(Into::into).collect(),
+            selected_audio: s.selected_audio,
+            selected_subtitle: s.selected_subtitle,
+            capabilities: s.capabilities.into(),
+            sequence: s.sequence,
+        }
+    }
+}
+
+/// Drains `event_rx`, routing an inbound `RemoteControl` request onto
+/// `control_tx` and every other event onto `generic_tx`. Spawned once,
+/// unconditionally, by `P2pHost::init` — see the comment at that call site
+/// for why splitting the two here (rather than inline in `event_stream`'s
+/// own loop) matters, and why the generic side is unbounded.
+///
+/// Admission onto `control_tx` is `try_send`, not an awaited `send`,
+/// deliberately. `control_tx` is bounded at 32 specifically so a Dart side
+/// that never subscribes (or whose `remote_control_stream` sink closed)
+/// cannot make this dispatcher accumulate requests forever — but a bounded
+/// channel enforces that bound by having `send` block once it is full, and
+/// this is the same loop that has to keep draining `event_rx` for the
+/// generic side too. An awaited `send` here would stop draining `event_rx`
+/// the moment the control side backed up, taking generic event delivery
+/// down with it — exactly the coupling this split exists to avoid. Both
+/// `Full` (32 unconsumed) and `Closed` (no receiver at all) mean the same
+/// thing operationally — nobody is currently able to receive this control
+/// request — so both are handled the same way: the request is dropped and
+/// logged, and the loop moves on to keep draining `event_rx`.
+async fn run_event_dispatcher(
+    event_rx: Arc<Mutex<mpsc::Receiver<Event>>>,
+    control_tx: mpsc::Sender<FlutterInboundControlRequest>,
+    generic_tx: mpsc::UnboundedSender<Event>,
+) {
+    let mut event_rx = event_rx.lock().await;
+    while let Some(event) = event_rx.recv().await {
+        match event {
+            Event::RequestReceived {
+                peer,
+                request: MydiaRequest::RemoteControl(req),
+                request_id,
+            } => {
+                if let Err(err) = control_tx.try_send(FlutterInboundControlRequest {
+                    peer,
+                    request_id,
+                    request: req.into(),
+                }) {
+                    let reason = match err {
+                        mpsc::error::TrySendError::Full(_) => {
+                            "the control channel is full (32 unconsumed requests)"
+                        }
+                        mpsc::error::TrySendError::Closed(_) => {
+                            "the control channel has no receiver"
+                        }
+                    };
+                    log::warn!("Dropping inbound control request: {reason}");
+                }
+            }
+            other => {
+                // An error here just means no `event_stream` subscriber is
+                // currently listening; keep draining `event_rx` regardless
+                // so control routing above is never blocked by it.
+                let _ = generic_tx.send(other);
+            }
+        }
+    }
+}
+
 impl P2pHost {
     /// Initialize a new P2P host with optional custom relay URL.
     ///
@@ -208,10 +660,57 @@ impl P2pHost {
         let (host, node_id) = Host::new(config);
         let hls_requester = host.hls_requester();
         log::info!("P2pHost created with node_id: {}", node_id);
+
+        // Fan `inner.event_rx` out into two channels: one carrying inbound
+        // control requests for `remote_control_stream`, the other carrying
+        // everything else for `event_stream` to format into its
+        // colon-delimited strings.
+        //
+        // This dispatcher is spawned here, unconditionally, rather than
+        // inline inside `event_stream`'s own loop. If control routing lived
+        // there instead, it would only run while a Dart caller happened to
+        // have an active `event_stream()` subscription — `remote_control_stream()`
+        // on its own would silently receive nothing, with no error anywhere,
+        // because nothing would ever be draining `inner.event_rx` to find the
+        // control requests in the first place. `P2pService.initialize()`
+        // does always subscribe to `event_stream()` today, but that is an
+        // application-level habit, not a guarantee this layer enforces, and
+        // this file is exactly where guaranteeing it costs nothing. Spawning
+        // the dispatcher immediately here means `remote_control_stream()`
+        // gets inbound requests whether or not `event_stream()` is ever
+        // called at all.
+        //
+        // The generic side uses an unbounded channel on purpose.
+        // `inner.event_rx` is bounded at 100 and already backpressures the
+        // whole host event loop if it is never drained (a pre-existing
+        // property of every event type, not something introduced here).
+        // Routing the generic side through another *bounded* channel would
+        // reproduce that stall one hop later inside this dispatcher's own
+        // loop, and while stalled there it would stop reading `inner.event_rx`
+        // altogether — taking control-request delivery down with it, which
+        // is precisely the coupling this split exists to remove. Unbounded
+        // avoids that at the cost of unbounded growth if `event_stream` is
+        // never consumed; connection-lifecycle events are small and rare
+        // enough that this is a reasonable trade.
+        //
+        // The control side stays bounded at 32 (below), for the opposite
+        // reason: an unconsumed inbound control request is a request nobody
+        // will ever answer, so bounding it caps how much of that this
+        // dispatcher will accumulate. See `run_event_dispatcher`'s own doc
+        // for why admission onto it has to be non-blocking despite that.
+        let (generic_tx, generic_rx) = mpsc::unbounded_channel::<Event>();
+        let (control_tx, control_rx) = mpsc::channel::<FlutterInboundControlRequest>(32);
+
+        let event_rx = host.event_rx.clone();
+        let _guard = runtime::enter();
+        runtime::spawn(run_event_dispatcher(event_rx, control_tx, generic_tx));
+
         (
             P2pHost {
                 inner: host,
                 hls_requester,
+                generic_event_rx: Arc::new(Mutex::new(generic_rx)),
+                control_rx: Arc::new(Mutex::new(control_rx)),
             },
             node_id,
         )
@@ -238,9 +737,15 @@ impl P2pHost {
     }
 
     /// Start streaming events to Flutter.
+    ///
+    /// Reads from `generic_event_rx`, not `inner.event_rx` directly: a
+    /// dispatcher spawned once in `init` already pulled inbound control
+    /// requests out onto their own channel, so subscribing here is *not*
+    /// required for `remote_control_stream` to work. See `init` for why that
+    /// independence matters.
     pub fn event_stream(&self, sink: StreamSink<String>) -> anyhow::Result<()> {
         log::info!("P2pHost::event_stream() called");
-        let rx = self.inner.event_rx.clone();
+        let rx = self.generic_event_rx.clone();
 
         // Entering the core's runtime rather than spawning a thread with a
         // runtime of its own: this is called from the Dart isolate thread,
@@ -261,7 +766,11 @@ impl P2pHost {
                     Event::RelayConnected => "relay_connected".to_string(),
                     Event::Ready { node_addr } => format!("ready:{}", node_addr),
                     Event::RequestReceived { .. } => {
-                        // Client doesn't handle incoming requests
+                        // RemoteControl requests never reach this channel:
+                        // the `init` dispatcher already routed them to
+                        // `remote_control_stream`. Every other inbound
+                        // request is still a server role this client does
+                        // not handle.
                         continue;
                     }
                     Event::HlsStreamRequest { .. } => {
@@ -292,6 +801,72 @@ impl P2pHost {
             log::info!("event_stream loop ended");
         });
         Ok(())
+    }
+
+    /// Stream inbound control requests to Flutter.
+    ///
+    /// Separate from `event_stream` on purpose: that one is a colon-delimited
+    /// string protocol, which cannot carry a structured command. This mirrors
+    /// `send_hls_request_streaming`, which is already typed.
+    ///
+    /// Unlike `send_hls_request_streaming`, this does not depend on
+    /// `event_stream` being subscribed to: the `init` dispatcher feeds
+    /// `control_rx` independently. Calling only this method, without ever
+    /// calling `event_stream()`, is a fully supported way to act as a
+    /// control target.
+    pub fn remote_control_stream(
+        &self,
+        sink: StreamSink<FlutterInboundControlRequest>,
+    ) -> anyhow::Result<()> {
+        let rx = self.control_rx.clone();
+        let _guard = runtime::enter();
+        runtime::spawn(async move {
+            let mut rx = rx.lock().await;
+            while let Some(inbound) = rx.recv().await {
+                if sink.add(inbound).is_err() {
+                    log::warn!("remote_control_stream sink closed, exiting");
+                    break;
+                }
+            }
+        });
+        Ok(())
+    }
+
+    /// Send a control command to a peer and await its answer.
+    pub async fn send_remote_control_request(
+        &self,
+        peer: String,
+        req: FlutterRemoteControlRequest,
+    ) -> anyhow::Result<FlutterRemoteControlResponse> {
+        let response = self
+            .inner
+            .send_request(peer, MydiaRequest::RemoteControl(req.into()))
+            .await
+            .map_err(|e| anyhow::anyhow!("remote control request failed: {}", e))?;
+
+        match response {
+            MydiaResponse::RemoteControl(res) => Ok(res.into()),
+            MydiaResponse::Error(e) => Err(anyhow::anyhow!("target returned an error: {}", e)),
+            other => Err(anyhow::anyhow!("unexpected response: {:?}", other)),
+        }
+    }
+
+    /// Answer an inbound control request.
+    ///
+    /// A successful return means the response was *enqueued* on the host's
+    /// command channel, not that it reached the wire. Task 1 hit this for
+    /// real: a process that exits promptly after this returns can drop an
+    /// in-flight response. Callers that need the answer delivered must keep
+    /// the host alive until the peer's request completes.
+    pub async fn respond_to_remote_control(
+        &self,
+        request_id: String,
+        res: FlutterRemoteControlResponse,
+    ) -> anyhow::Result<()> {
+        self.inner
+            .send_response(request_id, MydiaResponse::RemoteControl(res.into()))
+            .await
+            .map_err(|e| anyhow::anyhow!("send_response failed: {}", e))
     }
 
     /// Send a pairing request to a specific peer.
@@ -617,5 +1192,151 @@ mod pairing_keys_tests {
         assert!(PairingKeys::derive("K7RPM3".to_string())
             .open(sealed.sealed)
             .is_err());
+    }
+}
+
+#[cfg(test)]
+mod remote_control_bridge_tests {
+    use super::*;
+    use mydia_p2p_core::{PlaybackState, RemoteControlRequest, TargetCapabilities};
+
+    #[test]
+    fn a_seek_converts_both_ways() {
+        let flutter = FlutterRemoteControlRequest::Seek {
+            position_ms: 754_000,
+        };
+        let core: RemoteControlRequest = flutter.clone().into();
+        assert_eq!(
+            core,
+            RemoteControlRequest::Seek {
+                position_ms: 754_000
+            }
+        );
+        assert_eq!(FlutterRemoteControlRequest::from(core), flutter);
+    }
+
+    #[test]
+    fn capabilities_convert_both_ways() {
+        let core = TargetCapabilities {
+            volume: true,
+            track_selection: false,
+            next_previous: true,
+        };
+        let flutter: FlutterTargetCapabilities = core.into();
+        assert!(flutter.volume);
+        assert!(!flutter.track_selection);
+        assert_eq!(TargetCapabilities::from(flutter), core);
+    }
+
+    #[test]
+    fn playback_state_converts_both_ways() {
+        for state in [
+            PlaybackState::Idle,
+            PlaybackState::Loading,
+            PlaybackState::Buffering,
+            PlaybackState::Playing,
+            PlaybackState::Paused,
+            PlaybackState::Ended,
+            PlaybackState::Error,
+        ] {
+            let flutter: FlutterPlaybackState = state.into();
+            assert_eq!(PlaybackState::from(flutter), state);
+        }
+    }
+}
+
+#[cfg(test)]
+mod event_dispatcher_tests {
+    use super::*;
+    use mydia_p2p_core::runtime::time::{timeout, Duration};
+
+    fn control_event(request_id: &str) -> Event {
+        Event::RequestReceived {
+            peer: "peer-controller".to_string(),
+            request: MydiaRequest::RemoteControl(RemoteControlRequest::GetState),
+            request_id: request_id.to_string(),
+        }
+    }
+
+    /// Pins the bug CodeRabbit found: an awaited `send` on the bounded
+    /// control channel used to block this loop once it filled up, which
+    /// stopped it from draining `event_rx` at all — silently stalling
+    /// *every* event, control and generic alike, not just the control
+    /// requests that were actually piling up.
+    #[test]
+    fn a_full_control_channel_does_not_stall_generic_event_delivery() {
+        runtime::block_on(async {
+            let (event_tx, event_rx) = mpsc::channel::<Event>(100);
+            let event_rx = Arc::new(Mutex::new(event_rx));
+            // Deliberately tiny, so the test does not need to send 33 events
+            // to reproduce a full channel.
+            let (control_tx, mut control_rx) = mpsc::channel::<FlutterInboundControlRequest>(2);
+            let (generic_tx, mut generic_rx) = mpsc::unbounded_channel::<Event>();
+
+            let _guard = runtime::enter();
+            runtime::spawn(run_event_dispatcher(event_rx, control_tx, generic_tx));
+
+            // Fill the control channel past capacity without ever draining
+            // `control_rx` — the "Dart never subscribed" scenario the
+            // finding describes.
+            for i in 0..5 {
+                event_tx
+                    .send(control_event(&format!("req-{i}")))
+                    .await
+                    .unwrap();
+            }
+
+            // A generic event sent after the control channel backed up must
+            // still arrive, and promptly: proof the dispatcher never
+            // blocked trying to hand the 3rd control request to a full
+            // channel.
+            event_tx.send(Event::RelayConnected).await.unwrap();
+
+            let generic = timeout(Duration::from_secs(2), generic_rx.recv())
+                .await
+                .expect(
+                    "the dispatcher must still be draining event_rx for the generic side, \
+                     even with the control side backed up",
+                )
+                .expect("generic_tx must still be open");
+            assert!(matches!(generic, Event::RelayConnected));
+
+            // Only as many control requests as fit the bounded channel were
+            // actually admitted; the rest were dropped rather than queued
+            // forever.
+            let mut received = 0;
+            while control_rx.try_recv().is_ok() {
+                received += 1;
+            }
+            assert_eq!(received, 2);
+        });
+    }
+
+    /// The other half of the same finding: `remote_control_stream`'s sink
+    /// closing (its subscriber cancels, or the stream itself ends) drops
+    /// `control_rx` entirely, which makes every future `try_send` return
+    /// `Closed` rather than `Full`. Generic event delivery must survive
+    /// that too.
+    #[test]
+    fn a_closed_control_receiver_does_not_stall_generic_event_delivery() {
+        runtime::block_on(async {
+            let (event_tx, event_rx) = mpsc::channel::<Event>(100);
+            let event_rx = Arc::new(Mutex::new(event_rx));
+            let (control_tx, control_rx) = mpsc::channel::<FlutterInboundControlRequest>(32);
+            drop(control_rx);
+            let (generic_tx, mut generic_rx) = mpsc::unbounded_channel::<Event>();
+
+            let _guard = runtime::enter();
+            runtime::spawn(run_event_dispatcher(event_rx, control_tx, generic_tx));
+
+            event_tx.send(control_event("req-1")).await.unwrap();
+            event_tx.send(Event::RelayConnected).await.unwrap();
+
+            let generic = timeout(Duration::from_secs(2), generic_rx.recv())
+                .await
+                .expect("the dispatcher must still be draining event_rx")
+                .expect("generic_tx must still be open");
+            assert!(matches!(generic, Event::RelayConnected));
+        });
     }
 }

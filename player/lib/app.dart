@@ -1,8 +1,9 @@
-import 'dart:async' show unawaited;
+import 'dart:async' show StreamSubscription, unawaited;
 
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'core/auth/auth_status.dart';
 import 'core/layout/window_chrome_inset.dart';
 import 'core/theme/app_theme.dart';
@@ -13,9 +14,104 @@ import 'core/graphql/watch/watcher_registry.dart';
 import 'core/cast/cast_providers.dart';
 import 'core/downloads/download_providers.dart';
 import 'core/downloads/download_service.dart';
+import 'core/auth/device_info_service.dart';
+import 'core/remote/ambient_lifecycle.dart';
+import 'core/remote/load_content_navigation.dart';
+import 'core/remote/node_registration.dart';
+import 'core/remote/remote_control_intent.dart';
+import 'core/remote/remote_control_receiver.dart';
+import 'core/remote/remote_control_settings.dart';
+import 'core/remote/remote_roster.dart';
+import 'core/remote/remote_target_controller.dart';
+import 'core/router/navigator_keys.dart';
 import 'core/scroll/app_scroll_behavior.dart';
+import 'presentation/screens/episode/episode_detail_controller.dart';
+import 'presentation/screens/movie/movie_detail_controller.dart';
 import 'presentation/widgets/cast_mini_controller.dart';
 import 'package:player/core/p2p/p2p_service.dart';
+import 'package:player/native/lib.dart';
+
+/// Answers one inbound control [request], re-checking the opt-out first.
+///
+/// [RemoteControlReceiver] itself only knows the paired-device roster, not
+/// this device's own opt-out. Re-checking per request is what makes flipping
+/// the setting off refuse the very next request, instead of only taking
+/// effect after a restart, and it does so without tearing down and rebuilding
+/// the subscription.
+///
+/// Every collaborator arrives as a callback, the same way
+/// [pushLoadContentDestination] takes `push`, so this is reachable from a
+/// test. That is not stylistic: the startup path that builds the real
+/// collaborators awaits `DeviceInfoService.getDeviceName()`, and on Linux
+/// that never completes inside `testWidgets`' fake-async zone — verified by
+/// probe, where it hangs indefinitely rather than throwing. So no widget test
+/// can pump [MyApp] far enough to reach the subscription that calls this, and
+/// the recheck would otherwise be untestable. `player_screen.dart` extracts
+/// `shouldRestartForSeek` and `applyQualityChoice` for the same reason.
+///
+/// Nothing escapes: the caller is a stream listener with no error path of its
+/// own, so a throw from either callback would surface as an unhandled async
+/// error rather than anything a user could act on.
+@visibleForTesting
+Future<void> handleControlRequest({
+  required FlutterInboundControlRequest request,
+  required Future<bool> Function() controllableEnabled,
+  required Future<void> Function(String, FlutterRemoteControlResponse) respond,
+  required Future<void> Function(FlutterInboundControlRequest) handle,
+}) async {
+  try {
+    if (!await controllableEnabled()) {
+      await respond(
+        request.requestId,
+        const FlutterRemoteControlResponse_NotAuthorized(),
+      );
+      return;
+    }
+    await handle(request);
+  } catch (e, stackTrace) {
+    debugPrint('[MyApp] Remote control request handling failed: $e');
+    debugPrintStack(stackTrace: stackTrace);
+  }
+}
+
+/// Decides whether [_MyAppState._initRemoteControlIfEnabled] still needs to
+/// run.
+///
+/// Deliberately not "have we ever attempted" — an opt-out or a transient
+/// startup failure (no reachable server yet, a registration error) must stay
+/// retryable for the rest of the launch, not just for the first
+/// `authStateProvider` emission. What actually latches this closed is a
+/// receiver successfully wired ([succeed]): from then on every further call
+/// is a no-op, whether the setting flips off and back on or auth re-emits
+/// `authenticated` again.
+///
+/// Extracted as its own class — like [handleControlRequest] above — because
+/// `_initRemoteControlIfEnabled` itself cannot be exercised by a widget test
+/// (see that method's own dartdoc), but the state-transition bug this class
+/// fixes — a single failed or opted-out attempt permanently disabling this
+/// device as a target for the rest of the launch — is independent of the
+/// untestable collaborators (P2P, GraphQL, Hive, `DeviceInfoService`) and can
+/// be pinned down on its own.
+@visibleForTesting
+class RemoteControlInitGate {
+  bool _inFlight = false;
+  bool _succeeded = false;
+
+  /// Whether a call should actually do the work, rather than return early.
+  bool get shouldAttempt => !_succeeded && !_inFlight;
+
+  /// Call before starting the attempt.
+  void begin() => _inFlight = true;
+
+  /// Call once the receiver is actually wired — the only outcome that
+  /// should stop future attempts.
+  void succeed() => _succeeded = true;
+
+  /// Call when the attempt is over, however it ended (opted out, threw, or
+  /// succeeded) — clears [_inFlight] so a later call is not blocked forever
+  /// by one that already finished.
+  void end() => _inFlight = false;
+}
 
 class MyApp extends ConsumerStatefulWidget {
   const MyApp({super.key});
@@ -27,10 +123,38 @@ class MyApp extends ConsumerStatefulWidget {
 class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   final ResumeGate _resumeGate = ResumeGate();
 
+  /// Drops [ambientTargetsProvider]'s held connections on a real background
+  /// transition and re-sweeps on the way back — see
+  /// `core/remote/ambient_lifecycle.dart` for which [AppLifecycleState]
+  /// values count and why. `AmbientTargets.onBackground()`
+  /// (`core/remote/ambient_targets.dart`) otherwise only ever fires when
+  /// `ambientPlayingProvider`'s listener count reaches zero, which does not
+  /// happen merely because the OS backgrounded the app — `CastMiniController`
+  /// stays mounted and keeps watching it (`presentation/widgets/cast_mini_controller.dart`).
+  late final AmbientLifecycleBinding _ambientLifecycle =
+      AmbientLifecycleBinding(() => ref.read(ambientTargetsProvider));
+
+  /// Subscribed once here, for the app's whole lifetime, rather than by
+  /// whichever screen happens to be mounted: `LoadContent` is the one intent
+  /// `RemoteTargetController` cannot hand to a player, because it is what
+  /// starts a player in the first place. See
+  /// `RemoteTargetController.intents`'s dartdoc.
+  StreamSubscription<RemoteControlIntent>? _remoteIntentsSubscription;
+
+  /// Subscribed once [_initRemoteControlIfEnabled] wires up a receiver.
+  /// Cancelled before `P2pService.dispose` can close the stream it reads
+  /// from, the same ordering `_remoteIntentsSubscription` follows relative to
+  /// `RemoteTargetController`.
+  StreamSubscription<FlutterInboundControlRequest>? _controlRequestSubscription;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _remoteIntentsSubscription = ref
+        .read(remoteTargetControllerProvider)
+        .intents
+        .listen(_handleRemoteIntent);
     // Initialize P2P services
     Future.microtask(() async {
       try {
@@ -55,13 +179,40 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     // body, where no caller can catch it. It surfaces as an unhandled async
     // error and fails the test run. Restoring a cast session before auth is
     // meaningless anyway: there is no reachable server yet.
+    //
+    // Starting remote control shares the same gate for the same reason:
+    // `NodeRegistration` and `RemoteRoster` both need a signed-in GraphQL
+    // client too.
     ref.listenManual<AsyncValue<AuthStatus>>(
       authStateProvider,
       (previous, next) {
         if (next.value != AuthStatus.authenticated) return;
         _restoreCastSession();
+        unawaited(_initRemoteControlIfEnabled());
       },
       fireImmediately: true,
+    );
+
+    // Enabling the setting after a launch that started opted out — or after
+    // a launch where startup itself failed (no reachable server yet, a
+    // registration error) — must not need a restart:
+    // `_initRemoteControlIfEnabled` no-ops once a receiver is actually
+    // wired (see `RemoteControlInitGate`), so re-invoking it here on every
+    // change is safe, and is what makes the settings switch take effect for
+    // the rest of this launch instead of only the next one. Gated on auth
+    // the same way `_initRemoteControlIfEnabled` itself is — see that
+    // method's own dartdoc for why reading `asyncGraphqlClientProvider`
+    // before authentication is not merely pointless but actively harmful in
+    // tests.
+    ref.listenManual<AsyncValue<bool>>(
+      remoteControlEnabledProvider,
+      (previous, next) {
+        if (next.value != true) return;
+        if (ref.read(authStateProvider).value != AuthStatus.authenticated) {
+          return;
+        }
+        unawaited(_initRemoteControlIfEnabled());
+      },
     );
   }
 
@@ -84,14 +235,168 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     }
   }
 
+  /// Whether the controllable-device startup path still needs to run. Not a
+  /// once-per-launch flag: `authStateProvider` can re-emit `authenticated`
+  /// and [remoteControlEnabledProvider] can flip from off to on mid-launch,
+  /// and either must be able to retry an opt-out or a transient failure.
+  /// What actually stops wiring a second receiver onto
+  /// [P2pService.onControlRequest] is [RemoteControlInitGate.succeed] —
+  /// once one attempt actually wires [_controlRequestSubscription], every
+  /// later call is a no-op.
+  final _remoteControlInitGate = RemoteControlInitGate();
+
+  /// Starts the iroh host if it is not already running, registers this
+  /// device's node ID with the server, and wires up a [RemoteControlReceiver]
+  /// so inbound requests get answered — all only when
+  /// [RemoteControlSettings.controllableEnabled] says this device should be
+  /// reachable.
+  ///
+  /// `p2pServiceProvider.initialize()` may already be running by the time
+  /// this reaches it — the unconditional call in [initState] starts it
+  /// purely so this device can dial its own paired server, independent of
+  /// whether it opts in to being a target — but `initialize()` is idempotent,
+  /// so calling it again here is always safe and is what actually starts the
+  /// host on a build where that unconditional call hasn't run yet (e.g. a
+  /// fresh pairing that lands here before the microtask above resolves).
+  Future<void> _initRemoteControlIfEnabled() async {
+    if (!_remoteControlInitGate.shouldAttempt) return;
+    _remoteControlInitGate.begin();
+
+    try {
+      final settings = await ref.read(remoteControlSettingsProvider.future);
+      if (!await settings.controllableEnabled()) {
+        debugPrint('[MyApp] Remote control opted out, not advertising');
+        return;
+      }
+
+      final p2pService = ref.read(p2pServiceProvider);
+      await p2pService.initialize();
+
+      final nodeId = p2pService.nodeId;
+      if (nodeId == null) {
+        debugPrint(
+            '[MyApp] Remote control: no node ID after initialize, skipping');
+        return;
+      }
+
+      final client = await ref.read(asyncGraphqlClientProvider.future);
+      final registered = await NodeRegistration(
+        client: client,
+        nodeId: () async => p2pService.nodeId,
+      ).register();
+      debugPrint('[MyApp] Remote control node registration: $registered');
+
+      final targetController = ref.read(remoteTargetControllerProvider);
+      final receiver = RemoteControlReceiver(
+        roster: RemoteRoster(client: client),
+        targetName: await DeviceInfoService().getDeviceName(),
+        snapshotSource: targetController.snapshot,
+        onIntent: targetController.submit,
+        respond: p2pService.respondToControl,
+      );
+
+      _controlRequestSubscription = p2pService.onControlRequest.listen(
+        (request) => unawaited(
+          handleControlRequest(
+            request: request,
+            controllableEnabled: settings.controllableEnabled,
+            respond: p2pService.respondToControl,
+            handle: receiver.handle,
+          ),
+        ),
+      );
+      _remoteControlInitGate.succeed();
+    } catch (e) {
+      // Matches `_restoreCastSession`'s catch: a startup gate that a device
+      // with no reachable server, no auth, or (in tests) no initialized Hive
+      // simply skips, same as opting out. Not latched via
+      // `RemoteControlInitGate.succeed` — a later retry (re-auth, or the
+      // setting itself flipping on) must be able to try again.
+      debugPrint('[MyApp] Failed to start remote control: $e');
+    } finally {
+      _remoteControlInitGate.end();
+    }
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _remoteIntentsSubscription?.cancel();
+    _controlRequestSubscription?.cancel();
     super.dispose();
+  }
+
+  /// The only intent `RemoteTargetController` ever puts on [Stream]
+  /// `intents` is `LoadContentIntent` — everything else goes straight to a
+  /// mounted player, if any — but the match is written out rather than
+  /// assumed, since a bare cast would silently misbehave if that ever
+  /// changed.
+  void _handleRemoteIntent(RemoteControlIntent intent) {
+    if (intent is! LoadContentIntent) return;
+
+    final context = rootNavigatorKey.currentContext;
+    if (context == null) {
+      debugPrint(
+          '[MyApp] Remote LoadContent arrived before the router mounted');
+      return;
+    }
+
+    unawaited(_pushLoadContent(context, intent));
+  }
+
+  /// Resolves [intent] to a playable file and pushes the player already
+  /// playing it, falling back to the detail screen — the same "no file
+  /// chosen yet" fallback every other entry point in this app takes (see
+  /// `home_screen.dart`'s `_handlePlay`) — when nothing resolves.
+  ///
+  /// `router` and `screenWidth` are read from [context] before the only
+  /// `await` in this method, never after: this device could navigate away
+  /// or tear down while [pushLoadContentDestination] runs, and neither
+  /// `context` nor anything derived from it would be safe to touch once
+  /// that has happened. The whole body is wrapped in `try`/`catch` on top of
+  /// [resolveLoadContentRoute]'s own — this runs off an inbound network
+  /// command with no caller able to catch an escaping exception, so nothing
+  /// here may ever throw, not even a `push` on a torn-down router.
+  Future<void> _pushLoadContent(
+    BuildContext context,
+    LoadContentIntent intent,
+  ) async {
+    try {
+      final router = GoRouter.of(context);
+      final screenWidth = MediaQuery.sizeOf(context).width;
+
+      await pushLoadContentDestination(
+        intent,
+        screenWidth,
+        fetchMovieTarget: (id) async {
+          final movie =
+              await ref.read(movieDetailControllerProvider(id).future);
+          return LoadContentTarget(files: movie.files, title: movie.title);
+        },
+        fetchEpisodeTarget: (id) async {
+          final episode =
+              await ref.read(episodeDetailControllerProvider(id).future);
+          return LoadContentTarget(
+            files: episode.files,
+            title: episode.title,
+            showId: episode.show.id,
+            seasonNumber: episode.seasonNumber,
+          );
+        },
+        push: (path) {
+          if (!mounted) return;
+          router.push(path);
+        },
+      );
+    } catch (error, stackTrace) {
+      debugPrint('[MyApp] Remote LoadContent handling failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    _ambientLifecycle.handle(state);
     if (applyAppLifecycleState(_resumeGate, state, DateTime.now())) {
       // Live screens refetch now; dormant ones become cold for their next
       // mount. Fire-and-forget: a lifecycle callback cannot await, so any

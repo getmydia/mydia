@@ -96,6 +96,85 @@ void main() {
     expect(find.byKey(const Key('cast-device-d1')), findsOneWidget);
   });
 
+  testWidgets('shows a Mydia group with what the target is playing',
+      (tester) async {
+    await pumpPicker(tester,
+        devices: const AsyncValue.data([
+          CastDevice(
+            id: 'node-a',
+            name: 'Living Room',
+            protocol: CastProtocolKind.mydia,
+            metadata: {'nodeId': 'node-a', 'nowPlayingTitle': 'Arrival'},
+          ),
+        ]));
+
+    expect(find.byKey(const Key('cast-group-mydia')), findsOneWidget);
+    expect(find.byKey(const Key('cast-device-node-a')), findsOneWidget);
+    expect(find.text('Living Room'), findsOneWidget);
+    expect(find.text('Arrival'), findsOneWidget);
+  });
+
+  testWidgets(
+      'falls back to a placeholder when a Mydia target reports nothing playing',
+      (tester) async {
+    // Idle, paused, and probe-failed targets all share this: the discovery
+    // probe only populates `nowPlayingTitle` when it catches the target
+    // actively playing something (see `MydiaCastBackend`).
+    await pumpPicker(tester,
+        devices: const AsyncValue.data([
+          CastDevice(
+            id: 'node-b',
+            name: 'Bedroom',
+            protocol: CastProtocolKind.mydia,
+            metadata: {'nodeId': 'node-b'},
+          ),
+        ]));
+
+    expect(find.byKey(const Key('cast-device-node-b')), findsOneWidget);
+    expect(find.text('Nothing playing'), findsOneWidget);
+  });
+
+  testWidgets(
+      'tells a probe-confirmed-idle target apart from one whose status '
+      'could not be fetched', (tester) async {
+    // `nowPlayingTitle`'s absence is ambiguous on its own — `MydiaCastBackend`
+    // sets `statusUnavailable` when it knows the two apart (Hello succeeded,
+    // GetState did not), and the picker owes the viewer the honest copy.
+    await pumpPicker(tester,
+        devices: const AsyncValue.data([
+          CastDevice(
+            id: 'node-c',
+            name: 'Kitchen',
+            protocol: CastProtocolKind.mydia,
+            metadata: {'nodeId': 'node-c', 'statusUnavailable': 'true'},
+          ),
+        ]));
+
+    expect(find.byKey(const Key('cast-device-node-c')), findsOneWidget);
+    expect(find.text('Status unavailable'), findsOneWidget);
+    expect(find.text('Nothing playing'), findsNothing);
+  });
+
+  testWidgets('shows a Mydia group regardless of Chromecast/DLNA capability',
+      (tester) async {
+    // Not gated on `capabilities`: a Mydia target is reached over the p2p
+    // host, not the platform's local-network entitlement.
+    await pumpPicker(
+      tester,
+      capabilities: const CastCapabilities.web(),
+      devices: const AsyncValue.data([
+        CastDevice(
+          id: 'node-c',
+          name: 'Kitchen',
+          protocol: CastProtocolKind.mydia,
+          metadata: {'nodeId': 'node-c'},
+        ),
+      ]),
+    );
+
+    expect(find.byKey(const Key('cast-group-mydia')), findsOneWidget);
+  });
+
   testWidgets(
       'keeps showing devices past the search timeout when devices arrive early',
       (tester) async {

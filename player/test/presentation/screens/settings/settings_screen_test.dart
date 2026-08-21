@@ -1,18 +1,38 @@
 // material.dart exports its own ConnectionState (the async-widget one), which
 // clashes with the app's. Tasks 2 and 7 hit this too.
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart' hide ConnectionState;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hive_ce/hive.dart';
 import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/connection/connection_provider.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/p2p/p2p_service.dart';
+import 'package:player/core/remote/remote_control_settings.dart';
 import 'package:player/core/update/update_provider.dart';
 import 'package:player/domain/models/user_settings.dart';
 import 'package:player/presentation/screens/settings/settings_controller.dart';
 import 'package:player/presentation/screens/settings/settings_screen.dart';
 import 'package:player/presentation/screens/settings/widgets/settings_identity.dart';
+
+/// A real, isolated Hive box per test: `RemoteControlSettings` takes a real
+/// `Box`, and the settings screen's row is the thing under test here, not a
+/// stand-in for it. A unique box name per test avoids Hive's open-box cache
+/// leaking a prior test's opt-out into the next one.
+///
+/// Opened with `bytes:`, which selects Hive's in-memory backend, so every
+/// read and write is a completed `Future.value()` with no file touched. That
+/// is load-bearing rather than tidiness: `testWidgets` runs its body inside a
+/// fake-async zone, and tapping the toggle below calls
+/// `RemoteControlSettings.setControllable` -- a disk-backed box would leave a
+/// real file write outstanding that the zone never drives, so the round trip
+/// could never be asserted. `subtitle_track_selector_test.dart` hit the same
+/// wall and solved it the same way.
+late Box<dynamic> _remoteControlBox;
+var _remoteControlBoxCounter = 0;
 
 class _FakeConnectionNotifier extends ConnectionNotifier {
   _FakeConnectionNotifier(this._state);
@@ -95,10 +115,25 @@ const _status = P2pStatus(
   connectedPeersCount: 0,
 );
 
+/// Resolves and reads normally, but fails the write itself — for proving
+/// `_setControllable` catches a failure from `setControllable` specifically,
+/// not just from `remoteControlSettingsProvider` failing to resolve at all
+/// (which would leave the switch disabled — `onChanged` is null while
+/// `remoteControlEnabledProvider` has no value — and never reach
+/// `_setControllable` in the first place).
+class _ThrowingRemoteControlSettings extends RemoteControlSettings {
+  _ThrowingRemoteControlSettings({required super.box});
+
+  @override
+  Future<void> setControllable(bool value) async =>
+      throw Exception('disk full');
+}
+
 Future<void> _pump(
   WidgetTester tester, {
   UserSettings? settings = _settings,
   bool fail = false,
+  bool failRemoteControlWrite = false,
   String version = '',
   Size size = const Size(1000, 1400),
 }) async {
@@ -123,6 +158,11 @@ Future<void> _pump(
           () => _FakeUpdateNotifier(UpdateState(currentVersion: version)),
         ),
         authStateProvider.overrideWith(_RecordingAuthNotifier.new),
+        remoteControlSettingsProvider.overrideWith(
+          (ref) async => failRemoteControlWrite
+              ? _ThrowingRemoteControlSettings(box: _remoteControlBox)
+              : RemoteControlSettings(box: _remoteControlBox),
+        ),
       ],
       child: MaterialApp.router(
         routerConfig: GoRouter(
@@ -153,6 +193,20 @@ Future<void> _pump(
 
 void main() {
   setUp(_FakeSettingsController.skipCalls.clear);
+
+  setUp(() async {
+    _remoteControlBoxCounter += 1;
+    _remoteControlBox = await Hive.openBox<dynamic>(
+      'remote_control_$_remoteControlBoxCounter',
+      bytes: Uint8List(0),
+    );
+  });
+
+  // `deleteFromDisk` is unsupported on a memory box and there is nothing on
+  // disk to clean up; closing is what unregisters the name.
+  tearDown(() async {
+    await _remoteControlBox.close();
+  });
 
   testWidgets('renders the identity band with the account and server',
       (tester) async {
@@ -241,10 +295,105 @@ void main() {
       (tester) async {
     await _pump(tester);
 
-    await tester.tap(find.byType(Switch));
+    await tester.tap(find.descendant(
+      of: find.byKey(const Key('auto-skip-segments-switch')),
+      matching: find.byType(Switch),
+    ));
     await tester.pump();
 
     expect(_FakeSettingsController.skipCalls, [true]);
+  });
+
+  testWidgets(
+      'the remote control toggle is interactive and writes through '
+      'RemoteControlSettings', (tester) async {
+    await _pump(tester);
+    await tester.pumpAndSettle();
+
+    final toggle = find.descendant(
+      of: find.byKey(const Key('remote-control-enabled-switch')),
+      matching: find.byType(Switch),
+    );
+    expect(find.text('Allow this device to be controlled'), findsOneWidget);
+    expect(tester.widget<Switch>(toggle).value, isTrue);
+    expect(tester.widget<Switch>(toggle).onChanged, isNotNull);
+
+    await tester.ensureVisible(
+      find.byKey(const Key('remote-control-enabled-switch')),
+    );
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+
+    // Read back through a *separate* RemoteControlSettings over the same box,
+    // which proves the opt-out reached storage rather than only the widget's
+    // own state. Going through the class rather than the raw Hive key keeps
+    // the test off a private constant.
+    expect(
+      await RemoteControlSettings(box: _remoteControlBox).controllableEnabled(),
+      isFalse,
+    );
+    // And the switch itself reflects the stored value, which is the part that
+    // depends on `_setControllable` invalidating remoteControlEnabledProvider.
+    expect(tester.widget<Switch>(toggle).value, isFalse);
+  });
+
+  testWidgets('the remote control toggle turns back on', (tester) async {
+    // The off direction is the one that stops the endpoint, so it is the one
+    // that must not be one-way. Seeded opted-out so the screen starts there.
+    await RemoteControlSettings(box: _remoteControlBox).setControllable(false);
+    await _pump(tester);
+    await tester.pumpAndSettle();
+
+    final toggle = find.descendant(
+      of: find.byKey(const Key('remote-control-enabled-switch')),
+      matching: find.byType(Switch),
+    );
+    expect(tester.widget<Switch>(toggle).value, isFalse);
+
+    await tester.ensureVisible(
+      find.byKey(const Key('remote-control-enabled-switch')),
+    );
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+
+    expect(
+      await RemoteControlSettings(box: _remoteControlBox).controllableEnabled(),
+      isTrue,
+    );
+    expect(tester.widget<Switch>(toggle).value, isTrue);
+  });
+
+  testWidgets(
+      'a failed write does not escape as an unhandled error and the '
+      'switch is not left stuck', (tester) async {
+    await _pump(tester, failRemoteControlWrite: true);
+    await tester.pumpAndSettle();
+
+    final toggle = find.descendant(
+      of: find.byKey(const Key('remote-control-enabled-switch')),
+      matching: find.byType(Switch),
+    );
+    expect(tester.widget<Switch>(toggle).value, isTrue);
+
+    await tester.ensureVisible(
+      find.byKey(const Key('remote-control-enabled-switch')),
+    );
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+
+    // The tap's failure must not have escaped as an unhandled async error —
+    // `tester.takeException()` (called implicitly by `tester.pumpAndSettle`
+    // completing without throwing, and confirmed explicitly here) would
+    // otherwise fail this test.
+    expect(tester.takeException(), isNull);
+
+    // The switch remains interactive rather than getting stuck disabled:
+    // `remoteControlEnabledProvider` is still invalidated after the
+    // failure, so it re-resolves off the (unchanged) stored value.
+    expect(tester.widget<Switch>(toggle).onChanged, isNotNull);
+    expect(tester.widget<Switch>(toggle).value, isTrue,
+        reason: 'the write never reached storage, so the true, persisted '
+            'value is still the original one');
   });
 
   testWidgets('paired devices navigates to the devices route', (tester) async {
@@ -305,7 +454,15 @@ void main() {
         (tester) async {
       await _pump(tester, settings: null, fail: true);
 
-      expect(tester.widget<Switch>(find.byType(Switch)).onChanged, isNull);
+      expect(
+        tester
+            .widget<Switch>(find.descendant(
+              of: find.byKey(const Key('auto-skip-segments-switch')),
+              matching: find.byType(Switch),
+            ))
+            .onChanged,
+        isNull,
+      );
       expect(find.text('Retry'), findsOneWidget);
     });
   });

@@ -14,6 +14,11 @@ anyhow = "1.0"
 log = "0.4"
 tracing = "0.1"
 serde_json = "1.0"
+# Only `sync` (channels, Mutex): this crate never spawns its own runtime, it
+# always enters mydia_p2p_core's via `runtime::enter`/`runtime::spawn`. Named
+# unconditionally rather than split by target because `sync` alone compiles
+# unchanged on wasm32-unknown-unknown, same as it does for mydia_p2p_core.
+tokio = { version = "1.49", features = ["sync"] }
 
 # mydia_p2p_core is named only inside the target sections below, never here.
 # Cargo unifies features additively, so one untargeted line taking the core

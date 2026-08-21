@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:player/core/cast/cast_backend.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
+import 'package:player/core/cast/mydia_cast_backend.dart';
 import 'package:player/domain/models/cast_device.dart';
+import 'package:player/native/lib.dart';
 
 /// Networkless [CastBackend] for tests. Emission is driver-controlled so tests
 /// can script exact sequences instead of waiting on timers.
@@ -12,9 +14,22 @@ class FakeCastBackend implements CastBackend {
   final _positions = StreamController<Duration>.broadcast();
   final _durations = StreamController<Duration>.broadcast();
   final _failures = StreamController<CastFailureKind>.broadcast();
+  final _volumes = StreamController<double>.broadcast();
 
   final List<CastMediaRequest> loadedRequests = [];
   final List<Duration> seeks = [];
+
+  /// Every `setVolume` call, in order.
+  final List<double> volumeChanges = [];
+
+  /// Every `setMuted` call, in order.
+  final List<bool> mutedChanges = [];
+
+  /// What [capabilities] reports. Settable so a test can declare a target
+  /// that supports volume (or track selection, or next/previous) without
+  /// needing a second fake.
+  @override
+  CastCapabilityFlags capabilities = const CastCapabilityFlags();
 
   /// Every `connect` call, so tests can prove an open connection is reused
   /// rather than torn down and rebuilt.
@@ -82,6 +97,7 @@ class FakeCastBackend implements CastBackend {
   void emitPosition(Duration position) => _positions.add(position);
   void emitDuration(Duration duration) => _durations.add(duration);
   void emitFailure(CastFailureKind kind) => _failures.add(kind);
+  void emitVolume(double level) => _volumes.add(level);
 
   /// Fail only the next [times] `loadMedia` call(s), consumed in order, so a
   /// later attempt can succeed. Calling this more than once (or with
@@ -190,11 +206,63 @@ class FakeCastBackend implements CastBackend {
   CastDevice? get connectedDevice => _connected;
 
   @override
+  Future<void> setVolume(double level) async => volumeChanges.add(level);
+
+  @override
+  Future<void> setMuted(bool muted) async => mutedChanges.add(muted);
+
+  @override
+  Stream<double> get volumeStream => _volumes.stream;
+
+  @override
   Future<void> dispose() async {
     await _devices.close();
     await _states.close();
     await _positions.close();
     await _durations.close();
     await _failures.close();
+    await _volumes.close();
+  }
+}
+
+/// A [FakeCastBackend] that also implements [MydiaSnapshotSource], for tests
+/// of the snapshot bridge — adoption's artwork/subtitle backfill and
+/// `CastSessionManager.pullToLocal` — that a plain [FakeCastBackend] cannot
+/// script.
+///
+/// Deliberately not folded into [FakeCastBackend] itself: only Mydia-facing
+/// tests need this, and the real [MydiaCastBackend]'s own book-keeping — a
+/// `stop`/`disconnect` clearing the cached snapshot the moment the target is
+/// actually told to stand down — is specific enough to this seam that most
+/// of the suite has no reason to carry it.
+class FakeMydiaCastBackend extends FakeCastBackend
+    implements MydiaSnapshotSource {
+  @override
+  FlutterPlaybackSnapshot? lastSnapshot;
+
+  /// When [lastSnapshot] was "captured" — settable directly, rather than
+  /// stamped automatically, so a test can place it an exact, arbitrary
+  /// distance behind whatever fixed clock the manager under test was built
+  /// with. Null by default, matching the real backend before anything has
+  /// been polled.
+  @override
+  DateTime? lastSnapshotAt;
+
+  /// What [lastSnapshot] becomes the instant [pause] is called — mirroring
+  /// how the real backend's follow-up poll (after `pause`, or after `stop`,
+  /// or the `disconnect` `CastSessionManager.stopCast` always issues right
+  /// after) can overwrite or clear the captured snapshot once the target has
+  /// actually been told to stand down.
+  ///
+  /// `pause` is what carries this, not `stop`, because
+  /// `CastSessionManager.pullToLocal` calls `pause` first — corrupting here
+  /// is what actually proves a caller read the position before *either*
+  /// command, not merely before the second of the two.
+  FlutterPlaybackSnapshot? snapshotAfterPause;
+
+  @override
+  Future<void> pause() {
+    if (snapshotAfterPause != null) lastSnapshot = snapshotAfterPause;
+    return super.pause();
   }
 }

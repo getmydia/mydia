@@ -73,6 +73,11 @@ pub struct RemoteDevice {
     pub last_seen_at: Option<DateTime<Utc>>,
     pub is_revoked: bool,
     pub created_at: DateTime<Utc>,
+    /// The p2p node id this device registered, if it has paired for remote
+    /// control. This server does not implement remote access, so it is
+    /// always `None` here; the field exists for schema parity with the
+    /// Elixir server.
+    pub node_id: Option<String>,
 }
 
 #[derive(SimpleObject)]
@@ -123,6 +128,7 @@ pub fn remote_device_from(
         last_seen_at: Some(parse_timestamp(&device.last_seen_at)?),
         is_revoked: device.revoked_at.is_some(),
         created_at: parse_timestamp(&device.inserted_at)?,
+        node_id: None,
     })
 }
 

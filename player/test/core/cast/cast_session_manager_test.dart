@@ -3,16 +3,148 @@ import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:player/core/cast/cast_backend.dart';
+import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_route_resolver.dart';
 import 'package:player/core/cast/cast_session_manager.dart';
 import 'package:player/core/cast/cast_session_store.dart';
 import 'package:player/core/player/progress_service.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/graphql/mutations/update_episode_progress.graphql.dart';
+import 'package:player/native/lib.dart';
 
 import '../../test_utils/fake_cast_backend.dart';
 import '../../test_utils/fake_streaming_session_service.dart';
 import 'cast_session_manager_test.mocks.dart';
+
+/// Minimal [CastBackend] double for the registry/dispatch tests in the
+/// 'multi-protocol routing' group below.
+///
+/// Deliberately smaller than [FakeCastBackend] (see
+/// `test/test_utils/fake_cast_backend.dart`), which the rest of this file
+/// uses for full protocol-lifecycle coverage. These tests only need to prove
+/// which backend a command reached, not exercise position/duration/failure
+/// streams, so a `calls` log and a static device list are enough.
+class FakeBackend implements CastBackend {
+  final List<CastDevice> devices;
+  final List<String> calls = [];
+
+  CastDevice? _connected;
+
+  FakeBackend({this.devices = const []});
+
+  @override
+  Stream<List<CastDevice>> startDiscovery({
+    required CastCapabilities capabilities,
+    Duration timeout = const Duration(seconds: 10),
+  }) =>
+      Stream.value(devices);
+
+  @override
+  void stopDiscovery() {}
+
+  @override
+  Future<void> connect(CastDevice device) async {
+    calls.add('connect');
+    _connected = device;
+  }
+
+  @override
+  Future<void> disconnect() async {
+    calls.add('disconnect');
+    _connected = null;
+  }
+
+  @override
+  Future<String?> probeReceiverContentUrl(CastDevice device) async => null;
+
+  @override
+  Future<void> loadMedia(CastMediaRequest request) async {
+    calls.add('loadMedia');
+  }
+
+  @override
+  Future<void> play() async => calls.add('play');
+
+  @override
+  Future<void> pause() async => calls.add('pause');
+
+  @override
+  Future<void> stop() async => calls.add('stop');
+
+  @override
+  Future<void> seek(Duration position) async => calls.add('seek');
+
+  @override
+  Future<void> selectSubtitle(CastSubtitleTrack? track) async =>
+      calls.add('selectSubtitle');
+
+  @override
+  Stream<CastPlaybackState> get stateStream => const Stream.empty();
+
+  @override
+  Stream<Duration> get positionStream => const Stream.empty();
+
+  @override
+  Stream<Duration> get durationStream => const Stream.empty();
+
+  @override
+  Stream<CastFailureKind> get failureStream => const Stream.empty();
+
+  @override
+  CastDevice? get connectedDevice => _connected;
+
+  @override
+  Future<void> setVolume(double level) async => calls.add('setVolume');
+
+  @override
+  Future<void> setMuted(bool muted) async => calls.add('setMuted');
+
+  @override
+  Stream<double> get volumeStream => const Stream.empty();
+
+  @override
+  CastCapabilityFlags get capabilities => const CastCapabilityFlags();
+
+  @override
+  Future<void> dispose() async {}
+}
+
+/// A [FlutterPlaybackSnapshot] with sensible defaults for every required
+/// field, so a test only has to spell out the fields it cares about. Mirrors
+/// the identically-named helper in `mydia_cast_backend_test.dart`; not
+/// shared, because that file's version exists to script a [FakeTransport]
+/// this one has no reason to depend on.
+FlutterPlaybackSnapshot _snapshot({
+  FlutterPlaybackState state = FlutterPlaybackState.playing,
+  String? mediaItemId,
+  String? episodeId,
+  String title = 'Blade Runner',
+  String? imageUrl,
+  BigInt? positionMs,
+  BigInt? durationMs,
+  List<FlutterTrackInfo> subtitleTracks = const [],
+  String? selectedSubtitle,
+  BigInt? sequence,
+}) =>
+    FlutterPlaybackSnapshot(
+      state: state,
+      mediaItemId: mediaItemId,
+      episodeId: episodeId,
+      title: title,
+      imageUrl: imageUrl,
+      positionMs: positionMs ?? BigInt.zero,
+      durationMs: durationMs ?? BigInt.from(60000),
+      muted: false,
+      audioTracks: const [],
+      subtitleTracks: subtitleTracks,
+      selectedSubtitle: selectedSubtitle,
+      capabilities: const FlutterTargetCapabilities(
+        volume: true,
+        trackSelection: true,
+        nextPrevious: false,
+      ),
+      sequence: sequence ?? BigInt.one,
+    );
 
 @GenerateMocks([GraphQLClient])
 void main() {
@@ -70,6 +202,52 @@ void main() {
             ? 'http://192.168.1.20:5000/g/abcd'
             : null;
       },
+      clock: () => DateTime.utc(2026, 7, 28, 12),
+    );
+  }
+
+  /// Wires a [CastSessionManager] with distinct backends per protocol, for
+  /// the 'multi-protocol routing' group below. Those tests cover discovery
+  /// merging and command dispatch — neither touches route resolution or
+  /// progress sync — so the resolver/streaming-session wiring here is a
+  /// minimal, self-contained stub rather than the shared `client`/`sessions`
+  /// fixtures every other test in this file uses.
+  ///
+  /// [sessions] is required, not built internally, so a test that needs to
+  /// script the fake server's own answers — `echoedStartOffset`, chiefly —
+  /// can reach the exact instance this manager ends up wired to. It has no
+  /// default of its own on purpose: a silently-fresh `FakeStreamingSessionService`
+  /// per call would still work for callers that don't care, but would make it
+  /// easy to construct one, forget to pass it, and then wonder why scripting
+  /// it did nothing.
+  CastSessionManager buildManagerWithBackends({
+    required CastBackend chromecast,
+    CastBackend? mydia,
+    required FakeStreamingSessionService sessions,
+  }) {
+    final fakeClient = MockGraphQLClient();
+    when(fakeClient.mutate(any)).thenAnswer(
+      (_) async => QueryResult(
+        source: QueryResultSource.network,
+        data: const {},
+        options: QueryOptions(document: gql('{ __typename }')),
+      ),
+    );
+
+    return CastSessionManager(
+      backend: chromecast,
+      mydiaBackend: mydia,
+      store: InMemoryCastSessionStore(),
+      progressService: ProgressService(fakeClient),
+      streamingSessions: sessions,
+      resolverFactory: () => CastRouteResolver(
+        isP2pMode: false,
+        serverUrl: 'https://mydia.test',
+        mediaToken: () async => 'tok',
+        lanBaseUrl: () => null,
+        streamingSessions: sessions,
+      ),
+      setLanAccess: (enabled) async {},
       clock: () => DateTime.utc(2026, 7, 28, 12),
     );
   }
@@ -365,6 +543,39 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 10));
 
       expect(manager.currentSession?.isStale, isTrue);
+    });
+
+    test('a revoked pairing (notAuthorized) also marks the session stale',
+        () async {
+      // A Mydia target that revokes this app mid-session cannot take any
+      // further commands, same as one that dropped off the network — without
+      // this the controller would keep showing live transport controls for a
+      // target refusing every one of them.
+      final manager = build();
+      addTearDown(manager.dispose);
+      await manager.startCast(device: device, request: launch);
+
+      backend.emitFailure(CastFailureKind.notAuthorized);
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(manager.currentSession?.isStale, isTrue);
+    });
+
+    test('notPlaying is left alone: not an error the UI needs to see',
+        () async {
+      // Mydia's own backend treats `notPlaying` as a benign state to
+      // re-sync from, not a failure. Routing it to the session state here
+      // would raise an alarming "lost" bar for a non-event.
+      final manager = build();
+      addTearDown(manager.dispose);
+      await manager.startCast(device: device, request: launch);
+      final before = manager.currentSession;
+
+      backend.emitFailure(CastFailureKind.notPlaying);
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(manager.currentSession?.connectionState, before?.connectionState);
+      expect(manager.currentSession?.isStale, isFalse);
     });
 
     test('keeps the stored session so it can be reconnected', () async {
@@ -1272,6 +1483,19 @@ void main() {
       expect(manager.currentSession?.connectionState, CastConnectionState.lost);
       expect(manager.currentSession?.isStale, isTrue);
     });
+
+    test('marks the session lost when the pairing is revoked (notAuthorized)',
+        () async {
+      final manager = build();
+      addTearDown(manager.dispose);
+
+      await manager.connectTo(device);
+      backend.emitFailure(CastFailureKind.notAuthorized);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(manager.currentSession?.connectionState, CastConnectionState.lost);
+      expect(manager.currentSession?.isStale, isTrue);
+    });
   });
 
   group('connectTo cancellation', () {
@@ -1908,6 +2132,736 @@ void main() {
       // request and the track assertion would prove nothing.
       expect(backend.loadedRequests, hasLength(2));
       expect(backend.loadedRequests.last.subtitles.first.trackId, '3');
+    });
+  });
+
+  group('multi-protocol routing', () {
+    test('merges Mydia targets into the same device list as Chromecast',
+        () async {
+      // One picker, three protocols. A second picker would be a worse UX and
+      // would duplicate the offline-row and reconnect behaviour this manager
+      // already has.
+      final manager = buildManagerWithBackends(
+        chromecast: FakeBackend(devices: [
+          const CastDevice(
+              id: 'cc-1', name: 'TV', protocol: CastProtocolKind.chromecast),
+        ]),
+        mydia: FakeBackend(devices: [
+          const CastDevice(
+            id: 'node-tv',
+            name: 'Living Room',
+            protocol: CastProtocolKind.mydia,
+            metadata: {'nodeId': 'node-tv'},
+          ),
+        ]),
+        sessions: FakeStreamingSessionService(),
+      );
+      addTearDown(manager.dispose);
+
+      final devices = await manager.discoveredDevices.first;
+
+      expect(devices.map((d) => d.protocol),
+          containsAll([CastProtocolKind.chromecast, CastProtocolKind.mydia]));
+    });
+
+    test('routes a command to the backend that owns the selected protocol',
+        () async {
+      final chromecast = FakeBackend(devices: const []);
+      final mydia = FakeBackend(devices: const []);
+      final manager = buildManagerWithBackends(
+        chromecast: chromecast,
+        mydia: mydia,
+        sessions: FakeStreamingSessionService(),
+      );
+      addTearDown(manager.dispose);
+
+      await manager.connectTo(const CastDevice(
+        id: 'node-tv',
+        name: 'Living Room',
+        protocol: CastProtocolKind.mydia,
+        metadata: {'nodeId': 'node-tv'},
+      ));
+      await manager.pause();
+
+      expect(mydia.calls, contains('pause'));
+      expect(chromecast.calls, isEmpty);
+    });
+
+    test('a device with no distinct backend falls back to the primary one',
+        () async {
+      // A manager built with no Mydia backend at all (P2P not ready — see
+      // `mydiaCastBackendProvider`) must not crash on a Mydia device; it
+      // just cannot reach it, same as any other unreachable target.
+      final chromecast = FakeBackend(devices: const []);
+      final manager = buildManagerWithBackends(
+        chromecast: chromecast,
+        sessions: FakeStreamingSessionService(),
+      );
+      addTearDown(manager.dispose);
+
+      await manager.connectTo(const CastDevice(
+        id: 'node-tv',
+        name: 'Living Room',
+        protocol: CastProtocolKind.mydia,
+        metadata: {'nodeId': 'node-tv'},
+      ));
+
+      expect(chromecast.calls, contains('connect'));
+    });
+  });
+
+  group('connectTo adopting an already-playing Mydia target', () {
+    test('an idle Mydia target still gets a media-less connection', () async {
+      // No `nowPlayingTitle` in metadata is exactly what the discovery probe
+      // stashes for a target it found idle (or couldn't confirm) — see
+      // `isPlayingMydiaTarget`'s dartdoc.
+      final chromecast = FakeBackend(devices: const []);
+      final mydia = FakeCastBackend();
+      final manager = buildManagerWithBackends(
+        chromecast: chromecast,
+        mydia: mydia,
+        sessions: FakeStreamingSessionService(),
+      );
+      addTearDown(manager.dispose);
+
+      const idleDevice = CastDevice(
+        id: 'node-tv',
+        name: 'Living Room',
+        protocol: CastProtocolKind.mydia,
+        metadata: {'nodeId': 'node-tv'},
+      );
+
+      await manager.connectTo(idleDevice);
+
+      expect(manager.currentSession?.connectionState,
+          CastConnectionState.connected);
+      expect(manager.currentSession?.playbackState, CastPlaybackState.idle);
+      expect(manager.currentSession?.mediaInfo, isNull,
+          reason: 'the existing media-less connect publishes no mediaInfo');
+      expect(mydia.loadedRequests, isEmpty);
+    });
+
+    test('a playing Mydia target is adopted without sending LoadContent',
+        () async {
+      final chromecast = FakeBackend(devices: const []);
+      final mydia = FakeCastBackend();
+      final manager = buildManagerWithBackends(
+        chromecast: chromecast,
+        mydia: mydia,
+        sessions: FakeStreamingSessionService(),
+      );
+      addTearDown(manager.dispose);
+
+      const playingDevice = CastDevice(
+        id: 'node-tv',
+        name: 'Living Room',
+        protocol: CastProtocolKind.mydia,
+        metadata: {
+          'nodeId': 'node-tv',
+          'nowPlayingTitle': 'Blade Runner',
+        },
+      );
+
+      await manager.connectTo(playingDevice);
+
+      // The receiver's own numbers, arriving after connect — not anything
+      // this controller chose, since `connectTo` never took a
+      // `CastLaunchRequest` to choose from in the first place.
+      mydia.emitDuration(const Duration(hours: 2, minutes: 3));
+      mydia.emitPosition(const Duration(minutes: 41));
+      mydia.emitState(CastPlaybackState.playing);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(manager.currentSession?.connectionState,
+          CastConnectionState.connected);
+      expect(manager.currentSession?.mediaInfo?.title, 'Blade Runner');
+      expect(manager.currentSession?.mediaInfo?.duration,
+          const Duration(hours: 2, minutes: 3));
+      expect(manager.currentSession?.mediaInfo?.position,
+          const Duration(minutes: 41));
+      expect(manager.currentSession?.playbackState, CastPlaybackState.playing);
+
+      // The point of the whole feature: adopting must not restart playback.
+      expect(mydia.loadedRequests, isEmpty);
+    });
+
+    test(
+        'adopting clears what an earlier, unrelated cast on this manager '
+        'chose', () async {
+      // `_lastRequest`/`_persisted` from a real prior session — not merely
+      // an idle connect, which never sets either — must not leak into an
+      // adopted one. See `_listenToBackendForAdoption`'s dartdoc.
+      final chromecast = FakeCastBackend();
+      final mydia = FakeCastBackend();
+      final manager = buildManagerWithBackends(
+        chromecast: chromecast,
+        mydia: mydia,
+        sessions: FakeStreamingSessionService(),
+      );
+      addTearDown(manager.dispose);
+
+      const chromecastDevice = CastDevice(
+        id: 'cc-1',
+        name: 'Office TV',
+        protocol: CastProtocolKind.chromecast,
+      );
+      await manager.startCast(device: chromecastDevice, request: launch);
+      // Sanity: `startCast` really did choose something, so the clear below
+      // proves adoption undoes it rather than the fields never having been
+      // set in the first place.
+      expect(manager.canRetarget, isTrue);
+      expect(manager.persistedSession, isNotNull);
+
+      const playingDevice = CastDevice(
+        id: 'node-tv',
+        name: 'Living Room',
+        protocol: CastProtocolKind.mydia,
+        metadata: {
+          'nodeId': 'node-tv',
+          'nowPlayingTitle': 'Arrival',
+        },
+      );
+      await manager.connectTo(playingDevice);
+
+      expect(manager.canRetarget, isFalse,
+          reason: 'an adopted session was never chosen through this '
+              'manager, so there is nothing to retarget');
+      expect(manager.persistedSession, isNull);
+    });
+  });
+
+  group('startCast rollback across two backends', () {
+    test(
+        'a failing startCast on one backend must not disconnect or clobber '
+        'a connectTo that already won on a different backend', () async {
+      // The reviewer's live repro, reduced to a test: a `startCast` to a
+      // chromecast device whose loads all fail, racing a `connectTo` to a
+      // different (mydia) device that wins outright. Originally this
+      // exercised the stale `startCast`'s failure-rollback catch block,
+      // which used to read the shared `_backend` field (by then repointed
+      // at the mydia backend) and call `_publish(null)`/
+      // `_cancelSubscriptions()` unconditionally — nulling out the live,
+      // unrelated mydia session and tearing down its just installed
+      // listeners. A later fix added a generation check right after
+      // `backend.connect()` resolves, so this exact race is now caught
+      // earlier still — the stale call bails out before ever reaching
+      // `_loadWithRetries` or that catch block at all. `failAllLoads` below
+      // is kept anyway as a belt-and-suspenders: if that earlier guard ever
+      // regressed, this call would fall through to the load attempt and
+      // this test would still catch the clobber.
+      final chromecastBackend = FakeCastBackend();
+      final mydiaBackend = FakeCastBackend();
+      final manager = buildManagerWithBackends(
+        chromecast: chromecastBackend,
+        mydia: mydiaBackend,
+        sessions: FakeStreamingSessionService(),
+      );
+      addTearDown(manager.dispose);
+
+      const ccDevice = CastDevice(
+        id: 'cc-1',
+        name: 'Living Room TV',
+        protocol: CastProtocolKind.chromecast,
+      );
+      const mydiaDevice = CastDevice(
+        id: 'node-tv',
+        name: 'Bedroom',
+        protocol: CastProtocolKind.mydia,
+        metadata: {'nodeId': 'node-tv'},
+      );
+
+      // Held at `connect` so the test controls exactly when the stale
+      // startCast resumes relative to the winning connectTo below. Every
+      // load fails too, so that if the early generation guard ever
+      // regressed, this call would be guaranteed to reach the rollback catch
+      // block — `unreachable` with no LAN base URL configured here means
+      // `_retryRouteFor` finds no bridge to fall back to and gives up after
+      // one attempt.
+      chromecastBackend.holdNextConnect();
+      chromecastBackend.failAllLoads(CastFailureKind.unreachable);
+
+      final started = manager.startCast(device: ccDevice, request: launch);
+      await Future<void>.delayed(Duration.zero);
+
+      // The concurrent, unrelated connectTo: a different device on a
+      // different backend, nothing superseding it, so it publishes a
+      // connected session outright.
+      await manager.connectTo(mydiaDevice);
+      expect(manager.currentSession?.device.id, mydiaDevice.id);
+      expect(manager.currentSession?.connectionState,
+          CastConnectionState.connected);
+
+      // Let the stale startCast's held connect proceed. It connects to the
+      // chromecast backend, notices it has been superseded, disconnects that
+      // backend itself, and returns — never touching `_backend` (still the
+      // mydia backend the connectTo above committed) and never reaching
+      // `_loadWithRetries`.
+      chromecastBackend.releaseConnect();
+
+      await started;
+
+      expect(manager.currentSession?.device.id, mydiaDevice.id,
+          reason: 'the older, unrelated, failing startCast must not clobber '
+              'the newer, already-published connectTo session');
+      expect(manager.currentSession?.connectionState,
+          CastConnectionState.connected,
+          reason: 'the mydia session must still read as connected, not '
+              'nulled out by the stale rollback');
+      expect(mydiaBackend.disconnectCallCount, 0,
+          reason: 'the failing startCast must disconnect only the backend '
+              'it itself resolved and connected, never the unrelated '
+              'backend a concurrent connectTo committed to `_backend`');
+      expect(chromecastBackend.disconnectCallCount, 1,
+          reason: 'the stale startCast still tears down its own, actually '
+              'failed connection');
+    });
+
+    test(
+        'a stale startCast must not kill the winning connectTo\'s '
+        'connectionLost listener', () async {
+      // Same race as above, but this one is about the success path right
+      // after `backend.connect()` resolves, not the failure-rollback catch
+      // block: before this fix, `startCast` ran `_backend = backend;
+      // _listenToBackend(request);` unconditionally there, with no
+      // generation check at all. A stale `startCast` that loses to a
+      // concurrent `connectTo` still repointed `_backend` at its own
+      // (unwanted) backend and cancelled the winner's subscriptions —
+      // permanently killing the winner's `connectionLost`/`notAuthorized`
+      // reporting, since nothing re-arms it short of another
+      // connectTo/startCast/stopCast. Session identity alone (asserted
+      // above) cannot catch this: that assertion already passes even when
+      // this listener is dead.
+      final chromecastBackend = FakeCastBackend();
+      final mydiaBackend = FakeCastBackend();
+      final manager = buildManagerWithBackends(
+        chromecast: chromecastBackend,
+        mydia: mydiaBackend,
+        sessions: FakeStreamingSessionService(),
+      );
+      addTearDown(manager.dispose);
+
+      const ccDevice = CastDevice(
+        id: 'cc-1',
+        name: 'Living Room TV',
+        protocol: CastProtocolKind.chromecast,
+      );
+      const mydiaDevice = CastDevice(
+        id: 'node-tv',
+        name: 'Bedroom',
+        protocol: CastProtocolKind.mydia,
+        metadata: {'nodeId': 'node-tv'},
+      );
+
+      // Held at `connect` so the test controls exactly when the stale
+      // startCast resumes relative to the winning connectTo below. Its load
+      // is set to fail throughout as a belt-and-suspenders (see the sibling
+      // test above): irrelevant to what this test actually proves, since the
+      // damage (if any) happens the instant `connect` resolves, before any
+      // load is attempted — but if the early generation guard ever
+      // regressed, a load that instead *succeeded* would trip a different,
+      // out-of-scope bug (the unguarded `_publish` in `_loadOnRoute`) and
+      // muddy this test's failure signal.
+      chromecastBackend.holdNextConnect();
+      chromecastBackend.failAllLoads(CastFailureKind.unreachable);
+
+      final started = manager.startCast(device: ccDevice, request: launch);
+      await Future<void>.delayed(Duration.zero);
+
+      // The winning, unrelated connectTo: a different device on a different
+      // backend, nothing superseding it, so it publishes a connected session
+      // and installs its own connectionLost listener on mydiaBackend.
+      await manager.connectTo(mydiaDevice);
+      expect(manager.currentSession?.device.id, mydiaDevice.id);
+      expect(manager.currentSession?.connectionState,
+          CastConnectionState.connected);
+
+      // Let the stale startCast's held connect proceed and run to
+      // completion. With the fix, it notices it has been superseded right
+      // after `connect()` resolves and bails out — never touching `_backend`
+      // or the winner's listeners, and never reaching `_loadWithRetries`.
+      chromecastBackend.releaseConnect();
+      await started;
+
+      // The real assertion: the winner's own failure listener must still be
+      // live on its own backend.
+      mydiaBackend.emitFailure(CastFailureKind.connectionLost);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(manager.currentSession?.device.id, mydiaDevice.id);
+      expect(manager.currentSession?.connectionState, CastConnectionState.lost,
+          reason: 'the winning connectTo\'s connectionLost listener must '
+              'survive a stale startCast that loses the generation race '
+              'after its own connect() resolves');
+    });
+  });
+
+  group('adoption backfills artwork and subtitle tracks from the snapshot', () {
+    const playingDevice = CastDevice(
+      id: 'node-tv',
+      name: 'Living Room',
+      protocol: CastProtocolKind.mydia,
+      metadata: {
+        'nodeId': 'node-tv',
+        'nowPlayingTitle': 'Blade Runner',
+      },
+    );
+
+    test(
+        'fills in artwork and subtitle tracks once the target reports '
+        'them, closing the gap 17b left', () async {
+      final chromecast = FakeBackend(devices: const []);
+      final mydia = FakeMydiaCastBackend();
+      final manager = buildManagerWithBackends(
+        chromecast: chromecast,
+        mydia: mydia,
+        sessions: FakeStreamingSessionService(),
+      );
+      addTearDown(manager.dispose);
+
+      await manager.connectTo(playingDevice);
+
+      // Nothing yet: `connectTo` only has the title from the discovery
+      // probe's metadata (see `isPlayingMydiaTarget`'s dartdoc) — the
+      // generic streams this manager otherwise reads from carry no artwork
+      // or track channel at all.
+      expect(manager.currentSession?.mediaInfo?.imageUrl, isNull);
+      expect(manager.currentSession?.subtitles, isEmpty);
+
+      mydia.lastSnapshot = _snapshot(
+        imageUrl: 'https://mydia.test/poster.jpg',
+        subtitleTracks: const [
+          FlutterTrackInfo(id: '0', label: 'English', language: 'en'),
+          FlutterTrackInfo(id: '1', label: 'French', language: 'fr'),
+        ],
+        selectedSubtitle: '1',
+      );
+      // Any real poll tick reaches `_applyAdoptedSnapshotExtras` — the
+      // duration channel is used here only because it is guaranteed to fire
+      // exactly once per real snapshot (see its own `<= Duration.zero`
+      // guard), unlike `positionStream`'s interpolation ticker.
+      mydia.emitDuration(const Duration(hours: 2));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(manager.currentSession?.mediaInfo?.imageUrl,
+          'https://mydia.test/poster.jpg');
+      expect(
+          manager.currentSession?.subtitles.map((t) => t.trackId), ['0', '1']);
+      expect(manager.currentSession?.subtitles.map((t) => t.label),
+          ['English', 'French']);
+      expect(manager.currentSession?.selectedSubtitle?.trackId, '1');
+    });
+
+    test(
+        'stays a no-op for a session adopted on a backend with no snapshot '
+        'bridge', () async {
+      // A device flagged adoptable by its own metadata, but this manager has
+      // no distinct Mydia backend (P2P not ready) — `connectTo` still takes
+      // the adopted branch, since `isPlayingMydiaTarget` only reads the
+      // device, and lands on the chromecast/primary backend via
+      // `CastBackendRegistry.forProtocol`'s fallback. The snapshot bridge
+      // must degrade gracefully there rather than crash.
+      final chromecast = FakeCastBackend();
+      final manager = buildManagerWithBackends(
+        chromecast: chromecast,
+        sessions: FakeStreamingSessionService(),
+      );
+      addTearDown(manager.dispose);
+
+      await manager.connectTo(playingDevice);
+      chromecast.emitDuration(const Duration(hours: 1));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(manager.currentSession?.mediaInfo?.imageUrl, isNull);
+      expect(manager.currentSession?.subtitles, isEmpty);
+    });
+  });
+
+  group("an adopted session's seek", () {
+    test(
+        'is not mistranslated by a stream offset an earlier, unrelated '
+        'cast on this manager left behind', () async {
+      // Fast-follow left open by 17b: `_listenToBackendForAdoption` resets
+      // `_timeline` to `StreamTimeline.zero`, but nothing proved that
+      // mattered. Without it, a stale non-zero `startOffset` from an
+      // earlier `startCast` on this same manager would mistranslate a
+      // `seek()` here — `seek()` early-returns to
+      // `_backend.seek(_timeline.toPlayer(position))` whenever `_persisted`/
+      // `_lastRequest` are null, which adoption always leaves them.
+      final chromecast = FakeCastBackend();
+      final mydia = FakeCastBackend();
+      final fakeSessions = FakeStreamingSessionService();
+      final manager = buildManagerWithBackends(
+        chromecast: chromecast,
+        mydia: mydia,
+        sessions: fakeSessions,
+      );
+      addTearDown(manager.dispose);
+
+      // An earlier, unrelated cast on this same manager, resumed mid-item —
+      // matching the `seek` group's own pattern above — so
+      // `_timeline.startOffset` ends up non-zero.
+      fakeSessions.echoedStartOffset = const Duration(seconds: 2394);
+      const chromecastDevice = CastDevice(
+        id: 'cc-1',
+        name: 'Office TV',
+        protocol: CastProtocolKind.chromecast,
+      );
+      await manager.startCast(
+        device: chromecastDevice,
+        request: const CastLaunchRequest(
+          fileId: 'file-1',
+          mediaId: 'movie-1',
+          mediaType: 'movie',
+          title: 'Arrival',
+          startPosition: Duration(seconds: 2400),
+          duration: Duration(hours: 1),
+        ),
+      );
+
+      const playingDevice = CastDevice(
+        id: 'node-tv',
+        name: 'Living Room',
+        protocol: CastProtocolKind.mydia,
+        metadata: {
+          'nodeId': 'node-tv',
+          'nowPlayingTitle': 'Blade Runner',
+        },
+      );
+      await manager.connectTo(playingDevice);
+
+      await manager.seek(const Duration(minutes: 41));
+
+      expect(mydia.seeks, [const Duration(minutes: 41)],
+          reason: 'the adopted receiver\'s own position already is the '
+              'real one; a stale offset from the earlier chromecast cast '
+              'must not still be applied');
+    });
+  });
+
+  group('pullToLocal', () {
+    const playingDevice = CastDevice(
+      id: 'node-tv',
+      name: 'Living Room',
+      protocol: CastProtocolKind.mydia,
+      metadata: {
+        'nodeId': 'node-tv',
+        'nowPlayingTitle': 'Blade Runner',
+      },
+    );
+
+    test(
+        'reads the exact position (and tracks) from the snapshot before '
+        'pausing or stopping the target', () async {
+      final chromecast = FakeBackend(devices: const []);
+      final mydia = FakeMydiaCastBackend();
+      final manager = buildManagerWithBackends(
+        chromecast: chromecast,
+        mydia: mydia,
+        sessions: FakeStreamingSessionService(),
+      );
+      addTearDown(manager.dispose);
+
+      await manager.connectTo(playingDevice);
+
+      mydia.lastSnapshot = _snapshot(
+        mediaItemId: 'movie-42',
+        episodeId: 'ep-7',
+        positionMs: BigInt.from(const Duration(minutes: 41).inMilliseconds),
+        selectedSubtitle: 'sub-1',
+      );
+      // What a real target would report the instant it is actually told to
+      // pause — position reset, nothing loaded. Set on `pause`, not `stop`,
+      // because `pullToLocal` calls `pause` first: if the ordering bug were
+      // "read after pause but before stop", corrupting only on `stop` would
+      // not catch it.
+      mydia.snapshotAfterPause = _snapshot(
+        mediaItemId: null,
+        episodeId: null,
+        positionMs: BigInt.zero,
+      );
+
+      final pulled = await manager.pullToLocal();
+
+      expect(pulled?.mediaItemId, 'movie-42');
+      expect(pulled?.episodeId, 'ep-7');
+      expect(pulled?.position, const Duration(minutes: 41),
+          reason: 'read before either command, not the zeroed-out position '
+              'the target reports once actually paused');
+      expect(pulled?.selectedSubtitleTrackId, 'sub-1');
+    });
+
+    test('pauses the target, then ends the cast session locally', () async {
+      final chromecast = FakeBackend(devices: const []);
+      final mydia = FakeMydiaCastBackend();
+      final manager = buildManagerWithBackends(
+        chromecast: chromecast,
+        mydia: mydia,
+        sessions: FakeStreamingSessionService(),
+      );
+      addTearDown(manager.dispose);
+
+      await manager.connectTo(playingDevice);
+      mydia.lastSnapshot = _snapshot(mediaItemId: 'movie-42');
+
+      final states = <CastPlaybackState>[];
+      mydia.stateStream.listen(states.add);
+
+      await manager.pullToLocal();
+
+      expect(states, [CastPlaybackState.paused, CastPlaybackState.idle],
+          reason: 'pause is sent before the stop stopCast issues');
+      expect(mydia.disconnectCallCount, 1);
+      expect(manager.currentSession, isNull);
+    });
+
+    test(
+        'returns null and touches nothing for a backend with no snapshot '
+        'bridge', () async {
+      final chromecast = FakeCastBackend();
+      final manager = buildManagerWithBackends(
+        chromecast: chromecast,
+        sessions: FakeStreamingSessionService(),
+      );
+      addTearDown(manager.dispose);
+
+      expect(await manager.pullToLocal(), isNull);
+      expect(chromecast.disconnectCallCount, 0);
+    });
+
+    test('returns null when nothing has ever been polled from the target',
+        () async {
+      final chromecast = FakeBackend(devices: const []);
+      final mydia = FakeMydiaCastBackend();
+      final manager = buildManagerWithBackends(
+        chromecast: chromecast,
+        mydia: mydia,
+        sessions: FakeStreamingSessionService(),
+      );
+      addTearDown(manager.dispose);
+
+      await manager.connectTo(playingDevice);
+
+      expect(await manager.pullToLocal(), isNull);
+      expect(mydia.disconnectCallCount, 0,
+          reason: 'nothing to pull means nothing should be touched');
+    });
+
+    // `buildManagerWithBackends` fixes the manager's clock at
+    // `DateTime.utc(2026, 7, 28, 12)`; these place `lastSnapshotAt` an exact,
+    // known distance behind that instead of needing a mutable clock.
+    final fixedNow = DateTime.utc(2026, 7, 28, 12);
+
+    test(
+        'projects a playing snapshot forward by the time elapsed since it '
+        'was captured', () async {
+      final chromecast = FakeBackend(devices: const []);
+      final mydia = FakeMydiaCastBackend();
+      final manager = buildManagerWithBackends(
+        chromecast: chromecast,
+        mydia: mydia,
+        sessions: FakeStreamingSessionService(),
+      );
+      addTearDown(manager.dispose);
+
+      await manager.connectTo(playingDevice);
+
+      mydia.lastSnapshot = _snapshot(
+        state: FlutterPlaybackState.playing,
+        mediaItemId: 'movie-42',
+        positionMs: BigInt.from(const Duration(minutes: 41).inMilliseconds),
+        durationMs: BigInt.from(const Duration(minutes: 116).inMilliseconds),
+      );
+      // The target's last poll answer landed 4 seconds before the manager's
+      // clock — one poll interval's worth of staleness, the exact gap this
+      // fix closes.
+      mydia.lastSnapshotAt = fixedNow.subtract(const Duration(seconds: 4));
+
+      final pulled = await manager.pullToLocal();
+
+      expect(pulled?.position, const Duration(minutes: 41, seconds: 4),
+          reason: 'the position must be projected forward to match what '
+              'the target is actually at now, not what it last reported');
+    });
+
+    test('does not project a paused snapshot forward', () async {
+      final chromecast = FakeBackend(devices: const []);
+      final mydia = FakeMydiaCastBackend();
+      final manager = buildManagerWithBackends(
+        chromecast: chromecast,
+        mydia: mydia,
+        sessions: FakeStreamingSessionService(),
+      );
+      addTearDown(manager.dispose);
+
+      await manager.connectTo(playingDevice);
+
+      mydia.lastSnapshot = _snapshot(
+        state: FlutterPlaybackState.paused,
+        mediaItemId: 'movie-42',
+        positionMs: BigInt.from(const Duration(minutes: 41).inMilliseconds),
+      );
+      mydia.lastSnapshotAt = fixedNow.subtract(const Duration(seconds: 4));
+
+      final pulled = await manager.pullToLocal();
+
+      expect(pulled?.position, const Duration(minutes: 41),
+          reason: 'nothing is advancing behind a paused snapshot');
+    });
+
+    test(
+        'clamps the projected position at duration rather than running '
+        'past it', () async {
+      final chromecast = FakeBackend(devices: const []);
+      final mydia = FakeMydiaCastBackend();
+      final manager = buildManagerWithBackends(
+        chromecast: chromecast,
+        mydia: mydia,
+        sessions: FakeStreamingSessionService(),
+      );
+      addTearDown(manager.dispose);
+
+      await manager.connectTo(playingDevice);
+
+      mydia.lastSnapshot = _snapshot(
+        state: FlutterPlaybackState.playing,
+        mediaItemId: 'movie-42',
+        positionMs:
+            BigInt.from(const Duration(minutes: 1, seconds: 58).inMilliseconds),
+        durationMs: BigInt.from(const Duration(minutes: 2).inMilliseconds),
+      );
+      // Comfortably longer than the 2 seconds left in the snapshot's own
+      // duration.
+      mydia.lastSnapshotAt = fixedNow.subtract(const Duration(seconds: 30));
+
+      final pulled = await manager.pullToLocal();
+
+      expect(pulled?.position, const Duration(minutes: 2));
+    });
+
+    test(
+        'falls back to the raw position when the backend reports no '
+        'capture time', () async {
+      final chromecast = FakeBackend(devices: const []);
+      final mydia = FakeMydiaCastBackend();
+      final manager = buildManagerWithBackends(
+        chromecast: chromecast,
+        mydia: mydia,
+        sessions: FakeStreamingSessionService(),
+      );
+      addTearDown(manager.dispose);
+
+      await manager.connectTo(playingDevice);
+
+      mydia.lastSnapshot = _snapshot(
+        state: FlutterPlaybackState.playing,
+        mediaItemId: 'movie-42',
+        positionMs: BigInt.from(const Duration(minutes: 41).inMilliseconds),
+      );
+      // Deliberately never set `lastSnapshotAt`.
+
+      final pulled = await manager.pullToLocal();
+
+      expect(pulled?.position, const Duration(minutes: 41));
     });
   });
 }

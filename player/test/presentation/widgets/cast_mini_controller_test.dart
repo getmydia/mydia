@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
@@ -15,7 +16,9 @@ import 'package:player/core/cast/cast_session_store.dart';
 import 'package:player/core/cast/cast_target.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/player/progress_service.dart';
+import 'package:player/core/remote/ambient_targets.dart';
 import 'package:player/domain/models/cast_device.dart';
+import 'package:player/native/lib.dart';
 import 'package:player/presentation/widgets/cast_mini_controller.dart';
 
 import '../../test_utils/fake_cast_backend.dart';
@@ -58,10 +61,35 @@ CastSession _session({
 }
 
 /// Returns the container so a test can set a cast target after pumping.
+///
+/// Unmounts whatever is currently on screen before building the new
+/// container's tree. A test that calls this more than once (the subtitle
+/// icon test below is the only one that does) would otherwise hand the
+/// *same* `CastMiniController` element a new `ProviderContainer` in place:
+/// the `MaterialApp` subtree here is `const`, so Dart canonicalizes it to
+/// one object across calls, and Flutter reuses the existing element rather
+/// than unmounting it, merely swapping `UncontrolledProviderScope.container`
+/// underneath it. `CastMiniController`'s first frame always briefly
+/// subscribes to the ambient-banner providers (`session` starts `null`
+/// until the overridden `castSessionProvider` stream delivers on the next
+/// microtask, and a null session with no target renders the ambient
+/// banner), and Riverpod tears that subscription down as part of adopting
+/// the new container — but the *old* container's live Flutter vsync
+/// registration is already gone by then (it belongs to the same element,
+/// which has just repointed itself at the new container), so Riverpod
+/// falls back to a bare zero-duration `Timer` to schedule the disposal
+/// check. Nothing ever pumps the old container again to fire it, so it is
+/// still pending when the test ends. A real app never does this — one
+/// `ProviderContainer` lives for the whole process and is never swapped out
+/// from under a mounted widget — so unmounting first (a real, tracked
+/// dispose against whichever container was actually live) matches
+/// production and avoids the orphaned-timer artifact entirely.
 Future<ProviderContainer> _pump(
   WidgetTester tester, {
   CastSession? session,
 }) async {
+  await tester.pumpWidget(const SizedBox.shrink());
+
   final container = ProviderContainer(overrides: [
     castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
     authStateProvider.overrideWith(() =>
@@ -119,6 +147,69 @@ _ManagerHarness _buildManagerHarness() {
   return _ManagerHarness(manager, backend);
 }
 
+/// Like [_buildManagerHarness], but over a [FakeMydiaCastBackend] — the
+/// `pullToLocal`/Pull-button tests need [MydiaSnapshotSource], which a plain
+/// [FakeCastBackend] cannot script (see that class's own dartdoc in
+/// `fake_cast_backend.dart`).
+_ManagerHarness _buildMydiaManagerHarness() {
+  final backend = FakeMydiaCastBackend();
+  final sessions = FakeStreamingSessionService();
+  final client = stubClient(
+    StubLink((request, callIndex) => const {'__typename': 'Query'}),
+  );
+
+  final manager = CastSessionManager(
+    backend: backend,
+    store: InMemoryCastSessionStore(),
+    progressService: ProgressService(client),
+    resolverFactory: () => CastRouteResolver(
+      isP2pMode: false,
+      serverUrl: 'https://mydia.test',
+      mediaToken: () async => null,
+      lanBaseUrl: () => null,
+      streamingSessions: sessions,
+    ),
+    streamingSessions: sessions,
+    setLanAccess: (enabled) async {},
+  );
+
+  return _ManagerHarness(manager, backend);
+}
+
+const _mydiaDevice = CastDevice(
+  id: 'node-tv',
+  name: 'Living Room',
+  protocol: CastProtocolKind.mydia,
+  metadata: {'nodeId': 'node-tv', 'nowPlayingTitle': 'Blade Runner'},
+);
+
+/// A [FlutterPlaybackSnapshot] with sensible defaults, so a test only has to
+/// spell out the fields it cares about — mirrors
+/// `mydia_cast_backend_test.dart`'s own helper of the same shape.
+FlutterPlaybackSnapshot _snapshot({
+  String title = 'Blade Runner',
+  String? mediaItemId,
+  String? episodeId,
+  BigInt? positionMs,
+}) =>
+    FlutterPlaybackSnapshot(
+      state: FlutterPlaybackState.playing,
+      mediaItemId: mediaItemId,
+      episodeId: episodeId,
+      title: title,
+      positionMs: positionMs ?? BigInt.zero,
+      durationMs: BigInt.from(6000000),
+      muted: false,
+      audioTracks: const [],
+      subtitleTracks: const [],
+      capabilities: const FlutterTargetCapabilities(
+        volume: true,
+        trackSelection: true,
+        nextPrevious: false,
+      ),
+      sequence: BigInt.one,
+    );
+
 /// Like [_pump], but backs `castSessionManagerProvider` with a real manager
 /// over a [FakeCastBackend] and lets the caller push more than one session
 /// onto `castSessionProvider` (a plain `Stream.value` can only ever emit
@@ -127,6 +218,7 @@ Future<ProviderContainer> _pumpWithManager(
   WidgetTester tester, {
   required _ManagerHarness harness,
   required Stream<CastSession?> sessionStream,
+  List<Override> extraOverrides = const [],
 }) async {
   final container = ProviderContainer(overrides: [
     castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
@@ -139,6 +231,7 @@ Future<ProviderContainer> _pumpWithManager(
       return harness.manager;
     }),
     castSessionProvider.overrideWith((ref) => sessionStream),
+    ...extraOverrides,
   ]);
   addTearDown(container.dispose);
 
@@ -773,6 +866,273 @@ void main() {
       expect(harness.backend.subtitleSelections, isEmpty,
           reason: 'backing out of the sheet must leave the receiver alone, '
               'not silently turn subtitles off');
+    });
+  });
+
+  group('cast bar pull button', () {
+    testWidgets('shown for a Mydia session, not a chromecast one',
+        (tester) async {
+      final harness = _buildManagerHarness();
+      addTearDown(harness.manager.dispose);
+
+      await _pumpWithManager(
+        tester,
+        harness: harness,
+        sessionStream: Stream.value(_session(
+          duration: const Duration(minutes: 44),
+        )),
+      );
+
+      expect(find.byKey(const Key('cast-bar-pull')), findsNothing,
+          reason: 'only a Mydia target runs this app; a Chromecast/DLNA '
+              'receiver has nothing to hand playback back from');
+    });
+
+    testWidgets(
+        'tapping it runs the manager\'s real pullToLocal, which pauses and '
+        'stops the target', (tester) async {
+      final harness = _buildMydiaManagerHarness();
+      final mydiaBackend = harness.backend as FakeMydiaCastBackend;
+      addTearDown(harness.manager.dispose);
+
+      await harness.manager.connectTo(_mydiaDevice);
+      mydiaBackend.lastSnapshot = _snapshot(mediaItemId: 'movie-42');
+
+      await _pumpWithManager(
+        tester,
+        harness: harness,
+        sessionStream: Stream.value(harness.manager.currentSession),
+      );
+
+      expect(find.byKey(const Key('cast-bar-pull')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('cast-bar-pull')));
+      await tester.pumpAndSettle();
+
+      expect(mydiaBackend.disconnectCallCount, 1,
+          reason: 'pullToLocal pauses the target then runs stopCast, which '
+              'disconnects — gutting the button\'s call to pullToLocal '
+              'would leave this at 0');
+      expect(harness.manager.currentSession, isNull,
+          reason: 'pullToLocal ends this manager\'s own session once the '
+              'target has been read and told to stand down');
+      // This harness mounts no GoRouter (see `_pumpWithManager`), so the
+      // "open locally" half of the button can never resolve a route here —
+      // the assertion that matters is that this does not escape as an
+      // unhandled exception; `_pullToLocal`'s own try/catch is what a real
+      // GoRouter.of() failure would otherwise crash through.
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('does nothing destructive when there is nothing to pull',
+        (tester) async {
+      final harness = _buildMydiaManagerHarness();
+      final mydiaBackend = harness.backend as FakeMydiaCastBackend;
+      addTearDown(harness.manager.dispose);
+
+      await harness.manager.connectTo(_mydiaDevice);
+      // Deliberately never set `lastSnapshot`: nothing has been polled yet.
+
+      await _pumpWithManager(
+        tester,
+        harness: harness,
+        sessionStream: Stream.value(harness.manager.currentSession),
+      );
+
+      await tester.tap(find.byKey(const Key('cast-bar-pull')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nothing to bring over yet.'), findsOneWidget);
+      expect(mydiaBackend.disconnectCallCount, 0,
+          reason: 'pullToLocal itself already refuses to touch anything '
+              'when nothing has been polled; this pins the button honors '
+              'that null rather than plowing ahead into navigation');
+    });
+  });
+
+  group('capability gate', () {
+    testWidgets(
+        'renders nothing on a build with no Chromecast/DLNA capability and '
+        'no Mydia backend either', (tester) async {
+      final container = ProviderContainer(overrides: [
+        castCapabilitiesProvider
+            .overrideWithValue(const CastCapabilities.web()),
+        authStateProvider.overrideWith(() =>
+            _FakeAuthNotifier(const AsyncValue.data(AuthStatus.authenticated))),
+        asyncGraphqlClientProvider
+            .overrideWith((ref) => Completer<GraphQLClient>().future),
+        castSessionProvider.overrideWith((ref) => Stream.value(null)),
+        ambientPlayingProvider.overrideWith((ref) => Stream.value(const [])),
+      ]);
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: Scaffold(body: CastMiniController())),
+      ));
+      await tester.pump();
+
+      expect(find.byType(CastMiniController), findsOneWidget,
+          reason: 'the widget itself always mounts');
+      expect(tester.getSize(find.byType(CastMiniController)), Size.zero,
+          reason: 'with no capability and no Mydia backend, it renders '
+              'nothing — the pre-fix baseline this test pins');
+    });
+
+    testWidgets(
+        'still mounts on a build with no Chromecast/DLNA capability when a '
+        'Mydia backend is available (e.g. Flutter Web)', (tester) async {
+      final ambientTarget = AmbientTarget(
+        device: const CastDevice(
+          id: 'node-tv',
+          name: 'node-tv',
+          protocol: CastProtocolKind.mydia,
+        ),
+        snapshot: _snapshot(title: 'Arrival', mediaItemId: 'movie-9'),
+      );
+
+      final container = ProviderContainer(overrides: [
+        // A Mydia target needs no Chromecast/DLNA entitlement — this is
+        // exactly the web build `ambient_lifecycle.dart` names as this
+        // app's primary deployment.
+        castCapabilitiesProvider
+            .overrideWithValue(const CastCapabilities.web()),
+        mydiaCastBackendProvider.overrideWithValue(FakeMydiaCastBackend()),
+        authStateProvider.overrideWith(() =>
+            _FakeAuthNotifier(const AsyncValue.data(AuthStatus.authenticated))),
+        asyncGraphqlClientProvider
+            .overrideWith((ref) => Completer<GraphQLClient>().future),
+        castSessionProvider.overrideWith((ref) => Stream.value(null)),
+        ambientPlayingProvider
+            .overrideWith((ref) => Stream.value([ambientTarget])),
+        remoteDeviceNamesProvider
+            .overrideWith((ref) async => {'node-tv': 'Living Room'}),
+      ]);
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: Scaffold(body: CastMiniController())),
+      ));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Playing on Living Room'), findsOneWidget,
+          reason: 'the ambient banner must be reachable on a build with no '
+              'platform cast capability at all, since Mydia targets do not '
+              'need one');
+    });
+  });
+
+  group('cast bar ambient banner', () {
+    testWidgets('shows nothing when nothing is playing ambiently',
+        (tester) async {
+      final container = ProviderContainer(overrides: [
+        castCapabilitiesProvider
+            .overrideWithValue(const CastCapabilities.full()),
+        authStateProvider.overrideWith(() =>
+            _FakeAuthNotifier(const AsyncValue.data(AuthStatus.authenticated))),
+        asyncGraphqlClientProvider
+            .overrideWith((ref) => Completer<GraphQLClient>().future),
+        castSessionProvider.overrideWith((ref) => Stream.value(null)),
+        ambientPlayingProvider.overrideWith((ref) => Stream.value(const [])),
+      ]);
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: Scaffold(body: CastMiniController())),
+      ));
+      await tester.pump();
+
+      expect(find.byKey(const Key('cast-bar-ambient-open')), findsNothing);
+    });
+
+    testWidgets(
+        'resolves the bare node id against the roster before showing the '
+        'banner', (tester) async {
+      final ambientTarget = AmbientTarget(
+        device: const CastDevice(
+          id: 'node-tv',
+          name: 'node-tv',
+          protocol: CastProtocolKind.mydia,
+        ),
+        snapshot: _snapshot(title: 'Arrival', mediaItemId: 'movie-9'),
+      );
+
+      final container = ProviderContainer(overrides: [
+        castCapabilitiesProvider
+            .overrideWithValue(const CastCapabilities.full()),
+        authStateProvider.overrideWith(() =>
+            _FakeAuthNotifier(const AsyncValue.data(AuthStatus.authenticated))),
+        asyncGraphqlClientProvider
+            .overrideWith((ref) => Completer<GraphQLClient>().future),
+        castSessionProvider.overrideWith((ref) => Stream.value(null)),
+        ambientPlayingProvider
+            .overrideWith((ref) => Stream.value([ambientTarget])),
+        remoteDeviceNamesProvider
+            .overrideWith((ref) async => {'node-tv': 'Living Room'}),
+      ]);
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: Scaffold(body: CastMiniController())),
+      ));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Playing on Living Room'), findsOneWidget,
+          reason: 'AmbientTarget.device.name is the bare node id; the '
+              'banner must resolve the real name before it ever renders, '
+              'not fall back to showing the id itself');
+    });
+
+    testWidgets(
+        'tapping View adopts the target rather than reconnecting '
+        'media-less', (tester) async {
+      final harness = _buildMydiaManagerHarness();
+      final mydiaBackend = harness.backend as FakeMydiaCastBackend;
+      addTearDown(harness.manager.dispose);
+
+      final ambientTarget = AmbientTarget(
+        device: const CastDevice(
+          id: 'node-tv',
+          name: 'node-tv',
+          protocol: CastProtocolKind.mydia,
+        ),
+        snapshot: _snapshot(title: 'Arrival', mediaItemId: 'movie-9'),
+      );
+
+      await _pumpWithManager(
+        tester,
+        harness: harness,
+        sessionStream: Stream.value(null),
+        extraOverrides: [
+          ambientPlayingProvider
+              .overrideWith((ref) => Stream.value([ambientTarget])),
+          remoteDeviceNamesProvider
+              .overrideWith((ref) async => {'node-tv': 'Living Room'}),
+        ],
+      );
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('cast-bar-ambient-open')));
+      await tester.pumpAndSettle();
+
+      expect(
+          mydiaBackend.connectAttempts,
+          [
+            isA<CastDevice>()
+                .having((d) => d.id, 'id', 'node-tv')
+                .having((d) => d.protocol, 'protocol', CastProtocolKind.mydia)
+                .having((d) => d.metadata['nowPlayingTitle'],
+                    'metadata[nowPlayingTitle]', 'Arrival'),
+          ],
+          reason: 'without nowPlayingTitle in the connected device\'s own '
+              'metadata, isPlayingMydiaTarget reads it as idle and connectTo '
+              'reconnects media-less instead of adopting the session already on '
+              'the receiver');
     });
   });
 }

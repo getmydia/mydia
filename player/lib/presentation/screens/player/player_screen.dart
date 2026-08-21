@@ -76,6 +76,9 @@ import '../../../core/p2p/media_proxy_factory.dart';
 import '../../../core/window/desktop_window.dart';
 import '../../../core/window/player_window_sizer.dart';
 import '../../../core/player/resume_plan.dart';
+import '../../../core/remote/remote_control_intent.dart';
+import '../../../core/remote/remote_target_controller.dart';
+import '../../../native/lib.dart';
 import '../settings/settings_controller.dart';
 import 'subtitle_track_builder.dart';
 
@@ -111,6 +114,20 @@ class PlayerScreen extends ConsumerStatefulWidget {
   final int? seasonNumber;
   final int? resumeSeconds;
 
+  /// Track ids to select once playback opens, in the same id space
+  /// [selectTrack] already accepts. Null means "leave whatever this file
+  /// opens on" — the existing behaviour for every call site that predates
+  /// remote control, where nothing ever requested a specific track.
+  final String? audioTrack;
+  final String? subtitleTrack;
+
+  /// Whether to start playing once the media opens. Defaults to true, which
+  /// is what every call site did before this field existed: opening this
+  /// screen has always meant "play now". A remote `LoadContent` with
+  /// `autoplay: false` is the one caller that passes false, to load a title
+  /// cued up without starting it.
+  final bool autoplay;
+
   const PlayerScreen({
     super.key,
     required this.mediaId,
@@ -120,6 +137,9 @@ class PlayerScreen extends ConsumerStatefulWidget {
     this.showId,
     this.seasonNumber,
     this.resumeSeconds,
+    this.audioTrack,
+    this.subtitleTrack,
+    this.autoplay = true,
   });
 
   @override
@@ -154,10 +174,18 @@ class PlayerScreen extends ConsumerStatefulWidget {
       );
 }
 
-class _PlayerScreenState extends ConsumerState<PlayerScreen> {
+class _PlayerScreenState extends ConsumerState<PlayerScreen>
+    implements RemotePlayerBinding {
   Player? _player;
   VideoController? _videoController;
   ProgressService? _progressService;
+
+  /// Captured in [initState] rather than read from `dispose()`, for the same
+  /// reason as [_invalidator]: `remoteTargetControllerProvider` is a plain
+  /// (non-autoDispose) provider, so this stays the same live instance for
+  /// the container's lifetime and is safe to call after the widget's
+  /// element is defunct.
+  late final RemoteTargetController _remoteTargetController;
 
   /// Set once the offline or already-downloaded branch of
   /// [_initializePlayer] resolves [playbackProgressStoreProvider]. Null
@@ -560,6 +588,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     super.initState();
     _invalidator = ref.read(invalidatorProvider);
     _mediaProxy = ref.read(mediaProxyProvider);
+    _remoteTargetController = ref.read(remoteTargetControllerProvider);
+    _remoteTargetController.attachPlayer(this);
 
     // Seeded here rather than read at each branch: an entry-point that already
     // said "Continue" has answered the resume question, and all three
@@ -1535,6 +1565,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     // later arrives through that subscription instead.
     _detectTracks();
 
+    // Applied through the same `selectTrack` a remote `SelectAudioTrack`/
+    // `SelectSubtitleTrack` command uses, right after detection so both
+    // `_audioTracks`/`_subtitleTracks` and their media_kit id maps are
+    // populated. Only ever non-null for a `LoadContent`-originated screen —
+    // every other call site leaves these null, which is a no-op here.
+    if (widget.audioTrack != null) {
+      await selectTrack(TrackKind.audio, widget.audioTrack);
+    }
+    if (widget.subtitleTrack != null) {
+      await selectTrack(TrackKind.subtitle, widget.subtitleTrack);
+    }
+
     // A plain seek, not a `seekToReal`: these paths hold the whole file, so
     // the player's own coordinates already are the real ones and there is no
     // session that could need restarting.
@@ -1548,8 +1590,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     // coordinates genuinely do start at zero.
     _furthestPosition = plan.position;
 
-    // Start playback
-    await player.play();
+    // Start playback, unless a remote `LoadContent` asked to load without
+    // playing. Every other caller leaves `autoplay` at its default of true.
+    if (widget.autoplay) {
+      await player.play();
+    }
 
     // Start progress tracking
     if (_progressService != null) {
@@ -3694,6 +3739,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   @override
   void dispose() {
+    // Detached first, before anything below can run: a remote command that
+    // lands mid-teardown must find no player attached rather than reach a
+    // `_player` that is about to be disposed out from under it.
+    //
+    // Passes `this` so a newer `PlayerScreen` that already attached over
+    // this one (a remote `LoadContent` mounts before the old screen
+    // disposes) is never clobbered by this late detach — see
+    // `detachPlayer`'s own dartdoc.
+    _remoteTargetController.detachPlayer(this);
+
     // Order matters twice over. Stop listening *first*: in `systemUi` mode
     // `exit()` reports the transition synchronously, and the resulting
     // `setState` would assert — by the time `State.dispose` runs, the element
@@ -3768,6 +3823,155 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _focusNode.dispose();
     super.dispose();
   }
+
+  // ---------------------------------------------------------------------
+  // RemotePlayerBinding
+  //
+  // Forwards each command to the media_kit `Player` this screen already
+  // owns. Nothing here duplicates playback logic: `seek` reuses `seekToReal`
+  // (the same entry point the keyboard and gesture controls use), and
+  // episode stepping reuses `_playNextEpisode`/`_playPreviousEpisode`. Track
+  // selection is the one place this does less than the on-screen pickers —
+  // it applies a track by id directly and skips their loading-snackbar and
+  // remembered-language-preference side effects, which are UI concerns a
+  // remote command has no use for.
+  // ---------------------------------------------------------------------
+
+  @override
+  Future<void> play() async => _player?.play();
+
+  @override
+  Future<void> pause() async => _player?.pause();
+
+  @override
+  Future<void> stop() async => _player?.stop();
+
+  @override
+  Future<void> seek(Duration to) => seekToReal(to);
+
+  /// [level] is 0.0-1.0 on the wire; media_kit's `Player.setVolume` is 0-100.
+  /// See [remoteControlVolumeToPlayerVolume].
+  @override
+  Future<void> setVolume(double level) async =>
+      _player?.setVolume(remoteControlVolumeToPlayerVolume(level));
+
+  /// Mirrors the existing keyboard M-key handler: this player has no
+  /// separate mute flag, only volume, so muting snaps to 0 and unmuting
+  /// snaps to full rather than restoring whatever was set before muting. See
+  /// [remoteControlMuteVolume].
+  @override
+  Future<void> setMuted(bool muted) async =>
+      _player?.setVolume(remoteControlMuteVolume(muted));
+
+  @override
+  Future<void> selectTrack(TrackKind kind, String? id) async {
+    switch (kind) {
+      case TrackKind.audio:
+        if (id == null) return;
+        final track = findTrackById(_audioTracks, id, idOf: (t) => t.id);
+        final mkTrack = _mediaKitAudioTrackMap[id];
+        final player = _player;
+        if (track == null || mkTrack == null || player == null) return;
+        await player.setAudioTrack(mkTrack);
+        if (mounted) setState(() => _selectedAudioTrack = track);
+
+      case TrackKind.subtitle:
+        if (id == null) {
+          final player = _player;
+          if (player == null) return;
+          await player.setSubtitleTrack(SubtitleTrack.no());
+          if (mounted) setState(() => _selectedSubtitleTrack = null);
+          return;
+        }
+        final track = findTrackById(_subtitleTracks, id, idOf: (t) => t.id);
+        if (track == null) return;
+        final mkTrack = await _resolveMediaKitSubtitleTrack(track);
+        if (mkTrack == null || !mounted) return;
+        // Captured fresh here, after the fetch above, not before it: a
+        // restart can swap `_player` out from under an in-flight fetch, the
+        // same hazard `_showSubtitleSelector` documents at its own
+        // `setSubtitleTrack` call.
+        final player = _player;
+        if (player == null) return;
+        await player.setSubtitleTrack(mkTrack);
+        if (mounted) setState(() => _selectedSubtitleTrack = track);
+    }
+  }
+
+  @override
+  Future<void> stepEpisode(EpisodeStep step) async {
+    switch (step) {
+      case EpisodeStep.next:
+        _playNextEpisode();
+      case EpisodeStep.previous:
+        _playPreviousEpisode();
+    }
+  }
+
+  @override
+  FlutterPlaybackSnapshot describe(int sequence) {
+    final player = _player;
+    final position = player == null
+        ? Duration.zero
+        : _timeline.toReal(player.state.position);
+    final duration = player == null
+        ? (_timeline.totalDuration ?? Duration.zero)
+        : _timeline.resolveDuration(player.state.duration);
+
+    return FlutterPlaybackSnapshot(
+      state: _remoteControlPlaybackState(player),
+      // For an episode `widget.mediaId` is the episode's own id and
+      // `widget.showId` is the underlying media item; for a movie
+      // `widget.mediaId` is the media item itself and there is no episode.
+      mediaItemId:
+          widget.mediaType == 'episode' ? widget.showId : widget.mediaId,
+      episodeId: widget.mediaType == 'episode' ? widget.mediaId : null,
+      title: widget.title ?? 'Untitled',
+      subtitle: null,
+      imageUrl: null,
+      positionMs: BigInt.from(position.inMilliseconds),
+      durationMs: BigInt.from(duration.inMilliseconds),
+      volume: player == null
+          ? null
+          : playerVolumeToRemoteControlVolume(player.state.volume),
+      muted: isPlayerVolumeMuted(player?.state.volume),
+      audioTracks: _audioTracks
+          .map((t) => FlutterTrackInfo(
+              id: t.id, label: t.displayName, language: t.language))
+          .toList(),
+      subtitleTracks: _subtitleTracks
+          .map((t) => FlutterTrackInfo(
+              id: t.id, label: t.displayName, language: t.language))
+          .toList(),
+      selectedAudio: _selectedAudioTrack?.id,
+      selectedSubtitle: _selectedSubtitleTrack?.id,
+      capabilities: FlutterTargetCapabilities(
+        // App-level output volume through media_kit, which works on every
+        // platform this ships on. System volume is a different, harder
+        // problem this target does not attempt.
+        volume: true,
+        trackSelection: true,
+        // Reported per-title rather than unconditionally: a movie, or an
+        // episode with no adjacent episode in this season, has nothing for
+        // Next/Previous to do, and claiming the capability anyway would show
+        // a controller a button that silently does nothing.
+        nextPrevious: _hasNextEpisode || _hasPreviousEpisode,
+      ),
+      sequence: BigInt.from(sequence),
+    );
+  }
+
+  /// Reads this screen's own loading/error flags and the `Player`'s state,
+  /// and hands them to [remoteControlPlaybackState] for the actual mapping.
+  FlutterPlaybackState _remoteControlPlaybackState(Player? player) =>
+      remoteControlPlaybackState(
+        hasError: _error != null,
+        isLoading: _isLoading,
+        hasPlayer: player != null,
+        buffering: player?.state.buffering ?? false,
+        completed: player?.state.completed ?? false,
+        playing: player?.state.playing ?? false,
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -4107,27 +4311,28 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           ? localSelection.id
           : null;
 
-      await manager.startCast(
-        device: device,
-        request: CastLaunchRequest(
-          fileId: widget.fileId,
-          mediaId: widget.mediaId,
-          mediaType: widget.mediaType,
-          title: widget.title ?? 'Untitled',
-          startPosition: startPosition,
-          // The receiver cannot work this out for itself: Mydia's HLS
-          // playlists carry no `#EXT-X-ENDLIST` until FFmpeg finishes, so a
-          // Chromecast reports `duration: -1` for the whole session. Hand it
-          // the runtime the server already told us (`_totalDuration`, set
-          // from the candidates metadata), falling back to whatever the local
-          // player managed to work out.
-          duration: _knownCastDuration(),
-          subtitles: offeredSubtitles,
-          selectedSubtitleTrackId: selectedSubtitleTrackId,
+      await pushToRemoteTarget(
+        startCast: () => manager.startCast(
+          device: device,
+          request: CastLaunchRequest(
+            fileId: widget.fileId,
+            mediaId: widget.mediaId,
+            mediaType: widget.mediaType,
+            title: widget.title ?? 'Untitled',
+            startPosition: startPosition,
+            // The receiver cannot work this out for itself: Mydia's HLS
+            // playlists carry no `#EXT-X-ENDLIST` until FFmpeg finishes, so a
+            // Chromecast reports `duration: -1` for the whole session. Hand it
+            // the runtime the server already told us (`_totalDuration`, set
+            // from the candidates metadata), falling back to whatever the
+            // local player managed to work out.
+            duration: _knownCastDuration(),
+            subtitles: offeredSubtitles,
+            selectedSubtitleTrackId: selectedSubtitleTrackId,
+          ),
         ),
+        stopLocal: () async => await _player?.pause(),
       );
-
-      await _player?.pause();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -4554,4 +4759,111 @@ StreamSubscription<Tracks> watchAudioTracks(
   void Function(AudioTrackDetection detection) onDetected,
 ) {
   return tracks.listen((t) => onDetected(detectAudioTracks(t.audio)));
+}
+
+/// Converts the wire's 0.0-1.0 volume level to media_kit's 0-100 scale, used
+/// by [_PlayerScreenState.setVolume]. Clamps out-of-range input rather than
+/// trusting the caller — a remote peer, not this app, decides what crosses
+/// the wire.
+///
+/// Extracted as a free function, alongside its inverse
+/// [playerVolumeToRemoteControlVolume] and [remoteControlMuteVolume], so the
+/// 0-1/0-100 conversion `_PlayerScreenState`'s `RemotePlayerBinding`
+/// implementation depends on is directly unit-tested rather than only
+/// exercised indirectly through `RemoteTargetController`'s own tests, which
+/// drive a hand-written fake binding and never reach this arithmetic. See
+/// [shouldRestartForSeek]'s dartdoc for why a real `Player` cannot stand in
+/// for it under `flutter test` instead.
+@visibleForTesting
+double remoteControlVolumeToPlayerVolume(double level) =>
+    level.clamp(0.0, 1.0) * 100;
+
+/// The inverse of [remoteControlVolumeToPlayerVolume], for reporting the
+/// current volume back out through [_PlayerScreenState.describe].
+@visibleForTesting
+double playerVolumeToRemoteControlVolume(double playerVolume) =>
+    playerVolume / 100;
+
+/// media_kit has no separate mute flag on this screen, only volume: muting
+/// snaps it to 0 and unmuting snaps it to full, mirroring
+/// `_handleKeyEvent`'s existing `keyM` case exactly rather than restoring
+/// whatever was set before muting, which would need new state this screen
+/// does not keep.
+@visibleForTesting
+double remoteControlMuteVolume(bool muted) => muted ? 0.0 : 100.0;
+
+/// Whether [_PlayerScreenState.describe] should report the player as muted.
+/// Paired with [remoteControlMuteVolume] rather than a tracked mute flag:
+/// muted is exactly "volume is 0" (including when there is no player at
+/// all, since `null == 0` is false).
+@visibleForTesting
+bool isPlayerVolumeMuted(double? playerVolume) => playerVolume == 0;
+
+/// Finds the element of [tracks] whose [idOf] equals [id], or null when
+/// nothing matches — the case every `selectTrack` branch in
+/// [_PlayerScreenState] must silently no-op for rather than throw, since
+/// `id` names a track a *remote peer* chose, which this screen never
+/// validated before it arrived.
+@visibleForTesting
+T? findTrackById<T>(
+  List<T> tracks,
+  String id, {
+  required String Function(T track) idOf,
+}) =>
+    tracks.where((track) => idOf(track) == id).firstOrNull;
+
+/// Maps [_PlayerScreenState]'s own loading/error flags and the `Player`'s
+/// state onto the wire's [FlutterPlaybackState], for
+/// [_PlayerScreenState.describe] by way of
+/// [_PlayerScreenState._remoteControlPlaybackState].
+///
+/// Order is significant, checked in this priority: [hasError] wins over
+/// everything else — a player still decoding through a stream error is not
+/// meaningfully "playing". [isLoading]/`!hasPlayer` come next because this
+/// screen's own `_isLoading`/`_error` fields describe *screen* phases where
+/// `Player.state` may not exist yet or may be stale from a session this
+/// screen already tore down, so they are trusted ahead of whatever the
+/// `Player` itself reports. [buffering] and [completed] are checked before
+/// [playing] because media_kit can report `playing: true` while buffering,
+/// and after the file has already ended.
+@visibleForTesting
+FlutterPlaybackState remoteControlPlaybackState({
+  required bool hasError,
+  required bool isLoading,
+  required bool hasPlayer,
+  required bool buffering,
+  required bool completed,
+  required bool playing,
+}) {
+  if (hasError) return FlutterPlaybackState.error;
+  if (isLoading || !hasPlayer) return FlutterPlaybackState.loading;
+  if (buffering) return FlutterPlaybackState.buffering;
+  if (completed) return FlutterPlaybackState.ended;
+  return playing ? FlutterPlaybackState.playing : FlutterPlaybackState.paused;
+}
+
+/// Casts to a remote target, stopping local playback only once the receiver
+/// has confirmed the load — never before, and never at all if it refuses.
+///
+/// This ordering is what makes "Push" (spec term: capture position and
+/// track selections, `Hello`, `LoadContent`, only then stop locally)
+/// non-destructive. An unreachable receiver or a rejected codec must never
+/// cost the viewer their place in a film: when [startCast] throws, [stopLocal]
+/// simply never runs, and whatever [_PlayerScreenState._player] was doing
+/// keeps doing it. The caller's own `catch` (see `_showCastDevicePicker`) is
+/// what turns that exception into a snackbar instead of a crash.
+///
+/// Extracted as a free function for the same reason as [applyQualityChoice]
+/// and [trackRestartInFlight]: proving this ordering under `flutter test`
+/// needs to observe whether local playback kept running, and this suite can
+/// never construct a real, playing media_kit `Player` to observe that
+/// against (see [shouldRestartForSeek]'s dartdoc) — so the ordering itself
+/// is what gets pinned instead, independent of any real player.
+@visibleForTesting
+Future<void> pushToRemoteTarget({
+  required Future<void> Function() startCast,
+  required Future<void> Function() stopLocal,
+}) async {
+  await startCast();
+  await stopLocal();
 }

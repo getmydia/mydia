@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
@@ -12,6 +15,7 @@ import 'package:player/core/cast/cast_target.dart';
 import 'package:player/core/cast/multicast_lock.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/p2p/local_proxy_service.dart';
+import 'package:player/core/remote/ambient_targets.dart';
 import 'package:player/domain/models/cast_device.dart';
 
 import '../../test_utils/fake_cast_backend.dart';
@@ -138,6 +142,61 @@ void main() {
     await Future<void>.delayed(Duration.zero);
 
     expect(container.read(castDiscoveryProvider).hasError, isFalse);
+  });
+
+  test('castDiscoveryProvider also surfaces Mydia devices', () async {
+    final mydiaBackend = FakeCastBackend();
+    final container = ProviderContainer(overrides: [
+      castBackendProvider.overrideWithValue(backend),
+      mydiaCastBackendProvider.overrideWithValue(mydiaBackend),
+      castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
+      multicastLockProvider.overrideWithValue(lock),
+    ]);
+    addTearDown(container.dispose);
+
+    final sub = container.listen(castDiscoveryProvider, (_, __) {});
+    addTearDown(sub.close);
+    await Future<void>.delayed(Duration.zero);
+
+    backend.emitDevices(const [
+      CastDevice(id: 'cc-1', name: 'TV', protocol: CastProtocolKind.chromecast),
+    ]);
+    mydiaBackend.emitDevices(const [
+      CastDevice(id: 'node-1', name: 'Phone', protocol: CastProtocolKind.mydia),
+    ]);
+    await Future<void>.delayed(Duration.zero);
+
+    final devices = container.read(castDiscoveryProvider).value ?? const [];
+    expect(devices.map((d) => d.id), containsAll(['cc-1', 'node-1']));
+  });
+
+  test(
+      'castDiscoveryProvider still finds Mydia devices with no Chromecast/DLNA capability',
+      () async {
+    // Mirrors `MydiaCastBackend.startDiscovery`'s own dartdoc: a Mydia target
+    // is reached over the p2p host, not the platform's local-network
+    // entitlement, so it must not disappear on a build (e.g. web) that
+    // reports no other capability at all.
+    final mydiaBackend = FakeCastBackend();
+    final container = ProviderContainer(overrides: [
+      castBackendProvider.overrideWithValue(backend),
+      mydiaCastBackendProvider.overrideWithValue(mydiaBackend),
+      castCapabilitiesProvider.overrideWithValue(const CastCapabilities.web()),
+      multicastLockProvider.overrideWithValue(lock),
+    ]);
+    addTearDown(container.dispose);
+
+    final sub = container.listen(castDiscoveryProvider, (_, __) {});
+    addTearDown(sub.close);
+    await Future<void>.delayed(Duration.zero);
+
+    mydiaBackend.emitDevices(const [
+      CastDevice(id: 'node-1', name: 'Phone', protocol: CastProtocolKind.mydia),
+    ]);
+    await Future<void>.delayed(Duration.zero);
+
+    final devices = container.read(castDiscoveryProvider).value ?? const [];
+    expect(devices.map((d) => d.id), contains('node-1'));
   });
 
   test('castCapabilitiesProvider yields no capability on web builds', () {
@@ -513,6 +572,56 @@ void main() {
       expect(c.read(isCastingProvider), isTrue,
           reason: 'a lost session with media must keep the cast UI up so '
               'Reconnect is meaningful; Stop is what tears it down');
+    });
+  });
+
+  group('ambientPlayingProvider resweep cadence', () {
+    test(
+        'stays on its own 30-second cadence, independent of AmbientTargets\' '
+        'own 5-second held-target poll', () {
+      fakeAsync((async) {
+        var sweepCalls = 0;
+        final targets = AmbientTargets(
+          rosterSource: () async {
+            sweepCalls++;
+            return const ['node-tv'];
+          },
+          // Nobody ever answers playing — this test only cares how often
+          // the whole roster gets dialed, not what holding a target does.
+          probe: (nodeId) async => null,
+        );
+
+        final c = ProviderContainer(overrides: [
+          ambientTargetsProvider.overrideWithValue(targets),
+        ]);
+
+        final sub = c.listen(ambientPlayingProvider, (_, __) {});
+        async.flushMicrotasks();
+        expect(sweepCalls, 1, reason: 'the sweep on first listen');
+
+        // Short of the 30s mark: AmbientTargets' own 5s poll only re-dials
+        // *held* targets (none, here), never the whole roster via sweep().
+        async.elapse(const Duration(seconds: 25));
+        expect(sweepCalls, 1,
+            reason: 'the roster is not re-dialed before 30s elapse');
+
+        async.elapse(const Duration(seconds: 5));
+        expect(sweepCalls, 2,
+            reason: "ambientPlayingProvider's own 30s resweep ran, "
+                're-dialing the whole roster');
+
+        async.elapse(const Duration(seconds: 30));
+        expect(sweepCalls, 3, reason: 'the cadence repeats, not one-shot');
+
+        // fakeAsync tests dispose inside the zone that started the timer —
+        // never via addTearDown, which runs in real time after this zone
+        // exits and would hang closing what the fake zone already closed
+        // (see the reasoning in `ambient_targets_test.dart`).
+        sub.close();
+        c.dispose();
+        unawaited(targets.dispose());
+        async.flushMicrotasks();
+      });
     });
   });
 }

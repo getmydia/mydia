@@ -513,6 +513,21 @@ class DartCastBackend implements CastBackend {
   @override
   CastDevice? get connectedDevice => _connectedDevice;
 
+  /// This project is not adding Chromecast volume; nothing calls this today.
+  @override
+  Future<void> setVolume(double level) =>
+      throw UnsupportedError('DartCastBackend does not support volume.');
+
+  @override
+  Future<void> setMuted(bool muted) =>
+      throw UnsupportedError('DartCastBackend does not support volume.');
+
+  @override
+  Stream<double> get volumeStream => const Stream.empty();
+
+  @override
+  CastCapabilityFlags get capabilities => const CastCapabilityFlags();
+
   @override
   Future<void> dispose() async {
     _cancelSubscriptions();

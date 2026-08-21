@@ -9,7 +9,7 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'lib.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `init_logging`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<P2pHost>>
 abstract class P2PHost implements RustOpaqueInterface {
@@ -17,6 +17,12 @@ abstract class P2PHost implements RustOpaqueInterface {
   Future<void> dial({required String endpointAddrJson});
 
   /// Start streaming events to Flutter.
+  ///
+  /// Reads from `generic_event_rx`, not `inner.event_rx` directly: a
+  /// dispatcher spawned once in `init` already pulled inbound control
+  /// requests out onto their own channel, so subscribing here is *not*
+  /// required for `remote_control_stream` to work. See `init` for why that
+  /// independence matters.
   Stream<String> eventStream();
 
   /// Get network statistics.
@@ -36,6 +42,29 @@ abstract class P2PHost implements RustOpaqueInterface {
   static (P2PHost, String) init({String? relayUrl, Uint8List? keypairBytes}) =>
       RustLib.instance.api
           .crateP2PHostInit(relayUrl: relayUrl, keypairBytes: keypairBytes);
+
+  /// Stream inbound control requests to Flutter.
+  ///
+  /// Separate from `event_stream` on purpose: that one is a colon-delimited
+  /// string protocol, which cannot carry a structured command. This mirrors
+  /// `send_hls_request_streaming`, which is already typed.
+  ///
+  /// Unlike `send_hls_request_streaming`, this does not depend on
+  /// `event_stream` being subscribed to: the `init` dispatcher feeds
+  /// `control_rx` independently. Calling only this method, without ever
+  /// calling `event_stream()`, is a fully supported way to act as a
+  /// control target.
+  Stream<FlutterInboundControlRequest> remoteControlStream();
+
+  /// Answer an inbound control request.
+  ///
+  /// A successful return means the response was *enqueued* on the host's
+  /// command channel, not that it reached the wire. Task 1 hit this for
+  /// real: a process that exits promptly after this returns can drop an
+  /// in-flight response. Callers that need the answer delivered must keep
+  /// the host alive until the peer's request completes.
+  Future<void> respondToRemoteControl(
+      {required String requestId, required FlutterRemoteControlResponse res});
 
   /// Send a GraphQL request to a specific peer.
   Future<FlutterGraphQLResponse> sendGraphqlRequest(
@@ -59,6 +88,10 @@ abstract class P2PHost implements RustOpaqueInterface {
   /// Send a pairing request to a specific peer.
   Future<FlutterPairingResponse> sendPairingRequest(
       {required String peer, required FlutterPairingRequest req});
+
+  /// Send a control command to a peer and await its answer.
+  Future<FlutterRemoteControlResponse> sendRemoteControlRequest(
+      {required String peer, required FlutterRemoteControlRequest req});
 }
 
 /// The decrypted contents of a sealed pairing claim.
@@ -263,6 +296,74 @@ sealed class FlutterHlsStreamEvent with _$FlutterHlsStreamEvent {
   ) = FlutterHlsStreamEvent_Error;
 }
 
+/// An inbound command with the identifiers needed to answer it.
+///
+/// `peer` is the dialing node's ID, authenticated by iroh during the handshake.
+/// It is what the Dart roster check tests against, and it cannot be forged by
+/// the payload.
+class FlutterInboundControlRequest {
+  final String peer;
+  final String requestId;
+  final FlutterRemoteControlRequest request;
+
+  const FlutterInboundControlRequest({
+    required this.peer,
+    required this.requestId,
+    required this.request,
+  });
+
+  @override
+  int get hashCode => peer.hashCode ^ requestId.hashCode ^ request.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FlutterInboundControlRequest &&
+          runtimeType == other.runtimeType &&
+          peer == other.peer &&
+          requestId == other.requestId &&
+          request == other.request;
+}
+
+class FlutterLoadContentRequest {
+  final String mediaItemId;
+  final String? episodeId;
+  final BigInt positionMs;
+  final String? audioTrack;
+  final String? subtitleTrack;
+  final bool autoplay;
+
+  const FlutterLoadContentRequest({
+    required this.mediaItemId,
+    this.episodeId,
+    required this.positionMs,
+    this.audioTrack,
+    this.subtitleTrack,
+    required this.autoplay,
+  });
+
+  @override
+  int get hashCode =>
+      mediaItemId.hashCode ^
+      episodeId.hashCode ^
+      positionMs.hashCode ^
+      audioTrack.hashCode ^
+      subtitleTrack.hashCode ^
+      autoplay.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FlutterLoadContentRequest &&
+          runtimeType == other.runtimeType &&
+          mediaItemId == other.mediaItemId &&
+          episodeId == other.episodeId &&
+          positionMs == other.positionMs &&
+          audioTrack == other.audioTrack &&
+          subtitleTrack == other.subtitleTrack &&
+          autoplay == other.autoplay;
+}
+
 /// Network statistics for display in the UI
 class FlutterNetworkStats {
   final BigInt connectedPeers;
@@ -367,6 +468,210 @@ class FlutterPairingResponse {
           deviceToken == other.deviceToken &&
           error == other.error &&
           directUrls == other.directUrls;
+}
+
+class FlutterPlaybackSnapshot {
+  final FlutterPlaybackState state;
+  final String? mediaItemId;
+  final String? episodeId;
+  final String title;
+  final String? subtitle;
+  final String? imageUrl;
+  final BigInt positionMs;
+  final BigInt durationMs;
+  final double? volume;
+  final bool muted;
+  final List<FlutterTrackInfo> audioTracks;
+  final List<FlutterTrackInfo> subtitleTracks;
+  final String? selectedAudio;
+  final String? selectedSubtitle;
+  final FlutterTargetCapabilities capabilities;
+  final BigInt sequence;
+
+  const FlutterPlaybackSnapshot({
+    required this.state,
+    this.mediaItemId,
+    this.episodeId,
+    required this.title,
+    this.subtitle,
+    this.imageUrl,
+    required this.positionMs,
+    required this.durationMs,
+    this.volume,
+    required this.muted,
+    required this.audioTracks,
+    required this.subtitleTracks,
+    this.selectedAudio,
+    this.selectedSubtitle,
+    required this.capabilities,
+    required this.sequence,
+  });
+
+  @override
+  int get hashCode =>
+      state.hashCode ^
+      mediaItemId.hashCode ^
+      episodeId.hashCode ^
+      title.hashCode ^
+      subtitle.hashCode ^
+      imageUrl.hashCode ^
+      positionMs.hashCode ^
+      durationMs.hashCode ^
+      volume.hashCode ^
+      muted.hashCode ^
+      audioTracks.hashCode ^
+      subtitleTracks.hashCode ^
+      selectedAudio.hashCode ^
+      selectedSubtitle.hashCode ^
+      capabilities.hashCode ^
+      sequence.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FlutterPlaybackSnapshot &&
+          runtimeType == other.runtimeType &&
+          state == other.state &&
+          mediaItemId == other.mediaItemId &&
+          episodeId == other.episodeId &&
+          title == other.title &&
+          subtitle == other.subtitle &&
+          imageUrl == other.imageUrl &&
+          positionMs == other.positionMs &&
+          durationMs == other.durationMs &&
+          volume == other.volume &&
+          muted == other.muted &&
+          audioTracks == other.audioTracks &&
+          subtitleTracks == other.subtitleTracks &&
+          selectedAudio == other.selectedAudio &&
+          selectedSubtitle == other.selectedSubtitle &&
+          capabilities == other.capabilities &&
+          sequence == other.sequence;
+}
+
+enum FlutterPlaybackState {
+  idle,
+  loading,
+  buffering,
+  playing,
+  paused,
+  ended,
+  error,
+  ;
+}
+
+@freezed
+sealed class FlutterRemoteControlRequest with _$FlutterRemoteControlRequest {
+  const FlutterRemoteControlRequest._();
+
+  const factory FlutterRemoteControlRequest.hello({
+    required String controllerName,
+    required int protocolVersion,
+  }) = FlutterRemoteControlRequest_Hello;
+  const factory FlutterRemoteControlRequest.getState() =
+      FlutterRemoteControlRequest_GetState;
+  const factory FlutterRemoteControlRequest.play() =
+      FlutterRemoteControlRequest_Play;
+  const factory FlutterRemoteControlRequest.pause() =
+      FlutterRemoteControlRequest_Pause;
+  const factory FlutterRemoteControlRequest.stop() =
+      FlutterRemoteControlRequest_Stop;
+  const factory FlutterRemoteControlRequest.seek({
+    required BigInt positionMs,
+  }) = FlutterRemoteControlRequest_Seek;
+  const factory FlutterRemoteControlRequest.setVolume({
+    required double level,
+  }) = FlutterRemoteControlRequest_SetVolume;
+  const factory FlutterRemoteControlRequest.setMute({
+    required bool muted,
+  }) = FlutterRemoteControlRequest_SetMute;
+  const factory FlutterRemoteControlRequest.selectAudioTrack({
+    String? id,
+  }) = FlutterRemoteControlRequest_SelectAudioTrack;
+  const factory FlutterRemoteControlRequest.selectSubtitleTrack({
+    String? id,
+  }) = FlutterRemoteControlRequest_SelectSubtitleTrack;
+  const factory FlutterRemoteControlRequest.nextEpisode() =
+      FlutterRemoteControlRequest_NextEpisode;
+  const factory FlutterRemoteControlRequest.previousEpisode() =
+      FlutterRemoteControlRequest_PreviousEpisode;
+  const factory FlutterRemoteControlRequest.loadContent(
+    FlutterLoadContentRequest field0,
+  ) = FlutterRemoteControlRequest_LoadContent;
+}
+
+@freezed
+sealed class FlutterRemoteControlResponse with _$FlutterRemoteControlResponse {
+  const FlutterRemoteControlResponse._();
+
+  const factory FlutterRemoteControlResponse.welcome({
+    required String targetName,
+    required int protocolVersion,
+    required FlutterTargetCapabilities capabilities,
+  }) = FlutterRemoteControlResponse_Welcome;
+  const factory FlutterRemoteControlResponse.state(
+    FlutterPlaybackSnapshot field0,
+  ) = FlutterRemoteControlResponse_State;
+  const factory FlutterRemoteControlResponse.accepted() =
+      FlutterRemoteControlResponse_Accepted;
+  const factory FlutterRemoteControlResponse.notAuthorized() =
+      FlutterRemoteControlResponse_NotAuthorized;
+  const factory FlutterRemoteControlResponse.notPlaying() =
+      FlutterRemoteControlResponse_NotPlaying;
+  const factory FlutterRemoteControlResponse.unsupported() =
+      FlutterRemoteControlResponse_Unsupported;
+  const factory FlutterRemoteControlResponse.error(
+    String field0,
+  ) = FlutterRemoteControlResponse_Error;
+}
+
+class FlutterTargetCapabilities {
+  final bool volume;
+  final bool trackSelection;
+  final bool nextPrevious;
+
+  const FlutterTargetCapabilities({
+    required this.volume,
+    required this.trackSelection,
+    required this.nextPrevious,
+  });
+
+  @override
+  int get hashCode =>
+      volume.hashCode ^ trackSelection.hashCode ^ nextPrevious.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FlutterTargetCapabilities &&
+          runtimeType == other.runtimeType &&
+          volume == other.volume &&
+          trackSelection == other.trackSelection &&
+          nextPrevious == other.nextPrevious;
+}
+
+class FlutterTrackInfo {
+  final String id;
+  final String label;
+  final String? language;
+
+  const FlutterTrackInfo({
+    required this.id,
+    required this.label,
+    this.language,
+  });
+
+  @override
+  int get hashCode => id.hashCode ^ label.hashCode ^ language.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FlutterTrackInfo &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          label == other.label &&
+          language == other.language;
 }
 
 /// Keys derived from a pairing claim code.

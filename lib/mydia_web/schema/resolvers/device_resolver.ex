@@ -4,6 +4,7 @@ defmodule MydiaWeb.Schema.Resolvers.DeviceResolver do
   """
 
   alias Mydia.RemoteAccess
+  alias Mydia.RemoteAccess.RemoteDevice
 
   @doc """
   Lists all devices for the current user.
@@ -49,6 +50,43 @@ defmodule MydiaWeb.Schema.Resolvers.DeviceResolver do
     {:error, :unauthorized}
   end
 
+  @doc """
+  Records the calling device's iroh node ID.
+
+  Keyed on the device inside the caller's own token rather than on an argument,
+  so one device cannot rewrite another's address even within the same account.
+  """
+  def register_device_node(_parent, %{node_id: node_id}, %{
+        context: %{current_user: user, device_id: device_id}
+      })
+      when is_binary(device_id) do
+    case RemoteAccess.get_device(device_id) do
+      nil ->
+        {:error, :not_found}
+
+      device when device.user_id != user.id ->
+        {:error, :forbidden}
+
+      device ->
+        # A revoked device holding an unexpired token must not be able to
+        # keep re-registering its node id — `revoke_device/1` is documented
+        # as preventing future access, and this mutation is access.
+        if RemoteDevice.revoked?(device) do
+          {:error, :unauthorized}
+        else
+          case RemoteAccess.register_node_id(device, node_id) do
+            {:ok, updated} -> {:ok, format_device(updated)}
+            {:error, changeset} -> {:error, message: "Invalid node ID", details: changeset}
+          end
+        end
+    end
+  end
+
+  def register_device_node(_parent, _args, _context) do
+    # A plain user login carries no device_id, so there is nothing to record.
+    {:error, :unauthorized}
+  end
+
   # Format device for GraphQL response
   defp format_device(device) do
     %{
@@ -57,7 +95,8 @@ defmodule MydiaWeb.Schema.Resolvers.DeviceResolver do
       platform: device.platform,
       last_seen_at: device.last_seen_at,
       is_revoked: not is_nil(device.revoked_at),
-      created_at: device.inserted_at
+      created_at: device.inserted_at,
+      node_id: device.node_id
     }
   end
 end

@@ -3,13 +3,16 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../domain/models/cast_device.dart';
+import '../../native/lib.dart';
 import '../player/progress_service.dart';
 import '../player/stream_timeline.dart';
 import 'cast_backend.dart';
+import 'cast_capabilities.dart';
 import 'cast_route_resolver.dart';
 import 'cast_seek_restart.dart';
 import 'cast_session_store.dart';
 import 'cast_streaming_session_service.dart';
+import 'mydia_cast_backend.dart';
 
 /// The track list to hand to LOAD, with [selectedTrackId] first.
 ///
@@ -31,6 +34,156 @@ List<CastSubtitleTrack> orderSubtitlesForLoad(
   if (index <= 0) return tracks;
 
   return [tracks[index], ...tracks]..removeAt(index + 1);
+}
+
+/// Whether picking [device] should *adopt* whatever is already on it,
+/// rather than connect media-less and wait for a `LoadContent`.
+///
+/// The signal is `metadata['nowPlayingTitle']`: `MydiaCastBackend`'s
+/// discovery probe (`_probeSequence`) sets it when a `GetState` call made
+/// *during discovery* both succeeded and reported the target playing *or*
+/// paused. Paused counts deliberately, not just playing: the whole point of
+/// this fork is that one player must not stomp what another is doing, and a
+/// paused-but-resumable session is exactly the kind of thing worth not
+/// stomping — treating it as idle would let picking that device silently
+/// restart it. Everything else reads as false here — a non-Mydia device, a
+/// Mydia device the probe found genuinely idle, and one whose `GetState`
+/// failed during that same probe (`metadata['statusUnavailable']`, a target
+/// that answered `Hello` but not `GetState`) — and falls back to the
+/// existing media-less connect. Not knowing what a target is doing must
+/// never be read as "it has something loaded".
+bool isPlayingMydiaTarget(CastDevice device) =>
+    device.protocol == CastProtocolKind.mydia &&
+    device.metadata['nowPlayingTitle'] != null;
+
+/// Reaches through [backend]'s snapshot bridge — see [MydiaSnapshotSource]'s
+/// dartdoc for why this exists instead of a richer [CastBackend] — or null
+/// when it doesn't have one: a Chromecast/DLNA backend, or a Mydia one with
+/// nothing polled yet.
+///
+/// Paired with an explicit cast rather than a bare `is` check because Dart
+/// only promotes a variable's static type on a *narrowing* check — [backend]
+/// is declared [CastBackend], which shares no subtype relationship with
+/// [MydiaSnapshotSource], so `backend is MydiaSnapshotSource` alone leaves
+/// `backend.lastSnapshot` a compile error even in the branch that just
+/// proved it true.
+FlutterPlaybackSnapshot? _snapshotFrom(CastBackend backend) =>
+    backend is MydiaSnapshotSource
+        ? (backend as MydiaSnapshotSource).lastSnapshot
+        : null;
+
+/// Companion to [_snapshotFrom]: when that snapshot was actually captured,
+/// for projecting a still-playing position forward — see
+/// [CastSessionManager.pullToLocal].
+DateTime? _snapshotCapturedAtFrom(CastBackend backend) =>
+    backend is MydiaSnapshotSource
+        ? (backend as MydiaSnapshotSource).lastSnapshotAt
+        : null;
+
+/// Chooses which backend owns a device's protocol, and fans discovery out
+/// across every backend registered.
+///
+/// Extracted out of [CastSessionManager] itself rather than left as a
+/// conditional at each call site: once Mydia needed its own backend,
+/// dispatch by protocol touched connect, discovery, and every command entry
+/// point, which is exactly the "edits scattered across the file" a single
+/// `if (protocol == mydia)` per call site would have produced. One named
+/// unit reads better and cannot drift between call sites.
+///
+/// Chromecast and DLNA are not two entries here: one `DartCastBackend`
+/// already discovers and drives both through a single `dart_cast` service,
+/// gating itself on [CastCapabilities] internally. Only Mydia gets a
+/// distinct backend.
+class CastBackendRegistry {
+  final CastBackend primary;
+  final CastBackend? mydia;
+
+  const CastBackendRegistry({required this.primary, this.mydia});
+
+  /// The backend that owns [protocol].
+  ///
+  /// Falls back to [primary] for a protocol this build has no distinct
+  /// backend for, rather than throwing — today that only matters when
+  /// [mydia] itself is unconfigured (P2P not ready yet; see
+  /// `mydiaCastBackendProvider`). A Mydia device then simply cannot be
+  /// reached, which the connect attempt reports as an ordinary failure
+  /// instead of a crash.
+  CastBackend forProtocol(CastProtocolKind protocol) {
+    return switch (protocol) {
+      CastProtocolKind.mydia => mydia ?? primary,
+      CastProtocolKind.chromecast || CastProtocolKind.dlna => primary,
+    };
+  }
+
+  /// Every distinct backend, for fan-out operations like discovery.
+  List<CastBackend> get all => [primary, if (mydia != null) mydia!];
+}
+
+/// Merges every backend's discovery stream into one combined device list,
+/// republishing the full list whenever any single backend's own view
+/// changes.
+///
+/// Each backend already reports only the devices it owns — the Chromecast/
+/// DLNA backend gates itself on [capabilities], Mydia ignores it and always
+/// sweeps — so this never needs to know which protocol a device came from;
+/// it just keeps one slot of "the latest list from backend N" per backend
+/// and concatenates them.
+Stream<List<CastDevice>> mergeCastDiscovery(
+  List<CastBackend> backends, {
+  required CastCapabilities capabilities,
+  Duration timeout = const Duration(seconds: 10),
+}) {
+  if (backends.isEmpty) return Stream.value(const []);
+  if (backends.length == 1) {
+    return backends.single
+        .startDiscovery(capabilities: capabilities, timeout: timeout);
+  }
+
+  final latest = List<List<CastDevice>>.filled(backends.length, const []);
+  final subs = <StreamSubscription<List<CastDevice>>>[];
+  late final StreamController<List<CastDevice>> controller;
+
+  // Coalesced onto the microtask queue rather than published straight from
+  // each backend's own listener: two backends that both answer "eagerly"
+  // (a discovery sweep that resolves instantly, as every test double here
+  // does) fire their updates back to back within the same microtask drain.
+  // Publishing on the first of those and only *then* letting the second
+  // land would make a `.first`-style read of this stream see just one
+  // backend's devices — a real, order-dependent bug this coalescing closes.
+  // Two backends that answer minutes apart, which is the normal case for a
+  // live discovery sweep, are unaffected: each gets its own flush once the
+  // scheduled one has already run, so a fast backend's devices still show
+  // up without waiting on a slow (or silent) one.
+  var flushScheduled = false;
+  void scheduleFlush() {
+    if (flushScheduled) return;
+    flushScheduled = true;
+    scheduleMicrotask(() {
+      flushScheduled = false;
+      if (controller.isClosed) return;
+      controller.add(latest.expand((d) => d).toList(growable: false));
+    });
+  }
+
+  controller = StreamController<List<CastDevice>>(
+    onCancel: () {
+      for (final sub in subs) {
+        unawaited(sub.cancel());
+      }
+    },
+  );
+
+  for (var i = 0; i < backends.length; i++) {
+    final index = i;
+    subs.add(backends[i]
+        .startDiscovery(capabilities: capabilities, timeout: timeout)
+        .listen((devices) {
+      latest[index] = devices;
+      scheduleFlush();
+    }, onError: controller.addError));
+  }
+
+  return controller.stream;
 }
 
 /// Everything the UI knows about the item it wants to cast.
@@ -106,9 +259,51 @@ class CastLaunchRequest {
       );
 }
 
+/// What [CastSessionManager.pullToLocal] hands back for a caller to resume
+/// playback locally with — the mirror of what a [CastLaunchRequest] carries
+/// *out* to a receiver, but read back from a Mydia target's own snapshot
+/// rather than assembled from what this app chose to load.
+///
+/// [mediaItemId] is null when the target had nothing usable to report (see
+/// [CastSessionManager.pullToLocal]'s dartdoc) — a caller with nothing to
+/// open should treat that as "there was nothing to pull", not open an item
+/// with no id.
+class PulledSession {
+  final String? mediaItemId;
+  final String? episodeId;
+  final Duration position;
+  final String? selectedAudioTrackId;
+  final String? selectedSubtitleTrackId;
+
+  const PulledSession({
+    required this.mediaItemId,
+    required this.episodeId,
+    required this.position,
+    required this.selectedAudioTrackId,
+    required this.selectedSubtitleTrackId,
+  });
+}
+
 /// Owns the active cast session: routing, playback, progress and persistence.
 class CastSessionManager {
-  final CastBackend _backend;
+  final CastBackendRegistry _registry;
+  final CastCapabilities _capabilities;
+
+  /// The backend behind whatever [_current] session is (or, before any
+  /// connect, the primary/default one).
+  ///
+  /// Mutable rather than the single object it used to be: it is reassigned
+  /// to `_registry.forProtocol(device.protocol)` at every entry point that
+  /// establishes a new connection ([startCast], [connectTo],
+  /// [restoreSession]), and only once that call has confirmed it actually
+  /// owns the session — never from inside a race with another such call. See
+  /// those methods for why the commit point matters: a naive reassignment as
+  /// soon as the protocol is known would let a second, concurrent connect to
+  /// a *different* protocol repoint this field out from under the first
+  /// call's own post-await cleanup, which reads `_backend` expecting it to
+  /// still be the one it just connected.
+  CastBackend _backend;
+
   final CastSessionStore _store;
   final ProgressService _progressService;
   final CastRouteResolver Function() _resolverFactory;
@@ -170,7 +365,8 @@ class CastSessionManager {
   /// guards the equivalent local-playback restart the same way.
   bool _isRestartingForSeek = false;
 
-  /// Bumped at the start of every [connectTo] and by [stopCast].
+  /// Bumped at the start of every [connectTo] and [startCast], and by
+  /// [stopCast].
   ///
   /// `connectTo` awaits `_backend.connect(device)` with nothing else guarding
   /// against a second call landing while the first is still in flight — the
@@ -185,6 +381,17 @@ class CastSessionManager {
   /// no session yet for `stopCast`'s `disconnect()` to act on) and the
   /// connect would resurrect the bar up to 15s later; a double-pick left
   /// whichever connect resolved last in control with no way to stop it.
+  ///
+  /// `startCast` captures its own generation the same way and re-checks it in
+  /// its failure-rollback catch block, for the same reason: `_loadWithRetries`
+  /// awaits across a network round trip with nothing else guarding against a
+  /// `connectTo` (to a different device, possibly a different protocol) both
+  /// starting and finishing while this call is still failing to load. Without
+  /// the check, that failure's cleanup — `_cancelSubscriptions()` and
+  /// `_publish(null)` — would clobber the newer, already-published, unrelated
+  /// session the winning `connectTo` just installed, exactly the "phantom
+  /// disconnected while still connected" bug this field exists to prevent on
+  /// `connectTo`'s own path.
   int _connectGeneration = 0;
 
   /// Maps receiver-reported positions onto real media positions.
@@ -202,22 +409,34 @@ class CastSessionManager {
 
   CastSessionManager({
     required CastBackend backend,
+    CastBackend? mydiaBackend,
     required CastSessionStore store,
     required ProgressService progressService,
     required CastRouteResolver Function() resolverFactory,
     required CastStreamingSessionService streamingSessions,
     required Future<void> Function(bool enabled) setLanAccess,
     DateTime Function()? clock,
-  })  : _backend = backend,
+    CastCapabilities? capabilities,
+  })  : _registry = CastBackendRegistry(primary: backend, mydia: mydiaBackend),
+        _backend = backend,
         _store = store,
         _progressService = progressService,
         _resolverFactory = resolverFactory,
         _streamingSessions = streamingSessions,
         _setLanAccess = setLanAccess,
-        _clock = clock ?? DateTime.now;
+        _clock = clock ?? DateTime.now,
+        _capabilities = capabilities ?? const CastCapabilities.full();
 
   Stream<CastSession?> get sessionStream => _sessions.stream;
   CastSession? get currentSession => _current;
+
+  /// Devices from every registered backend, merged into one list.
+  ///
+  /// A fresh sweep on every read, matching how `CastBackend.startDiscovery`
+  /// itself behaves — this is a thin fan-out over the same per-backend
+  /// sweeps `castDiscoveryProvider` starts for the picker, not a cache.
+  Stream<List<CastDevice>> get discoveredDevices =>
+      mergeCastDiscovery(_registry.all, capabilities: _capabilities);
 
   /// The item the active (or last) session is playing, for a UI that needs to
   /// re-cast it — a stale session's "Reconnect" must target the media that
@@ -238,8 +457,10 @@ class CastSessionManager {
     // idle session over the one this call is about to load — and
     // `_listenForConnectionLoss`'s subscription setup would then tear down
     // the progress/state subscriptions this call installs via
-    // `_listenToBackend`.
-    _connectGeneration++;
+    // `_listenToBackend`. Captured into a local (see `_connectGeneration`'s
+    // dartdoc): this call's own failure-rollback catch block below re-checks
+    // it before touching any shared state, the same way `connectTo`'s does.
+    final generation = ++_connectGeneration;
 
     final resolver = _resolverFactory();
 
@@ -270,33 +491,67 @@ class CastSessionManager {
       );
     }
 
+    // Resolved from `device.protocol`, not read off `_backend`: a concurrent
+    // call for a different protocol could have repointed that field between
+    // here and whenever this call last touched it. Everything below uses
+    // this local until the connection is confirmed to belong to this call,
+    // at which point it is committed to `_backend` for the rest of the
+    // session (see that field's dartdoc).
+    final backend = _registry.forProtocol(device.protocol);
+
     // Reuse an open connection instead of rebuilding it. `connectTo` may
     // already own this receiver because the user chose it while browsing, and
-    // `_backend.connect` sends LAUNCH again — evicting and relaunching the
+    // `backend.connect` sends LAUNCH again — evicting and relaunching the
     // receiver app for no reason, which the user sees as a flicker on the TV
     // and a slower start.
     //
     // The `connected` check matters as much as the device check: after a drop,
     // `connectedDevice` still names the device (nothing called disconnect), so
     // matching on the id alone would load onto a dead socket.
-    final reusable = _backend.connectedDevice?.id == device.id &&
+    final reusable = backend.connectedDevice?.id == device.id &&
         _current?.connectionState == CastConnectionState.connected;
 
     if (!reusable) {
       try {
-        await _backend.connect(device);
+        await backend.connect(device);
       } catch (e) {
         await _abandonStart(lanEnabledBeforeCall, startedHlsSessions);
         rethrow;
       }
     }
 
+    if (generation != _connectGeneration) {
+      // Superseded (by a second `startCast`, a `connectTo`, or `stopCast`)
+      // while `backend.connect()` above — or the `reusable` check itself —
+      // was resolving. `connectTo`'s own catch block already guards this
+      // moment for the *failure* path; this is the same race on the success
+      // path, which until now ran `_backend = backend; _listenToBackend(...)`
+      // unconditionally just below. A winner may already have its own
+      // backend and listeners live, and repointing `_backend` here would
+      // silently kill that winner's `connectionLost`/`notAuthorized`
+      // reporting for the rest of the session — permanently, since nothing
+      // re-arms it short of another connectTo/startCast/stopCast.
+      //
+      // Same device-match and newer-ownership care as `connectTo`'s stale
+      // branch: `backend.disconnect()` targets whatever this backend
+      // currently holds, with no device argument to aim it, so it must not
+      // run when a newer call already owns this same backend/device.
+      final newerOwnsThisDevice = _current?.device.id == device.id;
+      if (backend.connectedDevice?.id == device.id && !newerOwnsThisDevice) {
+        await backend.disconnect();
+      }
+      await _abandonStart(lanEnabledBeforeCall, startedHlsSessions);
+      return;
+    }
+
+    _backend = backend;
     _listenToBackend(request);
 
     final CastRoute loaded;
     try {
       loaded = await _loadWithRetries(
         resolver,
+        backend,
         route,
         device,
         request,
@@ -307,9 +562,22 @@ class CastSessionManager {
       // live, and the LAN proxy exposed would strand the app in a state
       // with no session but an active connection and (per the Security
       // requirement) a listener with no cast in progress.
-      _cancelSubscriptions();
+      //
+      // `_cancelSubscriptions()` and `_publish(null)` below only run when
+      // nothing has superseded this call while `_loadWithRetries` awaited
+      // above — the same `generation == _connectGeneration` ownership check
+      // `connectTo`'s own catch block uses. A concurrent `connectTo` (to a
+      // different device, possibly a different protocol) may already have
+      // published its own session and installed its own listeners by now,
+      // and this call's failure must not tear those down or null out that
+      // unrelated, newer session. `backend.disconnect()` just below is
+      // unconditional regardless: it always targets *this call's own*
+      // resolved backend local from `:415`, never whatever `_backend`
+      // currently points at, so it can never reach a backend this call did
+      // not itself connect (or reuse).
+      if (generation == _connectGeneration) _cancelSubscriptions();
       try {
-        await _backend.disconnect();
+        await backend.disconnect();
       } catch (e) {
         debugPrint(
             '[CastSessionManager] Ignoring disconnect error during rollback: $e');
@@ -320,8 +588,9 @@ class CastSessionManager {
       // prior `startCast` on this same device — would claim a connection
       // that no longer exists. That is exactly the stale "connected" state
       // this project exists to eliminate, so clear it unconditionally here,
-      // not only when the connection was reused.
-      _publish(null);
+      // not only when the connection was reused — but, as above, only when
+      // this call still owns whatever is currently published.
+      if (generation == _connectGeneration) _publish(null);
       rethrow;
     }
 
@@ -356,6 +625,92 @@ class CastSessionManager {
   /// Whether [retargetTo] has a request to move.
   bool get canRetarget => _lastRequest != null;
 
+  /// Pulls whatever is on the connected Mydia target back onto this device:
+  /// pauses and stops the target, ends this manager's own session, and
+  /// hands back what the target was actually at so a caller can resume
+  /// locally at the same spot.
+  ///
+  /// The target's exact position is read from its captured
+  /// [FlutterPlaybackSnapshot] — via [MydiaSnapshotSource], the same seam
+  /// [_applyAdoptedSnapshotExtras] uses — never from [CastBackend
+  /// .positionStream], whose interpolation exists purely to keep a scrubber
+  /// moving between real polls (see `MydiaCastBackend._positionTicker`), and
+  /// never from server-reported progress, which [_syncProgress] throttles to
+  /// once every 10 seconds. Either would routinely be seconds off, which
+  /// matters here: this is the one number a caller cannot re-derive once the
+  /// target has been told to stand down.
+  ///
+  /// A *playing* snapshot's own `positionMs` is itself already stale by the
+  /// time this runs, though — it is only ever as fresh as the target's last
+  /// poll answer (1s while its remote-control UI is visible, 5s otherwise;
+  /// see `MydiaCastBackend`'s poll intervals). This projects it forward by
+  /// however much wall clock has passed since [MydiaSnapshotSource
+  /// .lastSnapshotAt], the same math [MydiaCastBackend._positionAt] applies
+  /// to [CastBackend.positionStream] between polls, so the position handed
+  /// back matches what the viewer actually saw rather than what the target
+  /// happened to report last. A paused snapshot is never projected — nothing
+  /// is advancing behind it — and a target that never reported a capture
+  /// time (a fake in a test, or an old build) falls back to the raw,
+  /// unprojected value.
+  ///
+  /// Reads before it sends anything, deliberately: [_backend.pause] runs
+  /// first below, and the target's own follow-up `GetState` poll (or the
+  /// `disconnect` [stopCast] issues right after) can freely overwrite or
+  /// clear the cached snapshot once the target has actually been told to
+  /// pause or stop. Capturing [PulledSession] after either call risks
+  /// reading a position that is no longer the one the viewer was actually
+  /// watching from — or, once disconnected, no snapshot at all.
+  ///
+  /// Returns null, touching nothing, when [_backend] is not
+  /// [MydiaSnapshotSource] (a Chromecast or DLNA target — there is no
+  /// symmetric "pull" for either, since neither runs this app) or when
+  /// nothing has been polled from it yet.
+  Future<PulledSession?> pullToLocal() async {
+    final snapshot = _snapshotFrom(_backend);
+    if (snapshot == null) return null;
+
+    final pulled = PulledSession(
+      mediaItemId: snapshot.mediaItemId,
+      episodeId: snapshot.episodeId,
+      position: _projectedPosition(snapshot),
+      selectedAudioTrackId: snapshot.selectedAudio,
+      selectedSubtitleTrackId: snapshot.selectedSubtitle,
+    );
+
+    try {
+      await _backend.pause();
+    } catch (e) {
+      // Best-effort: a target that will not even answer `pause` is not one
+      // `stop` (via `stopCast` below) is likely to fare better with either,
+      // and the position that matters has already been captured above.
+      debugPrint('[CastSessionManager] Ignoring pause error during pull: $e');
+    }
+
+    await stopCast();
+
+    return pulled;
+  }
+
+  /// [snapshot]'s own position, projected forward by however much wall
+  /// clock has passed since it was captured — but only while the target was
+  /// actually playing, and only when [_backend] actually reports a capture
+  /// time. Mirrors `MydiaCastBackend._positionAt`, which does the same
+  /// projection for [CastBackend.positionStream].
+  Duration _projectedPosition(FlutterPlaybackSnapshot snapshot) {
+    final base = Duration(milliseconds: snapshot.positionMs.toInt());
+    if (snapshot.state != FlutterPlaybackState.playing) return base;
+
+    final capturedAt = _snapshotCapturedAtFrom(_backend);
+    if (capturedAt == null) return base;
+
+    final elapsed = _clock().difference(capturedAt);
+    final projected = base + (elapsed.isNegative ? Duration.zero : elapsed);
+
+    final duration = Duration(milliseconds: snapshot.durationMs.toInt());
+    if (duration > Duration.zero && projected > duration) return duration;
+    return projected;
+  }
+
   /// Connect to [device] with no media on it.
   ///
   /// This is what makes the cast icon's "connected" claim true before anything
@@ -373,6 +728,12 @@ class CastSessionManager {
   Future<void> connectTo(CastDevice device) async {
     final generation = ++_connectGeneration;
 
+    // Resolved locally rather than read off `_backend`: this call's own
+    // cleanup below re-reads whichever backend it itself connected, even if
+    // a concurrent call for a different protocol commits a different one to
+    // `_backend` in the meantime. See that field's dartdoc.
+    final backend = _registry.forProtocol(device.protocol);
+
     _publish(CastSession(
       device: device,
       playbackState: CastPlaybackState.idle,
@@ -380,7 +741,7 @@ class CastSessionManager {
     ));
 
     try {
-      await _backend.connect(device);
+      await backend.connect(device);
     } catch (e) {
       // Only touch shared state if nothing superseded this call while it was
       // awaiting: a stale failure racing behind a newer, already-published
@@ -401,11 +762,14 @@ class CastSessionManager {
       //
       // Two independent checks guard the actual `disconnect()`:
       //
-      // - Device match: `_backend.disconnect()` closes whatever the backend
+      // - Device match: `backend.disconnect()` closes whatever that backend
       //   currently holds, with no device argument to target. If a second
       //   `connectTo` resolved first and is already connected to a
-      //   *different* device, an unconditional disconnect here would tear
-      //   down that newer, wanted connection instead of this stale one.
+      //   *different* device on this SAME backend, an unconditional
+      //   disconnect here would tear down that newer, wanted connection
+      //   instead of this stale one. (A second call for a *different*
+      //   protocol cannot collide here at all — it resolved its own,
+      //   different `backend` local above.)
       //
       // - Not newer-owned: matching on device id alone is not enough,
       //   because `startCast` can supersede this call and then connect to
@@ -418,19 +782,58 @@ class CastSessionManager {
       //   publishes null before bumping past this call, so it never counts
       //   as an owner and the disconnect it demands still happens.
       final newerOwnsThisDevice = _current?.device.id == device.id;
-      if (_backend.connectedDevice?.id == device.id && !newerOwnsThisDevice) {
-        await _backend.disconnect();
+      if (backend.connectedDevice?.id == device.id && !newerOwnsThisDevice) {
+        await backend.disconnect();
       }
       return;
     }
 
-    _listenForConnectionLoss();
+    // This call won: commit its backend as the one behind the session about
+    // to be published, so every command with no device of its own to name
+    // (`play`, `pause`, `seek`, ...) reaches the right receiver.
+    _backend = backend;
 
-    _publish(CastSession(
-      device: device,
-      playbackState: CastPlaybackState.idle,
-      connectionState: CastConnectionState.connected,
-    ));
+    if (isPlayingMydiaTarget(device)) {
+      // Adopted: something is already on this receiver that nobody here
+      // chose. See `_listenToBackendForAdoption`'s dartdoc for why this
+      // needs its own subscription setup rather than reusing
+      // `_listenForConnectionLoss` (no media, so nothing to track) or
+      // `_listenToBackend` (assumes this app is the one that loaded it) —
+      // including how it backfills artwork and subtitle tracks from the
+      // target's own snapshot via `MydiaSnapshotSource`, which the generic
+      // `CastBackend` streams this manager otherwise reads from carry no
+      // channel for at all.
+      _listenToBackendForAdoption();
+
+      _publish(CastSession(
+        device: device,
+        // Not `idle`: something genuinely is loaded, we just don't yet know
+        // its playback state — the first `stateStream` event resolves this,
+        // same as a freshly loaded session sits at `buffering` until the
+        // receiver reports otherwise.
+        playbackState: CastPlaybackState.buffering,
+        connectionState: CastConnectionState.connected,
+        mediaInfo: CastMediaInfo(
+          // The only field the discovery probe actually carries (see
+          // `isPlayingMydiaTarget`'s dartdoc) — guaranteed non-null here.
+          // Duration and position start at zero and are corrected by the
+          // first real `durationStream`/`positionStream` events, exactly
+          // like a freshly loaded session's placeholder is corrected by the
+          // receiver's own numbers.
+          title: device.metadata['nowPlayingTitle']!,
+          duration: Duration.zero,
+          position: Duration.zero,
+        ),
+      ));
+    } else {
+      _listenForConnectionLoss();
+
+      _publish(CastSession(
+        device: device,
+        playbackState: CastPlaybackState.idle,
+        connectionState: CastConnectionState.connected,
+      ));
+    }
   }
 
   /// Failure-only subscription for an idle connection.
@@ -447,7 +850,19 @@ class CastSessionManager {
     _cancelSubscriptions();
 
     _failureSub = _backend.failureStream.listen((failure) {
-      if (failure != CastFailureKind.connectionLost) return;
+      // `notAuthorized` is a Mydia target revoking this app mid-session — a
+      // trust boundary, and actionable ("pair with it again") — so it gets
+      // the same treatment as a dropped connection. `notPlaying` stays
+      // quiet on purpose: it is a benign state Mydia's own backend already
+      // re-syncs from (see its `_sendCommand`), not a failure the UI needs
+      // to react to. Everything else here is unreachable for the backends
+      // this manager drives today (see `CastFailureKind`'s dartdoc on each
+      // member for why), so it stays filtered out rather than silently
+      // handled the same way.
+      if (failure != CastFailureKind.connectionLost &&
+          failure != CastFailureKind.notAuthorized) {
+        return;
+      }
 
       final current = _current;
       if (current == null) return;
@@ -455,6 +870,144 @@ class CastSessionManager {
       debugPrint('[CastSessionManager] Receiver lost while idle');
       _publish(current.copyWith(connectionState: CastConnectionState.lost));
     });
+  }
+
+  /// Subscription setup for a session this app *adopted* — connected to and
+  /// found already playing — rather than one it loaded itself.
+  ///
+  /// Differs from [_listenToBackend] in every way that assumption matters:
+  ///
+  /// - Never calls [_syncProgress]. Progress reporting stays with whoever is
+  ///   playing: the target is the one writing `updateMovieProgress`/
+  ///   `updateEpisodeProgress` for this item already, and a second writer
+  ///   here would race it for continue-watching.
+  /// - Resets [_timeline] to [StreamTimeline.zero] instead of carrying
+  ///   forward whatever offset a *previous*, unrelated session on this same
+  ///   manager left behind. A stale offset here would mistranslate a later
+  ///   [seek] on a session this manager never itself routed — the receiver's
+  ///   position already *is* the real position.
+  /// - Clears every field that answers "what did I load" —
+  ///   [_persisted], [_lastRequest], [_subtitles], [_selectedSubtitle] — for
+  ///   the same reason: this session's item was never chosen through this
+  ///   manager, so a value left over from an earlier, different session must
+  ///   not be read as this one's.
+  /// - Leaves [_lastDuration] at [Duration.zero] rather than tracking the
+  ///   receiver's real duration the way [_listenToBackend] does. That field
+  ///   exists only to gate [_syncProgress] (see its own `<=` guard), which
+  ///   this method never calls — keeping it at zero means an adopted session
+  ///   stays inert to progress sync even if something were ever wired up to
+  ///   call it by mistake, rather than merely happening not to be called
+  ///   today.
+  /// - Also backfills artwork and subtitle tracks from [_backend]'s captured
+  ///   [FlutterPlaybackSnapshot] (see [_applyAdoptedSnapshotExtras]), which
+  ///   [_listenToBackend] never needs to: a session this manager loaded
+  ///   itself already got both from the [CastLaunchRequest] at
+  ///   [_loadOnRoute] time.
+  ///
+  /// [_updateMediaInfo] still does the actual publishing — the same helper
+  /// [_listenToBackend] uses — since both cases are "republish [_current]'s
+  /// `mediaInfo` with a new position/duration applied" and nothing about
+  /// that step differs for an adopted session.
+  void _listenToBackendForAdoption() {
+    _cancelSubscriptions();
+
+    _persisted = null;
+    _lastRequest = null;
+    _lastDuration = Duration.zero;
+    _lastProgressSync = null;
+    _subtitles = const [];
+    _selectedSubtitle = null;
+    _useTimeline(StreamTimeline.zero);
+
+    _durationSub = _backend.durationStream.listen((duration) {
+      // Same "receiver says -1 for unknown" guard `_listenToBackend` uses.
+      if (duration <= Duration.zero) return;
+      _updateMediaInfo(duration: duration);
+      _applyAdoptedSnapshotExtras();
+    });
+
+    _positionSub = _backend.positionStream.listen((position) {
+      // No `_timeline` translation: an adopted session was never routed
+      // through this manager, so the receiver's own position already is the
+      // real one.
+      _updateMediaInfo(position: position);
+    });
+
+    _stateSub = _backend.stateStream.listen((state) {
+      final current = _current;
+      if (current == null) return;
+      _publish(current.copyWith(playbackState: state));
+    });
+
+    _failureSub = _backend.failureStream.listen((failure) {
+      if (failure != CastFailureKind.connectionLost &&
+          failure != CastFailureKind.notAuthorized) {
+        return;
+      }
+
+      final current = _current;
+      if (current == null) return;
+
+      debugPrint(
+          '[CastSessionManager] Adopted receiver lost; marking session stale');
+      _publish(current.copyWith(
+        connectionState: CastConnectionState.lost,
+        playbackState: CastPlaybackState.idle,
+      ));
+    });
+  }
+
+  /// Fills in what an adopted session's generic streams cannot carry —
+  /// artwork and subtitle tracks — from [_backend]'s own captured snapshot.
+  ///
+  /// A no-op for anything that is not [MydiaSnapshotSource] (Chromecast,
+  /// DLNA, or a Mydia backend that has not polled yet) — exactly the
+  /// backends [isPlayingMydiaTarget] can never have flagged this session
+  /// adoptable from in the first place, so this only ever does real work on
+  /// the path that actually reaches it.
+  ///
+  /// `url` on the rebuilt [CastSubtitleTrack]s is always empty: a Mydia
+  /// target is selected by [CastSubtitleTrack.trackId] alone
+  /// (`MydiaCastBackend.selectSubtitle` sends only `track?.trackId`), so
+  /// there is no receiver URL to reconstruct and none is needed.
+  ///
+  /// ARTWORK IS A DEAD WIRE TODAY, and this is the only place that says so.
+  /// Subtitle tracks genuinely arrive; `imageUrl` does not, and no amount of
+  /// reading this method will reveal why. The consumer side below is correct
+  /// — the *producer* never fills it in. `PlayerScreen.describe()`
+  /// (`presentation/screens/player/player_screen.dart`, search `imageUrl:`)
+  /// hardcodes `imageUrl: null` in the snapshot a controlled device answers
+  /// `GetState` with, and it has no poster to send: neither `PlayerScreen`
+  /// nor `PlayerRouteParams` carries one. Populating it means threading a
+  /// poster URL through the route and every navigation call site, the same
+  /// shape of change that added `audioTrack`/`subtitleTrack`/`autoplay`.
+  /// So an adopted session shows no poster, and will keep showing none until
+  /// that is done. Do not delete this note because the code below looks
+  /// complete — it is complete, and the feature still does not work.
+  void _applyAdoptedSnapshotExtras() {
+    final snapshot = _snapshotFrom(_backend);
+    final current = _current;
+    if (snapshot == null || current == null) return;
+
+    _subtitles = [
+      for (final track in snapshot.subtitleTracks)
+        CastSubtitleTrack(
+          trackId: track.id,
+          url: '',
+          label: track.label,
+          language: track.language ?? '',
+        ),
+    ];
+    _selectedSubtitle = _subtitles
+        .where((t) => t.trackId == snapshot.selectedSubtitle)
+        .firstOrNull;
+
+    _publish(current.copyWith(
+      mediaInfo: current.mediaInfo?.copyWith(imageUrl: snapshot.imageUrl),
+      subtitles: _subtitles,
+      selectedSubtitle: _selectedSubtitle,
+      clearSelectedSubtitle: _selectedSubtitle == null,
+    ));
   }
 
   /// Resolve a route, enabling LAN access first when the route will be a
@@ -517,15 +1070,21 @@ class CastSessionManager {
   ///      (see `DartCastBackend.failureKindFor`) — having ruled out the
   ///      former by trying the bridge, the codec explanation is the only
   ///      one left, regardless of why attempt 2 itself failed.
+  ///
+  /// [backend] is this call's own resolved backend local (see `startCast`'s
+  /// `:415`) threaded all the way down to [_loadOnRoute], never read off the
+  /// shared `_backend` field — a concurrent connect to a different device
+  /// could repoint that field before any of the awaits below settle.
   Future<CastRoute> _loadWithRetries(
     CastRouteResolver resolver,
+    CastBackend backend,
     CastRoute route,
     CastDevice device,
     CastLaunchRequest request,
     List<String> startedHlsSessions,
   ) async {
     try {
-      await _loadOnRoute(resolver, route, device, request);
+      await _loadOnRoute(resolver, route, device, request, backend);
       return route;
     } on CastBackendException catch (firstFailure) {
       final secondRoute = await _retryRouteFor(
@@ -539,7 +1098,7 @@ class CastSessionManager {
       if (secondRoute == null) rethrow;
 
       try {
-        await _loadOnRoute(resolver, secondRoute, device, request);
+        await _loadOnRoute(resolver, secondRoute, device, request, backend);
         return secondRoute;
       } on CastBackendException {
         final isBridgeEscalationFromDirectMediaLoadFailed =
@@ -561,7 +1120,7 @@ class CastSessionManager {
         debugPrint(
           '[CastSessionManager] Bridge retry also failed, retrying with TRANSCODE',
         );
-        await _loadOnRoute(resolver, transcodeRoute, device, request);
+        await _loadOnRoute(resolver, transcodeRoute, device, request, backend);
         return transcodeRoute;
       }
     }
@@ -677,16 +1236,30 @@ class CastSessionManager {
       // A block on our own side. No alternate media route reaches a receiver
       // the OS will not let us open a socket to.
       case CastFailureKind.localNetworkDenied:
+      // Both are Mydia-target-specific and neither is a media-route problem:
+      // a revoked pairing or an unmounted player is not fixed by retrying
+      // with a different URL or encoding.
+      case CastFailureKind.notAuthorized:
+      case CastFailureKind.notPlaying:
       case CastFailureKind.unknown:
         return null;
     }
   }
 
+  /// [backend] is the caller's own resolved backend — from `startCast`'s
+  /// `:415` local, `_reloadBridgeSession`'s parameter, or (transitively)
+  /// `restoreSession`'s local — used here instead of the shared `_backend`
+  /// field for the same reason `_receiverStillPlaying` already takes one: a
+  /// concurrent connect elsewhere in the manager can repoint `_backend`
+  /// between when the caller started and when this method's own awaits
+  /// settle, and a load must land on the connection it actually resolved a
+  /// route for, not whatever the field currently names.
   Future<void> _loadOnRoute(
     CastRouteResolver resolver,
     CastRoute route,
     CastDevice device,
     CastLaunchRequest request,
+    CastBackend backend,
   ) async {
     // The route already rewrote every track to a URL its receiver can fetch,
     // and dropped them entirely when it cannot serve any. Reading them from
@@ -705,7 +1278,7 @@ class CastSessionManager {
       totalDuration: request.duration,
     ));
 
-    await _backend.loadMedia(CastMediaRequest(
+    await backend.loadMedia(CastMediaRequest(
       url: route.mediaUrl,
       kind: route.mediaKind,
       title: request.title,
@@ -733,7 +1306,7 @@ class CastSessionManager {
     // first track active while the UI (`CastSession.selectedSubtitle`) says
     // off would show the viewer a subtitle they were told is disabled.
     if (subtitles.isNotEmpty && _selectedSubtitle == null) {
-      await _backend.selectSubtitle(null);
+      await backend.selectSubtitle(null);
     }
 
     // What to carry forward as "the chosen id". When tracks were actually
@@ -874,8 +1447,19 @@ class CastSessionManager {
     // A receiver that disappears must not leave controls that quietly do
     // nothing. The stored session is deliberately kept so the user can
     // reconnect to it.
+    //
+    // `notAuthorized` gets the same treatment: a Mydia target that revokes
+    // this app mid-session is just as unable to take further commands as
+    // one that dropped off the network, and without this a controller would
+    // keep showing live transport controls for a target refusing every one
+    // of them. `notPlaying` is deliberately left out — Mydia's own backend
+    // treats it as a benign state to re-sync from, not a failure, and
+    // routing it here would raise an alarming "lost" bar for a non-event.
     _failureSub = _backend.failureStream.listen((failure) {
-      if (failure != CastFailureKind.connectionLost) return;
+      if (failure != CastFailureKind.connectionLost &&
+          failure != CastFailureKind.notAuthorized) {
+        return;
+      }
 
       final current = _current;
       if (current == null) return;
@@ -1127,19 +1711,22 @@ class CastSessionManager {
       return false;
     }
 
-    if (!await _receiverStillPlaying(stored)) {
+    final backend = _registry.forProtocol(stored.device.protocol);
+
+    if (!await _receiverStillPlaying(stored, backend)) {
       await _store.clear();
       return false;
     }
 
     try {
-      await _backend.connect(stored.device);
+      await backend.connect(stored.device);
     } catch (e) {
       debugPrint('[CastSessionManager] Reconnect failed: $e');
       await _store.clear();
       return false;
     }
 
+    _backend = backend;
     _persisted = stored;
 
     // The progress pump reads a CastLaunchRequest, not a PersistedCastSession
@@ -1170,7 +1757,7 @@ class CastSessionManager {
       // path token are new, and any HLS session id in the old URL is stale.
       // Re-resolve and reload at the stored position — a visible blip, which
       // the design accepts as the cost of the bridge path.
-      if (!await _reloadBridgeSession(stored, request)) {
+      if (!await _reloadBridgeSession(stored, request, backend)) {
         await _store.clear();
         return false;
       }
@@ -1190,10 +1777,13 @@ class CastSessionManager {
     return true;
   }
 
-  Future<bool> _receiverStillPlaying(PersistedCastSession stored) async {
+  Future<bool> _receiverStillPlaying(
+    PersistedCastSession stored,
+    CastBackend backend,
+  ) async {
     String? playing;
     try {
-      playing = await _backend.probeReceiverContentUrl(stored.device);
+      playing = await backend.probeReceiverContentUrl(stored.device);
     } catch (e) {
       debugPrint('[CastSessionManager] Receiver probe failed: $e');
       return false;
@@ -1218,9 +1808,18 @@ class CastSessionManager {
     return true;
   }
 
+  /// [backend] is `restoreSession`'s own resolved local, threaded through
+  /// rather than read off the shared `_backend` field: `restoreSession` runs
+  /// `unawaited` from app startup while the UI is already interactive (see
+  /// `app.dart`'s `_restoreCastSession`), so a user tapping cast during that
+  /// window is an ordinary concurrent connect, not a hypothetical — and the
+  /// catch block's `disconnect()` below must tear down only the backend this
+  /// restore itself connected, never a newer, user-chosen one that raced
+  /// ahead and committed to `_backend` in the meantime.
   Future<bool> _reloadBridgeSession(
     PersistedCastSession stored,
     CastLaunchRequest request,
+    CastBackend backend,
   ) async {
     final resolver = _resolverFactory();
     final startedHlsSessions = <String>[];
@@ -1238,7 +1837,7 @@ class CastSessionManager {
         return false;
       }
 
-      await _loadOnRoute(resolver, route, stored.device, request);
+      await _loadOnRoute(resolver, route, stored.device, request, backend);
       await _adoptHlsSession(route.hlsSessionId, startedHlsSessions);
       return true;
     } catch (e) {
@@ -1246,7 +1845,7 @@ class CastSessionManager {
       _cancelSubscriptions();
       await _abandonStart(false, startedHlsSessions);
       try {
-        await _backend.disconnect();
+        await backend.disconnect();
       } catch (_) {
         // Best effort: the restore has already failed.
       }
