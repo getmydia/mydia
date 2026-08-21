@@ -15,6 +15,15 @@ import '../../test_utils/stub_graphql_client.dart';
 class FakeTransport implements MydiaControlTransport {
   final Map<String, List<FlutterRemoteControlResponse>> scripted;
   final Set<String> unreachable;
+
+  /// Nodes that answer `Hello` normally (from [scripted]) but throw on the
+  /// discovery probe's follow-up `GetState` specifically — unlike
+  /// [unreachable], which fails every request including `Hello` itself. This
+  /// is what a target that Hello-succeeds but times out or errors on the
+  /// state fetch looks like: reachable, but its playback state genuinely
+  /// unknown.
+  final Set<String> getStateFails;
+
   final sent = <String>[];
 
   /// The actual request objects passed to [send], in order. `sent` only
@@ -23,7 +32,11 @@ class FakeTransport implements MydiaControlTransport {
   /// assert on the real field values instead.
   final requests = <FlutterRemoteControlRequest>[];
 
-  FakeTransport({this.scripted = const {}, this.unreachable = const {}});
+  FakeTransport({
+    this.scripted = const {},
+    this.unreachable = const {},
+    this.getStateFails = const {},
+  });
 
   @override
   Future<FlutterRemoteControlResponse> send(
@@ -34,6 +47,10 @@ class FakeTransport implements MydiaControlTransport {
     requests.add(request);
     if (unreachable.contains(nodeId)) {
       throw StateError('unreachable');
+    }
+    if (getStateFails.contains(nodeId) &&
+        request is FlutterRemoteControlRequest_GetState) {
+      throw StateError('getState failed');
     }
     final queue = scripted[nodeId];
     if (queue == null || queue.isEmpty) {
@@ -167,6 +184,35 @@ void main() {
       expect(devices.single.metadata.containsKey('nowPlayingTitle'), isFalse,
           reason: 'GetState succeeded but the target is not actively '
               'playing, so the fallback title never applies');
+    });
+
+    test(
+        'flags statusUnavailable when Hello succeeds but the GetState '
+        'follow-up fails', () async {
+      // Different from "omits a device that does not answer" below: this
+      // target IS reachable (Hello worked, so it stays listed), but its
+      // playback state genuinely could not be determined — a distinct claim
+      // from "confirmed not playing", which the picker's copy has to tell
+      // apart (see `cast_device_picker.dart`).
+      final transport = FakeTransport(
+        scripted: {
+          'node-tv': [_welcome],
+        },
+        getStateFails: {'node-tv'},
+      );
+
+      final backend = MydiaCastBackend(
+        roster: rosterOf([('d1', 'node-tv')]),
+        transport: transport,
+        selfNodeId: 'node-self',
+      );
+
+      final devices = await backend
+          .startDiscovery(capabilities: const CastCapabilities.full())
+          .first;
+
+      expect(devices.single.metadata.containsKey('nowPlayingTitle'), isFalse);
+      expect(devices.single.metadata['statusUnavailable'], 'true');
     });
 
     test('omits a device that does not answer', () async {

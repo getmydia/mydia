@@ -40,9 +40,37 @@ final castBackendProvider = Provider<CastBackend>((ref) {
 /// All three are already in place by the time a user reaches the cast
 /// picker in normal use — `_initRemoteControlIfEnabled` in app.dart starts
 /// the P2P host unconditionally at launch, independent of whether this
-/// device opts in to being controlled itself — so `null` here is a
+/// device opts in to being controlled itself — so `null` on first read is a
 /// first-run/timing gap, not a steady-state condition: Mydia targets simply
 /// do not appear yet.
+///
+/// That is not the only way this goes stale, though, and the other way *is*
+/// steady-state. `p2pServiceProvider` is a plain, permanent `Provider` — it
+/// is never invalidated, so `ref.watch` here never triggers a rebuild — yet
+/// the same `P2pService` instance's `host` can be swapped out from under it:
+/// `P2pStatusNotifier.reinitializeWithRelayUrl` (wired to the relay-URL
+/// field on `login_screen.dart`, reachable again any time auth is lost and
+/// the app falls back to that screen while a `CastSessionManager` built
+/// during an earlier authenticated session is still alive) calls
+/// `P2pService.reset()`, which nulls `_host` and rebuilds a new one via
+/// `initialize()` on that one long-lived service. Nothing observes that
+/// swap: whatever this provider last returned — including a
+/// `MydiaCastBackend` wrapping the *old*, now-abandoned `P2PHost` — keeps
+/// being handed out, and `castSessionManagerProvider` below reads this only
+/// once, baking the result into its `CastSessionManager`'s
+/// `CastBackendRegistry` for that manager's whole lifetime. The old host is
+/// never explicitly torn down either (the Rust side only drops it on GC),
+/// so the failure is silent: Mydia casting and discovery through the stale
+/// backend simply stop working, with nothing in the UI pointing at why.
+///
+/// A real fix needs `CastSessionManager` to re-resolve its Mydia backend
+/// live instead of capturing it once — which means changing what
+/// `CastBackendRegistry` holds — or, short of that, invalidating
+/// `castSessionManagerProvider` itself on every relay change, which would
+/// tear down *any* live cast session (Chromecast/DLNA included, not just
+/// Mydia) as a side effect of an unrelated P2P setting change. Both are
+/// bigger than this provider; noted here rather than silently patched
+/// half-way.
 ///
 /// Overridden in tests with a fake; the real construction path (a live iroh
 /// host, a real roster fetch) is not exercised by this build's test suite.
@@ -93,8 +121,12 @@ final castSessionManagerProvider =
     // *after* this provider has already built will not retroactively add
     // Mydia routing to this manager instance — see `mydiaCastBackendProvider`'s
     // dartdoc. In normal use the host is already up by the time anything
-    // needs a `CastSessionManager`, so this is a narrow startup-ordering gap,
-    // not a steady-state one.
+    // needs a `CastSessionManager`, so on first build this is a narrow
+    // startup-ordering gap. It stops being narrow the moment the P2P host is
+    // ever reset and rebuilt later in the same app session (relay URL
+    // changed while this manager was already alive) — see
+    // `mydiaCastBackendProvider`'s dartdoc for why that path is real and
+    // left as a known gap rather than fixed here.
     mydiaBackend: ref.read(mydiaCastBackendProvider),
     capabilities: ref.read(castCapabilitiesProvider),
     store: store,

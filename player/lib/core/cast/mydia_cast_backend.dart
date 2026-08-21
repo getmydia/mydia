@@ -172,7 +172,12 @@ class MydiaCastBackend implements CastBackend {
         metadata = {...metadata, 'nowPlayingTitle': state.field0.title};
       }
     } catch (_) {
-      // Hello worked; GetState failing is not worth losing the device over.
+      // Hello worked, so the target is genuinely reachable and stays listed
+      // (see `_probe`'s dartdoc) — but GetState failing here means we
+      // actually don't know what it's doing, which is a different claim
+      // than "confirmed idle". Flagged in metadata so the picker's copy
+      // ("Nothing playing" vs "Status unavailable") can tell the two apart.
+      metadata = {...metadata, 'statusUnavailable': 'true'};
     }
 
     return CastDevice(

@@ -294,7 +294,8 @@ class CastSessionManager {
   /// guards the equivalent local-playback restart the same way.
   bool _isRestartingForSeek = false;
 
-  /// Bumped at the start of every [connectTo] and by [stopCast].
+  /// Bumped at the start of every [connectTo] and [startCast], and by
+  /// [stopCast].
   ///
   /// `connectTo` awaits `_backend.connect(device)` with nothing else guarding
   /// against a second call landing while the first is still in flight — the
@@ -309,6 +310,17 @@ class CastSessionManager {
   /// no session yet for `stopCast`'s `disconnect()` to act on) and the
   /// connect would resurrect the bar up to 15s later; a double-pick left
   /// whichever connect resolved last in control with no way to stop it.
+  ///
+  /// `startCast` captures its own generation the same way and re-checks it in
+  /// its failure-rollback catch block, for the same reason: `_loadWithRetries`
+  /// awaits across a network round trip with nothing else guarding against a
+  /// `connectTo` (to a different device, possibly a different protocol) both
+  /// starting and finishing while this call is still failing to load. Without
+  /// the check, that failure's cleanup — `_cancelSubscriptions()` and
+  /// `_publish(null)` — would clobber the newer, already-published, unrelated
+  /// session the winning `connectTo` just installed, exactly the "phantom
+  /// disconnected while still connected" bug this field exists to prevent on
+  /// `connectTo`'s own path.
   int _connectGeneration = 0;
 
   /// Maps receiver-reported positions onto real media positions.
@@ -374,8 +386,10 @@ class CastSessionManager {
     // idle session over the one this call is about to load — and
     // `_listenForConnectionLoss`'s subscription setup would then tear down
     // the progress/state subscriptions this call installs via
-    // `_listenToBackend`.
-    _connectGeneration++;
+    // `_listenToBackend`. Captured into a local (see `_connectGeneration`'s
+    // dartdoc): this call's own failure-rollback catch block below re-checks
+    // it before touching any shared state, the same way `connectTo`'s does.
+    final generation = ++_connectGeneration;
 
     final resolver = _resolverFactory();
 
@@ -442,6 +456,7 @@ class CastSessionManager {
     try {
       loaded = await _loadWithRetries(
         resolver,
+        backend,
         route,
         device,
         request,
@@ -452,9 +467,22 @@ class CastSessionManager {
       // live, and the LAN proxy exposed would strand the app in a state
       // with no session but an active connection and (per the Security
       // requirement) a listener with no cast in progress.
-      _cancelSubscriptions();
+      //
+      // `_cancelSubscriptions()` and `_publish(null)` below only run when
+      // nothing has superseded this call while `_loadWithRetries` awaited
+      // above — the same `generation == _connectGeneration` ownership check
+      // `connectTo`'s own catch block uses. A concurrent `connectTo` (to a
+      // different device, possibly a different protocol) may already have
+      // published its own session and installed its own listeners by now,
+      // and this call's failure must not tear those down or null out that
+      // unrelated, newer session. `backend.disconnect()` just below is
+      // unconditional regardless: it always targets *this call's own*
+      // resolved backend local from `:415`, never whatever `_backend`
+      // currently points at, so it can never reach a backend this call did
+      // not itself connect (or reuse).
+      if (generation == _connectGeneration) _cancelSubscriptions();
       try {
-        await _backend.disconnect();
+        await backend.disconnect();
       } catch (e) {
         debugPrint(
             '[CastSessionManager] Ignoring disconnect error during rollback: $e');
@@ -465,8 +493,9 @@ class CastSessionManager {
       // prior `startCast` on this same device — would claim a connection
       // that no longer exists. That is exactly the stale "connected" state
       // this project exists to eliminate, so clear it unconditionally here,
-      // not only when the connection was reused.
-      _publish(null);
+      // not only when the connection was reused — but, as above, only when
+      // this call still owns whatever is currently published.
+      if (generation == _connectGeneration) _publish(null);
       rethrow;
     }
 
@@ -687,15 +716,21 @@ class CastSessionManager {
   ///      (see `DartCastBackend.failureKindFor`) — having ruled out the
   ///      former by trying the bridge, the codec explanation is the only
   ///      one left, regardless of why attempt 2 itself failed.
+  ///
+  /// [backend] is this call's own resolved backend local (see `startCast`'s
+  /// `:415`) threaded all the way down to [_loadOnRoute], never read off the
+  /// shared `_backend` field — a concurrent connect to a different device
+  /// could repoint that field before any of the awaits below settle.
   Future<CastRoute> _loadWithRetries(
     CastRouteResolver resolver,
+    CastBackend backend,
     CastRoute route,
     CastDevice device,
     CastLaunchRequest request,
     List<String> startedHlsSessions,
   ) async {
     try {
-      await _loadOnRoute(resolver, route, device, request);
+      await _loadOnRoute(resolver, route, device, request, backend);
       return route;
     } on CastBackendException catch (firstFailure) {
       final secondRoute = await _retryRouteFor(
@@ -709,7 +744,7 @@ class CastSessionManager {
       if (secondRoute == null) rethrow;
 
       try {
-        await _loadOnRoute(resolver, secondRoute, device, request);
+        await _loadOnRoute(resolver, secondRoute, device, request, backend);
         return secondRoute;
       } on CastBackendException {
         final isBridgeEscalationFromDirectMediaLoadFailed =
@@ -731,7 +766,7 @@ class CastSessionManager {
         debugPrint(
           '[CastSessionManager] Bridge retry also failed, retrying with TRANSCODE',
         );
-        await _loadOnRoute(resolver, transcodeRoute, device, request);
+        await _loadOnRoute(resolver, transcodeRoute, device, request, backend);
         return transcodeRoute;
       }
     }
@@ -857,11 +892,20 @@ class CastSessionManager {
     }
   }
 
+  /// [backend] is the caller's own resolved backend — from `startCast`'s
+  /// `:415` local, `_reloadBridgeSession`'s parameter, or (transitively)
+  /// `restoreSession`'s local — used here instead of the shared `_backend`
+  /// field for the same reason `_receiverStillPlaying` already takes one: a
+  /// concurrent connect elsewhere in the manager can repoint `_backend`
+  /// between when the caller started and when this method's own awaits
+  /// settle, and a load must land on the connection it actually resolved a
+  /// route for, not whatever the field currently names.
   Future<void> _loadOnRoute(
     CastRouteResolver resolver,
     CastRoute route,
     CastDevice device,
     CastLaunchRequest request,
+    CastBackend backend,
   ) async {
     // The route already rewrote every track to a URL its receiver can fetch,
     // and dropped them entirely when it cannot serve any. Reading them from
@@ -880,7 +924,7 @@ class CastSessionManager {
       totalDuration: request.duration,
     ));
 
-    await _backend.loadMedia(CastMediaRequest(
+    await backend.loadMedia(CastMediaRequest(
       url: route.mediaUrl,
       kind: route.mediaKind,
       title: request.title,
@@ -908,7 +952,7 @@ class CastSessionManager {
     // first track active while the UI (`CastSession.selectedSubtitle`) says
     // off would show the viewer a subtitle they were told is disabled.
     if (subtitles.isNotEmpty && _selectedSubtitle == null) {
-      await _backend.selectSubtitle(null);
+      await backend.selectSubtitle(null);
     }
 
     // What to carry forward as "the chosen id". When tracks were actually
@@ -1359,7 +1403,7 @@ class CastSessionManager {
       // path token are new, and any HLS session id in the old URL is stale.
       // Re-resolve and reload at the stored position — a visible blip, which
       // the design accepts as the cost of the bridge path.
-      if (!await _reloadBridgeSession(stored, request)) {
+      if (!await _reloadBridgeSession(stored, request, backend)) {
         await _store.clear();
         return false;
       }
@@ -1410,9 +1454,18 @@ class CastSessionManager {
     return true;
   }
 
+  /// [backend] is `restoreSession`'s own resolved local, threaded through
+  /// rather than read off the shared `_backend` field: `restoreSession` runs
+  /// `unawaited` from app startup while the UI is already interactive (see
+  /// `app.dart`'s `_restoreCastSession`), so a user tapping cast during that
+  /// window is an ordinary concurrent connect, not a hypothetical — and the
+  /// catch block's `disconnect()` below must tear down only the backend this
+  /// restore itself connected, never a newer, user-chosen one that raced
+  /// ahead and committed to `_backend` in the meantime.
   Future<bool> _reloadBridgeSession(
     PersistedCastSession stored,
     CastLaunchRequest request,
+    CastBackend backend,
   ) async {
     final resolver = _resolverFactory();
     final startedHlsSessions = <String>[];
@@ -1430,7 +1483,7 @@ class CastSessionManager {
         return false;
       }
 
-      await _loadOnRoute(resolver, route, stored.device, request);
+      await _loadOnRoute(resolver, route, stored.device, request, backend);
       await _adoptHlsSession(route.hlsSessionId, startedHlsSessions);
       return true;
     } catch (e) {
@@ -1438,7 +1491,7 @@ class CastSessionManager {
       _cancelSubscriptions();
       await _abandonStart(false, startedHlsSessions);
       try {
-        await _backend.disconnect();
+        await backend.disconnect();
       } catch (_) {
         // Best effort: the restore has already failed.
       }

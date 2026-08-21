@@ -2109,6 +2109,7 @@ void main() {
           ),
         ]),
       );
+      addTearDown(manager.dispose);
 
       final devices = await manager.discoveredDevices.first;
 
@@ -2153,6 +2154,83 @@ void main() {
       ));
 
       expect(chromecast.calls, contains('connect'));
+    });
+  });
+
+  group('startCast rollback across two backends', () {
+    test(
+        'a failing startCast on one backend must not disconnect or clobber '
+        'a connectTo that already won on a different backend', () async {
+      // The reviewer's live repro, reduced to a test: a `startCast` to a
+      // chromecast device whose loads all fail, racing a `connectTo` to a
+      // different (mydia) device that wins outright. Before this fix, the
+      // stale `startCast`'s failure-rollback catch block read the shared
+      // `_backend` field (by then repointed at the mydia backend) and called
+      // `_publish(null)`/`_cancelSubscriptions()` unconditionally — nulling
+      // out the live, unrelated mydia session and tearing down its just
+      // installed listeners.
+      final chromecastBackend = FakeCastBackend();
+      final mydiaBackend = FakeCastBackend();
+      final manager = buildManagerWithBackends(
+        chromecast: chromecastBackend,
+        mydia: mydiaBackend,
+      );
+      addTearDown(manager.dispose);
+
+      const ccDevice = CastDevice(
+        id: 'cc-1',
+        name: 'Living Room TV',
+        protocol: CastProtocolKind.chromecast,
+      );
+      const mydiaDevice = CastDevice(
+        id: 'node-tv',
+        name: 'Bedroom',
+        protocol: CastProtocolKind.mydia,
+        metadata: {'nodeId': 'node-tv'},
+      );
+
+      // Held at `connect` so the test controls exactly when the stale
+      // startCast resumes relative to the winning connectTo below, and every
+      // load fails so it is guaranteed to reach the rollback catch block —
+      // `unreachable` with no LAN base URL configured here means
+      // `_retryRouteFor` finds no bridge to fall back to and gives up after
+      // one attempt.
+      chromecastBackend.holdNextConnect();
+      chromecastBackend.failAllLoads(CastFailureKind.unreachable);
+
+      final started = manager.startCast(device: ccDevice, request: launch);
+      await Future<void>.delayed(Duration.zero);
+
+      // The concurrent, unrelated connectTo: a different device on a
+      // different backend, nothing superseding it, so it publishes a
+      // connected session outright.
+      await manager.connectTo(mydiaDevice);
+      expect(manager.currentSession?.device.id, mydiaDevice.id);
+      expect(manager.currentSession?.connectionState,
+          CastConnectionState.connected);
+
+      // Let the stale startCast's held connect proceed. It connects to the
+      // chromecast backend, fails to load, and hits its rollback catch block
+      // with `_backend` currently pointed at the mydia backend the connectTo
+      // above just committed.
+      chromecastBackend.releaseConnect();
+
+      await expectLater(started, throwsA(isA<CastBackendException>()));
+
+      expect(manager.currentSession?.device.id, mydiaDevice.id,
+          reason: 'the older, unrelated, failing startCast must not clobber '
+              'the newer, already-published connectTo session');
+      expect(manager.currentSession?.connectionState,
+          CastConnectionState.connected,
+          reason: 'the mydia session must still read as connected, not '
+              'nulled out by the stale rollback');
+      expect(mydiaBackend.disconnectCallCount, 0,
+          reason: 'the failing startCast must disconnect only the backend '
+              'it itself resolved and connected, never the unrelated '
+              'backend a concurrent connectTo committed to `_backend`');
+      expect(chromecastBackend.disconnectCallCount, 1,
+          reason: 'the stale startCast still tears down its own, actually '
+              'failed connection');
     });
   });
 }

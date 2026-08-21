@@ -278,11 +278,18 @@ class _ProtocolGroup extends StatelessWidget {
           // Mydia targets have no `model`; the discovery probe fetches what
           // they are playing instead (see `MydiaCastBackend`), which is what
           // makes this list read like Spotify's rather than a bare name.
-          // `nowPlayingTitle` is only ever populated for a target the probe
-          // caught mid-playback, so idle, paused, and probe-failed targets
-          // all share this fallback.
+          // `nowPlayingTitle` is only populated when the probe's follow-up
+          // `GetState` actually confirmed the target playing. When that
+          // follow-up fails or times out — the target answered `Hello` (it
+          // is reachable, so it stays listed) but never confirmed a state —
+          // `statusUnavailable` says so, and gets its own copy rather than
+          // being folded into "Nothing playing": that fallback is only
+          // honest for idle/paused targets whose state we actually know.
           final subtitle = device.protocol == CastProtocolKind.mydia
-              ? (device.metadata['nowPlayingTitle'] ?? 'Nothing playing')
+              ? (device.metadata['nowPlayingTitle'] ??
+                  (device.metadata['statusUnavailable'] == 'true'
+                      ? 'Status unavailable'
+                      : 'Nothing playing'))
               : device.model;
           return ListTile(
             key: Key('cast-device-${device.id}'),
