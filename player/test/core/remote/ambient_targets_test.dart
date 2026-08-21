@@ -243,6 +243,57 @@ void main() {
     });
 
     test(
+        'a sweep() arriving while backgrounded (e.g. the 30-second ambient '
+        'resweep timer in cast_providers.dart) does not repopulate held '
+        'targets or resume polling', () {
+      fakeAsync((async) {
+        final scripted = ScriptedProbe({
+          'node-tv': playingSnapshot(title: 'Blade Runner'),
+        });
+        final targets = AmbientTargets(
+          rosterSource: rosterOf(['node-tv']),
+          probe: scripted.call,
+        );
+
+        List<AmbientTarget>? latest;
+        targets.playing.listen((held) => latest = held);
+
+        unawaited(targets.sweep());
+        async.flushMicrotasks();
+        expect(latest?.map((t) => t.device.id), ['node-tv']);
+        expect(scripted.callCounts['node-tv'], 1);
+
+        targets.onBackground();
+        async.flushMicrotasks();
+        expect(latest, isEmpty);
+
+        // Simulate `ambientPlayingProvider`'s own resweep `Timer.periodic`,
+        // which keeps calling plain `sweep()` for as long as
+        // `CastMiniController` is mounted — i.e. permanently, background
+        // included — by firing `sweep()` again once that timer's interval
+        // has elapsed.
+        async.elapse(const Duration(seconds: 30));
+        unawaited(targets.sweep());
+        async.flushMicrotasks();
+
+        expect(scripted.callCounts['node-tv'], 1,
+            reason: 'a backgrounded sweep() must not even dial the roster, '
+                'let alone repopulate');
+        expect(latest, isEmpty,
+            reason: 'still dropped: the resweep must not have undone '
+                'onBackground()');
+
+        // No poll timer resumed either: elapsing another 5-second tick must
+        // not trigger any further probe calls.
+        async.elapse(const Duration(seconds: 5));
+        expect(scripted.callCounts['node-tv'], 1,
+            reason: 'no poll timer should have restarted');
+
+        targets.dispose();
+      });
+    });
+
+    test(
         'never calls probe again after dispose, even after a long elapsed time',
         () {
       fakeAsync((async) {

@@ -73,10 +73,25 @@ class AmbientTarget {
 /// never started" — the difference that lets a controller show "Playing on
 /// Living Room" without the user opening a picker first.
 ///
-/// Deliberately dumb about backgrounding: [onBackground] just drops every
-/// held connection outright. Recovery is the next [sweep] — expected to be
-/// fired by the caller on the next foreground transition — not a reconnect
-/// loop run from in here.
+/// [onBackground] drops every held connection outright; recovery is the
+/// next [sweep] — expected to be fired by the caller on the next foreground
+/// transition — not a reconnect loop run from in here.
+///
+/// That much is deliberately dumb, but the backgrounded state itself is
+/// authoritative here, not merely advisory: [sweep] is a no-op for as long
+/// as [onBackground] was the last transition heard, until [onForeground]
+/// says otherwise. This is what [AmbientLifecycleBinding]
+/// (`ambient_lifecycle.dart`) relies on to make its own foreground-recovery
+/// [sweep] call the *only* [sweep] that can repopulate [_held] while
+/// backgrounded — `ambientPlayingProvider`'s (`cast_providers.dart`) own
+/// 30-second resweep timer keeps calling plain `sweep()` for as long as
+/// `CastMiniController` holds a listener, which is permanently, background
+/// included, and without this guard that timer alone was enough to undo
+/// [onBackground] within half a minute: it repopulated [_held] and
+/// restarted the 5-second poll, defeating the entire point of dropping
+/// connections on background in the first place (unbounded p2p connection
+/// and polling cost behind a backgrounded window — exactly what the cap on
+/// held targets exists to prevent).
 class AmbientTargets {
   final AmbientRosterSource rosterSource;
   final AmbientNodeProbe probe;
@@ -86,6 +101,13 @@ class AmbientTargets {
   List<AmbientTarget> _held = const [];
   final _updates = StreamController<List<AmbientTarget>>.broadcast();
   Timer? _pollTimer;
+
+  /// Set by [onBackground], cleared by [onForeground]. While `true`,
+  /// [sweep] returns immediately without touching [rosterSource] or
+  /// [probe] at all — not just discarding the result — so a backgrounded
+  /// app pays no roster-wide dial cost no matter how often some other
+  /// timer calls [sweep].
+  bool _backgrounded = false;
 
   /// The currently held targets, replayed to every new listener before any
   /// later update. Without the replay, `await playing.first` right after
@@ -111,7 +133,11 @@ class AmbientTargets {
   /// This is the expensive operation: it dials the whole roster, the same
   /// shape as `MydiaCastBackend._discover`. The cap does not make *this*
   /// cheaper; see [_refreshHeld] for the operation it actually bounds.
+  ///
+  /// A no-op while [_backgrounded] — see the class doc for why that has to
+  /// be true regardless of which caller's timer is the one dialing this.
   Future<void> sweep() async {
+    if (_backgrounded) return;
     final ids = await rosterSource();
     final probed = await Future.wait(ids.map((id) async {
       final snapshot = await probe(id);
@@ -121,12 +147,23 @@ class AmbientTargets {
     _restartPolling();
   }
 
-  /// Drops every held connection immediately. Does not itself reconnect —
-  /// see the class doc; the next [sweep] is what recovers.
+  /// Drops every held connection immediately and marks [sweep] inert until
+  /// [onForeground] says otherwise. Does not itself reconnect — see the
+  /// class doc; the next [sweep] *after* [onForeground] is what recovers.
   void onBackground() {
+    _backgrounded = true;
     _pollTimer?.cancel();
     _pollTimer = null;
     _setHeld(const []);
+  }
+
+  /// Re-arms [sweep], undoing [onBackground]. Called by
+  /// [AmbientLifecycleBinding] immediately before the [sweep] it fires on a
+  /// genuine `resumed` transition — that ordering is what lets *that*
+  /// specific call through while every other caller's [sweep] keeps
+  /// no-oping for as long as [onBackground] was the last transition heard.
+  void onForeground() {
+    _backgrounded = false;
   }
 
   Future<void> dispose() async {

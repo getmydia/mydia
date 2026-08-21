@@ -134,6 +134,46 @@ void main() {
     });
 
     test(
+        "an external sweep() (e.g. ambientPlayingProvider's 30-second "
+        'resweep timer) while backgrounded does not undo onBackground()',
+        () async {
+      final scripted = ScriptedProbe({
+        'node-tv': playingSnapshot(title: 'Blade Runner'),
+      });
+      final targets = AmbientTargets(
+        rosterSource: rosterOf(['node-tv']),
+        probe: scripted.call,
+      );
+      addTearDown(targets.dispose);
+      final binding = AmbientLifecycleBinding(() => targets);
+
+      await targets.sweep();
+      expect(await targets.playing.first, isNotEmpty);
+
+      binding.handle(AppLifecycleState.paused);
+      expect(await targets.playing.first, isEmpty);
+
+      // Something other than the binding — in production,
+      // `ambientPlayingProvider`'s own resweep `Timer.periodic`
+      // (`cast_providers.dart`), which keeps firing for as long as
+      // `CastMiniController` holds a listener, background included — calls
+      // plain `sweep()` directly, bypassing the binding entirely.
+      await targets.sweep();
+
+      expect(await targets.playing.first, isEmpty,
+          reason: 'a stray sweep() from outside the binding must stay '
+              'inert while backgrounded, no matter which timer fired it');
+
+      // The binding itself must still recover normally afterwards.
+      binding.handle(AppLifecycleState.resumed);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(await targets.playing.first, isNotEmpty,
+          reason: 'ambient must still recover on the next genuine '
+              'foreground transition');
+    });
+
+    test(
         'a background arriving while a foreground sweep is still in flight '
         'wins: the late sweep does not leave connections open', () async {
       final probeCompleter = Completer<FlutterPlaybackSnapshot?>();

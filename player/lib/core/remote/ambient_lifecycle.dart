@@ -113,6 +113,13 @@ class AmbientLifecycleBinding {
   void _sweep() {
     final current = targets();
     if (current == null) return;
+    // Re-arm before firing: `AmbientTargets.sweep()` is a no-op for as long
+    // as it thinks the app is backgrounded (see that class's dartdoc), and
+    // this is the one call site allowed to undo that — every other caller
+    // of `sweep()` (namely `ambientPlayingProvider`'s 30-second resweep
+    // timer in `cast_providers.dart`) must keep no-oping through a
+    // background period no matter how many times it fires.
+    current.onForeground();
     unawaited(current.sweep().then((_) {
       // The app may have backgrounded again while this sweep was still in
       // flight (see `_foreground`'s dartdoc). Undo it rather than leaving a
