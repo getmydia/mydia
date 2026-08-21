@@ -83,11 +83,19 @@ final mydiaCastBackendProvider = Provider<CastBackend?>((ref) {
 
   if (host == null || selfNodeId == null || client == null) return null;
 
-  return MydiaCastBackend(
+  final backend = MydiaCastBackend(
     roster: RemoteRoster(client: client),
     transport: P2pControlTransport(host),
     selfNodeId: selfNodeId,
   );
+  // Every rebuild (the `client` this provider `watch`es changes on a token
+  // refresh, for one) constructs a fresh backend. Without this, the
+  // previous one is simply abandoned with five open `StreamController`s
+  // and, if it was connected, a live poll timer and interpolation ticker —
+  // nothing else ever cancels them. `ambientTargetsProvider` just below
+  // already follows this pattern for the same reason.
+  ref.onDispose(() => unawaited(backend.dispose()));
+  return backend;
 });
 
 /// How often the ambient sweep re-runs while something is watching
