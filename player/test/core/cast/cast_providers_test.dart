@@ -140,6 +140,61 @@ void main() {
     expect(container.read(castDiscoveryProvider).hasError, isFalse);
   });
 
+  test('castDiscoveryProvider also surfaces Mydia devices', () async {
+    final mydiaBackend = FakeCastBackend();
+    final container = ProviderContainer(overrides: [
+      castBackendProvider.overrideWithValue(backend),
+      mydiaCastBackendProvider.overrideWithValue(mydiaBackend),
+      castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
+      multicastLockProvider.overrideWithValue(lock),
+    ]);
+    addTearDown(container.dispose);
+
+    final sub = container.listen(castDiscoveryProvider, (_, __) {});
+    addTearDown(sub.close);
+    await Future<void>.delayed(Duration.zero);
+
+    backend.emitDevices(const [
+      CastDevice(id: 'cc-1', name: 'TV', protocol: CastProtocolKind.chromecast),
+    ]);
+    mydiaBackend.emitDevices(const [
+      CastDevice(id: 'node-1', name: 'Phone', protocol: CastProtocolKind.mydia),
+    ]);
+    await Future<void>.delayed(Duration.zero);
+
+    final devices = container.read(castDiscoveryProvider).value ?? const [];
+    expect(devices.map((d) => d.id), containsAll(['cc-1', 'node-1']));
+  });
+
+  test(
+      'castDiscoveryProvider still finds Mydia devices with no Chromecast/DLNA capability',
+      () async {
+    // Mirrors `MydiaCastBackend.startDiscovery`'s own dartdoc: a Mydia target
+    // is reached over the p2p host, not the platform's local-network
+    // entitlement, so it must not disappear on a build (e.g. web) that
+    // reports no other capability at all.
+    final mydiaBackend = FakeCastBackend();
+    final container = ProviderContainer(overrides: [
+      castBackendProvider.overrideWithValue(backend),
+      mydiaCastBackendProvider.overrideWithValue(mydiaBackend),
+      castCapabilitiesProvider.overrideWithValue(const CastCapabilities.web()),
+      multicastLockProvider.overrideWithValue(lock),
+    ]);
+    addTearDown(container.dispose);
+
+    final sub = container.listen(castDiscoveryProvider, (_, __) {});
+    addTearDown(sub.close);
+    await Future<void>.delayed(Duration.zero);
+
+    mydiaBackend.emitDevices(const [
+      CastDevice(id: 'node-1', name: 'Phone', protocol: CastProtocolKind.mydia),
+    ]);
+    await Future<void>.delayed(Duration.zero);
+
+    final devices = container.read(castDiscoveryProvider).value ?? const [];
+    expect(devices.map((d) => d.id), contains('node-1'));
+  });
+
   test('castCapabilitiesProvider yields no capability on web builds', () {
     final container = ProviderContainer(overrides: [
       castCapabilitiesProvider.overrideWithValue(const CastCapabilities.web()),

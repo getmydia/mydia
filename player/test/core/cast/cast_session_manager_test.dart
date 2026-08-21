@@ -3,6 +3,7 @@ import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:player/core/cast/cast_backend.dart';
+import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_route_resolver.dart';
 import 'package:player/core/cast/cast_session_manager.dart';
 import 'package:player/core/cast/cast_session_store.dart';
@@ -13,6 +14,99 @@ import 'package:player/graphql/mutations/update_episode_progress.graphql.dart';
 import '../../test_utils/fake_cast_backend.dart';
 import '../../test_utils/fake_streaming_session_service.dart';
 import 'cast_session_manager_test.mocks.dart';
+
+/// Minimal [CastBackend] double for the registry/dispatch tests in the
+/// 'multi-protocol routing' group below.
+///
+/// Deliberately smaller than [FakeCastBackend] (see
+/// `test/test_utils/fake_cast_backend.dart`), which the rest of this file
+/// uses for full protocol-lifecycle coverage. These tests only need to prove
+/// which backend a command reached, not exercise position/duration/failure
+/// streams, so a `calls` log and a static device list are enough.
+class FakeBackend implements CastBackend {
+  final List<CastDevice> devices;
+  final List<String> calls = [];
+
+  CastDevice? _connected;
+
+  FakeBackend({this.devices = const []});
+
+  @override
+  Stream<List<CastDevice>> startDiscovery({
+    required CastCapabilities capabilities,
+    Duration timeout = const Duration(seconds: 10),
+  }) =>
+      Stream.value(devices);
+
+  @override
+  void stopDiscovery() {}
+
+  @override
+  Future<void> connect(CastDevice device) async {
+    calls.add('connect');
+    _connected = device;
+  }
+
+  @override
+  Future<void> disconnect() async {
+    calls.add('disconnect');
+    _connected = null;
+  }
+
+  @override
+  Future<String?> probeReceiverContentUrl(CastDevice device) async => null;
+
+  @override
+  Future<void> loadMedia(CastMediaRequest request) async {
+    calls.add('loadMedia');
+  }
+
+  @override
+  Future<void> play() async => calls.add('play');
+
+  @override
+  Future<void> pause() async => calls.add('pause');
+
+  @override
+  Future<void> stop() async => calls.add('stop');
+
+  @override
+  Future<void> seek(Duration position) async => calls.add('seek');
+
+  @override
+  Future<void> selectSubtitle(CastSubtitleTrack? track) async =>
+      calls.add('selectSubtitle');
+
+  @override
+  Stream<CastPlaybackState> get stateStream => const Stream.empty();
+
+  @override
+  Stream<Duration> get positionStream => const Stream.empty();
+
+  @override
+  Stream<Duration> get durationStream => const Stream.empty();
+
+  @override
+  Stream<CastFailureKind> get failureStream => const Stream.empty();
+
+  @override
+  CastDevice? get connectedDevice => _connected;
+
+  @override
+  Future<void> setVolume(double level) async => calls.add('setVolume');
+
+  @override
+  Future<void> setMuted(bool muted) async => calls.add('setMuted');
+
+  @override
+  Stream<double> get volumeStream => const Stream.empty();
+
+  @override
+  CastCapabilityFlags get capabilities => const CastCapabilityFlags();
+
+  @override
+  Future<void> dispose() async {}
+}
 
 @GenerateMocks([GraphQLClient])
 void main() {
@@ -70,6 +164,44 @@ void main() {
             ? 'http://192.168.1.20:5000/g/abcd'
             : null;
       },
+      clock: () => DateTime.utc(2026, 7, 28, 12),
+    );
+  }
+
+  /// Wires a [CastSessionManager] with distinct backends per protocol, for
+  /// the 'multi-protocol routing' group below. Those tests cover discovery
+  /// merging and command dispatch — neither touches route resolution or
+  /// progress sync — so the resolver/streaming-session wiring here is a
+  /// minimal, self-contained stub rather than the shared `client`/`sessions`
+  /// fixtures every other test in this file uses.
+  CastSessionManager buildManagerWithBackends({
+    required CastBackend chromecast,
+    CastBackend? mydia,
+  }) {
+    final fakeClient = MockGraphQLClient();
+    when(fakeClient.mutate(any)).thenAnswer(
+      (_) async => QueryResult(
+        source: QueryResultSource.network,
+        data: const {},
+        options: QueryOptions(document: gql('{ __typename }')),
+      ),
+    );
+    final fakeSessions = FakeStreamingSessionService();
+
+    return CastSessionManager(
+      backend: chromecast,
+      mydiaBackend: mydia,
+      store: InMemoryCastSessionStore(),
+      progressService: ProgressService(fakeClient),
+      streamingSessions: fakeSessions,
+      resolverFactory: () => CastRouteResolver(
+        isP2pMode: false,
+        serverUrl: 'https://mydia.test',
+        mediaToken: () async => 'tok',
+        lanBaseUrl: () => null,
+        streamingSessions: fakeSessions,
+      ),
+      setLanAccess: (enabled) async {},
       clock: () => DateTime.utc(2026, 7, 28, 12),
     );
   }
@@ -365,6 +497,39 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 10));
 
       expect(manager.currentSession?.isStale, isTrue);
+    });
+
+    test('a revoked pairing (notAuthorized) also marks the session stale',
+        () async {
+      // A Mydia target that revokes this app mid-session cannot take any
+      // further commands, same as one that dropped off the network — without
+      // this the controller would keep showing live transport controls for a
+      // target refusing every one of them.
+      final manager = build();
+      addTearDown(manager.dispose);
+      await manager.startCast(device: device, request: launch);
+
+      backend.emitFailure(CastFailureKind.notAuthorized);
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(manager.currentSession?.isStale, isTrue);
+    });
+
+    test('notPlaying is left alone: not an error the UI needs to see',
+        () async {
+      // Mydia's own backend treats `notPlaying` as a benign state to
+      // re-sync from, not a failure. Routing it to the session state here
+      // would raise an alarming "lost" bar for a non-event.
+      final manager = build();
+      addTearDown(manager.dispose);
+      await manager.startCast(device: device, request: launch);
+      final before = manager.currentSession;
+
+      backend.emitFailure(CastFailureKind.notPlaying);
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(manager.currentSession?.connectionState, before?.connectionState);
+      expect(manager.currentSession?.isStale, isFalse);
     });
 
     test('keeps the stored session so it can be reconnected', () async {
@@ -1272,6 +1437,19 @@ void main() {
       expect(manager.currentSession?.connectionState, CastConnectionState.lost);
       expect(manager.currentSession?.isStale, isTrue);
     });
+
+    test('marks the session lost when the pairing is revoked (notAuthorized)',
+        () async {
+      final manager = build();
+      addTearDown(manager.dispose);
+
+      await manager.connectTo(device);
+      backend.emitFailure(CastFailureKind.notAuthorized);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(manager.currentSession?.connectionState, CastConnectionState.lost);
+      expect(manager.currentSession?.isStale, isTrue);
+    });
   });
 
   group('connectTo cancellation', () {
@@ -1908,6 +2086,73 @@ void main() {
       // request and the track assertion would prove nothing.
       expect(backend.loadedRequests, hasLength(2));
       expect(backend.loadedRequests.last.subtitles.first.trackId, '3');
+    });
+  });
+
+  group('multi-protocol routing', () {
+    test('merges Mydia targets into the same device list as Chromecast',
+        () async {
+      // One picker, three protocols. A second picker would be a worse UX and
+      // would duplicate the offline-row and reconnect behaviour this manager
+      // already has.
+      final manager = buildManagerWithBackends(
+        chromecast: FakeBackend(devices: [
+          const CastDevice(
+              id: 'cc-1', name: 'TV', protocol: CastProtocolKind.chromecast),
+        ]),
+        mydia: FakeBackend(devices: [
+          const CastDevice(
+            id: 'node-tv',
+            name: 'Living Room',
+            protocol: CastProtocolKind.mydia,
+            metadata: {'nodeId': 'node-tv'},
+          ),
+        ]),
+      );
+
+      final devices = await manager.discoveredDevices.first;
+
+      expect(devices.map((d) => d.protocol),
+          containsAll([CastProtocolKind.chromecast, CastProtocolKind.mydia]));
+    });
+
+    test('routes a command to the backend that owns the selected protocol',
+        () async {
+      final chromecast = FakeBackend(devices: const []);
+      final mydia = FakeBackend(devices: const []);
+      final manager =
+          buildManagerWithBackends(chromecast: chromecast, mydia: mydia);
+      addTearDown(manager.dispose);
+
+      await manager.connectTo(const CastDevice(
+        id: 'node-tv',
+        name: 'Living Room',
+        protocol: CastProtocolKind.mydia,
+        metadata: {'nodeId': 'node-tv'},
+      ));
+      await manager.pause();
+
+      expect(mydia.calls, contains('pause'));
+      expect(chromecast.calls, isEmpty);
+    });
+
+    test('a device with no distinct backend falls back to the primary one',
+        () async {
+      // A manager built with no Mydia backend at all (P2P not ready — see
+      // `mydiaCastBackendProvider`) must not crash on a Mydia device; it
+      // just cannot reach it, same as any other unreachable target.
+      final chromecast = FakeBackend(devices: const []);
+      final manager = buildManagerWithBackends(chromecast: chromecast);
+      addTearDown(manager.dispose);
+
+      await manager.connectTo(const CastDevice(
+        id: 'node-tv',
+        name: 'Living Room',
+        protocol: CastProtocolKind.mydia,
+        metadata: {'nodeId': 'node-tv'},
+      ));
+
+      expect(chromecast.calls, contains('connect'));
     });
   });
 }

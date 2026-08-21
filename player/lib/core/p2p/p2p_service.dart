@@ -247,6 +247,12 @@ class P2pService {
   /// This node's ID (PublicKey string)
   String? get nodeId => _nodeId;
 
+  /// The underlying host, for callers that need it directly rather than one
+  /// of this service's higher-level request wrappers — `MydiaCastBackend`'s
+  /// transport (see `cast_providers.dart`) sends `FlutterRemoteControlRequest`s
+  /// this service has no wrapper for. Null until [initialize] has completed.
+  P2PHost? get host => _host;
+
   /// Current P2P status (built from cached event data, no FFI calls)
   P2pStatus get status {
     final relayUrl = _getEffectiveRelayUrl();

@@ -7,7 +7,9 @@ import '../../domain/models/cast_device.dart';
 import '../connection/connection_provider.dart';
 import '../graphql/graphql_provider.dart';
 import '../p2p/local_proxy_service.dart';
+import '../p2p/p2p_service.dart';
 import '../player/progress_service.dart';
+import '../remote/remote_roster.dart';
 import 'cast_backend.dart';
 import 'cast_capabilities.dart';
 import 'cast_route_resolver.dart';
@@ -17,6 +19,7 @@ import 'cast_streaming_session_service.dart';
 import 'cast_target.dart';
 import 'dart_cast_backend.dart';
 import 'multicast_lock.dart';
+import 'mydia_cast_backend.dart';
 
 /// What this build can discover. Overridden in tests.
 final castCapabilitiesProvider = Provider<CastCapabilities>((ref) {
@@ -28,6 +31,34 @@ final castBackendProvider = Provider<CastBackend>((ref) {
   final backend = DartCastBackend();
   ref.onDispose(() => backend.dispose());
   return backend;
+});
+
+/// The Mydia peer-to-peer cast transport, or null until this device has a
+/// live P2P host, a resolved node ID, and a GraphQL client to look up the
+/// paired-device roster with.
+///
+/// All three are already in place by the time a user reaches the cast
+/// picker in normal use — `_initRemoteControlIfEnabled` in app.dart starts
+/// the P2P host unconditionally at launch, independent of whether this
+/// device opts in to being controlled itself — so `null` here is a
+/// first-run/timing gap, not a steady-state condition: Mydia targets simply
+/// do not appear yet.
+///
+/// Overridden in tests with a fake; the real construction path (a live iroh
+/// host, a real roster fetch) is not exercised by this build's test suite.
+final mydiaCastBackendProvider = Provider<CastBackend?>((ref) {
+  final p2pService = ref.watch(p2pServiceProvider);
+  final host = p2pService.host;
+  final selfNodeId = p2pService.nodeId;
+  final client = ref.watch(graphqlClientProvider);
+
+  if (host == null || selfNodeId == null || client == null) return null;
+
+  return MydiaCastBackend(
+    roster: RemoteRoster(client: client),
+    transport: P2pControlTransport(host),
+    selfNodeId: selfNodeId,
+  );
 });
 
 /// Android's multicast lock. Overridden in tests.
@@ -57,6 +88,15 @@ final castSessionManagerProvider =
 
   final manager = CastSessionManager(
     backend: ref.read(castBackendProvider),
+    // Same `read`-not-`watch` reasoning as the client above: this is
+    // captured once, at construction. A P2P host that finishes initializing
+    // *after* this provider has already built will not retroactively add
+    // Mydia routing to this manager instance — see `mydiaCastBackendProvider`'s
+    // dartdoc. In normal use the host is already up by the time anything
+    // needs a `CastSessionManager`, so this is a narrow startup-ordering gap,
+    // not a steady-state one.
+    mydiaBackend: ref.read(mydiaCastBackendProvider),
+    capabilities: ref.read(castCapabilitiesProvider),
     store: store,
     progressService: ProgressService(client),
     resolverFactory: () => CastRouteResolver(
@@ -98,9 +138,20 @@ final castSessionManagerProvider =
 final castDiscoveryProvider =
     StreamProvider.autoDispose<List<CastDevice>>((ref) {
   final backend = ref.watch(castBackendProvider);
+  final mydiaBackend = ref.watch(mydiaCastBackendProvider);
   final capabilities = ref.watch(castCapabilitiesProvider);
 
-  if (!capabilities.any) return Stream.value(const []);
+  // `capabilities` gates only the Chromecast/DLNA backend, matching
+  // `MydiaCastBackend.startDiscovery`'s own dartdoc: a Mydia target is
+  // reached over the already-connected p2p host, not the platform's
+  // local-network entitlement, so it stays in the sweep even on a build
+  // (e.g. web) with no other capability at all.
+  final backends = [
+    if (capabilities.any) backend,
+    if (mydiaBackend != null) mydiaBackend,
+  ];
+
+  if (backends.isEmpty) return Stream.value(const []);
 
   final lock = ref.watch(multicastLockProvider);
   unawaited(lock.acquire());
@@ -111,10 +162,8 @@ final castDiscoveryProvider =
   // empty network, and the picker's permission-denied branch never renders.
   final controller = StreamController<List<CastDevice>>();
 
-  final deviceSub = backend.startDiscovery(capabilities: capabilities).listen(
-        controller.add,
-        onError: controller.addError,
-      );
+  final deviceSub = mergeCastDiscovery(backends, capabilities: capabilities)
+      .listen(controller.add, onError: controller.addError);
 
   final failureSub = backend.failureStream
       .where((failure) => failure == CastFailureKind.discoveryDenied)
@@ -127,6 +176,7 @@ final castDiscoveryProvider =
 
   ref.onDispose(() {
     backend.stopDiscovery();
+    mydiaBackend?.stopDiscovery();
     unawaited(lock.release());
     unawaited(deviceSub.cancel());
     unawaited(failureSub.cancel());
