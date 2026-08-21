@@ -638,8 +638,7 @@ void main() {
 
     // Cleanup, matching the existing integration tests' pattern: replace the
     // app widget to stop pending async work before the test function
-    // returns.
-    await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump(const Duration(milliseconds: 100));
+    // returns. Settles first; see `unmountApp`.
+    await unmountApp(tester);
   }, timeout: const Timeout(Duration(minutes: 8)));
 }

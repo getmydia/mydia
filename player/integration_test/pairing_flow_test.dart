@@ -138,9 +138,11 @@ void main() {
       final pairingSucceeded = await waitForPairingComplete(tester);
 
       // Cleanup first - replace app widget to stop all pending async operations
-      // This prevents the "inTest is not true" error from async providers
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump(const Duration(milliseconds: 100));
+      // This prevents the "inTest is not true" error from async providers.
+      // Settles first: pairing has just authenticated, so the graphql client
+      // chain is mid-flight, and disposing the container while it loads throws
+      // out of unmount. See `unmountApp`.
+      await unmountApp(tester);
 
       // Now run assertions after cleanup
       expect(
