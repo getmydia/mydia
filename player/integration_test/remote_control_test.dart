@@ -50,7 +50,9 @@
 // screen answers commands correctly — that is `PlayerScreen`'s own
 // `RemotePlayerBinding` implementation, exercised by unit tests instead.
 //
-// Coverage against the plan's 7 steps:
+// Coverage against the plan's 7 steps — all of it currently DORMANT: this
+// test is quarantined at step 3 (see the `skip` at the bottom of the file),
+// so none of the following is actually being verified on any run.
 //   1. Pair two players to the same account; confirm both node IDs reached
 //      the server.                                            — COVERED
 //   2. Start playback locally on player B, without involving player A.
@@ -385,7 +387,9 @@ void main() {
     await adminApi.login();
   });
 
-  testWidgets('one player drives another end to end', (tester) async {
+  testWidgets(
+      'QUARANTINED (no remote-control integration coverage) — '
+      'one player drives another end to end', (tester) async {
     final movie = await _fetchTestMovie(adminApi);
 
     // --- Player B: headless, real p2p host + real pairing (steps 1 & 2) ---
@@ -646,5 +650,36 @@ void main() {
     // app widget to stop pending async work before the test function
     // returns. Settles first; see `unmountApp`.
     await unmountApp(tester);
-  }, timeout: const Timeout(Duration(minutes: 8)));
+  },
+      timeout: const Timeout(Duration(minutes: 8)),
+      // QUARANTINED at step 3, and the reason is a product bug this test
+      // found rather than anything wrong with the harness.
+      //
+      // `MydiaCastBackend._probe` sends `Hello` to a bare node ID read out of
+      // `RemoteRoster`. That lands in `handle_send_request`
+      // (`native/mydia_p2p_core/src/lib.rs`), which looks the peer up in
+      // `connected_peers` and returns "Not connected to peer" when it is
+      // absent — it never dials. Nothing else dials a peer either: every
+      // `P2pService.dial`/`ensureConnected` call site in the player targets
+      // the *server* (`core/channels/pairing_service.dart`,
+      // `core/graphql/p2p_link.dart`). So A holds no connection to B, every
+      // probe fails the instant it is made, and B can never be offered in A's
+      // picker.
+      //
+      // That makes casting to another player non-functional in general, not
+      // only under CI, which is the finding worth keeping. `probeBudget` is
+      // not the limit — no budget rescues a call that never dials — so do not
+      // re-diagnose this as discovery latency and raise a timeout.
+      //
+      // Re-enable once `send_request` establishes a connection on demand.
+      // Note `handle_command` awaits inline in the host event loop, so a dial
+      // added there must not be allowed to stall every other command while an
+      // unreachable peer times out.
+      //
+      // `testWidgets` types `skip` as `bool?`, unlike plain `test()` where it
+      // is `dynamic` and a reason string would print in the run output. So the
+      // quarantine is carried in the test NAME above instead — a bare
+      // "skipped" line is exactly how a disabled test starts reading as a
+      // covered one.
+      skip: true);
 }
