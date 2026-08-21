@@ -385,9 +385,7 @@ void main() {
     await adminApi.login();
   });
 
-  testWidgets(
-      'QUARANTINED (no remote-control integration coverage) — '
-      'one player drives another end to end', (tester) async {
+  testWidgets('one player drives another end to end', (tester) async {
     final movie = await _fetchTestMovie(adminApi);
 
     // --- Player B: headless, real p2p host + real pairing (steps 1 & 2) ---
@@ -465,6 +463,12 @@ void main() {
     // credentials in its own injected store, but clearing here rather than
     // earlier keeps the reset adjacent to the mount it exists to protect.
     await getAuthStorage().deleteAll();
+
+    // Registered before the mount so any of the seven steps below failing
+    // still tears the app down. This test has the most assertions of any
+    // suite, so it is the most likely to exit early; see `unmountApp` for why
+    // an un-settled teardown takes out every later suite.
+    addTearDown(() => unmountApp(tester));
 
     await tester.pumpWidget(const ProviderScope(child: MyApp()));
     final aClaimCode = await _generateClaimCode(adminApi, 'A');
@@ -640,51 +644,7 @@ void main() {
 
     // Cleanup, matching the existing integration tests' pattern: replace the
     // app widget to stop pending async work before the test function
-    // returns.
-    await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump(const Duration(milliseconds: 100));
-  },
-      timeout: const Timeout(Duration(minutes: 8)),
-      // SKIPPED, and not because of anything in this file.
-      //
-      // Three consecutive CI runs each died BEFORE this test's body ran, from
-      // three unrelated async-disposal races in the shared-isolate harness:
-      //   32455230401 — the process-wide AuthStorage left paired by
-      //                 pairing_flow_test.dart (fixed, 514236a54)
-      //   32458915516 — castSessionProvider, a StreamProvider disposed
-      //                 mid-load (fixed, ce65b7e25)
-      //   32464761435 — ConnectionNotifier._loadStoredState, disposed during
-      //                 its AuthStorage reads (fixed alongside this skip)
-      // None of the three was in this file, and the third died inside
-      // simple_test.dart, two suites earlier.
-      //
-      // The cause is structural rather than a run of bad luck. all_tests.dart
-      // runs every suite in ONE isolate, and this harness mounts and unmounts
-      // a real, fully-wired MyApp() repeatedly inside it — which production
-      // never does, since the app mounts once and lives for the session. That
-      // makes it an effective fuzzer for every provider in the app that starts
-      // async work after build() without an `ref.mounted` guard, and it finds
-      // a different one each run. `Future.microtask`/`scheduleMicrotask` under
-      // lib/core and lib/presentation still turns up several unaudited
-      // candidates, so a fourth run would most likely just find the next one
-      // rather than reach step 1 of this test.
-      //
-      // What this test would add over what already ships: proof that the
-      // pieces still agree once real bytes cross a real socket. The pieces
-      // themselves are unit-covered — RemoteControlReceiver,
-      // RemoteTargetController, MydiaCastBackend, and CastSessionManager's
-      // adoption fork all have their own suites. So this is a bounded,
-      // documented gap in integration coverage, not an untested feature.
-      //
-      // To re-enable: audit the app's async providers for the `ref.mounted`
-      // guard (the convention is already used in compatibility_provider.dart
-      // and login_controller.dart), or give each suite its own isolate. Then
-      // drop this `skip` and dispatch `CI / Player E2E` by hand — it does not
-      // run on pull requests, only on push to master.
-      // `testWidgets` types `skip` as `bool?`, unlike plain `test()` where it
-      // is `dynamic` and a reason string would print in the run output. So the
-      // quarantine is carried in the test NAME above instead — a bare
-      // "skipped" line is exactly how a disabled test starts reading as a
-      // covered one.
-      skip: true);
+    // returns. Settles first; see `unmountApp`.
+    await unmountApp(tester);
+  }, timeout: const Timeout(Duration(minutes: 8)));
 }

@@ -79,6 +79,16 @@ class UpdateNotifier extends Notifier<UpdateState> {
   Future<void> _initAndCheck() async {
     try {
       final info = await PackageInfo.fromPlatform();
+
+      // The container can be disposed while that read is in flight — `build`
+      // fires this off with an unawaited `Future.microtask`, so nothing holds
+      // the provider open for it. Same guard, same reason, as
+      // `connection_provider.dart` and `compatibility_provider.dart`. The
+      // catch below would swallow the UnmountedRefException today, but only
+      // by accident, and it would still be reported as an error the app
+      // cannot act on.
+      if (!ref.mounted) return;
+
       state = state.copyWith(currentVersion: info.version);
 
       // Skip auto-check on web
@@ -104,6 +114,11 @@ class UpdateNotifier extends Notifier<UpdateState> {
   }
 
   Future<void> _performCheck({required bool force}) async {
+    // Before the `try`, so the guards inside it do not cover this read and
+    // write. Reached unawaited from `_initAndCheck` and from
+    // `checkForUpdate`, either of which can resume after disposal.
+    if (!ref.mounted) return;
+
     if (state.isChecking) return;
 
     state = state.copyWith(isChecking: true, clearError: true);
@@ -114,12 +129,18 @@ class UpdateNotifier extends Notifier<UpdateState> {
         force: force,
       );
 
+      if (!ref.mounted) return;
+
       state = state.copyWith(
         availableUpdate: update,
         isChecking: false,
         clearUpdate: update == null,
       );
     } catch (e) {
+      // Guarded because a disposal that threw out of the try lands here and
+      // throws again from the handler, turning a caught error into an
+      // unhandled async one.
+      if (!ref.mounted) return;
       state = state.copyWith(
         isChecking: false,
         error: 'Failed to check for updates: $e',
@@ -129,22 +150,32 @@ class UpdateNotifier extends Notifier<UpdateState> {
 
   /// Download and apply the available update.
   Future<void> applyUpdate() async {
+    // Same reason as `_performCheck`: the reads and the write below sit
+    // outside the `try`.
+    if (!ref.mounted) return;
+
     final update = state.availableUpdate;
     if (update == null || _platformUpdater == null || state.isApplying) return;
 
-    state = state.copyWith(isApplying: true, downloadProgress: 0.0, clearError: true);
+    state = state.copyWith(
+        isApplying: true, downloadProgress: 0.0, clearError: true);
 
     try {
       await _platformUpdater.applyUpdate(
         update,
         onProgress: (progress) {
+          if (!ref.mounted) return;
           state = state.copyWith(downloadProgress: progress);
         },
       );
 
+      if (!ref.mounted) return;
+
       // If we get here, the updater didn't exit the process (e.g. macOS).
       state = state.copyWith(isApplying: false);
     } catch (e) {
+      // Same double-throw guard as `_performCheck`.
+      if (!ref.mounted) return;
       state = state.copyWith(
         isApplying: false,
         error: 'Update failed: $e',

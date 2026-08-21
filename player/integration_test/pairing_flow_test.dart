@@ -107,6 +107,11 @@ void main() {
           reason: 'E2E_CLAIM_CODE must be set via --dart-define');
       debugPrint('Using pre-generated claim code: $claimCode');
 
+      // Registered before the mount so a failure anywhere below still tears
+      // the app down. See `unmountApp` for why an un-settled teardown breaks
+      // every later suite in the shared isolate.
+      addTearDown(() => unmountApp(tester));
+
       // Launch the app using pumpWidget with proper Riverpod scope
       await tester.pumpWidget(
         const ProviderScope(
@@ -138,9 +143,11 @@ void main() {
       final pairingSucceeded = await waitForPairingComplete(tester);
 
       // Cleanup first - replace app widget to stop all pending async operations
-      // This prevents the "inTest is not true" error from async providers
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump(const Duration(milliseconds: 100));
+      // This prevents the "inTest is not true" error from async providers.
+      // Settles first: pairing has just authenticated, so the graphql client
+      // chain is mid-flight, and disposing the container while it loads throws
+      // out of unmount. See `unmountApp`.
+      await unmountApp(tester);
 
       // Now run assertions after cleanup
       expect(

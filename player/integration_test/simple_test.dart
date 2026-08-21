@@ -28,12 +28,15 @@ void main() {
   setUpAll(ensureTestBootstrap);
   testWidgets('App boots with the native bridge initialized',
       (WidgetTester tester) async {
+    // Registered before the mount, not called at the end of the body: a
+    // failing expect below would skip a terminal call, leaving the app mounted
+    // for the framework to dispose later, which is the exact teardown this
+    // helper exists to make safe.
+    addTearDown(() => unmountApp(tester));
+
     await tester.pumpWidget(const ProviderScope(child: MyApp()));
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(find.byType(MaterialApp), findsOneWidget);
-
-    await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump(const Duration(milliseconds: 100));
   });
 }
