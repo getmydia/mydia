@@ -84,7 +84,19 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
   @override
   Widget build(BuildContext context) {
     final capabilities = ref.watch(castCapabilitiesProvider);
-    if (!capabilities.any) return const SizedBox.shrink();
+    // `capabilities` describes only Chromecast/DLNA platform entitlement.
+    // A Mydia target needs none of that — it is reached over the
+    // already-connected p2p host, not the platform's local-network
+    // discovery — so `castDiscoveryProvider` and `cast_device_picker.dart`
+    // both already keep it ungated for the same reason (see
+    // `castDiscoveryProvider`'s own dartdoc in `cast_providers.dart`).
+    // Gating the whole bar on `capabilities.any` alone means this never
+    // mounts on a build with no other capability at all — Flutter Web,
+    // `ambient_lifecycle.dart` names as this app's primary deployment —
+    // which would make both the ambient "Playing on X" banner and the
+    // pull-to-local button unreachable there.
+    final hasMydia = ref.watch(mydiaCastBackendProvider) != null;
+    if (!capabilities.any && !hasMydia) return const SizedBox.shrink();
 
     // Gate on authentication before touching anything else in the cast stack.
     // `isCastingProvider` reaches `castSessionManagerProvider`, whose body

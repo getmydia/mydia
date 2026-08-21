@@ -950,6 +950,80 @@ void main() {
     });
   });
 
+  group('capability gate', () {
+    testWidgets(
+        'renders nothing on a build with no Chromecast/DLNA capability and '
+        'no Mydia backend either', (tester) async {
+      final container = ProviderContainer(overrides: [
+        castCapabilitiesProvider
+            .overrideWithValue(const CastCapabilities.web()),
+        authStateProvider.overrideWith(() =>
+            _FakeAuthNotifier(const AsyncValue.data(AuthStatus.authenticated))),
+        asyncGraphqlClientProvider
+            .overrideWith((ref) => Completer<GraphQLClient>().future),
+        castSessionProvider.overrideWith((ref) => Stream.value(null)),
+        ambientPlayingProvider.overrideWith((ref) => Stream.value(const [])),
+      ]);
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: Scaffold(body: CastMiniController())),
+      ));
+      await tester.pump();
+
+      expect(find.byType(CastMiniController), findsOneWidget,
+          reason: 'the widget itself always mounts');
+      expect(tester.getSize(find.byType(CastMiniController)), Size.zero,
+          reason: 'with no capability and no Mydia backend, it renders '
+              'nothing — the pre-fix baseline this test pins');
+    });
+
+    testWidgets(
+        'still mounts on a build with no Chromecast/DLNA capability when a '
+        'Mydia backend is available (e.g. Flutter Web)', (tester) async {
+      final ambientTarget = AmbientTarget(
+        device: const CastDevice(
+          id: 'node-tv',
+          name: 'node-tv',
+          protocol: CastProtocolKind.mydia,
+        ),
+        snapshot: _snapshot(title: 'Arrival', mediaItemId: 'movie-9'),
+      );
+
+      final container = ProviderContainer(overrides: [
+        // A Mydia target needs no Chromecast/DLNA entitlement — this is
+        // exactly the web build `ambient_lifecycle.dart` names as this
+        // app's primary deployment.
+        castCapabilitiesProvider
+            .overrideWithValue(const CastCapabilities.web()),
+        mydiaCastBackendProvider.overrideWithValue(FakeMydiaCastBackend()),
+        authStateProvider.overrideWith(() =>
+            _FakeAuthNotifier(const AsyncValue.data(AuthStatus.authenticated))),
+        asyncGraphqlClientProvider
+            .overrideWith((ref) => Completer<GraphQLClient>().future),
+        castSessionProvider.overrideWith((ref) => Stream.value(null)),
+        ambientPlayingProvider
+            .overrideWith((ref) => Stream.value([ambientTarget])),
+        remoteDeviceNamesProvider
+            .overrideWith((ref) async => {'node-tv': 'Living Room'}),
+      ]);
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: Scaffold(body: CastMiniController())),
+      ));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Playing on Living Room'), findsOneWidget,
+          reason: 'the ambient banner must be reachable on a build with no '
+              'platform cast capability at all, since Mydia targets do not '
+              'need one');
+    });
+  });
+
   group('cast bar ambient banner', () {
     testWidgets('shows nothing when nothing is playing ambiently',
         (tester) async {
