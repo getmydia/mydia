@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cast/cast_backend.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/mydia_cast_backend.dart';
+import 'package:player/core/remote/remote_control_protocol.dart';
 import 'package:player/core/remote/remote_roster.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/native/lib.dart';
@@ -76,6 +77,23 @@ class _SlowTransport implements MydiaControlTransport {
     FlutterRemoteControlRequest request,
   ) =>
       Future.delayed(delay, () => response);
+}
+
+/// A transport that answers `Hello` with [_welcome] immediately, but every
+/// other request hangs on [pending] until the test completes it — for
+/// simulating a response landing after the caller has already moved on
+/// (e.g. `dispose()`).
+class _StallingTransport implements MydiaControlTransport {
+  final pending = Completer<FlutterRemoteControlResponse>();
+
+  @override
+  Future<FlutterRemoteControlResponse> send(
+    String nodeId,
+    FlutterRemoteControlRequest request,
+  ) async {
+    if (request is FlutterRemoteControlRequest_Hello) return _welcome;
+    return pending.future;
+  }
 }
 
 /// A [FlutterPlaybackSnapshot] with sensible defaults for every required
@@ -279,6 +297,213 @@ void main() {
       // An app that is closed is genuinely not controllable. Saying so is the
       // honest picker the design asks for.
       expect(devices, isEmpty);
+    });
+  });
+
+  group('MydiaCastBackend connect', () {
+    test(
+        'throws and clears connectedDevice when Hello is answered with '
+        'NotAuthorized, and never starts a poll timer', () {
+      fakeAsync((async) {
+        final transport = FakeTransport(scripted: {
+          'node-tv': [const FlutterRemoteControlResponse_NotAuthorized()],
+        });
+        final backend = MydiaCastBackend(
+          roster: rosterOf([('d1', 'node-tv')]),
+          transport: transport,
+          selfNodeId: 'node-self',
+        );
+
+        Object? caught;
+        unawaited(backend.connect(_connectedDevice).catchError((e) {
+          caught = e;
+        }));
+        async.flushMicrotasks();
+
+        expect(caught, isA<CastBackendException>(),
+            reason: 'a refused Hello must fail connect(), not silently '
+                'commit a connected session');
+        expect(
+          (caught as CastBackendException).kind,
+          CastFailureKind.notAuthorized,
+        );
+        expect(backend.connectedDevice, isNull,
+            reason: 'a refused Hello must not leave connectedDevice naming '
+                'a target that refused this device');
+
+        // No poll timer was ever armed against the refusing target:
+        // elapsing well past both poll cadences (1s visible, 5s background)
+        // must produce no further sends at all.
+        async.elapse(const Duration(seconds: 10));
+        expect(
+          transport.sent.where((s) => s.contains('GetState')),
+          isEmpty,
+          reason: 'connect must not start polling a target that refused us',
+        );
+
+        backend.dispose();
+      });
+    });
+
+    test('throws CastBackendException for any other non-Welcome answer too',
+        () async {
+      final transport = FakeTransport(scripted: {
+        'node-tv': [const FlutterRemoteControlResponse_Error('boom')],
+      });
+      final backend = MydiaCastBackend(
+        roster: rosterOf([('d1', 'node-tv')]),
+        transport: transport,
+        selfNodeId: 'node-self',
+      );
+
+      await expectLater(
+        backend.connect(_connectedDevice),
+        throwsA(isA<CastBackendException>()),
+      );
+      expect(backend.connectedDevice, isNull);
+    });
+
+    test('clears connectedDevice when the transport itself throws on Hello',
+        () async {
+      final transport = FakeTransport(unreachable: {'node-tv'});
+      final backend = MydiaCastBackend(
+        roster: rosterOf([('d1', 'node-tv')]),
+        transport: transport,
+        selfNodeId: 'node-self',
+      );
+
+      await expectLater(
+        backend.connect(_connectedDevice),
+        throwsA(isA<CastBackendException>()),
+      );
+      expect(backend.connectedDevice, isNull,
+          reason: 'a target the transport never reached must not be named '
+              'as connected');
+    });
+
+    test('succeeds and starts polling when Hello answers Welcome', () {
+      fakeAsync((async) {
+        final transport = FakeTransport(scripted: {
+          'node-tv': [_welcome],
+        });
+        final backend = MydiaCastBackend(
+          roster: rosterOf([('d1', 'node-tv')]),
+          transport: transport,
+          selfNodeId: 'node-self',
+        );
+
+        unawaited(backend.connect(_connectedDevice));
+        async.flushMicrotasks();
+
+        expect(backend.connectedDevice, _connectedDevice);
+
+        async.elapse(const Duration(seconds: 1));
+        expect(
+          transport.sent.where((s) => s.contains('GetState')),
+          hasLength(1),
+          reason: 'a successful connect must still start the poll timer',
+        );
+
+        backend.dispose();
+      });
+    });
+
+    test(
+        'throws and clears connectedDevice when Welcome reports an '
+        'incompatible protocol version', () async {
+      final transport = FakeTransport(scripted: {
+        'node-tv': [
+          const FlutterRemoteControlResponse_Welcome(
+            targetName: 'Living Room',
+            // One past whatever this build actually speaks — not hardcoded
+            // to a literal, so this stays a mismatch even if
+            // `remoteControlProtocolVersion` is ever bumped.
+            protocolVersion: remoteControlProtocolVersion + 1,
+            capabilities: FlutterTargetCapabilities(
+              volume: true,
+              trackSelection: true,
+              nextPrevious: false,
+            ),
+          ),
+        ],
+      });
+      final backend = MydiaCastBackend(
+        roster: rosterOf([('d1', 'node-tv')]),
+        transport: transport,
+        selfNodeId: 'node-self',
+      );
+
+      await expectLater(
+        backend.connect(_connectedDevice),
+        throwsA(isA<CastBackendException>()),
+      );
+      expect(backend.connectedDevice, isNull,
+          reason: 'a protocol mismatch must not be recorded as a live, '
+              'connected session');
+    });
+
+    test(
+        'discovery does not offer a target reporting an incompatible '
+        'protocol version', () async {
+      final transport = FakeTransport(scripted: {
+        'node-old': [
+          const FlutterRemoteControlResponse_Welcome(
+            targetName: 'Old Build',
+            protocolVersion: remoteControlProtocolVersion + 1,
+            capabilities: FlutterTargetCapabilities(
+              volume: true,
+              trackSelection: true,
+              nextPrevious: false,
+            ),
+          ),
+        ],
+      });
+      final backend = MydiaCastBackend(
+        roster: rosterOf([('d1', 'node-old')]),
+        transport: transport,
+        selfNodeId: 'node-self',
+      );
+
+      final devices = await backend
+          .startDiscovery(capabilities: const CastCapabilities.full())
+          .first;
+
+      expect(devices, isEmpty);
+    });
+  });
+
+  group('MydiaCastBackend dispose', () {
+    test(
+        'a command answer landing after dispose does not throw on the '
+        'closed streams', () async {
+      final transport = _StallingTransport();
+      final backend = MydiaCastBackend(
+        roster: rosterOf([('d1', 'node-tv')]),
+        transport: transport,
+        selfNodeId: 'node-self',
+      );
+
+      await backend.connect(_connectedDevice);
+
+      // `play()` sends the Play command through `_sendCommand` -> `_send`,
+      // which now hangs on `transport.pending` until this test completes it
+      // below — simulating a response landing after `dispose()` has already
+      // closed every stream controller.
+      final playFuture = backend.play();
+
+      await backend.dispose();
+
+      // Without the `_disposed` guard, completing this makes
+      // `_sendCommand`'s `_handleResponse` call `_states.add`/... on a
+      // closed `StreamController`, throwing `StateError: Cannot add new
+      // events after calling close` — which surfaces as an error on
+      // `playFuture` since `_handleResponse` runs outside `_sendCommand`'s
+      // own try/catch.
+      transport.pending.complete(FlutterRemoteControlResponse_State(
+        _snapshot(),
+      ));
+
+      await expectLater(playFuture, completes);
     });
   });
 

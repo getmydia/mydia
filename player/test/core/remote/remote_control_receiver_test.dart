@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/remote/remote_control_intent.dart';
+import 'package:player/core/remote/remote_control_protocol.dart';
 import 'package:player/core/remote/remote_control_receiver.dart';
 import 'package:player/core/remote/remote_roster.dart';
 import 'package:player/native/lib.dart';
@@ -104,6 +105,29 @@ void main() {
       expect(welcome.targetName, 'Living Room');
       expect(welcome.capabilities.volume, isTrue);
       expect(intents, isEmpty, reason: 'Hello is not a playback action');
+    });
+
+    test(
+        "Welcome reports this target's own protocol version, not the "
+        "controller's", () async {
+      final receiver =
+          build(allowed: ['node-controller'], snapshot: playingSnapshot());
+
+      // A controller claiming a wildly different version than this build
+      // actually speaks — proving the response is not simply echoing
+      // `request.protocolVersion` back.
+      await receiver.handle(inbound(
+        'node-controller',
+        const FlutterRemoteControlRequest_Hello(
+          controllerName: 'iPhone',
+          protocolVersion: 999,
+        ),
+      ));
+
+      final welcome = responses.single as FlutterRemoteControlResponse_Welcome;
+      expect(welcome.protocolVersion, remoteControlProtocolVersion,
+          reason: 'echoing the request would make a real version mismatch '
+              'permanently invisible to the controller');
     });
 
     test('refuses a peer that is not in the roster', () async {

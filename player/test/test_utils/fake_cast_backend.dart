@@ -240,6 +240,14 @@ class FakeMydiaCastBackend extends FakeCastBackend
   @override
   FlutterPlaybackSnapshot? lastSnapshot;
 
+  /// When [lastSnapshot] was "captured" — settable directly, rather than
+  /// stamped automatically, so a test can place it an exact, arbitrary
+  /// distance behind whatever fixed clock the manager under test was built
+  /// with. Null by default, matching the real backend before anything has
+  /// been polled.
+  @override
+  DateTime? lastSnapshotAt;
+
   /// What [lastSnapshot] becomes the instant [pause] is called — mirroring
   /// how the real backend's follow-up poll (after `pause`, or after `stop`,
   /// or the `disconnect` `CastSessionManager.stopCast` always issues right

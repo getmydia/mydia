@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 
 import '../../native/lib.dart';
 import 'remote_control_intent.dart';
+import 'remote_control_protocol.dart';
 import 'remote_roster.dart';
 
 /// Current playback state, or null when no player is mounted.
@@ -58,7 +59,13 @@ class RemoteControlReceiver {
         inbound.requestId,
         FlutterRemoteControlResponse_Welcome(
           targetName: _targetName,
-          protocolVersion: request.protocolVersion,
+          // This target's own version, not `request.protocolVersion`
+          // echoed back. Echoing would make a real mismatch invisible: the
+          // controller's own request would always come back unchanged
+          // regardless of what this build actually understands, and
+          // `MydiaCastBackend.connect` relies on this field to reject an
+          // incompatible target rather than silently connect to one.
+          protocolVersion: remoteControlProtocolVersion,
           capabilities: _capabilities(),
         ),
       );

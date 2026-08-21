@@ -2,15 +2,13 @@ import 'dart:async';
 
 import '../../domain/models/cast_device.dart';
 import '../../native/lib.dart';
+import '../remote/remote_control_protocol.dart';
 import '../remote/remote_roster.dart';
 import 'cast_backend.dart';
 import 'cast_capabilities.dart';
 
 /// The controller-facing name this app hands a Mydia target on `Hello`.
 const _controllerName = 'Mydia Player';
-
-/// The remote-control protocol version this build speaks.
-const _protocolVersion = 1;
 
 /// How the poll timer refreshes state while the remote UI is on screen.
 const _visiblePollInterval = Duration(seconds: 1);
@@ -70,6 +68,20 @@ abstract class MydiaSnapshotSource {
   /// [CastBackend.positionStream] republishes between polls. Null before the
   /// first one has landed.
   FlutterPlaybackSnapshot? get lastSnapshot;
+
+  /// When [lastSnapshot] was actually captured — the same timestamp
+  /// [MydiaCastBackend._positionAt] projects [CastBackend.positionStream]
+  /// forward from between real polls. Null exactly when [lastSnapshot] is:
+  /// nothing has been polled yet.
+  ///
+  /// Exposed alongside [lastSnapshot], rather than folded into a pre-projected
+  /// position on this interface, because only a *playing* snapshot should
+  /// ever be projected forward — [CastSessionManager.pullToLocal] is the one
+  /// caller so far that needs this distinction; a plain position field here
+  /// would force every other reader (the adoption backfill in
+  /// `_applyAdoptedSnapshotExtras`) to reason about whether it was looking at
+  /// a moving or a frozen number.
+  DateTime? get lastSnapshotAt;
 }
 
 /// The production transport: wraps [P2PHost.sendRemoteControlRequest].
@@ -141,6 +153,14 @@ class MydiaCastBackend implements CastBackend, MydiaSnapshotSource {
 
   bool _remoteUiVisible = true;
 
+  /// Set once by [dispose], before the stream controllers are closed.
+  /// [_send]/[_pollOnce]/[_sendCommand] can still be mid-flight when
+  /// [dispose] runs — the transport call they are awaiting has no way to be
+  /// cancelled — so every site that would otherwise `add` to a controller
+  /// after a `dispose` races it must check this first rather than throw
+  /// `StateError: Cannot add new events after calling close`.
+  bool _disposed = false;
+
   /// Whether the remote-control screen is currently on screen. Not part of
   /// [CastBackend] — nothing outside this backend needs it — but settable so
   /// a future caller (the remote UI itself, or ambient background handling)
@@ -191,11 +211,16 @@ class MydiaCastBackend implements CastBackend, MydiaSnapshotSource {
       entry.nodeId,
       const FlutterRemoteControlRequest.hello(
         controllerName: _controllerName,
-        protocolVersion: _protocolVersion,
+        protocolVersion: remoteControlProtocolVersion,
       ),
     );
 
     if (hello is! FlutterRemoteControlResponse_Welcome) return null;
+    // A target that speaks a different protocol revision cannot honestly be
+    // offered as connectable — `connect()` would refuse it anyway (see its
+    // own check below), so it is simplest not to list it in the first
+    // place.
+    if (hello.protocolVersion != remoteControlProtocolVersion) return null;
 
     var metadata = {'nodeId': entry.nodeId};
 
@@ -251,11 +276,60 @@ class MydiaCastBackend implements CastBackend, MydiaSnapshotSource {
     _lastSnapshot = null;
     _lastSnapshotAt = null;
 
-    final response = await _send(const FlutterRemoteControlRequest.hello(
-      controllerName: _controllerName,
-      protocolVersion: _protocolVersion,
-    ));
+    final FlutterRemoteControlResponse response;
+    try {
+      response = await _send(const FlutterRemoteControlRequest.hello(
+        controllerName: _controllerName,
+        protocolVersion: remoteControlProtocolVersion,
+      ));
+    } catch (_) {
+      // `_send` already reported this on `failureStream` and rethrew a
+      // `CastBackendException`. This call must not leave `connectedDevice`
+      // naming a target the round trip never actually reached.
+      _connectedNodeId = null;
+      _connected = null;
+      rethrow;
+    }
+
+    if (response is! FlutterRemoteControlResponse_Welcome) {
+      // The target answered but refused this device (`NotAuthorized`) or
+      // sent something else entirely. `_probeSequence` already treats
+      // anything but `Welcome` as "not offered" on the discovery path;
+      // `connect` needs the same bar — otherwise a refusal here would be
+      // recorded as a live, connected session, complete with a poll timer
+      // dialing a target that just said no.
+      _connectedNodeId = null;
+      _connected = null;
+      final kind = response is FlutterRemoteControlResponse_NotAuthorized
+          ? CastFailureKind.notAuthorized
+          : CastFailureKind.unknown;
+      if (!_disposed) _failures.add(kind);
+      throw CastBackendException(
+        'The Mydia target refused this device.',
+        kind,
+      );
+    }
+
+    if (response.protocolVersion != remoteControlProtocolVersion) {
+      // A `Welcome` from a target speaking a different protocol revision.
+      // Reported version, not echoed: `RemoteControlReceiver.handle`
+      // answers with what the target itself speaks, so this genuinely
+      // reflects a mismatch rather than trivially matching whatever this
+      // build just sent.
+      _connectedNodeId = null;
+      _connected = null;
+      if (!_disposed) _failures.add(CastFailureKind.unknown);
+      throw CastBackendException(
+        'The Mydia target speaks protocol version '
+        '${response.protocolVersion}, not $remoteControlProtocolVersion.',
+        CastFailureKind.unknown,
+      );
+    }
+
     _everConnected = true;
+    // `dispose` cannot cancel this in-flight `_send`; if it raced this call
+    // to completion, there is nothing left to update or poll.
+    if (_disposed) return;
     _handleResponse(response);
     _startPolling();
   }
@@ -378,7 +452,11 @@ class MydiaCastBackend implements CastBackend, MydiaSnapshotSource {
   FlutterPlaybackSnapshot? get lastSnapshot => _lastSnapshot;
 
   @override
+  DateTime? get lastSnapshotAt => _lastSnapshotAt;
+
+  @override
   Future<void> dispose() async {
+    _disposed = true;
     _pollTimer?.cancel();
     _positionTicker?.cancel();
     await _states.close();
@@ -432,13 +510,16 @@ class MydiaCastBackend implements CastBackend, MydiaSnapshotSource {
       final kind = _everConnected
           ? CastFailureKind.connectionLost
           : CastFailureKind.unreachable;
-      _failures.add(kind);
+      if (!_disposed) _failures.add(kind);
       throw CastBackendException(
           'Could not reach the Mydia target: $error', kind);
     }
   }
 
   void _handleResponse(FlutterRemoteControlResponse response) {
+    // `dispose` cannot cancel an in-flight `_send`/`_pollOnce`; a response
+    // landing after it must not write to the now-closed controllers below.
+    if (_disposed) return;
     switch (response) {
       case FlutterRemoteControlResponse_Welcome(:final capabilities):
         _capabilities = CastCapabilityFlags(
@@ -502,6 +583,7 @@ class MydiaCastBackend implements CastBackend, MydiaSnapshotSource {
   }
 
   void _applySnapshot(FlutterPlaybackSnapshot snapshot) {
+    if (_disposed) return;
     final lastSequence = _lastSequence;
     if (lastSequence != null && snapshot.sequence <= lastSequence) {
       // Stale or duplicate: another controller's poll (or our own retried
