@@ -232,6 +232,15 @@ class LoginController extends _$LoginController {
         userId: credentials.deviceId, // Use device ID as user ID for now
         username: 'Device ${credentials.deviceId.substring(0, 8)}',
       );
+
+      // `setSession` awaits storage writes, so this Ref may have been disposed
+      // while it ran. Riverpod 3 throws `UnmountedRefException` on any use of a
+      // disposed Ref, invalidation included.
+      if (!ref.mounted) {
+        debugPrint(
+            '[LoginController] Not mounted after setSession, returning early');
+        return;
+      }
       _invalidateStoredSessionProviders(ref);
       debugPrint('[LoginController] Credentials stored');
 
@@ -417,6 +426,9 @@ class LoginController extends _$LoginController {
         userId: credentials.deviceId,
         username: 'Device ${credentials.deviceId.substring(0, 8)}',
       );
+
+      // See the claim-code path: a disposed Ref throws on invalidate too.
+      if (!ref.mounted) return;
       _invalidateStoredSessionProviders(ref);
 
       // Set connection mode
