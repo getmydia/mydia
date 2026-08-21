@@ -139,10 +139,23 @@ class AmbientTargets {
   Future<void> sweep() async {
     if (_backgrounded) return;
     final ids = await rosterSource();
+    // A background transition can land while the roster fetch above was in
+    // flight. Checking only at entry (the guard two lines up) is not
+    // enough — `AmbientLifecycleBinding._sweep` only compensates for its
+    // own call, and `ambientPlayingProvider`'s 30-second resweep timer
+    // keeps calling this regardless of foreground state (see the class
+    // doc), so a sweep already past its first await has to re-check itself
+    // rather than assume nothing changed underneath it.
+    if (_backgrounded) return;
     final probed = await Future.wait(ids.map((id) async {
       final snapshot = await probe(id);
       return MapEntry(id, snapshot);
     }));
+    // Same reasoning, after the second await: a background transition that
+    // arrived while the probe fan-out was in flight must win. Publishing
+    // here would repopulate `_held` and restart the poll timer behind a
+    // backgrounded app — exactly the state this guard exists to prevent.
+    if (_backgrounded) return;
     _setHeld(_takePlaying(Map.fromEntries(probed)));
     _restartPolling();
   }

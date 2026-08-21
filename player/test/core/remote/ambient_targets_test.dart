@@ -294,6 +294,103 @@ void main() {
     });
 
     test(
+        'a background transition landing while sweep() awaits the roster '
+        'fetch must not repopulate held targets', () {
+      fakeAsync((async) {
+        final rosterGate = Completer<List<String>>();
+        final scripted = ScriptedProbe({
+          'node-tv': playingSnapshot(title: 'Blade Runner'),
+        });
+        final targets = AmbientTargets(
+          rosterSource: () => rosterGate.future,
+          probe: scripted.call,
+        );
+
+        List<AmbientTarget>? latest;
+        targets.playing.listen((held) => latest = held);
+
+        // The sweep starts, but is stuck awaiting the roster fetch — the
+        // entry guard already passed, and the only guard left is the one
+        // this fix adds after this await.
+        unawaited(targets.sweep());
+        async.flushMicrotasks();
+        expect(latest, isEmpty, reason: 'the roster fetch has not resolved');
+
+        // The app backgrounds while that sweep is still in flight.
+        targets.onBackground();
+        async.flushMicrotasks();
+
+        // Now the roster fetch resolves, well after the background
+        // transition landed.
+        rosterGate.complete(['node-tv']);
+        async.flushMicrotasks();
+
+        expect(latest, isEmpty,
+            reason: 'a background transition mid-sweep must win over a '
+                'sweep that was already in flight when it landed');
+        expect(scripted.callCounts['node-tv'], isNull,
+            reason: 'the re-check must return before the probe fan-out '
+                'ever dials the roster');
+
+        // No poll timer was started either.
+        async.elapse(const Duration(seconds: 5));
+        expect(scripted.callCounts['node-tv'], isNull,
+            reason: 'no poll timer should have started');
+
+        targets.dispose();
+      });
+    });
+
+    test(
+        'a background transition landing while sweep() awaits the probe '
+        'fan-out must not repopulate held targets or restart polling', () {
+      fakeAsync((async) {
+        final probeGate = Completer<FlutterPlaybackSnapshot?>();
+        var probeCalls = 0;
+        Future<FlutterPlaybackSnapshot?> probe(String id) {
+          probeCalls += 1;
+          return probeGate.future;
+        }
+
+        final targets = AmbientTargets(
+          rosterSource: rosterOf(['node-tv']),
+          probe: probe,
+        );
+
+        List<AmbientTarget>? latest;
+        targets.playing.listen((held) => latest = held);
+
+        // The roster resolves synchronously (see `rosterOf`), so this
+        // sweep reaches the probe fan-out and stalls there.
+        unawaited(targets.sweep());
+        async.flushMicrotasks();
+        expect(latest, isEmpty, reason: 'the probe has not answered yet');
+        expect(probeCalls, 1);
+
+        // The app backgrounds while the probe fan-out is still in flight.
+        targets.onBackground();
+        async.flushMicrotasks();
+
+        // The probe now answers, after the background transition landed.
+        probeGate.complete(playingSnapshot(title: 'Blade Runner'));
+        async.flushMicrotasks();
+
+        expect(latest, isEmpty,
+            reason: 'a background transition mid-probe-fan-out must win '
+                'over the sweep that was already in flight');
+
+        // No poll timer was restarted: elapsing a 5-second tick must not
+        // trigger a further probe call.
+        async.elapse(const Duration(seconds: 5));
+        expect(probeCalls, 1,
+            reason: 'no poll timer should have restarted behind the '
+                'backgrounded app');
+
+        targets.dispose();
+      });
+    });
+
+    test(
         'never calls probe again after dispose, even after a long elapsed time',
         () {
       fakeAsync((async) {
