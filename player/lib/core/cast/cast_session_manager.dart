@@ -658,6 +658,25 @@ class CastSessionManager {
       // needs its own subscription setup rather than reusing
       // `_listenForConnectionLoss` (no media, so nothing to track) or
       // `_listenToBackend` (assumes this app is the one that loaded it).
+      //
+      // DELIBERATELY INCOMPLETE, and tracked rather than forgotten: the spec
+      // for this branch asks for title, artwork, duration and tracks from the
+      // target's snapshot. Only title (and duration/position, via the generic
+      // streams) are reachable from here. `CastBackend` is protocol-agnostic
+      // by design and surfaces no artwork or track channel, so an adopted
+      // session leaves `imageUrl` null and `subtitles`/`selectedSubtitle`
+      // empty — you get no poster and no subtitle picker on a screen whose
+      // whole job is controlling that session.
+      //
+      // The data is not missing, only unbridged: `MydiaCastBackend`'s poll
+      // loop already receives a full `FlutterPlaybackSnapshot` — imageUrl,
+      // audioTracks, subtitleTracks, selectedAudio, selectedSubtitle — every
+      // tick and discards all of it at `_applySnapshot`. Closing it here
+      // would mean widening the shared interface with a stream only one
+      // implementation could ever populate. The right home is whoever wires
+      // the per-node snapshot bridge that Pull already needs, since that
+      // settles the shape once instead of building a narrow adoption-only
+      // version first.
       _listenToBackendForAdoption();
 
       _publish(CastSession(
