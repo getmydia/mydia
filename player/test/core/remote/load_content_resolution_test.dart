@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/app.dart';
+import 'package:player/core/remote/load_content_navigation.dart';
 import 'package:player/core/player/best_file.dart';
 import 'package:player/core/remote/remote_control_intent.dart';
 import 'package:player/domain/models/media_file.dart';

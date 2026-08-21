@@ -4306,27 +4306,28 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           ? localSelection.id
           : null;
 
-      await manager.startCast(
-        device: device,
-        request: CastLaunchRequest(
-          fileId: widget.fileId,
-          mediaId: widget.mediaId,
-          mediaType: widget.mediaType,
-          title: widget.title ?? 'Untitled',
-          startPosition: startPosition,
-          // The receiver cannot work this out for itself: Mydia's HLS
-          // playlists carry no `#EXT-X-ENDLIST` until FFmpeg finishes, so a
-          // Chromecast reports `duration: -1` for the whole session. Hand it
-          // the runtime the server already told us (`_totalDuration`, set
-          // from the candidates metadata), falling back to whatever the local
-          // player managed to work out.
-          duration: _knownCastDuration(),
-          subtitles: offeredSubtitles,
-          selectedSubtitleTrackId: selectedSubtitleTrackId,
+      await pushToRemoteTarget(
+        startCast: () => manager.startCast(
+          device: device,
+          request: CastLaunchRequest(
+            fileId: widget.fileId,
+            mediaId: widget.mediaId,
+            mediaType: widget.mediaType,
+            title: widget.title ?? 'Untitled',
+            startPosition: startPosition,
+            // The receiver cannot work this out for itself: Mydia's HLS
+            // playlists carry no `#EXT-X-ENDLIST` until FFmpeg finishes, so a
+            // Chromecast reports `duration: -1` for the whole session. Hand it
+            // the runtime the server already told us (`_totalDuration`, set
+            // from the candidates metadata), falling back to whatever the
+            // local player managed to work out.
+            duration: _knownCastDuration(),
+            subtitles: offeredSubtitles,
+            selectedSubtitleTrackId: selectedSubtitleTrackId,
+          ),
         ),
+        stopLocal: () async => await _player?.pause(),
       );
-
-      await _player?.pause();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -4834,4 +4835,30 @@ FlutterPlaybackState remoteControlPlaybackState({
   if (buffering) return FlutterPlaybackState.buffering;
   if (completed) return FlutterPlaybackState.ended;
   return playing ? FlutterPlaybackState.playing : FlutterPlaybackState.paused;
+}
+
+/// Casts to a remote target, stopping local playback only once the receiver
+/// has confirmed the load — never before, and never at all if it refuses.
+///
+/// This ordering is what makes "Push" (spec term: capture position and
+/// track selections, `Hello`, `LoadContent`, only then stop locally)
+/// non-destructive. An unreachable receiver or a rejected codec must never
+/// cost the viewer their place in a film: when [startCast] throws, [stopLocal]
+/// simply never runs, and whatever [_PlayerScreenState._player] was doing
+/// keeps doing it. The caller's own `catch` (see `_showCastDevicePicker`) is
+/// what turns that exception into a snackbar instead of a crash.
+///
+/// Extracted as a free function for the same reason as [applyQualityChoice]
+/// and [trackRestartInFlight]: proving this ordering under `flutter test`
+/// needs to observe whether local playback kept running, and this suite can
+/// never construct a real, playing media_kit `Player` to observe that
+/// against (see [shouldRestartForSeek]'s dartdoc) — so the ordering itself
+/// is what gets pinned instead, independent of any real player.
+@visibleForTesting
+Future<void> pushToRemoteTarget({
+  required Future<void> Function() startCast,
+  required Future<void> Function() stopLocal,
+}) async {
+  await startCast();
+  await stopLocal();
 }

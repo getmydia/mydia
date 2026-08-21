@@ -60,6 +60,24 @@ class FakeTransport implements MydiaControlTransport {
   }
 }
 
+/// A transport that answers after [delay] — for pinning
+/// `probeMydiaNodeState`'s own timeout against `fakeAsync`, where a bare
+/// `Future.delayed` inside [FakeTransport] would need the same treatment
+/// anyway.
+class _SlowTransport implements MydiaControlTransport {
+  _SlowTransport(this.response, {required this.delay});
+
+  final FlutterRemoteControlResponse response;
+  final Duration delay;
+
+  @override
+  Future<FlutterRemoteControlResponse> send(
+    String nodeId,
+    FlutterRemoteControlRequest request,
+  ) =>
+      Future.delayed(delay, () => response);
+}
+
 /// A [FlutterPlaybackSnapshot] with sensible defaults for every required
 /// field, so a test only has to spell out the fields it cares about.
 FlutterPlaybackSnapshot _snapshot({
@@ -588,6 +606,94 @@ void main() {
       final url = await backend.probeReceiverContentUrl(_connectedDevice);
 
       expect(url, isNull);
+    });
+  });
+
+  group('probeMydiaNodeState', () {
+    test('answers the snapshot for a node that is playing', () async {
+      final transport = FakeTransport(scripted: {
+        'node-tv': [
+          FlutterRemoteControlResponse_State(
+            _snapshot(state: FlutterPlaybackState.playing, title: 'Arrival'),
+          ),
+        ],
+      });
+
+      final snapshot = await probeMydiaNodeState(transport, 'node-tv');
+
+      expect(snapshot?.title, 'Arrival');
+      expect(transport.sent, ['node-tv:FlutterRemoteControlRequest_GetState'],
+          reason: 'no Hello, no connect — just the one GetState');
+    });
+
+    test('answers the snapshot for a node that is paused too', () async {
+      // Matches `isPlayingMydiaTarget`'s own reasoning: a paused-but-
+      // resumable session is exactly the kind of thing ambient awareness
+      // exists to surface, not something to treat as idle.
+      final transport = FakeTransport(scripted: {
+        'node-tv': [
+          FlutterRemoteControlResponse_State(
+            _snapshot(state: FlutterPlaybackState.paused, title: 'Arrival'),
+          ),
+        ],
+      });
+
+      final snapshot = await probeMydiaNodeState(transport, 'node-tv');
+
+      expect(snapshot?.title, 'Arrival');
+    });
+
+    test('answers null for a node that is genuinely idle', () async {
+      final transport = FakeTransport(scripted: {
+        'node-tv': [
+          FlutterRemoteControlResponse_State(
+            _snapshot(state: FlutterPlaybackState.idle),
+          ),
+        ],
+      });
+
+      expect(await probeMydiaNodeState(transport, 'node-tv'), isNull);
+    });
+
+    test('answers null when the node has nothing mounted at all', () async {
+      final transport = FakeTransport(scripted: {
+        'node-tv': [const FlutterRemoteControlResponse_NotPlaying()],
+      });
+
+      expect(await probeMydiaNodeState(transport, 'node-tv'), isNull);
+    });
+
+    test('answers null for an unreachable node rather than throwing', () async {
+      final transport = FakeTransport(unreachable: {'node-tv'});
+
+      expect(await probeMydiaNodeState(transport, 'node-tv'), isNull);
+    });
+
+    test('answers null when the node does not respond within the timeout', () {
+      fakeAsync((async) {
+        final transport = _SlowTransport(
+          FlutterRemoteControlResponse_State(
+            _snapshot(state: FlutterPlaybackState.playing),
+          ),
+          delay: const Duration(seconds: 10),
+        );
+
+        FlutterPlaybackSnapshot? result;
+        var completed = false;
+        unawaited(probeMydiaNodeState(
+          transport,
+          'node-tv',
+          timeout: const Duration(seconds: 3),
+        ).then((snapshot) {
+          result = snapshot;
+          completed = true;
+        }));
+
+        async.elapse(const Duration(seconds: 3));
+
+        expect(completed, isTrue);
+        expect(result, isNull);
+      });
     });
   });
 

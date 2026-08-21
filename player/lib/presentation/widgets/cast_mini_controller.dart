@@ -1,13 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/auth/auth_status.dart';
 import '../../core/cast/cast_backend.dart';
 import '../../core/cast/cast_providers.dart';
 import '../../core/cast/cast_seek.dart';
+import '../../core/cast/cast_session_manager.dart' show PulledSession;
 import '../../core/cast/cast_target.dart';
 import '../../core/graphql/graphql_provider.dart';
+import '../../core/remote/ambient_targets.dart';
+import '../../core/remote/load_content_navigation.dart';
+import '../../core/remote/remote_control_intent.dart';
 import '../../core/router/navigator_keys.dart';
 import '../../domain/models/cast_device.dart';
+import '../screens/episode/episode_detail_controller.dart';
+import '../screens/movie/movie_detail_controller.dart';
 import 'cast_actions.dart';
 import 'cast_subtitle_sheet.dart';
 
@@ -97,7 +104,12 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
     final Widget? content;
     if (session == null) {
       // A remembered device with no session at all: a connect that failed.
-      content = target == null ? null : _buildOffline(target);
+      // With neither, there is nothing of this device's own to show — which
+      // is exactly when an ambient banner about a *different* paired player
+      // belongs: an active cast (of this device's own) already claims the
+      // bar, and stacking a third party's "Playing on X" underneath it
+      // would just be noise.
+      content = target == null ? _buildAmbient() : _buildOffline(target);
     } else if (session.connectionState == CastConnectionState.connecting) {
       content = _buildConnecting(session.device);
     } else if (session.isStale) {
@@ -210,6 +222,90 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
         ),
       ],
     );
+  }
+
+  /// "Playing on Living Room" for a paired player already mid-watch that
+  /// nobody asked this device to track — from [ambientPlayingProvider]
+  /// (`AmbientTargets`, `core/remote/ambient_targets.dart`). Null when there
+  /// is nothing ambient to show, which is the ordinary case: most of the
+  /// time no other paired device is playing anything at all.
+  ///
+  /// Only ever one row, the first target held: a user with more than one
+  /// other device mid-watch at once is a corner the picker already covers,
+  /// and this banner's whole point is a glanceable nudge, not a second
+  /// picker.
+  Widget? _buildAmbient() {
+    final held = ref.watch(ambientPlayingProvider).value ?? const [];
+    if (held.isEmpty) return null;
+
+    final ambientTarget = held.first;
+    // `AmbientTarget.device.name` is the bare node id — the probe this came
+    // from carries no display names (see that field's own dartdoc) — so
+    // resolve the real one against the paired-device roster before it ever
+    // reaches the label. Falls back to the id itself only in the narrow
+    // window before `remoteDeviceNamesProvider` has resolved.
+    final names = ref.watch(remoteDeviceNamesProvider).value ?? const {};
+    final name = names[ambientTarget.device.id] ?? ambientTarget.device.id;
+
+    return _barRow(
+      leading: const Icon(Icons.cast, color: Colors.blue, size: 24),
+      label: 'Playing on $name',
+      actions: [
+        TextButton(
+          key: const Key('cast-bar-ambient-open'),
+          onPressed: () => _openAmbientTarget(ambientTarget, name),
+          child: const Text('View'),
+        ),
+      ],
+    );
+  }
+
+  /// Connects to an ambient target, tapping through to the remote UI —
+  /// `_buildPlaying` below, once the connect resolves and republishes the
+  /// session with media on it.
+  ///
+  /// [AmbientTarget.device] carries no `nowPlayingTitle` metadata of its own
+  /// (only [AmbientTargets.sweep]'s roster-wide probe sets that, on the
+  /// *discovery*-shaped [CastDevice] `MydiaCastBackend._probeSequence`
+  /// builds — an ambient one never goes through that path). Without it,
+  /// `isPlayingMydiaTarget` would read this device as idle and connect
+  /// media-less instead of adopting, showing "Ready to play on" over a
+  /// receiver that is actually mid-film. [ambientTarget.snapshot] already
+  /// has the one field that check needs, so this rebuilds the device with it
+  /// set rather than reaching back into discovery for it.
+  Future<void> _openAmbientTarget(
+    AmbientTarget ambientTarget,
+    String name,
+  ) async {
+    if (!mounted) return;
+
+    final device = CastDevice(
+      id: ambientTarget.device.id,
+      name: name,
+      protocol: CastProtocolKind.mydia,
+      metadata: {
+        'nodeId': ambientTarget.device.id,
+        'nowPlayingTitle': ambientTarget.snapshot.title,
+      },
+    );
+
+    try {
+      final manager = await ref.read(castSessionManagerProvider.future);
+      await manager.connectTo(device);
+    } on CastBackendException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(castErrorMessage(e, ref: ref)),
+        backgroundColor: Colors.red,
+      ));
+    } catch (e) {
+      debugPrint('[CastMiniController] Unexpected error opening $name: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Failed to open $name: $e'),
+        backgroundColor: Colors.red,
+      ));
+    }
   }
 
   /// Re-open a media-less connection.
@@ -421,6 +517,18 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                     ),
                     onPressed: () => _pickSubtitle(session),
                   ),
+                // Pull: only a Mydia target runs this same app, so only one
+                // can hand playback back to this device at its exact
+                // position. Shown for a self-started cast too, not just an
+                // adopted one — bringing your own cast back is exactly as
+                // valid a thing to want as pulling someone else's.
+                if (session.device.protocol == CastProtocolKind.mydia)
+                  IconButton(
+                    key: const Key('cast-bar-pull'),
+                    icon: const Icon(Icons.phone_iphone),
+                    tooltip: 'Play on this device',
+                    onPressed: _pullToLocal,
+                  ),
                 IconButton(
                   key: const Key('cast-bar-stop'),
                   icon: const Icon(Icons.stop, size: 28),
@@ -433,6 +541,87 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
         ],
       ),
     );
+  }
+
+  /// Brings whatever is on the connected Mydia target back to this device.
+  ///
+  /// `CastSessionManager.pullToLocal` does the hard part: it reads the
+  /// target's exact position from its own captured snapshot (never the
+  /// interpolated position stream or throttled server progress — see that
+  /// method's own dartdoc), then pauses and stops the target and ends this
+  /// manager's session. What is left here is turning the
+  /// [PulledSession] that comes back into an actual local playback — the
+  /// same resolution an inbound remote `LoadContent` uses
+  /// ([pushLoadContentDestination], `core/remote/load_content_navigation.dart`)
+  /// applied to a `LoadContentIntent` built from it
+  /// ([loadContentIntentForPulledSession]), so a pulled session picks the
+  /// same file a local tap would.
+  ///
+  /// Progress reporting: `pullToLocal` is what stops the target, which is
+  /// what stops it writing `updateMovieProgress`/`updateEpisodeProgress` for
+  /// this item (its own local player receives the `Stop` over remote
+  /// control and halts). The `PlayerScreen` this pushes into then becomes
+  /// the item's only writer, exactly like any other local playback. This
+  /// method itself never calls either mutation.
+  Future<void> _pullToLocal() async {
+    if (!mounted) return;
+    try {
+      final manager = await ref.read(castSessionManagerProvider.future);
+      final pulled = await manager.pullToLocal();
+      if (!mounted) return;
+
+      final intent =
+          pulled == null ? null : loadContentIntentForPulledSession(pulled);
+      if (intent == null) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Nothing to bring over yet.'),
+        ));
+        return;
+      }
+
+      // A clear signal the viewer wants to watch here now, the same as
+      // `_stopCasting` clearing it on an explicit stop — a lingering target
+      // would silently re-cast the *next* thing played instead of keeping
+      // it local.
+      ref.read(castTargetProvider.notifier).clear();
+      if (!mounted) return;
+
+      // `app.dart` mounts this bar above the router's own Navigator (see
+      // `CastBarLayer`'s dartdoc), so this widget's own `context` has no
+      // `GoRouter` above it to find; `rootNavigatorKey.currentContext` is
+      // the router's own root, same fallback `_confirmStop` already uses.
+      final router = GoRouter.of(rootNavigatorKey.currentContext ?? context);
+      final screenWidth =
+          MediaQuery.sizeOf(rootNavigatorKey.currentContext ?? context).width;
+
+      await pushLoadContentDestination(
+        intent,
+        screenWidth,
+        fetchMovieTarget: (id) async {
+          final movie =
+              await ref.read(movieDetailControllerProvider(id).future);
+          return LoadContentTarget(files: movie.files, title: movie.title);
+        },
+        fetchEpisodeTarget: (id) async {
+          final episode =
+              await ref.read(episodeDetailControllerProvider(id).future);
+          return LoadContentTarget(
+            files: episode.files,
+            title: episode.title,
+            showId: episode.show.id,
+            seasonNumber: episode.seasonNumber,
+          );
+        },
+        push: (path) => router.push(path),
+      );
+    } catch (e) {
+      debugPrint('[CastMiniController] Unexpected error pulling session: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Failed to bring playback here: $e'),
+        backgroundColor: Colors.red,
+      ));
+    }
   }
 
   /// Re-cast the media the stored (now stale) session was playing.
@@ -549,4 +738,32 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
       return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
     }
   }
+}
+
+/// The `LoadContentIntent` a pulled session should resume as, or null when
+/// [pulled] has nothing playable to resume.
+///
+/// [PulledSession.mediaItemId] only, per that field's own dartdoc: "a
+/// caller with nothing to open should treat that as there was nothing to
+/// pull, not open an item with no id."
+///
+/// Extracted as a free function, the same precedent as
+/// `player_screen.dart`'s `applyQualityChoice`/`pushToRemoteTarget`: the
+/// widget path needs a live `CastSessionManager`, a resolved GraphQL
+/// client, and a mounted `GoRouter` to reach this decision at all, none of
+/// which a bare unit test can stand up around — but the mapping itself
+/// depends on none of them.
+@visibleForTesting
+LoadContentIntent? loadContentIntentForPulledSession(PulledSession pulled) {
+  final mediaItemId = pulled.mediaItemId;
+  if (mediaItemId == null) return null;
+
+  return LoadContentIntent(
+    mediaItemId: mediaItemId,
+    episodeId: pulled.episodeId,
+    startAt: pulled.position,
+    audioTrack: pulled.selectedAudioTrackId,
+    subtitleTrack: pulled.selectedSubtitleTrackId,
+    autoplay: true,
+  );
 }

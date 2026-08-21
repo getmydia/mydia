@@ -9,6 +9,7 @@ import '../graphql/graphql_provider.dart';
 import '../p2p/local_proxy_service.dart';
 import '../p2p/p2p_service.dart';
 import '../player/progress_service.dart';
+import '../remote/ambient_targets.dart';
 import '../remote/remote_roster.dart';
 import 'cast_backend.dart';
 import 'cast_capabilities.dart';
@@ -87,6 +88,107 @@ final mydiaCastBackendProvider = Provider<CastBackend?>((ref) {
     transport: P2pControlTransport(host),
     selfNodeId: selfNodeId,
   );
+});
+
+/// How often the ambient sweep re-runs while something is watching
+/// [ambientPlayingProvider] — the cadence that lets a *newly*-playing
+/// target (one [AmbientTargets]'s own 5-second poll deliberately never
+/// promotes on its own; see that class's `_refreshHeld` dartdoc) eventually
+/// show up in the banner instead of staying invisible until the app
+/// restarts. Half a minute, not [AmbientTargets]' own 5s poll cadence: this
+/// one dials the whole roster (`AmbientTargets.sweep`'s cost, not
+/// `_refreshHeld`'s), so it stays coarser on purpose.
+const _ambientResweepInterval = Duration(seconds: 30);
+
+/// [AmbientTargets] for this device's own ambient awareness of other paired
+/// players — independent of any live cast session, since ambient awareness
+/// has to reach a node this device has never connected to at all.
+///
+/// [AmbientTargets.probe] is built from [probeMydiaNodeState], a direct,
+/// connectionless `GetState` per node — not [MydiaSnapshotSource], the seam
+/// `pullToLocal`/adoption reach through, and not [mydiaCastBackendProvider]'s
+/// own backend either. Both of those only ever know about the *one* node
+/// this device is currently connected to; ambient awareness has to sweep
+/// every rostered node whether or not a session was ever opened to it, so
+/// only a bare transport + per-node `GetState` reaches far enough. Reusing
+/// `mydiaCastBackendProvider`'s connected-session backend here would also
+/// tangle ambient sweeping's lifecycle with whatever cast session happens to
+/// be live, which is exactly the coupling keeping this independent avoids.
+///
+/// Null under the same conditions as [mydiaCastBackendProvider]: no p2p
+/// host yet, no resolved node ID, or no signed-in GraphQL client.
+final ambientTargetsProvider = Provider<AmbientTargets?>((ref) {
+  final p2pService = ref.watch(p2pServiceProvider);
+  final host = p2pService.host;
+  final selfNodeId = p2pService.nodeId;
+  final client = ref.watch(graphqlClientProvider);
+
+  if (host == null || selfNodeId == null || client == null) return null;
+
+  final roster = RemoteRoster(client: client);
+  final transport = P2pControlTransport(host);
+
+  final targets = AmbientTargets(
+    rosterSource: () async => (await roster.entries())
+        .where((entry) => entry.nodeId != selfNodeId)
+        .map((entry) => entry.nodeId)
+        .toList(growable: false),
+    probe: (nodeId) => probeMydiaNodeState(transport, nodeId),
+  );
+  ref.onDispose(() => unawaited(targets.dispose()));
+  return targets;
+});
+
+/// The targets [ambientTargetsProvider] currently holds, for
+/// `CastMiniController`'s ambient banner.
+///
+/// Autodispose is load-bearing, the same reasoning as [castDiscoveryProvider]:
+/// ambient awareness costs a live, polled connection per held target (see
+/// [AmbientTargets]' own dartdoc), so it only runs while the banner actually
+/// has room to show one — `CastMiniController` only watches this when there
+/// is no cast session and no remembered target of its own. Losing every
+/// listener drops the held connections via [AmbientTargets.onBackground]
+/// (see `ref.onDispose` below); gaining one again re-sweeps.
+final ambientPlayingProvider =
+    StreamProvider.autoDispose<List<AmbientTarget>>((ref) async* {
+  final targets = ref.watch(ambientTargetsProvider);
+  if (targets == null) {
+    yield const [];
+    return;
+  }
+
+  unawaited(targets.sweep());
+  final resweep = Timer.periodic(
+    _ambientResweepInterval,
+    (_) => unawaited(targets.sweep()),
+  );
+  ref.onDispose(() {
+    resweep.cancel();
+    targets.onBackground();
+  });
+
+  yield* targets.playing;
+});
+
+/// This account's paired devices, by node ID, for resolving
+/// [AmbientTarget.device]'s bare node ID (see that field's own dartdoc) to a
+/// real name before it reaches the ambient banner.
+///
+/// A separate [RemoteRoster] instance from [ambientTargetsProvider]'s own —
+/// matching how `mydiaCastBackendProvider` and `app.dart`'s remote-control
+/// receiver already each keep their own independent instance rather than
+/// sharing one; see `mydiaCastBackendProvider`'s dartdoc for the staleness
+/// caveat that already applies to that split. Consolidating all of them onto
+/// one shared, provider-scoped `RemoteRoster` is a real improvement but a
+/// separate one — this file already has three independent instances before
+/// this provider adds a fourth, so it does not introduce a new inconsistency.
+final remoteDeviceNamesProvider =
+    FutureProvider<Map<String, String>>((ref) async {
+  final client = ref.watch(graphqlClientProvider);
+  if (client == null) return const {};
+
+  final entries = await RemoteRoster(client: client).entries();
+  return {for (final entry in entries) entry.nodeId: entry.deviceName};
 });
 
 /// Android's multicast lock. Overridden in tests.

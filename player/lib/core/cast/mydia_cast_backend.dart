@@ -555,3 +555,42 @@ class MydiaCastBackend implements CastBackend, MydiaSnapshotSource {
     }
   }
 }
+
+/// Probes one node directly for its [FlutterPlaybackSnapshot] — no `Hello`,
+/// no `connect`, and (unlike [MydiaCastBackend.connect]) no session left
+/// behind afterward. Same "no LAUNCH, so nothing to evict" shape as
+/// [MydiaCastBackend.probeReceiverContentUrl], generalized to hand back the
+/// whole snapshot instead of just a content ref.
+///
+/// This is what `ambientTargetsProvider` (`cast_providers.dart`) builds its
+/// production [AmbientNodeProbe] from — see that file for why
+/// [MydiaSnapshotSource] cannot serve the same purpose: it only ever
+/// reflects the one target [CastSessionManager] is currently connected to,
+/// never an arbitrary, never-connected node from the rest of the roster,
+/// which is exactly what ambient awareness has to sweep.
+///
+/// Playing and paused both count, matching `isPlayingMydiaTarget`'s
+/// reasoning in `cast_session_manager.dart`: a paused-but-resumable session
+/// is exactly the kind of thing ambient awareness exists to surface.
+/// Everything else — idle, ended, unreachable, timed out, a response this
+/// build cannot decode — folds into null; [AmbientTargets] only needs "hold
+/// this" from "don't", not why a given node didn't qualify.
+Future<FlutterPlaybackSnapshot?> probeMydiaNodeState(
+  MydiaControlTransport transport,
+  String nodeId, {
+  Duration timeout = const Duration(seconds: 3),
+}) async {
+  try {
+    final response = await transport
+        .send(nodeId, const FlutterRemoteControlRequest.getState())
+        .timeout(timeout);
+    if (response is! FlutterRemoteControlResponse_State) return null;
+
+    final snapshot = response.field0;
+    final playingOrPaused = snapshot.state == FlutterPlaybackState.playing ||
+        snapshot.state == FlutterPlaybackState.paused;
+    return playingOrPaused ? snapshot : null;
+  } catch (_) {
+    return null;
+  }
+}
