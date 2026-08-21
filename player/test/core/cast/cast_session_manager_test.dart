@@ -2745,5 +2745,123 @@ void main() {
       expect(mydia.disconnectCallCount, 0,
           reason: 'nothing to pull means nothing should be touched');
     });
+
+    // `buildManagerWithBackends` fixes the manager's clock at
+    // `DateTime.utc(2026, 7, 28, 12)`; these place `lastSnapshotAt` an exact,
+    // known distance behind that instead of needing a mutable clock.
+    final fixedNow = DateTime.utc(2026, 7, 28, 12);
+
+    test(
+        'projects a playing snapshot forward by the time elapsed since it '
+        'was captured', () async {
+      final chromecast = FakeBackend(devices: const []);
+      final mydia = FakeMydiaCastBackend();
+      final manager = buildManagerWithBackends(
+        chromecast: chromecast,
+        mydia: mydia,
+        sessions: FakeStreamingSessionService(),
+      );
+      addTearDown(manager.dispose);
+
+      await manager.connectTo(playingDevice);
+
+      mydia.lastSnapshot = _snapshot(
+        state: FlutterPlaybackState.playing,
+        mediaItemId: 'movie-42',
+        positionMs: BigInt.from(const Duration(minutes: 41).inMilliseconds),
+        durationMs: BigInt.from(const Duration(minutes: 116).inMilliseconds),
+      );
+      // The target's last poll answer landed 4 seconds before the manager's
+      // clock — one poll interval's worth of staleness, the exact gap this
+      // fix closes.
+      mydia.lastSnapshotAt = fixedNow.subtract(const Duration(seconds: 4));
+
+      final pulled = await manager.pullToLocal();
+
+      expect(pulled?.position, const Duration(minutes: 41, seconds: 4),
+          reason: 'the position must be projected forward to match what '
+              'the target is actually at now, not what it last reported');
+    });
+
+    test('does not project a paused snapshot forward', () async {
+      final chromecast = FakeBackend(devices: const []);
+      final mydia = FakeMydiaCastBackend();
+      final manager = buildManagerWithBackends(
+        chromecast: chromecast,
+        mydia: mydia,
+        sessions: FakeStreamingSessionService(),
+      );
+      addTearDown(manager.dispose);
+
+      await manager.connectTo(playingDevice);
+
+      mydia.lastSnapshot = _snapshot(
+        state: FlutterPlaybackState.paused,
+        mediaItemId: 'movie-42',
+        positionMs: BigInt.from(const Duration(minutes: 41).inMilliseconds),
+      );
+      mydia.lastSnapshotAt = fixedNow.subtract(const Duration(seconds: 4));
+
+      final pulled = await manager.pullToLocal();
+
+      expect(pulled?.position, const Duration(minutes: 41),
+          reason: 'nothing is advancing behind a paused snapshot');
+    });
+
+    test(
+        'clamps the projected position at duration rather than running '
+        'past it', () async {
+      final chromecast = FakeBackend(devices: const []);
+      final mydia = FakeMydiaCastBackend();
+      final manager = buildManagerWithBackends(
+        chromecast: chromecast,
+        mydia: mydia,
+        sessions: FakeStreamingSessionService(),
+      );
+      addTearDown(manager.dispose);
+
+      await manager.connectTo(playingDevice);
+
+      mydia.lastSnapshot = _snapshot(
+        state: FlutterPlaybackState.playing,
+        mediaItemId: 'movie-42',
+        positionMs:
+            BigInt.from(const Duration(minutes: 1, seconds: 58).inMilliseconds),
+        durationMs: BigInt.from(const Duration(minutes: 2).inMilliseconds),
+      );
+      // Comfortably longer than the 2 seconds left in the snapshot's own
+      // duration.
+      mydia.lastSnapshotAt = fixedNow.subtract(const Duration(seconds: 30));
+
+      final pulled = await manager.pullToLocal();
+
+      expect(pulled?.position, const Duration(minutes: 2));
+    });
+
+    test(
+        'falls back to the raw position when the backend reports no '
+        'capture time', () async {
+      final chromecast = FakeBackend(devices: const []);
+      final mydia = FakeMydiaCastBackend();
+      final manager = buildManagerWithBackends(
+        chromecast: chromecast,
+        mydia: mydia,
+        sessions: FakeStreamingSessionService(),
+      );
+      addTearDown(manager.dispose);
+
+      await manager.connectTo(playingDevice);
+
+      mydia.lastSnapshot = _snapshot(
+        state: FlutterPlaybackState.playing,
+        mediaItemId: 'movie-42',
+        positionMs: BigInt.from(const Duration(minutes: 41).inMilliseconds),
+      );
+      // Deliberately never set `lastSnapshotAt`.
+
+      final pulled = await manager.pullToLocal();
+
+      expect(pulled?.position, const Duration(minutes: 41));
+    });
   });
 }

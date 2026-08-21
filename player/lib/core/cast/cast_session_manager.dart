@@ -72,6 +72,14 @@ FlutterPlaybackSnapshot? _snapshotFrom(CastBackend backend) =>
         ? (backend as MydiaSnapshotSource).lastSnapshot
         : null;
 
+/// Companion to [_snapshotFrom]: when that snapshot was actually captured,
+/// for projecting a still-playing position forward — see
+/// [CastSessionManager.pullToLocal].
+DateTime? _snapshotCapturedAtFrom(CastBackend backend) =>
+    backend is MydiaSnapshotSource
+        ? (backend as MydiaSnapshotSource).lastSnapshotAt
+        : null;
+
 /// Chooses which backend owns a device's protocol, and fans discovery out
 /// across every backend registered.
 ///
@@ -632,6 +640,19 @@ class CastSessionManager {
   /// matters here: this is the one number a caller cannot re-derive once the
   /// target has been told to stand down.
   ///
+  /// A *playing* snapshot's own `positionMs` is itself already stale by the
+  /// time this runs, though — it is only ever as fresh as the target's last
+  /// poll answer (1s while its remote-control UI is visible, 5s otherwise;
+  /// see `MydiaCastBackend`'s poll intervals). This projects it forward by
+  /// however much wall clock has passed since [MydiaSnapshotSource
+  /// .lastSnapshotAt], the same math [MydiaCastBackend._positionAt] applies
+  /// to [CastBackend.positionStream] between polls, so the position handed
+  /// back matches what the viewer actually saw rather than what the target
+  /// happened to report last. A paused snapshot is never projected — nothing
+  /// is advancing behind it — and a target that never reported a capture
+  /// time (a fake in a test, or an old build) falls back to the raw,
+  /// unprojected value.
+  ///
   /// Reads before it sends anything, deliberately: [_backend.pause] runs
   /// first below, and the target's own follow-up `GetState` poll (or the
   /// `disconnect` [stopCast] issues right after) can freely overwrite or
@@ -651,7 +672,7 @@ class CastSessionManager {
     final pulled = PulledSession(
       mediaItemId: snapshot.mediaItemId,
       episodeId: snapshot.episodeId,
-      position: Duration(milliseconds: snapshot.positionMs.toInt()),
+      position: _projectedPosition(snapshot),
       selectedAudioTrackId: snapshot.selectedAudio,
       selectedSubtitleTrackId: snapshot.selectedSubtitle,
     );
@@ -668,6 +689,26 @@ class CastSessionManager {
     await stopCast();
 
     return pulled;
+  }
+
+  /// [snapshot]'s own position, projected forward by however much wall
+  /// clock has passed since it was captured — but only while the target was
+  /// actually playing, and only when [_backend] actually reports a capture
+  /// time. Mirrors `MydiaCastBackend._positionAt`, which does the same
+  /// projection for [CastBackend.positionStream].
+  Duration _projectedPosition(FlutterPlaybackSnapshot snapshot) {
+    final base = Duration(milliseconds: snapshot.positionMs.toInt());
+    if (snapshot.state != FlutterPlaybackState.playing) return base;
+
+    final capturedAt = _snapshotCapturedAtFrom(_backend);
+    if (capturedAt == null) return base;
+
+    final elapsed = _clock().difference(capturedAt);
+    final projected = base + (elapsed.isNegative ? Duration.zero : elapsed);
+
+    final duration = Duration(milliseconds: snapshot.durationMs.toInt());
+    if (duration > Duration.zero && projected > duration) return duration;
+    return projected;
   }
 
   /// Connect to [device] with no media on it.
