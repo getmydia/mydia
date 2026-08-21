@@ -277,9 +277,23 @@ class _ManageSection extends ConsumerWidget {
   /// so the switch reflects it immediately. This only ever affects whether
   /// this device *answers* as a target; it never touches pairing or this
   /// device's own ability to control others.
+  ///
+  /// Runs from a switch callback that nothing awaits, so a failure here —
+  /// `remoteControlSettingsProvider` failing to resolve, or the Hive write
+  /// itself throwing — has no caller to escape to; left unguarded it would
+  /// surface as an unhandled async error. Caught and logged instead.
+  /// [remoteControlEnabledProvider] is still invalidated afterward either
+  /// way: the switch is driven entirely by that provider's value, with no
+  /// optimistic local state, so re-reading it after a failed write just
+  /// reconfirms the unchanged, actually-persisted value rather than leaving
+  /// the switch out of sync with storage.
   Future<void> _setControllable(WidgetRef ref, bool value) async {
-    final settings = await ref.read(remoteControlSettingsProvider.future);
-    await settings.setControllable(value);
+    try {
+      final settings = await ref.read(remoteControlSettingsProvider.future);
+      await settings.setControllable(value);
+    } catch (e) {
+      debugPrint('[Settings] Could not save remote-control setting: $e');
+    }
     ref.invalidate(remoteControlEnabledProvider);
   }
 

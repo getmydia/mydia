@@ -115,10 +115,25 @@ const _status = P2pStatus(
   connectedPeersCount: 0,
 );
 
+/// Resolves and reads normally, but fails the write itself — for proving
+/// `_setControllable` catches a failure from `setControllable` specifically,
+/// not just from `remoteControlSettingsProvider` failing to resolve at all
+/// (which would leave the switch disabled — `onChanged` is null while
+/// `remoteControlEnabledProvider` has no value — and never reach
+/// `_setControllable` in the first place).
+class _ThrowingRemoteControlSettings extends RemoteControlSettings {
+  _ThrowingRemoteControlSettings({required super.box});
+
+  @override
+  Future<void> setControllable(bool value) async =>
+      throw Exception('disk full');
+}
+
 Future<void> _pump(
   WidgetTester tester, {
   UserSettings? settings = _settings,
   bool fail = false,
+  bool failRemoteControlWrite = false,
   String version = '',
   Size size = const Size(1000, 1400),
 }) async {
@@ -144,7 +159,9 @@ Future<void> _pump(
         ),
         authStateProvider.overrideWith(_RecordingAuthNotifier.new),
         remoteControlSettingsProvider.overrideWith(
-          (ref) async => RemoteControlSettings(box: _remoteControlBox),
+          (ref) async => failRemoteControlWrite
+              ? _ThrowingRemoteControlSettings(box: _remoteControlBox)
+              : RemoteControlSettings(box: _remoteControlBox),
         ),
       ],
       child: MaterialApp.router(
@@ -344,6 +361,39 @@ void main() {
       isTrue,
     );
     expect(tester.widget<Switch>(toggle).value, isTrue);
+  });
+
+  testWidgets(
+      'a failed write does not escape as an unhandled error and the '
+      'switch is not left stuck', (tester) async {
+    await _pump(tester, failRemoteControlWrite: true);
+    await tester.pumpAndSettle();
+
+    final toggle = find.descendant(
+      of: find.byKey(const Key('remote-control-enabled-switch')),
+      matching: find.byType(Switch),
+    );
+    expect(tester.widget<Switch>(toggle).value, isTrue);
+
+    await tester.ensureVisible(
+      find.byKey(const Key('remote-control-enabled-switch')),
+    );
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+
+    // The tap's failure must not have escaped as an unhandled async error —
+    // `tester.takeException()` (called implicitly by `tester.pumpAndSettle`
+    // completing without throwing, and confirmed explicitly here) would
+    // otherwise fail this test.
+    expect(tester.takeException(), isNull);
+
+    // The switch remains interactive rather than getting stuck disabled:
+    // `remoteControlEnabledProvider` is still invalidated after the
+    // failure, so it re-resolves off the (unchanged) stored value.
+    expect(tester.widget<Switch>(toggle).onChanged, isNotNull);
+    expect(tester.widget<Switch>(toggle).value, isTrue,
+        reason: 'the write never reached storage, so the true, persisted '
+            'value is still the original one');
   });
 
   testWidgets('paired devices navigates to the devices route', (tester) async {
