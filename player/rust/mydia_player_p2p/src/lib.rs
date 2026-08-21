@@ -568,6 +568,64 @@ impl From<PlaybackSnapshot> for FlutterPlaybackSnapshot {
     }
 }
 
+/// Drains `event_rx`, routing an inbound `RemoteControl` request onto
+/// `control_tx` and every other event onto `generic_tx`. Spawned once,
+/// unconditionally, by `P2pHost::init` — see the comment at that call site
+/// for why splitting the two here (rather than inline in `event_stream`'s
+/// own loop) matters, and why the generic side is unbounded.
+///
+/// Admission onto `control_tx` is `try_send`, not an awaited `send`,
+/// deliberately. `control_tx` is bounded at 32 specifically so a Dart side
+/// that never subscribes (or whose `remote_control_stream` sink closed)
+/// cannot make this dispatcher accumulate requests forever — but a bounded
+/// channel enforces that bound by having `send` block once it is full, and
+/// this is the same loop that has to keep draining `event_rx` for the
+/// generic side too. An awaited `send` here would stop draining `event_rx`
+/// the moment the control side backed up, taking generic event delivery
+/// down with it — exactly the coupling this split exists to avoid. Both
+/// `Full` (32 unconsumed) and `Closed` (no receiver at all) mean the same
+/// thing operationally — nobody is currently able to receive this control
+/// request — so both are handled the same way: the request is dropped and
+/// logged, and the loop moves on to keep draining `event_rx`.
+async fn run_event_dispatcher(
+    event_rx: Arc<Mutex<mpsc::Receiver<Event>>>,
+    control_tx: mpsc::Sender<FlutterInboundControlRequest>,
+    generic_tx: mpsc::UnboundedSender<Event>,
+) {
+    let mut event_rx = event_rx.lock().await;
+    while let Some(event) = event_rx.recv().await {
+        match event {
+            Event::RequestReceived {
+                peer,
+                request: MydiaRequest::RemoteControl(req),
+                request_id,
+            } => {
+                if let Err(err) = control_tx.try_send(FlutterInboundControlRequest {
+                    peer,
+                    request_id,
+                    request: req.into(),
+                }) {
+                    let reason = match err {
+                        mpsc::error::TrySendError::Full(_) => {
+                            "the control channel is full (32 unconsumed requests)"
+                        }
+                        mpsc::error::TrySendError::Closed(_) => {
+                            "the control channel has no receiver"
+                        }
+                    };
+                    log::warn!("Dropping inbound control request: {reason}");
+                }
+            }
+            other => {
+                // An error here just means no `event_stream` subscriber is
+                // currently listening; keep draining `event_rx` regardless
+                // so control routing above is never blocked by it.
+                let _ = generic_tx.send(other);
+            }
+        }
+    }
+}
+
 impl P2pHost {
     /// Initialize a new P2P host with optional custom relay URL.
     ///
@@ -634,38 +692,18 @@ impl P2pHost {
         // avoids that at the cost of unbounded growth if `event_stream` is
         // never consumed; connection-lifecycle events are small and rare
         // enough that this is a reasonable trade.
+        //
+        // The control side stays bounded at 32 (below), for the opposite
+        // reason: an unconsumed inbound control request is a request nobody
+        // will ever answer, so bounding it caps how much of that this
+        // dispatcher will accumulate. See `run_event_dispatcher`'s own doc
+        // for why admission onto it has to be non-blocking despite that.
         let (generic_tx, generic_rx) = mpsc::unbounded_channel::<Event>();
         let (control_tx, control_rx) = mpsc::channel::<FlutterInboundControlRequest>(32);
 
         let event_rx = host.event_rx.clone();
         let _guard = runtime::enter();
-        runtime::spawn(async move {
-            let mut event_rx = event_rx.lock().await;
-            while let Some(event) = event_rx.recv().await {
-                match event {
-                    Event::RequestReceived {
-                        peer,
-                        request: MydiaRequest::RemoteControl(req),
-                        request_id,
-                    } => {
-                        let _ = control_tx
-                            .send(FlutterInboundControlRequest {
-                                peer,
-                                request_id,
-                                request: req.into(),
-                            })
-                            .await;
-                    }
-                    other => {
-                        // An error here just means no `event_stream`
-                        // subscriber is currently listening; keep draining
-                        // `inner.event_rx` regardless so control routing
-                        // above is never blocked by it.
-                        let _ = generic_tx.send(other);
-                    }
-                }
-            }
-        });
+        runtime::spawn(run_event_dispatcher(event_rx, control_tx, generic_tx));
 
         (
             P2pHost {
@@ -1204,5 +1242,101 @@ mod remote_control_bridge_tests {
             let flutter: FlutterPlaybackState = state.into();
             assert_eq!(PlaybackState::from(flutter), state);
         }
+    }
+}
+
+#[cfg(test)]
+mod event_dispatcher_tests {
+    use super::*;
+    use mydia_p2p_core::runtime::time::{timeout, Duration};
+
+    fn control_event(request_id: &str) -> Event {
+        Event::RequestReceived {
+            peer: "peer-controller".to_string(),
+            request: MydiaRequest::RemoteControl(RemoteControlRequest::GetState),
+            request_id: request_id.to_string(),
+        }
+    }
+
+    /// Pins the bug CodeRabbit found: an awaited `send` on the bounded
+    /// control channel used to block this loop once it filled up, which
+    /// stopped it from draining `event_rx` at all — silently stalling
+    /// *every* event, control and generic alike, not just the control
+    /// requests that were actually piling up.
+    #[test]
+    fn a_full_control_channel_does_not_stall_generic_event_delivery() {
+        runtime::block_on(async {
+            let (event_tx, event_rx) = mpsc::channel::<Event>(100);
+            let event_rx = Arc::new(Mutex::new(event_rx));
+            // Deliberately tiny, so the test does not need to send 33 events
+            // to reproduce a full channel.
+            let (control_tx, mut control_rx) = mpsc::channel::<FlutterInboundControlRequest>(2);
+            let (generic_tx, mut generic_rx) = mpsc::unbounded_channel::<Event>();
+
+            let _guard = runtime::enter();
+            runtime::spawn(run_event_dispatcher(event_rx, control_tx, generic_tx));
+
+            // Fill the control channel past capacity without ever draining
+            // `control_rx` — the "Dart never subscribed" scenario the
+            // finding describes.
+            for i in 0..5 {
+                event_tx
+                    .send(control_event(&format!("req-{i}")))
+                    .await
+                    .unwrap();
+            }
+
+            // A generic event sent after the control channel backed up must
+            // still arrive, and promptly: proof the dispatcher never
+            // blocked trying to hand the 3rd control request to a full
+            // channel.
+            event_tx.send(Event::RelayConnected).await.unwrap();
+
+            let generic = timeout(Duration::from_secs(2), generic_rx.recv())
+                .await
+                .expect(
+                    "the dispatcher must still be draining event_rx for the generic side, \
+                     even with the control side backed up",
+                )
+                .expect("generic_tx must still be open");
+            assert!(matches!(generic, Event::RelayConnected));
+
+            // Only as many control requests as fit the bounded channel were
+            // actually admitted; the rest were dropped rather than queued
+            // forever.
+            let mut received = 0;
+            while control_rx.try_recv().is_ok() {
+                received += 1;
+            }
+            assert_eq!(received, 2);
+        });
+    }
+
+    /// The other half of the same finding: `remote_control_stream`'s sink
+    /// closing (its subscriber cancels, or the stream itself ends) drops
+    /// `control_rx` entirely, which makes every future `try_send` return
+    /// `Closed` rather than `Full`. Generic event delivery must survive
+    /// that too.
+    #[test]
+    fn a_closed_control_receiver_does_not_stall_generic_event_delivery() {
+        runtime::block_on(async {
+            let (event_tx, event_rx) = mpsc::channel::<Event>(100);
+            let event_rx = Arc::new(Mutex::new(event_rx));
+            let (control_tx, control_rx) = mpsc::channel::<FlutterInboundControlRequest>(32);
+            drop(control_rx);
+            let (generic_tx, mut generic_rx) = mpsc::unbounded_channel::<Event>();
+
+            let _guard = runtime::enter();
+            runtime::spawn(run_event_dispatcher(event_rx, control_tx, generic_tx));
+
+            event_tx.send(control_event("req-1")).await.unwrap();
+            event_tx.send(Event::RelayConnected).await.unwrap();
+
+            let generic = timeout(Duration::from_secs(2), generic_rx.recv())
+                .await
+                .expect("the dispatcher must still be draining event_rx")
+                .expect("generic_tx must still be open");
+            assert!(matches!(generic, Event::RelayConnected));
+        });
     }
 }
