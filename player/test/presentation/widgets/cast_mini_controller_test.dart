@@ -61,10 +61,35 @@ CastSession _session({
 }
 
 /// Returns the container so a test can set a cast target after pumping.
+///
+/// Unmounts whatever is currently on screen before building the new
+/// container's tree. A test that calls this more than once (the subtitle
+/// icon test below is the only one that does) would otherwise hand the
+/// *same* `CastMiniController` element a new `ProviderContainer` in place:
+/// the `MaterialApp` subtree here is `const`, so Dart canonicalizes it to
+/// one object across calls, and Flutter reuses the existing element rather
+/// than unmounting it, merely swapping `UncontrolledProviderScope.container`
+/// underneath it. `CastMiniController`'s first frame always briefly
+/// subscribes to the ambient-banner providers (`session` starts `null`
+/// until the overridden `castSessionProvider` stream delivers on the next
+/// microtask, and a null session with no target renders the ambient
+/// banner), and Riverpod tears that subscription down as part of adopting
+/// the new container — but the *old* container's live Flutter vsync
+/// registration is already gone by then (it belongs to the same element,
+/// which has just repointed itself at the new container), so Riverpod
+/// falls back to a bare zero-duration `Timer` to schedule the disposal
+/// check. Nothing ever pumps the old container again to fire it, so it is
+/// still pending when the test ends. A real app never does this — one
+/// `ProviderContainer` lives for the whole process and is never swapped out
+/// from under a mounted widget — so unmounting first (a real, tracked
+/// dispose against whichever container was actually live) matches
+/// production and avoids the orphaned-timer artifact entirely.
 Future<ProviderContainer> _pump(
   WidgetTester tester, {
   CastSession? session,
 }) async {
+  await tester.pumpWidget(const SizedBox.shrink());
+
   final container = ProviderContainer(overrides: [
     castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
     authStateProvider.overrideWith(() =>
