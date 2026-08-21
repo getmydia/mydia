@@ -34,6 +34,22 @@ List<CastSubtitleTrack> orderSubtitlesForLoad(
   return [tracks[index], ...tracks]..removeAt(index + 1);
 }
 
+/// Whether picking [device] should *adopt* whatever is already playing on
+/// it, rather than connect media-less and wait for a `LoadContent`.
+///
+/// The signal is `metadata['nowPlayingTitle']`: `MydiaCastBackend`'s
+/// discovery probe (`_probeSequence`) sets it only when a `GetState` call
+/// made *during discovery* both succeeded and reported
+/// `FlutterPlaybackState.playing`. Everything else reads as false here —
+/// a non-Mydia device, a Mydia device the probe found idle, and one whose
+/// `GetState` failed during that same probe (`metadata['statusUnavailable']`,
+/// a target that answered `Hello` but not `GetState`) — and falls back to
+/// the existing media-less connect. Not knowing what a target is doing must
+/// never be read as "it's playing".
+bool isPlayingMydiaTarget(CastDevice device) =>
+    device.protocol == CastProtocolKind.mydia &&
+    device.metadata['nowPlayingTitle'] != null;
+
 /// Chooses which backend owns a device's protocol, and fans discovery out
 /// across every backend registered.
 ///
@@ -635,13 +651,44 @@ class CastSessionManager {
     // to be published, so every command with no device of its own to name
     // (`play`, `pause`, `seek`, ...) reaches the right receiver.
     _backend = backend;
-    _listenForConnectionLoss();
 
-    _publish(CastSession(
-      device: device,
-      playbackState: CastPlaybackState.idle,
-      connectionState: CastConnectionState.connected,
-    ));
+    if (isPlayingMydiaTarget(device)) {
+      // Adopted: something is already on this receiver that nobody here
+      // chose. See `_listenToBackendForAdoption`'s dartdoc for why this
+      // needs its own subscription setup rather than reusing
+      // `_listenForConnectionLoss` (no media, so nothing to track) or
+      // `_listenToBackend` (assumes this app is the one that loaded it).
+      _listenToBackendForAdoption();
+
+      _publish(CastSession(
+        device: device,
+        // Not `idle`: something genuinely is loaded, we just don't yet know
+        // its playback state — the first `stateStream` event resolves this,
+        // same as a freshly loaded session sits at `buffering` until the
+        // receiver reports otherwise.
+        playbackState: CastPlaybackState.buffering,
+        connectionState: CastConnectionState.connected,
+        mediaInfo: CastMediaInfo(
+          // The only field the discovery probe actually carries (see
+          // `isPlayingMydiaTarget`'s dartdoc) — guaranteed non-null here.
+          // Duration and position start at zero and are corrected by the
+          // first real `durationStream`/`positionStream` events, exactly
+          // like a freshly loaded session's placeholder is corrected by the
+          // receiver's own numbers.
+          title: device.metadata['nowPlayingTitle']!,
+          duration: Duration.zero,
+          position: Duration.zero,
+        ),
+      ));
+    } else {
+      _listenForConnectionLoss();
+
+      _publish(CastSession(
+        device: device,
+        playbackState: CastPlaybackState.idle,
+        connectionState: CastConnectionState.connected,
+      ));
+    }
   }
 
   /// Failure-only subscription for an idle connection.
@@ -677,6 +724,85 @@ class CastSessionManager {
 
       debugPrint('[CastSessionManager] Receiver lost while idle');
       _publish(current.copyWith(connectionState: CastConnectionState.lost));
+    });
+  }
+
+  /// Subscription setup for a session this app *adopted* — connected to and
+  /// found already playing — rather than one it loaded itself.
+  ///
+  /// Differs from [_listenToBackend] in every way that assumption matters:
+  ///
+  /// - Never calls [_syncProgress]. Progress reporting stays with whoever is
+  ///   playing: the target is the one writing `updateMovieProgress`/
+  ///   `updateEpisodeProgress` for this item already, and a second writer
+  ///   here would race it for continue-watching.
+  /// - Resets [_timeline] to [StreamTimeline.zero] instead of carrying
+  ///   forward whatever offset a *previous*, unrelated session on this same
+  ///   manager left behind. A stale offset here would mistranslate a later
+  ///   [seek] on a session this manager never itself routed — the receiver's
+  ///   position already *is* the real position.
+  /// - Clears every field that answers "what did I load" —
+  ///   [_persisted], [_lastRequest], [_subtitles], [_selectedSubtitle] — for
+  ///   the same reason: this session's item was never chosen through this
+  ///   manager, so a value left over from an earlier, different session must
+  ///   not be read as this one's.
+  /// - Leaves [_lastDuration] at [Duration.zero] rather than tracking the
+  ///   receiver's real duration the way [_listenToBackend] does. That field
+  ///   exists only to gate [_syncProgress] (see its own `<=` guard), which
+  ///   this method never calls — keeping it at zero means an adopted session
+  ///   stays inert to progress sync even if something were ever wired up to
+  ///   call it by mistake, rather than merely happening not to be called
+  ///   today.
+  ///
+  /// [_updateMediaInfo] still does the actual publishing — the same helper
+  /// [_listenToBackend] uses — since both cases are "republish [_current]'s
+  /// `mediaInfo` with a new position/duration applied" and nothing about
+  /// that step differs for an adopted session.
+  void _listenToBackendForAdoption() {
+    _cancelSubscriptions();
+
+    _persisted = null;
+    _lastRequest = null;
+    _lastDuration = Duration.zero;
+    _lastProgressSync = null;
+    _subtitles = const [];
+    _selectedSubtitle = null;
+    _useTimeline(StreamTimeline.zero);
+
+    _durationSub = _backend.durationStream.listen((duration) {
+      // Same "receiver says -1 for unknown" guard `_listenToBackend` uses.
+      if (duration <= Duration.zero) return;
+      _updateMediaInfo(duration: duration);
+    });
+
+    _positionSub = _backend.positionStream.listen((position) {
+      // No `_timeline` translation: an adopted session was never routed
+      // through this manager, so the receiver's own position already is the
+      // real one.
+      _updateMediaInfo(position: position);
+    });
+
+    _stateSub = _backend.stateStream.listen((state) {
+      final current = _current;
+      if (current == null) return;
+      _publish(current.copyWith(playbackState: state));
+    });
+
+    _failureSub = _backend.failureStream.listen((failure) {
+      if (failure != CastFailureKind.connectionLost &&
+          failure != CastFailureKind.notAuthorized) {
+        return;
+      }
+
+      final current = _current;
+      if (current == null) return;
+
+      debugPrint(
+          '[CastSessionManager] Adopted receiver lost; marking session stale');
+      _publish(current.copyWith(
+        connectionState: CastConnectionState.lost,
+        playbackState: CastPlaybackState.idle,
+      ));
     });
   }
 

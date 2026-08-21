@@ -2157,6 +2157,117 @@ void main() {
     });
   });
 
+  group('connectTo adopting an already-playing Mydia target', () {
+    test('an idle Mydia target still gets a media-less connection', () async {
+      // No `nowPlayingTitle` in metadata is exactly what the discovery probe
+      // stashes for a target it found idle (or couldn't confirm) — see
+      // `isPlayingMydiaTarget`'s dartdoc.
+      final chromecast = FakeBackend(devices: const []);
+      final mydia = FakeCastBackend();
+      final manager =
+          buildManagerWithBackends(chromecast: chromecast, mydia: mydia);
+      addTearDown(manager.dispose);
+
+      const idleDevice = CastDevice(
+        id: 'node-tv',
+        name: 'Living Room',
+        protocol: CastProtocolKind.mydia,
+        metadata: {'nodeId': 'node-tv'},
+      );
+
+      await manager.connectTo(idleDevice);
+
+      expect(manager.currentSession?.connectionState,
+          CastConnectionState.connected);
+      expect(manager.currentSession?.playbackState, CastPlaybackState.idle);
+      expect(manager.currentSession?.mediaInfo, isNull,
+          reason: 'the existing media-less connect publishes no mediaInfo');
+      expect(mydia.loadedRequests, isEmpty);
+    });
+
+    test('a playing Mydia target is adopted without sending LoadContent',
+        () async {
+      final chromecast = FakeBackend(devices: const []);
+      final mydia = FakeCastBackend();
+      final manager =
+          buildManagerWithBackends(chromecast: chromecast, mydia: mydia);
+      addTearDown(manager.dispose);
+
+      const playingDevice = CastDevice(
+        id: 'node-tv',
+        name: 'Living Room',
+        protocol: CastProtocolKind.mydia,
+        metadata: {
+          'nodeId': 'node-tv',
+          'nowPlayingTitle': 'Blade Runner',
+        },
+      );
+
+      await manager.connectTo(playingDevice);
+
+      // The receiver's own numbers, arriving after connect — not anything
+      // this controller chose, since `connectTo` never took a
+      // `CastLaunchRequest` to choose from in the first place.
+      mydia.emitDuration(const Duration(hours: 2, minutes: 3));
+      mydia.emitPosition(const Duration(minutes: 41));
+      mydia.emitState(CastPlaybackState.playing);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(manager.currentSession?.connectionState,
+          CastConnectionState.connected);
+      expect(manager.currentSession?.mediaInfo?.title, 'Blade Runner');
+      expect(manager.currentSession?.mediaInfo?.duration,
+          const Duration(hours: 2, minutes: 3));
+      expect(manager.currentSession?.mediaInfo?.position,
+          const Duration(minutes: 41));
+      expect(manager.currentSession?.playbackState, CastPlaybackState.playing);
+
+      // The point of the whole feature: adopting must not restart playback.
+      expect(mydia.loadedRequests, isEmpty);
+    });
+
+    test(
+        'adopting clears what an earlier, unrelated cast on this manager '
+        'chose', () async {
+      // `_lastRequest`/`_persisted` from a real prior session — not merely
+      // an idle connect, which never sets either — must not leak into an
+      // adopted one. See `_listenToBackendForAdoption`'s dartdoc.
+      final chromecast = FakeCastBackend();
+      final mydia = FakeCastBackend();
+      final manager =
+          buildManagerWithBackends(chromecast: chromecast, mydia: mydia);
+      addTearDown(manager.dispose);
+
+      const chromecastDevice = CastDevice(
+        id: 'cc-1',
+        name: 'Office TV',
+        protocol: CastProtocolKind.chromecast,
+      );
+      await manager.startCast(device: chromecastDevice, request: launch);
+      // Sanity: `startCast` really did choose something, so the clear below
+      // proves adoption undoes it rather than the fields never having been
+      // set in the first place.
+      expect(manager.canRetarget, isTrue);
+      expect(manager.persistedSession, isNotNull);
+
+      const playingDevice = CastDevice(
+        id: 'node-tv',
+        name: 'Living Room',
+        protocol: CastProtocolKind.mydia,
+        metadata: {
+          'nodeId': 'node-tv',
+          'nowPlayingTitle': 'Arrival',
+        },
+      );
+      await manager.connectTo(playingDevice);
+
+      expect(manager.canRetarget, isFalse,
+          reason: 'an adopted session was never chosen through this '
+              'manager, so there is nothing to retarget');
+      expect(manager.persistedSession, isNull);
+    });
+  });
+
   group('startCast rollback across two backends', () {
     test(
         'a failing startCast on one backend must not disconnect or clobber '
