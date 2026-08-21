@@ -257,6 +257,12 @@ class AuthStateNotifier extends Notifier<AsyncValue<AuthStatus>> {
   }
 
   Future<void> _checkAuth() async {
+    // Before the `try`, so the guards inside it do not cover this write.
+    // `login()` reaches here after awaiting `setSession`, and `refresh()` and
+    // `retryConnection()` are both called without being awaited, so this can
+    // start after disposal.
+    if (!ref.mounted) return;
+
     debugPrint(
         '[AuthStateNotifier] _checkAuth() called, setting state to loading');
     state = const AsyncValue.loading();

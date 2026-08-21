@@ -114,6 +114,11 @@ class UpdateNotifier extends Notifier<UpdateState> {
   }
 
   Future<void> _performCheck({required bool force}) async {
+    // Before the `try`, so the guards inside it do not cover this read and
+    // write. Reached unawaited from `_initAndCheck` and from
+    // `checkForUpdate`, either of which can resume after disposal.
+    if (!ref.mounted) return;
+
     if (state.isChecking) return;
 
     state = state.copyWith(isChecking: true, clearError: true);
@@ -145,6 +150,10 @@ class UpdateNotifier extends Notifier<UpdateState> {
 
   /// Download and apply the available update.
   Future<void> applyUpdate() async {
+    // Same reason as `_performCheck`: the reads and the write below sit
+    // outside the `try`.
+    if (!ref.mounted) return;
+
     final update = state.availableUpdate;
     if (update == null || _platformUpdater == null || state.isApplying) return;
 

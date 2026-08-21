@@ -464,6 +464,12 @@ void main() {
     // earlier keeps the reset adjacent to the mount it exists to protect.
     await getAuthStorage().deleteAll();
 
+    // Registered before the mount so any of the seven steps below failing
+    // still tears the app down. This test has the most assertions of any
+    // suite, so it is the most likely to exit early; see `unmountApp` for why
+    // an un-settled teardown takes out every later suite.
+    addTearDown(() => unmountApp(tester));
+
     await tester.pumpWidget(const ProviderScope(child: MyApp()));
     final aClaimCode = await _generateClaimCode(adminApi, 'A');
     await _pairPlayerA(tester, aClaimCode);

@@ -107,6 +107,11 @@ void main() {
           reason: 'E2E_CLAIM_CODE must be set via --dart-define');
       debugPrint('Using pre-generated claim code: $claimCode');
 
+      // Registered before the mount so a failure anywhere below still tears
+      // the app down. See `unmountApp` for why an un-settled teardown breaks
+      // every later suite in the shared isolate.
+      addTearDown(() => unmountApp(tester));
+
       // Launch the app using pumpWidget with proper Riverpod scope
       await tester.pumpWidget(
         const ProviderScope(
