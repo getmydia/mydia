@@ -39,6 +39,12 @@ class P2pStatusNotifier extends Notifier<P2pStatus> {
     _subscription = service.onStatusChanged.listen((status) {
       debugPrint(
           '[P2pStatusNotifier] Received status update: peerConnectionType=${status.peerConnectionType}');
+      // `onDispose` cancels this subscription, but `cancel()` is async and
+      // does not retract an event already queued for delivery, so one can
+      // still arrive here after the provider is gone. Writing `state` then
+      // throws UnmountedRefException from a stream callback, where nothing
+      // catches it. Same guard, same reason, as `connection_provider.dart`.
+      if (!ref.mounted) return;
       state = status;
     });
 
@@ -60,6 +66,8 @@ class P2pStatusNotifier extends Notifier<P2pStatus> {
 
       // Reinitialize with new relay URL
       await p2pService.initialize(relayUrl: relayUrl);
+
+      if (!ref.mounted) return;
 
       state = p2pService.status;
     } catch (e) {

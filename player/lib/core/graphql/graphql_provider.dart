@@ -221,9 +221,18 @@ class AuthStateNotifier extends Notifier<AsyncValue<AuthStatus>> {
       // Check if we have stored credentials
       final isAuth = await authService.isAuthenticated();
 
+      // `build` calls this without awaiting it, so nothing holds the provider
+      // open across the secure-storage read above. Same guard, same reason, as
+      // `connection_provider.dart` and `compatibility_provider.dart`.
+      if (!ref.mounted) return;
+
       state = AsyncValue.data(
           isAuth ? AuthStatus.authenticated : AuthStatus.unauthenticated);
     } catch (e, st) {
+      // Guarded because a disposal that threw out of the try lands here and
+      // throws again from the handler, turning a caught error into an
+      // unhandled async one.
+      if (!ref.mounted) return;
       state = AsyncValue.error(e, st);
     }
   }
@@ -257,10 +266,13 @@ class AuthStateNotifier extends Notifier<AsyncValue<AuthStatus>> {
       debugPrint('[AuthStateNotifier] isAuthenticated() returned: $isAuth');
       final status =
           isAuth ? AuthStatus.authenticated : AuthStatus.unauthenticated;
+      if (!ref.mounted) return;
       state = AsyncValue.data(status);
       debugPrint('[AuthStateNotifier] State set to AsyncValue.data($status)');
     } catch (e, st) {
       debugPrint('[AuthStateNotifier] _checkAuth() error: $e');
+      // Same double-throw guard as `_initAuth`.
+      if (!ref.mounted) return;
       state = AsyncValue.error(e, st);
     }
   }
@@ -299,7 +311,10 @@ class AuthStateNotifier extends Notifier<AsyncValue<AuthStatus>> {
       () => ref.read(connectionProvider.notifier).clear(),
     );
 
-    // Last, because this is what redirects the router to /login.
+    // Last, because this is what redirects the router to /login. Guarded
+    // because the two awaits above are storage work: this notifier outlives
+    // the screen that calls it, but not a teardown of the whole container.
+    if (!ref.mounted) return;
     state = const AsyncValue.data(AuthStatus.unauthenticated);
   }
 
