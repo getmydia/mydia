@@ -449,6 +449,30 @@ class CastSessionManager {
       }
     }
 
+    if (generation != _connectGeneration) {
+      // Superseded (by a second `startCast`, a `connectTo`, or `stopCast`)
+      // while `backend.connect()` above — or the `reusable` check itself —
+      // was resolving. `connectTo`'s own catch block already guards this
+      // moment for the *failure* path; this is the same race on the success
+      // path, which until now ran `_backend = backend; _listenToBackend(...)`
+      // unconditionally just below. A winner may already have its own
+      // backend and listeners live, and repointing `_backend` here would
+      // silently kill that winner's `connectionLost`/`notAuthorized`
+      // reporting for the rest of the session — permanently, since nothing
+      // re-arms it short of another connectTo/startCast/stopCast.
+      //
+      // Same device-match and newer-ownership care as `connectTo`'s stale
+      // branch: `backend.disconnect()` targets whatever this backend
+      // currently holds, with no device argument to aim it, so it must not
+      // run when a newer call already owns this same backend/device.
+      final newerOwnsThisDevice = _current?.device.id == device.id;
+      if (backend.connectedDevice?.id == device.id && !newerOwnsThisDevice) {
+        await backend.disconnect();
+      }
+      await _abandonStart(lanEnabledBeforeCall, startedHlsSessions);
+      return;
+    }
+
     _backend = backend;
     _listenToBackend(request);
 

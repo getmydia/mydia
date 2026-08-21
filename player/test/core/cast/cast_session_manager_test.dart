@@ -2163,12 +2163,19 @@ void main() {
         'a connectTo that already won on a different backend', () async {
       // The reviewer's live repro, reduced to a test: a `startCast` to a
       // chromecast device whose loads all fail, racing a `connectTo` to a
-      // different (mydia) device that wins outright. Before this fix, the
-      // stale `startCast`'s failure-rollback catch block read the shared
-      // `_backend` field (by then repointed at the mydia backend) and called
-      // `_publish(null)`/`_cancelSubscriptions()` unconditionally — nulling
-      // out the live, unrelated mydia session and tearing down its just
-      // installed listeners.
+      // different (mydia) device that wins outright. Originally this
+      // exercised the stale `startCast`'s failure-rollback catch block,
+      // which used to read the shared `_backend` field (by then repointed
+      // at the mydia backend) and call `_publish(null)`/
+      // `_cancelSubscriptions()` unconditionally — nulling out the live,
+      // unrelated mydia session and tearing down its just installed
+      // listeners. A later fix added a generation check right after
+      // `backend.connect()` resolves, so this exact race is now caught
+      // earlier still — the stale call bails out before ever reaching
+      // `_loadWithRetries` or that catch block at all. `failAllLoads` below
+      // is kept anyway as a belt-and-suspenders: if that earlier guard ever
+      // regressed, this call would fall through to the load attempt and
+      // this test would still catch the clobber.
       final chromecastBackend = FakeCastBackend();
       final mydiaBackend = FakeCastBackend();
       final manager = buildManagerWithBackends(
@@ -2190,9 +2197,10 @@ void main() {
       );
 
       // Held at `connect` so the test controls exactly when the stale
-      // startCast resumes relative to the winning connectTo below, and every
-      // load fails so it is guaranteed to reach the rollback catch block —
-      // `unreachable` with no LAN base URL configured here means
+      // startCast resumes relative to the winning connectTo below. Every
+      // load fails too, so that if the early generation guard ever
+      // regressed, this call would be guaranteed to reach the rollback catch
+      // block — `unreachable` with no LAN base URL configured here means
       // `_retryRouteFor` finds no bridge to fall back to and gives up after
       // one attempt.
       chromecastBackend.holdNextConnect();
@@ -2210,12 +2218,13 @@ void main() {
           CastConnectionState.connected);
 
       // Let the stale startCast's held connect proceed. It connects to the
-      // chromecast backend, fails to load, and hits its rollback catch block
-      // with `_backend` currently pointed at the mydia backend the connectTo
-      // above just committed.
+      // chromecast backend, notices it has been superseded, disconnects that
+      // backend itself, and returns — never touching `_backend` (still the
+      // mydia backend the connectTo above committed) and never reaching
+      // `_loadWithRetries`.
       chromecastBackend.releaseConnect();
 
-      await expectLater(started, throwsA(isA<CastBackendException>()));
+      await started;
 
       expect(manager.currentSession?.device.id, mydiaDevice.id,
           reason: 'the older, unrelated, failing startCast must not clobber '
@@ -2231,6 +2240,83 @@ void main() {
       expect(chromecastBackend.disconnectCallCount, 1,
           reason: 'the stale startCast still tears down its own, actually '
               'failed connection');
+    });
+
+    test(
+        'a stale startCast must not kill the winning connectTo\'s '
+        'connectionLost listener', () async {
+      // Same race as above, but this one is about the success path right
+      // after `backend.connect()` resolves, not the failure-rollback catch
+      // block: before this fix, `startCast` ran `_backend = backend;
+      // _listenToBackend(request);` unconditionally there, with no
+      // generation check at all. A stale `startCast` that loses to a
+      // concurrent `connectTo` still repointed `_backend` at its own
+      // (unwanted) backend and cancelled the winner's subscriptions —
+      // permanently killing the winner's `connectionLost`/`notAuthorized`
+      // reporting, since nothing re-arms it short of another
+      // connectTo/startCast/stopCast. Session identity alone (asserted
+      // above) cannot catch this: that assertion already passes even when
+      // this listener is dead.
+      final chromecastBackend = FakeCastBackend();
+      final mydiaBackend = FakeCastBackend();
+      final manager = buildManagerWithBackends(
+        chromecast: chromecastBackend,
+        mydia: mydiaBackend,
+      );
+      addTearDown(manager.dispose);
+
+      const ccDevice = CastDevice(
+        id: 'cc-1',
+        name: 'Living Room TV',
+        protocol: CastProtocolKind.chromecast,
+      );
+      const mydiaDevice = CastDevice(
+        id: 'node-tv',
+        name: 'Bedroom',
+        protocol: CastProtocolKind.mydia,
+        metadata: {'nodeId': 'node-tv'},
+      );
+
+      // Held at `connect` so the test controls exactly when the stale
+      // startCast resumes relative to the winning connectTo below. Its load
+      // is set to fail throughout as a belt-and-suspenders (see the sibling
+      // test above): irrelevant to what this test actually proves, since the
+      // damage (if any) happens the instant `connect` resolves, before any
+      // load is attempted — but if the early generation guard ever
+      // regressed, a load that instead *succeeded* would trip a different,
+      // out-of-scope bug (the unguarded `_publish` in `_loadOnRoute`) and
+      // muddy this test's failure signal.
+      chromecastBackend.holdNextConnect();
+      chromecastBackend.failAllLoads(CastFailureKind.unreachable);
+
+      final started = manager.startCast(device: ccDevice, request: launch);
+      await Future<void>.delayed(Duration.zero);
+
+      // The winning, unrelated connectTo: a different device on a different
+      // backend, nothing superseding it, so it publishes a connected session
+      // and installs its own connectionLost listener on mydiaBackend.
+      await manager.connectTo(mydiaDevice);
+      expect(manager.currentSession?.device.id, mydiaDevice.id);
+      expect(manager.currentSession?.connectionState,
+          CastConnectionState.connected);
+
+      // Let the stale startCast's held connect proceed and run to
+      // completion. With the fix, it notices it has been superseded right
+      // after `connect()` resolves and bails out — never touching `_backend`
+      // or the winner's listeners, and never reaching `_loadWithRetries`.
+      chromecastBackend.releaseConnect();
+      await started;
+
+      // The real assertion: the winner's own failure listener must still be
+      // live on its own backend.
+      mydiaBackend.emitFailure(CastFailureKind.connectionLost);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(manager.currentSession?.device.id, mydiaDevice.id);
+      expect(manager.currentSession?.connectionState, CastConnectionState.lost,
+          reason: 'the winning connectTo\'s connectionLost listener must '
+              'survive a stale startCast that loses the generation race '
+              'after its own connect() resolves');
     });
   });
 }
