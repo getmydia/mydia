@@ -4,6 +4,7 @@ defmodule MydiaWeb.Schema.Resolvers.DeviceResolver do
   """
 
   alias Mydia.RemoteAccess
+  alias Mydia.RemoteAccess.RemoteDevice
 
   @doc """
   Lists all devices for the current user.
@@ -67,9 +68,16 @@ defmodule MydiaWeb.Schema.Resolvers.DeviceResolver do
         {:error, :forbidden}
 
       device ->
-        case RemoteAccess.register_node_id(device, node_id) do
-          {:ok, updated} -> {:ok, format_device(updated)}
-          {:error, changeset} -> {:error, message: "Invalid node ID", details: changeset}
+        # A revoked device holding an unexpired token must not be able to
+        # keep re-registering its node id — `revoke_device/1` is documented
+        # as preventing future access, and this mutation is access.
+        if RemoteDevice.revoked?(device) do
+          {:error, :unauthorized}
+        else
+          case RemoteAccess.register_node_id(device, node_id) do
+            {:ok, updated} -> {:ok, format_device(updated)}
+            {:error, changeset} -> {:error, message: "Invalid node ID", details: changeset}
+          end
         end
     end
   end

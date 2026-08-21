@@ -92,5 +92,27 @@ defmodule MydiaWeb.Schema.DeviceTest do
                  context: %{current_user: other, device_id: device.id}
                )
     end
+
+    test "refuses a revoked device holding an otherwise-valid token", %{
+      user: user,
+      device: device
+    } do
+      {:ok, revoked} = RemoteAccess.revoke_device(device)
+
+      mutation = """
+      mutation($nodeId: String!) {
+        registerDeviceNode(nodeId: $nodeId) { id nodeId }
+      }
+      """
+
+      assert {:ok, %{errors: [_ | _]}} =
+               Absinthe.run(mutation, MydiaWeb.Schema,
+                 variables: %{"nodeId" => String.duplicate("e", 64)},
+                 context: %{current_user: user, device_id: revoked.id}
+               )
+
+      # The mutation must not have registered the node id either.
+      refute RemoteAccess.get_device(revoked.id).node_id
+    end
   end
 end
