@@ -283,15 +283,46 @@ defmodule MydiaWeb.DashboardLive.Index do
   end
 
   def handle_info({:add_media_to_library, provider_id, media_type, library_path_id}, socket) do
-    # Comes from client params, so a blank string is possible. "" is truthy in
-    # Elixir and would reach the changeset as library_path_id: "", failing the
-    # foreign key instead of falling back to normal resolution.
-    opts =
-      case library_path_id do
-        id when is_binary(id) and id != "" -> [library_path_id: id]
-        _ -> []
-      end
+    case MediaAddHelpers.library_path_opts(library_path_id, media_type) do
+      {:error, :unknown_library} ->
+        {:noreply,
+         socket
+         |> clear_adding(provider_id)
+         |> put_flash(:error, "That library is no longer available. Nothing was added.")}
 
+      {:ok, opts} ->
+        add_with_opts(provider_id, media_type, opts, socket)
+    end
+  end
+
+  def handle_info({:request_media, provider_id, media_type}, socket) do
+    trending = socket.assigns.trending_movies ++ socket.assigns.trending_tv
+
+    case Enum.find(trending, &(to_string(&1.provider_id) == provider_id)) do
+      nil ->
+        {:noreply, assign(socket, :requesting_item_id, nil)}
+
+      item ->
+        {:noreply, submit_request(socket, item, media_type)}
+    end
+  end
+
+  # Grab outcomes are broadcast on the "downloads" topic and handled by
+  # MediaLive.Show, which owns the manual-search UI. Ignore them quietly here
+  # so the catch-all below keeps meaning "genuinely unexpected message".
+  def handle_info({:grab_completed, _payload}, socket), do: {:noreply, socket}
+  def handle_info({:grab_failed, _payload}, socket), do: {:noreply, socket}
+  def handle_info({:grab_duplicate, _payload}, socket), do: {:noreply, socket}
+
+  def handle_info(msg, socket) do
+    # Catch-all for unhandled messages to prevent crashes
+    Logger.warning("Unhandled message in DashboardLive.Index: #{inspect(msg)}")
+    {:noreply, socket}
+  end
+
+  ## Private Helpers
+
+  defp add_with_opts(provider_id, media_type, opts, socket) do
     case MediaAddHelpers.handle_add_media_to_library(
            provider_id,
            media_type,
@@ -354,33 +385,6 @@ defmodule MydiaWeb.DashboardLive.Index do
          |> put_flash(:error, "Failed to fetch metadata: #{inspect(reason)}")}
     end
   end
-
-  def handle_info({:request_media, provider_id, media_type}, socket) do
-    trending = socket.assigns.trending_movies ++ socket.assigns.trending_tv
-
-    case Enum.find(trending, &(to_string(&1.provider_id) == provider_id)) do
-      nil ->
-        {:noreply, assign(socket, :requesting_item_id, nil)}
-
-      item ->
-        {:noreply, submit_request(socket, item, media_type)}
-    end
-  end
-
-  # Grab outcomes are broadcast on the "downloads" topic and handled by
-  # MediaLive.Show, which owns the manual-search UI. Ignore them quietly here
-  # so the catch-all below keeps meaning "genuinely unexpected message".
-  def handle_info({:grab_completed, _payload}, socket), do: {:noreply, socket}
-  def handle_info({:grab_failed, _payload}, socket), do: {:noreply, socket}
-  def handle_info({:grab_duplicate, _payload}, socket), do: {:noreply, socket}
-
-  def handle_info(msg, socket) do
-    # Catch-all for unhandled messages to prevent crashes
-    Logger.warning("Unhandled message in DashboardLive.Index: #{inspect(msg)}")
-    {:noreply, socket}
-  end
-
-  ## Private Helpers
 
   # Four completion clauses all retire the same id. A MapSet rather than a
   # single id so a second add cannot blank the first one's spinner (#459).
