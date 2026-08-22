@@ -831,6 +831,15 @@
                   <span>•</span>
                   <span>{format_progress(torrent.progress)}%</span>
                 <% end %>
+                <%!-- Without this, a plainly matchable release sitting here
+                      untouched gives no clue whether Mydia skipped it on
+                      purpose or failed at something. --%>
+                <%= if torrent.excluded_by_policy do %>
+                  <span>•</span>
+                  <span title="This client's External torrents setting tells Mydia not to adopt it">
+                    Not adopted by client setting
+                  </span>
+                <% end %>
               </div>
               <%= if @search_open_for == torrent.id do %>
                 <MydiaWeb.Live.Components.LibrarySearchForm.library_search_form

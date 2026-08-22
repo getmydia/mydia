@@ -9,10 +9,15 @@ defmodule Mydia.Downloads.Structs.ExternalTorrent do
 
   `kind` is the split that decides where it renders:
 
-    * `:needs_matching` — the name parses as a movie or a TV release, so Mydia
-      offers to match it to the library (Issues tab)
-    * `:external` — anything else, most often genuinely unrelated to Mydia
-      (External tab)
+    * `:needs_matching` — the name parses as a movie or a TV release AND the
+      client's policy would have adopted it, so Mydia offers to match it to
+      the library (Issues tab)
+    * `:external` — anything else (External tab). That includes a perfectly
+      parseable release from a client the operator told Mydia to leave alone,
+      which is why `excluded_by_policy` exists: without it an operator sees a
+      matchable film sitting untouched with no way to tell whether Mydia
+      skipped it on purpose or failed at something. See
+      `Mydia.Downloads.ExternalPolicy` and issue #531.
 
   `seeders` / `leechers` are deliberately absent: adapters return
   `Mydia.Downloads.Structs.DownloadStatus`, which does not carry them.
@@ -35,6 +40,7 @@ defmodule Mydia.Downloads.Structs.ExternalTorrent do
     :ratio,
     :save_path,
     :parsed,
+    excluded_by_policy: false,
     suggestions: []
   ]
 
@@ -61,6 +67,7 @@ defmodule Mydia.Downloads.Structs.ExternalTorrent do
           ratio: float() | nil,
           save_path: String.t() | nil,
           parsed: ParsedFileInfo.t() | nil,
+          excluded_by_policy: boolean(),
           suggestions: [suggestion()]
         }
 end
