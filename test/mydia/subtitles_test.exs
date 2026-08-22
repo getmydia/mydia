@@ -1,5 +1,7 @@
 defmodule Mydia.SubtitlesTest do
-  use Mydia.DataCase, async: true
+  # Not async: the provider-type fallback test stubs the relay by setting
+  # :subtitle_relay_url, which is global application state.
+  use Mydia.DataCase, async: false
 
   defmodule RecordingAdapter do
     @behaviour Mydia.Subtitles.Provider
