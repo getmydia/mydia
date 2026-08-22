@@ -20,6 +20,7 @@ on:
       - "priv/graphql/schema.graphql"
       - ".github/workflows/ci-player.yml"
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - "player/**"
       - "native/**"
