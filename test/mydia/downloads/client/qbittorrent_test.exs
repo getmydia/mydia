@@ -1031,6 +1031,59 @@ defmodule Mydia.Downloads.Client.QBittorrentTest do
     end
   end
 
+  describe "category parsing (Bypass)" do
+    setup do
+      bypass = Bypass.open()
+      stub_login(bypass)
+      {:ok, bypass: bypass, config: bypass_config(bypass)}
+    end
+
+    test "reports the torrent's category as a single-element list", %{
+      bypass: bypass,
+      config: config
+    } do
+      hash = "1111111111111111111111111111111111111111"
+
+      Bypass.expect(bypass, "GET", "/api/v2/torrents/info", fn conn ->
+        json_resp(conn, 200, [torrent_payload(hash, category: "mydia")])
+      end)
+
+      assert {:ok, [status]} = QBittorrent.list_torrents(config)
+      assert status.categories == ["mydia"]
+    end
+
+    test "reports an empty list when the category is the empty string", %{
+      bypass: bypass,
+      config: config
+    } do
+      # qBittorrent sends "" rather than omitting the key for an uncategorised
+      # torrent. Treating "" as a category would make it match a client whose
+      # configured category is also blank.
+      hash = "2222222222222222222222222222222222222222"
+
+      Bypass.expect(bypass, "GET", "/api/v2/torrents/info", fn conn ->
+        json_resp(conn, 200, [torrent_payload(hash, category: "")])
+      end)
+
+      assert {:ok, [status]} = QBittorrent.list_torrents(config)
+      assert status.categories == []
+    end
+
+    test "reports an empty list when the key is absent entirely", %{
+      bypass: bypass,
+      config: config
+    } do
+      hash = "3333333333333333333333333333333333333333"
+
+      Bypass.expect(bypass, "GET", "/api/v2/torrents/info", fn conn ->
+        json_resp(conn, 200, [torrent_payload(hash)])
+      end)
+
+      assert {:ok, [status]} = QBittorrent.list_torrents(config)
+      assert status.categories == []
+    end
+  end
+
   ## Helpers
 
   defp bypass_config(bypass) do

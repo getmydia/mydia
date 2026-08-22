@@ -567,9 +567,17 @@ defmodule Mydia.Downloads.Client.QBittorrent do
       save_path: save_path,
       files: content_files(save_path, torrent["content_path"]),
       added_at: Helpers.parse_timestamp_unix(torrent["added_on"]),
-      completed_at: Helpers.parse_timestamp_unix(torrent["completion_on"])
+      completed_at: Helpers.parse_timestamp_unix(torrent["completion_on"]),
+      categories: parse_categories(torrent["category"])
     })
   end
+
+  # qBittorrent has one category per torrent and sends "" for an uncategorised
+  # one rather than omitting the key. Read back by
+  # `Mydia.Downloads.ExternalPolicy` to tell a torrent Mydia added from one the
+  # operator added by hand.
+  defp parse_categories(category) when is_binary(category) and category != "", do: [category]
+  defp parse_categories(_absent_or_blank), do: []
 
   # `save_path` is the *containing* directory, so a single-file torrent reports
   # the shared download root verbatim — and MediaImport's fallback recursively

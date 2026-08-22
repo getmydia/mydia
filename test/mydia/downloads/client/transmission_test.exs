@@ -528,6 +528,94 @@ defmodule Mydia.Downloads.Client.TransmissionTest do
     end
   end
 
+  ## Bypass helpers for the label read path
+  ##
+  ## `bypass_config/1` already exists above, next to the priority-profile tests.
+
+  # Transmission's RPC requires a session-id round trip first: the initial call
+  # gets a 409 carrying the header, and the real call follows with it set.
+  defp stub_rpc(bypass, responder) do
+    Bypass.expect(bypass, "POST", "/transmission/rpc", fn conn ->
+      case Plug.Conn.get_req_header(conn, "x-transmission-session-id") do
+        [] ->
+          conn
+          |> Plug.Conn.put_resp_header("x-transmission-session-id", "test-session-id")
+          |> Plug.Conn.resp(409, "")
+
+        ["test-session-id"] ->
+          responder.(conn)
+      end
+    end)
+  end
+
+  defp transmission_payload(overrides) do
+    Map.merge(
+      %{
+        "hashString" => "abc123",
+        "name" => "Dune.Part.Two.2024.2160p.WEB-DL.x265-GROUP",
+        "status" => 6,
+        "percentDone" => 1.0,
+        "rateDownload" => 0,
+        "rateUpload" => 0,
+        "downloadedEver" => 1000,
+        "uploadedEver" => 0,
+        "totalSize" => 1000,
+        "eta" => -1,
+        "uploadRatio" => 0.0,
+        "downloadDir" => "/downloads",
+        "addedDate" => 1_700_000_000,
+        "doneDate" => 1_700_000_100
+      },
+      overrides
+    )
+  end
+
+  defp stub_torrent_get(bypass, torrent) do
+    stub_rpc(bypass, fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(
+        200,
+        Jason.encode!(%{"result" => "success", "arguments" => %{"torrents" => [torrent]}})
+      )
+    end)
+  end
+
+  describe "label parsing (Bypass)" do
+    setup do
+      bypass = Bypass.open()
+      {:ok, bypass: bypass, config: bypass_config(bypass)}
+    end
+
+    test "reports every non-blank label", %{bypass: bypass, config: config} do
+      stub_torrent_get(bypass, transmission_payload(%{"labels" => ["mydia", "seeding"]}))
+
+      assert {:ok, [status]} = Transmission.list_torrents(config)
+      assert status.categories == ["mydia", "seeding"]
+    end
+
+    test "reports an empty list when labels is empty", %{bypass: bypass, config: config} do
+      stub_torrent_get(bypass, transmission_payload(%{"labels" => []}))
+
+      assert {:ok, [status]} = Transmission.list_torrents(config)
+      assert status.categories == []
+    end
+
+    test "reports an empty list when labels is absent", %{bypass: bypass, config: config} do
+      stub_torrent_get(bypass, transmission_payload(%{}))
+
+      assert {:ok, [status]} = Transmission.list_torrents(config)
+      assert status.categories == []
+    end
+
+    test "drops blank labels", %{bypass: bypass, config: config} do
+      stub_torrent_get(bypass, transmission_payload(%{"labels" => ["", "mydia"]}))
+
+      assert {:ok, [status]} = Transmission.list_torrents(config)
+      assert status.categories == ["mydia"]
+    end
+  end
+
   # Note: Full integration tests would require either:
   # 1. A real Transmission instance (can be configured via environment variables)
   # 2. HTTP mocking library like Bypass or Mox to simulate Transmission RPC responses

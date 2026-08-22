@@ -445,9 +445,20 @@ defmodule Mydia.Downloads.Client.Transmission do
       save_path: save_path,
       files: resolve_torrent_files(download_dir, torrent["files"]),
       added_at: Helpers.parse_timestamp_unix(torrent["addedDate"]),
-      completed_at: Helpers.parse_timestamp_unix(torrent["doneDate"])
+      completed_at: Helpers.parse_timestamp_unix(torrent["doneDate"]),
+      categories: parse_labels(torrent["labels"])
     })
   end
+
+  # Transmission labels are plural and free-form, and are what every other
+  # adapter calls a category. `labels` is already in the torrent-get field
+  # list, so reading them costs no extra request. Read back by
+  # `Mydia.Downloads.ExternalPolicy`.
+  defp parse_labels(labels) when is_list(labels) do
+    Enum.filter(labels, &(is_binary(&1) and &1 != ""))
+  end
+
+  defp parse_labels(_absent_or_malformed), do: []
 
   # Transmission's `files[].name` is already the path relative to
   # `downloadDir` (it includes the torrent's own subfolder for multi-file
