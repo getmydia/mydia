@@ -14,11 +14,19 @@ defmodule Mydia.Downloads.UntrackedMatcher do
 
   This dual-matching prevents issues when download clients reuse numeric IDs
   after torrents are removed from the client.
+
+  ## Opting out
+
+  Adoption is per-client, governed by `Mydia.Downloads.ExternalPolicy`. A
+  client set to `:ignore` is never listed here at all, and a client scoped to
+  its own category adopts only torrents carrying it. Anything not adopted is
+  still surfaced by `Mydia.Downloads.ExternalTorrents` under Downloads,
+  External, where it can be matched by hand. See issue #531.
   """
 
   require Logger
   alias Mydia.Downloads
-  alias Mydia.Downloads.{ReleaseIntake, TorrentMatcher}
+  alias Mydia.Downloads.{ExternalPolicy, ReleaseIntake, TorrentMatcher}
   alias Mydia.Library
   alias Mydia.Library.Structs.Quality
   alias Mydia.Settings
@@ -69,11 +77,19 @@ defmodule Mydia.Downloads.UntrackedMatcher do
       Logger.warning("No download clients configured")
       []
     else
-      # Only fetch torrents from torrent clients (not Usenet or HTTP clients)
+      # Only fetch torrents from torrent clients (not Usenet or HTTP clients),
+      # and skip clients the operator told Mydia to keep its hands off.
+      #
+      # The skip is safe here and only here: `Mydia.Downloads.ExternalTorrents`
+      # runs its own listing pass, so an ignored client's torrents are still
+      # visible under Downloads, External. Skipping it there would make them
+      # vanish, which is the opposite of what `:ignore` is asking for.
       torrent_clients =
-        Enum.filter(clients, fn client ->
+        clients
+        |> Enum.filter(fn client ->
           client.type in [:qbittorrent, :transmission, :rqbit]
         end)
+        |> Enum.reject(&(ExternalPolicy.effective_mode(&1) == :ignore))
 
       torrent_clients
       |> Task.async_stream(
@@ -94,15 +110,25 @@ defmodule Mydia.Downloads.UntrackedMatcher do
 
     case Downloads.Client.list_torrents(adapter, config, []) do
       {:ok, torrents} ->
-        # Attach client name to each torrent for later reference
-        Enum.map(torrents, fn torrent ->
-          Map.put(torrent, :client_name, client_config.name)
-        end)
+        adoptable_torrents(client_config, torrents)
 
       {:error, error} ->
         Logger.warning("Failed to fetch torrents from #{client_config.name}: #{inspect(error)}")
         []
     end
+  end
+
+  @doc false
+  # Applies the client's external-torrent policy and attaches the client name
+  # to the survivors.
+  #
+  # Public for the same reason process_untracked_torrent/1 is: the repo has no
+  # download client mock, so find_and_match_untracked/0 cannot be driven end to
+  # end in a test, and this is the whole behavioural change for issue #531.
+  def adoptable_torrents(client_config, torrents) do
+    torrents
+    |> Enum.filter(&ExternalPolicy.adopt?(client_config, &1))
+    |> Enum.map(&Map.put(&1, :client_name, client_config.name))
   end
 
   defp find_untracked_torrents(client_torrents, tracked_downloads) do
