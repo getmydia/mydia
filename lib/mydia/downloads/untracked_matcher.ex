@@ -218,6 +218,14 @@ defmodule Mydia.Downloads.UntrackedMatcher do
             confidence: match.confidence
           )
 
+          # Put adoption in the activity feed. Without it the only trace is
+          # this log line and a file that moved, which is how issue #531 came
+          # in as a possible bug rather than as recognised behaviour.
+          Mydia.Events.download_adopted(download,
+            media_item: match.media_item,
+            confidence: match.confidence
+          )
+
           {:ok, download}
 
         {:error, reason} ->

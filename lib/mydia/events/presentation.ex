@@ -116,6 +116,12 @@ defmodule Mydia.Events.Presentation do
       title: "Download started"
     },
     %{
+      type: "download.adopted",
+      icon: "hero-inbox-arrow-down",
+      color: "text-info",
+      title: "Adopted from download client"
+    },
+    %{
       type: "download.completed",
       icon: "hero-check-circle",
       color: "text-success",
@@ -398,7 +404,7 @@ defmodule Mydia.Events.Presentation do
   @plain_download_types ~w(
     download.initiated download.completed download.cancelled
     download.paused download.resumed download.unstalled
-    download.auto_reject_suppressed
+    download.auto_reject_suppressed download.adopted
   )
 
   def detail(%Event{type: type, metadata: metadata}) when type in @plain_download_types,
