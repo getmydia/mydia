@@ -1735,6 +1735,23 @@ defmodule MydiaWeb.DownloadsLive.Index do
     end
   end
 
+  # Whether Mydia adopted this download from a client rather than grabbing it
+  # itself. Written by `UntrackedMatcher.create_download_record/3` (automatic)
+  # and `Queue.adopt_external_torrent/3` (manual); "Added outside Mydia" is
+  # accurate for both.
+  #
+  # `metadata` is a `Mydia.Settings.JsonMapType`, whose `cast/1` passes a map
+  # through unchanged. A struct built in memory therefore carries atom keys
+  # while the same row loaded from the database carries string keys after JSON
+  # decoding. Reading only one form works right after adoption and silently
+  # stops after the next page load.
+  defp adopted_from_client?(%{metadata: metadata}) when is_map(metadata) do
+    Map.get(metadata, "matched_from_client") == true or
+      Map.get(metadata, :matched_from_client) == true
+  end
+
+  defp adopted_from_client?(_download), do: false
+
   defp get_display_title(download) do
     cond do
       # Episode download - show parent show title

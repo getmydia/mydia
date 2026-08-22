@@ -21,6 +21,22 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
   # no seedbox concept.
   @remote_fetch_types ~w(qbittorrent transmission rqbit rtorrent)
 
+  # Client types the untracked scan actually visits. Usenet, debrid, and
+  # blackhole clients have no concept of a foreign torrent sitting in them, so
+  # the External torrents control is meaningless for them. Mirrors
+  # `@torrent_client_types` in `Mydia.Downloads.ExternalTorrents`.
+  @external_torrent_types ~w(qbittorrent transmission rqbit)
+
+  # `category_only` is omitted for a client that cannot report a category back
+  # (rqbit), rather than offered and left to adopt nothing in silence. The
+  # changeset rejects that combination too, in both config layers.
+  @external_torrent_modes [
+    {"Automatic (recommended)", "auto"},
+    {"Adopt any match", "adopt"},
+    {"Only my category", "category_only"},
+    {"Ignore", "ignore"}
+  ]
+
   # Placeholder hints shown in the per-tier priority profile inputs. Each
   # adapter has its own native priority value domain; the placeholder mirrors
   # the hardcoded default mapping so users see what value they'd get if they
@@ -139,6 +155,11 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
                     </span>
                     <%= if client.category do %>
                       <span class="ml-2">Category: {client.category}</span>
+                    <% end %>
+                    <%!-- Only when the operator changed it. :auto is the
+                          default and says nothing worth a row of chrome. --%>
+                    <%= if client.external_torrents && client.external_torrents != :auto do %>
+                      <span class="ml-2">External: {client.external_torrents}</span>
                     <% end %>
                   </div>
                 </div>
@@ -281,6 +302,16 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
     show_categories? = selected_type in @category_aware_types
     show_priority_profile? = selected_type in @priority_profile_types
     show_remote_fetch? = selected_type in @remote_fetch_types
+    show_external_torrents? = selected_type in @external_torrent_types
+
+    # rqbit reports neither categories nor labels, so scoping to a category can
+    # never match there. Drop the option rather than let it look available.
+    external_torrent_modes =
+      if category_capable_type?(selected_type) do
+        @external_torrent_modes
+      else
+        Enum.reject(@external_torrent_modes, fn {_label, value} -> value == "category_only" end)
+      end
 
     priority_placeholders = Map.get(@priority_profile_placeholders, selected_type, %{})
 
@@ -294,6 +325,9 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
       |> assign(:show_categories?, show_categories?)
       |> assign(:show_priority_profile?, show_priority_profile?)
       |> assign(:show_remote_fetch?, show_remote_fetch?)
+      |> assign(:show_external_torrents?, show_external_torrents?)
+      |> assign(:external_torrent_modes, external_torrent_modes)
+      |> assign(:category_capable_type?, category_capable_type?(selected_type))
       |> assign(:priority_placeholders, priority_placeholders)
       |> assign(:priority_tiers, @priority_tiers)
       |> assign(:content_types, @content_types)
@@ -604,6 +638,53 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
                     />
                   <% end %>
                 </div>
+              </div>
+            <% end %>
+
+            <%!-- What to do with torrents this client already holds that Mydia
+                 did not add. See Mydia.Downloads.ExternalPolicy and #531. --%>
+            <%= if @show_external_torrents? do %>
+              <div class="space-y-3" id="download-client-external-torrents-section">
+                <div class="flex items-center gap-2 text-sm font-medium text-base-content/80">
+                  <.icon name="hero-inbox-stack" class="w-4 h-4" />
+                  <span>External torrents</span>
+                </div>
+
+                <p class="text-xs text-base-content/50">
+                  What Mydia does with torrents already in this client that it did not add.
+                  Anything Mydia does not adopt stays visible under Downloads, External,
+                  where you can match it by hand.
+                </p>
+
+                <.input
+                  field={@download_client_form[:external_torrents]}
+                  id="download-client-external-torrents"
+                  type="select"
+                  label="Mode"
+                  options={@external_torrent_modes}
+                />
+
+                <ul class="text-xs text-base-content/50 space-y-1 list-disc list-inside">
+                  <li>
+                    <span class="font-medium">Automatic</span>
+                    uses your category when you have one set, and adopts any library match
+                    otherwise.
+                  </li>
+                  <li>
+                    <span class="font-medium">Adopt any match</span>
+                    imports every torrent here that matches something in your library.
+                  </li>
+                  <%= if @category_capable_type? do %>
+                    <li>
+                      <span class="font-medium">Only my category</span>
+                      imports only torrents tagged with this client's configured category.
+                    </li>
+                  <% end %>
+                  <li>
+                    <span class="font-medium">Ignore</span>
+                    never imports from this client. Use this for a client you manage yourself.
+                  </li>
+                </ul>
               </div>
             <% end %>
 
@@ -958,6 +1039,16 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
 
   defp auth_method_label("password"), do: "Password"
   defp auth_method_label("ssh_key"), do: "SSH key"
+
+  # Compares as strings rather than round-tripping through
+  # String.to_existing_atom/1: the form's type is a string, and there is no
+  # reason to convert just to compare. Sourced from the schema so the UI and
+  # the two changeset validations cannot disagree about which clients qualify.
+  defp category_capable_type?(type) when is_binary(type) do
+    type in Enum.map(Settings.DownloadClientConfig.category_capable_types(), &Atom.to_string/1)
+  end
+
+  defp category_capable_type?(_type), do: false
 
   # Whether a client's saved connection_settings has remote_fetch enabled,
   # for the row-level "Seedbox" badge in the list. `enabled` is stored as

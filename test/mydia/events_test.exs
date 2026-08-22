@@ -108,6 +108,63 @@ defmodule Mydia.EventsTest do
     end
   end
 
+  describe "download_adopted/2" do
+    test "records the client, confidence, and media context" do
+      media_item = %Mydia.Media.MediaItem{
+        id: Ecto.UUID.generate(),
+        title: "Dune: Part Two",
+        type: "movie"
+      }
+
+      download = %Mydia.Downloads.Download{
+        id: Ecto.UUID.generate(),
+        title: "Dune.Part.Two.2024.2160p.WEB-DL.x265-GROUP",
+        download_client: "qbit"
+      }
+
+      assert :ok = Events.download_adopted(download, media_item: media_item, confidence: 0.92)
+
+      # create_event_async/1 writes in a task. Process.sleep/1 is what the
+      # "create_event_async/1" describe block below already uses.
+      Process.sleep(100)
+
+      events = Events.list_events(category: "downloads")
+      assert [event] = Enum.filter(events, &(&1.type == "download.adopted"))
+
+      assert event.actor_type == :system
+      assert event.metadata["download_client"] == "qbit"
+      assert event.metadata["match_confidence"] == 0.92
+      assert event.metadata["media_title"] == "Dune: Part Two"
+      assert event.resource_type == "media_item"
+      assert event.resource_id == media_item.id
+    end
+
+    test "falls back to the download as the resource when there is no media item" do
+      download = %Mydia.Downloads.Download{
+        id: Ecto.UUID.generate(),
+        title: "Some.Release.2024",
+        download_client: "qbit"
+      }
+
+      assert :ok = Events.download_adopted(download)
+
+      Process.sleep(100)
+
+      events = Events.list_events(category: "downloads")
+      assert [event] = Enum.filter(events, &(&1.type == "download.adopted"))
+
+      assert event.resource_type == "download"
+      assert event.resource_id == download.id
+    end
+
+    test "the type is registered, so the changeset accepts it" do
+      # Event.changeset/2 rejects any type missing from Mydia.Events.Presentation
+      # with "is not a registered event type". Without registration the event
+      # would be dropped at write time and only a log line would say so.
+      assert "download.adopted" in Mydia.Events.Presentation.known_types()
+    end
+  end
+
   describe "create_event_async/1" do
     test "creates event asynchronously" do
       attrs = %{

@@ -62,7 +62,15 @@ defmodule Mydia.Downloads.Structs.DownloadStatus do
     # rtorrent a single `base_path`, either of which is usually the torrent's
     # root DIRECTORY. Anything that needs to know what is actually inside a
     # torrent must use `Mydia.Downloads.Client.list_files/3` instead.
-    files: nil
+    files: nil,
+    # Categories or labels the client reports for this item, as the client
+    # spells them. Empty for a client with no such concept (rqbit) and for
+    # every adapter that does not report them.
+    #
+    # A list rather than a single value because Transmission labels are plural
+    # and a torrent can carry several. `Mydia.Downloads.ExternalPolicy` treats
+    # any one match as a match.
+    categories: []
   ]
 
   @state_values [
@@ -103,7 +111,8 @@ defmodule Mydia.Downloads.Structs.DownloadStatus do
           added_at: DateTime.t() | nil,
           completed_at: DateTime.t() | nil,
           failure_category: FailureCategory.t() | nil,
-          failure_detail: String.t() | nil
+          failure_detail: String.t() | nil,
+          categories: [String.t()]
         }
 
   @doc """

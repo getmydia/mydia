@@ -106,4 +106,98 @@ defmodule Mydia.Downloads.UntrackedMatcherTest do
       assert download.media_item_id == movie.id
     end
   end
+
+  describe "adoptable_torrents/2" do
+    alias Mydia.Downloads.Structs.DownloadStatus
+    alias Mydia.Settings.DownloadClientConfig
+
+    defp client(overrides \\ %{}) do
+      struct!(
+        %DownloadClientConfig{
+          name: "qbit",
+          type: :qbittorrent,
+          external_torrents: :auto,
+          category: nil,
+          categories: %{}
+        },
+        overrides
+      )
+    end
+
+    # Distinct from the module-level torrent/2 helper above, which builds the
+    # plain map shape process_untracked_torrent/1 consumes. This builds what an
+    # adapter actually returns.
+    defp client_torrent(name, categories) do
+      %DownloadStatus{
+        id: "hash-#{System.unique_integer([:positive])}",
+        name: name,
+        state: :seeding,
+        progress: 100.0,
+        categories: categories
+      }
+    end
+
+    test "keeps everything when the client adopts any match" do
+      config = client(%{external_torrents: :adopt})
+
+      torrents = [
+        client_torrent("A.Movie.2024.1080p", []),
+        client_torrent("B.Movie.2024.1080p", ["other"])
+      ]
+
+      assert length(UntrackedMatcher.adoptable_torrents(config, torrents)) == 2
+    end
+
+    test "drops everything when the client ignores external torrents" do
+      config = client(%{external_torrents: :ignore, category: "mydia"})
+      torrents = [client_torrent("A.Movie.2024.1080p", ["mydia"])]
+
+      assert UntrackedMatcher.adoptable_torrents(config, torrents) == []
+    end
+
+    test "keeps only the configured category when scoped" do
+      config = client(%{external_torrents: :category_only, category: "mydia"})
+
+      torrents = [
+        client_torrent("Mine.2024.1080p", ["mydia"]),
+        client_torrent("Theirs.2024.1080p", ["manual"]),
+        client_torrent("Bare.2024.1080p", [])
+      ]
+
+      assert [%{name: "Mine.2024.1080p"}] =
+               UntrackedMatcher.adoptable_torrents(config, torrents)
+    end
+
+    test "auto scopes to the category when one is configured" do
+      config = client(%{category: "mydia"})
+
+      torrents = [
+        client_torrent("Mine.2024.1080p", ["mydia"]),
+        client_torrent("Theirs.2024.1080p", ["manual"])
+      ]
+
+      assert [%{name: "Mine.2024.1080p"}] =
+               UntrackedMatcher.adoptable_torrents(config, torrents)
+    end
+
+    test "auto adopts everything when no category is configured" do
+      config = client()
+
+      torrents = [
+        client_torrent("Mine.2024.1080p", []),
+        client_torrent("Theirs.2024.1080p", ["manual"])
+      ]
+
+      assert length(UntrackedMatcher.adoptable_torrents(config, torrents)) == 2
+    end
+
+    test "attaches the client name to every surviving torrent" do
+      config = client(%{name: "my-qbit", external_torrents: :adopt})
+
+      assert [%{client_name: "my-qbit"}] =
+               UntrackedMatcher.adoptable_torrents(config, [
+                 client_torrent("A.Movie.2024.1080p", [])
+               ])
+    end
+  end
 end

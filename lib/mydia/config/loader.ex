@@ -346,6 +346,11 @@ defmodule Mydia.Config.Loader do
       |> put_if_present(:password, System.get_env("#{prefix}PASSWORD"))
       |> put_if_present(:api_key, System.get_env("#{prefix}API_KEY"))
       |> put_if_present(:category, System.get_env("#{prefix}CATEGORY"))
+      |> put_if_present(
+        :external_torrents,
+        System.get_env("#{prefix}EXTERNAL_TORRENTS"),
+        &parse_external_torrents/1
+      )
       |> put_if_present(:download_directory, System.get_env("#{prefix}DOWNLOAD_DIRECTORY"))
       |> put_download_client_connection_settings(prefix)
     end)
@@ -624,6 +629,32 @@ defmodule Mydia.Config.Loader do
   end
 
   defp parse_atom(_), do: :error
+
+  # A fixed enum rather than parse_atom/1, which falls back to
+  # String.to_atom/1 and would mint an atom from an environment variable.
+  # Atoms are never garbage collected, and the project rule is explicit: no
+  # String.to_atom/1 on user input.
+  #
+  # An unrecognised value maps to :invalid rather than returning :error.
+  # Returning :error makes put_if_present/4 drop the key, which would fall
+  # back to :auto: an operator who typed "ignor" would get the adoption they
+  # were explicitly trying to switch off, which is the exact silent behaviour
+  # this setting exists to remove. :invalid is not a member of the Ecto.Enum,
+  # so config validation rejects it by name. That matches how a bad
+  # DOWNLOAD_CLIENT_<N>_TYPE already behaves, minus the atom leak.
+  defp parse_external_torrents(value) when is_atom(value), do: {:ok, value}
+
+  defp parse_external_torrents(value) when is_binary(value) do
+    case value |> String.trim() |> String.downcase() do
+      "auto" -> {:ok, :auto}
+      "adopt" -> {:ok, :adopt}
+      "category_only" -> {:ok, :category_only}
+      "ignore" -> {:ok, :ignore}
+      _unrecognised -> {:ok, :invalid}
+    end
+  end
+
+  defp parse_external_torrents(_), do: :error
 
   defp parse_string_list(value) when is_list(value), do: {:ok, value}
 

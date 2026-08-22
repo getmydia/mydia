@@ -148,6 +148,10 @@ defmodule Mydia.Downloads.Client.Transmission do
       "downloadDir",
       "addedDate",
       "doneDate",
+      # Kept in step with the list_torrents/2 field list. Without it a
+      # single-torrent fetch reports categories: [] even for a labelled
+      # torrent, so a caller could reasonably conclude it carries no category.
+      "labels",
       "files"
     ]
 
@@ -391,8 +395,30 @@ defmodule Mydia.Downloads.Client.Transmission do
     arguments
     |> add_optional_arg("download-dir", opts[:save_path])
     |> add_optional_arg("paused", opts[:paused])
-    |> add_optional_arg("labels", opts[:tags])
+    |> add_optional_arg("labels", labels_for(opts))
     |> add_optional_arg("bandwidthPriority", map_priority(opts[:priority], config))
+  end
+
+  # Transmission's labels are what every other adapter calls a category, and
+  # `Mydia.Downloads.Queue` sends `:category`. Before this the only source was
+  # `:tags`, which nothing in Mydia ever passes, so every Transmission torrent
+  # Mydia added went in unlabelled. That made the client's own torrents
+  # indistinguishable from foreign ones, which is exactly what
+  # `Mydia.Downloads.ExternalPolicy` needs to tell apart.
+  #
+  # An explicit `:tags` list still wins, so a caller that wants several labels
+  # can say so.
+  defp labels_for(opts) do
+    case opts[:tags] do
+      [_ | _] = tags ->
+        tags
+
+      _ ->
+        case opts[:category] do
+          category when is_binary(category) and category != "" -> [category]
+          _ -> nil
+        end
+    end
   end
 
   # Resolves a Priority atom into Transmission's `bandwidthPriority` value.
@@ -445,9 +471,20 @@ defmodule Mydia.Downloads.Client.Transmission do
       save_path: save_path,
       files: resolve_torrent_files(download_dir, torrent["files"]),
       added_at: Helpers.parse_timestamp_unix(torrent["addedDate"]),
-      completed_at: Helpers.parse_timestamp_unix(torrent["doneDate"])
+      completed_at: Helpers.parse_timestamp_unix(torrent["doneDate"]),
+      categories: parse_labels(torrent["labels"])
     })
   end
+
+  # Transmission labels are plural and free-form, and are what every other
+  # adapter calls a category. `labels` is already in the torrent-get field
+  # list, so reading them costs no extra request. Read back by
+  # `Mydia.Downloads.ExternalPolicy`.
+  defp parse_labels(labels) when is_list(labels) do
+    Enum.filter(labels, &(is_binary(&1) and &1 != ""))
+  end
+
+  defp parse_labels(_absent_or_malformed), do: []
 
   # Transmission's `files[].name` is already the path relative to
   # `downloadDir` (it includes the torrent's own subfolder for multi-file

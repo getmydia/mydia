@@ -20,11 +20,16 @@ defmodule Mydia.Downloads.ExternalTorrents.ClassifierTest do
     )
   end
 
+  # Entries carry the client's adoption decision, from
+  # `Mydia.Downloads.ExternalPolicy.decide/2`. `:adopt` is the default here
+  # because it is what every pre-#531 caller effectively passed.
+  defp entry(name, decision \\ :adopt), do: {"qbit", status(name), decision}
+
   defp empty_pool, do: %CandidatePool{movies: [], tv_shows: []}
 
   describe "classify/2 split rule" do
     test "a movie release goes to needs_matching" do
-      entries = [{"qbit", status("Dune.Part.Two.2024.2160p.WEB-DL.x265-GROUP")}]
+      entries = [entry("Dune.Part.Two.2024.2160p.WEB-DL.x265-GROUP")]
 
       {needs, external} = Classifier.classify(entries, empty_pool())
 
@@ -33,7 +38,7 @@ defmodule Mydia.Downloads.ExternalTorrents.ClassifierTest do
     end
 
     test "a tv release goes to needs_matching" do
-      entries = [{"qbit", status("The.Bear.S03E02.1080p.WEB-DL.x264-GROUP")}]
+      entries = [entry("The.Bear.S03E02.1080p.WEB-DL.x264-GROUP")]
 
       {needs, external} = Classifier.classify(entries, empty_pool())
 
@@ -42,7 +47,7 @@ defmodule Mydia.Downloads.ExternalTorrents.ClassifierTest do
     end
 
     test "a non-media name goes to external" do
-      entries = [{"qbit", status("ubuntu-24.04-desktop-amd64.iso")}]
+      entries = [entry("ubuntu-24.04-desktop-amd64.iso")]
 
       {needs, external} = Classifier.classify(entries, empty_pool())
 
@@ -51,7 +56,7 @@ defmodule Mydia.Downloads.ExternalTorrents.ClassifierTest do
     end
 
     test "a validator-rejected name goes to external with no parsed info" do
-      entries = [{"qbit", status("From.S04E05.1080p.WEB.h264-ETHEL.exe")}]
+      entries = [entry("From.S04E05.1080p.WEB.h264-ETHEL.exe")]
 
       {needs, external} = Classifier.classify(entries, empty_pool())
 
@@ -60,11 +65,91 @@ defmodule Mydia.Downloads.ExternalTorrents.ClassifierTest do
     end
   end
 
+  describe "classify/2 policy exclusion" do
+    test "a movie from a client set to ignore goes to external, not needs_matching" do
+      entries = [entry("Dune.Part.Two.2024.2160p.WEB-DL.x265-GROUP", :excluded_by_ignore)]
+
+      {needs, external} = Classifier.classify(entries, empty_pool())
+
+      assert needs == []
+      assert [%{kind: :external, excluded_by_policy: true}] = external
+    end
+
+    test "a movie excluded by category also goes to external" do
+      entries = [entry("Dune.Part.Two.2024.2160p.WEB-DL.x265-GROUP", :excluded_by_category)]
+
+      {needs, external} = Classifier.classify(entries, empty_pool())
+
+      assert needs == []
+      assert [%{kind: :external, excluded_by_policy: true}] = external
+    end
+
+    test "a category-excluded torrent keeps its parsed info so a manual pull stays easy" do
+      entries = [entry("Dune.Part.Two.2024.2160p.WEB-DL.x265-GROUP", :excluded_by_category)]
+
+      {_needs, [torrent]} = Classifier.classify(entries, empty_pool())
+
+      assert %{type: :movie} = torrent.parsed
+    end
+
+    test "an ignored torrent keeps parsed info but is not scored for suggestions" do
+      # Scoring every foreign torrent every couple of minutes is work the
+      # operator explicitly asked Mydia not to do.
+      media_item_fixture(%{type: "tv_show", title: "The Bear"})
+
+      entries = [entry("The.Bear.S03E02.1080p.WEB-DL.x264-GROUP", :excluded_by_ignore)]
+
+      {_needs, [torrent]} = Classifier.classify(entries, CandidatePool.load())
+
+      assert %{type: :tv_show} = torrent.parsed
+      assert torrent.suggestions == []
+    end
+
+    test "a category-excluded torrent IS scored, since a manual pull is plausible" do
+      show = media_item_fixture(%{type: "tv_show", title: "The Bear"})
+
+      entries = [entry("The.Bear.S03E02.1080p.WEB-DL.x264-GROUP", :excluded_by_category)]
+
+      {_needs, [torrent]} = Classifier.classify(entries, CandidatePool.load())
+
+      assert [%{media_item_id: id} | _] = torrent.suggestions
+      assert id == show.id
+    end
+
+    test "an adopted torrent is not flagged as excluded" do
+      entries = [entry("Dune.Part.Two.2024.2160p.WEB-DL.x265-GROUP", :adopt)]
+
+      {[torrent], _external} = Classifier.classify(entries, empty_pool())
+
+      refute torrent.excluded_by_policy
+    end
+
+    test "a non-media name from an ignored client is external and flagged" do
+      # It would have been :external regardless of policy, since the name does
+      # not parse as media. The flag still records that policy also excluded it.
+      entries = [entry("ubuntu-24.04-desktop-amd64.iso", :excluded_by_ignore)]
+
+      {needs, external} = Classifier.classify(entries, empty_pool())
+
+      assert needs == []
+      assert [%{kind: :external, excluded_by_policy: true, suggestions: []}] = external
+    end
+
+    test "a validator-rejected name from an ignored client is external and flagged" do
+      entries = [entry("From.S04E05.1080p.WEB.h264-ETHEL.exe", :excluded_by_ignore)]
+
+      {needs, external} = Classifier.classify(entries, empty_pool())
+
+      assert needs == []
+      assert [%{kind: :external, excluded_by_policy: true, parsed: nil}] = external
+    end
+  end
+
   describe "classify/2 suggestions" do
     test "media-shaped entries are scored against the pool" do
       show = media_item_fixture(%{type: "tv_show", title: "The Bear"})
       pool = CandidatePool.load()
-      entries = [{"qbit", status("The.Bear.S03E02.1080p.WEB-DL.x264-GROUP")}]
+      entries = [entry("The.Bear.S03E02.1080p.WEB-DL.x264-GROUP")]
 
       {[torrent], []} = Classifier.classify(entries, pool)
 
@@ -74,7 +159,7 @@ defmodule Mydia.Downloads.ExternalTorrents.ClassifierTest do
 
     test "external entries never get suggestions" do
       media_item_fixture(%{type: "tv_show", title: "Ubuntu"})
-      entries = [{"qbit", status("ubuntu-24.04-desktop-amd64.iso")}]
+      entries = [entry("ubuntu-24.04-desktop-amd64.iso")]
 
       {[], [torrent]} = Classifier.classify(entries, CandidatePool.load())
 
@@ -84,10 +169,10 @@ defmodule Mydia.Downloads.ExternalTorrents.ClassifierTest do
 
   describe "classify/2 identity" do
     test "the same torrent gets the same id across two runs" do
-      entry = {"qbit", status("ubuntu-24.04-desktop-amd64.iso")}
+      single = entry("ubuntu-24.04-desktop-amd64.iso")
 
-      {[], [first]} = Classifier.classify([entry], empty_pool())
-      {[], [second]} = Classifier.classify([entry], empty_pool())
+      {[], [first]} = Classifier.classify([single], empty_pool())
+      {[], [second]} = Classifier.classify([single], empty_pool())
 
       assert first.id == second.id
     end
@@ -96,14 +181,17 @@ defmodule Mydia.Downloads.ExternalTorrents.ClassifierTest do
       shared = status("ubuntu-24.04-desktop-amd64.iso")
 
       {[], torrents} =
-        Classifier.classify([{"qbit", shared}, {"transmission", shared}], empty_pool())
+        Classifier.classify(
+          [{"qbit", shared, :adopt}, {"transmission", shared, :adopt}],
+          empty_pool()
+        )
 
       assert [a, b] = torrents
       assert a.id != b.id
     end
 
     test "carries the client fields and live status through" do
-      entries = [{"qbit", status("ubuntu-24.04.iso", %{progress: 12.5, state: :seeding})}]
+      entries = [{"qbit", status("ubuntu-24.04.iso", %{progress: 12.5, state: :seeding}), :adopt}]
 
       {[], [torrent]} = Classifier.classify(entries, empty_pool())
 

@@ -26,6 +26,7 @@ defmodule Mydia.Downloads.ExternalTorrents do
   require Logger
 
   alias Mydia.Downloads
+  alias Mydia.Downloads.ExternalPolicy
   alias Mydia.Downloads.ExternalTorrents.Classifier
   alias Mydia.Downloads.Structs.{CandidatePool, DownloadStatus, ExternalScan, ExternalTorrent}
   alias Mydia.Library
@@ -103,11 +104,12 @@ defmodule Mydia.Downloads.ExternalTorrents do
   """
   @spec scan() :: ExternalScan.t()
   def scan do
-    {listings, failed_clients} = fetch_all()
+    {listings, failed_clients, configs_by_name} = fetch_all()
 
     {needs_matching, external} =
       listings
       |> subtract_known()
+      |> decide_all(configs_by_name)
       |> Classifier.classify(CandidatePool.load())
 
     %ExternalScan{
@@ -116,6 +118,25 @@ defmodule Mydia.Downloads.ExternalTorrents do
       scanned_at: DateTime.utc_now(),
       failed_clients: failed_clients
     }
+  end
+
+  # Attaches each entry's adoption decision. Every configured client is still
+  # listed, including one set to `:ignore`: the External tab is where its
+  # torrents are supposed to be visible, and skipping the listing would be the
+  # obvious optimisation and the wrong one. See issue #531.
+  defp decide_all(entries, configs_by_name) do
+    Enum.map(entries, fn {client_name, status} ->
+      case Map.fetch(configs_by_name, client_name) do
+        {:ok, config} ->
+          {client_name, status, ExternalPolicy.decide(config, status)}
+
+        :error ->
+          # The client disappeared between fetch and classify. With no config
+          # there is no policy to apply, so keep the pre-existing behaviour
+          # rather than silently moving the torrent to a different tab.
+          {client_name, status, :adopt}
+      end
+    end)
   end
 
   @doc """
@@ -165,6 +186,8 @@ defmodule Mydia.Downloads.ExternalTorrents do
       Settings.list_download_client_configs()
       |> Enum.filter(&(&1.enabled and &1.type in @torrent_client_types))
 
+    configs_by_name = Map.new(clients, &{&1.name, &1})
+
     results =
       clients
       |> Task.async_stream(&fetch_one/1, timeout: :infinity, max_concurrency: 10)
@@ -184,7 +207,7 @@ defmodule Mydia.Downloads.ExternalTorrents do
     listings = for {:ok, client_name, statuses} <- results, do: {client_name, statuses}
     failed = for {:error, client_name} <- results, do: client_name
 
-    {listings, failed}
+    {listings, failed, configs_by_name}
   end
 
   defp fetch_one(config) do

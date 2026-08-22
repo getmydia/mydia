@@ -685,6 +685,53 @@ defmodule Mydia.Events do
   end
 
   @doc """
+  Records a download.adopted event.
+
+  Emitted when Mydia takes over a torrent it did not add. Before this the only
+  trace of adoption was an info-level log line and a file that had moved, which
+  is how issue #531 came in as a possible bug rather than as recognised
+  behaviour.
+
+  ## Parameters
+    - `download` - The Download struct just created
+    - `opts` - `:media_item` for context, `:confidence` for the match score
+
+  ## Examples
+
+      iex> download_adopted(download, media_item: media_item, confidence: 0.92)
+      :ok
+  """
+  def download_adopted(download, opts \\ []) do
+    media_item = opts[:media_item]
+
+    {resource_type, resource_id} =
+      if media_item do
+        {"media_item", media_item.id}
+      else
+        {"download", download.id}
+      end
+
+    metadata =
+      %{
+        "title" => download.title,
+        "download_client" => download.download_client,
+        "download_id" => download.id,
+        "match_confidence" => opts[:confidence]
+      }
+      |> maybe_add_media_context(media_item)
+
+    create_event_async(%{
+      category: "downloads",
+      type: "download.adopted",
+      actor_type: :system,
+      actor_id: "download_monitor",
+      resource_type: resource_type,
+      resource_id: resource_id,
+      metadata: metadata
+    })
+  end
+
+  @doc """
   Records a download.completed event.
 
   ## Parameters
