@@ -43,5 +43,32 @@ for f in priv/changelog/*.md; do
   fi
 done
 
+# Plain-text conversion, asserted against a release known to exercise every rule.
+out="$("$SCRIPT" 0.14.0 HEAD v0.14.0 2>/dev/null)"
+
+case "$out" in
+  *'`'*)   note_failure "0.14.0: backticks survived the plain-text conversion" ;;
+esac
+case "$out" in
+  *'**'*)  note_failure "0.14.0: bold markers survived the plain-text conversion" ;;
+esac
+case "$out" in
+  *'(#'*)  note_failure "0.14.0: a PR reference survived the plain-text conversion" ;;
+esac
+case "$out" in
+  *'### '*) note_failure "0.14.0: a subheading kept its hashes" ;;
+esac
+case "$out" in
+  *'Remote control between players'*) : ;;
+  *) note_failure "0.14.0: the subheading text itself was dropped" ;;
+esac
+
+# A trailing sentence period must survive its PR reference being stripped.
+out="$("$SCRIPT" 0.13.0 HEAD v0.13.0 2>/dev/null)"
+case "$out" in
+  *'rendered identically.'*) : ;;
+  *) note_failure "0.13.0: stripping '(#332).' also ate the sentence period" ;;
+esac
+
 [ "$fail" -eq 0 ] || exit 1
 echo "testflight notes: all $(find priv/changelog -name '*.md' | wc -l | tr -d ' ') bundled changelogs pass"

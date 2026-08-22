@@ -31,6 +31,27 @@ extract_player_section() {
   awk '/^## Player$/ { inside = 1; next } /^## / { inside = 0 } inside { print }'
 }
 
+# Markdown to plain text. The awk pass folds any continuation line onto the
+# bullet above it, so fit_to_budget can only ever cut between whole bullets.
+# Bullets are one line each in every current changelog; this is insurance
+# against a future wrapped one.
+to_plain_text() {
+  awk '
+    /^[[:space:]]*$/ { if (buf != "") { print buf; buf = "" } print ""; next }
+    /^- /            { if (buf != "") print buf; buf = $0; next }
+    /^### /          { if (buf != "") { print buf; buf = "" } sub(/^### /, ""); print; next }
+                     { if (buf != "") buf = buf " " $0; else buf = $0 }
+    END              { if (buf != "") print buf }
+  ' | sed -E '
+    s/`([^`]*)`/\1/g
+    s/\*\*([^*]*)\*\*/\1/g
+    s/\[([^]]*)\]\([^)]*\)/\1/g
+    s/[[:space:]]*\(#[0-9]+(,[[:space:]]*#[0-9]+)*\)([.]?)[[:space:]]*$/\2/
+  ' | cat -s \
+    | sed -e '/./,$!d' \
+    | awk 'NF { last = NR } { lines[NR] = $0 } END { for (i = 1; i <= last; i++) print lines[i] }'
+}
+
 # Keep whole lines until the budget is spent. Once a line does not fit, every
 # later line is dropped too, so the output never ends mid-bullet.
 # Returns 1 when something was dropped, 0 when everything fit.
@@ -75,7 +96,7 @@ source_label=""
 # a commit older than the ref this runs on.
 notes_path="priv/changelog/${VERSION}.md"
 if git cat-file -e "${SHA}:${notes_path}" 2>/dev/null; then
-  notes="$(git show "${SHA}:${notes_path}" | extract_player_section)"
+  notes="$(git show "${SHA}:${notes_path}" | extract_player_section | to_plain_text)"
   [ -n "$notes" ] && source_label="bundled"
 fi
 
