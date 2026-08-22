@@ -132,6 +132,39 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEventsTest do
       assert socket.assigns.downloading_subtitle_index == nil
       assert flash(socket)["error"] =~ "no longer available"
     end
+
+    # Integer.parse/1 requires a binary. The rendered button always sends a
+    # DOM string, so reaching these needs a hand-crafted channel push, but the
+    # handler still must not raise on one.
+    test "a nil index flashes rather than raising" do
+      {:noreply, socket} =
+        SubtitleEvents.download_subtitle_result(
+          %{"index" => nil},
+          search_socket([relay_result()])
+        )
+
+      assert socket.assigns.downloading_subtitle_index == nil
+      assert flash(socket)["error"] =~ "no longer available"
+    end
+
+    test "an integer index flashes rather than raising" do
+      {:noreply, socket} =
+        SubtitleEvents.download_subtitle_result(
+          %{"index" => 1},
+          search_socket([relay_result()])
+        )
+
+      assert socket.assigns.downloading_subtitle_index == nil
+      assert flash(socket)["error"] =~ "no longer available"
+    end
+
+    test "a payload missing the index key flashes rather than raising" do
+      {:noreply, socket} =
+        SubtitleEvents.download_subtitle_result(%{}, search_socket([relay_result()]))
+
+      assert socket.assigns.downloading_subtitle_index == nil
+      assert flash(socket)["error"] =~ "no longer available"
+    end
   end
 
   describe "handle_download_subtitle_async/2" do

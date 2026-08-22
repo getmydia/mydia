@@ -61,7 +61,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
   # payload. The wire used to carry the provider's own file id, which meant the
   # server both trusted it and had to parse it; parsing it as an integer killed
   # the LiveView for every relay and Gestdown result, whose ids are strings.
-  def download_subtitle_result(%{"index" => index}, socket) do
+  def download_subtitle_result(%{"index" => index}, socket) when is_binary(index) do
     media_file = socket.assigns.selected_media_file
 
     with {position, ""} <- Integer.parse(index),
@@ -78,6 +78,13 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
       _ ->
         {:noreply, put_flash(socket, :error, "That result is no longer available. Search again.")}
     end
+  end
+
+  # The rendered button always sends a string index, so this clause only
+  # guards a hand-crafted payload (a nil, a JSON number, or a missing key).
+  # This handler must never let a client value reach a parser that can raise.
+  def download_subtitle_result(_params, socket) do
+    {:noreply, put_flash(socket, :error, "That result is no longer available. Search again.")}
   end
 
   def delete_subtitle(%{"subtitle-id" => subtitle_id}, socket) do
