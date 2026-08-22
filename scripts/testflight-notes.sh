@@ -35,6 +35,12 @@ extract_player_section() {
 # bullet above it, so fit_to_budget can only ever cut between whole bullets.
 # Bullets are one line each in every current changelog; this is insurance
 # against a future wrapped one.
+#
+# The PR-reference sed pattern strips every parenthetical group on a line,
+# not just a trailing one: a bullet can carry a mid-sentence group and a
+# trailing group in the same line, e.g. "Poster cards ... (#344). Search
+# posters ... (#347). ... gone (#345)." A sentence period sits outside the
+# parentheses either way, so it is left in place naturally.
 to_plain_text() {
   awk '
     /^[[:space:]]*$/ { if (buf != "") { print buf; buf = "" } print ""; next }
@@ -46,7 +52,7 @@ to_plain_text() {
     s/`([^`]*)`/\1/g
     s/\*\*([^*]*)\*\*/\1/g
     s/\[([^]]*)\]\([^)]*\)/\1/g
-    s/[[:space:]]*\(#[0-9]+(,[[:space:]]*#[0-9]+)*\)([.]?)[[:space:]]*$/\2/
+    s/[[:space:]]*\(#[0-9]+(,[[:space:]]*#[0-9]+)*\)//g
   ' | cat -s \
     | sed -e '/./,$!d' \
     | awk 'NF { last = NR } { lines[NR] = $0 } END { for (i = 1; i <= last; i++) print lines[i] }'

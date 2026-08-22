@@ -70,5 +70,12 @@ case "$out" in
   *) note_failure "0.13.0: stripping '(#332).' also ate the sentence period" ;;
 esac
 
+# 0.13.0 has bullets with more than one parenthetical PR-ref group per line
+# (a mid-sentence group plus a trailing one), which a stripping pattern
+# anchored to end of line only catches the last of.
+case "$out" in
+  *'(#'*) note_failure "0.13.0: a PR reference survived the plain-text conversion" ;;
+esac
+
 [ "$fail" -eq 0 ] || exit 1
 echo "testflight notes: all $(find priv/changelog -name '*.md' | wc -l | tr -d ' ') bundled changelogs pass"
