@@ -391,8 +391,30 @@ defmodule Mydia.Downloads.Client.Transmission do
     arguments
     |> add_optional_arg("download-dir", opts[:save_path])
     |> add_optional_arg("paused", opts[:paused])
-    |> add_optional_arg("labels", opts[:tags])
+    |> add_optional_arg("labels", labels_for(opts))
     |> add_optional_arg("bandwidthPriority", map_priority(opts[:priority], config))
+  end
+
+  # Transmission's labels are what every other adapter calls a category, and
+  # `Mydia.Downloads.Queue` sends `:category`. Before this the only source was
+  # `:tags`, which nothing in Mydia ever passes, so every Transmission torrent
+  # Mydia added went in unlabelled. That made the client's own torrents
+  # indistinguishable from foreign ones, which is exactly what
+  # `Mydia.Downloads.ExternalPolicy` needs to tell apart.
+  #
+  # An explicit `:tags` list still wins, so a caller that wants several labels
+  # can say so.
+  defp labels_for(opts) do
+    case opts[:tags] do
+      [_ | _] = tags ->
+        tags
+
+      _ ->
+        case opts[:category] do
+          category when is_binary(category) and category != "" -> [category]
+          _ -> nil
+        end
+    end
   end
 
   # Resolves a Priority atom into Transmission's `bandwidthPriority` value.

@@ -616,6 +616,78 @@ defmodule Mydia.Downloads.Client.TransmissionTest do
     end
   end
 
+  describe "category is written as a label (Bypass)" do
+    setup do
+      bypass = Bypass.open()
+      {:ok, bypass: bypass, config: bypass_config(bypass)}
+    end
+
+    defp expect_add(bypass, args_assertion) do
+      stub_rpc(bypass, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn, length: 1_000_000)
+        decoded = Jason.decode!(body)
+        assert decoded["method"] == "torrent-add"
+        args_assertion.(decoded["arguments"])
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          200,
+          ~s({"result":"success","arguments":{"torrent-added":{"hashString":"abc"}}})
+        )
+      end)
+    end
+
+    test "puts the category into labels", %{bypass: bypass, config: config} do
+      expect_add(bypass, fn args ->
+        assert args["labels"] == ["mydia"]
+      end)
+
+      assert {:ok, "abc"} =
+               Transmission.add_torrent(config, {:magnet, "magnet:?xt=urn:btih:abc"},
+                 category: "mydia"
+               )
+    end
+
+    test "omits labels entirely when no category is configured", %{
+      bypass: bypass,
+      config: config
+    } do
+      expect_add(bypass, fn args ->
+        refute Map.has_key?(args, "labels")
+      end)
+
+      assert {:ok, "abc"} =
+               Transmission.add_torrent(config, {:magnet, "magnet:?xt=urn:btih:abc"}, [])
+    end
+
+    test "omits labels when the category is blank", %{bypass: bypass, config: config} do
+      expect_add(bypass, fn args ->
+        refute Map.has_key?(args, "labels")
+      end)
+
+      assert {:ok, "abc"} =
+               Transmission.add_torrent(config, {:magnet, "magnet:?xt=urn:btih:abc"},
+                 category: ""
+               )
+    end
+
+    test "an explicit tags list still wins, for callers that pass one", %{
+      bypass: bypass,
+      config: config
+    } do
+      expect_add(bypass, fn args ->
+        assert args["labels"] == ["explicit"]
+      end)
+
+      assert {:ok, "abc"} =
+               Transmission.add_torrent(config, {:magnet, "magnet:?xt=urn:btih:abc"},
+                 category: "mydia",
+                 tags: ["explicit"]
+               )
+    end
+  end
+
   # Note: Full integration tests would require either:
   # 1. A real Transmission instance (can be configured via environment variables)
   # 2. HTTP mocking library like Bypass or Mox to simulate Transmission RPC responses
