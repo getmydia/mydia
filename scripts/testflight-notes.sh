@@ -94,6 +94,20 @@ fit_to_budget() {
   return $truncated
 }
 
+# The tag being built does not exist yet: GitHub creates it when the workflow
+# publishes the draft. So the newest existing tag is the previous release. The
+# grep -vFx is defensive against a re-dispatch where it somehow already does.
+#
+# TESTFLIGHT_PREV_TAG exists for check-testflight-notes.sh, which needs a
+# deterministic commit range. Production never sets it.
+previous_tag() {
+  if [ -n "${TESTFLIGHT_PREV_TAG:-}" ]; then
+    echo "$TESTFLIGHT_PREV_TAG"
+    return
+  fi
+  git tag --sort=-version:refname | grep -v metadata-relay | grep -vFx "$TAG" | head -n1
+}
+
 notes=""
 source_label=""
 
@@ -104,6 +118,15 @@ notes_path="priv/changelog/${VERSION}.md"
 if git cat-file -e "${SHA}:${notes_path}" 2>/dev/null; then
   notes="$(git show "${SHA}:${notes_path}" | extract_player_section | to_plain_text)"
   [ -n "$notes" ] && source_label="bundled"
+fi
+
+# --- Source 2: commits touching the app since the previous tag ----------------
+if [ -z "$notes" ]; then
+  prev="$(previous_tag)"
+  if [ -n "$prev" ]; then
+    notes="$(git log --format='- %s' "${prev}..${SHA}" -- player/ || true)"
+    [ -n "$notes" ] && source_label="gitlog"
+  fi
 fi
 
 # --- Source 3: a line naming the version --------------------------------------

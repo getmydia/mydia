@@ -77,5 +77,21 @@ case "$out" in
   *'(#'*) note_failure "0.13.0: a PR reference survived the plain-text conversion" ;;
 esac
 
+# The commit-log fallback, for a version with no bundled file. The previous tag
+# is pinned so the commit range does not drift as new releases land.
+if out="$(TESTFLIGHT_PREV_TAG=v0.13.0 "$SCRIPT" 9.9.9 HEAD v9.9.9 2>"$err")"; then
+  source_label="$(sed -n 's/^testflight-notes: source=//p' "$err")"
+  [ -n "$out" ] || note_failure "fallback: produced no output"
+  chars="$(printf '%s' "$out" | wc -m | tr -d ' ')"
+  if [ "$chars" -gt "$MAX_CHARS" ]; then
+    note_failure "fallback: ${chars} characters, over the ${MAX_CHARS} limit"
+  fi
+  if [ "$source_label" != "gitlog" ]; then
+    note_failure "fallback: reported source=${source_label}, wanted gitlog"
+  fi
+else
+  note_failure "fallback: script exited non-zero: $(cat "$err")"
+fi
+
 [ "$fail" -eq 0 ] || exit 1
 echo "testflight notes: all $(find priv/changelog -name '*.md' | wc -l | tr -d ' ') bundled changelogs pass"
