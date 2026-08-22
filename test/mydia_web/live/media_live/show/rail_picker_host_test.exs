@@ -78,7 +78,7 @@ defmodule MydiaWeb.MediaLive.Show.RailPickerHostTest do
     library_path_fixture(%{path: "/media/host-a", type: "movies"})
     library_path_fixture(%{path: "/media/host-b", type: "movies"})
 
-    {movie, recommended} = movie_with_recommendation()
+    {movie, _recommended} = movie_with_recommendation()
 
     {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")
     render_async(view, 5000)
