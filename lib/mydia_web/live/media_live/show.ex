@@ -18,6 +18,7 @@ defmodule MydiaWeb.MediaLive.Show do
   alias MydiaWeb.MediaLive.Show.FranchiseEvents
   alias MydiaWeb.MediaLive.Show.RecommendationEvents
   alias MydiaWeb.MediaLive.Show.RecommendationComponents
+  alias MydiaWeb.MediaLive.Show.LibraryPickerEvents
 
   # Import helper modules
   import MydiaWeb.MediaLive.Show.Formatters
@@ -144,6 +145,7 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:adding_recommendation_tmdb_ids, MapSet.new())
      |> assign(:requesting_recommendation_id, nil)
      |> assign_new(:metadata_config, fn -> Mydia.Metadata.default_relay_config() end)
+     |> assign_new(:library_picker, fn -> nil end)
      |> assign(
        :can_create_media,
        Mydia.Accounts.Authorization.can_create_media?(socket.assigns.current_user)
@@ -449,6 +451,15 @@ defmodule MydiaWeb.MediaLive.Show do
   @impl true
   def handle_event("request_recommendation", params, socket),
     do: RecommendationEvents.request_recommendation(params, socket)
+
+  def handle_event("open_library_picker", params, socket),
+    do: LibraryPickerEvents.open_library_picker(params, socket)
+
+  def handle_event("close_library_picker", params, socket),
+    do: LibraryPickerEvents.close_library_picker(params, socket)
+
+  def handle_event("add_from_library_picker", params, socket),
+    do: LibraryPickerEvents.add_from_library_picker(params, socket)
 
   @impl true
   def handle_info({:download_created, download}, socket) do
