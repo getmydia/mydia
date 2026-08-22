@@ -346,6 +346,11 @@ defmodule Mydia.Config.Loader do
       |> put_if_present(:password, System.get_env("#{prefix}PASSWORD"))
       |> put_if_present(:api_key, System.get_env("#{prefix}API_KEY"))
       |> put_if_present(:category, System.get_env("#{prefix}CATEGORY"))
+      |> put_if_present(
+        :external_torrents,
+        System.get_env("#{prefix}EXTERNAL_TORRENTS"),
+        &parse_atom/1
+      )
       |> put_if_present(:download_directory, System.get_env("#{prefix}DOWNLOAD_DIRECTORY"))
       |> put_download_client_connection_settings(prefix)
     end)

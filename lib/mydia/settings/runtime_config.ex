@@ -427,6 +427,7 @@ defmodule Mydia.Settings.RuntimeConfig do
       category: Map.get(map, :category),
       download_directory: Map.get(map, :download_directory),
       connection_settings: Map.get(map, :connection_settings, %{}),
+      external_torrents: Map.get(map, :external_torrents, :auto),
       updated_by_id: nil,
       inserted_at: nil,
       updated_at: nil

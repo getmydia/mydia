@@ -23,6 +23,10 @@ defmodule Mydia.Settings.DownloadClientConfig do
     value (integer or string, varies per adapter). Empty map means adapters
     fall back to their hardcoded default mapping.
   - `incomplete_grace_minutes` — stall detection grace window; defaults to 60.
+  - `external_torrents` — what Mydia does with torrents in this client that it
+    did not add. `:auto` (the default) resolves to `:category_only` when the
+    client has a category configured and can report one back, and to `:adopt`
+    otherwise. See `Mydia.Downloads.ExternalPolicy` and issue #531.
   """
   use Ecto.Schema
   import Ecto.Changeset
@@ -50,6 +54,7 @@ defmodule Mydia.Settings.DownloadClientConfig do
           download_directory: String.t() | nil,
           connection_settings: map() | nil,
           remove_completed: boolean(),
+          external_torrents: :auto | :adopt | :category_only | :ignore,
           updated_by: Mydia.Accounts.User.t() | nil | Ecto.Association.NotLoaded.t(),
           updated_by_id: binary() | nil,
           inserted_at: DateTime.t(),
@@ -73,6 +78,13 @@ defmodule Mydia.Settings.DownloadClientConfig do
   @remote_fetch_types [:qbittorrent, :transmission, :rqbit, :rtorrent]
   @remote_fetch_auth_methods ~w(password ssh_key)
 
+  @external_torrent_modes [:auto, :adopt, :category_only, :ignore]
+
+  # Client types whose torrents can carry a category or label Mydia can read
+  # back. rqbit has neither, so `:category_only` can never be satisfied there
+  # and is rejected rather than left to fail closed in silence.
+  @category_capable_types [:qbittorrent, :transmission]
+
   schema "download_client_configs" do
     field :name, :string
     field :type, Ecto.Enum, values: @client_types
@@ -92,6 +104,10 @@ defmodule Mydia.Settings.DownloadClientConfig do
     field :download_directory, :string
     field :connection_settings, Mydia.Settings.JsonMapType
     field :remove_completed, :boolean, default: false
+
+    field :external_torrents, Ecto.Enum,
+      values: @external_torrent_modes,
+      default: :auto
 
     belongs_to :updated_by, Mydia.Accounts.User
 
@@ -122,12 +138,14 @@ defmodule Mydia.Settings.DownloadClientConfig do
       :download_directory,
       :connection_settings,
       :remove_completed,
+      :external_torrents,
       :updated_by_id
     ])
     |> validate_required([:name, :type])
     |> validate_inclusion(:type, @client_types)
     |> apply_debrid_grace_default(attrs)
     |> validate_by_type()
+    |> validate_external_torrents()
     |> validate_remote_fetch_config()
     |> validate_number(:priority, greater_than: 0)
     |> validate_number(:incomplete_grace_minutes, greater_than: 0)
@@ -205,6 +223,26 @@ defmodule Mydia.Settings.DownloadClientConfig do
         changeset
         |> validate_required([:host, :port])
         |> validate_number(:port, greater_than: 0, less_than: 65536)
+    end
+  end
+
+  # `:category_only` needs a client that reports a category or label back.
+  # rqbit reports neither, so the combination is impossible rather than merely
+  # unusual, and is rejected at write time in both the DB and runtime-config
+  # paths. See `Mydia.Downloads.ExternalPolicy`.
+  defp validate_external_torrents(changeset) do
+    type = get_field(changeset, :type)
+    mode = get_field(changeset, :external_torrents)
+
+    if mode == :category_only and type not in @category_capable_types do
+      add_error(
+        changeset,
+        :external_torrents,
+        "category_only is not supported for #{type} clients, which do not report categories " <>
+          "(supported: #{Enum.join(@category_capable_types, ", ")})"
+      )
+    else
+      changeset
     end
   end
 
@@ -339,4 +377,14 @@ defmodule Mydia.Settings.DownloadClientConfig do
   """
   @spec remote_fetch_auth_methods() :: [String.t()]
   def remote_fetch_auth_methods, do: @remote_fetch_auth_methods
+
+  @doc """
+  Returns the client types that report a category or label Mydia can read back.
+
+  `Mydia.Downloads.ExternalPolicy` and `Mydia.Config.Schema` both read this, so
+  the runtime rule and the two write-time validations cannot disagree about
+  which clients qualify.
+  """
+  @spec category_capable_types() :: [atom()]
+  def category_capable_types, do: @category_capable_types
 end

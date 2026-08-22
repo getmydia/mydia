@@ -475,4 +475,62 @@ defmodule Mydia.Settings.DownloadClientConfigTest do
       assert DownloadClientConfig.remote_fetch_auth_methods() == ["password", "ssh_key"]
     end
   end
+
+  describe "external_torrents" do
+    defp base_attrs(overrides \\ %{}) do
+      Map.merge(
+        %{
+          name: "qbit-#{System.unique_integer([:positive])}",
+          type: :qbittorrent,
+          host: "localhost",
+          port: 8080
+        },
+        overrides
+      )
+    end
+
+    test "defaults to :auto" do
+      changeset = DownloadClientConfig.changeset(%DownloadClientConfig{}, base_attrs())
+
+      assert changeset.valid?
+      assert Ecto.Changeset.get_field(changeset, :external_torrents) == :auto
+    end
+
+    test "accepts every mode for a qbittorrent client" do
+      for mode <- [:auto, :adopt, :category_only, :ignore] do
+        changeset =
+          DownloadClientConfig.changeset(
+            %DownloadClientConfig{},
+            base_attrs(%{external_torrents: mode})
+          )
+
+        assert changeset.valid?, "expected #{mode} to be valid"
+        assert Ecto.Changeset.get_field(changeset, :external_torrents) == mode
+      end
+    end
+
+    test "rejects category_only for rqbit, which has no categories" do
+      changeset =
+        DownloadClientConfig.changeset(
+          %DownloadClientConfig{},
+          base_attrs(%{type: :rqbit, external_torrents: :category_only})
+        )
+
+      refute changeset.valid?
+      assert %{external_torrents: [message]} = errors_on(changeset)
+      assert message =~ "rqbit"
+    end
+
+    test "accepts adopt and ignore for rqbit" do
+      for mode <- [:auto, :adopt, :ignore] do
+        changeset =
+          DownloadClientConfig.changeset(
+            %DownloadClientConfig{},
+            base_attrs(%{type: :rqbit, external_torrents: mode})
+          )
+
+        assert changeset.valid?, "expected #{mode} to be valid for rqbit"
+      end
+    end
+  end
 end

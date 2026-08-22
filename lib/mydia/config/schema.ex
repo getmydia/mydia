@@ -248,6 +248,12 @@ defmodule Mydia.Config.Schema do
       field :category, :string
       field :download_directory, :string
       field :connection_settings, :map, default: %{}
+
+      # What Mydia does with torrents in this client that it did not add.
+      # See `Mydia.Downloads.ExternalPolicy` and issue #531.
+      field :external_torrents, Ecto.Enum,
+        values: [:auto, :adopt, :category_only, :ignore],
+        default: :auto
     end
 
     embeds_many :indexers, Indexer, on_replace: :delete, primary_key: false do
@@ -581,7 +587,8 @@ defmodule Mydia.Config.Schema do
       :api_key,
       :category,
       :download_directory,
-      :connection_settings
+      :connection_settings,
+      :external_torrents
     ])
     |> validate_required([:name, :type])
     |> validate_inclusion(:type, [
@@ -596,6 +603,7 @@ defmodule Mydia.Config.Schema do
       :debrid
     ])
     |> validate_download_client_by_type()
+    |> validate_external_torrents()
     |> validate_number(:port, greater_than: 0, less_than: 65536)
     |> validate_number(:priority, greater_than: 0)
   end
@@ -614,6 +622,25 @@ defmodule Mydia.Config.Schema do
 
       _network_client ->
         validate_required(changeset, [:host, :port])
+    end
+  end
+
+  # Mirrors DownloadClientConfig.validate_external_torrents/1. The two layers
+  # must agree: a combination the admin UI refuses must not be reachable
+  # through YAML or an environment variable.
+  defp validate_external_torrents(changeset) do
+    capable = Mydia.Settings.DownloadClientConfig.category_capable_types()
+    type = get_field(changeset, :type)
+
+    if get_field(changeset, :external_torrents) == :category_only and type not in capable do
+      add_error(
+        changeset,
+        :external_torrents,
+        "category_only is not supported for #{type} clients, which do not report categories " <>
+          "(supported: #{Enum.join(capable, ", ")})"
+      )
+    else
+      changeset
     end
   end
 
