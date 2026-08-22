@@ -322,11 +322,11 @@ defmodule MydiaWeb.DiscoverComponents do
               <.icon name="hero-plus" class="w-4 h-4" /> Add to Library
             <% end %>
           </button>
-          <LibraryComponents.library_picker_menu
+          <LibraryComponents.library_picker_button
             libraries={@libraries}
-            event={@add_event}
             tmdb_id={@item.provider_id}
             media_type={@media_type}
+            title={@item.title}
           />
         </div>
       <% @item.in_library -> %>
