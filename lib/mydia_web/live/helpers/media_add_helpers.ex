@@ -33,6 +33,44 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   end
 
   @doc """
+  Opens the library picker dialog for one card.
+
+  The candidate list is read here rather than carried from mount, so a library
+  added or unmonitored since the page loaded cannot show up as a stale option.
+
+  An unrecognised media type returns the socket untouched: the caret only ever
+  sends "movie" or "tv_show", so anything else is a forged event and opening a
+  dialog with an empty list would be worse than doing nothing.
+  """
+  @spec put_library_picker(Phoenix.LiveView.Socket.t(), map()) :: Phoenix.LiveView.Socket.t()
+  def put_library_picker(socket, %{"tmdb_id" => tmdb_id, "media_type" => media_type} = params) do
+    case media_type do
+      "movie" -> assign_library_picker(socket, tmdb_id, :movie, params["title"])
+      "tv_show" -> assign_library_picker(socket, tmdb_id, :tv_show, params["title"])
+      _ -> socket
+    end
+  end
+
+  def put_library_picker(socket, _params), do: socket
+
+  @doc """
+  Closes the library picker dialog.
+  """
+  @spec clear_library_picker(Phoenix.LiveView.Socket.t()) :: Phoenix.LiveView.Socket.t()
+  def clear_library_picker(socket) do
+    Phoenix.Component.assign(socket, :library_picker, nil)
+  end
+
+  defp assign_library_picker(socket, tmdb_id, media_type, title) do
+    Phoenix.Component.assign(socket, :library_picker, %{
+      tmdb_id: tmdb_id,
+      media_type: media_type,
+      title: title || "",
+      libraries: candidate_libraries(media_type)
+    })
+  end
+
+  @doc """
   Enriches a list of search result items with library status information.
 
   For each item, adds `:in_library`, `:monitored`, and `:id` fields
