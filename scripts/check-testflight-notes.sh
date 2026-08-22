@@ -93,5 +93,29 @@ else
   note_failure "fallback: script exited non-zero: $(cat "$err")"
 fi
 
+# Commit subjects reach testers too, so they get the same cleanup the bundled
+# section gets. A squash merge appends its PR number to the subject, so this is a
+# real case rather than a theoretical one.
+#
+# Both ends of this range are immutable, and it is deliberately NOT the range
+# used above: `v0.13.0..HEAD` runs to 120+ subjects, and the marked-up one sits
+# far past the point the 4000-character budget stops keeping lines, so it never
+# reaches the output and the assertion would pass without testing anything.
+# `v0.13.2..7f080ff3` is 46 subjects with the marked-up one first.
+if out="$(TESTFLIGHT_PREV_TAG=v0.13.2 "$SCRIPT" 9.9.9 7f080ff3714f91b186eaa052cf8f721260c6e1ad v9.9.9 2>/dev/null)"; then
+  case "$out" in
+    *'Address PR review feedback'*) : ;;
+    *) note_failure "fallback markup: the fixture subject is missing, so this assertion proves nothing" ;;
+  esac
+  case "$out" in
+    *'(#'*) note_failure "fallback markup: a PR reference survived the plain-text conversion" ;;
+  esac
+  case "$out" in
+    *'`'*)  note_failure "fallback markup: backticks survived the plain-text conversion" ;;
+  esac
+else
+  note_failure "fallback markup: script exited non-zero"
+fi
+
 [ "$fail" -eq 0 ] || exit 1
 echo "testflight notes: all $(find priv/changelog -name '*.md' | wc -l | tr -d ' ') bundled changelogs pass"

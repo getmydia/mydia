@@ -192,15 +192,20 @@ jobs:
       # job's checkout is shallow and pinned. Runs on a dry run too, so the
       # rehearsal exercises it, and echoes the result into the step summary so
       # the notes can be read before any platform build finishes.
+      #
+      # The three values arrive through env rather than ${{ }} substitution into
+      # the script body. The tag is a dispatch input, so a tag containing $(...)
+      # would otherwise be parsed as command substitution here.
       - name: Compute store release notes
         id: testflight_notes
+        env:
+          VERSION: ${{ steps.get_version.outputs.version }}
+          NOTES_SHA: ${{ steps.get_version.outputs.sha }}
+          TAG: ${{ steps.get_version.outputs.tag }}
         run: |
           set -euo pipefail
 
-          NOTES=$(./scripts/testflight-notes.sh \
-            "${{ steps.get_version.outputs.version }}" \
-            "${{ steps.get_version.outputs.sha }}" \
-            "${{ steps.get_version.outputs.tag }}")
+          NOTES=$(./scripts/testflight-notes.sh "$VERSION" "$NOTES_SHA" "$TAG")
 
           # A random delimiter: a fixed one appearing in the notes would
           # terminate the value early.

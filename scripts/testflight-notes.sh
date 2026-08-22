@@ -128,10 +128,13 @@ if git cat-file -e "${SHA}:${notes_path}" 2>/dev/null; then
 fi
 
 # --- Source 2: commits touching the app since the previous tag ----------------
+# Subjects go through to_plain_text for the same reason the bundled section does.
+# A squash merge appends its PR number, so "Address PR review feedback (#475)" is
+# a normal subject here, and backticks in a subject are not unusual either.
 if [ -z "$notes" ]; then
   prev="$(previous_tag)"
   if [ -n "$prev" ]; then
-    notes="$(git log --format='- %s' "${prev}..${SHA}" -- player/ || true)"
+    notes="$(git log --format='- %s' "${prev}..${SHA}" -- player/ | to_plain_text || true)"
     [ -n "$notes" ] && source_label="gitlog"
   fi
 fi
