@@ -148,6 +148,10 @@ defmodule Mydia.Downloads.Client.Transmission do
       "downloadDir",
       "addedDate",
       "doneDate",
+      # Kept in step with the list_torrents/2 field list. Without it a
+      # single-torrent fetch reports categories: [] even for a labelled
+      # torrent, so a caller could reasonably conclude it carries no category.
+      "labels",
       "files"
     ]
 

@@ -456,6 +456,47 @@ defmodule Mydia.Config.LoaderTest do
       assert %{external_torrents: :ignore} = List.first(config.download_clients)
     end
 
+    test "accepts EXTERNAL_TORRENTS case-insensitively with surrounding whitespace" do
+      System.put_env("DOWNLOAD_CLIENT_1_NAME", "EnvClient")
+      System.put_env("DOWNLOAD_CLIENT_1_TYPE", "qbittorrent")
+      System.put_env("DOWNLOAD_CLIENT_1_HOST", "env.host")
+      System.put_env("DOWNLOAD_CLIENT_1_PORT", "8080")
+      System.put_env("DOWNLOAD_CLIENT_1_EXTERNAL_TORRENTS", "  Ignore ")
+
+      {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+
+      assert %{external_torrents: :ignore} = List.first(config.download_clients)
+    end
+
+    test "rejects an unrecognised EXTERNAL_TORRENTS rather than falling back to auto" do
+      # Dropping the key would silently fall back to :auto, so an operator who
+      # typed "ignor" would get the adoption they were trying to switch off.
+      # Failing loudly matches how a bad DOWNLOAD_CLIENT_<N>_TYPE behaves.
+      System.put_env("DOWNLOAD_CLIENT_1_NAME", "EnvClient")
+      System.put_env("DOWNLOAD_CLIENT_1_TYPE", "qbittorrent")
+      System.put_env("DOWNLOAD_CLIENT_1_HOST", "env.host")
+      System.put_env("DOWNLOAD_CLIENT_1_PORT", "8080")
+      System.put_env("DOWNLOAD_CLIENT_1_EXTERNAL_TORRENTS", "ignor")
+
+      assert {:error, _reason} = Loader.load(config_file: "nonexistent.yml")
+    end
+
+    test "an unrecognised EXTERNAL_TORRENTS does not mint a new atom" do
+      # parse_atom/1 falls back to String.to_atom/1, and atoms are never
+      # garbage collected. The dedicated parser must never reach that path.
+      System.put_env("DOWNLOAD_CLIENT_1_NAME", "EnvClient")
+      System.put_env("DOWNLOAD_CLIENT_1_TYPE", "qbittorrent")
+      System.put_env("DOWNLOAD_CLIENT_1_HOST", "env.host")
+      System.put_env("DOWNLOAD_CLIENT_1_PORT", "8080")
+      System.put_env("DOWNLOAD_CLIENT_1_EXTERNAL_TORRENTS", "definitely_not_a_mode_atom")
+
+      {:error, _reason} = Loader.load(config_file: "nonexistent.yml")
+
+      assert_raise ArgumentError, fn ->
+        String.to_existing_atom("definitely_not_a_mode_atom")
+      end
+    end
+
     test "rejects category_only for an rqbit client, which reports no categories" do
       System.put_env("DOWNLOAD_CLIENT_1_NAME", "EnvRqbit")
       System.put_env("DOWNLOAD_CLIENT_1_TYPE", "rqbit")

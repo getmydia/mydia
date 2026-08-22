@@ -614,6 +614,33 @@ defmodule Mydia.Downloads.Client.TransmissionTest do
       assert {:ok, [status]} = Transmission.list_torrents(config)
       assert status.categories == ["mydia"]
     end
+
+    test "get_status/2 requests labels too, so it agrees with list_torrents/2", %{
+      bypass: bypass,
+      config: config
+    } do
+      # get_status/2 keeps its own field list. When the two drift, a
+      # single-torrent fetch reports no categories for a labelled torrent and a
+      # caller could reasonably conclude it carries none.
+      stub_rpc(bypass, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn, length: 1_000_000)
+        decoded = Jason.decode!(body)
+        assert "labels" in decoded["arguments"]["fields"]
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          200,
+          Jason.encode!(%{
+            "result" => "success",
+            "arguments" => %{"torrents" => [transmission_payload(%{"labels" => ["mydia"]})]}
+          })
+        )
+      end)
+
+      assert {:ok, status} = Transmission.get_status(config, "abc123")
+      assert status.categories == ["mydia"]
+    end
   end
 
   describe "category is written as a label (Bypass)" do
