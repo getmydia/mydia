@@ -93,6 +93,25 @@ jobs:
       - name: Assert every Apple deployment target agrees
         run: ./scripts/check-apple-deployment-targets.sh
 
+  testflight-notes:
+    name: Check / TestFlight Notes
+    runs-on: ubuntu-latest
+
+    steps:
+      # fetch-depth: 0 because the commit-log fallback resolves a previous tag
+      # and walks a commit range. A shallow checkout has neither.
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # The notes this produces become TestFlight's "What to Test", which Apple
+      # caps at 4000 characters and rejects when empty. Both properties are
+      # invisible until a release is dispatched, so they are asserted here
+      # against every bundled changelog instead. Needs only the checkout.
+      - name: Assert the store release notes hold their contract
+        run: ./scripts/check-testflight-notes.sh
+
   # Both NixOS VM tests run on push only. They are the slowest and least
   # reliable jobs in CI, combining a QEMU boot with a full Nix build on top of
   # the FlakeHub cache 503s that can hit any Nix job, and breaking the NixOS

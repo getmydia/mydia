@@ -62,6 +62,7 @@ jobs:
       version_code: ${{ steps.get_version.outputs.version_code }}
       is_prerelease: ${{ steps.get_version.outputs.is_prerelease }}
       sha: ${{ steps.get_version.outputs.sha }}
+      testflight_notes: ${{ steps.testflight_notes.outputs.notes }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -185,6 +186,43 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
           echo "Building version: $VERSION_NUM (code: $VERSION_CODE, prerelease: $IS_PRERELEASE, commit: $SHA)"
+
+      # What testers read in TestFlight's "What to Test". Computed here because
+      # this is the only job with the resolved version and full history; the iOS
+      # job's checkout is shallow and pinned. Runs on a dry run too, so the
+      # rehearsal exercises it, and echoes the result into the step summary so
+      # the notes can be read before any platform build finishes.
+      #
+      # The three values arrive through env rather than ${{ }} substitution into
+      # the script body. The tag is a dispatch input, so a tag containing $(...)
+      # would otherwise be parsed as command substitution here.
+      - name: Compute store release notes
+        id: testflight_notes
+        env:
+          VERSION: ${{ steps.get_version.outputs.version }}
+          NOTES_SHA: ${{ steps.get_version.outputs.sha }}
+          TAG: ${{ steps.get_version.outputs.tag }}
+        run: |
+          set -euo pipefail
+
+          NOTES=$(./scripts/testflight-notes.sh "$VERSION" "$NOTES_SHA" "$TAG")
+
+          # A random delimiter: a fixed one appearing in the notes would
+          # terminate the value early.
+          DELIM="notes-$(openssl rand -hex 16)"
+          {
+            echo "notes<<${DELIM}"
+            echo "$NOTES"
+            echo "${DELIM}"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### TestFlight release notes"
+            echo
+            echo '```'
+            echo "$NOTES"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   docker-build:
     name: Docker / ${{ matrix.db }} / ${{ matrix.arch }}
@@ -607,12 +645,23 @@ jobs:
           bundler-cache: true
           working-directory: ${{ env.PLAYER_PATH }}/ios
 
+      # The notes reach the shell through env, never through ${{ }} substitution
+      # into this body: changelog text contains backticks and $, which would be
+      # both an injection risk and a corruption bug.
+      - name: Write TestFlight notes
+        if: ${{ !inputs.dry_run && env.APP_STORE_CONNECT_API_KEY_ID != '' }}
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          NOTES: ${{ needs.prepare.outputs.testflight_notes }}
+        run: printf '%s' "$NOTES" > "$RUNNER_TEMP/testflight-notes.txt"
+
       - name: Upload to TestFlight
         if: ${{ !inputs.dry_run && env.APP_STORE_CONNECT_API_KEY_ID != '' }}
         env:
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+          TESTFLIGHT_CHANGELOG_PATH: ${{ runner.temp }}/testflight-notes.txt
         working-directory: ${{ env.PLAYER_PATH }}/ios
         run: bundle exec fastlane beta
 
