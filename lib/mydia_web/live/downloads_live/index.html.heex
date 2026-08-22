@@ -214,6 +214,17 @@
                   {get_episode_details(download)}
                 </span>
               <% end %>
+              <%!-- Mydia did not add this one. Neutral styling on purpose:
+                    adoption is intended behaviour, not a problem. --%>
+              <%= if adopted_from_client?(download) do %>
+                <span
+                  class="badge badge-ghost badge-xs shrink-0"
+                  data-test="adopted-badge"
+                  title="Mydia did not add this torrent. It was already in the download client and matched to your library."
+                >
+                  Added outside Mydia
+                </span>
+              <% end %>
             </div>
             <%!-- Line 2: release title (muted), only when it differs from the display title --%>
             <%= if get_display_title(download) != download.title do %>
