@@ -4,8 +4,8 @@ defmodule Mydia.Subtitles.Downloader do
 
   Handles the complete subtitle download workflow:
   1. Fetches subtitle content from the configured provider adapter
-  2. Writes content to a temporary file
-  3. Detects the real subtitle format from the content
+  2. Detects the real subtitle format from the content
+  3. Writes content to a temporary file
   4. Stores file with proper naming convention
   5. Persists metadata to database
 
@@ -192,8 +192,9 @@ defmodule Mydia.Subtitles.Downloader do
     end
   end
 
-  # The provider already handed us bytes, so this only needs somewhere to put
-  # them for the format validation and storage steps that follow.
+  # The provider already handed us bytes, and the format has already been
+  # detected from them, so this only needs somewhere to put them so the
+  # storage step that follows has bytes on disk to move.
   defp write_temp(content) do
     path = Path.join(@temp_dir, "subtitle_#{:erlang.unique_integer([:positive])}.tmp")
 
