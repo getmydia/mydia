@@ -280,6 +280,15 @@ repository. The app compiles that file into the image, and the draft's
 GitHub notes are produced from it too. Nothing is generated from the commit
 range.
 
+The `## Player` section has a second consumer. `scripts/testflight-notes.sh`
+extracts it during the release run and it becomes TestFlight's "What to Test",
+so it is what beta testers read on their phones. Apple caps that field at 4000
+characters; anything longer is trimmed to whole bullets with a link to the
+release page. A prerelease, which ships no bundled file, gets a summary of the
+commit subjects touching `player/` since the previous tag instead. The computed
+text is echoed into the `Prepare` job's step summary on every run, including a
+dry run, so it can be read before the build finishes.
+
 A patch release's GitHub notes carry the preceding minor's notes as well as
 its own, produced by concatenating the two bundled files. The bundled file
 itself holds only the patch's own changes, since the app stacks releases

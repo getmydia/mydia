@@ -640,12 +640,23 @@ jobs:
           bundler-cache: true
           working-directory: ${{ env.PLAYER_PATH }}/ios
 
+      # The notes reach the shell through env, never through ${{ }} substitution
+      # into this body: changelog text contains backticks and $, which would be
+      # both an injection risk and a corruption bug.
+      - name: Write TestFlight notes
+        if: ${{ !inputs.dry_run && env.APP_STORE_CONNECT_API_KEY_ID != '' }}
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          NOTES: ${{ needs.prepare.outputs.testflight_notes }}
+        run: printf '%s' "$NOTES" > "$RUNNER_TEMP/testflight-notes.txt"
+
       - name: Upload to TestFlight
         if: ${{ !inputs.dry_run && env.APP_STORE_CONNECT_API_KEY_ID != '' }}
         env:
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+          TESTFLIGHT_CHANGELOG_PATH: ${{ runner.temp }}/testflight-notes.txt
         working-directory: ${{ env.PLAYER_PATH }}/ios
         run: bundle exec fastlane beta
 
