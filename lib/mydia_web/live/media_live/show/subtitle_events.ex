@@ -65,6 +65,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
     media_file = socket.assigns.selected_media_file
 
     with {position, ""} <- Integer.parse(index),
+         true <- position >= 0,
          result when not is_nil(result) <-
            Enum.at(socket.assigns.subtitle_search_results, position) do
       {:noreply,

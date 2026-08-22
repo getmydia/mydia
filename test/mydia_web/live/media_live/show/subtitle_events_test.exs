@@ -118,6 +118,20 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEventsTest do
       assert socket.assigns.downloading_subtitle_index == nil
       assert flash(socket)["error"] =~ "no longer available"
     end
+
+    # Integer.parse/1 accepts a leading minus sign, so a crafted "-1" would
+    # otherwise resolve from the end of the list via Enum.at/2 instead of
+    # being rejected as out of range.
+    test "a negative index flashes rather than resolving from the end of the list" do
+      {:noreply, socket} =
+        SubtitleEvents.download_subtitle_result(
+          %{"index" => "-1"},
+          search_socket([relay_result()])
+        )
+
+      assert socket.assigns.downloading_subtitle_index == nil
+      assert flash(socket)["error"] =~ "no longer available"
+    end
   end
 
   describe "handle_download_subtitle_async/2" do
