@@ -208,12 +208,11 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
                   >
                     <.icon name="hero-plus" class="w-4 h-4" /> Add to Library
                   </button>
-                  <.library_picker_menu
+                  <.library_picker_button
                     libraries={@libraries}
-                    event="add_to_library"
                     tmdb_id={@item.provider_id}
                     media_type={media_type_string(@item)}
-                    placement={:top}
+                    title={@item.title}
                   />
                 </div>
               <% end %>

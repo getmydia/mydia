@@ -554,64 +554,6 @@ defmodule MydiaWeb.LibraryComponents do
   end
 
   @doc """
-  A caret button opening a menu of target libraries.
-
-  Renders nothing when there are fewer than two candidates, so a single-library
-  install sees the plain add button exactly as before.
-
-  Libraries have no `name` column, only `path`, so each entry shows the
-  basename with the full path as secondary text.
-  """
-  attr :libraries, :list, required: true
-  attr :event, :string, required: true
-  attr :tmdb_id, :any, default: nil
-  attr :media_type, :any, default: nil
-  attr :selected_id, :string, default: nil
-
-  # A host that has no room below the caret opens the menu upward instead. An
-  # atom with `values:` rather than a pass-through class string, so a typo is a
-  # compile error and daisyUI class names stay inside this component.
-  attr :placement, :atom, default: :bottom, values: [:bottom, :top]
-
-  def library_picker_menu(assigns) do
-    ~H"""
-    <div
-      :if={length(@libraries) > 1}
-      class={["dropdown dropdown-end z-20", @placement == :top && "dropdown-top"]}
-    >
-      <div
-        tabindex="0"
-        role="button"
-        data-test="library-picker-caret"
-        class="btn btn-primary btn-sm join-item px-2"
-        title="Choose a library"
-      >
-        <.icon name="hero-chevron-down" class="w-3 h-3" />
-      </div>
-      <ul
-        tabindex="0"
-        class="dropdown-content menu p-2 shadow-lg bg-base-100 rounded-box w-60 border border-base-300"
-      >
-        <li class="menu-title text-xs">Add to library</li>
-        <li :for={library <- @libraries}>
-          <button
-            type="button"
-            phx-click={@event}
-            phx-value-library_path_id={library.id}
-            phx-value-tmdb_id={@tmdb_id}
-            phx-value-media_type={@media_type}
-            class="flex-col items-start gap-0"
-          >
-            <span class="font-medium">{Path.basename(library.path)}</span>
-            <span class="text-xs text-base-content/50 truncate w-full">{library.path}</span>
-          </button>
-        </li>
-      </ul>
-    </div>
-    """
-  end
-
-  @doc """
   The caret half of the "Add to Library" split button.
 
   Renders nothing when there are fewer than two candidates, so a
