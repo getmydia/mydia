@@ -105,7 +105,14 @@ previous_tag() {
     echo "$TESTFLIGHT_PREV_TAG"
     return
   fi
-  git tag --sort=-version:refname | grep -v metadata-relay | grep -vFx "$TAG" | head -n1
+  # An empty filtered list (no tag left after excluding metadata-relay tags and
+  # $TAG itself) makes the last grep exit non-zero even though head still runs
+  # and prints nothing. Under pipefail that failing status is the pipeline's
+  # status, and set -e would abort the whole script right here, silently,
+  # before Source 3's placeholder fallback is ever reached. The trailing
+  # `|| true` keeps this a clean empty result so the `if [ -n "$prev" ]` guard
+  # at the call site can handle it. Do not remove this as dead code.
+  git tag --sort=-version:refname | grep -v metadata-relay | grep -vFx "$TAG" | head -n1 || true
 }
 
 notes=""
