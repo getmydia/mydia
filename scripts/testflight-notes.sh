@@ -25,6 +25,12 @@ readonly VERSION="$1" SHA="$2" TAG="$3"
 
 git cat-file -e "${SHA}^{commit}" 2>/dev/null || die "'${SHA}' is not a commit"
 
+# The heading match is exact. A renamed or whitespace-padded heading extracts
+# nothing and falls through, which check-testflight-notes.sh is what catches.
+extract_player_section() {
+  awk '/^## Player$/ { inside = 1; next } /^## / { inside = 0 } inside { print }'
+}
+
 # Keep whole lines until the budget is spent. Once a line does not fit, every
 # later line is dropped too, so the output never ends mid-bullet.
 # Returns 1 when something was dropped, 0 when everything fit.
@@ -64,6 +70,16 @@ fit_to_budget() {
 notes=""
 source_label=""
 
+# --- Source 1: the bundled `## Player` section --------------------------------
+# Read from the pinned commit, not the working tree: a draft release can target
+# a commit older than the ref this runs on.
+notes_path="priv/changelog/${VERSION}.md"
+if git cat-file -e "${SHA}:${notes_path}" 2>/dev/null; then
+  notes="$(git show "${SHA}:${notes_path}" | extract_player_section)"
+  [ -n "$notes" ] && source_label="bundled"
+fi
+
+# --- Source 3: a line naming the version --------------------------------------
 # External TestFlight distribution rejects empty notes, so this never yields "".
 if [ -z "$notes" ]; then
   notes="Mydia Player ${VERSION}. No app changes in this build."
