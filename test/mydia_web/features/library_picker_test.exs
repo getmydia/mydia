@@ -79,11 +79,21 @@ defmodule MydiaWeb.Features.LibraryPickerTest do
   setup do
     bypass = Bypass.open()
 
+    # Capture whatever was configured before this test so on_exit can put it
+    # back rather than deleting the key outright. metadata_relay_url/0 now
+    # prefers this application env key over METADATA_RELAY_URL, so a bare
+    # delete_env would erase a real config value for every test that runs
+    # afterwards in this VM if one is ever set.
+    previous_metadata_relay_url = Application.get_env(:mydia, :metadata_relay_url)
     Application.put_env(:mydia, :metadata_relay_url, "http://localhost:#{bypass.port}")
     Cache.clear()
 
     on_exit(fn ->
-      Application.delete_env(:mydia, :metadata_relay_url)
+      case previous_metadata_relay_url do
+        nil -> Application.delete_env(:mydia, :metadata_relay_url)
+        value -> Application.put_env(:mydia, :metadata_relay_url, value)
+      end
+
       Cache.clear()
     end)
 

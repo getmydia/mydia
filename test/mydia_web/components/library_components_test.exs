@@ -105,10 +105,20 @@ defmodule MydiaWeb.LibraryComponentsTest do
     end
 
     test "shows the basename with the full path underneath" do
-      html = picker_dialog()
+      document = LazyHTML.from_fragment(picker_dialog())
 
-      assert html =~ "movies-1"
-      assert html =~ "/media/movies-1"
+      # `LazyHTML.text/1` on a multi-node match concatenates every node's
+      # text, so map over the spans individually to keep the basename and
+      # the full path as separate assertions. A substring check here
+      # (`html =~ "movies-1"`) would pass even if the basename span vanished,
+      # since "/media/movies-1" itself contains "movies-1".
+      spans =
+        document
+        |> LazyHTML.query(~s(button[data-test="library-picker-option"] span))
+        |> Enum.map(&LazyHTML.text/1)
+
+      assert Enum.at(spans, 0) == "movies-1"
+      assert Enum.at(spans, 1) == "/media/movies-1"
     end
 
     test "names the title being added" do

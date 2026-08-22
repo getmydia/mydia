@@ -529,9 +529,11 @@ defmodule Mydia.Metadata do
   This provides a ready-to-use configuration for the metadata-relay service
   that doesn't require an API key.
 
-  The base URL can be configured via the METADATA_RELAY_URL environment variable,
-  defaulting to the self-hosted relay at relay.mydia.dev if not set. The metadata
-  language can be configured via the METADATA_LANGUAGE environment variable.
+  The base URL follows `metadata_relay_url/0`'s precedence: application env
+  (`:mydia, :metadata_relay_url`), then the METADATA_RELAY_URL environment
+  variable, then the default self-hosted relay at relay.mydia.dev. The
+  metadata language can be configured via the METADATA_LANGUAGE environment
+  variable.
 
   ## Examples
 
@@ -557,9 +559,11 @@ defmodule Mydia.Metadata do
   @doc """
   Gets the default TVDB relay configuration.
 
-  The base URL can be configured via the METADATA_RELAY_URL environment variable,
-  defaulting to the self-hosted relay at relay.mydia.dev if not set. The metadata
-  language can be configured via the METADATA_LANGUAGE environment variable.
+  The base URL follows `metadata_relay_url/0`'s precedence: application env
+  (`:mydia, :metadata_relay_url`), then the METADATA_RELAY_URL environment
+  variable, then the default self-hosted relay at relay.mydia.dev. The
+  metadata language can be configured via the METADATA_LANGUAGE environment
+  variable.
 
   ## Examples
 
