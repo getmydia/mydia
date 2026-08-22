@@ -5,7 +5,7 @@ defmodule Mydia.Subtitles.Downloader do
   Handles the complete subtitle download workflow:
   1. Fetches subtitle content from the configured provider adapter
   2. Writes content to a temporary file
-  3. Validates subtitle format
+  3. Detects the real subtitle format from the content
   4. Stores file with proper naming convention
   5. Persists metadata to database
 
@@ -27,6 +27,7 @@ defmodule Mydia.Subtitles.Downloader do
 
   require Logger
   alias Mydia.Repo
+  alias Mydia.Subtitles.Format
   alias Mydia.Subtitles.Subtitle
   alias Mydia.Library.MediaFile
 
@@ -82,11 +83,17 @@ defmodule Mydia.Subtitles.Downloader do
          :ok <- validate_subtitle_info(subtitle_info),
          {:ok, _existing} <- check_duplicate(media_file_id, subtitle_info.subtitle_hash),
          {:ok, content} <- fetch_subtitle_content(subtitle_info, provider_config),
+         {:ok, format} <- Format.detect(content),
          {:ok, temp_path} <- write_temp(content),
-         :ok <- validate_format(temp_path, subtitle_info.format),
-         {:ok, final_path} <- store_subtitle_file(temp_path, media_file, subtitle_info),
+         {:ok, final_path} <- store_subtitle_file(temp_path, media_file, subtitle_info, format),
          {:ok, subtitle} <-
-           persist_subtitle(media_file, subtitle_info, final_path, to_string(provider_type)) do
+           persist_subtitle(
+             media_file,
+             subtitle_info,
+             final_path,
+             format,
+             to_string(provider_type)
+           ) do
       Logger.info("Subtitle downloaded successfully",
         media_file_id: media_file_id,
         language: subtitle_info.language,
@@ -198,41 +205,8 @@ defmodule Mydia.Subtitles.Downloader do
     end
   end
 
-  # Validate subtitle file format by checking content
-  defp validate_format(file_path, expected_format) do
-    case File.read(file_path) do
-      {:ok, content} ->
-        if valid_subtitle_content?(content, expected_format) do
-          :ok
-        else
-          {:error, {:format_validation_failed, expected_format}}
-        end
-
-      {:error, reason} ->
-        {:error, {:file_read_error, reason}}
-    end
-  end
-
-  # Check if content matches expected subtitle format
-  defp valid_subtitle_content?(content, "srt") do
-    # SRT files start with subtitle number followed by timecode
-    String.match?(content, ~r/^\d+\s*\n\d{2}:\d{2}:\d{2},\d{3}\s*-->/m)
-  end
-
-  defp valid_subtitle_content?(content, "ass") do
-    # ASS files contain [Script Info] section
-    String.contains?(content, "[Script Info]") or String.contains?(content, "[V4+ Styles]")
-  end
-
-  defp valid_subtitle_content?(content, "vtt") do
-    # VTT files start with WEBVTT header
-    String.starts_with?(content, "WEBVTT")
-  end
-
-  defp valid_subtitle_content?(_content, _format), do: false
-
   # Move subtitle file to permanent location with proper naming
-  defp store_subtitle_file(temp_path, media_file, subtitle_info) do
+  defp store_subtitle_file(temp_path, media_file, subtitle_info, format) do
     absolute_path = MediaFile.absolute_path(media_file)
 
     if is_nil(absolute_path) do
@@ -244,7 +218,7 @@ defmodule Mydia.Subtitles.Downloader do
       media_dir = Path.dirname(absolute_path)
 
       # Build subtitle filename: {base}.{language}.{format}
-      subtitle_filename = "#{base_filename}.#{subtitle_info.language}.#{subtitle_info.format}"
+      subtitle_filename = "#{base_filename}.#{subtitle_info.language}.#{format}"
       final_path = Path.join(media_dir, subtitle_filename)
 
       # Ensure directory exists
@@ -285,14 +259,14 @@ defmodule Mydia.Subtitles.Downloader do
   end
 
   # Persist subtitle metadata to database
-  defp persist_subtitle(media_file, subtitle_info, file_path, provider) do
+  defp persist_subtitle(media_file, subtitle_info, file_path, format, provider) do
     attrs = %{
       media_file_id: media_file.id,
       language: subtitle_info.language,
       provider: provider,
       subtitle_hash: subtitle_info.subtitle_hash,
       file_path: file_path,
-      format: subtitle_info.format,
+      format: format,
       rating: Map.get(subtitle_info, :rating),
       download_count: Map.get(subtitle_info, :download_count),
       hearing_impaired: Map.get(subtitle_info, :hearing_impaired, false)
