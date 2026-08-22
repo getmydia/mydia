@@ -479,31 +479,13 @@ defmodule Mydia.Subtitles do
   defp handle_search_results([best | _rest] = results, media_file_id, true) do
     # Check if auto-download is appropriate for high-confidence match
     if best.score >= @high_confidence_threshold do
-      # Auto-download high-confidence match
-      subtitle_info = %{
-        file_id: best.file_id,
-        language: best.language,
-        # The provider states the format. Deriving it from the file name breaks
-        # on providers whose name carries no extension: Gestdown's is a release
-        # tag like "Bluray-CtrlHD", so Path.extname/1 returns "" and the
-        # download is rejected as an unsupported format.
-        format: best.format || "srt",
-        subtitle_hash: best.subtitle_hash || generate_subtitle_hash(best),
-        rating: best.rating,
-        download_count: best.download_count,
-        hearing_impaired: Map.get(best, :hearing_impaired) || false
-      }
-
-      # Route to the provider that produced this candidate. Without it the
-      # download goes to the relay by default and fails for anything found by
-      # Gestdown, SubDL or a direct OpenSubtitles account.
-      download_opts =
-        case Map.get(best, :provider_type) do
-          nil -> []
-          provider_type -> [provider_type: provider_type]
-        end
-
-      case download_subtitle(subtitle_info, media_file_id, download_opts) do
+      # Auto-download high-confidence match, through the same entry point the
+      # search modal and the player's download mutation use. It resolves the
+      # provider config from `best`'s provider_id instead of the relay
+      # default, so this stays correct for Gestdown, SubDL or a direct
+      # OpenSubtitles account, and stays a match for the "one shared entry
+      # point" this download path is meant to be.
+      case download_from_result(best, media_file_id) do
         {:ok, subtitle} ->
           Logger.info("Auto-downloaded high-confidence subtitle",
             media_file_id: media_file_id,
@@ -527,12 +509,5 @@ defmodule Mydia.Subtitles do
 
   defp handle_search_results(results, _media_file_id, _auto_download) do
     {:ok, results}
-  end
-
-  # Generate a subtitle hash if not provided by the API
-  defp generate_subtitle_hash(result) do
-    # Use file_id and language as unique identifier
-    :crypto.hash(:sha256, "#{result.file_id}-#{result.language}")
-    |> Base.encode16(case: :lower)
   end
 end

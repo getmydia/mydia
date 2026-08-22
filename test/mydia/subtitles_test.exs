@@ -6,7 +6,27 @@ defmodule Mydia.SubtitlesTest do
   defmodule RecordingAdapter do
     @behaviour Mydia.Subtitles.Provider
 
+    # A named config can opt into returning a single high-confidence result,
+    # so a test can drive the full search_subtitles/2 auto-download path
+    # without a real upstream. Every other config searches empty, same as
+    # before.
     @impl true
+    def search(%{name: "auto-download-match"}, _params) do
+      {:ok,
+       [
+         %Mydia.Subtitles.Provider.SearchResult{
+           file_id: "auto-1",
+           language: "en",
+           format: "srt",
+           subtitle_hash: "auto-download-hash",
+           rating: 10.0,
+           download_count: 10_000,
+           hearing_impaired: false,
+           moviehash_match: false
+         }
+       ]}
+    end
+
     def search(_config, _params), do: {:ok, []}
 
     # Records what it was handed so the test can assert the file id survived
@@ -152,6 +172,50 @@ defmodule Mydia.SubtitlesTest do
       }
 
       assert {:ok, _subtitle} = Mydia.Subtitles.download_from_result(result, media_file.id)
+    end
+  end
+
+  describe "search_subtitles/2 auto_download" do
+    alias Mydia.MediaFixtures
+    alias Mydia.SubtitleProviderFixtures
+    alias Mydia.Subtitles.Health
+
+    setup do
+      # Health is a singleton keyed by provider type; a circuit opened by a
+      # concurrent test elsewhere in the suite would make the :relay-typed
+      # configs below look unavailable and skip them.
+      for %{type: type} <- Mydia.Subtitles.ProviderRegistry.builtins(), do: Health.reset(type)
+
+      movie =
+        MediaFixtures.media_item_fixture(%{
+          type: "movie",
+          tmdb_id: System.unique_integer([:positive])
+        })
+
+      media_file = MediaFixtures.media_file_fixture(%{media_item_id: movie.id})
+      {:ok, media_file: media_file}
+    end
+
+    # Defect B, exercised through the auto-download branch instead of a
+    # hand-built result: the download must reach the config the candidate's
+    # provider_id names, not the relay default the old hand-rolled
+    # download_opts fell back to.
+    test "auto-download resolves the provider config from provider_id", %{media_file: media_file} do
+      SubtitleProviderFixtures.config_fixture(%{adapter: RecordingAdapter, name: "wrong"})
+
+      SubtitleProviderFixtures.config_fixture(%{
+        adapter: RecordingAdapter,
+        name: "auto-download-match"
+      })
+
+      assert {:ok, {:downloaded, _subtitle}} =
+               Mydia.Subtitles.search_subtitles(media_file.id,
+                 languages: "en",
+                 auto_download: true
+               )
+
+      assert_received {:downloaded, "auto-download-match", "auto-1"}
+      refute_received {:downloaded, "wrong", _}
     end
   end
 
