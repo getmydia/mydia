@@ -11,72 +11,111 @@ defmodule MydiaWeb.LibraryComponentsTest do
     for i <- 1..count, do: %{id: "lib-#{i}", path: "/media/movies-#{i}"}
   end
 
-  defp picker(overrides \\ %{}) do
+  defp picker_button(overrides \\ %{}) do
     assigns =
       Map.merge(
-        %{libraries: libraries(2), event: "add_to_library"},
+        %{
+          libraries: libraries(2),
+          tmdb_id: "693134",
+          media_type: :movie,
+          title: "Dune: Part Two"
+        },
         overrides
       )
 
-    render_component(&LibraryComponents.library_picker_menu/1, assigns)
+    render_component(&LibraryComponents.library_picker_button/1, assigns)
   end
 
-  describe "library_picker_menu/1" do
+  defp picker_dialog(overrides \\ %{}) do
+    assigns =
+      Map.merge(
+        %{
+          picker: %{
+            tmdb_id: "693134",
+            media_type: :movie,
+            title: "Dune: Part Two",
+            libraries: libraries(2)
+          }
+        },
+        overrides
+      )
+
+    render_component(&LibraryComponents.library_picker_dialog/1, assigns)
+  end
+
+  describe "library_picker_button/1" do
     test "renders nothing when there is only one candidate library" do
-      html = picker(%{libraries: libraries(1)})
-
-      refute html =~ "library-picker-caret"
+      refute picker_button(%{libraries: libraries(1)}) =~ "library-picker-caret"
     end
 
-    test "renders a caret and one entry per library when there are several" do
-      html = picker()
-
-      assert html =~ ~s(data-test="library-picker-caret")
-      assert html =~ "movies-1"
-      assert html =~ "movies-2"
-    end
-
-    # Regression for #465: the menu sat at z-[1] while the trending card's
-    # rating and in-library badges sit at z-10, so even the unclipped sliver
-    # rendered underneath them.
-    #
-    # daisyUI's `.join > :where(:focus, :has(:focus))` rule stamps z-index: 1
-    # on the `.dropdown` wrapper the moment the caret is focused (the same
-    # condition that opens the menu), which creates a stacking context on
-    # that `position: relative` div. A z-index on the inner `<ul>` is then
-    # confined below that context regardless of its value, so the wrapper
-    # itself must carry the z-index, not the menu list.
-    test "the menu stacks above the trending card badges" do
-      html = picker()
+    test "renders a real button that opens the dialog, carrying the card's identity" do
+      html = picker_button()
       document = LazyHTML.from_fragment(html)
 
-      # The `.dropdown` div is the root node of this component's output, so
-      # filter/2 (root nodes only) is correct here.
-      wrapper_class =
-        document
-        |> LazyHTML.filter("div.dropdown")
-        |> LazyHTML.attribute("class")
-        |> List.first()
+      caret = LazyHTML.query(document, ~s(button[data-test="library-picker-caret"]))
 
-      assert wrapper_class =~ "z-20"
+      assert LazyHTML.attribute(caret, "phx-click") == ["open_library_picker"]
+      assert LazyHTML.attribute(caret, "phx-value-tmdb_id") == ["693134"]
+      assert LazyHTML.attribute(caret, "phx-value-media_type") == ["movie"]
+      assert LazyHTML.attribute(caret, "phx-value-title") == ["Dune: Part Two"]
+    end
+  end
 
-      # The `<ul>` is nested inside the wrapper, so it needs query/2, not
-      # filter/2, to be found at all.
-      menu_class =
-        document
-        |> LazyHTML.query("ul.dropdown-content")
-        |> LazyHTML.attribute("class")
-        |> List.first()
+  describe "library_picker_dialog/1" do
+    test "renders a closed dialog when no picker is open" do
+      html = render_component(&LibraryComponents.library_picker_dialog/1, %{picker: nil})
+      document = LazyHTML.from_fragment(html)
 
-      refute menu_class =~ "z-20"
+      dialog = LazyHTML.filter(document, "dialog")
+
+      assert LazyHTML.attribute(dialog, "open") == []
+      refute html =~ "library-picker-option"
     end
 
-    test "opens downward by default" do
-      refute picker() =~ "dropdown-top"
+    # The dialog is a page-level overlay rather than a card descendant, which
+    # is the whole point: the sidebar is z-40 and the mobile dock is z-50, so
+    # no value a card can claim keeps the old anchored menu visible. daisyUI's
+    # .modal is z-999 and the picker takes 1000 so it also wins against the
+    # trending detail modal without depending on DOM order.
+    test "the open dialog sits above every other layer" do
+      document = LazyHTML.from_fragment(picker_dialog())
+
+      dialog = LazyHTML.filter(document, "dialog")
+      [class] = LazyHTML.attribute(dialog, "class")
+
+      assert LazyHTML.attribute(dialog, "open") == [""]
+      assert class =~ "modal"
+      assert class =~ "z-[1000]"
     end
 
-    test "opens upward when placement is :top" do
-      assert picker(%{placement: :top}) =~ "dropdown-top"
+    test "lists every candidate library with the values the add handler needs" do
+      document = LazyHTML.from_fragment(picker_dialog())
+
+      options = LazyHTML.query(document, ~s(button[data-test="library-picker-option"]))
+
+      assert LazyHTML.attribute(options, "phx-click") == ["add_to_library", "add_to_library"]
+      assert LazyHTML.attribute(options, "phx-value-library_path_id") == ["lib-1", "lib-2"]
+      assert LazyHTML.attribute(options, "phx-value-tmdb_id") == ["693134", "693134"]
+      assert LazyHTML.attribute(options, "phx-value-media_type") == ["movie", "movie"]
+    end
+
+    test "shows the basename with the full path underneath" do
+      html = picker_dialog()
+
+      assert html =~ "movies-1"
+      assert html =~ "/media/movies-1"
+    end
+
+    test "names the title being added" do
+      assert picker_dialog() =~ "Dune: Part Two"
+    end
+
+    test "offers cancel and a backdrop that both close the dialog" do
+      document = LazyHTML.from_fragment(picker_dialog())
+
+      closers = LazyHTML.query(document, ~s([phx-click="close_library_picker"]))
+
+      assert Enum.count(closers) >= 2
     end
   end
 

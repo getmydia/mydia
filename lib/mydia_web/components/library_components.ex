@@ -610,4 +610,107 @@ defmodule MydiaWeb.LibraryComponents do
     </div>
     """
   end
+
+  @doc """
+  The caret half of the "Add to Library" split button.
+
+  Renders nothing when there are fewer than two candidates, so a
+  single-library install sees the plain add button exactly as before.
+
+  This is a real `<button>` rather than a `div[role="button"]` because it no
+  longer drives a CSS `:focus` dropdown. It pushes an event and the host opens
+  `library_picker_dialog/1`.
+  """
+  attr :libraries, :list, required: true
+  attr :tmdb_id, :any, default: nil
+  attr :media_type, :any, default: nil
+  attr :title, :string, default: ""
+
+  def library_picker_button(assigns) do
+    ~H"""
+    <button
+      :if={length(@libraries) > 1}
+      type="button"
+      data-test="library-picker-caret"
+      class="btn btn-primary btn-sm join-item px-2"
+      title="Choose a library"
+      phx-click="open_library_picker"
+      phx-value-tmdb_id={@tmdb_id}
+      phx-value-media_type={@media_type}
+      phx-value-title={@title}
+    >
+      <.icon name="hero-chevron-down" class="w-3 h-3" />
+    </button>
+    """
+  end
+
+  @doc """
+  The library chooser, rendered once per host LiveView.
+
+  An anchored dropdown inside the card cannot work here. The sidebar is
+  `z-40`, the mobile dock is `z-50` and the sticky header is `z-30`, so any
+  value a card claims either loses to the chrome or paints over it during
+  ordinary browsing, and a horizontal rail's `overflow` clips the menu
+  whatever its z-index. A page-level `.modal` is `position: fixed; inset: 0;
+  z-index: 999`, which sidesteps both problems.
+
+  The explicit `z-[1000]` puts the picker above the trending detail modal,
+  which is also a `.modal` at 999, without depending on which of the two
+  happens to come later in the DOM.
+
+  Libraries have no `name` column, only `path`, so each entry shows the
+  basename with the full path as secondary text.
+  """
+  attr :picker, :map,
+    default: nil,
+    doc: "nil, or %{tmdb_id:, media_type:, title:, libraries:} for the card being added"
+
+  attr :event, :string, default: "add_to_library"
+  attr :on_cancel, :string, default: "close_library_picker"
+
+  def library_picker_dialog(assigns) do
+    ~H"""
+    <dialog
+      id="library-picker-dialog"
+      class="modal z-[1000]"
+      open={@picker != nil}
+      phx-window-keydown={@picker && @on_cancel}
+      phx-key="Escape"
+    >
+      <div :if={@picker} class="modal-box max-w-md">
+        <h3 class="font-bold text-lg">Add to which library?</h3>
+        <p class="text-sm text-base-content/60 mt-1 truncate">{@picker.title}</p>
+
+        <ul class="menu w-full mt-4 p-0">
+          <li :for={library <- @picker.libraries}>
+            <button
+              type="button"
+              data-test="library-picker-option"
+              phx-click={@event}
+              phx-value-library_path_id={library.id}
+              phx-value-tmdb_id={@picker.tmdb_id}
+              phx-value-media_type={@picker.media_type}
+              class="flex-col items-start gap-0"
+            >
+              <span class="font-medium">{Path.basename(library.path)}</span>
+              <span class="text-xs text-base-content/50 truncate w-full">{library.path}</span>
+            </button>
+          </li>
+        </ul>
+
+        <div class="modal-action">
+          <button type="button" class="btn btn-ghost" phx-click={@on_cancel}>Cancel</button>
+        </div>
+      </div>
+
+      <%!-- A <dialog> opened through the `open` attribute rather than
+           showModal() gets no ::backdrop and no Escape handling, which is why
+           the keydown above and this click target both exist. Same approach
+           as TrendingDetailModal. --%>
+      <div class="modal-backdrop bg-black/70">
+        <button type="button" phx-click={@on_cancel}>close</button>
+      </div>
+    </dialog>
+    """
+  end
 end
