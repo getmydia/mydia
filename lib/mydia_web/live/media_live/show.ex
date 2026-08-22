@@ -127,7 +127,7 @@ defmodule MydiaWeb.MediaLive.Show do
      # Subtitle state
      |> assign(:show_subtitle_search_modal, false)
      |> assign(:subtitle_search_state, :idle)
-     |> assign(:downloading_subtitle_id, nil)
+     |> assign(:downloading_subtitle_index, nil)
      |> assign(:subtitle_search_results, [])
      |> assign(:subtitle_providers, [])
      |> assign(:selected_media_file, nil)

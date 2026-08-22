@@ -1178,7 +1178,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   attr :subtitle_search_state, :any, default: :idle
   attr :subtitle_search_results, :list, required: true
   attr :subtitle_providers, :list, default: []
-  attr :downloading_subtitle_id, :any, default: nil
+  attr :downloading_subtitle_index, :any, default: nil
   attr :selected_languages, :list, default: ["en"]
 
   def subtitle_search_modal(assigns) do
@@ -1383,7 +1383,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                   />
                   <ul class="list bg-base-100 rounded-box">
                     <li
-                      :for={result <- @subtitle_search_results}
+                      :for={{result, index} <- Enum.with_index(@subtitle_search_results)}
                       class="list-row hover:bg-base-200/50 transition-colors"
                     >
                       <div class="list-col-grow min-w-0">
@@ -1426,17 +1426,11 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                       <button
                         type="button"
                         phx-click="download_subtitle_result"
-                        phx-value-file-id={result.file_id}
-                        phx-value-language={result.language}
-                        phx-value-format={result.format}
-                        phx-value-subtitle-hash={result.subtitle_hash}
-                        phx-value-rating={result.rating}
-                        phx-value-download-count={result.download_count}
-                        phx-value-hearing-impaired={result.hearing_impaired}
+                        phx-value-index={index}
                         class="btn btn-primary btn-sm"
-                        disabled={@downloading_subtitle_id != nil}
+                        disabled={@downloading_subtitle_index != nil}
                       >
-                        <%= if @downloading_subtitle_id == result.file_id do %>
+                        <%= if @downloading_subtitle_index == index do %>
                           <span class="loading loading-spinner loading-xs"></span>
                         <% else %>
                           <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> Download
