@@ -440,8 +440,12 @@ defmodule Mydia.Metadata do
   @doc """
   Gets the metadata relay base URL.
 
-  The base URL can be configured via the METADATA_RELAY_URL environment variable,
-  defaulting to the self-hosted relay if not set.
+  Resolved in order of precedence:
+
+    1. `Application.get_env(:mydia, :metadata_relay_url)` — set directly in
+       config, or in tests to point the relay at a local `Bypass` instance.
+    2. The `METADATA_RELAY_URL` environment variable.
+    3. The default, the self-hosted relay at `https://relay.mydia.dev`.
 
   ## Examples
 

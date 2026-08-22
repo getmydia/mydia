@@ -14,6 +14,9 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
         metadata={@selected_metadata}
         loading={@detail_loading}
         current_user={@current_user}
+        open={@selected_item != nil}
+        libraries={@libraries}
+        picker_open={@library_picker != nil}
       />
 
   ## Events
@@ -22,6 +25,21 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
 
   - `close_details` - When user closes the modal
   - `add_to_library` - When user clicks "Add to Library" (with tmdb_id and media_type params)
+
+  ## `picker_open`
+
+  Both host LiveViews also render `MydiaWeb.Components.LibraryComponents.library_picker_dialog/1`
+  once per page, at `z-[1000]`, above this modal's `z-999`. That dialog can be
+  opened from this modal's footer, and both dialogs bind `phx-window-keydown`
+  with `phx-key="Escape"` as a workaround for `open`-attribute dialogs getting
+  no native Escape handling. `phx-window-keydown` is not scoped by visual
+  stacking, so without `picker_open` a single Escape press would close both
+  layers at once instead of only the top one.
+
+  Every caller must pass `picker_open` (whether the library picker dialog is
+  currently open for this LiveView). There is deliberately no default — a
+  future caller that forgets to pass it fails loudly at render instead of
+  silently regressing Escape handling.
   """
   use MydiaWeb, :live_component
 
@@ -34,7 +52,7 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
       id={@id}
       class="modal"
       open={@open}
-      phx-window-keydown={@open && "close_details"}
+      phx-window-keydown={@open && not @picker_open && "close_details"}
       phx-key="Escape"
     >
       <%= if @open do %>

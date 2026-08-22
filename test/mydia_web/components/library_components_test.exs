@@ -68,6 +68,11 @@ defmodule MydiaWeb.LibraryComponentsTest do
 
       dialog = LazyHTML.filter(document, "dialog")
 
+      # Guard the cardinality first: `LazyHTML.attribute/2` on a zero-node
+      # match returns `[]` same as a genuinely closed dialog's missing `open`
+      # attribute, so without this the assertion below would pass even if the
+      # "dialog" selector matched nothing at all.
+      assert Enum.count(dialog) == 1
       assert LazyHTML.attribute(dialog, "open") == []
       refute html =~ "library-picker-option"
     end
