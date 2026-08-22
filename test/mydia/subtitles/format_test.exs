@@ -164,4 +164,49 @@ defmodule Mydia.Subtitles.FormatTest do
       refute Format.image_format?("ass")
     end
   end
+
+  describe "detect/1" do
+    @fixtures "test/fixtures/subtitles"
+
+    # Real bytes from the live relay. SubDL ships archives whose contents are
+    # frequently not what the search result declared, and fixtures in a shape
+    # production never produces are how that went unnoticed.
+    test "reads ASS out of a file the provider declared as srt" do
+      assert Format.detect(File.read!("#{@fixtures}/ass_sample.ass")) == {:ok, "ass"}
+    end
+
+    test "reads SRT through a UTF-8 BOM and CRLF line endings" do
+      assert Format.detect(File.read!("#{@fixtures}/srt_bom_sample.srt")) == {:ok, "srt"}
+    end
+
+    # The cue regex carries no /u modifier, so PCRE matches it byte by byte and
+    # Latin-1 content is fine. Asserting it keeps anyone from "fixing" that.
+    test "reads SRT out of a non-UTF-8 file" do
+      content = File.read!("#{@fixtures}/srt_latin1_sample.srt")
+
+      refute String.valid?(content)
+      assert Format.detect(content) == {:ok, "srt"}
+    end
+
+    test "reads VTT with and without a BOM" do
+      vtt = "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nhi\n"
+
+      assert Format.detect(vtt) == {:ok, "vtt"}
+      assert Format.detect("﻿" <> vtt) == {:ok, "vtt"}
+    end
+
+    test "names MicroDVD as unsupported rather than unrecognized" do
+      microdvd = "{100}{200}Hello there\n{300}{400}General Kenobi\n"
+
+      assert Format.detect(microdvd) == {:error, {:unsupported_subtitle_format, "sub"}}
+    end
+
+    test "rejects content that is not a subtitle at all" do
+      assert Format.detect("<!DOCTYPE html><html><body>404</body></html>") ==
+               {:error, :unrecognized_subtitle_content}
+
+      assert Format.detect(<<0, 1, 2, 3, 255, 254>>) == {:error, :unrecognized_subtitle_content}
+      assert Format.detect("") == {:error, :unrecognized_subtitle_content}
+    end
+  end
 end
