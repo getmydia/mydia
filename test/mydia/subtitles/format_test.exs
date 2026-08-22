@@ -179,6 +179,24 @@ defmodule Mydia.Subtitles.FormatTest do
       assert Format.detect(File.read!("#{@fixtures}/srt_bom_sample.srt")) == {:ok, "srt"}
     end
 
+    # "[Script Info]" is an ASS/SSA section header only when it starts a line.
+    # An SRT cue whose text merely contains the string (a subtitle about
+    # subtitle formats, a converted file carrying a comment) must not be
+    # misdetected as ASS.
+    test "reads SRT out of a cue whose text contains an ASS header string" do
+      srt = """
+      1
+      00:00:01,000 --> 00:00:04,000
+      The [Script Info] section starts an ASS file.
+
+      2
+      00:00:05,500 --> 00:00:08,250
+      General Kenobi.
+      """
+
+      assert Format.detect(srt) == {:ok, "srt"}
+    end
+
     # The cue regex carries no /u modifier, so PCRE matches it byte by byte and
     # Latin-1 content is fine. Asserting it keeps anyone from "fixing" that.
     test "reads SRT out of a non-UTF-8 file" do

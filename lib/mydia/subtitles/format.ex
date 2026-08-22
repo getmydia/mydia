@@ -18,6 +18,12 @@ defmodule Mydia.Subtitles.Format do
   # source, so the declared format is treated as a hint and this is the answer.
   @srt_cue ~r/^\d+\s*\n\d{2}:\d{2}:\d{2},\d{3}\s*-->/m
   @microdvd ~r/^\{\d+\}\{\d+\}/m
+  # Anchored to the start of a line so cue TEXT that happens to contain one of
+  # these strings (an SRT/VTT file about subtitle formats, a converted file
+  # carrying a comment) is not mistaken for a real ASS/SSA section header. `^`
+  # in multiline mode is unaffected by a trailing CRLF, so this still matches
+  # real files whose line content is "[Script Info]\r".
+  @ass_header ~r/^\[(?:Script Info|V4\+ Styles|V4 Styles)\]/m
   @probe_bytes 4096
 
   @doc """
@@ -77,11 +83,7 @@ defmodule Mydia.Subtitles.Format do
   defp strip_bom("﻿" <> rest), do: rest
   defp strip_bom(content), do: content
 
-  defp ass?(head) do
-    String.contains?(head, "[Script Info]") or
-      String.contains?(head, "[V4+ Styles]") or
-      String.contains?(head, "[V4 Styles]")
-  end
+  defp ass?(head), do: Regex.match?(@ass_header, head)
 
   defp srt_to_vtt(content) do
     body =
