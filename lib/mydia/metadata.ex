@@ -449,7 +449,8 @@ defmodule Mydia.Metadata do
       "https://relay.mydia.dev"
   """
   def metadata_relay_url do
-    System.get_env("METADATA_RELAY_URL", "https://relay.mydia.dev")
+    Application.get_env(:mydia, :metadata_relay_url) ||
+      System.get_env("METADATA_RELAY_URL", "https://relay.mydia.dev")
   end
 
   @doc """
