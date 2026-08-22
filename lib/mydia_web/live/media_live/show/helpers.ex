@@ -516,34 +516,6 @@ defmodule MydiaWeb.MediaLive.Show.Helpers do
 
   def parse_int(_), do: 0
 
-  # Parse optional integer (returns nil if not present or invalid)
-  def parse_optional_int(nil), do: nil
-  def parse_optional_int(""), do: nil
-  def parse_optional_int(value) when is_integer(value), do: value
-
-  def parse_optional_int(value) when is_binary(value) do
-    case Integer.parse(value) do
-      {int, _} -> int
-      :error -> nil
-    end
-  end
-
-  def parse_optional_int(_), do: nil
-
-  # Parse optional float (returns nil if not present or invalid)
-  def parse_optional_float(nil), do: nil
-  def parse_optional_float(""), do: nil
-  def parse_optional_float(value) when is_float(value), do: value
-
-  def parse_optional_float(value) when is_binary(value) do
-    case Float.parse(value) do
-      {float, _} -> float
-      :error -> nil
-    end
-  end
-
-  def parse_optional_float(_), do: nil
-
   # Available categories by media type
   def available_categories_for("movie") do
     [
