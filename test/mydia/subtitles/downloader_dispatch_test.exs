@@ -62,6 +62,63 @@ defmodule Mydia.Subtitles.DownloaderDispatchTest do
     end
   end
 
+  defmodule AssAdapter do
+    @behaviour Mydia.Subtitles.Provider
+
+    @impl true
+    def search(_config, _params), do: {:ok, []}
+
+    # What SubDL and the relay actually serve for a result whose search entry
+    # said "srt": the archive holds an ASS file.
+    @impl true
+    def download(_config, _info),
+      do: {:ok, "[Script Info]\r\nScriptType: v4.00+\r\n\r\n[V4+ Styles]\r\nFormat: Name\r\n"}
+
+    @impl true
+    def validate_config(config), do: {:ok, config}
+
+    @impl true
+    def quota_info(_config),
+      do: {:ok, Mydia.Subtitles.Provider.QuotaInfo.unlimited(:subdl)}
+
+    @impl true
+    def capabilities do
+      %{
+        media_types: [:movie],
+        search_keys: [:tmdb_id],
+        requires_credentials: false,
+        quota: :unlimited
+      }
+    end
+  end
+
+  defmodule GarbageAdapter do
+    @behaviour Mydia.Subtitles.Provider
+
+    @impl true
+    def search(_config, _params), do: {:ok, []}
+
+    @impl true
+    def download(_config, _info), do: {:ok, "<!DOCTYPE html><html>404</html>"}
+
+    @impl true
+    def validate_config(config), do: {:ok, config}
+
+    @impl true
+    def quota_info(_config),
+      do: {:ok, Mydia.Subtitles.Provider.QuotaInfo.unlimited(:subdl)}
+
+    @impl true
+    def capabilities do
+      %{
+        media_types: [:movie],
+        search_keys: [:tmdb_id],
+        requires_credentials: false,
+        quota: :unlimited
+      }
+    end
+  end
+
   setup do
     movie = MediaFixtures.media_item_fixture(%{type: "movie"})
     media_file = MediaFixtures.media_file_fixture(%{media_item_id: movie.id})
@@ -106,5 +163,43 @@ defmodule Mydia.Subtitles.DownloaderDispatchTest do
                provider_type: :subdl,
                provider_config: config_for(FailingAdapter)
              )
+  end
+
+  test "an ASS body declared as srt is stored as ass", %{media_file: media_file} do
+    info = %{
+      file_id: "/subtitle/3.zip",
+      language: "en",
+      format: "srt",
+      subtitle_hash: "ass-hash"
+    }
+
+    assert {:ok, subtitle} =
+             Downloader.download(info, media_file.id,
+               provider_type: :subdl,
+               provider_config: config_for(AssAdapter)
+             )
+
+    assert subtitle.format == "ass"
+    assert String.ends_with?(subtitle.file_path, ".en.ass")
+    assert File.exists?(subtitle.file_path)
+  end
+
+  test "content that is not a subtitle is rejected and leaves no file", %{
+    media_file: media_file
+  } do
+    info = %{
+      file_id: "/subtitle/4.zip",
+      language: "en",
+      format: "srt",
+      subtitle_hash: "garbage-hash"
+    }
+
+    assert {:error, :unrecognized_subtitle_content} =
+             Downloader.download(info, media_file.id,
+               provider_type: :subdl,
+               provider_config: config_for(GarbageAdapter)
+             )
+
+    assert Mydia.Subtitles.list_subtitles(media_file.id) == []
   end
 end

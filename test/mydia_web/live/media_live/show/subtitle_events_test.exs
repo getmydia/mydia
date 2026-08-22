@@ -74,6 +74,99 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEventsTest do
     end
   end
 
+  describe "download_subtitle_result/2" do
+    # A relay-shaped result. The file id is base64url, which is what made
+    # String.to_integer/1 raise and take the LiveView down with it.
+    defp relay_result do
+      %{
+        file_id: "L3N1YnRpdGxlLzM0NjczMzAtODM5MDM4OS56aXA",
+        language: "en",
+        format: "srt",
+        subtitle_hash: "relay-hash",
+        provider_id: "registry::relay",
+        provider_type: :relay,
+        provider_name: "Mydia Relay"
+      }
+    end
+
+    defp search_socket(results) do
+      socket(%{
+        selected_media_file: %{id: "mf-1"},
+        subtitle_search_results: results,
+        downloading_subtitle_index: nil
+      })
+    end
+
+    test "an out of range index flashes rather than raising" do
+      {:noreply, socket} =
+        SubtitleEvents.download_subtitle_result(
+          %{"index" => "7"},
+          search_socket([relay_result()])
+        )
+
+      assert socket.assigns.downloading_subtitle_index == nil
+      assert flash(socket)["error"] =~ "no longer available"
+    end
+
+    test "a non-numeric index flashes rather than raising" do
+      {:noreply, socket} =
+        SubtitleEvents.download_subtitle_result(
+          %{"index" => "not-a-number"},
+          search_socket([relay_result()])
+        )
+
+      assert socket.assigns.downloading_subtitle_index == nil
+      assert flash(socket)["error"] =~ "no longer available"
+    end
+
+    # Integer.parse/1 accepts a leading minus sign, so a crafted "-1" would
+    # otherwise resolve from the end of the list via Enum.at/2 instead of
+    # being rejected as out of range.
+    test "a negative index flashes rather than resolving from the end of the list" do
+      {:noreply, socket} =
+        SubtitleEvents.download_subtitle_result(
+          %{"index" => "-1"},
+          search_socket([relay_result()])
+        )
+
+      assert socket.assigns.downloading_subtitle_index == nil
+      assert flash(socket)["error"] =~ "no longer available"
+    end
+
+    # Integer.parse/1 requires a binary. The rendered button always sends a
+    # DOM string, so reaching these needs a hand-crafted channel push, but the
+    # handler still must not raise on one.
+    test "a nil index flashes rather than raising" do
+      {:noreply, socket} =
+        SubtitleEvents.download_subtitle_result(
+          %{"index" => nil},
+          search_socket([relay_result()])
+        )
+
+      assert socket.assigns.downloading_subtitle_index == nil
+      assert flash(socket)["error"] =~ "no longer available"
+    end
+
+    test "an integer index flashes rather than raising" do
+      {:noreply, socket} =
+        SubtitleEvents.download_subtitle_result(
+          %{"index" => 1},
+          search_socket([relay_result()])
+        )
+
+      assert socket.assigns.downloading_subtitle_index == nil
+      assert flash(socket)["error"] =~ "no longer available"
+    end
+
+    test "a payload missing the index key flashes rather than raising" do
+      {:noreply, socket} =
+        SubtitleEvents.download_subtitle_result(%{}, search_socket([relay_result()]))
+
+      assert socket.assigns.downloading_subtitle_index == nil
+      assert flash(socket)["error"] =~ "no longer available"
+    end
+  end
+
   describe "handle_download_subtitle_async/2" do
     defp socket_with_media_item(assigns \\ %{}) do
       socket(Map.merge(%{media_item: %{media_files: []}}, assigns))
@@ -86,14 +179,14 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEventsTest do
           socket_with_media_item()
         )
 
-      assert socket.assigns.downloading_subtitle_id == nil
+      assert socket.assigns.downloading_subtitle_index == nil
     end
 
     test "a failed download clears the downloading id and humanizes a known reason" do
       {:noreply, socket} =
         SubtitleEvents.handle_download_subtitle_async({:ok, {:error, :not_found}}, socket())
 
-      assert socket.assigns.downloading_subtitle_id == nil
+      assert socket.assigns.downloading_subtitle_index == nil
       assert flash(socket)["error"] =~ "no longer available from the provider"
       refute flash(socket)["error"] =~ "not_found"
     end
@@ -113,7 +206,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEventsTest do
       {:noreply, socket} =
         SubtitleEvents.handle_download_subtitle_async({:exit, :boom}, socket())
 
-      assert socket.assigns.downloading_subtitle_id == nil
+      assert socket.assigns.downloading_subtitle_index == nil
       assert flash(socket)["error"] =~ "check the server logs"
       refute flash(socket)["error"] =~ "boom"
     end

@@ -171,6 +171,41 @@ defmodule Mydia.Subtitles do
   end
 
   @doc """
+  Downloads a subtitle search result.
+
+  Takes a result as the provider chain tagged it, or the equivalent payload a
+  verified `Mydia.Subtitles.Candidate` carries, and resolves the provider from
+  it before downloading.
+
+  Both the subtitle search modal and the player's download mutation call this.
+  They used to derive the provider separately, and only one of them did it
+  correctly, so a Gestdown result was fetched from the relay and failed.
+  """
+  @spec download_from_result(map(), binary()) :: {:ok, Subtitle.t()} | {:error, term()}
+  def download_from_result(result, media_file_id) do
+    download_subtitle(result_to_subtitle_info(result), media_file_id, provider_opts(result))
+  end
+
+  @doc """
+  Returns the format a result should be recorded as before it is downloaded.
+
+  Providers often leave `:format` nil and put the real extension on the file
+  name. This is a declared value only; the downloader detects the real format
+  from the bytes it receives.
+  """
+  @spec normalize_format(map()) :: String.t()
+  def normalize_format(%{format: format}) when is_binary(format) and format != "", do: format
+
+  def normalize_format(%{file_name: name}) when is_binary(name) do
+    case name |> Path.extname() |> String.trim_leading(".") |> String.downcase() do
+      "" -> "srt"
+      ext -> ext
+    end
+  end
+
+  def normalize_format(_result), do: "srt"
+
+  @doc """
   Lists all downloaded subtitles for a media file.
 
   ## Parameters
@@ -245,6 +280,45 @@ defmodule Mydia.Subtitles do
   end
 
   ## Private Functions
+
+  defp result_to_subtitle_info(result) do
+    %{
+      file_id: result.file_id,
+      language: result.language,
+      format: normalize_format(result),
+      subtitle_hash: result.subtitle_hash,
+      rating: Map.get(result, :rating),
+      download_count: Map.get(result, :download_count),
+      hearing_impaired: Map.get(result, :hearing_impaired) || false
+    }
+  end
+
+  # The result carries both the config id and the provider type. Prefer the id,
+  # because that config holds the credentials: a credentialed provider resolved
+  # by type alone falls back to a registry default with no API key, so a user
+  # with a working SubDL or OpenSubtitles account searches successfully and
+  # then cannot download anything they found.
+  #
+  # The type is the fallback for a config edited or deleted inside the token's
+  # 15 minute window, which is the case it was added for.
+  defp provider_opts(result) do
+    case Map.get(result, :provider_id) do
+      nil ->
+        [provider_type: result.provider_type]
+
+      provider_id ->
+        case fetch_provider_config(provider_id) do
+          nil -> [provider_type: result.provider_type]
+          config -> [provider_type: config.type, provider_config: config]
+        end
+    end
+  end
+
+  defp fetch_provider_config(provider_id) do
+    [enabled: true]
+    |> Mydia.Settings.ServiceConfigs.list_subtitle_provider_configs()
+    |> Enum.find(&(&1.id == provider_id))
+  end
 
   # Fetch media file with all necessary associations for subtitle search
   defp fetch_media_file_with_associations(media_file_id) do
@@ -405,31 +479,13 @@ defmodule Mydia.Subtitles do
   defp handle_search_results([best | _rest] = results, media_file_id, true) do
     # Check if auto-download is appropriate for high-confidence match
     if best.score >= @high_confidence_threshold do
-      # Auto-download high-confidence match
-      subtitle_info = %{
-        file_id: best.file_id,
-        language: best.language,
-        # The provider states the format. Deriving it from the file name breaks
-        # on providers whose name carries no extension: Gestdown's is a release
-        # tag like "Bluray-CtrlHD", so Path.extname/1 returns "" and the
-        # download is rejected as an unsupported format.
-        format: best.format || "srt",
-        subtitle_hash: best.subtitle_hash || generate_subtitle_hash(best),
-        rating: best.rating,
-        download_count: best.download_count,
-        hearing_impaired: Map.get(best, :hearing_impaired) || false
-      }
-
-      # Route to the provider that produced this candidate. Without it the
-      # download goes to the relay by default and fails for anything found by
-      # Gestdown, SubDL or a direct OpenSubtitles account.
-      download_opts =
-        case Map.get(best, :provider_type) do
-          nil -> []
-          provider_type -> [provider_type: provider_type]
-        end
-
-      case download_subtitle(subtitle_info, media_file_id, download_opts) do
+      # Auto-download high-confidence match, through the same entry point the
+      # search modal and the player's download mutation use. It resolves the
+      # provider config from `best`'s provider_id instead of the relay
+      # default, so this stays correct for Gestdown, SubDL or a direct
+      # OpenSubtitles account, and stays a match for the "one shared entry
+      # point" this download path is meant to be.
+      case download_from_result(best, media_file_id) do
         {:ok, subtitle} ->
           Logger.info("Auto-downloaded high-confidence subtitle",
             media_file_id: media_file_id,
@@ -453,12 +509,5 @@ defmodule Mydia.Subtitles do
 
   defp handle_search_results(results, _media_file_id, _auto_download) do
     {:ok, results}
-  end
-
-  # Generate a subtitle hash if not provided by the API
-  defp generate_subtitle_hash(result) do
-    # Use file_id and language as unique identifier
-    :crypto.hash(:sha256, "#{result.file_id}-#{result.language}")
-    |> Base.encode16(case: :lower)
   end
 end

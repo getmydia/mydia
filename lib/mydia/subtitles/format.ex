@@ -12,11 +12,50 @@ defmodule Mydia.Subtitles.Format do
 
   @image_formats ~w(pgs vobsub dvd_subtitle hdmv_pgs_subtitle)
 
+  # A provider states a format in its search results, but SubDL and the relay
+  # both hardcode "srt" there because the real extension is only visible once
+  # the archive is opened, one request later. The bytes are the only honest
+  # source, so the declared format is treated as a hint and this is the answer.
+  @srt_cue ~r/^\d+\s*\n\d{2}:\d{2}:\d{2},\d{3}\s*-->/m
+  @microdvd ~r/^\{\d+\}\{\d+\}/m
+  # Anchored to the start of a line so cue TEXT that happens to contain one of
+  # these strings (an SRT/VTT file about subtitle formats, a converted file
+  # carrying a comment) is not mistaken for a real ASS/SSA section header. `^`
+  # in multiline mode is unaffected by a trailing CRLF, so this still matches
+  # real files whose line content is "[Script Info]\r".
+  @ass_header ~r/^\[(?:Script Info|V4\+ Styles|V4 Styles)\]/m
+  @probe_bytes 4096
+
   @doc """
   Returns true when the format carries bitmaps rather than text.
   """
   @spec image_format?(String.t()) :: boolean()
   def image_format?(format), do: format in @image_formats
+
+  @doc """
+  Reads the subtitle format out of the content itself.
+
+  Returns one of `Subtitle.supported_formats/0`. `.ssa` reports as `"ass"`: it
+  shares the `[Script Info]` header and ffmpeg treats the two identically.
+
+  Only the first #{@probe_bytes} bytes are examined, which bounds the work on a
+  large file and is far past any header. The regexes carry no `/u` modifier, so
+  they match byte by byte and a Latin-1 file is read correctly.
+  """
+  @spec detect(binary()) ::
+          {:ok, String.t()}
+          | {:error, {:unsupported_subtitle_format, String.t()} | :unrecognized_subtitle_content}
+  def detect(content) when is_binary(content) do
+    head = content |> strip_bom() |> binary_slice(0, @probe_bytes)
+
+    cond do
+      ass?(head) -> {:ok, "ass"}
+      String.starts_with?(head, "WEBVTT") -> {:ok, "vtt"}
+      Regex.match?(@srt_cue, head) -> {:ok, "srt"}
+      Regex.match?(@microdvd, head) -> {:error, {:unsupported_subtitle_format, "sub"}}
+      true -> {:error, :unrecognized_subtitle_content}
+    end
+  end
 
   @doc """
   Converts subtitle content from one format to another.
@@ -43,6 +82,8 @@ defmodule Mydia.Subtitles.Format do
 
   defp strip_bom("﻿" <> rest), do: rest
   defp strip_bom(content), do: content
+
+  defp ass?(head), do: Regex.match?(@ass_header, head)
 
   defp srt_to_vtt(content) do
     body =

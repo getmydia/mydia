@@ -34,7 +34,7 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
       subtitle_search_state: :idle,
       subtitle_search_results: [],
       subtitle_providers: [],
-      downloading_subtitle_id: nil,
+      downloading_subtitle_index: nil,
       selected_languages: ["en"]
     ]
 
@@ -44,7 +44,7 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
   defp result_fixture(overrides \\ %{}) do
     Map.merge(
       %{
-        file_id: 1,
+        file_id: "L3N1YnRpdGxlLzM0NjczMzAtODM5MDM4OS56aXA",
         language: "en",
         format: "srt",
         subtitle_hash: "abc",
@@ -353,7 +353,7 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
           ],
           subtitle_search_results: [
             %{
-              file_id: 1,
+              file_id: "L3N1YnRpdGxlLzM0NjczMzAtODM5MDM4OS56aXA",
               language: "en",
               format: "srt",
               subtitle_hash: "abc",
@@ -423,12 +423,20 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
     test "only the downloading row spins" do
       html =
         loaded_html(
-          [result_fixture(%{file_id: 1}), result_fixture(%{file_id: 2, subtitle_hash: "def"})],
-          downloading_subtitle_id: 1
+          [result_fixture(), result_fixture(%{subtitle_hash: "def"})],
+          downloading_subtitle_index: 0
         )
 
       # One spinner, not one per row.
       assert length(String.split(html, "loading-spinner")) - 1 == 1
+    end
+
+    test "the download button sends only a list index" do
+      html = loaded_html([result_fixture()])
+
+      assert html =~ ~s(phx-value-index="0")
+      refute html =~ "phx-value-file-id"
+      refute html =~ "phx-value-subtitle-hash"
     end
 
     test "hearing impaired is flagged only when true" do

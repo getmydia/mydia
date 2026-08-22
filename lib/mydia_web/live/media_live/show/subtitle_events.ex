@@ -5,7 +5,6 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
   import Phoenix.LiveView, only: [put_flash: 3, start_async: 3]
 
   import MydiaWeb.MediaLive.Show.Loaders, only: [load_media_file_subtitles: 1]
-  import MydiaWeb.MediaLive.Show.Helpers, only: [parse_optional_float: 1, parse_optional_int: 1]
 
   require Logger
 
@@ -58,33 +57,34 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
      end)}
   end
 
-  def download_subtitle_result(
-        %{
-          "file-id" => file_id,
-          "language" => language,
-          "format" => format,
-          "subtitle-hash" => subtitle_hash
-        } = params,
-        socket
-      ) do
+  # The result is looked up from the socket rather than rebuilt from the click
+  # payload. The wire used to carry the provider's own file id, which meant the
+  # server both trusted it and had to parse it; parsing it as an integer killed
+  # the LiveView for every relay and Gestdown result, whose ids are strings.
+  def download_subtitle_result(%{"index" => index}, socket) when is_binary(index) do
     media_file = socket.assigns.selected_media_file
 
-    subtitle_info = %{
-      file_id: String.to_integer(file_id),
-      language: language,
-      format: format,
-      subtitle_hash: subtitle_hash,
-      rating: parse_optional_float(params["rating"]),
-      download_count: parse_optional_int(params["download-count"]),
-      hearing_impaired: params["hearing-impaired"] == "true"
-    }
+    with {position, ""} <- Integer.parse(index),
+         true <- position >= 0,
+         result when not is_nil(result) <-
+           Enum.at(socket.assigns.subtitle_search_results, position) do
+      {:noreply,
+       socket
+       |> assign(:downloading_subtitle_index, position)
+       |> start_async(:download_subtitle, fn ->
+         Mydia.Subtitles.download_from_result(result, media_file.id)
+       end)}
+    else
+      _ ->
+        {:noreply, put_flash(socket, :error, "That result is no longer available. Search again.")}
+    end
+  end
 
-    {:noreply,
-     socket
-     |> assign(:downloading_subtitle_id, subtitle_info.file_id)
-     |> start_async(:download_subtitle, fn ->
-       Mydia.Subtitles.download_subtitle(subtitle_info, media_file.id)
-     end)}
+  # The rendered button always sends a string index, so this clause only
+  # guards a hand-crafted payload (a nil, a JSON number, or a missing key).
+  # This handler must never let a client value reach a parser that can raise.
+  def download_subtitle_result(_params, socket) do
+    {:noreply, put_flash(socket, :error, "That result is no longer available. Search again.")}
   end
 
   def delete_subtitle(%{"subtitle-id" => subtitle_id}, socket) do
@@ -139,7 +139,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
 
     {:noreply,
      socket
-     |> assign(:downloading_subtitle_id, nil)
+     |> assign(:downloading_subtitle_index, nil)
      |> assign(:show_subtitle_search_modal, false)
      |> assign(:selected_media_file, nil)
      |> assign(:subtitle_search_state, :idle)
@@ -154,7 +154,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
 
     {:noreply,
      socket
-     |> assign(:downloading_subtitle_id, nil)
+     |> assign(:downloading_subtitle_index, nil)
      |> put_flash(:error, "Subtitle download failed: #{download_error_message(reason)}")}
   end
 
@@ -163,7 +163,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
 
     {:noreply,
      socket
-     |> assign(:downloading_subtitle_id, nil)
+     |> assign(:downloading_subtitle_index, nil)
      |> put_flash(:error, "Subtitle download failed: #{download_error_message(reason)}")}
   end
 
@@ -193,6 +193,12 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
 
   defp download_error_message(:unauthorized),
     do: "the provider rejected the request. Check its credentials."
+
+  defp download_error_message(:unrecognized_subtitle_content),
+    do: "the provider sent a file that is not a subtitle."
+
+  defp download_error_message({:unsupported_subtitle_format, format}),
+    do: "that subtitle is in #{format} format, which Mydia cannot use."
 
   defp download_error_message(_reason),
     do: "check the server logs for details."

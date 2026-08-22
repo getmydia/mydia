@@ -6,7 +6,6 @@ defmodule MydiaWeb.Schema.Resolvers.SubtitleSearchResolver do
   require Logger
 
   alias Mydia.Accounts.User
-  alias Mydia.Settings.ServiceConfigs
   alias Mydia.Subtitles
   alias Mydia.Subtitles.Candidate
   alias Mydia.Subtitles.Extractor
@@ -46,12 +45,7 @@ defmodule MydiaWeb.Schema.Resolvers.SubtitleSearchResolver do
         context: %{current_user: %User{}}
       }) do
     with {:ok, payload} <- Candidate.verify(token, media_file_id),
-         {:ok, subtitle} <-
-           Subtitles.download_subtitle(
-             to_subtitle_info(payload),
-             media_file_id,
-             download_opts(payload)
-           ) do
+         {:ok, subtitle} <- Subtitles.download_from_result(payload, media_file_id) do
       track =
         media_file_id
         |> Extractor.list_external_subtitle_tracks()
@@ -84,7 +78,7 @@ defmodule MydiaWeb.Schema.Resolvers.SubtitleSearchResolver do
   defp to_candidate(result, media_file_id) do
     # Providers often leave :format nil and put the real extension on the file
     # name. Normalize before signing so download validation accepts the token.
-    normalized = Map.put(result, :format, normalize_format(result))
+    normalized = Map.put(result, :format, Subtitles.normalize_format(result))
 
     %{
       token: Candidate.sign(media_file_id, normalized),
@@ -97,57 +91,6 @@ defmodule MydiaWeb.Schema.Resolvers.SubtitleSearchResolver do
       hash_match: Map.get(result, :moviehash_match) || false,
       score: Map.get(result, :score) || 0,
       provider_name: Map.get(result, :provider_name) || "Unknown"
-    }
-  end
-
-  # Providers often leave :format nil and put the real extension on the file name.
-  defp normalize_format(%{format: format}) when is_binary(format) and format != "", do: format
-
-  defp normalize_format(%{file_name: name}) when is_binary(name) do
-    case name |> Path.extname() |> String.trim_leading(".") |> String.downcase() do
-      "" -> "srt"
-      ext -> ext
-    end
-  end
-
-  defp normalize_format(_result), do: "srt"
-
-  # The token carries both the config id and the provider type. Prefer the id,
-  # because that config holds the credentials: a credentialed provider resolved
-  # by type alone falls back to a registry default with no API key, so a user
-  # with a working SubDL or OpenSubtitles account searches successfully and
-  # then cannot download anything they found.
-  #
-  # The type is the fallback for a config edited or deleted inside the token's
-  # 15 minute window, which is the case it was added for.
-  defp download_opts(payload) do
-    case Map.get(payload, :provider_id) do
-      nil ->
-        [provider_type: payload.provider_type]
-
-      provider_id ->
-        case fetch_provider_config(provider_id) do
-          nil -> [provider_type: payload.provider_type]
-          config -> [provider_type: config.type, provider_config: config]
-        end
-    end
-  end
-
-  defp fetch_provider_config(provider_id) do
-    [enabled: true]
-    |> ServiceConfigs.list_subtitle_provider_configs()
-    |> Enum.find(&(&1.id == provider_id))
-  end
-
-  defp to_subtitle_info(payload) do
-    %{
-      file_id: payload.file_id,
-      language: payload.language,
-      format: payload.format,
-      subtitle_hash: payload.subtitle_hash,
-      rating: Map.get(payload, :rating),
-      download_count: Map.get(payload, :download_count),
-      hearing_impaired: Map.get(payload, :hearing_impaired) || false
     }
   end
 end
