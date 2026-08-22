@@ -548,6 +548,66 @@ defmodule MydiaWeb.AdminDownloadClientsLiveTest do
     end
   end
 
+  describe "Form: External torrents" do
+    setup %{conn: conn, token: token} do
+      start_supervised!(Mydia.Indexers.Health)
+
+      conn =
+        conn
+        |> init_test_session(%{})
+        |> put_session(:guardian_default_token, token)
+        |> put_req_header("authorization", "Bearer #{token}")
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/clients")
+      %{conn: conn, view: view}
+    end
+
+    defp open_new_client_form(view) do
+      view
+      |> element(~s{button[phx-click="new_download_client"]})
+      |> render_click()
+    end
+
+    defp change_type(view, type) do
+      view
+      |> form("#download-client-form", %{"download_client_config" => %{"type" => type}})
+      |> render_change()
+    end
+
+    # The mode select is type-aware. `category_only` is meaningless for rqbit,
+    # which has neither categories nor labels, so it is not offered at all
+    # rather than offered and left to adopt nothing in silence.
+    test "offers every mode for a qbittorrent client", %{view: view} do
+      open_new_client_form(view)
+
+      assert has_element?(view, "#download-client-external-torrents")
+
+      html = change_type(view, "qbittorrent")
+      assert html =~ "External torrents"
+      assert html =~ "category_only"
+      assert html =~ "ignore"
+    end
+
+    test "omits category_only for rqbit", %{view: view} do
+      open_new_client_form(view)
+
+      html = change_type(view, "rqbit")
+
+      # The control is still there, minus the one option rqbit cannot satisfy.
+      assert html =~ "External torrents"
+      refute html =~ "category_only"
+    end
+
+    test "hides the control entirely for a client type the scan never visits", %{view: view} do
+      open_new_client_form(view)
+
+      # Usenet clients have no concept of a foreign torrent sitting in them.
+      html = change_type(view, "sabnzbd")
+
+      refute html =~ "External torrents"
+    end
+  end
+
   describe "Wave-2 Form: Remote seedbox (Test SFTP Connection)" do
     setup %{conn: conn, token: token} do
       start_supervised!(Mydia.Indexers.Health)
