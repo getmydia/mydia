@@ -62,6 +62,7 @@ jobs:
       version_code: ${{ steps.get_version.outputs.version_code }}
       is_prerelease: ${{ steps.get_version.outputs.is_prerelease }}
       sha: ${{ steps.get_version.outputs.sha }}
+      testflight_notes: ${{ steps.testflight_notes.outputs.notes }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -185,6 +186,38 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
           echo "Building version: $VERSION_NUM (code: $VERSION_CODE, prerelease: $IS_PRERELEASE, commit: $SHA)"
+
+      # What testers read in TestFlight's "What to Test". Computed here because
+      # this is the only job with the resolved version and full history; the iOS
+      # job's checkout is shallow and pinned. Runs on a dry run too, so the
+      # rehearsal exercises it, and echoes the result into the step summary so
+      # the notes can be read before any platform build finishes.
+      - name: Compute store release notes
+        id: testflight_notes
+        run: |
+          set -euo pipefail
+
+          NOTES=$(./scripts/testflight-notes.sh \
+            "${{ steps.get_version.outputs.version }}" \
+            "${{ steps.get_version.outputs.sha }}" \
+            "${{ steps.get_version.outputs.tag }}")
+
+          # A random delimiter: a fixed one appearing in the notes would
+          # terminate the value early.
+          DELIM="notes-$(openssl rand -hex 16)"
+          {
+            echo "notes<<${DELIM}"
+            echo "$NOTES"
+            echo "${DELIM}"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### TestFlight release notes"
+            echo
+            echo '```'
+            echo "$NOTES"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   docker-build:
     name: Docker / ${{ matrix.db }} / ${{ matrix.arch }}
