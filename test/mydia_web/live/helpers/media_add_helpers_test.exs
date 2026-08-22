@@ -443,5 +443,20 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
       assert {:error, :unknown_library} =
                MediaAddHelpers.library_path_opts(Ecto.UUID.generate(), :movie)
     end
+
+    test "rejects a map value instead of silently treating it as no choice" do
+      # #458: a crafted event sending a non-binary library_path_id must not be
+      # swallowed by the catch-all as "no library was selected".
+      assert {:error, :unknown_library} =
+               MediaAddHelpers.library_path_opts(%{"id" => "1"}, :movie)
+    end
+
+    test "rejects a list value instead of silently treating it as no choice" do
+      assert {:error, :unknown_library} = MediaAddHelpers.library_path_opts(["1"], :movie)
+    end
+
+    test "rejects an integer value instead of silently treating it as no choice" do
+      assert {:error, :unknown_library} = MediaAddHelpers.library_path_opts(1, :movie)
+    end
   end
 end

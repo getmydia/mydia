@@ -79,6 +79,13 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   worth telling the user about, and #458 was filed because a silently ignored
   choice is worse than no picker at all.
 
+  Only `nil` and `""` mean "no choice was made". `nil` is what an ordinary
+  "Add to Library" click sends, since the form has no picker to include a
+  `library_path_id` at all; `""` is the picker's own placeholder option. Any
+  other shape, including a non-binary value such as a map, list, or integer,
+  is a malformed target and is rejected rather than silently treated as "no
+  choice".
+
   The blank-string clause is the reason this function exists. `""` is truthy in
   Elixir, so without it the value reaches the changeset as
   `library_path_id: ""` and fails the foreign key rather than falling back to
@@ -92,6 +99,9 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
           {:ok, keyword()} | {:error, :unknown_library}
   def library_path_opts(library_path_id, media_type)
 
+  def library_path_opts(nil, _media_type), do: {:ok, []}
+  def library_path_opts("", _media_type), do: {:ok, []}
+
   def library_path_opts(id, media_type) when is_binary(id) and id != "" do
     if Enum.any?(candidate_libraries(media_type), &(to_string(&1.id) == id)) do
       {:ok, [library_path_id: id]}
@@ -100,7 +110,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
     end
   end
 
-  def library_path_opts(_library_path_id, _media_type), do: {:ok, []}
+  def library_path_opts(_library_path_id, _media_type), do: {:error, :unknown_library}
 
   @doc """
   Enriches a list of search result items with library status information.
