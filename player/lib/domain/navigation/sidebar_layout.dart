@@ -151,6 +151,52 @@ class SidebarLayout {
     return rows;
   }
 
+  /// The full stored order after edit mode moves one middle row.
+  ///
+  /// [oldIndex] and [newIndex] index [reconcileForEditing]'s output, and the
+  /// middle list here is built from that same call so the two cannot drift.
+  ///
+  /// `ReorderableListView` reports [newIndex] as a position in the list
+  /// *before* the dragged row is removed, so it is decremented when it sits
+  /// past [oldIndex]. Dropping that adjustment is an off-by-one that appears
+  /// only on downward drags.
+  ///
+  /// Anchors are reassembled around the result rather than carried through the
+  /// move. Their relative order does not matter here because [reconcile] sorts
+  /// anchors by `defaultIndex` at render time regardless of stored order.
+  List<String> orderAfterReorder({
+    required int oldIndex,
+    required int newIndex,
+    required bool downloadSupported,
+  }) {
+    final layout = reconcileLayout(downloadSupported: downloadSupported);
+
+    final middle = reconcileForEditing(downloadSupported: downloadSupported)
+        .map((row) => row.destination.id)
+        .toList();
+    final middleIds = middle.toSet();
+
+    final leading = <String>[];
+    final trailing = <String>[];
+    for (final id in layout.order) {
+      if (middleIds.contains(id)) continue;
+      final builtin = _builtinsById[id];
+      if (builtin != null && _anchorsToTop(builtin)) {
+        leading.add(id);
+      } else {
+        trailing.add(id);
+      }
+    }
+
+    var target = newIndex;
+    if (target > oldIndex) target -= 1;
+
+    final moved = middle.removeAt(oldIndex);
+    middle.insert(target, moved);
+
+    return [...leading, ...middle, ...trailing];
+  }
+
   /// Where [destination] belongs in [ids]: after the last builtin with a lower
   /// `defaultIndex`. Filters and unknown ids do not move the insertion point.
   static int _insertionPoint(

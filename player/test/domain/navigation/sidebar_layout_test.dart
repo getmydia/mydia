@@ -252,4 +252,88 @@ void main() {
       );
     });
   });
+
+  group('orderAfterReorder', () {
+    List<String> middleOf(SidebarLayout layout) => layout
+        .reconcileForEditing(downloadSupported: true)
+        .map((r) => r.destination.id)
+        .toList();
+
+    test('moves a row upward to the front', () {
+      final layout = SidebarLayout.defaults;
+      final middle = middleOf(layout);
+      final moviesIndex = middle.indexOf('movies');
+
+      final order = layout.orderAfterReorder(
+        oldIndex: moviesIndex,
+        newIndex: 0,
+        downloadSupported: true,
+      );
+
+      final newMiddle = order
+          .where(
+              (id) => id != 'search' && id != 'downloads' && id != 'settings')
+          .toList();
+      expect(newMiddle.first, 'movies');
+    });
+
+    test('moves a row downward, applying the pre-removal index adjustment', () {
+      // ReorderableListView reports newIndex against the list BEFORE the
+      // dragged row is removed. Without the decrement this lands one slot too
+      // early, which only shows on downward drags.
+      final layout = SidebarLayout.defaults;
+      final middle = middleOf(layout);
+
+      final order = layout.orderAfterReorder(
+        oldIndex: 0,
+        newIndex: 3,
+        downloadSupported: true,
+      );
+
+      final newMiddle = order
+          .where(
+              (id) => id != 'search' && id != 'downloads' && id != 'settings')
+          .toList();
+
+      final expected = List<String>.from(middle);
+      final moved = expected.removeAt(0);
+      expected.insert(2, moved);
+
+      expect(newMiddle, expected);
+    });
+
+    test('keeps anchors pinned at the edges', () {
+      final layout = SidebarLayout.defaults;
+      final middle = middleOf(layout);
+
+      final order = layout.orderAfterReorder(
+        oldIndex: middle.length - 1,
+        newIndex: 0,
+        downloadSupported: true,
+      );
+
+      expect(order.first, 'search');
+      expect(order.sublist(order.length - 2), ['downloads', 'settings']);
+    });
+
+    test('carries a hidden row along as an ordinary middle row', () {
+      final layout = SidebarLayout.defaults.withHidden('collections');
+      final middle = middleOf(layout);
+      final collectionsIndex = middle.indexOf('collections');
+
+      final order = layout.orderAfterReorder(
+        oldIndex: collectionsIndex,
+        newIndex: 0,
+        downloadSupported: true,
+      );
+
+      final newMiddle = order
+          .where(
+              (id) => id != 'search' && id != 'downloads' && id != 'settings')
+          .toList();
+
+      expect(newMiddle.first, 'collections');
+      expect(order, contains('collections'));
+    });
+  });
 }
