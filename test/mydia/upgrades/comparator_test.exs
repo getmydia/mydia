@@ -153,6 +153,42 @@ defmodule Mydia.Upgrades.ComparatorTest do
 
       assert bare_score == sourced_score
     end
+
+    test "a terse title is not penalized for omitting HDR either" do
+      # REGRESSION: Attrs.from_quality/3 built :hdr_tokens by running the
+      # parsed Quality through Hdr.profile_tokens/1 unconditionally, so a
+      # release name with no HDR token produced [] rather than nil. reconcile/2
+      # neutralizes only nil, so [] survived as "known SDR" and took
+      # score_hdr_format/2's 50.0 no-signal fallback while the current file
+      # scored its listed :hdr10 (60.0 at index 1 of this profile's two-entry
+      # preference list). Every untagged candidate lost 0.7 points against
+      # every HDR file, for nothing the release name actually claimed.
+      #
+      # Same candidate, same file, one field apart: the only difference
+      # between the two scenarios is whether the *file* carries HDR, which
+      # after neutralization must not move the delta at all.
+      bare = %Quality{resolution: "2160p", codec: "x265", source: "BluRay"}
+      size = 20 * 1024 * 1024 * 1024
+
+      sdr_file = %MediaFile{
+        resolution: "1080p",
+        codec: "h264",
+        audio_codec: "ac3",
+        metadata: %FileMetadata{audio_codec_raw: "DD+ 5.1"},
+        size: 8 * 1024 * 1024 * 1024,
+        analyzed_at: ~U[2026-07-01 00:00:00Z]
+      }
+
+      hdr_file = %MediaFile{sdr_file | hdr_format: :hdr10}
+
+      {:ok, %{delta: sdr_delta}} =
+        Comparator.upgrade?(sdr_file, bare, size, profile(), :movie)
+
+      {:ok, %{delta: hdr_delta}} =
+        Comparator.upgrade?(hdr_file, bare, size, profile(), :movie)
+
+      assert hdr_delta == sdr_delta
+    end
   end
 
   describe "upgrade?/5 margin" do

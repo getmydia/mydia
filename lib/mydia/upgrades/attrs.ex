@@ -26,8 +26,14 @@ defmodule Mydia.Upgrades.Attrs do
   or `nil`), the same vocabulary on both sides of this module. `from_media_file/2`
   and `from_quality/3` run the base plus whatever Dolby Vision signal each side
   carries (`dolby_vision_profile` on a file, the `dolby_vision` boolean on a
-  parsed release) straight through `Hdr.profile_tokens/1` to build
-  `:hdr_tokens`, the list `QualityProfile.score_hdr_format/2` scores against.
+  parsed release) through `Hdr.profile_tokens/1` to build `:hdr_tokens`, the
+  list `QualityProfile.score_hdr_format/2` scores against.
+
+  The two sides differ on what "no HDR tokens" means, and the difference is
+  load-bearing. An analyzed file with no HDR really is SDR, so
+  `from_media_file/2` reports `[]`. A release title that names no HDR token
+  has only failed to mention one, so `from_quality/3` reports `nil` and lets
+  the reconciliation below neutralize the dimension.
 
   Since eligibility requires `analyzed_at IS NOT NULL`, *every* file this
   feature scores holds the post-`Codec` form. This module therefore maps that
@@ -187,15 +193,31 @@ defmodule Mydia.Upgrades.Attrs do
       video_codec: canonical_video_codec(quality.codec),
       audio_codec: audio_codec,
       audio_channels: audio_channels,
-      hdr_tokens:
-        Hdr.profile_tokens(%Hdr{
-          base: quality.hdr_format,
-          dv_profile: if(quality.dolby_vision, do: 8)
-        }),
+      hdr_tokens: release_hdr_tokens(quality),
       source: canonical_source(quality.source),
       file_size_mb: bytes_to_mb(size_bytes),
       media_type: media_type
     }
+  end
+
+  # `nil`, not `[]`, when the title carries no HDR token at all - the same
+  # treatment every other dimension a terse release name omits gets.
+  #
+  # `Comparator.reconcile/2` neutralizes only `nil`. An `[]` here is read as
+  # "known SDR" and survives reconciliation, so the candidate takes
+  # `score_hdr_format/2`'s 50.0 no-signal fallback while the current HDR file
+  # scores its listed format (60.0 at the tail of a preference list, 100.0 at
+  # its head). At the 0.07 HDR weight that costs an otherwise genuine upgrade
+  # between 0.7 and 3.5 points, purely for what the release name did not say.
+  # `from_media_file/2` keeps `[]`, where it is a real observation.
+  defp release_hdr_tokens(%Quality{} = quality) do
+    case Hdr.profile_tokens(%Hdr{
+           base: quality.hdr_format,
+           dv_profile: if(quality.dolby_vision, do: 8)
+         }) do
+      [] -> nil
+      tokens -> tokens
+    end
   end
 
   defp metadata_source(%MediaFile{metadata: %{source: source}}) when is_binary(source),

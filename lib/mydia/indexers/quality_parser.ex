@@ -94,7 +94,15 @@ defmodule Mydia.Indexers.QualityParser do
   # word-to-word transition exists between `+` and `.`) and silently falls
   # through to the bare `hdr10` alternative instead. A regression test
   # ("HDR10+ maps to :hdr10_plus") in quality_parser_test.exs guards this.
-  @hdr_token_re ~r/\b(dolby[\s._-]?vision|dovi|dv|hdr10\+|hdr10plus|hdr10|hdr|hlg)(?![a-z0-9])/i
+  #
+  # The `[\s._-]?` between `hdr10` and its suffix matters just as much.
+  # Scene names spell the format "HDR10+", "HDR10PLUS", "HDR10.PLUS" and
+  # "HDR10-PLUS" interchangeably, and the alternation is leftmost-first: with
+  # no separator allowed, "HDR10.PLUS" matches the bare `hdr10` alternative,
+  # the trailing "PLUS" matches nothing, and the release scores as HDR10.
+  # `Hdr.from_release_token/1` strips those separators itself, so the regex
+  # only has to hand it the whole token.
+  @hdr_token_re ~r/\b(dolby[\s._-]?vision|dovi|dv|hdr10[\s._-]?\+|hdr10[\s._-]?plus|hdr10|hdr|hlg)(?![a-z0-9])/i
 
   @doc """
   Parses quality information from a release title.

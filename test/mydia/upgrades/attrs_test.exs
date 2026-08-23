@@ -222,14 +222,23 @@ defmodule Mydia.Upgrades.AttrsTest do
       assert attrs.file_size_mb == 20_480
     end
 
-    test "leaves unmentioned dimensions nil, but hdr_tokens is always a list" do
+    test "leaves every unmentioned dimension nil, hdr_tokens included" do
       quality = %Quality{resolution: "1080p"}
       attrs = Attrs.from_quality(quality, nil, :movie)
 
       assert attrs.audio_codec == nil
       assert attrs.audio_channels == nil
       assert attrs.source == nil
-      assert attrs.hdr_tokens == []
+
+      # nil, not []. A title that never says "HDR" has not established that
+      # the release is SDR, and Comparator.reconcile/2 neutralizes only nil.
+      # An [] here silently costs an untagged candidate the HDR dimension
+      # against any HDR file it would otherwise upgrade.
+      assert attrs.hdr_tokens == nil
+    end
+
+    test "an SDR analyzed file still reports [], which is a real observation" do
+      assert Attrs.from_media_file(%MediaFile{}, :movie).hdr_tokens == []
     end
   end
 

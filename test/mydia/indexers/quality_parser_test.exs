@@ -495,6 +495,26 @@ defmodule Mydia.Indexers.QualityParserTest do
       assert QualityParser.parse("Movie.2024.2160p.HDR10+.x265").hdr_format == :hdr10_plus
     end
 
+    test "separator-form HDR10+ labels map to :hdr10_plus too" do
+      # REGRESSION: the token regex spelled the suffix `hdr10\+|hdr10plus`,
+      # with no separator allowed between the two halves. Alternation is
+      # leftmost-first, so "HDR10.PLUS" matched the bare `hdr10` alternative,
+      # the trailing "PLUS" matched nothing at all, and the release scored as
+      # HDR10 - a tier below what it actually carries. The real corpus in
+      # release_ranker_trash_guide_integration_test.exs holds one of these
+      # ("1917.2019.2160p.REMUX.Dolby.Vision.And.HDR10.PLUS...").
+      for title <- [
+            "Movie.2024.2160p.HDR10.PLUS.x265",
+            "Movie.2024.2160p.HDR10-PLUS.x265",
+            "Movie.2024.2160p.HDR10_PLUS.x265",
+            "Movie 2024 2160p HDR10 PLUS x265",
+            "Movie.2024.2160p.HDR10PLUS.x265"
+          ] do
+        assert QualityParser.parse(title).hdr_format == :hdr10_plus,
+               "expected :hdr10_plus for #{title}"
+      end
+    end
+
     test "the first base token wins when a title carries two distinct bases" do
       # A bare HDR token (:hdr10) precedes an HDR10+ token here; extract_hdr/1
       # must keep the first base found, not the last, or a release that opens
