@@ -34,6 +34,21 @@ defmodule Mydia.Subtitles.ProviderChainTest do
       {:ok, []}
     end
 
+    # A proxying provider names the upstream that actually produced the result.
+    def search(%{name: "proxy"}, _params) do
+      {:ok,
+       [
+         %Mydia.Subtitles.Provider.SearchResult{
+           file_id: 2,
+           language: "en",
+           format: "srt",
+           subtitle_hash: "proxy-hash",
+           file_name: "proxy.srt",
+           origin: "SubDL"
+         }
+       ]}
+    end
+
     def search(%{name: name}, _params) do
       {:ok,
        [
@@ -155,6 +170,30 @@ defmodule Mydia.Subtitles.ProviderChainTest do
     assert working.error == nil
     assert length(results) == 1
     assert hd(results).provider_name == "working"
+  end
+
+  # The relay is a transport, not a source. Its config name says "Mydia Relay"
+  # while the subtitle actually came from SubDL, and the UI should name the
+  # latter.
+  test "a result's origin becomes its provider name" do
+    SubtitleProviderFixtures.config_fixture(%{name: "proxy", adapter: StubAdapter})
+
+    assert {:ok, %{results: [result]}} =
+             ProviderChain.search(%{languages: "en", media_type: "movie"})
+
+    assert result.provider_name == "SubDL"
+  end
+
+  # A provider that is its own source sets no origin, and so does a relay old
+  # enough to predate the "source" key on the wire. Both must fall back to the
+  # configured name rather than showing nothing.
+  test "a result with no origin falls back to the configured provider name" do
+    SubtitleProviderFixtures.config_fixture(%{name: "direct", adapter: StubAdapter})
+
+    assert {:ok, %{results: [result]}} =
+             ProviderChain.search(%{languages: "en", media_type: "movie"})
+
+    assert result.provider_name == "direct"
   end
 
   test "ranks results tied on score by provider priority" do

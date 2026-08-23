@@ -156,12 +156,16 @@ defmodule Mydia.Subtitles.ProviderChain do
     kind, value -> {:error, {kind, value}}
   end
 
+  # `provider_name` is a display field. A proxying provider reports the upstream
+  # it actually reached as the result's origin, and that is what the UI should
+  # name. `config.name` is the fallback, and remains what the provider status
+  # list shows, so a relay outage is still attributable to the relay.
   defp tag(result, config) do
     result
     |> Map.from_struct()
     |> Map.put(:provider_id, config.id)
     |> Map.put(:provider_type, config.type)
-    |> Map.put(:provider_name, config.name)
+    |> Map.put(:provider_name, result.origin || config.name)
     |> Map.put(:provider_priority, config.priority || 0)
   end
 
