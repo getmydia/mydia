@@ -157,7 +157,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModalTest do
       # The badge cluster is the flex-wrap row of badges. If the panel were
       # still inside it the panel would be a wrapping flex item, which is what
       # made it a cramped w-64 card in the first place.
-      assert Enum.count(LazyHTML.query(doc, ".flex-wrap #subtitle-score-breakdown-0")) == 0
+      assert Enum.empty?(LazyHTML.query(doc, ".flex-wrap #subtitle-score-breakdown-0"))
       assert Enum.count(LazyHTML.query_by_id(doc, "subtitle-score-breakdown-0")) == 1
     end
   end
