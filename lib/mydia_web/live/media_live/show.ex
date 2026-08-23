@@ -3,6 +3,7 @@ defmodule MydiaWeb.MediaLive.Show do
   alias Mydia.Media
   alias Mydia.Settings
   alias MydiaWeb.MediaLive.Show.Modals
+  alias MydiaWeb.MediaLive.Show.SubtitleModal
   alias MydiaWeb.MediaLive.Show.Components
   alias MydiaWeb.MediaLive.Show.FranchiseComponents
   alias MydiaWeb.MediaLive.Show.EpisodeEvents

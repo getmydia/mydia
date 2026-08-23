@@ -79,6 +79,11 @@ defmodule Mydia.Subtitles.Provider.Relay do
   # adapter owns its own translation here rather than SearchResult growing
   # provider-specific clauses, since Task 6's direct OpenSubtitles adapter
   # has yet another wire format.
+  #
+  # The relay emits "source" naming the upstream it proxied, which becomes the
+  # result's origin so the UI can show SubDL rather than the relay. A relay
+  # deployed before that key existed sends nothing, origin stays nil, and
+  # ProviderChain falls back to the configured provider name.
   defp normalize_subtitle(subtitle) do
     file_id = Map.get(subtitle, "id")
     language = Map.get(subtitle, "language")
@@ -86,6 +91,7 @@ defmodule Mydia.Subtitles.Provider.Relay do
     subtitle
     |> Map.put("file_id", file_id)
     |> Map.put("file_name", Map.get(subtitle, "release"))
+    |> Map.put("origin", Map.get(subtitle, "source"))
     |> Map.put("subtitle_hash", synthesize_subtitle_hash(file_id, language))
   end
 

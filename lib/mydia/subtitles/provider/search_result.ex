@@ -16,6 +16,8 @@ defmodule Mydia.Subtitles.Provider.SearchResult do
     * `:download_count` - Number of times this subtitle has been downloaded (optional)
     * `:hearing_impaired` - Whether subtitle includes hearing impaired annotations (default: false)
     * `:moviehash_match` - Whether this subtitle matched by file hash (default: false)
+    * `:origin` - Name of the upstream this result actually came from, when the
+      provider is a proxy (nil for a provider that is its own source)
 
   ## Examples
 
@@ -56,7 +58,8 @@ defmodule Mydia.Subtitles.Provider.SearchResult do
           rating: float() | nil,
           download_count: integer() | nil,
           hearing_impaired: boolean(),
-          moviehash_match: boolean()
+          moviehash_match: boolean(),
+          origin: String.t() | nil
         }
 
   @enforce_keys [:file_id, :language, :format, :subtitle_hash]
@@ -68,6 +71,7 @@ defmodule Mydia.Subtitles.Provider.SearchResult do
     :file_name,
     :rating,
     :download_count,
+    :origin,
     hearing_impaired: false,
     moviehash_match: false
   ]
@@ -100,11 +104,28 @@ defmodule Mydia.Subtitles.Provider.SearchResult do
       hearing_impaired:
         get_field(map, "hearing_impaired") || get_field(map, :hearing_impaired) || false,
       moviehash_match:
-        get_field(map, "moviehash_match") || get_field(map, :moviehash_match) || false
+        get_field(map, "moviehash_match") || get_field(map, :moviehash_match) || false,
+      origin: blank_to_nil(get_field(map, "origin") || get_field(map, :origin))
     }
   end
 
   defp get_field(map, key), do: Map.get(map, key)
+
+  # An empty (or whitespace-only) string is truthy in Elixir, so
+  # `result.origin || config.name` in `ProviderChain.tag/2` never falls back
+  # to the configured name when a relay sends `"source": ""` or `"source": " "`.
+  # Blanking it here, at the boundary, keeps that `||` simple instead of
+  # teaching every reader of it about this edge case. Trimming also means a
+  # padded-but-real origin like `" SubDL "` is normalized rather than kept
+  # with its padding.
+  defp blank_to_nil(value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> nil
+      origin -> origin
+    end
+  end
+
+  defp blank_to_nil(value), do: value
 
   @doc """
   Converts a SearchResult struct to a plain map.
@@ -124,7 +145,8 @@ defmodule Mydia.Subtitles.Provider.SearchResult do
         rating: nil,
         download_count: nil,
         hearing_impaired: false,
-        moviehash_match: false
+        moviehash_match: false,
+        origin: nil
       }
 
   """
@@ -138,7 +160,8 @@ defmodule Mydia.Subtitles.Provider.SearchResult do
       rating: result.rating,
       download_count: result.download_count,
       hearing_impaired: result.hearing_impaired,
-      moviehash_match: result.moviehash_match
+      moviehash_match: result.moviehash_match,
+      origin: result.origin
     }
   end
 end

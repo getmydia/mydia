@@ -174,6 +174,11 @@ defmodule MetadataRelay.SubDL.Handler do
   # relay-backed result carries neither bonus either way.
   defp transform_subtitle(subtitle, feature) do
     %{
+      # Names the upstream this subtitle actually came from. Clients show the
+      # origin rather than the relay, which is only the transport. Added after
+      # the wire format shipped, so a client that predates it simply ignores
+      # the key.
+      "source" => "SubDL",
       "id" => FileId.encode(subtitle["url"] || ""),
       "language" => normalize_language(subtitle["language"] || subtitle["lang"]),
       "format" => "srt",

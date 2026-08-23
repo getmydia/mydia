@@ -71,7 +71,8 @@ defmodule Mydia.SubtitlesTest do
               moviehash_match: false
             }
           ],
-          %{languages: "en", imdb_id: "0133093"}
+          %{languages: "en", imdb_id: "0133093"},
+          nil
         )
 
       assert [%{score: score}] = results

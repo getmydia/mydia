@@ -74,6 +74,56 @@ defmodule Mydia.Subtitles.Provider.RelayTest do
       assert result.subtitle_hash == expected_hash
     end
 
+    test "carries the relay's source through as the result origin", %{bypass: bypass} do
+      Bypass.expect_once(bypass, "POST", "/api/v1/subtitles/search", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          200,
+          Jason.encode!(%{
+            "subtitles" => [
+              %{
+                "source" => "SubDL",
+                "id" => 12_345,
+                "language" => "en",
+                "format" => "srt",
+                "release" => "Movie.2020.1080p.BluRay.x264"
+              }
+            ]
+          })
+        )
+      end)
+
+      assert {:ok, [result]} = Relay.search(@provider, %{languages: "en", tmdb_id: "603"})
+      assert result.origin == "SubDL"
+    end
+
+    # An older relay deployment predates the "source" key. The result must not
+    # claim an origin it does not have; ProviderChain falls back to the config
+    # name in that case.
+    test "leaves origin nil when the relay sends no source", %{bypass: bypass} do
+      Bypass.expect_once(bypass, "POST", "/api/v1/subtitles/search", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          200,
+          Jason.encode!(%{
+            "subtitles" => [
+              %{
+                "id" => 12_345,
+                "language" => "en",
+                "format" => "srt",
+                "release" => "Movie.2020.1080p.BluRay.x264"
+              }
+            ]
+          })
+        )
+      end)
+
+      assert {:ok, [result]} = Relay.search(@provider, %{languages: "en", tmdb_id: "603"})
+      assert result.origin == nil
+    end
+
     test "surfaces the relay's error reason without collapsing it", %{bypass: bypass} do
       Bypass.expect_once(bypass, "POST", "/api/v1/subtitles/search", fn conn ->
         Plug.Conn.resp(conn, 401, "")
