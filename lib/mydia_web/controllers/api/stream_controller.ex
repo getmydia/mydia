@@ -12,6 +12,7 @@ defmodule MydiaWeb.Api.StreamController do
     AudioPreferences,
     Candidates,
     Compatibility,
+    DeviceProfile,
     FfmpegRemuxer,
     HlsSession,
     HlsSessionSupervisor,
@@ -156,7 +157,13 @@ defmodule MydiaWeb.Api.StreamController do
     case Candidates.resolve_media_file(content_type, id) do
       {:ok, media_file} ->
         media_file = Candidates.ensure_codec_info(media_file)
-        candidates = Candidates.build_streaming_candidates(media_file)
+
+        candidates =
+          Candidates.build_streaming_candidates(
+            media_file,
+            conn.assigns[:device_profile] || DeviceProfile.browser_default()
+          )
+
         # Carries the viewer through, so this endpoint's
         # preferred_audio_languages reflects a stored per-show choice the same
         # way the GraphQL resolver's does. Without it a web client doing

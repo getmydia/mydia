@@ -14,6 +14,7 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
   alias Mydia.Streaming.AudioPreferences
   alias Mydia.Streaming.AudioTrackSelector
   alias Mydia.Streaming.Candidates
+  alias Mydia.Streaming.DeviceProfile
   alias Mydia.Streaming.FfmpegHlsTranscoder
   alias Mydia.Streaming.HlsSessionSupervisor
   alias Mydia.Streaming.HlsSession
@@ -35,7 +36,13 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
         case Candidates.resolve_media_file(content_type, id) do
           {:ok, media_file} ->
             media_file = Candidates.ensure_codec_info(media_file)
-            candidates = Candidates.build_streaming_candidates(media_file)
+
+            candidates =
+              Candidates.build_streaming_candidates(
+                media_file,
+                context[:device_profile] || DeviceProfile.browser_default()
+              )
+
             metadata = Candidates.build_metadata_response(media_file, user_id: user.id)
 
             # For relay connections, only allow TRANSCODE (direct play won't work
