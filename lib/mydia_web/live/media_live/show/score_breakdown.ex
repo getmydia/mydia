@@ -16,13 +16,16 @@ defmodule MydiaWeb.MediaLive.Show.ScoreBreakdown do
 
   `:weight` renders a percentage column and is omitted when the caller's
   factors are absolute. `:max` is the highest this factor can score, used to
-  colour the value.
+  colour the value. `:zero_is_absent` means a score of 0 for this factor
+  indicates the signal was unavailable rather than bad, so it renders neutral
+  instead of `text-error`.
   """
   attr :label, :string, required: true
   attr :value, :any, default: nil
   attr :score, :any, default: nil
   attr :weight, :integer, default: nil
   attr :max, :integer, default: 100
+  attr :zero_is_absent, :boolean, default: false
 
   def score_row(assigns) do
     ~H"""
@@ -36,7 +39,7 @@ defmodule MydiaWeb.MediaLive.Show.ScoreBreakdown do
       <div class="flex items-center gap-1.5 flex-shrink-0">
         <span class={[
           "font-mono font-semibold w-8 text-right",
-          score_color(@score, @max)
+          score_color(@score, @max, @zero_is_absent)
         ]}>
           {format_score(@score)}
         </span>
@@ -89,17 +92,25 @@ defmodule MydiaWeb.MediaLive.Show.ScoreBreakdown do
   default max of 100 this reproduces the release ranker's original 80 and 50
   thresholds exactly.
 
-  An exact zero renders in the same neutral colour as a nil score rather than
-  `text-error`. On a relay result "Hash match" is a permanent zero because
-  SubDL has no hash search, and every naming gap in the release block adds
-  another zero row; painting all of them red reads as "several things are
-  wrong" when the honest story is "these signals are unavailable."
+  `zero_is_absent` controls how an exact zero renders. When `true`, it renders
+  in the same neutral colour as a nil score rather than `text-error`: on a
+  relay result "Hash match" is a permanent zero because SubDL has no hash
+  search, and a naming gap means the parser had nothing to compare, so
+  painting those zeros red reads as "several things are wrong" when the
+  honest story is "these signals are unavailable." When `false` (the
+  default), a zero is scored normally against `max` like any other value, so
+  a genuinely bad result, such as a torrent with zero known seeders, still
+  reads as `text-error`.
   """
-  def score_color(nil, _max), do: "text-base-content/50"
-  def score_color(_score, max) when not is_number(max) or max <= 0, do: "text-base-content/50"
-  def score_color(score, _max) when score == 0, do: "text-base-content/50"
+  def score_color(score, max, zero_is_absent \\ false)
+  def score_color(nil, _max, _zero_is_absent), do: "text-base-content/50"
 
-  def score_color(score, max) do
+  def score_color(_score, max, _zero_is_absent) when not is_number(max) or max <= 0,
+    do: "text-base-content/50"
+
+  def score_color(score, _max, true) when score == 0, do: "text-base-content/50"
+
+  def score_color(score, max, _zero_is_absent) do
     cond do
       score / max >= 0.8 -> "text-success"
       score / max >= 0.5 -> "text-warning"

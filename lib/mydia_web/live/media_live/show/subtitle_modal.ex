@@ -275,6 +275,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
                                     value={factor.detail}
                                     score={factor.points}
                                     max={factor.max}
+                                    zero_is_absent={true}
                                   />
                                 </div>
                               </div>
