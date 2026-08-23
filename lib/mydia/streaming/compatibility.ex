@@ -134,18 +134,30 @@ defmodule Mydia.Streaming.Compatibility do
   language selection then maps a different stream, `-c copy` would put a codec
   in the fMP4 that the client's `canPlayType` check never approved and the
   advertised MIME no longer describes.
+
+  Delegates to the `/2` clause with the browser default profile, so this stays
+  the exact answer it gave before device profiles existed.
   """
   @spec compatible_audio_codec?(String.t() | nil) :: boolean()
-  def compatible_audio_codec?(nil), do: false
-
   def compatible_audio_codec?(codec) do
-    normalized = String.downcase(codec)
+    compatible_audio_codec?(codec, DeviceProfile.browser_default())
+  end
 
-    # Check for compatible codecs - handle formatted strings like "AAC 5.1" or "MP3 Stereo"
-    String.contains?(normalized, "aac") or
-      String.contains?(normalized, "mp3") or
-      String.contains?(normalized, "opus") or
-      String.contains?(normalized, "vorbis")
+  @doc """
+  Same check against a specific client's declared audio allowlist instead of
+  the hardcoded browser one.
+
+  The remuxer's stream-copy decision was gated on the `/1` browser check even
+  when a profile was available, which meant a client that declared it could
+  decode e.g. AC3 was still told REMUX (stream copy) while the server quietly
+  downmixed to stereo AAC behind its back. This lets that decision agree with
+  the profile that actually earned the REMUX strategy.
+  """
+  @spec compatible_audio_codec?(String.t() | nil, DeviceProfile.t()) :: boolean()
+  def compatible_audio_codec?(nil, %DeviceProfile{}), do: false
+
+  def compatible_audio_codec?(codec, %DeviceProfile{} = profile) do
+    DeviceProfile.audio_codec_allowed_or_absent?(profile, codec)
   end
 
   @doc """
@@ -205,7 +217,22 @@ defmodule Mydia.Streaming.Compatibility do
   """
   @spec transcoding_reason(MediaFile.t()) :: String.t()
   def transcoding_reason(%MediaFile{} = media_file) do
-    profile = DeviceProfile.browser_default()
+    transcoding_reason(media_file, DeviceProfile.browser_default())
+  end
+
+  @doc """
+  Same explanation against a specific client's profile.
+
+  Unlike `remux_reason/1`, this one genuinely depends on which allowlist was
+  used: `check_compatibility/2` decided `:needs_transcoding` against the
+  caller's profile, and the `/1` clause here explained it against the
+  hardcoded browser one instead. That can name the wrong incompatibility, for
+  example blaming "video codec" when the caller's profile allowed that codec
+  fine and the real blocker (per `check_compatibility/2`) was the audio codec.
+  Threading the same profile through keeps the logged reason honest.
+  """
+  @spec transcoding_reason(MediaFile.t(), DeviceProfile.t()) :: String.t()
+  def transcoding_reason(%MediaFile{} = media_file, %DeviceProfile{} = profile) do
     container = get_container_format(media_file)
     video_codec = media_file.codec
     audio_codec = media_file.audio_codec
@@ -227,6 +254,12 @@ defmodule Mydia.Streaming.Compatibility do
 
   @doc """
   Returns a human-readable description of why a file needs remuxing.
+
+  Deliberately stays arity 1, unlike `transcoding_reason/2`. It only ever
+  names the container, and `remux_eligible?/4` only reaches `:needs_remux` for
+  a container on the hardcoded `remuxable_container?/1` list, which does not
+  vary by profile. So this text is accurate under any profile that produced
+  `:needs_remux`, and threading one through would not change what it says.
 
   ## Examples
 

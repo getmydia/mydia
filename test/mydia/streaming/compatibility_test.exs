@@ -460,4 +460,76 @@ defmodule Mydia.Streaming.CompatibilityTest do
       assert Compatibility.check_compatibility(file) == :direct_play
     end
   end
+
+  describe "compatible_audio_codec?/2" do
+    alias Mydia.Streaming.DeviceProfile
+
+    test "delegating /1 rejects AC3, matching the hardcoded browser table" do
+      refute Compatibility.compatible_audio_codec?("ac3")
+    end
+
+    test "/2 rejects AC3 under the browser default profile, same as /1" do
+      refute Compatibility.compatible_audio_codec?("ac3", DeviceProfile.browser_default())
+    end
+
+    test "/2 accepts AC3 under a profile that declares it" do
+      profile = %DeviceProfile{
+        containers: ["mkv"],
+        video_codecs: ["h264"],
+        audio_codecs: ["ac3"],
+        hdr_formats: []
+      }
+
+      assert Compatibility.compatible_audio_codec?("ac3", profile)
+    end
+
+    test "/2 still rejects nil regardless of profile" do
+      profile = %DeviceProfile{
+        containers: ["mkv"],
+        video_codecs: ["h264"],
+        audio_codecs: ["ac3"],
+        hdr_formats: []
+      }
+
+      refute Compatibility.compatible_audio_codec?(nil, profile)
+    end
+  end
+
+  describe "transcoding_reason/2" do
+    alias Mydia.Streaming.DeviceProfile
+
+    test "names the audio codec, not the video codec, when only audio is disallowed" do
+      # media_file's video codec (hevc) is fine under this profile; only the
+      # audio codec (truehd) is not. The /1 clause (hardcoded browser table)
+      # would misreport this as an incompatible video codec instead, since
+      # the browser table has never allowed hevc either.
+      media_file = %MediaFile{
+        codec: "hevc",
+        audio_codec: "truehd",
+        metadata: %FileMetadata{container: "mkv"},
+        path: "/path/to/video.mkv"
+      }
+
+      profile = %DeviceProfile{
+        containers: ["mkv"],
+        video_codecs: ["hevc"],
+        audio_codecs: ["aac"],
+        hdr_formats: []
+      }
+
+      assert Compatibility.transcoding_reason(media_file, profile) ==
+               "Incompatible audio codec (truehd)"
+    end
+
+    test "delegating /1 still reasons from the browser default" do
+      media_file = %MediaFile{
+        codec: "hevc",
+        audio_codec: "truehd",
+        metadata: %FileMetadata{container: "mkv"},
+        path: "/path/to/video.mkv"
+      }
+
+      assert Compatibility.transcoding_reason(media_file) == "Incompatible video codec (hevc)"
+    end
+  end
 end
