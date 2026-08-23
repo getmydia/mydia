@@ -402,4 +402,61 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
       assert MediaAddHelpers.clear_library_picker(opened).assigns.library_picker == nil
     end
   end
+
+  describe "library_path_opts/2" do
+    test "returns no options when no library was chosen" do
+      assert {:ok, []} = MediaAddHelpers.library_path_opts(nil, :movie)
+    end
+
+    test "returns no options for a blank string" do
+      # "" is truthy in Elixir. Without an explicit clause it reaches the
+      # changeset as library_path_id: "" and fails the foreign key, instead of
+      # falling back to normal target resolution.
+      assert {:ok, []} = MediaAddHelpers.library_path_opts("", :movie)
+    end
+
+    test "keeps an id that is a candidate for this media type" do
+      library = library_path_fixture(%{path: "/media/opts-a", type: "movies"})
+
+      assert {:ok, opts} = MediaAddHelpers.library_path_opts(to_string(library.id), :movie)
+      assert Keyword.fetch!(opts, :library_path_id) == to_string(library.id)
+    end
+
+    test "rejects a library belonging to the other media type" do
+      series = library_path_fixture(%{path: "/media/opts-series", type: "series"})
+
+      assert {:error, :unknown_library} =
+               MediaAddHelpers.library_path_opts(to_string(series.id), :movie)
+    end
+
+    test "rejects an unmonitored library" do
+      unmonitored =
+        library_path_fixture(%{path: "/media/opts-off", type: "movies", monitored: false})
+
+      assert {:error, :unknown_library} =
+               MediaAddHelpers.library_path_opts(to_string(unmonitored.id), :movie)
+    end
+
+    test "rejects an id matching no library at all" do
+      # library_path_id is client input. Without the candidate check a crafted
+      # event can name any row in the table.
+      assert {:error, :unknown_library} =
+               MediaAddHelpers.library_path_opts(Ecto.UUID.generate(), :movie)
+    end
+
+    test "rejects a map value instead of silently treating it as no choice" do
+      # #458: a crafted event sending a non-binary library_path_id must not be
+      # swallowed by the catch-all as "no library was selected".
+      assert {:error, :unknown_library} =
+               MediaAddHelpers.library_path_opts(%{"id" => "1"}, :movie)
+    end
+
+    test "rejects a list value instead of silently treating it as no choice" do
+      assert {:error, :unknown_library} = MediaAddHelpers.library_path_opts(["1"], :movie)
+    end
+
+    test "rejects an integer value instead of silently treating it as no choice" do
+      assert {:error, :unknown_library} = MediaAddHelpers.library_path_opts(1, :movie)
+    end
+  end
 end

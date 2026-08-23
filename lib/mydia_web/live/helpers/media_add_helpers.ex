@@ -71,6 +71,48 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   end
 
   @doc """
+  Add options for a client-supplied `library_path_id`.
+
+  Three cases have to stay distinct, which is why this returns a tagged tuple
+  rather than a bare keyword list: no choice was made, a valid choice was made,
+  or a choice was made that this server will not honour. Only the third is
+  worth telling the user about, and #458 was filed because a silently ignored
+  choice is worse than no picker at all.
+
+  Only `nil` and `""` mean "no choice was made". `nil` is what an ordinary
+  "Add to Library" click sends, since the form has no picker to include a
+  `library_path_id` at all; `""` is the picker's own placeholder option. Any
+  other shape, including a non-binary value such as a map, list, or integer,
+  is a malformed target and is rejected rather than silently treated as "no
+  choice".
+
+  The blank-string clause is the reason this function exists. `""` is truthy in
+  Elixir, so without it the value reaches the changeset as
+  `library_path_id: ""` and fails the foreign key rather than falling back to
+  normal target resolution.
+
+  The candidate check is authorization, not convenience. This value arrives in
+  event params, so without it a crafted event can name any `library_paths` row,
+  including one of the wrong type for the media being added.
+  """
+  @spec library_path_opts(term(), :movie | :tv_show) ::
+          {:ok, keyword()} | {:error, :unknown_library}
+  def library_path_opts(library_path_id, media_type)
+
+  def library_path_opts(nil, _media_type), do: {:ok, []}
+  def library_path_opts("", _media_type), do: {:ok, []}
+
+  def library_path_opts(id, media_type) when is_binary(id) and id != "" do
+    if Enum.any?(candidate_libraries(media_type), &(to_string(&1.id) == id)) do
+      {:ok, [library_path_id: id]}
+    else
+      {:error, :unknown_library}
+    end
+  end
+
+  def library_path_opts(_library_path_id, _media_type), do: {:error, :unknown_library}
+
+  @doc """
   Enriches a list of search result items with library status information.
 
   For each item, adds `:in_library`, `:monitored`, and `:id` fields

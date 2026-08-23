@@ -64,17 +64,23 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
   cancels a task under an existing key, which would silently drop the first
   result.
   """
-  def add_franchise_movie(%{"tmdb_id" => tmdb_id}, socket) do
-    with :ok <- Authorization.authorize_create_media(socket) do
-      start_add(tmdb_id, socket)
+  def add_franchise_movie(%{"tmdb_id" => tmdb_id} = params, socket) do
+    with :ok <- Authorization.authorize_create_media(socket),
+         {:ok, opts} <- MediaAddHelpers.library_path_opts(params["library_path_id"], :movie) do
+      start_add(tmdb_id, opts, socket)
     else
-      {:unauthorized, socket} -> {:noreply, socket}
+      {:unauthorized, socket} ->
+        {:noreply, socket}
+
+      {:error, :unknown_library} ->
+        {:noreply,
+         put_flash(socket, :error, "That library is no longer available. Nothing was added.")}
     end
   end
 
-  defp start_add(tmdb_id, socket) do
+  defp start_add(tmdb_id, opts, socket) do
     case Integer.parse(tmdb_id) do
-      {tmdb_id, ""} -> dispatch_add(tmdb_id, socket)
+      {tmdb_id, ""} -> dispatch_add(tmdb_id, opts, socket)
       _ -> {:noreply, socket}
     end
   end
@@ -82,7 +88,9 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
   # An impatient double-click sends the event twice. The second add would hit the
   # tmdb_id unique index and flash a failure for a row the first add just
   # created, so a repeat for an id already in flight is dropped.
-  defp dispatch_add(tmdb_id, socket) do
+  #
+  # The in-flight set stays keyed on tmdb_id alone and `opts` rides beside it.
+  defp dispatch_add(tmdb_id, opts, socket) do
     if MapSet.member?(socket.assigns.adding_franchise_tmdb_ids, tmdb_id) do
       {:noreply, socket}
     else
@@ -93,7 +101,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
         socket
         |> mark_in_flight(tmdb_id)
         |> start_async({:add_franchise_movie, tmdb_id}, fn ->
-          perform_add(media_item, tmdb_id, config)
+          perform_add(media_item, tmdb_id, config, opts)
         end)
 
       {:noreply, socket}
@@ -104,14 +112,16 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
   Performs the add. Public so it can be exercised directly in tests without a
   live process.
   """
-  def perform_add(media_item, tmdb_id, config) do
+  def perform_add(media_item, tmdb_id, config, opts \\ []) do
     MediaAddHelpers.handle_add_media_to_library(
       to_string(tmdb_id),
       :movie,
       %{},
       config,
-      monitored: media_item.monitored,
-      quality_profile_id: media_item.quality_profile_id
+      Keyword.merge(
+        [monitored: media_item.monitored, quality_profile_id: media_item.quality_profile_id],
+        opts
+      )
     )
     |> case do
       {:ok, added, _status_map} -> {:ok, added}

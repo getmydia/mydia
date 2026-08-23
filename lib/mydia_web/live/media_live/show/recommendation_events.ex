@@ -81,21 +81,33 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   overwrites rather than cancels under an existing key, which would silently drop
   the first result.
   """
-  def add_recommendation(%{"tmdb_id" => tmdb_id}, socket) do
-    with :ok <- Authorization.authorize_create_media(socket) do
+  def add_recommendation(%{"tmdb_id" => tmdb_id} = params, socket) do
+    media_type = if socket.assigns.media_item.type == "tv_show", do: :tv_show, else: :movie
+
+    with :ok <- Authorization.authorize_create_media(socket),
+         {:ok, opts} <- MediaAddHelpers.library_path_opts(params["library_path_id"], media_type) do
       case Integer.parse(tmdb_id) do
-        {parsed, ""} -> dispatch_add(parsed, socket)
+        {parsed, ""} -> dispatch_add(parsed, opts, socket)
         _ -> {:noreply, socket}
       end
     else
-      {:unauthorized, socket} -> {:noreply, socket}
+      {:unauthorized, socket} ->
+        {:noreply, socket}
+
+      {:error, :unknown_library} ->
+        {:noreply,
+         put_flash(socket, :error, "That library is no longer available. Nothing was added.")}
     end
   end
 
   # An impatient double-click sends the event twice. The second add would hit the
   # tmdb_id unique index and flash a failure for a row the first add just
   # created, so a repeat for an id already in flight is dropped.
-  defp dispatch_add(tmdb_id, socket) do
+  #
+  # The in-flight set stays keyed on tmdb_id alone and `opts` rides beside it.
+  # Folding the library into the key would let a double-click through two
+  # different libraries past this guard and onto the unique index.
+  defp dispatch_add(tmdb_id, opts, socket) do
     if MapSet.member?(socket.assigns.adding_recommendation_tmdb_ids, tmdb_id) do
       {:noreply, socket}
     else
@@ -106,7 +118,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
         socket
         |> mark_in_flight(tmdb_id)
         |> start_async({:add_recommendation, tmdb_id}, fn ->
-          perform_add(media_item, tmdb_id, config)
+          perform_add(media_item, tmdb_id, config, opts)
         end)
 
       {:noreply, socket}
@@ -168,7 +180,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   Performs the add. Public so it can be exercised directly in tests without a
   live process.
   """
-  def perform_add(media_item, tmdb_id, config) do
+  def perform_add(media_item, tmdb_id, config, opts \\ []) do
     media_type = if media_item.type == "tv_show", do: :tv_show, else: :movie
 
     MediaAddHelpers.handle_add_media_to_library(
@@ -176,11 +188,17 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
       media_type,
       %{},
       config,
-      monitored: media_item.monitored,
-      quality_profile_id: media_item.quality_profile_id
+      Keyword.merge(
+        [monitored: media_item.monitored, quality_profile_id: media_item.quality_profile_id],
+        opts
+      )
     )
     |> case do
       {:ok, added, _status_map} -> {:ok, added}
+      # Reachable when the same title sits in both rails (#460): adding from
+      # one leaves the other's card stale, and a click there lands here. Without
+      # this clause it raises CaseClauseError and takes the page down.
+      {:already_in_library, added, _status_map} -> {:already_in_library, added}
       {:error, reason} -> {:error, reason}
     end
   end
@@ -191,6 +209,16 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
      |> clear_in_flight(tmdb_id)
      |> assign(:recommendations, mark_owned(socket.assigns.recommendations, added))
      |> put_flash(:info, "Added #{added.title} to your library")}
+  end
+
+  # Not an error from here up: the title the user clicked is already in the
+  # library, just under a card this rail had not linked up yet.
+  def handle_add_result(tmdb_id, {:ok, {:already_in_library, added}}, socket) do
+    {:noreply,
+     socket
+     |> clear_in_flight(tmdb_id)
+     |> assign(:recommendations, mark_owned(socket.assigns.recommendations, added))
+     |> put_flash(:info, "#{added.title} is already in your library")}
   end
 
   def handle_add_result(tmdb_id, {:ok, {:error, reason}}, socket) do

@@ -399,15 +399,36 @@ defmodule MydiaWeb.DiscoverLive.Index do
   end
 
   def handle_info({:add_media_to_library, provider_id, media_type, library_path_id}, socket) do
-    # Comes from client params, so a blank string is possible. "" is truthy in
-    # Elixir and would reach the changeset as library_path_id: "", failing the
-    # foreign key instead of falling back to normal resolution.
-    opts =
-      case library_path_id do
-        id when is_binary(id) and id != "" -> [library_path_id: id]
-        _ -> []
-      end
+    case MediaAddHelpers.library_path_opts(library_path_id, media_type) do
+      {:error, :unknown_library} ->
+        {:noreply,
+         socket
+         |> clear_adding(provider_id)
+         |> put_flash(:error, "That library is no longer available. Nothing was added.")}
 
+      {:ok, opts} ->
+        add_with_opts(provider_id, media_type, opts, socket)
+    end
+  end
+
+  def handle_info({:request_media, provider_id, media_type}, socket) do
+    # Also resolves against the recommendations rail. A rail title is not in
+    # `items`, so searching only that list made a guest's Request click from
+    # inside the modal silently do nothing.
+    case find_selectable_item(
+           socket.assigns.items,
+           socket.assigns.selected_recommendations,
+           provider_id
+         ) do
+      nil ->
+        {:noreply, assign(socket, :requesting_item_id, nil)}
+
+      item ->
+        {:noreply, submit_request(socket, item, media_type)}
+    end
+  end
+
+  defp add_with_opts(provider_id, media_type, opts, socket) do
     case MediaAddHelpers.handle_add_media_to_library(
            provider_id,
            media_type,
@@ -465,23 +486,6 @@ defmodule MydiaWeb.DiscoverLive.Index do
          socket
          |> clear_adding(provider_id)
          |> put_flash(:error, "Failed to fetch metadata: #{inspect(reason)}")}
-    end
-  end
-
-  def handle_info({:request_media, provider_id, media_type}, socket) do
-    # Also resolves against the recommendations rail. A rail title is not in
-    # `items`, so searching only that list made a guest's Request click from
-    # inside the modal silently do nothing.
-    case find_selectable_item(
-           socket.assigns.items,
-           socket.assigns.selected_recommendations,
-           provider_id
-         ) do
-      nil ->
-        {:noreply, assign(socket, :requesting_item_id, nil)}
-
-      item ->
-        {:noreply, submit_request(socket, item, media_type)}
     end
   end
 

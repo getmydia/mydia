@@ -22,6 +22,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseComponents do
   attr :can_add, :boolean, required: true
   attr :adding_tmdb_ids, MapSet, required: true
   attr :current_user, :map, required: true
+  attr :libraries, :list, default: []
 
   def franchise_section(assigns) do
     assigns = assign(assigns, :items, items(assigns.franchise))
@@ -35,6 +36,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseComponents do
       current_user={@current_user}
       can_add={@can_add}
       adding_ids={@adding_tmdb_ids}
+      libraries={@libraries}
       on_select={nil}
       add_event="add_franchise_movie"
       request_event="request_franchise_movie"
