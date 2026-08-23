@@ -49,6 +49,48 @@ void main() {
 
     test('returns 0 for unrecognized string', () {
       expect(MediaFileSelector.parseToPixels('unknown'), 0);
+      expect(MediaFileSelector.parseToPixels('garbage'), 0);
+      expect(MediaFileSelector.parseToPixels(''), 0);
+    });
+
+    test('parses the filename-metadata import path display strings', () {
+      // These are what ReleaseParser.quality.resolution renders via
+      // standardize_resolution/1 (quality_extractor.ex), as opposed to the
+      // bare labels FileAnalyzer.extract_resolution/1 emits.
+      expect(MediaFileSelector.parseToPixels('2160p (4K)'), 2160);
+      expect(MediaFileSelector.parseToPixels('1080p (Full HD)'), 1080);
+      expect(MediaFileSelector.parseToPixels('720p (HD)'), 720);
+      expect(MediaFileSelector.parseToPixels('480p (SD)'), 480);
+      expect(MediaFileSelector.parseToPixels('576p (SD)'), 576);
+      expect(MediaFileSelector.parseToPixels('4320p (8K)'), 4320);
+    });
+
+    test('bare labels from FileAnalyzer keep parsing the same as before', () {
+      expect(MediaFileSelector.parseToPixels('4K'), 2160);
+      expect(MediaFileSelector.parseToPixels('2160p'), 2160);
+      expect(MediaFileSelector.parseToPixels('1440p'), 1440);
+      expect(MediaFileSelector.parseToPixels('1080p'), 1080);
+      expect(MediaFileSelector.parseToPixels('720p'), 720);
+      expect(MediaFileSelector.parseToPixels('480p'), 480);
+    });
+
+    test('does not let an unrelated leading number win', () {
+      // A naive unanchored `(\d+)p?` would match "264" out of "h264" here
+      // (the "p" is optional, so a bare digit run is enough), well before
+      // it ever reaches the real "1080p" later in the string. The fixed
+      // pattern is anchored to the START of the string, so a string that
+      // doesn't begin with the resolution digits (never a real value of
+      // this field, but worth guarding) is rejected outright as 0 rather
+      // than extracting 264 -- or even guessing 1080 -- out of it.
+      expect(MediaFileSelector.parseToPixels('h264 1080p'), 0);
+    });
+
+    test('does not guess pixel height for formats this app never produces', () {
+      // "1080i" (interlaced) and a bare "8K" are never written by either
+      // server-side writer, so both are deliberately treated as
+      // unparseable rather than guessed at.
+      expect(MediaFileSelector.parseToPixels('1080i'), 0);
+      expect(MediaFileSelector.parseToPixels('8K'), 0);
     });
   });
 
