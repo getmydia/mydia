@@ -186,8 +186,10 @@ HDR format you did not list. That ordering is deliberate. If you listed the
 formats you want and HLG is not among them, an HLG file is worse for you than a
 plain SDR one. It looks like a bug the first time you see it, so it is worth
 saying plainly: an absent HDR signal is neutral, the same as an attribute Mydia
-could not determine. Carrying the wrong HDR format is a preference violation,
-scored exactly like a codec or source that missed your list.
+could not determine. Carrying an HDR format you did not list counts against you
+exactly like an unlisted codec or source. That is the soft preference-list
+penalty; the harder `require_hdr` rule, which zeroes the score outright, is a
+separate mechanism covered further down this page.
 
 Availability is logarithmic, so seeder counts matter much less than they appear
 to. The difference between fifty and five hundred seeders is a handful of points,
