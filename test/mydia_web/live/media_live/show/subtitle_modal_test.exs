@@ -131,6 +131,35 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModalTest do
       assert html =~ ~s(id="subtitle-score-breakdown-0")
       assert html =~ "Release group"
     end
+
+    test "the score badge is a button wired to the breakdown panel, not a dropdown" do
+      html = render_modal([result(%{score: 95, score_breakdown: []})])
+      doc = LazyHTML.from_fragment(html)
+      trigger = LazyHTML.query_by_id(doc, "subtitle-score-badge-0")
+
+      assert LazyHTML.attribute(trigger, "type") == ["button"]
+      assert LazyHTML.attribute(trigger, "aria-controls") == ["subtitle-score-breakdown-0"]
+      assert LazyHTML.attribute(trigger, "aria-expanded") == ["false"]
+    end
+
+    test "no hover dropdown survives anywhere in the dialog" do
+      html = render_modal([result(%{score: 95, score_breakdown: []})])
+
+      refute html =~ "dropdown-hover"
+      refute html =~ "dropdown-content"
+      refute html =~ "dropdown-end"
+    end
+
+    test "the breakdown panel is a sibling of the badge cluster, not inside it" do
+      html = render_modal([result(%{score: 95, score_breakdown: []})])
+      doc = LazyHTML.from_fragment(html)
+
+      # The badge cluster is the flex-wrap row of badges. If the panel were
+      # still inside it the panel would be a wrapping flex item, which is what
+      # made it a cramped w-64 card in the first place.
+      assert Enum.count(LazyHTML.query(doc, ".flex-wrap #subtitle-score-breakdown-0")) == 0
+      assert Enum.count(LazyHTML.query_by_id(doc, "subtitle-score-breakdown-0")) == 1
+    end
   end
 
   describe "subtitle_search_modal/1 shell" do

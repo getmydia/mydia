@@ -248,40 +248,25 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
                           >
                             <span class="badge badge-outline badge-sm">HI</span>
                           </div>
-                          <div class="dropdown dropdown-hover dropdown-end">
-                            <div
-                              tabindex="0"
-                              role="button"
-                              id={"subtitle-score-badge-#{index}"}
-                              class={[
-                                "badge badge-sm cursor-pointer",
-                                score_badge_class(result.score)
-                              ]}
-                              title="Hover for score breakdown"
-                            >
-                              Score {result.score}
-                            </div>
-                            <div
-                              tabindex="0"
-                              id={"subtitle-score-breakdown-#{index}"}
-                              class="dropdown-content z-50 card card-compact bg-base-200 shadow-xl w-64"
-                            >
-                              <div class="card-body p-3">
-                                <h4 class="card-title text-sm mb-2">Score breakdown</h4>
-                                <div class="space-y-1.5 text-xs">
-                                  <.score_row
-                                    :for={factor <- result.score_breakdown}
-                                    label={factor.label}
-                                    value={factor.detail}
-                                    score={factor.points}
-                                    max={factor.max}
-                                    zero_is_absent={true}
-                                  />
-                                </div>
-                              </div>
-                            </div>
-                          </div>
+                          <.score_trigger
+                            id={"subtitle-score-badge-#{index}"}
+                            panel_id={"subtitle-score-breakdown-#{index}"}
+                            class={["badge badge-sm cursor-pointer", score_badge_class(result.score)]}
+                            title="Show score breakdown"
+                          >
+                            Score {result.score}
+                          </.score_trigger>
                         </div>
+                        <.score_panel id={"subtitle-score-breakdown-#{index}"}>
+                          <.score_row
+                            :for={factor <- result.score_breakdown}
+                            label={factor.label}
+                            value={factor.detail}
+                            score={factor.points}
+                            max={factor.max}
+                            zero_is_absent={true}
+                          />
+                        </.score_panel>
                         <div class="text-xs text-base-content/60 mt-1 flex gap-3">
                           <span :if={result.rating}>★ {result.rating}/10</span>
                           <span :if={result.download_count}>
