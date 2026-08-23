@@ -1,4 +1,4 @@
-// Unit coverage for `detectAudioTracks` and `watchAudioTracks`, the pure
+// Unit coverage for `detectAudioTracks` and `watchTracks`, the pure
 // pieces extracted from `_PlayerScreenState._detectTracks`.
 //
 // Extracted (rather than tested through a fully mounted `PlayerScreen`) for
@@ -27,6 +27,9 @@ import 'package:player/presentation/screens/player/player_screen.dart';
 /// `Silo.S03E03.A.Dark.Web.2160p...ENG.ITA...mkv`.
 const _italian = AudioTrack('1', null, 'ita', isDefault: true);
 const _english = AudioTrack('2', null, 'eng');
+
+/// A single embedded subtitle track, as media_kit reports one.
+const _englishSubtitle = SubtitleTrack('1', null, 'eng');
 
 /// What media_kit reports before it has probed the file: sentinels only.
 const _sentinelsOnly = Tracks();
@@ -96,35 +99,56 @@ void main() {
     });
   });
 
-  group('watchAudioTracks', () {
+  group('watchTracks', () {
     test('reports tracks that media_kit only discovers after playback opens',
         () async {
       final controller = StreamController<Tracks>();
       addTearDown(controller.close);
 
-      final seen = <AudioTrackDetection>[];
-      final subscription = watchAudioTracks(controller.stream, seen.add);
+      final seen = <Tracks>[];
+      final subscription = watchTracks(controller.stream, seen.add);
       addTearDown(subscription.cancel);
 
       // The probe has not finished: this is exactly the state the old fixed
       // 500ms sample could land in.
       controller.add(_sentinelsOnly);
       await pumpEventQueue();
-      expect(seen.last.tracks, isEmpty);
+      expect(detectAudioTracks(seen.last.audio).tracks, isEmpty);
 
       // mpv finishes probing and revises the list.
       controller.add(const Tracks(audio: [_italian, _english]));
       await pumpEventQueue();
 
-      expect(seen.last.tracks.map((t) => t.language), ['ita', 'eng']);
+      expect(
+        detectAudioTracks(seen.last.audio).tracks.map((t) => t.language),
+        ['ita', 'eng'],
+      );
+    });
+
+    test('carries the subtitle tracks too, not only the audio ones', () async {
+      // The whole point of widening this from `watchTracks`. Subtitle
+      // tracks used to be sampled once, 500ms after `open()`, with nothing
+      // watching for a later revision -- so a probe that finished late left
+      // the subtitle button disabled for the entire session.
+      final controller = StreamController<Tracks>();
+      addTearDown(controller.close);
+
+      final seen = <Tracks>[];
+      final subscription = watchTracks(controller.stream, seen.add);
+      addTearDown(subscription.cancel);
+
+      controller.add(const Tracks(subtitle: [_englishSubtitle]));
+      await pumpEventQueue();
+
+      expect(seen.last.subtitle, contains(_englishSubtitle));
     });
 
     test('stops reporting once cancelled', () async {
       final controller = StreamController<Tracks>();
       addTearDown(controller.close);
 
-      final seen = <AudioTrackDetection>[];
-      final subscription = watchAudioTracks(controller.stream, seen.add);
+      final seen = <Tracks>[];
+      final subscription = watchTracks(controller.stream, seen.add);
       await subscription.cancel();
 
       controller.add(const Tracks(audio: [_italian, _english]));

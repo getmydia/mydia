@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/models/subtitle_track.dart';
 import 'package:player/presentation/screens/player/subtitle_track_builder.dart';
@@ -25,6 +26,16 @@ void main() {
     language: 'eng',
     title: 'English',
     format: 'srt',
+    embedded: true,
+  );
+
+  /// What `_applySubtitleTracks` builds out of a media_kit track: the `mk_`
+  /// prefix is what keeps mpv's id space apart from the server's ffprobe
+  /// stream indices.
+  const mkTrack = SubtitleTrack(
+    id: 'mk_1',
+    language: 'eng',
+    title: 'English',
     embedded: true,
   );
 
@@ -73,6 +84,81 @@ void main() {
         selectableTracks([embeddedTextTrack], isDirectPlay: false),
         contains(embeddedTextTrack),
       );
+    });
+  });
+
+  group('resolveSubtitleTracks', () {
+    test('ignores media_kit entirely when streaming', () {
+      // Streaming delivers every track's body as text over GraphQL, so the
+      // server's list is the only one that means anything and image tracks
+      // cannot be rendered at all.
+      final tracks = resolveSubtitleTracks(
+        serverTracks: [textTrack, embeddedTextTrack, imageTrack],
+        mpvTracks: [mkTrack],
+        isDirectPlay: false,
+      );
+
+      expect(tracks, [textTrack, embeddedTextTrack]);
+    });
+
+    test('prefers media_kit tracks over the server list in direct play', () {
+      // mpv reads embedded tracks straight from the container, at no fetch
+      // cost, so its own tracks win. Sidecars are not in the container and
+      // still come from the server.
+      final tracks = resolveSubtitleTracks(
+        serverTracks: [textTrack, embeddedTextTrack],
+        mpvTracks: [mkTrack],
+        isDirectPlay: true,
+      );
+
+      expect(tracks, [mkTrack, textTrack]);
+    });
+
+    test(
+        'falls back to the server list when media_kit has probed nothing '
+        'yet in direct play', () {
+      // The regression this whole change exists for. mpv discovers tracks
+      // asynchronously while it probes, and on a remote file the probe
+      // routinely outruns the fixed 500ms sample after `open()`. Dropping
+      // the server's embedded tracks here left `_subtitleTracks` empty and
+      // `panel_controls.dart`'s `subtitleTrackCount > 0` gate rendered the
+      // button dead for the whole session.
+      final tracks = resolveSubtitleTracks(
+        serverTracks: [textTrack, embeddedTextTrack],
+        mpvTracks: const [],
+        isDirectPlay: true,
+      );
+
+      expect(tracks, [textTrack, embeddedTextTrack]);
+    });
+
+    test('drops image tracks from the direct-play fallback', () {
+      // PGS and VobSub are bitmaps. In direct play mpv renders them from the
+      // container; without mpv there is no body to fetch and nothing that
+      // could draw them, so offering one would be a selection that silently
+      // fails.
+      final tracks = resolveSubtitleTracks(
+        serverTracks: [textTrack, imageTrack],
+        mpvTracks: const [],
+        isDirectPlay: true,
+      );
+
+      expect(tracks, isNot(contains(imageTrack)));
+      expect(tracks, contains(textTrack));
+    });
+
+    test('derives an equal list from unchanged inputs', () {
+      // What lets `_applySubtitleTracks` skip the rebuild on a repeated
+      // media_kit emission. That skip is load-bearing:
+      // `_syncSelectedSubtitleTrack` bumps `_subtitleSelectionGeneration`,
+      // and a bump discards whatever selection the viewer has in flight.
+      List<SubtitleTrack> derive() => resolveSubtitleTracks(
+            serverTracks: [textTrack, embeddedTextTrack],
+            mpvTracks: [mkTrack],
+            isDirectPlay: true,
+          );
+
+      expect(listEquals(derive(), derive()), isTrue);
     });
   });
 

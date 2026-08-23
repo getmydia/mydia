@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, listEquals;
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -338,6 +338,24 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   GraphQLClient? _graphQLClient;
 
   // Track selection state
+  /// The subtitle tracks the *server* reported for this file, exactly as
+  /// `MediaFileFragment` delivered them: embedded tracks ffprobe found, plus
+  /// sidecars from the database.
+  ///
+  /// The source of truth, and never overwritten by track detection.
+  /// [_subtitleTracks] is derived from this together with whatever media_kit
+  /// has probed (see [_applySubtitleTracks]).
+  ///
+  /// Keeping the two apart is what makes detection re-runnable. The
+  /// direct-play branch used to assign media_kit's own list straight over
+  /// the one field, so a probe that finished after the fixed sample taken
+  /// just after `open()` left an empty list with the server's tracks already
+  /// discarded, and nothing could rebuild it.
+  List<app_models.SubtitleTrack> _serverSubtitleTracks = [];
+
+  /// The tracks actually offered to the viewer, and the list
+  /// `subtitleTrackCount` gates the subtitle button on. Derived: never
+  /// assigned outside [_applySubtitleTracks].
   List<app_models.SubtitleTrack> _subtitleTracks = [];
   app_models.SubtitleTrack? _selectedSubtitleTrack;
   List<app_models_audio.AudioTrack> _audioTracks = [];
@@ -1538,10 +1556,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // detection pass below would otherwise be lost — which is the whole
     // failure this guards against.
     await _tracksSubscription?.cancel();
-    _tracksSubscription = watchAudioTracks(
-      player.stream.tracks,
-      _onAudioTracksDetected,
-    );
+    _tracksSubscription = watchTracks(player.stream.tracks, _onTracksChanged);
 
     // Before `open`, deliberately: mpv chooses its audio track while loading
     // the file, so a preference applied afterwards does not reselect and the
@@ -1851,12 +1866,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       if (file.id == widget.fileId) {
         final subtitles = file.subtitles;
         if (subtitles != null) {
-          _subtitleTracks = subtitles
+          _serverSubtitleTracks = subtitles
               .whereType<Fragment$MediaFileFragment$subtitles>()
               .map((sub) => app_models.SubtitleTrack.fromGraphQL(sub))
               .toList();
-          debugPrint(
-              'Extracted ${_subtitleTracks.length} subtitle tracks from GraphQL');
+          _refreshSubtitleTracks();
+          debugPrint('Extracted ${_serverSubtitleTracks.length} subtitle '
+              'tracks from GraphQL');
         }
         break;
       }
@@ -1950,70 +1966,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
   }
 
-  /// Detect available audio and subtitle tracks from the media_kit player
-  /// and build mappings between app model tracks and media_kit track objects.
+  /// Sample whatever media_kit knows right now.
+  ///
+  /// Covers anything mpv had already published before [watchTracks] went
+  /// live; every later revision arrives through that subscription instead.
+  /// Both paths land in [_onTracksChanged], so there is one code path that
+  /// can change the track lists.
   void _detectTracks() {
     final player = _player;
     if (player == null) return;
 
-    // --- Audio tracks ---
-    final audioDetection = detectAudioTracks(player.state.tracks.audio);
-
-    // --- Subtitle tracks ---
-    final mkSubtitleTracks = player.state.tracks.subtitle;
-    final subtitleMap = <String, SubtitleTrack>{};
-
-    if (_isDirectPlay) {
-      // In direct play the engine already sees every embedded track in the
-      // container, including image-based ones it can render natively. These
-      // need no fetch: media_kit already has them.
-      final embeddedSubs = <app_models.SubtitleTrack>[];
-      for (final mkTrack in mkSubtitleTracks) {
-        if (mkTrack == SubtitleTrack.auto() || mkTrack == SubtitleTrack.no()) {
-          continue;
-        }
-
-        final appTrack = app_models.SubtitleTrack(
-          id: 'mk_${mkTrack.id}',
-          language: mkTrack.language ?? 'und',
-          title: mkTrack.title,
-          embedded: true,
-        );
-        embeddedSubs.add(appTrack);
-        subtitleMap[appTrack.id] = mkTrack;
-      }
-
-      // Sidecars are not in the container, so they still come from the
-      // server. Their body is fetched lazily in
-      // [_resolveMediaKitSubtitleTrack], only if and when the viewer selects
-      // one, rather than built here for every sidecar up front. `deliverable`
-      // is redundant with every sidecar today (they are hardcoded true
-      // server-side, unlike an embedded image track), but this keeps the
-      // client's own filtering honest rather than leaning on that server
-      // invariant silently.
-      final externalSubs =
-          _subtitleTracks.where((s) => !s.embedded && s.deliverable).toList();
-
-      _subtitleTracks = [...embeddedSubs, ...externalSubs];
-    } else {
-      // Streaming: every selectable track's body arrives as content over
-      // GraphQL, fetched lazily in [_resolveMediaKitSubtitleTrack] once the
-      // viewer actually picks a track. This is the one path that works
-      // identically on LAN, direct, p2p and web, because GraphQL is already
-      // tunnelled in every connection mode.
-      _subtitleTracks = selectableTracks(_subtitleTracks, isDirectPlay: false);
-    }
-
-    _audioTracks = audioDetection.tracks;
-    _mediaKitAudioTrackMap = audioDetection.byId;
-    _mediaKitSubtitleTrackMap = subtitleMap;
-
-    _syncSelectedAudioTrack();
-    _syncSelectedSubtitleTrack();
-
-    debugPrint('[PlayerScreen] Detected ${_audioTracks.length} audio tracks, '
-        '${_subtitleTracks.length} subtitle tracks '
-        '(directPlay=$_isDirectPlay)');
+    _onTracksChanged(player.state.tracks);
   }
 
   /// Point [_selectedAudioTrack] at whichever detected track media_kit is
@@ -2083,19 +2046,96 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _subtitleSelectionGeneration++;
   }
 
-  /// Adopt a track list media_kit published after playback opened.
-  ///
-  /// The audio button is gated on `audioTrackCount > 0`, so until this lands
-  /// a late-probing file leaves it disabled with no way to reach a second
-  /// language.
-  void _onAudioTracksDetected(AudioTrackDetection detection) {
+  /// Adopt a track list media_kit published, whether sampled directly after
+  /// `open()` by [_detectTracks] or delivered later by [watchTracks].
+  void _onTracksChanged(Tracks tracks) {
     if (!mounted) return;
 
     setState(() {
-      _audioTracks = detection.tracks;
-      _mediaKitAudioTrackMap = detection.byId;
+      final audio = detectAudioTracks(tracks.audio);
+      _audioTracks = audio.tracks;
+      _mediaKitAudioTrackMap = audio.byId;
       _syncSelectedAudioTrack();
+
+      _applySubtitleTracks(tracks.subtitle);
     });
+
+    debugPrint('[PlayerScreen] Detected ${_audioTracks.length} audio tracks, '
+        '${_subtitleTracks.length} subtitle tracks '
+        '(directPlay=$_isDirectPlay)');
+  }
+
+  /// Rebuild [_subtitleTracks] from [_serverSubtitleTracks] and whatever
+  /// media_kit has probed so far.
+  ///
+  /// Call inside a `setState`; this does not call one itself, so the audio
+  /// and subtitle halves of [_onTracksChanged] share a single rebuild.
+  ///
+  /// Returns early when the derived list is unchanged, which is
+  /// load-bearing rather than an optimisation: [_syncSelectedSubtitleTrack]
+  /// bumps [_subtitleSelectionGeneration], and a bump makes
+  /// [shouldApplySubtitleSelection] discard whatever selection the viewer
+  /// has in flight. media_kit revises its track list more than once per
+  /// playback, so an unguarded rebuild would swallow a tap every time it
+  /// did.
+  ///
+  /// The comparison is by id, since `SubtitleTrack.operator ==` is
+  /// id-based. That is the right granularity: the button's gate and every
+  /// selection path key on id, so a revision that changes only a title
+  /// genuinely does not need a rebuild.
+  void _applySubtitleTracks(List<SubtitleTrack> mkTracks) {
+    final mpvTracks = <app_models.SubtitleTrack>[];
+    final mpvById = <String, SubtitleTrack>{};
+
+    for (final mkTrack in mkTracks) {
+      if (mkTrack == SubtitleTrack.auto() || mkTrack == SubtitleTrack.no()) {
+        continue;
+      }
+
+      final appTrack = app_models.SubtitleTrack(
+        id: 'mk_${mkTrack.id}',
+        language: mkTrack.language ?? 'und',
+        title: mkTrack.title,
+        embedded: true,
+      );
+      mpvTracks.add(appTrack);
+      mpvById[appTrack.id] = mkTrack;
+    }
+
+    final derived = resolveSubtitleTracks(
+      serverTracks: _serverSubtitleTracks,
+      mpvTracks: mpvTracks,
+      isDirectPlay: _isDirectPlay,
+    );
+
+    if (listEquals(derived, _subtitleTracks)) return;
+
+    _subtitleTracks = derived;
+
+    // Only the `mk_` half of this map is media_kit's to republish. The rest
+    // is the lazily fetched `SubtitleTrack.data` bodies
+    // [_resolveMediaKitSubtitleTrack] caches by server track id. Assigning
+    // the whole map, as detection used to, would drop that cache and refetch
+    // -- re-running a server-side ffmpeg extraction -- for every track the
+    // viewer had already selected this session.
+    _mediaKitSubtitleTrackMap
+      ..removeWhere((id, _) => id.startsWith('mk_'))
+      ..addAll(mpvById);
+
+    _syncSelectedSubtitleTrack();
+  }
+
+  /// Re-derive [_subtitleTracks] after the *server's* list changed, against
+  /// whatever media_kit has already published.
+  ///
+  /// The counterpart to [_onTracksChanged]: that one runs when media_kit
+  /// revises its side, this one when [_extractSubtitlesFromFiles] or a
+  /// freshly downloaded sidecar revises the server's.
+  void _refreshSubtitleTracks() {
+    if (!mounted) return;
+
+    final mkTracks = _player?.state.tracks.subtitle ?? const <SubtitleTrack>[];
+    setState(() => _applySubtitleTracks(mkTracks));
   }
 
   Future<void> _fetchSeasonEpisodes(GraphQLClient client) async {
@@ -3308,14 +3348,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       Mutation$DownloadSubtitle.fromJson(data).downloadSubtitle,
     );
 
-    // Added to the list the sheet was opened with so it survives the sheet
-    // closing: the pick that follows is applied against `_subtitleTracks`,
-    // and the controls' track count and the next open of the sheet both
-    // read from it. Guarded on identity because the server returns the
-    // existing row when the same subtitle is downloaded twice, and a
-    // duplicate entry would render the track twice in the list.
-    if (mounted && !_subtitleTracks.any((t) => t.id == track.id)) {
-      setState(() => _subtitleTracks = [..._subtitleTracks, track]);
+    // Added to the server list so it survives the sheet closing: the pick
+    // that follows is applied against `_subtitleTracks`, and the controls'
+    // track count and the next open of the sheet both read from it.
+    // Guarded on identity because the server returns the existing row when
+    // the same subtitle is downloaded twice, and a duplicate entry would
+    // render the track twice in the list.
+    //
+    // Written to `_serverSubtitleTracks` rather than `_subtitleTracks`
+    // because the latter is derived: a later media_kit revision rebuilds it
+    // from this list, so an append made directly to the derived list would
+    // vanish at the next revision. A downloaded sidecar is `embedded:
+    // false, deliverable: true`, so every branch of `resolveSubtitleTracks`
+    // keeps it.
+    if (mounted && !_serverSubtitleTracks.any((t) => t.id == track.id)) {
+      _serverSubtitleTracks = [..._serverSubtitleTracks, track];
+      _refreshSubtitleTracks();
     }
 
     return track;
@@ -4749,23 +4797,24 @@ AudioTrackDetection detectAudioTracks(List<AudioTrack> mkTracks) {
   return AudioTrackDetection(tracks: tracks, byId: byId);
 }
 
-/// Reports an [AudioTrackDetection] every time media_kit revises [tracks].
+/// Reports media_kit's track list every time it is revised.
 ///
 /// mpv discovers tracks asynchronously while it probes the file, and revises
 /// the list afterwards, so sampling it once at a fixed moment after `open()`
-/// races the probe. On a slow enough source the sample lands before any audio
-/// track exists and the selector is left permanently empty. Driving detection
-/// off the stream instead means a late arrival still reaches the UI.
+/// races the probe. On a slow enough source the sample lands before any
+/// track exists and the selectors are left permanently empty. Driving
+/// detection off the stream instead means a late arrival still reaches the
+/// UI.
 ///
 /// `player.stream.tracks` is a plain broadcast stream with no replay, so
 /// callers must subscribe before opening the media and still run a detection
 /// pass afterwards to cover anything emitted in between.
 @visibleForTesting
-StreamSubscription<Tracks> watchAudioTracks(
+StreamSubscription<Tracks> watchTracks(
   Stream<Tracks> tracks,
-  void Function(AudioTrackDetection detection) onDetected,
+  void Function(Tracks tracks) onTracks,
 ) {
-  return tracks.listen((t) => onDetected(detectAudioTracks(t.audio)));
+  return tracks.listen(onTracks);
 }
 
 /// Converts the wire's 0.0-1.0 volume level to media_kit's 0-100 scale, used
