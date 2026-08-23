@@ -15,7 +15,10 @@ defmodule Mydia.Library.MediaFile do
           size: integer() | nil,
           resolution: String.t() | nil,
           codec: String.t() | nil,
-          hdr_format: String.t() | nil,
+          hdr_format: :hdr10 | :hdr10_plus | :hlg | nil,
+          dolby_vision_profile: integer() | nil,
+          dolby_vision_bl_compat_id: integer() | nil,
+          hdr_backfilled_at: DateTime.t() | nil,
           audio_codec: String.t() | nil,
           bitrate: integer() | nil,
           verified_at: DateTime.t() | nil,
@@ -52,7 +55,13 @@ defmodule Mydia.Library.MediaFile do
     field :size, :integer
     field :resolution, :string
     field :codec, :string
-    field :hdr_format, :string
+    # Values are declared literally rather than calling Hdr.bases/0 so this
+    # schema carries no compile-time dependency on that module. A test in
+    # test/mydia/library/media_file_hdr_test.exs asserts the two agree.
+    field :hdr_format, Ecto.Enum, values: [:hdr10, :hdr10_plus, :hlg]
+    field :dolby_vision_profile, :integer
+    field :dolby_vision_bl_compat_id, :integer
+    field :hdr_backfilled_at, :utc_datetime
     field :audio_codec, :string
     field :bitrate, :integer
     field :verified_at, :utc_datetime
@@ -203,6 +212,8 @@ defmodule Mydia.Library.MediaFile do
       :resolution,
       :codec,
       :hdr_format,
+      :dolby_vision_profile,
+      :dolby_vision_bl_compat_id,
       :audio_codec,
       :bitrate,
       :verified_at,
@@ -259,6 +270,8 @@ defmodule Mydia.Library.MediaFile do
       :resolution,
       :codec,
       :hdr_format,
+      :dolby_vision_profile,
+      :dolby_vision_bl_compat_id,
       :audio_codec,
       :bitrate,
       :verified_at,
