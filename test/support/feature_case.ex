@@ -238,26 +238,102 @@ defmodule MydiaWeb.FeatureCase do
   end
 
   @doc """
-  Waits for LiveView to connect and be ready.
-  Useful after navigation or form submissions.
+  Blocks until the root LiveView has connected its socket.
+
+  `data-phx-main` is server-rendered and present before connect, so asserting
+  on it alone proves nothing. LiveView adds `phx-connected` to the view
+  container in `hideLoader()` once the join succeeds, which is the real signal.
+
+  `find/2` polls through `Wallaby.Browser.retry/2` until `:max_wait_time`
+  (10s, see config/test.exs), so this returns as soon as the socket is up
+  rather than after a fixed delay.
   """
   def wait_for_liveview(session) do
-    # Wait for data-phx-main which indicates LiveView root is present
+    Wallaby.Browser.find(session, Wallaby.Query.css("[data-phx-main].phx-connected"))
     session
-    |> Wallaby.Browser.find(Wallaby.Query.css("[data-phx-main]", []))
-    |> then(fn _ ->
-      # Wait for LiveView to connect and stabilize
-      :timer.sleep(3000)
-      session
-    end)
   end
 
   @doc """
-  Clicks an element using JavaScript. More reliable in headless browsers
-  for phx-click buttons that don't respond to standard clicks.
+  Polls `fun` until it returns `{:ok, value}`, then returns `value`.
+
+  For state Wallaby cannot see, principally database writes that a LiveView
+  performs after the browser has already returned. `fun` returns `{:ok, value}`
+  on success or `:error` to keep waiting.
+
+  Options: `:timeout` (ms, default 10_000), `:interval` (ms, default 100),
+  `:description` (used in the timeout message).
+
+      request =
+        eventually(
+          fn ->
+            case Repo.get_by(MediaRequest, tmdb_id: id) do
+              nil -> :error
+              request -> {:ok, request}
+            end
+          end,
+          description: "a media request with tmdb_id \#{id}"
+        )
+  """
+  def eventually(fun, opts \\ []) when is_function(fun, 0) do
+    timeout = Keyword.get(opts, :timeout, 10_000)
+    interval = Keyword.get(opts, :interval, 100)
+    description = Keyword.get(opts, :description, "condition")
+    deadline = System.monotonic_time(:millisecond) + timeout
+
+    poll_until(fun, deadline, interval, description, timeout)
+  end
+
+  defp poll_until(fun, deadline, interval, description, timeout) do
+    case fun.() do
+      {:ok, value} ->
+        value
+
+      :error ->
+        if System.monotonic_time(:millisecond) >= deadline do
+          raise "eventually/2 timed out after #{timeout}ms waiting for #{description}"
+        else
+          Process.sleep(interval)
+          poll_until(fun, deadline, interval, description, timeout)
+        end
+    end
+  end
+
+  @doc """
+  Runs `script` in the browser and returns its value.
+
+  `Wallaby.Browser.execute_script/3` throws the return value away; the 4-arity
+  form hands it to a callback, which runs synchronously in this process. So the
+  value can be stashed under a unique process-dictionary key and taken straight
+  back out.
+
+  Arguments are exposed to the script as `arguments[0]`, `arguments[1]`, and so
+  on. The script must `return` explicitly.
+
+      theme = eval_js(session, "return document.documentElement.dataset.theme;")
+  """
+  def eval_js(session, script, args \\ []) do
+    key = {__MODULE__, :eval_js, make_ref()}
+
+    Wallaby.Browser.execute_script(session, script, args, fn value ->
+      Process.put(key, value)
+    end)
+
+    Process.delete(key)
+  end
+
+  @doc """
+  Escape hatch: clicks an element via JavaScript.
+
+  Prefer `Wallaby.Browser.click/2` with a `Query`, which scrolls into view and
+  retries on its own. Reach for this only when a real click genuinely cannot
+  reach the element, and note why at the call site. A `phx-click` that does not
+  respond to a real click is usually a UI defect worth fixing rather than
+  routing around.
+
+  This does not wait. Follow it with an assertion on the resulting DOM, which
+  retries, or with `eventually/2` for database state.
   """
   def js_click(session, css_selector) do
-    # Scroll element into view and click
     Wallaby.Browser.execute_script(
       session,
       """
@@ -270,9 +346,6 @@ defmodule MydiaWeb.FeatureCase do
       """,
       [css_selector]
     )
-
-    # Wait for LiveView to process the event and update the DOM
-    :timer.sleep(2000)
 
     session
   end
