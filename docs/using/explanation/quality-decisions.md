@@ -173,6 +173,22 @@ codecs list only `h265`, an h264 release is not merely second-best, it is
 unlisted, and it takes a substantially larger hit. Short preference lists are
 strong statements.
 
+HDR scores a little differently from the other preference lists, because a file
+can legitimately be two formats at once. A Dolby Vision 8.1 file carries a Dolby
+Vision layer on top of an HDR10 base, so it offers both `dolby_vision` and
+`hdr10` to the list and takes whichever position scores higher. HDR10+ works the
+same way, offering `hdr10` alongside `hdr10+`. List only `hdr10` and a Dolby
+Vision or HDR10+ file still scores off that entry, at whatever position it
+occupies in your list.
+
+A file with no HDR at all lands in the middle of that scale, above a file whose
+HDR format you did not list. That ordering is deliberate. If you listed the
+formats you want and HLG is not among them, an HLG file is worse for you than a
+plain SDR one. It looks like a bug the first time you see it, so it is worth
+saying plainly: an absent HDR signal is neutral, the same as an attribute Mydia
+could not determine. Carrying the wrong HDR format is a preference violation,
+scored exactly like a codec or source that missed your list.
+
 Availability is logarithmic, so seeder counts matter much less than they appear
 to. The difference between fifty and five hundred seeders is a handful of points,
 comparable to a single codec preference. The one sharp effect is having zero
