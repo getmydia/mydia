@@ -16,6 +16,8 @@ defmodule Mydia.Subtitles.Provider.SearchResult do
     * `:download_count` - Number of times this subtitle has been downloaded (optional)
     * `:hearing_impaired` - Whether subtitle includes hearing impaired annotations (default: false)
     * `:moviehash_match` - Whether this subtitle matched by file hash (default: false)
+    * `:origin` - Name of the upstream this result actually came from, when the
+      provider is a proxy (nil for a provider that is its own source)
 
   ## Examples
 
@@ -56,7 +58,8 @@ defmodule Mydia.Subtitles.Provider.SearchResult do
           rating: float() | nil,
           download_count: integer() | nil,
           hearing_impaired: boolean(),
-          moviehash_match: boolean()
+          moviehash_match: boolean(),
+          origin: String.t() | nil
         }
 
   @enforce_keys [:file_id, :language, :format, :subtitle_hash]
@@ -68,6 +71,7 @@ defmodule Mydia.Subtitles.Provider.SearchResult do
     :file_name,
     :rating,
     :download_count,
+    :origin,
     hearing_impaired: false,
     moviehash_match: false
   ]
@@ -100,7 +104,8 @@ defmodule Mydia.Subtitles.Provider.SearchResult do
       hearing_impaired:
         get_field(map, "hearing_impaired") || get_field(map, :hearing_impaired) || false,
       moviehash_match:
-        get_field(map, "moviehash_match") || get_field(map, :moviehash_match) || false
+        get_field(map, "moviehash_match") || get_field(map, :moviehash_match) || false,
+      origin: get_field(map, "origin") || get_field(map, :origin)
     }
   end
 
@@ -138,7 +143,8 @@ defmodule Mydia.Subtitles.Provider.SearchResult do
       rating: result.rating,
       download_count: result.download_count,
       hearing_impaired: result.hearing_impaired,
-      moviehash_match: result.moviehash_match
+      moviehash_match: result.moviehash_match,
+      origin: result.origin
     }
   end
 end
