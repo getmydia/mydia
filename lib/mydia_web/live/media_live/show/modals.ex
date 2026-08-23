@@ -769,83 +769,31 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                 id={id}
                 class="list-row hover:bg-base-200/50 transition-colors px-4 py-3 border-b border-base-200 last:border-b-0"
               >
+                <% profile? = Keyword.get(@manual_ranking_opts, :quality_profile) != nil %>
+                <% score_data = profile? && profile_score_breakdown(result, @manual_ranking_opts) %>
+                <% breakdown = score_data && score_data.breakdown %>
+                <% score = (score_data && score_data.score) || 0 %>
+                <% ring_value = max(0, trunc(score)) %>
+                <% has_penalty =
+                  profile? and breakdown != nil and
+                    (breakdown.size_penalty < 0.0 or breakdown.seeder_penalty < 0.0 or
+                       breakdown.identity_penalty < 0.0) %>
                 <%!-- Score display --%>
-                <%= if Keyword.get(@manual_ranking_opts, :quality_profile) do %>
-                  <%!-- Unified ranker score with breakdown dropdown --%>
-                  <% score_data = profile_score_breakdown(result, @manual_ranking_opts) %>
-                  <% breakdown = score_data.breakdown %>
-                  <% score = score_data.score %>
-                  <% ring_value = max(0, trunc(score)) %>
-                  <% has_penalty =
-                    breakdown.size_penalty < 0.0 or breakdown.seeder_penalty < 0.0 or
-                      breakdown.identity_penalty < 0.0 %>
-                  <div class="dropdown dropdown-hover dropdown-right">
-                    <div
-                      tabindex="0"
-                      role="button"
-                      class={[
-                        "radial-progress text-sm font-bold cursor-pointer",
-                        score >= 80 && "text-success",
-                        score >= 50 && score < 80 && "text-warning",
-                        score < 50 && "text-error"
-                      ]}
-                      style={"--value:#{ring_value}; --size:3rem; --thickness:4px;"}
-                      title="Hover for score breakdown"
-                    >
-                      {trunc(score)}
-                    </div>
-                    <div
-                      tabindex="0"
-                      class="dropdown-content z-50 card card-compact bg-base-200 shadow-xl w-72 ml-2"
-                    >
-                      <div class="card-body p-3">
-                        <h4 class="card-title text-sm mb-2">Score Breakdown</h4>
-                        <div class="space-y-1.5 text-xs">
-                          <.score_row
-                            label="Resolution"
-                            value={score_data.detected[:resolution]}
-                            score={breakdown.quality}
-                            weight={60}
-                          />
-                          <.score_row
-                            label="Title match"
-                            value={nil}
-                            score={breakdown.title_match}
-                            weight={10}
-                          />
-                          <.score_row
-                            label="File Size"
-                            value={
-                              if(score_data.detected[:size_mb],
-                                do: "#{score_data.detected[:size_mb]} MB",
-                                else: nil
-                              )
-                            }
-                            score={breakdown.size}
-                            weight={5}
-                          />
-                          <div class="divider my-1 text-xs opacity-50">Availability</div>
-                          <.score_row
-                            label="Seeders"
-                            value={"#{result.seeders} peers"}
-                            score={breakdown.seeders}
-                            weight={30}
-                          />
-                        </div>
-                        <%= if has_penalty do %>
-                          <div class="divider my-1 text-xs opacity-50">Penalties</div>
-                          <div class="space-y-1.5 text-xs">
-                            <.penalty_row label="Size penalty" score={breakdown.size_penalty} />
-                            <.penalty_row label="Seeder penalty" score={breakdown.seeder_penalty} />
-                            <.penalty_row
-                              label="Identity mismatch"
-                              score={breakdown.identity_penalty}
-                            />
-                          </div>
-                        <% end %>
-                      </div>
-                    </div>
-                  </div>
+                <%= if profile? do %>
+                  <.score_trigger
+                    id={"#{id}-score-badge"}
+                    panel_id={"#{id}-score-breakdown"}
+                    class={[
+                      "radial-progress text-sm font-bold cursor-pointer",
+                      score >= 80 && "text-success",
+                      score >= 50 && score < 80 && "text-warning",
+                      score < 50 && "text-error"
+                    ]}
+                    style={"--value:#{ring_value}; --size:3rem; --thickness:4px;"}
+                    title="Show score breakdown"
+                  >
+                    {trunc(score)}
+                  </.score_trigger>
                 <% else %>
                   <%!-- No profile - just show seeders count (sorted by most seeders) --%>
                   <div
@@ -914,6 +862,44 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                   <%= if reason = Map.get(result, :grab_failed) do %>
                     <div class="text-xs text-error mt-1 line-clamp-2">{reason}</div>
                   <% end %>
+                  <.score_panel :if={profile?} id={"#{id}-score-breakdown"}>
+                    <.score_row
+                      label="Resolution"
+                      value={score_data.detected[:resolution]}
+                      score={breakdown.quality}
+                      weight={60}
+                    />
+                    <.score_row
+                      label="Title match"
+                      value={nil}
+                      score={breakdown.title_match}
+                      weight={10}
+                    />
+                    <.score_row
+                      label="File Size"
+                      value={
+                        if(score_data.detected[:size_mb],
+                          do: "#{score_data.detected[:size_mb]} MB",
+                          else: nil
+                        )
+                      }
+                      score={breakdown.size}
+                      weight={5}
+                    />
+                    <div class="divider my-1 text-xs opacity-50">Availability</div>
+                    <.score_row
+                      label="Seeders"
+                      value={"#{result.seeders} peers"}
+                      score={breakdown.seeders}
+                      weight={30}
+                    />
+                    <%= if has_penalty do %>
+                      <div class="divider my-1 text-xs opacity-50">Penalties</div>
+                      <.penalty_row label="Size penalty" score={breakdown.size_penalty} />
+                      <.penalty_row label="Seeder penalty" score={breakdown.seeder_penalty} />
+                      <.penalty_row label="Identity mismatch" score={breakdown.identity_penalty} />
+                    <% end %>
+                  </.score_panel>
                 </div>
                 <%!-- Download Action --%>
                 <div class="flex items-center">
