@@ -72,7 +72,7 @@ defmodule MetadataRelay.SubDL.HandlerTest do
        )}
     end)
 
-    assert {:ok, %{"subtitles" => [subtitle]}} = Handler.search(%{imdb_id: "0133093"})
+    assert {:ok, %{"subtitles" => [subtitle]}} = Handler.search(%{"imdb_id" => "0133093"})
 
     assert Map.fetch!(subtitle, "source") == "SubDL"
   end
