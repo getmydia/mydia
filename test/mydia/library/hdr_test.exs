@@ -208,5 +208,20 @@ defmodule Mydia.Library.HdrTest do
       assert Hdr.from_release_token("BluRay") == :unknown
       assert Hdr.from_release_token("") == :unknown
     end
+
+    test "strips dots and underscores, which release names use heavily" do
+      # Task 7 feeds this function tokens captured straight out of dot-separated
+      # release names, so "Dolby.Vision" arrives with the dot intact. The old
+      # parser this replaces handled that case explicitly.
+      assert Hdr.from_release_token("Dolby.Vision") == :dolby_vision
+      assert Hdr.from_release_token("Dolby_Vision") == :dolby_vision
+      assert Hdr.from_release_token("HDR10_PLUS") == {:base, :hdr10_plus}
+      assert Hdr.from_release_token("HDR10.Plus") == {:base, :hdr10_plus}
+    end
+
+    test "returns :unknown for non-binary input rather than raising" do
+      assert Hdr.from_release_token(nil) == :unknown
+      assert Hdr.from_release_token(123) == :unknown
+    end
   end
 end
