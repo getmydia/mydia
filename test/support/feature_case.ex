@@ -101,6 +101,7 @@ defmodule MydiaWeb.FeatureCase do
       use Wallaby.DSL
 
       import MydiaWeb.FeatureCase
+      import MydiaWeb.FeatureCase.Geometry
       import Mydia.Factory
 
       alias MydiaWeb.Router.Helpers, as: Routes
