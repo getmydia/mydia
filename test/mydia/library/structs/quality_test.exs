@@ -131,6 +131,26 @@ defmodule Mydia.Library.Structs.QualityTest do
       assert q.hdr_format == nil
     end
 
+    test "a legacy 'Dolby Vision' display string round-trips as HDR, not SDR" do
+      q = Quality.from_map(%{"hdr_format" => "Dolby Vision"})
+      assert q.hdr_format == nil
+      assert q.dolby_vision
+      assert Quality.hdr?(q)
+    end
+
+    test "a legacy 'HDR10' display string round-trips as HDR" do
+      q = Quality.from_map(%{"hdr_format" => "HDR10"})
+      assert q.hdr_format == :hdr10
+      refute q.dolby_vision
+      assert Quality.hdr?(q)
+    end
+
+    test "an explicit dolby_vision key wins over a base-only legacy string" do
+      q = Quality.from_map(%{"hdr_format" => "HDR10", "dolby_vision" => true})
+      assert q.hdr_format == :hdr10
+      assert q.dolby_vision
+    end
+
     test "nil maps to nil" do
       assert Quality.from_map(nil) == nil
     end

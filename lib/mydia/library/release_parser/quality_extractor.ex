@@ -228,9 +228,15 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
 
   # --- HDR ---
 
-  # A release name can carry more than one HDR token (e.g. "Dolby.Vision.HDR10"),
-  # so every :hdr-labeled token is scanned and folded into a base plus a Dolby
-  # Vision flag rather than stopping at the first match.
+  # Defensive fold, not a load-bearing one: Resolver.@singleton_labels treats
+  # :hdr as a singleton, and resolve_one_label/2 strips every losing :hdr
+  # candidate before quality_tokens is built, so this producer receives at
+  # most one :hdr-labeled token per release. The scan-and-fold shape mirrors
+  # QualityParser.extract_hdr/1, which scans a release title's raw text with
+  # a regex and genuinely can see several HDR tokens (no resolver sits
+  # between it and the string), so it keeps this shape for consistency and
+  # to stay correct if the resolver's singleton constraint on :hdr is ever
+  # relaxed.
   defp extract_hdr(quality_tokens) do
     quality_tokens
     |> Enum.filter(&(&1.label == :hdr))

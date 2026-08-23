@@ -130,26 +130,37 @@ defmodule Mydia.Library.Structs.Quality do
   def from_map(nil), do: nil
 
   def from_map(map) when is_map(map) do
+    raw_hdr = map["hdr_format"] || map[:hdr_format]
+    {base, dv_from_string} = decode_hdr(raw_hdr)
+
     new(%{
       resolution: map["resolution"] || map[:resolution],
       source: map["source"] || map[:source],
       codec: map["codec"] || map[:codec],
       audio: map["audio"] || map[:audio],
-      hdr_format: decode_base(map["hdr_format"] || map[:hdr_format]),
-      dolby_vision: map["dolby_vision"] || map[:dolby_vision] || false,
+      hdr_format: base,
+      dolby_vision: explicit_dv(map) || dv_from_string,
       proper: map["proper"] || map[:proper] || false,
       repack: map["repack"] || map[:repack] || false
     })
   end
 
-  # Stored JSON holds the atom as a string.
-  defp decode_base(nil), do: nil
-  defp decode_base(value) when is_atom(value), do: value
+  # Stored JSON may hold either the canonical atom (written since the HDR
+  # canonicalization) or a legacy display string such as "Dolby Vision" or
+  # "DV" written before it. A legacy DV string carries no base, so it sets
+  # only the boolean; leaving it to fall through to nil/false, as a naive
+  # `decode_base/1` once did, silently read a legacy Dolby Vision download
+  # back as SDR.
+  defp decode_hdr(nil), do: {nil, false}
+  defp decode_hdr(value) when is_atom(value), do: {value, false}
 
-  defp decode_base(value) when is_binary(value) do
+  defp decode_hdr(value) when is_binary(value) do
     case Mydia.Library.Hdr.from_release_token(value) do
-      {:base, base} -> base
-      _other -> nil
+      {:base, base} -> {base, false}
+      :dolby_vision -> {nil, true}
+      :unknown -> {nil, false}
     end
   end
+
+  defp explicit_dv(map), do: map["dolby_vision"] || map[:dolby_vision] || false
 end
