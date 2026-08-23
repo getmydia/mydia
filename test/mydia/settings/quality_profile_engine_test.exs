@@ -1,6 +1,9 @@
 defmodule Mydia.Settings.QualityProfileEngineTest do
   use Mydia.DataCase, async: true
 
+  import Mydia.MediaFixtures
+  import Mydia.SettingsFixtures
+
   alias Mydia.Quality.Sources
   alias Mydia.Settings
   alias Mydia.Settings.QualityProfileEngine
@@ -236,6 +239,97 @@ defmodule Mydia.Settings.QualityProfileEngineTest do
     test "returns nil when the path carries no source token" do
       assert QualityProfileEngine.infer_source_from_filename("Wonka (2023)/Wonka.2023.1080p.mkv") ==
                nil
+    end
+  end
+
+  describe "HDR scoring is not inverted" do
+    # REGRESSION: QualityProfileEngine.extract_media_attributes/1 (formerly
+    # build_media_attrs/2) passed media_file.hdr_format raw, using neither
+    # Upgrades.Attrs nor SearchScorer.normalize_hdr_format/1.
+    # score_from_preference_list/2 does an exact == test, so "Dolby Vision"
+    # missed ["dolby_vision", ...] and scored 25.0, while a file with no HDR
+    # at all hit the 50.0 fallback.
+    #
+    # Having Dolby Vision made a file score worse than having no HDR.
+    #
+    # This test must go through the ENGINE specifically. The SearchScorer and
+    # Attrs paths both bridge correctly and already pass, so asserting through
+    # either of them would give a false green.
+
+    setup do
+      profile =
+        quality_profile_fixture(%{
+          quality_standards: %{
+            preferred_resolutions: ["1080p", "2160p"],
+            hdr_formats: ["dolby_vision", "hdr10+", "hdr10"],
+            require_hdr: false
+          }
+        })
+
+      {:ok, profile: profile}
+    end
+
+    test "a Dolby Vision file outscores an SDR file", %{profile: profile} do
+      dv =
+        media_file_fixture(%{
+          hdr_format: :hdr10,
+          dolby_vision_profile: 8,
+          dolby_vision_bl_compat_id: 1,
+          analyzed_at: DateTime.utc_now()
+        })
+
+      sdr = media_file_fixture(%{hdr_format: nil, analyzed_at: DateTime.utc_now()})
+
+      {:ok, dv_eval} = QualityProfileEngine.evaluate_file(profile, dv)
+      {:ok, sdr_eval} = QualityProfileEngine.evaluate_file(profile, sdr)
+
+      dv_score = dv_eval.breakdown.hdr
+      sdr_score = sdr_eval.breakdown.hdr
+
+      assert dv_score > sdr_score,
+             "Dolby Vision scored #{dv_score}, SDR scored #{sdr_score}"
+
+      assert dv_score == 100.0
+    end
+
+    test "an HDR10 file scores by list position", %{profile: profile} do
+      hdr10 = media_file_fixture(%{hdr_format: :hdr10, analyzed_at: DateTime.utc_now()})
+      {:ok, eval} = QualityProfileEngine.evaluate_file(profile, hdr10)
+      assert eval.breakdown.hdr == 60.0
+    end
+
+    test "an unlisted format still scores below SDR, which is intentional", %{profile: profile} do
+      # An operator who listed the HDR formats they want and omitted HLG is
+      # saying an HLG file is worse for them than plain SDR.
+      hlg = media_file_fixture(%{hdr_format: :hlg, analyzed_at: DateTime.utc_now()})
+      sdr = media_file_fixture(%{hdr_format: nil, analyzed_at: DateTime.utc_now()})
+
+      {:ok, hlg_eval} = QualityProfileEngine.evaluate_file(profile, hlg)
+      {:ok, sdr_eval} = QualityProfileEngine.evaluate_file(profile, sdr)
+
+      assert hlg_eval.breakdown.hdr == 25.0
+      assert sdr_eval.breakdown.hdr == 50.0
+    end
+
+    # MUTATION TARGET: score_hdr_format/2 takes Enum.max/1 across every token
+    # a file offers. Collapsing that to "just the first token" would score
+    # this file 25.0 (dolby_vision is not in a profile that lists only
+    # hdr10), not 100.0.
+    test "an operator listing only hdr10 still matches a Dolby Vision 8.1 file (best token wins)" do
+      hdr10_only_profile =
+        quality_profile_fixture(%{
+          quality_standards: %{preferred_resolutions: ["1080p"], hdr_formats: ["hdr10"]}
+        })
+
+      dv =
+        media_file_fixture(%{
+          hdr_format: :hdr10,
+          dolby_vision_profile: 8,
+          analyzed_at: DateTime.utc_now()
+        })
+
+      {:ok, eval} = QualityProfileEngine.evaluate_file(hdr10_only_profile, dv)
+      assert eval.breakdown.hdr == 100.0
     end
   end
 end

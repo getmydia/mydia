@@ -1385,7 +1385,7 @@ defmodule Mydia.SettingsTest do
         source: "BluRay",
         file_size_mb: 8192,
         media_type: :movie,
-        hdr_format: "dolby_vision"
+        hdr_tokens: ["dolby_vision"]
       }
 
       result = QualityProfile.score_media_file(profile, media_attrs)

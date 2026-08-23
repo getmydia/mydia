@@ -2752,7 +2752,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
         source: "BluRay",
         video_codec: "h265",
         audio_codec: "atmos",
-        hdr_format: "dolby_vision",
+        hdr_tokens: ["dolby_vision"],
         file_size_mb: 40000,
         media_type: :movie
       }
@@ -2769,7 +2769,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
         source: "WEB-DL",
         video_codec: "av1",
         audio_codec: "truehd",
-        hdr_format: "hdr10",
+        hdr_tokens: ["hdr10"],
         file_size_mb: 25000,
         media_type: :movie
       }

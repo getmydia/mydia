@@ -161,14 +161,28 @@ defmodule Mydia.Upgrades.AttrsTest do
   end
 
   describe "from_media_file/2 hdr mapping" do
-    test "maps the Dolby Vision display name to its canonical token" do
-      file = %MediaFile{hdr_format: "Dolby Vision", size: 1024 * 1024}
-      assert %{hdr_format: "dolby_vision"} = Attrs.from_media_file(file, :movie)
+    # REGRESSION: canonical_hdr/1 guarded on is_binary(value), so it silently
+    # returned nil for the atom hdr_format now stores, neutralizing HDR on
+    # every on-disk file that reaches Mydia.Upgrades.Comparator.
+    test "a Dolby Vision 8.1 file yields both the dolby_vision and hdr10 tokens" do
+      file = %MediaFile{
+        hdr_format: :hdr10,
+        dolby_vision_profile: 8,
+        dolby_vision_bl_compat_id: 1,
+        size: 1024 * 1024
+      }
+
+      assert %{hdr_tokens: ["dolby_vision", "hdr10"]} = Attrs.from_media_file(file, :movie)
     end
 
-    test "maps the HDR10+ display name to its canonical token" do
-      file = %MediaFile{hdr_format: "HDR10+", size: 1024 * 1024}
-      assert %{hdr_format: "hdr10+"} = Attrs.from_media_file(file, :movie)
+    test "an HDR10+ file yields the hdr10+ and hdr10 tokens" do
+      file = %MediaFile{hdr_format: :hdr10_plus, size: 1024 * 1024}
+      assert %{hdr_tokens: ["hdr10+", "hdr10"]} = Attrs.from_media_file(file, :movie)
+    end
+
+    test "an SDR file yields no HDR tokens" do
+      file = %MediaFile{hdr_format: nil, size: 1024 * 1024}
+      assert %{hdr_tokens: []} = Attrs.from_media_file(file, :movie)
     end
   end
 
@@ -191,23 +205,31 @@ defmodule Mydia.Upgrades.AttrsTest do
 
   describe "from_quality/3" do
     test "normalizes a parsed release title into the same vocabulary" do
-      quality = %Quality{resolution: "2160p", codec: "x265", source: "BluRay", hdr_format: "DV"}
+      quality = %Quality{
+        resolution: "2160p",
+        codec: "x265",
+        source: "BluRay",
+        hdr_format: nil,
+        dolby_vision: true
+      }
+
       attrs = Attrs.from_quality(quality, 20 * 1024 * 1024 * 1024, :movie)
 
       assert attrs.resolution == "2160p"
       assert attrs.video_codec == "h265"
       assert attrs.source == "BluRay"
-      assert attrs.hdr_format == "dolby_vision"
+      assert attrs.hdr_tokens == ["dolby_vision"]
       assert attrs.file_size_mb == 20_480
     end
 
-    test "leaves unmentioned dimensions nil" do
+    test "leaves unmentioned dimensions nil, but hdr_tokens is always a list" do
       quality = %Quality{resolution: "1080p"}
       attrs = Attrs.from_quality(quality, nil, :movie)
 
       assert attrs.audio_codec == nil
       assert attrs.audio_channels == nil
       assert attrs.source == nil
+      assert attrs.hdr_tokens == []
     end
   end
 

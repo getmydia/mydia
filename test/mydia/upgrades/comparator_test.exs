@@ -30,18 +30,21 @@ defmodule Mydia.Upgrades.ComparatorTest do
   end
 
   # A real 4K HDR file exactly as Mydia.Library.apply_analysis/2 stores one:
-  # resolution and hdr_format land raw from the analyzer, while codec and
-  # audio_codec go through Mydia.Streaming.Codec first ("HEVC (Main 10)" ->
-  # "hevc", "DD+ 5.1" -> "ac3", channels dropped). The analyzer's own audio
-  # string survives only in metadata.audio_codec_raw, which is where Attrs
-  # reads channels and the E-AC3/Atmos distinction from.
+  # resolution lands raw from the analyzer, hdr_format holds Hdr's canonical
+  # base atom plus the Dolby Vision columns, and codec and audio_codec go
+  # through Mydia.Streaming.Codec first ("HEVC (Main 10)" -> "hevc",
+  # "DD+ 5.1" -> "ac3", channels dropped). The analyzer's own audio string
+  # survives only in metadata.audio_codec_raw, which is where Attrs reads
+  # channels and the E-AC3/Atmos distinction from.
   defp uhd_file do
     %MediaFile{
       resolution: "4K",
       codec: "hevc",
       audio_codec: "ac3",
       metadata: %FileMetadata{audio_codec_raw: "DD+ 5.1"},
-      hdr_format: "Dolby Vision",
+      hdr_format: :hdr10,
+      dolby_vision_profile: 8,
+      dolby_vision_bl_compat_id: 1,
       size: 20 * 1024 * 1024 * 1024,
       analyzed_at: ~U[2026-07-01 00:00:00Z]
     }
@@ -244,6 +247,53 @@ defmodule Mydia.Upgrades.ComparatorTest do
                  profile(%{min_upgrade_margin: 5}),
                  :movie
                )
+    end
+  end
+
+  describe "HDR signal reaches Comparator" do
+    # REGRESSION: Mydia.Upgrades.Attrs.canonical_hdr/1 guarded on
+    # is_binary(value). MediaFile.hdr_format and Quality.hdr_format both
+    # store the Hdr module's canonical base atom (:hdr10, :hdr10_plus, :hlg),
+    # never a string, so that guard silently returned nil for every real
+    # file and release. Every analyzed file scored the same 50.0 fallback on
+    # the hdr dimension through this module regardless of its actual HDR
+    # status, neutralizing quality_standards.hdr_formats for the entire
+    # upgrade sweep.
+    test "a Dolby Vision file scores higher on the hdr dimension than an SDR file" do
+      p = profile()
+
+      sdr_file = %MediaFile{
+        uhd_file()
+        | hdr_format: nil,
+          dolby_vision_profile: nil,
+          dolby_vision_bl_compat_id: nil
+      }
+
+      {:ok, %{breakdown: dv_breakdown}} =
+        Comparator.score_file_with_breakdown(uhd_file(), p, :movie)
+
+      {:ok, %{breakdown: sdr_breakdown}} =
+        Comparator.score_file_with_breakdown(sdr_file, p, :movie)
+
+      assert dv_breakdown.hdr > sdr_breakdown.hdr
+    end
+
+    test "a candidate release carrying Dolby Vision beats the same file with no HDR at all" do
+      p = profile(%{min_upgrade_margin: 0})
+
+      file = %MediaFile{
+        resolution: "1080p",
+        codec: "h264",
+        size: 8 * 1024 * 1024 * 1024,
+        analyzed_at: ~U[2026-07-01 00:00:00Z]
+      }
+
+      dv_candidate = %Quality{resolution: "1080p", codec: "h264", dolby_vision: true}
+
+      assert {:ok, %{delta: delta}} =
+               Comparator.upgrade?(file, dv_candidate, 8 * 1024 * 1024 * 1024, p, :movie)
+
+      assert delta > 0
     end
   end
 

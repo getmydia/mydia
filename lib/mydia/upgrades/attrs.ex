@@ -13,12 +13,21 @@ defmodule Mydia.Upgrades.Attrs do
   ## Two vocabularies, one column
 
   `Mydia.Library.apply_analysis/2` does not store the analyzer's strings
-  verbatim in every column. `resolution` and `hdr_format` land raw ("4K",
-  "Dolby Vision"), but `codec` and `audio_codec` are written through
-  `Mydia.Streaming.Codec`, which normalizes them for streaming-compatibility
-  checks: "H.264 (High)" becomes "h264", "HEVC (Main 10)" becomes "hevc", and
-  - lossily for our purposes - "DD+ 5.1" becomes "ac3" and "TrueHD Atmos"
-  becomes "truehd", discarding the channel layout entirely.
+  verbatim in every column. `resolution` lands raw ("4K"), but `codec` and
+  `audio_codec` are written through `Mydia.Streaming.Codec`, which normalizes
+  them for streaming-compatibility checks: "H.264 (High)" becomes "h264",
+  "HEVC (Main 10)" becomes "hevc", and - lossily for our purposes - "DD+ 5.1"
+  becomes "ac3" and "TrueHD Atmos" becomes "truehd", discarding the channel
+  layout entirely.
+
+  `hdr_format` needs no such mapping here. `Mydia.Library.MediaFile.hdr_format`
+  and `Mydia.Library.Structs.Quality.hdr_format` both already hold
+  `Mydia.Library.Hdr`'s canonical base atom (`:hdr10`, `:hdr10_plus`, `:hlg`,
+  or `nil`), the same vocabulary on both sides of this module. `from_media_file/2`
+  and `from_quality/3` run the base plus whatever Dolby Vision signal each side
+  carries (`dolby_vision_profile` on a file, the `dolby_vision` boolean on a
+  parsed release) straight through `Hdr.profile_tokens/1` to build
+  `:hdr_tokens`, the list `QualityProfile.score_hdr_format/2` scores against.
 
   Since eligibility requires `analyzed_at IS NOT NULL`, *every* file this
   feature scores holds the post-`Codec` form. This module therefore maps that
@@ -39,6 +48,7 @@ defmodule Mydia.Upgrades.Attrs do
   favours either side.
   """
 
+  alias Mydia.Library.Hdr
   alias Mydia.Library.MediaFile
   alias Mydia.Library.Structs.Quality
   alias Mydia.Quality.Sources
@@ -128,17 +138,6 @@ defmodule Mydia.Upgrades.Attrs do
     "7.1.4" => "7.1.4"
   }
 
-  @hdr_aliases %{
-    "dolby vision" => "dolby_vision",
-    "dolbyvision" => "dolby_vision",
-    "dv" => "dolby_vision",
-    "hdr10+" => "hdr10+",
-    "hdr10plus" => "hdr10+",
-    "hdr10" => "hdr10",
-    "hdr" => "hdr10",
-    "hlg" => "hlg"
-  }
-
   @canonical_sources ~w(BluRay REMUX WEB-DL WEBRip HDTV SDTV DVD DVDRip BDRip) ++
                        ["CAM", "Telesync", "Telecine", "Screener", "Workprint"]
 
@@ -161,7 +160,12 @@ defmodule Mydia.Upgrades.Attrs do
       video_codec: canonical_video_codec(file.codec),
       audio_codec: audio_codec,
       audio_channels: audio_channels,
-      hdr_format: canonical_hdr(file.hdr_format),
+      hdr_tokens:
+        Hdr.profile_tokens(%Hdr{
+          base: file.hdr_format,
+          dv_profile: file.dolby_vision_profile,
+          bl_compat_id: file.dolby_vision_bl_compat_id
+        }),
       source: canonical_source(metadata_source(file)),
       file_size_mb: bytes_to_mb(file.size),
       media_type: media_type
@@ -183,7 +187,11 @@ defmodule Mydia.Upgrades.Attrs do
       video_codec: canonical_video_codec(quality.codec),
       audio_codec: audio_codec,
       audio_channels: audio_channels,
-      hdr_format: canonical_hdr(quality.hdr_format),
+      hdr_tokens:
+        Hdr.profile_tokens(%Hdr{
+          base: quality.hdr_format,
+          dv_profile: if(quality.dolby_vision, do: 8)
+        }),
       source: canonical_source(quality.source),
       file_size_mb: bytes_to_mb(size_bytes),
       media_type: media_type
@@ -248,14 +256,6 @@ defmodule Mydia.Upgrades.Attrs do
   end
 
   defp canonical_video_codec(_), do: nil
-
-  defp canonical_hdr(nil), do: nil
-
-  defp canonical_hdr(value) when is_binary(value) do
-    Map.get(@hdr_aliases, String.downcase(String.trim(value)))
-  end
-
-  defp canonical_hdr(_), do: nil
 
   defp canonical_source(nil), do: nil
 

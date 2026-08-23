@@ -167,4 +167,52 @@ defmodule Mydia.Settings.QualityProfileTest do
       assert result.violations == []
     end
   end
+
+  describe "require_hdr checks token presence, not a single hdr_format field" do
+    # REGRESSION: the require_hdr violation check used to test
+    # Map.has_key?(media_attrs, :hdr_format). A Dolby Vision profile 5 file
+    # has no base format (hdr_format is nil by design, see
+    # Mydia.Library.Hdr's moduledoc), so it has no :hdr_format key even
+    # though it is unambiguously HDR - the most premium format there is. The
+    # old check would have flagged it as missing HDR.
+    test "a Dolby Vision profile 5 file (no base, dolby_vision token only) satisfies require_hdr" do
+      profile = %QualityProfile{
+        name: "Require HDR",
+        quality_standards: %{require_hdr: true}
+      }
+
+      result =
+        QualityProfile.score_media_file(profile, %{
+          resolution: "2160p",
+          hdr_tokens: ["dolby_vision"]
+        })
+
+      assert result.violations == []
+    end
+
+    test "a genuinely SDR file (empty hdr_tokens) violates require_hdr" do
+      profile = %QualityProfile{
+        name: "Require HDR",
+        quality_standards: %{require_hdr: true}
+      }
+
+      result =
+        QualityProfile.score_media_file(profile, %{resolution: "2160p", hdr_tokens: []})
+
+      assert [violation] = result.violations
+      assert violation =~ "HDR is required"
+    end
+
+    test "an unanalyzed dimension (no hdr_tokens key at all) still violates require_hdr" do
+      profile = %QualityProfile{
+        name: "Require HDR",
+        quality_standards: %{require_hdr: true}
+      }
+
+      result = QualityProfile.score_media_file(profile, %{resolution: "2160p"})
+
+      assert [violation] = result.violations
+      assert violation =~ "HDR is required"
+    end
+  end
 end
