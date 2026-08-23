@@ -229,6 +229,55 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModalTest do
       assert subtitle_modal_html(selected_languages: ["fi"]) =~ ~s(aria-label="Finnish")
     end
 
+    test "every language is a chip in the filter group, with the extras hidden" do
+      html = subtitle_modal_html(selected_languages: ["en"])
+      doc = LazyHTML.from_fragment(html)
+
+      # All 20 of Languages.all/0, as direct children of the one filter group.
+      assert Enum.count(LazyHTML.query(doc, ".filter input[type=checkbox]")) == 20
+
+      # Finnish is not common and is not selected, so it is present but hidden.
+      [class] =
+        doc
+        |> LazyHTML.query(~s(.filter input[aria-label="Finnish"]))
+        |> LazyHTML.attribute("class")
+
+      assert class =~ "subtitle-lang-extra"
+      assert class =~ "hidden"
+    end
+
+    test "the language list is inline, not a dropdown" do
+      html = subtitle_modal_html(selected_languages: ["en"])
+
+      refute html =~ "dropdown"
+      refute html =~ "menu bg-base-100"
+    end
+
+    test "the more-languages toggle is a client-side disclosure" do
+      html = subtitle_modal_html(selected_languages: ["en"])
+      doc = LazyHTML.from_fragment(html)
+      toggle = LazyHTML.query_by_id(doc, "subtitle-language-more-toggle")
+      [click] = LazyHTML.attribute(toggle, "phx-click")
+
+      assert LazyHTML.attribute(toggle, "type") == ["button"]
+      assert LazyHTML.attribute(toggle, "aria-expanded") == ["false"]
+      assert click =~ "subtitle-lang-extra"
+      refute click =~ ~s("push")
+    end
+
+    test "a selected uncommon language is visible rather than hidden behind the toggle" do
+      html = subtitle_modal_html(selected_languages: ["fi"])
+      doc = LazyHTML.from_fragment(html)
+
+      [class] =
+        doc
+        |> LazyHTML.query(~s(.filter input[aria-label="Finnish"]))
+        |> LazyHTML.attribute("class")
+
+      refute class =~ "hidden"
+      assert html =~ ~s(aria-label="Finnish")
+    end
+
     test "disables search when no language is selected" do
       html = subtitle_modal_html(selected_languages: [])
 

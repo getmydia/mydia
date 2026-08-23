@@ -10,6 +10,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
   import MydiaWeb.MediaLive.Show.ScoreBreakdown
 
   alias Mydia.Library.MediaFile
+  alias Phoenix.LiveView.JS
 
   @doc """
   Subtitle search modal for searching and downloading subtitles.
@@ -91,29 +92,36 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
                 aria-label={label}
                 checked={code in @selected_languages}
               />
+              <input
+                :for={{code, label} <- @more_languages}
+                class="btn btn-sm subtitle-lang-extra hidden"
+                type="checkbox"
+                name="languages[]"
+                value={code}
+                aria-label={label}
+                checked={code in @selected_languages}
+              />
             </div>
 
-            <div class="dropdown dropdown-end">
-              <div tabindex="0" role="button" class="btn btn-sm btn-ghost">
-                +{length(@more_languages)} more <.icon name="hero-chevron-down" class="w-4 h-4" />
-              </div>
-              <ul
-                tabindex="0"
-                class="dropdown-content menu bg-base-100 rounded-box z-10 w-52 p-2 shadow-sm max-h-64 flex-nowrap overflow-y-auto"
-              >
-                <li :for={{code, label} <- @more_languages}>
-                  <label class="label cursor-pointer justify-start gap-2">
-                    <input
-                      type="checkbox"
-                      class="checkbox checkbox-sm"
-                      name="languages[]"
-                      value={code}
-                    />
-                    <span class="label-text">{label}</span>
-                  </label>
-                </li>
-              </ul>
-            </div>
+            <button
+              type="button"
+              id="subtitle-language-more-toggle"
+              class="btn btn-sm btn-ghost"
+              aria-expanded="false"
+              aria-controls="subtitle-language-form"
+              phx-click={
+                JS.toggle(to: "#subtitle-language-form .subtitle-lang-extra", display: "inline-flex")
+                |> JS.toggle_attribute({"aria-expanded", "true", "false"},
+                  to: "#subtitle-language-more-toggle"
+                )
+                |> JS.toggle(to: "#subtitle-language-more-label", display: "inline")
+                |> JS.toggle(to: "#subtitle-language-fewer-label", display: "inline")
+              }
+            >
+              <span id="subtitle-language-more-label">+{length(@more_languages)} more</span>
+              <span id="subtitle-language-fewer-label" class="hidden">Show fewer</span>
+              <.icon name="hero-chevron-down" class="w-4 h-4" />
+            </button>
 
             <div class="flex-1"></div>
 
