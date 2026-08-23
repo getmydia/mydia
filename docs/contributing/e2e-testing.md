@@ -6,8 +6,8 @@ sandbox, so each one gets a transaction that is rolled back afterwards.
 
 There is no Playwright test suite. An earlier one existed under `assets/e2e/`; it
 depended on `/api/test/*` seeding endpoints that were never built, and it was
-removed. `@playwright/test` remains in `assets/package.json` solely for
-`screenshots.js`.
+removed. `@playwright/test` remains in `assets/package.json` for
+`screenshots.js` and `populate-media.js`.
 
 ## Running
 
