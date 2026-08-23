@@ -47,6 +47,33 @@ Future<List<NavDestination>> sidebarDestinations(Ref ref) async {
   return layout.reconcile(downloadSupported: isDownloadSupported);
 }
 
+/// Whether the sidebar is in edit mode.
+///
+/// Presentation state, never persisted: a relaunch always starts in normal
+/// mode. It lives in a provider rather than widget state because the desktop
+/// sidebar and the mobile drawer each build their own `SidebarContent`, and
+/// `Scaffold.drawer` keeps its child mounted while closed, so local state would
+/// leave the drawer in edit mode the next time it opened.
+@Riverpod(keepAlive: true)
+class SidebarEditMode extends _$SidebarEditMode {
+  @override
+  bool build() => false;
+
+  void toggle() => state = !state;
+
+  void exit() => state = false;
+}
+
+/// The middle rows edit mode arranges, hidden ones included.
+///
+/// Distinct from [sidebarDestinations], which drops hidden rows and keeps
+/// anchors. Edit mode needs the opposite of both.
+@riverpod
+Future<List<SidebarEditRow>> sidebarEditRows(Ref ref) async {
+  final layout = await ref.watch(sidebarLayoutProvider.future);
+  return layout.reconcileForEditing(downloadSupported: isDownloadSupported);
+}
+
 @riverpod
 SidebarLayoutController sidebarLayoutController(Ref ref) =>
     SidebarLayoutController(ref);
@@ -83,5 +110,18 @@ class SidebarLayoutController {
   Future<void> deleteFilter(String id) =>
       _mutate((layout) => layout.withoutFilter(id));
 
-  Future<void> resetToDefaults() => _mutate((_) => SidebarLayout.defaults);
+  /// Restores default order and unhides everything, keeping saved filters.
+  ///
+  /// `SidebarLayout.defaults` carries `filters: const {}`, so assigning it
+  /// wholesale would delete every saved filter rather than rearranging. Filters
+  /// are user-created content and the reset affordance is about arrangement.
+  /// Rule 3 in `reconcileLayout` appends the preserved filters back onto the
+  /// default order, so they return at the bottom of the list.
+  Future<void> resetToDefaults() => _mutate(
+        (layout) => SidebarLayout(
+          order: SidebarLayout.defaults.order,
+          hidden: const {},
+          filters: layout.filters,
+        ),
+      );
 }
