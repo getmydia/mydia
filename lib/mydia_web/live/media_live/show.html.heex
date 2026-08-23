@@ -317,7 +317,7 @@
     />
   <% end %>
   <%= if @show_subtitle_search_modal && @selected_media_file do %>
-    <Modals.subtitle_search_modal
+    <SubtitleModal.subtitle_search_modal
       media_file={@selected_media_file}
       subtitle_search_state={@subtitle_search_state}
       subtitle_search_results={@subtitle_search_results}

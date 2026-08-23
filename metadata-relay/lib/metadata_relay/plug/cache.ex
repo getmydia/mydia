@@ -36,6 +36,15 @@ defmodule MetadataRelay.Plug.Cache do
   # exact path match rather than a prefix.
   @cacheable_post "/api/v1/subtitles/search"
 
+  # Bump this whenever `MetadataRelay.SubDL.Handler.transform_subtitle/2`'s
+  # emitted shape changes (a field added, renamed, or removed). The cache
+  # stores the transformed response body, not the upstream payload, so a
+  # shape change by itself does not invalidate what is already cached and a
+  # popular title would keep serving the old shape for the full search TTL.
+  # Folding this into the cache key makes a shape change invalidate its own
+  # entries automatically, with no manual flush on deploy.
+  @subtitle_wire_format_version 1
+
   # A search that found nothing is a claim about today, and subtitles for a new
   # release land within hours of it. Holding that claim for the full search TTL
   # would hide a fresh upload from every install for a week, including from a
@@ -88,7 +97,7 @@ defmodule MetadataRelay.Plug.Cache do
     # that request goes upstream uncached rather than sharing a key.
     case body_fingerprint(conn) do
       {:ok, fingerprint} ->
-        serve_or_cache(conn, Cache.build_key(conn.method, conn.request_path, fingerprint))
+        serve_or_cache(conn, subtitle_search_cache_key(fingerprint))
 
       :error ->
         conn
@@ -99,6 +108,15 @@ defmodule MetadataRelay.Plug.Cache do
   def call(conn, _opts) do
     # Skip caching for every other request
     conn
+  end
+
+  @doc false
+  # Exposed (rather than private) so a test can prove that bumping the
+  # version alone changes the key, without needing to recompile the module
+  # with a different `@subtitle_wire_format_version`.
+  @spec subtitle_search_cache_key(String.t(), non_neg_integer()) :: String.t()
+  def subtitle_search_cache_key(fingerprint, version \\ @subtitle_wire_format_version) do
+    Cache.build_key("POST", @cacheable_post, "v#{version}:#{fingerprint}")
   end
 
   ## Private Functions

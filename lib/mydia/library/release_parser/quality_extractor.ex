@@ -421,7 +421,16 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
 
   # ---- Standardization (matches V2's standardize_quality/1 outputs exactly) ----
 
-  defp standardize(%Quality{} = q) do
+  @doc """
+  Canonicalizes a `%Quality{}` into the parser's standard vocabulary.
+
+  Public so a caller holding quality values from another source, such as the
+  analyzed columns on a media file, can bring them into the same vocabulary the
+  parser emits under `standardize: true`, instead of maintaining a second
+  mapping table that would drift from this one.
+  """
+  @spec standardize(Quality.t()) :: Quality.t()
+  def standardize(%Quality{} = q) do
     %Quality{
       resolution: standardize_resolution(q.resolution),
       source: standardize_source(q.source),
