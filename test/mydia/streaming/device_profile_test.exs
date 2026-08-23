@@ -115,4 +115,42 @@ defmodule Mydia.Streaming.DeviceProfileTest do
       assert :erlang.system_info(:atom_count) == before
     end
   end
+
+  describe "decode_header/1" do
+    defp encode(map), do: Base.url_encode64(Jason.encode!(map), padding: false)
+
+    test "returns nil for a nil value" do
+      assert DeviceProfile.decode_header(nil) == nil
+    end
+
+    test "decodes a valid header into a profile" do
+      header = encode(%{"containers" => ["mkv"], "videoCodecs" => ["hevc"]})
+
+      assert %DeviceProfile{containers: ["mkv"], video_codecs: ["hevc"]} =
+               DeviceProfile.decode_header(header)
+    end
+
+    test "treats a non-base64 value as absent" do
+      assert DeviceProfile.decode_header("not base64!!") == nil
+    end
+
+    test "treats base64 that is not JSON as absent" do
+      header = Base.url_encode64("this is not json", padding: false)
+      assert DeviceProfile.decode_header(header) == nil
+    end
+
+    test "treats JSON that is not an object as absent" do
+      assert DeviceProfile.decode_header(encode(["mp4"])) == nil
+    end
+
+    test "treats a payload over 4 KB as absent without decoding it" do
+      header = Base.url_encode64(String.duplicate("a", 5000), padding: false)
+      assert DeviceProfile.decode_header(header) == nil
+    end
+
+    test "treats an over-cap payload as absent rather than raising" do
+      header = encode(%{"containers" => Enum.map(1..65, &"c#{&1}")})
+      assert DeviceProfile.decode_header(header) == nil
+    end
+  end
 end

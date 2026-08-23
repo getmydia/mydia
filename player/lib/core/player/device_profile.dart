@@ -78,6 +78,21 @@ Future<DeviceProfile> detectDeviceProfile() => platform.detectDeviceProfile();
 /// client rebuild, no orphaned in-flight query, and no subscription
 /// reconnect.
 class DeviceProfileHolder {
+  DeviceProfileHolder._();
+
+  /// The one instance for the app's lifetime.
+  ///
+  /// `DeviceProfileHolder()` always returns this. `graphql_provider.dart`'s
+  /// `deviceProfileHolderProvider` reads it through Riverpod for the HTTP
+  /// link; `P2pGraphQLLink` (`p2p_link.dart`) has no `ref` to read a provider
+  /// through, so it reads this same instance directly. Both must see the one
+  /// slot `detectDeviceProfile()` eventually writes into, not independent
+  /// copies.
+  static final DeviceProfileHolder _instance = DeviceProfileHolder._();
+
+  /// Always returns [_instance].
+  factory DeviceProfileHolder() => _instance;
+
   /// Null until the probe resolves, then fixed for the rest of the session.
   DeviceProfile? profile;
 }

@@ -147,6 +147,10 @@ pub struct FlutterGraphQLRequest {
     pub variables: Option<String>,
     pub operation_name: Option<String>,
     pub auth_token: Option<String>,
+    /// Base64url-encoded JSON describing what this client can decode. Same
+    /// value the HTTP path sends in the X-Mydia-Device-Profile header; the
+    /// p2p transport has no headers, so it rides along in the request body.
+    pub device_profile: Option<String>,
 }
 
 /// GraphQL response received over P2P
@@ -932,6 +936,7 @@ impl P2pHost {
             variables: req.variables,
             operation_name: req.operation_name,
             auth_token: req.auth_token,
+            device_profile: req.device_profile,
         };
 
         match self

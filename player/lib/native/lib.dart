@@ -8,7 +8,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'lib.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `init_logging`
+// These functions are ignored because they are not marked as `pub`: `init_logging`, `run_event_dispatcher`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<P2pHost>>
@@ -139,11 +139,17 @@ class FlutterGraphQLRequest {
   final String? operationName;
   final String? authToken;
 
+  /// Base64url-encoded JSON describing what this client can decode. Same
+  /// value the HTTP path sends in the X-Mydia-Device-Profile header; the
+  /// p2p transport has no headers, so it rides along in the request body.
+  final String? deviceProfile;
+
   const FlutterGraphQLRequest({
     required this.query,
     this.variables,
     this.operationName,
     this.authToken,
+    this.deviceProfile,
   });
 
   @override
@@ -151,7 +157,8 @@ class FlutterGraphQLRequest {
       query.hashCode ^
       variables.hashCode ^
       operationName.hashCode ^
-      authToken.hashCode;
+      authToken.hashCode ^
+      deviceProfile.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -161,7 +168,8 @@ class FlutterGraphQLRequest {
           query == other.query &&
           variables == other.variables &&
           operationName == other.operationName &&
-          authToken == other.authToken;
+          authToken == other.authToken &&
+          deviceProfile == other.deviceProfile;
 }
 
 /// GraphQL response received over P2P

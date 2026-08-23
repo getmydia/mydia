@@ -128,6 +128,7 @@ struct ElixirGraphQLRequest {
     pub variables: Option<String>,
     pub operation_name: Option<String>,
     pub auth_token: Option<String>,
+    pub device_profile: Option<String>,
 }
 
 #[derive(NifStruct)]
@@ -389,6 +390,7 @@ fn start_listening(
                                 variables: req.variables,
                                 operation_name: req.operation_name,
                                 auth_token: req.auth_token,
+                                device_profile: req.device_profile,
                             };
                             (
                                 atoms::ok(),

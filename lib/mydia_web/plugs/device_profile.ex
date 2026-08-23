@@ -16,7 +16,6 @@ defmodule MydiaWeb.Plugs.DeviceProfile do
   alias Mydia.Streaming.DeviceProfile
 
   @header "x-mydia-device-profile"
-  @max_encoded_bytes 4096
 
   @impl Plug
   def init(opts), do: opts
@@ -28,20 +27,8 @@ defmodule MydiaWeb.Plugs.DeviceProfile do
 
   defp parse(conn) do
     case Plug.Conn.get_req_header(conn, @header) do
-      [value | _] -> decode(value)
+      [value | _] -> DeviceProfile.decode_header(value)
       [] -> nil
-    end
-  end
-
-  defp decode(value) when byte_size(value) > @max_encoded_bytes, do: nil
-
-  defp decode(value) do
-    with {:ok, json} <- Base.url_decode64(value, padding: false),
-         {:ok, map} <- Jason.decode(json),
-         {:ok, profile} <- DeviceProfile.from_map(map) do
-      profile
-    else
-      _ -> nil
     end
   end
 end

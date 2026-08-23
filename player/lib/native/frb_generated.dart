@@ -778,13 +778,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   FlutterGraphQLRequest dco_decode_flutter_graph_ql_request(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 4)
-      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
     return FlutterGraphQLRequest(
       query: dco_decode_String(arr[0]),
       variables: dco_decode_opt_String(arr[1]),
       operationName: dco_decode_opt_String(arr[2]),
       authToken: dco_decode_opt_String(arr[3]),
+      deviceProfile: dco_decode_opt_String(arr[4]),
     );
   }
 
@@ -1380,11 +1381,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_variables = sse_decode_opt_String(deserializer);
     var var_operationName = sse_decode_opt_String(deserializer);
     var var_authToken = sse_decode_opt_String(deserializer);
+    var var_deviceProfile = sse_decode_opt_String(deserializer);
     return FlutterGraphQLRequest(
         query: var_query,
         variables: var_variables,
         operationName: var_operationName,
-        authToken: var_authToken);
+        authToken: var_authToken,
+        deviceProfile: var_deviceProfile);
   }
 
   @protected
@@ -2032,6 +2035,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_opt_String(self.variables, serializer);
     sse_encode_opt_String(self.operationName, serializer);
     sse_encode_opt_String(self.authToken, serializer);
+    sse_encode_opt_String(self.deviceProfile, serializer);
   }
 
   @protected

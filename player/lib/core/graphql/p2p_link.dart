@@ -7,6 +7,7 @@ import 'package:gql/language.dart' show printNode;
 import 'package:graphql_flutter/graphql_flutter.dart';
 
 import '../p2p/p2p_service.dart';
+import '../player/device_profile.dart';
 
 /// Max number of retry attempts for transient connection errors.
 const _maxRetries = 3;
@@ -58,12 +59,20 @@ class P2pGraphQLLink extends Link {
 
       debugPrint('[P2pGraphQLLink] Sending request: $operationName');
 
+      // Read fresh on every request, same as `DeviceProfileLink` does for the
+      // HTTP path (see `client.dart`): a request issued before the probe
+      // resolves carries null, which degrades to the server's no-profile
+      // behavior, and one issued after picks up the profile with nothing
+      // else to rebuild.
+      final deviceProfile = DeviceProfileHolder().profile?.toHeaderValue();
+
       // Attempt the request with retries on connection errors
       final responseData = await _sendWithAuthRecovery(
         query: query,
         operationName: operationName,
         variables: variables.isNotEmpty ? variables : null,
         authToken: authToken,
+        deviceProfile: deviceProfile,
       );
 
       debugPrint('[P2pGraphQLLink] Received response');
@@ -101,6 +110,7 @@ class P2pGraphQLLink extends Link {
     String? operationName,
     Map<String, dynamic>? variables,
     String? authToken,
+    String? deviceProfile,
   }) async {
     try {
       return await _sendWithRetry(
@@ -108,6 +118,7 @@ class P2pGraphQLLink extends Link {
         operationName: operationName,
         variables: variables,
         authToken: authToken,
+        deviceProfile: deviceProfile,
       );
     } catch (e) {
       final refresh = _refreshAuthToken;
@@ -126,6 +137,7 @@ class P2pGraphQLLink extends Link {
         operationName: operationName,
         variables: variables,
         authToken: refreshed,
+        deviceProfile: deviceProfile,
       );
     }
   }
@@ -146,6 +158,7 @@ class P2pGraphQLLink extends Link {
     String? operationName,
     Map<String, dynamic>? variables,
     String? authToken,
+    String? deviceProfile,
   }) async {
     Object? lastError;
     StackTrace? lastStack;
@@ -158,6 +171,7 @@ class P2pGraphQLLink extends Link {
           variables: variables,
           operationName: operationName,
           authToken: authToken,
+          deviceProfile: deviceProfile,
         );
       } catch (e, stackTrace) {
         lastError = e;

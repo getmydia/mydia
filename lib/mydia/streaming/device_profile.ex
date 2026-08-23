@@ -31,6 +31,7 @@ defmodule Mydia.Streaming.DeviceProfile do
 
   @max_entries 64
   @max_entry_length 64
+  @max_encoded_bytes 4096
 
   @type t :: %__MODULE__{
           containers: [String.t()],
@@ -102,6 +103,40 @@ defmodule Mydia.Streaming.DeviceProfile do
   end
 
   def from_map(_other), do: :error
+
+  @doc """
+  Decodes a raw device profile header value into a profile.
+
+  Shared by every transport that can carry a device profile: HTTP passes the
+  `X-Mydia-Device-Profile` header value through `MydiaWeb.Plugs.DeviceProfile`,
+  and p2p passes the `GraphQLRequest.device_profile` field through
+  `Mydia.P2p.Server` unchanged, since p2p has no headers of its own. Keeping
+  the decode chain here means the 4 KB cap, base64url decode, JSON parse and
+  validation are applied identically everywhere instead of drifting between
+  two copies.
+
+  Applies the 4 KB cap on the raw value before attempting to decode it at all,
+  so an oversized payload is never base64-decoded or parsed. Returns `nil` for
+  a `nil` input or anything malformed, over-cap, non-base64, non-JSON, or
+  non-object, mirroring `from_map/1`'s "treat as absent, not as an error"
+  contract.
+  """
+  @spec decode_header(String.t() | nil) :: t() | nil
+  def decode_header(nil), do: nil
+
+  def decode_header(value) when is_binary(value) do
+    if byte_size(value) > @max_encoded_bytes do
+      nil
+    else
+      with {:ok, json} <- Base.url_decode64(value, padding: false),
+           {:ok, map} <- Jason.decode(json),
+           {:ok, profile} <- from_map(map) do
+        profile
+      else
+        _ -> nil
+      end
+    end
+  end
 
   @doc "Whether the container is listed. Exact match, case-insensitive."
   @spec container_allowed?(t(), String.t() | nil) :: boolean()

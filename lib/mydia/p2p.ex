@@ -158,13 +158,14 @@ defmodule Mydia.P2p.GraphQLRequest do
   @moduledoc """
   A GraphQL request received from a player over P2P.
   """
-  defstruct [:query, :variables, :operation_name, :auth_token]
+  defstruct [:query, :variables, :operation_name, :auth_token, :device_profile]
 
   @type t :: %__MODULE__{
           query: String.t(),
           variables: String.t() | nil,
           operation_name: String.t() | nil,
-          auth_token: String.t() | nil
+          auth_token: String.t() | nil,
+          device_profile: String.t() | nil
         }
 end
 
