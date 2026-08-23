@@ -53,7 +53,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.year == 2021
       assert result.quality.resolution == "2160p"
       assert result.quality.source == "WEB-DL"
-      assert result.quality.hdr_format == "HDR10"
+      assert result.quality.hdr_format == :hdr10
       assert result.quality.codec == "x265"
     end
 
@@ -119,7 +119,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
     test "parses movie with Dolby Vision" do
       result = FileParser.parse("Epic.Film.2021.2160p.WEB.DolbyVision.mkv")
 
-      assert result.quality.hdr_format == "DolbyVision"
+      assert result.quality.dolby_vision
     end
   end
 
@@ -320,7 +320,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
     test "handles HDR10+ format" do
       result = FileParser.parse("Movie 2021 2160p HDR10+.mkv")
 
-      assert result.quality.hdr_format == "HDR10+"
+      assert result.quality.hdr_format == :hdr10_plus
     end
 
     test "handles Atmos audio" do
@@ -505,7 +505,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.quality.resolution == "2160p"
       assert result.quality.source == "BluRay"
       assert result.quality.codec == "x265"
-      assert result.quality.hdr_format == "HDR"
+      assert result.quality.hdr_format == :hdr10
       # Audio codec case is preserved from the filename (lowercase "aac")
       assert result.quality.audio == "aac"
       assert result.release_group == "Rosy"
@@ -714,7 +714,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.quality.resolution == "2160p"
       assert result.quality.source == "BluRay"
       assert result.quality.codec == "x265"
-      assert result.quality.hdr_format == "HDR"
+      assert result.quality.hdr_format == :hdr10
       assert result.quality.audio == "DTS-HD.MA"
       assert result.release_group == "GROUP"
     end
@@ -989,26 +989,26 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result5.quality.resolution == "2160p (4K)"
     end
 
-    test "standardizes HDR format variations" do
-      # HDR10+ → HDR10+
+    test "HDR is already canonical, so standardize mode changes nothing about it" do
+      # HDR10+ → :hdr10_plus
       result1 = FileParser.parse("Movie.2024.2160p.HDR10+.mkv", standardize: true)
-      assert result1.quality.hdr_format == "HDR10+"
+      assert result1.quality.hdr_format == :hdr10_plus
 
-      # HDR10 → HDR10
+      # HDR10 → :hdr10
       result2 = FileParser.parse("Movie.2024.2160p.HDR10.mkv", standardize: true)
-      assert result2.quality.hdr_format == "HDR10"
+      assert result2.quality.hdr_format == :hdr10
 
-      # DolbyVision → Dolby Vision
+      # DolbyVision → dolby_vision
       result3 = FileParser.parse("Movie.2024.2160p.DolbyVision.mkv", standardize: true)
-      assert result3.quality.hdr_format == "Dolby Vision"
+      assert result3.quality.dolby_vision
 
-      # DoVi → Dolby Vision
+      # DoVi → dolby_vision
       result4 = FileParser.parse("Movie.2024.2160p.DoVi.mkv", standardize: true)
-      assert result4.quality.hdr_format == "Dolby Vision"
+      assert result4.quality.dolby_vision
 
-      # HDR → HDR
+      # A bare HDR token canonicalizes to the same base as an explicit HDR10 token.
       result5 = FileParser.parse("Movie.2024.2160p.HDR.mkv", standardize: true)
-      assert result5.quality.hdr_format == "HDR"
+      assert result5.quality.hdr_format == :hdr10
     end
 
     test "raw mode preserves original values (default behavior)" do
@@ -1043,7 +1043,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.quality.resolution == "2160p (4K)"
       assert result.quality.source == "Blu-ray"
       assert result.quality.codec == "H.265/HEVC"
-      assert result.quality.hdr_format == "HDR10+"
+      assert result.quality.hdr_format == :hdr10_plus
       assert result.quality.audio == "DTS-HD Master Audio"
       assert result.release_group == "GROUP"
     end
@@ -1104,7 +1104,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert Enum.at(results, 0).quality.audio == "Dolby Digital Plus 5.1"
 
       assert Enum.at(results, 1).quality.codec == "H.265/HEVC"
-      assert Enum.at(results, 1).quality.hdr_format == "HDR10"
+      assert Enum.at(results, 1).quality.hdr_format == :hdr10
 
       assert Enum.at(results, 2).quality.codec == "H.264/AVC"
       assert Enum.at(results, 2).quality.audio == "AAC"
@@ -1168,7 +1168,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.quality.resolution == "2160p (4K)"
       assert result.quality.source == "Blu-ray"
       assert result.quality.codec == "H.265/HEVC"
-      assert result.quality.hdr_format == "HDR10+"
+      assert result.quality.hdr_format == :hdr10_plus
       assert result.quality.audio == "Dolby TrueHD"
       # Release group should still be extracted
       assert result.release_group == "ELITE"
@@ -1311,7 +1311,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.quality.resolution == "2160p"
       assert result.quality.source == "WEB-DL"
       assert result.quality.audio == "DDP5.1"
-      assert result.quality.hdr_format == "HDR"
+      assert result.quality.hdr_format == :hdr10
       assert result.quality.codec == "H265"
       assert result.release_group == "GROUP"
     end
@@ -1805,7 +1805,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.title == "Game Of Thrones"
       assert result.quality.resolution == "2160p"
       assert result.quality.source == "BluRay"
-      assert result.quality.hdr_format == "DolbyVision"
+      assert result.quality.dolby_vision
     end
 
     test "Star Wars Collection 4K UHD BluRay REMUX with TrueHD" do
@@ -1819,7 +1819,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.quality.source == "BluRay"
       assert result.quality.codec == "HEVC"
       assert result.quality.audio == "TrueHD 7.1"
-      assert result.quality.hdr_format == "HDR"
+      assert result.quality.hdr_format == :hdr10
       assert result.release_group == "MR"
     end
 
@@ -1854,8 +1854,9 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.quality.resolution == "2160p"
       assert result.quality.codec == "x265"
       assert result.quality.audio == "DDP5.1"
-      # DV is normalized to DolbyVision for consistency
-      assert result.quality.hdr_format == "DolbyVision"
+      # DV sets dolby_vision; the separate HDR10 token still sets the base
+      assert result.quality.dolby_vision
+      assert result.quality.hdr_format == :hdr10
       assert result.release_group == "BEN"
     end
 
@@ -1869,7 +1870,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.quality.resolution == "2160p"
       assert result.quality.codec == "x265"
       assert result.quality.audio == "DDP5.1"
-      assert result.quality.hdr_format == "HDR10+"
+      assert result.quality.hdr_format == :hdr10_plus
       assert result.release_group == "GROUP"
     end
 
@@ -2334,23 +2335,33 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       result =
         FileParser.parse("The.Marvels.2023.2160p.DolbyVision.DDP5.1.Atmos.x265-GROUP.mkv")
 
-      assert result.quality.hdr_format == "DolbyVision"
+      assert result.quality.dolby_vision
     end
 
     test "DV abbreviation in release name" do
       result =
         FileParser.parse("Chucky.2021.2160p.BluRay.REMUX.DV.HDR.HEVC-LTN.mkv")
 
-      # DV is normalized to DolbyVision for consistency
-      assert result.quality.hdr_format == "DolbyVision"
+      # The resolver's :hdr label is a singleton (Resolver.resolve_one_label/2):
+      # only the highest zone-adjusted-confidence HDR-ish token survives per
+      # release, and DV (0.8 base + 0.1 metadata-zone bonus = 0.9) ties the
+      # bare HDR token (0.9 base + 0.0 = 0.9); Enum.max_by/2 keeps the first
+      # on a tie, and DV appears first in this title. The bare HDR token is
+      # demoted to a title candidate and never reaches QualityExtractor, so
+      # hdr_format stays nil here even though the release also says "HDR".
+      assert result.quality.dolby_vision
+      assert result.quality.hdr_format == nil
     end
 
     test "DoVi abbreviation" do
       result =
         FileParser.parse("Game.of.Thrones.S01E01.2160p.DoVi.HDR.BluRay.REMUX.HEVC-PB69.mkv")
 
-      # DoVi is normalized to DolbyVision for consistency
-      assert result.quality.hdr_format == "DolbyVision"
+      # DoVi (0.95 base + 0.05 metadata-zone bonus, clamped to 1.0) outranks
+      # the bare HDR token (0.9) outright in the :hdr singleton conflict, so
+      # HDR is demoted and hdr_format stays nil. See the DV test above.
+      assert result.quality.dolby_vision
+      assert result.quality.hdr_format == nil
     end
   end
 
@@ -2359,14 +2370,14 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       result =
         FileParser.parse("Wonka.2023.2160p.HDR10.DDP5.1.Atmos.x265-GROUP.mkv")
 
-      assert result.quality.hdr_format == "HDR10"
+      assert result.quality.hdr_format == :hdr10
     end
 
     test "HDR abbreviation" do
       result =
         FileParser.parse("Star.Wars.1977.2160p.UHD.BluRay.REMUX.HDR.HEVC.TrueHD.7.1-MR.mkv")
 
-      assert result.quality.hdr_format == "HDR"
+      assert result.quality.hdr_format == :hdr10
     end
   end
 
@@ -2377,7 +2388,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
           "Killers.of.the.Flower.Moon.2023.2160p.HDR10+.DDP5.1.Atmos.x265-GROUP.mkv"
         )
 
-      assert result.quality.hdr_format == "HDR10+"
+      assert result.quality.hdr_format == :hdr10_plus
     end
   end
 
@@ -2741,7 +2752,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
         source: "BluRay",
         video_codec: "h265",
         audio_codec: "atmos",
-        hdr_format: "dolby_vision",
+        hdr_tokens: ["dolby_vision"],
         file_size_mb: 40000,
         media_type: :movie
       }
@@ -2758,7 +2769,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
         source: "WEB-DL",
         video_codec: "av1",
         audio_codec: "truehd",
-        hdr_format: "hdr10",
+        hdr_tokens: ["hdr10"],
         file_size_mb: 25000,
         media_type: :movie
       }
@@ -2863,8 +2874,8 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.quality.resolution == "2160p"
       assert result.quality.codec == "x265"
       assert result.quality.audio == "DDP5.1"
-      # DV is normalized to DolbyVision for consistency
-      assert result.quality.hdr_format == "DolbyVision"
+      # DV sets dolby_vision, not hdr_format
+      assert result.quality.dolby_vision
       assert result.release_group == "GROUP"
       assert result.confidence > 0.8
     end

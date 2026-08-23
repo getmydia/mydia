@@ -11,7 +11,7 @@ defmodule Mydia.Streaming.Candidates do
   require Logger
 
   alias Mydia.Library
-  alias Mydia.Library.{FileAnalyzer, FileRanking, MediaFile}
+  alias Mydia.Library.{FileAnalyzer, FileRanking, Hdr, MediaFile}
   alias Mydia.Library.Structs.FileMetadata
   alias Mydia.Repo
 
@@ -158,13 +158,28 @@ defmodule Mydia.Streaming.Candidates do
     show_preference =
       AudioPreferences.for_media_file(Keyword.get(opts, :user_id), with_item)
 
+    # hdr_format must be the display string ("HDR10", "Dolby Vision", "HLG"),
+    # never the raw Ecto.Enum atom (hdr10, dolby_vision). Self-hosted installs
+    # have no coordinated deploy order, so a shipped player reaching this
+    # server months from now still expects display text here. This map backs
+    # both this REST candidates payload and the GraphQL streamingMetadata
+    # object (see MydiaWeb.Schema.Resolvers.StreamingResolver.streaming_candidates/3),
+    # so fixing it here fixes both wire paths at once.
+    hdr = %Hdr{
+      base: media_file.hdr_format,
+      dv_profile: media_file.dolby_vision_profile,
+      bl_compat_id: media_file.dolby_vision_bl_compat_id
+    }
+
     %{
       duration: metadata.duration,
       width: metadata.width,
       height: metadata.height,
       bitrate: media_file.bitrate,
       resolution: media_file.resolution,
-      hdr_format: media_file.hdr_format,
+      hdr_format: Hdr.display(hdr),
+      dolby_vision_profile: media_file.dolby_vision_profile,
+      dolby_vision_bl_compat_id: media_file.dolby_vision_bl_compat_id,
       original_codec: media_file.codec,
       original_audio_codec: media_file.audio_codec,
       container: metadata.container,

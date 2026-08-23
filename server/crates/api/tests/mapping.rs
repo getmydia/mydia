@@ -47,6 +47,8 @@ fn file(size: i64) -> MediaFileRow {
         codec: Some("HEVC (Main 10)".to_string()),
         audio_codec: Some("TrueHD 7.1".to_string()),
         hdr_format: Some("Dolby Vision".to_string()),
+        dolby_vision_profile: Some(8),
+        dolby_vision_bl_compat_id: Some(1),
         bitrate: Some(48_000_000),
         duration_seconds: Some(7200.0),
         container: Some("matroska,webm".to_string()),
@@ -82,6 +84,15 @@ fn a_multi_gigabyte_size_survives_mapping() {
     let mapped = media_file_from(&file(8_000_000_000), &[]);
 
     assert_eq!(mapped.size, Some(8_000_000_000));
+}
+
+#[test]
+fn dolby_vision_profile_and_compat_id_are_mapped_through() {
+    let mapped = media_file_from(&file(1), &[]);
+
+    assert_eq!(mapped.hdr_format.as_deref(), Some("Dolby Vision"));
+    assert_eq!(mapped.dolby_vision_profile, Some(8));
+    assert_eq!(mapped.dolby_vision_bl_compat_id, Some(1));
 }
 
 #[test]

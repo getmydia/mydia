@@ -13,7 +13,8 @@ defmodule Mydia.Indexers.QualityParser do
         source: "BluRay",
         codec: "x264",
         audio: "DTS",
-        hdr: false,
+        hdr_format: nil,
+        dolby_vision: false,
         proper: false,
         repack: false
       }
@@ -24,12 +25,14 @@ defmodule Mydia.Indexers.QualityParser do
         source: "WEB-DL",
         codec: "H.265",
         audio: "AAC",
-        hdr: true,
+        hdr_format: :hdr10,
+        dolby_vision: false,
         proper: false,
         repack: false
       }
   """
 
+  alias Mydia.Library.Hdr
   alias Mydia.Library.Structs.Quality
   alias Mydia.Quality.Sources
 
@@ -83,20 +86,23 @@ defmodule Mydia.Indexers.QualityParser do
     ]
   end
 
-  # HDR format patterns (order matters - more specific patterns first)
-  # TRaSH Guide HDR tiers: DV > HDR10+ > HDR10 > SDR
-  defp hdr_formats do
-    [
-      # Dolby Vision (highest tier) - various naming conventions
-      {"DV", ~r/\bDV\b|dolby[\-\s]?vision|dovi/i},
-      # HDR10+ (dynamic metadata)
-      {"HDR10+", ~r/hdr10\+|hdr10plus|hdr10[\-\s]?plus/i},
-      # HDR10 (static metadata) - must come after HDR10+
-      {"HDR10", ~r/hdr10(?!\+)/i},
-      # Generic HDR (assume HDR10 if not specified)
-      {"HDR", ~r/\bHDR\b/i}
-    ]
-  end
+  # Release names carry HDR tokens anywhere; scan for all of them and let Hdr
+  # decide what each means.
+  #
+  # The trailing edge is a negative lookahead, not `\b`: `+` is not a word
+  # character, so `\bhdr10\+\b` can never match "HDR10+.x265" (no
+  # word-to-word transition exists between `+` and `.`) and silently falls
+  # through to the bare `hdr10` alternative instead. A regression test
+  # ("HDR10+ maps to :hdr10_plus") in quality_parser_test.exs guards this.
+  #
+  # The `[\s._-]?` between `hdr10` and its suffix matters just as much.
+  # Scene names spell the format "HDR10+", "HDR10PLUS", "HDR10.PLUS" and
+  # "HDR10-PLUS" interchangeably, and the alternation is leftmost-first: with
+  # no separator allowed, "HDR10.PLUS" matches the bare `hdr10` alternative,
+  # the trailing "PLUS" matches nothing, and the release scores as HDR10.
+  # `Hdr.from_release_token/1` strips those separators itself, so the regex
+  # only has to hand it the whole token.
+  @hdr_token_re ~r/\b(dolby[\s._-]?vision|dovi|dv|hdr10[\s._-]?\+|hdr10[\s._-]?plus|hdr10|hdr|hlg)(?![a-z0-9])/i
 
   @doc """
   Parses quality information from a release title.
@@ -112,7 +118,8 @@ defmodule Mydia.Indexers.QualityParser do
         source: "BluRay",
         codec: "x264",
         audio: nil,
-        hdr: false,
+        hdr_format: nil,
+        dolby_vision: false,
         proper: false,
         repack: false
       }
@@ -123,22 +130,23 @@ defmodule Mydia.Indexers.QualityParser do
         source: "WEB-DL",
         codec: "x265",
         audio: nil,
-        hdr: false,
+        hdr_format: nil,
+        dolby_vision: false,
         proper: true,
         repack: true
       }
   """
   @spec parse(String.t()) :: Quality.t()
   def parse(title) when is_binary(title) do
-    hdr_format = extract_hdr_format(title)
+    {hdr_format, dolby_vision} = extract_hdr(title)
 
     Quality.new(
       resolution: extract_resolution(title),
       source: extract_source(title),
       codec: extract_codec(title),
       audio: extract_audio(title),
-      hdr: hdr_format != nil,
       hdr_format: hdr_format,
+      dolby_vision: dolby_vision,
       proper: has_proper?(title),
       repack: has_repack?(title)
     )
@@ -233,35 +241,43 @@ defmodule Mydia.Indexers.QualityParser do
   end
 
   @doc """
-  Extracts the specific HDR format from a release title.
+  Extracts the HDR base format and Dolby Vision signal from a release title.
 
-  Returns the HDR format string or nil if no HDR detected.
-  TRaSH Guide ranking: DV > HDR10+ > HDR10 > HDR > nil (SDR)
+  Scans every HDR-shaped token in the title (a release can carry more than
+  one, e.g. "Dolby.Vision.HDR10") and lets `Mydia.Library.Hdr` decide what
+  each one means. The first base token wins; Dolby Vision is sticky once any
+  token signals it.
 
   ## Examples
 
-      iex> QualityParser.extract_hdr_format("Movie.2160p.UHD.BluRay.DV.HDR10.HEVC")
-      "DV"
+      iex> QualityParser.extract_hdr("Movie.2160p.UHD.BluRay.DV.HDR10.HEVC")
+      {:hdr10, true}
 
-      iex> QualityParser.extract_hdr_format("Movie.2160p.UHD.BluRay.HDR10+.HEVC")
-      "HDR10+"
+      iex> QualityParser.extract_hdr("Movie.2160p.UHD.BluRay.HDR10+.HEVC")
+      {:hdr10_plus, false}
 
-      iex> QualityParser.extract_hdr_format("Movie.2160p.WEB-DL.HDR.x265")
-      "HDR"
+      iex> QualityParser.extract_hdr("Movie.2160p.WEB-DL.HDR.x265")
+      {:hdr10, false}
 
-      iex> QualityParser.extract_hdr_format("Movie.1080p.BluRay.x264")
-      nil
+      iex> QualityParser.extract_hdr("Movie.1080p.BluRay.x264")
+      {nil, false}
   """
-  @spec extract_hdr_format(String.t()) :: String.t() | nil
-  def extract_hdr_format(title) do
-    hdr_formats()
-    |> Enum.find_value(fn {label, pattern} ->
-      if Regex.match?(pattern, title), do: label
+  @spec extract_hdr(String.t()) :: {Hdr.base(), boolean()}
+  def extract_hdr(title) do
+    @hdr_token_re
+    |> Regex.scan(title, capture: :all_but_first)
+    |> List.flatten()
+    |> Enum.reduce({nil, false}, fn token, {base, dv} ->
+      case Hdr.from_release_token(token) do
+        :dolby_vision -> {base, true}
+        {:base, found} -> {base || found, dv}
+        :unknown -> {base, dv}
+      end
     end)
   end
 
   @doc """
-  Checks if the release has HDR.
+  Checks if the release has HDR, including Dolby Vision with no base format.
 
   ## Examples
 
@@ -276,7 +292,7 @@ defmodule Mydia.Indexers.QualityParser do
   """
   @spec has_hdr?(String.t()) :: boolean()
   def has_hdr?(title) do
-    extract_hdr_format(title) != nil
+    match?({base, dv} when not is_nil(base) or dv, extract_hdr(title))
   end
 
   @doc """
@@ -323,14 +339,14 @@ defmodule Mydia.Indexers.QualityParser do
   - Source: REMUX (500) > BluRay (450) > WEB-DL (400) > WEBRip (350) > HDTV (300)
   - Video Codec: x265/H.265 (150) > AV1 (140) > x264/H.264 (100)
   - Audio: TrueHD Atmos (200) > DTS:X (190) > TrueHD (180) > DTS-HD MA (170) > etc.
-  - HDR Format: DV (100) > HDR10+ (80) > HDR10 (60) > HDR (40)
+  - HDR: Dolby Vision (100) > HDR10+ (80) > HDR10/HLG (60)
   - PROPER/REPACK: +25/+15 bonus
 
   ## Examples
 
-      iex> quality = Quality.new(resolution: "2160p", source: "BluRay", codec: "x265", hdr: true, hdr_format: "DV")
+      iex> quality = Quality.new(resolution: "2160p", source: "BluRay", codec: "x265", dolby_vision: true)
       iex> QualityParser.quality_score(quality)
-      1750
+      1700
 
       iex> quality = Quality.new(resolution: "1080p", source: "WEB-DL", codec: "x264")
       iex> QualityParser.quality_score(quality)
@@ -342,7 +358,7 @@ defmodule Mydia.Indexers.QualityParser do
       source_score(quality.source) +
       codec_score(quality.codec) +
       audio_score(quality.audio) +
-      hdr_format_score(quality.hdr_format) +
+      hdr_score(quality) +
       if(quality.proper, do: 25, else: 0) +
       if(quality.repack, do: 15, else: 0)
   end
@@ -398,11 +414,13 @@ defmodule Mydia.Indexers.QualityParser do
   defp audio_score("MP3"), do: 30
   defp audio_score(_), do: 0
 
-  # HDR format scoring (per TRaSH Guide tiers)
-  # DV > HDR10+ > HDR10 > generic HDR > SDR
-  defp hdr_format_score("DV"), do: 100
-  defp hdr_format_score("HDR10+"), do: 80
-  defp hdr_format_score("HDR10"), do: 60
-  defp hdr_format_score("HDR"), do: 40
-  defp hdr_format_score(_), do: 0
+  # HDR scoring (per TRaSH Guide tiers)
+  # Dolby Vision > HDR10+ > HDR10/HLG > SDR. A bare "HDR" token canonicalizes
+  # to :hdr10 upstream (see Hdr.from_release_token/1), so there is no separate
+  # generic-HDR tier left to score.
+  defp hdr_score(%Quality{dolby_vision: true}), do: 100
+  defp hdr_score(%Quality{hdr_format: :hdr10_plus}), do: 80
+  defp hdr_score(%Quality{hdr_format: :hdr10}), do: 60
+  defp hdr_score(%Quality{hdr_format: :hlg}), do: 60
+  defp hdr_score(%Quality{}), do: 0
 end

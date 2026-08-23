@@ -75,7 +75,7 @@ defmodule Mydia.Settings.QualityProfile do
   # since the whole point of the exclusion list is naming the cam-tier types
   # that are never valid *preferences*.
   @valid_excludable_sources @valid_sources ++ Sources.cam_tier()
-  @valid_hdr_formats ["hdr10", "hdr10+", "dolby_vision", "hlg"]
+  @valid_hdr_formats Mydia.Library.Hdr.profile_format_strings()
 
   schema "quality_profiles" do
     field :name, :string
@@ -204,7 +204,9 @@ defmodule Mydia.Settings.QualityProfile do
       - `:source` - Source type (e.g., "BluRay", "WEB-DL")
       - `:file_size_mb` - File size in MB
       - `:media_type` - Either :movie or :episode
-      - `:hdr_format` - HDR format if present (e.g., "dolby_vision", "hdr10")
+      - `:hdr_tokens` - HDR preference-list tokens by specificity, e.g.
+        `["dolby_vision", "hdr10"]` for a DV 8.1 file, `[]` for SDR. See
+        `Mydia.Library.Hdr.profile_tokens/1`.
 
   ## Returns
 
@@ -738,27 +740,34 @@ defmodule Mydia.Settings.QualityProfile do
 
   defp score_file_size(_standards, _media_attrs), do: 50.0
 
-  defp score_hdr_format(standards, %{hdr_format: format}) when is_binary(format) do
+  # Scores the best position any of the file's tokens reaches. A DV 8.1 file
+  # offers ["dolby_vision", "hdr10"], so it matches an operator who listed
+  # either one.
+  defp score_hdr_format(standards, %{hdr_tokens: tokens})
+       when is_list(tokens) and tokens != [] do
     case Map.get(standards, :hdr_formats) do
-      nil ->
-        100.0
-
       formats when is_list(formats) ->
-        score_from_preference_list(format, formats)
+        tokens
+        |> Enum.map(&score_from_preference_list(&1, formats))
+        |> Enum.max()
 
-      _ ->
+      _other ->
         100.0
     end
   end
 
+  # No HDR signal at all. Deliberately above the 25.0 an unlisted format gets.
   defp score_hdr_format(_standards, _media_attrs), do: 50.0
 
   defp collect_violations(standards, media_attrs) do
     violations = []
 
-    # Check HDR requirement
+    # Check HDR requirement. A Dolby Vision profile 5 file has no base format
+    # (hdr_format is nil by design) but is certainly not SDR, so this tests
+    # token presence rather than a single field.
     violations =
-      if Map.get(standards, :require_hdr) == true && !Map.has_key?(media_attrs, :hdr_format) do
+      if Map.get(standards, :require_hdr) == true &&
+           Map.get(media_attrs, :hdr_tokens, []) == [] do
         ["HDR is required but file does not have HDR" | violations]
       else
         violations

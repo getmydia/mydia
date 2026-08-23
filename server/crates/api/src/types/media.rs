@@ -224,6 +224,10 @@ pub struct MediaFile {
     pub codec: Option<String>,
     pub audio_codec: Option<String>,
     pub hdr_format: Option<String>,
+    /// Dolby Vision profile (5, 7, 8) if present.
+    pub dolby_vision_profile: Option<i32>,
+    /// DV base-layer compatibility id: 1 = HDR10 base, 4 = HLG base, 0 = none.
+    pub dolby_vision_bl_compat_id: Option<i32>,
     pub file_name: Option<String>,
     pub directory: Option<String>,
     pub container: Option<String>,

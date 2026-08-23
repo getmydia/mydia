@@ -303,6 +303,67 @@ defmodule Mydia.Streaming.CandidatesTest do
     end
   end
 
+  describe "build_metadata_response/2 HDR wire format" do
+    test "hdr_format is the display string, not the raw Ecto.Enum atom" do
+      # Same compatibility promise as the GraphQL MediaFile.hdrFormat field:
+      # self-hosted installs have no coordinated deploy order, so a shipped
+      # player reaching this server months later still expects "Dolby
+      # Vision", not "dolby_vision" or "hdr10". This is the map JSON-encoded
+      # straight into the REST candidates payload and reused as the source
+      # for GraphQL's streamingMetadata object, so a raw atom here breaks
+      # both wire paths at once.
+      movie = media_item_fixture(%{type: "movie"})
+
+      media_file =
+        media_file_fixture(%{
+          media_item_id: movie.id,
+          hdr_format: :hdr10,
+          dolby_vision_profile: 8,
+          dolby_vision_bl_compat_id: 1
+        })
+
+      metadata = Candidates.build_metadata_response(media_file)
+
+      assert metadata.hdr_format == "Dolby Vision"
+      assert metadata.dolby_vision_profile == 8
+      assert metadata.dolby_vision_bl_compat_id == 1
+    end
+
+    test "a Dolby Vision profile 5 file (base nil by design) still reports Dolby Vision" do
+      # Profile 5 has no HDR10-compatible base layer, so hdr_format is nil.
+      # nil there must not be read as SDR.
+      movie = media_item_fixture(%{type: "movie"})
+
+      media_file =
+        media_file_fixture(%{
+          media_item_id: movie.id,
+          hdr_format: nil,
+          dolby_vision_profile: 5,
+          dolby_vision_bl_compat_id: 0
+        })
+
+      metadata = Candidates.build_metadata_response(media_file)
+
+      assert metadata.hdr_format == "Dolby Vision"
+    end
+
+    test "an SDR file reports nil" do
+      movie = media_item_fixture(%{type: "movie"})
+
+      media_file =
+        media_file_fixture(%{
+          media_item_id: movie.id,
+          hdr_format: nil,
+          dolby_vision_profile: nil,
+          dolby_vision_bl_compat_id: nil
+        })
+
+      metadata = Candidates.build_metadata_response(media_file)
+
+      assert metadata.hdr_format == nil
+    end
+  end
+
   describe "build_streaming_candidates/2" do
     alias Mydia.Streaming.DeviceProfile
 

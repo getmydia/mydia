@@ -153,4 +153,40 @@ defmodule Mydia.Library.Structs.StreamInfoTest do
       assert info.codec == "av1"
     end
   end
+
+  describe "dolby_vision_bl_compat_id" do
+    test "is read from the DOVI configuration record" do
+      stream = %{
+        "codec_type" => "video",
+        "index" => 0,
+        "side_data_list" => [
+          %{
+            "side_data_type" => "DOVI configuration record",
+            "dv_profile" => 8,
+            "dv_bl_signal_compatibility_id" => 1
+          }
+        ]
+      }
+
+      assert %{dolby_vision_profile: 8, dolby_vision_bl_compat_id: 1} =
+               StreamInfo.from_ffprobe_stream(stream)
+    end
+
+    test "is nil when the record omits it" do
+      stream = %{
+        "codec_type" => "video",
+        "index" => 0,
+        "side_data_list" => [
+          %{"side_data_type" => "DOVI configuration record", "dv_profile" => 7}
+        ]
+      }
+
+      assert %{dolby_vision_bl_compat_id: nil} = StreamInfo.from_ffprobe_stream(stream)
+    end
+
+    test "round-trips through to_map/1 and from_map/1" do
+      original = %StreamInfo{type: :video, index: 0, dolby_vision_bl_compat_id: 4}
+      assert StreamInfo.from_map(StreamInfo.to_map(original)).dolby_vision_bl_compat_id == 4
+    end
+  end
 end

@@ -15,6 +15,10 @@ pub struct MediaFileRow {
     pub codec: Option<String>,
     pub audio_codec: Option<String>,
     pub hdr_format: Option<String>,
+    /// Dolby Vision profile (5, 7, 8, ...), when the DOVI record is present.
+    pub dolby_vision_profile: Option<i64>,
+    /// DV base-layer compatibility id: 1 = HDR10 base, 4 = HLG base, 0 = none.
+    pub dolby_vision_bl_compat_id: Option<i64>,
     pub bitrate: Option<i64>,
     pub duration_seconds: Option<f64>,
     pub container: Option<String>,
@@ -43,6 +47,8 @@ pub struct NewMediaFile {
     pub codec: Option<String>,
     pub audio_codec: Option<String>,
     pub hdr_format: Option<String>,
+    pub dolby_vision_profile: Option<i64>,
+    pub dolby_vision_bl_compat_id: Option<i64>,
     pub bitrate: Option<i64>,
     pub duration_seconds: Option<f64>,
     pub container: Option<String>,
@@ -53,7 +59,8 @@ pub struct NewMediaFile {
 }
 
 const SELECT: &str = "SELECT id, media_item_id, episode_id, path, size, resolution, codec,
-                             audio_codec, hdr_format, bitrate, duration_seconds, container,
+                             audio_codec, hdr_format, dolby_vision_profile,
+                             dolby_vision_bl_compat_id, bitrate, duration_seconds, container,
                              width, height, subtitle_tracks, mtime, scanned_at
                       FROM media_files";
 
@@ -71,25 +78,27 @@ pub async fn upsert(db: &Db, new: NewMediaFile) -> Result<MediaFileRow, DbError>
     sqlx::query(
         "INSERT INTO media_files
            (id, media_item_id, episode_id, path, size, resolution, codec, audio_codec,
-            hdr_format, bitrate, duration_seconds, container, width, height,
-            subtitle_tracks, mtime, scanned_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            hdr_format, dolby_vision_profile, dolby_vision_bl_compat_id, bitrate,
+            duration_seconds, container, width, height, subtitle_tracks, mtime, scanned_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(path) DO UPDATE SET
-           media_item_id    = excluded.media_item_id,
-           episode_id       = excluded.episode_id,
-           size             = excluded.size,
-           resolution       = excluded.resolution,
-           codec            = excluded.codec,
-           audio_codec      = excluded.audio_codec,
-           hdr_format       = excluded.hdr_format,
-           bitrate          = excluded.bitrate,
-           duration_seconds = excluded.duration_seconds,
-           container        = excluded.container,
-           width            = excluded.width,
-           height           = excluded.height,
-           subtitle_tracks  = excluded.subtitle_tracks,
-           mtime            = excluded.mtime,
-           scanned_at       = excluded.scanned_at",
+           media_item_id             = excluded.media_item_id,
+           episode_id                = excluded.episode_id,
+           size                      = excluded.size,
+           resolution                = excluded.resolution,
+           codec                     = excluded.codec,
+           audio_codec               = excluded.audio_codec,
+           hdr_format                = excluded.hdr_format,
+           dolby_vision_profile      = excluded.dolby_vision_profile,
+           dolby_vision_bl_compat_id = excluded.dolby_vision_bl_compat_id,
+           bitrate                   = excluded.bitrate,
+           duration_seconds          = excluded.duration_seconds,
+           container                 = excluded.container,
+           width                     = excluded.width,
+           height                    = excluded.height,
+           subtitle_tracks           = excluded.subtitle_tracks,
+           mtime                     = excluded.mtime,
+           scanned_at                = excluded.scanned_at",
     )
     .bind(uuid::Uuid::new_v4().to_string())
     .bind(media_item_id)
@@ -100,6 +109,8 @@ pub async fn upsert(db: &Db, new: NewMediaFile) -> Result<MediaFileRow, DbError>
     .bind(&new.codec)
     .bind(&new.audio_codec)
     .bind(&new.hdr_format)
+    .bind(new.dolby_vision_profile)
+    .bind(new.dolby_vision_bl_compat_id)
     .bind(new.bitrate)
     .bind(new.duration_seconds)
     .bind(&new.container)
@@ -301,6 +312,8 @@ mod tests {
             codec: Some("HEVC (Main 10)".to_string()),
             audio_codec: Some("TrueHD 7.1".to_string()),
             hdr_format: Some("Dolby Vision".to_string()),
+            dolby_vision_profile: Some(8),
+            dolby_vision_bl_compat_id: Some(1),
             bitrate: Some(48_000_000),
             duration_seconds: Some(7200.0),
             container: Some("matroska,webm".to_string()),
@@ -325,6 +338,22 @@ mod tests {
 
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].resolution.as_deref(), Some("2160p"));
+    }
+
+    #[tokio::test]
+    async fn dolby_vision_profile_and_compat_id_round_trip() {
+        let (db, _g) = connect_temp().await.unwrap();
+        let lp = library(&db).await;
+        let item = movie(&db, &lp, "The Movie").await;
+
+        upsert(&db, file(Owner::Item(item.clone()), "/media/a.mkv"))
+            .await
+            .unwrap();
+
+        let listed = list_for_item(&db, &item).await.unwrap();
+
+        assert_eq!(listed[0].dolby_vision_profile, Some(8));
+        assert_eq!(listed[0].dolby_vision_bl_compat_id, Some(1));
     }
 
     #[tokio::test]

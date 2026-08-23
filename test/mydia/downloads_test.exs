@@ -155,7 +155,8 @@ defmodule Mydia.DownloadsTest do
         source: "BluRay",
         codec: "x264",
         audio: nil,
-        hdr: false,
+        hdr_format: nil,
+        dolby_vision: false,
         proper: false,
         repack: false
       }

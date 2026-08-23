@@ -25,6 +25,7 @@ defmodule Mydia.Indexers.SearchScorer do
   """
 
   alias Mydia.Indexers.SearchResult
+  alias Mydia.Library.Hdr
   alias Mydia.Settings.QualityProfile
 
   @type score_opts :: [
@@ -335,13 +336,16 @@ defmodule Mydia.Indexers.SearchScorer do
       media_type: media_type
     }
 
-    # Add HDR format if present - use actual format, not hardcoded hdr10
-    if quality.hdr do
-      hdr_format = normalize_hdr_format(quality.hdr_format)
-      Map.put(base_attrs, :hdr_format, hdr_format)
-    else
-      base_attrs
-    end
+    # HDR tokens by specificity, e.g. ["dolby_vision", "hdr10"] for a DV 8.1
+    # release. Omitted entirely when the release carries no HDR signal, which
+    # is what score_hdr_format/2's SDR fallback clause expects.
+    tokens =
+      Hdr.profile_tokens(%Hdr{
+        base: quality.hdr_format,
+        dv_profile: if(quality.dolby_vision, do: 8)
+      })
+
+    if tokens == [], do: base_attrs, else: Map.put(base_attrs, :hdr_tokens, tokens)
   end
 
   # Extract detected quality attributes from search result for display
@@ -353,7 +357,11 @@ defmodule Mydia.Indexers.SearchScorer do
       source: quality.source,
       video_codec: normalize_codec(quality.codec),
       audio_codec: normalize_audio_codec(quality.audio),
-      hdr: quality.hdr,
+      hdr:
+        Hdr.display(%Hdr{
+          base: quality.hdr_format,
+          dv_profile: if(quality.dolby_vision, do: 8)
+        }),
       size_mb: if(result.size, do: Float.round(result.size / (1024 * 1024), 1), else: nil)
     }
   end
@@ -407,26 +415,6 @@ defmodule Mydia.Indexers.SearchScorer do
       "dd+" -> "eac3"
       "ddp" -> "eac3"
       "dd" -> "ac3"
-      other -> other
-    end
-  end
-
-  # Normalize HDR format names to match quality profile format
-  # QualityParser returns: "DV", "HDR10+", "HDR10"
-  # QualityProfile expects: "dolby_vision", "hdr10+", "hdr10"
-  defp normalize_hdr_format(nil), do: "hdr10"
-
-  defp normalize_hdr_format(format) when is_binary(format) do
-    format
-    |> String.downcase()
-    |> case do
-      "dv" -> "dolby_vision"
-      "dolby vision" -> "dolby_vision"
-      "dolbyvision" -> "dolby_vision"
-      "hdr10+" -> "hdr10+"
-      "hdr10plus" -> "hdr10+"
-      "hdr10" -> "hdr10"
-      "hdr" -> "hdr10"
       other -> other
     end
   end

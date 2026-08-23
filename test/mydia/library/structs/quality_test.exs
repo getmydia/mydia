@@ -10,19 +10,35 @@ defmodule Mydia.Library.Structs.QualityTest do
       assert q.source == nil
       assert q.codec == nil
       assert q.audio == nil
-      assert q.hdr == false
       assert q.hdr_format == nil
+      assert q.dolby_vision == false
       assert q.proper == false
       assert q.repack == false
     end
 
     test "accepts a map" do
-      q = Quality.new(%{resolution: "2160p", hdr: true, hdr_format: "DV", proper: true})
+      q =
+        Quality.new(%{resolution: "2160p", hdr_format: :hdr10, dolby_vision: true, proper: true})
+
       assert q.resolution == "2160p"
-      assert q.hdr == true
-      assert q.hdr_format == "DV"
+      assert q.hdr_format == :hdr10
+      assert q.dolby_vision == true
       assert q.proper == true
       assert q.repack == false
+    end
+  end
+
+  describe "hdr?/1" do
+    test "true for a canonical base" do
+      assert Quality.hdr?(%Quality{hdr_format: :hdr10})
+    end
+
+    test "true for Dolby Vision with no base, which is how profile 5 parses" do
+      assert Quality.hdr?(%Quality{hdr_format: nil, dolby_vision: true})
+    end
+
+    test "false for SDR" do
+      refute Quality.hdr?(%Quality{})
     end
   end
 
@@ -32,12 +48,16 @@ defmodule Mydia.Library.Structs.QualityTest do
     end
 
     test "a struct with only flags set is still empty" do
-      assert Quality.empty?(%Quality{hdr: false, proper: false, repack: false})
+      assert Quality.empty?(%Quality{dolby_vision: false, proper: false, repack: false})
     end
 
     test "a struct with content is not empty" do
       refute Quality.empty?(%Quality{resolution: "1080p"})
-      refute Quality.empty?(%Quality{hdr_format: "HDR10"})
+      refute Quality.empty?(%Quality{hdr_format: :hdr10})
+    end
+
+    test "a Dolby Vision only struct (no base) is not empty" do
+      refute Quality.empty?(%Quality{dolby_vision: true})
     end
   end
 
@@ -47,14 +67,18 @@ defmodule Mydia.Library.Structs.QualityTest do
       assert Quality.format(q) == "1080p BluRay x264 DTS-HD MA"
     end
 
-    test "uses hdr_format when hdr is true" do
-      q = %Quality{resolution: "2160p", source: "WEB-DL", hdr: true, hdr_format: "DV"}
-      assert Quality.format(q) == "2160p WEB-DL DV"
+    test "renders Dolby Vision over its base" do
+      assert Quality.format(%Quality{resolution: "2160p", hdr_format: :hdr10, dolby_vision: true}) ==
+               "2160p Dolby Vision"
     end
 
-    test "shows HDR when hdr is true but no format" do
-      q = %Quality{resolution: "2160p", source: "BluRay", hdr: true}
-      assert Quality.format(q) == "2160p BluRay HDR"
+    test "renders a bare base" do
+      assert Quality.format(%Quality{resolution: "2160p", hdr_format: :hdr10}) == "2160p HDR10"
+    end
+
+    test "shows Dolby Vision when there is no base at all" do
+      q = %Quality{resolution: "2160p", source: "BluRay", dolby_vision: true}
+      assert Quality.format(q) == "2160p BluRay Dolby Vision"
     end
 
     test "appends PROPER and REPACK" do
@@ -77,16 +101,54 @@ defmodule Mydia.Library.Structs.QualityTest do
       assert %Quality{} = q
       assert q.resolution == "1080p"
       assert q.source == "BluRay"
-      assert q.hdr == false
+      assert q.hdr_format == nil
+      assert q.dolby_vision == false
       assert q.proper == false
       assert q.repack == false
     end
 
     test "honors atom keys and explicit flags" do
-      q = Quality.from_map(%{resolution: "2160p", hdr: true, hdr_format: "DV", repack: true})
-      assert q.hdr == true
-      assert q.hdr_format == "DV"
+      q =
+        Quality.from_map(%{
+          resolution: "2160p",
+          hdr_format: :hdr10,
+          dolby_vision: true,
+          repack: true
+        })
+
+      assert q.hdr_format == :hdr10
+      assert q.dolby_vision == true
       assert q.repack == true
+    end
+
+    test "decodes a stored string hdr_format back to its atom" do
+      q = Quality.from_map(%{"resolution" => "2160p", "hdr_format" => "hdr10+"})
+      assert q.hdr_format == :hdr10_plus
+    end
+
+    test "an unrecognized stored hdr_format string decodes to nil" do
+      q = Quality.from_map(%{"resolution" => "2160p", "hdr_format" => "garbage"})
+      assert q.hdr_format == nil
+    end
+
+    test "a legacy 'Dolby Vision' display string round-trips as HDR, not SDR" do
+      q = Quality.from_map(%{"hdr_format" => "Dolby Vision"})
+      assert q.hdr_format == nil
+      assert q.dolby_vision
+      assert Quality.hdr?(q)
+    end
+
+    test "a legacy 'HDR10' display string round-trips as HDR" do
+      q = Quality.from_map(%{"hdr_format" => "HDR10"})
+      assert q.hdr_format == :hdr10
+      refute q.dolby_vision
+      assert Quality.hdr?(q)
+    end
+
+    test "an explicit dolby_vision key wins over a base-only legacy string" do
+      q = Quality.from_map(%{"hdr_format" => "HDR10", "dolby_vision" => true})
+      assert q.hdr_format == :hdr10
+      assert q.dolby_vision
     end
 
     test "nil maps to nil" do

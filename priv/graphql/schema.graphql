@@ -769,8 +769,14 @@ type MediaFile {
   "Audio codec (e.g., dts, aac)"
   audioCodec: String
 
-  "HDR format if applicable (e.g., dolby_vision)"
+  "HDR format for display (e.g. Dolby Vision, HDR10, HLG). Self-hosted installs have no coordinated deploy order, so a shipped player reaches this server months later still expecting a display string, not the raw enum atom."
   hdrFormat: String
+
+  "Dolby Vision profile (5, 7, 8) if present"
+  dolbyVisionProfile: Int
+
+  "DV base-layer compatibility id: 1 = HDR10 base, 4 = HLG base, 0 = none"
+  dolbyVisionBlCompatId: Int
 
   "File size in bytes"
   size: Int
@@ -1253,8 +1259,14 @@ type StreamingMetadata {
   "Resolution label (e.g., 1080p)"
   resolution: String
 
-  "HDR format if applicable"
+  "HDR format for display (e.g. Dolby Vision, HDR10, HLG). Computed by Mydia.Streaming.Candidates.build_metadata_response\/2, which also backs the REST candidates payload, so the two never disagree."
   hdrFormat: String
+
+  "Dolby Vision profile (5, 7, 8) if present"
+  dolbyVisionProfile: Int
+
+  "DV base-layer compatibility id: 1 = HDR10 base, 4 = HLG base, 0 = none"
+  dolbyVisionBlCompatId: Int
 
   "Original video codec"
   originalCodec: String

@@ -43,6 +43,7 @@ defmodule Mydia.Settings.QualityProfileEngine do
   alias Mydia.Quality.Sources
   alias Mydia.Repo
   alias Mydia.Settings.QualityProfile
+  alias Mydia.Library.Hdr
   alias Mydia.Library.MediaFile
   alias Mydia.Library.Structs.FileMetadata
   alias Phoenix.PubSub
@@ -445,7 +446,12 @@ defmodule Mydia.Settings.QualityProfileEngine do
       source: extract_source(media_file),
       file_size_mb: file_size_mb,
       media_type: media_type,
-      hdr_format: media_file.hdr_format
+      hdr_tokens:
+        Hdr.profile_tokens(%Hdr{
+          base: media_file.hdr_format,
+          dv_profile: media_file.dolby_vision_profile,
+          bl_compat_id: media_file.dolby_vision_bl_compat_id
+        })
     }
     |> Enum.reject(fn {_k, v} -> is_nil(v) end)
     |> Map.new()
@@ -542,7 +548,7 @@ defmodule Mydia.Settings.QualityProfileEngine do
            get_in(profile.quality_standards, [:require_hdr]) == false do
         hdr_formats = get_in(profile.quality_standards, [:hdr_formats]) || []
 
-        if Enum.any?(hdr_formats) and not Map.has_key?(media_attrs, :hdr_format) do
+        if Enum.any?(hdr_formats) and Map.get(media_attrs, :hdr_tokens, []) == [] do
           best_hdr = List.first(hdr_formats)
           ["Consider upgrading to #{best_hdr} HDR format" | recommendations]
         else

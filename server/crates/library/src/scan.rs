@@ -219,6 +219,8 @@ async fn persist(
             codec: facts.codec.clone(),
             audio_codec: facts.audio_codec.clone(),
             hdr_format: facts.hdr_format.clone(),
+            dolby_vision_profile: facts.dolby_vision_profile,
+            dolby_vision_bl_compat_id: facts.dolby_vision_bl_compat_id,
             bitrate: facts.bitrate,
             duration_seconds: facts.duration_seconds,
             container: facts.container.clone(),

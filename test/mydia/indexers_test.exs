@@ -520,7 +520,6 @@ defmodule Mydia.IndexersTest do
             source: "WEBRip",
             codec: "x264",
             audio: nil,
-            hdr: false,
             proper: false,
             repack: false
           })
@@ -539,7 +538,7 @@ defmodule Mydia.IndexersTest do
             source: "BluRay",
             codec: "x265",
             audio: "DTS",
-            hdr: true,
+            hdr_format: :hdr10,
             proper: false,
             repack: false
           })
@@ -595,7 +594,7 @@ defmodule Mydia.IndexersTest do
             source: "BluRay",
             codec: "x265",
             audio: "TrueHD",
-            hdr: true,
+            hdr_format: :hdr10,
             proper: false,
             repack: false
           })
@@ -614,7 +613,6 @@ defmodule Mydia.IndexersTest do
             source: "WEB-DL",
             codec: "x264",
             audio: "AAC",
-            hdr: false,
             proper: false,
             repack: false
           })

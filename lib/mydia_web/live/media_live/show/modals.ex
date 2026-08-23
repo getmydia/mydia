@@ -12,6 +12,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   import MydiaWeb.MediaLive.Show.SearchHelpers
 
   alias Mydia.Indexers.SearchResult
+  alias Mydia.Library.Hdr
   alias Mydia.Library.MediaFile
 
   @doc """
@@ -285,8 +286,19 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
             <div>
               <h4 class="text-sm font-semibold text-base-content/70 mb-2">HDR Format</h4>
               <p class="text-sm">
-                <%= if @file_details.hdr_format do %>
-                  <span class="badge badge-accent">{@file_details.hdr_format}</span>
+                <%= if @file_details.hdr_format || @file_details.dolby_vision_profile do %>
+                  <span class="badge badge-accent">
+                    {Hdr.display(%Hdr{
+                      base: @file_details.hdr_format,
+                      dv_profile: @file_details.dolby_vision_profile,
+                      bl_compat_id: @file_details.dolby_vision_bl_compat_id
+                    })}
+                  </span>
+                  <%= if @file_details.dolby_vision_profile do %>
+                    <span class="badge badge-ghost badge-sm">
+                      Profile {@file_details.dolby_vision_profile}
+                    </span>
+                  <% end %>
                 <% else %>
                   <span class="text-base-content/50">None</span>
                 <% end %>

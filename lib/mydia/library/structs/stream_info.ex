@@ -44,6 +44,7 @@ defmodule Mydia.Library.Structs.StreamInfo do
     :color_transfer,
     :color_primaries,
     :dolby_vision_profile,
+    :dolby_vision_bl_compat_id,
     :aspect_ratio,
     # audio
     :channels,
@@ -76,6 +77,7 @@ defmodule Mydia.Library.Structs.StreamInfo do
           color_transfer: String.t() | nil,
           color_primaries: String.t() | nil,
           dolby_vision_profile: integer() | nil,
+          dolby_vision_bl_compat_id: integer() | nil,
           aspect_ratio: String.t() | nil,
           channels: integer() | nil,
           channel_layout: String.t() | nil,
@@ -86,7 +88,8 @@ defmodule Mydia.Library.Structs.StreamInfo do
     index type codec codec_long profile level language title bitrate
     is_default is_forced is_hearing_impaired is_commentary
     width height frame_rate pixel_format bit_depth
-    color_space color_transfer color_primaries dolby_vision_profile aspect_ratio
+    color_space color_transfer color_primaries dolby_vision_profile
+    dolby_vision_bl_compat_id aspect_ratio
     channels channel_layout sample_rate
   )
 
@@ -129,6 +132,7 @@ defmodule Mydia.Library.Structs.StreamInfo do
       color_transfer: stream["color_transfer"],
       color_primaries: stream["color_primaries"],
       dolby_vision_profile: dolby_vision_profile(stream),
+      dolby_vision_bl_compat_id: dolby_vision_bl_compat_id(stream),
       aspect_ratio: stream["display_aspect_ratio"],
       channels: to_int(stream["channels"]),
       channel_layout: stream["channel_layout"],
@@ -233,6 +237,19 @@ defmodule Mydia.Library.Structs.StreamInfo do
     |> List.wrap()
     |> Enum.find_value(fn
       %{"dv_profile" => profile} -> to_int(profile)
+      _other -> nil
+    end)
+  end
+
+  # The base-layer compatibility id distinguishes DV 8.1 (HDR10 base) from
+  # 8.4 (HLG base) and 5 (no compatible base). Read from the same record as
+  # dv_profile.
+  defp dolby_vision_bl_compat_id(stream) do
+    stream
+    |> Map.get("side_data_list")
+    |> List.wrap()
+    |> Enum.find_value(fn
+      %{"dv_bl_signal_compatibility_id" => id} -> to_int(id)
       _other -> nil
     end)
   end

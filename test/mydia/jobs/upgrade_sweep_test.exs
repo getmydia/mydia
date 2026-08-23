@@ -153,8 +153,11 @@ defmodule Mydia.Jobs.UpgradeSweepTest do
   end
 
   # Resolution "4K" (canonicalizes to "2160p", the preferred resolution),
-  # audio channels "5.1" (preferred), plus hdr_format "Dolby Vision" score
-  # 94.0 overall — above the fixture's upgrade_until_score: 90, so
+  # audio channels "5.1" (preferred), plus a Dolby Vision profile 8.1
+  # enhancement layer over an HDR10 base (hdr_format: :hdr10,
+  # dolby_vision_profile: 8, dolby_vision_bl_compat_id: 1, which
+  # Hdr.profile_tokens/1 renders as ["dolby_vision", "hdr10"]) score 94.0
+  # overall, above the fixture's upgrade_until_score: 90, so
   # Upgrades.eligible_episodes/1 never returns this candidate. It exists
   # purely so the season's total episode count (read from the DB by
   # TVShowSearch.should_prefer_season_pack?/3, not from the below-cutoff
@@ -174,7 +177,9 @@ defmodule Mydia.Jobs.UpgradeSweepTest do
       codec: "h264",
       audio_codec: Codec.normalize_audio_codec("AAC 5.1"),
       metadata: %FileMetadata{audio_codec_raw: "AAC 5.1"},
-      hdr_format: "Dolby Vision",
+      hdr_format: :hdr10,
+      dolby_vision_profile: 8,
+      dolby_vision_bl_compat_id: 1,
       size: 2 * 1024 * 1024 * 1024,
       analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second),
       quality_profile: profile

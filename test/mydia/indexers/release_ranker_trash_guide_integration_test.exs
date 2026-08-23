@@ -36,6 +36,7 @@ defmodule Mydia.Indexers.ReleaseRankerTRaSHGuideIntegrationTest do
   use ExUnit.Case, async: true
 
   alias Mydia.Indexers.{QualityParser, ReleaseRanker, SearchResult}
+  alias Mydia.Library.Structs.Quality
   alias Mydia.Settings.QualityProfile
 
   # ===========================================================================
@@ -506,19 +507,16 @@ defmodule Mydia.Indexers.ReleaseRankerTRaSHGuideIntegrationTest do
   # ===========================================================================
 
   describe "HDR format preference ranking" do
-    test "Dolby Vision releases detected with correct hdr_format" do
+    test "Dolby Vision releases detected via dolby_vision, not just generic HDR" do
       dv_releases = @dolby_vision_releases
 
       for title <- dv_releases do
         result = build_result(%{title: title, size: 50 * 1024 * 1024 * 1024})
         quality = result.quality
 
-        # STRICT: Must detect specific DV format, not just generic HDR
-        assert quality.hdr == true,
-               "Expected hdr=true for: #{title}"
-
-        assert quality.hdr_format == "DV",
-               "Expected hdr_format='DV' but got '#{quality.hdr_format}' for: #{title}"
+        # STRICT: Must detect the Dolby Vision signal itself, not merely a base HDR token.
+        assert quality.dolby_vision,
+               "Expected dolby_vision for: #{title}"
       end
     end
 
@@ -529,13 +527,14 @@ defmodule Mydia.Indexers.ReleaseRankerTRaSHGuideIntegrationTest do
       dv_title = "Movie.2160p.UHD.BluRay.DV.HEVC-GROUP"
       generic_hdr_title = "Movie.2160p.UHD.BluRay.HDR.HEVC-GROUP"
 
-      assert QualityParser.extract_hdr_format(hdr10_title) == "HDR10"
-      assert QualityParser.extract_hdr_format(hdr10plus_title) == "HDR10+"
-      assert QualityParser.extract_hdr_format(dv_title) == "DV"
-      assert QualityParser.extract_hdr_format(generic_hdr_title) == "HDR"
+      assert QualityParser.extract_hdr(hdr10_title) == {:hdr10, false}
+      assert QualityParser.extract_hdr(hdr10plus_title) == {:hdr10_plus, false}
+      assert QualityParser.extract_hdr(dv_title) == {nil, true}
+      # A bare "HDR" token canonicalizes to the same base as an explicit "HDR10" token.
+      assert QualityParser.extract_hdr(generic_hdr_title) == {:hdr10, false}
     end
 
-    test "HDR format scores are correctly tiered: DV > HDR10+ > HDR10 > HDR > SDR" do
+    test "HDR format scores are correctly tiered: Dolby Vision > HDR10+ > HDR10 > SDR" do
       # Build releases with IDENTICAL specs except HDR format
       base_attrs = %{size: 25 * 1024 * 1024 * 1024, seeders: 100}
 
@@ -551,11 +550,13 @@ defmodule Mydia.Indexers.ReleaseRankerTRaSHGuideIntegrationTest do
       sdr_result = build_result(Map.put(base_attrs, :title, "Movie.2160p.BluRay.x265-GROUP"))
 
       # Verify format detection
-      assert dv_result.quality.hdr_format == "DV"
-      assert hdr10plus_result.quality.hdr_format == "HDR10+"
-      assert hdr10_result.quality.hdr_format == "HDR10"
-      assert hdr_result.quality.hdr_format == "HDR"
+      assert dv_result.quality.dolby_vision
+      assert hdr10plus_result.quality.hdr_format == :hdr10_plus
+      assert hdr10_result.quality.hdr_format == :hdr10
+      # A bare "HDR" token canonicalizes to the same base as an explicit "HDR10" token.
+      assert hdr_result.quality.hdr_format == :hdr10
       assert sdr_result.quality.hdr_format == nil
+      refute sdr_result.quality.dolby_vision
 
       # STRICT: Quality scores must follow TRaSH Guide tier order
       dv_score = QualityParser.quality_score(dv_result.quality)
@@ -570,11 +571,12 @@ defmodule Mydia.Indexers.ReleaseRankerTRaSHGuideIntegrationTest do
       assert hdr10plus_score > hdr10_score,
              "HDR10+ (#{hdr10plus_score}) must score higher than HDR10 (#{hdr10_score})"
 
-      assert hdr10_score > hdr_score,
-             "HDR10 (#{hdr10_score}) must score higher than generic HDR (#{hdr_score})"
+      # A bare "HDR" token is the same canonical tier as "HDR10" once normalized.
+      assert hdr_score == hdr10_score,
+             "generic HDR (#{hdr_score}) must score the same as HDR10 (#{hdr10_score}) once canonicalized"
 
-      assert hdr_score > sdr_score,
-             "HDR (#{hdr_score}) must score higher than SDR (#{sdr_score})"
+      assert hdr10_score > sdr_score,
+             "HDR10 (#{hdr10_score}) must score higher than SDR (#{sdr_score})"
     end
 
     test "HDR releases rank higher than SDR for UHD profile" do
@@ -602,8 +604,8 @@ defmodule Mydia.Indexers.ReleaseRankerTRaSHGuideIntegrationTest do
       second = List.last(ranked)
 
       # STRICT: HDR release must rank higher AND have higher score
-      assert first.result.quality.hdr == true
-      assert second.result.quality.hdr == false
+      assert Quality.hdr?(first.result.quality)
+      refute Quality.hdr?(second.result.quality)
 
       assert first.score > second.score,
              "HDR score (#{first.score}) must be higher than SDR score (#{second.score})"
@@ -636,8 +638,8 @@ defmodule Mydia.Indexers.ReleaseRankerTRaSHGuideIntegrationTest do
       first = List.first(ranked)
 
       # STRICT: DV must win when all else is equal
-      assert first.result.quality.hdr_format == "DV",
-             "Expected DV to rank first, but got #{first.result.quality.hdr_format}"
+      assert first.result.quality.dolby_vision,
+             "Expected Dolby Vision to rank first, but got dolby_vision=#{first.result.quality.dolby_vision}"
     end
   end
 

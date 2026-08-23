@@ -12,6 +12,7 @@ defmodule MydiaWeb.SearchLive.Index do
   import MydiaWeb.IndexerComponents
 
   alias Mydia.Indexers.Structs.IndexerProgress
+  alias Mydia.Library.Structs.Quality
 
   require Logger
 
@@ -1201,7 +1202,7 @@ defmodule MydiaWeb.SearchLive.Index do
 
     # Special indicators
     badges =
-      if quality.hdr do
+      if Quality.hdr?(quality) do
         [%{text: "HDR", color: "badge-warning"} | badges]
       else
         badges

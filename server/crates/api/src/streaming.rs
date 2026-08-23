@@ -74,6 +74,10 @@ fn metadata_for(row: &MediaFileRow) -> StreamingMetadata {
         bitrate: row.bitrate.and_then(|v| i32::try_from(v).ok()),
         resolution: row.resolution.clone(),
         hdr_format: row.hdr_format.clone(),
+        dolby_vision_profile: row.dolby_vision_profile.and_then(|v| i32::try_from(v).ok()),
+        dolby_vision_bl_compat_id: row
+            .dolby_vision_bl_compat_id
+            .and_then(|v| i32::try_from(v).ok()),
         original_codec: row.codec.clone(),
         original_audio_codec: row.audio_codec.clone(),
         container: row.container.clone(),

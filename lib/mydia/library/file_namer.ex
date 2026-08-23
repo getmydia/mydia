@@ -12,7 +12,7 @@ defmodule Mydia.Library.FileNamer do
   ```
   {Movie CleanTitle} ({Release Year}) [Edition]{[Quality Full]}{[Audio]}{[HDR]}{[Codec]}{-Release Group}
   ```
-  Example: `The Movie Title (2010) [IMAX][Bluray-1080p Proper][DTS 5.1][DV HDR10][x264]-RlsGrp`
+  Example: `The Movie Title (2010) [IMAX][Bluray-1080p Proper][DTS 5.1][Dolby Vision][x264]-RlsGrp`
 
   **TV Shows:**
   ```
@@ -26,13 +26,13 @@ defmodule Mydia.Library.FileNamer do
 
   ## Parameters
     - `media_item` - The movie media item (must have title and year)
-    - `quality_info` - Quality information map with keys: resolution, source, codec, audio, hdr, proper, repack
+    - `quality_info` - Quality information map with keys: resolution, source, codec, audio, hdr_format, dolby_vision, proper, repack
     - `original_filename` - Original filename (for extension and release group)
 
   ## Examples
 
       iex> media_item = %{title: "The Matrix", year: 1999}
-      iex> quality = %{resolution: "1080p", source: "BluRay", codec: "x264", audio: "DTS", hdr: false, proper: false, repack: false}
+      iex> quality = %{resolution: "1080p", source: "BluRay", codec: "x264", audio: "DTS", hdr_format: nil, dolby_vision: false, proper: false, repack: false}
       iex> FileNamer.generate_movie_filename(media_item, quality, "The.Matrix.1999.1080p.BluRay.x264.DTS-GROUP.mkv")
       "The Matrix (1999) [BluRay-1080p][DTS][x264]-GROUP.mkv"
   """
@@ -72,14 +72,14 @@ defmodule Mydia.Library.FileNamer do
   ## Parameters
     - `media_item` - The TV show media item (must have title)
     - `episode` - The episode record (must have season_number, episode_number, title)
-    - `quality_info` - Quality information map with keys: resolution, source, codec, audio, hdr, proper, repack
+    - `quality_info` - Quality information map with keys: resolution, source, codec, audio, hdr_format, dolby_vision, proper, repack
     - `original_filename` - Original filename (for extension and release group)
 
   ## Examples
 
       iex> media_item = %{title: "Breaking Bad", year: 2008}
       iex> episode = %{season_number: 1, episode_number: 1, title: "Pilot"}
-      iex> quality = %{resolution: "1080p", source: "BluRay", codec: "x264", audio: nil, hdr: false, proper: false, repack: false}
+      iex> quality = %{resolution: "1080p", source: "BluRay", codec: "x264", audio: nil, hdr_format: nil, dolby_vision: false, proper: false, repack: false}
       iex> FileNamer.generate_episode_filename(media_item, episode, quality, "Breaking.Bad.S01E01.1080p.BluRay.x264-GROUP.mkv")
       "Breaking Bad (2008) - S01E01 - Pilot [BluRay-1080p][x264]-GROUP.mkv"
   """
@@ -180,11 +180,21 @@ defmodule Mydia.Library.FileNamer do
     "[#{audio}]"
   end
 
-  defp build_hdr_tag(%{hdr: false}), do: nil
-
-  defp build_hdr_tag(%{hdr: true}) do
-    # Just tag as HDR - specific HDR format detection can be added later
-    "[HDR]"
+  # Delegates to the one module that produces human HDR text, so the tag
+  # here, the GraphQL field, and the LiveView badge cannot drift apart again.
+  # `quality_info` is the reshaped Quality struct: hdr_format is an
+  # `Hdr.base()` atom or nil, plus a `dolby_vision` boolean. A filename
+  # cannot reveal a Dolby Vision profile number, so `dv_profile: 8` below is
+  # only an internal marker telling `display/1` to say "Dolby Vision" when
+  # `dolby_vision` is true; it is not a claim that the real profile is 8.
+  defp build_hdr_tag(quality_info) do
+    case Mydia.Library.Hdr.display(%Mydia.Library.Hdr{
+           base: Map.get(quality_info, :hdr_format),
+           dv_profile: if(Map.get(quality_info, :dolby_vision), do: 8)
+         }) do
+      nil -> nil
+      label -> "[#{label}]"
+    end
   end
 
   defp build_codec_tag(nil), do: nil

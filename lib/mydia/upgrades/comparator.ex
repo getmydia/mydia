@@ -23,7 +23,7 @@ defmodule Mydia.Upgrades.Comparator do
   alias Mydia.Settings.QualityProfile
   alias Mydia.Upgrades.Attrs
 
-  @neutralizable ~w(resolution video_codec audio_codec audio_channels source hdr_format file_size_mb)a
+  @neutralizable ~w(resolution video_codec audio_codec audio_channels source hdr_tokens file_size_mb)a
 
   @doc """
   Scores an analyzed file against its profile.

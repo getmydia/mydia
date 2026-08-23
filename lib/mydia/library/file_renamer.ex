@@ -231,8 +231,8 @@ defmodule Mydia.Library.FileRenamer do
       source: source,
       codec: file.codec,
       audio: file.audio_codec,
-      hdr: file.hdr_format != nil,
       hdr_format: file.hdr_format,
+      dolby_vision: not is_nil(file.dolby_vision_profile),
       proper: false,
       repack: false
     })
