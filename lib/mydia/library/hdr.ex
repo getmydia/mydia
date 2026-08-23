@@ -194,4 +194,30 @@ defmodule Mydia.Library.Hdr do
   end
 
   defp to_int(_value), do: nil
+
+  @doc """
+  Interprets one quality token lifted from a release name.
+
+  A release name can reveal that Dolby Vision is present but never which
+  profile, which is why this returns `:dolby_vision` rather than a struct.
+  """
+  @spec from_release_token(String.t()) :: {:base, base()} | :dolby_vision | :unknown
+  def from_release_token(token) when is_binary(token) do
+    token
+    |> String.downcase()
+    |> String.replace(~r/[\s._\-]/, "")
+    |> case do
+      "dv" -> :dolby_vision
+      "dovi" -> :dolby_vision
+      "dolbyvision" -> :dolby_vision
+      "hdr10+" -> {:base, :hdr10_plus}
+      "hdr10plus" -> {:base, :hdr10_plus}
+      "hdr10" -> {:base, :hdr10}
+      "hdr" -> {:base, :hdr10}
+      "hlg" -> {:base, :hlg}
+      _other -> :unknown
+    end
+  end
+
+  def from_release_token(_token), do: :unknown
 end

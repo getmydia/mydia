@@ -181,4 +181,32 @@ defmodule Mydia.Library.HdrTest do
       refute Hdr.needs_frame_probe?(%Hdr{})
     end
   end
+
+  describe "from_release_token/1" do
+    test "recognises Dolby Vision spellings" do
+      for token <- ["DV", "dv", "DoVi", "DolbyVision", "Dolby Vision", "dolby-vision"] do
+        assert Hdr.from_release_token(token) == :dolby_vision, "failed on #{token}"
+      end
+    end
+
+    test "recognises HDR10+ spellings" do
+      for token <- ["HDR10+", "hdr10plus", "HDR10-Plus", "hdr10 plus"] do
+        assert Hdr.from_release_token(token) == {:base, :hdr10_plus}, "failed on #{token}"
+      end
+    end
+
+    test "recognises HDR10 and bare HDR" do
+      assert Hdr.from_release_token("HDR10") == {:base, :hdr10}
+      assert Hdr.from_release_token("HDR") == {:base, :hdr10}
+    end
+
+    test "recognises HLG" do
+      assert Hdr.from_release_token("HLG") == {:base, :hlg}
+    end
+
+    test "returns :unknown for anything else" do
+      assert Hdr.from_release_token("BluRay") == :unknown
+      assert Hdr.from_release_token("") == :unknown
+    end
+  end
 end
