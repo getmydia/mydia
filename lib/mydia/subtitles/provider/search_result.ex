@@ -105,11 +105,18 @@ defmodule Mydia.Subtitles.Provider.SearchResult do
         get_field(map, "hearing_impaired") || get_field(map, :hearing_impaired) || false,
       moviehash_match:
         get_field(map, "moviehash_match") || get_field(map, :moviehash_match) || false,
-      origin: get_field(map, "origin") || get_field(map, :origin)
+      origin: blank_to_nil(get_field(map, "origin") || get_field(map, :origin))
     }
   end
 
   defp get_field(map, key), do: Map.get(map, key)
+
+  # An empty string is truthy in Elixir, so `result.origin || config.name` in
+  # `ProviderChain.tag/2` never falls back to the configured name when a relay
+  # sends `"source": ""`. Blanking it here, at the boundary, keeps that `||`
+  # simple instead of teaching every reader of it about this edge case.
+  defp blank_to_nil(""), do: nil
+  defp blank_to_nil(value), do: value
 
   @doc """
   Converts a SearchResult struct to a plain map.
@@ -129,7 +136,8 @@ defmodule Mydia.Subtitles.Provider.SearchResult do
         rating: nil,
         download_count: nil,
         hearing_impaired: false,
-        moviehash_match: false
+        moviehash_match: false,
+        origin: nil
       }
 
   """
