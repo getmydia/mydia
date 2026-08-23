@@ -57,13 +57,12 @@ defmodule Mydia.Streaming.Compatibility do
     container = get_container_format(media_file)
     video_codec = media_file.codec
     audio_codec = media_file.audio_codec
-    hdr_format = media_file.hdr_format
 
     cond do
-      client_can_play?(profile, container, video_codec, audio_codec, hdr_format) ->
+      client_can_play?(profile, container, video_codec, audio_codec) ->
         :direct_play
 
-      remux_eligible?(profile, container, video_codec, audio_codec, hdr_format) ->
+      remux_eligible?(profile, container, video_codec, audio_codec) ->
         :needs_remux
 
       true ->
@@ -72,24 +71,37 @@ defmodule Mydia.Streaming.Compatibility do
   end
 
   # The client can open this container and decode every stream in it as-is.
-  defp client_can_play?(profile, container, video_codec, audio_codec, hdr_format) do
+  defp client_can_play?(profile, container, video_codec, audio_codec) do
     DeviceProfile.container_allowed?(profile, container) and
-      codecs_playable?(profile, video_codec, audio_codec, hdr_format)
+      codecs_playable?(profile, video_codec, audio_codec)
   end
 
   # The codecs are fine but the container is not, so ffmpeg can stream-copy into
   # fMP4 without re-encoding. `remuxable_container?/1` stays hardcoded because it
   # describes what ffmpeg can repackage, which is a server capability and does
   # not vary by client.
-  defp remux_eligible?(profile, container, video_codec, audio_codec, hdr_format) do
+  defp remux_eligible?(profile, container, video_codec, audio_codec) do
     remuxable_container?(container) and
-      codecs_playable?(profile, video_codec, audio_codec, hdr_format)
+      codecs_playable?(profile, video_codec, audio_codec)
   end
 
-  defp codecs_playable?(profile, video_codec, audio_codec, hdr_format) do
+  # HDR is deliberately NOT checked here yet.
+  #
+  # Two things have to be true before it can be, and neither is today.
+  # FfmpegHlsTranscoder emits no tonemapping filter at all (its only -vf is
+  # `scale=`), so refusing HDR direct play would hand the viewer a washed-out
+  # SDR transcode instead of correct HDR. And `media_file.hdr_format` holds
+  # ffprobe display strings ("Dolby Vision", "HDR10+"), which no clean allowlist
+  # matches. Dolby Vision also cannot be answered by presence alone: profile 8.1
+  # carries an HDR10 base that non-DV clients play correctly, while profile 5
+  # does not.
+  #
+  # Activate this against Mydia.Library.Hdr.profile_tokens/1 when it lands,
+  # matching any-member-of rather than equality. DeviceProfile still parses and
+  # caps `hdr_formats` so the wire format does not have to change then.
+  defp codecs_playable?(profile, video_codec, audio_codec) do
     DeviceProfile.video_codec_allowed?(profile, video_codec) and
-      DeviceProfile.audio_codec_allowed_or_absent?(profile, audio_codec) and
-      DeviceProfile.hdr_allowed_or_absent?(profile, hdr_format)
+      DeviceProfile.audio_codec_allowed_or_absent?(profile, audio_codec)
   end
 
   # Containers that can be remuxed to fMP4 without transcoding.

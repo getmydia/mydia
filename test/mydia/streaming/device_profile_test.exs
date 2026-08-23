@@ -66,19 +66,6 @@ defmodule Mydia.Streaming.DeviceProfileTest do
     end
   end
 
-  describe "hdr_allowed_or_absent?/2" do
-    test "a nil hdr format is unconstrained" do
-      assert DeviceProfile.hdr_allowed_or_absent?(%DeviceProfile{hdr_formats: []}, nil)
-    end
-
-    test "a present hdr format must be listed" do
-      profile = %DeviceProfile{hdr_formats: ["hdr10"]}
-
-      assert DeviceProfile.hdr_allowed_or_absent?(profile, "HDR10")
-      refute DeviceProfile.hdr_allowed_or_absent?(profile, "dolby_vision")
-    end
-  end
-
   describe "from_map/1" do
     test "builds a profile from string-keyed JSON" do
       assert {:ok, profile} =

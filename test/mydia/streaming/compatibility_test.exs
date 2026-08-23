@@ -410,30 +410,31 @@ defmodule Mydia.Streaming.CompatibilityTest do
       assert Compatibility.check_compatibility(mkv_hevc_file(), profile) == :needs_remux
     end
 
-    test "an unlistable hdr format forces transcoding even when the video codec is allowed" do
+    test "an HDR file with browser-compatible codecs still direct plays with no profile" do
+      # Regression guard. Compatibility did not read hdr_format before device
+      # profiles existed, and it must not start now: the transcoder has no
+      # tonemapping, so forcing a transcode here would produce washed-out SDR
+      # from correct HDR. VP9 and AV1 HDR are the real cases; browsers decode
+      # both natively.
       file = %MediaFile{
-        codec: "hevc",
-        audio_codec: "aac",
-        hdr_format: "dolby_vision",
-        metadata: %FileMetadata{container: "mkv"},
-        path: "/path/to/video.mkv"
+        codec: "vp9",
+        audio_codec: "opus",
+        hdr_format: "HDR10",
+        metadata: %FileMetadata{container: "webm"},
+        path: "/path/to/video.webm"
       }
 
-      profile = %DeviceProfile{
-        containers: ["mkv"],
-        video_codecs: ["hevc"],
-        audio_codecs: ["aac"],
-        hdr_formats: ["hdr10"]
-      }
-
-      assert Compatibility.check_compatibility(file, profile) == :needs_transcoding
+      assert Compatibility.check_compatibility(file) == :direct_play
     end
 
-    test "a listed hdr format is direct play" do
+    test "a profile that lists hdr_formats does not yet constrain playback" do
+      # hdr_formats is parsed and validated but deliberately unenforced. If this
+      # test starts failing, HDR enforcement was switched on; make sure it went
+      # through Hdr.profile_tokens/1 and not string equality on the column.
       file = %MediaFile{
         codec: "hevc",
         audio_codec: "aac",
-        hdr_format: "hdr10",
+        hdr_format: "Dolby Vision",
         metadata: %FileMetadata{container: "mkv"},
         path: "/path/to/video.mkv"
       }
@@ -446,13 +447,6 @@ defmodule Mydia.Streaming.CompatibilityTest do
       }
 
       assert Compatibility.check_compatibility(file, profile) == :direct_play
-    end
-
-    test "check_compatibility/1 still delegates to the browser default" do
-      file = mkv_hevc_file()
-
-      assert Compatibility.check_compatibility(file) ==
-               Compatibility.check_compatibility(file, DeviceProfile.browser_default())
     end
 
     test "an RFC 6381 video codec string now resolves, widening the old exact match" do

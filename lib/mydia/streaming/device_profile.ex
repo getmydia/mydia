@@ -17,6 +17,12 @@ defmodule Mydia.Streaming.DeviceProfile do
   Entries are plain strings and are never converted to atoms. The payload is
   attacker-controlled and its contents read exactly like atom names, which is
   precisely the shape that invites an unsafe `String.to_atom/1`.
+
+  ## HDR is parsed but not enforced
+
+  `hdr_formats` is accepted, capped, and downcased like the other lists, so the
+  wire format is stable, but `Mydia.Streaming.Compatibility` does not consult
+  it yet. See the comment above `codecs_playable?/3` there for why.
   """
 
   use Ecto.Schema
@@ -129,22 +135,6 @@ defmodule Mydia.Streaming.DeviceProfile do
   end
 
   def audio_codec_allowed_or_absent?(%__MODULE__{}, _codec), do: false
-
-  @doc """
-  Whether the HDR format is listed, or absent.
-
-  Most files carry no HDR format, and those are unconstrained. A file that does
-  carry one must have it listed, which is the rule that reaches formats a client
-  cannot decode even though it handles the underlying video codec.
-  """
-  @spec hdr_allowed_or_absent?(t(), String.t() | nil) :: boolean()
-  def hdr_allowed_or_absent?(%__MODULE__{}, nil), do: true
-
-  def hdr_allowed_or_absent?(%__MODULE__{hdr_formats: list}, hdr) when is_binary(hdr) do
-    String.downcase(hdr) in list
-  end
-
-  def hdr_allowed_or_absent?(%__MODULE__{}, _hdr), do: false
 
   defp contains_any?(list, value) do
     normalized = String.downcase(value)
