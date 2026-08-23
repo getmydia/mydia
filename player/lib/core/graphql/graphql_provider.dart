@@ -39,7 +39,7 @@ import 'p2p_link.dart';
 /// profile would survive an OS upgrade, a display swap, or a change in
 /// hardware decode availability that the process holding it did not.
 final deviceProfileHolderProvider = Provider<DeviceProfileHolder>((ref) {
-  final holder = DeviceProfileHolder();
+  final holder = DeviceProfileHolder.instance;
   // Not awaited: detectDeviceProfile never throws (every failure path
   // resolves to a fallback profile), and this provider's job is to hand back
   // the holder immediately, not to block on the probe. The eventual write is

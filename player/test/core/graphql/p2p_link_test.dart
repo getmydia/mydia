@@ -126,11 +126,11 @@ void main() {
   });
 
   group('P2pGraphQLLink device profile threading', () {
-    // DeviceProfileHolder() is a process-wide singleton, the same one
+    // DeviceProfileHolder.instance is a process-wide singleton, the same one
     // graphql_provider.dart's deviceProfileHolderProvider hands to the HTTP
     // link. Reset it so a value set here cannot leak into another test.
     tearDown(() {
-      DeviceProfileHolder().profile = null;
+      DeviceProfileHolder.instance.profile = null;
     });
 
     test('carries null before the probe resolves', () async {
@@ -148,7 +148,7 @@ void main() {
 
     test('carries the encoded header value once the probe resolves', () async {
       const profile = DeviceProfile.webDefault();
-      DeviceProfileHolder().profile = profile;
+      DeviceProfileHolder.instance.profile = profile;
 
       final service = _FakeP2pService();
       final link = P2pGraphQLLink(

@@ -64,6 +64,14 @@ const DeviceProfile _staticNativeProfile = DeviceProfile(
     'pcm',
     'alac',
   ],
+  // Naming time bomb: separate in-flight work migrates the server's
+  // hdr_format column to Ecto.Enum [:hdr10, :hdr10_plus, :hlg] plus separate
+  // Dolby Vision profile fields, exposing a future
+  // Mydia.Library.Hdr.profile_tokens/1 seam that returns tokens like
+  // ["dolby_vision", "hdr10"]. "hdr10plus" here will NOT match :hdr10_plus
+  // there. Inert today because HDR is parsed but not enforced (see
+  // DeviceProfile's moduledoc on the server); reconcile against
+  // Hdr.profile_tokens/1 when enforcement is activated.
   hdrFormats: ['hdr10', 'hdr10plus', 'hlg', 'dolby_vision'],
 );
 

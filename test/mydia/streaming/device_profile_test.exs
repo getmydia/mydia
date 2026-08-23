@@ -105,6 +105,14 @@ defmodule Mydia.Streaming.DeviceProfileTest do
       assert :error = DeviceProfile.from_map(%{"containers" => "mp4"})
     end
 
+    test "rejects a list containing a non-string element" do
+      assert :error = DeviceProfile.from_map(%{"containers" => [1, "mp4"]})
+    end
+
+    test "rejects an empty-string entry" do
+      assert :error = DeviceProfile.from_map(%{"videoCodecs" => [""]})
+    end
+
     test "rejects a non-map input" do
       assert :error = DeviceProfile.from_map("mp4")
     end

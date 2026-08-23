@@ -78,20 +78,21 @@ Future<DeviceProfile> detectDeviceProfile() => platform.detectDeviceProfile();
 /// client rebuild, no orphaned in-flight query, and no subscription
 /// reconnect.
 class DeviceProfileHolder {
-  DeviceProfileHolder._();
+  DeviceProfileHolder();
 
   /// The one instance for the app's lifetime.
   ///
-  /// `DeviceProfileHolder()` always returns this. `graphql_provider.dart`'s
-  /// `deviceProfileHolderProvider` reads it through Riverpod for the HTTP
-  /// link; `P2pGraphQLLink` (`p2p_link.dart`) has no `ref` to read a provider
-  /// through, so it reads this same instance directly. Both must see the one
-  /// slot `detectDeviceProfile()` eventually writes into, not independent
-  /// copies.
-  static final DeviceProfileHolder _instance = DeviceProfileHolder._();
-
-  /// Always returns [_instance].
-  factory DeviceProfileHolder() => _instance;
+  /// `graphql_provider.dart`'s `deviceProfileHolderProvider` reads
+  /// [instance] for the HTTP link; `P2pGraphQLLink` (`p2p_link.dart`) has no
+  /// `ref` to read a provider through, so it reads [instance] directly. Both
+  /// must see the one slot `detectDeviceProfile()` eventually writes into,
+  /// not independent copies.
+  ///
+  /// Use the plain constructor, `DeviceProfileHolder()`, instead of
+  /// [instance] only where an independent, non-shared holder is actually
+  /// wanted, such as a test that scopes its own state rather than mutating
+  /// the global.
+  static final DeviceProfileHolder instance = DeviceProfileHolder();
 
   /// Null until the probe resolves, then fixed for the rest of the session.
   DeviceProfile? profile;

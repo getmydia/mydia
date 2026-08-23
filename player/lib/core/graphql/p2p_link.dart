@@ -64,7 +64,8 @@ class P2pGraphQLLink extends Link {
       // resolves carries null, which degrades to the server's no-profile
       // behavior, and one issued after picks up the profile with nothing
       // else to rebuild.
-      final deviceProfile = DeviceProfileHolder().profile?.toHeaderValue();
+      final deviceProfile =
+          DeviceProfileHolder.instance.profile?.toHeaderValue();
 
       // Attempt the request with retries on connection errors
       final responseData = await _sendWithAuthRecovery(

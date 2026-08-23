@@ -86,7 +86,12 @@ defmodule Mydia.Streaming.DeviceProfile do
 
     changeset =
       %__MODULE__{}
-      |> cast(params, [:containers, :video_codecs, :audio_codecs, :hdr_formats])
+      # `empty_values: []` turns off cast/3's default behavior of silently
+      # dropping "" entries from array fields (built for HTML forms, where a
+      # blank multi-select submits ""). That default would swallow an empty
+      # codec entry into the field's default `[]` before validate_list/2
+      # ever saw it, so the malformed-entry check below would never fire.
+      |> cast(params, [:containers, :video_codecs, :audio_codecs, :hdr_formats], empty_values: [])
       |> validate_list(:containers)
       |> validate_list(:video_codecs)
       |> validate_list(:audio_codecs)
@@ -188,6 +193,13 @@ defmodule Mydia.Streaming.DeviceProfile do
 
           Enum.any?(entries, &(String.length(&1) > @max_entry_length)) ->
             add_error(changeset, field, "entry too long")
+
+          Enum.any?(entries, &(&1 == "")) ->
+            # String.contains?(anything, "") is always true, so an empty entry
+            # would make contains_any?/2 match every codec instead of none.
+            # Reject it here, with the other caps, rather than filtering it
+            # out at match time.
+            add_error(changeset, field, "entry cannot be empty")
 
           true ->
             changeset
