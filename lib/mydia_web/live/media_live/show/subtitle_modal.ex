@@ -350,9 +350,14 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
   defp search_error_message(_reason),
     do: "The search could not be completed. Check the server logs for details."
 
-  # A perfect release-name match on a metadata search reaches 100, which is the
-  # best a provider with no hash search can do, so that is where green starts.
-  defp score_badge_class(score) when score >= 100, do: "badge-success"
+  # The release block's ceiling moves with how much the file's own name
+  # reveals. A name with no audio token, the very common bare naming like
+  # "...1080p.BluRay.x264-AMIABLE", tops the release block at 47 instead of
+  # 50, so a byte-identical match on that naming totals 97, not 100.
+  # Reachable totals near the top are 100, 97, 95, 90, 88, 80, so 95 means
+  # "everything matched except at most one of audio or codec" and nothing
+  # weaker qualifies for green.
+  defp score_badge_class(score) when score >= 95, do: "badge-success"
   defp score_badge_class(score) when score >= 75, do: "badge-warning"
   defp score_badge_class(_score), do: "badge-ghost"
 end

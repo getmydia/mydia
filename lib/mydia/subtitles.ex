@@ -29,12 +29,15 @@ defmodule Mydia.Subtitles do
   alias Mydia.Library.MediaFile
   alias Mydia.Media.{MediaItem, Episode}
 
-  # Auto-download fires when the best result clears this. The bar is now
-  # reachable without a hash: a metadata search whose best candidate matches the
-  # file's release name exactly scores 50 + 50. Previously only an
+  # Auto-download fires when the best result clears this. Previously only an
   # OpenSubtitles hash match could clear it, which made the option dead for
-  # every zero-configuration install. The weights themselves live in
-  # `Mydia.Subtitles.Scoring`.
+  # every zero-configuration install. A metadata search can clear it too, but
+  # only when the candidate matches the file's release name AND the file's
+  # own name carries every release-block token, audio included: the very
+  # common bare naming with no audio token (e.g.
+  # "...1080p.BluRay.x264-AMIABLE") caps the release block at 47, so a
+  # byte-identical match on that naming scores 50 + 47 = 97, not 100. The
+  # weights themselves live in `Mydia.Subtitles.Scoring`.
   @high_confidence_threshold 100
 
   @doc """

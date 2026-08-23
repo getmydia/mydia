@@ -40,6 +40,27 @@ defmodule Mydia.Subtitles.ScoringTest do
       assert total == 100
     end
 
+    # The very common bare naming carries no audio token, so both sides parse
+    # to audio: nil and the audio factor can never fire. This locks in the
+    # resulting 97 ceiling: it is what makes the badge threshold in
+    # `SubtitleModal.score_badge_class/1` 95 rather than 100, and it should
+    # break loudly if a future change to the weights or the threshold quietly
+    # drifts the common case.
+    test "a release name with no audio token on either side totals 97, not 100" do
+      {total, factors} =
+        Scoring.score(
+          candidate("The.Matrix.1999.1080p.BluRay.x264-AMIABLE"),
+          %{imdb_id: "0133093"},
+          reference("The.Matrix.1999.1080p.BluRay.x264-AMIABLE.mkv")
+        )
+
+      assert total == 97
+
+      audio = Enum.find(factors, &(&1.key == :audio))
+      assert audio.points == 0
+      refute audio.matched
+    end
+
     test "release group awards 20 when it matches" do
       assert points(
                candidate("The.Matrix.1999.1080p.BluRay.x264-AMIABLE"),
