@@ -49,8 +49,10 @@ defmodule MetadataRelay.TVDB.Handler do
     - page: Page number for pagination (0-indexed)
   """
   def get_series_episodes(id, params) do
-    # TVDB v4 uses page parameter directly
-    page = Keyword.get(params, :page, 0)
+    # TVDB v4 uses page parameter directly. `params` is the relay's
+    # string-keyed param map (see Router.extract_query_params/1), so caller
+    # key names never become atoms.
+    page = Map.get(params, "page", 0)
     Client.get("/series/#{id}/episodes/default/page/#{page}")
   end
 

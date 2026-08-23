@@ -197,6 +197,59 @@ defmodule MetadataRelay.Cache.InMemoryTest do
       assert {:ok, "value_1"} = InMemory.get("key_1")
       assert {:ok, "value_100"} = InMemory.get("key_100")
     end
+
+    # Regression guard for T-263: eviction must be genuinely oldest-first,
+    # not whatever key a plain `:set`'s `:ets.first/1` happens to hash to
+    # first. `@max_entries` is overridden via config so this can exercise
+    # real evictions without inserting 20,000 rows.
+    test "evicts entries in true insertion order, not ETS hash order" do
+      InMemory.clear()
+      Application.put_env(:metadata_relay, :cache_max_entries, 5)
+      on_exit(fn -> Application.delete_env(:metadata_relay, :cache_max_entries) end)
+
+      for i <- 0..9 do
+        InMemory.put("key_#{i}", "value_#{i}", 60_000)
+      end
+
+      stats = InMemory.stats()
+      assert stats.size == 5
+
+      # Only the five most recently inserted keys should survive.
+      for i <- 0..4 do
+        assert {:error, :not_found} = InMemory.get("key_#{i}"),
+               "expected key_#{i} to have been evicted as the oldest entry"
+      end
+
+      for i <- 5..9 do
+        expected = "value_#{i}"
+
+        assert {:ok, ^expected} = InMemory.get("key_#{i}"),
+               "expected key_#{i} (recently inserted) to survive eviction"
+      end
+    end
+
+    test "re-inserting an existing key refreshes its position instead of leaking a stale eviction slot" do
+      InMemory.clear()
+      Application.put_env(:metadata_relay, :cache_max_entries, 3)
+      on_exit(fn -> Application.delete_env(:metadata_relay, :cache_max_entries) end)
+
+      InMemory.put("a", 1, 60_000)
+      InMemory.put("b", 2, 60_000)
+      InMemory.put("c", 3, 60_000)
+
+      # Touch "a" again so it becomes the most recently inserted key.
+      InMemory.put("a", "updated", 60_000)
+
+      # Capacity is still 3, so the next insert evicts the true oldest ("b"),
+      # not "a" (which would happen if the refreshed insert left its old
+      # order-table slot behind).
+      InMemory.put("d", 4, 60_000)
+
+      assert {:ok, "updated"} = InMemory.get("a")
+      assert {:error, :not_found} = InMemory.get("b")
+      assert {:ok, 3} = InMemory.get("c")
+      assert {:ok, 4} = InMemory.get("d")
+    end
   end
 
   describe "concurrent access" do

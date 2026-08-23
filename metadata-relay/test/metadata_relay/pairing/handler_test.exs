@@ -155,6 +155,20 @@ defmodule MetadataRelay.Pairing.HandlerTest do
 
       assert conn.status == 204
     end
+
+    # Regression guard for T-253: this route previously had no rate limit at
+    # all, unlike its POST/GET siblings.
+    test "is rate limited after 30 requests from the same caller" do
+      for _ <- 1..30 do
+        conn = Plug.Test.conn(:delete, "/pairing/claim/NONEXISTENT") |> Router.call([])
+        assert conn.status == 204
+      end
+
+      conn = Plug.Test.conn(:delete, "/pairing/claim/NONEXISTENT") |> Router.call([])
+
+      assert conn.status == 429
+      assert ["60"] = Plug.Conn.get_resp_header(conn, "retry-after")
+    end
   end
 
   describe "v2 sealed claims" do
@@ -221,6 +235,24 @@ defmodule MetadataRelay.Pairing.HandlerTest do
 
       assert {:ok, :no_content} = MetadataRelay.Pairing.Handler.delete_sealed_claim(key)
       assert {:error, :not_found} = MetadataRelay.Pairing.Handler.get_sealed_claim(key)
+    end
+  end
+
+  describe "DELETE /pairing/v2/claim/:lookup_key" do
+    # Regression guard for T-257: same missing-rate-limit gap as T-253, on
+    # the v2 sealed claim's delete route.
+    test "is rate limited after 30 requests from the same caller" do
+      key = String.duplicate("e", 64)
+
+      for _ <- 1..30 do
+        conn = Plug.Test.conn(:delete, "/pairing/v2/claim/#{key}") |> Router.call([])
+        assert conn.status == 204
+      end
+
+      conn = Plug.Test.conn(:delete, "/pairing/v2/claim/#{key}") |> Router.call([])
+
+      assert conn.status == 429
+      assert ["60"] = Plug.Conn.get_resp_header(conn, "retry-after")
     end
   end
 

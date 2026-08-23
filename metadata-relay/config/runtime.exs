@@ -5,32 +5,20 @@ import Config
 
 # Skip runtime configuration for test environment (handled in test.exs)
 if config_env() != :test do
-  normalize_env = fn name ->
-    case System.get_env(name) do
-      nil ->
-        nil
-
-      value ->
-        value = String.trim(value)
-        if value == "", do: nil, else: value
-    end
-  end
+  # `normalize_env/1` treats "unset" and "blank after trimming" identically
+  # (both become `nil`): `System.get_env/1` returns `""`, not `nil`, for a
+  # variable explicitly set to an empty string, and `""` is truthy in
+  # Elixir, so a bare `System.get_env(name) || default`/`|| raise` silently
+  # accepts that misconfiguration. See MetadataRelay.Config's moduledoc
+  # (T-259..T-262) for the dashboard-credential instance of this that
+  # motivated pulling this out of a local, single-purpose closure.
+  normalize_env = &MetadataRelay.Config.get_non_blank/1
 
   dashboard_username =
-    System.get_env("DASHBOARD_USERNAME") ||
-      if config_env() == :prod do
-        raise("DASHBOARD_USERNAME not set")
-      else
-        "admin"
-      end
+    MetadataRelay.Config.fetch_credential!("DASHBOARD_USERNAME", config_env(), "admin")
 
   dashboard_password =
-    System.get_env("DASHBOARD_PASSWORD") ||
-      if config_env() == :prod do
-        raise("DASHBOARD_PASSWORD not set")
-      else
-        "admin"
-      end
+    MetadataRelay.Config.fetch_credential!("DASHBOARD_PASSWORD", config_env(), "admin")
 
   config :metadata_relay,
     dashboard_auth: [username: dashboard_username, password: dashboard_password]

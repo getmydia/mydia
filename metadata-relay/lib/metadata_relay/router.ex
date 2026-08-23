@@ -13,17 +13,13 @@ defmodule MetadataRelay.Router do
   alias MetadataRelay.SubDL.Handler, as: SubtitlesHandler
   alias MetadataRelay.Pairing.Handler, as: PairingHandler
 
-  @feedback_param_atoms %{
-    "type" => :type,
-    "message" => :message,
-    "contact" => :contact,
-    "instance_id" => :instance_id,
-    "mydia_version" => :mydia_version
-  }
-
   plug(Plug.Logger)
   plug(Plug.Parsers, parsers: [:urlencoded, :json], json_decoder: Jason)
   plug(MetadataRelay.Plug.Cache)
+  # After the cache: a cache hit halts the connection above and never
+  # reaches here, so this only ever throttles genuine cache misses (see
+  # MetadataRelay.Plug.ProxyRateLimit for the full T-263 rationale).
+  plug(MetadataRelay.Plug.ProxyRateLimit)
   plug(:match)
   plug(:dispatch)
 
@@ -448,10 +444,24 @@ defmodule MetadataRelay.Router do
     |> send_resp(204, "")
   end
 
-  # Delete claim code after successful pairing
+  # Delete claim code after successful pairing.
+  #
+  # T-253: this route had no rate limit at all, unlike its POST/GET
+  # siblings -- an unauthenticated caller who knows (or, per T-251's
+  # keyspace analysis, could in principle try to guess) a live code could
+  # delete another party's in-progress pairing claim with no throttle
+  # whatsoever. Same limit as the sibling GET lookup: this is a one-shot
+  # operation for a legitimate caller (delete the claim once pairing
+  # succeeds), so 30/minute is generous headroom for retries while still
+  # bounding a guessing attempt.
   delete "/pairing/claim/:code" do
     conn = allow_web_player(conn)
-    handle_pairing_no_content(conn, fn -> PairingHandler.delete_claim(code) end)
+
+    with :ok <- check_pairing_rate_limit(conn, limit: 30, window_ms: 60_000) do
+      handle_pairing_no_content(conn, fn -> PairingHandler.delete_claim(code) end)
+    else
+      {:error, :rate_limited} -> send_rate_limited(conn, 60)
+    end
   end
 
   # Pairing API v2 - the relay stores a blinded lookup key against a sealed
@@ -484,9 +494,16 @@ defmodule MetadataRelay.Router do
     |> send_resp(204, "")
   end
 
+  # T-257: same missing-rate-limit gap as T-253, on the v2 sealed claim's
+  # delete route.
   delete "/pairing/v2/claim/:lookup_key" do
     conn = allow_web_player(conn)
-    handle_pairing_no_content(conn, fn -> PairingHandler.delete_sealed_claim(lookup_key) end)
+
+    with :ok <- check_pairing_rate_limit(conn, limit: 30, window_ms: 60_000) do
+      handle_pairing_no_content(conn, fn -> PairingHandler.delete_sealed_claim(lookup_key) end)
+    else
+      {:error, :rate_limited} -> send_rate_limited(conn, 60)
+    end
   end
 
   # 404 catch-all
@@ -591,16 +608,19 @@ defmodule MetadataRelay.Router do
     end
   end
 
-  defp extract_query_params(conn) do
-    conn.query_params
-    |> Enum.map(fn {k, v} -> {String.to_atom(k), v} end)
-  end
+  # String-keyed on purpose: these are forwarded verbatim to TMDB/TVDB/SubDL
+  # (see the `*.Client` modules), so an allowlist here would silently drop
+  # any param name the relay doesn't already know about (e.g.
+  # `append_to_response`). Converting caller-supplied key names to atoms
+  # instead -- via `String.to_atom/1` or `String.to_existing_atom/1` -- was
+  # the T-020/T-237 finding: atoms are never garbage collected, and an
+  # unauthenticated caller sending enough distinct key names crashes the
+  # whole (shared) relay by exhausting the BEAM atom table. `conn.query_params`
+  # and `conn.body_params` are already string-keyed maps, so returning them
+  # as-is mints no atoms at all.
+  defp extract_query_params(conn), do: conn.query_params
 
-  defp extract_body_params(conn) do
-    conn.body_params
-    |> Enum.map(fn {k, v} -> {String.to_atom(k), v} end)
-    |> Map.new()
-  end
+  defp extract_body_params(conn), do: conn.body_params
 
   # The download URL handed to clients has to be absolute and reachable from
   # outside. PHX_HOST is already set in the deployment for exactly this kind of
@@ -637,23 +657,10 @@ defmodule MetadataRelay.Router do
     end
   end
 
-  defp get_client_ip(conn) do
-    # Get the client IP from the connection
-    # Check X-Forwarded-For header first (for proxied requests)
-    case get_req_header(conn, "x-forwarded-for") do
-      [forwarded | _] ->
-        forwarded
-        |> String.split(",")
-        |> List.first()
-        |> String.trim()
-
-      [] ->
-        # Fall back to remote_ip
-        conn.remote_ip
-        |> :inet.ntoa()
-        |> to_string()
-    end
-  end
+  # See MetadataRelay.ClientIp for the full rationale (T-235/T-236/T-250/
+  # T-251/T-253/T-254/T-255/T-257): X-Forwarded-For is only honoured from a
+  # trusted proxy peer, and its rightmost entry is used.
+  defp get_client_ip(conn), do: MetadataRelay.ClientIp.resolve(conn)
 
   defp process_crash_report(conn) do
     with {:ok, body} <- validate_crash_report(conn.body_params),
@@ -821,7 +828,7 @@ defmodule MetadataRelay.Router do
 
   defp handle_feedback(conn) do
     client_ip = get_client_ip(conn)
-    instance_id = feedback_rate_limit_instance_id(conn.body_params)
+    instance_id = feedback_rate_limit_instance_id(conn.body_params, client_ip)
 
     with {:ok, _remaining} <-
            MetadataRelay.RateLimiter.check_rate_limit("feedback:ip:#{client_ip}",
@@ -970,18 +977,32 @@ defmodule MetadataRelay.Router do
       :ok
   end
 
-  defp feedback_rate_limit_instance_id(params) when is_map(params) do
+  # `instance_id` is an ordinary caller-supplied JSON field with no proof of
+  # identity behind it, so it cannot itself be trusted as a rate-limit
+  # bucket key (T-236: "an attacker-chosen key means an attacker-chosen
+  # bucket" -- a fresh random value on every request gets a fresh bucket
+  # every time). What it *can* still do is stop unrelated callers who each
+  # omit it from colliding into one shared identity: previously every
+  # request with no `instance_id` fell back to the literal string
+  # "anonymous", a single bucket shared by every caller on the internet who
+  # didn't set the field -- meaning one abusive caller sending five
+  # instance_id-less requests could exhaust the "anonymous" bucket and rate
+  # limit every *other* anonymous submitter for the rest of the hour. Falling
+  # back to the caller's own rate-limited IP identity instead keeps that
+  # fallback scoped to one caller, same as the sibling IP-keyed check.
+  # Rotating `instance_id` on every request no longer buys an attacker
+  # anything beyond what omitting it already would: the IP-keyed check
+  # (`handle_feedback/1`, checked first) still caps them independently.
+  defp feedback_rate_limit_instance_id(params, client_ip) when is_map(params) do
     case get_feedback_param(params, "instance_id") do
       value when is_binary(value) and value != "" -> value
-      _ -> "anonymous"
+      _ -> "ip:#{client_ip}"
     end
   end
 
-  defp feedback_rate_limit_instance_id(_), do: "anonymous"
+  defp feedback_rate_limit_instance_id(_params, client_ip), do: "ip:#{client_ip}"
 
-  defp get_feedback_param(params, key) do
-    Map.get(params, key) || Map.get(params, Map.fetch!(@feedback_param_atoms, key))
-  end
+  defp get_feedback_param(params, key), do: Map.get(params, key)
 
   defp require_feedback_field(errors, field, value) do
     if is_binary(value) && String.trim(value) != "" do
