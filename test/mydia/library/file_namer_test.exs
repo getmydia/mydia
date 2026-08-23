@@ -180,7 +180,7 @@ defmodule Mydia.Library.FileNamerTest do
       result = FileNamer.generate_movie_filename(media_item, quality_info, original)
 
       assert result =~ "[HDR10]"
-      refute result =~ "[HDR]]"
+      refute result =~ "[HDR]"
     end
 
     test "renders HDR10+ distinctly from plain HDR10" do

@@ -142,6 +142,76 @@ defmodule Mydia.Jobs.HdrBackfillTest do
     end
   end
 
+  describe "perform/1 self-reschedule via the real Oban dispatch path" do
+    # REGRESSION: every test above drives the worker through
+    # Oban.Testing.perform_job/2, which builds an in-memory job and calls the
+    # executor directly. It never inserts or claims a real oban_jobs row, so
+    # the self-reschedule's `Oban.insert/1` call inside perform/1 never has a
+    # conflicting row to collide with, and would appear to pass even if the
+    # `unique:` config made it silently insert nothing.
+    #
+    # Both Oban engines this app can use (Basic for PostgreSQL, Lite for
+    # SQLite) move a claimed job's row to "executing" BEFORE calling
+    # perform/1, and it stays "executing" for the whole call. That is the
+    # exact condition the bug needs to reproduce: this test has to make a
+    # real row sit in "executing" state while perform/1, running because of
+    # that very claim, tries to insert a follow-up job for itself.
+    #
+    # Oban.drain_queue/2 is the tool for that: unlike perform_job/2, it goes
+    # through conf.engine.fetch_jobs/3 for real (see
+    # deps/oban/lib/oban/engines/lite.ex's fetch_jobs/3: a genuine
+    # `UPDATE ... SET state = 'executing'`), then calls the executor, so the
+    # row this job's own self-insert has to avoid colliding with is a real
+    # database row, not a fixture.
+    test "drains every pending row across more than one batch, not just the first" do
+      # A small batch size against 5 pending rows forces multiple passes:
+      # batch 1 (2 rows), batch 2 (2 rows), batch 3 (1 row, reschedules once
+      # more to observe the set is empty), batch 4 (0 rows, stops).
+      Application.put_env(:mydia, :hdr_backfill_batch_size, 2)
+      on_exit(fn -> Application.delete_env(:mydia, :hdr_backfill_batch_size) end)
+
+      # No library_path is attached, so absolute_path resolves to nothing and
+      # every row takes the "missing file" branch in backfill_one/1 -- no
+      # ffprobe shim needed, and irrelevant to what this test is proving.
+      files =
+        for _ <- 1..5 do
+          media_file_fixture(%{hdr_format: :hdr10, analyzed_at: DateTime.utc_now()})
+        end
+
+      assert {:ok, _job} = Oban.insert(HdrBackfill.new(%{}))
+
+      # with_scheduled: true stages the 5-second-delayed follow-up jobs
+      # immediately rather than waiting; with_recursion: true keeps draining
+      # newly-staged jobs until a pass processes nothing further, which is
+      # exactly the loop perform/1's self-reschedule drives in production.
+      result = Oban.drain_queue(queue: :analysis, with_scheduled: true, with_recursion: true)
+
+      # Under the bug, only the first batch (2 rows) would ever run: the
+      # self-reschedule's Oban.insert/1 would match this job's own
+      # still-executing row and silently insert nothing, so drain_queue would
+      # report exactly one successful job and stop.
+      assert result.success > 1,
+             "expected more than one HdrBackfill job to run, got #{inspect(result)}"
+
+      for file <- files do
+        assert Repo.get(MediaFile, file.id).hdr_backfilled_at != nil
+      end
+
+      assert HdrBackfill.pending_ids(10) == []
+
+      # A second, independent confirmation that real follow-up jobs were
+      # inserted and executed: more than one HdrBackfill row actually
+      # completed in oban_jobs, not just the one this test inserted by hand.
+      completed_backfill_jobs =
+        Oban.Job
+        |> where(worker: "Mydia.Jobs.HdrBackfill")
+        |> where(state: "completed")
+        |> Repo.aggregate(:count)
+
+      assert completed_backfill_jobs > 1
+    end
+  end
+
   describe "enqueue_once/0" do
     test "does not raise when no Oban instance is registered" do
       # This module's top-level setup starts a supervised Oban instance so
@@ -203,7 +273,8 @@ defmodule Mydia.Jobs.HdrBackfillTest do
         hdr: media_file_fixture(%{analyzed_at: DateTime.utc_now()}),
         hdr10_plus: media_file_fixture(%{analyzed_at: DateTime.utc_now()}),
         hlg: media_file_fixture(%{analyzed_at: DateTime.utc_now()}),
-        sdr: media_file_fixture(%{analyzed_at: DateTime.utc_now()})
+        sdr: media_file_fixture(%{analyzed_at: DateTime.utc_now()}),
+        unrecognized: media_file_fixture(%{analyzed_at: DateTime.utc_now()})
       }
 
       assert :ok = run_migration_down()
@@ -218,6 +289,7 @@ defmodule Mydia.Jobs.HdrBackfillTest do
       set_legacy_hdr_format(rows.hdr, "HDR")
       set_legacy_hdr_format(rows.hdr10_plus, "HDR10+")
       set_legacy_hdr_format(rows.hlg, "HLG")
+      set_legacy_hdr_format(rows.unrecognized, "Some Unknown Format")
       # rows.sdr already carries hdr_format: nil, the fixture default.
 
       # Re-run the migration for real: the exact code path a fresh install
@@ -237,7 +309,25 @@ defmodule Mydia.Jobs.HdrBackfillTest do
 
       assert MapSet.subset?(non_sdr_ids, pending)
       refute rows.sdr.id in pending
+      refute rows.unrecognized.id in pending
+
+      # Direct value assertions on the mapping itself. Everything above only
+      # asserts set membership in pending_ids/1: a mutation that swapped, say,
+      # the HDR10+ and HLG branches in the migration would still select both
+      # rows for backfill and pass every assertion above unchanged, because
+      # both would still land on a non-nil canonical atom. Only reading back
+      # the actual hdr_format value catches that, and this migration
+      # irreversibly rewrites the column on every row of every existing
+      # install, so it is worth pinning down exactly.
+      assert hdr_format_of(rows.dolby_vision) == :hdr10
+      assert hdr_format_of(rows.hdr10) == :hdr10
+      assert hdr_format_of(rows.hdr) == :hdr10
+      assert hdr_format_of(rows.hdr10_plus) == :hdr10_plus
+      assert hdr_format_of(rows.hlg) == :hlg
+      assert hdr_format_of(rows.unrecognized) == nil
     end
+
+    defp hdr_format_of(%MediaFile{id: id}), do: Repo.get!(MediaFile, id).hdr_format
 
     defp run_migration_up do
       Ecto.Migrator.up(

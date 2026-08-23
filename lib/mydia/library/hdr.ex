@@ -21,6 +21,8 @@ defmodule Mydia.Library.Hdr do
   `profile_tokens/1` is the single crossing point between them.
   """
 
+  require Logger
+
   defstruct base: nil, dv_profile: nil, bl_compat_id: nil
 
   @type base :: :hdr10 | :hdr10_plus | :hlg | nil
@@ -176,6 +178,22 @@ defmodule Mydia.Library.Hdr do
   defp dv_base(_transfer, dv, 4) when is_integer(dv), do: :hlg
   defp dv_base(_transfer, dv, 0) when is_integer(dv), do: nil
   defp dv_base(_transfer, dv, 2) when is_integer(dv), do: nil
+
+  # A DOVI record with an integer dv_profile but a bl_compat_id outside the
+  # known set (1, 4, 0, 2) is treated as absent: fall back to the
+  # transfer-derived base, same as a stream with no DOVI record at all. Log
+  # it, since this means ffprobe reported a compatibility id this module
+  # does not recognize.
+  defp dv_base(transfer, dv, bl_compat_id) when is_integer(dv) do
+    Logger.debug(
+      "HDR: unknown Dolby Vision bl_compat_id, treating as absent",
+      dv_profile: dv,
+      bl_compat_id: bl_compat_id
+    )
+
+    transfer
+  end
+
   defp dv_base(transfer, _dv, _bl_compat_id), do: transfer
 
   defp promote_hdr10_plus(:hdr10, nil, frame_side_data) do

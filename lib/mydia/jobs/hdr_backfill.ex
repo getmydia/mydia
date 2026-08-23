@@ -25,10 +25,14 @@ defmodule Mydia.Jobs.HdrBackfill do
   use Oban.Worker,
     queue: :analysis,
     max_attempts: 3,
-    # A batch takes longer than one tick would allow it to settle, so the
-    # worker reschedules itself (see perform/1). :retryable guards against
-    # cron-style pileup the same way Mydia.Jobs.FileAnalysis does: without it
-    # a failed pass sitting in backoff would not block a duplicate insert.
+    # Guards `enqueue_once/0` at boot: with :executing included, a restart
+    # while a backfill pass is mid-batch cannot stack a second one on top.
+    # :retryable guards against cron-style pileup the same way
+    # Mydia.Jobs.FileAnalysis does: without it a failed pass sitting in
+    # backoff would not block a duplicate insert.
+    #
+    # perform/1's own self-reschedule does NOT use this config as-is: see
+    # @reschedule_unique_states below for why it narrows the states list.
     unique: [
       period: 300,
       fields: [:worker],
@@ -43,6 +47,26 @@ defmodule Mydia.Jobs.HdrBackfill do
   alias Mydia.Repo
 
   @default_batch_size 50
+
+  # Both Oban engines this app can use (Basic for PostgreSQL, Lite for
+  # SQLite) move a claimed job's row to "executing" before calling perform/1,
+  # and it stays "executing" for the entire call. Oban's uniqueness check is
+  # a plain query against oban_jobs with no exclusion for the row currently
+  # executing this code, so if perform/1 reused the worker-level `unique`
+  # config above unchanged, the follow-up insert below would match its OWN
+  # row (same worker, "executing" is in that list, well inside the 300s
+  # period), `resolve_conflict/4` would return the existing (self) row
+  # unchanged, and no new job would ever be inserted: the backfill would
+  # silently stop after one batch.
+  #
+  # Dropping :executing here is the minimal change that lets the follow-up
+  # insert succeed while it is still running. :suspended, :available,
+  # :scheduled and :retryable stay, so a duplicate reschedule (e.g. from a
+  # retried attempt of the same job) still can't stack. `:period` and
+  # `:fields` are not repeated here: `Oban.Worker.merge_opts/2` merges an
+  # `unique:` override key-by-key with the worker-level default above, so
+  # they carry over unchanged and only `:states` needs overriding.
+  @reschedule_unique_states [:suspended, :available, :scheduled, :retryable]
 
   @doc """
   Enqueues the one-shot backfill job. Called once at boot.
@@ -107,8 +131,11 @@ defmodule Mydia.Jobs.HdrBackfill do
         Enum.each(ids, &backfill_one/1)
 
         # Reschedule until the set drains. Singular insert/1, not insert_all/1,
-        # which bypasses the worker's unique constraint.
-        %{} |> new(schedule_in: 5) |> Oban.insert()
+        # which bypasses the worker's unique constraint. The `unique:`
+        # override excludes :executing (see @reschedule_unique_states) so
+        # this genuinely inserts a follow-up job instead of matching this
+        # job's own still-executing row.
+        %{} |> new(schedule_in: 5, unique: [states: @reschedule_unique_states]) |> Oban.insert()
         :ok
     end
   end
