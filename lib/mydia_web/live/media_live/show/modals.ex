@@ -10,6 +10,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   import MydiaWeb.MediaLive.Show.Formatters
   import MydiaWeb.Formatters, only: [format_progress: 1]
   import MydiaWeb.MediaLive.Show.SearchHelpers
+  import MydiaWeb.MediaLive.Show.ScoreBreakdown
 
   alias Mydia.Indexers.SearchResult
   alias Mydia.Library.Hdr
@@ -1512,70 +1513,6 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
     </div>
     """
   end
-
-  # Private helper component for score breakdown rows
-  attr :label, :string, required: true
-  attr :value, :any, default: nil
-  attr :score, :float, default: nil
-  attr :weight, :integer, required: true
-
-  defp score_row(assigns) do
-    ~H"""
-    <div class="flex items-center justify-between gap-2">
-      <div class="flex items-center gap-2 flex-1 min-w-0">
-        <span class="text-base-content/70 whitespace-nowrap">{@label}:</span>
-        <span class="font-medium truncate">
-          {display_value(@value)}
-        </span>
-      </div>
-      <div class="flex items-center gap-1.5 flex-shrink-0">
-        <span class={[
-          "font-mono font-semibold w-8 text-right",
-          score_color(@score)
-        ]}>
-          {format_score(@score)}
-        </span>
-        <span class="text-base-content/50 text-[10px] w-8">
-          ({@weight}%)
-        </span>
-      </div>
-    </div>
-    """
-  end
-
-  # Penalty breakdown row. Rendered only for a non-zero penalty (hide-when-empty
-  # convention), with a `−` prefix and a distinct warning color so a penalty
-  # never looks like a weak positive score. No weight column — it is meaningless
-  # for a penalty.
-  attr :label, :string, required: true
-  attr :score, :float, default: 0.0
-
-  defp penalty_row(assigns) do
-    ~H"""
-    <div :if={@score < 0.0} class="flex items-center justify-between gap-2">
-      <div class="flex items-center gap-2 flex-1 min-w-0">
-        <span class="text-base-content/70 whitespace-nowrap">{@label}:</span>
-      </div>
-      <div class="flex items-center gap-1.5 flex-shrink-0">
-        <span class="font-mono font-semibold w-10 text-right text-warning">
-          −{abs(trunc(@score))}
-        </span>
-      </div>
-    </div>
-    """
-  end
-
-  defp display_value(nil), do: "-"
-  defp display_value(value), do: value
-
-  defp format_score(nil), do: "-"
-  defp format_score(score) when is_float(score), do: trunc(score)
-  defp format_score(score), do: score
-
-  defp score_color(nil), do: "text-base-content/50"
-  defp score_color(score) when score >= 80, do: "text-success"
-  defp score_color(score) when score >= 50, do: "text-warning"
-  defp score_color(_score), do: "text-error"
 
   # Provider-level failures arrive already humanized from ProviderChain. These
   # are the top-level ones search_candidates/2 can actually return, which
