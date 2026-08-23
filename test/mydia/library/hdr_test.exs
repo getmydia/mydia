@@ -106,6 +106,15 @@ defmodule Mydia.Library.HdrTest do
       assert %Hdr{base: nil, dv_profile: 5, bl_compat_id: 0} = Hdr.from_ffprobe(stream)
     end
 
+    test "DV profile 5 has no base even when bl_compat_id claims HDR10 compatibility" do
+      # Guards clause ORDER in dv_base/3. The profile-5 clause must win over the
+      # bl_compat_id clauses. With them reordered this returns :hdr10, which would
+      # mislabel every profile 5 file. The dovi(5, 0) test above cannot catch that,
+      # because the bl_compat_id 0 clause returns nil for any profile on its own.
+      stream = %{"color_transfer" => "smpte2084", "side_data_list" => [dovi(5, 1)]}
+      assert %Hdr{base: nil, dv_profile: 5, bl_compat_id: 1} = Hdr.from_ffprobe(stream)
+    end
+
     test "DV profile 7 without a compatibility id falls back to the transfer function" do
       stream = %{
         "color_transfer" => "smpte2084",
