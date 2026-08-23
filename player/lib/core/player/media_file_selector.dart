@@ -55,8 +55,21 @@ class MediaFileSelector {
     if (lower == '480p' || lower == 'sd') return 480;
     if (lower == '360p') return 360;
 
-    // Try parsing numeric suffix (e.g. "576p")
-    final match = RegExp(r'(\d+)p?$').firstMatch(lower);
+    // Try parsing a leading numeric resolution, allowing descriptive text to
+    // follow (e.g. "2160p (4K)", "1080p (Full HD)", "4320p (8K)" -- the
+    // display strings the filename-metadata import path stores). Anchored
+    // to the START of the string, not the end, and requiring a literal "p"
+    // right after the digits. That means an unrelated number earlier in the
+    // string (e.g. "h264 1080p") can never be picked up instead: matching
+    // must succeed at position 0, and "h264..." doesn't start with a digit.
+    //
+    // This deliberately does NOT match "1080i" (interlaced notation isn't
+    // produced anywhere in this codebase, so there's nothing to validate
+    // the pixel height against) or a bare "8K" (never emitted by either
+    // server writer -- the filename-metadata path always renders it as
+    // "4320p (8K)", which the pattern below does match). Both remain
+    // genuinely unparseable and fall through to 0.
+    final match = RegExp(r'^(\d+)p').firstMatch(lower);
     if (match != null) return int.parse(match.group(1)!);
 
     return 0;
@@ -85,13 +98,17 @@ class MediaFileSelector {
   }
 
   /// Maximum target resolution in vertical pixels for the given context.
+  ///
+  /// A return value of `0` means "no cap": `_score` treats it as a signal
+  /// to skip the target-relative scoring branch and reward raw resolution
+  /// directly instead of dividing by a target.
   static int _maxTargetResolution(DeviceContext context) {
     return switch ((context.deviceCategory, context.networkType)) {
       (DeviceCategory.mobile, NetworkType.cellular) => 720,
       (DeviceCategory.mobile, _) => 1080,
       (DeviceCategory.tablet, _) => 1080,
-      (DeviceCategory.desktop, _) => 999999, // uncapped
-      (DeviceCategory.widescreen, _) => 999999, // uncapped
+      (DeviceCategory.desktop, _) => 0, // no cap
+      (DeviceCategory.widescreen, _) => 0, // no cap
     };
   }
 

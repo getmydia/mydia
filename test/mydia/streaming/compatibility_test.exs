@@ -370,4 +370,166 @@ defmodule Mydia.Streaming.CompatibilityTest do
       assert Compatibility.needs_remux?(media_file) == false
     end
   end
+
+  describe "check_compatibility/2 with a device profile" do
+    alias Mydia.Streaming.DeviceProfile
+
+    defp mkv_hevc_file do
+      %MediaFile{
+        codec: "hevc",
+        audio_codec: "ac3",
+        metadata: %FileMetadata{container: "mkv"},
+        path: "/path/to/video.mkv"
+      }
+    end
+
+    test "an mkv/hevc file needs transcoding under the browser default" do
+      assert Compatibility.check_compatibility(mkv_hevc_file(), DeviceProfile.browser_default()) ==
+               :needs_transcoding
+    end
+
+    test "the same file is direct play under a native profile listing mkv, hevc and ac3" do
+      profile = %DeviceProfile{
+        containers: ["mkv", "mp4"],
+        video_codecs: ["h264", "hevc"],
+        audio_codecs: ["aac", "ac3"],
+        hdr_formats: []
+      }
+
+      assert Compatibility.check_compatibility(mkv_hevc_file(), profile) == :direct_play
+    end
+
+    test "a profile that allows the codecs but not the container gets remux, not direct play" do
+      profile = %DeviceProfile{
+        containers: ["mp4"],
+        video_codecs: ["hevc"],
+        audio_codecs: ["ac3"],
+        hdr_formats: []
+      }
+
+      assert Compatibility.check_compatibility(mkv_hevc_file(), profile) == :needs_remux
+    end
+
+    test "an HDR file with browser-compatible codecs still direct plays with no profile" do
+      # Regression guard. Compatibility did not read hdr_format before device
+      # profiles existed, and it must not start now: the transcoder has no
+      # tonemapping, so forcing a transcode here would produce washed-out SDR
+      # from correct HDR. VP9 and AV1 HDR are the real cases; browsers decode
+      # both natively.
+      file = %MediaFile{
+        codec: "vp9",
+        audio_codec: "opus",
+        hdr_format: "HDR10",
+        metadata: %FileMetadata{container: "webm"},
+        path: "/path/to/video.webm"
+      }
+
+      assert Compatibility.check_compatibility(file) == :direct_play
+    end
+
+    test "a profile that lists hdr_formats does not yet constrain playback" do
+      # hdr_formats is parsed and validated but deliberately unenforced. If this
+      # test starts failing, HDR enforcement was switched on; make sure it went
+      # through Hdr.profile_tokens/1 and not string equality on the column.
+      file = %MediaFile{
+        codec: "hevc",
+        audio_codec: "aac",
+        hdr_format: "Dolby Vision",
+        metadata: %FileMetadata{container: "mkv"},
+        path: "/path/to/video.mkv"
+      }
+
+      profile = %DeviceProfile{
+        containers: ["mkv"],
+        video_codecs: ["hevc"],
+        audio_codecs: ["aac"],
+        hdr_formats: ["hdr10"]
+      }
+
+      assert Compatibility.check_compatibility(file, profile) == :direct_play
+    end
+
+    test "an RFC 6381 video codec string now resolves, widening the old exact match" do
+      file = %MediaFile{
+        codec: "avc1.640028",
+        audio_codec: "aac",
+        metadata: %FileMetadata{container: "mp4"},
+        path: "/path/to/video.mp4"
+      }
+
+      assert Compatibility.check_compatibility(file) == :direct_play
+    end
+  end
+
+  describe "compatible_audio_codec?/2" do
+    alias Mydia.Streaming.DeviceProfile
+
+    test "delegating /1 rejects AC3, matching the hardcoded browser table" do
+      refute Compatibility.compatible_audio_codec?("ac3")
+    end
+
+    test "/2 rejects AC3 under the browser default profile, same as /1" do
+      refute Compatibility.compatible_audio_codec?("ac3", DeviceProfile.browser_default())
+    end
+
+    test "/2 accepts AC3 under a profile that declares it" do
+      profile = %DeviceProfile{
+        containers: ["mkv"],
+        video_codecs: ["h264"],
+        audio_codecs: ["ac3"],
+        hdr_formats: []
+      }
+
+      assert Compatibility.compatible_audio_codec?("ac3", profile)
+    end
+
+    test "/2 still rejects nil regardless of profile" do
+      profile = %DeviceProfile{
+        containers: ["mkv"],
+        video_codecs: ["h264"],
+        audio_codecs: ["ac3"],
+        hdr_formats: []
+      }
+
+      refute Compatibility.compatible_audio_codec?(nil, profile)
+    end
+  end
+
+  describe "transcoding_reason/2" do
+    alias Mydia.Streaming.DeviceProfile
+
+    test "names the audio codec, not the video codec, when only audio is disallowed" do
+      # media_file's video codec (hevc) is fine under this profile; only the
+      # audio codec (truehd) is not. The /1 clause (hardcoded browser table)
+      # would misreport this as an incompatible video codec instead, since
+      # the browser table has never allowed hevc either.
+      media_file = %MediaFile{
+        codec: "hevc",
+        audio_codec: "truehd",
+        metadata: %FileMetadata{container: "mkv"},
+        path: "/path/to/video.mkv"
+      }
+
+      profile = %DeviceProfile{
+        containers: ["mkv"],
+        video_codecs: ["hevc"],
+        audio_codecs: ["aac"],
+        hdr_formats: []
+      }
+
+      assert Compatibility.transcoding_reason(media_file, profile) ==
+               "Incompatible audio codec (truehd)"
+    end
+
+    test "delegating /1 still reasons from the browser default" do
+      media_file = %MediaFile{
+        codec: "hevc",
+        audio_codec: "truehd",
+        metadata: %FileMetadata{container: "mkv"},
+        path: "/path/to/video.mkv"
+      }
+
+      assert Compatibility.transcoding_reason(media_file) == "Incompatible video codec (hevc)"
+    end
+  end
 end

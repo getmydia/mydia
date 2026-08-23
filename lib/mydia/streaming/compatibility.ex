@@ -14,6 +14,7 @@ defmodule Mydia.Streaming.Compatibility do
   """
 
   alias Mydia.Library.MediaFile
+  alias Mydia.Streaming.DeviceProfile
 
   @type streaming_mode :: :direct_play | :needs_remux | :needs_transcoding
 
@@ -41,15 +42,27 @@ defmodule Mydia.Streaming.Compatibility do
   """
   @spec check_compatibility(MediaFile.t()) :: streaming_mode()
   def check_compatibility(%MediaFile{} = media_file) do
+    check_compatibility(media_file, DeviceProfile.browser_default())
+  end
+
+  @doc """
+  Checks compatibility against a specific client's declared capabilities.
+
+  With a real profile `:needs_remux` means what it says. Before profiles it
+  meant "the codecs are fine but browsers cannot open this container", which is
+  only true for one kind of client.
+  """
+  @spec check_compatibility(MediaFile.t(), DeviceProfile.t()) :: streaming_mode()
+  def check_compatibility(%MediaFile{} = media_file, %DeviceProfile{} = profile) do
     container = get_container_format(media_file)
     video_codec = media_file.codec
     audio_codec = media_file.audio_codec
 
     cond do
-      browser_compatible?(container, video_codec, audio_codec) ->
+      client_can_play?(profile, container, video_codec, audio_codec) ->
         :direct_play
 
-      remux_eligible?(container, video_codec, audio_codec) ->
+      remux_eligible?(profile, container, video_codec, audio_codec) ->
         :needs_remux
 
       true ->
@@ -57,40 +70,38 @@ defmodule Mydia.Streaming.Compatibility do
     end
   end
 
-  # Determines if the given combination of container, video codec, and audio codec
-  # is compatible with modern browsers.
-  # Note: Videos without audio (nil audio_codec) are allowed if video is compatible.
-  defp browser_compatible?(container, video_codec, audio_codec) do
-    compatible_container?(container) and
-      compatible_video_codec?(video_codec) and
-      audio_compatible_or_absent?(audio_codec)
+  # The client can open this container and decode every stream in it as-is.
+  defp client_can_play?(profile, container, video_codec, audio_codec) do
+    DeviceProfile.container_allowed?(profile, container) and
+      codecs_playable?(profile, video_codec, audio_codec)
   end
 
-  # Determines if a file can be remuxed to fMP4 without transcoding.
-  # This is possible when the codecs are browser-compatible but the container isn't.
-  # Note: Videos without audio (nil audio_codec) are allowed if video is compatible.
-  defp remux_eligible?(container, video_codec, audio_codec) do
+  # The codecs are fine but the container is not, so ffmpeg can stream-copy into
+  # fMP4 without re-encoding. `remuxable_container?/1` stays hardcoded because it
+  # describes what ffmpeg can repackage, which is a server capability and does
+  # not vary by client.
+  defp remux_eligible?(profile, container, video_codec, audio_codec) do
     remuxable_container?(container) and
-      compatible_video_codec?(video_codec) and
-      audio_compatible_or_absent?(audio_codec)
+      codecs_playable?(profile, video_codec, audio_codec)
   end
 
-  # Audio is considered compatible if it's a known compatible codec or if there's no audio track
-  defp audio_compatible_or_absent?(nil), do: true
-  defp audio_compatible_or_absent?(audio_codec), do: compatible_audio_codec?(audio_codec)
-
-  # Containers that browsers can play directly
-  defp compatible_container?(nil), do: false
-
-  defp compatible_container?(container) do
-    normalized = String.downcase(container)
-
-    normalized in [
-      "mp4",
-      "webm",
-      # Browser may handle these via video element
-      "m4v"
-    ]
+  # HDR is deliberately NOT checked here yet.
+  #
+  # Two things have to be true before it can be, and neither is today.
+  # FfmpegHlsTranscoder emits no tonemapping filter at all (its only -vf is
+  # `scale=`), so refusing HDR direct play would hand the viewer a washed-out
+  # SDR transcode instead of correct HDR. And `media_file.hdr_format` holds
+  # ffprobe display strings ("Dolby Vision", "HDR10+"), which no clean allowlist
+  # matches. Dolby Vision also cannot be answered by presence alone: profile 8.1
+  # carries an HDR10 base that non-DV clients play correctly, while profile 5
+  # does not.
+  #
+  # Activate this against Mydia.Library.Hdr.profile_tokens/1 when it lands,
+  # matching any-member-of rather than equality. DeviceProfile still parses and
+  # caps `hdr_formats` so the wire format does not have to change then.
+  defp codecs_playable?(profile, video_codec, audio_codec) do
+    DeviceProfile.video_codec_allowed?(profile, video_codec) and
+      DeviceProfile.audio_codec_allowed_or_absent?(profile, audio_codec)
   end
 
   # Containers that can be remuxed to fMP4 without transcoding.
@@ -114,39 +125,6 @@ defmodule Mydia.Streaming.Compatibility do
     ]
   end
 
-  # Video codecs that browsers support natively
-  defp compatible_video_codec?(nil), do: false
-
-  defp compatible_video_codec?(codec) do
-    normalized = String.downcase(codec)
-
-    # Check for compatible codecs - handle formatted strings like "H.264 (Main)" or "HEVC"
-    cond do
-      # H.264 / AVC - browser compatible
-      String.contains?(normalized, "h264") or
-        String.contains?(normalized, "h.264") or
-          normalized in ["avc", "avc1"] ->
-        true
-
-      # VP9 - browser compatible
-      String.contains?(normalized, "vp9") or normalized == "vp09" ->
-        true
-
-      # AV1 - browser compatible
-      String.contains?(normalized, "av1") or normalized == "av01" ->
-        true
-
-      # HEVC/H.265 - NOT browser compatible (needs transcoding)
-      String.contains?(normalized, "hevc") or String.contains?(normalized, "h.265") or
-          String.contains?(normalized, "h265") ->
-        false
-
-      # Everything else - not compatible
-      true ->
-        false
-    end
-  end
-
   @doc """
   Whether a browser can decode this audio codec natively.
 
@@ -156,18 +134,30 @@ defmodule Mydia.Streaming.Compatibility do
   language selection then maps a different stream, `-c copy` would put a codec
   in the fMP4 that the client's `canPlayType` check never approved and the
   advertised MIME no longer describes.
+
+  Delegates to the `/2` clause with the browser default profile, so this stays
+  the exact answer it gave before device profiles existed.
   """
   @spec compatible_audio_codec?(String.t() | nil) :: boolean()
-  def compatible_audio_codec?(nil), do: false
-
   def compatible_audio_codec?(codec) do
-    normalized = String.downcase(codec)
+    compatible_audio_codec?(codec, DeviceProfile.browser_default())
+  end
 
-    # Check for compatible codecs - handle formatted strings like "AAC 5.1" or "MP3 Stereo"
-    String.contains?(normalized, "aac") or
-      String.contains?(normalized, "mp3") or
-      String.contains?(normalized, "opus") or
-      String.contains?(normalized, "vorbis")
+  @doc """
+  Same check against a specific client's declared audio allowlist instead of
+  the hardcoded browser one.
+
+  The remuxer's stream-copy decision was gated on the `/1` browser check even
+  when a profile was available, which meant a client that declared it could
+  decode e.g. AC3 was still told REMUX (stream copy) while the server quietly
+  downmixed to stereo AAC behind its back. This lets that decision agree with
+  the profile that actually earned the REMUX strategy.
+  """
+  @spec compatible_audio_codec?(String.t() | nil, DeviceProfile.t()) :: boolean()
+  def compatible_audio_codec?(nil, %DeviceProfile{}), do: false
+
+  def compatible_audio_codec?(codec, %DeviceProfile{} = profile) do
+    DeviceProfile.audio_codec_allowed_or_absent?(profile, codec)
   end
 
   @doc """
@@ -227,18 +217,34 @@ defmodule Mydia.Streaming.Compatibility do
   """
   @spec transcoding_reason(MediaFile.t()) :: String.t()
   def transcoding_reason(%MediaFile{} = media_file) do
+    transcoding_reason(media_file, DeviceProfile.browser_default())
+  end
+
+  @doc """
+  Same explanation against a specific client's profile.
+
+  Unlike `remux_reason/1`, this one genuinely depends on which allowlist was
+  used: `check_compatibility/2` decided `:needs_transcoding` against the
+  caller's profile, and the `/1` clause here explained it against the
+  hardcoded browser one instead. That can name the wrong incompatibility, for
+  example blaming "video codec" when the caller's profile allowed that codec
+  fine and the real blocker (per `check_compatibility/2`) was the audio codec.
+  Threading the same profile through keeps the logged reason honest.
+  """
+  @spec transcoding_reason(MediaFile.t(), DeviceProfile.t()) :: String.t()
+  def transcoding_reason(%MediaFile{} = media_file, %DeviceProfile{} = profile) do
     container = get_container_format(media_file)
     video_codec = media_file.codec
     audio_codec = media_file.audio_codec
 
     cond do
-      not compatible_video_codec?(video_codec) ->
+      not DeviceProfile.video_codec_allowed?(profile, video_codec) ->
         "Incompatible video codec (#{video_codec || "unknown"})"
 
-      not audio_compatible_or_absent?(audio_codec) ->
+      not DeviceProfile.audio_codec_allowed_or_absent?(profile, audio_codec) ->
         "Incompatible audio codec (#{audio_codec || "unknown"})"
 
-      not compatible_container?(container) ->
+      not DeviceProfile.container_allowed?(profile, container) ->
         "Incompatible container format (#{container || "unknown"})"
 
       true ->
@@ -248,6 +254,12 @@ defmodule Mydia.Streaming.Compatibility do
 
   @doc """
   Returns a human-readable description of why a file needs remuxing.
+
+  Deliberately stays arity 1, unlike `transcoding_reason/2`. It only ever
+  names the container, and `remux_eligible?/4` only reaches `:needs_remux` for
+  a container on the hardcoded `remuxable_container?/1` list, which does not
+  vary by profile. So this text is accurate under any profile that produced
+  `:needs_remux`, and threading one through would not change what it says.
 
   ## Examples
 

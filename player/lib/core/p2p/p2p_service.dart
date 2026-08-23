@@ -622,12 +622,19 @@ class P2pService {
 
   /// Send a GraphQL request to the server over P2P.
   /// Returns the parsed JSON response data or throws on error.
+  ///
+  /// [deviceProfile] is the same base64url-encoded JSON value the HTTP path
+  /// sends in the `X-Mydia-Device-Profile` header. The p2p transport has no
+  /// headers, so it rides along as a request field instead. `null` (the
+  /// default, and what a caller passes before the profile probe resolves)
+  /// degrades to the server's no-profile behavior.
   Future<Map<String, dynamic>> sendGraphQLRequest({
     required String peer,
     required String query,
     Map<String, dynamic>? variables,
     String? operationName,
     String? authToken,
+    String? deviceProfile,
   }) async {
     if (_host == null) throw Exception("P2P host not initialized");
 
@@ -646,6 +653,7 @@ class P2pService {
       variables: variablesJson,
       operationName: operationName,
       authToken: authToken,
+      deviceProfile: deviceProfile,
     );
 
     final res =

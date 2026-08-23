@@ -36,6 +36,7 @@ class FakeP2pService extends P2pService {
     Map<String, dynamic>? variables,
     String? operationName,
     String? authToken,
+    String? deviceProfile,
   }) async {
     final call = GraphqlCall(
       peer: peer,

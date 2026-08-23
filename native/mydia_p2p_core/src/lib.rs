@@ -75,6 +75,11 @@ pub struct GraphQLRequest {
     pub variables: Option<String>, // JSON-encoded
     pub operation_name: Option<String>,
     pub auth_token: Option<String>, // Access token for authorization
+    // Base64url-encoded JSON describing what this client can decode. Carried
+    // here rather than as a header because the p2p transport has none. The
+    // server applies the same caps and validation it applies to the HTTP
+    // X-Mydia-Device-Profile header.
+    pub device_profile: Option<String>,
 }
 
 /// HLS request for streaming manifests and segments over P2P
@@ -1807,10 +1812,46 @@ mod tests {
             variables: Some(r#"{"limit": 10}"#.to_string()),
             operation_name: Some("GetMovies".to_string()),
             auth_token: Some("test_token_123".to_string()),
+            device_profile: Some("eyJjb250YWluZXJzIjpbIm1rdiJdfQ".to_string()),
         });
         let data = serde_cbor::to_vec(&request).unwrap();
         let decoded: MydiaRequest = serde_cbor::from_slice(&data).unwrap();
         assert_eq!(request, decoded);
+    }
+
+    // Guards the no-coordinated-deploy property described in the p2p codec
+    // docs: an old client's wire bytes never include `device_profile` at all,
+    // since it does not know the field exists. serde_cbor is self-describing,
+    // so a missing map key deserializes a missing `Option<T>` as `None`
+    // instead of failing, and the server falls back to its documented
+    // no-profile behavior. This must keep passing without
+    // `#[serde(deny_unknown_fields)]` on `GraphQLRequest` and without
+    // reordering its fields.
+    #[test]
+    fn test_graphql_request_deserializes_without_device_profile_field() {
+        use serde_cbor::Value;
+        use std::collections::BTreeMap;
+
+        let mut map: BTreeMap<Value, Value> = BTreeMap::new();
+        map.insert(
+            Value::Text("query".to_string()),
+            Value::Text("query { movies { id } }".to_string()),
+        );
+        map.insert(Value::Text("variables".to_string()), Value::Null);
+        map.insert(Value::Text("operation_name".to_string()), Value::Null);
+        map.insert(
+            Value::Text("auth_token".to_string()),
+            Value::Text("old_client_token".to_string()),
+        );
+        // Deliberately no "device_profile" key: this is what an old client's
+        // CBOR payload looks like.
+
+        let data = serde_cbor::to_vec(&Value::Map(map)).unwrap();
+        let decoded: GraphQLRequest = serde_cbor::from_slice(&data).unwrap();
+
+        assert_eq!(decoded.query, "query { movies { id } }");
+        assert_eq!(decoded.auth_token, Some("old_client_token".to_string()));
+        assert_eq!(decoded.device_profile, None);
     }
 
     #[test]

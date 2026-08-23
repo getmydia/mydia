@@ -303,6 +303,47 @@ defmodule Mydia.Streaming.CandidatesTest do
     end
   end
 
+  describe "build_streaming_candidates/2" do
+    alias Mydia.Streaming.DeviceProfile
+
+    defp strategies(candidates), do: Enum.map(candidates, & &1.strategy)
+
+    defp mkv_hevc do
+      %Mydia.Library.MediaFile{
+        codec: "hevc",
+        audio_codec: "ac3",
+        metadata: %Mydia.Library.Structs.FileMetadata{container: "mkv"},
+        path: "/path/to/video.mkv"
+      }
+    end
+
+    test "leads with DIRECT_PLAY for a profile that can decode the file" do
+      profile = %DeviceProfile{
+        containers: ["mkv"],
+        video_codecs: ["hevc"],
+        audio_codecs: ["ac3"],
+        hdr_formats: []
+      }
+
+      assert [first | _] = strategies(Candidates.build_streaming_candidates(mkv_hevc(), profile))
+      assert first == "DIRECT_PLAY"
+    end
+
+    test "leads with HLS_COPY or TRANSCODE under the browser default" do
+      candidates =
+        Candidates.build_streaming_candidates(mkv_hevc(), DeviceProfile.browser_default())
+
+      refute "DIRECT_PLAY" in strategies(candidates)
+    end
+
+    test "the one-arity form matches the browser default exactly" do
+      file = mkv_hevc()
+
+      assert Candidates.build_streaming_candidates(file) ==
+               Candidates.build_streaming_candidates(file, DeviceProfile.browser_default())
+    end
+  end
+
   # Helpers
 
   defp seed_unanalyzed(prefix) do

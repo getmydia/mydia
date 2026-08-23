@@ -12,6 +12,7 @@ defmodule MydiaWeb.Api.StreamController do
     AudioPreferences,
     Candidates,
     Compatibility,
+    DeviceProfile,
     FfmpegRemuxer,
     HlsSession,
     HlsSessionSupervisor,
@@ -156,7 +157,13 @@ defmodule MydiaWeb.Api.StreamController do
     case Candidates.resolve_media_file(content_type, id) do
       {:ok, media_file} ->
         media_file = Candidates.ensure_codec_info(media_file)
-        candidates = Candidates.build_streaming_candidates(media_file)
+
+        candidates =
+          Candidates.build_streaming_candidates(
+            media_file,
+            conn.assigns[:device_profile] || DeviceProfile.browser_default()
+          )
+
         # Carries the viewer through, so this endpoint's
         # preferred_audio_languages reflects a stored per-show choice the same
         # way the GraphQL resolver's does. Without it a web client doing
@@ -274,9 +281,16 @@ defmodule MydiaWeb.Api.StreamController do
   end
 
   # Legacy auto-detection based on compatibility check (for backward compatibility)
-  # New clients should use the candidates API with explicit strategy parameter
+  # New clients should use the candidates API with explicit strategy parameter.
+  #
+  # This is documented as a fallback for older clients that never send a
+  # strategy, so a request with no profile header must keep answering exactly
+  # as it did before profiles existed (the DeviceProfile.browser_default/0
+  # fallback), matching how the candidates path in this same controller
+  # already resolves the profile.
   defp route_with_auto_detection(conn, media_file, absolute_path) do
-    compatibility = Compatibility.check_compatibility(media_file)
+    profile = conn.assigns[:device_profile] || DeviceProfile.browser_default()
+    compatibility = Compatibility.check_compatibility(media_file, profile)
 
     Logger.info("Auto-detecting stream method for #{absolute_path}: #{compatibility}")
 
@@ -300,7 +314,7 @@ defmodule MydiaWeb.Api.StreamController do
 
       :needs_transcoding ->
         # Default to transcoding for incompatible codecs
-        reason = Compatibility.transcoding_reason(media_file)
+        reason = Compatibility.transcoding_reason(media_file, profile)
 
         Logger.info(
           "File #{absolute_path} needs transcoding: #{reason} (codec: #{media_file.codec}, audio: #{media_file.audio_codec})"
@@ -497,8 +511,13 @@ defmodule MydiaWeb.Api.StreamController do
     # picked English on one episode gets the operator default on the next
     # whenever the client happens to choose REMUX, which is precisely the
     # stickiness this is meant to provide.
+    #
+    # device_profile is passed through as-is, including nil: the remuxer
+    # itself falls back to the browser compatibility table when it is absent,
+    # so there is no behavior to preserve by substituting browser_default/0
+    # here as well.
     remux_opts =
-      [duration: duration, media_file: media_file] ++
+      [duration: duration, media_file: media_file, device_profile: conn.assigns[:device_profile]] ++
         case get_user_id(conn) do
           {:ok, user_id} -> AudioPreferences.session_opts(user_id, media_file)
           _ -> []

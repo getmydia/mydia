@@ -14,6 +14,7 @@ defmodule MydiaWeb.Router do
   pipeline :api do
     plug :accepts, ["json"]
     plug :fetch_session
+    plug MydiaWeb.Plugs.DeviceProfile
   end
 
   # Base graphql pipeline - authentication handled separately
@@ -21,6 +22,7 @@ defmodule MydiaWeb.Router do
     plug :accepts, ["json"]
     plug :fetch_session
     plug MydiaWeb.Plugs.GraphQLLogger
+    plug MydiaWeb.Plugs.DeviceProfile
   end
 
   # Builds Absinthe context after authentication
