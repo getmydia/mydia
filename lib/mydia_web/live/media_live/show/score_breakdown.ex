@@ -170,6 +170,13 @@ defmodule MydiaWeb.MediaLive.Show.ScoreBreakdown do
   Carries no width of its own. It is placed by its caller inside the row's
   content column, so it spans that column instead of floating as a fixed-width
   card anchored to a badge.
+
+  Deliberately not a `role="region"`. That role is a landmark, and one result
+  list renders a panel per row, so it would add a dozen identically named
+  "Score breakdown" landmarks to a single page and make landmark navigation
+  worse rather than better. The disclosure contract is already complete without
+  it: the trigger carries `aria-expanded` and `aria-controls`, and the heading
+  names the content.
   """
   attr :id, :string, required: true
   attr :title, :string, default: "Score breakdown"
@@ -178,7 +185,7 @@ defmodule MydiaWeb.MediaLive.Show.ScoreBreakdown do
 
   def score_panel(assigns) do
     ~H"""
-    <div id={@id} role="region" class={["hidden mt-2 rounded-box bg-base-200 p-3", @class]}>
+    <div id={@id} class={["hidden mt-2 rounded-box bg-base-200 p-3", @class]}>
       <h4 class="text-sm font-semibold mb-2">{@title}</h4>
       <div class="space-y-1.5 text-xs">
         {render_slot(@inner_block)}
