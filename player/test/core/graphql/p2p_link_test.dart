@@ -3,6 +3,7 @@ import 'package:graphql_flutter/graphql_flutter.dart'
     show Operation, Request, gql;
 import 'package:player/core/graphql/p2p_link.dart';
 import 'package:player/core/p2p/p2p_service.dart';
+import 'package:player/core/player/device_profile.dart';
 
 /// Token value this fake treats as expired.
 const _expiredToken = 'expired';
@@ -13,6 +14,7 @@ const _expiredToken = 'expired';
 /// TTL: the transport surfaces the GraphQL error as a plain Exception.
 class _FakeP2pService extends P2pService {
   final List<String?> tokensSeen = [];
+  final List<String?> deviceProfilesSeen = [];
 
   @override
   Future<Map<String, dynamic>> sendGraphQLRequest({
@@ -21,8 +23,10 @@ class _FakeP2pService extends P2pService {
     Map<String, dynamic>? variables,
     String? operationName,
     String? authToken,
+    String? deviceProfile,
   }) async {
     tokensSeen.add(authToken);
+    deviceProfilesSeen.add(deviceProfile);
 
     if (authToken == _expiredToken) {
       throw Exception('Authentication required');
@@ -118,6 +122,44 @@ void main() {
 
       expect(service.tokensSeen, ['expired']);
       expect(response.errors, isNotNull);
+    });
+  });
+
+  group('P2pGraphQLLink device profile threading', () {
+    // DeviceProfileHolder.instance is a process-wide singleton, the same one
+    // graphql_provider.dart's deviceProfileHolderProvider hands to the HTTP
+    // link. Reset it so a value set here cannot leak into another test.
+    tearDown(() {
+      DeviceProfileHolder.instance.profile = null;
+    });
+
+    test('carries null before the probe resolves', () async {
+      final service = _FakeP2pService();
+      final link = P2pGraphQLLink(
+        p2pService: service,
+        serverNodeId: 'node',
+        getAuthToken: () async => 'valid',
+      );
+
+      await link.request(_request()).first;
+
+      expect(service.deviceProfilesSeen, [null]);
+    });
+
+    test('carries the encoded header value once the probe resolves', () async {
+      const profile = DeviceProfile.webDefault();
+      DeviceProfileHolder.instance.profile = profile;
+
+      final service = _FakeP2pService();
+      final link = P2pGraphQLLink(
+        p2pService: service,
+        serverNodeId: 'node',
+        getAuthToken: () async => 'valid',
+      );
+
+      await link.request(_request()).first;
+
+      expect(service.deviceProfilesSeen, [profile.toHeaderValue()]);
     });
   });
 }

@@ -4,6 +4,7 @@ defmodule Mydia.Streaming.FfmpegAudioMapTest do
   alias Mydia.Library.MediaFile
   alias Mydia.Library.Structs.FileMetadata
   alias Mydia.Library.Structs.StreamInfo
+  alias Mydia.Streaming.DeviceProfile
   alias Mydia.Streaming.FfmpegHlsTranscoder
 
   defp args(opts) do
@@ -201,6 +202,39 @@ defmodule Mydia.Streaming.FfmpegAudioMapTest do
         )
 
       assert value_after(remux_args(media_file: file, audio_language: ["en"]), "-c") == "copy"
+    end
+
+    test "without a device profile, still re-encodes AC3 to stereo AAC" do
+      # Baseline for the test below: the browser table has never allowed
+      # AC3, so a caller that sends no profile keeps getting the pre-profile
+      # answer.
+      file = media_file([video_stream(), audio(1, "eng", codec: "ac3", channels: 6)])
+
+      args = remux_args(media_file: file, audio_language: ["en"])
+
+      assert value_after(args, "-c:v") == "copy"
+      assert value_after(args, "-c:a") == "aac"
+      assert value_after(args, "-ac") == "2"
+    end
+
+    test "a device profile that allows AC3 stream-copies instead of downmixing to stereo AAC" do
+      # The regression this fix closes: with a profile in play, REMUX must
+      # mean what it advertises (a stream copy), not a silent downmix that
+      # spends CPU and quality the client never asked the server to spend.
+      file = media_file([video_stream(), audio(1, "eng", codec: "ac3", channels: 6)])
+
+      profile = %DeviceProfile{
+        containers: ["mkv"],
+        video_codecs: ["h264"],
+        audio_codecs: ["ac3"],
+        hdr_formats: []
+      }
+
+      args =
+        remux_args(media_file: file, audio_language: ["en"], device_profile: profile)
+
+      assert value_after(args, "-c") == "copy"
+      refute value_after(args, "-c:a") == "aac"
     end
 
     test "emits no -map for an unanalysed file, preserving the old behaviour" do

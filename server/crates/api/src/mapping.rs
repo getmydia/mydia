@@ -168,10 +168,12 @@ pub fn media_file_from(row: &MediaFileRow, external: &[ExternalSubtitleRow]) -> 
         external_subtitles: Some(external_tracks()),
         size: row.size,
         bitrate: row.bitrate.and_then(|v| i32::try_from(v).ok()),
-        // Elixir hardcodes true behind a "TODO: Implement based on client
-        // capabilities" (common_types.ex:25-31). Mirrored deliberately: a
-        // computed answer would diverge on a field the conformance suite
-        // compares, and would risk the player refusing files it handles fine.
+        // Elixir answers this from the caller's `X-Mydia-Device-Profile` header
+        // (`common_types.ex`, `Mydia.Streaming.DeviceProfile`). With no profile
+        // it returns true, which is what this server's callers get: it does not
+        // read the header. So `Some(true)` is the correct no-profile answer here
+        // rather than a placeholder, and the conformance suite stays honest.
+        // Computing it belongs to whichever slice takes on streaming.
         direct_play_supported: Some(true),
         stream_url: Some(format!("/api/v1/stream/file/{}", row.id)),
         direct_play_url: Some(format!(

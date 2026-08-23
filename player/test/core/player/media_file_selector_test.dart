@@ -49,6 +49,48 @@ void main() {
 
     test('returns 0 for unrecognized string', () {
       expect(MediaFileSelector.parseToPixels('unknown'), 0);
+      expect(MediaFileSelector.parseToPixels('garbage'), 0);
+      expect(MediaFileSelector.parseToPixels(''), 0);
+    });
+
+    test('parses the filename-metadata import path display strings', () {
+      // These are what ReleaseParser.quality.resolution renders via
+      // standardize_resolution/1 (quality_extractor.ex), as opposed to the
+      // bare labels FileAnalyzer.extract_resolution/1 emits.
+      expect(MediaFileSelector.parseToPixels('2160p (4K)'), 2160);
+      expect(MediaFileSelector.parseToPixels('1080p (Full HD)'), 1080);
+      expect(MediaFileSelector.parseToPixels('720p (HD)'), 720);
+      expect(MediaFileSelector.parseToPixels('480p (SD)'), 480);
+      expect(MediaFileSelector.parseToPixels('576p (SD)'), 576);
+      expect(MediaFileSelector.parseToPixels('4320p (8K)'), 4320);
+    });
+
+    test('bare labels from FileAnalyzer keep parsing the same as before', () {
+      expect(MediaFileSelector.parseToPixels('4K'), 2160);
+      expect(MediaFileSelector.parseToPixels('2160p'), 2160);
+      expect(MediaFileSelector.parseToPixels('1440p'), 1440);
+      expect(MediaFileSelector.parseToPixels('1080p'), 1080);
+      expect(MediaFileSelector.parseToPixels('720p'), 720);
+      expect(MediaFileSelector.parseToPixels('480p'), 480);
+    });
+
+    test('does not let an unrelated leading number win', () {
+      // A naive unanchored `(\d+)p?` would match "264" out of "h264" here
+      // (the "p" is optional, so a bare digit run is enough), well before
+      // it ever reaches the real "1080p" later in the string. The fixed
+      // pattern is anchored to the START of the string, so a string that
+      // doesn't begin with the resolution digits (never a real value of
+      // this field, but worth guarding) is rejected outright as 0 rather
+      // than extracting 264 -- or even guessing 1080 -- out of it.
+      expect(MediaFileSelector.parseToPixels('h264 1080p'), 0);
+    });
+
+    test('does not guess pixel height for formats this app never produces', () {
+      // "1080i" (interlaced) and a bare "8K" are never written by either
+      // server-side writer, so both are deliberately treated as
+      // unparseable rather than guessed at.
+      expect(MediaFileSelector.parseToPixels('1080i'), 0);
+      expect(MediaFileSelector.parseToPixels('8K'), 0);
     });
   });
 
@@ -171,8 +213,7 @@ void main() {
         bitrate: 8000000, // 8 Mbps
       );
 
-      final result =
-          MediaFileSelector.selectBest([fileLow, fileHigh], context);
+      final result = MediaFileSelector.selectBest([fileLow, fileHigh], context);
       expect(result?.id, equals('high-br'));
     });
 
@@ -185,8 +226,7 @@ void main() {
       final fileNull = _makeFile(id: 'null-res');
       final file720 = _makeFile(id: '720', resolution: '720p');
 
-      final result =
-          MediaFileSelector.selectBest([fileNull, file720], context);
+      final result = MediaFileSelector.selectBest([fileNull, file720], context);
       expect(result?.id, equals('720'));
     });
 
@@ -221,8 +261,7 @@ void main() {
         bitrate: 20000000, // 20 Mbps
       );
 
-      final result =
-          MediaFileSelector.selectBest([fileLow, fileHigh], context);
+      final result = MediaFileSelector.selectBest([fileLow, fileHigh], context);
       expect(result?.id, equals('low-br'));
     });
 
@@ -235,9 +274,99 @@ void main() {
       final file1080 = _makeFile(id: '1080', resolution: '1080p');
       final file4k = _makeFile(id: '4k', resolution: '4K');
 
-      final result =
-          MediaFileSelector.selectBest([file1080, file4k], context);
+      final result = MediaFileSelector.selectBest([file1080, file4k], context);
       expect(result?.id, equals('4k'));
+    });
+  });
+
+  group('direct play bonus', () {
+    const wifiDesktop = DeviceContext(
+      deviceCategory: DeviceCategory.desktop,
+      networkType: NetworkType.wifi,
+      isWeb: false,
+    );
+
+    test('prefers the direct-playable file when resolution and bitrate tie',
+        () {
+      final direct = _makeFile(
+        id: 'direct',
+        resolution: '1080p',
+        bitrate: 5000000,
+        directPlaySupported: true,
+      );
+      final transcode = _makeFile(
+        id: 'transcode',
+        resolution: '1080p',
+        bitrate: 5000000,
+        directPlaySupported: false,
+      );
+
+      final best =
+          MediaFileSelector.selectBest([transcode, direct], wifiDesktop);
+
+      expect(best!.id, 'direct');
+    });
+
+    test('a higher resolution still wins over a direct-playable lower one', () {
+      // Desktop/widescreen are uncapped: _maxTargetResolution returns 0,
+      // which routes _score into its uncapped branch and rewards raw
+      // resolution on a 0-100 scale (pixels / 2160). A large enough
+      // resolution gap still outweighs the flat +20 direct-play bonus.
+      const context = DeviceContext(
+        deviceCategory: DeviceCategory.desktop,
+        networkType: NetworkType.wifi,
+        isWeb: false,
+      );
+
+      final direct = _makeFile(
+        id: 'direct',
+        resolution: '720p',
+        directPlaySupported: true,
+      );
+      final bigger = _makeFile(
+        id: 'bigger',
+        resolution: '4K',
+        directPlaySupported: false,
+      );
+
+      expect(MediaFileSelector.selectBest([direct, bigger], context)!.id,
+          'bigger');
+    });
+
+    test(
+        'desktop: non-direct-playable 4K outranks direct-playable 480p '
+        'despite the bonus', () {
+      // Regression test for the fix: before it, desktop's uncapped
+      // resolution branch was unreachable because _maxTargetResolution
+      // returned the 999999 sentinel instead of 0, so the resolution term
+      // was scaled down to a fraction of a point (2160 / 999999 * 100 ~=
+      // 0.22) and the +20 direct-play bonus dominated regardless of
+      // resolution. With the fix, the 4K file scores ~100 for resolution
+      // (2160 / 2160 * 100) against the 480p file's ~22 (480 / 2160 * 100)
+      // + 20 bonus, so the two-tier resolution gap can no longer be
+      // overwhelmed by the bonus alone.
+      const context = DeviceContext(
+        deviceCategory: DeviceCategory.desktop,
+        networkType: NetworkType.wifi,
+        isWeb: false,
+      );
+
+      final highRes = _makeFile(
+        id: '4k-transcode',
+        resolution: '4K',
+        directPlaySupported: false,
+      );
+      final lowResDirect = _makeFile(
+        id: '480p-direct',
+        resolution: '480p',
+        directPlaySupported: true,
+      );
+
+      final result = MediaFileSelector.selectBest(
+        [lowResDirect, highRes],
+        context,
+      );
+      expect(result?.id, equals('4k-transcode'));
     });
   });
 

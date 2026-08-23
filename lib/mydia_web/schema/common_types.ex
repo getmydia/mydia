@@ -147,11 +147,27 @@ defmodule MydiaWeb.Schema.CommonTypes do
       end)
     end
 
-    @desc "Whether this file can be direct played (no transcoding needed)"
+    @desc """
+    Whether this client can play this file untouched.
+
+    Answered from the caller's device profile in the GraphQL context. Two
+    transports populate it: the `X-Mydia-Device-Profile` header over HTTP, and
+    the `device_profile` field on the request envelope over p2p. With no
+    profile the answer is `true`: the honest answer is unknowable, and `true`
+    is what this field returned before profiles existed. Falling back to the
+    browser table instead would make older players deprioritize files they
+    play perfectly well.
+    """
     field :direct_play_supported, :boolean do
-      resolve(fn _file, _args, _info ->
-        # TODO: Implement based on client capabilities
-        {:ok, true}
+      resolve(fn file, _args, %{context: context} ->
+        case context[:device_profile] do
+          nil ->
+            {:ok, true}
+
+          profile ->
+            {:ok,
+             Mydia.Streaming.Compatibility.check_compatibility(file, profile) == :direct_play}
+        end
       end)
     end
 

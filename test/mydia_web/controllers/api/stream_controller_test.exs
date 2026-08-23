@@ -225,6 +225,52 @@ defmodule MydiaWeb.Api.StreamControllerTest do
     end
   end
 
+  describe "GET /api/v1/stream/:id auto-detection honors an assigned device profile" do
+    defp encode_profile(map), do: Base.url_encode64(Jason.encode!(map), padding: false)
+
+    test "a device profile allowing the container and codecs upgrades an MKV to direct play",
+         %{conn: conn, token: token} do
+      # route_with_auto_detection/3 (no ?strategy= query param) used to check
+      # compatibility against the hardcoded browser table even when a device
+      # profile was assigned, so this file (browser-compatible codecs, but a
+      # container the browser table never allows) fell back to fMP4 remux no
+      # matter what the caller declared. With the profile honored, a client
+      # that says it can open mkv directly gets DIRECT_PLAY instead.
+      library_path = library_path_fixture()
+      File.mkdir_p!(library_path.path)
+      test_file_name = "profile_direct_#{System.unique_integer([:positive])}.mkv"
+      test_file_path = Path.join(library_path.path, test_file_name)
+      File.write!(test_file_path, :crypto.strong_rand_bytes(1024 * 10))
+
+      media_file =
+        media_file_fixture(%{
+          library_path_id: library_path.id,
+          relative_path: test_file_name,
+          codec: "h264",
+          audio_codec: "aac",
+          metadata: %{"container" => "mkv", "duration" => 120.5}
+        })
+
+      header =
+        encode_profile(%{
+          "containers" => ["mkv"],
+          "videoCodecs" => ["h264"],
+          "audioCodecs" => ["aac"]
+        })
+
+      conn =
+        conn
+        |> put_req_header("authorization", "Bearer #{token}")
+        |> put_req_header("x-mydia-device-profile", header)
+        |> get("/api/v1/stream/#{media_file.id}")
+
+      assert conn.status == 200
+      assert get_resp_header(conn, "x-streaming-mode") == ["direct"]
+
+      File.rm!(test_file_path)
+    end
+  end
+
   describe "GET /api/v1/stream/:content_type/:id/candidates" do
     test "returns candidates for a movie with direct play compatible file", %{
       conn: conn,

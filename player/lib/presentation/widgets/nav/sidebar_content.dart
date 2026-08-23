@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -12,6 +11,8 @@ import '../../../domain/navigation/sidebar_layout.dart';
 import '../../screens/filter/filter_editor_sheet.dart';
 import '../mydia_logo.dart';
 import 'nav_badges.dart';
+import 'sidebar_edit_bar.dart';
+import 'sidebar_middle_list.dart';
 import 'sidebar_row.dart';
 
 /// Shared sidebar navigation content used by both the desktop sidebar and the
@@ -52,76 +53,22 @@ class SidebarContent extends ConsumerWidget {
     return best;
   }
 
-  /// Builds the full stored order after a middle-section reorder.
-  ///
-  /// Visible middle rows are reordered among themselves; hidden middle ids
-  /// stay at their relative slots in the stored middle list.
-  @visibleForTesting
-  static List<String> orderAfterMiddleReorder({
-    required SidebarLayout layout,
-    required List<String> visibleMiddleIds,
-    required int oldIndex,
-    required int newIndex,
-    required bool downloadSupported,
-  }) {
-    var adjustedNewIndex = newIndex;
-    if (adjustedNewIndex > oldIndex) adjustedNewIndex -= 1;
-
-    final reorderedVisible = List<String>.from(visibleMiddleIds);
-    final moved = reorderedVisible.removeAt(oldIndex);
-    reorderedVisible.insert(adjustedNewIndex, moved);
-
-    final reconciled =
-        layout.reconcileLayout(downloadSupported: downloadSupported);
-    final storedOrder = reconciled.order;
-
-    final leadingIds =
-        storedOrder.where((id) => _isLeadingAnchorId(id)).toList();
-    final trailingIds =
-        storedOrder.where((id) => _isTrailingAnchorId(id)).toList();
-    final storedMiddleIds = storedOrder
-        .where((id) => !_isLeadingAnchorId(id) && !_isTrailingAnchorId(id))
-        .toList();
-
-    final newMiddleIds = _mergeMiddleOrder(
-      storedMiddleIds: storedMiddleIds,
-      hiddenIds: reconciled.hidden,
-      reorderedVisibleIds: reorderedVisible,
-    );
-
-    return [...leadingIds, ...newMiddleIds, ...trailingIds];
-  }
-
-  static bool _isLeadingAnchorId(String id) => id == 'search';
-
-  static bool _isTrailingAnchorId(String id) =>
-      id == 'downloads' || id == 'settings';
-
-  static List<String> _mergeMiddleOrder({
-    required List<String> storedMiddleIds,
-    required Set<String> hiddenIds,
-    required List<String> reorderedVisibleIds,
-  }) {
-    final result = <String>[];
-    var visibleIndex = 0;
-
-    for (final id in storedMiddleIds) {
-      if (hiddenIds.contains(id)) {
-        result.add(id);
-      } else {
-        result.add(reorderedVisibleIds[visibleIndex++]);
-      }
-    }
-
-    return result;
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final editing = ref.watch(sidebarEditModeProvider);
+
     final asyncDestinations = ref.watch(sidebarDestinationsProvider);
     final destinations = switch (asyncDestinations) {
       AsyncData(:final value) => value,
       _ => SidebarLayout.defaults.reconcile(
+          downloadSupported: isDownloadSupported,
+        ),
+    };
+
+    final asyncEditRows = ref.watch(sidebarEditRowsProvider);
+    final editRows = switch (asyncEditRows) {
+      AsyncData(:final value) => value,
+      _ => SidebarLayout.defaults.reconcileForEditing(
           downloadSupported: isDownloadSupported,
         ),
     };
@@ -131,7 +78,6 @@ class SidebarContent extends ConsumerWidget {
         destinations.where((d) => d.isAnchored && d.id == 'search').toList();
     final trailing =
         destinations.where((d) => d.isAnchored && d.id != 'search').toList();
-    final middle = destinations.where((d) => !d.isAnchored).toList();
 
     final hasBackWidget = backToMydiaWidget != null;
 
@@ -144,7 +90,7 @@ class SidebarContent extends ConsumerWidget {
             child: backToMydiaWidget!,
           ),
         Padding(
-          padding: EdgeInsets.fromLTRB(20, hasBackWidget ? 16 : 20, 20, 24),
+          padding: EdgeInsets.fromLTRB(20, hasBackWidget ? 16 : 20, 12, 16),
           child: Row(
             children: [
               const MydiaLogo(size: 36),
@@ -160,9 +106,25 @@ class SidebarContent extends ConsumerWidget {
                       ),
                 ),
               ),
+              IconButton(
+                onPressed: () =>
+                    ref.read(sidebarEditModeProvider.notifier).toggle(),
+                tooltip: 'Edit sidebar',
+                visualDensity: VisualDensity.compact,
+                icon: Icon(
+                  Icons.edit_outlined,
+                  size: 20,
+                  color: editing ? AppColors.primary : AppColors.textSecondary,
+                ),
+              ),
             ],
           ),
         ),
+        if (editing)
+          SidebarEditBar(
+            onDone: () => ref.read(sidebarEditModeProvider.notifier).exit(),
+            onReset: () => _confirmReset(context, ref),
+          ),
         Expanded(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -174,55 +136,44 @@ class SidebarContent extends ConsumerWidget {
                     context: context,
                     destination: destination,
                     selected: selected,
+                    isEditing: editing,
                   ),
                   const SizedBox(height: 2),
                 ],
-                // The reorderable region owns the leftover vertical space and
-                // scrolls inside it. It must not size to its content: the flat
-                // list renders every destination at once, where the old tree
-                // kept Library collapsed, so on a short viewport the column
-                // overflowed by ~100px and the render library threw. Anchors
-                // stay outside this so Downloads and Settings never scroll
-                // away, Settings being the only route back from a hidden row.
                 Expanded(
-                  child: ReorderableListView.builder(
-                    buildDefaultDragHandles: false,
-                    itemCount: middle.length,
+                  child: SidebarMiddleList(
+                    editing: editing,
+                    rows: editRows,
+                    buildRow: (row, {editingTrailing}) => _buildRow(
+                      ref: ref,
+                      context: context,
+                      destination: row.destination,
+                      selected: selected,
+                      isEditing: editing,
+                      isHidden: row.hidden,
+                      editingTrailing: editingTrailing,
+                    ),
                     onReorder: (oldIndex, newIndex) => _onReorder(
                       ref: ref,
-                      middle: middle,
                       oldIndex: oldIndex,
                       newIndex: newIndex,
                     ),
-                    itemBuilder: (context, index) {
-                      final destination = middle[index];
-                      return ReorderableDragStartListener(
-                        key: ValueKey(destination.id),
-                        index: index,
-                        child: Padding(
-                          padding: const EdgeInsets.only(bottom: 2),
-                          child: _buildRow(
-                            ref: ref,
-                            context: context,
-                            destination: destination,
-                            selected: selected,
-                          ),
-                        ),
-                      );
-                    },
+                    onRestore: (id) =>
+                        ref.read(sidebarLayoutControllerProvider).unhide(id),
                   ),
                 ),
-                SidebarRow(
-                  icon: Icons.add_rounded,
-                  selectedIcon: Icons.add_rounded,
-                  label: '+ New filter',
-                  isSelected: false,
-                  onTap: () => showFilterEditor(
-                    context: context,
-                    ref: ref,
-                    initialFilter: MediaFilter.allMovies,
+                if (!editing)
+                  SidebarRow(
+                    icon: Icons.add_rounded,
+                    selectedIcon: Icons.add_rounded,
+                    label: '+ New filter',
+                    isSelected: false,
+                    onTap: () => showFilterEditor(
+                      context: context,
+                      ref: ref,
+                      initialFilter: MediaFilter.allMovies,
+                    ),
                   ),
-                ),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   child: Divider(
@@ -237,6 +188,7 @@ class SidebarContent extends ConsumerWidget {
                     context: context,
                     destination: destination,
                     selected: selected,
+                    isEditing: editing,
                   ),
                   const SizedBox(height: 2),
                 ],
@@ -251,17 +203,13 @@ class SidebarContent extends ConsumerWidget {
 
   void _onReorder({
     required WidgetRef ref,
-    required List<NavDestination> middle,
     required int oldIndex,
     required int newIndex,
   }) {
     final layout =
         ref.read(sidebarLayoutStoreProvider).get() ?? SidebarLayout.defaults;
-    final visibleMiddleIds = middle.map((d) => d.id).toList();
 
-    final newOrder = orderAfterMiddleReorder(
-      layout: layout,
-      visibleMiddleIds: visibleMiddleIds,
+    final newOrder = layout.orderAfterReorder(
       oldIndex: oldIndex,
       newIndex: newIndex,
       downloadSupported: isDownloadSupported,
@@ -270,21 +218,77 @@ class SidebarContent extends ConsumerWidget {
     ref.read(sidebarLayoutControllerProvider).reorder(newOrder);
   }
 
+  /// Confirms before resetting, because reset is the one destructive action in
+  /// edit mode. It restores default order and unhides every row. Saved
+  /// filters survive (see `SidebarLayoutController.resetToDefaults`) but
+  /// return to the bottom of the list, which the copy says plainly.
+  Future<void> _confirmReset(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.surfaceVariant,
+        title: const Text('Reset sidebar?'),
+        content: const Text(
+          'Restores the default order and shows every hidden row. Saved '
+          'filters are kept, but move to the bottom of the list.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+
+    // sidebarLayoutControllerProvider is plain @riverpod (autoDispose) with no
+    // watcher anywhere, so a controller captured before the dialog's await
+    // does not survive it: the provider is torn down once its listener count
+    // hits zero, and calling a method on the stale instance afterwards throws
+    // UnmountedRefException. Reading it fresh here, mirroring onDelete above
+    // and showFilterEditor's onSave, rebuilds the (stateless) controller on
+    // demand instead of reusing a possibly-disposed one. The context.mounted
+    // guard covers the SidebarContent-unmounted-during-the-dialog case.
+    if ((confirmed ?? false) && context.mounted) {
+      await ref.read(sidebarLayoutControllerProvider).resetToDefaults();
+    }
+  }
+
   Widget _buildRow({
     required WidgetRef ref,
     required BuildContext context,
     required NavDestination destination,
     required NavDestination? selected,
+    bool isEditing = false,
+    bool isHidden = false,
+    Widget? editingTrailing,
   }) {
     final isSelected = selected?.id == destination.id;
     final isDisabled = isOffline && destination.id != 'downloads';
     final canCustomise = !destination.isAnchored;
+
+    // Anchors read as locked while editing so they do not look draggable.
+    // They cannot move, and saying so is more honest than leaving them bare.
+    final Widget? trailing = isEditing && !canCustomise
+        ? const Icon(
+            Icons.lock_outline_rounded,
+            size: 17,
+            color: AppColors.textDisabled,
+          )
+        : editingTrailing;
 
     if (destination.id == 'settings') {
       return SettingsSidebarRow(
         isSelected: isSelected,
         isDisabled: isDisabled,
         onTap: () => onNavigate(destination.route),
+        isEditing: isEditing,
+        isHidden: isHidden,
+        editingTrailing: trailing,
       );
     }
 
@@ -317,6 +321,9 @@ class SidebarContent extends ConsumerWidget {
             context.go('/');
           }
         },
+        isEditing: isEditing,
+        isHidden: isHidden,
+        editingTrailing: trailing,
       );
     }
 
@@ -331,6 +338,9 @@ class SidebarContent extends ConsumerWidget {
       onHide: canCustomise
           ? () => ref.read(sidebarLayoutControllerProvider).hide(destination.id)
           : null,
+      isEditing: isEditing,
+      isHidden: isHidden,
+      editingTrailing: trailing,
     );
   }
 }

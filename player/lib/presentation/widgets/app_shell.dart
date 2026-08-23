@@ -7,6 +7,7 @@ import '../../core/config/web_config.dart';
 import '../../core/downloads/collection_auto_sync.dart';
 import '../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../core/graphql/graphql_provider.dart';
+import '../../core/navigation/sidebar_layout_providers.dart';
 import '../../core/playback/playback_progress_providers.dart';
 import '../../core/layout/breakpoints.dart';
 import '../../core/theme/colors.dart';
@@ -139,6 +140,25 @@ class AppShell extends ConsumerStatefulWidget {
           child: child,
         ),
       );
+
+  /// Reacts to the mobile drawer opening or closing.
+  ///
+  /// Edit mode is ephemeral, and `Scaffold.drawer` keeps its child mounted
+  /// while closed, so without this the drawer reopens in whatever mode it was
+  /// left in. Order changes persist on every drop, so exiting loses nothing.
+  ///
+  /// Public and `@visibleForTesting` for the reason [castOverlay] and
+  /// [contentGutter] are: a test can exercise the exact call the shell makes,
+  /// rather than a mirror that would stay green if the wiring below were
+  /// deleted.
+  @visibleForTesting
+  static void onDrawerVisibilityChanged({
+    required bool isOpen,
+    required WidgetRef ref,
+  }) {
+    if (isOpen) return;
+    ref.read(sidebarEditModeProvider.notifier).exit();
+  }
 
   @override
   ConsumerState<AppShell> createState() => _AppShellState();
@@ -323,7 +343,9 @@ class _AppShellState extends ConsumerState<AppShell>
       backgroundColor: Colors.transparent,
       extendBody: true,
       onDrawerChanged: (isOpen) {
-        if (mounted) setState(() => _drawerOpen = isOpen);
+        if (!mounted) return;
+        setState(() => _drawerOpen = isOpen);
+        AppShell.onDrawerVisibilityChanged(isOpen: isOpen, ref: ref);
       },
       drawer: MobileDrawer(
         location: location,

@@ -986,11 +986,13 @@ impl SseDecode for crate::FlutterGraphQLRequest {
         let mut var_variables = <Option<String>>::sse_decode(deserializer);
         let mut var_operationName = <Option<String>>::sse_decode(deserializer);
         let mut var_authToken = <Option<String>>::sse_decode(deserializer);
+        let mut var_deviceProfile = <Option<String>>::sse_decode(deserializer);
         return crate::FlutterGraphQLRequest {
             query: var_query,
             variables: var_variables,
             operation_name: var_operationName,
             auth_token: var_authToken,
+            device_profile: var_deviceProfile,
         };
     }
 }
@@ -1610,6 +1612,7 @@ impl flutter_rust_bridge::IntoDart for crate::FlutterGraphQLRequest {
             self.variables.into_into_dart().into_dart(),
             self.operation_name.into_into_dart().into_dart(),
             self.auth_token.into_into_dart().into_dart(),
+            self.device_profile.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -2145,6 +2148,7 @@ impl SseEncode for crate::FlutterGraphQLRequest {
         <Option<String>>::sse_encode(self.variables, serializer);
         <Option<String>>::sse_encode(self.operation_name, serializer);
         <Option<String>>::sse_encode(self.auth_token, serializer);
+        <Option<String>>::sse_encode(self.device_profile, serializer);
     }
 }
 

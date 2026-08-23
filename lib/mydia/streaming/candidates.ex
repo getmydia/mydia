@@ -14,7 +14,14 @@ defmodule Mydia.Streaming.Candidates do
   alias Mydia.Library.{FileAnalyzer, FileRanking, Hdr, MediaFile}
   alias Mydia.Library.Structs.FileMetadata
   alias Mydia.Repo
-  alias Mydia.Streaming.{AudioPreferences, AudioTrackSelector, CodecString, Compatibility}
+
+  alias Mydia.Streaming.{
+    AudioPreferences,
+    AudioTrackSelector,
+    CodecString,
+    Compatibility,
+    DeviceProfile
+  }
 
   @default_max_attempts 3
 
@@ -89,9 +96,19 @@ defmodule Mydia.Streaming.Candidates do
 
   @doc """
   Builds a prioritized list of streaming candidates for a media file.
+
+  Without a profile this answers for a browser, which is what it answered
+  before profiles existed.
   """
   def build_streaming_candidates(media_file) do
-    compatibility = Compatibility.check_compatibility(media_file)
+    build_streaming_candidates(media_file, DeviceProfile.browser_default())
+  end
+
+  @doc """
+  Builds a prioritized list of streaming candidates for a specific client.
+  """
+  def build_streaming_candidates(media_file, %DeviceProfile{} = profile) do
+    compatibility = Compatibility.check_compatibility(media_file, profile)
     metadata = media_file.metadata || FileMetadata.empty()
 
     video_codec_str = CodecString.video_codec_string(media_file.codec, metadata)

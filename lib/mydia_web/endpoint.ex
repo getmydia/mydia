@@ -15,9 +15,13 @@ defmodule MydiaWeb.Endpoint do
   ]
 
   # Enable SQL sandbox for browser-based feature tests (Wallaby)
-  # This allows browser requests to participate in the test transaction
-  # The plug only activates when sandbox metadata is present in the request
-  plug Phoenix.Ecto.SQL.Sandbox
+  # This allows browser requests to participate in the test transaction.
+  # This plug deserializes data carried in a request header, so per the
+  # library's own guidance it must be compiled out of every environment
+  # except test.
+  if Application.compile_env(:mydia, :sql_sandbox) do
+    plug Phoenix.Ecto.SQL.Sandbox
+  end
 
   # Trust X-Forwarded-* headers from reverse proxy (Caddy)
   # This ensures conn.scheme reflects the original HTTPS request

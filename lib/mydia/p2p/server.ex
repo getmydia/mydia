@@ -13,6 +13,7 @@ defmodule Mydia.P2p.Server do
   alias Mydia.RemoteAccess
   alias Mydia.RemoteAccess.DirectUrls
   alias Mydia.RemoteAccess.Pairing
+  alias Mydia.Streaming.DeviceProfile
   alias Mydia.Streaming.HlsSession
   alias Mydia.Streaming.SessionFiles
   alias Mydia.Streaming.SessionSubtitles
@@ -401,7 +402,9 @@ defmodule Mydia.P2p.Server do
     # Build context from auth token, marking source as p2p
     # Include peer connection type so resolvers can enforce relay caps
     peer_connection_type = infer_peer_connection_type(state.connected_peers)
-    context = build_graphql_context(req.auth_token, :p2p, peer_connection_type)
+
+    context =
+      build_graphql_context(req.auth_token, :p2p, peer_connection_type, req.device_profile)
 
     # Execute the GraphQL query with logging
     result =
@@ -840,10 +843,18 @@ defmodule Mydia.P2p.Server do
     end
   end
 
-  defp build_graphql_context(nil, source, peer_connection_type),
-    do: %{source: source, peer_connection_type: peer_connection_type}
+  # Direct play is a capability question, not an authorization question, so
+  # the profile is decoded and attached regardless of which clause below
+  # handles the auth token, exactly as on the HTTP side
+  # (`MydiaWeb.Plugs.AbsintheContext.put_device_profile/2`). The key must be
+  # ABSENT from the context when there is no profile, not present with a
+  # `nil` value, since resolvers pattern match on presence.
+  defp build_graphql_context(nil, source, peer_connection_type, device_profile_header) do
+    %{source: source, peer_connection_type: peer_connection_type}
+    |> put_device_profile(device_profile_header)
+  end
 
-  defp build_graphql_context(auth_token, source, peer_connection_type)
+  defp build_graphql_context(auth_token, source, peer_connection_type, device_profile_header)
        when is_binary(auth_token) do
     # Use Guardian to verify the token and get the user
     case Guardian.verify_token_with_claims(auth_token) do
@@ -853,11 +864,13 @@ defmodule Mydia.P2p.Server do
         # page reads it back as "Online now".
         RemoteAccess.touch_device_from_claims(claims)
 
-        context = %{
-          current_user: user,
-          source: source,
-          peer_connection_type: peer_connection_type
-        }
+        context =
+          %{
+            current_user: user,
+            source: source,
+            peer_connection_type: peer_connection_type
+          }
+          |> put_device_profile(device_profile_header)
 
         case RemoteAccess.device_id_from_claims(claims) do
           nil -> context
@@ -866,7 +879,16 @@ defmodule Mydia.P2p.Server do
 
       {:error, _reason} ->
         Logger.debug("P2P GraphQL: Invalid auth token")
+
         %{source: source, peer_connection_type: peer_connection_type}
+        |> put_device_profile(device_profile_header)
+    end
+  end
+
+  defp put_device_profile(context, device_profile_header) do
+    case DeviceProfile.decode_header(device_profile_header) do
+      nil -> context
+      profile -> Map.put(context, :device_profile, profile)
     end
   end
 

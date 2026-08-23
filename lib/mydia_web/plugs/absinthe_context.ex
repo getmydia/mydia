@@ -20,7 +20,9 @@ defmodule MydiaWeb.Plugs.AbsintheContext do
   defp build_context(conn) do
     # remote_ip lets unauthenticated resolvers rate limit per caller, the same way
     # MydiaWeb.Plugs.ApiAuth does for API key validation.
-    base = %{source: :http, remote_ip: format_ip(conn.remote_ip)}
+    base =
+      %{source: :http, remote_ip: format_ip(conn.remote_ip)}
+      |> put_device_profile(conn.assigns[:device_profile])
 
     case Guardian.Plug.current_resource(conn) do
       nil ->
@@ -40,6 +42,11 @@ defmodule MydiaWeb.Plugs.AbsintheContext do
       device_id -> Map.put(context, :device_id, device_id)
     end
   end
+
+  # Absent rather than nil, so a resolver can pattern match on presence and does
+  # not have to distinguish "no header" from "header said nothing".
+  defp put_device_profile(context, nil), do: context
+  defp put_device_profile(context, profile), do: Map.put(context, :device_profile, profile)
 
   defp format_ip({a, b, c, d}), do: "#{a}.#{b}.#{c}.#{d}"
   defp format_ip({a, b, c, d, e, f, g, h}), do: "#{a}:#{b}:#{c}:#{d}:#{e}:#{f}:#{g}:#{h}"

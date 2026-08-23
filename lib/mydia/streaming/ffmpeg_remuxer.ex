@@ -47,6 +47,7 @@ defmodule Mydia.Streaming.FfmpegRemuxer do
   alias Mydia.Library.Structs.StreamInfo
   alias Mydia.Streaming.AudioTrackSelector
   alias Mydia.Streaming.Compatibility
+  alias Mydia.Streaming.DeviceProfile
 
   # Matches FfmpegHlsTranscoder's budget, so a stream that has to be encoded
   # on either path lands at the same bitrate.
@@ -57,7 +58,8 @@ defmodule Mydia.Streaming.FfmpegRemuxer do
           duration: number() | nil,
           media_file: Mydia.Library.MediaFile.t() | nil,
           audio_language: [String.t()] | nil,
-          show_audio_language: [String.t()] | nil
+          show_audio_language: [String.t()] | nil,
+          device_profile: DeviceProfile.t() | nil
         ]
 
   @doc """
@@ -73,6 +75,9 @@ defmodule Mydia.Streaming.FfmpegRemuxer do
   - `:duration` - (optional) Total duration in seconds. When provided, FFmpeg writes
     the correct duration to the moov atom, preventing the browser from showing
     progressively increasing duration during playback.
+  - `:device_profile` - (optional) The caller's `DeviceProfile`, used to decide
+    whether the mapped audio stream can be stream-copied. `nil` (the default)
+    falls back to the browser compatibility table, matching pre-profile behavior.
 
   ## Examples
 
@@ -196,7 +201,12 @@ defmodule Mydia.Streaming.FfmpegRemuxer do
     # while the advertised MIME still said `mp4a.40.2`. Encoding that one
     # stream to AAC keeps the promise the candidate made, and still avoids
     # touching the video.
-    codec_args = remux_codec_args(selected_audio)
+    #
+    # The decision is made against the caller's device profile, not the
+    # hardcoded browser table: a client that declared it can decode e.g. AC3
+    # should get the stream copy REMUX implies, not a silent downmix to
+    # stereo AAC.
+    codec_args = remux_codec_args(selected_audio, Keyword.get(opts, :device_profile))
 
     # Duration args - tell FFmpeg the total duration so it writes correct metadata
     # This prevents the browser from showing progressively increasing duration
@@ -235,10 +245,16 @@ defmodule Mydia.Streaming.FfmpegRemuxer do
   # No stream was selected, so no -map was emitted and ffmpeg's implicit
   # selection stands. That is the pre-existing behaviour for an unanalysed
   # file, and the codec the strategy was chosen from is the one it will pick.
-  defp remux_codec_args(nil), do: ["-c", "copy"]
+  defp remux_codec_args(nil, _device_profile), do: ["-c", "copy"]
 
-  defp remux_codec_args(%StreamInfo{codec: codec}) do
-    if Compatibility.compatible_audio_codec?(codec) do
+  defp remux_codec_args(%StreamInfo{codec: codec}, device_profile) do
+    compatible? =
+      case device_profile do
+        nil -> Compatibility.compatible_audio_codec?(codec)
+        %DeviceProfile{} = profile -> Compatibility.compatible_audio_codec?(codec, profile)
+      end
+
+    if compatible? do
       ["-c", "copy"]
     else
       Logger.info("Remux: mapped audio stream is #{codec}, encoding to AAC for playability")
