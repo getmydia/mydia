@@ -1,10 +1,10 @@
 defmodule MydiaWeb.Features.GuestTest do
   @moduledoc """
-  Browser coverage for the guest request system.
-
   Scope is deliberately narrow. The full lifecycle is covered far faster by
-  `MydiaWeb.GuestRequestFlowTest`; what only a real browser can prove is that
-  the request and approve modals, and their phx-click wiring, actually work.
+  `MydiaWeb.GuestRequestFlowTest`, and guest route access by
+  `MydiaWeb.RouteAuthorizationTest`. What only a real browser can prove is
+  that the request and approve modals, and their phx-click wiring, actually
+  work.
 
   Metadata is served by `Mydia.MetadataStubProvider`, so approval genuinely
   succeeds. An earlier version of this file let approval fail against the live
@@ -23,30 +23,6 @@ defmodule MydiaWeb.Features.GuestTest do
   @moduletag :feature
 
   setup :setup_metadata_stub
-
-  describe "Guest Navigation & Access Control" do
-    @tag :feature
-    test "guest can access dashboard after login", %{session: session} do
-      login_as_guest(session)
-
-      session
-      |> wait_for_liveview()
-      |> assert_path("/")
-      |> assert_has_text("Dashboard")
-    end
-
-    @tag :feature
-    test "guest cannot access admin pages", %{session: session} do
-      login_as_guest(session)
-      session |> wait_for_liveview()
-
-      session
-      |> visit("/admin/requests")
-      |> wait_for_liveview()
-
-      refute Wallaby.Browser.current_path(session) == "/admin/requests"
-    end
-  end
 
   describe "End-to-end request and approval in a real browser" do
     @tag :feature
