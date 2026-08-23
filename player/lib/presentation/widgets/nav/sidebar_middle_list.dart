@@ -50,6 +50,13 @@ class SidebarMiddleList extends StatelessWidget {
 
   final void Function(String id) onRestore;
 
+  /// Minimum interactive (tap/click) region for the restore control, in
+  /// logical pixels. Kept at Material's 48dp-adjacent minimum touch target
+  /// guidance even though the glyph itself stays small — restore is tapped
+  /// repeatedly while a user cleans up a long hidden list on a phone, so a
+  /// cramped hit target is a real usability defect, not polish.
+  static const double _restoreControlTapSize = 44;
+
   @override
   Widget build(BuildContext context) {
     if (!editing) {
@@ -84,13 +91,14 @@ class SidebarMiddleList extends StatelessWidget {
             ? IconButton(
                 onPressed: () => onRestore(row.destination.id),
                 tooltip: 'Restore ${row.destination.label}',
-                visualDensity: VisualDensity.compact,
+                iconSize: 20,
                 padding: EdgeInsets.zero,
-                constraints:
-                    const BoxConstraints.tightFor(width: 32, height: 32),
+                constraints: const BoxConstraints.tightFor(
+                  width: _restoreControlTapSize,
+                  height: _restoreControlTapSize,
+                ),
                 icon: const Icon(
                   Icons.add_circle_outline_rounded,
-                  size: 20,
                   color: AppColors.primary,
                 ),
               )

@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/navigation/sidebar_layout.dart';
@@ -117,5 +118,53 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(restored, ['movies']);
+  });
+
+  testWidgets(
+      'edit mode passes the raw ReorderableListView indices straight '
+      'through, unmodified', (tester) async {
+    // `_rows()` (no hidden ids) puts Home at index 0, Continue Watching at
+    // 1, Movies at 2 — see SidebarLayout.defaults' builtin ordering.
+    final captured = <(int, int)>[];
+    await _pumpList(
+      tester,
+      editing: true,
+      onReorder: (oldIndex, newIndex) => captured.add((oldIndex, newIndex)),
+      height: 900,
+    );
+
+    // Drag Home's grip down until the drag proxy settles past Movies (row
+    // index 2). Every row occupies a fixed 48px slot (46px content from
+    // `_pumpList`'s `buildRow` plus this widget's own 2px bottom padding),
+    // so rows sit at [0,48), [48,96), [96,144)... Dragging down by 84px
+    // puts the dragged proxy's trailing edge at 132px, inside Movies'
+    // ending half (its midpoint-to-end span is 120-144px). Per
+    // `_dragUpdateItems` in the Flutter SDK's
+    // `packages/flutter/lib/src/widgets/reorderable_list.dart`, landing in
+    // an item's ending half sets `newIndex = item.index + 1`, i.e. 3 —
+    // NOT 2. That "+1" is Flutter's documented pre-removal semantics:
+    // ReorderableListView reports newIndex as the insertion point in the
+    // list *before* the dragged row is removed, one past where the row
+    // actually lands once removal happens. `SidebarLayout
+    // .orderAfterReorder` performs exactly that one adjustment itself.
+    //
+    // If this widget "helpfully" pre-adjusted newIndex too (reintroducing
+    // a second `-= 1`), this test would observe (0, 2) here instead of
+    // (0, 3) — precisely the off-by-one-on-downward-drags failure mode
+    // the brief warns about by name.
+    final grip = find.descendant(
+      of: find.byKey(const ValueKey('home')),
+      matching: find.byType(ReorderableDragStartListener),
+    );
+    final gesture = await tester.startGesture(tester.getCenter(grip));
+    await tester.pump(kPressTimeout);
+    for (var i = 0; i < 4; i++) {
+      await gesture.moveBy(const Offset(0, 21));
+      await tester.pump();
+    }
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(captured, [(0, 3)]);
   });
 }
