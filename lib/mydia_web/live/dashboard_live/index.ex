@@ -39,6 +39,7 @@ defmodule MydiaWeb.DashboardLive.Index do
         |> assign(:detail_loading, false)
         |> assign(:movie_libraries, MediaAddHelpers.candidate_libraries(:movie))
         |> assign(:show_libraries, MediaAddHelpers.candidate_libraries(:tv_show))
+        |> assign(:library_picker, nil)
         |> load_dashboard_data()
       else
         socket
@@ -63,6 +64,7 @@ defmodule MydiaWeb.DashboardLive.Index do
         |> assign(:detail_loading, false)
         |> assign(:movie_libraries, [])
         |> assign(:show_libraries, [])
+        |> assign(:library_picker, nil)
       end
 
     {:ok, socket}
@@ -130,11 +132,21 @@ defmodule MydiaWeb.DashboardLive.Index do
   end
 
   @impl true
+  def handle_event("open_library_picker", params, socket) do
+    {:noreply, MediaAddHelpers.put_library_picker(socket, params)}
+  end
+
+  def handle_event("close_library_picker", _params, socket) do
+    {:noreply, MediaAddHelpers.clear_library_picker(socket)}
+  end
+
   def handle_event(
         "add_to_library",
         %{"tmdb_id" => provider_id, "media_type" => media_type} = params,
         socket
       ) do
+    socket = MediaAddHelpers.clear_library_picker(socket)
+
     case parse_event_media_type(media_type) do
       {:ok, media_type_atom} ->
         # An impatient double-click sends the event twice before the first

@@ -172,16 +172,24 @@ defmodule MydiaWeb.DiscoverComponentsTest do
   end
 
   # The rail is a horizontal scroll container (overflow-x-auto, which makes
-  # overflow-y compute to auto as well) and is one card tall, so a dropdown
-  # cannot escape it at any placement. The picker is withdrawn there rather
-  # than shipped broken: the plain add button still works against the default
-  # library. See #465.
-  describe "media_rail picker suppression" do
-    test "a rail renders the add button but never a library picker" do
+  # overflow-y compute to auto as well) and is one card tall. That is why the
+  # old anchored dropdown was withdrawn here: it could not escape the
+  # container at any placement. The picker is now a page-level dialog, which
+  # the container cannot clip, so rail cards can target a chosen library
+  # again. See #465.
+  describe "media_rail library picker" do
+    test "a rail card offers the picker when the host supplies several libraries" do
       html =
         rail(%{
           libraries: [%{id: "a", path: "/m/a"}, %{id: "b", path: "/m/b"}]
         })
+
+      assert html =~ "Add to Library"
+      assert html =~ "library-picker-caret"
+    end
+
+    test "a rail card offers no picker when the host supplies none" do
+      html = rail(%{})
 
       assert html =~ "Add to Library"
       refute html =~ "library-picker-caret"

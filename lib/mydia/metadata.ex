@@ -440,8 +440,12 @@ defmodule Mydia.Metadata do
   @doc """
   Gets the metadata relay base URL.
 
-  The base URL can be configured via the METADATA_RELAY_URL environment variable,
-  defaulting to the self-hosted relay if not set.
+  Resolved in order of precedence:
+
+    1. `Application.get_env(:mydia, :metadata_relay_url)` — set directly in
+       config, or in tests to point the relay at a local `Bypass` instance.
+    2. The `METADATA_RELAY_URL` environment variable.
+    3. The default, the self-hosted relay at `https://relay.mydia.dev`.
 
   ## Examples
 
@@ -449,7 +453,8 @@ defmodule Mydia.Metadata do
       "https://relay.mydia.dev"
   """
   def metadata_relay_url do
-    System.get_env("METADATA_RELAY_URL", "https://relay.mydia.dev")
+    Application.get_env(:mydia, :metadata_relay_url) ||
+      System.get_env("METADATA_RELAY_URL", "https://relay.mydia.dev")
   end
 
   @doc """
@@ -524,9 +529,11 @@ defmodule Mydia.Metadata do
   This provides a ready-to-use configuration for the metadata-relay service
   that doesn't require an API key.
 
-  The base URL can be configured via the METADATA_RELAY_URL environment variable,
-  defaulting to the self-hosted relay at relay.mydia.dev if not set. The metadata
-  language can be configured via the METADATA_LANGUAGE environment variable.
+  The base URL follows `metadata_relay_url/0`'s precedence: application env
+  (`:mydia, :metadata_relay_url`), then the METADATA_RELAY_URL environment
+  variable, then the default self-hosted relay at relay.mydia.dev. The
+  metadata language can be configured via the METADATA_LANGUAGE environment
+  variable.
 
   ## Examples
 
@@ -552,9 +559,11 @@ defmodule Mydia.Metadata do
   @doc """
   Gets the default TVDB relay configuration.
 
-  The base URL can be configured via the METADATA_RELAY_URL environment variable,
-  defaulting to the self-hosted relay at relay.mydia.dev if not set. The metadata
-  language can be configured via the METADATA_LANGUAGE environment variable.
+  The base URL follows `metadata_relay_url/0`'s precedence: application env
+  (`:mydia, :metadata_relay_url`), then the METADATA_RELAY_URL environment
+  variable, then the default self-hosted relay at relay.mydia.dev. The
+  metadata language can be configured via the METADATA_LANGUAGE environment
+  variable.
 
   ## Examples
 

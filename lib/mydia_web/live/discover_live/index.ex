@@ -62,6 +62,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
       |> assign(:load_error, nil)
       |> assign(:detail_loading, false)
       |> assign(:libraries, [])
+      |> assign(:library_picker, nil)
       |> GridDensity.assign_current()
 
     {:ok, socket}
@@ -147,7 +148,8 @@ defmodule MydiaWeb.DiscoverLive.Index do
        |> assign(:selected_year, nil)
        |> assign(:min_rating, nil)
        |> assign(:sort_by, "popularity.desc")
-       |> assign(:libraries, MediaAddHelpers.candidate_libraries(:movie))}
+       |> assign(:libraries, MediaAddHelpers.candidate_libraries(:movie))
+       |> assign(:library_picker, nil)}
     end
   end
 
@@ -210,11 +212,21 @@ defmodule MydiaWeb.DiscoverLive.Index do
     end
   end
 
+  def handle_event("open_library_picker", params, socket) do
+    {:noreply, MediaAddHelpers.put_library_picker(socket, params)}
+  end
+
+  def handle_event("close_library_picker", _params, socket) do
+    {:noreply, MediaAddHelpers.clear_library_picker(socket)}
+  end
+
   def handle_event(
         "add_to_library",
         %{"tmdb_id" => provider_id, "media_type" => media_type} = params,
         socket
       ) do
+    socket = MediaAddHelpers.clear_library_picker(socket)
+
     case parse_event_media_type(media_type) do
       {:ok, media_type_atom} ->
         # An impatient double-click sends the event twice before the first

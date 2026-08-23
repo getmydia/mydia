@@ -185,9 +185,11 @@ defmodule MydiaWeb.DiscoverComponents do
   attr :current_user, :map, required: true
   attr :adding_ids, MapSet, default: MapSet.new()
   attr :requesting_item_id, :string, default: nil
-  # No libraries attr on purpose. The rail is a horizontal scroll container, so
-  # a library picker dropdown cannot escape it at any placement (#465). Rail
-  # cards add to the default library.
+  # The rail is a horizontal scroll container, so the old anchored dropdown
+  # could not escape it at any placement and was withdrawn here (#465). The
+  # picker is now a page-level dialog, which no ancestor's overflow can clip,
+  # so the attr is back. A host that passes nothing still gets no caret.
+  attr :libraries, :list, default: []
 
   attr :id, :string, default: "media-rail"
   attr :title, :string, default: "More like this"
@@ -264,6 +266,7 @@ defmodule MydiaWeb.DiscoverComponents do
             adding_ids={@adding_ids}
             current={Map.get(item, :current, false)}
             requesting_item_id={@requesting_item_id}
+            libraries={@libraries}
             on_select={@on_select}
             navigate={Map.get(item, :navigate)}
             add_event={@add_event}
@@ -322,11 +325,11 @@ defmodule MydiaWeb.DiscoverComponents do
               <.icon name="hero-plus" class="w-4 h-4" /> Add to Library
             <% end %>
           </button>
-          <LibraryComponents.library_picker_menu
+          <LibraryComponents.library_picker_button
             libraries={@libraries}
-            event={@add_event}
             tmdb_id={@item.provider_id}
             media_type={@media_type}
+            title={@item.title}
           />
         </div>
       <% @item.in_library -> %>

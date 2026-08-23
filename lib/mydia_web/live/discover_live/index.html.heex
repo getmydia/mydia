@@ -207,6 +207,7 @@
     current_user={@current_user}
     open={@selected_item != nil}
     libraries={@libraries}
+    picker_open={@library_picker != nil}
   >
     <:rail>
       <.media_rail
@@ -217,7 +218,12 @@
         current_user={@current_user}
         adding_ids={@adding_item_ids}
         requesting_item_id={@requesting_item_id}
+        libraries={@libraries}
       />
     </:rail>
   </.live_component>
+
+  <%!-- Rendered once per page rather than once per card. See
+        library_picker_dialog/1 for why an anchored menu cannot work here. --%>
+  <.library_picker_dialog picker={@library_picker} />
 </Layouts.app>
