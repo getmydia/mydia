@@ -85,13 +85,17 @@ class MediaFileSelector {
   }
 
   /// Maximum target resolution in vertical pixels for the given context.
+  ///
+  /// A return value of `0` means "no cap": `_score` treats it as a signal
+  /// to skip the target-relative scoring branch and reward raw resolution
+  /// directly instead of dividing by a target.
   static int _maxTargetResolution(DeviceContext context) {
     return switch ((context.deviceCategory, context.networkType)) {
       (DeviceCategory.mobile, NetworkType.cellular) => 720,
       (DeviceCategory.mobile, _) => 1080,
       (DeviceCategory.tablet, _) => 1080,
-      (DeviceCategory.desktop, _) => 999999, // uncapped
-      (DeviceCategory.widescreen, _) => 999999, // uncapped
+      (DeviceCategory.desktop, _) => 0, // no cap
+      (DeviceCategory.widescreen, _) => 0, // no cap
     };
   }
 

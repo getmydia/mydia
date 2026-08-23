@@ -266,16 +266,12 @@ void main() {
     });
 
     test('a higher resolution still wins over a direct-playable lower one', () {
-      // Desktop/widescreen are uncapped (_maxTargetResolution returns
-      // 999999), which scales the resolution term down to a fraction of a
-      // point for any real resolution: far below the +20 direct-play bonus.
-      // On those categories a lower-resolution direct-play file actually
-      // beats a higher-resolution transcode, which is real, current scorer
-      // behavior and out of scope for this task to change. Use a capped
-      // category (mobile) instead, where the resolution term is large
-      // enough (0-100) to meaningfully outweigh the bonus.
+      // Desktop/widescreen are uncapped: _maxTargetResolution returns 0,
+      // which routes _score into its uncapped branch and rewards raw
+      // resolution on a 0-100 scale (pixels / 2160). A large enough
+      // resolution gap still outweighs the flat +20 direct-play bonus.
       const context = DeviceContext(
-        deviceCategory: DeviceCategory.mobile,
+        deviceCategory: DeviceCategory.desktop,
         networkType: NetworkType.wifi,
         isWeb: false,
       );
@@ -287,12 +283,48 @@ void main() {
       );
       final bigger = _makeFile(
         id: 'bigger',
-        resolution: '1080p',
+        resolution: '4K',
         directPlaySupported: false,
       );
 
       expect(MediaFileSelector.selectBest([direct, bigger], context)!.id,
           'bigger');
+    });
+
+    test(
+        'desktop: non-direct-playable 4K outranks direct-playable 480p '
+        'despite the bonus', () {
+      // Regression test for the fix: before it, desktop's uncapped
+      // resolution branch was unreachable because _maxTargetResolution
+      // returned the 999999 sentinel instead of 0, so the resolution term
+      // was scaled down to a fraction of a point (2160 / 999999 * 100 ~=
+      // 0.22) and the +20 direct-play bonus dominated regardless of
+      // resolution. With the fix, the 4K file scores ~100 for resolution
+      // (2160 / 2160 * 100) against the 480p file's ~22 (480 / 2160 * 100)
+      // + 20 bonus, so the two-tier resolution gap can no longer be
+      // overwhelmed by the bonus alone.
+      const context = DeviceContext(
+        deviceCategory: DeviceCategory.desktop,
+        networkType: NetworkType.wifi,
+        isWeb: false,
+      );
+
+      final highRes = _makeFile(
+        id: '4k-transcode',
+        resolution: '4K',
+        directPlaySupported: false,
+      );
+      final lowResDirect = _makeFile(
+        id: '480p-direct',
+        resolution: '480p',
+        directPlaySupported: true,
+      );
+
+      final result = MediaFileSelector.selectBest(
+        [lowResDirect, highRes],
+        context,
+      );
+      expect(result?.id, equals('4k-transcode'));
     });
   });
 
