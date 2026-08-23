@@ -88,9 +88,16 @@ defmodule MydiaWeb.MediaLive.Show.ScoreBreakdown do
   marks at 20 instead of as a failure against a 100-point yardstick. With the
   default max of 100 this reproduces the release ranker's original 80 and 50
   thresholds exactly.
+
+  An exact zero renders in the same neutral colour as a nil score rather than
+  `text-error`. On a relay result "Hash match" is a permanent zero because
+  SubDL has no hash search, and every naming gap in the release block adds
+  another zero row; painting all of them red reads as "several things are
+  wrong" when the honest story is "these signals are unavailable."
   """
   def score_color(nil, _max), do: "text-base-content/50"
   def score_color(_score, max) when not is_number(max) or max <= 0, do: "text-base-content/50"
+  def score_color(score, _max) when score == 0, do: "text-base-content/50"
 
   def score_color(score, max) do
     cond do
