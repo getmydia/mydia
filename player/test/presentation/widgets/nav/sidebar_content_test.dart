@@ -222,12 +222,42 @@ void main() {
     expect(store.get()!.hidden, isNot(contains('collections')));
   });
 
-  testWidgets('edit mode offers no reset until it can confirm', (tester) async {
-    await _pump(tester, location: '/');
+  testWidgets('reset asks before it acts, and cancel changes nothing',
+      (tester) async {
+    final store = InMemorySidebarLayoutStore();
+    await store.save(SidebarLayout.defaults.withHidden('collections'));
+
+    await _pump(tester, location: '/', store: store);
 
     await tester.tap(find.byTooltip('Edit sidebar'));
     await tester.pumpAndSettle();
 
-    expect(find.byTooltip('Reset sidebar'), findsNothing);
+    await tester.tap(find.byTooltip('Reset sidebar'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Reset sidebar?'), findsOneWidget);
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(store.get()!.hidden, contains('collections'));
+  });
+
+  testWidgets('confirming reset unhides everything', (tester) async {
+    final store = InMemorySidebarLayoutStore();
+    await store.save(SidebarLayout.defaults.withHidden('collections'));
+
+    await _pump(tester, location: '/', store: store);
+
+    await tester.tap(find.byTooltip('Edit sidebar'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Reset sidebar'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(TextButton, 'Reset'));
+    await tester.pumpAndSettle();
+
+    expect(store.get()!.hidden, isEmpty);
   });
 }

@@ -121,11 +121,9 @@ class SidebarContent extends ConsumerWidget {
           ),
         ),
         if (editing)
-          // Reset arrives in Task 9, together with its confirmation dialog.
-          // Omitted rather than stubbed, so this commit ships no destructive
-          // control that skips confirming.
           SidebarEditBar(
             onDone: () => ref.read(sidebarEditModeProvider.notifier).exit(),
+            onReset: () => _confirmReset(context, ref),
           ),
         Expanded(
           child: Padding(
@@ -218,6 +216,46 @@ class SidebarContent extends ConsumerWidget {
     );
 
     ref.read(sidebarLayoutControllerProvider).reorder(newOrder);
+  }
+
+  /// Confirms before resetting, because reset is the one destructive action in
+  /// edit mode. It restores default order and unhides every row. Saved
+  /// filters survive (see `SidebarLayoutController.resetToDefaults`) but
+  /// return to the bottom of the list, which the copy says plainly.
+  Future<void> _confirmReset(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.surfaceVariant,
+        title: const Text('Reset sidebar?'),
+        content: const Text(
+          'Restores the default order and shows every hidden row. Saved '
+          'filters are kept, but move to the bottom of the list.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+
+    // sidebarLayoutControllerProvider is plain @riverpod (autoDispose) with no
+    // watcher anywhere, so a controller captured before the dialog's await
+    // does not survive it: the provider is torn down once its listener count
+    // hits zero, and calling a method on the stale instance afterwards throws
+    // UnmountedRefException. Reading it fresh here, mirroring onDelete above
+    // and showFilterEditor's onSave, rebuilds the (stateless) controller on
+    // demand instead of reusing a possibly-disposed one. The context.mounted
+    // guard covers the SidebarContent-unmounted-during-the-dialog case.
+    if ((confirmed ?? false) && context.mounted) {
+      await ref.read(sidebarLayoutControllerProvider).resetToDefaults();
+    }
   }
 
   Widget _buildRow({
