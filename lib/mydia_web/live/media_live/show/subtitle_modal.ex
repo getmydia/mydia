@@ -43,10 +43,10 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
       |> assign(:more_languages, more)
 
     ~H"""
-    <div class="modal modal-open" id="subtitle-search-modal">
-      <div class="modal-box max-w-3xl max-h-[85vh] flex flex-col p-0">
+    <div class="modal modal-bottom sm:modal-middle modal-open" id="subtitle-search-modal">
+      <div class="modal-box max-w-none sm:max-w-3xl max-h-[92dvh] sm:max-h-[85vh] flex flex-col overflow-hidden p-0">
         <%!-- Header --%>
-        <div class="sticky top-0 z-10 bg-base-100 border-b border-base-300 p-4 sm:p-6">
+        <div class="bg-base-100 border-b border-base-300 p-4 sm:p-6">
           <div class="flex items-start justify-between gap-4">
             <div class="min-w-0">
               <h3 class="text-xl sm:text-2xl font-bold">Search Subtitles</h3>
@@ -128,7 +128,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
             <button
               type="button"
               phx-click="perform_subtitle_search"
-              class="btn btn-primary btn-sm"
+              class="btn btn-primary btn-sm btn-block sm:w-auto"
               disabled={@subtitle_search_state == :searching or @selected_languages == []}
             >
               <%= if @subtitle_search_state == :searching do %>
@@ -234,68 +234,73 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
                       :for={{result, index} <- Enum.with_index(@subtitle_search_results)}
                       class="list-row hover:bg-base-200/50 transition-colors"
                     >
-                      <div class="list-col-grow min-w-0">
-                        <div class="font-medium truncate">
-                          {result.file_name || MydiaWeb.Languages.name(result.language)}
-                        </div>
-                        <div class="flex flex-wrap items-center gap-1.5 mt-1">
-                          <span class="badge badge-sm">
-                            {MydiaWeb.Languages.name(result.language)}
-                          </span>
-                          <span class="badge badge-ghost badge-sm">{result.format}</span>
-                          <span :if={result.provider_name} class="badge badge-ghost badge-sm">
-                            {result.provider_name}
-                          </span>
-                          <span :if={result.moviehash_match} class="badge badge-success badge-sm">
-                            Exact match
-                          </span>
-                          <div
-                            :if={result.hearing_impaired}
-                            class="tooltip"
-                            data-tip="Includes hearing impaired captions"
-                          >
-                            <span class="badge badge-outline badge-sm">HI</span>
+                      <div class="list-col-grow min-w-0 flex flex-col sm:flex-row sm:items-center gap-3">
+                        <div class="min-w-0 flex-1">
+                          <div class="font-medium truncate">
+                            {result.file_name || MydiaWeb.Languages.name(result.language)}
                           </div>
-                          <.score_trigger
-                            id={"subtitle-score-badge-#{index}"}
-                            panel_id={"subtitle-score-breakdown-#{index}"}
-                            class={["badge badge-sm cursor-pointer", score_badge_class(result.score)]}
-                            title="Show score breakdown"
-                          >
-                            Score {result.score}
-                          </.score_trigger>
+                          <div class="flex flex-wrap items-center gap-1.5 mt-1">
+                            <span class="badge badge-sm">
+                              {MydiaWeb.Languages.name(result.language)}
+                            </span>
+                            <span class="badge badge-ghost badge-sm">{result.format}</span>
+                            <span :if={result.provider_name} class="badge badge-ghost badge-sm">
+                              {result.provider_name}
+                            </span>
+                            <span :if={result.moviehash_match} class="badge badge-success badge-sm">
+                              Exact match
+                            </span>
+                            <div
+                              :if={result.hearing_impaired}
+                              class="tooltip"
+                              data-tip="Includes hearing impaired captions"
+                            >
+                              <span class="badge badge-outline badge-sm">HI</span>
+                            </div>
+                            <.score_trigger
+                              id={"subtitle-score-badge-#{index}"}
+                              panel_id={"subtitle-score-breakdown-#{index}"}
+                              class={[
+                                "badge badge-sm cursor-pointer",
+                                score_badge_class(result.score)
+                              ]}
+                              title="Show score breakdown"
+                            >
+                              Score {result.score}
+                            </.score_trigger>
+                          </div>
+                          <.score_panel id={"subtitle-score-breakdown-#{index}"}>
+                            <.score_row
+                              :for={factor <- result.score_breakdown}
+                              label={factor.label}
+                              value={factor.detail}
+                              score={factor.points}
+                              max={factor.max}
+                              zero_is_absent={true}
+                            />
+                          </.score_panel>
+                          <div class="text-xs text-base-content/60 mt-1 flex gap-3">
+                            <span :if={result.rating}>★ {result.rating}/10</span>
+                            <span :if={result.download_count}>
+                              {result.download_count} downloads
+                            </span>
+                          </div>
                         </div>
-                        <.score_panel id={"subtitle-score-breakdown-#{index}"}>
-                          <.score_row
-                            :for={factor <- result.score_breakdown}
-                            label={factor.label}
-                            value={factor.detail}
-                            score={factor.points}
-                            max={factor.max}
-                            zero_is_absent={true}
-                          />
-                        </.score_panel>
-                        <div class="text-xs text-base-content/60 mt-1 flex gap-3">
-                          <span :if={result.rating}>★ {result.rating}/10</span>
-                          <span :if={result.download_count}>
-                            {result.download_count} downloads
-                          </span>
-                        </div>
-                      </div>
 
-                      <button
-                        type="button"
-                        phx-click="download_subtitle_result"
-                        phx-value-index={index}
-                        class="btn btn-primary btn-sm"
-                        disabled={@downloading_subtitle_index != nil}
-                      >
-                        <%= if @downloading_subtitle_index == index do %>
-                          <span class="loading loading-spinner loading-xs"></span>
-                        <% else %>
-                          <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> Download
-                        <% end %>
-                      </button>
+                        <button
+                          type="button"
+                          phx-click="download_subtitle_result"
+                          phx-value-index={index}
+                          class="btn btn-primary btn-sm btn-block sm:w-auto"
+                          disabled={@downloading_subtitle_index != nil}
+                        >
+                          <%= if @downloading_subtitle_index == index do %>
+                            <span class="loading loading-spinner loading-xs"></span>
+                          <% else %>
+                            <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> Download
+                          <% end %>
+                        </button>
+                      </div>
                     </li>
                   </ul>
               <% end %>

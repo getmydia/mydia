@@ -278,6 +278,39 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModalTest do
       assert html =~ ~s(aria-label="Finnish")
     end
 
+    test "the dialog is a bottom sheet on mobile and a centered modal from sm up" do
+      html = subtitle_modal_html()
+
+      assert html =~ "modal-bottom"
+      assert html =~ "sm:modal-middle"
+    end
+
+    test "the modal box sizes to the small viewport without the phantom scroll layer" do
+      html = subtitle_modal_html()
+      doc = LazyHTML.from_fragment(html)
+
+      [class] =
+        LazyHTML.query(doc, "#subtitle-search-modal > .modal-box")
+        |> LazyHTML.attribute("class")
+
+      # dvh, not vh: mobile browser chrome eats a vh-measured footer.
+      assert class =~ "max-h-[92dvh]"
+      assert class =~ "sm:max-h-[85vh]"
+      assert class =~ "max-w-none"
+      assert class =~ "sm:max-w-3xl"
+      # .modal-box ships overflow-y:auto, which nothing needs now that no
+      # popover has to escape it, and which made a nested scroll container.
+      assert class =~ "overflow-hidden"
+      # The header's sticky was inert: its parent never scrolls.
+      refute class =~ "sticky"
+    end
+
+    test "the primary actions are full width on mobile" do
+      html = loaded_html([result_fixture()])
+
+      assert html =~ "btn-block sm:w-auto"
+    end
+
     test "disables search when no language is selected" do
       html = subtitle_modal_html(selected_languages: [])
 
