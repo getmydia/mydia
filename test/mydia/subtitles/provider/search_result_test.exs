@@ -30,6 +30,32 @@ defmodule Mydia.Subtitles.Provider.SearchResultTest do
       assert result.origin == "SubDL"
     end
 
+    test "a whitespace-only origin becomes nil rather than blank whitespace" do
+      result =
+        SearchResult.from_map(%{
+          "file_id" => 1,
+          "language" => "en",
+          "format" => "srt",
+          "subtitle_hash" => "abc",
+          "origin" => "   "
+        })
+
+      assert result.origin == nil
+    end
+
+    test "a padded-but-non-blank origin is trimmed" do
+      result =
+        SearchResult.from_map(%{
+          "file_id" => 1,
+          "language" => "en",
+          "format" => "srt",
+          "subtitle_hash" => "abc",
+          "origin" => " SubDL "
+        })
+
+      assert result.origin == "SubDL"
+    end
+
     test "a missing origin stays nil" do
       result =
         SearchResult.from_map(%{

@@ -111,11 +111,20 @@ defmodule Mydia.Subtitles.Provider.SearchResult do
 
   defp get_field(map, key), do: Map.get(map, key)
 
-  # An empty string is truthy in Elixir, so `result.origin || config.name` in
-  # `ProviderChain.tag/2` never falls back to the configured name when a relay
-  # sends `"source": ""`. Blanking it here, at the boundary, keeps that `||`
-  # simple instead of teaching every reader of it about this edge case.
-  defp blank_to_nil(""), do: nil
+  # An empty (or whitespace-only) string is truthy in Elixir, so
+  # `result.origin || config.name` in `ProviderChain.tag/2` never falls back
+  # to the configured name when a relay sends `"source": ""` or `"source": " "`.
+  # Blanking it here, at the boundary, keeps that `||` simple instead of
+  # teaching every reader of it about this edge case. Trimming also means a
+  # padded-but-real origin like `" SubDL "` is normalized rather than kept
+  # with its padding.
+  defp blank_to_nil(value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> nil
+      origin -> origin
+    end
+  end
+
   defp blank_to_nil(value), do: value
 
   @doc """
