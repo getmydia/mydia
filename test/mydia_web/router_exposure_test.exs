@@ -174,6 +174,14 @@ defmodule MydiaWeb.RouterExposureTest do
   # Reads the router's own source from the path the compiler recorded for it,
   # rather than a hardcoded path, so this stays correct if the file ever
   # moves.
+  #
+  # This is a build-time path baked in at compile time: it assumes the
+  # process running this test has access to the same source tree the module
+  # was compiled from, which holds in this repo's CI (compile and test share
+  # a checkout) but would not hold for a release or a `_build`-only Docker
+  # layer shipped without the `lib/` source -- `File.read!/1` would raise
+  # there. Not a concern for how this suite runs today; noted so a future
+  # maintainer moving this test isn't surprised by it.
   defp router_source do
     MydiaWeb.Router.__info__(:compile)
     |> Keyword.fetch!(:source)
@@ -191,14 +199,21 @@ defmodule MydiaWeb.RouterExposureTest do
     end
   end
 
+  # Anchored so a decoy plug whose module name merely starts with the real
+  # one (e.g. `MydiaWeb.Plugs.EnsureAuthenticatedButAlwaysAllow`) cannot
+  # register as a match: the expected `plug <Module>` text must open the
+  # trimmed line and be followed immediately by whitespace, a comma (an
+  # options list, e.g. `plug MydiaWeb.Plugs.EnsureRole, :admin`), or nothing
+  # else on the line.
   defp pipeline_invokes?(body, module) do
     plug_line = "plug #{inspect(module)}"
+    pattern = ~r/^#{Regex.escape(plug_line)}(\s|,|$)/
 
     body
     |> String.split("\n")
     |> Enum.any?(fn line ->
       trimmed = String.trim(line)
-      not String.starts_with?(trimmed, "#") and String.contains?(trimmed, plug_line)
+      not String.starts_with?(trimmed, "#") and Regex.match?(pattern, trimmed)
     end)
   end
 end
