@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
@@ -15,22 +17,37 @@ import 'p2p_link.dart';
 /// This device's decode-capability profile, probed once per app session and
 /// held in memory for as long as the app runs.
 ///
-/// Never persisted, for the same staleness reason [DeviceProfile] itself
-/// gives: a stored profile would survive an OS upgrade, a display swap, or a
-/// change in hardware decode availability that the process holding it did
-/// not. A plain (non-autoDispose) [FutureProvider] gives exactly that
-/// lifetime: computed once, cached for the container's life, never written
-/// anywhere durable.
+/// A plain [DeviceProfileHolder], not a [FutureProvider]: the holder's
+/// `profile` field is mutated in place once [detectDeviceProfile] resolves,
+/// and mutating a field does not notify Riverpod, so nothing that reads this
+/// provider ever rebuilds because the probe finished. That is deliberate.
+/// `DeviceProfileLink` (see `client.dart`) reads `profile` fresh on every
+/// outgoing request instead, so:
 ///
-/// [detectDeviceProfile] never throws; every failure path inside it already
-/// resolves to a fallback profile. While this is still resolving, callers see
-/// `null` via `.value` (riverpod 3.2.1 has no `valueOrNull`, and `.value`
-/// returns null on both `AsyncLoading` and `AsyncError` rather than
-/// rethrowing), which is the same as an absent profile: the server treats a
-/// missing header exactly like the behavior that existed before device
-/// profiles did.
-final deviceProfileProvider = FutureProvider<DeviceProfile>((ref) {
-  return detectDeviceProfile();
+/// - a request issued before the probe resolves carries no header, which
+///   degrades to the server's no-profile behavior (correct, by design);
+/// - a request issued after carries it, with no GraphQL client rebuild, no
+///   orphaned in-flight query, and no subscriptions WebSocket reconnect.
+///
+/// The alternative this replaced, a watched `FutureProvider<DeviceProfile>`
+/// feeding `graphqlClientProvider`, rebuilt the client the moment the probe
+/// settled. Because the probe constructs and initializes a real native
+/// player and is not fast, that meant the home screen's first queries on
+/// every cold start went out with no header regardless, and then the client
+/// was rebuilt out from under any request still in flight. Never persisted,
+/// for the same staleness reason [DeviceProfile] itself gives: a stored
+/// profile would survive an OS upgrade, a display swap, or a change in
+/// hardware decode availability that the process holding it did not.
+final deviceProfileHolderProvider = Provider<DeviceProfileHolder>((ref) {
+  final holder = DeviceProfileHolder();
+  // Not awaited: detectDeviceProfile never throws (every failure path
+  // resolves to a fallback profile), and this provider's job is to hand back
+  // the holder immediately, not to block on the probe. The eventual write is
+  // a plain field mutation on an object nothing else observes reactively, so
+  // there is no disposal race to guard against the way there is for a
+  // Notifier's `state =`.
+  unawaited(detectDeviceProfile().then((profile) => holder.profile = profile));
+  return holder;
 });
 
 /// True only when the player is served by a Mydia instance at `/player`.
@@ -85,9 +102,12 @@ final graphqlClientProvider = Provider<GraphQLClient?>((ref) {
   final serverUrlAsync = ref.watch(serverUrlProvider);
   final authTokenAsync = ref.watch(authTokenProvider);
   final authService = ref.watch(authServiceProvider);
-  // Absent (null) until the probe resolves, which degrades to no header at
-  // all rather than blocking client construction on it.
-  final deviceProfile = ref.watch(deviceProfileProvider).value;
+  // `ref.read`, not `ref.watch`: this client must never rebuild because the
+  // probe resolved. The holder instance itself is stable for the
+  // container's life; only its `profile` field changes, and
+  // `getDeviceProfile` below reads that field fresh on every request rather
+  // than through Riverpod. See `deviceProfileHolderProvider`.
+  final deviceProfileHolder = ref.read(deviceProfileHolderProvider);
 
   debugPrint(
       '[graphqlClientProvider] Building: isP2PMode=${connectionState.isP2PMode}');
@@ -136,7 +156,7 @@ final graphqlClientProvider = Provider<GraphQLClient?>((ref) {
           return createGraphQLClient(
             serverUrl,
             authToken,
-            deviceProfile: deviceProfile,
+            getDeviceProfile: () => deviceProfileHolder.profile,
             onAuthError: () async {
               // Try to refresh token (currently not supported, returns null)
               final newToken = await authService.refreshToken();
@@ -175,7 +195,9 @@ final graphqlClientWithSubscriptionsProvider = Provider<GraphQLClient?>((ref) {
   final serverUrlAsync = ref.watch(serverUrlProvider);
   final authTokenAsync = ref.watch(authTokenProvider);
   final authService = ref.watch(authServiceProvider);
-  final deviceProfile = ref.watch(deviceProfileProvider).value;
+  // Same reasoning as `graphqlClientProvider`: `ref.read`, so this client
+  // never rebuilds off the probe resolving.
+  final deviceProfileHolder = ref.read(deviceProfileHolderProvider);
 
   return serverUrlAsync.when(
     data: (serverUrl) {
@@ -186,7 +208,7 @@ final graphqlClientWithSubscriptionsProvider = Provider<GraphQLClient?>((ref) {
           return createGraphQLClientWithSubscriptions(
             serverUrl,
             authToken,
-            deviceProfile: deviceProfile,
+            getDeviceProfile: () => deviceProfileHolder.profile,
             onAuthError: () async {
               // Try to refresh token (currently not supported, returns null)
               final newToken = await authService.refreshToken();

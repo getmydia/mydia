@@ -61,3 +61,23 @@ class DeviceProfile {
 /// profile since there is nothing to probe. See `device_profile_native.dart`
 /// and `device_profile_web.dart`.
 Future<DeviceProfile> detectDeviceProfile() => platform.detectDeviceProfile();
+
+/// A mutable, session-lived slot for the profile [detectDeviceProfile]
+/// eventually resolves to.
+///
+/// GraphQL request links (see `DeviceProfileLink` in `core/graphql/client.dart`)
+/// read [profile] fresh on every outgoing request rather than through a
+/// watched Riverpod provider. That is deliberate: the probe constructs and
+/// initializes a real native player, which is not fast, and the very first
+/// requests of a cold start (the home screen's opening queries) must not
+/// wait on it or be served by a GraphQL client that gets rebuilt out from
+/// under them the moment it settles. A request that races ahead of the probe
+/// simply goes out with [profile] still null, which the header-injection
+/// link treats as "send no header", the server's documented no-profile
+/// behavior. A request after the probe resolves picks up [profile] with no
+/// client rebuild, no orphaned in-flight query, and no subscription
+/// reconnect.
+class DeviceProfileHolder {
+  /// Null until the probe resolves, then fixed for the rest of the session.
+  DeviceProfile? profile;
+}
