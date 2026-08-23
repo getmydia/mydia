@@ -11,11 +11,19 @@ class SettingsSidebarRow extends ConsumerWidget {
   final bool isDisabled;
   final VoidCallback onTap;
 
+  /// Forwarded to the wrapped [SidebarRow]. See its docs.
+  final bool isEditing;
+  final bool isHidden;
+  final Widget? editingTrailing;
+
   const SettingsSidebarRow({
     super.key,
     required this.isSelected,
     required this.isDisabled,
     required this.onTap,
+    this.isEditing = false,
+    this.isHidden = false,
+    this.editingTrailing,
   });
 
   @override
@@ -28,6 +36,9 @@ class SettingsSidebarRow extends ConsumerWidget {
       isDisabled: isDisabled,
       onTap: onTap,
       badge: const ConnectionStatusDot(),
+      isEditing: isEditing,
+      isHidden: isHidden,
+      editingTrailing: editingTrailing,
     );
   }
 }

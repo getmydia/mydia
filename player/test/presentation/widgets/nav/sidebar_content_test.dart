@@ -2,8 +2,6 @@ import 'package:flutter/material.dart' hide ConnectionState;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/connection/connection_provider.dart';
-import 'package:player/core/downloads/download_service.dart'
-    show isDownloadSupported;
 import 'package:player/core/navigation/sidebar_layout_providers.dart';
 import 'package:player/core/navigation/sidebar_layout_store.dart';
 import 'package:player/domain/navigation/sidebar_layout.dart';
@@ -150,76 +148,86 @@ void main() {
     expect(downloads.isDisabled, isFalse);
   });
 
-  test('reorder preserves hidden middle ids in stored order', () async {
+  testWidgets('the header offers an edit control', (tester) async {
+    await _pump(tester, location: '/');
+
+    expect(find.byTooltip('Edit sidebar'), findsOneWidget);
+    expect(find.text('Editing'), findsNothing);
+  });
+
+  testWidgets('tapping edit reveals grips and hidden rows', (tester) async {
     final store = InMemorySidebarLayoutStore();
     await store.save(SidebarLayout.defaults.withHidden('collections'));
 
-    final container = ProviderContainer(
-      overrides: [sidebarLayoutStoreProvider.overrideWithValue(store)],
-    );
-    addTearDown(container.dispose);
+    await _pump(tester, location: '/', store: store);
+    expect(find.text('Collections'), findsNothing);
 
-    await container.read(sidebarLayoutProvider.future);
+    await tester.tap(find.byTooltip('Edit sidebar'));
+    await tester.pumpAndSettle();
 
-    final layoutBefore = store.get()!;
-    final middleBefore = layoutBefore.order
-        .where(
-          (id) => id != 'search' && id != 'downloads' && id != 'settings',
-        )
-        .toList();
-    final collectionsIndexBefore = middleBefore.indexOf('collections');
-    expect(collectionsIndexBefore, greaterThan(0));
-    final neighborBefore = middleBefore[collectionsIndexBefore - 1];
+    expect(find.text('Editing'), findsOneWidget);
+    expect(find.text('Collections'), findsOneWidget);
+    expect(find.byType(ReorderableDragStartListener), findsWidgets);
+  });
 
-    final visibleMiddle =
-        (await container.read(sidebarDestinationsProvider.future))
-            .where((d) => !d.isAnchored)
-            .map((d) => d.id)
-            .toList();
-    final moviesIndex = visibleMiddle.indexOf('movies');
+  testWidgets('a row tap does not navigate while editing', (tester) async {
+    final routes = <String>[];
+    await _pump(tester, location: '/', onNavigate: routes.add);
 
-    final newOrder = SidebarContent.orderAfterMiddleReorder(
-      layout: layoutBefore,
-      visibleMiddleIds: visibleMiddle,
-      oldIndex: moviesIndex,
-      newIndex: 0,
-      downloadSupported: isDownloadSupported,
-    );
+    await tester.tap(find.byTooltip('Edit sidebar'));
+    await tester.pumpAndSettle();
 
-    await container.read(sidebarLayoutControllerProvider).reorder(newOrder);
+    await tester.tap(find.text('Movies'));
+    await tester.pumpAndSettle();
 
-    final layoutAfterReorder = store.get()!;
-    expect(layoutAfterReorder.order, contains('collections'));
-    expect(layoutAfterReorder.hidden, contains('collections'));
+    expect(routes, isEmpty);
+  });
 
-    final middleAfterReorder = layoutAfterReorder.order
-        .where(
-          (id) => id != 'search' && id != 'downloads' && id != 'settings',
-        )
-        .toList();
-    expect(
-      middleAfterReorder.indexOf('collections'),
-      collectionsIndexBefore,
-    );
-    expect(middleAfterReorder[collectionsIndexBefore - 1], neighborBefore);
+  testWidgets('Done leaves edit mode', (tester) async {
+    await _pump(tester, location: '/');
 
-    await container.read(sidebarLayoutControllerProvider).unhide('collections');
+    await tester.tap(find.byTooltip('Edit sidebar'));
+    await tester.pumpAndSettle();
+    expect(find.text('Editing'), findsOneWidget);
 
-    final destinations =
-        await container.read(sidebarDestinationsProvider.future);
-    expect(destinations.map((d) => d.id), contains('collections'));
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
 
-    final middleAfterUnhide = store
-        .get()!
-        .order
-        .where(
-          (id) => id != 'search' && id != 'downloads' && id != 'settings',
-        )
-        .toList();
-    expect(
-      middleAfterUnhide.indexOf('collections'),
-      collectionsIndexBefore,
-    );
-    expect(middleAfterUnhide[collectionsIndexBefore - 1], neighborBefore);
+    expect(find.text('Editing'), findsNothing);
+    expect(find.byType(ReorderableDragStartListener), findsNothing);
+  });
+
+  testWidgets('the New filter row is hidden while editing', (tester) async {
+    await _pump(tester, location: '/');
+    expect(find.text('+ New filter'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Edit sidebar'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('+ New filter'), findsNothing);
+  });
+
+  testWidgets('restoring a hidden row unhides it', (tester) async {
+    final store = InMemorySidebarLayoutStore();
+    await store.save(SidebarLayout.defaults.withHidden('collections'));
+
+    await _pump(tester, location: '/', store: store);
+
+    await tester.tap(find.byTooltip('Edit sidebar'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Restore Collections'));
+    await tester.pumpAndSettle();
+
+    expect(store.get()!.hidden, isNot(contains('collections')));
+  });
+
+  testWidgets('edit mode offers no reset until it can confirm', (tester) async {
+    await _pump(tester, location: '/');
+
+    await tester.tap(find.byTooltip('Edit sidebar'));
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Reset sidebar'), findsNothing);
   });
 }
