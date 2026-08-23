@@ -1663,6 +1663,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   ///
   /// On native desktop, FFmpeg handles virtually all codecs/containers,
   /// so DIRECT_PLAY, REMUX, and HLS_COPY are all direct-playable.
+  ///
+  /// This stays deliberately permissive even now that the server answers
+  /// against a real device profile. The native profile narrows a static
+  /// table with an mpv probe that has not been validated on hardware, so it
+  /// can under-report. Narrowing this guard to DIRECT_PLAY on top of an
+  /// under-reporting profile would refuse files the player handles fine.
+  /// Narrow it once the probe is confirmed on a device.
   bool _canDirectPlay(
     List<Query$StreamingCandidates$streamingCandidates$candidates> candidates,
   ) {

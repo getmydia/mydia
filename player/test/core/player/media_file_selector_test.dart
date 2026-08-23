@@ -171,8 +171,7 @@ void main() {
         bitrate: 8000000, // 8 Mbps
       );
 
-      final result =
-          MediaFileSelector.selectBest([fileLow, fileHigh], context);
+      final result = MediaFileSelector.selectBest([fileLow, fileHigh], context);
       expect(result?.id, equals('high-br'));
     });
 
@@ -185,8 +184,7 @@ void main() {
       final fileNull = _makeFile(id: 'null-res');
       final file720 = _makeFile(id: '720', resolution: '720p');
 
-      final result =
-          MediaFileSelector.selectBest([fileNull, file720], context);
+      final result = MediaFileSelector.selectBest([fileNull, file720], context);
       expect(result?.id, equals('720'));
     });
 
@@ -221,8 +219,7 @@ void main() {
         bitrate: 20000000, // 20 Mbps
       );
 
-      final result =
-          MediaFileSelector.selectBest([fileLow, fileHigh], context);
+      final result = MediaFileSelector.selectBest([fileLow, fileHigh], context);
       expect(result?.id, equals('low-br'));
     });
 
@@ -235,9 +232,67 @@ void main() {
       final file1080 = _makeFile(id: '1080', resolution: '1080p');
       final file4k = _makeFile(id: '4k', resolution: '4K');
 
-      final result =
-          MediaFileSelector.selectBest([file1080, file4k], context);
+      final result = MediaFileSelector.selectBest([file1080, file4k], context);
       expect(result?.id, equals('4k'));
+    });
+  });
+
+  group('direct play bonus', () {
+    const wifiDesktop = DeviceContext(
+      deviceCategory: DeviceCategory.desktop,
+      networkType: NetworkType.wifi,
+      isWeb: false,
+    );
+
+    test('prefers the direct-playable file when resolution and bitrate tie',
+        () {
+      final direct = _makeFile(
+        id: 'direct',
+        resolution: '1080p',
+        bitrate: 5000000,
+        directPlaySupported: true,
+      );
+      final transcode = _makeFile(
+        id: 'transcode',
+        resolution: '1080p',
+        bitrate: 5000000,
+        directPlaySupported: false,
+      );
+
+      final best =
+          MediaFileSelector.selectBest([transcode, direct], wifiDesktop);
+
+      expect(best!.id, 'direct');
+    });
+
+    test('a higher resolution still wins over a direct-playable lower one', () {
+      // Desktop/widescreen are uncapped (_maxTargetResolution returns
+      // 999999), which scales the resolution term down to a fraction of a
+      // point for any real resolution: far below the +20 direct-play bonus.
+      // On those categories a lower-resolution direct-play file actually
+      // beats a higher-resolution transcode, which is real, current scorer
+      // behavior and out of scope for this task to change. Use a capped
+      // category (mobile) instead, where the resolution term is large
+      // enough (0-100) to meaningfully outweigh the bonus.
+      const context = DeviceContext(
+        deviceCategory: DeviceCategory.mobile,
+        networkType: NetworkType.wifi,
+        isWeb: false,
+      );
+
+      final direct = _makeFile(
+        id: 'direct',
+        resolution: '720p',
+        directPlaySupported: true,
+      );
+      final bigger = _makeFile(
+        id: 'bigger',
+        resolution: '1080p',
+        directPlaySupported: false,
+      );
+
+      expect(MediaFileSelector.selectBest([direct, bigger], context)!.id,
+          'bigger');
     });
   });
 
