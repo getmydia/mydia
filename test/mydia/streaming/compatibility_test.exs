@@ -370,4 +370,100 @@ defmodule Mydia.Streaming.CompatibilityTest do
       assert Compatibility.needs_remux?(media_file) == false
     end
   end
+
+  describe "check_compatibility/2 with a device profile" do
+    alias Mydia.Streaming.DeviceProfile
+
+    defp mkv_hevc_file do
+      %MediaFile{
+        codec: "hevc",
+        audio_codec: "ac3",
+        metadata: %FileMetadata{container: "mkv"},
+        path: "/path/to/video.mkv"
+      }
+    end
+
+    test "an mkv/hevc file needs transcoding under the browser default" do
+      assert Compatibility.check_compatibility(mkv_hevc_file(), DeviceProfile.browser_default()) ==
+               :needs_transcoding
+    end
+
+    test "the same file is direct play under a native profile listing mkv, hevc and ac3" do
+      profile = %DeviceProfile{
+        containers: ["mkv", "mp4"],
+        video_codecs: ["h264", "hevc"],
+        audio_codecs: ["aac", "ac3"],
+        hdr_formats: []
+      }
+
+      assert Compatibility.check_compatibility(mkv_hevc_file(), profile) == :direct_play
+    end
+
+    test "a profile that allows the codecs but not the container gets remux, not direct play" do
+      profile = %DeviceProfile{
+        containers: ["mp4"],
+        video_codecs: ["hevc"],
+        audio_codecs: ["ac3"],
+        hdr_formats: []
+      }
+
+      assert Compatibility.check_compatibility(mkv_hevc_file(), profile) == :needs_remux
+    end
+
+    test "an unlistable hdr format forces transcoding even when the video codec is allowed" do
+      file = %MediaFile{
+        codec: "hevc",
+        audio_codec: "aac",
+        hdr_format: "dolby_vision",
+        metadata: %FileMetadata{container: "mkv"},
+        path: "/path/to/video.mkv"
+      }
+
+      profile = %DeviceProfile{
+        containers: ["mkv"],
+        video_codecs: ["hevc"],
+        audio_codecs: ["aac"],
+        hdr_formats: ["hdr10"]
+      }
+
+      assert Compatibility.check_compatibility(file, profile) == :needs_transcoding
+    end
+
+    test "a listed hdr format is direct play" do
+      file = %MediaFile{
+        codec: "hevc",
+        audio_codec: "aac",
+        hdr_format: "hdr10",
+        metadata: %FileMetadata{container: "mkv"},
+        path: "/path/to/video.mkv"
+      }
+
+      profile = %DeviceProfile{
+        containers: ["mkv"],
+        video_codecs: ["hevc"],
+        audio_codecs: ["aac"],
+        hdr_formats: ["hdr10"]
+      }
+
+      assert Compatibility.check_compatibility(file, profile) == :direct_play
+    end
+
+    test "check_compatibility/1 still delegates to the browser default" do
+      file = mkv_hevc_file()
+
+      assert Compatibility.check_compatibility(file) ==
+               Compatibility.check_compatibility(file, DeviceProfile.browser_default())
+    end
+
+    test "an RFC 6381 video codec string now resolves, widening the old exact match" do
+      file = %MediaFile{
+        codec: "avc1.640028",
+        audio_codec: "aac",
+        metadata: %FileMetadata{container: "mp4"},
+        path: "/path/to/video.mp4"
+      }
+
+      assert Compatibility.check_compatibility(file) == :direct_play
+    end
+  end
 end

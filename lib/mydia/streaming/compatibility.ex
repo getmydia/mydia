@@ -14,6 +14,7 @@ defmodule Mydia.Streaming.Compatibility do
   """
 
   alias Mydia.Library.MediaFile
+  alias Mydia.Streaming.DeviceProfile
 
   @type streaming_mode :: :direct_play | :needs_remux | :needs_transcoding
 
@@ -41,15 +42,28 @@ defmodule Mydia.Streaming.Compatibility do
   """
   @spec check_compatibility(MediaFile.t()) :: streaming_mode()
   def check_compatibility(%MediaFile{} = media_file) do
+    check_compatibility(media_file, DeviceProfile.browser_default())
+  end
+
+  @doc """
+  Checks compatibility against a specific client's declared capabilities.
+
+  With a real profile `:needs_remux` means what it says. Before profiles it
+  meant "the codecs are fine but browsers cannot open this container", which is
+  only true for one kind of client.
+  """
+  @spec check_compatibility(MediaFile.t(), DeviceProfile.t()) :: streaming_mode()
+  def check_compatibility(%MediaFile{} = media_file, %DeviceProfile{} = profile) do
     container = get_container_format(media_file)
     video_codec = media_file.codec
     audio_codec = media_file.audio_codec
+    hdr_format = media_file.hdr_format
 
     cond do
-      browser_compatible?(container, video_codec, audio_codec) ->
+      client_can_play?(profile, container, video_codec, audio_codec, hdr_format) ->
         :direct_play
 
-      remux_eligible?(container, video_codec, audio_codec) ->
+      remux_eligible?(profile, container, video_codec, audio_codec, hdr_format) ->
         :needs_remux
 
       true ->
@@ -57,40 +71,25 @@ defmodule Mydia.Streaming.Compatibility do
     end
   end
 
-  # Determines if the given combination of container, video codec, and audio codec
-  # is compatible with modern browsers.
-  # Note: Videos without audio (nil audio_codec) are allowed if video is compatible.
-  defp browser_compatible?(container, video_codec, audio_codec) do
-    compatible_container?(container) and
-      compatible_video_codec?(video_codec) and
-      audio_compatible_or_absent?(audio_codec)
+  # The client can open this container and decode every stream in it as-is.
+  defp client_can_play?(profile, container, video_codec, audio_codec, hdr_format) do
+    DeviceProfile.container_allowed?(profile, container) and
+      codecs_playable?(profile, video_codec, audio_codec, hdr_format)
   end
 
-  # Determines if a file can be remuxed to fMP4 without transcoding.
-  # This is possible when the codecs are browser-compatible but the container isn't.
-  # Note: Videos without audio (nil audio_codec) are allowed if video is compatible.
-  defp remux_eligible?(container, video_codec, audio_codec) do
+  # The codecs are fine but the container is not, so ffmpeg can stream-copy into
+  # fMP4 without re-encoding. `remuxable_container?/1` stays hardcoded because it
+  # describes what ffmpeg can repackage, which is a server capability and does
+  # not vary by client.
+  defp remux_eligible?(profile, container, video_codec, audio_codec, hdr_format) do
     remuxable_container?(container) and
-      compatible_video_codec?(video_codec) and
-      audio_compatible_or_absent?(audio_codec)
+      codecs_playable?(profile, video_codec, audio_codec, hdr_format)
   end
 
-  # Audio is considered compatible if it's a known compatible codec or if there's no audio track
-  defp audio_compatible_or_absent?(nil), do: true
-  defp audio_compatible_or_absent?(audio_codec), do: compatible_audio_codec?(audio_codec)
-
-  # Containers that browsers can play directly
-  defp compatible_container?(nil), do: false
-
-  defp compatible_container?(container) do
-    normalized = String.downcase(container)
-
-    normalized in [
-      "mp4",
-      "webm",
-      # Browser may handle these via video element
-      "m4v"
-    ]
+  defp codecs_playable?(profile, video_codec, audio_codec, hdr_format) do
+    DeviceProfile.video_codec_allowed?(profile, video_codec) and
+      DeviceProfile.audio_codec_allowed_or_absent?(profile, audio_codec) and
+      DeviceProfile.hdr_allowed_or_absent?(profile, hdr_format)
   end
 
   # Containers that can be remuxed to fMP4 without transcoding.
@@ -112,39 +111,6 @@ defmodule Mydia.Streaming.Compatibility do
       "wmv",
       "flv"
     ]
-  end
-
-  # Video codecs that browsers support natively
-  defp compatible_video_codec?(nil), do: false
-
-  defp compatible_video_codec?(codec) do
-    normalized = String.downcase(codec)
-
-    # Check for compatible codecs - handle formatted strings like "H.264 (Main)" or "HEVC"
-    cond do
-      # H.264 / AVC - browser compatible
-      String.contains?(normalized, "h264") or
-        String.contains?(normalized, "h.264") or
-          normalized in ["avc", "avc1"] ->
-        true
-
-      # VP9 - browser compatible
-      String.contains?(normalized, "vp9") or normalized == "vp09" ->
-        true
-
-      # AV1 - browser compatible
-      String.contains?(normalized, "av1") or normalized == "av01" ->
-        true
-
-      # HEVC/H.265 - NOT browser compatible (needs transcoding)
-      String.contains?(normalized, "hevc") or String.contains?(normalized, "h.265") or
-          String.contains?(normalized, "h265") ->
-        false
-
-      # Everything else - not compatible
-      true ->
-        false
-    end
   end
 
   @doc """
@@ -227,18 +193,19 @@ defmodule Mydia.Streaming.Compatibility do
   """
   @spec transcoding_reason(MediaFile.t()) :: String.t()
   def transcoding_reason(%MediaFile{} = media_file) do
+    profile = DeviceProfile.browser_default()
     container = get_container_format(media_file)
     video_codec = media_file.codec
     audio_codec = media_file.audio_codec
 
     cond do
-      not compatible_video_codec?(video_codec) ->
+      not DeviceProfile.video_codec_allowed?(profile, video_codec) ->
         "Incompatible video codec (#{video_codec || "unknown"})"
 
-      not audio_compatible_or_absent?(audio_codec) ->
+      not DeviceProfile.audio_codec_allowed_or_absent?(profile, audio_codec) ->
         "Incompatible audio codec (#{audio_codec || "unknown"})"
 
-      not compatible_container?(container) ->
+      not DeviceProfile.container_allowed?(profile, container) ->
         "Incompatible container format (#{container || "unknown"})"
 
       true ->
