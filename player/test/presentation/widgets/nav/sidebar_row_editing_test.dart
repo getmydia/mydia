@@ -7,6 +7,7 @@ Future<void> _pumpRow(
   WidgetTester tester, {
   required bool isEditing,
   bool isHidden = false,
+  bool canCustomise = true,
   Widget? editingTrailing,
   VoidCallback? onTap,
 }) async {
@@ -20,7 +21,7 @@ Future<void> _pumpRow(
             selectedIcon: Icons.movie,
             label: 'Movies',
             isSelected: false,
-            canCustomise: true,
+            canCustomise: canCustomise,
             isEditing: isEditing,
             isHidden: isHidden,
             editingTrailing: editingTrailing,
@@ -33,6 +34,11 @@ Future<void> _pumpRow(
   );
   await tester.pumpAndSettle();
 }
+
+/// The 36px trailing slot every customisable row already reserves for its
+/// overflow menu. Edit mode reuses this same width for the grip/restore
+/// slot, so a slot of exactly this width must persist while editing.
+const _menuWidth = 36.0;
 
 void main() {
   testWidgets('editing suppresses the row tap', (tester) async {
@@ -98,5 +104,34 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Hide'), findsNothing);
+  });
+
+  testWidgets(
+      'editing reserves the trailing slot even when editingTrailing is '
+      'omitted', (tester) async {
+    await _pumpRow(tester, isEditing: true);
+
+    final slot = tester.widget<SizedBox>(
+      find.byWidgetPredicate(
+        (widget) => widget is SizedBox && widget.width == _menuWidth,
+      ),
+    );
+
+    expect(slot.width, _menuWidth);
+    expect(find.byType(PopupMenuButton<String>), findsNothing);
+  });
+
+  testWidgets(
+      'a non-customisable row still shows a supplied editingTrailing while '
+      'editing', (tester) async {
+    await _pumpRow(
+      tester,
+      isEditing: true,
+      canCustomise: false,
+      editingTrailing: const Icon(Icons.drag_indicator, key: Key('grip')),
+    );
+
+    expect(find.byKey(const Key('grip')), findsOneWidget);
+    expect(find.byType(PopupMenuButton<String>), findsNothing);
   });
 }

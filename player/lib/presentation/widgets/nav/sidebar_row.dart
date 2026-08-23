@@ -161,10 +161,13 @@ class _SidebarRowState extends State<SidebarRow> {
                   ),
                 ),
               ),
-              if (trailing != null)
+              // The slot stays reserved for the whole time the row is
+              // editing, even when the caller withholds editingTrailing, so
+              // the row's width never shifts mid-edit.
+              if (trailing != null || widget.isEditing)
                 SizedBox(
                   width: _menuWidth,
-                  child: Center(child: trailing),
+                  child: Center(child: trailing ?? const SizedBox.shrink()),
                 ),
             ],
           ),
