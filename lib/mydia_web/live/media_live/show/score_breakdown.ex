@@ -123,12 +123,16 @@ defmodule MydiaWeb.MediaLive.Show.ScoreBreakdown do
   @doc """
   Trigger button for a score breakdown panel.
 
-  An inline disclosure rather than a daisyUI `dropdown`, because a `dropdown`
-  cannot work here. daisyUI hides a `dropdown-hover` panel whenever its trigger
-  has `:focus` without `:focus-visible`, which is exactly what a finger tap
-  produces, so the panel was unreachable on touch. And `.dropdown-content` is
-  absolutely positioned, so the modal box's own `overflow-y: auto` clipped it
-  regardless of z-index. A plain hidden sibling has neither problem.
+  An inline disclosure rather than a daisyUI `dropdown`, because a hover-driven
+  panel is not a dependable touch affordance. daisyUI hides a `dropdown-hover`
+  panel whenever its trigger has `:focus` without `:focus-visible`, so the only
+  thing keeping it open after a tap is the sticky `:hover` the tap happens to
+  leave behind, which no touch platform guarantees and which any scroll can
+  clear. Focus, the one state a tap reliably leaves, is excluded by that rule.
+
+  A hidden sibling opens on an explicit tap and stays open until tapped again.
+  It also spans the row rather than a fixed `w-64`, and because it is in flow it
+  grows its scrolling ancestor's scroll extent instead of overhanging it.
 
   The toggle is a client-side `JS` command, not a server event, so it costs no
   round-trip and does not fight the release dialog's `phx-update="stream"` list.

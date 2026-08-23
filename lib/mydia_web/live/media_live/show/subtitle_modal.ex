@@ -26,8 +26,8 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
     common = MydiaWeb.Languages.common()
     common_codes = Enum.map(common, &elem(&1, 0))
 
-    # A selected language always gets a chip, even an uncommon one, so the
-    # current selection is never hidden behind the dropdown.
+    # A selected language always gets a visible chip, even an uncommon one, so
+    # the current selection is never hidden behind the "+N more" toggle.
     extra_chips =
       assigns.selected_languages
       |> Enum.reject(&(&1 in common_codes))
