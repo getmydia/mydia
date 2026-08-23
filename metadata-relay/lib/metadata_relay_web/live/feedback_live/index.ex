@@ -6,21 +6,30 @@ defmodule MetadataRelayWeb.FeedbackLive.Index do
   use Phoenix.LiveView
 
   alias MetadataRelay.Feedback
+  alias MetadataRelay.Feedback.IssueDraft
+  alias MetadataRelay.GitHub.Client
 
   @message_preview_limit 220
-  @valid_state_filters ~w(unread read archived all)
+  @valid_state_filters ~w(unread read filed archived all)
   @valid_type_filters ~w(bug idea question all)
 
   @impl true
-  def mount(_params, _session, socket) do
+  def mount(params, _session, socket) do
     {:ok,
      socket
      |> assign(:state_filter, "unread")
      |> assign(:type_filter, "all")
-     |> assign(:expanded_ids, MapSet.new())
+     |> assign(:expanded_ids, focused_ids(params))
      |> assign(:page_title, "Feedback Dashboard")
+     |> assign(:issue_draft, nil)
+     |> assign(:issue_error, nil)
+     |> assign(:issue_submitting?, false)
+     |> assign(:github_repo, Client.repo())
      |> load_dashboard()}
   end
+
+  defp focused_ids(%{"focus" => focus}) when is_binary(focus), do: MapSet.new([focus])
+  defp focused_ids(_params), do: MapSet.new()
 
   @impl true
   def handle_event("filter", %{"filters" => filters}, socket) do
@@ -56,6 +65,106 @@ defmodule MetadataRelayWeb.FeedbackLive.Index do
     update_submission(socket, id, fn submission ->
       Feedback.set_github_ref(submission, github_ref)
     end)
+  end
+
+  def handle_event("open_issue", %{"id" => id}, socket) do
+    case Feedback.get_submission(id) do
+      nil ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "Feedback no longer exists.")
+         |> load_dashboard()}
+
+      submission ->
+        draft = IssueDraft.from_submission(submission, Feedback.dashboard_url())
+
+        {:noreply,
+         socket
+         |> assign(:issue_draft, %{
+           submission_id: submission.id,
+           title: draft.title,
+           body: draft.body,
+           labels: draft.labels
+         })
+         |> assign(:issue_error, nil)
+         |> assign(:issue_submitting?, false)}
+    end
+  end
+
+  def handle_event("close_issue", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:issue_draft, nil)
+     |> assign(:issue_error, nil)
+     |> assign(:issue_submitting?, false)}
+  end
+
+  def handle_event("submit_issue", %{"title" => title, "body" => body}, socket) do
+    # The modal only renders with a draft and a token, but a client can push
+    # this event regardless. Handle both gaps explicitly: a nil draft would
+    # raise here, and a nil token would fail inside the async task and surface
+    # as a misleading "GitHub is unreachable".
+    case {socket.assigns.issue_draft, socket.assigns.github_token} do
+      {nil, _token} ->
+        {:noreply, put_flash(socket, :error, "No issue draft is open.")}
+
+      {_draft, token} when not is_binary(token) ->
+        {:noreply,
+         socket
+         |> assign(:issue_error, "Your GitHub sign-in is missing. Sign in again and retry.")
+         |> assign(:issue_submitting?, false)}
+
+      {draft, token} ->
+        attrs = %{title: title, body: body, labels: draft.labels}
+        submission_id = draft.submission_id
+
+        {:noreply,
+         socket
+         |> assign(:issue_draft, %{draft | title: title, body: body})
+         |> assign(:issue_error, nil)
+         |> assign(:issue_submitting?, true)
+         |> start_async(:file_issue, fn ->
+           case Feedback.get_submission(submission_id) do
+             nil -> {:error, {:missing, "Feedback no longer exists."}}
+             submission -> Feedback.file_issue(submission, attrs, token)
+           end
+         end)}
+    end
+  end
+
+  @impl true
+  def handle_async(:file_issue, {:ok, {:ok, submission}}, socket) do
+    {:noreply,
+     socket
+     |> assign(:issue_draft, nil)
+     |> assign(:issue_error, nil)
+     |> assign(:issue_submitting?, false)
+     |> put_flash(:info, "Filed as #{submission.github_ref}")
+     |> load_dashboard()}
+  end
+
+  def handle_async(:file_issue, {:ok, {:error, {_reason, message}}}, socket) do
+    {:noreply,
+     socket
+     |> assign(:issue_error, message)
+     |> assign(:issue_submitting?, false)}
+  end
+
+  def handle_async(:file_issue, {:ok, {:error, _changeset}}, socket) do
+    {:noreply,
+     socket
+     |> assign(
+       :issue_error,
+       "The issue was created but could not be recorded. Reload and check GitHub."
+     )
+     |> assign(:issue_submitting?, false)}
+  end
+
+  def handle_async(:file_issue, {:exit, _reason}, socket) do
+    {:noreply,
+     socket
+     |> assign(:issue_error, "GitHub is unreachable. Your draft is preserved, try again.")
+     |> assign(:issue_submitting?, false)}
   end
 
   defp update_submission(socket, id, updater) do
@@ -122,6 +231,7 @@ defmodule MetadataRelayWeb.FeedbackLive.Index do
 
   def state_label("unread"), do: "Unread"
   def state_label("read"), do: "Read"
+  def state_label("filed"), do: "Filed"
   def state_label("archived"), do: "Archived"
 
   def type_badge_class("bug"), do: "badge-error"
@@ -130,6 +240,7 @@ defmodule MetadataRelayWeb.FeedbackLive.Index do
 
   def state_badge_class("unread"), do: "badge-primary"
   def state_badge_class("read"), do: "badge-ghost"
+  def state_badge_class("filed"), do: "badge-success"
   def state_badge_class("archived"), do: "badge-neutral"
 
   def expandable_message?(message), do: byte_size(message) > @message_preview_limit
@@ -140,6 +251,7 @@ defmodule MetadataRelayWeb.FeedbackLive.Index do
   defp label_for_state_filter("all"), do: "all states"
   defp label_for_state_filter("unread"), do: "unread"
   defp label_for_state_filter("read"), do: "read"
+  defp label_for_state_filter("filed"), do: "filed"
   defp label_for_state_filter("archived"), do: "archived"
   defp label_for_state_filter(_), do: "all states"
 

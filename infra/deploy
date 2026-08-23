@@ -100,6 +100,13 @@ class Config:
     # relay answers /api/v1/subtitles/* with 503 not-configured)
     relay_subdl_api_key: str = ""
 
+    # Maintainer dashboard sign-in (optional; leave blank and the dashboards
+    # stay on basic auth). Note this is the Phoenix session key, unrelated to
+    # relay_secret_key_base above, which is written as RELAY_TOKEN_SECRET.
+    relay_dashboard_secret_key_base: str = ""
+    relay_github_app_client_id: str = ""
+    relay_github_app_client_secret: str = ""
+
     # Feedback email notifications (optional; leave blank to disable)
     relay_smtp_host: str = ""
     relay_smtp_port: str = ""
@@ -193,6 +200,9 @@ class Config:
             "relay_tmdb_api_key": self.relay_tmdb_api_key,
             "relay_smtp_password": self.relay_smtp_password,
             "relay_subdl_api_key": self.relay_subdl_api_key,
+            "relay_dashboard_secret_key_base": self.relay_dashboard_secret_key_base,
+            "relay_github_app_client_id": self.relay_github_app_client_id,
+            "relay_github_app_client_secret": self.relay_github_app_client_secret,
             "relay_smtp_host": self.relay_smtp_host,
             "relay_smtp_port": self.relay_smtp_port,
             "relay_smtp_username": self.relay_smtp_username,
@@ -1036,6 +1046,15 @@ def metadata_relay_secret_data(config: Config) -> dict[str, str]:
 
     if config.relay_subdl_api_key:
         data["SUBDL_API_KEY"] = config.relay_subdl_api_key
+
+    if config.relay_dashboard_secret_key_base:
+        data["SECRET_KEY_BASE"] = config.relay_dashboard_secret_key_base
+
+    if config.relay_github_app_client_id:
+        data["GITHUB_APP_CLIENT_ID"] = config.relay_github_app_client_id
+
+    if config.relay_github_app_client_secret:
+        data["GITHUB_APP_CLIENT_SECRET"] = config.relay_github_app_client_secret
 
     return data
 

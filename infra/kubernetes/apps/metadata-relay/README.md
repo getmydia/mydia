@@ -74,6 +74,9 @@ curl https://relay.mydia.dev/health
 - `PHX_HOST`: Hostname for Phoenix (relay.mydia.dev)
 - `MIX_ENV`: Environment (prod)
 - `SQLITE_DB_PATH`: Path to SQLite database file
+- `FEEDBACK_DASHBOARD_URL`: Base URL used in feedback notification links
+- `DASHBOARD_GITHUB_ORG`: GitHub organization whose active members may reach `/feedback` and `/errors`. Setting this switches the dashboards from basic auth to GitHub sign-in. Leave empty to keep basic auth.
+- `FEEDBACK_GITHUB_REPO`: Repository that issues filed from the feedback dashboard land in (default `getmydia/mydia`)
 
 ### Secrets (secret.yaml)
 
@@ -87,6 +90,27 @@ Optional secrets:
   `/api/v1/subtitles/*` endpoint returns 503 until it is set, so it is
   required for subtitle functionality specifically, not for the service to
   boot.
+- `SECRET_KEY_BASE`: Phoenix session signing and encryption key (generate with `head -c 48 /dev/urandom | base64`). A random key is generated per boot if unset, but dashboard sessions will not survive a restart.
+- `GITHUB_APP_CLIENT_ID`: Client ID of the "Mydia Relay" GitHub App
+- `GITHUB_APP_CLIENT_SECRET`: Client secret of the "Mydia Relay" GitHub App
+
+### Maintainer access
+
+The `/feedback` and `/errors` dashboards support two mutually exclusive access modes.
+
+**Basic auth** (default): leave `DASHBOARD_GITHUB_ORG` empty and set `DASHBOARD_USERNAME` / `DASHBOARD_PASSWORD`. The issue-filing button is hidden.
+
+**GitHub App sign-in**: set `DASHBOARD_GITHUB_ORG` to a GitHub organization. Basic auth is disabled. Active members of that organization sign in through the "Mydia Relay" GitHub App, and the feedback dashboard can file issues as the signed-in maintainer.
+
+Membership is read with `GET /user/memberships/orgs/{org}` using the signed-in maintainer's own token, so private membership works and the App needs no permission to read the org's member list. Only `active` counts; a pending invitation is refused. The check runs at sign-in and again at most every five minutes, so removing someone from the organization ends their session within that window. If GitHub is unreachable an already-verified session is kept rather than dropped.
+
+To enable GitHub sign-in:
+
+1. Create a GitHub App named "Mydia Relay" owned by the `getmydia` organization. Repository permissions: Issues, read and write. Callback URL: `https://relay.mydia.dev/auth/github/callback`. Leave "Expire user authorization tokens" unchecked. Disable webhooks.
+2. Install the App on `getmydia/mydia`.
+3. Add `SECRET_KEY_BASE`, `GITHUB_APP_CLIENT_ID`, and `GITHUB_APP_CLIENT_SECRET` to the cluster secret **first**, then `DASHBOARD_GITHUB_ORG` plus `FEEDBACK_GITHUB_REPO` to the ConfigMap.
+
+Order matters in one direction only. A non-empty `DASHBOARD_GITHUB_ORG` turns basic auth off, so applying the ConfigMap before the App credentials are in the secret leaves `/feedback` and `/errors` unreachable until the secret lands: sign-in cannot complete and basic auth is gone. The relay keeps serving the proxy throughout, so this is a locked door rather than an outage, and there is never a window in which the dashboards are unprotected. Apply the secret first.
 
 ### Storage
 

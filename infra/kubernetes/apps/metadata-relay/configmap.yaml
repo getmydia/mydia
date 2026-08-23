@@ -23,6 +23,13 @@ data:
   FEEDBACK_EMAIL_TO: "feedback@mydia.dev"
   FEEDBACK_EMAIL_FROM: "feedback@mydia.dev"
   FEEDBACK_DASHBOARD_URL: "https://relay.mydia.dev"
+  # GitHub organization whose active members may reach /feedback and /errors.
+  # Setting this switches the dashboards from basic auth to GitHub sign-in, so
+  # apply GITHUB_APP_CLIENT_ID/SECRET to the secret before applying this, or the
+  # dashboards are unreachable until it lands. Leave empty to keep basic auth.
+  DASHBOARD_GITHUB_ORG: "getmydia"
+  # Repository that issues filed from the feedback dashboard land in.
+  FEEDBACK_GITHUB_REPO: "getmydia/mydia"
   SMTP_HOST: "smtp.resend.com"
   SMTP_PORT: "587"
   SMTP_USERNAME: "resend"

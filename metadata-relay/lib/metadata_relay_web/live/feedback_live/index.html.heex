@@ -11,6 +11,18 @@
               Review product feedback from Mydia instances, focus on unread items first, and keep GitHub filing notes attached to each submission.
             </p>
           </div>
+
+          <form
+            :if={@github_login}
+            id="sign-out-form"
+            action="/auth/logout"
+            method="post"
+            class="flex items-center gap-3"
+          >
+            <input type="hidden" name="_csrf_token" value={Phoenix.Controller.get_csrf_token()} />
+            <span class="text-sm text-base-content/60">Signed in as {@github_login}</span>
+            <button id="sign-out" type="submit" class="btn btn-ghost btn-xs">Sign out</button>
+          </form>
         </div>
 
         <div class="stats stats-vertical rounded-box border border-base-300 bg-base-200/70 shadow-sm sm:stats-horizontal">
@@ -28,6 +40,11 @@
             <div class="stat-title">Read</div>
             <div class="stat-value text-3xl text-info">{@summary.read}</div>
             <div class="stat-desc">Acknowledged</div>
+          </div>
+          <div id="feedback-stat-filed" class="stat">
+            <div class="stat-title">Filed</div>
+            <div class="stat-value text-3xl text-success">{@summary.filed}</div>
+            <div class="stat-desc">On GitHub</div>
           </div>
           <div id="feedback-stat-archived" class="stat">
             <div class="stat-title">Archived</div>
@@ -59,6 +76,7 @@
             <select id="feedback-filter-state" name="filters[state]" class="select select-bordered w-full">
               <option value="unread" selected={@state_filter == "unread"}>Unread</option>
               <option value="read" selected={@state_filter == "read"}>Read</option>
+              <option value="filed" selected={@state_filter == "filed"}>Filed</option>
               <option value="archived" selected={@state_filter == "archived"}>Archived</option>
               <option value="all" selected={@state_filter == "all"}>All</option>
             </select>
@@ -108,7 +126,20 @@
                 <span class={["badge badge-outline font-medium", state_badge_class(submission.state)]}>
                   {state_label(submission.state)}
                 </span>
-                <span :if={submission.github_ref} class="badge badge-outline badge-info">
+                <a
+                  :if={submission.github_ref && submission.github_issue_url}
+                  id={"github-link-#{submission.id}"}
+                  href={submission.github_issue_url}
+                  target="_blank"
+                  rel="noopener"
+                  class="badge badge-outline badge-info"
+                >
+                  Filed as {submission.github_ref}
+                </a>
+                <span
+                  :if={submission.github_ref && is_nil(submission.github_issue_url)}
+                  class="badge badge-outline badge-info"
+                >
                   Filed as {submission.github_ref}
                 </span>
               </div>
@@ -139,6 +170,16 @@
             </div>
 
             <div class="flex shrink-0 flex-wrap gap-2 xl:justify-end">
+              <button
+                :if={@github_token && is_nil(submission.github_ref)}
+                id={"file-issue-#{submission.id}"}
+                type="button"
+                phx-click="open_issue"
+                phx-value-id={submission.id}
+                class="btn btn-primary btn-sm"
+              >
+                File GitHub issue
+              </button>
               <button
                 :if={submission.state == "unread"}
                 id={"mark-read-#{submission.id}"}
@@ -210,5 +251,62 @@
         </div>
       </article>
     </section>
+
+    <div :if={@issue_draft} id="issue-modal" class="modal modal-open">
+      <div class="modal-box max-w-2xl">
+        <h3 class="text-lg font-semibold">File a GitHub issue</h3>
+        <p class="mt-1 text-sm text-base-content/70">
+          This will be public on {@github_repo}. Review before creating.
+        </p>
+
+        <div :if={@issue_error} id="issue-modal-error" class="alert alert-error mt-4">
+          <span>{@issue_error}</span>
+        </div>
+
+        <form id="issue-form" phx-submit="submit_issue" class="mt-4 space-y-4">
+          <label class="form-control w-full">
+            <div class="label pb-2">
+              <span class="label-text font-medium">Title</span>
+            </div>
+            <input
+              id="issue-title"
+              type="text"
+              name="title"
+              value={@issue_draft.title}
+              class="input input-bordered w-full"
+              required
+            />
+          </label>
+
+          <label class="form-control w-full">
+            <div class="label pb-2">
+              <span class="label-text font-medium">Body</span>
+            </div>
+            <textarea
+              id="issue-body"
+              name="body"
+              rows="10"
+              class="textarea textarea-bordered w-full font-mono text-sm"
+            >{@issue_draft.body}</textarea>
+          </label>
+
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="text-sm text-base-content/60">Labels</span>
+            <span :for={label <- @issue_draft.labels} class="badge badge-outline">{label}</span>
+          </div>
+
+          <div class="modal-action">
+            <button id="issue-cancel" type="button" phx-click="close_issue" class="btn btn-ghost">
+              Cancel
+            </button>
+            <button id="issue-submit" type="submit" class="btn btn-primary" disabled={@issue_submitting?}>
+              <span :if={@issue_submitting?} class="loading loading-spinner loading-sm"></span>
+              Create issue
+            </button>
+          </div>
+        </form>
+      </div>
+      <div class="modal-backdrop" phx-click="close_issue"></div>
+    </div>
   </section>
 </MetadataRelayWeb.Layouts.app>

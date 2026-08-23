@@ -6,6 +6,7 @@ defmodule MetadataRelay.Feedback do
   import Ecto.Query
 
   alias MetadataRelay.Feedback.Submission
+  alias MetadataRelay.GitHub.Client
   alias MetadataRelay.Repo
 
   def create_submission(attrs) when is_map(attrs) do
@@ -35,6 +36,11 @@ defmodule MetadataRelay.Feedback do
           read:
             fragment(
               "coalesce(sum(case when ? = 'read' then 1 else 0 end), 0)",
+              submission.state
+            ),
+          filed:
+            fragment(
+              "coalesce(sum(case when ? = 'filed' then 1 else 0 end), 0)",
               submission.state
             ),
           archived:
@@ -82,6 +88,58 @@ defmodule MetadataRelay.Feedback do
     submission
     |> Submission.github_ref_changeset(github_ref)
     |> Repo.update()
+  end
+
+  @doc """
+  Creates a GitHub issue for a submission using the caller's token.
+
+  On success the reference, URL, and state are written in one update. On
+  failure the row is left untouched, so a failed call never leaves a
+  half-filed submission behind.
+  """
+  def file_issue(%Submission{} = submission, attrs, token) do
+    with {:ok, %{number: number, html_url: html_url}} <- Client.create_issue(attrs, token) do
+      submission
+      |> Submission.filed_changeset("##{number}", html_url)
+      |> Repo.update()
+    end
+  end
+
+  @doc """
+  Base URL of the maintainer dashboard, with any trailing slash removed.
+
+  Shared by the email notifier and the GitHub issue body so both derive their
+  backlink from one place.
+  """
+  def dashboard_url do
+    :metadata_relay
+    |> Application.get_env(MetadataRelay.Feedback.Notifier, [])
+    |> Keyword.get(:dashboard_url)
+    |> case do
+      value when is_binary(value) ->
+        case String.trim(value) do
+          "" -> nil
+          trimmed -> String.trim_trailing(trimmed, "/")
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  @doc """
+  Dashboard link for a submission, focusing and anchoring it.
+
+  The two-argument form takes the base URL so pure callers such as
+  `MetadataRelay.Feedback.IssueDraft` can build the same link without reading
+  configuration. This is the single definition of the link format.
+  """
+  def submission_url(submission), do: submission_url(submission, dashboard_url())
+
+  def submission_url(_submission, nil), do: nil
+
+  def submission_url(%Submission{id: id}, base) when is_binary(base) do
+    "#{base}/feedback?focus=#{id}#feedback-#{id}"
   end
 
   defp maybe_filter(query, _field, nil), do: query
