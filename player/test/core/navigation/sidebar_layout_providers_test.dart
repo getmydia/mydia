@@ -2,6 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/navigation/sidebar_layout_providers.dart';
 import 'package:player/core/navigation/sidebar_layout_store.dart';
+import 'package:player/domain/navigation/media_filter.dart';
+import 'package:player/domain/navigation/nav_destination.dart';
 import 'package:player/domain/navigation/sidebar_layout.dart';
 
 ProviderContainer _container(SidebarLayoutStore store) {
@@ -59,5 +61,93 @@ void main() {
       await container.read(sidebarLayoutProvider.future),
       SidebarLayout.defaults,
     );
+  });
+
+  group('sidebarEditMode', () {
+    test('starts off, toggles, and exits', () {
+      final container = ProviderContainer(
+        overrides: [
+          sidebarLayoutStoreProvider
+              .overrideWithValue(InMemorySidebarLayoutStore()),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      expect(container.read(sidebarEditModeProvider), isFalse);
+
+      container.read(sidebarEditModeProvider.notifier).toggle();
+      expect(container.read(sidebarEditModeProvider), isTrue);
+
+      container.read(sidebarEditModeProvider.notifier).exit();
+      expect(container.read(sidebarEditModeProvider), isFalse);
+    });
+
+    test('exit is idempotent', () {
+      final container = ProviderContainer(
+        overrides: [
+          sidebarLayoutStoreProvider
+              .overrideWithValue(InMemorySidebarLayoutStore()),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      container.read(sidebarEditModeProvider.notifier).exit();
+      expect(container.read(sidebarEditModeProvider), isFalse);
+    });
+  });
+
+  group('sidebarEditRows', () {
+    test('includes hidden rows that sidebarDestinations drops', () async {
+      final store = InMemorySidebarLayoutStore();
+      await store.save(SidebarLayout.defaults.withHidden('collections'));
+
+      final container = ProviderContainer(
+        overrides: [sidebarLayoutStoreProvider.overrideWithValue(store)],
+      );
+      addTearDown(container.dispose);
+
+      final destinations =
+          await container.read(sidebarDestinationsProvider.future);
+      expect(
+        destinations.map((d) => d.id),
+        isNot(contains('collections')),
+      );
+
+      final rows = await container.read(sidebarEditRowsProvider.future);
+      final collections =
+          rows.firstWhere((r) => r.destination.id == 'collections');
+      expect(collections.hidden, isTrue);
+    });
+  });
+
+  group('resetToDefaults', () {
+    test('restores order and unhides without deleting saved filters', () async {
+      final filter = FilterDestination(
+        id: 'filter_keep_me',
+        label: 'Keep me',
+        filter: MediaFilter.allMovies,
+      );
+
+      final store = InMemorySidebarLayoutStore();
+      await store.save(
+        SidebarLayout.defaults.withFilter(filter).withHidden('collections'),
+      );
+
+      final container = ProviderContainer(
+        overrides: [sidebarLayoutStoreProvider.overrideWithValue(store)],
+      );
+      addTearDown(container.dispose);
+
+      await container.read(sidebarLayoutControllerProvider).resetToDefaults();
+
+      final after = store.get()!;
+      expect(after.hidden, isEmpty);
+      expect(after.filters.keys, contains('filter_keep_me'));
+
+      final destinations =
+          await container.read(sidebarDestinationsProvider.future);
+      expect(destinations.map((d) => d.id), contains('filter_keep_me'));
+      expect(destinations.map((d) => d.id), contains('collections'));
+    });
   });
 }

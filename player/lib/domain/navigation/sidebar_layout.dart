@@ -126,6 +126,77 @@ class SidebarLayout {
     );
   }
 
+  /// The middle rows edit mode arranges, hidden ones included.
+  ///
+  /// Anchors are excluded entirely. They cannot be reordered or hidden, and
+  /// `SidebarContent` renders them outside the reorderable region, so putting
+  /// them in this list would misalign every index the reorder callback reports.
+  List<SidebarEditRow> reconcileForEditing({required bool downloadSupported}) {
+    final layout = reconcileLayout(downloadSupported: downloadSupported);
+
+    final rows = <SidebarEditRow>[];
+    for (final id in layout.order) {
+      final NavDestination? destination =
+          _builtinsById[id] ?? layout.filters[id];
+      if (destination == null) continue;
+      if (destination.isAnchored) continue;
+
+      rows.add(
+        SidebarEditRow(
+          destination: destination,
+          hidden: layout.hidden.contains(id),
+        ),
+      );
+    }
+    return rows;
+  }
+
+  /// The full stored order after edit mode moves one middle row.
+  ///
+  /// [oldIndex] and [newIndex] index [reconcileForEditing]'s output, and the
+  /// middle list here is built from that same call so the two cannot drift.
+  ///
+  /// `ReorderableListView` reports [newIndex] as a position in the list
+  /// *before* the dragged row is removed, so it is decremented when it sits
+  /// past [oldIndex]. Dropping that adjustment is an off-by-one that appears
+  /// only on downward drags.
+  ///
+  /// Anchors are reassembled around the result rather than carried through the
+  /// move. Their relative order does not matter here because [reconcile] sorts
+  /// anchors by `defaultIndex` at render time regardless of stored order.
+  List<String> orderAfterReorder({
+    required int oldIndex,
+    required int newIndex,
+    required bool downloadSupported,
+  }) {
+    final layout = reconcileLayout(downloadSupported: downloadSupported);
+
+    final middle = reconcileForEditing(downloadSupported: downloadSupported)
+        .map((row) => row.destination.id)
+        .toList();
+    final middleIds = middle.toSet();
+
+    final leading = <String>[];
+    final trailing = <String>[];
+    for (final id in layout.order) {
+      if (middleIds.contains(id)) continue;
+      final builtin = _builtinsById[id];
+      if (builtin != null && _anchorsToTop(builtin)) {
+        leading.add(id);
+      } else {
+        trailing.add(id);
+      }
+    }
+
+    var target = newIndex;
+    if (target > oldIndex) target -= 1;
+
+    final moved = middle.removeAt(oldIndex);
+    middle.insert(target, moved);
+
+    return [...leading, ...middle, ...trailing];
+  }
+
   /// Where [destination] belongs in [ids]: after the last builtin with a lower
   /// `defaultIndex`. Filters and unknown ids do not move the insertion point.
   static int _insertionPoint(
@@ -232,4 +303,28 @@ class SidebarLayout {
   @override
   String toString() =>
       'SidebarLayout(order: $order, hidden: $hidden, filters: ${filters.keys})';
+}
+
+/// One middle row as edit mode sees it.
+///
+/// Edit mode renders hidden rows in place so the user can see where a restored
+/// row will land, which is why it cannot reuse [SidebarLayout.reconcile]'s
+/// output: that drops hidden rows entirely.
+class SidebarEditRow {
+  const SidebarEditRow({required this.destination, required this.hidden});
+
+  final NavDestination destination;
+  final bool hidden;
+
+  @override
+  bool operator ==(Object other) =>
+      other is SidebarEditRow &&
+      other.destination.id == destination.id &&
+      other.hidden == hidden;
+
+  @override
+  int get hashCode => Object.hash(destination.id, hidden);
+
+  @override
+  String toString() => 'SidebarEditRow(${destination.id}, hidden: $hidden)';
 }

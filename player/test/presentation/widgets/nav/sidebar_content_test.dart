@@ -2,8 +2,6 @@ import 'package:flutter/material.dart' hide ConnectionState;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/connection/connection_provider.dart';
-import 'package:player/core/downloads/download_service.dart'
-    show isDownloadSupported;
 import 'package:player/core/navigation/sidebar_layout_providers.dart';
 import 'package:player/core/navigation/sidebar_layout_store.dart';
 import 'package:player/domain/navigation/sidebar_layout.dart';
@@ -150,76 +148,145 @@ void main() {
     expect(downloads.isDisabled, isFalse);
   });
 
-  test('reorder preserves hidden middle ids in stored order', () async {
+  testWidgets('the header offers an edit control', (tester) async {
+    await _pump(tester, location: '/');
+
+    expect(find.byTooltip('Edit sidebar'), findsOneWidget);
+    expect(find.text('Editing'), findsNothing);
+  });
+
+  testWidgets('tapping edit reveals grips and hidden rows', (tester) async {
     final store = InMemorySidebarLayoutStore();
     await store.save(SidebarLayout.defaults.withHidden('collections'));
 
-    final container = ProviderContainer(
-      overrides: [sidebarLayoutStoreProvider.overrideWithValue(store)],
+    await _pump(tester, location: '/', store: store);
+    expect(find.text('Collections'), findsNothing);
+
+    await tester.tap(find.byTooltip('Edit sidebar'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Editing'), findsOneWidget);
+    expect(find.text('Collections'), findsOneWidget);
+    expect(find.byType(ReorderableDragStartListener), findsWidgets);
+  });
+
+  testWidgets('a row tap does not navigate while editing', (tester) async {
+    final routes = <String>[];
+    await _pump(tester, location: '/', onNavigate: routes.add);
+
+    await tester.tap(find.byTooltip('Edit sidebar'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Movies'));
+    await tester.pumpAndSettle();
+
+    expect(routes, isEmpty);
+  });
+
+  testWidgets('Done leaves edit mode', (tester) async {
+    await _pump(tester, location: '/');
+
+    await tester.tap(find.byTooltip('Edit sidebar'));
+    await tester.pumpAndSettle();
+    expect(find.text('Editing'), findsOneWidget);
+
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Editing'), findsNothing);
+    expect(find.byType(ReorderableDragStartListener), findsNothing);
+  });
+
+  testWidgets('the New filter row is hidden while editing', (tester) async {
+    await _pump(tester, location: '/');
+    expect(find.text('+ New filter'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Edit sidebar'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('+ New filter'), findsNothing);
+  });
+
+  testWidgets('restoring a hidden row unhides it', (tester) async {
+    final store = InMemorySidebarLayoutStore();
+    await store.save(SidebarLayout.defaults.withHidden('collections'));
+
+    await _pump(tester, location: '/', store: store);
+
+    await tester.tap(find.byTooltip('Edit sidebar'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Restore Collections'));
+    await tester.pumpAndSettle();
+
+    expect(store.get()!.hidden, isNot(contains('collections')));
+  });
+
+  testWidgets(
+      'the restore control fills its shared 36px slot, and keeps at least a '
+      '44px tap height', (tester) async {
+    // SidebarRow's trailing slot is a fixed 36px, shared with normal mode's
+    // overflow menu; widening it would shift row layout there too. So the
+    // restore control's live hit target is 36 wide, exactly the slot, not
+    // the 44 its own BoxConstraints requests for height alone — width comes
+    // from Material's own default tap-target padding being clamped down
+    // into the slot, not from this widget's constraints. Height is at least
+    // the requested 44 and, since nothing upstream bounds it, actually lands
+    // at Material's own 48px padded minimum.
+    final store = InMemorySidebarLayoutStore();
+    await store.save(SidebarLayout.defaults.withHidden('collections'));
+
+    await _pump(tester, location: '/', store: store);
+
+    await tester.tap(find.byTooltip('Edit sidebar'));
+    await tester.pumpAndSettle();
+
+    final button = find.ancestor(
+      of: find.byTooltip('Restore Collections'),
+      matching: find.byType(IconButton),
     );
-    addTearDown(container.dispose);
+    final size = tester.getSize(button);
 
-    await container.read(sidebarLayoutProvider.future);
+    expect(size.width, 36);
+    expect(size.height, greaterThanOrEqualTo(44));
+  });
 
-    final layoutBefore = store.get()!;
-    final middleBefore = layoutBefore.order
-        .where(
-          (id) => id != 'search' && id != 'downloads' && id != 'settings',
-        )
-        .toList();
-    final collectionsIndexBefore = middleBefore.indexOf('collections');
-    expect(collectionsIndexBefore, greaterThan(0));
-    final neighborBefore = middleBefore[collectionsIndexBefore - 1];
+  testWidgets('reset asks before it acts, and cancel changes nothing',
+      (tester) async {
+    final store = InMemorySidebarLayoutStore();
+    await store.save(SidebarLayout.defaults.withHidden('collections'));
 
-    final visibleMiddle =
-        (await container.read(sidebarDestinationsProvider.future))
-            .where((d) => !d.isAnchored)
-            .map((d) => d.id)
-            .toList();
-    final moviesIndex = visibleMiddle.indexOf('movies');
+    await _pump(tester, location: '/', store: store);
 
-    final newOrder = SidebarContent.orderAfterMiddleReorder(
-      layout: layoutBefore,
-      visibleMiddleIds: visibleMiddle,
-      oldIndex: moviesIndex,
-      newIndex: 0,
-      downloadSupported: isDownloadSupported,
-    );
+    await tester.tap(find.byTooltip('Edit sidebar'));
+    await tester.pumpAndSettle();
 
-    await container.read(sidebarLayoutControllerProvider).reorder(newOrder);
+    await tester.tap(find.byTooltip('Reset sidebar'));
+    await tester.pumpAndSettle();
 
-    final layoutAfterReorder = store.get()!;
-    expect(layoutAfterReorder.order, contains('collections'));
-    expect(layoutAfterReorder.hidden, contains('collections'));
+    expect(find.text('Reset sidebar?'), findsOneWidget);
 
-    final middleAfterReorder = layoutAfterReorder.order
-        .where(
-          (id) => id != 'search' && id != 'downloads' && id != 'settings',
-        )
-        .toList();
-    expect(
-      middleAfterReorder.indexOf('collections'),
-      collectionsIndexBefore,
-    );
-    expect(middleAfterReorder[collectionsIndexBefore - 1], neighborBefore);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
 
-    await container.read(sidebarLayoutControllerProvider).unhide('collections');
+    expect(store.get()!.hidden, contains('collections'));
+  });
 
-    final destinations =
-        await container.read(sidebarDestinationsProvider.future);
-    expect(destinations.map((d) => d.id), contains('collections'));
+  testWidgets('confirming reset unhides everything', (tester) async {
+    final store = InMemorySidebarLayoutStore();
+    await store.save(SidebarLayout.defaults.withHidden('collections'));
 
-    final middleAfterUnhide = store
-        .get()!
-        .order
-        .where(
-          (id) => id != 'search' && id != 'downloads' && id != 'settings',
-        )
-        .toList();
-    expect(
-      middleAfterUnhide.indexOf('collections'),
-      collectionsIndexBefore,
-    );
-    expect(middleAfterUnhide[collectionsIndexBefore - 1], neighborBefore);
+    await _pump(tester, location: '/', store: store);
+
+    await tester.tap(find.byTooltip('Edit sidebar'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Reset sidebar'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(TextButton, 'Reset'));
+    await tester.pumpAndSettle();
+
+    expect(store.get()!.hidden, isEmpty);
   });
 }
