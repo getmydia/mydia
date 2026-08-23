@@ -227,7 +227,9 @@ defmodule Mydia.Library.Prune.RankerTest do
             resolution: "4K",
             codec: "hevc",
             audio_codec: "aac",
-            hdr_format: "Dolby Vision",
+            hdr_format: :hdr10,
+            dolby_vision_profile: 8,
+            dolby_vision_bl_compat_id: 1,
             size: 20_000_000_000
           }
         ])

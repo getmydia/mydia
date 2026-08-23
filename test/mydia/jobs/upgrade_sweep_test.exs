@@ -174,7 +174,9 @@ defmodule Mydia.Jobs.UpgradeSweepTest do
       codec: "h264",
       audio_codec: Codec.normalize_audio_codec("AAC 5.1"),
       metadata: %FileMetadata{audio_codec_raw: "AAC 5.1"},
-      hdr_format: "Dolby Vision",
+      hdr_format: :hdr10,
+      dolby_vision_profile: 8,
+      dolby_vision_bl_compat_id: 1,
       size: 2 * 1024 * 1024 * 1024,
       analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second),
       quality_profile: profile
