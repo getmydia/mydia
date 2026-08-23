@@ -133,4 +133,72 @@ defmodule MydiaWeb.RouterExposureTest do
       segment -> segment
     end)
   end
+
+  # Maps each halting guard pipeline (see @guard_plugs) to the plug module it
+  # is believed to run.
+  #
+  # The brief for this test originally paired @guard_plugs down to two
+  # entries (:require_authenticated, :require_admin) while leaving this map
+  # at four keys, then checked membership with
+  # `guard_pipelines -- Map.keys(@known_guard_pipelines)`. Since
+  # `guard_pipelines` is filtered from `@guard_plugs` itself, it can only ever
+  # contain the two atoms already present as keys here -- the subtraction is
+  # always `[]` and the assertion can never fail no matter what the pipelines
+  # actually contain. That version is not implemented below.
+  #
+  # What is worth checking: that each pipeline's *body*, not just its name,
+  # still invokes the module we believe guards it. Someone could gut
+  # `pipeline :require_admin do end` to a no-op while every route's
+  # `pipe_through :require_admin` (and this map) stays untouched -- a
+  # name-only check would keep passing while every admin route silently
+  # stopped being guarded.
+  @known_guard_pipelines %{
+    require_authenticated: MydiaWeb.Plugs.EnsureAuthenticated,
+    require_admin: MydiaWeb.Plugs.EnsureRole
+  }
+
+  test "each guard pipeline's body still invokes its known plug module" do
+    source = router_source()
+
+    for {pipeline, module} <- @known_guard_pipelines do
+      body =
+        pipeline_body(source, pipeline) ||
+          flunk("pipeline :#{pipeline} not found in router.ex source")
+
+      assert pipeline_invokes?(body, module),
+             "pipeline :#{pipeline} no longer invokes #{inspect(module)} -- " <>
+               "routes piping through it would silently stop being guarded"
+    end
+  end
+
+  # Reads the router's own source from the path the compiler recorded for it,
+  # rather than a hardcoded path, so this stays correct if the file ever
+  # moves.
+  defp router_source do
+    MydiaWeb.Router.__info__(:compile)
+    |> Keyword.fetch!(:source)
+    |> List.to_string()
+    |> File.read!()
+  end
+
+  # Pipeline bodies in router.ex are flat `plug ...` lists with no nested
+  # `do`/`end`, so a non-greedy match up to the next `end` correctly bounds
+  # the block.
+  defp pipeline_body(source, pipeline) do
+    case Regex.run(~r/pipeline\s+:#{pipeline}\s+do(.*?)\n\s*end/s, source) do
+      [_, body] -> body
+      nil -> nil
+    end
+  end
+
+  defp pipeline_invokes?(body, module) do
+    plug_line = "plug #{inspect(module)}"
+
+    body
+    |> String.split("\n")
+    |> Enum.any?(fn line ->
+      trimmed = String.trim(line)
+      not String.starts_with?(trimmed, "#") and String.contains?(trimmed, plug_line)
+    end)
+  end
 end
