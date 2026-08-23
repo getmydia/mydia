@@ -200,6 +200,26 @@ defmodule MetadataRelay.Plug.CacheTest do
     end
   end
 
+  describe "subtitle_search_cache_key/2" do
+    # The cache stores the transformed response body. A deploy that changes
+    # `SubDL.Handler.transform_subtitle/2`'s emitted shape does not otherwise
+    # invalidate what is already cached, so a popular title would keep
+    # serving the old shape for the rest of the 7-day search TTL. Folding the
+    # wire-format version into the key means a version bump alone is enough
+    # to invalidate it, with no manual flush.
+    test "a different wire-format version produces a different cache key" do
+      key_v1 = MetadataRelay.Plug.Cache.subtitle_search_cache_key("fingerprint", 1)
+      key_v2 = MetadataRelay.Plug.Cache.subtitle_search_cache_key("fingerprint", 2)
+
+      refute key_v1 == key_v2
+    end
+
+    test "the same version and fingerprint produce the same cache key" do
+      assert MetadataRelay.Plug.Cache.subtitle_search_cache_key("fingerprint", 1) ==
+               MetadataRelay.Plug.Cache.subtitle_search_cache_key("fingerprint", 1)
+    end
+  end
+
   describe "other POST routes" do
     test "POST /crashes/report is never cached, so every report is stored" do
       report = %{
