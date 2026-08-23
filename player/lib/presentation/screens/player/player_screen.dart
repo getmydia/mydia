@@ -1538,10 +1538,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // detection pass below would otherwise be lost — which is the whole
     // failure this guards against.
     await _tracksSubscription?.cancel();
-    _tracksSubscription = watchAudioTracks(
-      player.stream.tracks,
-      _onAudioTracksDetected,
-    );
+    _tracksSubscription = watchTracks(player.stream.tracks, _onTracksChanged);
 
     // Before `open`, deliberately: mpv chooses its audio track while loading
     // the file, so a preference applied afterwards does not reselect and the
@@ -2081,6 +2078,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _selectedSubtitleTrack = applied;
     _pendingSubtitleSelection = applied;
     _subtitleSelectionGeneration++;
+  }
+
+  /// Adopt a track list media_kit published, whether sampled directly after
+  /// `open()` or delivered later by [watchTracks].
+  void _onTracksChanged(Tracks tracks) {
+    _onAudioTracksDetected(detectAudioTracks(tracks.audio));
   }
 
   /// Adopt a track list media_kit published after playback opened.
@@ -4749,23 +4752,24 @@ AudioTrackDetection detectAudioTracks(List<AudioTrack> mkTracks) {
   return AudioTrackDetection(tracks: tracks, byId: byId);
 }
 
-/// Reports an [AudioTrackDetection] every time media_kit revises [tracks].
+/// Reports media_kit's track list every time it is revised.
 ///
 /// mpv discovers tracks asynchronously while it probes the file, and revises
 /// the list afterwards, so sampling it once at a fixed moment after `open()`
-/// races the probe. On a slow enough source the sample lands before any audio
-/// track exists and the selector is left permanently empty. Driving detection
-/// off the stream instead means a late arrival still reaches the UI.
+/// races the probe. On a slow enough source the sample lands before any
+/// track exists and the selectors are left permanently empty. Driving
+/// detection off the stream instead means a late arrival still reaches the
+/// UI.
 ///
 /// `player.stream.tracks` is a plain broadcast stream with no replay, so
 /// callers must subscribe before opening the media and still run a detection
 /// pass afterwards to cover anything emitted in between.
 @visibleForTesting
-StreamSubscription<Tracks> watchAudioTracks(
+StreamSubscription<Tracks> watchTracks(
   Stream<Tracks> tracks,
-  void Function(AudioTrackDetection detection) onDetected,
+  void Function(Tracks tracks) onTracks,
 ) {
-  return tracks.listen((t) => onDetected(detectAudioTracks(t.audio)));
+  return tracks.listen(onTracks);
 }
 
 /// Converts the wire's 0.0-1.0 volume level to media_kit's 0-100 scale, used
