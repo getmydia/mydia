@@ -8,8 +8,30 @@ import '../auth/session_teardown.dart';
 import '../config/web_config.dart';
 import '../connection/connection_provider.dart';
 import '../p2p/p2p_service.dart';
+import '../player/device_profile.dart';
 import 'client.dart';
 import 'p2p_link.dart';
+
+/// This device's decode-capability profile, probed once per app session and
+/// held in memory for as long as the app runs.
+///
+/// Never persisted, for the same staleness reason [DeviceProfile] itself
+/// gives: a stored profile would survive an OS upgrade, a display swap, or a
+/// change in hardware decode availability that the process holding it did
+/// not. A plain (non-autoDispose) [FutureProvider] gives exactly that
+/// lifetime: computed once, cached for the container's life, never written
+/// anywhere durable.
+///
+/// [detectDeviceProfile] never throws; every failure path inside it already
+/// resolves to a fallback profile. While this is still resolving, callers see
+/// `null` via `.value` (riverpod 3.2.1 has no `valueOrNull`, and `.value`
+/// returns null on both `AsyncLoading` and `AsyncError` rather than
+/// rethrowing), which is the same as an absent profile: the server treats a
+/// missing header exactly like the behavior that existed before device
+/// profiles did.
+final deviceProfileProvider = FutureProvider<DeviceProfile>((ref) {
+  return detectDeviceProfile();
+});
 
 /// True only when the player is served by a Mydia instance at `/player`.
 ///
@@ -63,6 +85,9 @@ final graphqlClientProvider = Provider<GraphQLClient?>((ref) {
   final serverUrlAsync = ref.watch(serverUrlProvider);
   final authTokenAsync = ref.watch(authTokenProvider);
   final authService = ref.watch(authServiceProvider);
+  // Absent (null) until the probe resolves, which degrades to no header at
+  // all rather than blocking client construction on it.
+  final deviceProfile = ref.watch(deviceProfileProvider).value;
 
   debugPrint(
       '[graphqlClientProvider] Building: isP2PMode=${connectionState.isP2PMode}');
@@ -111,6 +136,7 @@ final graphqlClientProvider = Provider<GraphQLClient?>((ref) {
           return createGraphQLClient(
             serverUrl,
             authToken,
+            deviceProfile: deviceProfile,
             onAuthError: () async {
               // Try to refresh token (currently not supported, returns null)
               final newToken = await authService.refreshToken();
@@ -149,6 +175,7 @@ final graphqlClientWithSubscriptionsProvider = Provider<GraphQLClient?>((ref) {
   final serverUrlAsync = ref.watch(serverUrlProvider);
   final authTokenAsync = ref.watch(authTokenProvider);
   final authService = ref.watch(authServiceProvider);
+  final deviceProfile = ref.watch(deviceProfileProvider).value;
 
   return serverUrlAsync.when(
     data: (serverUrl) {
@@ -159,6 +186,7 @@ final graphqlClientWithSubscriptionsProvider = Provider<GraphQLClient?>((ref) {
           return createGraphQLClientWithSubscriptions(
             serverUrl,
             authToken,
+            deviceProfile: deviceProfile,
             onAuthError: () async {
               // Try to refresh token (currently not supported, returns null)
               final newToken = await authService.refreshToken();

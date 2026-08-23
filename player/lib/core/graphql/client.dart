@@ -1,5 +1,7 @@
 import 'package:graphql_flutter/graphql_flutter.dart';
 
+import '../player/device_profile.dart';
+
 /// Callback function type for handling authentication errors.
 /// Should attempt to refresh the token and return the new token if successful.
 typedef OnAuthError = Future<String?> Function();
@@ -9,17 +11,28 @@ typedef OnAuthError = Future<String?> Function();
 /// [serverUrl] - Base URL of the Mydia server (e.g., "https://mydia.example.com")
 /// [authToken] - Optional authentication token for the current user
 /// [onAuthError] - Optional callback invoked when a 401 error occurs
+/// [deviceProfile] - Optional decode-capability profile sent as a header so
+/// the server can decide direct play vs. transcode. Left unset, the request
+/// carries no profile header at all, which the server treats the same as it
+/// did before profiles existed.
 GraphQLClient createGraphQLClient(
   String serverUrl,
   String? authToken, {
   OnAuthError? onAuthError,
+  DeviceProfile? deviceProfile,
 }) {
   // Ensure the server URL doesn't have a trailing slash
   final baseUrl = serverUrl.endsWith('/')
       ? serverUrl.substring(0, serverUrl.length - 1)
       : serverUrl;
 
-  final httpLink = HttpLink('$baseUrl/api/graphql');
+  final httpLink = HttpLink(
+    '$baseUrl/api/graphql',
+    defaultHeaders: {
+      if (deviceProfile != null)
+        DeviceProfile.headerName: deviceProfile.toHeaderValue(),
+    },
+  );
 
   // Add authentication header if token is provided
   final authLink = AuthLink(
@@ -86,18 +99,16 @@ WebSocketLink createWebSocketLink(String serverUrl, String? authToken) {
       .replaceFirst('http://', 'ws://')
       .replaceFirst('https://', 'wss://');
 
-  final baseUrl = wsUrl.endsWith('/')
-      ? wsUrl.substring(0, wsUrl.length - 1)
-      : wsUrl;
+  final baseUrl =
+      wsUrl.endsWith('/') ? wsUrl.substring(0, wsUrl.length - 1) : wsUrl;
 
   return WebSocketLink(
     '$baseUrl/api/graphql/socket',
     config: SocketClientConfig(
       autoReconnect: true,
       inactivityTimeout: const Duration(seconds: 30),
-      initialPayload: authToken != null
-          ? {'Authorization': 'Bearer $authToken'}
-          : null,
+      initialPayload:
+          authToken != null ? {'Authorization': 'Bearer $authToken'} : null,
     ),
   );
 }
@@ -106,16 +117,26 @@ WebSocketLink createWebSocketLink(String serverUrl, String? authToken) {
 ///
 /// This client can handle queries, mutations, and subscriptions.
 /// [onAuthError] - Optional callback invoked when a 401 error occurs
+/// [deviceProfile] - Optional decode-capability profile, see
+/// [createGraphQLClient]. Only the HTTP leg carries it; subscriptions run
+/// over the WebSocket link and never call into the direct-play decision.
 GraphQLClient createGraphQLClientWithSubscriptions(
   String serverUrl,
   String? authToken, {
   OnAuthError? onAuthError,
+  DeviceProfile? deviceProfile,
 }) {
   final baseUrl = serverUrl.endsWith('/')
       ? serverUrl.substring(0, serverUrl.length - 1)
       : serverUrl;
 
-  final httpLink = HttpLink('$baseUrl/api/graphql');
+  final httpLink = HttpLink(
+    '$baseUrl/api/graphql',
+    defaultHeaders: {
+      if (deviceProfile != null)
+        DeviceProfile.headerName: deviceProfile.toHeaderValue(),
+    },
+  );
   final wsLink = createWebSocketLink(serverUrl, authToken);
 
   final authLink = AuthLink(
