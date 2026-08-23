@@ -25,55 +25,8 @@ defmodule Mydia.Subtitles.Scoring do
   alias Mydia.Library.ReleaseParser
   alias Mydia.Library.ReleaseParser.QualityExtractor
   alias Mydia.Library.Structs.Quality
-
-  defmodule Factor do
-    @moduledoc """
-    One scored dimension of a result, and why it earned what it earned.
-
-    `detail` carries the reference's value, meaning what this media file is,
-    so an unmatched row tells the operator what the subtitle failed to match
-    rather than restating the subtitle's own name.
-
-    `max` is this factor's ceiling. It rides on the struct so a renderer can
-    colour a row by the fraction earned without keeping its own copy of the
-    weight table, which would be free to drift from the real one.
-    """
-
-    @type t :: %__MODULE__{
-            key: atom(),
-            label: String.t(),
-            detail: String.t() | nil,
-            matched: boolean(),
-            points: integer(),
-            max: integer()
-          }
-
-    @enforce_keys [:key, :label, :matched, :points, :max]
-    defstruct [:key, :label, :detail, :matched, :points, :max]
-  end
-
-  defmodule Reference do
-    @moduledoc """
-    A release description in the release parser's standard vocabulary.
-
-    Two things share this shape: `build_reference/1` builds one describing
-    what the media file is, once per search, since parsing is the expensive
-    half of scoring and that reference does not vary across candidates.
-    `parse_candidate/1` builds another describing what a subtitle candidate's
-    own file name claims to be, once per result, so the two can be compared
-    field by field.
-    """
-
-    @type t :: %__MODULE__{
-            release_group: String.t() | nil,
-            resolution: String.t() | nil,
-            source: String.t() | nil,
-            codec: String.t() | nil,
-            audio: String.t() | nil
-          }
-
-    defstruct [:release_group, :resolution, :source, :codec, :audio]
-  end
+  alias Mydia.Subtitles.Scoring.Factor
+  alias Mydia.Subtitles.Scoring.Reference
 
   @scoring_weights %{
     hash_match: 100,
