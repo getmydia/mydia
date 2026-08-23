@@ -68,7 +68,27 @@ defmodule MydiaWeb.Schema.CommonTypes do
     field :resolution, :string, description: "Video resolution (e.g., 1080p)"
     field :codec, :string, description: "Video codec (e.g., hevc, h264)"
     field :audio_codec, :string, description: "Audio codec (e.g., dts, aac)"
-    field :hdr_format, :string, description: "HDR format if applicable (e.g., dolby_vision)"
+
+    @desc "HDR format for display (e.g. Dolby Vision, HDR10, HLG). Self-hosted installs " <>
+            "have no coordinated deploy order, so a shipped player reaches this server " <>
+            "months later still expecting a display string, not the raw enum atom."
+    field :hdr_format, :string do
+      resolve(fn media_file, _args, _res ->
+        {:ok,
+         Mydia.Library.Hdr.display(%Mydia.Library.Hdr{
+           base: media_file.hdr_format,
+           dv_profile: media_file.dolby_vision_profile,
+           bl_compat_id: media_file.dolby_vision_bl_compat_id
+         })}
+      end)
+    end
+
+    field :dolby_vision_profile, :integer,
+      description: "Dolby Vision profile (5, 7, 8) if present"
+
+    field :dolby_vision_bl_compat_id, :integer,
+      description: "DV base-layer compatibility id: 1 = HDR10 base, 4 = HLG base, 0 = none"
+
     field :size, :integer, description: "File size in bytes"
     field :bitrate, :integer, description: "Bitrate in bits per second"
 
@@ -481,7 +501,19 @@ defmodule MydiaWeb.Schema.CommonTypes do
     field :height, :integer, description: "Video height in pixels"
     field :bitrate, :integer, description: "Bitrate in bits per second"
     field :resolution, :string, description: "Resolution label (e.g., 1080p)"
-    field :hdr_format, :string, description: "HDR format if applicable"
+
+    field :hdr_format, :string,
+      description:
+        "HDR format for display (e.g. Dolby Vision, HDR10, HLG). Computed by " <>
+          "Mydia.Streaming.Candidates.build_metadata_response/2, which also backs the " <>
+          "REST candidates payload, so the two never disagree."
+
+    field :dolby_vision_profile, :integer,
+      description: "Dolby Vision profile (5, 7, 8) if present"
+
+    field :dolby_vision_bl_compat_id, :integer,
+      description: "DV base-layer compatibility id: 1 = HDR10 base, 4 = HLG base, 0 = none"
+
     field :original_codec, :string, description: "Original video codec"
     field :original_audio_codec, :string, description: "Original audio codec"
     field :container, :string, description: "Original container format"

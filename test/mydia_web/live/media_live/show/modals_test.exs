@@ -75,6 +75,75 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
     )
   end
 
+  describe "file_details_modal/1 HDR badge" do
+    defp hdr_file(overrides) do
+      Map.merge(
+        %MediaFile{
+          id: "mf-hdr",
+          relative_path: "Movie (2020)/movie.mkv",
+          library_path: %LibraryPath{path: "/movies"},
+          resolution: "2160p",
+          size: 1_500_000_000,
+          codec: "hevc",
+          audio_codec: "eac3",
+          hdr_format: nil,
+          dolby_vision_profile: nil,
+          dolby_vision_bl_compat_id: nil
+        },
+        overrides
+      )
+    end
+
+    test "renders the Hdr.display/1 text, not the raw enum atom" do
+      # Guards against rendering @file_details.hdr_format directly, which
+      # would show the raw Ecto.Enum atom ("hdr10") in the admin UI instead
+      # of the display string ("HDR10") Mydia.Library.Hdr.display/1 produces.
+      html =
+        render_component(&Modals.file_details_modal/1,
+          file_details: hdr_file(%{hdr_format: :hdr10})
+        )
+
+      assert html =~ "HDR10"
+      refute html =~ ">hdr10<"
+    end
+
+    test "a Dolby Vision profile 8 file shows Dolby Vision plus the profile number" do
+      html =
+        render_component(&Modals.file_details_modal/1,
+          file_details:
+            hdr_file(%{hdr_format: :hdr10, dolby_vision_profile: 8, dolby_vision_bl_compat_id: 1})
+        )
+
+      assert html =~ "Dolby Vision"
+      assert html =~ "Profile 8"
+    end
+
+    test "a Dolby Vision profile 5 file (hdr_format nil by design) still shows the badge" do
+      # Profile 5 has no HDR10-compatible base layer, so hdr_format is nil.
+      # Gating the badge on hdr_format alone would hide it for the most
+      # premium HDR format there is.
+      html =
+        render_component(&Modals.file_details_modal/1,
+          file_details:
+            hdr_file(%{hdr_format: nil, dolby_vision_profile: 5, dolby_vision_bl_compat_id: 0})
+        )
+
+      assert html =~ "badge-accent"
+      assert html =~ "Dolby Vision"
+      assert html =~ "Profile 5"
+    end
+
+    test "a genuinely SDR file (no base, no DV profile) shows None" do
+      html =
+        render_component(&Modals.file_details_modal/1,
+          file_details: hdr_file(%{hdr_format: nil, dolby_vision_profile: nil})
+        )
+
+      refute html =~ "badge-accent"
+      assert html =~ "None"
+    end
+  end
+
   describe "reidentify_modal/1" do
     test "renders candidates with selectable buttons wired to the select event" do
       html =

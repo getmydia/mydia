@@ -376,6 +376,52 @@ defmodule MydiaWeb.Api.StreamControllerTest do
       File.rm!(test_file_path)
     end
 
+    test "metadata.hdr_format is a display string, not the raw Ecto.Enum atom", %{
+      conn: conn,
+      token: token
+    } do
+      # This is the same wire-format promise as GraphQL's MediaFile.hdrFormat:
+      # self-hosted installs have no coordinated deploy order, so a shipped
+      # player reaching this server months later still expects "Dolby Vision",
+      # not "dolby_vision" or "hdr10". Guards against
+      # Mydia.Streaming.Candidates.build_metadata_response/2 regressing to
+      # passing media_file.hdr_format straight through.
+      library_path = library_path_fixture()
+      File.mkdir_p!(library_path.path)
+      test_file_name = "hdr_test_#{System.unique_integer([:positive])}.mkv"
+      test_file_path = Path.join(library_path.path, test_file_name)
+      File.write!(test_file_path, :crypto.strong_rand_bytes(1024 * 10))
+
+      media_item = media_item_fixture(%{type: "movie"})
+
+      _media_file =
+        media_file_fixture(%{
+          library_path_id: library_path.id,
+          relative_path: test_file_name,
+          media_item_id: media_item.id,
+          codec: "hevc",
+          audio_codec: "aac",
+          hdr_format: :hdr10,
+          dolby_vision_profile: 8,
+          dolby_vision_bl_compat_id: 1,
+          metadata: %{"container" => "mkv", "duration" => 120.5}
+        })
+
+      conn =
+        conn
+        |> put_req_header("authorization", "Bearer #{token}")
+        |> get("/api/v1/stream/movie/#{media_item.id}/candidates")
+
+      assert conn.status == 200
+      response = json_response(conn, 200)
+
+      assert response["metadata"]["hdr_format"] == "Dolby Vision"
+      assert response["metadata"]["dolby_vision_profile"] == 8
+      assert response["metadata"]["dolby_vision_bl_compat_id"] == 1
+
+      File.rm!(test_file_path)
+    end
+
     test "returns 404 for non-existent movie", %{conn: conn, token: token} do
       conn =
         conn
