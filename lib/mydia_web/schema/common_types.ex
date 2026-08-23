@@ -130,7 +130,9 @@ defmodule MydiaWeb.Schema.CommonTypes do
     @desc """
     Whether this client can play this file untouched.
 
-    Answered against the caller's `X-Mydia-Device-Profile` header. With no
+    Answered from the caller's device profile in the GraphQL context. Two
+    transports populate it: the `X-Mydia-Device-Profile` header over HTTP, and
+    the `device_profile` field on the request envelope over p2p. With no
     profile the answer is `true`: the honest answer is unknowable, and `true`
     is what this field returned before profiles existed. Falling back to the
     browser table instead would make older players deprioritize files they
