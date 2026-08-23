@@ -67,4 +67,39 @@ defmodule MetadataRelay.ClientIpTest do
       assert ClientIp.resolve(conn) == "127.0.0.1"
     end
   end
+
+  describe "Cloudflare fronts this relay, but CF-Connecting-IP is not yet trusted" do
+    # Guardrail, not a functional regression test: `CF-Connecting-IP` is a
+    # single opaque value Traefik passes through unmodified regardless of
+    # who actually connected to it (unlike `X-Forwarded-For`, Traefik does
+    # not append its own observed peer to it), and `TrustedProxy.trusted?/1`
+    # cannot distinguish "arrived via Cloudflare" from "reached Traefik's
+    # public IP directly" -- `conn.remote_ip` is Traefik's in-cluster
+    # address either way. Honouring this header today would let a caller
+    # who reaches the origin directly pick their own rate-limit identity,
+    # reopening T-235/T-236 via a new header name. See the moduledoc for
+    # the infra precondition (restricting Traefik's public entrypoint to
+    # Cloudflare's published ranges) that would need to hold before this
+    # becomes safe to change.
+    test "a caller-supplied CF-Connecting-IP does not influence resolution, trusted peer or not" do
+      trusted = conn_from({10, 0, 0, 5})
+      trusted = Plug.Conn.put_req_header(trusted, "cf-connecting-ip", "198.51.100.9")
+      assert ClientIp.resolve(trusted) == "10.0.0.5"
+
+      untrusted = conn_from({8, 8, 8, 8})
+      untrusted = Plug.Conn.put_req_header(untrusted, "cf-connecting-ip", "198.51.100.9")
+      assert ClientIp.resolve(untrusted) == "8.8.8.8"
+    end
+
+    test "an attacker who reaches Traefik directly still cannot pick their own identity via CF-Connecting-IP" do
+      ips =
+        for spoofed <- ["1.1.1.1", "2.2.2.2", "3.3.3.3"] do
+          conn = conn_from({10, 0, 0, 5})
+          conn = Plug.Conn.put_req_header(conn, "cf-connecting-ip", spoofed)
+          ClientIp.resolve(conn)
+        end
+
+      assert Enum.uniq(ips) == ["10.0.0.5"]
+    end
+  end
 end

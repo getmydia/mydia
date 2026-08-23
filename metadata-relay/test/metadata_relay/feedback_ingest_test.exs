@@ -273,6 +273,37 @@ defmodule MetadataRelay.FeedbackIngestTest do
       assert conn.status == 429
       assert 5 == Repo.aggregate(Submission, :count, :id)
     end
+
+    # Regression guard: the T-236 fallback introduced a new collision. The
+    # fallback bucket for a caller who omits instance_id is keyed off
+    # "ip:<client_ip>". A caller can *supply* instance_id: "ip:<victim_ip>"
+    # and land in the exact same rate-limit bucket as the victim's fallback,
+    # letting an attacker (spreading requests across throwaway IPs so their
+    # own IP-keyed bucket never trips) exhaust the victim's fallback bucket
+    # before the victim ever sends a request.
+    test "a caller-supplied instance_id cannot collide with another caller's fallback bucket" do
+      victim_ip = "203.0.113.77"
+
+      for i <- 1..5 do
+        conn =
+          post_feedback(
+            %{"type" => "bug", "message" => "Attacker #{i}", "instance_id" => "ip:#{victim_ip}"},
+            forwarded_for: "198.51.100.#{i}"
+          )
+
+        assert conn.status == 201
+      end
+
+      # The victim, sending from their own IP with no instance_id at all,
+      # must still get through -- their fallback bucket must not have been
+      # exhausted by the attacker's crafted instance_id.
+      conn =
+        post_feedback(%{"type" => "bug", "message" => "Victim", "instance_id" => nil},
+          forwarded_for: victim_ip
+        )
+
+      assert conn.status == 201
+    end
   end
 
   defp post_feedback(body, opts \\ []) do

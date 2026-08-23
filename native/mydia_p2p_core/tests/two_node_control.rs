@@ -57,18 +57,34 @@ async fn two_hosts_exchange_a_request_body() {
     // Wait for the responder to be ready and learn its address.
     let responder_addr = wait_for_ready(&responder).await;
 
-    // Answer inbound requests on the responder.
+    // Answer inbound requests on the responder. `send_response` only enqueues
+    // `Command::SendResponse` on the responder's `Host` -- the actual
+    // `send.write_all(...)`/`send.finish()` that puts the response bytes on
+    // the wire runs in a separate task `handle_connection` spawned earlier
+    // (see `lib.rs`), decoupled from this one. So this task hands
+    // `responder` back out as its return value instead of letting it drop
+    // here: dropping the last `Command` sender now correctly and promptly
+    // tears the responder's endpoint down (that is the fix under test in
+    // `lib.rs`'s `run_event_loop`), and if that raced ahead of the still
+    // in-flight write, the dialer's read below would fail with a lost
+    // connection instead of ever seeing the response. Moving `responder`
+    // is trusted to run: this is a fresh test-only channel with capacity
+    // (unlike the T-808/T-809 hosts, nothing here fills it), so
+    // `send_response` returning means the command was actually enqueued.
     let responder_handle = tokio::spawn(async move {
-        let mut rx = responder.event_rx.lock().await;
-        while let Some(event) = rx.recv().await {
-            if let Event::RequestReceived { request_id, .. } = event {
-                responder
-                    .send_response(request_id, MydiaResponse::Custom(vec![2]))
-                    .await
-                    .expect("send_response failed");
-                return;
+        {
+            let mut rx = responder.event_rx.lock().await;
+            while let Some(event) = rx.recv().await {
+                if let Event::RequestReceived { request_id, .. } = event {
+                    responder
+                        .send_response(request_id, MydiaResponse::Custom(vec![2]))
+                        .await
+                        .expect("send_response failed");
+                    break;
+                }
             }
         }
+        responder
     });
 
     dialer.dial(responder_addr).await.expect("dial failed");
@@ -79,7 +95,11 @@ async fn two_hosts_exchange_a_request_body() {
         .expect("send_request failed");
 
     assert_eq!(response, MydiaResponse::Custom(vec![2]));
-    responder_handle.await.unwrap();
+
+    // Only drop the responder's `Host` (freeing `cmd_tx` and tearing the
+    // endpoint down) now that the dialer has already read the full
+    // response -- see the comment above.
+    let _responder = responder_handle.await.unwrap();
 }
 
 async fn wait_for_ready(host: &Host) -> String {

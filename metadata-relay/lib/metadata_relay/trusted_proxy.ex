@@ -18,8 +18,48 @@ defmodule MetadataRelay.TrustedProxy do
   plus the RFC 1918 private ranges. This is deliberately not something an
   operator has to configure for the default deployment to work correctly
   (self-hosted operators should never need to fiddle with their
-  environment for a security control to function) -- `RELAY_TRUSTED_PROXY_CIDRS`
-  exists only as an override for a non-default network topology.
+  environment for a security control to function).
+
+  The default is intentionally *broad* rather than scoped to one ingress
+  controller's pod CIDR: that CIDR differs by Kubernetes distro and CNI
+  (flannel, Calico, Cilium, ...) and isn't something this code can know
+  ahead of time, so hardcoding a narrower default risks silently breaking
+  trust for the real production deployment (and every other operator's
+  differently-configured cluster) with no way to notice short of requests
+  failing to get the caller's real IP. That's a materially worse outcome
+  than the residual risk being traded off: reaching the relay's `ClusterIP`
+  at all already requires being inside the private network, which is a much
+  higher bar than the original vulnerability this module closes (any
+  internet caller spoofing `X-Forwarded-For`).
+
+  `RELAY_TRUSTED_PROXY_CIDRS`, when set, *replaces* the default set rather
+  than extending it -- an operator whose topology needs a narrower trust
+  boundary than "all of RFC 1918" (e.g. only the ingress controller's own
+  CIDR) can express exactly that, instead of the default always being
+  unioned back in regardless of what they configure.
+
+  ## What "trusted" does *not* mean
+
+  This module answers one question only: is `conn.remote_ip` the relay's
+  real, non-spoofable TCP peer, i.e. the in-cluster Traefik ingress
+  (`infra/kubernetes/apps/metadata-relay/ingress.yaml`)? It says nothing
+  about what *Traefik's own* peer was for a given request.
+
+  Production is actually `client -> Cloudflare edge -> Traefik -> relay
+  pod` (`relay.mydia.dev` resolves to Cloudflare's anycast ranges, and
+  Traefik has no `forwardedHeaders.trustedIPs` configured -- verified
+  against live Traefik access logs and its deploy args on 2026-08-23). The
+  relay pod's peer is *always* Traefik's in-cluster pod address, whether
+  the request genuinely arrived via Cloudflare or reached Traefik's public
+  IP directly (that IP is not secret: it's the `external-dns` annotation
+  target in this repo's `ingress.yaml`). `trusted?/1` being `true` therefore
+  never implies "this request came through Cloudflare" -- only "this
+  request came through Traefik", which is true either way. Headers that
+  only Cloudflare is supposed to set (`CF-Connecting-IP`, `CF-Ray`, ...)
+  are passed through by Traefik unmodified and unvalidated regardless of
+  who actually connected to it, so they must not be trusted as client
+  identity on the strength of this check alone -- see
+  `MetadataRelay.ClientIp` for why that header isn't used yet.
   """
 
   @default_cidrs [
@@ -43,15 +83,25 @@ defmodule MetadataRelay.TrustedProxy do
   end
 
   defp cidrs do
-    extra =
-      "RELAY_TRUSTED_PROXY_CIDRS"
-      |> System.get_env("")
-      |> String.split(",", trim: true)
-      |> Enum.map(&String.trim/1)
-
-    (@default_cidrs ++ extra)
+    case configured_cidrs() do
+      [] -> @default_cidrs
+      configured -> configured
+    end
     |> Enum.map(&parse_cidr/1)
     |> Enum.reject(&is_nil/1)
+  end
+
+  # Explicit configuration replaces the default set entirely rather than
+  # extending it -- an unset or blank env var (including one that is only
+  # whitespace, or a comma list of only whitespace/empty segments) falls
+  # back to `@default_cidrs`; anything else becomes the complete trusted
+  # set, with the default no longer unioned in.
+  defp configured_cidrs do
+    "RELAY_TRUSTED_PROXY_CIDRS"
+    |> System.get_env("")
+    |> String.split(",", trim: true)
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
   end
 
   @doc false

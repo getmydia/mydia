@@ -18,6 +18,17 @@ defmodule MetadataRelay.Plug.ProxyRateLimitTest do
     System.put_env("TMDB_API_KEY", "test_api_key_12345")
     MetadataRelay.Cache.clear()
 
+    # The plug ships disabled (behind Cloudflare its only resolvable client
+    # identity is a shared edge address -- see its moduledoc), so these
+    # tests have to switch it on to exercise it at all. `on_exit` restores
+    # the shipped default so no other suite inherits it.
+    previous_enabled = Application.get_env(:metadata_relay, :proxy_rate_limit_enabled, false)
+    Application.put_env(:metadata_relay, :proxy_rate_limit_enabled, true)
+
+    on_exit(fn ->
+      Application.put_env(:metadata_relay, :proxy_rate_limit_enabled, previous_enabled)
+    end)
+
     case GenServer.whereis(MetadataRelay.RateLimiter) do
       nil -> start_supervised!(MetadataRelay.RateLimiter)
       _pid -> :ok
@@ -99,5 +110,33 @@ defmodule MetadataRelay.Plug.ProxyRateLimitTest do
 
     conn = Plug.Test.conn(:get, "/health") |> Router.call([])
     assert conn.status == 200
+  end
+
+  describe "the shipped default" do
+    setup do
+      # Undo the suite-wide enable, so this block sees what a real
+      # deployment sees with RELAY_PROXY_RATE_LIMIT unset.
+      Application.put_env(:metadata_relay, :proxy_rate_limit_enabled, false)
+      :ok
+    end
+
+    test "is off, so cache-busted proxy traffic is never throttled" do
+      refute MetadataRelay.Plug.ProxyRateLimit.enabled?()
+
+      statuses =
+        for _ <- 1..350 do
+          Plug.Test.conn(:get, "/tmdb/movies/search?_=#{System.unique_integer()}")
+          |> Router.call([])
+          |> Map.fetch!(:status)
+        end
+
+      # Every one of these is a genuine cache miss, well past the 300/min
+      # limit. None may 429 while the plug is disabled: behind Cloudflare
+      # the client identity collapses to a shared edge address, so an
+      # enabled-by-default limiter would reject unrelated installs rather
+      # than an attacker. See the plug's moduledoc for the conditions that
+      # have to hold before this is safe to turn on.
+      assert Enum.all?(statuses, &(&1 == 200))
+    end
   end
 end

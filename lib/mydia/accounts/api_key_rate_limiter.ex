@@ -44,7 +44,7 @@ defmodule Mydia.Accounts.ApiKeyRateLimiter do
       [] ->
         :ok
 
-      [{^storage_key, attempts, first_attempt_at}] ->
+      [{^storage_key, attempts, first_attempt_at, _window_seconds}] ->
         if now - first_attempt_at > window_seconds do
           # Window has expired, reset
           :ets.delete(@table_name, storage_key)
@@ -73,14 +73,14 @@ defmodule Mydia.Accounts.ApiKeyRateLimiter do
 
     case :ets.lookup(@table_name, storage_key) do
       [] ->
-        :ets.insert(@table_name, {storage_key, 1, now})
+        :ets.insert(@table_name, {storage_key, 1, now, window_seconds})
 
-      [{^storage_key, attempts, first_attempt_at}] ->
+      [{^storage_key, attempts, first_attempt_at, _window_seconds}] ->
         if now - first_attempt_at > window_seconds do
           # Window has expired, reset counter
-          :ets.insert(@table_name, {storage_key, 1, now})
+          :ets.insert(@table_name, {storage_key, 1, now, window_seconds})
         else
-          :ets.insert(@table_name, {storage_key, attempts + 1, first_attempt_at})
+          :ets.insert(@table_name, {storage_key, attempts + 1, first_attempt_at, window_seconds})
         end
     end
 
@@ -98,13 +98,20 @@ defmodule Mydia.Accounts.ApiKeyRateLimiter do
 
   @doc """
   Cleans up expired entries from the rate limiter table.
+
+  Each bucket carries the `:window_seconds` it was recorded with (see
+  `record_failed_attempt/2`), so this uses that per-bucket value rather than
+  the module default `@window_seconds`. A bucket recorded with a longer
+  custom window (e.g. `window_seconds: 7200`) would otherwise be cleared by
+  this sweep before its own window elapsed, letting a caller back in before
+  the configured lockout actually expired.
   """
   def cleanup_expired do
     now = System.system_time(:second)
 
     :ets.foldl(
-      fn {key, _attempts, first_attempt_at}, acc ->
-        if now - first_attempt_at > @window_seconds do
+      fn {key, _attempts, first_attempt_at, window_seconds}, acc ->
+        if now - first_attempt_at > window_seconds do
           :ets.delete(@table_name, key)
         end
 

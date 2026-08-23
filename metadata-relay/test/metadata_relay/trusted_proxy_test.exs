@@ -41,13 +41,31 @@ defmodule MetadataRelay.TrustedProxyTest do
       on_exit(fn -> System.delete_env("RELAY_TRUSTED_PROXY_CIDRS") end)
     end
 
-    test "extends, rather than replaces, the default trusted set" do
+    # Regression guard: explicit configuration must REPLACE the default
+    # trusted set, not extend it. An operator configuring a narrower trust
+    # boundary (e.g. only their ingress controller's own CIDR) must actually
+    # get that narrower boundary -- if the default were still unioned in
+    # regardless, there would be no way for any operator to ever restrict
+    # this trust boundary below "all of RFC 1918", no matter what they set.
+    test "replaces, rather than extends, the default trusted set" do
       System.put_env("RELAY_TRUSTED_PROXY_CIDRS", "203.0.113.0/24")
 
       assert TrustedProxy.trusted?({203, 0, 113, 5})
-      # Defaults still apply
-      assert TrustedProxy.trusted?({127, 0, 0, 1})
+      # Defaults no longer apply once the operator has configured a
+      # replacement set.
+      refute TrustedProxy.trusted?({127, 0, 0, 1})
+      refute TrustedProxy.trusted?({10, 0, 0, 1})
       refute TrustedProxy.trusted?({198, 51, 100, 9})
+    end
+
+    test "an unset or blank override falls back to the defaults" do
+      System.put_env("RELAY_TRUSTED_PROXY_CIDRS", "")
+      assert TrustedProxy.trusted?({127, 0, 0, 1})
+      assert TrustedProxy.trusted?({10, 0, 0, 1})
+
+      System.put_env("RELAY_TRUSTED_PROXY_CIDRS", "   ")
+      assert TrustedProxy.trusted?({127, 0, 0, 1})
+      assert TrustedProxy.trusted?({10, 0, 0, 1})
     end
 
     test "accepts multiple comma-separated CIDRs" do

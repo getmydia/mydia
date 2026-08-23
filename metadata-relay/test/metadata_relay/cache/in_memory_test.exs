@@ -252,6 +252,76 @@ defmodule MetadataRelay.Cache.InMemoryTest do
     end
   end
 
+  describe "order-table race safety" do
+    # Regression guard: two concurrent `put/3` calls for the same key can
+    # each insert their own `{seq, key}` row into the order table (the
+    # `drop_order_entry/1` lookup that's supposed to remove the *old* row
+    # is not atomic with a sibling call's own insert), while the main
+    # table -- a `:set` -- ends up keeping only the last writer's record.
+    # That leaves an orphaned order-table row pointing at a `seq` the main
+    # table no longer has under that key. This test reproduces that exact
+    # end state directly (rather than relying on real scheduler timing to
+    # hit a microsecond window) and checks that a subsequent eviction,
+    # walking the order table oldest-first, doesn't use the stale row to
+    # delete the *current*, live record for the key.
+    test "a stale order-table row from a concurrent put does not let eviction delete the current cache record instead of the true oldest" do
+      InMemory.clear()
+      Application.put_env(:metadata_relay, :cache_max_entries, 2)
+      on_exit(fn -> Application.delete_env(:metadata_relay, :cache_max_entries) end)
+
+      # P1: a normal put/3 call establishes "racer"'s first record and its
+      # order row (seq_orphan) -- the smallest (oldest) sequence number
+      # generated in this test.
+      :ok = InMemory.put("racer", "v1", 60_000)
+      [{"racer", _value, _expires_at, seq_orphan}] = :ets.lookup(:metadata_relay_cache, "racer")
+
+      # A second, independent key is inserted next, genuinely older than
+      # what "racer" is about to become -- this is the entry a correct
+      # eviction should pick.
+      :ok = InMemory.put("victim", "real-oldest", 60_000)
+      [{"victim", _value, _expires_at, seq_victim}] = :ets.lookup(:metadata_relay_cache, "victim")
+
+      # P2: simulate a concurrent put/3 call for "racer" whose own
+      # `drop_order_entry/1` ran before P1 had written anything (so it
+      # found nothing to drop -- exactly what the real race produces),
+      # then wrote its own order row and overwrote the main table's single
+      # slot for "racer". seq_orphan's order-table row is never cleaned up,
+      # and "racer" is now the *most recently written* live key even
+      # though its stale row is the *oldest* entry in the order table.
+      seq_racer_current = :erlang.unique_integer([:monotonic, :positive])
+      :ets.insert(:metadata_relay_cache_order, {seq_racer_current, "racer"})
+
+      :ets.insert(
+        :metadata_relay_cache,
+        {"racer", "v-current", DateTime.add(DateTime.utc_now(), 60_000, :millisecond),
+         seq_racer_current}
+      )
+
+      # Sanity check on the constructed race state: three order-table rows
+      # for two live main-table keys, with "racer"'s orphan row the
+      # globally oldest.
+      assert :ets.first(:metadata_relay_cache_order) == seq_orphan
+
+      assert [{"racer", "v-current", _, ^seq_racer_current}] =
+               :ets.lookup(:metadata_relay_cache, "racer")
+
+      assert seq_orphan < seq_victim and seq_victim < seq_racer_current
+
+      # Force an eviction (main table is already at the 2-entry cap). It
+      # walks the order table oldest-first, so it reaches the orphaned
+      # seq_orphan row before either live row.
+      :ok = InMemory.put("new-key", "x", 60_000)
+
+      assert {:ok, "v-current"} = InMemory.get("racer"),
+             "the live, most-recently-written entry for \"racer\" must survive " <>
+               "an eviction triggered while a stale order-table row for it exists"
+
+      assert {:error, :not_found} = InMemory.get("victim"),
+             "the genuinely oldest live entry (\"victim\") must be the one evicted, " <>
+               "not skipped in favor of deleting \"racer\" via its stale row"
+    end
+  end
+
   describe "concurrent access" do
     test "handles concurrent reads and writes" do
       InMemory.clear()

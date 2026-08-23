@@ -880,6 +880,18 @@ async fn run_event_loop(
         // client only serves commands. `tokio::select!` takes no `#[cfg]` on
         // a branch, so the two loop bodies are spelled out separately. Both
         // call the same handlers, so only the set of arms differs.
+        // `cmd_rx.recv()` returning `None` is the shutdown signal: it means
+        // every `Command` sender (all owned, directly or via clone, by the
+        // `Host` handle) has been dropped. That must end the loop on its
+        // own. It cannot be left to the `else` arm: `disconnect_rx` never
+        // observes closure while this function still holds `disconnect_tx`
+        // above, and `endpoint.accept()` simply stays pending with no more
+        // peers dialing in, so `else` would require both of those to also
+        // resolve to a non-matching value in the very same poll -- which
+        // they never do. Matching `cmd_rx.recv()`'s `Option` explicitly
+        // (instead of `Some(cmd) = cmd_rx.recv()`, which just disables the
+        // arm on `None` rather than ending the loop) makes shutdown fire
+        // directly off that one authoritative signal.
         #[cfg(feature = "host")]
         let running = tokio::select! {
             Some(incoming) = endpoint.accept() => {
@@ -887,50 +899,56 @@ async fn run_event_loop(
                 true
             }
 
-            Some(cmd) = cmd_rx.recv() => {
-                handle_command(
-                    cmd,
-                    &endpoint,
-                    &mut connected_peers,
-                    &event_tx,
-                    &shared_state,
-                    relay_connected,
-                    &disconnect_tx,
-                )
-                .await;
-                true
+            cmd = cmd_rx.recv() => {
+                match cmd {
+                    Some(cmd) => {
+                        handle_command(
+                            cmd,
+                            &endpoint,
+                            &mut connected_peers,
+                            &event_tx,
+                            &shared_state,
+                            relay_connected,
+                            &disconnect_tx,
+                        )
+                        .await;
+                        true
+                    }
+                    None => false,
+                }
             }
 
             Some((peer_id, stable_id)) = disconnect_rx.recv() => {
                 prune_disconnected_peer(&mut connected_peers, &peer_id, stable_id);
                 true
             }
-
-            else => false,
         };
 
         #[cfg(not(feature = "host"))]
         let running = tokio::select! {
-            Some(cmd) = cmd_rx.recv() => {
-                handle_command(
-                    cmd,
-                    &endpoint,
-                    &mut connected_peers,
-                    &event_tx,
-                    &shared_state,
-                    relay_connected,
-                    &disconnect_tx,
-                )
-                .await;
-                true
+            cmd = cmd_rx.recv() => {
+                match cmd {
+                    Some(cmd) => {
+                        handle_command(
+                            cmd,
+                            &endpoint,
+                            &mut connected_peers,
+                            &event_tx,
+                            &shared_state,
+                            relay_connected,
+                            &disconnect_tx,
+                        )
+                        .await;
+                        true
+                    }
+                    None => false,
+                }
             }
 
             Some((peer_id, stable_id)) = disconnect_rx.recv() => {
                 prune_disconnected_peer(&mut connected_peers, &peer_id, stable_id);
                 true
             }
-
-            else => false,
         };
 
         if !running {
@@ -2113,6 +2131,41 @@ mod tests {
         panic!("host never published an endpoint address");
     }
 
+    /// Drain `host.event_rx` for the rest of the test.
+    ///
+    /// Nothing below inspects `Event`s -- they poll `Host`'s debug/stats
+    /// commands instead -- but every non-`Log` `Event` (`Ready`,
+    /// `RelayConnected`, `Connected`, `Disconnected`, ...) is delivered with
+    /// a blocking `event_tx.send(...).await`, and `Event::Log` shares that
+    /// same 100-item channel via a non-blocking `try_send` from `tracing`.
+    /// `LOG_TX` is a single process-wide `OnceLock`, so whichever `Host` is
+    /// constructed first across the whole test binary -- not necessarily
+    /// this one -- ends up receiving every test's log traffic on its
+    /// channel. If nothing ever drains it, that log volume alone can fill
+    /// the buffer; the next blocking `Event` send then blocks forever with
+    /// no reader, freezing that `Host`'s `run_event_loop` task and, with
+    /// it, every `Command` reply a test is waiting on (`wait_until` then
+    /// fails messily on its own timeout instead of the intended assertion
+    /// ever running). Draining unconditionally removes that risk regardless
+    /// of which `Host` won the race.
+    fn spawn_event_drain(host: &Host) {
+        let event_rx = host.event_rx.clone();
+        tokio::spawn(async move {
+            let mut rx = event_rx.lock().await;
+            while rx.recv().await.is_some() {}
+        });
+    }
+
+    /// Bind an OS-assigned UDP port and immediately release it, so the
+    /// caller gets a port number very likely free for its own bind.
+    fn free_udp_port() -> u16 {
+        std::net::UdpSocket::bind(("0.0.0.0", 0))
+            .expect("bind ephemeral UDP port")
+            .local_addr()
+            .expect("read local_addr")
+            .port()
+    }
+
     /// T-809: before this fix, nothing ever removed a `connected_peers`
     /// entry -- `grep -n "connected_peers\.\(remove\|retain\)"` returned zero
     /// matches, so `NetworkStats.connected_peers` could only ever grow.
@@ -2123,6 +2176,8 @@ mod tests {
     async fn connected_peers_is_pruned_when_the_connection_closes() {
         let (server, _server_id) = Host::new(test_config());
         let (client, client_id) = Host::new(test_config());
+        spawn_event_drain(&server);
+        spawn_event_drain(&client);
 
         let server_addr = wait_for_addr(&server).await;
         client.dial(server_addr).await.expect("dial should succeed");
@@ -2161,6 +2216,8 @@ mod tests {
     async fn pending_responses_is_reclaimed_when_the_response_times_out() {
         let (responder, responder_id) = Host::new(test_config());
         let (dialer, _dialer_id) = Host::new(test_config());
+        spawn_event_drain(&responder);
+        spawn_event_drain(&dialer);
 
         let responder_addr = wait_for_addr(&responder).await;
         dialer
@@ -2212,6 +2269,49 @@ mod tests {
             matches!(response, MydiaResponse::Error(_)),
             "expected a timeout Error response, got {response:?}"
         );
+    }
+
+    /// Review fix for the T-809 PR: `run_event_loop`'s `else => false` arm
+    /// could only fire if `endpoint.accept()` and `disconnect_rx.recv()`
+    /// *also* resolved to a non-matching value on the very same poll as
+    /// `cmd_rx.recv()` returning `None` -- and since `run_event_loop` holds
+    /// `disconnect_tx` for its own entire lifetime, `disconnect_rx.recv()`
+    /// never resolves to `None` while the loop is running, and
+    /// `endpoint.accept()` just stays pending with no one dialing in. So
+    /// dropping the last `Command` sender (what happens when `Host` is
+    /// dropped) never reached `else`, and `run_event_loop` spun forever on
+    /// the other two pending branches instead of calling
+    /// `endpoint.close().await` and returning.
+    ///
+    /// This is exercised as a black box, without any test-only hook into
+    /// `run_event_loop`: dropping `Host` can only free the UDP port its
+    /// endpoint is bound to once the task that owns that endpoint actually
+    /// returns. Before the fix, the task never returns, so the port stays
+    /// bound forever and the `wait_until` below times out. After the fix,
+    /// `cmd_rx.recv()` returning `None` ends the loop directly, the
+    /// function returns, `endpoint` (and the OS socket under it) drops, and
+    /// the port becomes bindable again.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn dropping_the_host_frees_its_bound_udp_port() {
+        let port = free_udp_port();
+
+        let (host, _host_id) = Host::new(HostConfig {
+            bind_port: Some(port),
+            ..test_config()
+        });
+        spawn_event_drain(&host);
+        wait_for_addr(&host).await;
+
+        drop(host);
+
+        wait_until(
+            || async { std::net::UdpSocket::bind(("0.0.0.0", port)).is_ok() },
+            std::time::Duration::from_secs(10),
+            "the endpoint's UDP port to be released after the Host was dropped -- before the \
+             fix, run_event_loop never observed cmd_rx closing on its own and looped forever \
+             without ever calling endpoint.close()",
+        )
+        .await;
     }
 
     /// Poll `check` until it returns true or `timeout` elapses, panicking

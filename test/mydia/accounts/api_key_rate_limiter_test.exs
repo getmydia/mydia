@@ -110,5 +110,47 @@ defmodule Mydia.Accounts.ApiKeyRateLimiterTest do
       # For now, just verify the function can be called without error
       assert :ok = ApiKeyRateLimiter.cleanup_expired()
     end
+
+    test "does not clear a bucket before its own configured window elapses" do
+      # cleanup_expired/0 used to always compare against the module's
+      # hardcoded 3600s default, ignoring any custom `:window_seconds` a
+      # caller passed to record_failed_attempt/2. A bucket configured with a
+      # longer window (e.g. 7200s) would get swept away once it crossed the
+      # 3600s mark, letting a still-supposed-to-be-locked-out caller back in
+      # well before its actual window expired. The bucket must now persist
+      # its own window alongside the attempt count so cleanup can honor it.
+      ip = "192.168.1.42"
+      window_seconds = 7200
+      storage_key = "api_key_validation:#{ip}"
+
+      for _i <- 1..10 do
+        ApiKeyRateLimiter.record_failed_attempt(ip, window_seconds: window_seconds)
+      end
+
+      assert {:error, :rate_limited} =
+               ApiKeyRateLimiter.check_rate_limit(ip, window_seconds: window_seconds)
+
+      assert [{^storage_key, attempts, _first_attempt_at, stored_window}] =
+               :ets.lookup(:api_key_rate_limiter, storage_key)
+
+      assert stored_window == window_seconds
+
+      # Back-date the bucket past the hardcoded 3600s default cleanup
+      # window, but still inside the 7200s window it was actually
+      # configured with.
+      backdated_first_attempt_at = System.system_time(:second) - 4000
+
+      :ets.insert(
+        :api_key_rate_limiter,
+        {storage_key, attempts, backdated_first_attempt_at, stored_window}
+      )
+
+      assert :ok = ApiKeyRateLimiter.cleanup_expired()
+
+      # Still within the bucket's own 7200s window: cleanup must not have
+      # cleared it early, so the lockout must still be in effect.
+      assert {:error, :rate_limited} =
+               ApiKeyRateLimiter.check_rate_limit(ip, window_seconds: window_seconds)
+    end
   end
 end

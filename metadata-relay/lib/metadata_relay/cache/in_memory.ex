@@ -160,8 +160,15 @@ defmodule MetadataRelay.Cache.InMemory do
         {{:"$1", :_, :"$3", :"$4"}, [{:<, :"$3", {:const, now}}], [{{:"$1", :"$4"}}]}
       ])
 
+    # `expired` is a snapshot taken by the `:ets.select/2` above. A
+    # concurrent `put/3` for one of these keys can land between that
+    # snapshot and this loop and give the key a new value and a new `seq`
+    # -- see `delete_if_current/2` for why the main-table delete below must
+    # be conditioned on `seq` still matching, rather than deleting by `key`
+    # alone, or this sweep could destroy a write that raced in after the
+    # snapshot decided the *old* value had expired.
     Enum.each(expired, fn {key, seq} ->
-      :ets.delete(@table_name, key)
+      delete_if_current(key, seq)
       :ets.delete(@order_table_name, seq)
     end)
 
@@ -172,6 +179,20 @@ defmodule MetadataRelay.Cache.InMemory do
 
   # Deletes oldest-first by insertion order, using the order table's own
   # ordering rather than the main table's arbitrary hash-bucket order.
+  #
+  # Two concurrent `put/3` calls for the same key can each insert their own
+  # `{seq, key}` row into the order table (`drop_order_entry/1`'s
+  # lookup-then-delete is not atomic with the sibling call's own insert),
+  # while the main table -- a `:set` -- ends up keeping only the last
+  # writer's record. That leaves the losing call's order-table row pointing
+  # at a `seq` the main table no longer has under that key. Walking
+  # straight from that stale row to an unconditional
+  # `:ets.delete(@table_name, key)` would delete whatever the *current*
+  # (possibly much newer, unrelated to this row) record for that key is,
+  # destroying live data a concurrent write just produced. Guarding the
+  # delete on `seq` still matching (`delete_if_current/2`) means a stale
+  # row can only ever remove itself; eviction then falls through to the
+  # next-oldest row so real capacity pressure still gets relieved.
   defp evict_oldest do
     case :ets.first(@order_table_name) do
       :"$end_of_table" ->
@@ -181,14 +202,27 @@ defmodule MetadataRelay.Cache.InMemory do
         case :ets.lookup(@order_table_name, seq) do
           [{^seq, key}] ->
             :ets.delete(@order_table_name, seq)
-            :ets.delete(@table_name, key)
+
+            if delete_if_current(key, seq) == 0 do
+              evict_oldest()
+            end
 
           [] ->
-            :ok
+            evict_oldest()
         end
     end
   end
 
+  # Best-effort: this lookup-then-delete is itself the non-atomic sequence
+  # that lets a concurrent sibling `put/3` call's row survive uncleared (see
+  # `evict_oldest/0`). That's left as-is rather than serialized -- a
+  # surviving stale row costs a few bytes in the order table and is always
+  # reconciled the next time `evict_oldest/0` walks past it, since every
+  # main-table delete downstream (`delete_if_current/2`) is itself guarded
+  # against acting on a stale `seq`. Making *this* function atomic too would
+  # only shrink how often a harmless orphan row briefly exists, not change
+  # any observable behavior, so it isn't worth adding contention to the hot
+  # path of every cache write for that.
   defp drop_order_entry(key) do
     case :ets.lookup(@table_name, key) do
       [{^key, _value, _expires_at, seq}] -> :ets.delete(@order_table_name, seq)
@@ -199,12 +233,22 @@ defmodule MetadataRelay.Cache.InMemory do
   defp delete_entry(key) do
     case :ets.lookup(@table_name, key) do
       [{^key, _value, _expires_at, seq}] ->
-        :ets.delete(@table_name, key)
+        delete_if_current(key, seq)
         :ets.delete(@order_table_name, seq)
 
       [] ->
         :ok
     end
+  end
+
+  # Deletes the main-table record for `key` only if it is still the exact
+  # record tagged with `seq` -- never a record a concurrent `put/3` has
+  # since replaced with a new value and a new `seq`. Always safe to call
+  # with a `seq` that no longer matches (or a `key` that no longer exists):
+  # it simply deletes nothing. Returns the number of records deleted (0 or
+  # 1), matching `:ets.select_delete/2`.
+  defp delete_if_current(key, seq) do
+    :ets.select_delete(@table_name, [{{key, :_, :_, seq}, [], [true]}])
   end
 
   defp increment_hits do

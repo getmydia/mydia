@@ -993,14 +993,24 @@ defmodule MetadataRelay.Router do
   # Rotating `instance_id` on every request no longer buys an attacker
   # anything beyond what omitting it already would: the IP-keyed check
   # (`handle_feedback/1`, checked first) still caps them independently.
+  #
+  # The supplied and fallback cases are tagged with fixed, disjoint literal
+  # prefixes ("supplied:" / "fallback:") *before* the caller-controlled or
+  # IP-derived value is appended, not interpolated together into one string
+  # the caller could reproduce. A caller who supplies `instance_id:
+  # "ip:<victim ip>"` (mimicking the pre-fix fallback format) therefore
+  # produces "supplied:ip:<victim ip>", which can never equal another
+  # caller's fallback key "fallback:<their ip>" -- the two namespaces cannot
+  # collide no matter what string a caller sends, since only the fallback
+  # path can ever produce a key starting with "fallback:".
   defp feedback_rate_limit_instance_id(params, client_ip) when is_map(params) do
     case get_feedback_param(params, "instance_id") do
-      value when is_binary(value) and value != "" -> value
-      _ -> "ip:#{client_ip}"
+      value when is_binary(value) and value != "" -> "supplied:#{value}"
+      _ -> "fallback:#{client_ip}"
     end
   end
 
-  defp feedback_rate_limit_instance_id(_params, client_ip), do: "ip:#{client_ip}"
+  defp feedback_rate_limit_instance_id(_params, client_ip), do: "fallback:#{client_ip}"
 
   defp get_feedback_param(params, key), do: Map.get(params, key)
 

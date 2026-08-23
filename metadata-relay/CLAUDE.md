@@ -26,7 +26,12 @@ mix test
 mix format
 ```
 
-Environment variables: `PORT` (default 4001), `DASHBOARD_USERNAME` and `DASHBOARD_PASSWORD` (required in production for `/errors` and `/feedback` dashboards), `TMDB_API_KEY`, `TVDB_API_KEY`, `SUBDL_API_KEY`, `REDIS_URL` (optional).
+Environment variables: `PORT` (default 4001), `DASHBOARD_USERNAME` and `DASHBOARD_PASSWORD` (required in production for `/errors` and `/feedback` dashboards, and rejected if blank), `TMDB_API_KEY`, `TVDB_API_KEY`, `SUBDL_API_KEY`, `REDIS_URL` (optional).
+
+Two more, both about how the relay identifies a caller for rate limiting:
+
+- `RELAY_TRUSTED_PROXY_CIDRS` — comma-separated CIDRs whose `X-Forwarded-For` the relay will honour. Defaults to loopback plus RFC1918. Setting it **replaces** the default rather than adding to it, so it can be narrowed as well as widened.
+- `RELAY_PROXY_RATE_LIMIT` — set to `1`/`true`/`yes`/`on` to enable the TMDB/TVDB proxy rate limit. **Off by default, deliberately.** Production sits behind Cloudflare, where the furthest hop the relay can trust is a Cloudflare edge address shared by many installs, so an enabled limiter would throttle unrelated installs against each other rather than an abuser. The real caller is in `CF-Connecting-IP`, but honouring that is only safe once Traefik's public entrypoint is restricted to Cloudflare's published ranges — until then anyone reaching the origin directly could set it and choose their own bucket. See `MetadataRelay.Plug.ProxyRateLimit`'s moduledoc for the full ordering.
 
 ## Deploying a New Version
 

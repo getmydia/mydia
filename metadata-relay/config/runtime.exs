@@ -23,6 +23,14 @@ if config_env() != :test do
   config :metadata_relay,
     dashboard_auth: [username: dashboard_username, password: dashboard_password]
 
+  # Opt-in, and deliberately off by default: behind Cloudflare the client IP
+  # this throttle can key on is a shared Cloudflare edge address, so turning
+  # it on before the origin is restricted to Cloudflare's published ranges
+  # would rate-limit unrelated installs against each other. See
+  # MetadataRelay.Plug.ProxyRateLimit's moduledoc for the full ordering.
+  config :metadata_relay,
+    proxy_rate_limit_enabled: normalize_env.("RELAY_PROXY_RATE_LIMIT") in ~w(1 true yes on)
+
   # Database configuration (all environments except test)
   db_path = System.get_env("SQLITE_DB_PATH") || "./metadata_relay.db"
 

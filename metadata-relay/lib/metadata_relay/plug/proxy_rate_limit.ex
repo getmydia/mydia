@@ -24,6 +24,34 @@ defmodule MetadataRelay.Plug.ProxyRateLimit do
   One shared bucket per client IP covers every proxied route together --
   a per-route limit would let an attacker multiply their effective rate by
   spreading requests across the ~30 routes.
+
+  ## Disabled by default, on purpose
+
+  This plug is inert unless `RELAY_PROXY_RATE_LIMIT` is set to a truthy
+  value. That is not timidity about a new feature; it is a specific
+  consequence of the deployment topology.
+
+  Production sits behind Cloudflare: `client -> Cloudflare edge -> Traefik
+  -> relay pod`. `MetadataRelay.ClientIp` can only resolve as far as the
+  hop it can actually trust, which behind Cloudflare is a **Cloudflare edge
+  address**, not the caller. Cloudflare fronts an enormous number of
+  clients from a comparatively small pool of egress addresses, so unrelated
+  Mydia installs share a bucket, and a limit low enough to be meaningful
+  would 429 innocent installs. The real caller is in `CF-Connecting-IP`,
+  but that header cannot be trusted yet: Traefik forwards it unmodified,
+  its public entrypoint is not restricted to Cloudflare's ranges, and its
+  address is not secret (it is the `external-dns` target checked into
+  `infra/kubernetes/apps/metadata-relay/ingress.yaml`). Honouring it today
+  would let anyone who reaches the origin directly choose their own
+  rate-limit identity -- reintroducing exactly the T-235/T-236 class of bug
+  the sibling `ClientIp` fix closes, under a different header name.
+
+  So the ordering is: restrict Traefik's public entrypoint to Cloudflare's
+  published ranges first, then teach `ClientIp` to honour
+  `CF-Connecting-IP`, and only then turn this on. Shipping it enabled ahead
+  of that trades a quota-exhaustion risk for an outage risk across every
+  install, which is a bad trade. The code, its tests, and this note ship now
+  so that turning it on later is a one-line change rather than a rewrite.
   """
 
   import Plug.Conn
@@ -52,11 +80,23 @@ defmodule MetadataRelay.Plug.ProxyRateLimit do
 
   @impl true
   def call(%Plug.Conn{request_path: path} = conn, _opts) do
-    if proxied_route?(path) do
+    if enabled?() and proxied_route?(path) do
       enforce(conn)
     else
       conn
     end
+  end
+
+  @doc """
+  Whether the proxy rate limit is switched on.
+
+  Defaults to `false`. See the "Disabled by default" section of this
+  module's documentation for why, and what has to be true before it is
+  safe to enable.
+  """
+  @spec enabled?() :: boolean()
+  def enabled? do
+    Application.get_env(:metadata_relay, :proxy_rate_limit_enabled, false) == true
   end
 
   defp enforce(conn) do

@@ -190,22 +190,38 @@ defmodule Mydia.Accounts do
   the `user_id` FK cascades the connection rows on its own, but the KV keys are
   not user-scoped, so the application sweep removes them before the cascade.
 
-  Also invalidates any cached media tokens for the user's paired devices before
-  the delete: `remote_devices.user_id` cascades at the database level
+  Also invalidates any cached media tokens for the user's paired devices after
+  the delete succeeds: `remote_devices.user_id` cascades at the database level
   (`on_delete: :delete_all`), which drops the rows without going through
   `RemoteAccess.revoke_device/1` or `delete_device/1` -- and so without either
   of those functions' own cache invalidation. Without this sweep, a device
   belonging to a just-deleted user would keep authenticating off a stale
   `Mydia.Media.TokenCache` entry for up to the cache's TTL.
+
+  The device list is collected *before* `Repo.delete/1`, since the rows are
+  gone once the cascade runs, but the cache invalidation itself happens
+  *after* a successful delete -- mirroring `RemoteAccess.revoke_device/1` and
+  `delete_device/1`. Invalidating first would leave a window where the device
+  rows still exist: a concurrent media request could miss the cache, read the
+  still-present row, and re-cache it, and that re-cached entry would then
+  survive the cascade for the full cache TTL.
   """
   def delete_user(%User{} = user) do
     Mydia.Plugins.Connections.delete_for_user(user.id)
 
-    user.id
-    |> Mydia.RemoteAccess.list_devices()
-    |> Enum.each(&Mydia.Media.TokenCache.invalidate_for_device(&1.id))
+    device_ids =
+      user.id
+      |> Mydia.RemoteAccess.list_devices()
+      |> Enum.map(& &1.id)
 
-    Repo.delete(user)
+    case Repo.delete(user) do
+      {:ok, _deleted_user} = result ->
+        Enum.each(device_ids, &Mydia.Media.TokenCache.invalidate_for_device/1)
+        result
+
+      error ->
+        error
+    end
   end
 
   @doc """
