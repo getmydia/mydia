@@ -1,6 +1,7 @@
 defmodule MydiaWeb.Plugs.AbsintheContextTest do
   use MydiaWeb.ConnCase, async: true
 
+  alias Mydia.Auth.Guardian
   alias Mydia.Streaming.DeviceProfile
   alias MydiaWeb.Plugs.AbsintheContext
 
@@ -33,5 +34,27 @@ defmodule MydiaWeb.Plugs.AbsintheContextTest do
 
     assert ctx.source == :http
     assert is_binary(ctx.remote_ip)
+  end
+
+  test "carries both device_profile and current_user for an authenticated caller", %{
+    conn: conn
+  } do
+    # This is the Flutter player's actual request shape: always authenticated,
+    # always sending the profile header. A refactor that rebuilds the context
+    # inside the authenticated branch instead of threading `base` through it
+    # would silently drop device_profile here while every other test stays
+    # green, so this combination needs its own coverage.
+    user = create_test_user()
+    profile = %DeviceProfile{containers: ["mkv"]}
+
+    conn =
+      conn
+      |> Guardian.Plug.put_current_resource(user)
+      |> Plug.Conn.assign(:device_profile, profile)
+
+    ctx = context(conn)
+
+    assert ctx[:current_user].id == user.id
+    assert ctx[:device_profile] == profile
   end
 end
