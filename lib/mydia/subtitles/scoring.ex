@@ -54,10 +54,14 @@ defmodule Mydia.Subtitles.Scoring do
 
   defmodule Reference do
     @moduledoc """
-    What the media file is, in the release parser's standard vocabulary.
+    A release description in the release parser's standard vocabulary.
 
-    Built once per search rather than once per result: parsing is the expensive
-    half of scoring and the reference does not vary across candidates.
+    Two things share this shape: `build_reference/1` builds one describing
+    what the media file is, once per search, since parsing is the expensive
+    half of scoring and that reference does not vary across candidates.
+    `parse_candidate/1` builds another describing what a subtitle candidate's
+    own file name claims to be, once per result, so the two can be compared
+    field by field.
     """
 
     @type t :: %__MODULE__{
