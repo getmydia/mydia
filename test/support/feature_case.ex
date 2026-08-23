@@ -5,14 +5,6 @@ defmodule MydiaWeb.FeatureCase do
   Feature tests run in a real browser (headless Chrome by default) and can test
   JavaScript interactions, LiveView updates, and real-time features.
 
-  ## Why Wallaby over Playwright?
-
-  - **Native Elixir integration**: Tests are written in Elixir and run with ExUnit
-  - **Ecto sandbox support**: Each test runs in a database transaction, automatically rolled back
-  - **Concurrent execution**: Tests can run in parallel without data conflicts
-  - **No Node.js dependency**: Eliminates the need for a separate Node.js E2E test infrastructure
-  - **Consistent patterns**: Same testing patterns as the rest of the codebase
-
   ## Usage
 
       defmodule MydiaWeb.AuthFeatureTest do
@@ -73,9 +65,11 @@ defmodule MydiaWeb.FeatureCase do
   - `login(session, username, password)` - Login with credentials
   - `login_as_admin(session)` - Create an admin user and login
   - `login_as_user(session)` - Create a regular user and login
+  - `login_as_guest(session)` - Create a guest user and login
   - `assert_path(session, path)` - Assert current URL path
   - `assert_has_text(session, text)` - Assert page contains text
-  - `wait_for_liveview(session)` - Wait for LiveView to connect
+  - `wait_for_liveview(session)` - Wait for the LiveView root to be present
+  - `js_click(session, selector)` - Escape hatch: click via JS. Prefer `click/2`.
 
   ## Wallaby DSL Reference
 
@@ -259,15 +253,6 @@ defmodule MydiaWeb.FeatureCase do
   end
 
   @doc """
-  Waits for LiveView to process an event after a button click.
-  Use this after click() calls to ensure DOM updates are complete.
-  """
-  def wait_for_liveview_update(session) do
-    :timer.sleep(500)
-    session
-  end
-
-  @doc """
   Clicks an element using JavaScript. More reliable in headless browsers
   for phx-click buttons that don't respond to standard clicks.
   """
@@ -290,98 +275,5 @@ defmodule MydiaWeb.FeatureCase do
     :timer.sleep(2000)
 
     session
-  end
-
-  @doc """
-  Waits for LiveView to be idle (no pending operations).
-  Uses a simple delay-based approach since checking phx-loading classes
-  via execute_script is unreliable (returns session, not value).
-  """
-  def wait_for_liveview_idle(session) do
-    # Simple approach: wait a fixed amount of time for LiveView to stabilize
-    # This is more reliable than trying to check for phx-loading classes
-    :timer.sleep(500)
-    session
-  end
-
-  @doc """
-  Asserts that the page has the given text, with retry.
-  More reliable than Wallaby.Browser.has_text? in CI environments.
-  """
-  def assert_has_text_with_retry(session, text, attempts \\ 20) do
-    if attempts <= 0 do
-      raise "Expected to find text '#{text}' but it was not found after retries"
-    end
-
-    if Wallaby.Browser.has_text?(session, text) do
-      session
-    else
-      :timer.sleep(500)
-      assert_has_text_with_retry(session, text, attempts - 1)
-    end
-  end
-
-  @doc """
-  Asserts that the page source contains the given text, with retry.
-  Uses page_source instead of has_text? to avoid chromedriver log endpoint hangs.
-  Useful after execute_script calls that trigger LiveView updates.
-  """
-  def assert_page_contains(session, text, attempts \\ 20) do
-    if attempts <= 0 do
-      raise "Expected page source to contain '#{text}' but it was not found after retries"
-    end
-
-    html = Wallaby.Browser.page_source(session)
-
-    if String.contains?(html, text) do
-      session
-    else
-      :timer.sleep(500)
-      assert_page_contains(session, text, attempts - 1)
-    end
-  end
-
-  @doc """
-  Pushes a LiveView event by injecting a temporary hidden button with phx-click
-  attributes and clicking it. More reliable than direct JS API calls because
-  Phoenix LiveView automatically binds phx-click handlers on new DOM elements.
-  """
-  def push_liveview_event(session, event, params) do
-    param_attrs =
-      Enum.map_join(params, "\n", fn {k, v} -> "el.setAttribute('phx-value-#{k}', '#{v}');" end)
-
-    Wallaby.Browser.execute_script(
-      session,
-      """
-      var el = document.createElement('button');
-      el.setAttribute('phx-click', '#{event}');
-      #{param_attrs}
-      el.style.display = 'none';
-      var container = document.querySelector('[data-phx-main]');
-      container.appendChild(el);
-      el.click();
-      setTimeout(function() { el.remove(); }, 100);
-      """,
-      []
-    )
-
-    :timer.sleep(2000)
-
-    session
-  end
-
-  def wait_for_any_text(session, texts, attempts \\ 20) when is_list(texts) do
-    if attempts <= 0 do
-      false
-    else
-      found = Enum.any?(texts, fn text -> Wallaby.Browser.has_text?(session, text) end)
-
-      if found do
-        true
-      else
-        :timer.sleep(500)
-        wait_for_any_text(session, texts, attempts - 1)
-      end
-    end
   end
 end
