@@ -1,21 +1,14 @@
 {
   "name": "mydia-assets",
   "version": "0.1.0",
-  "description": "Mydia - Modern Media Management Platform",
+  "description": "Mydia - Modern Media Management Platform. Note: @playwright/test is retained for screenshots.js and populate-media.js only; browser tests live in test/mydia_web/features (Wallaby).",
   "repository": {},
   "license": "MIT",
   "scripts": {
     "deploy": "cd .. && mix assets.deploy && rm -f _build/esbuild*",
     "screenshots": "node screenshots.js",
     "populate-media": "node populate-media.js",
-    "test:unit": "node --test test/unit/*.test.mjs",
-    "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui",
-    "test:e2e:debug": "playwright test --debug",
-    "test:e2e:headed": "playwright test --headed",
-    "test:e2e:chromium": "playwright test --project=chromium",
-    "test:e2e:firefox": "playwright test --project=firefox",
-    "test:e2e:webkit": "playwright test --project=webkit"
+    "test:unit": "node --test test/unit/*.test.mjs"
   },
   "dependencies": {
     "alpinejs": "^3.15.1",

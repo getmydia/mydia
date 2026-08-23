@@ -1,10 +1,10 @@
 defmodule MydiaWeb.Features.GuestTest do
   @moduledoc """
-  Browser coverage for the guest request system.
-
   Scope is deliberately narrow. The full lifecycle is covered far faster by
-  `MydiaWeb.GuestRequestFlowTest`; what only a real browser can prove is that
-  the request and approve modals, and their phx-click wiring, actually work.
+  `MydiaWeb.GuestRequestFlowTest`, and guest route access by
+  `MydiaWeb.RouteAuthorizationTest`. What only a real browser can prove is
+  that the request and approve modals, and their phx-click wiring, actually
+  work.
 
   Metadata is served by `Mydia.MetadataStubProvider`, so approval genuinely
   succeeds. An earlier version of this file let approval fail against the live
@@ -24,30 +24,6 @@ defmodule MydiaWeb.Features.GuestTest do
 
   setup :setup_metadata_stub
 
-  describe "Guest Navigation & Access Control" do
-    @tag :feature
-    test "guest can access dashboard after login", %{session: session} do
-      login_as_guest(session)
-
-      session
-      |> wait_for_liveview()
-      |> assert_path("/")
-      |> assert_has_text("Dashboard")
-    end
-
-    @tag :feature
-    test "guest cannot access admin pages", %{session: session} do
-      login_as_guest(session)
-      session |> wait_for_liveview()
-
-      session
-      |> visit("/admin/requests")
-      |> wait_for_liveview()
-
-      refute Wallaby.Browser.current_path(session) == "/admin/requests"
-    end
-  end
-
   describe "End-to-end request and approval in a real browser" do
     @tag :feature
     @tag timeout: 180_000
@@ -66,7 +42,7 @@ defmodule MydiaWeb.Features.GuestTest do
       |> assert_has_text(MetadataStubProvider.movie_title())
 
       session
-      |> js_click(~s(button[phx-click="open_request_modal"][phx-value-index="0"]))
+      |> click(Query.css(~s(button[phx-click="open_request_modal"][phx-value-index="0"])))
 
       assert Wallaby.Browser.has_css?(session, "#request-modal-form")
 
@@ -90,7 +66,9 @@ defmodule MydiaWeb.Features.GuestTest do
       |> assert_has_text(MetadataStubProvider.movie_title())
 
       session
-      |> js_click(~s(button[phx-click="open_approve_modal"][phx-value-id="#{request.id}"]))
+      |> click(
+        Query.css(~s(button[phx-click="open_approve_modal"][phx-value-id="#{request.id}"]))
+      )
 
       assert Wallaby.Browser.has_css?(session, "#approve-form")
 
@@ -110,33 +88,25 @@ defmodule MydiaWeb.Features.GuestTest do
 
   # Wallaby has no built-in wait on database state, and the LiveView write
   # happens after the browser returns from requestSubmit.
-  defp wait_for_request(tmdb_id, attempts \\ 40) do
-    case Repo.get_by(MediaRequest, tmdb_id: tmdb_id) do
-      nil when attempts > 0 ->
-        :timer.sleep(250)
-        wait_for_request(tmdb_id, attempts - 1)
-
-      nil ->
-        raise "no media request with tmdb_id #{tmdb_id} was created after waiting"
-
-      request ->
-        request
-    end
+  defp wait_for_request(tmdb_id) do
+    eventually(
+      fn ->
+        case Repo.get_by(MediaRequest, tmdb_id: tmdb_id) do
+          nil -> :error
+          request -> {:ok, request}
+        end
+      end,
+      description: "a media request with tmdb_id #{tmdb_id}"
+    )
   end
 
-  defp wait_for_status(id, status, attempts \\ 40) do
-    request = Repo.get!(MediaRequest, id)
-
-    cond do
-      request.status == status ->
-        request
-
-      attempts > 0 ->
-        :timer.sleep(250)
-        wait_for_status(id, status, attempts - 1)
-
-      true ->
-        raise "request #{id} never reached status #{status}, last saw #{request.status}"
-    end
+  defp wait_for_status(id, status) do
+    eventually(
+      fn ->
+        request = Repo.get!(MediaRequest, id)
+        if request.status == status, do: {:ok, request}, else: :error
+      end,
+      description: "request #{id} to reach status #{status}"
+    )
   end
 end

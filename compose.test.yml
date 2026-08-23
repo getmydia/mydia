@@ -2,20 +2,17 @@
 #
 # Profiles:
 #   - (default): app + mock-oauth2 + relay only
-#   - test: includes playwright for running E2E tests
 #   - e2e: includes mock-prowlarr and mock-qbittorrent
 #
 # Usage:
 #   # Basic prod image testing with OIDC
 #   docker compose -f compose.test.yml up -d
 #
-#   # Run playwright E2E tests
-#   docker compose -f compose.test.yml --profile test up -d
-#   docker compose -f compose.test.yml --profile test run playwright
+#   # With mock indexer and download client
+#   docker compose -f compose.test.yml --profile e2e up -d
 #
-#   # Full E2E with mock services
-#   docker compose -f compose.test.yml --profile e2e --profile test up -d
-#   docker compose -f compose.test.yml --profile e2e --profile test run playwright
+# Browser tests are Wallaby and do not run here. See
+# docs/contributing/e2e-testing.md and `./dev feature-test`.
 
 services:
   app:
@@ -88,11 +85,9 @@ services:
       # otherwise omitted entirely — an empty string is a distinct, worse
       # failure mode than unset (metadata-relay's client raises a clear error
       # for a missing key; an empty one can reach TMDB/TVDB as a confusing
-      # auth failure instead). Unset by default since the current Playwright
-      # suite's metadata-search tests are all test.skip() today, so this
-      # relay never actually calls out to TMDB/TVDB. Export TMDB_API_KEY /
-      # TVDB_API_KEY before `docker compose up` to exercise real fetches once
-      # that suite is enabled.
+      # auth failure instead). Unset by default. Export TMDB_API_KEY /
+      # TVDB_API_KEY before starting this stack if you need the relay to
+      # serve real metadata lookups.
       - TMDB_API_KEY
       - TVDB_API_KEY
     volumes:
@@ -189,30 +184,6 @@ services:
       timeout: 3s
       start_period: 10s
       retries: 3
-
-  # Test profile: Playwright test runner
-  playwright:
-    image: mcr.microsoft.com/playwright:v1.56.1-noble
-    container_name: mydia_playwright
-    working_dir: /work
-    command: npm run test:e2e
-    environment:
-      E2E_BASE_URL: http://localhost:4000
-      CI: "true"
-    volumes:
-      - ./assets:/work
-    depends_on:
-      app:
-        condition: service_healthy
-      mock-prowlarr:
-        condition: service_healthy
-        required: false
-      mock-qbittorrent:
-        condition: service_healthy
-        required: false
-    network_mode: "service:app"
-    profiles:
-      - test
 
 volumes:
   test_config:

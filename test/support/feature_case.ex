@@ -5,14 +5,6 @@ defmodule MydiaWeb.FeatureCase do
   Feature tests run in a real browser (headless Chrome by default) and can test
   JavaScript interactions, LiveView updates, and real-time features.
 
-  ## Why Wallaby over Playwright?
-
-  - **Native Elixir integration**: Tests are written in Elixir and run with ExUnit
-  - **Ecto sandbox support**: Each test runs in a database transaction, automatically rolled back
-  - **Concurrent execution**: Tests can run in parallel without data conflicts
-  - **No Node.js dependency**: Eliminates the need for a separate Node.js E2E test infrastructure
-  - **Consistent patterns**: Same testing patterns as the rest of the codebase
-
   ## Usage
 
       defmodule MydiaWeb.AuthFeatureTest do
@@ -73,9 +65,19 @@ defmodule MydiaWeb.FeatureCase do
   - `login(session, username, password)` - Login with credentials
   - `login_as_admin(session)` - Create an admin user and login
   - `login_as_user(session)` - Create a regular user and login
+  - `login_as_guest(session)` - Create a guest user and login
+  - `create_admin_user(attrs \\\\ %{})` - Create an admin user without logging in
+  - `create_test_user(attrs \\\\ %{})` - Create a regular user without logging in
+  - `create_guest_user(attrs \\\\ %{})` - Create a guest user without logging in
   - `assert_path(session, path)` - Assert current URL path
   - `assert_has_text(session, text)` - Assert page contains text
-  - `wait_for_liveview(session)` - Wait for LiveView to connect
+  - `wait_for_liveview(session)` - Wait for the LiveView root to be present
+  - `eventually(fun, opts \\\\ [])` - Poll for state the browser cannot observe directly (e.g. a database write)
+  - `eval_js(session, script, args \\\\ [])` - Run JavaScript in the browser and return its value
+  - `js_click(session, selector)` - Escape hatch: click via JS. Prefer `click/2`.
+
+  `MydiaWeb.FeatureCase.Geometry`'s `refute_covered/2`, `assert_in_viewport/2`,
+  and `refute_clipped/2` are also auto-imported, via the `using` block below.
 
   ## Wallaby DSL Reference
 
@@ -107,6 +109,7 @@ defmodule MydiaWeb.FeatureCase do
       use Wallaby.DSL
 
       import MydiaWeb.FeatureCase
+      import MydiaWeb.FeatureCase.Geometry
       import Mydia.Factory
 
       alias MydiaWeb.Router.Helpers, as: Routes
@@ -244,35 +247,102 @@ defmodule MydiaWeb.FeatureCase do
   end
 
   @doc """
-  Waits for LiveView to connect and be ready.
-  Useful after navigation or form submissions.
+  Blocks until the root LiveView has connected its socket.
+
+  `data-phx-main` is server-rendered and present before connect, so asserting
+  on it alone proves nothing. LiveView adds `phx-connected` to the view
+  container in `hideLoader()` once the join succeeds, which is the real signal.
+
+  `find/2` polls through `Wallaby.Browser.retry/2` until `:max_wait_time`
+  (10s, see config/test.exs), so this returns as soon as the socket is up
+  rather than after a fixed delay.
   """
   def wait_for_liveview(session) do
-    # Wait for data-phx-main which indicates LiveView root is present
+    Wallaby.Browser.find(session, Wallaby.Query.css("[data-phx-main].phx-connected"))
     session
-    |> Wallaby.Browser.find(Wallaby.Query.css("[data-phx-main]", []))
-    |> then(fn _ ->
-      # Wait for LiveView to connect and stabilize
-      :timer.sleep(3000)
-      session
-    end)
   end
 
   @doc """
-  Waits for LiveView to process an event after a button click.
-  Use this after click() calls to ensure DOM updates are complete.
+  Polls `fun` until it returns `{:ok, value}`, then returns `value`.
+
+  For state Wallaby cannot see, principally database writes that a LiveView
+  performs after the browser has already returned. `fun` returns `{:ok, value}`
+  on success or `:error` to keep waiting.
+
+  Options: `:timeout` (ms, default 10_000), `:interval` (ms, default 100),
+  `:description` (used in the timeout message).
+
+      request =
+        eventually(
+          fn ->
+            case Repo.get_by(MediaRequest, tmdb_id: id) do
+              nil -> :error
+              request -> {:ok, request}
+            end
+          end,
+          description: "a media request with tmdb_id \#{id}"
+        )
   """
-  def wait_for_liveview_update(session) do
-    :timer.sleep(500)
-    session
+  def eventually(fun, opts \\ []) when is_function(fun, 0) do
+    timeout = Keyword.get(opts, :timeout, 10_000)
+    interval = Keyword.get(opts, :interval, 100)
+    description = Keyword.get(opts, :description, "condition")
+    deadline = System.monotonic_time(:millisecond) + timeout
+
+    poll_until(fun, deadline, interval, description, timeout)
+  end
+
+  defp poll_until(fun, deadline, interval, description, timeout) do
+    case fun.() do
+      {:ok, value} ->
+        value
+
+      :error ->
+        if System.monotonic_time(:millisecond) >= deadline do
+          raise "eventually/2 timed out after #{timeout}ms waiting for #{description}"
+        else
+          Process.sleep(interval)
+          poll_until(fun, deadline, interval, description, timeout)
+        end
+    end
   end
 
   @doc """
-  Clicks an element using JavaScript. More reliable in headless browsers
-  for phx-click buttons that don't respond to standard clicks.
+  Runs `script` in the browser and returns its value.
+
+  `Wallaby.Browser.execute_script/3` throws the return value away; the 4-arity
+  form hands it to a callback, which runs synchronously in this process. So the
+  value can be stashed under a unique process-dictionary key and taken straight
+  back out.
+
+  Arguments are exposed to the script as `arguments[0]`, `arguments[1]`, and so
+  on. The script must `return` explicitly.
+
+      theme = eval_js(session, "return document.documentElement.dataset.theme;")
+  """
+  def eval_js(session, script, args \\ []) do
+    key = {__MODULE__, :eval_js, make_ref()}
+
+    Wallaby.Browser.execute_script(session, script, args, fn value ->
+      Process.put(key, value)
+    end)
+
+    Process.delete(key)
+  end
+
+  @doc """
+  Escape hatch: clicks an element via JavaScript.
+
+  Prefer `Wallaby.Browser.click/2` with a `Query`, which scrolls into view and
+  retries on its own. Reach for this only when a real click genuinely cannot
+  reach the element, and note why at the call site. A `phx-click` that does not
+  respond to a real click is usually a UI defect worth fixing rather than
+  routing around.
+
+  This does not wait. Follow it with an assertion on the resulting DOM, which
+  retries, or with `eventually/2` for database state.
   """
   def js_click(session, css_selector) do
-    # Scroll element into view and click
     Wallaby.Browser.execute_script(
       session,
       """
@@ -286,102 +356,6 @@ defmodule MydiaWeb.FeatureCase do
       [css_selector]
     )
 
-    # Wait for LiveView to process the event and update the DOM
-    :timer.sleep(2000)
-
     session
-  end
-
-  @doc """
-  Waits for LiveView to be idle (no pending operations).
-  Uses a simple delay-based approach since checking phx-loading classes
-  via execute_script is unreliable (returns session, not value).
-  """
-  def wait_for_liveview_idle(session) do
-    # Simple approach: wait a fixed amount of time for LiveView to stabilize
-    # This is more reliable than trying to check for phx-loading classes
-    :timer.sleep(500)
-    session
-  end
-
-  @doc """
-  Asserts that the page has the given text, with retry.
-  More reliable than Wallaby.Browser.has_text? in CI environments.
-  """
-  def assert_has_text_with_retry(session, text, attempts \\ 20) do
-    if attempts <= 0 do
-      raise "Expected to find text '#{text}' but it was not found after retries"
-    end
-
-    if Wallaby.Browser.has_text?(session, text) do
-      session
-    else
-      :timer.sleep(500)
-      assert_has_text_with_retry(session, text, attempts - 1)
-    end
-  end
-
-  @doc """
-  Asserts that the page source contains the given text, with retry.
-  Uses page_source instead of has_text? to avoid chromedriver log endpoint hangs.
-  Useful after execute_script calls that trigger LiveView updates.
-  """
-  def assert_page_contains(session, text, attempts \\ 20) do
-    if attempts <= 0 do
-      raise "Expected page source to contain '#{text}' but it was not found after retries"
-    end
-
-    html = Wallaby.Browser.page_source(session)
-
-    if String.contains?(html, text) do
-      session
-    else
-      :timer.sleep(500)
-      assert_page_contains(session, text, attempts - 1)
-    end
-  end
-
-  @doc """
-  Pushes a LiveView event by injecting a temporary hidden button with phx-click
-  attributes and clicking it. More reliable than direct JS API calls because
-  Phoenix LiveView automatically binds phx-click handlers on new DOM elements.
-  """
-  def push_liveview_event(session, event, params) do
-    param_attrs =
-      Enum.map_join(params, "\n", fn {k, v} -> "el.setAttribute('phx-value-#{k}', '#{v}');" end)
-
-    Wallaby.Browser.execute_script(
-      session,
-      """
-      var el = document.createElement('button');
-      el.setAttribute('phx-click', '#{event}');
-      #{param_attrs}
-      el.style.display = 'none';
-      var container = document.querySelector('[data-phx-main]');
-      container.appendChild(el);
-      el.click();
-      setTimeout(function() { el.remove(); }, 100);
-      """,
-      []
-    )
-
-    :timer.sleep(2000)
-
-    session
-  end
-
-  def wait_for_any_text(session, texts, attempts \\ 20) when is_list(texts) do
-    if attempts <= 0 do
-      false
-    else
-      found = Enum.any?(texts, fn text -> Wallaby.Browser.has_text?(session, text) end)
-
-      if found do
-        true
-      else
-        :timer.sleep(500)
-        wait_for_any_text(session, texts, attempts - 1)
-      end
-    end
   end
 end
