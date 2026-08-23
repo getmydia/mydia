@@ -182,12 +182,16 @@ defmodule MydiaWeb.Features.LibraryPickerTest do
     |> visit("/discover")
     |> wait_for_liveview()
     |> assert_has(Query.css(~s([data-test="library-picker-caret"]), minimum: 1))
-    # Wallaby's native click on this button produces zero DOM click events at
-    # the mobile viewport (confirmed with a document-level click listener: an
-    # empty log after the "click" returned), while it is reliable at the
-    # desktop viewport. js_click/2 is this codebase's existing workaround for
-    # exactly that headless-Chrome unreliability on phx-click buttons (see
-    # guest_test.exs), so it is used here instead of Query-based click.
+    # Tried a real click(Query.css(..., at: 0)) here first: it reaches the
+    # caret and opens the picker at the 1400x1000 desktop viewport, but at
+    # the 390x844 mobile viewport used below it produces zero DOM click
+    # events (confirmed empirically: the assertion after it finds 0 opened
+    # options, every time). js_click/2 is the documented escape hatch for
+    # exactly that case — a phx-click button a real click genuinely cannot
+    # reach — so it is used here instead of Query-based click. js_click no
+    # longer carries an implicit sleep, so the assert_has immediately below
+    # is load-bearing: it is what actually waits for the dialog to open,
+    # polling up to max_wait_time rather than a fixed delay.
     |> js_click(~s([data-test="library-picker-caret"]))
     |> assert_has(Query.css(~s([data-test="library-picker-option"]), minimum: 2))
   end
@@ -234,6 +238,31 @@ defmodule MydiaWeb.Features.LibraryPickerTest do
     # width, but the mobile dock is a real, painted fixed element here, so
     # it is the chrome that actually contends with the dialog layer.
     assert chrome_probe(session, "#mobile-dock") == []
+  end
+
+  @tag :feature
+  test "the open picker dialog is fully visible and nothing is painted over it",
+       %{session: session} do
+    session
+    |> login_as_admin()
+    |> resize_window(390, 844)
+    |> open_first_picker()
+
+    # library_picker_dialog/1's own @doc explains why this is a page-level
+    # `.modal` (position: fixed; inset: 0; z-index: 999) rather than an
+    # anchored dropdown: an earlier :focus-within dropdown lost to the z-40
+    # sidebar and z-50 dock, which is exactly the class of bug
+    # `MydiaWeb.FeatureCase.Geometry`'s `assert_in_viewport/2` and
+    # `refute_covered/2` exist to catch. There is no dropdown menu left in
+    # this component to point them at — @probe and
+    # chrome_probe/1 above already hit-test the same question by hand for
+    # this exact dialog. This test asks it again with the shared, canonical
+    # helpers instead of a one-off script, so the coverage survives even if
+    # the hand-rolled probes above are ever deleted, and so a future
+    # regression back to an anchored dropdown is still caught here.
+    session
+    |> assert_in_viewport(~s(#library-picker-dialog .modal-box))
+    |> refute_covered(~s(#library-picker-dialog .modal-box))
   end
 
   @tag :feature

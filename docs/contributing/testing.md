@@ -268,5 +268,5 @@ CI runs:
 
 ## Next Steps
 
-- [E2E Testing](e2e-testing.md) - Browser-based testing with Playwright
+- [E2E Testing](e2e-testing.md) - Browser-based testing with Wallaby
 - [Development Setup](setup.md) - Local environment setup

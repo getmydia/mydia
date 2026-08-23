@@ -1,273 +1,180 @@
-# E2E Testing
+# Browser Testing
 
-Mydia uses Playwright for comprehensive browser-based end-to-end testing. [Wallaby](https://github.com/elixir-wallaby/wallaby) (an Elixir-based browser testing library) is also available as a dependency for server-side integration tests.
+Mydia's browser tests use [Wallaby](https://hexdocs.pm/wallaby), which drives a real
+headless Chrome from ExUnit. Tests are written in Elixir and run inside the Ecto
+sandbox, so each one gets a transaction that is rolled back afterwards.
 
-## Overview
+There is no Playwright test suite. An earlier one existed under `assets/e2e/`; it
+depended on `/api/test/*` seeding endpoints that were never built, and it was
+removed. `@playwright/test` remains in `assets/package.json` for
+`screenshots.js` and `populate-media.js`.
 
-E2E tests verify complete user workflows in a real browser environment:
-
-- Authentication flows
-- LiveView real-time updates
-- JavaScript/Alpine.js interactions
-- Cross-browser compatibility
-
-## Quick Start
-
-### Install Dependencies
+## Running
 
 ```bash
-cd assets
-npm install
+./dev feature-test                                            # the whole suite
+./dev feature-test test/mydia_web/features/dock_nav_test.exs --include feature
+WALLABY_HEADLESS=false ./dev feature-test                     # watch it run
 ```
 
-### Run Tests
+Pass `--include feature` only alongside a file path. On its own it runs the entire
+project suite rather than just the browser tests, which takes about ten minutes.
+Plain `./dev feature-test` with no arguments is the way to run all browser tests.
+
+Assets must be built or every test fails for an unrelated reason: a worktree with
+no `priv/static/assets/` serves a 404 for `app.js`, so the LiveView socket never
+connects. CI does this before running the suite; do it once locally too.
 
 ```bash
-# Run all E2E tests (Chromium only, fast)
-npm run test:e2e
-
-# Run with UI for debugging
-npm run test:e2e:ui
-
-# Run in headed mode (see browser)
-npm run test:e2e -- --headed
+./dev mix compile && ./dev mix assets.deploy
 ```
 
-## Test Structure
+Feature tests are excluded from `./dev test` by the `:feature` tag, because they
+need chromedriver. devenv provides chromium and chromedriver in-shell and sets
+`CHROME_PATH` / `CHROMEDRIVER_PATH`, so no extra setup is required.
 
-Tests are located in `assets/test/e2e/`:
+Screenshots of failures land in `tmp/wallaby_screenshots/`. CI uploads them as an
+artifact on the `Test / E2E Browser` job.
 
-```
-assets/test/e2e/
-├── specs/           # Test specifications
-│   ├── auth.spec.ts
-│   ├── library.spec.ts
-│   └── ...
-├── helpers/         # Test utilities
-│   ├── auth.ts
-│   ├── liveview.ts
-│   └── ...
-└── fixtures/        # Test data
-```
+## What belongs in a browser test
 
-## Writing Tests
+Browser tests are the slowest tests in the repo. A test earns its place here only
+if it exercises something no other layer can reach.
 
-### Basic Test
+**Put it in the browser when it depends on client-side JavaScript.** The
+`phx-hook` modules in `assets/js/` are the clearest case: `DockNav`,
+`ThemeToggle`, `PersistedCheckbox`, `VideoPlayer`, `PlexOAuth`, `DownloadFile`.
+`Phoenix.LiveViewTest` never executes them.
 
-```typescript
-import { test, expect } from "@playwright/test";
+**Put it in the browser when it is about layout.** Whether one element is painted
+over another, or clipped by its scroll container, is only answerable by a real
+rendering engine. See "Geometry assertions" below.
 
-test("home page loads", async ({ page }) => {
-  await page.goto("/");
-  await expect(page).toHaveTitle(/Mydia/);
-});
-```
+**Do not put it in the browser to check who can reach which URL.** That is decided
+by a plug and an `on_mount` hook. `test/mydia_web/route_authorization_test.exs`
+covers the whole route/role matrix in milliseconds. Add a row there instead.
 
-### With Authentication
+**Do not put it in the browser to check a form handler.** A POST is a POST.
+`test/mydia_web/controllers/session_controller_test.exs` is the model.
 
-```typescript
-import { test, expect } from "@playwright/test";
-import { loginAsAdmin } from "../helpers/auth";
+## Never sleep
 
-test("admin can access settings", async ({ page }) => {
-  await loginAsAdmin(page);
-  await page.goto("/admin/settings");
-  await expect(page.locator("h1")).toContainText("Settings");
-});
-```
+`test/mydia_web/features/no_sleep_test.exs` fails the build if a feature test
+calls `:timer.sleep`. This is enforced because the suite once carried 10 sleeps,
+including a flat 3-second wait repeated across 37 call sites.
 
-### LiveView Interactions
+Wallaby's `Query` assertions already retry until `:max_wait_time` (10s, set in
+`config/test.exs`). So the fix for "the DOM was not ready yet" is to assert on the
+thing you are waiting for:
 
-```typescript
-import { test, expect } from "@playwright/test";
-import { loginAsAdmin } from "../helpers/auth";
-import { assertFlashMessage } from "../helpers/liveview";
+```elixir
+# No. The sleep is doing the waiting, and 500ms is a guess.
+:timer.sleep(500)
+assert Wallaby.Browser.has_text?(session, "Saved")
 
-test("admin can update settings", async ({ page }) => {
-  await loginAsAdmin(page);
-  await page.goto("/admin/settings");
-
-  // Fill form
-  await page.fill('input[name="setting"]', "value");
-
-  // Submit
-  await page.click('button[type="submit"]');
-
-  // Verify flash message
-  await assertFlashMessage(page, "success", "Settings saved");
-});
+# Yes. has_text?/2 retries until it appears or max_wait_time elapses.
+assert Wallaby.Browser.has_text?(session, "Saved")
 ```
 
-## Helper Functions
+To wait for a LiveView socket, use `wait_for_liveview/1`. It blocks on
+`[data-phx-main].phx-connected`, the class LiveView adds when the join succeeds.
+Do not assert on `data-phx-main` alone: it is server-rendered and present before
+the socket connects, so it proves nothing.
 
-### Authentication
+**`wait_for_liveview/1` is not enough after clicking something that navigates.**
+`<.link navigate>` performs client-side pushState. The WebDriver click returns
+before the destination mounts, so `wait_for_liveview/1` matches the *stale* root
+immediately and any following `assert_path` reads the old path. Poll the path
+first:
 
-```typescript
-import { loginAsAdmin, loginAsGuest, logout } from "../helpers/auth";
+```elixir
+session
+|> click(Query.css(~s(a[href="/movies"])))
 
-// Login as admin
-await loginAsAdmin(page);
+eventually(
+  fn ->
+    if Wallaby.Browser.current_path(session) == "/movies", do: {:ok, true}, else: :error
+  end,
+  description: "navigation to /movies"
+)
 
-// Login as guest
-await loginAsGuest(page);
-
-// Logout
-await logout(page);
+session |> wait_for_liveview()
 ```
 
-### LiveView
+**Viewport matters.** The headless window is small by default, and this app hides
+components at breakpoints. The dock is `lg:hidden`, so it renders only *below*
+1024px, so resizing up hides it. Set the viewport the component actually needs:
 
-```typescript
-import {
-  assertFlashMessage,
-  waitForLiveView,
-  waitForPatch
-} from "../helpers/liveview";
-
-// Wait for LiveView to connect
-await waitForLiveView(page);
-
-// Assert flash message
-await assertFlashMessage(page, "success", "Saved");
-
-// Wait for LiveView navigation
-await waitForPatch(page);
+```elixir
+Wallaby.Browser.resize_window(session, 390, 844)   # mobile: dock, library picker
 ```
 
-## Test Configuration
+For state the browser cannot show you, such as a row a LiveView writes after the
+click returns, use `eventually/2`:
 
-### playwright.config.ts
-
-```typescript
-import { defineConfig } from "@playwright/test";
-
-export default defineConfig({
-  testDir: "./test/e2e/specs",
-  baseURL: "http://localhost:4002",
-  use: {
-    trace: "on-first-retry",
-    screenshot: "only-on-failure",
-  },
-  projects: [
-    { name: "chromium", use: { browserName: "chromium" } },
-  ],
-});
+```elixir
+request =
+  eventually(
+    fn ->
+      case Repo.get_by(MediaRequest, tmdb_id: id) do
+        nil -> :error
+        request -> {:ok, request}
+      end
+    end,
+    description: "a media request with tmdb_id #{id}"
+  )
 ```
 
-### Environment
+## Geometry assertions
 
-E2E tests run against a test server:
+`MydiaWeb.FeatureCase.Geometry` asserts facts about the rendered box. It is
+imported automatically by `MydiaWeb.FeatureCase`.
 
-- Port: 4002
-- Database: Test database
-- Mock services for external dependencies
-
-## Running in CI
-
-Tests run automatically in GitHub Actions:
-
-```yaml
-- name: Run E2E tests
-  run: |
-    cd assets
-    npm run test:e2e
+```elixir
+session
+|> refute_covered(~s([phx-hook="DockNav"]))   # nothing is painted on top
+|> assert_in_viewport("#approve-form")        # the rect is on screen
+|> refute_clipped("#library-grid")            # the scroll container does not cut it off
 ```
 
-CI uses Docker Compose with mock services:
+`refute_covered/2` samples a 3x3 grid across the element's bounding rect and calls
+`document.elementFromPoint` at each point. When it fails it names the covering
+element, so the message reads "covered by nav.dock" rather than reporting a pixel
+count.
 
-- OAuth2 mock provider
-- Prowlarr mock
-- qBittorrent mock
+This is deliberately not screenshot diffing. Baseline images would drift between a
+NixOS dev machine and an ubuntu-latest CI runner over nothing but font rendering,
+and a pixel count does not tell you what broke.
 
-## Debugging
+## Writing a test
 
-### Visual Mode
+```elixir
+defmodule MydiaWeb.Features.MyThingTest do
+  use MydiaWeb.FeatureCase, async: false
 
-```bash
-npm run test:e2e -- --headed
+  @moduletag :feature
+
+  @tag :feature
+  test "the thing works", %{session: session} do
+    login_as_admin(session)
+
+    session
+    |> visit("/")
+    |> wait_for_liveview()
+    |> click(Query.css("#my-button"))
+
+    assert Wallaby.Browser.has_text?(session, "It worked")
+  end
+end
 ```
 
-### UI Mode
+`async: false` is required. SQLite does not tolerate concurrent writes.
 
-```bash
-npm run test:e2e:ui
-```
+Available helpers from `MydiaWeb.FeatureCase`: `login/3`, `login_as_admin/1`,
+`login_as_user/1`, `login_as_guest/1`, `create_admin_user/1`, `create_test_user/1`,
+`create_guest_user/1`, `assert_path/2`, `assert_has_text/2`, `wait_for_liveview/1`,
+`eventually/2`, `eval_js/3`, `js_click/2`.
 
-### Trace Viewer
-
-When tests fail, Playwright generates traces:
-
-```bash
-npx playwright show-trace trace.zip
-```
-
-### Screenshots
-
-Failed tests automatically capture screenshots:
-
-```
-assets/test-results/
-```
-
-## Best Practices
-
-### Page Objects
-
-Encapsulate page interactions:
-
-```typescript
-class LibraryPage {
-  constructor(private page: Page) {}
-
-  async addLibrary(name: string, path: string) {
-    await this.page.click("#add-library");
-    await this.page.fill("#name", name);
-    await this.page.fill("#path", path);
-    await this.page.click("#save");
-  }
-
-  async getLibraryNames(): Promise<string[]> {
-    return this.page.locator(".library-name").allTextContents();
-  }
-}
-```
-
-### Test Isolation
-
-Each test should:
-
-- Start from a known state
-- Not depend on other tests
-- Clean up after itself
-
-### Selectors
-
-Prefer stable selectors:
-
-```typescript
-// Good - uses data-testid
-page.locator('[data-testid="submit-button"]')
-
-// Okay - uses role
-page.getByRole("button", { name: "Submit" })
-
-// Avoid - fragile
-page.locator(".btn.btn-primary.submit")
-```
-
-## Coverage
-
-E2E tests cover:
-
-- Authentication flows (local + OIDC)
-- Library management
-- Media search and add
-- Download client configuration
-- Indexer configuration
-- User management
-- Real-time updates
-
-## Next Steps
-
-- [Testing](testing.md) - Unit and integration testing
-- [Development Setup](setup.md) - Local environment setup
+`MydiaWeb.FeatureCase.Geometry`'s `refute_covered/2`, `assert_in_viewport/2`, and
+`refute_clipped/2` (see "Geometry assertions" above) are also auto-imported, via
+the `using` block in `test/support/feature_case.ex`.
