@@ -25,36 +25,17 @@ defmodule Mydia.Subtitles do
   import Ecto.Query
 
   alias Mydia.Repo
-  alias Mydia.Subtitles.{Subtitle, MediaHash, Downloader}
+  alias Mydia.Subtitles.{Subtitle, MediaHash, Downloader, Scoring}
   alias Mydia.Library.MediaFile
   alias Mydia.Media.{MediaItem, Episode}
 
-  # The 50-point metadata bonus needs an imdb, tmdb or tvdb id in the search
-  # params; a title-only search starts every result at 0. What each provider
-  # can add on top of that:
-  #
-  #   * Relay and direct SubDL add nothing at all. SubDL reports no rating and
-  #     no download count, so both bonuses are skipped, and it has no hash
-  #     search, so the 100-point hash bonus never fires. Auto-download is off
-  #     for them at any threshold above 50, which is the honest outcome:
-  #     nothing in a SubDL result separates a good match from a bad one.
-  #   * Gestdown reports a download count but no rating, so it adds
-  #     log10(count) * 10.
-  #   * OpenSubtitles reports both, and is the only provider that can also
-  #     claim a hash match.
-  #
-  # At 150 only a hash match could ever qualify, making auto-download an
-  # OpenSubtitles-with-hash feature. At 100 the popularity term is what carries
-  # a result over: metadata plus a perfect rating is 70, so clearing the bar
-  # takes roughly 1000 downloads alongside that rating, or about 100k on their
-  # own.
+  # Auto-download fires when the best result clears this. The bar is now
+  # reachable without a hash: a metadata search whose best candidate matches the
+  # file's release name exactly scores 50 + 50. Previously only an
+  # OpenSubtitles hash match could clear it, which made the option dead for
+  # every zero-configuration install. The weights themselves live in
+  # `Mydia.Subtitles.Scoring`.
   @high_confidence_threshold 100
-  @scoring_weights %{
-    hash_match: 100,
-    metadata_match: 50,
-    rating: 20,
-    popularity: 10
-  }
 
   @doc """
   Searches for subtitles for a media file.
@@ -90,7 +71,7 @@ defmodule Mydia.Subtitles do
          {:ok, search_params} <- build_search_params(media_file, languages),
          {:ok, raw_results, providers} <- perform_search(search_params),
          :ok <- ensure_a_provider_answered(raw_results, providers),
-         scored_results <- score_results(raw_results, search_params) do
+         scored_results <- score_results(raw_results, search_params, media_file) do
       handle_search_results(scored_results, media_file_id, auto_download)
     end
   end
@@ -131,7 +112,7 @@ defmodule Mydia.Subtitles do
          {:ok, search_params} <- build_search_params(media_file, languages),
          {:ok, %{results: results, providers: providers}} <-
            Mydia.Subtitles.ProviderChain.search(search_params) do
-      {:ok, %{results: score_results(results, search_params), providers: providers}}
+      {:ok, %{results: score_results(results, search_params, media_file), providers: providers}}
     end
   end
 
@@ -415,60 +396,21 @@ defmodule Mydia.Subtitles do
   end
 
   @doc false
-  # Score subtitle results based on matching criteria
-  def score_results(results, search_params) do
+  # Score subtitle results and attach the breakdown that produced each score.
+  # The reference is built once here rather than per result, since it does not
+  # vary across candidates and parsing is the expensive half.
+  def score_results(results, search_params, media_file) do
+    reference = Scoring.build_reference(media_file)
+
     results
     |> Enum.map(fn result ->
-      score = calculate_score(result, search_params)
-      Map.put(result, :score, score)
+      {score, factors} = Scoring.score(result, search_params, reference)
+
+      result
+      |> Map.put(:score, score)
+      |> Map.put(:score_breakdown, factors)
     end)
     |> Enum.sort_by(&{&1.score, Map.get(&1, :provider_priority, 0)}, :desc)
-  end
-
-  defp calculate_score(result, search_params) do
-    score = 0
-
-    # Hash match (highest confidence)
-    score =
-      if Map.has_key?(search_params, :file_hash) &&
-           Map.get(result, :moviehash_match) == true do
-        score + @scoring_weights.hash_match
-      else
-        score
-      end
-
-    # Metadata match (IMDB/TMDB)
-    score =
-      if Map.has_key?(search_params, :imdb_id) || Map.has_key?(search_params, :tmdb_id) ||
-           Map.has_key?(search_params, :tvdb_id) do
-        score + @scoring_weights.metadata_match
-      else
-        score
-      end
-
-    # Rating bonus (0-10 scale, multiply by weight)
-    score =
-      case Map.get(result, :rating) do
-        rating when is_number(rating) ->
-          score + round(rating * @scoring_weights.rating / 10)
-
-        _ ->
-          score
-      end
-
-    # Popularity bonus (download count)
-    score =
-      case Map.get(result, :download_count) do
-        count when is_integer(count) and count > 0 ->
-          # Logarithmic scale: log10(count) * weight
-          popularity_score = :math.log10(count) * @scoring_weights.popularity
-          score + round(popularity_score)
-
-        _ ->
-          score
-      end
-
-    score
   end
 
   # Handle search results based on auto_download setting
