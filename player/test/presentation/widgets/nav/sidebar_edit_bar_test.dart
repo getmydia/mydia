@@ -53,4 +53,20 @@ void main() {
     expect(find.byTooltip('Reset sidebar'), findsNothing);
     expect(find.text('Done'), findsOneWidget);
   });
+
+  testWidgets('the reset control keeps an accessible tap target',
+      (tester) async {
+    await _pumpBar(tester, onDone: () {}, onReset: () {});
+
+    final tapTargetSize = tester.getSize(find.byTooltip('Reset sidebar'));
+
+    expect(
+      tapTargetSize.width,
+      greaterThanOrEqualTo(SidebarEditBar.resetControlTapSize),
+    );
+    expect(
+      tapTargetSize.height,
+      greaterThanOrEqualTo(SidebarEditBar.resetControlTapSize),
+    );
+  });
 }
