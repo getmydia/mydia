@@ -52,7 +52,7 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       assert result.title == "Game Of Thrones"
       assert result.quality.resolution == "2160p"
       assert result.quality.source == "BluRay"
-      assert result.quality.hdr_format == "DolbyVision"
+      assert result.quality.dolby_vision
     end
 
     test "Star Wars Collection 4K UHD BluRay REMUX with TrueHD" do
@@ -66,7 +66,7 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       assert result.quality.source == "BluRay"
       assert result.quality.codec == "HEVC"
       assert result.quality.audio == "TrueHD 7.1"
-      assert result.quality.hdr_format == "HDR"
+      assert result.quality.hdr_format == :hdr10
       assert result.release_group == "MR"
     end
 
@@ -101,8 +101,8 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       assert result.quality.resolution == "2160p"
       assert result.quality.codec == "x265"
       assert result.quality.audio == "DDP5.1"
-      # DV is normalized to DolbyVision for consistency
-      assert result.quality.hdr_format == "DolbyVision"
+      # DV sets dolby_vision, not hdr_format
+      assert result.quality.dolby_vision
       assert result.release_group == "BEN"
     end
 
@@ -116,7 +116,7 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       assert result.quality.resolution == "2160p"
       assert result.quality.codec == "x265"
       assert result.quality.audio == "DDP5.1"
-      assert result.quality.hdr_format == "HDR10+"
+      assert result.quality.hdr_format == :hdr10_plus
       assert result.release_group == "GROUP"
     end
 
@@ -581,23 +581,33 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       result =
         FileParser.parse("The.Marvels.2023.2160p.DolbyVision.DDP5.1.Atmos.x265-GROUP.mkv")
 
-      assert result.quality.hdr_format == "DolbyVision"
+      assert result.quality.dolby_vision
     end
 
     test "DV abbreviation in release name" do
       result =
         FileParser.parse("Chucky.2021.2160p.BluRay.REMUX.DV.HDR.HEVC-LTN.mkv")
 
-      # DV is normalized to DolbyVision for consistency
-      assert result.quality.hdr_format == "DolbyVision"
+      # The resolver's :hdr label is a singleton (Resolver.resolve_one_label/2):
+      # only the highest zone-adjusted-confidence HDR-ish token survives per
+      # release, and DV (0.8 base + 0.1 metadata-zone bonus = 0.9) ties the
+      # bare HDR token (0.9 base + 0.0 = 0.9); Enum.max_by/2 keeps the first
+      # on a tie, and DV appears first in this title. The bare HDR token is
+      # demoted to a title candidate and never reaches QualityExtractor, so
+      # hdr_format stays nil here even though the release also says "HDR".
+      assert result.quality.dolby_vision
+      assert result.quality.hdr_format == nil
     end
 
     test "DoVi abbreviation" do
       result =
         FileParser.parse("Game.of.Thrones.S01E01.2160p.DoVi.HDR.BluRay.REMUX.HEVC-PB69.mkv")
 
-      # DoVi is normalized to DolbyVision for consistency
-      assert result.quality.hdr_format == "DolbyVision"
+      # DoVi (0.95 base + 0.05 metadata-zone bonus, clamped to 1.0) outranks
+      # the bare HDR token (0.9) outright in the :hdr singleton conflict, so
+      # HDR is demoted and hdr_format stays nil. See the DV test above.
+      assert result.quality.dolby_vision
+      assert result.quality.hdr_format == nil
     end
   end
 
@@ -606,14 +616,14 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       result =
         FileParser.parse("Wonka.2023.2160p.HDR10.DDP5.1.Atmos.x265-GROUP.mkv")
 
-      assert result.quality.hdr_format == "HDR10"
+      assert result.quality.hdr_format == :hdr10
     end
 
     test "HDR abbreviation" do
       result =
         FileParser.parse("Star.Wars.1977.2160p.UHD.BluRay.REMUX.HDR.HEVC.TrueHD.7.1-MR.mkv")
 
-      assert result.quality.hdr_format == "HDR"
+      assert result.quality.hdr_format == :hdr10
     end
   end
 
@@ -624,7 +634,7 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
           "Killers.of.the.Flower.Moon.2023.2160p.HDR10+.DDP5.1.Atmos.x265-GROUP.mkv"
         )
 
-      assert result.quality.hdr_format == "HDR10+"
+      assert result.quality.hdr_format == :hdr10_plus
     end
   end
 
@@ -1110,8 +1120,8 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
       assert result.quality.resolution == "2160p"
       assert result.quality.codec == "x265"
       assert result.quality.audio == "DDP5.1"
-      # DV is normalized to DolbyVision for consistency
-      assert result.quality.hdr_format == "DolbyVision"
+      # DV sets dolby_vision, not hdr_format
+      assert result.quality.dolby_vision
       assert result.release_group == "GROUP"
       assert result.confidence > 0.8
     end

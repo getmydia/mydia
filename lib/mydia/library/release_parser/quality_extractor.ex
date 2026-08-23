@@ -26,6 +26,7 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
   `release_parser/`.
   """
 
+  alias Mydia.Library.Hdr
   alias Mydia.Library.ReleaseParser.Token
   alias Mydia.Library.Structs.Quality
 
@@ -65,14 +66,15 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
     resolution = extract_resolution(quality_tokens)
     source = extract_source(quality_tokens, next_by_token)
     codec = extract_codec(quality_tokens, all_tokens, next_by_token)
-    hdr = extract_hdr(quality_tokens)
+    {hdr_format, dolby_vision} = extract_hdr(quality_tokens)
     audio = extract_audio(quality_tokens, next_by_token)
 
     %Quality{
       resolution: resolution,
       source: source,
       codec: codec,
-      hdr_format: hdr,
+      hdr_format: hdr_format,
+      dolby_vision: dolby_vision,
       audio: audio
     }
   end
@@ -226,25 +228,19 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
 
   # --- HDR ---
 
+  # A release name can carry more than one HDR token (e.g. "Dolby.Vision.HDR10"),
+  # so every :hdr-labeled token is scanned and folded into a base plus a Dolby
+  # Vision flag rather than stopping at the first match.
   defp extract_hdr(quality_tokens) do
-    case Enum.find(quality_tokens, &(&1.label == :hdr)) do
-      nil -> nil
-      entry -> normalize_hdr_raw(token_text(entry))
-    end
-  end
-
-  # V2's `extract_hdr/3` normalization for raw values:
-  defp normalize_hdr_raw(value) do
-    cleaned = String.trim(value)
-
-    cond do
-      String.contains?(cleaned, "HDR10+") -> "HDR10+"
-      Regex.match?(~r/^Dolby[\s.]?Vision$/i, cleaned) -> "DolbyVision"
-      Regex.match?(~r/^DolbyVision$/i, cleaned) -> "DolbyVision"
-      Regex.match?(~r/^DoVi$/i, cleaned) -> "DolbyVision"
-      Regex.match?(~r/^DV$/i, cleaned) -> "DolbyVision"
-      true -> cleaned
-    end
+    quality_tokens
+    |> Enum.filter(&(&1.label == :hdr))
+    |> Enum.reduce({nil, false}, fn entry, {base, dv} ->
+      case Hdr.from_release_token(token_text(entry)) do
+        :dolby_vision -> {base, true}
+        {:base, found} -> {base || found, dv}
+        :unknown -> {base, dv}
+      end
+    end)
   end
 
   # --- Audio ---
@@ -424,7 +420,10 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
       resolution: standardize_resolution(q.resolution),
       source: standardize_source(q.source),
       codec: standardize_codec(q.codec),
-      hdr_format: standardize_hdr(q.hdr_format),
+      # HDR is already canonical coming out of extract_hdr/1; no raw string
+      # form remains to standardize.
+      hdr_format: q.hdr_format,
+      dolby_vision: q.dolby_vision,
       audio: standardize_audio(q.audio)
     }
   end
@@ -477,20 +476,6 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
       normalized == "vp9" -> "VP9"
       normalized == "av1" -> "AV1"
       normalized == "nvenc" -> "NVENC"
-      true -> value
-    end
-  end
-
-  defp standardize_hdr(nil), do: nil
-
-  defp standardize_hdr(value) do
-    normalized = String.downcase(value)
-
-    cond do
-      String.contains?(normalized, "hdr10+") -> "HDR10+"
-      normalized == "hdr10" -> "HDR10"
-      normalized in ["dolbyvision", "dovi"] -> "Dolby Vision"
-      normalized == "hdr" -> "HDR"
       true -> value
     end
   end

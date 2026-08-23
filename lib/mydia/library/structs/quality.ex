@@ -7,23 +7,31 @@ defmodule Mydia.Library.Structs.Quality do
   Provides compile-time safety for quality data, replacing plain map
   access that can silently return nil.
 
-  Boolean release flags (`hdr`, `proper`, `repack`) default to `false`;
-  on-disk files simply leave them at the defaults.
+  Boolean release flags (`dolby_vision`, `proper`, `repack`) default to
+  `false`; on-disk files simply leave them at the defaults.
+
+  ## HDR representation
+
+  `hdr_format` and `dolby_vision` mirror `Mydia.Library.Hdr`'s `base` and
+  Dolby Vision split: a release can carry a base format and Dolby Vision at
+  once (an 8.1 release is both HDR10 and Dolby Vision), or Dolby Vision
+  alone with no base (profile 5). Use `hdr?/1` rather than testing
+  `hdr_format` for nil.
 
   ## HDR Format Tiers (per TRaSH Guides)
 
-  - "DV" (Dolby Vision) - highest quality, includes fallback layer
-  - "HDR10+" - dynamic metadata
-  - "HDR10" - static metadata HDR
-  - nil (SDR) - standard dynamic range
+  - Dolby Vision - highest quality, includes fallback layer
+  - `:hdr10_plus` - dynamic metadata
+  - `:hdr10` / `:hlg` - static metadata HDR
+  - nil and no Dolby Vision (SDR) - standard dynamic range
   """
 
   defstruct resolution: nil,
             source: nil,
             codec: nil,
             audio: nil,
-            hdr: false,
             hdr_format: nil,
+            dolby_vision: false,
             proper: false,
             repack: false
 
@@ -32,8 +40,8 @@ defmodule Mydia.Library.Structs.Quality do
           source: String.t() | nil,
           codec: String.t() | nil,
           audio: String.t() | nil,
-          hdr: boolean(),
-          hdr_format: String.t() | nil,
+          hdr_format: Mydia.Library.Hdr.base(),
+          dolby_vision: boolean(),
           proper: boolean(),
           repack: boolean()
         }
@@ -44,7 +52,7 @@ defmodule Mydia.Library.Structs.Quality do
   ## Examples
 
       iex> new(resolution: "1080p", source: "BluRay")
-      %Quality{resolution: "1080p", source: "BluRay", hdr: false, proper: false, repack: false}
+      %Quality{resolution: "1080p", source: "BluRay", proper: false, repack: false}
   """
   def new(attrs \\ []) when is_list(attrs) or is_map(attrs) do
     struct(__MODULE__, attrs)
@@ -58,15 +66,25 @@ defmodule Mydia.Library.Structs.Quality do
   end
 
   @doc """
+  Whether this release carries any HDR signal.
+
+  Use this rather than testing `hdr_format` for nil. A Dolby Vision profile 5
+  release has no base format but is certainly not SDR.
+  """
+  @spec hdr?(t()) :: boolean()
+  def hdr?(%__MODULE__{hdr_format: nil, dolby_vision: false}), do: false
+  def hdr?(%__MODULE__{}), do: true
+
+  @doc """
   Checks if a Quality struct is empty (all content fields are nil).
-  Boolean flags are not considered.
+  Boolean flags other than HDR are not considered.
   """
   def empty?(%__MODULE__{} = quality) do
     quality.resolution == nil &&
       quality.source == nil &&
       quality.codec == nil &&
       quality.audio == nil &&
-      quality.hdr_format == nil
+      not hdr?(quality)
   end
 
   @doc """
@@ -77,8 +95,8 @@ defmodule Mydia.Library.Structs.Quality do
       iex> format(%Quality{resolution: "1080p", source: "BluRay", codec: "x264"})
       "1080p BluRay x264"
 
-      iex> format(%Quality{resolution: "2160p", source: "WEB-DL", hdr: true, hdr_format: "DV"})
-      "2160p WEB-DL DV"
+      iex> format(%Quality{resolution: "2160p", source: "WEB-DL", hdr_format: :hdr10, dolby_vision: true})
+      "2160p WEB-DL Dolby Vision"
   """
   def format(%__MODULE__{} = quality) do
     [
@@ -86,8 +104,7 @@ defmodule Mydia.Library.Structs.Quality do
       quality.source,
       quality.codec,
       quality.audio,
-      if(quality.hdr && quality.hdr_format, do: quality.hdr_format),
-      if(quality.hdr && !quality.hdr_format, do: "HDR"),
+      hdr_label(quality),
       if(quality.proper, do: "PROPER"),
       if(quality.repack, do: "REPACK")
     ]
@@ -96,6 +113,14 @@ defmodule Mydia.Library.Structs.Quality do
   end
 
   def format(nil), do: nil
+
+  # Delegates to the one module that produces human HDR text.
+  defp hdr_label(%__MODULE__{} = quality) do
+    Mydia.Library.Hdr.display(%Mydia.Library.Hdr{
+      base: quality.hdr_format,
+      dv_profile: if(quality.dolby_vision, do: 8)
+    })
+  end
 
   @doc """
   Creates a Quality struct from a plain map with string or atom keys.
@@ -110,10 +135,21 @@ defmodule Mydia.Library.Structs.Quality do
       source: map["source"] || map[:source],
       codec: map["codec"] || map[:codec],
       audio: map["audio"] || map[:audio],
-      hdr: map["hdr"] || map[:hdr] || false,
-      hdr_format: map["hdr_format"] || map[:hdr_format],
+      hdr_format: decode_base(map["hdr_format"] || map[:hdr_format]),
+      dolby_vision: map["dolby_vision"] || map[:dolby_vision] || false,
       proper: map["proper"] || map[:proper] || false,
       repack: map["repack"] || map[:repack] || false
     })
+  end
+
+  # Stored JSON holds the atom as a string.
+  defp decode_base(nil), do: nil
+  defp decode_base(value) when is_atom(value), do: value
+
+  defp decode_base(value) when is_binary(value) do
+    case Mydia.Library.Hdr.from_release_token(value) do
+      {:base, base} -> base
+      _other -> nil
+    end
   end
 end

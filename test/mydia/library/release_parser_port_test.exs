@@ -43,7 +43,7 @@ defmodule Mydia.Library.ReleaseParserPortTest do
       assert result.year == 2021
       assert result.quality.resolution == "2160p"
       assert result.quality.source == "WEB-DL"
-      assert result.quality.hdr_format == "HDR10"
+      assert result.quality.hdr_format == :hdr10
       assert result.quality.codec == "x265"
     end
 
@@ -109,7 +109,7 @@ defmodule Mydia.Library.ReleaseParserPortTest do
     test "parses movie with Dolby Vision" do
       result = FileParser.parse("Epic.Film.2021.2160p.WEB.DolbyVision.mkv")
 
-      assert result.quality.hdr_format == "DolbyVision"
+      assert result.quality.dolby_vision
     end
   end
 
@@ -426,7 +426,7 @@ defmodule Mydia.Library.ReleaseParserPortTest do
     test "handles HDR10+ format" do
       result = FileParser.parse("Movie 2021 2160p HDR10+.mkv")
 
-      assert result.quality.hdr_format == "HDR10+"
+      assert result.quality.hdr_format == :hdr10_plus
     end
 
     test "handles Atmos audio" do
@@ -602,7 +602,7 @@ defmodule Mydia.Library.ReleaseParserPortTest do
       assert result.quality.resolution == "2160p"
       assert result.quality.source == "BluRay"
       assert result.quality.codec == "x265"
-      assert result.quality.hdr_format == "HDR"
+      assert result.quality.hdr_format == :hdr10
       # Audio codec case is preserved from the filename (lowercase "aac")
       assert result.quality.audio == "aac"
       assert result.release_group == "Rosy"

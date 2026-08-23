@@ -1692,6 +1692,11 @@ defmodule Mydia.Jobs.MediaImport do
       resolution: filename_metadata.quality.resolution,
       codec: filename_metadata.quality.codec,
       audio_codec: filename_metadata.quality.audio,
+      # A filename can reveal the HDR base but never a Dolby Vision profile
+      # (that needs the DOVI record from a real probe), so
+      # dolby_vision_profile/dolby_vision_bl_compat_id are deliberately left
+      # unset here. Mydia.Jobs.FileAnalysis fills them from ffprobe once the
+      # row is picked up.
       hdr_format: filename_metadata.quality.hdr_format,
       verified_at: DateTime.utc_now(),
       metadata: %{

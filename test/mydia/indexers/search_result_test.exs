@@ -2,6 +2,7 @@ defmodule Mydia.Indexers.SearchResultTest do
   use ExUnit.Case, async: true
 
   alias Mydia.Indexers.SearchResult
+  alias Mydia.Library.Structs.Quality
 
   defp search_result(attrs) do
     defaults = %{
@@ -41,12 +42,11 @@ defmodule Mydia.Indexers.SearchResultTest do
     test "creates search result with optional fields" do
       published_at = ~U[2024-01-01 00:00:00Z]
 
-      quality = %{
+      quality = %Quality{
         resolution: "1080p",
         source: "BluRay",
         codec: "x264",
         audio: "DTS",
-        hdr: false,
         proper: false,
         repack: false
       }
@@ -219,12 +219,11 @@ defmodule Mydia.Indexers.SearchResultTest do
     end
 
     test "formats quality with all fields" do
-      quality = %{
+      quality = %Quality{
         resolution: "1080p",
         source: "BluRay",
         codec: "x264",
         audio: "DTS",
-        hdr: false,
         proper: false,
         repack: false
       }
@@ -243,12 +242,12 @@ defmodule Mydia.Indexers.SearchResultTest do
     end
 
     test "formats quality with HDR" do
-      quality = %{
+      quality = %Quality{
         resolution: "2160p",
         source: "WEB-DL",
         codec: "x265",
         audio: nil,
-        hdr: true,
+        hdr_format: :hdr10,
         proper: false,
         repack: false
       }
@@ -267,12 +266,11 @@ defmodule Mydia.Indexers.SearchResultTest do
     end
 
     test "formats quality with PROPER and REPACK" do
-      quality = %{
+      quality = %Quality{
         resolution: "1080p",
         source: "BluRay",
         codec: "x264",
         audio: nil,
-        hdr: false,
         proper: true,
         repack: true
       }
@@ -291,12 +289,11 @@ defmodule Mydia.Indexers.SearchResultTest do
     end
 
     test "omits nil fields from description" do
-      quality = %{
+      quality = %Quality{
         resolution: "720p",
         source: nil,
         codec: "x264",
         audio: nil,
-        hdr: false,
         proper: false,
         repack: false
       }

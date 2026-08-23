@@ -12,7 +12,8 @@ defmodule Mydia.Library.FileNamerTest do
         source: "BluRay",
         codec: "x264",
         audio: "DTS",
-        hdr: false,
+        hdr_format: nil,
+        dolby_vision: false,
         proper: false,
         repack: false
       }
@@ -32,7 +33,8 @@ defmodule Mydia.Library.FileNamerTest do
         source: "WEB-DL",
         codec: "x265",
         audio: "AAC",
-        hdr: false,
+        hdr_format: nil,
+        dolby_vision: false,
         proper: false,
         repack: false
       }
@@ -52,7 +54,8 @@ defmodule Mydia.Library.FileNamerTest do
         source: "BluRay",
         codec: "x264",
         audio: nil,
-        hdr: false,
+        hdr_format: nil,
+        dolby_vision: false,
         proper: true,
         repack: false
       }
@@ -72,7 +75,8 @@ defmodule Mydia.Library.FileNamerTest do
         source: "WEB-DL",
         codec: "x265",
         audio: "DTS",
-        hdr: true,
+        hdr_format: :hdr10,
+        dolby_vision: false,
         proper: false,
         repack: true
       }
@@ -95,7 +99,8 @@ defmodule Mydia.Library.FileNamerTest do
         source: "BluRay",
         codec: "x264",
         audio: nil,
-        hdr: false,
+        hdr_format: nil,
+        dolby_vision: false,
         proper: false,
         repack: false
       }
@@ -116,7 +121,8 @@ defmodule Mydia.Library.FileNamerTest do
         source: "WEB-DL",
         codec: "H.265",
         audio: "Atmos",
-        hdr: true,
+        hdr_format: :hdr10,
+        dolby_vision: false,
         proper: false,
         repack: false
       }
@@ -138,7 +144,8 @@ defmodule Mydia.Library.FileNamerTest do
         source: "HDTV",
         codec: "x264",
         audio: "AAC",
-        hdr: false,
+        hdr_format: nil,
+        dolby_vision: false,
         proper: false,
         repack: false
       }

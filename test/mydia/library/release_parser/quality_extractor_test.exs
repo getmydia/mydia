@@ -70,9 +70,10 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractorTest do
       assert result.quality.resolution == "2160p (4K)"
     end
 
-    test "HDR canonicalization" do
+    test "Dolby Vision detection" do
       result = ReleaseParser.parse("Movie.2020.2160p.DoVi.mkv", standardize: true)
-      assert result.quality.hdr_format == "Dolby Vision"
+      assert result.quality.dolby_vision
+      assert result.quality.hdr_format == nil
     end
   end
 

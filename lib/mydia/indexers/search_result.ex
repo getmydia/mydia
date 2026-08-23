@@ -38,8 +38,8 @@ defmodule Mydia.Indexers.SearchResult do
         source: "BluRay" | "WEB-DL" | "WEBRip" | "HDTV" | nil,
         codec: "x264" | "x265" | "H.264" | "H.265" | nil,
         audio: "AAC" | "AC3" | "DTS" | "TrueHD" | nil,
-        hdr: true | false,
-        hdr_format: "hdr10" | "hdr10+" | "dolby_vision" | nil,
+        hdr_format: :hdr10 | :hdr10_plus | :hlg | nil,
+        dolby_vision: true | false,
         proper: true | false,
         repack: true | false
       }
@@ -199,7 +199,7 @@ defmodule Mydia.Indexers.SearchResult do
         quality.source,
         quality.codec,
         quality.audio,
-        quality.hdr && "HDR",
+        Quality.hdr?(quality) && "HDR",
         quality.proper && "PROPER",
         quality.repack && "REPACK"
       ]

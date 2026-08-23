@@ -13,7 +13,8 @@ defmodule Mydia.Indexers.QualityParserTest do
       assert quality.source == "BluRay"
       assert quality.codec == "x264"
       assert quality.audio == "DTS"
-      assert quality.hdr == false
+      assert quality.hdr_format == nil
+      refute quality.dolby_vision
       assert quality.proper == false
       assert quality.repack == false
     end
@@ -26,7 +27,7 @@ defmodule Mydia.Indexers.QualityParserTest do
       assert quality.source == "WEB-DL"
       assert quality.codec == "H.265"
       assert quality.audio == "AAC"
-      assert quality.hdr == true
+      assert quality.hdr_format == :hdr10
     end
 
     test "parses PROPER releases" do
@@ -53,7 +54,8 @@ defmodule Mydia.Indexers.QualityParserTest do
       assert quality.source == nil
       assert quality.codec == nil
       assert quality.audio == nil
-      assert quality.hdr == false
+      assert quality.hdr_format == nil
+      refute quality.dolby_vision
       assert quality.proper == false
       assert quality.repack == false
     end
@@ -269,40 +271,39 @@ defmodule Mydia.Indexers.QualityParserTest do
   end
 
   describe "quality_score/1" do
-    test "scores 2160p BluRay with DV HDR highest" do
+    test "scores 2160p BluRay with Dolby Vision highest" do
       quality =
         Quality.new(
           resolution: "2160p",
           source: "BluRay",
           codec: "x265",
           audio: "TrueHD Atmos",
-          hdr: true,
-          hdr_format: "DV",
+          hdr_format: :hdr10,
+          dolby_vision: true,
           proper: false,
           repack: false
         )
 
       score = QualityParser.quality_score(quality)
-      # 2160p(1000) + BluRay(450) + x265(150) + TrueHD Atmos(200) + DV(100) = 1900
+      # 2160p(1000) + BluRay(450) + x265(150) + TrueHD Atmos(200) + DolbyVision(100) = 1900
       assert score == 1900
     end
 
-    test "scores 2160p BluRay with generic HDR" do
+    test "scores 2160p BluRay with HDR10" do
       quality =
         Quality.new(
           resolution: "2160p",
           source: "BluRay",
           codec: "x265",
           audio: nil,
-          hdr: true,
-          hdr_format: "HDR",
+          hdr_format: :hdr10,
           proper: false,
           repack: false
         )
 
       score = QualityParser.quality_score(quality)
-      # 2160p(1000) + BluRay(450) + x265(150) + HDR(40) = 1640
-      assert score == 1640
+      # 2160p(1000) + BluRay(450) + x265(150) + HDR10(60) = 1660
+      assert score == 1660
     end
 
     test "scores 1080p WEB-DL x264 appropriately" do
@@ -312,7 +313,6 @@ defmodule Mydia.Indexers.QualityParserTest do
           source: "WEB-DL",
           codec: "x264",
           audio: nil,
-          hdr: false,
           proper: false,
           repack: false
         )
@@ -329,7 +329,6 @@ defmodule Mydia.Indexers.QualityParserTest do
           source: "BluRay",
           codec: "x264",
           audio: nil,
-          hdr: false,
           proper: false,
           repack: false
         )
@@ -347,7 +346,6 @@ defmodule Mydia.Indexers.QualityParserTest do
           source: "BluRay",
           codec: "x264",
           audio: nil,
-          hdr: false,
           proper: false,
           repack: false
         )
@@ -365,7 +363,6 @@ defmodule Mydia.Indexers.QualityParserTest do
           source: nil,
           codec: nil,
           audio: nil,
-          hdr: false,
           proper: false,
           repack: false
         )
@@ -380,7 +377,6 @@ defmodule Mydia.Indexers.QualityParserTest do
           source: "CAM",
           codec: "XviD",
           audio: nil,
-          hdr: false,
           proper: false,
           repack: false
         )
@@ -399,8 +395,8 @@ defmodule Mydia.Indexers.QualityParserTest do
       assert quality.source == "BluRay"
       assert quality.codec == "x264"
       assert quality.audio == "DTS-HD MA"
-      assert quality.hdr == false
       assert quality.hdr_format == nil
+      refute quality.dolby_vision
     end
 
     test "parses 4K Dolby Vision release with DD+" do
@@ -412,8 +408,8 @@ defmodule Mydia.Indexers.QualityParserTest do
       assert quality.source == "WEB-DL"
       assert quality.codec == "H.265"
       assert quality.audio == "DD+"
-      assert quality.hdr == true
-      assert quality.hdr_format == "DV"
+      assert quality.dolby_vision
+      assert quality.hdr_format == :hdr10
     end
 
     test "parses 4K REMUX with TrueHD Atmos" do
@@ -424,8 +420,8 @@ defmodule Mydia.Indexers.QualityParserTest do
       assert quality.source == "REMUX"
       assert quality.codec == "x265"
       assert quality.audio == "TrueHD Atmos"
-      assert quality.hdr == true
-      assert quality.hdr_format == "DV"
+      assert quality.dolby_vision
+      assert quality.hdr_format == :hdr10
     end
 
     test "parses TV episode release" do
@@ -454,8 +450,7 @@ defmodule Mydia.Indexers.QualityParserTest do
 
       assert quality.resolution == "2160p"
       assert quality.source == "BluRay"
-      assert quality.hdr == true
-      assert quality.hdr_format == "HDR10+"
+      assert quality.hdr_format == :hdr10_plus
       assert quality.audio == "DTS-HD MA"
     end
   end
@@ -482,6 +477,36 @@ defmodule Mydia.Indexers.QualityParserTest do
 
       assert QualityParser.extract_source("Movie.2026.HDTS.x264") == "Telesync"
       assert QualityParser.extract_source("Movie.2026.HDCAM.x264") == "CAM"
+    end
+  end
+
+  describe "canonical HDR parsing" do
+    test "DV in a release name sets dolby_vision, not hdr_format" do
+      quality = QualityParser.parse("Movie.2024.2160p.BluRay.DV.HDR10.x265-GRP")
+      assert quality.dolby_vision
+      assert quality.hdr_format == :hdr10
+    end
+
+    test "a bare HDR token maps to :hdr10" do
+      assert QualityParser.parse("Movie.2024.2160p.HDR.x265").hdr_format == :hdr10
+    end
+
+    test "HDR10+ maps to :hdr10_plus" do
+      assert QualityParser.parse("Movie.2024.2160p.HDR10+.x265").hdr_format == :hdr10_plus
+    end
+
+    test "the first base token wins when a title carries two distinct bases" do
+      # A bare HDR token (:hdr10) precedes an HDR10+ token here; extract_hdr/1
+      # must keep the first base found, not the last, or a release that opens
+      # with a weaker HDR claim would silently overwrite a stronger one found
+      # later (or vice versa) depending on token order alone.
+      assert QualityParser.extract_hdr("Movie.2024.2160p.HDR.HDR10+.x265") == {:hdr10, false}
+    end
+
+    test "an SDR release has neither" do
+      quality = QualityParser.parse("Movie.2024.1080p.BluRay.x264-GRP")
+      assert quality.hdr_format == nil
+      refute quality.dolby_vision
     end
   end
 end
