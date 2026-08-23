@@ -3237,13 +3237,18 @@ it, including feature flags such as <code>ENABLE_REMOTE_ACCESS</code>.</p>
 </tr>
 <tr>
 <td><code>guardianSecretKeyFile</code></td>
-<td>path or null</td>
-<td>File containing <code>GUARDIAN_SECRET_KEY</code></td>
+<td>path</td>
+<td>File containing <code>GUARDIAN_SECRET_KEY</code>. Defaults to <code>secretKeyBaseFile</code>.</td>
 </tr>
 </tbody>
 </table>
 <p>Both are read from files rather than set inline, so secrets never land in the Nix
 store.</p>
+<p>Each file must exist and be non-empty. An empty secrets file is now a startup
+failure naming the variable, rather than something the service boots through:
+a blank signing key would otherwise be accepted and used to both sign and
+verify tokens. Generate one with <code>mix guardian.gen.secret</code> or
+<code>openssl rand -base64 48</code>.</p>
 <h3 id="database">Database</h3>
 <table>
 <thead>

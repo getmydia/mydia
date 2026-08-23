@@ -3378,6 +3378,14 @@
 </tr>
 </tbody>
 </table>
+<p>Both must be set to a non-empty value of at least 32 characters, and Mydia
+refuses to start otherwise with an error naming the variable. Set-but-blank
+counts as unset: a zero-length signing key is accepted by the JWT library for
+both signing and verification, which would make tokens forgeable. The 32
+character floor is the one <code>mix phx.gen.secret</code> and <code>mix guardian.gen.secret</code>
+enforce themselves, so any secret produced by the commands above passes.
+<code>GUARDIAN_SECRET_KEY</code> is required in its own right and is never inherited from
+<code>SECRET_KEY_BASE</code>.</p>
 <h2 id="container-configuration">Container Configuration</h2>
 <table>
 <thead>
