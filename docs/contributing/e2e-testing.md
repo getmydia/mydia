@@ -103,7 +103,7 @@ session |> wait_for_liveview()
 
 **Viewport matters.** The headless window is small by default, and this app hides
 components at breakpoints. The dock is `lg:hidden`, so it renders only *below*
-1024px — resizing up hides it. Set the viewport the component actually needs:
+1024px, so resizing up hides it. Set the viewport the component actually needs:
 
 ```elixir
 Wallaby.Browser.resize_window(session, 390, 844)   # mobile: dock, library picker
