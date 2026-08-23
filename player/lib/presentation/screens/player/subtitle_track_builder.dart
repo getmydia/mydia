@@ -21,6 +21,51 @@ List<SubtitleTrack> selectableTracks(
   return tracks.where((t) => t.deliverable).toList();
 }
 
+/// The subtitle tracks to offer the viewer, given both places they can come
+/// from.
+///
+/// [serverTracks] is what `MediaFileFragment` reported: embedded tracks
+/// ffprobe found, plus sidecars from the database. [mpvTracks] is what
+/// media_kit has probed out of the container so far, already mapped onto
+/// this app's model with `mk_`-prefixed ids.
+///
+/// Three cases:
+///
+///  - **Streaming.** The server is the only source that means anything --
+///    every body arrives as text over GraphQL -- so media_kit's list is
+///    ignored and image tracks are filtered out.
+///  - **Direct play, media_kit has tracks.** Its tracks win: it reads them
+///    from the container at no fetch cost, including image-based ones it
+///    renders natively. Sidecars are not in the container, so those still
+///    come from [serverTracks].
+///  - **Direct play, media_kit has nothing yet.** Fall back to the server's
+///    deliverable tracks. mpv discovers tracks asynchronously while it
+///    probes, so on a remote file the probe routinely finishes after the
+///    fixed sample taken just after `open()`. Before this fallback existed
+///    that left the list empty and `panel_controls.dart`'s
+///    `subtitleTrackCount > 0` gate rendered the subtitle button
+///    permanently dead. Selecting one of these fetches its body over the
+///    `SubtitleContent` query, the same path sidecars already take; image
+///    tracks are dropped because there is no body to fetch for a bitmap.
+///
+/// The two lists are never merged into one. ffprobe stream indices and
+/// media_kit's own track ids do not correspond, so a merge would list every
+/// embedded track twice.
+List<SubtitleTrack> resolveSubtitleTracks({
+  required List<SubtitleTrack> serverTracks,
+  required List<SubtitleTrack> mpvTracks,
+  required bool isDirectPlay,
+}) {
+  if (isDirectPlay && mpvTracks.isNotEmpty) {
+    return [
+      ...mpvTracks,
+      ...serverTracks.where((t) => !t.embedded && t.deliverable),
+    ];
+  }
+
+  return selectableTracks(serverTracks, isDirectPlay: false);
+}
+
 /// Whether an in-flight subtitle selection's result should still be applied
 /// to the player, once its async work (a media_kit "Off" call, or a
 /// `SubtitleContent` fetch) finishes.
