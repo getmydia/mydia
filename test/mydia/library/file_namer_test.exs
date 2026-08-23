@@ -85,7 +85,7 @@ defmodule Mydia.Library.FileNamerTest do
 
       result = FileNamer.generate_movie_filename(media_item, quality_info, original)
 
-      assert result == "Test Movie (2023) [WEB-DL-2160p-Repack] [DTS] [HDR] [x265]-GROUP.mkv"
+      assert result == "Test Movie (2023) [WEB-DL-2160p-Repack] [DTS] [HDR10] [x265]-GROUP.mkv"
     end
   end
 
@@ -132,7 +132,7 @@ defmodule Mydia.Library.FileNamerTest do
       result = FileNamer.generate_episode_filename(media_item, episode, quality_info, original)
 
       assert result ==
-               "Game of Thrones (2011) - S08E06 - The Iron Throne [WEB-DL-2160p] [Atmos] [HDR] [H.265]-GROUP.mkv"
+               "Game of Thrones (2011) - S08E06 - The Iron Throne [WEB-DL-2160p] [Atmos] [HDR10] [H.265]-GROUP.mkv"
     end
 
     test "handles TV episode without year" do
@@ -155,6 +155,120 @@ defmodule Mydia.Library.FileNamerTest do
       result = FileNamer.generate_episode_filename(media_item, episode, quality_info, original)
 
       assert result == "New Show - S01E05 - Episode Five [HDTV-720p] [AAC] [x264]-GROUP.mkv"
+    end
+  end
+
+  describe "HDR tag" do
+    test "renders the specific format, not a flat [HDR]" do
+      # build_hdr_tag/1 used to emit a flat "[HDR]" for every format while
+      # the module's own docstring promised something like "[DV HDR10]".
+      media_item = %{title: "Test Movie", year: 2023}
+
+      quality_info = %{
+        resolution: "2160p",
+        source: "BluRay",
+        codec: "x265",
+        audio: nil,
+        hdr_format: :hdr10,
+        dolby_vision: false,
+        proper: false,
+        repack: false
+      }
+
+      original = "Test.Movie.2023.2160p.BluRay.HDR.x265-GROUP.mkv"
+
+      result = FileNamer.generate_movie_filename(media_item, quality_info, original)
+
+      assert result =~ "[HDR10]"
+      refute result =~ "[HDR]]"
+    end
+
+    test "renders HDR10+ distinctly from plain HDR10" do
+      media_item = %{title: "Test Movie", year: 2023}
+
+      quality_info = %{
+        resolution: "2160p",
+        source: "BluRay",
+        codec: "x265",
+        audio: nil,
+        hdr_format: :hdr10_plus,
+        dolby_vision: false,
+        proper: false,
+        repack: false
+      }
+
+      original = "Test.Movie.2023.2160p.BluRay.HDR10Plus.x265-GROUP.mkv"
+
+      result = FileNamer.generate_movie_filename(media_item, quality_info, original)
+
+      assert result =~ "[HDR10+]"
+    end
+
+    test "renders HLG" do
+      media_item = %{title: "Test Movie", year: 2023}
+
+      quality_info = %{
+        resolution: "2160p",
+        source: "BluRay",
+        codec: "x265",
+        audio: nil,
+        hdr_format: :hlg,
+        dolby_vision: false,
+        proper: false,
+        repack: false
+      }
+
+      original = "Test.Movie.2023.2160p.BluRay.HLG.x265-GROUP.mkv"
+
+      result = FileNamer.generate_movie_filename(media_item, quality_info, original)
+
+      assert result =~ "[HLG]"
+    end
+
+    test "a Dolby Vision profile 5 file (hdr_format nil) still gets an HDR tag" do
+      # REGRESSION: profile 5 has hdr_format == nil by design because it has
+      # no HDR10-compatible base layer. Deciding SDR by testing hdr_format
+      # for nil drops the tag from exactly the files that most need it.
+      media_item = %{title: "Test Movie", year: 2023}
+
+      quality_info = %{
+        resolution: "2160p",
+        source: "BluRay",
+        codec: "x265",
+        audio: nil,
+        hdr_format: nil,
+        dolby_vision: true,
+        proper: false,
+        repack: false
+      }
+
+      original = "Test.Movie.2023.2160p.BluRay.DV.x265-GROUP.mkv"
+
+      result = FileNamer.generate_movie_filename(media_item, quality_info, original)
+
+      assert result =~ "[Dolby Vision]"
+    end
+
+    test "an SDR file gets no HDR tag" do
+      media_item = %{title: "Test Movie", year: 2023}
+
+      quality_info = %{
+        resolution: "1080p",
+        source: "BluRay",
+        codec: "x264",
+        audio: nil,
+        hdr_format: nil,
+        dolby_vision: false,
+        proper: false,
+        repack: false
+      }
+
+      original = "Test.Movie.2023.1080p.BluRay.x264-GROUP.mkv"
+
+      result = FileNamer.generate_movie_filename(media_item, quality_info, original)
+
+      refute result =~ "HDR"
+      refute result =~ "Dolby Vision"
     end
   end
 
