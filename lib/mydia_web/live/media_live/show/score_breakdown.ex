@@ -11,6 +11,8 @@ defmodule MydiaWeb.MediaLive.Show.ScoreBreakdown do
   """
   use Phoenix.Component
 
+  alias Phoenix.LiveView.JS
+
   @doc """
   One factor of a score breakdown.
 
@@ -116,5 +118,68 @@ defmodule MydiaWeb.MediaLive.Show.ScoreBreakdown do
       score / max >= 0.5 -> "text-warning"
       true -> "text-error"
     end
+  end
+
+  @doc """
+  Trigger button for a score breakdown panel.
+
+  An inline disclosure rather than a daisyUI `dropdown`, because a `dropdown`
+  cannot work here. daisyUI hides a `dropdown-hover` panel whenever its trigger
+  has `:focus` without `:focus-visible`, which is exactly what a finger tap
+  produces, so the panel was unreachable on touch. And `.dropdown-content` is
+  absolutely positioned, so the modal box's own `overflow-y: auto` clipped it
+  regardless of z-index. A plain hidden sibling has neither problem.
+
+  The toggle is a client-side `JS` command, not a server event, so it costs no
+  round-trip and does not fight the release dialog's `phx-update="stream"` list.
+  """
+  attr :id, :string, required: true
+  attr :panel_id, :string, required: true
+  attr :class, :any, default: nil
+  attr :style, :string, default: nil
+  attr :rest, :global
+  slot :inner_block, required: true
+
+  def score_trigger(assigns) do
+    ~H"""
+    <button
+      type="button"
+      id={@id}
+      class={@class}
+      style={@style}
+      aria-expanded="false"
+      aria-controls={@panel_id}
+      phx-click={
+        JS.toggle(to: "##{@panel_id}")
+        |> JS.toggle_attribute({"aria-expanded", "true", "false"}, to: "##{@id}")
+      }
+      {@rest}
+    >
+      {render_slot(@inner_block)}
+    </button>
+    """
+  end
+
+  @doc """
+  The panel a `score_trigger/1` opens, hidden until it is toggled.
+
+  Carries no width of its own. It is placed by its caller inside the row's
+  content column, so it spans that column instead of floating as a fixed-width
+  card anchored to a badge.
+  """
+  attr :id, :string, required: true
+  attr :title, :string, default: "Score breakdown"
+  attr :class, :any, default: nil
+  slot :inner_block, required: true
+
+  def score_panel(assigns) do
+    ~H"""
+    <div id={@id} role="region" class={["hidden mt-2 rounded-box bg-base-200 p-3", @class]}>
+      <h4 class="text-sm font-semibold mb-2">{@title}</h4>
+      <div class="space-y-1.5 text-xs">
+        {render_slot(@inner_block)}
+      </div>
+    </div>
+    """
   end
 end

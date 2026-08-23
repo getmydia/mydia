@@ -2,6 +2,8 @@ defmodule MydiaWeb.MediaLive.Show.ScoreBreakdownTest do
   use ExUnit.Case, async: true
 
   import Phoenix.LiveViewTest
+  import Phoenix.Component
+  import MydiaWeb.MediaLive.Show.ScoreBreakdown
 
   alias MydiaWeb.MediaLive.Show.ScoreBreakdown
 
@@ -97,5 +99,89 @@ defmodule MydiaWeb.MediaLive.Show.ScoreBreakdownTest do
       assert ScoreBreakdown.score_color(nil, 10) == "text-base-content/50"
       assert ScoreBreakdown.score_color(nil, 10, true) == "text-base-content/50"
     end
+  end
+
+  # A local wrapper component, because render_component/2 cannot pass a slot
+  # ergonomically. Rendering the pair together is also what we actually want to
+  # assert: their contract is the link between the two ids.
+  defp disclosure(assigns) do
+    ~H"""
+    <.score_trigger
+      id="subtitle-score-badge-0"
+      panel_id="subtitle-score-breakdown-0"
+      class="badge badge-sm"
+    >
+      Score 95
+    </.score_trigger>
+    <.score_panel id="subtitle-score-breakdown-0">
+      <.score_row label="Resolution" value="1080p" score={30} max={30} />
+    </.score_panel>
+    """
+  end
+
+  defp disclosure_html, do: render_component(&disclosure/1, %{})
+
+  describe "score_trigger/1 and score_panel/1 disclosure contract" do
+    test "the trigger is a real button that points at its panel" do
+      doc = LazyHTML.from_fragment(disclosure_html())
+      trigger = LazyHTML.query_by_id(doc, "subtitle-score-badge-0")
+
+      assert LazyHTML.attribute(trigger, "type") == ["button"]
+      assert LazyHTML.attribute(trigger, "aria-controls") == ["subtitle-score-breakdown-0"]
+      assert LazyHTML.attribute(trigger, "aria-expanded") == ["false"]
+    end
+
+    test "the trigger keeps the caller's styling" do
+      doc = LazyHTML.from_fragment(disclosure_html())
+      trigger = LazyHTML.query_by_id(doc, "subtitle-score-badge-0")
+
+      assert LazyHTML.attribute(trigger, "class") == ["badge badge-sm"]
+      assert LazyHTML.text(trigger) =~ "Score 95"
+    end
+
+    test "the trigger toggles the panel client-side, with no server event" do
+      doc = LazyHTML.from_fragment(disclosure_html())
+      trigger = LazyHTML.query_by_id(doc, "subtitle-score-badge-0")
+      [click] = LazyHTML.attribute(trigger, "phx-click")
+
+      # A JS command list, not an event name. A bare event name would mean a
+      # round-trip, which breaks the release dialog's phx-update="stream" list.
+      assert click =~ "toggle"
+      assert click =~ "subtitle-score-breakdown-0"
+      refute click =~ ~s("push")
+    end
+
+    test "the panel starts hidden and renders its rows" do
+      doc = LazyHTML.from_fragment(disclosure_html())
+      panel = LazyHTML.query_by_id(doc, "subtitle-score-breakdown-0")
+      [class] = LazyHTML.attribute(panel, "class")
+
+      assert class =~ "hidden"
+      assert LazyHTML.text(panel) =~ "Score breakdown"
+      assert LazyHTML.text(panel) =~ "Resolution"
+      assert LazyHTML.text(panel) =~ "1080p"
+    end
+
+    test "the panel is not a positioned dropdown" do
+      html = disclosure_html()
+
+      refute html =~ "dropdown"
+      refute html =~ "dropdown-content"
+    end
+
+    test "the panel title is overridable" do
+      html = render_component(&titled_panel/1, %{})
+
+      assert html =~ "Why this ranked here"
+      refute html =~ "Score breakdown"
+    end
+  end
+
+  defp titled_panel(assigns) do
+    ~H"""
+    <.score_panel id="p" title="Why this ranked here">
+      <span>row</span>
+    </.score_panel>
+    """
   end
 end
