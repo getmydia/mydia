@@ -56,6 +56,23 @@ defmodule MetadataRelay.SubDL.HandlerTest do
     assert {:ok, "/subtitle/3602674-8520054.zip"} = FileId.decode(subtitle["id"])
   end
 
+  # The relay is a proxy, and a client that cannot tell which upstream answered
+  # can only name the relay itself. SubDL is the only subtitle source today, but
+  # naming it on the wire is what lets a client stop guessing.
+  test "names SubDL as the source on every emitted subtitle" do
+    stub(fn request ->
+      {request,
+       Req.Response.new(
+         status: 200,
+         body: %{"status" => true, "subtitles" => [subtitle_fixture()]}
+       )}
+    end)
+
+    assert {:ok, %{"subtitles" => [subtitle]}} = Handler.search(%{imdb_id: "0133093"})
+
+    assert Map.fetch!(subtitle, "source") == "SubDL"
+  end
+
   test "reports rating and download count as unknown rather than zero" do
     stub(fn request ->
       {request,
