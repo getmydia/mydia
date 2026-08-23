@@ -131,6 +131,35 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModalTest do
       assert html =~ ~s(id="subtitle-score-breakdown-0")
       assert html =~ "Release group"
     end
+
+    test "the score badge is a button wired to the breakdown panel, not a dropdown" do
+      html = render_modal([result(%{score: 95, score_breakdown: []})])
+      doc = LazyHTML.from_fragment(html)
+      trigger = LazyHTML.query_by_id(doc, "subtitle-score-badge-0")
+
+      assert LazyHTML.attribute(trigger, "type") == ["button"]
+      assert LazyHTML.attribute(trigger, "aria-controls") == ["subtitle-score-breakdown-0"]
+      assert LazyHTML.attribute(trigger, "aria-expanded") == ["false"]
+    end
+
+    test "no hover dropdown survives anywhere in the dialog" do
+      html = render_modal([result(%{score: 95, score_breakdown: []})])
+
+      refute html =~ "dropdown-hover"
+      refute html =~ "dropdown-content"
+      refute html =~ "dropdown-end"
+    end
+
+    test "the breakdown panel is a sibling of the badge cluster, not inside it" do
+      html = render_modal([result(%{score: 95, score_breakdown: []})])
+      doc = LazyHTML.from_fragment(html)
+
+      # The badge cluster is the flex-wrap row of badges. If the panel were
+      # still inside it the panel would be a wrapping flex item, which is what
+      # made it a cramped w-64 card in the first place.
+      assert Enum.empty?(LazyHTML.query(doc, ".flex-wrap #subtitle-score-breakdown-0"))
+      assert Enum.count(LazyHTML.query_by_id(doc, "subtitle-score-breakdown-0")) == 1
+    end
   end
 
   describe "subtitle_search_modal/1 shell" do
@@ -198,6 +227,88 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModalTest do
       # Finnish is not one of the eight common chips, but selecting it must not
       # bury it inside the dropdown.
       assert subtitle_modal_html(selected_languages: ["fi"]) =~ ~s(aria-label="Finnish")
+    end
+
+    test "every language is a chip in the filter group, with the extras hidden" do
+      html = subtitle_modal_html(selected_languages: ["en"])
+      doc = LazyHTML.from_fragment(html)
+
+      # All 20 of Languages.all/0, as direct children of the one filter group.
+      assert Enum.count(LazyHTML.query(doc, ".filter input[type=checkbox]")) == 20
+
+      # Finnish is not common and is not selected, so it is present but hidden.
+      [class] =
+        doc
+        |> LazyHTML.query(~s(.filter input[aria-label="Finnish"]))
+        |> LazyHTML.attribute("class")
+
+      assert class =~ "subtitle-lang-extra"
+      assert class =~ "hidden"
+    end
+
+    test "the language list is inline, not a dropdown" do
+      html = subtitle_modal_html(selected_languages: ["en"])
+
+      refute html =~ "dropdown"
+      refute html =~ "menu bg-base-100"
+    end
+
+    test "the more-languages toggle is a client-side disclosure" do
+      html = subtitle_modal_html(selected_languages: ["en"])
+      doc = LazyHTML.from_fragment(html)
+      toggle = LazyHTML.query_by_id(doc, "subtitle-language-more-toggle")
+      [click] = LazyHTML.attribute(toggle, "phx-click")
+
+      assert LazyHTML.attribute(toggle, "type") == ["button"]
+      assert LazyHTML.attribute(toggle, "aria-expanded") == ["false"]
+      assert click =~ "subtitle-lang-extra"
+      refute click =~ ~s("push")
+    end
+
+    test "a selected uncommon language is visible rather than hidden behind the toggle" do
+      html = subtitle_modal_html(selected_languages: ["fi"])
+      doc = LazyHTML.from_fragment(html)
+
+      [class] =
+        doc
+        |> LazyHTML.query(~s(.filter input[aria-label="Finnish"]))
+        |> LazyHTML.attribute("class")
+
+      refute class =~ "hidden"
+      assert html =~ ~s(aria-label="Finnish")
+    end
+
+    test "the dialog is a bottom sheet on mobile and a centered modal from sm up" do
+      html = subtitle_modal_html()
+
+      assert html =~ "modal-bottom"
+      assert html =~ "sm:modal-middle"
+    end
+
+    test "the modal box sizes to the small viewport without the phantom scroll layer" do
+      html = subtitle_modal_html()
+      doc = LazyHTML.from_fragment(html)
+
+      [class] =
+        LazyHTML.query(doc, "#subtitle-search-modal > .modal-box")
+        |> LazyHTML.attribute("class")
+
+      # dvh, not vh: mobile browser chrome eats a vh-measured footer.
+      assert class =~ "max-h-[92dvh]"
+      assert class =~ "sm:max-h-[85vh]"
+      assert class =~ "max-w-none"
+      assert class =~ "sm:max-w-3xl"
+      # .modal-box ships overflow-y:auto, which nothing needs now that no
+      # popover has to escape it, and which made a nested scroll container.
+      assert class =~ "overflow-hidden"
+      # The header's sticky was inert: its parent never scrolls.
+      refute class =~ "sticky"
+    end
+
+    test "the primary actions are full width on mobile" do
+      html = loaded_html([result_fixture()])
+
+      assert html =~ "btn-block sm:w-auto"
     end
 
     test "disables search when no language is selected" do

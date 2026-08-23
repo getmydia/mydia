@@ -10,6 +10,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
   import MydiaWeb.MediaLive.Show.ScoreBreakdown
 
   alias Mydia.Library.MediaFile
+  alias Phoenix.LiveView.JS
 
   @doc """
   Subtitle search modal for searching and downloading subtitles.
@@ -25,8 +26,8 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
     common = MydiaWeb.Languages.common()
     common_codes = Enum.map(common, &elem(&1, 0))
 
-    # A selected language always gets a chip, even an uncommon one, so the
-    # current selection is never hidden behind the dropdown.
+    # A selected language always gets a visible chip, even an uncommon one, so
+    # the current selection is never hidden behind the "+N more" toggle.
     extra_chips =
       assigns.selected_languages
       |> Enum.reject(&(&1 in common_codes))
@@ -42,10 +43,10 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
       |> assign(:more_languages, more)
 
     ~H"""
-    <div class="modal modal-open" id="subtitle-search-modal">
-      <div class="modal-box max-w-3xl max-h-[85vh] flex flex-col p-0">
+    <div class="modal modal-bottom sm:modal-middle modal-open" id="subtitle-search-modal">
+      <div class="modal-box max-w-none sm:max-w-3xl max-h-[92dvh] sm:max-h-[85vh] flex flex-col overflow-hidden p-0">
         <%!-- Header --%>
-        <div class="sticky top-0 z-10 bg-base-100 border-b border-base-300 p-4 sm:p-6">
+        <div class="bg-base-100 border-b border-base-300 p-4 sm:p-6">
           <div class="flex items-start justify-between gap-4">
             <div class="min-w-0">
               <h3 class="text-xl sm:text-2xl font-bold">Search Subtitles</h3>
@@ -91,36 +92,43 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
                 aria-label={label}
                 checked={code in @selected_languages}
               />
+              <input
+                :for={{code, label} <- @more_languages}
+                class="btn btn-sm subtitle-lang-extra hidden"
+                type="checkbox"
+                name="languages[]"
+                value={code}
+                aria-label={label}
+                checked={code in @selected_languages}
+              />
             </div>
 
-            <div class="dropdown dropdown-end">
-              <div tabindex="0" role="button" class="btn btn-sm btn-ghost">
-                +{length(@more_languages)} more <.icon name="hero-chevron-down" class="w-4 h-4" />
-              </div>
-              <ul
-                tabindex="0"
-                class="dropdown-content menu bg-base-100 rounded-box z-10 w-52 p-2 shadow-sm max-h-64 flex-nowrap overflow-y-auto"
-              >
-                <li :for={{code, label} <- @more_languages}>
-                  <label class="label cursor-pointer justify-start gap-2">
-                    <input
-                      type="checkbox"
-                      class="checkbox checkbox-sm"
-                      name="languages[]"
-                      value={code}
-                    />
-                    <span class="label-text">{label}</span>
-                  </label>
-                </li>
-              </ul>
-            </div>
+            <button
+              type="button"
+              id="subtitle-language-more-toggle"
+              class="btn btn-sm btn-ghost"
+              aria-expanded="false"
+              aria-controls="subtitle-language-form"
+              phx-click={
+                JS.toggle(to: "#subtitle-language-form .subtitle-lang-extra", display: "inline-flex")
+                |> JS.toggle_attribute({"aria-expanded", "true", "false"},
+                  to: "#subtitle-language-more-toggle"
+                )
+                |> JS.toggle(to: "#subtitle-language-more-label", display: "inline")
+                |> JS.toggle(to: "#subtitle-language-fewer-label", display: "inline")
+              }
+            >
+              <span id="subtitle-language-more-label">+{length(@more_languages)} more</span>
+              <span id="subtitle-language-fewer-label" class="hidden">Show fewer</span>
+              <.icon name="hero-chevron-down" class="w-4 h-4" />
+            </button>
 
             <div class="flex-1"></div>
 
             <button
               type="button"
               phx-click="perform_subtitle_search"
-              class="btn btn-primary btn-sm"
+              class="btn btn-primary btn-sm btn-block sm:w-auto"
               disabled={@subtitle_search_state == :searching or @selected_languages == []}
             >
               <%= if @subtitle_search_state == :searching do %>
@@ -226,83 +234,73 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
                       :for={{result, index} <- Enum.with_index(@subtitle_search_results)}
                       class="list-row hover:bg-base-200/50 transition-colors"
                     >
-                      <div class="list-col-grow min-w-0">
-                        <div class="font-medium truncate">
-                          {result.file_name || MydiaWeb.Languages.name(result.language)}
-                        </div>
-                        <div class="flex flex-wrap items-center gap-1.5 mt-1">
-                          <span class="badge badge-sm">
-                            {MydiaWeb.Languages.name(result.language)}
-                          </span>
-                          <span class="badge badge-ghost badge-sm">{result.format}</span>
-                          <span :if={result.provider_name} class="badge badge-ghost badge-sm">
-                            {result.provider_name}
-                          </span>
-                          <span :if={result.moviehash_match} class="badge badge-success badge-sm">
-                            Exact match
-                          </span>
-                          <div
-                            :if={result.hearing_impaired}
-                            class="tooltip"
-                            data-tip="Includes hearing impaired captions"
-                          >
-                            <span class="badge badge-outline badge-sm">HI</span>
+                      <div class="list-col-grow min-w-0 flex flex-col sm:flex-row sm:items-center gap-3">
+                        <div class="min-w-0 flex-1">
+                          <div class="font-medium truncate">
+                            {result.file_name || MydiaWeb.Languages.name(result.language)}
                           </div>
-                          <div class="dropdown dropdown-hover dropdown-end">
+                          <div class="flex flex-wrap items-center gap-1.5 mt-1">
+                            <span class="badge badge-sm">
+                              {MydiaWeb.Languages.name(result.language)}
+                            </span>
+                            <span class="badge badge-ghost badge-sm">{result.format}</span>
+                            <span :if={result.provider_name} class="badge badge-ghost badge-sm">
+                              {result.provider_name}
+                            </span>
+                            <span :if={result.moviehash_match} class="badge badge-success badge-sm">
+                              Exact match
+                            </span>
                             <div
-                              tabindex="0"
-                              role="button"
+                              :if={result.hearing_impaired}
+                              class="tooltip"
+                              data-tip="Includes hearing impaired captions"
+                            >
+                              <span class="badge badge-outline badge-sm">HI</span>
+                            </div>
+                            <.score_trigger
                               id={"subtitle-score-badge-#{index}"}
+                              panel_id={"subtitle-score-breakdown-#{index}"}
                               class={[
                                 "badge badge-sm cursor-pointer",
                                 score_badge_class(result.score)
                               ]}
-                              title="Hover for score breakdown"
+                              title="Show score breakdown"
                             >
                               Score {result.score}
-                            </div>
-                            <div
-                              tabindex="0"
-                              id={"subtitle-score-breakdown-#{index}"}
-                              class="dropdown-content z-50 card card-compact bg-base-200 shadow-xl w-64"
-                            >
-                              <div class="card-body p-3">
-                                <h4 class="card-title text-sm mb-2">Score breakdown</h4>
-                                <div class="space-y-1.5 text-xs">
-                                  <.score_row
-                                    :for={factor <- result.score_breakdown}
-                                    label={factor.label}
-                                    value={factor.detail}
-                                    score={factor.points}
-                                    max={factor.max}
-                                    zero_is_absent={true}
-                                  />
-                                </div>
-                              </div>
-                            </div>
+                            </.score_trigger>
+                          </div>
+                          <.score_panel id={"subtitle-score-breakdown-#{index}"}>
+                            <.score_row
+                              :for={factor <- result.score_breakdown}
+                              label={factor.label}
+                              value={factor.detail}
+                              score={factor.points}
+                              max={factor.max}
+                              zero_is_absent={true}
+                            />
+                          </.score_panel>
+                          <div class="text-xs text-base-content/60 mt-1 flex gap-3">
+                            <span :if={result.rating}>★ {result.rating}/10</span>
+                            <span :if={result.download_count}>
+                              {result.download_count} downloads
+                            </span>
                           </div>
                         </div>
-                        <div class="text-xs text-base-content/60 mt-1 flex gap-3">
-                          <span :if={result.rating}>★ {result.rating}/10</span>
-                          <span :if={result.download_count}>
-                            {result.download_count} downloads
-                          </span>
-                        </div>
-                      </div>
 
-                      <button
-                        type="button"
-                        phx-click="download_subtitle_result"
-                        phx-value-index={index}
-                        class="btn btn-primary btn-sm"
-                        disabled={@downloading_subtitle_index != nil}
-                      >
-                        <%= if @downloading_subtitle_index == index do %>
-                          <span class="loading loading-spinner loading-xs"></span>
-                        <% else %>
-                          <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> Download
-                        <% end %>
-                      </button>
+                        <button
+                          type="button"
+                          phx-click="download_subtitle_result"
+                          phx-value-index={index}
+                          class="btn btn-primary btn-sm btn-block sm:w-auto"
+                          disabled={@downloading_subtitle_index != nil}
+                        >
+                          <%= if @downloading_subtitle_index == index do %>
+                            <span class="loading loading-spinner loading-xs"></span>
+                          <% else %>
+                            <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> Download
+                          <% end %>
+                        </button>
+                      </div>
                     </li>
                   </ul>
               <% end %>

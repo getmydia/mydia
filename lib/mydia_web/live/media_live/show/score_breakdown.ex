@@ -11,6 +11,8 @@ defmodule MydiaWeb.MediaLive.Show.ScoreBreakdown do
   """
   use Phoenix.Component
 
+  alias Phoenix.LiveView.JS
+
   @doc """
   One factor of a score breakdown.
 
@@ -116,5 +118,79 @@ defmodule MydiaWeb.MediaLive.Show.ScoreBreakdown do
       score / max >= 0.5 -> "text-warning"
       true -> "text-error"
     end
+  end
+
+  @doc """
+  Trigger button for a score breakdown panel.
+
+  An inline disclosure rather than a daisyUI `dropdown`, because a hover-driven
+  panel is not a dependable touch affordance. daisyUI hides a `dropdown-hover`
+  panel whenever its trigger has `:focus` without `:focus-visible`, so the only
+  thing keeping it open after a tap is the sticky `:hover` the tap happens to
+  leave behind, which no touch platform guarantees and which any scroll can
+  clear. Focus, the one state a tap reliably leaves, is excluded by that rule.
+
+  A hidden sibling opens on an explicit tap and stays open until tapped again.
+  It also spans the row rather than a fixed `w-64`, and because it is in flow it
+  grows its scrolling ancestor's scroll extent instead of overhanging it.
+
+  The toggle is a client-side `JS` command, not a server event, so it costs no
+  round-trip and does not fight the release dialog's `phx-update="stream"` list.
+  """
+  attr :id, :string, required: true
+  attr :panel_id, :string, required: true
+  attr :class, :any, default: nil
+  attr :style, :string, default: nil
+  attr :rest, :global
+  slot :inner_block, required: true
+
+  def score_trigger(assigns) do
+    ~H"""
+    <button
+      type="button"
+      id={@id}
+      class={@class}
+      style={@style}
+      aria-expanded="false"
+      aria-controls={@panel_id}
+      phx-click={
+        JS.toggle(to: "##{@panel_id}")
+        |> JS.toggle_attribute({"aria-expanded", "true", "false"}, to: "##{@id}")
+      }
+      {@rest}
+    >
+      {render_slot(@inner_block)}
+    </button>
+    """
+  end
+
+  @doc """
+  The panel a `score_trigger/1` opens, hidden until it is toggled.
+
+  Carries no width of its own. It is placed by its caller inside the row's
+  content column, so it spans that column instead of floating as a fixed-width
+  card anchored to a badge.
+
+  Deliberately not a `role="region"`. That role is a landmark, and one result
+  list renders a panel per row, so it would add a dozen identically named
+  "Score breakdown" landmarks to a single page and make landmark navigation
+  worse rather than better. The disclosure contract is already complete without
+  it: the trigger carries `aria-expanded` and `aria-controls`, and the heading
+  names the content.
+  """
+  attr :id, :string, required: true
+  attr :title, :string, default: "Score breakdown"
+  attr :class, :any, default: nil
+  slot :inner_block, required: true
+
+  def score_panel(assigns) do
+    ~H"""
+    <div id={@id} class={["hidden mt-2 rounded-box bg-base-200 p-3", @class]}>
+      <h4 class="text-sm font-semibold mb-2">{@title}</h4>
+      <div class="space-y-1.5 text-xs">
+        {render_slot(@inner_block)}
+      </div>
+    </div>
+    """
   end
 end
