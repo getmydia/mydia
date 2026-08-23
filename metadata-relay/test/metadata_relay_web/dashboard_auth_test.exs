@@ -35,6 +35,26 @@ defmodule MetadataRelayWeb.DashboardAuthTest do
     assert [_www_authenticate] = get_resp_header(conn, "www-authenticate")
   end
 
+  # `Authorization: Basic Og==` is the base64 of the literal string ":" --
+  # empty username, empty password. This test's configured credentials
+  # (config/config.exs -- "admin"/"admin", the same fixed values every test
+  # in this module runs against) are non-blank, so it correctly gets
+  # rejected here regardless of the T-259..T-262 fix: `Plug.BasicAuth`
+  # itself is unmodified. What the fix (MetadataRelay.Config, exercised
+  # directly in config_test.exs) prevents is the *configured* credentials
+  # themselves ever becoming blank in `:prod` -- which is the state under
+  # which this same empty-auth header would otherwise succeed, since
+  # `Plug.BasicAuth`'s own moduledoc documents that a blank configured
+  # user/pass "may be empty strings" and is accepted as such by design.
+  test "an empty Authorization header is rejected against the configured (non-blank) credentials" do
+    conn =
+      build_conn()
+      |> put_req_header("authorization", "Basic Og==")
+      |> get("/errors")
+
+    assert conn.status == 401
+  end
+
   defp basic_auth(username, password) do
     "Basic " <> Base.encode64("#{username}:#{password}")
   end

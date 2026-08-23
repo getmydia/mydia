@@ -124,20 +124,20 @@ defmodule MetadataRelay.SubDL.Handler do
   # resort. A file hash is ignored: SubDL has no hash search at all.
   defp identity(params) do
     cond do
-      present?(params[:tmdb_id]) -> [tmdb_id: to_string(params[:tmdb_id])]
-      present?(params[:imdb_id]) -> [imdb_id: imdb_with_prefix(params[:imdb_id])]
-      present?(params[:query]) -> [film_name: to_string(params[:query])]
+      present?(params["tmdb_id"]) -> [tmdb_id: to_string(params["tmdb_id"])]
+      present?(params["imdb_id"]) -> [imdb_id: imdb_with_prefix(params["imdb_id"])]
+      present?(params["query"]) -> [film_name: to_string(params["query"])]
       true -> nil
     end
   end
 
   defp type_params(params) do
-    case Map.get(params, :media_type) do
+    case Map.get(params, "media_type") do
       "episode" ->
         [
           type: "tv",
-          season_number: Map.get(params, :season_number),
-          episode_number: Map.get(params, :episode_number)
+          season_number: Map.get(params, "season_number"),
+          episode_number: Map.get(params, "episode_number")
         ]
         |> Enum.reject(fn {_key, value} -> is_nil(value) end)
 
@@ -151,7 +151,7 @@ defmodule MetadataRelay.SubDL.Handler do
 
   defp languages(params) do
     params
-    |> Map.get(:languages, "en")
+    |> Map.get("languages", "en")
     |> to_string()
     |> String.split(",", trim: true)
     |> Enum.map_join(",", &(&1 |> String.trim() |> String.upcase()))

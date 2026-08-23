@@ -185,7 +185,16 @@ defmodule MetadataRelay.FeedbackIngestTest do
       assert submission.mydia_version == nil
     end
 
-    test "accepts null instance_id and rate-limits it under anonymous" do
+    # Regression guard for T-236: omitting `instance_id` used to fall back to
+    # the literal shared string "anonymous", so every caller in the world who
+    # left it out collided into one rate-limit bucket -- a caller with no
+    # instance_id at all could send five feedback requests from five
+    # different IPs and rate limit every *other* anonymous submitter for the
+    # rest of the hour, since the trusted-forwarded-for IP check alone never
+    # tripped for any of them individually. The fallback now scopes to the
+    # caller's own (rate-limited) IP instead, so distinct callers omitting
+    # instance_id no longer share a bucket.
+    test "omitting instance_id does not create a shared bucket across different callers" do
       for i <- 1..5 do
         conn =
           post_feedback(%{"type" => "bug", "message" => "Message #{i}", "instance_id" => nil},
@@ -195,14 +204,29 @@ defmodule MetadataRelay.FeedbackIngestTest do
         assert conn.status == 201
       end
 
+      # A sixth, distinct caller (its own IP, also no instance_id) must not
+      # be blocked by the other five.
       conn =
         post_feedback(%{"type" => "bug", "message" => "Message 6", "instance_id" => nil},
           forwarded_for: "203.0.113.6"
         )
 
+      assert conn.status == 201
+      assert 6 == Repo.aggregate(Submission, :count, :id)
+    end
+
+    test "still rate limits the sixth request from one IP when instance_id is omitted" do
+      for i <- 1..5 do
+        conn =
+          post_feedback(%{"type" => "bug", "message" => "Message #{i}", "instance_id" => nil})
+
+        assert conn.status == 201
+      end
+
+      conn = post_feedback(%{"type" => "bug", "message" => "Message 6", "instance_id" => nil})
+
       assert conn.status == 429
       assert ["3600"] = Plug.Conn.get_resp_header(conn, "retry-after")
-
       assert 5 == Repo.aggregate(Submission, :count, :id)
     end
 
@@ -248,6 +272,37 @@ defmodule MetadataRelay.FeedbackIngestTest do
 
       assert conn.status == 429
       assert 5 == Repo.aggregate(Submission, :count, :id)
+    end
+
+    # Regression guard: the T-236 fallback introduced a new collision. The
+    # fallback bucket for a caller who omits instance_id is keyed off
+    # "ip:<client_ip>". A caller can *supply* instance_id: "ip:<victim_ip>"
+    # and land in the exact same rate-limit bucket as the victim's fallback,
+    # letting an attacker (spreading requests across throwaway IPs so their
+    # own IP-keyed bucket never trips) exhaust the victim's fallback bucket
+    # before the victim ever sends a request.
+    test "a caller-supplied instance_id cannot collide with another caller's fallback bucket" do
+      victim_ip = "203.0.113.77"
+
+      for i <- 1..5 do
+        conn =
+          post_feedback(
+            %{"type" => "bug", "message" => "Attacker #{i}", "instance_id" => "ip:#{victim_ip}"},
+            forwarded_for: "198.51.100.#{i}"
+          )
+
+        assert conn.status == 201
+      end
+
+      # The victim, sending from their own IP with no instance_id at all,
+      # must still get through -- their fallback bucket must not have been
+      # exhausted by the attacker's crafted instance_id.
+      conn =
+        post_feedback(%{"type" => "bug", "message" => "Victim", "instance_id" => nil},
+          forwarded_for: victim_ip
+        )
+
+      assert conn.status == 201
     end
   end
 

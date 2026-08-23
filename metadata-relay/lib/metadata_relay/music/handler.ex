@@ -13,8 +13,8 @@ defmodule MetadataRelay.Music.Handler do
     - type: artist | release | recording
   """
   def search(params) do
-    query = Keyword.get(params, :query)
-    type = Keyword.get(params, :type)
+    query = Map.get(params, "query")
+    type = Map.get(params, "type")
 
     if is_nil(query) or is_nil(type) do
       {:error, {:http_error, 400, %{error: "Missing required parameters: query, type"}}}

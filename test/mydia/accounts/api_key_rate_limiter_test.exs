@@ -104,11 +104,83 @@ defmodule Mydia.Accounts.ApiKeyRateLimiterTest do
     end
   end
 
+  describe "record_failed_attempt/2 under concurrency" do
+    # A brute-force limit that loses increments when guesses arrive in parallel
+    # is a limit an attacker gets to raise by simply opening more connections.
+    # record_failed_attempt/2 used to read the counter and write it back as two
+    # separate ETS operations, so simultaneous attempts on the same bucket all
+    # read the same value and all stored that value plus one -- N guesses
+    # counted as one. Every attempt must land exactly once.
+    test "counts every concurrent attempt exactly once" do
+      ip = "192.168.1.99"
+      storage_key = "api_key_validation:#{ip}"
+      attempts = 200
+
+      ApiKeyRateLimiter.reset_rate_limit(ip)
+
+      1..attempts
+      |> Task.async_stream(fn _ -> ApiKeyRateLimiter.record_failed_attempt(ip) end,
+        max_concurrency: 50,
+        timeout: :infinity
+      )
+      |> Stream.run()
+
+      assert [{^storage_key, recorded, _first_attempt_at, _window}] =
+               :ets.lookup(:api_key_rate_limiter, storage_key)
+
+      assert recorded == attempts
+
+      ApiKeyRateLimiter.reset_rate_limit(ip)
+    end
+  end
+
   describe "cleanup_expired/0" do
     test "removes expired entries" do
       # This test would require mocking time or waiting for the window to expire
       # For now, just verify the function can be called without error
       assert :ok = ApiKeyRateLimiter.cleanup_expired()
+    end
+
+    test "does not clear a bucket before its own configured window elapses" do
+      # cleanup_expired/0 used to always compare against the module's
+      # hardcoded 3600s default, ignoring any custom `:window_seconds` a
+      # caller passed to record_failed_attempt/2. A bucket configured with a
+      # longer window (e.g. 7200s) would get swept away once it crossed the
+      # 3600s mark, letting a still-supposed-to-be-locked-out caller back in
+      # well before its actual window expired. The bucket must now persist
+      # its own window alongside the attempt count so cleanup can honor it.
+      ip = "192.168.1.42"
+      window_seconds = 7200
+      storage_key = "api_key_validation:#{ip}"
+
+      for _i <- 1..10 do
+        ApiKeyRateLimiter.record_failed_attempt(ip, window_seconds: window_seconds)
+      end
+
+      assert {:error, :rate_limited} =
+               ApiKeyRateLimiter.check_rate_limit(ip, window_seconds: window_seconds)
+
+      assert [{^storage_key, attempts, _first_attempt_at, stored_window}] =
+               :ets.lookup(:api_key_rate_limiter, storage_key)
+
+      assert stored_window == window_seconds
+
+      # Back-date the bucket past the hardcoded 3600s default cleanup
+      # window, but still inside the 7200s window it was actually
+      # configured with.
+      backdated_first_attempt_at = System.system_time(:second) - 4000
+
+      :ets.insert(
+        :api_key_rate_limiter,
+        {storage_key, attempts, backdated_first_attempt_at, stored_window}
+      )
+
+      assert :ok = ApiKeyRateLimiter.cleanup_expired()
+
+      # Still within the bucket's own 7200s window: cleanup must not have
+      # cleared it early, so the lockout must still be in effect.
+      assert {:error, :rate_limited} =
+               ApiKeyRateLimiter.check_rate_limit(ip, window_seconds: window_seconds)
     end
   end
 end

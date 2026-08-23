@@ -53,45 +53,67 @@ defmodule MydiaWeb.SessionController do
     config = Config.get()
 
     if config.auth.local_enabled do
-      case Accounts.get_user_by_username(username) do
-        nil ->
-          conn
-          |> put_flash(:error, "Invalid username or password")
-          |> render(:new,
-            changeset: Accounts.change_user(%Mydia.Accounts.User{}),
-            oidc_configured: oidc_configured?()
-          )
+      ip_address = remote_ip(conn)
 
-        user ->
-          if Accounts.verify_password(user, password) do
-            # Update last login timestamp
-            Accounts.update_last_login(user)
+      case Accounts.check_login_rate_limit(ip_address, username) do
+        :ok ->
+          attempt_login(conn, ip_address, username, password)
 
-            # Sign in the user via Guardian, which stores the token in session
-            # under the :guardian_default_token key that VerifySession expects.
-            # Also store under :guardian_token for backward compatibility with
-            # code that reads that key directly (e.g., logout, Flutter cookie auth).
-            {:ok, token, _claims} = Guardian.create_token(user)
-
-            conn
-            |> Guardian.Plug.sign_in(user)
-            |> put_session(:guardian_default_token, token)
-            |> put_session(:guardian_token, token)
-            |> put_flash(:info, "Successfully logged in!")
-            |> redirect(to: "/")
-          else
-            conn
-            |> put_flash(:error, "Invalid username or password")
-            |> render(:new,
-              changeset: Accounts.change_user(%Mydia.Accounts.User{}),
-              oidc_configured: oidc_configured?()
-            )
-          end
+        {:error, :rate_limited} ->
+          login_error(conn, "Too many login attempts. Please try again later.")
       end
     else
       conn
       |> put_flash(:error, "Local authentication is disabled")
       |> redirect(to: "/")
+    end
+  end
+
+  defp attempt_login(conn, ip_address, username, password) do
+    case Accounts.get_user_by_username(username) do
+      nil ->
+        Accounts.record_login_failure(ip_address, username)
+        login_error(conn, "Invalid username or password")
+
+      user ->
+        if Accounts.verify_password(user, password) do
+          Accounts.reset_login_rate_limit(ip_address, username)
+          # Update last login timestamp
+          Accounts.update_last_login(user)
+
+          # Sign in the user via Guardian, which stores the token in session
+          # under the :guardian_default_token key that VerifySession expects.
+          # Also store under :guardian_token for backward compatibility with
+          # code that reads that key directly (e.g., logout, Flutter cookie auth).
+          {:ok, token, _claims} = Guardian.create_token(user)
+
+          conn
+          |> Guardian.Plug.sign_in(user)
+          |> put_session(:guardian_default_token, token)
+          |> put_session(:guardian_token, token)
+          |> put_flash(:info, "Successfully logged in!")
+          |> redirect(to: "/")
+        else
+          Accounts.record_login_failure(ip_address, username)
+          login_error(conn, "Invalid username or password")
+        end
+    end
+  end
+
+  defp login_error(conn, message) do
+    conn
+    |> put_flash(:error, message)
+    |> render(:new,
+      changeset: Accounts.change_user(%Mydia.Accounts.User{}),
+      oidc_configured: oidc_configured?()
+    )
+  end
+
+  defp remote_ip(conn) do
+    case conn.remote_ip do
+      {a, b, c, d} -> "#{a}.#{b}.#{c}.#{d}"
+      {a, b, c, d, e, f, g, h} -> "#{a}:#{b}:#{c}:#{d}:#{e}:#{f}:#{g}:#{h}"
+      _ -> "unknown"
     end
   end
 end

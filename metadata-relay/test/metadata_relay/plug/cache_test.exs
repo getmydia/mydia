@@ -85,7 +85,7 @@ defmodule MetadataRelay.Plug.CacheTest do
   defp search_entry_ttl_ms do
     :metadata_relay_cache
     |> :ets.tab2list()
-    |> Enum.find_value(fn {key, _value, expires_at} ->
+    |> Enum.find_value(fn {key, _value, expires_at, _seq} ->
       if String.starts_with?(key, "POST:/api/v1/subtitles/search:") do
         DateTime.diff(expires_at, DateTime.utc_now(), :millisecond)
       end

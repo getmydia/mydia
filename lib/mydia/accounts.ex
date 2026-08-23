@@ -13,7 +13,7 @@ defmodule Mydia.Accounts do
   import Mydia.QueryHelpers
   require Logger
   alias Mydia.Repo
-  alias Mydia.Accounts.{User, ApiKey, UserPreference}
+  alias Mydia.Accounts.{User, ApiKey, UserPreference, ApiKeyRateLimiter}
 
   @changelog_key "last_seen_changelog_version"
 
@@ -186,13 +186,48 @@ defmodule Mydia.Accounts do
   @doc """
   Deletes a user.
 
-  Sweeps the user's plugin connections (and their per-connection KV state) first:
-  the `user_id` FK cascades the connection rows on its own, but the KV keys are
-  not user-scoped, so the application sweep removes them before the cascade.
+  Sweeps the per-connection KV state of the user's plugin connections: the
+  `user_id` FK cascades the connection rows on its own, but the KV keys are not
+  user-scoped, so the application has to remove them.
+
+  Also invalidates any cached media tokens for the user's paired devices after
+  the delete succeeds: `remote_devices.user_id` cascades at the database level
+  (`on_delete: :delete_all`), which drops the rows without going through
+  `RemoteAccess.revoke_device/1` or `delete_device/1` -- and so without either
+  of those functions' own cache invalidation. Without this sweep, a device
+  belonging to a just-deleted user would keep authenticating off a stale
+  `Mydia.Media.TokenCache` entry for up to the cache's TTL.
+
+  Both sweeps follow the same shape: collect what is needed *before*
+  `Repo.delete/1`, since the rows are gone once the cascade runs, then act on it
+  only *after* the delete succeeds.
+
+  Acting first would be wrong in each case, for its own reason. Invalidating the
+  token cache first leaves a window where the device rows still exist, so a
+  concurrent media request could miss the cache, read the still-present row, and
+  re-cache it -- and that re-cached entry would survive the cascade for the full
+  cache TTL. Sweeping plugin KV first destroys state that nothing restores if the
+  delete then fails: `media_requests.requester_id` is `on_delete: :restrict`, so
+  a user who has ever requested media is rejected here, and none of this runs in
+  a transaction. That user would stay live with their plugin state already gone.
   """
   def delete_user(%User{} = user) do
-    Mydia.Plugins.Connections.delete_for_user(user.id)
-    Repo.delete(user)
+    connections = Mydia.Plugins.Connections.list_for_user(user.id)
+
+    device_ids =
+      user.id
+      |> Mydia.RemoteAccess.list_devices()
+      |> Enum.map(& &1.id)
+
+    case Repo.delete(user) do
+      {:ok, _deleted_user} = result ->
+        Mydia.Plugins.Connections.sweep_kv(connections)
+        Enum.each(device_ids, &Mydia.Media.TokenCache.invalidate_for_device/1)
+        result
+
+      error ->
+        error
+    end
   end
 
   @doc """
@@ -211,6 +246,105 @@ defmodule Mydia.Accounts do
   end
 
   def verify_password(_user, _password), do: false
+
+  # Both the form login (SessionController) and the GraphQL `login` mutation
+  # (AuthResolver) reach `verify_password/2` above with no throttle of their
+  # own, so bcrypt's cost function was the only thing standing between an
+  # unauthenticated caller and unlimited password guesses (T-005 / T-011).
+  #
+  # Keyed on IP *and* username, checked independently, so neither attack
+  # shape slips through: a single source hammering many usernames is capped
+  # by the IP bucket regardless of which username it tries, and a
+  # distributed/credential-stuffing attempt against one account is capped by
+  # the username bucket regardless of source IP.
+  #
+  # The two buckets get different limits on purpose, because they fail in
+  # opposite directions.
+  #
+  # Username: 10 attempts / 15 minutes. A fat-fingered password rarely takes
+  # more than 2-3 tries, so a legitimate user never reaches it, and the window
+  # decays in 15 minutes rather than the hour `ApiKeyRateLimiter` otherwise
+  # defaults to -- this gates the *only* login path, so a self-locked-out
+  # admin should not be waiting an hour to get back in.
+  #
+  # IP: 50 attempts / 15 minutes, deliberately much looser. Mydia's documented
+  # deployment is behind a reverse proxy (see docs/using/how-to/reverse-proxy.md),
+  # and `Plug.RewriteOn` in the endpoint rewrites host/port/proto but NOT
+  # `x-forwarded-for` -- so `conn.remote_ip` is the proxy's address, and every
+  # user on such an install shares a single IP bucket. At 10 that bucket is a
+  # global lockout switch any unauthenticated caller could trip on purpose,
+  # denying login to everyone for 15 minutes; the cure would be worse than the
+  # brute-force disease. At 50 an accidental trip is implausible for a
+  # self-hosted instance's handful of users, while password spraying is still
+  # capped at 50 guesses per window instead of unlimited.
+  #
+  # Deliberately NOT solved by honouring `x-forwarded-for` here: trusting a
+  # client-supplied header without a verified trusted-proxy hop is the exact
+  # defect this audit found in the relay (T-235 et al) and in OIDC redirect
+  # validation (T-007/T-019). A real fix needs a trusted-proxy allowlist,
+  # which is tracked with those findings rather than bolted on here.
+  #
+  # A successful login resets both buckets, so only consecutive failures count.
+  @login_username_rate_limit_max_attempts 10
+  @login_ip_rate_limit_max_attempts 50
+  @login_rate_limit_window_seconds 900
+
+  @doc """
+  Checks whether a login attempt from `ip_address` for `username` is allowed.
+
+  Returns `:ok` if the attempt may proceed, `{:error, :rate_limited}` if
+  either the IP or the username bucket has exceeded the limit.
+  """
+  @spec check_login_rate_limit(String.t(), String.t()) :: :ok | {:error, :rate_limited}
+  def check_login_rate_limit(ip_address, username) do
+    with :ok <-
+           ApiKeyRateLimiter.check_rate_limit(login_ip_key(ip_address), login_ip_rate_opts()) do
+      ApiKeyRateLimiter.check_rate_limit(login_username_key(username), login_username_rate_opts())
+    end
+  end
+
+  @doc """
+  Records a failed login attempt against both the IP and username buckets.
+  """
+  @spec record_login_failure(String.t(), String.t()) :: :ok
+  def record_login_failure(ip_address, username) do
+    ApiKeyRateLimiter.record_failed_attempt(login_ip_key(ip_address), login_ip_rate_opts())
+
+    ApiKeyRateLimiter.record_failed_attempt(
+      login_username_key(username),
+      login_username_rate_opts()
+    )
+
+    :ok
+  end
+
+  @doc """
+  Clears the login rate limit for both buckets after a successful login, so a
+  legitimate user's earlier typos do not count against them going forward.
+  """
+  @spec reset_login_rate_limit(String.t(), String.t()) :: :ok
+  def reset_login_rate_limit(ip_address, username) do
+    ApiKeyRateLimiter.reset_rate_limit(login_ip_key(ip_address))
+    ApiKeyRateLimiter.reset_rate_limit(login_username_key(username))
+    :ok
+  end
+
+  defp login_ip_rate_opts do
+    [
+      max_attempts: @login_ip_rate_limit_max_attempts,
+      window_seconds: @login_rate_limit_window_seconds
+    ]
+  end
+
+  defp login_username_rate_opts do
+    [
+      max_attempts: @login_username_rate_limit_max_attempts,
+      window_seconds: @login_rate_limit_window_seconds
+    ]
+  end
+
+  defp login_ip_key(ip_address), do: "login_ip:#{ip_address}"
+  defp login_username_key(username), do: "login_username:#{username}"
 
   ## Profile Management
 

@@ -6,7 +6,12 @@ config :metadata_relay,
   port: 4000,
   # Ecto repository
   ecto_repos: [MetadataRelay.Repo],
-  dashboard_auth: [username: "admin", password: "admin"]
+  dashboard_auth: [username: "admin", password: "admin"],
+  # Off unless RELAY_PROXY_RATE_LIMIT says otherwise. Behind Cloudflare the
+  # resolvable client IP is a shared Cloudflare edge address, so enabling
+  # this before the origin is restricted to Cloudflare's ranges would 429
+  # unrelated installs. See MetadataRelay.Plug.ProxyRateLimit's moduledoc.
+  proxy_rate_limit_enabled: false
 
 config :metadata_relay, MetadataRelay.Feedback.Notifier,
   recipient: nil,

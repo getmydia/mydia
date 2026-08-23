@@ -20,7 +20,13 @@ defmodule MetadataRelay.Music.Client do
         ]
       )
 
-    params = Keyword.get(opts, :params, []) |> Keyword.put(:fmt, "json")
+    # `Enum.to_list/1` normalizes either a keyword list (server-controlled
+    # calls elsewhere in this module, e.g. `params: [inc: "..."]`) or a
+    # string-keyed map (the caller-forwarded params the relay never
+    # atomizes -- see Router.extract_query_params/1) into a plain list of
+    # 2-tuples, so `fmt` can be prepended without requiring caller params to
+    # be a `Keyword` (which `Keyword.put/3` would, and caller params are not).
+    params = [{:fmt, "json"} | opts |> Keyword.get(:params, []) |> Enum.to_list()]
 
     case Req.get(client, url: path, params: params) do
       {:ok, %{status: status, body: body}} when status in 200..299 ->

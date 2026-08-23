@@ -61,10 +61,16 @@ it, including feature flags such as `ENABLE_REMOTE_ACCESS`.
 | Option | Type | Purpose |
 |---|---|---|
 | `secretKeyBaseFile` | path | File containing `SECRET_KEY_BASE`. Required. |
-| `guardianSecretKeyFile` | path or null | File containing `GUARDIAN_SECRET_KEY` |
+| `guardianSecretKeyFile` | path | File containing `GUARDIAN_SECRET_KEY`. Defaults to `secretKeyBaseFile`. |
 
 Both are read from files rather than set inline, so secrets never land in the Nix
 store.
+
+Each file must exist and be non-empty. An empty secrets file is now a startup
+failure naming the variable, rather than something the service boots through:
+a blank signing key would otherwise be accepted and used to both sign and
+verify tokens. Generate one with `mix guardian.gen.secret` or
+`openssl rand -base64 48`.
 
 ### Database
 

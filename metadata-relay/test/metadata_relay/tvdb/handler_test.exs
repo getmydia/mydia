@@ -188,7 +188,7 @@ defmodule MetadataRelay.TVDB.HandlerTest do
              }}
         })
 
-      result = Handler.get_series_episodes("81189", [])
+      result = Handler.get_series_episodes("81189", %{})
 
       GenServer.stop(auth_pid)
 
@@ -209,7 +209,7 @@ defmodule MetadataRelay.TVDB.HandlerTest do
              }}
         })
 
-      result = Handler.get_series_episodes("81189", page: 2)
+      result = Handler.get_series_episodes("81189", %{"page" => 2})
 
       GenServer.stop(auth_pid)
 

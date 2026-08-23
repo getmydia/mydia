@@ -46,7 +46,11 @@ defmodule MetadataRelay.SubDL.HandlerTest do
     end)
 
     assert {:ok, %{"subtitles" => [subtitle]}} =
-             Handler.search(%{imdb_id: "0133093", languages: "en", media_type: "movie"})
+             Handler.search(%{
+               "imdb_id" => "0133093",
+               "languages" => "en",
+               "media_type" => "movie"
+             })
 
     assert subtitle["language"] == "en"
     assert subtitle["release"] == "Matrix (1999) DVD.US.Retail"
@@ -68,7 +72,7 @@ defmodule MetadataRelay.SubDL.HandlerTest do
        )}
     end)
 
-    assert {:ok, %{"subtitles" => [subtitle]}} = Handler.search(%{imdb_id: "0133093"})
+    assert {:ok, %{"subtitles" => [subtitle]}} = Handler.search(%{"imdb_id" => "0133093"})
 
     assert Map.fetch!(subtitle, "source") == "SubDL"
   end
@@ -82,7 +86,7 @@ defmodule MetadataRelay.SubDL.HandlerTest do
        )}
     end)
 
-    assert {:ok, %{"subtitles" => [subtitle]}} = Handler.search(%{imdb_id: "0133093"})
+    assert {:ok, %{"subtitles" => [subtitle]}} = Handler.search(%{"imdb_id" => "0133093"})
 
     # SubDL reports neither. A 0 would read as "rated zero, never downloaded",
     # which is a claim about the subtitle rather than about SubDL.
@@ -99,7 +103,7 @@ defmodule MetadataRelay.SubDL.HandlerTest do
        )}
     end)
 
-    assert {:ok, %{"subtitles" => [subtitle]}} = Handler.search(%{imdb_id: "0133093"})
+    assert {:ok, %{"subtitles" => [subtitle]}} = Handler.search(%{"imdb_id" => "0133093"})
     refute Base.url_decode64!(subtitle["id"], padding: false) =~ "secret_key_value"
   end
 
@@ -109,7 +113,7 @@ defmodule MetadataRelay.SubDL.HandlerTest do
       {request, Req.Response.new(status: 200, body: %{"status" => true, "subtitles" => []})}
     end)
 
-    assert {:ok, %{"subtitles" => []}} = Handler.search(%{imdb_id: "0133093"})
+    assert {:ok, %{"subtitles" => []}} = Handler.search(%{"imdb_id" => "0133093"})
   end
 
   test "prefers a tmdb id and upcases languages" do
@@ -120,7 +124,8 @@ defmodule MetadataRelay.SubDL.HandlerTest do
       {request, Req.Response.new(status: 200, body: %{"status" => true, "subtitles" => []})}
     end)
 
-    assert {:ok, _} = Handler.search(%{tmdb_id: 603, imdb_id: "0133093", languages: "en,es"})
+    assert {:ok, _} =
+             Handler.search(%{"tmdb_id" => 603, "imdb_id" => "0133093", "languages" => "en,es"})
   end
 
   test "maps an episode search onto SubDL's tv parameters" do
@@ -133,10 +138,10 @@ defmodule MetadataRelay.SubDL.HandlerTest do
 
     assert {:ok, _} =
              Handler.search(%{
-               tmdb_id: 1399,
-               media_type: "episode",
-               season_number: 2,
-               episode_number: 5
+               "tmdb_id" => 1399,
+               "media_type" => "episode",
+               "season_number" => 2,
+               "episode_number" => 5
              })
   end
 
@@ -147,17 +152,17 @@ defmodule MetadataRelay.SubDL.HandlerTest do
       {request, Req.Response.new(status: 200, body: %{"status" => false, "error" => "not found"})}
     end)
 
-    assert {:ok, %{"subtitles" => []}} = Handler.search(%{imdb_id: "0133093"})
+    assert {:ok, %{"subtitles" => []}} = Handler.search(%{"imdb_id" => "0133093"})
   end
 
   test "reports a search with no usable identity" do
-    assert {:error, :insufficient_search_criteria} = Handler.search(%{languages: "en"})
+    assert {:error, :insufficient_search_criteria} = Handler.search(%{"languages" => "en"})
   end
 
   test "passes the not-configured error through" do
     System.delete_env("SUBDL_API_KEY")
 
-    assert {:error, :not_configured} = Handler.search(%{imdb_id: "0133093"})
+    assert {:error, :not_configured} = Handler.search(%{"imdb_id" => "0133093"})
   end
 
   # An unexpected shape is an upstream anomaly, not a search that found nothing.
@@ -172,7 +177,7 @@ defmodule MetadataRelay.SubDL.HandlerTest do
        )}
     end)
 
-    assert {:error, :unexpected_upstream_response} = Handler.search(%{imdb_id: "0133093"})
+    assert {:error, :unexpected_upstream_response} = Handler.search(%{"imdb_id" => "0133093"})
   end
 
   test "does not leak api key when logging unexpected response" do
@@ -190,7 +195,7 @@ defmodule MetadataRelay.SubDL.HandlerTest do
 
     log =
       ExUnit.CaptureLog.capture_log(fn ->
-        {:error, :unexpected_upstream_response} = Handler.search(%{imdb_id: "0133093"})
+        {:error, :unexpected_upstream_response} = Handler.search(%{"imdb_id" => "0133093"})
       end)
 
     refute log =~ "secret_key_value"
@@ -208,7 +213,7 @@ defmodule MetadataRelay.SubDL.HandlerTest do
     end)
 
     assert {:ok, %{"subtitles" => [subtitle]}} =
-             Handler.search(%{imdb_id: "0133093"})
+             Handler.search(%{"imdb_id" => "0133093"})
 
     assert subtitle["language"] == "en"
   end
@@ -228,7 +233,7 @@ defmodule MetadataRelay.SubDL.HandlerTest do
     end)
 
     assert {:ok, %{"subtitles" => [subtitle]}} =
-             Handler.search(%{imdb_id: "0133093"})
+             Handler.search(%{"imdb_id" => "0133093"})
 
     assert subtitle["language"] == "en"
   end
@@ -255,7 +260,7 @@ defmodule MetadataRelay.SubDL.HandlerTest do
     end)
 
     assert {:ok, %{"subtitles" => [subtitle]}} =
-             Handler.search(%{imdb_id: "0133093"})
+             Handler.search(%{"imdb_id" => "0133093"})
 
     assert subtitle["feature_type"] == "movie"
     assert subtitle["title"] == "The Matrix"
@@ -274,7 +279,7 @@ defmodule MetadataRelay.SubDL.HandlerTest do
     end)
 
     assert {:ok, %{"subtitles" => [subtitle]}} =
-             Handler.search(%{imdb_id: "0133093"})
+             Handler.search(%{"imdb_id" => "0133093"})
 
     assert is_nil(subtitle["feature_type"])
     assert is_nil(subtitle["title"])
@@ -296,7 +301,7 @@ defmodule MetadataRelay.SubDL.HandlerTest do
 
     log =
       ExUnit.CaptureLog.capture_log(fn ->
-        assert {:error, :unexpected_upstream_response} = Handler.search(%{imdb_id: "0133093"})
+        assert {:error, :unexpected_upstream_response} = Handler.search(%{"imdb_id" => "0133093"})
       end)
 
     refute log =~ "secret_key_value"
@@ -317,7 +322,7 @@ defmodule MetadataRelay.SubDL.HandlerTest do
     end)
 
     assert {:ok, %{"subtitles" => [subtitle]}} =
-             Handler.search(%{imdb_id: "0133093"})
+             Handler.search(%{"imdb_id" => "0133093"})
 
     assert is_nil(subtitle["feature_type"])
     assert is_nil(subtitle["title"])

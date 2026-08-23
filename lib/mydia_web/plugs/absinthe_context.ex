@@ -23,6 +23,7 @@ defmodule MydiaWeb.Plugs.AbsintheContext do
     base =
       %{source: :http, remote_ip: format_ip(conn.remote_ip)}
       |> put_device_profile(conn.assigns[:device_profile])
+      |> put_media_token_auth(conn.assigns[:media_token_auth])
 
     case Guardian.Plug.current_resource(conn) do
       nil ->
@@ -47,6 +48,15 @@ defmodule MydiaWeb.Plugs.AbsintheContext do
   # not have to distinguish "no header" from "header said nothing".
   defp put_device_profile(context, nil), do: context
   defp put_device_profile(context, profile), do: Map.put(context, :device_profile, profile)
+
+  # Lets a resolver refuse a media-token-derived request outright (see
+  # MydiaWeb.Schema.Resolvers.ApiKeyResolver.create_api_key/3). No route
+  # currently mounts MediaAuth ahead of :graphql_context (see the :api_auth
+  # pipeline comment in the router), so this is defense in depth against a
+  # future pipeline change reintroducing that reachability, not something
+  # exercised by any request today.
+  defp put_media_token_auth(context, true), do: Map.put(context, :media_token_auth, true)
+  defp put_media_token_auth(context, _), do: context
 
   defp format_ip({a, b, c, d}), do: "#{a}.#{b}.#{c}.#{d}"
   defp format_ip({a, b, c, d, e, f, g, h}), do: "#{a}:#{b}:#{c}:#{d}:#{e}:#{f}:#{g}:#{h}"

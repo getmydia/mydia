@@ -30,12 +30,24 @@ defmodule MydiaWeb.Plugs.EnsureRole do
   def call(conn, required_roles) do
     user = Guardian.Plug.current_resource(conn)
 
-    if user && has_required_role?(user.role, required_roles) do
+    if user && !media_token_derived?(conn) && has_required_role?(user.role, required_roles) do
       conn
     else
       handle_unauthorized(conn)
     end
   end
+
+  # A media token proves only "this device may fetch media," not "this
+  # request speaks for the user with their full privileges" -- it is a
+  # 24-hour, URL-exposed credential every paired device holds, minted with
+  # no narrower permission tier in practice. Guardian.Plug.current_resource/1
+  # cannot distinguish that from a real session or API key on its own (both
+  # ultimately resolve to the same %User{}), so MydiaWeb.Plugs.MediaAuth
+  # tags the connection explicitly when it is the one that authenticated the
+  # request. No route currently reaches this plug with a media token (see
+  # the :api_auth pipeline comment in the router), but this refusal does not
+  # depend on that staying true (T-108).
+  defp media_token_derived?(conn), do: conn.assigns[:media_token_auth] == true
 
   defp has_required_role?(user_role, required_roles) do
     user_level = Map.get(@role_hierarchy, user_role, 0)

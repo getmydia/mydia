@@ -27,9 +27,24 @@ use sha2::Sha256;
 /// search over the code space opens every entry in that snapshot at once.
 ///
 /// Six characters from a 31-symbol alphabet is 31^6 = 887,503,681 candidates,
-/// about 29.7 bits. At 64 MiB and t=3 that search costs on the order of ten
+/// about 29.7 bits. At 64 MiB and t=3 that search costs roughly 3.3-3.9
 /// CPU-years, and the 300-second TTL means a snapshot holds very few live
 /// claims. What it yields is one node ID and an already-expired code.
+///
+/// That figure is measured, not estimated: a release-profile run of this
+/// module's tests forced single-threaded does ~117-137ms per `derive()` call,
+/// so 887,503,681 candidates is ~1.04e8 to ~1.22e8 CPU-seconds. This comment
+/// previously said "on the order of ten CPU-years", which overstated the cost
+/// by about 2.5-3x. The direction of that error matters: it read as safer than
+/// the code actually is, and a security bound that flatters itself is the kind
+/// of comment nobody rechecks.
+///
+/// Note also that CPU-years is a single-core framing, and the search is
+/// embarrassingly parallel. What bounds a funded attacker is not the total
+/// core-years but the 300-second TTL: exhausting the space inside one claim's
+/// live window needs ~405,000 concurrent cores, and a more plausible ~1,400
+/// cores covers only ~0.35% of the keyspace per window, with no progress
+/// carrying across claims because each one draws a fresh code.
 ///
 /// The p2p guess limiter does not help here; it bounds online guessing only.
 /// This bound is accepted deliberately for an honest-but-curious relay. Raising

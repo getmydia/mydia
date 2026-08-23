@@ -57,4 +57,30 @@ defmodule MydiaWeb.Plugs.AbsintheContextTest do
     assert ctx[:current_user].id == user.id
     assert ctx[:device_profile] == profile
   end
+
+  describe "media_token_auth propagation (T-108)" do
+    test "omits media_token_auth when the assign is absent", %{conn: conn} do
+      refute Map.has_key?(context(conn), :media_token_auth)
+    end
+
+    # MydiaWeb.Schema.Resolvers.ApiKeyResolver.create_api_key/3 refuses to
+    # mint an API key when this is set, so a request MediaAuth authenticated
+    # must carry it into the Absinthe context even though no route currently
+    # mounts MediaAuth ahead of :graphql_context (see the :api_auth pipeline
+    # comment in the router). Without this propagation, that resolver-level
+    # refusal could never see the signal MediaAuth put on the connection.
+    test "carries media_token_auth through when MediaAuth set the assign", %{conn: conn} do
+      user = create_test_user()
+
+      conn =
+        conn
+        |> Guardian.Plug.put_current_resource(user)
+        |> Plug.Conn.assign(:media_token_auth, true)
+
+      ctx = context(conn)
+
+      assert ctx[:current_user].id == user.id
+      assert ctx[:media_token_auth] == true
+    end
+  end
 end

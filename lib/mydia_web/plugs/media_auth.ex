@@ -89,6 +89,13 @@ defmodule MydiaWeb.Plugs.MediaAuth do
           |> assign(:media_device, device)
           |> assign(:media_user, device.user)
           |> assign(:media_token_claims, claims)
+          # Marks the resource below as media-token-derived, not a real login.
+          # EnsureRole refuses to grant a privileged role on this alone
+          # (T-108), and MydiaWeb.Plugs.AbsintheContext propagates it into
+          # the Absinthe context so createApiKey can refuse it too, even
+          # though no route currently reaches GraphQL with only a media
+          # token (see :api_auth in the router).
+          |> assign(:media_token_auth, true)
           # Also set Guardian resource so EnsureAuthenticated passes
           |> Mydia.Auth.Guardian.Plug.put_current_resource(device.user)
         else

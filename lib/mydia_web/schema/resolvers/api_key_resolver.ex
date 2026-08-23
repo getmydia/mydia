@@ -19,7 +19,21 @@ defmodule MydiaWeb.Schema.Resolvers.ApiKeyResolver do
 
   @doc """
   Creates a new API key for the current user.
+
+  Refuses when `context[:media_token_auth]` is set: a media token is a
+  24-hour, URL-exposed, always-full-permission credential every paired
+  device holds (see Mydia.RemoteAccess.MediaToken), never a real sign-in.
+  Letting it mint a permanent, non-expiring API key would convert that
+  low-trust credential into a durable one outliving the device and its own
+  24-hour TTL entirely (T-108). No route currently reaches this resolver
+  with `media_token_auth` set -- :api_auth no longer mounts MediaAuth (see
+  the router) -- so this guard is defense in depth against that changing,
+  not something any request exercises today.
   """
+  def create_api_key(_parent, _args, %{context: %{media_token_auth: true}}) do
+    {:error, "API keys cannot be created from a device/media token; sign in to manage API keys"}
+  end
+
   def create_api_key(_parent, %{name: name} = args, %{context: %{current_user: user}}) do
     attrs = %{
       name: name,
