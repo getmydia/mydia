@@ -24,6 +24,25 @@ class SidebarRow extends StatefulWidget {
   /// Invoked when the user chooses Delete. Null for builtins.
   final VoidCallback? onDelete;
 
+  /// Whether the sidebar is in edit mode.
+  ///
+  /// Suppresses the tap handler, the overflow menu, and the hover and
+  /// long-press reveal that opens it. Navigation is suspended across the whole
+  /// sidebar while editing, so a mistimed tap cannot navigate away mid-drag.
+  final bool isEditing;
+
+  /// Whether the user has hidden this row.
+  ///
+  /// Only ever true while editing, because edit mode is the only place hidden
+  /// rows render at all.
+  final bool isHidden;
+
+  /// Rendered in the trailing slot in place of the overflow menu while editing.
+  ///
+  /// The parent supplies it because building a `ReorderableDragStartListener`
+  /// needs the item's index, which belongs to the list rather than the row.
+  final Widget? editingTrailing;
+
   const SidebarRow({
     super.key,
     required this.icon,
@@ -37,6 +56,9 @@ class SidebarRow extends StatefulWidget {
     this.onHide,
     this.onEdit,
     this.onDelete,
+    this.isEditing = false,
+    this.isHidden = false,
+    this.editingTrailing,
   });
 
   @override
@@ -52,14 +74,14 @@ class _SidebarRowState extends State<SidebarRow> {
   @override
   Widget build(BuildContext context) {
     final isSelected = widget.isSelected && !widget.isDisabled;
-    final iconColor = widget.isDisabled
+    final iconColor = widget.isDisabled || widget.isHidden
         ? AppColors.textDisabled
         : isSelected
             ? AppColors.primary
             : _isHovered
                 ? AppColors.textPrimary
                 : AppColors.textSecondary;
-    final textColor = widget.isDisabled
+    final textColor = widget.isDisabled || widget.isHidden
         ? AppColors.textDisabled
         : isSelected
             ? AppColors.textPrimary
@@ -67,7 +89,15 @@ class _SidebarRowState extends State<SidebarRow> {
                 ? AppColors.textPrimary
                 : AppColors.textSecondary;
 
-    final showMenu = widget.canCustomise && (_isHovered || _isLongPressed);
+    final showMenu = widget.canCustomise &&
+        !widget.isEditing &&
+        (_isHovered || _isLongPressed);
+
+    // In edit mode the 36px slot the overflow menu already reserves becomes
+    // the grip or restore slot, so nothing shifts between the two modes.
+    final Widget? trailing = widget.isEditing
+        ? widget.editingTrailing
+        : (widget.canCustomise ? _overflowMenu(showMenu: showMenu) : null);
 
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
@@ -79,8 +109,8 @@ class _SidebarRowState extends State<SidebarRow> {
           ? SystemMouseCursors.forbidden
           : SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: widget.onTap,
-        onLongPress: widget.canCustomise
+        onTap: widget.isEditing ? null : widget.onTap,
+        onLongPress: widget.canCustomise && !widget.isEditing
             ? () => setState(() => _isLongPressed = true)
             : null,
         child: AnimatedContainer(
@@ -125,59 +155,56 @@ class _SidebarRowState extends State<SidebarRow> {
                     fontSize: 15,
                     fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
                     color: textColor,
+                    decoration:
+                        widget.isHidden ? TextDecoration.lineThrough : null,
+                    decorationColor: AppColors.textDisabled,
                   ),
                 ),
               ),
-              if (widget.canCustomise)
+              if (trailing != null)
                 SizedBox(
                   width: _menuWidth,
-                  child: Opacity(
-                    opacity: showMenu ? 1 : 0,
-                    child: IgnorePointer(
-                      ignoring: !showMenu,
-                      child: PopupMenuButton<String>(
-                        padding: EdgeInsets.zero,
-                        icon: Icon(
-                          Icons.more_vert,
-                          size: 20,
-                          color: AppColors.textSecondary,
-                        ),
-                        onSelected: (value) {
-                          setState(() => _isLongPressed = false);
-                          switch (value) {
-                            case 'hide':
-                              widget.onHide?.call();
-                            case 'edit':
-                              widget.onEdit?.call();
-                            case 'delete':
-                              widget.onDelete?.call();
-                          }
-                        },
-                        onCanceled: () =>
-                            setState(() => _isLongPressed = false),
-                        itemBuilder: (context) => [
-                          if (widget.onHide != null)
-                            const PopupMenuItem(
-                              value: 'hide',
-                              child: Text('Hide'),
-                            ),
-                          if (widget.onEdit != null)
-                            const PopupMenuItem(
-                              value: 'edit',
-                              child: Text('Edit'),
-                            ),
-                          if (widget.onDelete != null)
-                            const PopupMenuItem(
-                              value: 'delete',
-                              child: Text('Delete'),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
+                  child: Center(child: trailing),
                 ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _overflowMenu({required bool showMenu}) {
+    return Opacity(
+      opacity: showMenu ? 1 : 0,
+      child: IgnorePointer(
+        ignoring: !showMenu,
+        child: PopupMenuButton<String>(
+          padding: EdgeInsets.zero,
+          icon: Icon(
+            Icons.more_vert,
+            size: 20,
+            color: AppColors.textSecondary,
+          ),
+          onSelected: (value) {
+            setState(() => _isLongPressed = false);
+            switch (value) {
+              case 'hide':
+                widget.onHide?.call();
+              case 'edit':
+                widget.onEdit?.call();
+              case 'delete':
+                widget.onDelete?.call();
+            }
+          },
+          onCanceled: () => setState(() => _isLongPressed = false),
+          itemBuilder: (context) => [
+            if (widget.onHide != null)
+              const PopupMenuItem(value: 'hide', child: Text('Hide')),
+            if (widget.onEdit != null)
+              const PopupMenuItem(value: 'edit', child: Text('Edit')),
+            if (widget.onDelete != null)
+              const PopupMenuItem(value: 'delete', child: Text('Delete')),
+          ],
         ),
       ),
     );
