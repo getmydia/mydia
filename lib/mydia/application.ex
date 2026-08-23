@@ -60,9 +60,11 @@ defmodule Mydia.Application do
         # Check for database integrity issues and queue repairs if needed
         Mydia.Library.DatabaseHealthCheck.run()
         # One-shot HDR backfill. Idempotent by row state, so enqueuing on
-        # every boot is harmless once the set has drained. Singular
-        # insert/1: insert_all/1 bypasses the worker's unique constraint.
-        %{} |> Mydia.Jobs.HdrBackfill.new() |> Oban.insert()
+        # every boot is harmless once the set has drained. enqueue_once/0
+        # protects its own Oban.insert/1 call (never raises), matching the
+        # convention DatabaseHealthCheck.run/0 and StartupSync.sync_all/0
+        # already follow in this same block.
+        Mydia.Jobs.HdrBackfill.enqueue_once()
         # Clean up stale HLS session directories
         cleanup_stale_hls_sessions()
       end

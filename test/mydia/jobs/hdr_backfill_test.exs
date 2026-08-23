@@ -4,6 +4,7 @@ defmodule Mydia.Jobs.HdrBackfillTest do
   use Mydia.DataCase, async: false
   use Oban.Testing, repo: Mydia.Repo
 
+  import ExUnit.CaptureLog
   import Mydia.MediaFixtures
   import Mydia.SettingsFixtures
 
@@ -102,6 +103,62 @@ defmodule Mydia.Jobs.HdrBackfillTest do
       after
         File.rm(shim)
       end
+    end
+
+    test "stamps and skips a row when ffprobe fails, without failing" do
+      # Structurally identical to the missing-file branch above, but a
+      # separate failure path in backfill_one/1 (the {:error, reason} case
+      # rather than the is_nil(path) or not File.exists?(path) case): a
+      # broken/unreadable file must not spin forever either.
+      dir =
+        Path.join(System.tmp_dir!(), "hdr_backfill_test_#{System.unique_integer([:positive])}")
+
+      File.mkdir_p!(dir)
+      relative = "video.mkv"
+      File.write!(Path.join(dir, relative), "fake video content")
+      library_path = library_path_fixture(%{type: "movies", path: dir})
+
+      file =
+        media_file_fixture(%{
+          hdr_format: :hdr10,
+          analyzed_at: DateTime.utc_now(),
+          library_path_id: library_path.id,
+          relative_path: relative
+        })
+
+      shim = write_fail_shim()
+      Application.put_env(:mydia, :ffprobe_path, shim)
+
+      try do
+        assert :ok = perform_job(HdrBackfill, %{})
+
+        reloaded = Repo.get(MediaFile, file.id)
+        assert reloaded.hdr_backfilled_at != nil
+        assert is_nil(reloaded.dolby_vision_profile)
+        assert HdrBackfill.pending_ids(10) == []
+      after
+        File.rm(shim)
+      end
+    end
+  end
+
+  describe "enqueue_once/0" do
+    test "does not raise when no Oban instance is registered" do
+      # This module's top-level setup starts a supervised Oban instance so
+      # every other test's internal Oban.insert/1 call resolves. Stop it
+      # here, right before calling enqueue_once/0, so
+      # Oban.Registry.config(Oban) genuinely raises RuntimeError -- the same
+      # failure application.ex's boot call is exposed to (an Oban instance
+      # not registered under the expected name, or not started yet) -- not
+      # a vacuous pass through an instance that happens to still be running.
+      stop_supervised!(Oban)
+
+      log =
+        capture_log(fn ->
+          assert :ok = HdrBackfill.enqueue_once()
+        end)
+
+      assert log =~ "failed to enqueue"
     end
   end
 
@@ -239,6 +296,15 @@ defmodule Mydia.Jobs.HdrBackfillTest do
     escaped = String.replace(json, "'", "'\\''")
     path = Path.join(System.tmp_dir!(), "hdr_backfill_shim_#{:rand.uniform(10_000_000)}.sh")
     File.write!(path, "#!/bin/sh\nprintf '%s' '#{escaped}'\n")
+    File.chmod!(path, 0o755)
+    path
+  end
+
+  # Mirrors write_fail_shim/0 in file_analysis_test.exs: exits non-zero so
+  # FileAnalyzer.analyze/1 returns {:error, :ffprobe_failed}.
+  defp write_fail_shim do
+    path = Path.join(System.tmp_dir!(), "hdr_backfill_fail_shim_#{:rand.uniform(10_000_000)}.sh")
+    File.write!(path, "#!/bin/sh\necho 'simulated failure' >&2\nexit 1\n")
     File.chmod!(path, 0o755)
     path
   end

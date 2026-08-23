@@ -45,6 +45,34 @@ defmodule Mydia.Jobs.HdrBackfill do
   @default_batch_size 50
 
   @doc """
+  Enqueues the one-shot backfill job. Called once at boot.
+
+  Deliberately never raises. `Mydia.Application.start/2` has no top-level
+  rescue, and its two siblings that call into this same startup block
+  protect themselves already: `Mydia.Library.DatabaseHealthCheck.run/0`'s
+  own doc says it "should never raise exceptions to avoid blocking the
+  application", and `Mydia.Library.StartupSync.sync_all/0` follows the same
+  convention. A bare `Oban.insert/1` does not: `Oban.Registry.config/1`
+  raises `RuntimeError` for a name with no registered instance (possible if
+  `oban_children/1` ever returns `[]` for some config edge case, or this
+  runs before Oban has finished starting), and a transient DB error at
+  exactly this moment raises too. Losing the whole application to a
+  backfill job that can safely run on the next boot instead is a bad trade,
+  especially for a self-hosted operator with no easy way to diagnose a boot
+  crash. Do not remove this rescue as a "simplification": that is precisely
+  what would let this job take down startup again.
+  """
+  @spec enqueue_once() :: :ok
+  def enqueue_once do
+    %{} |> new() |> Oban.insert()
+    :ok
+  rescue
+    error ->
+      Logger.warning("HDR backfill: failed to enqueue on boot", error: inspect(error))
+      :ok
+  end
+
+  @doc """
   Ids of media files pending an HDR backfill, oldest first, capped at `limit`.
 
   A row is pending when its `hdr_format` was set by the migration (so there is
