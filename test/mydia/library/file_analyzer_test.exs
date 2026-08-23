@@ -4,6 +4,7 @@ defmodule Mydia.Library.FileAnalyzerTest do
   use ExUnit.Case, async: false
 
   alias Mydia.Library.FileAnalyzer
+  alias Mydia.Library.Hdr
 
   describe "analyze/1" do
     test "returns error when file does not exist" do
@@ -159,19 +160,127 @@ defmodule Mydia.Library.FileAnalyzerTest do
   end
 
   describe "HDR format detection" do
-    test "detects Dolby Vision from side data" do
-      # Would need mock FFprobe output
-      assert true
+    setup do
+      target_file = write_temp_file("fake video content")
+
+      on_exit(fn ->
+        Application.delete_env(:mydia, :ffprobe_path)
+        File.rm(target_file)
+      end)
+
+      %{target_file: target_file}
     end
 
-    test "detects HDR10+ from side data" do
-      # Would need mock FFprobe output
-      assert true
+    test "an HLG stream produces an :hlg base, not :hdr10", %{target_file: target_file} do
+      shim =
+        write_hdr_shim(
+          ~s({"streams":[{"codec_type":"video","codec_name":"hevc","color_transfer":"arib-std-b67","width":3840,"height":2160}],"format":{"duration":"60.0","format_name":"matroska"}})
+        )
+
+      try do
+        Application.put_env(:mydia, :ffprobe_path, shim)
+
+        assert {:ok, result} = FileAnalyzer.analyze(target_file)
+        assert result.hdr.base == :hlg
+      after
+        File.rm(shim)
+      end
     end
 
-    test "detects HDR10 from color transfer" do
-      # Would need mock FFprobe output
-      assert true
+    test "a Dolby Vision 8.1 stream carries both the base and the profile",
+         %{target_file: target_file} do
+      shim =
+        write_hdr_shim(
+          ~s({"streams":[{"codec_type":"video","codec_name":"hevc","color_transfer":"smpte2084","side_data_list":[{"side_data_type":"DOVI configuration record","dv_profile":8,"dv_bl_signal_compatibility_id":1}]}],"format":{"duration":"60.0","format_name":"matroska"}})
+        )
+
+      try do
+        Application.put_env(:mydia, :ffprobe_path, shim)
+
+        assert {:ok, result} = FileAnalyzer.analyze(target_file)
+        assert result.hdr.base == :hdr10
+        assert result.hdr.dv_profile == 8
+        assert result.hdr.bl_compat_id == 1
+      after
+        File.rm(shim)
+      end
+    end
+
+    test "a wide-gamut SDR stream is SDR", %{target_file: target_file} do
+      shim =
+        write_hdr_shim(
+          ~s({"streams":[{"codec_type":"video","codec_name":"h264","color_primaries":"bt2020","color_space":"bt2020nc","width":1920,"height":1080}],"format":{"duration":"60.0","format_name":"matroska"}})
+        )
+
+      try do
+        Application.put_env(:mydia, :ffprobe_path, shim)
+
+        assert {:ok, result} = FileAnalyzer.analyze(target_file)
+        assert Hdr.sdr?(result.hdr)
+      after
+        File.rm(shim)
+      end
+    end
+
+    test "promotes a plain HDR10 stream to hdr10_plus when the frame probe finds SEI side data",
+         %{target_file: target_file} do
+      shim =
+        write_hdr_shim(
+          ~s({"streams":[{"codec_type":"video","codec_name":"hevc","color_transfer":"smpte2084","width":3840,"height":2160}],"format":{"duration":"60.0","format_name":"matroska"}}),
+          frame_result: {:ok, ~s({"frames":[{"side_data_list":[{"side_data_type":"HDR10+"}]}]})}
+        )
+
+      try do
+        Application.put_env(:mydia, :ffprobe_path, shim)
+
+        assert {:ok, result} = FileAnalyzer.analyze(target_file)
+        assert result.hdr.base == :hdr10_plus
+      after
+        File.rm(shim)
+      end
+    end
+
+    test "keeps hdr10 as the base when the frame probe fails", %{target_file: target_file} do
+      shim =
+        write_hdr_shim(
+          ~s({"streams":[{"codec_type":"video","codec_name":"hevc","color_transfer":"smpte2084","width":3840,"height":2160}],"format":{"duration":"60.0","format_name":"matroska"}}),
+          frame_result: :error
+        )
+
+      try do
+        Application.put_env(:mydia, :ffprobe_path, shim)
+
+        assert {:ok, result} = FileAnalyzer.analyze(target_file)
+        assert result.hdr.base == :hdr10
+      after
+        File.rm(shim)
+      end
+    end
+
+    test "does not run the frame probe when Dolby Vision already resolves the base",
+         %{target_file: target_file} do
+      marker =
+        Path.join(System.tmp_dir!(), "hdr_frame_probe_marker_#{:rand.uniform(1_000_000_000)}")
+
+      shim =
+        write_hdr_shim(
+          ~s({"streams":[{"codec_type":"video","codec_name":"hevc","color_transfer":"smpte2084","side_data_list":[{"side_data_type":"DOVI configuration record","dv_profile":8,"dv_bl_signal_compatibility_id":1}]}],"format":{"duration":"60.0","format_name":"matroska"}}),
+          marker: marker
+        )
+
+      try do
+        Application.put_env(:mydia, :ffprobe_path, shim)
+
+        assert {:ok, result} = FileAnalyzer.analyze(target_file)
+        assert result.hdr.base == :hdr10
+        assert result.hdr.dv_profile == 8
+
+        refute File.exists?(marker),
+               "expected the frame probe not to run for a Dolby Vision file"
+      after
+        File.rm(shim)
+        File.rm(marker)
+      end
     end
   end
 
@@ -358,5 +467,49 @@ defmodule Mydia.Library.FileAnalyzerTest do
   defp write_json_shim(json) do
     escaped = String.replace(json, "'", "'\\''")
     write_shim("#!/bin/sh\nprintf '%s' '#{escaped}'\n")
+  end
+
+  # Builds a shim that branches on whether it was invoked for the stream-level
+  # pass (`-show_format -show_streams`) or the frame-level HDR10+ pass
+  # (`-show_frames`), so a single test file can exercise the second ffprobe
+  # call without a real binary.
+  #
+  # Options:
+  #   :frame_result - `{:ok, json}` (default `{"frames":[]}`) for what the
+  #     `-show_frames` branch prints, or `:error` to make that invocation
+  #     exit non-zero, simulating a failed frame probe.
+  #   :marker - a file path the `-show_frames` branch touches before
+  #     responding, so a test can assert whether the frame probe ran at all.
+  defp write_hdr_shim(stream_json, opts \\ []) do
+    escaped_stream = String.replace(stream_json, "'", "'\\''")
+
+    marker_line =
+      case Keyword.get(opts, :marker) do
+        nil -> ""
+        marker -> "touch '#{marker}'\n"
+      end
+
+    frame_lines =
+      case Keyword.get(opts, :frame_result, {:ok, ~s({"frames":[]})}) do
+        {:ok, frame_json} ->
+          escaped_frame = String.replace(frame_json, "'", "'\\''")
+          marker_line <> "printf '%s' '#{escaped_frame}'\n"
+
+        :error ->
+          marker_line <> "echo 'frame probe failure' >&2\nexit 1\n"
+      end
+
+    script =
+      "#!/bin/sh\n" <>
+        "case \"$*\" in\n" <>
+        "  *-show_frames*)\n" <>
+        frame_lines <>
+        "    ;;\n" <>
+        "  *)\n" <>
+        "    printf '%s' '#{escaped_stream}'\n" <>
+        "    ;;\n" <>
+        "esac\n"
+
+    write_shim(script)
   end
 end

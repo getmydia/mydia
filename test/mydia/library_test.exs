@@ -494,6 +494,7 @@ defmodule Mydia.LibraryTest do
   end
 
   describe "apply_analysis/2" do
+    alias Mydia.Library.Hdr
     alias Mydia.Library.MediaFile
     alias Mydia.Library.Structs.FileAnalysisResult
     alias Mydia.Library.Structs.FileMetadata
@@ -516,7 +517,7 @@ defmodule Mydia.LibraryTest do
         codec: "H.264 (High)",
         audio_codec: "AAC Stereo",
         bitrate: 8_000_000,
-        hdr_format: nil,
+        hdr: %Hdr{},
         size: 2_147_483_648,
         duration: 5400.5,
         container: "mkv"
@@ -536,6 +537,8 @@ defmodule Mydia.LibraryTest do
       assert reloaded.resolution == "1080p"
       assert reloaded.bitrate == 8_000_000
       assert is_nil(reloaded.hdr_format)
+      assert is_nil(reloaded.dolby_vision_profile)
+      assert is_nil(reloaded.dolby_vision_bl_compat_id)
       assert reloaded.size == 2_147_483_648
 
       # audio_codec_raw keeps the analyzer's own string, which the
@@ -636,6 +639,21 @@ defmodule Mydia.LibraryTest do
       assert reloaded.metadata.source == "trusted-release"
       assert reloaded.metadata.container == "mkv"
       assert reloaded.metadata.duration == 5400.5
+    end
+
+    test "writes hdr_format, dolby_vision_profile, and dolby_vision_bl_compat_id from result.hdr",
+         %{media_file: media_file, result: result} do
+      dv_result = %FileAnalysisResult{
+        result
+        | hdr: %Hdr{base: :hdr10, dv_profile: 8, bl_compat_id: 1}
+      }
+
+      assert :ok = Library.apply_analysis(media_file, {:ok, dv_result})
+
+      reloaded = Repo.get!(MediaFile, media_file.id)
+      assert reloaded.hdr_format == :hdr10
+      assert reloaded.dolby_vision_profile == 8
+      assert reloaded.dolby_vision_bl_compat_id == 1
     end
   end
 

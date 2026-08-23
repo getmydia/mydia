@@ -14,7 +14,7 @@ defmodule Mydia.Library.Structs.FileAnalysisResult do
   - `:codec` - Video codec (e.g., "H.264", "HEVC", "AV1")
   - `:audio_codec` - Audio codec with channel info (e.g., "AAC 5.1", "DTS-HD MA")
   - `:bitrate` - Video bitrate in bits per second
-  - `:hdr_format` - HDR format if present (e.g., "HDR10", "Dolby Vision")
+  - `:hdr` - Canonical HDR facts, see `Mydia.Library.Hdr`
   - `:size` - File size in bytes
   - `:duration` - Duration in seconds (floating point for precision)
   - `:container` - Container format (e.g., "mp4", "mkv", "webm")
@@ -30,7 +30,7 @@ defmodule Mydia.Library.Structs.FileAnalysisResult do
     :codec,
     :audio_codec,
     :bitrate,
-    :hdr_format,
+    :hdr,
     :size,
     :duration,
     :container,
@@ -44,7 +44,7 @@ defmodule Mydia.Library.Structs.FileAnalysisResult do
           codec: String.t() | nil,
           audio_codec: String.t() | nil,
           bitrate: integer() | nil,
-          hdr_format: String.t() | nil,
+          hdr: Mydia.Library.Hdr.t() | nil,
           size: integer() | nil,
           duration: float() | nil,
           container: String.t() | nil,

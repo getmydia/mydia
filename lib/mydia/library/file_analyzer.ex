@@ -13,6 +13,7 @@ defmodule Mydia.Library.FileAnalyzer do
 
   require Logger
 
+  alias Mydia.Library.Hdr
   alias Mydia.Library.Structs.FileAnalysisResult
   alias Mydia.Library.Structs.StreamInfo
 
@@ -31,7 +32,7 @@ defmodule Mydia.Library.FileAnalyzer do
         codec: "H.264",
         audio_codec: "AAC",
         bitrate: 8000000,
-        hdr_format: nil,
+        hdr: %Mydia.Library.Hdr{},
         size: 2147483648
       }}
   """
@@ -39,7 +40,9 @@ defmodule Mydia.Library.FileAnalyzer do
   def analyze(file_path) do
     if File.exists?(file_path) do
       with {:ok, ffprobe_data} <- run_ffprobe(file_path),
-           {:ok, metadata} <- parse_ffprobe_output(ffprobe_data) do
+           {:ok, metadata} <- parse_probe(ffprobe_data) do
+        metadata = maybe_probe_hdr10_plus(metadata, file_path)
+
         # File may disappear between the existence check and here on a long
         # ffprobe run; fall back to nil rather than raising so the row's
         # failure path still gets exercised via apply_analysis/2.
@@ -63,6 +66,78 @@ defmodule Mydia.Library.FileAnalyzer do
   @default_timeout_ms 30_000
 
   defp run_ffprobe(file_path) do
+    args = [
+      "-v",
+      "quiet",
+      "-print_format",
+      "json",
+      "-show_format",
+      "-show_streams",
+      file_path
+    ]
+
+    run_ffprobe_args(args)
+  end
+
+  # HDR10+ metadata is per-frame SEI (SMPTE ST 2094-40), so it never appears in
+  # stream-level side data no matter which label is matched. Detecting it needs
+  # a frame read, which is why this second pass exists.
+  #
+  # Gated by needs_frame_probe?/1 so it fires only for a plain HDR10 result:
+  # SDR, HLG and Dolby Vision files pay nothing.
+  defp maybe_probe_hdr10_plus(%{hdr: hdr} = metadata, file_path) do
+    if Hdr.needs_frame_probe?(hdr) do
+      case run_frame_probe(file_path) do
+        {:ok, side_data} ->
+          %{metadata | hdr: Hdr.from_ffprobe(%{"color_transfer" => "smpte2084"}, side_data)}
+
+        {:error, _reason} ->
+          # HDR10+ is a superset of HDR10, so degrading to the base format is
+          # correct rather than merely safe.
+          metadata
+      end
+    else
+      metadata
+    end
+  end
+
+  defp maybe_probe_hdr10_plus(metadata, _file_path), do: metadata
+
+  defp run_frame_probe(file_path) do
+    args = [
+      "-v",
+      "quiet",
+      "-print_format",
+      "json",
+      "-select_streams",
+      "v:0",
+      "-read_intervals",
+      "%+#5",
+      "-show_frames",
+      "-show_entries",
+      "frame=side_data_list",
+      file_path
+    ]
+
+    case run_ffprobe_args(args) do
+      {:ok, %{"frames" => frames}} when is_list(frames) ->
+        {:ok, Enum.flat_map(frames, fn frame -> List.wrap(frame["side_data_list"]) end)}
+
+      {:ok, _other} ->
+        {:ok, []}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  # Shared port-and-trap-exit plumbing for both the stream-level and
+  # frame-level ffprobe passes. Both share the resolved binary path and the
+  # `ffprobe_timeout_ms` configuration; only the argument list differs. The
+  # target file path is always the last argument, which is all the log
+  # messages below need it for.
+  defp run_ffprobe_args(args) do
+    file_path = List.last(args)
     start_ms = System.monotonic_time(:millisecond)
     timeout_ms = Application.get_env(:mydia, :ffprobe_timeout_ms, @default_timeout_ms)
 
@@ -77,16 +152,6 @@ defmodule Mydia.Library.FileAnalyzer do
         {:error, :ffprobe_not_found}
 
       ffprobe_path ->
-        args = [
-          "-v",
-          "quiet",
-          "-print_format",
-          "json",
-          "-show_format",
-          "-show_streams",
-          file_path
-        ]
-
         previous_trap_exit = Process.flag(:trap_exit, true)
 
         try do
@@ -236,7 +301,11 @@ defmodule Mydia.Library.FileAnalyzer do
 
   defp elapsed_ms(start_ms), do: System.monotonic_time(:millisecond) - start_ms
 
-  defp parse_ffprobe_output(data) do
+  # Public so tests can drive the ffprobe-JSON-to-FileAnalysisResult mapping
+  # directly, without spawning a real (or shimmed) ffprobe port.
+  @doc false
+  @spec parse_probe(map()) :: {:ok, analysis_result()}
+  def parse_probe(data) do
     streams = Map.get(data, "streams", [])
     format = Map.get(data, "format", %{})
 
@@ -252,7 +321,7 @@ defmodule Mydia.Library.FileAnalyzer do
         codec: extract_video_codec(video_stream),
         audio_codec: extract_audio_codec(audio_stream),
         bitrate: extract_bitrate(video_stream, format),
-        hdr_format: extract_hdr_format(video_stream),
+        hdr: Hdr.from_ffprobe(video_stream || %{}),
         duration: extract_duration(format),
         container: extract_container(format),
         size: nil,
@@ -556,49 +625,4 @@ defmodule Mydia.Library.FileAnalyzer do
 
   defp parse_bitrate(bitrate) when is_integer(bitrate), do: bitrate
   defp parse_bitrate(_), do: nil
-
-  defp extract_hdr_format(nil), do: nil
-
-  defp extract_hdr_format(video_stream) do
-    # Check color transfer characteristic
-    color_transfer = video_stream["color_transfer"]
-    color_space = video_stream["color_space"]
-    color_primaries = video_stream["color_primaries"]
-
-    # Check for side data (Dolby Vision, HDR10+, etc.)
-    side_data = video_stream["side_data_list"] || []
-
-    has_dolby_vision =
-      Enum.any?(side_data, fn data ->
-        data["side_data_type"] == "DOVI configuration record"
-      end)
-
-    has_hdr10_plus =
-      Enum.any?(side_data, fn data ->
-        data["side_data_type"] == "HDR10+"
-      end)
-
-    cond do
-      has_dolby_vision ->
-        "Dolby Vision"
-
-      has_hdr10_plus ->
-        "HDR10+"
-
-      # Check for HDR10 based on color transfer
-      color_transfer in ["smpte2084", "arib-std-b67"] ->
-        "HDR10"
-
-      # Check for HLG (Hybrid Log-Gamma)
-      color_transfer == "arib-std-b67" ->
-        "HLG"
-
-      # Check for wide color gamut (potential HDR)
-      color_primaries == "bt2020" && color_space == "bt2020nc" ->
-        "HDR"
-
-      true ->
-        nil
-    end
-  end
 end
