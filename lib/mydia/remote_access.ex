@@ -317,6 +317,11 @@ defmodule Mydia.RemoteAccess do
          |> RemoteDevice.revoke_changeset()
          |> Repo.update() do
       {:ok, updated_device} = result ->
+        # A cached media token for this device would otherwise stay valid for
+        # up to the cache's own TTL after this point, regardless of the
+        # revoked_at just written above (T-107). Must happen for every path
+        # that can end with a device no longer allowed to authenticate.
+        Mydia.Media.TokenCache.invalidate_for_device(updated_device.id)
         # Publish device status change event
         publish_device_event(updated_device, :revoked)
         result
@@ -332,6 +337,10 @@ defmodule Mydia.RemoteAccess do
   def delete_device(device) do
     case Repo.delete(device) do
       {:ok, deleted_device} = result ->
+        # Same cache-staleness gap as revoke_device/1 above: the device row
+        # is gone, but a cached token would still resolve to the in-memory
+        # snapshot taken before the delete.
+        Mydia.Media.TokenCache.invalidate_for_device(deleted_device.id)
         # Publish device status change event
         publish_device_event(deleted_device, :deleted)
         result

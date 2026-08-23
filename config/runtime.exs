@@ -77,11 +77,7 @@ if config_env() == :prod do
 
     Ecto.Adapters.SQLite3 ->
       database_path =
-        System.get_env("DATABASE_PATH") ||
-          raise """
-          environment variable DATABASE_PATH is missing.
-          For example: /etc/mydia/mydia.db
-          """
+        Mydia.Release.Env.fetch!("DATABASE_PATH", "For example: /etc/mydia/mydia.db")
 
       config :mydia, Mydia.Repo,
         database: database_path,
@@ -107,11 +103,9 @@ if config_env() == :prod do
   # to check this value into version control, so we use an environment
   # variable instead.
   secret_key_base =
-    System.get_env("SECRET_KEY_BASE") ||
-      raise """
-      environment variable SECRET_KEY_BASE is missing.
-      You can generate one by calling: mix phx.gen.secret
-      """
+    Mydia.Release.Env.fetch_secret!("SECRET_KEY_BASE",
+      hint: "You can generate one by calling: mix phx.gen.secret"
+    )
 
   host = System.get_env("PHX_HOST") || "example.com"
   port = String.to_integer(System.get_env("PORT") || "4000")
@@ -212,12 +206,16 @@ if config_env() == :prod do
   # Check `Plug.SSL` for all available options in `force_ssl`.
 
   # Guardian JWT secret key
+  #
+  # Deliberately not derived from secret_key_base: each secret must pass its
+  # own validation independently, so a broken/missing/empty
+  # GUARDIAN_SECRET_KEY fails loudly here rather than silently inheriting
+  # secret_key_base's value (see Mydia.Release.Env and nix/module.nix's
+  # guardianSecretKeyFile default for the corresponding NixOS-module fix).
   guardian_secret_key =
-    System.get_env("GUARDIAN_SECRET_KEY") ||
-      raise """
-      environment variable GUARDIAN_SECRET_KEY is missing.
-      You can generate one by calling: mix guardian.gen.secret
-      """
+    Mydia.Release.Env.fetch_secret!("GUARDIAN_SECRET_KEY",
+      hint: "You can generate one by calling: mix guardian.gen.secret"
+    )
 
   config :mydia, Mydia.Auth.Guardian, secret_key: guardian_secret_key
   config :mydia, Mydia.RemoteAccess.MediaToken, secret_key: guardian_secret_key
@@ -485,7 +483,28 @@ oidc_issuer =
 
 oidc_client_id = System.get_env("OIDC_CLIENT_ID")
 oidc_client_secret = System.get_env("OIDC_CLIENT_SECRET")
-oidc_redirect_uri = System.get_env("OIDC_REDIRECT_URI")
+oidc_callback_path = MydiaWeb.OidcRedirectUri.callback_path()
+
+# Without an explicit OIDC_REDIRECT_URI, Ueberauth.Strategy.Helpers.full_url/2
+# fills the gap by reading X-Forwarded-Host/X-Forwarded-Proto off the request
+# -- independently of Plug.RewriteOn, which does the same thing for
+# conn.host/conn.scheme elsewhere. Either header is client-suppliable, so an
+# attacker who can reach the origin could steer the redirect_uri sent to the
+# identity provider to a host they control (docs/superpowers/security-review,
+# findings T-007/T-019). `Dockerfile:274` exposes the app's own port
+# directly, and even the documented reverse-proxy config sets
+# X-Forwarded-Proto but never X-Forwarded-Host, so a client-supplied value
+# survives the "correctly configured" case too.
+#
+# See MydiaWeb.OidcRedirectUri for why this asks nothing new of the operator
+# and why it is scoped to :prod. An operator's own OIDC_REDIRECT_URI still
+# wins over this default, exactly as before.
+oidc_default_redirect_uri =
+  if config_env() == :prod do
+    MydiaWeb.OidcRedirectUri.default(System.get_env("PHX_HOST") || "example.com")
+  end
+
+oidc_redirect_uri = System.get_env("OIDC_REDIRECT_URI") || oidc_default_redirect_uri
 
 if oidc_issuer && oidc_client_id && oidc_client_secret do
   # Only log OIDC configuration in non-CLI mode
@@ -497,6 +516,26 @@ if oidc_issuer && oidc_client_id && oidc_client_secret do
     Logger.info("Issuer: #{oidc_issuer}")
     Logger.info("Client ID: #{oidc_client_id}")
     Logger.info("Redirect URI: #{oidc_redirect_uri || "(auto-generated)"}")
+
+    # The redirect URI used to be derived from the incoming request, so OIDC
+    # happened to work on an install that never set PHX_HOST. It is now
+    # derived from configuration instead (that request-derived value was
+    # attacker-steerable -- T-007/T-019), which means such an install would
+    # send the placeholder host to its identity provider and get back an
+    # opaque "redirect_uri mismatch". Say so plainly at boot rather than
+    # letting the operator debug it from the IdP's error page.
+    if config_env() == :prod and is_nil(System.get_env("OIDC_REDIRECT_URI")) and
+         System.get_env("PHX_HOST") in [nil, ""] do
+      Logger.warning("""
+      OIDC is configured but PHX_HOST is not set, so the redirect URI falls \
+      back to #{oidc_redirect_uri}, which your identity provider will reject.
+
+      Set PHX_HOST to the hostname users reach this server on, or set \
+      OIDC_REDIRECT_URI explicitly. Mydia no longer derives this from the \
+      request headers, because those are supplied by the client and could \
+      be used to redirect a login to an attacker-controlled host.
+      """)
+    end
   end
 
   # Configure oidcc library settings
@@ -536,7 +575,7 @@ if oidc_issuer && oidc_client_id && oidc_client_secret do
     client_id: oidc_client_id,
     client_secret: oidc_client_secret,
     scopes: ["openid", "profile", "email"],
-    callback_path: "/auth/oidc/callback",
+    callback_path: oidc_callback_path,
     userinfo: true,
     uid_field: "sub",
     # Use standard OAuth2 auth methods for maximum compatibility

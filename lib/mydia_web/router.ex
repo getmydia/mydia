@@ -46,12 +46,24 @@ defmodule MydiaWeb.Router do
     plug MydiaWeb.Plugs.EnsureRole, :admin
   end
 
-  # API authentication pipeline - supports both JWT and API keys
+  # API authentication pipeline - real identity only (session, bearer access
+  # token, or API key). Deliberately does NOT accept media tokens: a media
+  # token is a low-trust, URL-exposed, always-full-permission credential
+  # (every paired device holds one, minted with no narrower tier in
+  # practice -- see Mydia.RemoteAccess.MediaToken), and this pipeline also
+  # guards the admin config API and the entire GraphQL schema (including
+  # mutations like createApiKey). MediaAuth used to be mounted here with no
+  # `permissions:` option, which made its permission check a structural
+  # no-op and let a media token satisfy :require_admin and mint a
+  # permanent API key for whichever user paired the device (see
+  # docs/superpowers/security-review, finding T-108). Routes that
+  # genuinely need media-token compatibility (a URL a native player,
+  # download manager, or cast receiver fetches without custom headers) get
+  # their own narrowly-scoped pipeline below instead of a blanket accept
+  # here.
   pipeline :api_auth do
     plug MydiaWeb.Plugs.AuthPipeline
     plug MydiaWeb.Plugs.ApiAuth
-    # Also accept media tokens from remote devices for direct GraphQL requests
-    plug MydiaWeb.Plugs.MediaAuth
   end
 
   # Media API authentication pipeline - supports JWT, API keys, and media tokens
@@ -60,6 +72,19 @@ defmodule MydiaWeb.Router do
     plug MydiaWeb.Plugs.AuthPipeline
     plug MydiaWeb.Plugs.ApiAuth
     plug MydiaWeb.Plugs.MediaAuth, permissions: ["stream"]
+  end
+
+  # Media-token authentication scoped to the "download" permission. Used only
+  # for the one general-API endpoint (fetching a finished offline-download
+  # file) that a native download manager or cast receiver fetches directly by
+  # URL and cannot attach an Authorization header to. Everything else a media
+  # token could plausibly want lives under :media_api_auth (streaming) or this
+  # pipeline (download); nothing else in the general /api/v1 scope accepts a
+  # media token at all.
+  pipeline :media_download_auth do
+    plug MydiaWeb.Plugs.AuthPipeline
+    plug MydiaWeb.Plugs.ApiAuth
+    plug MydiaWeb.Plugs.MediaAuth, permissions: ["download"]
   end
 
   # Health check endpoint (no authentication required)
@@ -88,13 +113,18 @@ defmodule MydiaWeb.Router do
     # Auto-login (for first-time setup)
     get "/auto-login", AuthController, :auto_login
 
+    # Logout. Must be declared before the dynamic "/:provider" route below,
+    # or Phoenix's declaration-order matcher shadows it: "/:provider" matches
+    # "/auth/logout" first and dispatches to request/2 instead of logout/2,
+    # leaving every session (and its Guardian JWT) unrevoked. This is the
+    # ONLY logout affordance in the app -- there is no other route, no
+    # GraphQL logout mutation, and no other UI control that ends a session.
+    get "/logout", AuthController, :logout
+
     # OIDC authentication
     get "/:provider", AuthController, :request
     get "/:provider/callback", AuthController, :callback
     post "/:provider/callback", AuthController, :callback
-
-    # Logout
-    get "/logout", AuthController, :logout
   end
 
   # Flutter player web app (authenticated)
@@ -256,6 +286,16 @@ defmodule MydiaWeb.Router do
     post "/download/:content_type/:id/prepare", DownloadController, :prepare
     get "/download/job/:job_id/status", DownloadController, :job_status
     delete "/download/job/:job_id", DownloadController, :cancel_job
+  end
+
+  # Fetching the finished file for an offline-download job - the one general
+  # /api/v1 endpoint a media token may authenticate, since it is the URL a
+  # native OS download manager fetches directly (see :media_download_auth
+  # above). Kept in its own scope, deliberately apart from the download-job
+  # management routes above, which stay session/API-key only.
+  scope "/api/v1", MydiaWeb.Api do
+    pipe_through [:api, :media_download_auth, :require_authenticated]
+
     get "/download/job/:job_id/file", DownloadController, :download_file
   end
 
@@ -294,8 +334,12 @@ defmodule MydiaWeb.Router do
   end
 
   # GraphQL API - authentication handled at resolver level
-  # The :api_auth pipeline populates current_user if a valid JWT/API key is provided
-  # Individual resolvers check for authentication and return :unauthorized if needed
+  # The :api_auth pipeline populates current_user if a valid session/bearer
+  # access token/API key is provided. A media token does NOT authenticate
+  # here: :api_auth no longer mounts MediaAuth (see its pipeline comment),
+  # so createApiKey and every other mutation/query are unreachable with a
+  # media token alone. Individual resolvers check for authentication and
+  # return :unauthorized if needed.
   scope "/api/graphql" do
     pipe_through [:graphql, :api_auth, :graphql_context]
 
@@ -316,11 +360,17 @@ defmodule MydiaWeb.Router do
     end
   end
 
-  # Player API routes - authenticated with JWT or API key
-  # Note: Browse, discover, and search endpoints have been migrated to GraphQL.
-  # Only subtitle streaming endpoints remain here (serving actual subtitle files).
+  # Player API routes - authenticated with JWT, API key, or media token
+  # (:media_api_auth, "stream" permission). Note: Browse, discover, and
+  # search endpoints have been migrated to GraphQL. Only subtitle
+  # streaming endpoints remain here (serving actual subtitle files). The
+  # cast/DLNA route builds these URLs with a media token appended as a
+  # query parameter for receivers that cannot send an Authorization
+  # header (see player/lib/core/cast/cast_route_resolver.dart), so this
+  # scope needs the same media-token compatibility as the streaming scope
+  # above rather than plain :api_auth.
   scope "/api/player/v1", MydiaWeb.Api.Player.V1 do
-    pipe_through [:api, :api_auth, :require_authenticated]
+    pipe_through [:api, :media_api_auth, :require_authenticated]
 
     # Subtitles - serves actual subtitle files (URLs provided by GraphQL)
     get "/subtitles/:type/:id", SubtitleController, :index

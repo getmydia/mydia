@@ -23,10 +23,26 @@ defmodule MydiaWeb.Endpoint do
     plug Phoenix.Ecto.SQL.Sandbox
   end
 
-  # Trust X-Forwarded-* headers from reverse proxy (Caddy)
-  # This ensures conn.scheme reflects the original HTTPS request
-  # Required for OIDC redirect URI validation when behind a proxy
-  plug Plug.RewriteOn, [:x_forwarded_host, :x_forwarded_port, :x_forwarded_proto]
+  # Trust X-Forwarded-Proto/-Port from a reverse proxy so conn.scheme/conn.port
+  # reflect the original request (e.g. https terminated at the proxy, plain
+  # http to this app behind it). Deliberately does NOT include
+  # :x_forwarded_host: this app's own port is exposed directly by the
+  # container (see Dockerfile), nothing enforces that only a trusted proxy
+  # can reach it, and the documented reverse-proxy configs
+  # (docs/using/how-to/reverse-proxy.md) never set X-Forwarded-Host anyway --
+  # so trusting it here just handed conn.host to whatever value a client
+  # cared to send. That previously fed
+  # Ueberauth.Strategy.Helpers.full_url/2's host resolution for the OIDC
+  # redirect_uri whenever OIDC_REDIRECT_URI/:callback_url wasn't set (see
+  # docs/superpowers/security-review, findings T-007/T-019), and would do
+  # the same for any future code that reads conn.host. That path is now
+  # closed independently -- config/runtime.exs always configures a static
+  # :callback_url for OIDC in production (see MydiaWeb.OidcRedirectUri) -- so
+  # dropping :x_forwarded_host here is defense in depth, not the only fix,
+  # but nothing in this codebase reads conn.host today (grepped), so there is
+  # no legitimate behavior to preserve by keeping it and no operator
+  # reconfiguration needed to drop it.
+  plug Plug.RewriteOn, [:x_forwarded_port, :x_forwarded_proto]
 
   socket "/live", Phoenix.LiveView.Socket,
     websocket: [connect_info: [session: @session_options]],

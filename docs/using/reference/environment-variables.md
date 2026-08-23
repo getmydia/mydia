@@ -9,6 +9,15 @@ Complete reference of all environment variables supported by Mydia.
 | `SECRET_KEY_BASE` | Phoenix secret key for cookies/sessions | Generate with: `openssl rand -base64 48` |
 | `GUARDIAN_SECRET_KEY` | JWT signing key for authentication | Generate with: `openssl rand -base64 48` |
 
+Both must be set to a non-empty value of at least 32 characters, and Mydia
+refuses to start otherwise with an error naming the variable. Set-but-blank
+counts as unset: a zero-length signing key is accepted by the JWT library for
+both signing and verification, which would make tokens forgeable. The 32
+character floor is the one `mix phx.gen.secret` and `mix guardian.gen.secret`
+enforce themselves, so any secret produced by the commands above passes.
+`GUARDIAN_SECRET_KEY` is required in its own right and is never inherited from
+`SECRET_KEY_BASE`.
+
 ## Container Configuration
 
 | Variable | Description | Default |

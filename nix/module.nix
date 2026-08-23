@@ -147,11 +147,18 @@ in
     };
 
     guardianSecretKeyFile = mkOption {
-      type = types.nullOr types.path;
-      default = null;
+      type = types.path;
+      default = cfg.secretKeyBaseFile;
       description = ''
         Path to a file containing the GUARDIAN_SECRET_KEY for JWT tokens.
-        If not set, SECRET_KEY_BASE will be used.
+
+        Defaults to secretKeyBaseFile, so a single secret signs both session
+        cookies and JWTs unless you point this at a separate file. Whichever
+        file this resolves to is loaded and validated independently of
+        secretKeyBaseFile at service start (both must be non-empty) --
+        pointing it at an empty file is now a hard failure, it no longer
+        silently falls back to reusing the other secret's value.
+        Generate with: `mix guardian.gen.secret` or `openssl rand -base64 48`
       '';
       example = "/run/secrets/mydia/guardian_secret";
     };
@@ -327,15 +334,16 @@ in
         in pkgs.writeShellScript "mydia-migrate" ''
           set -euo pipefail
 
-          # Load secrets
-          if [ -f "$CREDENTIALS_DIRECTORY/SECRET_KEY_BASE" ]; then
+          # Load secrets. -s (exists AND non-empty) rather than -f: an
+          # empty credential file must be treated the same as a missing
+          # one, so it surfaces as a clear boot failure in
+          # Mydia.Release.Env instead of silently becoming an empty
+          # SECRET_KEY_BASE/GUARDIAN_SECRET_KEY.
+          if [ -s "$CREDENTIALS_DIRECTORY/SECRET_KEY_BASE" ]; then
             export SECRET_KEY_BASE=$(cat "$CREDENTIALS_DIRECTORY/SECRET_KEY_BASE")
           fi
-          if [ -f "$CREDENTIALS_DIRECTORY/GUARDIAN_SECRET_KEY" ]; then
+          if [ -s "$CREDENTIALS_DIRECTORY/GUARDIAN_SECRET_KEY" ]; then
             export GUARDIAN_SECRET_KEY=$(cat "$CREDENTIALS_DIRECTORY/GUARDIAN_SECRET_KEY")
-          else
-            # Fall back to SECRET_KEY_BASE if GUARDIAN_SECRET_KEY not configured
-            export GUARDIAN_SECRET_KEY="''${SECRET_KEY_BASE}"
           fi
 
           ${setupSqlite}
@@ -348,15 +356,16 @@ in
         ExecStart = let
           # Build credential loading script
           loadSecrets = ''
-            # Load core secrets
-            if [ -f "$CREDENTIALS_DIRECTORY/SECRET_KEY_BASE" ]; then
+            # Load core secrets. -s (exists AND non-empty) rather than -f:
+            # an empty credential file must be treated the same as a
+            # missing one, so it surfaces as a clear boot failure in
+            # Mydia.Release.Env instead of silently becoming an empty
+            # SECRET_KEY_BASE/GUARDIAN_SECRET_KEY.
+            if [ -s "$CREDENTIALS_DIRECTORY/SECRET_KEY_BASE" ]; then
               export SECRET_KEY_BASE=$(cat "$CREDENTIALS_DIRECTORY/SECRET_KEY_BASE")
             fi
-            if [ -f "$CREDENTIALS_DIRECTORY/GUARDIAN_SECRET_KEY" ]; then
+            if [ -s "$CREDENTIALS_DIRECTORY/GUARDIAN_SECRET_KEY" ]; then
               export GUARDIAN_SECRET_KEY=$(cat "$CREDENTIALS_DIRECTORY/GUARDIAN_SECRET_KEY")
-            else
-              # Fall back to SECRET_KEY_BASE if GUARDIAN_SECRET_KEY not configured
-              export GUARDIAN_SECRET_KEY="''${SECRET_KEY_BASE}"
             fi
           '';
 
@@ -416,9 +425,10 @@ in
 
         # Secrets via LoadCredential (not stored in Nix store)
         LoadCredential =
-          [ "SECRET_KEY_BASE:${cfg.secretKeyBaseFile}" ]
-          ++ optional (cfg.guardianSecretKeyFile != null)
+          [
+            "SECRET_KEY_BASE:${cfg.secretKeyBaseFile}"
             "GUARDIAN_SECRET_KEY:${cfg.guardianSecretKeyFile}"
+          ]
           ++ optional (cfg.database.type == "postgres" && cfg.database.passwordFile != null)
             "DATABASE_PASSWORD:${cfg.database.passwordFile}"
           ++ optionals cfg.oidc.enable [

@@ -160,6 +160,36 @@ defmodule MydiaWeb.Schema.ApiKeyTest do
       assert {:ok, %{errors: errors}} = result
       assert errors != []
     end
+
+    # T-108: a media token is a 24-hour, URL-exposed credential every paired
+    # device holds, minted with no narrower permission tier in practice (see
+    # Mydia.RemoteAccess.MediaToken). Before this fix, RequireAuth and this
+    # resolver both only checked `context[:current_user]` presence, so a
+    # media-token-derived context (indistinguishable from a real session's,
+    # since both carry the same %User{}) could mint a permanent, non-expiring
+    # API key with attacker-chosen permissions -- decoupling the compromise
+    # from the 24-hour token and the device entirely.
+    #
+    # No route currently reaches this resolver with `media_token_auth: true`
+    # -- :api_auth no longer mounts MediaAuth ahead of :graphql_context (see
+    # router.ex) -- so this test constructs the context directly, the same
+    # way MydiaWeb.Plugs.AbsintheContext would build it for such a request.
+    # Proven to fail without the fix: reverting the guard clause in
+    # ApiKeyResolver.create_api_key/3 makes this test create the key and
+    # assert failure, contradicting the actual (permissive) result.
+    test "refuses to create an API key from a media-token-derived context", %{user: user} do
+      variables = %{"name" => "Escalated Key", "permissions" => ["read", "write", "admin"]}
+
+      result =
+        Absinthe.run(@create_api_key_mutation, MydiaWeb.Schema,
+          variables: variables,
+          context: %{current_user: user, media_token_auth: true}
+        )
+
+      assert {:ok, %{errors: [%{message: message} | _]}} = result
+      assert message =~ "device/media token"
+      assert Accounts.list_api_keys(user.id) == []
+    end
   end
 
   describe "revokeApiKey mutation" do
