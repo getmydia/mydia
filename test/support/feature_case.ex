@@ -66,10 +66,18 @@ defmodule MydiaWeb.FeatureCase do
   - `login_as_admin(session)` - Create an admin user and login
   - `login_as_user(session)` - Create a regular user and login
   - `login_as_guest(session)` - Create a guest user and login
+  - `create_admin_user(attrs \\\\ %{})` - Create an admin user without logging in
+  - `create_test_user(attrs \\\\ %{})` - Create a regular user without logging in
+  - `create_guest_user(attrs \\\\ %{})` - Create a guest user without logging in
   - `assert_path(session, path)` - Assert current URL path
   - `assert_has_text(session, text)` - Assert page contains text
   - `wait_for_liveview(session)` - Wait for the LiveView root to be present
+  - `eventually(fun, opts \\\\ [])` - Poll for state the browser cannot observe directly (e.g. a database write)
+  - `eval_js(session, script, args \\\\ [])` - Run JavaScript in the browser and return its value
   - `js_click(session, selector)` - Escape hatch: click via JS. Prefer `click/2`.
+
+  `MydiaWeb.FeatureCase.Geometry`'s `refute_covered/2`, `assert_in_viewport/2`,
+  and `refute_clipped/2` are also auto-imported, via the `using` block below.
 
   ## Wallaby DSL Reference
 

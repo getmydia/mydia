@@ -252,8 +252,9 @@ defmodule MydiaWeb.Features.LibraryPickerTest do
     # `.modal` (position: fixed; inset: 0; z-index: 999) rather than an
     # anchored dropdown: an earlier :focus-within dropdown lost to the z-40
     # sidebar and z-50 dock, which is exactly the class of bug
-    # assert_in_viewport/refute_covered (Task 7) exist to catch. There is no
-    # dropdown menu left in this component to point them at — @probe and
+    # `MydiaWeb.FeatureCase.Geometry`'s `assert_in_viewport/2` and
+    # `refute_covered/2` exist to catch. There is no dropdown menu left in
+    # this component to point them at — @probe and
     # chrome_probe/1 above already hit-test the same question by hand for
     # this exact dialog. This test asks it again with the shared, canonical
     # helpers instead of a one-off script, so the coverage survives even if

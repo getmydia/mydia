@@ -48,10 +48,13 @@ defmodule MydiaWeb.Features.NoSleepTest do
            """
   end
 
-  test "the feature case template does not sleep either" do
-    contents = File.read!("test/support/feature_case.ex")
+  test "the feature case support files do not sleep either" do
+    offenders =
+      ["test/support/feature_case.ex" | Path.wildcard("test/support/feature_case/**/*.ex")]
+      |> Enum.filter(&String.contains?(File.read!(&1), ":timer.sleep"))
 
-    refute String.contains?(contents, ":timer.sleep"),
-           "test/support/feature_case.ex must not sleep; eventually/2 uses Process.sleep/1 deliberately"
+    assert offenders == [],
+           "#{Enum.join(offenders, ", ")} must not sleep; eventually/2 and eval_js/3 " <>
+             "use Process.sleep/1 deliberately"
   end
 end

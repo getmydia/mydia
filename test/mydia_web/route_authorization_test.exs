@@ -104,8 +104,7 @@ defmodule MydiaWeb.RouteAuthorizationTest do
 
       conn = get(conn, "/admin")
 
-      assert conn.status in [301, 302, 303]
-      refute redirected_to(conn) == "/admin"
+      assert redirected_to(conn) == "/"
     end
   end
 end

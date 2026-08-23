@@ -46,11 +46,10 @@ defmodule MydiaWeb.Features.DockNavTest do
       |> visit("/")
       |> wait_for_liveview()
 
-      # The brief guessed `[phx-hook="DockNav"] a[href="/movies"]`. The dock
-      # item is `<.link navigate="/movies" data-dock-link>` (layouts.ex), and
-      # `<.link navigate>` compiles to a real `<a href={@navigate} ...>`
-      # (phoenix_component.ex), so the guessed selector is exact — no
-      # substitution needed beyond confirming it against the source.
+      # The dock item is `<.link navigate="/movies" data-dock-link>`
+      # (layouts.ex), and `<.link navigate>` compiles to a real
+      # `<a href={@navigate} ...>` (phoenix_component.ex), so
+      # `[phx-hook="DockNav"] a[href="/movies"]` is an exact selector for it.
       session
       |> click(Query.css(~s([phx-hook="DockNav"] a[href="/movies"])))
 
@@ -60,7 +59,7 @@ defmodule MydiaWeb.Features.DockNavTest do
       # mounted. `wait_for_liveview/1`'s `[data-phx-main].phx-connected`
       # selector already matches the OLD "/" root, so calling it right after
       # the click races the navigation and can observe the stale page.
-      # Polling `current_path/1` (this codebase's `eventually/2`, Task 3)
+      # Polling `current_path/1` with `MydiaWeb.FeatureCase.eventually/2`
       # waits out that race before the connected-root check below runs.
       eventually(
         fn ->

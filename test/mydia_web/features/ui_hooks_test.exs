@@ -29,11 +29,10 @@ defmodule MydiaWeb.Features.UiHooksTest do
     # The hook itself (`phx-hook="ThemeToggle"`) only tracks the indicator
     # position via a MutationObserver; it does not receive clicks. The three
     # theme buttons inside it call `window.mydiaTheme.setTheme(...)` directly
-    # via a plain `onclick`, so the brief's
-    # `click(Query.css(~s([phx-hook="ThemeToggle"])))` would click the
-    # wrapper div rather than a button. Clicking a specific button (by its
-    # `title` attribute, layouts.ex:521/529/537) is both correct and
-    # unambiguous about which theme gets applied.
+    # via a plain `onclick`, so `click(Query.css(~s([phx-hook="ThemeToggle"])))`
+    # would click the wrapper div rather than a button. Clicking a specific
+    # button (by its `title` attribute, layouts.ex:521/529/537) is both
+    # correct and unambiguous about which theme gets applied.
     @tag :feature
     test "toggling changes the document theme and it survives navigation",
          %{session: session} do
@@ -86,11 +85,11 @@ defmodule MydiaWeb.Features.UiHooksTest do
     # wired to `<input id="auto-import-toggle" phx-hook="PersistedCheckbox"
     # phx-update="ignore" ...>` on the "/import" page (router.ex maps
     # `live "/import", ImportMediaLive.Index, :index`). The hook is on the
-    # `<input>` itself, not a wrapping element, so the brief's guessed
-    # selector `[phx-hook="PersistedCheckbox"] input[type="checkbox"]` (a
-    # descendant lookup) matches nothing; `#auto-import-toggle` is the real
-    # target and is directly clickable (it is a plain visible daisyUI
-    # `toggle` checkbox, not a visually-hidden input under a label).
+    # `<input>` itself, not a wrapping element, so a descendant selector like
+    # `[phx-hook="PersistedCheckbox"] input[type="checkbox"]` matches
+    # nothing; `#auto-import-toggle` is the real target and is directly
+    # clickable (it is a plain visible daisyUI `toggle` checkbox, not a
+    # visually-hidden input under a label).
     #
     # The start form only renders once a library path exists to scan
     # (`RunControl.run_control/1` shows an info alert instead when
@@ -140,7 +139,7 @@ defmodule MydiaWeb.Features.UiHooksTest do
     end
   end
 
-  # eval_js/3 comes from MydiaWeb.FeatureCase (Task 3), imported by `use`.
+  # eval_js/3 comes from MydiaWeb.FeatureCase, imported by `use`.
   defp document_theme(session) do
     eval_js(session, "return document.documentElement.getAttribute('data-theme');")
   end

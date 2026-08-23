@@ -173,4 +173,8 @@ end
 Available helpers from `MydiaWeb.FeatureCase`: `login/3`, `login_as_admin/1`,
 `login_as_user/1`, `login_as_guest/1`, `create_admin_user/1`, `create_test_user/1`,
 `create_guest_user/1`, `assert_path/2`, `assert_has_text/2`, `wait_for_liveview/1`,
-`eventually/2`, `js_click/2`.
+`eventually/2`, `eval_js/3`, `js_click/2`.
+
+`MydiaWeb.FeatureCase.Geometry`'s `refute_covered/2`, `assert_in_viewport/2`, and
+`refute_clipped/2` (see "Geometry assertions" above) are also auto-imported, via
+the `using` block in `test/support/feature_case.ex`.

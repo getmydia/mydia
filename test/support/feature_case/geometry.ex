@@ -93,8 +93,8 @@ defmodule MydiaWeb.FeatureCase.Geometry do
     end
   end
 
-  # Defined once in MydiaWeb.FeatureCase (Task 3). Called fully qualified
-  # because this module is imported into the test, not the other way round.
+  # Defined once in MydiaWeb.FeatureCase. Called fully qualified because
+  # this module is imported into the test, not the other way round.
   defp eval(session, script, args) do
     MydiaWeb.FeatureCase.eval_js(session, script, args)
   end
