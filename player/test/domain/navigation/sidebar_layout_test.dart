@@ -179,4 +179,77 @@ void main() {
       expect(hidden.withUnhidden('movies').hidden, isNot(contains('movies')));
     });
   });
+
+  group('reconcileForEditing', () {
+    test('keeps hidden rows in place, flagged', () {
+      final layout = SidebarLayout.defaults.withHidden('collections');
+
+      final rows = layout.reconcileForEditing(downloadSupported: true);
+      final ids = rows.map((r) => r.destination.id).toList();
+
+      expect(ids, contains('collections'));
+
+      final collections = rows.firstWhere(
+        (r) => r.destination.id == 'collections',
+      );
+      expect(collections.hidden, isTrue);
+
+      final movies = rows.firstWhere((r) => r.destination.id == 'movies');
+      expect(movies.hidden, isFalse);
+    });
+
+    test('holds a hidden row at its stored slot', () {
+      final visible = SidebarLayout.defaults
+          .reconcileForEditing(downloadSupported: true)
+          .map((r) => r.destination.id)
+          .toList();
+      final expectedIndex = visible.indexOf('collections');
+
+      final hiddenLayout = SidebarLayout.defaults.withHidden('collections');
+      final rows = hiddenLayout.reconcileForEditing(downloadSupported: true);
+
+      expect(
+        rows.map((r) => r.destination.id).toList().indexOf('collections'),
+        expectedIndex,
+      );
+    });
+
+    test('excludes anchors', () {
+      final rows =
+          SidebarLayout.defaults.reconcileForEditing(downloadSupported: true);
+      final ids = rows.map((r) => r.destination.id).toList();
+
+      expect(ids, isNot(contains('search')));
+      expect(ids, isNot(contains('downloads')));
+      expect(ids, isNot(contains('settings')));
+    });
+
+    test('drops ids matching no builtin and no stored filter', () {
+      final layout = SidebarLayout(
+        order: [...SidebarLayout.defaults.order, 'ghost_id'],
+        hidden: const {},
+        filters: const {},
+      );
+
+      final ids = layout
+          .reconcileForEditing(downloadSupported: true)
+          .map((r) => r.destination.id);
+
+      expect(ids, isNot(contains('ghost_id')));
+    });
+
+    test('is unaffected by download support', () {
+      // The only download-gated destination is `downloads`, and it is
+      // anchored, so it never reaches the middle list either way.
+      final supported =
+          SidebarLayout.defaults.reconcileForEditing(downloadSupported: true);
+      final unsupported =
+          SidebarLayout.defaults.reconcileForEditing(downloadSupported: false);
+
+      expect(
+        unsupported.map((r) => r.destination.id).toList(),
+        supported.map((r) => r.destination.id).toList(),
+      );
+    });
+  });
 }

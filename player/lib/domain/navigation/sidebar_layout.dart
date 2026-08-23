@@ -126,6 +126,31 @@ class SidebarLayout {
     );
   }
 
+  /// The middle rows edit mode arranges, hidden ones included.
+  ///
+  /// Anchors are excluded entirely. They cannot be reordered or hidden, and
+  /// `SidebarContent` renders them outside the reorderable region, so putting
+  /// them in this list would misalign every index the reorder callback reports.
+  List<SidebarEditRow> reconcileForEditing({required bool downloadSupported}) {
+    final layout = reconcileLayout(downloadSupported: downloadSupported);
+
+    final rows = <SidebarEditRow>[];
+    for (final id in layout.order) {
+      final NavDestination? destination =
+          _builtinsById[id] ?? layout.filters[id];
+      if (destination == null) continue;
+      if (destination.isAnchored) continue;
+
+      rows.add(
+        SidebarEditRow(
+          destination: destination,
+          hidden: layout.hidden.contains(id),
+        ),
+      );
+    }
+    return rows;
+  }
+
   /// Where [destination] belongs in [ids]: after the last builtin with a lower
   /// `defaultIndex`. Filters and unknown ids do not move the insertion point.
   static int _insertionPoint(
@@ -232,4 +257,28 @@ class SidebarLayout {
   @override
   String toString() =>
       'SidebarLayout(order: $order, hidden: $hidden, filters: ${filters.keys})';
+}
+
+/// One middle row as edit mode sees it.
+///
+/// Edit mode renders hidden rows in place so the user can see where a restored
+/// row will land, which is why it cannot reuse [SidebarLayout.reconcile]'s
+/// output: that drops hidden rows entirely.
+class SidebarEditRow {
+  const SidebarEditRow({required this.destination, required this.hidden});
+
+  final NavDestination destination;
+  final bool hidden;
+
+  @override
+  bool operator ==(Object other) =>
+      other is SidebarEditRow &&
+      other.destination.id == destination.id &&
+      other.hidden == hidden;
+
+  @override
+  int get hashCode => Object.hash(destination.id, hidden);
+
+  @override
+  String toString() => 'SidebarEditRow(${destination.id}, hidden: $hidden)';
 }
