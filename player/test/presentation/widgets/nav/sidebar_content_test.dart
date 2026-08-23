@@ -222,6 +222,35 @@ void main() {
     expect(store.get()!.hidden, isNot(contains('collections')));
   });
 
+  testWidgets(
+      'the restore control fills its shared 36px slot, and keeps at least a '
+      '44px tap height', (tester) async {
+    // SidebarRow's trailing slot is a fixed 36px, shared with normal mode's
+    // overflow menu; widening it would shift row layout there too. So the
+    // restore control's live hit target is 36 wide, exactly the slot, not
+    // the 44 its own BoxConstraints requests for height alone — width comes
+    // from Material's own default tap-target padding being clamped down
+    // into the slot, not from this widget's constraints. Height is at least
+    // the requested 44 and, since nothing upstream bounds it, actually lands
+    // at Material's own 48px padded minimum.
+    final store = InMemorySidebarLayoutStore();
+    await store.save(SidebarLayout.defaults.withHidden('collections'));
+
+    await _pump(tester, location: '/', store: store);
+
+    await tester.tap(find.byTooltip('Edit sidebar'));
+    await tester.pumpAndSettle();
+
+    final button = find.ancestor(
+      of: find.byTooltip('Restore Collections'),
+      matching: find.byType(IconButton),
+    );
+    final size = tester.getSize(button);
+
+    expect(size.width, 36);
+    expect(size.height, greaterThanOrEqualTo(44));
+  });
+
   testWidgets('reset asks before it acts, and cancel changes nothing',
       (tester) async {
     final store = InMemorySidebarLayoutStore();

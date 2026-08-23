@@ -19,8 +19,9 @@ import '../../../domain/navigation/sidebar_layout.dart';
 /// must not size to its content: the flat list renders every destination at
 /// once, where the old tree kept Library collapsed, so on a short viewport the
 /// column overflowed by ~100px and the render library threw. Anchors stay
-/// outside this widget so Downloads and Settings never scroll away, Settings
-/// being the only route back from a hidden row.
+/// outside this widget so Downloads and Settings never scroll away. The
+/// route back from a hidden row is the edit-mode pencil plus this list's
+/// own per-row restore control, not Settings.
 class SidebarMiddleList extends StatelessWidget {
   const SidebarMiddleList({
     super.key,
@@ -50,12 +51,34 @@ class SidebarMiddleList extends StatelessWidget {
 
   final void Function(String id) onRestore;
 
-  /// Minimum interactive (tap/click) region for the restore control, in
-  /// logical pixels. Kept at Material's 48dp-adjacent minimum touch target
-  /// guidance even though the glyph itself stays small — restore is tapped
+  /// Minimum interactive (tap/click) height for the restore control, in
+  /// logical pixels. Kept at the WCAG 2.5.5 / Apple HIG minimum touch target
+  /// size even though the glyph itself stays small — restore is tapped
   /// repeatedly while a user cleans up a long hidden list on a phone, so a
   /// cramped hit target is a real usability defect, not polish.
-  static const double _restoreControlTapSize = 44;
+  ///
+  /// Height only, deliberately. This control renders as `SidebarRow`'s
+  /// `editingTrailing` inside its shared trailing slot (`_menuWidth` in
+  /// sidebar_row.dart), which every customisable row's overflow menu also
+  /// occupies at 36px wide. Declaring a width here would not even be a
+  /// no-op: `IconButton` fills its own slot horizontally only because
+  /// Material's default `MaterialTapTargetSize.padded` behaviour pads a
+  /// small icon out to its 48dp minimum and then `BoxConstraints.enforce`
+  /// clamps that padding down into whatever the ambient slot allows: 36px
+  /// here, not 48. Requesting a tight 44px width instead would shrink the
+  /// button back down to its unpadded icon size (about 20px) and leave a
+  /// gap in the slot, which is worse than the width this finding's
+  /// predecessor complained about. Widening the slot itself to reach a
+  /// clean 44px target on both axes was rejected too: the slot is shared
+  /// with normal mode's row layout, and widening it would shift rows there
+  /// too, breaking the "nothing shifts between the two modes" guarantee
+  /// `sidebar_row_editing_test.dart` covers.
+  ///
+  /// The honest result: this control fills its 36px-wide slot exactly (via
+  /// the padding mechanism above, not this constant), and is at least this
+  /// tall — in practice 48px, since height is the one dimension nothing
+  /// upstream constrains, so Material's own padded minimum applies in full.
+  static const double _restoreControlTapHeight = 44;
 
   @override
   Widget build(BuildContext context) {
@@ -94,8 +117,7 @@ class SidebarMiddleList extends StatelessWidget {
                 iconSize: 20,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints.tightFor(
-                  width: _restoreControlTapSize,
-                  height: _restoreControlTapSize,
+                  height: _restoreControlTapHeight,
                 ),
                 icon: const Icon(
                   Icons.add_circle_outline_rounded,

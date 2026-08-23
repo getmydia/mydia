@@ -74,14 +74,22 @@ class _SidebarRowState extends State<SidebarRow> {
   @override
   Widget build(BuildContext context) {
     final isSelected = widget.isSelected && !widget.isDisabled;
-    final iconColor = widget.isDisabled || widget.isHidden
+
+    // An anchor cannot be reordered or hidden, so while editing it reads as
+    // locked: dimmed the same way a hidden row is, plus the lock glyph
+    // `SidebarContent` adds in its trailing slot.
+    final isLockedWhileEditing = widget.isEditing && !widget.canCustomise;
+
+    final isDimmed =
+        widget.isDisabled || widget.isHidden || isLockedWhileEditing;
+    final iconColor = isDimmed
         ? AppColors.textDisabled
         : isSelected
             ? AppColors.primary
             : _isHovered
                 ? AppColors.textPrimary
                 : AppColors.textSecondary;
-    final textColor = widget.isDisabled || widget.isHidden
+    final textColor = isDimmed
         ? AppColors.textDisabled
         : isSelected
             ? AppColors.textPrimary
@@ -105,9 +113,16 @@ class _SidebarRowState extends State<SidebarRow> {
         _isHovered = false;
         _isLongPressed = false;
       }),
+      // Scoped to anchors only: every row's tap is suppressed while editing,
+      // but only an anchor's cursor changes here. A customisable row is still
+      // draggable and its overflow menu still exists just outside edit mode,
+      // so a click cursor there is arguably still wrong too — left alone as a
+      // separate call, not part of this fix.
       cursor: widget.isDisabled
           ? SystemMouseCursors.forbidden
-          : SystemMouseCursors.click,
+          : isLockedWhileEditing
+              ? SystemMouseCursors.basic
+              : SystemMouseCursors.click,
       child: GestureDetector(
         onTap: widget.isEditing ? null : widget.onTap,
         onLongPress: widget.canCustomise && !widget.isEditing

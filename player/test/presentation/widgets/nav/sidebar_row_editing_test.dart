@@ -134,4 +134,25 @@ void main() {
     expect(find.byKey(const Key('grip')), findsOneWidget);
     expect(find.byType(PopupMenuButton<String>), findsNothing);
   });
+
+  testWidgets('an anchor dims its icon and label while editing',
+      (tester) async {
+    await _pumpRow(tester, isEditing: true, canCustomise: false);
+
+    final text = tester.widget<Text>(find.text('Movies'));
+    final icon = tester.widget<Icon>(find.byIcon(Icons.movie_outlined));
+
+    expect(text.style?.color, AppColors.textDisabled);
+    expect(icon.color, AppColors.textDisabled);
+    // Unlike a hidden row, an anchor is never struck through — it is locked,
+    // not removed.
+    expect(text.style?.decoration, isNot(TextDecoration.lineThrough));
+  });
+
+  testWidgets('an anchor is not dimmed outside edit mode', (tester) async {
+    await _pumpRow(tester, isEditing: false, canCustomise: false);
+
+    final text = tester.widget<Text>(find.text('Movies'));
+    expect(text.style?.color, isNot(AppColors.textDisabled));
+  });
 }
