@@ -190,6 +190,24 @@ enum Command {
     GetNetworkStats {
         reply: oneshot::Sender<NetworkStats>,
     },
+    /// Test-only introspection/control, compiled out of every real build.
+    /// `Host` has no production need to report `pending_responses.len()` or
+    /// to force-close a specific peer's connection, but the T-808/T-809
+    /// regression tests need both: `Host` is otherwise the only
+    /// proven-reliable way to establish a real connection in this crate's
+    /// test environment (a hand-rolled pair of bare `Endpoint`s times out on
+    /// `connect()` here for reasons unrelated to either leak), and neither
+    /// `pending_responses` nor a way to explicitly close a connection is
+    /// otherwise reachable from outside `run_event_loop`.
+    #[cfg(test)]
+    DebugPendingResponseCount {
+        reply: oneshot::Sender<usize>,
+    },
+    #[cfg(test)]
+    DebugCloseConnection {
+        peer_id: String,
+        reply: oneshot::Sender<bool>,
+    },
 }
 
 /// Events emitted by the Host
@@ -551,6 +569,42 @@ impl Host {
         rx.await.unwrap_or_default()
     }
 
+    /// Test-only: number of entries currently in `pending_responses`. See
+    /// the doc comment on `Command::DebugPendingResponseCount`.
+    #[cfg(test)]
+    async fn debug_pending_response_count(&self) -> usize {
+        let (tx, rx) = oneshot::channel();
+        if self
+            .cmd_tx
+            .send(Command::DebugPendingResponseCount { reply: tx })
+            .await
+            .is_err()
+        {
+            return 0;
+        }
+        rx.await.unwrap_or(0)
+    }
+
+    /// Test-only: force-close this host's connection to `peer_id`, if any.
+    /// Returns whether a connection was found. See the doc comment on
+    /// `Command::DebugCloseConnection`.
+    #[cfg(test)]
+    async fn debug_close_connection(&self, peer_id: &str) -> bool {
+        let (tx, rx) = oneshot::channel();
+        if self
+            .cmd_tx
+            .send(Command::DebugCloseConnection {
+                peer_id: peer_id.to_string(),
+                reply: tx,
+            })
+            .await
+            .is_err()
+        {
+            return false;
+        }
+        rx.await.unwrap_or(false)
+    }
+
     /// Get this node's ID
     pub fn node_id(&self) -> &str {
         &self.node_id
@@ -789,6 +843,15 @@ async fn run_event_loop(
     }));
     let mut relay_connected = false;
 
+    // `connected_peers` is only ever touched from this loop, so pruning it
+    // stays lock-free: each `handle_connection` task (one per accepted or
+    // dialed connection) reports its own closure back here as
+    // `(peer_id, stable_id)` instead of mutating the map itself. The
+    // `stable_id` -- fixed for a connection's lifetime, per iroh's docs --
+    // guards against a stale disconnect signal evicting a *fresh*
+    // reconnection under the same peer_id that raced ahead of it.
+    let (disconnect_tx, mut disconnect_rx) = mpsc::channel::<(String, usize)>(64);
+
     // Wait for endpoint to be online (relay connected + local IP available)
     // Use a timeout to avoid blocking indefinitely if relay is unreachable
     tracing::info!("Waiting for relay connection...");
@@ -820,7 +883,7 @@ async fn run_event_loop(
         #[cfg(feature = "host")]
         let running = tokio::select! {
             Some(incoming) = endpoint.accept() => {
-                accept_inbound(incoming, &mut connected_peers, &event_tx, &shared_state).await;
+                accept_inbound(incoming, &mut connected_peers, &event_tx, &shared_state, &disconnect_tx).await;
                 true
             }
 
@@ -832,8 +895,14 @@ async fn run_event_loop(
                     &event_tx,
                     &shared_state,
                     relay_connected,
+                    &disconnect_tx,
                 )
                 .await;
+                true
+            }
+
+            Some((peer_id, stable_id)) = disconnect_rx.recv() => {
+                prune_disconnected_peer(&mut connected_peers, &peer_id, stable_id);
                 true
             }
 
@@ -841,8 +910,8 @@ async fn run_event_loop(
         };
 
         #[cfg(not(feature = "host"))]
-        let running = match cmd_rx.recv().await {
-            Some(cmd) => {
+        let running = tokio::select! {
+            Some(cmd) = cmd_rx.recv() => {
                 handle_command(
                     cmd,
                     &endpoint,
@@ -850,11 +919,18 @@ async fn run_event_loop(
                     &event_tx,
                     &shared_state,
                     relay_connected,
+                    &disconnect_tx,
                 )
                 .await;
                 true
             }
-            None => false,
+
+            Some((peer_id, stable_id)) = disconnect_rx.recv() => {
+                prune_disconnected_peer(&mut connected_peers, &peer_id, stable_id);
+                true
+            }
+
+            else => false,
         };
 
         if !running {
@@ -868,6 +944,27 @@ async fn run_event_loop(
     tracing::info!("Endpoint closed");
 }
 
+/// Remove a `connected_peers` entry once its connection has closed.
+///
+/// Only removes the entry if it still refers to the connection that just
+/// closed (matched by iroh's `stable_id`, fixed for a connection's
+/// lifetime). Without that guard, a disconnect signal for an old connection
+/// that arrives after the same `peer_id` has already reconnected would
+/// evict the new, live connection instead of the dead one.
+fn prune_disconnected_peer(
+    connected_peers: &mut HashMap<String, Connection>,
+    peer_id: &str,
+    stable_id: usize,
+) {
+    if let std::collections::hash_map::Entry::Occupied(entry) =
+        connected_peers.entry(peer_id.to_string())
+    {
+        if entry.get().stable_id() == stable_id {
+            entry.remove();
+        }
+    }
+}
+
 /// Accept one inbound connection and start serving it.
 ///
 /// Host role only. A browser endpoint has nothing listening, so a client build
@@ -878,6 +975,7 @@ async fn accept_inbound(
     connected_peers: &mut HashMap<String, Connection>,
     event_tx: &mpsc::Sender<Event>,
     shared_state: &Arc<Mutex<SharedState>>,
+    disconnect_tx: &mpsc::Sender<(String, usize)>,
 ) {
     let mut accepting = match incoming.accept() {
         Ok(accepting) => accepting,
@@ -927,12 +1025,14 @@ async fn accept_inbound(
     let peer_id_clone = peer_id.clone();
     let shared_state_clone = shared_state.clone();
     let conn_clone = conn.clone();
+    let disconnect_tx_clone = disconnect_tx.clone();
     runtime::spawn(async move {
         handle_connection(
             conn_clone,
             peer_id_clone,
             event_tx_clone,
             shared_state_clone,
+            disconnect_tx_clone,
         )
         .await;
     });
@@ -952,6 +1052,7 @@ async fn handle_command(
     event_tx: &mpsc::Sender<Event>,
     shared_state: &Arc<Mutex<SharedState>>,
     relay_connected: bool,
+    disconnect_tx: &mpsc::Sender<(String, usize)>,
 ) {
     match cmd {
         Command::Dial {
@@ -964,6 +1065,7 @@ async fn handle_command(
                 connected_peers,
                 event_tx,
                 shared_state,
+                disconnect_tx,
             )
             .await;
             let _ = reply.send(result);
@@ -1032,6 +1134,21 @@ async fn handle_command(
                 peer_connection_type,
             };
             let _ = reply.send(stats);
+        }
+        #[cfg(test)]
+        Command::DebugPendingResponseCount { reply } => {
+            let state = shared_state.lock().await;
+            let _ = reply.send(state.pending_responses.len());
+        }
+        #[cfg(test)]
+        Command::DebugCloseConnection { peer_id, reply } => {
+            let closed = if let Some(conn) = connected_peers.get(&peer_id) {
+                conn.close(0u32.into(), b"test");
+                true
+            } else {
+                false
+            };
+            let _ = reply.send(closed);
         }
         #[cfg(feature = "host")]
         Command::SendHlsHeader {
@@ -1155,6 +1272,7 @@ async fn handle_dial(
     connected_peers: &mut HashMap<String, Connection>,
     event_tx: &mpsc::Sender<Event>,
     shared_state: &Arc<Mutex<SharedState>>,
+    disconnect_tx: &mpsc::Sender<(String, usize)>,
 ) -> Result<(), String> {
     let endpoint_addr = endpoint_addr_from_json(endpoint_addr_json)?;
     let endpoint_id: EndpointId = endpoint_addr.id;
@@ -1183,12 +1301,14 @@ async fn handle_dial(
     let shared_state_clone = shared_state.clone();
     let conn_clone = conn.clone();
     let node_id_clone = node_id.clone();
+    let disconnect_tx_clone = disconnect_tx.clone();
     runtime::spawn(async move {
         handle_connection(
             conn_clone,
             node_id_clone,
             event_tx_clone,
             shared_state_clone,
+            disconnect_tx_clone,
         )
         .await;
     });
@@ -1412,12 +1532,22 @@ async fn stream_file_to_quic(
     Ok(())
 }
 
+/// How long `handle_connection` waits for `Command::SendResponse` before
+/// giving up on a request and writing back a timeout error (T-808).
+/// Shrunk under `cfg(test)` so the regression test for that timeout path
+/// doesn't have to burn 30 real seconds.
+#[cfg(not(test))]
+const RESPONSE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+#[cfg(test)]
+const RESPONSE_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(300);
+
 /// Handle incoming streams from a peer connection
 async fn handle_connection(
     conn: Connection,
     peer_id: String,
     event_tx: mpsc::Sender<Event>,
     shared_state: Arc<Mutex<SharedState>>,
+    disconnect_tx: mpsc::Sender<(String, usize)>,
 ) {
     loop {
         match conn.accept_bi().await {
@@ -1523,9 +1653,9 @@ async fn handle_connection(
 
                 // Wait for the response and send it
                 let request_id_clone = request_id.clone();
+                let shared_state_clone = shared_state.clone();
                 runtime::spawn(async move {
-                    match runtime::time::timeout(std::time::Duration::from_secs(30), resp_rx).await
-                    {
+                    match runtime::time::timeout(RESPONSE_TIMEOUT, resp_rx).await {
                         Ok(Ok(response)) => {
                             if let Ok(response_data) = serde_cbor::to_vec(&response) {
                                 let _ = send.write_all(&response_data).await;
@@ -1533,13 +1663,28 @@ async fn handle_connection(
                             }
                         }
                         Ok(Err(_)) => {
+                            // The oneshot sender was dropped without a `send`. The only
+                            // place that removes a `pending_responses` entry and consumes
+                            // its sender is the `Command::SendResponse` handler, and it
+                            // always calls `tx.send(..)` on the sender it just removed, so
+                            // this branch cannot currently observe an entry still sitting
+                            // in the map -- nothing left to clean up here.
                             tracing::warn!(
                                 "Response channel closed for request {}",
                                 request_id_clone
                             );
                         }
                         Err(_) => {
+                            // Timed out waiting for `Command::SendResponse`. That command
+                            // is the *only* other place `pending_responses` entries are
+                            // removed, and it was never invoked for this `request_id` --
+                            // so this entry would otherwise sit in the map for the life of
+                            // the process (T-808). Remove it here.
                             tracing::warn!("Response timeout for request {}", request_id_clone);
+                            {
+                                let mut state = shared_state_clone.lock().await;
+                                state.pending_responses.remove(&request_id_clone);
+                            }
                             let error_response =
                                 MydiaResponse::Error("Request timeout".to_string());
                             if let Ok(response_data) = serde_cbor::to_vec(&error_response) {
@@ -1552,7 +1697,8 @@ async fn handle_connection(
             }
             Err(e) => {
                 tracing::info!("Connection closed for peer {}: {}", peer_id, e);
-                let _ = event_tx.send(Event::Disconnected(peer_id)).await;
+                let _ = event_tx.send(Event::Disconnected(peer_id.clone())).await;
+                let _ = disconnect_tx.send((peer_id, conn.stable_id())).await;
                 break;
             }
         }
@@ -1930,5 +2076,164 @@ mod tests {
         let data = serde_cbor::to_vec(&response).unwrap();
         let decoded: MydiaResponse = serde_cbor::from_slice(&data).unwrap();
         assert_eq!(response, decoded);
+    }
+
+    // --- T-808 / T-809 regression tests -----------------------------------
+    //
+    // Both drive real `Host`s over a real connection rather than a hand-
+    // rolled pair of bare iroh `Endpoint`s: an early version of these tests
+    // did exactly that, and `connect()` reliably timed out after 30s in this
+    // environment for reasons unrelated to either leak (a real dial through
+    // `Host::dial` in the very same test binary, at the very same commit,
+    // succeeds in under 50ms -- see `two_hosts_exchange_ping` in
+    // `tests/host_loopback.rs` for the working shape this was modeled on).
+    // `Host` exposes neither `connected_peers.len()`/`pending_responses.len()`
+    // nor a way to force-close a specific connection though, so
+    // `Command::DebugPendingResponseCount`/`Command::DebugCloseConnection`
+    // (both `#[cfg(test)]`, defined next to `Command` above) exist purely to
+    // give these tests that visibility without touching production surface.
+
+    fn test_config() -> HostConfig {
+        HostConfig {
+            relay_url: None,
+            bind_port: Some(0),
+            keypair_path: None,
+            keypair_bytes: None,
+        }
+    }
+
+    async fn wait_for_addr(host: &Host) -> String {
+        for _ in 0..100 {
+            let addr = host.get_node_addr().await;
+            if !addr.is_empty() && addr != "null" {
+                return addr;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        panic!("host never published an endpoint address");
+    }
+
+    /// T-809: before this fix, nothing ever removed a `connected_peers`
+    /// entry -- `grep -n "connected_peers\.\(remove\|retain\)"` returned zero
+    /// matches, so `NetworkStats.connected_peers` could only ever grow.
+    /// This drives one real connect/close cycle and asserts it returns to
+    /// zero afterward. Without the fix this test fails: the count stays at
+    /// 1 until the 10s wait loop below gives up.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn connected_peers_is_pruned_when_the_connection_closes() {
+        let (server, _server_id) = Host::new(test_config());
+        let (client, client_id) = Host::new(test_config());
+
+        let server_addr = wait_for_addr(&server).await;
+        client.dial(server_addr).await.expect("dial should succeed");
+
+        wait_until(
+            || async { server.get_network_stats().await.connected_peers == 1 },
+            std::time::Duration::from_secs(10),
+            "server to observe the inbound connection",
+        )
+        .await;
+
+        assert!(
+            server.debug_close_connection(&client_id).await,
+            "server should have found a connection for the dialed client_id"
+        );
+
+        wait_until(
+            || async { server.get_network_stats().await.connected_peers == 0 },
+            std::time::Duration::from_secs(10),
+            "connected_peers to be pruned after the connection closed -- before the T-809 \
+             fix, nothing ever removed the entry",
+        )
+        .await;
+    }
+
+    /// T-808: before this fix, the timeout branch in `handle_connection`
+    /// wrote back a timeout error but never called
+    /// `pending_responses.remove(..)` -- the only other remover was
+    /// `Command::SendResponse`, never reached for a request type nothing
+    /// answers. This sends exactly such a request (no handler ever calls
+    /// `send_response` for it, mirroring `RemoteControl`/`Custom` before the
+    /// `native/mydia_p2p` fix) and confirms the entry is reclaimed once
+    /// `RESPONSE_TIMEOUT` elapses. Without the fix, the final `wait_until`
+    /// times out: the count never drops back to 0.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn pending_responses_is_reclaimed_when_the_response_times_out() {
+        let (responder, responder_id) = Host::new(test_config());
+        let (dialer, _dialer_id) = Host::new(test_config());
+
+        let responder_addr = wait_for_addr(&responder).await;
+        dialer
+            .dial(responder_addr)
+            .await
+            .expect("dial should succeed");
+
+        assert_eq!(
+            responder.debug_pending_response_count().await,
+            0,
+            "nothing pending before any request is sent"
+        );
+
+        // Send a request and deliberately never answer it -- exactly what
+        // happens today for `RemoteControl`/`Custom` before the
+        // `native/mydia_p2p` fix (see `two_hosts_exchange_a_request` in
+        // `tests/two_node_control.rs` for why `Custom` rather than `Ping`
+        // exercises the real generic request/response path). Run it on its
+        // own task since `send_request` blocks until a response arrives --
+        // here, that means blocking until the responder's own timeout
+        // writes one back.
+        let send = tokio::spawn(async move {
+            dialer
+                .send_request(responder_id, MydiaRequest::Custom(vec![9]))
+                .await
+        });
+
+        wait_until(
+            || async { responder.debug_pending_response_count().await == 1 },
+            std::time::Duration::from_secs(10),
+            "the responder to register the pending request",
+        )
+        .await;
+
+        wait_until(
+            || async { responder.debug_pending_response_count().await == 0 },
+            RESPONSE_TIMEOUT + std::time::Duration::from_secs(5),
+            "pending_responses to be reclaimed once the response times out (T-808); before \
+             the fix this entry stayed in the map for the life of the process",
+        )
+        .await;
+
+        // The fix must not break the existing timeout-error response.
+        let response = send
+            .await
+            .expect("send task panicked")
+            .expect("send_request itself should not error");
+        assert!(
+            matches!(response, MydiaResponse::Error(_)),
+            "expected a timeout Error response, got {response:?}"
+        );
+    }
+
+    /// Poll `check` until it returns true or `timeout` elapses, panicking
+    /// with `what` on timeout. `Host`'s state changes (a connection closing,
+    /// a map being pruned) happen inside its own event loop task, so tests
+    /// observe them asynchronously rather than immediately after issuing a
+    /// command.
+    async fn wait_until<F, Fut>(mut check: F, timeout: std::time::Duration, what: &str)
+    where
+        F: FnMut() -> Fut,
+        Fut: std::future::Future<Output = bool>,
+    {
+        let deadline = std::time::Instant::now() + timeout;
+        loop {
+            if check().await {
+                return;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "timed out waiting for: {what}"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
     }
 }

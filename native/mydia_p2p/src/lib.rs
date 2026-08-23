@@ -315,14 +315,48 @@ fn start_listening(
     resource: ResourceArc<HostResource>,
     pid: LocalPid,
 ) -> Result<String, rustler::Error> {
-    let host = &resource.host;
-    let event_rx = host.event_rx.clone();
+    let event_rx = resource.host.event_rx.clone();
+    // Cloned (cheap: `ResourceArc` is Arc-backed) rather than borrowed, since
+    // the thread below needs `'static` access to `host` for the
+    // `RemoteControl`/`Custom` rejection path.
+    let resource_for_thread = resource.clone();
 
     thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
+            let host = &resource_for_thread.host;
             let mut rx = event_rx.lock().await;
             while let Some(event) = rx.recv().await {
+                // `RemoteControl` and `Custom` requests have no consumer on
+                // this side of the transport: neither variant has a match
+                // arm below, and player-to-player casting (the only feature
+                // that would want `RemoteControl`) cannot reach this server
+                // at all -- `send_request` only ever dials the server, so
+                // this server-side inbound path is dead surface today. Left
+                // alone, such a request would fall through the `_` arm
+                // below, which drops the `request_id` entirely; the core's
+                // `pending_responses` entry for it then has no way to be
+                // resolved and sits in the map until the 30s timeout, which
+                // itself used to leak the entry forever (T-808). Reject
+                // explicitly and immediately here, with the `request_id`
+                // intact, so the normal `Command::SendResponse` path runs
+                // and cleans the entry up right away instead of leaking or
+                // waiting out a timeout.
+                if let Event::RequestReceived {
+                    request: MydiaRequest::RemoteControl(_) | MydiaRequest::Custom(_),
+                    request_id,
+                    ..
+                } = &event
+                {
+                    let _ = host
+                        .send_response(
+                            request_id.clone(),
+                            MydiaResponse::Error("unsupported_request_type".to_string()),
+                        )
+                        .await;
+                    continue;
+                }
+
                 let mut msg_env = OwnedEnv::new();
                 let _ = msg_env.send_and_clear(&pid, |env| match event {
                     Event::Connected {
@@ -404,6 +438,13 @@ fn start_listening(
                         MydiaRequest::Ping => {
                             (atoms::ok(), "request_received", "ping", request_id).encode(env)
                         }
+                        // `RemoteControl` and `Custom` are intercepted and rejected before
+                        // this match (see above), so in practice this only ever matches
+                        // `HlsStream` -- which never reaches `Event::RequestReceived` at
+                        // all, since the core routes it to `Event::HlsStreamRequest`
+                        // instead. Kept for exhaustiveness against future variants; a
+                        // message reaching here still carries no `request_id` for Elixir
+                        // to answer with.
                         _ => (atoms::ok(), "unknown_request").encode(env),
                     },
                     Event::HlsStreamRequest {
