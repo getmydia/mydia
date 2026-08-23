@@ -148,6 +148,10 @@ pub fn media_file_from(row: &MediaFileRow, external: &[ExternalSubtitleRow]) -> 
         codec: row.codec.clone(),
         audio_codec: row.audio_codec.clone(),
         hdr_format: row.hdr_format.clone(),
+        dolby_vision_profile: row.dolby_vision_profile.and_then(|v| i32::try_from(v).ok()),
+        dolby_vision_bl_compat_id: row
+            .dolby_vision_bl_compat_id
+            .and_then(|v| i32::try_from(v).ok()),
         file_name: Path::new(&row.path)
             .file_name()
             .map(|name| name.to_string_lossy().into_owned()),

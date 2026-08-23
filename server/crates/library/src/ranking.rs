@@ -94,6 +94,8 @@ mod tests {
             codec: None,
             audio_codec: None,
             hdr_format: None,
+            dolby_vision_profile: None,
+            dolby_vision_bl_compat_id: None,
             bitrate,
             duration_seconds: None,
             container: None,

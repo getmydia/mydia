@@ -32,6 +32,10 @@ pub struct FileFacts {
     pub codec: Option<String>,
     pub audio_codec: Option<String>,
     pub hdr_format: Option<String>,
+    /// Dolby Vision profile (5, 7, 8, ...), when the DOVI record is present.
+    pub dolby_vision_profile: Option<i64>,
+    /// DV base-layer compatibility id: 1 = HDR10 base, 4 = HLG base, 0 = none.
+    pub dolby_vision_bl_compat_id: Option<i64>,
     pub bitrate: Option<i64>,
     pub duration_seconds: Option<f64>,
     pub container: Option<String>,
@@ -73,6 +77,8 @@ pub fn probe(path: &Path) -> Result<FileFacts, LibraryError> {
         codec: video.and_then(video_codec),
         audio_codec: audio.and_then(audio_codec),
         hdr_format: video.and_then(hdr_format),
+        dolby_vision_profile: video.and_then(dolby_vision_profile),
+        dolby_vision_bl_compat_id: video.and_then(dolby_vision_bl_compat_id),
         bitrate: bitrate(video, format),
         duration_seconds: format
             .and_then(|f| f.get("duration"))
@@ -298,47 +304,58 @@ fn audio_codec(stream: &Value) -> Option<String> {
     })
 }
 
-/// Port of file_analyzer.ex:548-591.
+/// Mirrors Mydia.Library.Hdr.display/1 (lib/mydia/library/hdr.ex). The
+/// transfer function determines the base and nothing else does -- a case on
+/// distinct values, never an `in`-style list, because that is what made the
+/// old Elixir HLG branch unreachable. Dolby Vision overrides the base via the
+/// DOVI record's compatibility id, but that override lives entirely in
+/// `Hdr.dv_base/3` and feeds Elixir's internal `base` field, which this crate
+/// does not compute or expose. `display/1` itself gates only on whether
+/// `dv_profile` is present (`Hdr.dolby_vision?/1`), unconditionally, before
+/// ever consulting a base -- so every Dolby Vision variant, including profile
+/// 5 (whose IPTPQc2 base layer is not HDR10-decodable even though it signals
+/// smpte2084), reports "Dolby Vision" here too.
+///
+/// The old bt2020-primaries-means-HDR rule is deleted, not ported: wide gamut
+/// without a PQ or HLG transfer is SDR with a wide gamut.
 fn hdr_format(stream: &Value) -> Option<String> {
-    let empty = Vec::new();
-    let side_data = stream
-        .get("side_data_list")
-        .and_then(Value::as_array)
-        .unwrap_or(&empty);
-
-    let has = |wanted: &str| {
-        side_data.iter().any(|d| {
-            d.get("side_data_type")
-                .and_then(Value::as_str)
-                .map(|t| t == wanted)
-                .unwrap_or(false)
-        })
-    };
-
-    if has("DOVI configuration record") {
+    if dolby_vision_profile(stream).is_some() {
         return Some("Dolby Vision".to_string());
     }
 
-    if has("HDR10+") {
-        return Some("HDR10+".to_string());
+    match stream.get("color_transfer").and_then(Value::as_str) {
+        // HDR10+ is per-frame SEI and never appears in stream-level ffprobe
+        // output, so it is invisible here. The Elixir analyzer runs a second
+        // frame-level probe to promote this to "HDR10+"; this crate does not
+        // scan, so it reports "HDR10", which degrades correctly since HDR10+
+        // is a superset of HDR10.
+        Some("smpte2084") => Some("HDR10".to_string()),
+        Some("arib-std-b67") => Some("HLG".to_string()),
+        _ => None,
     }
+}
 
-    let transfer = stream.get("color_transfer").and_then(Value::as_str);
-    let space = stream.get("color_space").and_then(Value::as_str);
-    let primaries = stream.get("color_primaries").and_then(Value::as_str);
+/// A DOVI record is identified by the presence of `dv_profile`, not by
+/// matching `side_data_type`'s string (which varies across ffmpeg builds),
+/// mirroring `Hdr`'s private `dovi_record/1`.
+fn dovi_record(stream: &Value) -> Option<&Value> {
+    stream
+        .get("side_data_list")
+        .and_then(Value::as_array)?
+        .iter()
+        .find(|d| d.get("dv_profile").is_some())
+}
 
-    // Both smpte2084 and arib-std-b67 report HDR10 in the Elixir analyzer,
-    // whose HLG branch is unreachable. Ported as written so the two servers
-    // agree; correcting it belongs in a change to both.
-    if matches!(transfer, Some("smpte2084") | Some("arib-std-b67")) {
-        return Some("HDR10".to_string());
-    }
+fn dolby_vision_profile(stream: &Value) -> Option<i64> {
+    dovi_record(stream)?
+        .get("dv_profile")
+        .and_then(Value::as_i64)
+}
 
-    if primaries == Some("bt2020") && space == Some("bt2020nc") {
-        return Some("HDR".to_string());
-    }
-
-    None
+fn dolby_vision_bl_compat_id(stream: &Value) -> Option<i64> {
+    dovi_record(stream)?
+        .get("dv_bl_signal_compatibility_id")
+        .and_then(Value::as_i64)
 }
 
 fn bitrate(video: Option<&Value>, format: Option<&Value>) -> Option<i64> {
@@ -441,7 +458,9 @@ fn subtitle_tracks(streams: &[Value]) -> Vec<SubtitleTrackFacts> {
 
 #[cfg(test)]
 mod tests {
-    use super::{probe, resolution_label};
+    use super::{
+        dolby_vision_bl_compat_id, dolby_vision_profile, hdr_format, probe, resolution_label,
+    };
     use std::path::Path;
     use std::process::Command;
 
@@ -604,5 +623,101 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
 
         assert!(probe(&dir.path().join("absent.mkv")).is_err());
+    }
+
+    // Guards against the shared-branch bug that made Mydia.Library.Hdr's HLG
+    // branch unreachable before this file and Elixir's file_analyzer.ex were
+    // both fixed together: a `matches!(transfer, Some("smpte2084") |
+    // Some("arib-std-b67")) => HDR10` construct (or an `in` list doing the
+    // same thing) always wins on the smpte2084 arm first, so HLG can never be
+    // reached. See the "Fix round" section of this task's report for the
+    // observed mutation failure.
+    #[test]
+    fn hlg_is_not_reported_as_hdr10() {
+        let stream = serde_json::json!({ "color_transfer": "arib-std-b67" });
+        assert_eq!(hdr_format(&stream).as_deref(), Some("HLG"));
+    }
+
+    #[test]
+    fn smpte2084_is_reported_as_hdr10() {
+        let stream = serde_json::json!({ "color_transfer": "smpte2084" });
+        assert_eq!(hdr_format(&stream).as_deref(), Some("HDR10"));
+    }
+
+    // Guards against the deleted bt2020-primaries-means-HDR rule. Wide gamut
+    // without a PQ or HLG transfer is SDR with a wide gamut, not HDR.
+    #[test]
+    fn wide_gamut_without_pq_or_hlg_is_sdr() {
+        let stream = serde_json::json!({
+            "color_primaries": "bt2020",
+            "color_space": "bt2020nc"
+        });
+        assert_eq!(hdr_format(&stream), None);
+    }
+
+    #[test]
+    fn a_stream_with_no_hdr_signal_at_all_is_none() {
+        let stream = serde_json::json!({});
+        assert_eq!(hdr_format(&stream), None);
+        assert_eq!(dolby_vision_profile(&stream), None);
+        assert_eq!(dolby_vision_bl_compat_id(&stream), None);
+    }
+
+    #[test]
+    fn dolby_vision_reports_profile_and_compat_id() {
+        let stream = serde_json::json!({
+            "color_transfer": "smpte2084",
+            "side_data_list": [{
+                "side_data_type": "DOVI configuration record",
+                "dv_profile": 8,
+                "dv_bl_signal_compatibility_id": 1
+            }]
+        });
+
+        assert_eq!(hdr_format(&stream).as_deref(), Some("Dolby Vision"));
+        assert_eq!(dolby_vision_profile(&stream), Some(8));
+        assert_eq!(dolby_vision_bl_compat_id(&stream), Some(1));
+    }
+
+    // A DOVI record is identified by the presence of `dv_profile`, not by
+    // matching `side_data_type`'s string, which varies across ffmpeg builds.
+    // This is the same convention as Mydia.Library.Hdr's private
+    // `dovi_record/1`.
+    #[test]
+    fn a_dovi_record_is_identified_by_dv_profile_presence_not_the_type_string() {
+        let stream = serde_json::json!({
+            "color_transfer": "smpte2084",
+            "side_data_list": [{
+                "side_data_type": "some ffmpeg build's unexpected label",
+                "dv_profile": 8,
+                "dv_bl_signal_compatibility_id": 1
+            }]
+        });
+
+        assert_eq!(hdr_format(&stream).as_deref(), Some("Dolby Vision"));
+    }
+
+    // Profile 5 has no display-compatible base layer (it is IPTPQc2, not
+    // HDR10-decodable) even though the stream signals smpte2084 and even when
+    // a malformed/unusual bl_compat_id of 1 (normally HDR10-compatible) is
+    // also present. `Hdr.display/1` in lib/mydia/library/hdr.ex gates
+    // unconditionally on `dv_profile`'s presence -- never on the bl_compat_id
+    // -derived `base` -- so this crate's `hdr_format` must too: it must not
+    // let a transfer- or compat-id-based check run ahead of the DV-presence
+    // check and mislabel this as "HDR10". See this task's report for the
+    // mutation that was run against this test.
+    #[test]
+    fn profile_5_with_an_hdr10_compatible_id_still_displays_as_dolby_vision() {
+        let stream = serde_json::json!({
+            "color_transfer": "smpte2084",
+            "side_data_list": [{
+                "dv_profile": 5,
+                "dv_bl_signal_compatibility_id": 1
+            }]
+        });
+
+        assert_eq!(hdr_format(&stream).as_deref(), Some("Dolby Vision"));
+        assert_eq!(dolby_vision_profile(&stream), Some(5));
+        assert_eq!(dolby_vision_bl_compat_id(&stream), Some(1));
     }
 }
