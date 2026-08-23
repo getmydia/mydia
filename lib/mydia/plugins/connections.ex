@@ -164,18 +164,22 @@ defmodule Mydia.Plugins.Connections do
   end
 
   @doc """
-  Removes every connection a deleted user holds, sweeping each one's KV prefix
-  first so per-user plugin state does not outlive the user. The `user_id` FK
-  would cascade the rows on its own, but the KV keys (not user-scoped) need the
-  application sweep.
+  Sweeps the `conn/<id>/` KV prefix of each of `connections`, so per-user plugin
+  state does not outlive the user who owned it.
+
+  Deleting the user cascades the connection rows themselves through the `user_id`
+  FK, but the KV keys are not user-scoped and need this application sweep. Callers
+  therefore collect the connections with `list_for_user/1` *before* the delete
+  (the rows are gone afterwards) and call this only once the delete has actually
+  succeeded -- sweeping first would destroy plugin state that nothing restores if
+  the delete is then rejected.
   """
-  @spec delete_for_user(binary()) :: :ok
-  def delete_for_user(user_id) do
-    for conn <- list_for_user(user_id) do
+  @spec sweep_kv([Connections.t()]) :: :ok
+  def sweep_kv(connections) when is_list(connections) do
+    for conn <- connections do
       Mydia.Plugins.Kv.delete_connection_prefix(conn.plugin_slug, conn.id)
     end
 
-    Repo.delete_all(from c in Connections, where: c.user_id == ^user_id)
     :ok
   end
 

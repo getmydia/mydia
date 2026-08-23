@@ -186,9 +186,9 @@ defmodule Mydia.Accounts do
   @doc """
   Deletes a user.
 
-  Sweeps the user's plugin connections (and their per-connection KV state) first:
-  the `user_id` FK cascades the connection rows on its own, but the KV keys are
-  not user-scoped, so the application sweep removes them before the cascade.
+  Sweeps the per-connection KV state of the user's plugin connections: the
+  `user_id` FK cascades the connection rows on its own, but the KV keys are not
+  user-scoped, so the application has to remove them.
 
   Also invalidates any cached media tokens for the user's paired devices after
   the delete succeeds: `remote_devices.user_id` cascades at the database level
@@ -198,16 +198,21 @@ defmodule Mydia.Accounts do
   belonging to a just-deleted user would keep authenticating off a stale
   `Mydia.Media.TokenCache` entry for up to the cache's TTL.
 
-  The device list is collected *before* `Repo.delete/1`, since the rows are
-  gone once the cascade runs, but the cache invalidation itself happens
-  *after* a successful delete -- mirroring `RemoteAccess.revoke_device/1` and
-  `delete_device/1`. Invalidating first would leave a window where the device
-  rows still exist: a concurrent media request could miss the cache, read the
-  still-present row, and re-cache it, and that re-cached entry would then
-  survive the cascade for the full cache TTL.
+  Both sweeps follow the same shape: collect what is needed *before*
+  `Repo.delete/1`, since the rows are gone once the cascade runs, then act on it
+  only *after* the delete succeeds.
+
+  Acting first would be wrong in each case, for its own reason. Invalidating the
+  token cache first leaves a window where the device rows still exist, so a
+  concurrent media request could miss the cache, read the still-present row, and
+  re-cache it -- and that re-cached entry would survive the cascade for the full
+  cache TTL. Sweeping plugin KV first destroys state that nothing restores if the
+  delete then fails: `media_requests.requester_id` is `on_delete: :restrict`, so
+  a user who has ever requested media is rejected here, and none of this runs in
+  a transaction. That user would stay live with their plugin state already gone.
   """
   def delete_user(%User{} = user) do
-    Mydia.Plugins.Connections.delete_for_user(user.id)
+    connections = Mydia.Plugins.Connections.list_for_user(user.id)
 
     device_ids =
       user.id
@@ -216,6 +221,7 @@ defmodule Mydia.Accounts do
 
     case Repo.delete(user) do
       {:ok, _deleted_user} = result ->
+        Mydia.Plugins.Connections.sweep_kv(connections)
         Enum.each(device_ids, &Mydia.Media.TokenCache.invalidate_for_device/1)
         result
 

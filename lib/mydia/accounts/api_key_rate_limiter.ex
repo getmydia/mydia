@@ -65,23 +65,42 @@ defmodule Mydia.Accounts.ApiKeyRateLimiter do
   Accepts the same `:window_seconds` option as `check_rate_limit/2`, so a
   caller using a custom window keeps the same window on both the check and
   the record.
+
+  The counter is bumped with `:ets.update_counter/4` rather than a
+  lookup-then-insert pair, because a lookup-then-insert loses increments under
+  concurrency: two simultaneous failed logins for the same bucket both read the
+  same `attempts` and both write back that value plus one, so two guesses count
+  as one. That is the wrong direction to be wrong in for a brute-force limit --
+  an attacker who simply fires their guesses in parallel gets more than
+  `:max_attempts` of them through. `:ets.update_counter/4` applies its whole op
+  list as one atomic operation and inserts the default tuple first if the bucket
+  is absent, so every concurrent caller's attempt is counted exactly once.
   """
   def record_failed_attempt(key, opts \\ []) when is_binary(key) do
     window_seconds = Keyword.get(opts, :window_seconds, @window_seconds)
     storage_key = rate_limit_key(key)
     now = System.system_time(:second)
 
-    case :ets.lookup(@table_name, storage_key) do
-      [] ->
-        :ets.insert(@table_name, {storage_key, 1, now, window_seconds})
+    # `{3, 0}` adds zero to `first_attempt_at`: a read of it in the same atomic
+    # operation as the increment, so the window check below cannot be decided
+    # against a bucket some other caller has since reset.
+    [_attempts, first_attempt_at] =
+      :ets.update_counter(
+        @table_name,
+        storage_key,
+        [{2, 1}, {3, 0}],
+        {storage_key, 0, now, window_seconds}
+      )
 
-      [{^storage_key, attempts, first_attempt_at, _window_seconds}] ->
-        if now - first_attempt_at > window_seconds do
-          # Window has expired, reset counter
-          :ets.insert(@table_name, {storage_key, 1, now, window_seconds})
-        else
-          :ets.insert(@table_name, {storage_key, attempts + 1, first_attempt_at, window_seconds})
-        end
+    if now - first_attempt_at > window_seconds do
+      # The window elapsed, so restart it at this attempt. Guarded on the expired
+      # `first_attempt_at` still being the stored one, so when several callers
+      # observe the same expiry only the first replaces the bucket and the rest
+      # leave that fresh bucket alone rather than each resetting it back to 1.
+      :ets.select_replace(@table_name, [
+        {{storage_key, :_, first_attempt_at, :_}, [],
+         [{{{:const, storage_key}, 1, now, window_seconds}}]}
+      ])
     end
 
     :ok

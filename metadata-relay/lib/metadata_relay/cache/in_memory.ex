@@ -59,10 +59,15 @@ defmodule MetadataRelay.Cache.InMemory do
     # table first, or that stale (and now spuriously "oldest") sequence
     # number would linger there and could get a fresh entry evicted in its
     # place.
-    drop_order_entry(key)
+    replacing? = drop_order_entry(key)
 
-    # Check size limit and evict if necessary
-    if :ets.info(@table_name, :size) >= max_entries() do
+    # Check size limit and evict if necessary. Only a *new* key grows the
+    # table, so only a new key can push it over the limit. Evicting on a
+    # replacement would throw away an unrelated live entry to make room for
+    # one that needs none -- a full cache holding `a`, `b`, `c` would answer
+    # `put("a", ...)` by evicting `b`, leaving `a` and `c` and a cache one
+    # entry short of its own capacity for no reason.
+    if not replacing? and :ets.info(@table_name, :size) >= max_entries() do
       evict_oldest()
     end
 
@@ -223,10 +228,18 @@ defmodule MetadataRelay.Cache.InMemory do
   # only shrink how often a harmless orphan row briefly exists, not change
   # any observable behavior, so it isn't worth adding contention to the hot
   # path of every cache write for that.
+  #
+  # Returns whether `key` was already present, which is what tells `put/3`
+  # apart a replacement (table size unchanged) from an insertion (table size
+  # grows, and so may need to evict first).
   defp drop_order_entry(key) do
     case :ets.lookup(@table_name, key) do
-      [{^key, _value, _expires_at, seq}] -> :ets.delete(@order_table_name, seq)
-      [] -> :ok
+      [{^key, _value, _expires_at, seq}] ->
+        :ets.delete(@order_table_name, seq)
+        true
+
+      [] ->
+        false
     end
   end
 

@@ -104,6 +104,36 @@ defmodule Mydia.Accounts.ApiKeyRateLimiterTest do
     end
   end
 
+  describe "record_failed_attempt/2 under concurrency" do
+    # A brute-force limit that loses increments when guesses arrive in parallel
+    # is a limit an attacker gets to raise by simply opening more connections.
+    # record_failed_attempt/2 used to read the counter and write it back as two
+    # separate ETS operations, so simultaneous attempts on the same bucket all
+    # read the same value and all stored that value plus one -- N guesses
+    # counted as one. Every attempt must land exactly once.
+    test "counts every concurrent attempt exactly once" do
+      ip = "192.168.1.99"
+      storage_key = "api_key_validation:#{ip}"
+      attempts = 200
+
+      ApiKeyRateLimiter.reset_rate_limit(ip)
+
+      1..attempts
+      |> Task.async_stream(fn _ -> ApiKeyRateLimiter.record_failed_attempt(ip) end,
+        max_concurrency: 50,
+        timeout: :infinity
+      )
+      |> Stream.run()
+
+      assert [{^storage_key, recorded, _first_attempt_at, _window}] =
+               :ets.lookup(:api_key_rate_limiter, storage_key)
+
+      assert recorded == attempts
+
+      ApiKeyRateLimiter.reset_rate_limit(ip)
+    end
+  end
+
   describe "cleanup_expired/0" do
     test "removes expired entries" do
       # This test would require mocking time or waiting for the window to expire

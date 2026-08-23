@@ -250,6 +250,31 @@ defmodule MetadataRelay.Cache.InMemoryTest do
       assert {:ok, 3} = InMemory.get("c")
       assert {:ok, 4} = InMemory.get("d")
     end
+
+    # The test above passes whether or not the replacement itself evicts,
+    # because it only looks at the end state after a *further* insert. This one
+    # checks the replacement in isolation: overwriting a key that is already in
+    # a full cache needs no room made for it, so nothing may be thrown out. The
+    # size check reading `>=` against a table that still holds the old record
+    # used to make a replacement look like an insert, so `put("a", ...)` here
+    # evicted "b" and left the cache holding two entries out of a capacity of
+    # three.
+    test "replacing a key in a full cache evicts nothing" do
+      InMemory.clear()
+      Application.put_env(:metadata_relay, :cache_max_entries, 3)
+      on_exit(fn -> Application.delete_env(:metadata_relay, :cache_max_entries) end)
+
+      InMemory.put("a", 1, 60_000)
+      InMemory.put("b", 2, 60_000)
+      InMemory.put("c", 3, 60_000)
+
+      InMemory.put("a", "updated", 60_000)
+
+      assert InMemory.stats().size == 3
+      assert {:ok, "updated"} = InMemory.get("a")
+      assert {:ok, 2} = InMemory.get("b")
+      assert {:ok, 3} = InMemory.get("c")
+    end
   end
 
   describe "order-table race safety" do

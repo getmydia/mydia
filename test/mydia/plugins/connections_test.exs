@@ -115,14 +115,49 @@ defmodule Mydia.Plugins.ConnectionsTest do
       assert {:ok, "keep"} = Kv.get("connector", "global")
     end
 
-    test "delete_for_user sweeps KV and removes the user's connections", %{user: user} do
+    test "sweep_kv drops each connection's prefix and leaves unscoped keys", %{user: user} do
+      {:ok, conn} = Connections.connect("connector", user.id, %{access_token: "t"})
+      {:ok, _} = Kv.set("connector", "conn/#{conn.id}/cursor", "x")
+      {:ok, _} = Kv.set("connector", "global", "keep")
+
+      assert :ok = Connections.sweep_kv(Connections.list_for_user(user.id))
+
+      assert {:ok, nil} = Kv.get("connector", "conn/#{conn.id}/cursor")
+      assert {:ok, "keep"} = Kv.get("connector", "global")
+    end
+
+    test "deleting the user cascades the rows and sweep_kv clears their state", %{user: user} do
       {:ok, conn} = Connections.connect("connector", user.id, %{access_token: "t"})
       {:ok, _} = Kv.set("connector", "conn/#{conn.id}/cursor", "x")
 
-      assert :ok = Connections.delete_for_user(user.id)
+      assert {:ok, _} = Mydia.Accounts.delete_user(user)
 
       assert Connections.get("connector", user.id) == nil
       assert {:ok, nil} = Kv.get("connector", "conn/#{conn.id}/cursor")
+    end
+
+    # `media_requests.requester_id` is `on_delete: :restrict`, so a user who has
+    # ever requested media cannot be deleted. Nothing here runs in a transaction,
+    # so a KV sweep that ran before `Repo.delete/1` would already be committed by
+    # the time the database rejects the delete, leaving a live user whose plugin
+    # state had been destroyed out from under them.
+    test "a rejected delete leaves the user's plugin state intact", %{user: user} do
+      {:ok, conn} = Connections.connect("connector", user.id, %{access_token: "t"})
+      {:ok, _} = Kv.set("connector", "conn/#{conn.id}/cursor", "x")
+
+      {:ok, _request} =
+        Mydia.MediaRequests.create_request(%{
+          media_type: "movie",
+          title: "Restricting Request",
+          tmdb_id: 603,
+          requester_id: user.id
+        })
+
+      assert_raise Ecto.ConstraintError, fn -> Mydia.Accounts.delete_user(user) end
+
+      assert Mydia.Accounts.get_user!(user.id)
+      assert Connections.get("connector", user.id)
+      assert {:ok, "x"} = Kv.get("connector", "conn/#{conn.id}/cursor")
     end
   end
 end
