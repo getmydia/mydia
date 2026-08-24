@@ -36,7 +36,7 @@ config :metadata_relay, MetadataRelayWeb.Endpoint,
     "metadata_relay_secret_key_base_placeholder_needs_to_be_at_least_64_bytes_long_for_security"
 
 config :esbuild,
-  version: "0.25.4",
+  version: "0.28.2",
   metadata_relay: [
     args: ~w(js/app.js --bundle --target=es2022 --outdir=../priv/static/assets/js),
     cd: Path.expand("../assets", __DIR__),
@@ -44,7 +44,7 @@ config :esbuild,
   ]
 
 config :tailwind,
-  version: "4.1.18",
+  version: "4.3.3",
   metadata_relay: [
     args: ~w(
       --input=assets/css/app.css

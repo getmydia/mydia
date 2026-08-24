@@ -2,6 +2,7 @@ defmodule MetadataRelay.SubDL.ClientTest do
   use ExUnit.Case, async: false
 
   alias MetadataRelay.SubDL.Client
+  import ExUnit.CaptureIO
 
   @moduletag :capture_log
 
@@ -26,6 +27,19 @@ defmodule MetadataRelay.SubDL.ClientTest do
     end)
 
     assert {:ok, %{"status" => true}} = Client.search(imdb_id: "tt0133093")
+  end
+
+  test "uses custom HTTP adapters without Req deprecation warnings" do
+    stub(fn request ->
+      {request, Req.Response.new(status: 200, body: %{"status" => true})}
+    end)
+
+    stderr =
+      capture_io(:stderr, fn ->
+        assert {:ok, %{"status" => true}} = Client.search(imdb_id: "tt0133093")
+      end)
+
+    refute stderr =~ "setting `adapter` to a function is deprecated"
   end
 
   test "reports a missing api key as not configured" do

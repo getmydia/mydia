@@ -28,8 +28,6 @@ defmodule MetadataRelay.Cache do
   Example: "GET:/tmdb/movies/search:query=matrix&year=1999"
   """
 
-  require Logger
-
   # TTL values in milliseconds - aggressive caching for better hit rates
   @metadata_ttl :timer.hours(24 * 30)
   @images_ttl :timer.hours(24 * 90)

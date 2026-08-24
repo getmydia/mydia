@@ -20,6 +20,8 @@ defmodule MetadataRelay.SubDL.Client do
   @api_base_url "https://api.subdl.com"
   @download_base_url "https://dl.subdl.com"
 
+  alias MetadataRelay.ReqAdapter
+
   @doc """
   Searches SubDL. `params` is a keyword list of query parameters; the API key is
   added here so no caller has to hold it.
@@ -67,8 +69,9 @@ defmodule MetadataRelay.SubDL.Client do
       retry: false
     ]
 
-    adapter = Application.get_env(:metadata_relay, :subdl_http_adapter)
-    Req.new(if adapter, do: Keyword.put(base_opts, :adapter, adapter), else: base_opts)
+    base_opts
+    |> Req.new()
+    |> ReqAdapter.attach(Application.get_env(:metadata_relay, :subdl_http_adapter))
   end
 
   defp handle_response({:ok, %{status: status, body: body}}) when status in 200..299,

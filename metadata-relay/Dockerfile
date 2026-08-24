@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.4
-FROM elixir:1.19-alpine AS builder
+FROM elixir:1.20.1-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache build-base git openssl-dev nodejs npm
@@ -72,7 +72,7 @@ RUN --mount=type=cache,id=relay-hex,target=/root/.hex \
     mix release
 
 # Start a new stage for the final image
-FROM alpine:3.22
+FROM alpine:3.24.1
 
 # Install runtime dependencies
 RUN apk add --no-cache libstdc++ openssl ncurses-libs curl

@@ -23,6 +23,8 @@ defmodule MetadataRelay.TVDB.Auth do
   use GenServer
   require Logger
 
+  alias MetadataRelay.ReqAdapter
+
   @auth_url "https://api4.thetvdb.com/v4/login"
   # Refresh token 1 hour before expiration (tokens typically last 30 days)
   @refresh_before_expiry :timer.hours(1)
@@ -116,13 +118,12 @@ defmodule MetadataRelay.TVDB.Auth do
 
     body = %{apikey: api_key}
 
-    req_opts =
-      case Application.get_env(:metadata_relay, :tvdb_http_adapter) do
-        nil -> [json: body]
-        adapter -> [json: body, adapter: adapter]
-      end
+    request =
+      [json: body]
+      |> Req.new()
+      |> ReqAdapter.attach(Application.get_env(:metadata_relay, :tvdb_http_adapter))
 
-    case Req.post(@auth_url, req_opts) do
+    case Req.post(request, url: @auth_url) do
       {:ok, %{status: 200, body: %{"data" => %{"token" => token}}}} ->
         # Parse JWT to get expiration time
         expires_at = parse_token_expiry(token)
