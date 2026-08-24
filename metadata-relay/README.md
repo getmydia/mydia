@@ -41,7 +41,7 @@ The Docker Compose configuration includes an optional Redis service for persiste
    ```
 
    This starts both the relay service and Redis, with the relay container user
-   matching the host user that owns the bind-mounted source tree. A one-shot
+   matching the current host user. A one-shot
    initialization service updates existing build, dependency, and database
    volume ownership without removing their contents.
 
