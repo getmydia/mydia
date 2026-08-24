@@ -37,10 +37,11 @@ The Docker Compose configuration includes an optional Redis service for persiste
 1. **Start all services**:
 
    ```bash
-   docker-compose up -d
+   HOST_UID=$(id -u) HOST_GID=$(id -g) docker-compose up -d --build
    ```
 
-   This starts both the relay service and Redis.
+   This starts both the relay service and Redis, with the relay container user
+   matching the host user that owns the bind-mounted source tree.
 
 2. **View logs**:
 
