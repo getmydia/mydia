@@ -23,7 +23,6 @@ defmodule MetadataRelay.Plug.Cache do
   """
 
   import Plug.Conn
-  require Logger
 
   alias MetadataRelay.Cache
 

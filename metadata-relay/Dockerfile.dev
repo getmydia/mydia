@@ -1,7 +1,17 @@
-FROM elixir:1.19-alpine
+FROM elixir:1.20.1-alpine
+
+ARG USER_ID=1000
+ARG GROUP_ID=1000
 
 # Install development dependencies
 RUN apk add --no-cache build-base git inotify-tools curl nodejs npm
+
+# Match the host user when source is bind-mounted by Docker Compose.
+RUN group_name="$(awk -F: -v gid="${GROUP_ID}" '$3 == gid { print $1; exit }' /etc/group)" && \
+    if [ -z "${group_name}" ]; then \
+      group_name=relay && addgroup -g "${GROUP_ID}" "${group_name}"; \
+    fi && \
+    adduser -D -u "${USER_ID}" -G "${group_name}" relay
 
 WORKDIR /app
 
@@ -17,7 +27,11 @@ RUN mix deps.get
 COPY . .
 
 # Compile dependencies and prebuild static assets
-RUN mix deps.compile && mix assets.setup && mix assets.build
+RUN mix deps.compile && mix assets.setup && mix assets.build && \
+    mkdir -p /app/data && \
+    chown -R relay /app
+
+USER relay
 
 # Expose the port
 EXPOSE 4001

@@ -24,7 +24,7 @@ The Metadata Relay Service acts as an intermediary between the Mydia application
 
 ### Prerequisites
 
-- Elixir 1.14 or later
+- Elixir 1.17 or later
 - Erlang/OTP 25 or later
 - Docker and Docker Compose (alternative to local Elixir install)
 
@@ -37,10 +37,13 @@ The Docker Compose configuration includes an optional Redis service for persiste
 1. **Start all services**:
 
    ```bash
-   docker-compose up -d
+   HOST_UID=$(id -u) HOST_GID=$(id -g) docker-compose up -d --build
    ```
 
-   This starts both the relay service and Redis.
+   This starts both the relay service and Redis, with the relay container user
+   matching the current host user. A one-shot
+   initialization service updates existing build, dependency, and database
+   volume ownership without removing their contents.
 
 2. **View logs**:
 

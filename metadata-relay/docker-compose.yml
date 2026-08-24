@@ -1,10 +1,27 @@
-version: "3.8"
-
 services:
-  relay:
+  relay-volume-init:
+    image: metadata-relay-dev
     build:
       context: .
       dockerfile: Dockerfile.dev
+      args:
+        USER_ID: ${HOST_UID:-1000}
+        GROUP_ID: ${HOST_GID:-1000}
+    user: root
+    command: ["chown", "-R", "relay", "/app/_build", "/app/deps", "/app/data"]
+    volumes:
+      - relay_build:/app/_build
+      - relay_deps:/app/deps
+      - relay_db:/app/data
+
+  relay:
+    image: metadata-relay-dev
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        USER_ID: ${HOST_UID:-1000}
+        GROUP_ID: ${HOST_GID:-1000}
     ports:
       - "4001:4001"
     environment:
@@ -26,7 +43,10 @@ services:
       - relay_db:/app/data
     command: mix run --no-halt
     depends_on:
-      - redis
+      relay-volume-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
 
   # Redis cache (optional)
   # Comment out this service and the REDIS_URL env var above to use in-memory caching

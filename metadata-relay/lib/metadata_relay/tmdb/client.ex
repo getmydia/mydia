@@ -18,6 +18,8 @@ defmodule MetadataRelay.TMDB.Client do
 
   @base_url "https://api.themoviedb.org/3"
 
+  alias MetadataRelay.ReqAdapter
+
   @doc """
   Creates a new Req client configured for TMDB API requests.
 
@@ -32,10 +34,9 @@ defmodule MetadataRelay.TMDB.Client do
       ]
     ]
 
-    adapter = Application.get_env(:metadata_relay, :tmdb_http_adapter)
-    opts = if adapter, do: Keyword.put(base_opts, :adapter, adapter), else: base_opts
-
-    Req.new(opts)
+    base_opts
+    |> Req.new()
+    |> ReqAdapter.attach(Application.get_env(:metadata_relay, :tmdb_http_adapter))
   end
 
   @doc """

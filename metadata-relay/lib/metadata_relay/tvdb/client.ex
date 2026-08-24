@@ -16,6 +16,7 @@ defmodule MetadataRelay.TVDB.Client do
 
   """
 
+  alias MetadataRelay.ReqAdapter
   alias MetadataRelay.TVDB.Auth
 
   @base_url "https://api4.thetvdb.com/v4"
@@ -43,10 +44,12 @@ defmodule MetadataRelay.TVDB.Client do
           ]
         ]
 
-        adapter = Application.get_env(:metadata_relay, :tvdb_http_adapter)
-        opts = if adapter, do: Keyword.put(base_opts, :adapter, adapter), else: base_opts
+        client =
+          base_opts
+          |> Req.new()
+          |> ReqAdapter.attach(Application.get_env(:metadata_relay, :tvdb_http_adapter))
 
-        {:ok, Req.new(opts)}
+        {:ok, client}
 
       {:error, reason} ->
         {:error, reason}
