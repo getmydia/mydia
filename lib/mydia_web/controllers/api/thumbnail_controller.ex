@@ -10,6 +10,7 @@ defmodule MydiaWeb.Api.ThumbnailController do
 
   alias Mydia.Library
   alias Mydia.Library.GeneratedMedia
+  alias MydiaWeb.MediaAccess
 
   require Logger
 
@@ -26,33 +27,43 @@ defmodule MydiaWeb.Api.ThumbnailController do
     try do
       media_file = Library.get_media_file!(media_file_id)
 
-      if media_file.vtt_blob do
-        path = GeneratedMedia.get_path(:vtt, media_file.vtt_blob)
-
-        if File.exists?(path) do
-          conn
-          |> put_resp_header("cache-control", "public, max-age=31536000")
-          |> put_resp_content_type("text/vtt")
-          |> send_file(200, path)
-        else
-          Logger.warning(
-            "VTT file missing for media file #{media_file_id}: #{media_file.vtt_blob}"
-          )
-
+      case MediaAccess.authorize_media_file(conn, media_file) do
+        :denied ->
           conn
           |> put_status(:not_found)
-          |> json(%{error: "VTT file not found on disk"})
-        end
-      else
-        conn
-        |> put_status(:not_found)
-        |> json(%{error: "No thumbnails available for this file"})
+          |> json(%{error: "Media file not found"})
+
+        :ok ->
+          serve_vtt(conn, media_file)
       end
     rescue
       Ecto.NoResultsError ->
         conn
         |> put_status(:not_found)
         |> json(%{error: "Media file not found"})
+    end
+  end
+
+  defp serve_vtt(conn, media_file) do
+    if media_file.vtt_blob do
+      path = GeneratedMedia.get_path(:vtt, media_file.vtt_blob)
+
+      if File.exists?(path) do
+        conn
+        |> put_resp_header("cache-control", "public, max-age=31536000")
+        |> put_resp_content_type("text/vtt")
+        |> send_file(200, path)
+      else
+        Logger.warning("VTT file missing for media file #{media_file.id}: #{media_file.vtt_blob}")
+
+        conn
+        |> put_status(:not_found)
+        |> json(%{error: "VTT file not found on disk"})
+      end
+    else
+      conn
+      |> put_status(:not_found)
+      |> json(%{error: "No thumbnails available for this file"})
     end
   end
 
@@ -69,33 +80,45 @@ defmodule MydiaWeb.Api.ThumbnailController do
     try do
       media_file = Library.get_media_file!(media_file_id)
 
-      if media_file.sprite_blob do
-        path = GeneratedMedia.get_path(:sprite, media_file.sprite_blob)
-
-        if File.exists?(path) do
-          conn
-          |> put_resp_header("cache-control", "public, max-age=31536000")
-          |> put_resp_content_type("image/jpeg")
-          |> send_file(200, path)
-        else
-          Logger.warning(
-            "Sprite file missing for media file #{media_file_id}: #{media_file.sprite_blob}"
-          )
-
+      case MediaAccess.authorize_media_file(conn, media_file) do
+        :denied ->
           conn
           |> put_status(:not_found)
-          |> json(%{error: "Sprite file not found on disk"})
-        end
-      else
-        conn
-        |> put_status(:not_found)
-        |> json(%{error: "No thumbnails available for this file"})
+          |> json(%{error: "Media file not found"})
+
+        :ok ->
+          serve_sprite(conn, media_file)
       end
     rescue
       Ecto.NoResultsError ->
         conn
         |> put_status(:not_found)
         |> json(%{error: "Media file not found"})
+    end
+  end
+
+  defp serve_sprite(conn, media_file) do
+    if media_file.sprite_blob do
+      path = GeneratedMedia.get_path(:sprite, media_file.sprite_blob)
+
+      if File.exists?(path) do
+        conn
+        |> put_resp_header("cache-control", "public, max-age=31536000")
+        |> put_resp_content_type("image/jpeg")
+        |> send_file(200, path)
+      else
+        Logger.warning(
+          "Sprite file missing for media file #{media_file.id}: #{media_file.sprite_blob}"
+        )
+
+        conn
+        |> put_status(:not_found)
+        |> json(%{error: "Sprite file not found on disk"})
+      end
+    else
+      conn
+      |> put_status(:not_found)
+      |> json(%{error: "No thumbnails available for this file"})
     end
   end
 end
