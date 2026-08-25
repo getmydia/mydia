@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/colors.dart';
+import 'focus_highlight.dart';
 
 /// Action row in the detail body, below the hero: mark watched/unwatched,
 /// favorite, download, open the trailer on YouTube when one exists, and open
@@ -134,35 +135,43 @@ class _ActionButton extends StatelessWidget {
     final color = highlighted ? highlightColor : AppColors.textPrimary;
 
     return Expanded(
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(22),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: highlighted
-                    ? highlightColor.withValues(alpha: 0.15)
-                    : AppColors.surfaceVariant,
-                border: Border.all(
+      child: FocusHighlight(
+        onActivate: onTap,
+        borderRadius: const BorderRadius.all(Radius.circular(12)),
+        child: InkWell(
+          onTap: onTap,
+          // FocusHighlight above is the single focus stop for this chip.
+          // InkWell defaults canRequestFocus to true, which would otherwise
+          // register a second, invisible focus stop nested inside the first.
+          canRequestFocus: false,
+          borderRadius: BorderRadius.circular(22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
                   color: highlighted
-                      ? highlightColor.withValues(alpha: 0.45)
-                      : AppColors.border,
+                      ? highlightColor.withValues(alpha: 0.15)
+                      : AppColors.surfaceVariant,
+                  border: Border.all(
+                    color: highlighted
+                        ? highlightColor.withValues(alpha: 0.45)
+                        : AppColors.border,
+                  ),
                 ),
+                child: Icon(icon, color: color, size: 20),
               ),
-              child: Icon(icon, color: color, size: 20),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              label,
-              style: const TextStyle(
-                  fontSize: 10.5, color: AppColors.textSecondary),
-            ),
-          ],
+              const SizedBox(height: 6),
+              Text(
+                label,
+                style: const TextStyle(
+                    fontSize: 10.5, color: AppColors.textSecondary),
+              ),
+            ],
+          ),
         ),
       ),
     );

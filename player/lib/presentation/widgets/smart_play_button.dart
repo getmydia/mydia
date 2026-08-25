@@ -4,6 +4,7 @@ import '../../core/player/best_file.dart';
 import '../../core/theme/colors.dart';
 import '../../domain/models/media_file.dart';
 import '../../domain/models/show_next_up.dart';
+import 'focus_highlight.dart';
 import 'next_up_labels.dart';
 import 'play_button.dart';
 import 'quality_selector.dart';
@@ -210,21 +211,29 @@ class _DropdownButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 28,
-        height: 28,
-        decoration: const BoxDecoration(
-          shape: BoxShape.circle,
-          // Neutral surface fill (no two-hue gradient) to match the system.
-          color: AppColors.surfaceVariant,
-        ),
-        child: const Center(
-          child: Icon(
-            Icons.keyboard_arrow_down_rounded,
-            size: 18,
-            color: AppColors.textSecondary,
+    // circular: true because this button's whole bounding box is the 28x28
+    // circle it paints (unlike the action chip below, whose ring encloses an
+    // icon plus a label). GestureDetector has no focus of its own, so this
+    // is the button's only focus stop.
+    return FocusHighlight(
+      onActivate: onTap,
+      circular: true,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 28,
+          height: 28,
+          decoration: const BoxDecoration(
+            shape: BoxShape.circle,
+            // Neutral surface fill (no two-hue gradient) to match the system.
+            color: AppColors.surfaceVariant,
+          ),
+          child: const Center(
+            child: Icon(
+              Icons.keyboard_arrow_down_rounded,
+              size: 18,
+              color: AppColors.textSecondary,
+            ),
           ),
         ),
       ),
