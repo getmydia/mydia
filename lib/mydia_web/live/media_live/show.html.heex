@@ -273,8 +273,23 @@
               serves both layouts, so there is no hidden/xl:block duplicate.
 
               Sticky for the same reason and with the same caveats as the hero
-              column: see the note there on self-start and the inner scroll. --%>
-        <aside class="md:col-span-2 xl:col-span-1 xl:col-start-3 xl:row-start-1 xl:sticky xl:top-4 xl:self-start xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
+              column: see the note there on self-start and the inner scroll.
+
+              The :if here is load-bearing alongside the grid template's own
+              @timeline_events == [] conditional above, and neither one makes
+              the other redundant: this aside carries xl:col-start-3 and
+              xl:row-start-1 unconditionally, so even when the grid template
+              picks the two-track layout, a rendered-but-empty aside would
+              still force Grid to open an implicit third column (and, below
+              xl, an implicit row) to satisfy that placement, and gap-4/gap-6
+              still applies to a track that exists but is empty. The template
+              conditional stops the 22rem column from being reserved; this
+              :if stops the aside from existing in the grid at all when there
+              is nothing to place, which is what actually removes the gap. --%>
+        <aside
+          :if={@timeline_events != []}
+          class="md:col-span-2 xl:col-span-1 xl:col-start-3 xl:row-start-1 xl:sticky xl:top-4 xl:self-start xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto"
+        >
           <Components.timeline_section timeline_events={@timeline_events} />
         </aside>
       </div>
