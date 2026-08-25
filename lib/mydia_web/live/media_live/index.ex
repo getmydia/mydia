@@ -392,7 +392,7 @@ defmodule MydiaWeb.MediaLive.Index do
   def handle_event("batch_monitor", _params, socket) do
     selected_ids = MapSet.to_list(socket.assigns.selected_ids)
 
-    case Media.update_media_items_monitored(selected_ids, true) do
+    case Media.update_media_items_monitored(socket.assigns.current_scope, selected_ids, true) do
       {:ok, count} ->
         {:noreply,
          socket
@@ -409,7 +409,7 @@ defmodule MydiaWeb.MediaLive.Index do
   def handle_event("batch_unmonitor", _params, socket) do
     selected_ids = MapSet.to_list(socket.assigns.selected_ids)
 
-    case Media.update_media_items_monitored(selected_ids, false) do
+    case Media.update_media_items_monitored(socket.assigns.current_scope, selected_ids, false) do
       {:ok, count} ->
         {:noreply,
          socket
@@ -424,10 +424,13 @@ defmodule MydiaWeb.MediaLive.Index do
   end
 
   def handle_event("toggle_item_monitored", %{"id" => id}, socket) do
-    media_item = Media.get_media_item!(id)
+    media_item = Media.get_media_item!(socket.assigns.current_scope, id)
     new_monitored_status = !media_item.monitored
 
-    case Media.update_media_item(media_item, %{monitored: new_monitored_status},
+    case Media.update_media_item(
+           socket.assigns.current_scope,
+           media_item,
+           %{monitored: new_monitored_status},
            reason: if(new_monitored_status, do: "Monitoring enabled", else: "Monitoring disabled")
          ) do
       {:ok, _updated_item} ->
@@ -530,7 +533,9 @@ defmodule MydiaWeb.MediaLive.Index do
     selected_ids = MapSet.to_list(socket.assigns.selected_ids)
     delete_files = socket.assigns.delete_files
 
-    case Media.delete_media_items(selected_ids, delete_files: delete_files) do
+    case Media.delete_media_items(socket.assigns.current_scope, selected_ids,
+           delete_files: delete_files
+         ) do
       {:ok, count, %DiskRemoval{} = removal} ->
         {kind, message} = DiskRemovalFlash.for_items(count, delete_files, removal)
 
@@ -575,7 +580,7 @@ defmodule MydiaWeb.MediaLive.Index do
       |> maybe_add_attr(:quality_profile_id, params["quality_profile_id"])
       |> maybe_add_attr(:monitored, params["monitored"])
 
-    case Media.update_media_items_batch(selected_ids, attrs) do
+    case Media.update_media_items_batch(socket.assigns.current_scope, selected_ids, attrs) do
       {:ok, count} ->
         {:noreply,
          socket

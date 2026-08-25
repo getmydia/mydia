@@ -119,10 +119,17 @@ defmodule MydiaWeb.Live.UserAuth do
 
     socket =
       socket
-      |> assign(:movie_count, Mydia.Media.count_movies(exclude_categories: excluded_categories))
+      |> assign(
+        :movie_count,
+        Mydia.Media.count_movies(socket.assigns.current_scope,
+          exclude_categories: excluded_categories
+        )
+      )
       |> assign(
         :tv_show_count,
-        Mydia.Media.count_tv_shows(exclude_categories: excluded_categories)
+        Mydia.Media.count_tv_shows(socket.assigns.current_scope,
+          exclude_categories: excluded_categories
+        )
       )
       |> assign(:excluded_categories, excluded_categories)
       |> assign(:sections, sections)

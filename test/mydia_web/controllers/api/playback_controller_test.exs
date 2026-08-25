@@ -1,6 +1,7 @@
 defmodule MydiaWeb.Api.PlaybackControllerTest do
   use MydiaWeb.ConnCase, async: true
 
+  alias Mydia.Accounts.Scope
   alias Mydia.{Media, Playback}
 
   setup do
@@ -411,6 +412,7 @@ defmodule MydiaWeb.Api.PlaybackControllerTest do
   # cached the way the mount-time detail-page lookups are (#530).
   defp create_media_item(type) do
     Media.create_media_item(
+      Scope.unrestricted(),
       %{
         title: "Test #{type} #{System.unique_integer([:positive])}",
         tmdb_id: System.unique_integer([:positive]),
@@ -425,6 +427,7 @@ defmodule MydiaWeb.Api.PlaybackControllerTest do
   defp create_episode do
     {:ok, media_item} =
       Media.create_media_item(
+        Scope.unrestricted(),
         %{
           title: "Test Show #{System.unique_integer([:positive])}",
           tmdb_id: System.unique_integer([:positive]),

@@ -7,6 +7,7 @@ defmodule Mydia.Library do
   import Mydia.DB
   import Mydia.QueryHelpers
   alias Mydia.Repo
+  alias Mydia.Accounts.Scope
   alias Mydia.Library.{MediaFile, MediaFileEpisode, FileAnalyzer, Text, TrashStore}
   alias Mydia.Library.ReleaseParser, as: FileParser
   alias Mydia.Library.Structs.FileMetadata
@@ -1302,7 +1303,7 @@ defmodule Mydia.Library do
         # which existing queries join on), and every one gets a
         # media_file_episodes row so no episode of the file reads as missing.
         episode_numbers
-        |> Enum.map(&Mydia.Media.get_episode_by_number(media_item_id, season, &1))
+        |> Enum.map(&Mydia.Media.get_episode_by_number(Scope.system(), media_item_id, season, &1))
         |> Enum.reject(&is_nil/1)
         |> case do
           [] ->
@@ -1475,7 +1476,7 @@ defmodule Mydia.Library do
     alias Mydia.Settings
 
     # Get media item and verify it's a TV show
-    media_item = Media.get_media_item!(media_item_id)
+    media_item = Media.get_media_item!(Scope.system(), media_item_id)
     library_paths = Settings.list_library_paths()
 
     if media_item.type != "tv_show" do
@@ -1622,7 +1623,7 @@ defmodule Mydia.Library do
     alias Mydia.Settings
 
     # Get media item and verify it's a TV show
-    media_item = Media.get_media_item!(media_item_id)
+    media_item = Media.get_media_item!(Scope.system(), media_item_id)
     library_paths = Settings.list_library_paths()
 
     if media_item.type != "tv_show" do
@@ -1804,7 +1805,7 @@ defmodule Mydia.Library do
     alias Mydia.Settings
 
     # Get media item and verify it's a movie
-    media_item = Media.get_media_item!(media_item_id)
+    media_item = Media.get_media_item!(Scope.system(), media_item_id)
     library_paths = Settings.list_library_paths()
 
     if media_item.type != "movie" do

@@ -4,6 +4,7 @@ defmodule Mydia.Plugins.HostFunctionsTest do
   import Mydia.MediaFixtures
   import Mydia.AccountsFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Events
   alias Mydia.Plugins.Connections
   alias Mydia.Plugins.Error
@@ -353,7 +354,7 @@ defmodule Mydia.Plugins.HostFunctionsTest do
 
     defp create_movie do
       {:ok, item} =
-        Mydia.Media.create_media_item(%{
+        Mydia.Media.create_media_item(Scope.unrestricted(), %{
           title: "Movie #{System.unique_integer([:positive])}",
           type: "movie",
           year: 2024,
@@ -440,6 +441,7 @@ defmodule Mydia.Plugins.HostFunctionsTest do
 
       {:ok, show} =
         Mydia.Media.create_media_item(
+          Scope.unrestricted(),
           %{title: "Show", type: "tv_show", tmdb_id: System.unique_integer([:positive])},
           skip_episode_refresh: true
         )
@@ -603,7 +605,10 @@ defmodule Mydia.Plugins.HostFunctionsTest do
 
     defp movie_with(attrs) do
       {:ok, item} =
-        Mydia.Media.create_media_item(Map.merge(%{title: "M", type: "movie", year: 2024}, attrs))
+        Mydia.Media.create_media_item(
+          Scope.unrestricted(),
+          Map.merge(%{title: "M", type: "movie", year: 2024}, attrs)
+        )
 
       item
     end
@@ -659,6 +664,7 @@ defmodule Mydia.Plugins.HostFunctionsTest do
          %{user: user} do
       {:ok, show} =
         Mydia.Media.create_media_item(
+          Scope.unrestricted(),
           %{title: "Show", type: "tv_show", tvdb_id: 999},
           skip_episode_refresh: true
         )

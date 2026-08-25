@@ -7,6 +7,7 @@ defmodule Mydia.ImportListsTest do
 
   import Mydia.MetadataStub
 
+  alias Mydia.Accounts.Scope
   alias Mydia.ImportLists
   alias Mydia.ImportLists.{ImportList, ImportListItem}
 
@@ -177,7 +178,7 @@ defmodule Mydia.ImportListsTest do
     test "list_import_list_items/2 filters by status", %{import_list: import_list} do
       # Create a media item for the "added" item
       {:ok, media_item} =
-        Mydia.Media.create_media_item(%{
+        Mydia.Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Added Movie",
           year: 2024
@@ -206,7 +207,7 @@ defmodule Mydia.ImportListsTest do
     test "count_import_list_items/2 returns count by status", %{import_list: import_list} do
       # Create a media item for the "added" item
       {:ok, media_item} =
-        Mydia.Media.create_media_item(%{
+        Mydia.Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Added Movie",
           year: 2024
@@ -244,7 +245,7 @@ defmodule Mydia.ImportListsTest do
     test "get_pending_items/1 returns only pending items", %{import_list: import_list} do
       # Create a media item for the "added" item
       {:ok, media_item} =
-        Mydia.Media.create_media_item(%{
+        Mydia.Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Added Movie",
           year: 2024
@@ -366,7 +367,7 @@ defmodule Mydia.ImportListsTest do
     test "mark_item_added/2 updates status to added", %{import_list: import_list} do
       # Create a media item first for the foreign key
       {:ok, media_item} =
-        Mydia.Media.create_media_item(%{
+        Mydia.Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Test Movie",
           year: 2024
@@ -388,7 +389,7 @@ defmodule Mydia.ImportListsTest do
     } do
       # Create a media item
       {:ok, media_item} =
-        Mydia.Media.create_media_item(%{
+        Mydia.Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Test Movie",
           year: 2024
@@ -409,7 +410,7 @@ defmodule Mydia.ImportListsTest do
       assert ImportLists.count_import_list_items(import_list, "pending") == 0
 
       # Now delete the media item
-      {:ok, _, _} = Mydia.Media.delete_media_item(media_item)
+      {:ok, _, _} = Mydia.Media.delete_media_item(Scope.unrestricted(), media_item)
 
       # After deletion, the item should be treated as "pending" since media is gone
       assert ImportLists.count_import_list_items(import_list, "added") == 0

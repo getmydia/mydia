@@ -13,6 +13,7 @@ defmodule Mydia.Metadata.NfoWriter do
 
   require Logger
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Library.MediaFile
   alias Mydia.Media
   alias Mydia.Media.MediaItem
@@ -41,7 +42,7 @@ defmodule Mydia.Metadata.NfoWriter do
 
   def maybe_write_nfos(media_item_id) when is_binary(media_item_id) do
     media_item =
-      Media.get_media_item!(media_item_id,
+      Media.get_media_item!(Scope.system(), media_item_id,
         preload: [:episodes, media_files: :library_path]
       )
 

@@ -111,9 +111,10 @@ defmodule MydiaWeb.DashboardLive.Index do
   end
 
   defp load_widget(socket, :library_stats) do
+    scope = socket.assigns.current_scope
     excluded_categories = socket.assigns[:excluded_categories] || []
-    movie_count = Media.count_movies(exclude_categories: excluded_categories)
-    tv_show_count = Media.count_tv_shows(exclude_categories: excluded_categories)
+    movie_count = Media.count_movies(scope, exclude_categories: excluded_categories)
+    tv_show_count = Media.count_tv_shows(scope, exclude_categories: excluded_categories)
     active_downloads_count = Downloads.count_active_downloads()
     total_storage = Library.total_storage_bytes() |> format_bytes()
 
@@ -655,6 +656,7 @@ defmodule MydiaWeb.DashboardLive.Index do
       |> Keyword.put_new(:actor_id, socket.assigns.current_user.id)
 
     case MediaAddHelpers.handle_add_media_to_library(
+           socket.assigns.current_scope,
            ref,
            media_type,
            socket.assigns.library_status_map,
@@ -752,6 +754,7 @@ defmodule MydiaWeb.DashboardLive.Index do
 
   defp submit_request(socket, item, media_type) do
     case MediaRequestHelpers.handle_request_media(
+           socket.assigns.current_scope,
            item,
            media_type,
            socket.assigns.current_user.id

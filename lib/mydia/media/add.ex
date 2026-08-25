@@ -13,6 +13,7 @@ defmodule Mydia.Media.Add do
   network work outside a database transaction and the insert inside one.
   """
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Media
   alias Mydia.Media.ExternalIds
   alias Mydia.Metadata
@@ -73,20 +74,20 @@ defmodule Mydia.Media.Add do
   still fetches episodes for TV shows, which is a network call; that is
   pre-existing behaviour and is deliberately left where it is.
   """
-  @spec from_attrs(map(), map() | nil, keyword()) ::
+  @spec from_attrs(Scope.t(), map(), map() | nil, keyword()) ::
           {:ok, Media.MediaItem.t()}
           | {:error,
              {:changeset, Ecto.Changeset.t()} | {:already_in_library, Media.MediaItem.t()}}
-  def from_attrs(attrs, config \\ nil, opts \\ []) do
+  def from_attrs(%Scope{} = scope, attrs, config \\ nil, opts \\ []) do
     config = config || Metadata.default_relay_config()
 
-    case existing_item(attrs) do
-      nil -> insert_media_item(attrs, config, opts)
-      item -> {:error, {:already_in_library, backfill_ids(item, attrs)}}
+    case existing_item(scope, attrs) do
+      nil -> insert_media_item(scope, attrs, config, opts)
+      item -> {:error, {:already_in_library, backfill_ids(scope, item, attrs)}}
     end
   end
 
-  defp insert_media_item(attrs, config, opts) do
+  defp insert_media_item(scope, attrs, config, opts) do
     create_opts =
       opts
       |> Keyword.take(@create_opt_keys)
@@ -94,7 +95,7 @@ defmodule Mydia.Media.Add do
 
     result =
       ExternalIds.write(attrs, [type: attrs[:type], title: attrs[:title]], fn attrs ->
-        Media.create_media_item(attrs, create_opts)
+        Media.create_media_item(scope, attrs, create_opts)
       end)
 
     case result do
@@ -124,7 +125,7 @@ defmodule Mydia.Media.Add do
   # library" and let `backfill_ids/2` stamp one title's provider id onto the
   # other. Every row Add or the scan path creates carries a tmdb or tvdb id, so
   # declining the imdb leg here costs no coverage.
-  defp existing_item(attrs) do
+  defp existing_item(scope, attrs) do
     xrefs = metadata_external_ids(attrs)
 
     Enum.find_value(
@@ -132,15 +133,15 @@ defmodule Mydia.Media.Add do
         %{tmdb: attrs[:tmdb_id], tvdb: attrs[:tvdb_id]},
         %{tmdb: xrefs[:tmdb], tvdb: xrefs[:tvdb]}
       ],
-      &find_by_ids(&1, attrs[:type])
+      &find_by_ids(scope, &1, attrs[:type])
     )
   end
 
-  defp find_by_ids(ids, type) do
+  defp find_by_ids(scope, ids, type) do
     if Enum.all?(Map.values(ids), &is_nil/1) do
       nil
     else
-      Media.find_by_external_ids(ids, type: type)
+      Media.find_by_external_ids(scope, ids, type: type)
     end
   end
 
@@ -169,7 +170,7 @@ defmodule Mydia.Media.Add do
   # wrong series. So only the id `metadata.external_ids` cross-references is
   # persisted here. A row left without one is picked up by
   # `Mydia.Jobs.MetadataBackfill`, which refreshes it from its own provider.
-  defp backfill_ids(item, attrs) do
+  defp backfill_ids(scope, item, attrs) do
     xrefs = metadata_external_ids(attrs)
 
     merged =
@@ -194,7 +195,7 @@ defmodule Mydia.Media.Add do
           {:ok, item}
 
         changes ->
-          Media.update_media_item(item, changes, reason: "Cross-referenced provider id")
+          Media.update_media_item(scope, item, changes, reason: "Cross-referenced provider id")
       end)
 
     case result do
@@ -213,13 +214,13 @@ defmodule Mydia.Media.Add do
   scan path establishes provenance later. Movies use TMDB and leave
   `metadata_source` nil.
   """
-  @spec from_provider(Ref.t() | nil, :movie | :tv_show, map() | nil, keyword()) ::
+  @spec from_provider(Scope.t(), Ref.t() | nil, :movie | :tv_show, map() | nil, keyword()) ::
           {:ok, Media.MediaItem.t()} | {:error, error()}
-  def from_provider(ref, media_type, config \\ nil, opts \\ []) do
+  def from_provider(%Scope{} = scope, ref, media_type, config \\ nil, opts \\ []) do
     config = config || Metadata.default_relay_config()
 
     with {:ok, attrs} <- resolve_attrs(ref, media_type, config, opts) do
-      from_attrs(attrs, config, opts)
+      from_attrs(scope, attrs, config, opts)
     end
   end
 

@@ -7,6 +7,7 @@ defmodule Mydia.Plugins.SimklSyncIntegrationTest do
   import Mydia.AccountsFixtures
   import Mydia.MediaFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Collections
   alias Mydia.Media
   alias Mydia.Playback
@@ -93,7 +94,7 @@ defmodule Mydia.Plugins.SimklSyncIntegrationTest do
 
   defp movie!(imdb) do
     {:ok, item} =
-      Media.create_media_item(%{
+      Media.create_media_item(Scope.unrestricted(), %{
         title: "Movie #{imdb}",
         type: "movie",
         year: 2024,
@@ -109,6 +110,7 @@ defmodule Mydia.Plugins.SimklSyncIntegrationTest do
   defp show_with_episode!(tvdb, season, episode) do
     {:ok, show} =
       Media.create_media_item(
+        Scope.unrestricted(),
         %{
           title: "Show #{tvdb}",
           type: "tv_show",

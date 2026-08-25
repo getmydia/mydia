@@ -46,7 +46,7 @@ defmodule MydiaWeb.Api.Player.V1.SubtitleController do
     - 500: Server error
   """
   def index(conn, %{"type" => type, "id" => id}) do
-    case resolve_media_file(type, id) do
+    case resolve_media_file(conn.assigns.current_scope, type, id) do
       {:ok, media_file} ->
         tracks = Extractor.list_subtitle_tracks(media_file)
 
@@ -98,7 +98,7 @@ defmodule MydiaWeb.Api.Player.V1.SubtitleController do
     # Parse track_id - could be integer (embedded) or string (external)
     track_id = parse_track_id(track_param)
 
-    case resolve_media_file(type, id) do
+    case resolve_media_file(conn.assigns.current_scope, type, id) do
       {:ok, media_file} ->
         case Mydia.Subtitles.Delivery.content(media_file, track_id, format) do
           {:ok, body} ->
@@ -171,12 +171,12 @@ defmodule MydiaWeb.Api.Player.V1.SubtitleController do
   ## Private Functions
 
   # Resolves a media file from type and ID
-  defp resolve_media_file(type, id) do
+  defp resolve_media_file(scope, type, id) do
     case type do
       "movie" ->
         try do
           media_item =
-            Mydia.Media.get_media_item!(id, preload: [media_files: active_files_query()])
+            Mydia.Media.get_media_item!(scope, id, preload: [media_files: active_files_query()])
 
           case FileRanking.best(media_item.media_files) do
             nil -> {:error, :no_media_files}
@@ -188,7 +188,8 @@ defmodule MydiaWeb.Api.Player.V1.SubtitleController do
 
       "episode" ->
         try do
-          episode = Mydia.Media.get_episode!(id, preload: [media_files: active_files_query()])
+          episode =
+            Mydia.Media.get_episode!(scope, id, preload: [media_files: active_files_query()])
 
           case FileRanking.best(episode.media_files) do
             nil -> {:error, :no_media_files}

@@ -4,6 +4,7 @@ defmodule Mydia.Media.AddTest do
   import ExUnit.CaptureLog
   import Mydia.SettingsFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Media.Add
   alias Mydia.Media.MediaItem
 
@@ -101,7 +102,8 @@ defmodule Mydia.Media.AddTest do
       id = System.unique_integer([:positive])
       stub_tmdb_movie(bypass, id, "Created Movie", "/created.jpg")
 
-      assert {:ok, item} = Add.from_provider({:tmdb, id}, :movie, relay_config(bypass))
+      assert {:ok, item} =
+               Add.from_provider(Scope.unrestricted(), {:tmdb, id}, :movie, relay_config(bypass))
 
       assert item.title == "Created Movie"
       assert item.tmdb_id == id
@@ -114,9 +116,9 @@ defmodule Mydia.Media.AddTest do
       Bypass.down(bypass)
 
       assert {:error, {:metadata, _reason}} =
-               Add.from_provider({:tmdb, id}, :movie, relay_config(bypass))
+               Add.from_provider(Scope.unrestricted(), {:tmdb, id}, :movie, relay_config(bypass))
 
-      refute Mydia.Media.find_by_external_ids(%{tmdb: id})
+      refute Mydia.Media.find_by_external_ids(Scope.unrestricted(), %{tmdb: id})
     end
 
     test "creates nothing when a TVDB ref is sent down the movie path" do
@@ -124,10 +126,15 @@ defmodule Mydia.Media.AddTest do
       tvdb_id = System.unique_integer([:positive])
 
       assert {:error, {:metadata, :tvdb_ref_for_movie}} =
-               Add.from_provider({:tvdb, tvdb_id}, :movie, relay_config(bypass))
+               Add.from_provider(
+                 Scope.unrestricted(),
+                 {:tvdb, tvdb_id},
+                 :movie,
+                 relay_config(bypass)
+               )
 
-      refute Mydia.Media.find_by_external_ids(%{tmdb: tvdb_id})
-      refute Mydia.Media.find_by_external_ids(%{tvdb: tvdb_id})
+      refute Mydia.Media.find_by_external_ids(Scope.unrestricted(), %{tmdb: tvdb_id})
+      refute Mydia.Media.find_by_external_ids(Scope.unrestricted(), %{tvdb: tvdb_id})
     end
   end
 
@@ -280,7 +287,7 @@ defmodule Mydia.Media.AddTest do
         monitored: true
       }
 
-      assert {:error, {:already_in_library, found}} = Add.from_attrs(attrs)
+      assert {:error, {:already_in_library, found}} = Add.from_attrs(Scope.unrestricted(), attrs)
 
       assert found.id == existing.id
       assert found.tmdb_id == tmdb_id
@@ -311,7 +318,8 @@ defmodule Mydia.Media.AddTest do
 
       before_count = Repo.aggregate(MediaItem, :count)
 
-      assert {:ok, added} = Add.from_attrs(attrs, nil, skip_episode_refresh: true)
+      assert {:ok, added} =
+               Add.from_attrs(Scope.unrestricted(), attrs, nil, skip_episode_refresh: true)
 
       assert added.imdb_id == shared_imdb_id
       assert Repo.aggregate(MediaItem, :count) == before_count + 1
@@ -354,7 +362,8 @@ defmodule Mydia.Media.AddTest do
       assert is_nil(attrs.tvdb_id)
       assert attrs.metadata.external_ids.tvdb == taken_tvdb_id
 
-      assert {:error, {:already_in_library, found}} = Add.from_attrs(attrs, relay_config(bypass))
+      assert {:error, {:already_in_library, found}} =
+               Add.from_attrs(Scope.unrestricted(), attrs, relay_config(bypass))
 
       assert found.id == existing.id
       assert found.tmdb_id == tmdb_id
@@ -399,7 +408,8 @@ defmodule Mydia.Media.AddTest do
       assert attrs.tvdb_id == fuzzy_tvdb_id
       assert attrs.metadata.external_ids.tvdb == taken_tvdb_id
 
-      assert {:error, {:already_in_library, found}} = Add.from_attrs(attrs, relay_config(bypass))
+      assert {:error, {:already_in_library, found}} =
+               Add.from_attrs(Scope.unrestricted(), attrs, relay_config(bypass))
 
       assert found.id == existing.id
       assert found.tvdb_id == taken_tvdb_id
@@ -440,11 +450,12 @@ defmodule Mydia.Media.AddTest do
       assert attrs.tvdb_id == fuzzy_tvdb_id
       assert is_nil(attrs.metadata.external_ids.tvdb)
 
-      assert {:error, {:already_in_library, found}} = Add.from_attrs(attrs, relay_config(bypass))
+      assert {:error, {:already_in_library, found}} =
+               Add.from_attrs(Scope.unrestricted(), attrs, relay_config(bypass))
 
       assert found.id == existing.id
       assert is_nil(found.tvdb_id)
-      assert is_nil(Mydia.Media.get_media_item!(existing.id).tvdb_id)
+      assert is_nil(Mydia.Media.get_media_item!(Scope.unrestricted(), existing.id).tvdb_id)
     end
 
     # The other half of the rule above: an id the provider itself
@@ -470,7 +481,8 @@ defmodule Mydia.Media.AddTest do
 
       assert attrs.metadata.external_ids.tvdb == exact_tvdb_id
 
-      assert {:error, {:already_in_library, found}} = Add.from_attrs(attrs, relay_config(bypass))
+      assert {:error, {:already_in_library, found}} =
+               Add.from_attrs(Scope.unrestricted(), attrs, relay_config(bypass))
 
       assert found.id == existing.id
       assert found.tvdb_id == exact_tvdb_id

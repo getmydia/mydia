@@ -34,6 +34,7 @@ defmodule Mydia.Jobs.MediaImport do
 
   require Logger
   alias Mydia.{Downloads, Library, Media, Settings}
+  alias Mydia.Accounts.Scope
   alias Mydia.Downloads.Client
   alias Mydia.Downloads.ClientRemoval
   alias Mydia.Downloads.ImportCandidates
@@ -632,7 +633,7 @@ defmodule Mydia.Jobs.MediaImport do
           episode_id = target["episode_id"]
 
           if File.exists?(path) do
-            episode = if episode_id, do: Media.get_episode!(episode_id), else: nil
+            episode = if episode_id, do: Media.get_episode!(Scope.system(), episode_id), else: nil
             file = %{path: path, name: Path.basename(path), size: File.stat!(path).size}
 
             # Build destination path for this episode
@@ -1292,6 +1293,7 @@ defmodule Mydia.Jobs.MediaImport do
 
           episode =
             Media.get_episode_by_number(
+              Scope.system(),
               media_item.id,
               file_season,
               episode_number
@@ -1314,6 +1316,7 @@ defmodule Mydia.Jobs.MediaImport do
               # another file in this same job may have just created the
               # episode row we need.
               Media.get_episode_by_number(
+                Scope.system(),
                 media_item.id,
                 file_season,
                 episode_number
@@ -1365,6 +1368,7 @@ defmodule Mydia.Jobs.MediaImport do
 
           episode =
             Media.get_episode_by_number(
+              Scope.system(),
               media_item.id,
               parsed.season,
               episode_number
