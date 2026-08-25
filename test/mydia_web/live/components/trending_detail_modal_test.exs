@@ -100,4 +100,28 @@ defmodule MydiaWeb.Components.TrendingDetailModalTest do
       assert LazyHTML.attribute(dialog, "phx-window-keydown") == []
     end
   end
+
+  describe "sticky header layout" do
+    test "the modal box is a flex column with a single scrolling child" do
+      html = render_modal(item(), metadata(%{number_of_seasons: 1}))
+
+      assert html =~ "flex flex-col"
+      assert html =~ ~s(id="trending-detail-modal-body")
+      assert html =~ "overflow-y-auto"
+    end
+
+    test "the add action lives in the header, not a footer" do
+      html = render_modal(item(), metadata(%{number_of_seasons: 1}))
+
+      assert html =~ ~s(id="trending-detail-modal-actions")
+      refute html =~ ~s(id="trending-detail-modal-footer")
+    end
+
+    test "an owned title offers a link to its page in the header" do
+      html = render_modal(item(%{in_library: true, id: "abc"}), metadata(%{}))
+
+      assert html =~ ~s(id="trending-detail-modal-actions")
+      assert html =~ "Go to Show"
+    end
+  end
 end

@@ -19,6 +19,10 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
         picker_open={@library_picker != nil}
       />
 
+  The box is a flex column: a fixed header, then one scrolling child. Any new
+  content belongs inside `#trending-detail-modal-body`, not as a sibling of it,
+  or it will sit outside the scroll region and be unreachable.
+
   ## Events
 
   The component emits these events to the parent LiveView:
@@ -30,11 +34,12 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
 
   Both host LiveViews also render `MydiaWeb.Components.LibraryComponents.library_picker_dialog/1`
   once per page, at `z-[1000]`, above this modal's `z-999`. That dialog can be
-  opened from this modal's footer, and both dialogs bind `phx-window-keydown`
-  with `phx-key="Escape"` as a workaround for `open`-attribute dialogs getting
-  no native Escape handling. `phx-window-keydown` is not scoped by visual
-  stacking, so without `picker_open` a single Escape press would close both
-  layers at once instead of only the top one.
+  opened from this modal's header actions, and both dialogs bind
+  `phx-window-keydown` with `phx-key="Escape"` as a workaround for
+  `open`-attribute dialogs getting no native Escape handling.
+  `phx-window-keydown` is not scoped by visual stacking, so without
+  `picker_open` a single Escape press would close both layers at once instead
+  of only the top one.
 
   Every caller must pass `picker_open` (whether the library picker dialog is
   currently open for this LiveView). There is deliberately no default — a
@@ -56,9 +61,9 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
       phx-key="Escape"
     >
       <%= if @open do %>
-        <div class="modal-box max-w-5xl w-11/12 max-h-[90vh] p-0 overflow-y-auto">
+        <div class="modal-box max-w-5xl w-11/12 max-h-[90vh] p-0 flex flex-col overflow-hidden">
           <%!-- Header with backdrop --%>
-          <div class="relative h-48 md:h-64 bg-base-300">
+          <div class="relative h-48 md:h-64 bg-base-300 shrink-0">
             <%= if backdrop_path(@item, @metadata) do %>
               <img
                 src={ImageUrl.backdrop_url(backdrop_path(@item, @metadata), "w1280")}
@@ -81,7 +86,7 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
 
             <%!-- Title overlay --%>
             <div class="absolute bottom-0 left-0 right-0 p-4 md:p-6">
-              <div class="flex items-end gap-4">
+              <div class="flex flex-wrap items-end gap-4">
                 <%= if poster_path(@item, @metadata) do %>
                   <img
                     src={ImageUrl.poster_url(poster_path(@item, @metadata), "w185")}
@@ -119,126 +124,132 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
                     <% end %>
                   </div>
                 </div>
+                <div
+                  id="trending-detail-modal-actions"
+                  class="flex flex-wrap items-center gap-2 shrink-0"
+                >
+                  <%= if not in_library?(@item) do %>
+                    <%= if @current_user && @current_user.role == "guest" do %>
+                      <button
+                        phx-click="request_media"
+                        phx-value-tmdb_id={@item.provider_id}
+                        phx-value-media_type={media_type_string(@item)}
+                        disabled={Map.get(@item, :request_status) != nil}
+                        class="btn btn-primary"
+                      >
+                        <%= if Map.get(@item, :request_status) do %>
+                          <.icon name="hero-check" class="w-4 h-4" /> Requested
+                        <% else %>
+                          <.icon name="hero-paper-airplane" class="w-4 h-4" /> Request
+                        <% end %>
+                      </button>
+                    <% else %>
+                      <div class="join">
+                        <button
+                          phx-click="add_to_library"
+                          phx-value-tmdb_id={@item.provider_id}
+                          phx-value-media_type={media_type_string(@item)}
+                          class="btn btn-primary join-item"
+                        >
+                          <.icon name="hero-plus" class="w-4 h-4" /> Add to Library
+                        </button>
+                        <.library_picker_button
+                          libraries={@libraries}
+                          tmdb_id={@item.provider_id}
+                          media_type={media_type_string(@item)}
+                          title={@item.title}
+                        />
+                      </div>
+                    <% end %>
+                  <% else %>
+                    <.link navigate={library_path(@item)} class="btn btn-ghost">
+                      <.icon name="hero-arrow-right" class="w-4 h-4" />
+                      Go to {media_type_label(@item)}
+                    </.link>
+                  <% end %>
+                </div>
               </div>
             </div>
           </div>
 
-          <%!-- Body content --%>
-          <div class="p-4 md:p-6">
-            <%= if @loading do %>
-              <div class="flex items-center justify-center py-12">
-                <span class="loading loading-spinner loading-lg"></span>
-                <span class="ml-3 text-base-content/70">Loading details...</span>
-              </div>
-            <% else %>
-              <div class="space-y-6">
-                <%!-- Trailer --%>
-                <%= if first_trailer(@metadata) do %>
-                  <div>
-                    <h3 class="text-lg font-semibold mb-3">Trailer</h3>
-                    <div class="aspect-video rounded-lg overflow-hidden bg-base-300">
-                      <iframe
-                        src={Video.youtube_embed_url(first_trailer(@metadata)) <> "?rel=0&modestbranding=1"}
-                        title="Trailer"
-                        class="w-full h-full"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                        allowfullscreen
-                      ></iframe>
-                    </div>
-                  </div>
-                <% end %>
-
-                <%!-- Synopsis --%>
-                <%= if overview(@item, @metadata) do %>
-                  <div>
-                    <h3 class="text-lg font-semibold mb-2">Synopsis</h3>
-                    <p class="text-base-content/80 leading-relaxed">{overview(@item, @metadata)}</p>
-                  </div>
-                <% end %>
-
-                <%!-- Cast --%>
-                <%= if cast(@metadata) != [] do %>
-                  <div>
-                    <h3 class="text-lg font-semibold mb-3">Cast</h3>
-                    <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
-                      <%= for member <- Enum.take(cast(@metadata), 6) do %>
-                        <div class="text-center">
-                          <%= if member.profile_path do %>
-                            <img
-                              src={ImageUrl.profile_url(member.profile_path)}
-                              alt={member.name}
-                              class="w-16 h-16 md:w-20 md:h-20 rounded-full object-cover mx-auto mb-2"
-                            />
-                          <% else %>
-                            <div class="w-16 h-16 md:w-20 md:h-20 rounded-full bg-base-300 flex items-center justify-center mx-auto mb-2">
-                              <.icon name="hero-user" class="w-8 h-8 text-base-content/30" />
-                            </div>
-                          <% end %>
-                          <p class="text-sm font-medium line-clamp-1">{member.name}</p>
-                          <%= if member.character do %>
-                            <p class="text-xs text-base-content/60 line-clamp-1">
-                              {member.character}
-                            </p>
-                          <% end %>
-                        </div>
-                      <% end %>
-                    </div>
-                  </div>
-                <% end %>
-              </div>
-            <% end %>
-          </div>
-
-          <%!-- Optional trailing content, e.g. a recommendations rail. Rendered
-               inside the modal box so it scrolls with the body; a rail placed
-               beside the <dialog> would sit behind the backdrop. --%>
-          <div :if={@rail != []} class="px-4 md:px-6 pb-4">
-            {render_slot(@rail)}
-          </div>
-
-          <%!-- Footer actions --%>
-          <div class="p-4 md:p-6 border-t border-base-300 bg-base-100 flex justify-end gap-2">
-            <button class="btn btn-ghost" phx-click="close_details">
-              Close
-            </button>
-            <%= if not in_library?(@item) do %>
-              <%= if @current_user && @current_user.role == "guest" do %>
-                <button
-                  phx-click="request_media"
-                  phx-value-tmdb_id={@item.provider_id}
-                  phx-value-media_type={media_type_string(@item)}
-                  disabled={Map.get(@item, :request_status) != nil}
-                  class="btn btn-primary"
-                >
-                  <%= if Map.get(@item, :request_status) do %>
-                    <.icon name="hero-check" class="w-4 h-4" /> Requested
-                  <% else %>
-                    <.icon name="hero-paper-airplane" class="w-4 h-4" /> Request
-                  <% end %>
-                </button>
+          <div id="trending-detail-modal-body" class="flex-1 overflow-y-auto">
+            <%!-- Body content --%>
+            <div class="p-4 md:p-6">
+              <%= if @loading do %>
+                <div class="flex items-center justify-center py-12">
+                  <span class="loading loading-spinner loading-lg"></span>
+                  <span class="ml-3 text-base-content/70">Loading details...</span>
+                </div>
               <% else %>
-                <div class="join">
-                  <button
-                    phx-click="add_to_library"
-                    phx-value-tmdb_id={@item.provider_id}
-                    phx-value-media_type={media_type_string(@item)}
-                    class="btn btn-primary join-item"
-                  >
-                    <.icon name="hero-plus" class="w-4 h-4" /> Add to Library
-                  </button>
-                  <.library_picker_button
-                    libraries={@libraries}
-                    tmdb_id={@item.provider_id}
-                    media_type={media_type_string(@item)}
-                    title={@item.title}
-                  />
+                <div class="space-y-6">
+                  <%!-- Trailer --%>
+                  <%= if first_trailer(@metadata) do %>
+                    <div>
+                      <h3 class="text-lg font-semibold mb-3">Trailer</h3>
+                      <div class="aspect-video rounded-lg overflow-hidden bg-base-300">
+                        <iframe
+                          src={
+                            Video.youtube_embed_url(first_trailer(@metadata)) <>
+                              "?rel=0&modestbranding=1"
+                          }
+                          title="Trailer"
+                          class="w-full h-full"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowfullscreen
+                        ></iframe>
+                      </div>
+                    </div>
+                  <% end %>
+
+                  <%!-- Synopsis --%>
+                  <%= if overview(@item, @metadata) do %>
+                    <div>
+                      <h3 class="text-lg font-semibold mb-2">Synopsis</h3>
+                      <p class="text-base-content/80 leading-relaxed">
+                        {overview(@item, @metadata)}
+                      </p>
+                    </div>
+                  <% end %>
+
+                  <%!-- Cast --%>
+                  <%= if cast(@metadata) != [] do %>
+                    <div>
+                      <h3 class="text-lg font-semibold mb-3">Cast</h3>
+                      <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+                        <%= for member <- Enum.take(cast(@metadata), 6) do %>
+                          <div class="text-center">
+                            <%= if member.profile_path do %>
+                              <img
+                                src={ImageUrl.profile_url(member.profile_path)}
+                                alt={member.name}
+                                class="w-16 h-16 md:w-20 md:h-20 rounded-full object-cover mx-auto mb-2"
+                              />
+                            <% else %>
+                              <div class="w-16 h-16 md:w-20 md:h-20 rounded-full bg-base-300 flex items-center justify-center mx-auto mb-2">
+                                <.icon name="hero-user" class="w-8 h-8 text-base-content/30" />
+                              </div>
+                            <% end %>
+                            <p class="text-sm font-medium line-clamp-1">{member.name}</p>
+                            <%= if member.character do %>
+                              <p class="text-xs text-base-content/60 line-clamp-1">
+                                {member.character}
+                              </p>
+                            <% end %>
+                          </div>
+                        <% end %>
+                      </div>
+                    </div>
+                  <% end %>
                 </div>
               <% end %>
-            <% else %>
-              <.link navigate={library_path(@item)} class="btn btn-ghost">
-                <.icon name="hero-arrow-right" class="w-4 h-4" /> Go to {media_type_label(@item)}
-              </.link>
-            <% end %>
+            </div>
+
+            <%!-- Optional trailing content, e.g. a recommendations rail. Rendered
+                 inside the scrolling body so it scrolls with it; a rail placed
+                 beside the <dialog> would sit behind the backdrop. --%>
+            <div :if={@rail != []} class="px-4 md:px-6 pb-4">
+              {render_slot(@rail)}
+            </div>
           </div>
         </div>
 
