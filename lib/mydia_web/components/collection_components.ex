@@ -191,7 +191,7 @@ defmodule MydiaWeb.CollectionComponents do
 
   defp poster_collage(%{poster_paths: []} = assigns) do
     ~H"""
-    <div class="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-base-200 to-base-300">
+    <div class="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-base-200 to-base-300 group-hover:scale-105 transition-transform duration-300">
       <.icon
         name={if @collection_type == "smart", do: "hero-sparkles", else: "hero-folder"}
         class="w-16 h-16 text-base-content/20"
@@ -220,7 +220,7 @@ defmodule MydiaWeb.CollectionComponents do
       |> assign(:url2, tmdb_poster_url(path2))
 
     ~H"""
-    <div class="grid grid-cols-2 w-full h-full">
+    <div class="grid grid-cols-2 w-full h-full group-hover:scale-105 transition-transform duration-300">
       <img src={@url1} alt="" class="w-full h-full object-cover" loading="lazy" />
       <img src={@url2} alt="" class="w-full h-full object-cover" loading="lazy" />
     </div>
@@ -235,7 +235,7 @@ defmodule MydiaWeb.CollectionComponents do
       |> assign(:url3, tmdb_poster_url(path3))
 
     ~H"""
-    <div class="grid grid-cols-2 w-full h-full">
+    <div class="grid grid-cols-2 w-full h-full group-hover:scale-105 transition-transform duration-300">
       <img src={@url1} alt="" class="w-full h-full object-cover row-span-2" loading="lazy" />
       <div class="flex flex-col">
         <img src={@url2} alt="" class="w-full h-1/2 object-cover" loading="lazy" />
@@ -256,7 +256,7 @@ defmodule MydiaWeb.CollectionComponents do
       |> assign(:url4, tmdb_poster_url(path4))
 
     ~H"""
-    <div class="grid grid-cols-2 grid-rows-2 w-full h-full">
+    <div class="grid grid-cols-2 grid-rows-2 w-full h-full group-hover:scale-105 transition-transform duration-300">
       <img src={@url1} alt="" class="w-full h-full object-cover" loading="lazy" />
       <img src={@url2} alt="" class="w-full h-full object-cover" loading="lazy" />
       <img src={@url3} alt="" class="w-full h-full object-cover" loading="lazy" />

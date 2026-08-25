@@ -71,28 +71,24 @@
           <%= for {result, index} <- Enum.with_index(@search_results) do %>
             <% is_requested = MapSet.member?(@requested_items, result.id) %>
             <% is_requesting = @requesting_index == index %>
-            <div class="card bg-base-100 shadow-lg hover:shadow-xl transition-shadow overflow-hidden">
-              <figure class="relative aspect-[2/3] overflow-hidden bg-base-300">
-                <img
-                  src={get_poster_url(result)}
-                  alt={result.title || result.name}
-                  class="w-full h-full object-cover"
-                  loading="lazy"
-                />
-                <%= if result.vote_average do %>
-                  <div class="badge badge-primary badge-sm absolute top-2 right-2">
-                    <.icon name="hero-star-solid" class="w-3 h-3 mr-1" />
-                    {format_rating(result.vote_average)}
-                  </div>
-                <% end %>
-                <%= if is_requested do %>
-                  <div class="absolute inset-0 bg-success/20 flex items-center justify-center">
-                    <div class="badge badge-success gap-1">
-                      <.icon name="hero-check" class="w-4 h-4" /> Requested
+            <div class="card bg-base-100 shadow-lg hover:shadow-xl transition-shadow overflow-hidden group">
+              <.poster_figure src={get_poster_url(result)} alt={result.title || result.name}>
+                <:overlay>
+                  <%= if result.vote_average do %>
+                    <div class="badge badge-primary badge-sm absolute top-2 right-2">
+                      <.icon name="hero-star-solid" class="w-3 h-3 mr-1" />
+                      {format_rating(result.vote_average)}
                     </div>
-                  </div>
-                <% end %>
-              </figure>
+                  <% end %>
+                  <%= if is_requested do %>
+                    <div class="absolute inset-0 bg-success/20 flex items-center justify-center">
+                      <div class="badge badge-success gap-1">
+                        <.icon name="hero-check" class="w-4 h-4" /> Requested
+                      </div>
+                    </div>
+                  <% end %>
+                </:overlay>
+              </.poster_figure>
               <div class="card-body p-3">
                 <h3 class="card-title text-sm line-clamp-2 h-10">
                   {result.title || result.name}

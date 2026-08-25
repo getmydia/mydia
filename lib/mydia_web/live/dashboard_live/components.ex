@@ -12,7 +12,7 @@ defmodule MydiaWeb.DashboardLive.Components do
   use Phoenix.Component
   use MydiaWeb, :verified_routes
 
-  import MydiaWeb.CoreComponents, only: [icon: 1]
+  import MydiaWeb.CoreComponents, only: [icon: 1, poster_figure: 1]
 
   alias MydiaWeb.Live.Helpers.MediaImages
 
@@ -39,22 +39,22 @@ defmodule MydiaWeb.DashboardLive.Components do
           id={"#{@id}-item-#{entry.media_item.id}"}
           class="snap-start flex-shrink-0 w-36"
         >
-          <div class="card bg-base-100 shadow-lg hover:shadow-xl transition-shadow duration-200 overflow-hidden">
+          <div class="card bg-base-100 shadow-lg hover:shadow-xl transition-shadow duration-200 overflow-hidden group">
             <.link navigate={~p"/media/#{entry.media_item.id}"}>
-              <figure class="relative aspect-[2/3] overflow-hidden bg-base-300">
-                <img
-                  src={MediaImages.poster_url(entry.media_item, "w342")}
-                  alt={entry.media_item.title}
-                  class="w-full h-full object-cover"
-                  loading={if index < 6, do: nil, else: "lazy"}
-                />
-                <span
-                  :if={new_episode_label(entry)}
-                  class="absolute bottom-1 left-1 right-1 badge badge-primary badge-sm justify-center truncate"
-                >
-                  {new_episode_label(entry)}
-                </span>
-              </figure>
+              <.poster_figure
+                src={MediaImages.poster_url(entry.media_item, "w342")}
+                alt={entry.media_item.title}
+                loading={if(index < 6, do: nil, else: "lazy")}
+              >
+                <:overlay>
+                  <span
+                    :if={new_episode_label(entry)}
+                    class="absolute bottom-1 left-1 right-1 badge badge-primary badge-sm justify-center truncate"
+                  >
+                    {new_episode_label(entry)}
+                  </span>
+                </:overlay>
+              </.poster_figure>
             </.link>
             <div class="card-body p-3">
               <h3 class="card-title text-sm line-clamp-2" title={entry.media_item.title}>

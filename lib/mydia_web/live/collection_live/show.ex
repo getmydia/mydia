@@ -234,21 +234,7 @@ defmodule MydiaWeb.CollectionLive.Show do
 
             <.link navigate={item_href(item)} class="block">
               <div class="card bg-base-100 shadow-lg hover:shadow-xl transition-shadow duration-200 overflow-hidden">
-                <figure class="relative aspect-[2/3] overflow-hidden bg-base-300">
-                  <img
-                    :if={item.poster_url}
-                    src={item.poster_url}
-                    alt={item.title}
-                    class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    loading="lazy"
-                  />
-                  <div
-                    :if={!item.poster_url}
-                    class="w-full h-full flex items-center justify-center"
-                  >
-                    <.icon name="hero-film" class="w-12 h-12 text-base-content/20" />
-                  </div>
-                </figure>
+                <.poster_figure src={item.poster_url} alt={item.title} />
                 <div class="card-body p-3">
                   <h3 class="card-title text-sm line-clamp-2">{item.title}</h3>
                   <span class="text-xs text-base-content/70">{item.year}</span>
