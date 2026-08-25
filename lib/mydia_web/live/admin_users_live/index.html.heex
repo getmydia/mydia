@@ -184,6 +184,17 @@
                         </button>
                       <% end %>
 
+                      <button
+                        :if={user.role != "admin"}
+                        id={"open-access-#{user.id}"}
+                        class="btn btn-ghost btn-sm"
+                        phx-click="open_access_modal"
+                        phx-value-id={user.id}
+                        title="Library access"
+                      >
+                        <.icon name="hero-shield-check" class="w-4 h-4" />
+                      </button>
+
                       <%= if user.id != @current_user.id do %>
                         <button
                           phx-click="open_delete_modal"
@@ -686,4 +697,12 @@
       <div class="modal-backdrop" phx-click="close_delete_modal"></div>
     </div>
   <% end %>
+
+  <%!-- Library Access Modal --%>
+  <MydiaWeb.AdminUsersLive.Components.access_modal
+    :if={@show_access_modal}
+    user={@access_user}
+    restriction={@access_restriction}
+    unrated_count={@unrated_count}
+  />
 </Layouts.app>
