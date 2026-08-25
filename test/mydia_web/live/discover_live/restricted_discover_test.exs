@@ -14,9 +14,30 @@ defmodule MydiaWeb.DiscoverLive.RestrictedDiscoverTest do
   # `Mydia.Metadata.genres/1`, which hits the relay on a cache miss. Warming
   # the cache directly avoids an unwarmed lookup escaping to the live relay
   # (see the franchise lookup issue this repo already hit once).
+  #
+  # The connected mount below lands on the default :trending category, which
+  # calls `Metadata.fetch_curated_list(:trending, media_type: :movie, page:
+  # 1)` under cache key "curated:trending:movie:1" -- also warmed here, or
+  # that render test would silently depend on relay.mydia.dev being
+  # reachable while still passing either way (has_element?/2 doesn't
+  # distinguish a populated grid from a load_error flash).
+  #
+  # Each key gets its own on_exit cleanup, per the convention in
+  # test/support/metadata_cache_helpers.ex: the cache is global ETS with no
+  # other reset between tests, so an entry left behind (1 hour default TTL)
+  # would leak into any later test sharing the same key.
   setup do
-    Cache.put("genres:movie", [%{id: 16, name: "Animation"}, %{id: 53, name: "Thriller"}])
-    Cache.put("genres:tv_show", [%{id: 16, name: "Animation"}, %{id: 53, name: "Thriller"}])
+    genres = [%{id: 16, name: "Animation"}, %{id: 53, name: "Thriller"}]
+    Cache.put("genres:movie", genres)
+    Cache.put("genres:tv_show", genres)
+    Cache.put("curated:trending:movie:1", %{results: [], page: 1, total_pages: 1})
+
+    on_exit(fn ->
+      Cache.delete("genres:movie")
+      Cache.delete("genres:tv_show")
+      Cache.delete("curated:trending:movie:1")
+    end)
+
     :ok
   end
 
