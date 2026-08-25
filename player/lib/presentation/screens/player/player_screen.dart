@@ -1778,20 +1778,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// without re-encoding it, so it still carries the exact video codec the
   /// server just said this device cannot decode. Treating a leading
   /// HLS_COPY as direct-playable is what let a Fire HD 10 — whose HEVC
-  /// decoder is Main 10 only — stream an HEVC Main 10 file untouched,
-  /// straight into mpv's "Could not open codec.".
+  /// decoder is Main 8-bit only, with no Main 10 support — stream an HEVC
+  /// Main 10 file untouched, straight into mpv's "Could not open codec.".
   ///
   /// This guard used to stay permissive on the theory that the native
   /// device profile the server checks against hadn't been validated on real
   /// hardware and might under-report a device's true decoder support. That
-  /// hedge no longer applies: an Android `MediaCodecList` probe against a
-  /// Fire HD 10 confirmed its decoder is exactly as limited as the server's
-  /// verdict assumed — `video/hevc` capped at 8-bit, `video/vp9` capped at
-  /// 10-bit — so a `:needs_transcoding` verdict for a codec this device
-  /// cannot decode is trustworthy, and HLS_COPY must not be used to
-  /// second-guess it. REMUX stays accepted because it only repackages a
-  /// codec the compatibility check already found acceptable into a
-  /// different container — an unrelated case.
+  /// hedge no longer applies: `android_codec_capabilities.dart`'s
+  /// `MediaCodecList` probe against a Fire HD 10 confirmed its decoder is
+  /// exactly as limited as the server's verdict assumed — `video/hevc`
+  /// capped at 8-bit, `video/vp9` capped at 10-bit — so a
+  /// `:needs_transcoding` verdict for a codec this device cannot decode is
+  /// trustworthy, and HLS_COPY must not be used to second-guess it. REMUX
+  /// stays accepted because it only repackages a codec the compatibility
+  /// check already found acceptable into a different container — an
+  /// unrelated case.
   bool _canDirectPlay(
     List<Query$StreamingCandidates$streamingCandidates$candidates> candidates,
   ) {

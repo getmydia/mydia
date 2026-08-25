@@ -42,10 +42,11 @@ String cappedRungDeliverySubtitle(int? maxBitrateKbps) {
 /// repackages a stream without re-encoding it — so a leading `HLS_COPY`
 /// always still carries the exact video codec the server just said this
 /// device cannot decode. Treating it as direct-playable let a Fire HD 10
-/// (whose HEVC decoder is Main 10 only) stream an HEVC Main 10 file
-/// untouched, straight into mpv's "Could not open codec." `REMUX` stays
-/// accepted: it only repackages a codec the compatibility check already
-/// found acceptable into a different container.
+/// (whose HEVC decoder is Main 8-bit only, with no Main 10 support) stream
+/// an HEVC Main 10 file untouched, straight into mpv's "Could not open
+/// codec." `REMUX` stays accepted: it only repackages a codec the
+/// compatibility check already found acceptable into a different
+/// container.
 ///
 /// Platform gating (`!kIsWeb`) is intentionally left to the caller — this
 /// only inspects strategy ordering.

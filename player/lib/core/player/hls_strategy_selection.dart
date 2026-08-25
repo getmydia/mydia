@@ -20,8 +20,8 @@ library;
 /// incompatible codec into a compatible one. Requesting it here would hand
 /// an old server's leading `HLS_COPY` candidate straight to the streaming
 /// session and reproduce the "Could not open codec." failure this function
-/// exists to avoid: a Fire HD 10's HEVC Main 10-only decoder choking on an
-/// HEVC Main 10 source it was told to stream untouched.
+/// exists to avoid: a Fire HD 10, whose HEVC decoder is Main 8-bit only,
+/// choking on an HEVC Main 10 source it was told to stream untouched.
 ///
 /// This holds against both an old server, which always leads
 /// `:needs_transcoding` with `HLS_COPY`, and one carrying the #564 fix,

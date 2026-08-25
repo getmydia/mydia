@@ -2,8 +2,9 @@
 // leading HLS_COPY candidate is the server's :needs_transcoding verdict
 // (Mydia.Streaming.Candidates.build_streaming_candidates/2), and HLS_COPY
 // never re-encodes, so it must never be requested in that case — that
-// inversion is what let a Fire HD 10 (HEVC Main 10-only decoder) stream an
-// HEVC Main 10 file untouched and hit mpv's "Could not open codec.".
+// inversion is what let a Fire HD 10 (HEVC decoder is Main 8-bit only, no
+// Main 10 support) stream an HEVC Main 10 file untouched and hit mpv's
+// "Could not open codec.".
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/player/hls_strategy_selection.dart';
