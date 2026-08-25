@@ -95,4 +95,46 @@ defmodule MydiaWeb.RequestPagesPosterTest do
     assert has_element?(view, ~s(#request-#{request.id} img[src="/images/no-poster.svg"]))
     refute has_element?(view, ~s(#request-#{request.id} button[phx-click="show_details"]))
   end
+
+  test "a permanently-unresolvable request is attempted once, not retried in a loop", %{
+    conn: conn,
+    admin: admin,
+    guest: guest
+  } do
+    # missing_id/0 is detailable (it is a tmdb_id) but its fetch always
+    # errors, which is exactly the row shape that used to loop: mount/3's
+    # load_requests/1 and the handle_params/3 that LiveView calls right after
+    # it both reach maybe_backfill_posters/2, and needs_poster?/1 stays true
+    # forever for a row whose fetch can never succeed.
+    request = request_fixture(guest, %{tmdb_id: MetadataStubProvider.missing_id()})
+    assert is_nil(request.poster_path)
+
+    MetadataStubProvider.reset_fetch_by_id_count!()
+
+    {:ok, view, _html} = live(log_in_user(conn, admin), ~p"/admin/requests")
+
+    # render/1 round-trips through the LiveView process, so the one backfill
+    # message queued during mount has been handled by the time it returns. If
+    # handle_info re-sent itself, the process would be mid-loop right now.
+    render(view)
+
+    assert Repo.get!(MediaRequest, request.id).poster_path == nil
+
+    assert MetadataStubProvider.fetch_by_id_count(to_string(MetadataStubProvider.missing_id())) ==
+             1
+
+    # The LiveView process must still be responsive to ordinary events: a
+    # busy resend loop would starve normal message handling. Switching tabs
+    # re-runs load_requests/1 (and therefore maybe_backfill_posters/2) again,
+    # so this also proves an already-attempted id is not retried on a second
+    # pass within the same connected session.
+    view
+    |> element(~s(button[phx-click="filter"][phx-value-status="all"]))
+    |> render_click()
+
+    assert has_element?(view, ~s(#request-#{request.id}))
+
+    assert MetadataStubProvider.fetch_by_id_count(to_string(MetadataStubProvider.missing_id())) ==
+             1
+  end
 end

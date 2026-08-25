@@ -34,6 +34,7 @@ defmodule Mydia.MetadataStubProvider do
   @movie_title "Stub Movie"
   @series_title "Stub Series"
   @season_fetch_block_key {__MODULE__, :season_fetch_block}
+  @fetch_by_id_counts_table :mydia_metadata_stub_fetch_by_id_counts
 
   @doc "TMDB id of the catalog movie."
   def movie_tmdb_id, do: @movie_tmdb_id
@@ -65,6 +66,39 @@ defmodule Mydia.MetadataStubProvider do
     end
   end
 
+  @doc """
+  Starts (or clears) the `fetch_by_id/3` call counter.
+
+  Opt-in and purely additive: `fetch_by_id/3` only counts a call when this
+  table exists, so tests that never call this function see no behavior
+  change. Used by `request_pages_poster_test.exs` to assert a permanently-
+  unresolvable row is attempted exactly once per backfill pass, not retried
+  in a loop.
+  """
+  def reset_fetch_by_id_count! do
+    if :ets.whereis(@fetch_by_id_counts_table) == :undefined do
+      :ets.new(@fetch_by_id_counts_table, [:named_table, :public, :set])
+    else
+      :ets.delete_all_objects(@fetch_by_id_counts_table)
+    end
+
+    :ok
+  end
+
+  @doc "Number of `fetch_by_id/3` calls observed for `provider_id` since the last reset."
+  def fetch_by_id_count(provider_id) do
+    case :ets.whereis(@fetch_by_id_counts_table) do
+      :undefined ->
+        0
+
+      _tid ->
+        case :ets.lookup(@fetch_by_id_counts_table, provider_id) do
+          [{^provider_id, count}] -> count
+          [] -> 0
+        end
+    end
+  end
+
   @impl true
   def test_connection(_config), do: {:ok, %{status: "ok"}}
 
@@ -78,6 +112,8 @@ defmodule Mydia.MetadataStubProvider do
 
   @impl true
   def fetch_by_id(_config, provider_id, opts) do
+    count_fetch_by_id_call(provider_id)
+
     cond do
       provider_id == to_string(@missing_id) ->
         {:error, Error.not_found("Media not found: #{@missing_id}")}
@@ -128,6 +164,18 @@ defmodule Mydia.MetadataStubProvider do
   def fetch_trending(_config, _opts), do: {:ok, []}
 
   ## Catalog
+
+  defp count_fetch_by_id_call(provider_id) do
+    case :ets.whereis(@fetch_by_id_counts_table) do
+      :undefined ->
+        :ok
+
+      _tid ->
+        :ets.update_counter(@fetch_by_id_counts_table, provider_id, {2, 1}, {provider_id, 0})
+    end
+
+    :ok
+  end
 
   defp maybe_block_season_fetch do
     case :persistent_term.get(@season_fetch_block_key, nil) do

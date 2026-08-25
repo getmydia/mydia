@@ -16,6 +16,7 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
      |> assign(:show_approve_modal, false)
      |> assign(:show_reject_modal, false)
      |> assign(:selected_request, nil)
+     |> assign(:poster_backfill_attempted, MapSet.new())
      |> load_requests()}
   end
 
@@ -148,8 +149,10 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
     MediaRequestHelpers.backfill_poster_paths(requests)
 
     # Re-read through load_requests/1 so the refreshed rows and the active
-    # filter stay in agreement. needs_poster?/1 is false for every row it just
-    # filled, so this does not loop.
+    # filter stay in agreement. Every id in `requests` was already added to
+    # :poster_backfill_attempted before this message was sent (see
+    # maybe_backfill_posters/2), so this cannot re-send for them even when the
+    # fetch above left poster_path nil.
     {:noreply, load_requests(socket)}
   end
 
@@ -181,12 +184,33 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
 
   # Sent to self rather than fetched here: a relay round trip inside mount/3 or
   # a handle_event would freeze the LiveView while its page is on screen.
+  #
+  # Ids are marked attempted at send time, not after the fetch completes.
+  # handle_info/2 re-reads through load_requests/1, and LiveView calls
+  # handle_params/3 (which also reaches load_requests/1) immediately after
+  # mount/3 on the first connected render, so this runs at least twice per
+  # page view. needs_poster?/1 never goes false for a row whose fetch cannot
+  # succeed (relay down, 404, or metadata with no poster), so marking on
+  # completion would resend that row to self() forever for as long as the
+  # socket stays connected. Marking at send time bounds every id to at most
+  # one attempt per connected socket; a permanently-failing row is retried on
+  # the next page visit, which starts with a fresh MapSet.
   defp maybe_backfill_posters(socket, requests) do
-    if connected?(socket) and Enum.any?(requests, &MediaRequestHelpers.needs_poster?/1) do
-      send(self(), {:backfill_posters, requests})
-    end
+    attempted = socket.assigns.poster_backfill_attempted
 
-    socket
+    pending =
+      Enum.filter(requests, fn request ->
+        MediaRequestHelpers.needs_poster?(request) and request.id not in attempted
+      end)
+
+    if connected?(socket) and pending != [] do
+      send(self(), {:backfill_posters, pending})
+
+      pending_ids = MapSet.new(pending, & &1.id)
+      assign(socket, :poster_backfill_attempted, MapSet.union(attempted, pending_ids))
+    else
+      socket
+    end
   end
 
   defp assign_approve_form(socket) do
