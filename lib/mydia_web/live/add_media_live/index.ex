@@ -241,6 +241,12 @@ defmodule MydiaWeb.AddMediaLive.Index do
              )
              |> put_flash(:info, "#{media_item.title} has been added to your library")}
 
+          {:error, :restricted} ->
+            {:noreply,
+             socket
+             |> assign(:adding_index, nil)
+             |> put_flash(:error, Media.restricted_message())}
+
           {:error, changeset} ->
             {:noreply,
              socket

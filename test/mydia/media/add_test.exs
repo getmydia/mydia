@@ -3,10 +3,12 @@ defmodule Mydia.Media.AddTest do
 
   import ExUnit.CaptureLog
   import Mydia.SettingsFixtures
+  import Mydia.AccountsFixtures
 
   alias Mydia.Accounts.Scope
   alias Mydia.Media.Add
   alias Mydia.Media.MediaItem
+  alias Mydia.Metadata.Structs.MediaMetadata
 
   defp relay_config(bypass) do
     %{
@@ -105,6 +107,58 @@ defmodule Mydia.Media.AddTest do
                Add.from_provider(Scope.unrestricted(), id, :movie, relay_config(bypass))
 
       refute Mydia.Media.get_media_item_by_tmdb(Scope.unrestricted(), id)
+    end
+  end
+
+  describe "from_attrs/4 with a restricted scope" do
+    # Media.create_media_item/3 can now refuse a write with {:error, :restricted}
+    # (a bare atom, not a changeset). insert_media_item/4 used to wrap every
+    # create_media_item error the same way, as {:error, {:changeset, reason}},
+    # which turned :restricted into {:error, {:changeset, :restricted}}. Every
+    # caller that ran that second element through
+    # MediaAddHelpers.format_changeset_errors/1 -- the "Add to Library" flow on
+    # Dashboard, Discover, the media detail franchise rail and recommendations
+    # rail -- would then crash calling Ecto.Changeset.traverse_errors/2 on an
+    # atom. This pins the fix: the atom must come back bare.
+    test "passes :restricted through bare rather than wrapping it as a changeset error" do
+      scope = Scope.for_user(restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]}))
+
+      attrs = %{
+        type: "movie",
+        title: "Out Of Bounds",
+        year: 2024,
+        tmdb_id: System.unique_integer([:positive]),
+        metadata: %MediaMetadata{
+          provider_id: "1",
+          provider: :tmdb,
+          media_type: :movie,
+          genres: ["Thriller"],
+          content_rating: "R"
+        }
+      }
+
+      assert {:error, :restricted} = Add.from_attrs(scope, attrs, nil, skip_episode_refresh: true)
+    end
+
+    test "an in-bounds item still creates normally under a restricted scope" do
+      scope = Scope.for_user(restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]}))
+
+      attrs = %{
+        type: "movie",
+        title: "In Bounds Cartoon",
+        year: 2024,
+        tmdb_id: System.unique_integer([:positive]),
+        metadata: %MediaMetadata{
+          provider_id: "2",
+          provider: :tmdb,
+          media_type: :movie,
+          genres: ["Animation"],
+          content_rating: "G"
+        }
+      }
+
+      assert {:ok, item} = Add.from_attrs(scope, attrs, nil, skip_episode_refresh: true)
+      assert item.category == "cartoon_movie"
     end
   end
 

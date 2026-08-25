@@ -168,6 +168,16 @@ defmodule MydiaWeb.Api.MediaController do
               data: serialize_media_item(media_item)
             })
 
+          {:error, :restricted} ->
+            Logger.info("Manual match refused: outside scope restrictions",
+              media_item_id: media_item.id,
+              provider_id: provider_id
+            )
+
+            conn
+            |> put_status(:forbidden)
+            |> json(%{error: Media.restricted_message()})
+
           {:error, reason} ->
             Logger.error("Failed to update media item with manual match",
               media_item_id: media_item.id,

@@ -803,7 +803,7 @@ defmodule MydiaWeb.SearchLive.Index do
          |> assign(:retry_error_message, "Metadata provider error: #{msg}")}
 
       _ ->
-        {:noreply, put_flash(socket, :error, "Failed to add to library: #{inspect(reason)}")}
+        {:noreply, put_flash(socket, :error, add_to_library_error_message(reason))}
     end
   end
 
@@ -850,7 +850,7 @@ defmodule MydiaWeb.SearchLive.Index do
     {:noreply,
      socket
      |> assign(:selecting_match_id, nil)
-     |> put_flash(:error, "Failed to add to library: #{inspect(reason)}")}
+     |> put_flash(:error, add_to_library_error_message(reason))}
   end
 
   def handle_async(:finalize_add_to_library, {:exit, reason}, socket) do
@@ -894,10 +894,18 @@ defmodule MydiaWeb.SearchLive.Index do
     {:noreply,
      socket
      |> assign(:selecting_match_id, nil)
-     |> put_flash(:error, "Failed to add to library: #{inspect(reason)}")}
+     |> put_flash(:error, add_to_library_error_message(reason))}
   end
 
   ## Private Functions
+
+  # Shared by every `handle_async` clause above that falls back to showing
+  # `reason` verbatim. `:restricted` gets Media's own generic wording instead
+  # of `inspect/1`, which would otherwise print the bare atom in the flash.
+  defp add_to_library_error_message(:restricted), do: Media.restricted_message()
+
+  defp add_to_library_error_message(reason),
+    do: "Failed to add to library: #{inspect(reason)}"
 
   # Map.replace_lazy/3 for the same reason handle_event("retry_indexer", ...)
   # uses it: an id that is not already in the map must be a clean no-op, never
@@ -1369,7 +1377,14 @@ defmodule MydiaWeb.SearchLive.Index do
     end
   end
 
-  defp create_media_item_from_metadata(scope, parsed, metadata) do
+  @doc """
+  Creates (or finds the existing) media item for already-fetched metadata.
+
+  Public, like `MediaLive.Show.FranchiseEvents.perform_add/5`, so it can be
+  exercised directly in tests without driving a real metadata fetch through
+  `start_async/3`.
+  """
+  def create_media_item_from_metadata(scope, parsed, metadata) do
     # Check if media already exists by provider ID
     # For TV shows from TVDB, check tvdb_id; otherwise check tmdb_id
     existing =
@@ -1388,6 +1403,9 @@ defmodule MydiaWeb.SearchLive.Index do
         case Media.create_media_item(scope, attrs) do
           {:ok, media_item} ->
             {:ok, media_item}
+
+          {:error, :restricted} ->
+            {:error, :restricted}
 
           {:error, changeset} ->
             Logger.error("Failed to create media item: #{inspect(changeset.errors)}")

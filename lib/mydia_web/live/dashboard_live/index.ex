@@ -375,6 +375,12 @@ defmodule MydiaWeb.DashboardLive.Index do
          |> assign(:trending_tv, trending_tv)
          |> put_flash(:info, "#{media_item.title} is already in your library")}
 
+      {:error, :restricted} ->
+        {:noreply,
+         socket
+         |> clear_adding(provider_id)
+         |> put_flash(:error, Media.restricted_message())}
+
       {:error, {:changeset, changeset}} ->
         {:noreply,
          socket
@@ -458,6 +464,7 @@ defmodule MydiaWeb.DashboardLive.Index do
 
   defp request_error_message(:duplicate_media), do: "That title is already in the library."
   defp request_error_message(:duplicate_request), do: "Someone has already requested that title."
+  defp request_error_message(:restricted), do: Media.restricted_message()
 
   defp request_error_message(%Ecto.Changeset{} = changeset),
     do: "Could not submit the request: #{MediaAddHelpers.format_changeset_errors(changeset)}"

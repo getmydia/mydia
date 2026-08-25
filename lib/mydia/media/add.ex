@@ -28,6 +28,7 @@ defmodule Mydia.Media.Add do
           {:metadata, term()}
           | {:changeset, Ecto.Changeset.t()}
           | {:already_in_library, Media.MediaItem.t()}
+          | :restricted
 
   @doc """
   Fetches provider metadata and builds the attrs for `Media.create_media_item/2`.
@@ -70,7 +71,9 @@ defmodule Mydia.Media.Add do
   @spec from_attrs(Scope.t(), map(), map() | nil, keyword()) ::
           {:ok, Media.MediaItem.t()}
           | {:error,
-             {:changeset, Ecto.Changeset.t()} | {:already_in_library, Media.MediaItem.t()}}
+             {:changeset, Ecto.Changeset.t()}
+             | {:already_in_library, Media.MediaItem.t()}
+             | :restricted}
   def from_attrs(%Scope{} = scope, attrs, config \\ nil, opts \\ []) do
     config = config || Metadata.default_relay_config()
 
@@ -88,6 +91,10 @@ defmodule Mydia.Media.Add do
 
     case Media.create_media_item(scope, attrs, create_opts) do
       {:ok, media_item} -> {:ok, media_item}
+      # Passed through bare, not wrapped as {:changeset, :restricted}: it is
+      # not a changeset, and callers that ran it through
+      # `MediaAddHelpers.format_changeset_errors/1` would crash on the atom.
+      {:error, :restricted} -> {:error, :restricted}
       {:error, changeset} -> {:error, {:changeset, changeset}}
     end
   end

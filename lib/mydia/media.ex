@@ -348,6 +348,19 @@ defmodule Mydia.Media do
     if writable?(scope, attrs), do: :ok, else: {:error, :restricted}
   end
 
+  @doc """
+  The message a restricted account sees when `writable?/2` refuses a write.
+
+  Every caller that can receive `{:error, :restricted}` from
+  `create_media_item/3`, `update_media_item/4`, `MediaRequests.create_request/3`,
+  or `Mydia.Media.Add`'s write path should show this rather than inventing its
+  own wording, so the copy stays consistent and, more importantly, generic:
+  it names neither the category nor the rating threshold, so a restricted
+  account cannot learn the shape of its own restrictions from an error string.
+  """
+  @spec restricted_message() :: String.t()
+  def restricted_message, do: "This title is outside what your account is allowed to access."
+
   defp classify_for_write("tv_show", metadata),
     do: CategoryClassifier.classify_from_metadata(:tv_show, metadata)
 

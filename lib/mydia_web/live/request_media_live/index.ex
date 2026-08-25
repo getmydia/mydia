@@ -1,7 +1,7 @@
 defmodule MydiaWeb.RequestMediaLive.Index do
   use MydiaWeb, :live_view
 
-  alias Mydia.{MediaRequests, Metadata}
+  alias Mydia.{Media, MediaRequests, Metadata}
 
   @impl true
   def mount(_params, _session, socket) do
@@ -111,6 +111,12 @@ defmodule MydiaWeb.RequestMediaLive.Index do
            socket
            |> assign(:request_form, to_form(changeset, as: :request))
            |> put_flash(:error, "A request for this media already exists")}
+
+        {:error, :restricted} ->
+          {:noreply,
+           socket
+           |> assign(:request_form, to_form(changeset, as: :request))
+           |> put_flash(:error, Media.restricted_message())}
 
         {:error, changeset} ->
           {:noreply, assign(socket, :request_form, to_form(changeset, as: :request))}

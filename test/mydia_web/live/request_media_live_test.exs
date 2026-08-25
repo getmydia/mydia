@@ -5,6 +5,7 @@ defmodule MydiaWeb.RequestMediaLive.IndexTest do
   use MydiaWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
+  import Mydia.AccountsFixtures
 
   alias Mydia.Metadata.Provider
   alias Mydia.Metadata.Structs.SearchResult
@@ -84,6 +85,55 @@ defmodule MydiaWeb.RequestMediaLive.IndexTest do
       assert html =~ "Request Media"
       assert html =~ "The Matrix"
       assert html =~ "true nature of reality"
+    end
+  end
+
+  describe "a restricted account submitting a request" do
+    # `submit_request_modal` used to fall through to the generic
+    # `{:error, changeset} -> to_form(changeset, as: :request)` clause for any
+    # error MediaRequests.create_request/3 returned it hadn't named explicitly,
+    # which raised Protocol.UndefinedError the moment that value could be the
+    # bare atom :restricted rather than an Ecto.Changeset. This is the guest
+    # request flow the whole access-restriction feature exists for.
+    #
+    # Overrides the module's ResultProvider (whose fetch_by_id/3 returns a
+    # bare %{}, fine for the tests above since they never fetch full
+    # metadata) with the shared stub, which returns a real %MediaMetadata{}
+    # carrying a genre -- required here because a restricted scope now
+    # triggers exactly that fetch to judge the request.
+    import Mydia.MetadataStub
+
+    alias Mydia.MetadataStubProvider
+
+    setup :setup_metadata_stub
+
+    setup %{conn: conn} do
+      restricted =
+        restricted_user_fixture(%{role: "user", allowed_categories: ["cartoon_movie"]})
+
+      %{conn: log_in_user(conn, restricted)}
+    end
+
+    test "an out-of-bounds request flashes a friendly message instead of raising",
+         %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/request/movie?q=stub")
+
+      # The stub movie carries the "Action" genre, so it classifies as plain
+      # "movie" -- out of bounds for a cartoon_movie-only scope.
+      assert render(view) =~ MetadataStubProvider.movie_title()
+
+      view
+      |> element(~s(button[phx-click="open_request_modal"][phx-value-index="0"]))
+      |> render_click()
+
+      html =
+        view
+        |> form("#request-modal-form", request: %{requester_notes: ""})
+        |> render_submit()
+
+      assert html =~ "This title is outside what your account is allowed to access."
+
+      refute Mydia.MediaRequests.pending_request_exists?(MetadataStubProvider.movie_tmdb_id())
     end
   end
 end
