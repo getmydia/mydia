@@ -18,6 +18,7 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
   alias Mydia.Streaming.FfmpegHlsTranscoder
   alias Mydia.Streaming.HlsSessionSupervisor
   alias Mydia.Streaming.HlsSession
+  alias MydiaWeb.MediaAccess
 
   @doc """
   Returns streaming candidates for a media item.
@@ -35,32 +36,38 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
       user ->
         case Candidates.resolve_media_file(context[:current_scope], content_type, id) do
           {:ok, media_file} ->
-            media_file = Candidates.ensure_codec_info(media_file)
+            case MediaAccess.authorize_media_file_for_scope(context[:current_scope], media_file) do
+              :denied ->
+                {:error, "#{content_type} not found"}
 
-            candidates =
-              Candidates.build_streaming_candidates(
-                media_file,
-                context[:device_profile] || DeviceProfile.browser_default()
-              )
+              :ok ->
+                media_file = Candidates.ensure_codec_info(media_file)
 
-            metadata = Candidates.build_metadata_response(media_file, user_id: user.id)
+                candidates =
+                  Candidates.build_streaming_candidates(
+                    media_file,
+                    context[:device_profile] || DeviceProfile.browser_default()
+                  )
 
-            # For relay connections, only allow TRANSCODE (direct play won't work
-            # within relay bandwidth limits)
-            candidates =
-              if context[:peer_connection_type] == "relay" do
-                Enum.filter(candidates, fn c -> c.strategy == "TRANSCODE" end)
-              else
-                candidates
-              end
+                metadata = Candidates.build_metadata_response(media_file, user_id: user.id)
 
-            # Convert string strategies to atoms for the GraphQL enum
-            candidates =
-              Enum.map(candidates, fn candidate ->
-                %{candidate | strategy: strategy_to_atom(candidate.strategy)}
-              end)
+                # For relay connections, only allow TRANSCODE (direct play won't work
+                # within relay bandwidth limits)
+                candidates =
+                  if context[:peer_connection_type] == "relay" do
+                    Enum.filter(candidates, fn c -> c.strategy == "TRANSCODE" end)
+                  else
+                    candidates
+                  end
 
-            {:ok, %{file_id: media_file.id, candidates: candidates, metadata: metadata}}
+                # Convert string strategies to atoms for the GraphQL enum
+                candidates =
+                  Enum.map(candidates, fn candidate ->
+                    %{candidate | strategy: strategy_to_atom(candidate.strategy)}
+                  end)
+
+                {:ok, %{file_id: media_file.id, candidates: candidates, metadata: metadata}}
+            end
 
           {:error, :not_found} ->
             {:error, "#{content_type} not found"}
@@ -117,6 +124,7 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
         max_height = FfmpegHlsTranscoder.effective_max_height(clamped_height)
 
         start_session_for_user(
+          context[:current_scope],
           file_id,
           user.id,
           strategy,
@@ -268,6 +276,7 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
   end
 
   defp start_session_for_user(
+         scope,
          file_id,
          user_id,
          strategy,
@@ -278,6 +287,7 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
     mode = strategy_to_mode(strategy)
 
     with {:ok, media_file} <- load_media_file(file_id),
+         :ok <- authorize(scope, media_file),
          media_file <- ensure_duration_known(media_file),
          duration <- get_duration_from_metadata(media_file),
          start_position <- clamp_start_position(requested_position, duration),
@@ -392,6 +402,17 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
   end
 
   def ensure_duration_known(media_file, _budget_ms), do: media_file
+
+  # Folds into the same `{:error, reason}` catch-all as a missing file, so a
+  # restricted account gets exactly the same generic "failed to start" it
+  # would get for a file id that does not exist at all, rather than a
+  # response that confirms the file is real but off-limits.
+  defp authorize(scope, media_file) do
+    case MediaAccess.authorize_media_file_for_scope(scope, media_file) do
+      :ok -> :ok
+      :denied -> {:error, :not_found}
+    end
+  end
 
   defp load_media_file(file_id) do
     # `:episode` is loaded for the per-show audio preference, not for the
