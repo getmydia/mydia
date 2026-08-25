@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/window/window_buttons_bridge_native.dart';
 
 void main() {
-  group('shouldControlTrafficLights', () {
+  group('shouldCallNativeButtonBridge', () {
     test('true hiding on windowed macOS', () {
       expect(
         shouldCallNativeButtonBridge(

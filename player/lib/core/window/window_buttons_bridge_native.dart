@@ -13,9 +13,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'window_buttons_hidden.dart';
+import 'window_chrome_channel.dart';
 import 'window_fullscreen.dart';
 
-const MethodChannel _channel = MethodChannel('dev.mydia.player/window_chrome');
+const MethodChannel _channel = MethodChannel(kWindowChromeChannelName);
 
 /// Whether [setWindowButtonsHidden] should forward a call for the given
 /// [hidden] direction to the NATIVE buttons.

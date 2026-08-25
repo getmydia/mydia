@@ -16,8 +16,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'decoration_layout.dart';
+import 'window_chrome_channel.dart';
 
-const MethodChannel _channel = MethodChannel('dev.mydia.player/window_chrome');
+const MethodChannel _channel = MethodChannel(kWindowChromeChannelName);
 
 class DecorationLayoutSource {
   DecorationLayoutSource() {
