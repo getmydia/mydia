@@ -231,6 +231,15 @@ defmodule MydiaWeb.ActivityLive.IndexTest do
       assert has_element?(view, "button", "Errors")
     end
 
+    test "an admin keeps every chip", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/activity")
+
+      for category <- ~w(all media downloads search system playback plugin errors) do
+        assert has_element?(view, "button[phx-value-category='#{category}']"),
+               "#{category} chip is missing for an admin"
+      end
+    end
+
     test "labels every feed-visible event type instead of printing its key", %{conn: conn} do
       types = Presentation.known_types() -- Presentation.feed_hidden_types()
 
@@ -543,6 +552,50 @@ defmodule MydiaWeb.ActivityLive.IndexTest do
       {:ok, _view, html} = live(admin_conn, ~p"/activity")
 
       assert html =~ "Admin.Visible.mkv"
+    end
+
+    test "shows only the chips that can match", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/activity")
+
+      for category <- ~w(all media playback) do
+        assert has_element?(view, "button[phx-value-category='#{category}']"),
+               "#{category} chip is missing"
+      end
+
+      for category <- ~w(downloads search system plugin errors) do
+        refute has_element?(view, "button[phx-value-category='#{category}']"),
+               "#{category} chip can never match but is still rendered"
+      end
+    end
+
+    test "the media chip still filters", %{conn: conn, guest: guest} do
+      {:ok, _} =
+        Events.create_event(%{
+          category: "media",
+          type: "media_item.added",
+          actor_type: :system,
+          actor_id: "media_context",
+          metadata: %{"title" => "Paddington", "media_type" => "movie"}
+        })
+
+      {:ok, _} =
+        Events.create_event(%{
+          category: "playback",
+          type: "playback.started",
+          actor_type: :user,
+          actor_id: guest.id,
+          metadata: %{"origin" => "this-guests-player"}
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/activity")
+
+      html =
+        view
+        |> element("button[phx-value-category='media']")
+        |> render_click()
+
+      assert html =~ "Paddington"
+      refute html =~ "this-guests-player"
     end
   end
 end

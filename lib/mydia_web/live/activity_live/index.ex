@@ -7,6 +7,70 @@ defmodule MydiaWeb.ActivityLive.Index do
 
   @page_size 50
 
+  # The chip catalog lives here rather than in Mydia.Events.Visibility so that
+  # daisyUI classes and hero icon names stay out of a context module. Visibility
+  # answers which categories a viewer can encounter; this decides how they look.
+  # "all" and "errors" are not categories: "all" clears the filter and "errors"
+  # filters on severity, so only "all" survives for a restricted viewer.
+  @chips [
+    %{
+      value: "all",
+      label: "All",
+      icon: "hero-squares-2x2",
+      active_class: "btn-primary",
+      idle_class: "btn-ghost"
+    },
+    %{
+      value: "media",
+      label: "Media",
+      icon: "hero-film",
+      active_class: "btn-primary",
+      idle_class: "btn-ghost"
+    },
+    %{
+      value: "downloads",
+      label: "Downloads",
+      icon: "hero-arrow-down-tray",
+      active_class: "btn-primary",
+      idle_class: "btn-ghost"
+    },
+    %{
+      value: "search",
+      label: "Search",
+      icon: "hero-magnifying-glass",
+      active_class: "btn-primary",
+      idle_class: "btn-ghost"
+    },
+    %{
+      value: "system",
+      label: "System",
+      icon: "hero-cog-6-tooth",
+      active_class: "btn-primary",
+      idle_class: "btn-ghost"
+    },
+    %{
+      value: "playback",
+      label: "Playback",
+      icon: "hero-play",
+      active_class: "btn-primary",
+      idle_class: "btn-ghost"
+    },
+    %{
+      value: "plugin",
+      label: "Plugins",
+      icon: "hero-puzzle-piece",
+      active_class: "btn-primary",
+      idle_class: "btn-ghost"
+    },
+    %{
+      value: "errors",
+      label: "Errors",
+      icon: "hero-exclamation-triangle",
+      active_class: "btn-error",
+      idle_class: "btn-ghost text-error/70 hover:text-error"
+    }
+  ]
+
   @impl true
   def mount(_params, _session, socket) do
     socket =
@@ -17,6 +81,7 @@ defmodule MydiaWeb.ActivityLive.Index do
         socket
         |> assign(:category_filter, "all")
         |> assign(:date_filter, "all")
+        |> assign(:filter_chips, filter_chips(socket.assigns.current_user))
         |> assign(:page, 0)
         |> assign(:has_more?, false)
         |> assign(:events_empty?, false)
@@ -25,6 +90,7 @@ defmodule MydiaWeb.ActivityLive.Index do
         socket
         |> assign(:category_filter, "all")
         |> assign(:date_filter, "all")
+        |> assign(:filter_chips, filter_chips(socket.assigns.current_user))
         |> assign(:page, 0)
         |> assign(:has_more?, false)
         |> assign(:events_empty?, true)
@@ -106,6 +172,13 @@ defmodule MydiaWeb.ActivityLive.Index do
   end
 
   ## Private Helpers
+
+  defp filter_chips(user) do
+    case Visibility.visible_categories(user) do
+      :all -> @chips
+      categories -> Enum.filter(@chips, &(&1.value == "all" or &1.value in categories))
+    end
+  end
 
   defp load_events(socket) do
     category_filter = socket.assigns.category_filter
