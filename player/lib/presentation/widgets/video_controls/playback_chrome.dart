@@ -17,6 +17,40 @@ import 'playback_surface.dart';
 import 'transport_cluster.dart';
 import 'video_progress_bar.dart';
 
+/// External handle on the playback chrome's shown or hidden state.
+///
+/// `_ChromeVisibilityState` keeps owning the state, the timer and the
+/// animation. This only reads and commands, because the one caller that needs
+/// it (the key handler in `player_screen.dart`) sits above this widget in the
+/// tree and cannot see a private field.
+///
+/// Every method is inert while detached. The controller outlives its widget
+/// across a route change, and a command arriving in that window is a no-op
+/// rather than a crash.
+class ChromeVisibilityController extends ChangeNotifier {
+  _ChromeVisibilityState? _state;
+
+  /// Whether the chrome is currently shown. True while detached, matching
+  /// how the chrome mounts.
+  bool get visible => _state?._visible ?? true;
+
+  void show() => _state?._show();
+
+  void hide() => _state?._hide();
+
+  void toggle() => _state?._toggle();
+
+  void _attach(_ChromeVisibilityState state) => _state = state;
+
+  void _detach(_ChromeVisibilityState state) {
+    if (identical(_state, state)) _state = null;
+  }
+
+  /// Called by the state on every real transition. Private because only the
+  /// state may declare one.
+  void _notify() => notifyListeners();
+}
+
 /// Visibility and motion state machine for playback chrome.
 ///
 /// Player-free so the timing rules can be tested directly. [PlaybackChrome]
@@ -69,6 +103,9 @@ class ChromeVisibility extends StatefulWidget {
   /// through the one field.
   final VoidCallback? onActivity;
 
+  /// Optional external handle on this chrome's shown or hidden state.
+  final ChromeVisibilityController? controller;
+
   const ChromeVisibility({
     super.key,
     required this.isPlaying,
@@ -79,6 +116,7 @@ class ChromeVisibility extends StatefulWidget {
     this.onWindowDrag,
     this.onTrafficLightsHidden,
     this.onActivity,
+    this.controller,
   });
 
   static const Key contentKey = Key('chrome-content');
@@ -158,6 +196,7 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
   @override
   void initState() {
     super.initState();
+    widget.controller?._attach(this);
     _controller = AnimationController(
       vsync: this,
       value: 1.0,
@@ -184,6 +223,10 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
   @override
   void didUpdateWidget(ChromeVisibility old) {
     super.didUpdateWidget(old);
+    if (old.controller != widget.controller) {
+      old.controller?._detach(this);
+      widget.controller?._attach(this);
+    }
     if (old.isPlaying != widget.isPlaying ||
         old.isSeeking != widget.isSeeking) {
       if (widget.isPlaying && !widget.isSeeking) {
@@ -197,6 +240,7 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
 
   @override
   void dispose() {
+    widget.controller?._detach(this);
     _hideTimer?.cancel();
     _setTrafficLightsHidden(false);
     _curved.dispose();
@@ -224,6 +268,7 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
     if (!_visible) {
       setState(() => _visible = true);
       _setTrafficLightsHidden(false);
+      widget.controller?._notify();
     }
     _controller.forward();
     _restartTimer();
@@ -234,6 +279,7 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
     if (_visible) {
       setState(() => _visible = false);
       _setTrafficLightsHidden(true);
+      widget.controller?._notify();
     }
     _controller.reverse();
   }
@@ -445,6 +491,11 @@ class PlaybackChrome extends StatefulWidget {
   final String? selectedSubtitleLabel;
   final String? selectedQualityLabel;
 
+  /// Handle on this chrome's shown or hidden state, for the player screen's
+  /// key handler. Passed straight through to [ChromeVisibility]; this widget
+  /// never reads it.
+  final ChromeVisibilityController? chromeVisibility;
+
   const PlaybackChrome({
     super.key,
     required this.player,
@@ -469,6 +520,7 @@ class PlaybackChrome extends StatefulWidget {
     this.selectedAudioLabel,
     this.selectedSubtitleLabel,
     this.selectedQualityLabel,
+    this.chromeVisibility,
   });
 
   @override
@@ -501,6 +553,7 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
       initialData: widget.player.state.playing,
       builder: (context, snapshot) {
         return ChromeVisibility(
+          controller: widget.chromeVisibility,
           isPlaying: snapshot.data ?? false,
           isSeeking: _seeking,
           // Both gates live here, not inside ChromeVisibility, so widget
