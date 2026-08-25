@@ -15,7 +15,7 @@
     <% end %>
     <%!-- Content Container --%>
     <div class="relative pt-8 md:pt-16 pb-8 px-3 sm:px-4 md:px-6 lg:px-8">
-      <div class="flex flex-col md:flex-row gap-4 md:gap-6">
+      <div class="grid gap-4 md:gap-6 grid-cols-1 md:grid-cols-[16rem_minmax(0,1fr)] lg:grid-cols-[20rem_minmax(0,1fr)]">
         <%!-- Left Column: Hero Section (Poster & Quick Actions) --%>
         <Components.hero_section
           media_item={@media_item}
@@ -34,7 +34,7 @@
           target_library_candidates={@target_library_candidates}
         />
         <%!-- Right Column: Main Content --%>
-        <div class="flex-1 min-w-0">
+        <div class="min-w-0">
           <%!-- Title and Basic Info --%>
           <div class="mb-4 md:mb-6">
             <div class="flex items-start justify-between gap-2 md:gap-4 mb-2">

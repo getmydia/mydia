@@ -47,7 +47,17 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   def hero_section(assigns) do
     ~H"""
     <%!-- Left Column: Poster and Quick Actions --%>
-    <div class="w-full md:w-64 lg:w-80 flex-shrink-0">
+    <%!-- self-start is load-bearing. Without it this grid item stretches to the
+          full row height, position: sticky has no travel room inside its own
+          box, and the column silently does not pin.
+
+          The inner scroll is not optional either. The column runs roughly
+          830px at lg (a 320px poster at 2:3 is 480px, plus about 350px of
+          actions and info cards), which is taller than most laptop viewports.
+          Plain sticky on a taller-than-viewport element makes its bottom
+          permanently unreachable, so the Path and Target Library rows would
+          never be visible. --%>
+    <div class="md:sticky md:top-4 md:self-start md:max-h-[calc(100vh-2rem)] md:overflow-y-auto">
       <%!-- Poster - centered and smaller on mobile --%>
       <div class="card bg-base-100 shadow-xl mb-4 mx-auto w-48 sm:w-56 md:w-full">
         <figure class="aspect-[2/3] bg-base-300 overflow-hidden rounded-t-2xl">
