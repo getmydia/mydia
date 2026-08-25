@@ -134,4 +134,59 @@ defmodule MydiaWeb.Api.MediaAccessTest do
 
     assert conn.status in [200, 206]
   end
+
+  # Task 7 review finding 4: these five guards had no test that would
+  # actually fail if the guard were deleted. Each assertion below checks the
+  # exact message the guard itself produces, not merely a 404, because the
+  # underlying resolution for a fake fixture (no real file on disk, no real
+  # subtitle track) 404s for unrelated reasons too, so a bare status
+  # assertion would pass whether or not the guard runs.
+
+  test "candidates for a restricted episode's file by file id is not found", %{conn: conn} do
+    {_show, episode} = adult_show_with_episode()
+    file = media_file_fixture(%{episode_id: episode.id})
+
+    conn = conn |> restricted_conn() |> get(~p"/api/v1/stream/file/#{file.id}/candidates")
+
+    assert %{"error" => "file not found"} = json_response(conn, 404)
+  end
+
+  test "subtitle tracks for a restricted episode's file by file id is not found", %{conn: conn} do
+    {_show, episode} = adult_show_with_episode()
+    file = media_file_fixture(%{episode_id: episode.id})
+
+    conn = conn |> restricted_conn() |> get(~p"/api/player/v1/subtitles/file/#{file.id}")
+
+    assert %{"error" => "Media not found"} = json_response(conn, 404)
+  end
+
+  test "a restricted episode's subtitle track by file id is not found", %{conn: conn} do
+    {_show, episode} = adult_show_with_episode()
+    file = media_file_fixture(%{episode_id: episode.id})
+
+    conn = conn |> restricted_conn() |> get(~p"/api/player/v1/subtitles/file/#{file.id}/0")
+
+    assert %{"error" => "Media not found"} = json_response(conn, 404)
+  end
+
+  test "download options for a restricted movie are not found", %{conn: conn} do
+    movie = adult_movie()
+    media_file_fixture(%{media_item_id: movie.id})
+
+    conn = conn |> restricted_conn() |> get(~p"/api/v1/download/movie/#{movie.id}/options")
+
+    assert %{"error" => "Media not found"} = json_response(conn, 404)
+  end
+
+  test "preparing a download for a restricted movie is not found", %{conn: conn} do
+    movie = adult_movie()
+    media_file_fixture(%{media_item_id: movie.id})
+
+    conn =
+      conn
+      |> restricted_conn()
+      |> post(~p"/api/v1/download/movie/#{movie.id}/prepare", %{"resolution" => "720p"})
+
+    assert %{"error" => "Media not found"} = json_response(conn, 404)
+  end
 end
