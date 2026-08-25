@@ -1,6 +1,8 @@
 defmodule Mydia.EventsTest do
   use Mydia.DataCase
 
+  import Mydia.AccountsFixtures
+
   alias Mydia.Events
   alias Mydia.Events.Event
   alias Phoenix.PubSub
@@ -1160,5 +1162,108 @@ defmodule Mydia.EventsTest do
 
       assert formatted.description == "Event occurred"
     end
+  end
+
+  describe "list_visible_events/2" do
+    setup do
+      guest = user_fixture(%{role: "guest"})
+      other = user_fixture(%{role: "guest"})
+
+      {:ok, added} = seed("media", "media_item.added", :system, "media_context")
+      {:ok, download} = seed("downloads", "download.completed", :system, "download_monitor")
+      {:ok, own_play} = seed("playback", "playback.started", :user, guest.id)
+      {:ok, other_play} = seed("playback", "playback.started", :user, other.id)
+
+      %{
+        guest: guest,
+        added: added,
+        download: download,
+        own_play: own_play,
+        other_play: other_play
+      }
+    end
+
+    test "a guest sees allowed types and only their own playback", ctx do
+      ids = Enum.map(Events.list_visible_events(ctx.guest), & &1.id)
+
+      assert ctx.added.id in ids
+      assert ctx.own_play.id in ids
+      refute ctx.download.id in ids
+      refute ctx.other_play.id in ids
+    end
+
+    test "an admin sees everything", ctx do
+      ids = Enum.map(Events.list_visible_events(admin_user_fixture()), & &1.id)
+
+      assert ctx.added.id in ids
+      assert ctx.download.id in ids
+      assert ctx.other_play.id in ids
+    end
+
+    test "no viewer sees nothing" do
+      assert Events.list_visible_events(nil) == []
+    end
+
+    test "viewer scoping composes with the other filters", ctx do
+      ids =
+        ctx.guest
+        |> Events.list_visible_events(category: "playback")
+        |> Enum.map(& &1.id)
+
+      assert ids == [ctx.own_play.id]
+    end
+
+    test "scoping is applied before pagination", ctx do
+      # Two visible rows exist for the guest. A limit of 1 must return one
+      # visible row, not one row selected from the unscoped set and then
+      # discarded.
+      assert [event] = Events.list_visible_events(ctx.guest, limit: 1)
+      assert event.id in [ctx.added.id, ctx.own_play.id]
+    end
+  end
+
+  describe "get_visible_resource_events/4" do
+    test "restricts a resource's events to what the viewer may read" do
+      guest = user_fixture(%{role: "guest"})
+      other = user_fixture(%{role: "guest"})
+      resource_id = Ecto.UUID.generate()
+
+      {:ok, own} =
+        Events.create_event(%{
+          category: "playback",
+          type: "playback.started",
+          actor_type: :user,
+          actor_id: guest.id,
+          resource_type: "media_item",
+          resource_id: resource_id
+        })
+
+      {:ok, _theirs} =
+        Events.create_event(%{
+          category: "playback",
+          type: "playback.started",
+          actor_type: :user,
+          actor_id: other.id,
+          resource_type: "media_item",
+          resource_id: resource_id
+        })
+
+      ids =
+        guest
+        |> Events.get_visible_resource_events("media_item", resource_id)
+        |> Enum.map(& &1.id)
+
+      assert ids == [own.id]
+    end
+  end
+
+  defp seed(category, type, actor_type, actor_id) do
+    Events.create_event(%{
+      category: category,
+      type: type,
+      actor_type: actor_type,
+      actor_id: actor_id,
+      metadata: %{"title" => "Fixture Title"}
+    })
   end
 end
