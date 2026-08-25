@@ -179,12 +179,26 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpers do
   end
 
   defp backfill_one(request) do
-    with {:ok, metadata} <- fetch_request_metadata(request),
-         path when is_binary(path) <- metadata.poster_path,
-         {:ok, _updated} <- MediaRequests.update_poster_path(request, path) do
-      :ok
-    else
-      _ -> :ok
+    # `Task.async_stream/3` links each task to the caller, which here is the
+    # user's connected AdminRequestsLive or MyRequestsLive process running
+    # this synchronously inside `handle_info`. `fetch_request_metadata/1`
+    # parses an upstream JSON payload this code does not control (via
+    # `MediaAddHelpers.fetch_detail_metadata/2` and `Metadata.fetch_by_id/3`
+    # into the relay provider), so a malformed response raising here is
+    # realistic, and an uncaught raise would crash that page's process over
+    # one bad row. Catch it here, matching
+    # `Mydia.Metadata.Provider.Relay.fetch_all_season_episodes/3`, which
+    # rescues at the same kind of single-relay-call-per-task boundary.
+    try do
+      with {:ok, metadata} <- fetch_request_metadata(request),
+           path when is_binary(path) <- metadata.poster_path,
+           {:ok, _updated} <- MediaRequests.update_poster_path(request, path) do
+        :ok
+      else
+        _ -> :ok
+      end
+    rescue
+      _exception -> :ok
     end
   end
 end

@@ -73,6 +73,32 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestBackfillTest do
       assert :ok = MediaRequestHelpers.backfill_poster_paths([request])
       assert reload(request).poster_path == "/keep.jpg"
     end
+
+    test "a raise resolving one row does not crash the caller or stop siblings", %{user: user} do
+      # Task.async_stream/3 links each task to the caller. This test calls
+      # backfill_poster_paths/1 directly from the test process, so if the
+      # per-row raise below were not caught, it would crash this test
+      # process via the link instead of merely failing an assertion --
+      # proving the containment, not just describing it.
+      crashing = request_fixture(user, %{tmdb_id: MetadataStubProvider.movie_tmdb_id()})
+
+      sibling =
+        request_fixture(user, %{
+          media_type: "tv_show",
+          title: "Stub Series",
+          tmdb_id: nil,
+          tvdb_id: MetadataStubProvider.series_tvdb_id()
+        })
+
+      provider_id = to_string(MetadataStubProvider.movie_tmdb_id())
+      ref = MetadataStubProvider.raise_on_fetch_by_id(provider_id)
+      on_exit(fn -> MetadataStubProvider.clear_raise_on_fetch_by_id(ref) end)
+
+      assert :ok = MediaRequestHelpers.backfill_poster_paths([crashing, sibling])
+
+      assert is_nil(reload(crashing).poster_path)
+      assert reload(sibling).poster_path == "/stub-series-poster.jpg"
+    end
   end
 
   defp request_fixture(user, attrs) do

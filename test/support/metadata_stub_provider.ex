@@ -35,6 +35,7 @@ defmodule Mydia.MetadataStubProvider do
   @series_title "Stub Series"
   @season_fetch_block_key {__MODULE__, :season_fetch_block}
   @fetch_by_id_counts_table :mydia_metadata_stub_fetch_by_id_counts
+  @raise_on_fetch_by_id_key {__MODULE__, :raise_on_fetch_by_id}
 
   @doc "TMDB id of the catalog movie."
   def movie_tmdb_id, do: @movie_tmdb_id
@@ -85,6 +86,32 @@ defmodule Mydia.MetadataStubProvider do
     :ok
   end
 
+  @doc """
+  Makes the next `fetch_by_id/3` call for `provider_id` raise instead of
+  returning the catalog entry.
+
+  Opt-in and self-clearing: the next matching call consumes it and reverts to
+  the normal catalog lookup, so a test that never triggers it (or fails
+  before triggering it) leaves no state behind for later tests other than
+  what `clear_raise_on_fetch_by_id/1` is meant to guard against -- call it
+  from `on_exit/1` regardless of whether the raise fired. Used by
+  `MediaRequestBackfillTest` to prove a raise inside one row of a concurrent
+  backfill does not crash the caller or stop sibling rows.
+  """
+  def raise_on_fetch_by_id(provider_id) do
+    ref = make_ref()
+    :persistent_term.put(@raise_on_fetch_by_id_key, {to_string(provider_id), ref})
+    ref
+  end
+
+  @doc "Clears a pending `raise_on_fetch_by_id/1` installed by a test, if not already consumed."
+  def clear_raise_on_fetch_by_id(ref) do
+    case :persistent_term.get(@raise_on_fetch_by_id_key, nil) do
+      {_provider_id, ^ref} -> :persistent_term.erase(@raise_on_fetch_by_id_key)
+      _other -> :ok
+    end
+  end
+
   @doc "Number of `fetch_by_id/3` calls observed for `provider_id` since the last reset."
   def fetch_by_id_count(provider_id) do
     case :ets.whereis(@fetch_by_id_counts_table) do
@@ -113,6 +140,7 @@ defmodule Mydia.MetadataStubProvider do
   @impl true
   def fetch_by_id(_config, provider_id, opts) do
     count_fetch_by_id_call(provider_id)
+    maybe_raise_on_fetch_by_id(provider_id)
 
     cond do
       provider_id == to_string(@missing_id) ->
@@ -175,6 +203,17 @@ defmodule Mydia.MetadataStubProvider do
     end
 
     :ok
+  end
+
+  defp maybe_raise_on_fetch_by_id(provider_id) do
+    case :persistent_term.get(@raise_on_fetch_by_id_key, nil) do
+      {^provider_id, _ref} ->
+        :persistent_term.erase(@raise_on_fetch_by_id_key)
+        raise "MetadataStubProvider: forced fetch_by_id failure for #{provider_id}"
+
+      _other ->
+        :ok
+    end
   end
 
   defp maybe_block_season_fetch do
