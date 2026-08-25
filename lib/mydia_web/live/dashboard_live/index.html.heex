@@ -28,50 +28,40 @@
   </a>
 
   <!-- Stats Cards -->
+  <% admin? = @current_user && @current_user.role == "admin" %>
   <div class="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6 md:mb-8">
-    <!-- Movies Card -->
-    <div class="card bg-base-100 shadow-sm">
-      <div class="card-body">
-        <h2 class="card-title">
-          <.icon name="hero-film" class="w-6 h-6 text-primary" /> Movies
-        </h2>
-        <p class="text-3xl font-bold">{@movie_count}</p>
-        <p class="text-sm text-base-content/60">Total movies</p>
-      </div>
-    </div>
-
-    <!-- TV Shows Card -->
-    <div class="card bg-base-100 shadow-sm">
-      <div class="card-body">
-        <h2 class="card-title">
-          <.icon name="hero-tv" class="w-6 h-6 text-primary" /> TV Shows
-        </h2>
-        <p class="text-3xl font-bold">{@tv_show_count}</p>
-        <p class="text-sm text-base-content/60">Total series</p>
-      </div>
-    </div>
-
-    <!-- Downloads Card -->
-    <div class="card bg-base-100 shadow-sm">
-      <div class="card-body">
-        <h2 class="card-title">
-          <.icon name="hero-arrow-down-tray" class="w-6 h-6 text-primary" /> Downloads
-        </h2>
-        <p class="text-3xl font-bold">{@active_downloads_count}</p>
-        <p class="text-sm text-base-content/60">Active downloads</p>
-      </div>
-    </div>
-
-    <!-- Storage Card -->
-    <div class="card bg-base-100 shadow-sm">
-      <div class="card-body">
-        <h2 class="card-title">
-          <.icon name="hero-circle-stack" class="w-6 h-6 text-primary" /> Storage
-        </h2>
-        <p class="text-3xl font-bold">{@total_storage}</p>
-        <p class="text-sm text-base-content/60">Total storage used</p>
-      </div>
-    </div>
+    <Components.stat_tile
+      id="stat-tile-movies"
+      icon="hero-film"
+      label="Movies"
+      value={@movie_count}
+      caption="Total movies"
+      navigate={~p"/movies"}
+    />
+    <Components.stat_tile
+      id="stat-tile-tv-shows"
+      icon="hero-tv"
+      label="TV Shows"
+      value={@tv_show_count}
+      caption="Total series"
+      navigate={~p"/tv"}
+    />
+    <Components.stat_tile
+      id="stat-tile-downloads"
+      icon="hero-arrow-down-tray"
+      label="Downloads"
+      value={@active_downloads_count}
+      caption="Active downloads"
+      navigate={~p"/downloads"}
+    />
+    <Components.stat_tile
+      id="stat-tile-storage"
+      icon="hero-circle-stack"
+      label="Storage"
+      value={@total_storage}
+      caption="Total storage used"
+      navigate={if(admin?, do: ~p"/admin/config/library-paths", else: nil)}
+    />
   </div>
 
   <!-- Quick Actions -->

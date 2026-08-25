@@ -12,6 +12,8 @@ defmodule MydiaWeb.DashboardLive.Components do
   use Phoenix.Component
   use MydiaWeb, :verified_routes
 
+  import MydiaWeb.CoreComponents, only: [icon: 1]
+
   alias MydiaWeb.Live.Helpers.MediaImages
 
   @doc """
@@ -77,4 +79,56 @@ defmodule MydiaWeb.DashboardLive.Components do
   end
 
   defp new_episode_label(_entry), do: nil
+
+  @doc """
+  One dashboard stat card, optionally a link.
+
+  `navigate` is nil for a tile with no destination, which renders the plain
+  card the dashboard had before. The caller decides whether a destination is
+  allowed for the current viewer: the Storage tile's target is admin-only and
+  this row renders for every role, so keeping the role test at the call site
+  keeps authorization out of a presentation component.
+  """
+  attr :id, :string, required: true
+  attr :icon, :string, required: true
+  attr :label, :string, required: true
+  attr :value, :any, required: true
+  attr :caption, :string, required: true
+  attr :navigate, :string, default: nil
+
+  def stat_tile(assigns) do
+    ~H"""
+    <.link
+      :if={@navigate}
+      id={@id}
+      navigate={@navigate}
+      class="card bg-base-100 shadow-sm hover:shadow-md transition-shadow"
+    >
+      <.stat_tile_body icon={@icon} label={@label} value={@value} caption={@caption} />
+    </.link>
+    <div :if={is_nil(@navigate)} id={@id} class="card bg-base-100 shadow-sm">
+      <.stat_tile_body icon={@icon} label={@label} value={@value} caption={@caption} />
+    </div>
+    """
+  end
+
+  # The body is repeated across both branches of stat_tile/1 by way of this
+  # component rather than inline, because HEEx cannot swap a tag name and the
+  # link and non-link branches need different elements.
+  attr :icon, :string, required: true
+  attr :label, :string, required: true
+  attr :value, :any, required: true
+  attr :caption, :string, required: true
+
+  defp stat_tile_body(assigns) do
+    ~H"""
+    <div class="card-body">
+      <h2 class="card-title">
+        <.icon name={@icon} class="w-6 h-6 text-primary" /> {@label}
+      </h2>
+      <p class="text-3xl font-bold">{@value}</p>
+      <p class="text-sm text-base-content/60">{@caption}</p>
+    </div>
+    """
+  end
 end
