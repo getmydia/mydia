@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/layout/breakpoints.dart';
 import '../../core/theme/colors.dart';
+import '../../core/theme/depth_tokens.dart';
 import '../../domain/models/media_file.dart';
 import '../../domain/models/watch_status.dart';
 import 'focus_highlight.dart';
@@ -134,11 +135,12 @@ class MediaCard extends StatelessWidget {
     //
     // FocusHighlight sits outermost so the ring encloses the poster and its
     // labels together, which is what a viewer scanning a rail with a remote
-    // is actually selecting. `ringInset` is zero because the poster's own
-    // rounded corners already inset the art from the card bounds.
+    // is actually selecting. `borderRadius` uses the shared poster token so
+    // the ring traces the same corner radius `PosterFrame` already paints.
     return FocusHighlight(
       onActivate: onTap,
-      borderRadius: const BorderRadius.all(Radius.circular(12)),
+      borderRadius:
+          const BorderRadius.all(Radius.circular(DepthTokens.radiusPoster)),
       child: MouseRegion(
         cursor: onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
         child: GestureDetector(
