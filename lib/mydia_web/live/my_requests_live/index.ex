@@ -1,7 +1,10 @@
 defmodule MydiaWeb.MyRequestsLive.Index do
   use MydiaWeb, :live_view
 
+  import MydiaWeb.MediaRequestComponents
+
   alias Mydia.MediaRequests
+  alias MydiaWeb.Live.Helpers.MediaRequestHelpers
 
   @impl true
   def mount(_params, _session, socket) do
@@ -22,6 +25,16 @@ defmodule MydiaWeb.MyRequestsLive.Index do
   @impl true
   def handle_event("filter", %{"status" => status}, socket) do
     {:noreply, push_patch(socket, to: ~p"/requests?status=#{status}")}
+  end
+
+  @impl true
+  def handle_info({:backfill_posters, requests}, socket) do
+    MediaRequestHelpers.backfill_poster_paths(requests)
+
+    # Re-read through load_requests/1 so the refreshed rows and the active
+    # filter stay in agreement. needs_poster?/1 is false for every row it just
+    # filled, so this does not loop.
+    {:noreply, load_requests(socket)}
   end
 
   ## Private Helpers
@@ -50,22 +63,18 @@ defmodule MydiaWeb.MyRequestsLive.Index do
 
     requests = MediaRequests.list_requests(opts)
 
-    assign(socket, :requests, requests)
+    socket
+    |> assign(:requests, requests)
+    |> maybe_backfill_posters(requests)
   end
 
-  defp format_date(nil), do: "N/A"
+  # Sent to self rather than fetched here: a relay round trip inside mount/3 or
+  # a handle_event would freeze the LiveView while its page is on screen.
+  defp maybe_backfill_posters(socket, requests) do
+    if connected?(socket) and Enum.any?(requests, &MediaRequestHelpers.needs_poster?/1) do
+      send(self(), {:backfill_posters, requests})
+    end
 
-  defp format_date(%DateTime{} = dt) do
-    Calendar.strftime(dt, "%b %d, %Y at %I:%M %p")
+    socket
   end
-
-  defp status_badge_class("pending"), do: "badge-warning"
-  defp status_badge_class("approved"), do: "badge-success"
-  defp status_badge_class("rejected"), do: "badge-error"
-  defp status_badge_class(_), do: "badge-ghost"
-
-  defp status_text("pending"), do: "Pending Review"
-  defp status_text("approved"), do: "Approved"
-  defp status_text("rejected"), do: "Rejected"
-  defp status_text(_), do: "Unknown"
 end
