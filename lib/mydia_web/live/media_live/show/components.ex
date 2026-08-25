@@ -918,6 +918,13 @@ defmodule MydiaWeb.MediaLive.Show.Components do
 
   @doc """
   Timeline section showing history of events.
+
+  Vertical, and positioned by the page grid rather than by its place in the
+  main column: at xl and up it is the third grid column, and below xl it falls
+  to a full-width row under the other two. See show.html.heex for the grid.
+
+  It renders nothing at all on an item with no events, which is why the page
+  grid picks its column template from `@timeline_events != []`.
   """
   attr :timeline_events, :list, required: true
 
@@ -927,81 +934,70 @@ defmodule MydiaWeb.MediaLive.Show.Components do
       <div id="timeline-section" class="card bg-base-200 shadow-lg mb-4 md:mb-6">
         <div class="card-body p-4 md:p-6">
           <h2 class="card-title text-lg md:text-xl mb-3 md:mb-4">History</h2>
-          <%!-- Horizontal scrollable timeline container --%>
-          <div class="w-full overflow-x-auto scroll-smooth pb-4 -mx-4 px-4">
-            <div class="flex gap-0 min-w-max relative">
-              <%!-- Horizontal timeline line --%>
-              <div class="absolute top-[32px] left-0 right-0 h-0.5 bg-base-300 z-0"></div>
+          <div class="relative">
+            <%!-- The spine. Inset to the centre of the 40px icon nodes below
+                  (left-5 is 20px), so every node sits on it. --%>
+            <div class="absolute left-5 top-0 bottom-0 w-0.5 bg-base-300"></div>
 
-              <%!-- Timeline events --%>
-              <%= for {event, index} <- Enum.with_index(@timeline_events) do %>
-                <div class="relative flex flex-col items-center z-10 min-w-[280px] md:min-w-[280px]">
-                  <%!-- Time above timeline --%>
-                  <time
-                    class="text-xs text-base-content/60 mb-2 whitespace-nowrap"
-                    title={format_absolute_time(event.timestamp)}
-                  >
-                    {format_relative_time(event.timestamp)}
-                  </time>
-
-                  <%!-- Timeline node and connector --%>
-                  <div class="relative flex items-center justify-center">
-                    <%!-- Icon node on timeline --%>
-                    <div class="w-10 h-10 rounded-full bg-base-200 flex items-center justify-center border-2 border-base-300 z-20">
-                      <.icon name={event.icon} class={"w-5 h-5 #{event.color}"} />
-                    </div>
-                  </div>
-
-                  <%!-- Event card below timeline --%>
-                  <div
-                    class="card bg-base-100 shadow-md mt-4 w-64 md:w-64 hover:shadow-xl transition-shadow"
-                    title={format_absolute_time(event.timestamp)}
-                  >
-                    <div class="card-body p-4">
-                      <div class="font-bold text-sm mb-2">{event.title}</div>
-                      <div class="text-sm text-base-content/80 mb-2 line-clamp-2">
-                        {event.description}
-                      </div>
-                      <%= if event.metadata do %>
-                        <div class="flex flex-wrap gap-1">
-                          <%= if event.metadata[:quality] do %>
-                            <span class="badge badge-primary badge-xs">
-                              {format_download_quality(event.metadata.quality)}
-                            </span>
-                          <% end %>
-                          <%= if event.metadata[:indexer] do %>
-                            <span class="badge badge-outline badge-xs">
-                              {event.metadata.indexer}
-                            </span>
-                          <% end %>
-                          <%= if event.metadata[:resolution] do %>
-                            <span class="badge badge-primary badge-xs">
-                              {event.metadata.resolution}
-                            </span>
-                          <% end %>
-                          <%= if event.metadata[:size] do %>
-                            <span class="badge badge-ghost badge-xs">
-                              {format_file_size(event.metadata.size)}
-                            </span>
-                          <% end %>
-                          <%= if event.metadata[:error] do %>
-                            <div class="text-xs text-error mt-1 line-clamp-2">
-                              <.icon name="hero-exclamation-circle" class="w-3 h-3 inline" />
-                              {event.metadata.error}
-                            </div>
-                          <% end %>
-                        </div>
-                      <% end %>
-                    </div>
-                  </div>
-
-                  <%!-- Connecting line to next event --%>
-                  <%= if index < length(@timeline_events) - 1 do %>
-                    <div class={"absolute top-[32px] left-1/2 w-[280px] h-0.5 #{event.color} z-0"}>
-                    </div>
-                  <% end %>
+            <div class="flex flex-col gap-4">
+              <div
+                :for={event <- @timeline_events}
+                class="relative flex items-start gap-3"
+              >
+                <%!-- Icon node on the spine --%>
+                <div class="w-10 h-10 rounded-full bg-base-200 flex items-center justify-center border-2 border-base-300 shrink-0 z-10">
+                  <.icon name={event.icon} class={"w-5 h-5 #{event.color}"} />
                 </div>
-              <% end %>
+
+                <%!-- Event card, filling the rest of the column --%>
+                <div
+                  class="card bg-base-100 shadow-md flex-1 min-w-0 hover:shadow-xl transition-shadow"
+                  title={format_absolute_time(event.timestamp)}
+                >
+                  <div class="card-body p-3">
+                    <time
+                      class="text-xs text-base-content/60 whitespace-nowrap"
+                      title={format_absolute_time(event.timestamp)}
+                    >
+                      {format_relative_time(event.timestamp)}
+                    </time>
+                    <div class="font-bold text-sm">{event.title}</div>
+                    <div class="text-sm text-base-content/80 line-clamp-2">
+                      {event.description}
+                    </div>
+                    <%= if event.metadata do %>
+                      <div class="flex flex-wrap gap-1">
+                        <%= if event.metadata[:quality] do %>
+                          <span class="badge badge-primary badge-xs">
+                            {format_download_quality(event.metadata.quality)}
+                          </span>
+                        <% end %>
+                        <%= if event.metadata[:indexer] do %>
+                          <span class="badge badge-outline badge-xs">
+                            {event.metadata.indexer}
+                          </span>
+                        <% end %>
+                        <%= if event.metadata[:resolution] do %>
+                          <span class="badge badge-primary badge-xs">
+                            {event.metadata.resolution}
+                          </span>
+                        <% end %>
+                        <%= if event.metadata[:size] do %>
+                          <span class="badge badge-ghost badge-xs">
+                            {format_file_size(event.metadata.size)}
+                          </span>
+                        <% end %>
+                        <%= if event.metadata[:error] do %>
+                          <div class="text-xs text-error mt-1 line-clamp-2">
+                            <.icon name="hero-exclamation-circle" class="w-3 h-3 inline" />
+                            {event.metadata.error}
+                          </div>
+                        <% end %>
+                      </div>
+                    <% end %>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
