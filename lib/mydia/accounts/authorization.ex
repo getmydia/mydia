@@ -43,8 +43,15 @@ defmodule Mydia.Accounts.Authorization do
 
   Only admin and user roles can create media items.
   Guests and readonly users cannot create media.
+
+  Also accepts a `Mydia.Accounts.Scope`, delegating to its user. A restricted
+  account keeps whatever its role allows: the category and rating limits are
+  enforced per item in `Mydia.Media`, not by removing the ability to create
+  anything at all, so an operator can give an account a rating limit without
+  demoting it.
   """
   def can_create_media?(user)
+  def can_create_media?(%Mydia.Accounts.Scope{user: user}), do: can_create_media?(user)
   def can_create_media?(nil), do: false
   def can_create_media?(%User{role: role}) when role in ["admin", "user"], do: true
   def can_create_media?(_user), do: false
@@ -54,8 +61,15 @@ defmodule Mydia.Accounts.Authorization do
 
   Only admin and user roles can update media items.
   Guests and readonly users cannot update media.
+
+  Also accepts a `Mydia.Accounts.Scope`, delegating to its user. A restricted
+  account keeps whatever its role allows: the category and rating limits are
+  enforced per item in `Mydia.Media`, not by removing the ability to update
+  anything at all, so an operator can give an account a rating limit without
+  demoting it.
   """
   def can_update_media?(user)
+  def can_update_media?(%Mydia.Accounts.Scope{user: user}), do: can_update_media?(user)
   def can_update_media?(nil), do: false
   def can_update_media?(%User{role: role}) when role in ["admin", "user"], do: true
   def can_update_media?(_user), do: false
@@ -65,8 +79,15 @@ defmodule Mydia.Accounts.Authorization do
 
   Only admin and user roles can delete media items.
   Guests and readonly users cannot delete media.
+
+  Also accepts a `Mydia.Accounts.Scope`, delegating to its user. A restricted
+  account keeps whatever its role allows: the category and rating limits are
+  enforced per item in `Mydia.Media`, not by removing the ability to delete
+  anything at all, so an operator can give an account a rating limit without
+  demoting it.
   """
   def can_delete_media?(user)
+  def can_delete_media?(%Mydia.Accounts.Scope{user: user}), do: can_delete_media?(user)
   def can_delete_media?(nil), do: false
   def can_delete_media?(%User{role: role}) when role in ["admin", "user"], do: true
   def can_delete_media?(_user), do: false
@@ -75,8 +96,11 @@ defmodule Mydia.Accounts.Authorization do
   Checks if a user can view media items.
 
   All authenticated users can view media items.
+
+  Also accepts a `Mydia.Accounts.Scope`, delegating to its user.
   """
   def can_view_media?(user)
+  def can_view_media?(%Mydia.Accounts.Scope{user: user}), do: can_view_media?(user)
   def can_view_media?(nil), do: false
   def can_view_media?(%User{}), do: true
 
@@ -85,8 +109,11 @@ defmodule Mydia.Accounts.Authorization do
 
   Only guest users can submit media requests.
   Higher-level users should create media directly.
+
+  Also accepts a `Mydia.Accounts.Scope`, delegating to its user.
   """
   def can_submit_request?(user)
+  def can_submit_request?(%Mydia.Accounts.Scope{user: user}), do: can_submit_request?(user)
   def can_submit_request?(nil), do: false
   def can_submit_request?(%User{role: "guest"}), do: true
   def can_submit_request?(_user), do: false
