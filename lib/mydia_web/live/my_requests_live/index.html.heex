@@ -79,83 +79,79 @@
       <%!-- Requests List --%>
       <div class="space-y-4">
         <%= for request <- @requests do %>
-          <div class="card bg-base-100 shadow-lg">
-            <div class="card-body">
-              <div class="flex gap-4">
-                <div class="flex-1">
-                  <div class="flex items-start justify-between">
-                    <div>
-                      <h3 class="card-title">
-                        {request.title}
-                        <%= if request.year do %>
-                          <span class="text-base-content/70 font-normal">({request.year})</span>
-                        <% end %>
-                      </h3>
-                      <div class="flex items-center gap-2 mt-1">
-                        <span class={"badge badge-sm " <> status_badge_class(request.status)}>
-                          {status_text(request.status)}
-                        </span>
-                        <span class="badge badge-sm badge-ghost">
-                          {String.replace(request.media_type, "_", " ") |> String.capitalize()}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  <%!-- Request Details --%>
-                  <div class="mt-4 space-y-2 text-sm">
-                    <div class="flex items-center gap-2 text-base-content/70">
-                      <.icon name="hero-calendar" class="w-4 h-4" />
-                      <span>Requested on {format_date(request.inserted_at)}</span>
-                    </div>
-                    <%= if request.requester_notes do %>
-                      <div class="flex items-start gap-2 text-base-content/70">
-                        <.icon name="hero-chat-bubble-left-right" class="w-4 h-4 mt-0.5" />
-                        <span>{request.requester_notes}</span>
-                      </div>
-                    <% end %>
-                    <%= if request.status == "approved" do %>
-                      <div class="flex items-start gap-2 text-success">
-                        <.icon name="hero-check-circle" class="w-4 h-4 mt-0.5" />
-                        <div>
-                          <div>Approved on {format_date(request.approved_at)}</div>
-                          <%= if request.admin_notes do %>
-                            <div class="text-xs mt-1">Admin notes: {request.admin_notes}</div>
-                          <% end %>
-                        </div>
-                      </div>
-                      <%= if request.media_item do %>
-                        <div class="mt-2">
-                          <.link
-                            navigate={~p"/media/#{request.media_item.id}"}
-                            class="btn btn-sm btn-success"
-                          >
-                            <.icon name="hero-arrow-top-right-on-square" class="w-4 h-4" />
-                            View in Library
-                          </.link>
-                        </div>
-                      <% end %>
-                    <% end %>
-                    <%= if request.status == "rejected" do %>
-                      <div class="flex items-start gap-2 text-error">
-                        <.icon name="hero-x-circle" class="w-4 h-4 mt-0.5" />
-                        <div>
-                          <div>Rejected on {format_date(request.rejected_at)}</div>
-                          <%= if request.rejection_reason do %>
-                            <div class="text-xs mt-1">Reason: {request.rejection_reason}</div>
-                          <% end %>
-                          <%= if request.admin_notes do %>
-                            <div class="text-xs mt-1">Admin notes: {request.admin_notes}</div>
-                          <% end %>
-                        </div>
-                      </div>
-                    <% end %>
+          <.request_card request={request}>
+            <:details>
+              <div class="flex items-center gap-2 text-base-content/70">
+                <.icon name="hero-calendar" class="w-4 h-4" />
+                <span>Requested on {format_date(request.inserted_at)}</span>
+              </div>
+              <div
+                :if={request.requester_notes}
+                class="flex items-start gap-2 text-base-content/70"
+              >
+                <.icon name="hero-chat-bubble-left-right" class="w-4 h-4 mt-0.5" />
+                <span>{request.requester_notes}</span>
+              </div>
+              <div :if={request.status == "approved"} class="flex items-start gap-2 text-success">
+                <.icon name="hero-check-circle" class="w-4 h-4 mt-0.5" />
+                <div>
+                  <div>Approved on {format_date(request.approved_at)}</div>
+                  <div :if={request.admin_notes} class="text-xs mt-1">
+                    Admin notes: {request.admin_notes}
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
+              <div :if={request.status == "rejected"} class="flex items-start gap-2 text-error">
+                <.icon name="hero-x-circle" class="w-4 h-4 mt-0.5" />
+                <div>
+                  <div>Rejected on {format_date(request.rejected_at)}</div>
+                  <div :if={request.rejection_reason} class="text-xs mt-1">
+                    Reason: {request.rejection_reason}
+                  </div>
+                  <div :if={request.admin_notes} class="text-xs mt-1">
+                    Admin notes: {request.admin_notes}
+                  </div>
+                </div>
+              </div>
+            </:details>
+
+            <:actions>
+              <.link
+                :if={request.status == "approved" and request.media_item}
+                navigate={~p"/media/#{request.media_item.id}"}
+                class="btn btn-sm btn-success"
+              >
+                <.icon name="hero-arrow-top-right-on-square" class="w-4 h-4" /> View in Library
+              </.link>
+            </:actions>
+          </.request_card>
         <% end %>
       </div>
     <% end %>
+
+    <%!-- Detail popup. picker_open is false because this page never opens the
+          library picker, and libraries is empty for the same reason. --%>
+    <.live_component
+      module={MydiaWeb.Live.Components.TrendingDetailModal}
+      id="request-detail-modal"
+      item={@detail_item}
+      metadata={@detail_metadata}
+      loading={@detail_loading}
+      current_user={@current_user}
+      open={@detail_item != nil}
+      libraries={[]}
+      picker_open={false}
+    >
+      <:actions>
+        <button class="btn btn-ghost" phx-click="close_details">Close</button>
+        <.link
+          :if={@detail_request && @detail_request.media_item}
+          navigate={~p"/media/#{@detail_request.media_item.id}"}
+          class="btn btn-primary"
+        >
+          <.icon name="hero-arrow-top-right-on-square" class="w-4 h-4" /> View in Library
+        </.link>
+      </:actions>
+    </.live_component>
   </div>
 </Layouts.app>

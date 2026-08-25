@@ -71,6 +71,21 @@ defmodule Mydia.MediaRequests do
   end
 
   @doc """
+  Stores the poster path for a request.
+
+  Used by the request list backfill for rows created before the column
+  existed. Deliberately a bare write with no duplicate checks: the poster is
+  presentation data and never changes which media the request refers to.
+  """
+  @spec update_poster_path(MediaRequest.t(), String.t()) ::
+          {:ok, MediaRequest.t()} | {:error, Ecto.Changeset.t()}
+  def update_poster_path(%MediaRequest{} = request, poster_path) when is_binary(poster_path) do
+    request
+    |> Ecto.Changeset.change(poster_path: poster_path)
+    |> Repo.update()
+  end
+
+  @doc """
   Approves a media request and creates the corresponding media item.
 
   Provider metadata is fetched before the transaction opens, so the media item

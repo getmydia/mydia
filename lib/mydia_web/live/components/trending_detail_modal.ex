@@ -21,7 +21,9 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
 
   The box is a flex column: a fixed header, then one scrolling child. Any new
   content belongs inside `#trending-detail-modal-body`, not as a sibling of it,
-  or it will sit outside the scroll region and be unreachable.
+  or it will sit outside the scroll region and be unreachable. There is no
+  footer; all actions live in the header's `#trending-detail-modal-actions`
+  cluster.
 
   ## Events
 
@@ -29,6 +31,14 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
 
   - `close_details` - When user closes the modal
   - `add_to_library` - When user clicks "Add to Library" (with tmdb_id and media_type params)
+
+  ## `actions` slot
+
+  Optional. Dashboard and Discovery render the default header action set
+  (Add to Library / Request / "Go to"). The two request pages pass their own
+  `:actions` slot instead, which renders inside `#trending-detail-modal-actions`
+  and replaces the defaults outright, because Add to Library there would
+  create the media item while leaving the request pending.
 
   ## `picker_open`
 
@@ -76,9 +86,9 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
               <div class="w-full h-full bg-gradient-to-br from-primary/20 to-secondary/20"></div>
             <% end %>
 
-            <%!-- Close button. Icon-only (and, since the footer's labeled Close
-                 button was removed, the sole click-based way to close the
-                 modal), so aria-label carries its accessible name. --%>
+            <%!-- Close button. Icon-only and always present regardless of what
+                 a caller's :actions slot puts beside it in the header, so
+                 aria-label carries its accessible name. --%>
             <button
               phx-click="close_details"
               aria-label="Close"
@@ -131,44 +141,48 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
                   id="trending-detail-modal-actions"
                   class="flex flex-wrap items-center gap-2 shrink-0"
                 >
-                  <%= if not in_library?(@item) do %>
-                    <%= if @current_user && @current_user.role == "guest" do %>
-                      <button
-                        phx-click="request_media"
-                        phx-value-tmdb_id={@item.provider_id}
-                        phx-value-media_type={media_type_string(@item)}
-                        disabled={Map.get(@item, :request_status) != nil}
-                        class="btn btn-primary"
-                      >
-                        <%= if Map.get(@item, :request_status) do %>
-                          <.icon name="hero-check" class="w-4 h-4" /> Requested
-                        <% else %>
-                          <.icon name="hero-paper-airplane" class="w-4 h-4" /> Request
-                        <% end %>
-                      </button>
-                    <% else %>
-                      <div class="join">
+                  <%= if @actions != [] do %>
+                    {render_slot(@actions)}
+                  <% else %>
+                    <%= if not in_library?(@item) do %>
+                      <%= if @current_user && @current_user.role == "guest" do %>
                         <button
-                          phx-click="add_to_library"
+                          phx-click="request_media"
                           phx-value-tmdb_id={@item.provider_id}
                           phx-value-media_type={media_type_string(@item)}
-                          class="btn btn-primary join-item"
+                          disabled={Map.get(@item, :request_status) != nil}
+                          class="btn btn-primary"
                         >
-                          <.icon name="hero-plus" class="w-4 h-4" /> Add to Library
+                          <%= if Map.get(@item, :request_status) do %>
+                            <.icon name="hero-check" class="w-4 h-4" /> Requested
+                          <% else %>
+                            <.icon name="hero-paper-airplane" class="w-4 h-4" /> Request
+                          <% end %>
                         </button>
-                        <.library_picker_button
-                          libraries={@libraries}
-                          tmdb_id={@item.provider_id}
-                          media_type={media_type_string(@item)}
-                          title={@item.title}
-                        />
-                      </div>
+                      <% else %>
+                        <div class="join">
+                          <button
+                            phx-click="add_to_library"
+                            phx-value-tmdb_id={@item.provider_id}
+                            phx-value-media_type={media_type_string(@item)}
+                            class="btn btn-primary join-item"
+                          >
+                            <.icon name="hero-plus" class="w-4 h-4" /> Add to Library
+                          </button>
+                          <.library_picker_button
+                            libraries={@libraries}
+                            tmdb_id={@item.provider_id}
+                            media_type={media_type_string(@item)}
+                            title={@item.title}
+                          />
+                        </div>
+                      <% end %>
+                    <% else %>
+                      <.link navigate={library_path(@item)} class="btn btn-ghost">
+                        <.icon name="hero-arrow-right" class="w-4 h-4" />
+                        Go to {media_type_label(@item)}
+                      </.link>
                     <% end %>
-                  <% else %>
-                    <.link navigate={library_path(@item)} class="btn btn-ghost">
-                      <.icon name="hero-arrow-right" class="w-4 h-4" />
-                      Go to {media_type_label(@item)}
-                    </.link>
                   <% end %>
                 </div>
               </div>
@@ -275,7 +289,9 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
      |> assign_new(:metadata, fn -> nil end)
      |> assign_new(:libraries, fn -> [] end)
      # Optional slot: the dashboard renders this modal without one.
-     |> assign_new(:rail, fn -> [] end)}
+     |> assign_new(:rail, fn -> [] end)
+     # Optional slot: Dashboard and Discovery render the default header actions.
+     |> assign_new(:actions, fn -> [] end)}
   end
 
   # Helper functions for accessing data from either SearchResult (item) or MediaMetadata

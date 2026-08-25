@@ -8,11 +8,21 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpers do
   """
 
   alias Mydia.Media.Add
+  alias Mydia.Media.MediaRequest
   alias Mydia.MediaRequests
+  alias Mydia.Metadata
+  alias Mydia.Metadata.Structs.SearchResult
+  alias MydiaWeb.Live.Helpers.MediaAddHelpers
 
   # Statuses that should keep the request button disabled. A rejected request
   # leaves the button enabled so a guest can ask again.
   @outstanding ~w(pending approved)
+
+  # A relay round trip per row, so bounded. Four at a time keeps a large
+  # pending queue from opening a connection storm while still finishing a
+  # typical page in one round trip's time.
+  @backfill_concurrency 4
+  @backfill_timeout 30_000
 
   @doc """
   Maps `tmdb_id` to request status for every outstanding request.
@@ -63,12 +73,140 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpers do
       title: item.title,
       year: Map.get(item, :year),
       tmdb_id: tmdb_id,
+      poster_path: Map.get(item, :poster_path),
       requester_id: requester_id
     }
 
     case MediaRequests.create_request(attrs) do
       {:ok, request} -> {:ok, request, %{tmdb_id => request.status}}
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Resolves provider metadata for a request.
+
+  Lives here rather than in `Mydia.MediaRequests` because the TMDB branch
+  delegates to `MediaAddHelpers.fetch_detail_metadata/2`, which is already a
+  web helper. Putting it in the context would point a context module at
+  `MydiaWeb`.
+
+  The TMDB branch reuses the Discovery helper so both surfaces show the same
+  metadata for the same title, including its TMDB-to-TVDB resolution for TV.
+  The TVDB branch mirrors `Mydia.Media.Add.fetch_tvdb_series/2` and exists
+  because a TV request made on a TVDB-configured instance stores no tmdb_id.
+  """
+  @spec fetch_request_metadata(MediaRequest.t()) ::
+          {:ok, Mydia.Metadata.Structs.MediaMetadata.t()} | {:error, term()}
+  def fetch_request_metadata(%MediaRequest{} = request) do
+    case MediaRequest.external_ref(request) do
+      {:tmdb, tmdb_id} ->
+        MediaAddHelpers.fetch_detail_metadata(
+          to_string(tmdb_id),
+          MediaRequest.media_type_atom(request)
+        )
+
+      {:tvdb, tvdb_id} ->
+        Metadata.fetch_by_id(
+          Metadata.default_relay_config(),
+          to_string(tvdb_id),
+          media_type: :tv_show,
+          provider: :tvdb
+        )
+
+      nil ->
+        {:error, :no_provider_id}
+    end
+  end
+
+  @doc """
+  Builds the `SearchResult` that `TrendingDetailModal` reads for its header.
+
+  Returns nil for a request with no external ref, which is the same set of rows
+  that render a non-clickable title.
+  """
+  @spec to_search_result(MediaRequest.t()) :: SearchResult.t() | nil
+  def to_search_result(%MediaRequest{} = request) do
+    case MediaRequest.external_ref(request) do
+      nil ->
+        nil
+
+      {provider, id} ->
+        %SearchResult{
+          provider_id: to_string(id),
+          provider: provider,
+          media_type: MediaRequest.media_type_atom(request),
+          id: id,
+          title: request.title,
+          year: request.year,
+          poster_path: request.poster_path
+        }
+    end
+  end
+
+  @doc """
+  Whether this request should be resolved for a poster.
+  """
+  @spec needs_poster?(MediaRequest.t()) :: boolean()
+  def needs_poster?(%MediaRequest{poster_path: nil} = request),
+    do: MediaRequest.detailable?(request)
+
+  def needs_poster?(%MediaRequest{}), do: false
+
+  @doc """
+  Resolves and stores posters for requests that have none.
+
+  Callers run this inside a `start_async/3` task, never inline: a relay round
+  trip per row inside `mount/3`, `handle_event`, or `handle_info` would block
+  the LiveView process while its page is already on screen. Deferring only to
+  `handle_info` (as this used to) merely lets the first render paint -- the
+  process is still blocked for every event afterward (Close, Approve, Reject)
+  while the batch runs, so `start_async/3` is what actually keeps it
+  responsive.
+
+  A failed or timed-out fetch leaves `poster_path` nil, so the card falls back
+  to the placeholder and the next visit to the page retries. There is
+  deliberately no retry inside a single pass.
+  """
+  @spec backfill_poster_paths([MediaRequest.t()]) :: :ok
+  def backfill_poster_paths(requests) when is_list(requests) do
+    requests
+    |> Enum.filter(&needs_poster?/1)
+    |> Task.async_stream(&backfill_one/1,
+      max_concurrency: @backfill_concurrency,
+      timeout: @backfill_timeout,
+      on_timeout: :kill_task
+    )
+    |> Stream.run()
+
+    :ok
+  end
+
+  defp backfill_one(request) do
+    # `Task.async_stream/3` links each task to the caller, which is the
+    # `start_async/3` task that AdminRequestsLive/MyRequestsLive spawn from
+    # `maybe_backfill_posters/2` (see their `handle_async(:backfill_posters,
+    # ...)`), not the LiveView process itself. `fetch_request_metadata/1`
+    # parses an upstream JSON payload this code does not control (via
+    # `MediaAddHelpers.fetch_detail_metadata/2` and `Metadata.fetch_by_id/3`
+    # into the relay provider), so a malformed response raising here is
+    # realistic. An uncaught raise here would still be isolated from the
+    # LiveView process -- `start_async/3` reports it to `handle_async/3` as
+    # `{:exit, reason}` rather than crashing the page -- but it would also
+    # abort every other row still in flight in this batch. Catch it here
+    # instead, matching
+    # `Mydia.Metadata.Provider.Relay.fetch_all_season_episodes/3`, which
+    # rescues at the same kind of single-relay-call-per-task boundary.
+    try do
+      with {:ok, metadata} <- fetch_request_metadata(request),
+           path when is_binary(path) <- metadata.poster_path,
+           {:ok, _updated} <- MediaRequests.update_poster_path(request, path) do
+        :ok
+      else
+        _ -> :ok
+      end
+    rescue
+      _exception -> :ok
     end
   end
 end

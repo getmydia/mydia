@@ -188,6 +188,7 @@ defmodule MydiaWeb.RequestMediaLive.Index do
       original_title: result.original_title || result.original_name,
       year: extract_year(result),
       imdb_id: result.imdb_id,
+      poster_path: result.poster_path,
       requester_notes: params["requester_notes"],
       requester_id: assigns.current_user.id
     }

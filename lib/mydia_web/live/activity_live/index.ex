@@ -2,9 +2,74 @@ defmodule MydiaWeb.ActivityLive.Index do
   use MydiaWeb, :live_view
   alias Mydia.Events
   alias Mydia.Events.Presentation
+  alias Mydia.Events.Visibility
   alias Phoenix.PubSub
 
   @page_size 50
+
+  # The chip catalog lives here rather than in Mydia.Events.Visibility so that
+  # daisyUI classes and hero icon names stay out of a context module. Visibility
+  # answers which categories a viewer can encounter; this decides how they look.
+  # "all" and "errors" are not categories: "all" clears the filter and "errors"
+  # filters on severity, so only "all" survives for a restricted viewer.
+  @chips [
+    %{
+      value: "all",
+      label: "All",
+      icon: "hero-squares-2x2",
+      active_class: "btn-primary",
+      idle_class: "btn-ghost"
+    },
+    %{
+      value: "media",
+      label: "Media",
+      icon: "hero-film",
+      active_class: "btn-primary",
+      idle_class: "btn-ghost"
+    },
+    %{
+      value: "downloads",
+      label: "Downloads",
+      icon: "hero-arrow-down-tray",
+      active_class: "btn-primary",
+      idle_class: "btn-ghost"
+    },
+    %{
+      value: "search",
+      label: "Search",
+      icon: "hero-magnifying-glass",
+      active_class: "btn-primary",
+      idle_class: "btn-ghost"
+    },
+    %{
+      value: "system",
+      label: "System",
+      icon: "hero-cog-6-tooth",
+      active_class: "btn-primary",
+      idle_class: "btn-ghost"
+    },
+    %{
+      value: "playback",
+      label: "Playback",
+      icon: "hero-play",
+      active_class: "btn-primary",
+      idle_class: "btn-ghost"
+    },
+    %{
+      value: "plugin",
+      label: "Plugins",
+      icon: "hero-puzzle-piece",
+      active_class: "btn-primary",
+      idle_class: "btn-ghost"
+    },
+    %{
+      value: "errors",
+      label: "Errors",
+      icon: "hero-exclamation-triangle",
+      active_class: "btn-error",
+      idle_class: "btn-ghost text-error/70 hover:text-error"
+    }
+  ]
 
   @impl true
   def mount(_params, _session, socket) do
@@ -16,6 +81,7 @@ defmodule MydiaWeb.ActivityLive.Index do
         socket
         |> assign(:category_filter, "all")
         |> assign(:date_filter, "all")
+        |> assign(:filter_chips, filter_chips(socket.assigns.current_user))
         |> assign(:page, 0)
         |> assign(:has_more?, false)
         |> assign(:events_empty?, false)
@@ -24,6 +90,7 @@ defmodule MydiaWeb.ActivityLive.Index do
         socket
         |> assign(:category_filter, "all")
         |> assign(:date_filter, "all")
+        |> assign(:filter_chips, filter_chips(socket.assigns.current_user))
         |> assign(:page, 0)
         |> assign(:has_more?, false)
         |> assign(:events_empty?, true)
@@ -77,6 +144,10 @@ defmodule MydiaWeb.ActivityLive.Index do
     # This check must mirror build_filter_opts/2, which applies it in SQL.
     feed_visible = event.type not in Presentation.feed_hidden_types()
 
+    # Viewer scoping needs no mirroring: this predicate and the SQL clause
+    # applied by Events.list_visible_events/2 are compiled from the same policy.
+    viewer_visible = Visibility.visible?(event, socket.assigns.current_user)
+
     # Only add event if it matches current category filter
     matches_category =
       case category_filter do
@@ -89,7 +160,7 @@ defmodule MydiaWeb.ActivityLive.Index do
     matches_date = event_matches_date_filter?(event.inserted_at, date_filter)
 
     socket =
-      if feed_visible && matches_category && matches_date do
+      if feed_visible && viewer_visible && matches_category && matches_date do
         socket
         |> assign(:events_empty?, false)
         |> stream_insert(:events, event, at: 0)
@@ -102,6 +173,13 @@ defmodule MydiaWeb.ActivityLive.Index do
 
   ## Private Helpers
 
+  defp filter_chips(user) do
+    case Visibility.visible_categories(user) do
+      :all -> @chips
+      categories -> Enum.filter(@chips, &(&1.value == "all" or &1.value in categories))
+    end
+  end
+
   defp load_events(socket) do
     category_filter = socket.assigns.category_filter
     date_filter = socket.assigns.date_filter
@@ -109,7 +187,11 @@ defmodule MydiaWeb.ActivityLive.Index do
     filter_opts = build_filter_opts(category_filter, date_filter)
 
     # Request one more than page_size to check if there are more results
-    events = Events.list_events(filter_opts ++ [limit: @page_size + 1, offset: 0])
+    events =
+      Events.list_visible_events(
+        socket.assigns.current_user,
+        filter_opts ++ [limit: @page_size + 1, offset: 0]
+      )
 
     has_more? = length(events) > @page_size
     events = Enum.take(events, @page_size)
@@ -129,7 +211,11 @@ defmodule MydiaWeb.ActivityLive.Index do
     offset = page * @page_size
 
     # Request one more than page_size to check if there are more results
-    events = Events.list_events(filter_opts ++ [limit: @page_size + 1, offset: offset])
+    events =
+      Events.list_visible_events(
+        socket.assigns.current_user,
+        filter_opts ++ [limit: @page_size + 1, offset: offset]
+      )
 
     has_more? = length(events) > @page_size
     events = Enum.take(events, @page_size)

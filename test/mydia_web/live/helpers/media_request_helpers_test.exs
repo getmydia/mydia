@@ -46,6 +46,27 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpersTest do
       assert {:error, :duplicate_request} =
                MediaRequestHelpers.handle_request_media(item(tmdb_id), :movie, user.id)
     end
+
+    test "stores the card's poster path on the request" do
+      user = guest()
+      tmdb_id = System.unique_integer([:positive])
+      poster_item = Map.put(item(tmdb_id), :poster_path, "/stub-movie-poster.jpg")
+
+      assert {:ok, request, _map} =
+               MediaRequestHelpers.handle_request_media(poster_item, :movie, user.id)
+
+      assert request.poster_path == "/stub-movie-poster.jpg"
+    end
+
+    test "leaves poster_path nil when the card has no poster" do
+      user = guest()
+      tmdb_id = System.unique_integer([:positive])
+
+      assert {:ok, request, _map} =
+               MediaRequestHelpers.handle_request_media(item(tmdb_id), :movie, user.id)
+
+      assert is_nil(request.poster_path)
+    end
   end
 
   describe "request_status_map/0" do

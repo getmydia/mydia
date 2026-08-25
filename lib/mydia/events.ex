@@ -10,6 +10,7 @@ defmodule Mydia.Events do
   alias Mydia.Repo
   alias Mydia.Events.Event
   alias Mydia.Events.Presentation
+  alias Mydia.Events.Visibility
   alias Mydia.Events.Writer
   alias Phoenix.PubSub
 
@@ -110,10 +111,32 @@ defmodule Mydia.Events do
   """
   def list_events(opts \\ []) do
     Event
+    |> query_events(opts)
+    |> Repo.all()
+  end
+
+  @doc """
+  Lists the events `user` is allowed to read.
+
+  Accepts the same options as `list_events/1`. Viewer scoping is applied in
+  SQL before pagination, so `:limit` and `:offset` stay correct: filtering
+  after the query would make a page-sized fetch return fewer rows than it
+  claims, and break the caller's "is there another page" check.
+
+  `list_events/1` stays unrestricted for system and admin callers.
+  """
+  def list_visible_events(user, opts \\ []) do
+    Event
+    |> Visibility.scope(user)
+    |> query_events(opts)
+    |> Repo.all()
+  end
+
+  defp query_events(query, opts) do
+    query
     |> apply_filters(opts)
     |> apply_pagination(opts)
     |> order_by([e], desc: e.inserted_at, desc: e.id)
-    |> Repo.all()
   end
 
   @doc """
@@ -131,6 +154,20 @@ defmodule Mydia.Events do
       |> Keyword.put(:resource_id, resource_id)
 
     list_events(opts)
+  end
+
+  @doc """
+  Events for a resource, restricted to what `user` is allowed to read.
+
+  The viewer-scoped counterpart of `get_resource_events/3`.
+  """
+  def get_visible_resource_events(user, resource_type, resource_id, opts \\ []) do
+    opts =
+      opts
+      |> Keyword.put(:resource_type, resource_type)
+      |> Keyword.put(:resource_id, resource_id)
+
+    list_visible_events(user, opts)
   end
 
   @doc """
