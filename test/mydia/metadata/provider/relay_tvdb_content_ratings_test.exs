@@ -57,4 +57,24 @@ defmodule Mydia.Metadata.Provider.RelayTvdbContentRatingsTest do
     assert transform(nil)["content_ratings"] == nil
     assert transform([])["content_ratings"] == %{"results" => []}
   end
+
+  # "ind" (India) is not one of the 19 codes in @tvdb_country_codes, so this
+  # exercises the String.upcase/1 passthrough in tvdb_country_to_iso/1 rather
+  # than a table hit. That passthrough is deliberate: an unmapped code still
+  # reaches parse_content_rating/2's first-non-blank fallback instead of being
+  # dropped, and nothing else in this file proves that path is alive.
+  test "passes through an unmapped country code upcased instead of dropping it" do
+    result = transform([%{"name" => "U/A 16+", "country" => "ind"}])
+
+    assert %{"content_ratings" => %{"results" => [entry]}} = result
+    assert entry["iso_3166_1"] == "IND"
+    assert entry["rating"] == "U/A 16+"
+
+    metadata =
+      [%{"name" => "U/A 16+", "country" => "ind"}]
+      |> transform()
+      |> MediaMetadata.from_api_response(:tv_show, "12345")
+
+    assert metadata.content_rating == "U/A 16+"
+  end
 end
