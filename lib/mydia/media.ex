@@ -1094,6 +1094,21 @@ defmodule Mydia.Media do
   end
 
   @doc """
+  Counts library items with no derived content rating.
+
+  An active age limit hides every one of these, so the admin UI states the
+  number at the point an operator chooses a limit rather than leaving them to
+  discover a sparse library and file a bug.
+  """
+  @spec count_unrated_items(Scope.t()) :: non_neg_integer()
+  def count_unrated_items(%Scope{} = scope) do
+    MediaItem
+    |> Restrictions.apply(scope)
+    |> where([m], is_nil(m.content_rating_age))
+    |> Repo.aggregate(:count, :id)
+  end
+
+  @doc """
   Counts episodes by availability state and monitored flag, for metrics.
 
   States follow `Mydia.Media.EpisodeStatus.get_episode_status/1`: `"downloaded"`
