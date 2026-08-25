@@ -18,6 +18,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
   alias MydiaWeb.Live.Helpers.RecommendationsExpanded
   alias MydiaWeb.MediaLive.Show.DetailModalEvents
+  alias MydiaWeb.RemoteFilter
 
   require Logger
 
@@ -42,10 +43,12 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   end
 
   def handle_load_result({:ok, {:ok, results}}, socket) do
+    scope = socket.assigns.current_scope
+
     recommendations =
       decorate(
-        socket.assigns.current_scope,
-        results,
+        scope,
+        RemoteFilter.filter(results, scope),
         socket.assigns.media_item,
         socket.assigns.current_user
       )
