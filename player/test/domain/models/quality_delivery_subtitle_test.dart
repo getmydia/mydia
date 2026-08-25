@@ -55,7 +55,7 @@ void main() {
   });
 
   group('firstStrategyAllowsDirectPlay', () {
-    test('true when first is DIRECT_PLAY, REMUX, or HLS_COPY', () {
+    test('true when first is DIRECT_PLAY or REMUX', () {
       expect(
         firstStrategyAllowsDirectPlay(['DIRECT_PLAY', 'TRANSCODE']),
         isTrue,
@@ -64,9 +64,17 @@ void main() {
         firstStrategyAllowsDirectPlay(['REMUX', 'HLS_COPY', 'TRANSCODE']),
         isTrue,
       );
+    });
+
+    test('false when first is HLS_COPY, even with nothing else ahead of it',
+        () {
+      // A leading HLS_COPY is the server's :needs_transcoding verdict
+      // (Mydia.Streaming.Candidates.build_streaming_candidates/2) and
+      // HLS_COPY never re-encodes, so it still carries a codec the device
+      // was just told it cannot decode.
       expect(
         firstStrategyAllowsDirectPlay(['HLS_COPY', 'TRANSCODE']),
-        isTrue,
+        isFalse,
       );
     });
 
