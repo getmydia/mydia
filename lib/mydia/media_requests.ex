@@ -60,15 +60,56 @@ defmodule Mydia.MediaRequests do
 
   Returns `{:error, :duplicate_media}` if media exists.
   Returns `{:error, :duplicate_request}` if pending request exists.
+  Returns `{:error, :restricted}` if the scope may not create an item in this
+  category or above its rating limit -- a restricted account must not be able
+  to route around the write guard by filing a request instead of creating
+  directly.
+
+  ## Options
+    - `:config` - Relay config used to resolve metadata for the restriction
+      check on a restricted scope. Defaults to `Metadata.default_relay_config/0`.
+      Inject a Bypass config in tests. Never fetched for an unrestricted scope,
+      so the common path stays a single insert.
   """
-  def create_request(%Scope{} = scope, attrs \\ %{}) do
+  def create_request(%Scope{} = scope, attrs \\ %{}, opts \\ []) do
     changeset = MediaRequest.create_changeset(%MediaRequest{}, attrs)
 
-    with :ok <- check_duplicate_media(scope, changeset),
+    with :ok <- authorize_request(scope, changeset, opts),
+         :ok <- check_duplicate_media(scope, changeset),
          :ok <- check_duplicate_request(changeset),
          {:ok, request} <- Repo.insert(changeset) do
       {:ok, Repo.preload(request, [:requester])}
     end
+  end
+
+  # An unrestricted scope (admin, or any account with no category/rating
+  # limits) is always authorized and never triggers the metadata fetch below,
+  # which is what keeps request submission instant for the common case. A
+  # changeset that is not valid yet is left for `Repo.insert/1` to reject with
+  # its own errors rather than spending a network call on attrs that cannot be
+  # persisted anyway.
+  defp authorize_request(scope, changeset, opts) do
+    if Scope.restricted?(scope) and changeset.valid? do
+      media_type = Ecto.Changeset.get_field(changeset, :media_type)
+      tmdb_id = Ecto.Changeset.get_field(changeset, :tmdb_id)
+      tvdb_id = Ecto.Changeset.get_field(changeset, :tvdb_id)
+
+      # Calls the same `Media.writable?/2` that gates direct creation, so a
+      # future change to what counts as out of bounds cannot apply to one path
+      # and not the other.
+      with {:ok, media_attrs} <- resolve_request_metadata(media_type, tmdb_id, tvdb_id, opts) do
+        if Media.writable?(scope, media_attrs), do: :ok, else: {:error, :restricted}
+      end
+    else
+      :ok
+    end
+  end
+
+  defp resolve_request_metadata(media_type, tmdb_id, tvdb_id, opts) do
+    {provider_id, provider} = request_provider(%MediaRequest{tmdb_id: tmdb_id, tvdb_id: tvdb_id})
+    media_type_atom = if media_type == "movie", do: :movie, else: :tv_show
+
+    Add.resolve_attrs(provider_id, media_type_atom, opts[:config], provider: provider)
   end
 
   @doc """

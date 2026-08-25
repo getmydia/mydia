@@ -9,6 +9,7 @@ defmodule Mydia.Media do
   alias Mydia.Repo
   alias Mydia.Accounts.Scope
   alias Mydia.Media.{AvailabilityStatus, MediaItem, Episode, CategoryClassifier}
+  alias Mydia.Media.ContentRating
   alias Mydia.Media.Restrictions
   alias Mydia.Media.Structs.CalendarEntry
   alias Mydia.Metadata.Access, as: MetadataAccess
@@ -318,6 +319,54 @@ defmodule Mydia.Media do
 
   def find_episode(%Scope{}, _, _, _), do: nil
 
+  # A restricted account must not be able to pull an out-of-bounds title into
+  # the library directly and skip the approval gate. The item does not exist
+  # yet, so its category comes from classifying the metadata it would be
+  # created with, the same classifier that runs on insert.
+  @doc """
+  True when this scope may create or move an item into the state `attrs`
+  describes. Public because `Mydia.MediaRequests` gates request creation on the
+  same rule and must not restate it.
+  """
+  @spec writable?(Scope.t(), map()) :: boolean()
+  def writable?(%Scope{allowed_categories: nil, max_content_age: nil}, _attrs), do: true
+
+  def writable?(%Scope{} = scope, attrs) do
+    metadata = Map.get(attrs, :metadata) || Map.get(attrs, "metadata")
+    type = Map.get(attrs, :type) || Map.get(attrs, "type")
+
+    candidate = %MediaItem{
+      category: to_string(classify_for_write(type, metadata)),
+      content_rating_age: ContentRating.min_age(content_rating_of(metadata))
+    }
+
+    Restrictions.visible?(candidate, scope)
+  end
+
+  # Callers want a tagged tuple to thread through `with`.
+  defp authorize_write(scope, attrs) do
+    if writable?(scope, attrs), do: :ok, else: {:error, :restricted}
+  end
+
+  defp classify_for_write("tv_show", metadata),
+    do: CategoryClassifier.classify_from_metadata(:tv_show, metadata)
+
+  defp classify_for_write(_type, metadata),
+    do: CategoryClassifier.classify_from_metadata(:movie, metadata)
+
+  defp content_rating_of(%{content_rating: rating}), do: rating
+  defp content_rating_of(_metadata), do: nil
+
+  # An update that does not mention metadata leaves the stored metadata in
+  # place, so judging the attrs alone would classify the item as though it had
+  # none and wrongly refuse an in-bounds edit.
+  defp merged_write_attrs(%MediaItem{} = item, attrs) do
+    %{
+      type: Map.get(attrs, :type) || Map.get(attrs, "type") || item.type,
+      metadata: Map.get(attrs, :metadata) || Map.get(attrs, "metadata") || item.metadata
+    }
+  end
+
   @doc """
   Creates a media item.
 
@@ -335,9 +384,10 @@ defmodule Mydia.Media do
       otherwise the automatic refresh silently uses `Metadata.default_relay_config/0`.
   """
   @spec create_media_item(Scope.t(), map(), keyword()) ::
-          {:ok, MediaItem.t()} | {:error, Ecto.Changeset.t()}
-  def create_media_item(%Scope{} = _scope, attrs \\ %{}, opts \\ []) do
-    with {:ok, media_item} <-
+          {:ok, MediaItem.t()} | {:error, Ecto.Changeset.t() | :restricted}
+  def create_media_item(%Scope{} = scope, attrs \\ %{}, opts \\ []) do
+    with :ok <- authorize_write(scope, attrs),
+         {:ok, media_item} <-
            %MediaItem{}
            |> MediaItem.changeset(attrs)
            |> Repo.insert() do
@@ -388,24 +438,26 @@ defmodule Mydia.Media do
     - `:reason` - Description of what was updated (e.g., "Metadata refreshed") - defaults to "Updated"
   """
   @spec update_media_item(Scope.t(), MediaItem.t(), map(), keyword()) ::
-          {:ok, MediaItem.t()} | {:error, Ecto.Changeset.t()}
-  def update_media_item(%Scope{} = _scope, %MediaItem{} = media_item, attrs, opts \\ []) do
-    changeset = MediaItem.changeset(media_item, attrs)
+          {:ok, MediaItem.t()} | {:error, Ecto.Changeset.t() | :restricted}
+  def update_media_item(%Scope{} = scope, %MediaItem{} = media_item, attrs, opts \\ []) do
+    with :ok <- authorize_write(scope, merged_write_attrs(media_item, attrs)) do
+      changeset = MediaItem.changeset(media_item, attrs)
 
-    case Repo.update(changeset) do
-      {:ok, updated_media_item} ->
-        # Track event with change details
-        actor_type = Keyword.get(opts, :actor_type, :system)
-        actor_id = Keyword.get(opts, :actor_id, "media_context")
-        reason = Keyword.get(opts, :reason, "Updated")
-        changes = extract_meaningful_changes(changeset, media_item)
+      case Repo.update(changeset) do
+        {:ok, updated_media_item} ->
+          # Track event with change details
+          actor_type = Keyword.get(opts, :actor_type, :system)
+          actor_id = Keyword.get(opts, :actor_id, "media_context")
+          reason = Keyword.get(opts, :reason, "Updated")
+          changes = extract_meaningful_changes(changeset, media_item)
 
-        Events.media_item_updated(updated_media_item, actor_type, actor_id, reason, changes)
+          Events.media_item_updated(updated_media_item, actor_type, actor_id, reason, changes)
 
-        {:ok, updated_media_item}
+          {:ok, updated_media_item}
 
-      error ->
-        error
+        error ->
+          error
+      end
     end
   end
 

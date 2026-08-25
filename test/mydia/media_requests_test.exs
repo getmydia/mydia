@@ -169,6 +169,57 @@ defmodule Mydia.MediaRequestsTest do
     end
   end
 
+  describe "create_request/3 with a restricted scope" do
+    setup do
+      user = create_user()
+      %{user: user}
+    end
+
+    test "refuses a request for a title out of the account's bounds", %{user: user} do
+      restricted = create_user(%{role: "user"})
+      {:ok, _} = Accounts.upsert_access_restriction(restricted, %{allowed_categories: ["movie"]})
+      scope = Scope.for_user(Accounts.get_user!(restricted.id))
+
+      bypass = Bypass.open()
+      tmdb_id = System.unique_integer([:positive])
+      stub_tmdb_movie_rated(bypass, tmdb_id, "Animated Feature", ["Animation"], "US", "G")
+
+      attrs = %{
+        media_type: "movie",
+        title: "Animated Feature",
+        tmdb_id: tmdb_id,
+        requester_id: user.id
+      }
+
+      assert {:error, :restricted} =
+               MediaRequests.create_request(scope, attrs, config: relay_config(bypass))
+
+      refute MediaRequests.pending_request_exists?(tmdb_id)
+    end
+
+    test "allows a request for a title within the account's bounds", %{user: user} do
+      restricted = create_user(%{role: "user"})
+      {:ok, _} = Accounts.upsert_access_restriction(restricted, %{allowed_categories: ["movie"]})
+      scope = Scope.for_user(Accounts.get_user!(restricted.id))
+
+      bypass = Bypass.open()
+      tmdb_id = System.unique_integer([:positive])
+      stub_tmdb_movie_rated(bypass, tmdb_id, "Live Action Thriller", ["Thriller"], "US", "R")
+
+      attrs = %{
+        media_type: "movie",
+        title: "Live Action Thriller",
+        tmdb_id: tmdb_id,
+        requester_id: user.id
+      }
+
+      assert {:ok, request} =
+               MediaRequests.create_request(scope, attrs, config: relay_config(bypass))
+
+      assert request.status == "pending"
+    end
+  end
+
   describe "approve_request/2" do
     setup do
       user = create_user()
@@ -466,6 +517,32 @@ defmodule Mydia.MediaRequestsTest do
       "overview" => "x",
       "credits" => %{"cast" => [], "crew" => []},
       "genres" => []
+    }
+
+    Bypass.stub(bypass, "GET", "/tmdb/movies/#{id}", fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, Jason.encode!(body))
+    end)
+  end
+
+  defp stub_tmdb_movie_rated(bypass, id, title, genres, country, certification) do
+    body = %{
+      "id" => id,
+      "title" => title,
+      "release_date" => "2021-03-04",
+      "poster_path" => "/x.jpg",
+      "overview" => "x",
+      "credits" => %{"cast" => [], "crew" => []},
+      "genres" => Enum.map(genres, &%{"name" => &1}),
+      "release_dates" => %{
+        "results" => [
+          %{
+            "iso_3166_1" => country,
+            "release_dates" => [%{"certification" => certification}]
+          }
+        ]
+      }
     }
 
     Bypass.stub(bypass, "GET", "/tmdb/movies/#{id}", fn conn ->
