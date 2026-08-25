@@ -109,6 +109,16 @@ Future<DeviceProfile> detectDeviceProfile() async {
   if (!Platform.isAndroid) return profile;
 
   final List<CodecProfile> codecProfiles = await probeAndroidCodecProfiles();
+
+  // Logged because the absence of exactly this line is what made the original
+  // failure so expensive to diagnose: a device claiming a codec it cannot open
+  // looks identical, from every log we had, to a device that can. One line
+  // naming what this client actually advertised turns that into a lookup.
+  debugPrint(
+    '[DeviceProfile] android codec constraints: '
+    '${codecProfiles.isEmpty ? 'none (unconstrained)' : codecProfiles.join(', ')}',
+  );
+
   if (codecProfiles.isEmpty) return profile;
 
   return profile.copyWith(codecProfiles: codecProfiles);

@@ -103,6 +103,14 @@ class CodecProfile {
       };
 
   @override
-  String toString() =>
-      'CodecProfile($type/$codec, ${conditions.length} condition(s))';
+  String toString() {
+    final detail = conditions.isEmpty
+        ? 'unconstrained'
+        : conditions
+            .map((c) =>
+                '${c.property}${c.isRequired ? '' : '?'} ${c.condition} ${c.value}')
+            .join(' AND ');
+
+    return '$type/$codec[$detail]';
+  }
 }
