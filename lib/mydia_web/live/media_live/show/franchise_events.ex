@@ -5,6 +5,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
   import Phoenix.LiveView, only: [start_async: 3, put_flash: 3, connected?: 1]
 
   alias Mydia.Accounts.Authorization, as: AccountsAuthorization
+  alias Mydia.Media
   alias Mydia.Media.FranchiseEntry
   alias Mydia.Media.Franchises
   alias Mydia.Metadata.Ref
@@ -348,5 +349,6 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
     do: MediaAddHelpers.format_changeset_errors(changeset)
 
   defp describe({:metadata, _reason}), do: "the metadata service could not be reached"
+  defp describe(:restricted), do: Media.restricted_message()
   defp describe(reason), do: inspect(reason)
 end
