@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/presentation/widgets/focus_highlight.dart';
 import 'package:player/presentation/widgets/video_controls/control_button.dart';
 
 Widget _host(Widget child) =>
@@ -16,12 +17,24 @@ Icon _iconOf(WidgetTester tester) =>
 Finder _withinButton(Finder matching) =>
     find.descendant(of: find.byType(ControlButton), matching: matching);
 
-FocusNode _focusNodeOf(WidgetTester tester) =>
-    tester.widget<Focus>(_withinButton(find.byType(Focus))).focusNode!;
+/// `FocusableActionDetector` wraps its `Focus` in a `Shortcuts` widget when
+/// interactive, and `Shortcuts` installs a `Focus` of its own (with no
+/// `focusNode` of its own) to capture key events for matching. That makes
+/// `find.byType(Focus)` ambiguous within the button once activation is
+/// wired up, so this picks out the one actually carrying a node rather than
+/// asserting there is exactly one.
+FocusNode _focusNodeOf(WidgetTester tester) => tester
+    .widgetList<Focus>(_withinButton(find.byType(Focus)))
+    .firstWhere((focus) => focus.focusNode != null)
+    .focusNode!;
 
-BoxDecoration _decorationOf(WidgetTester tester) => tester
-    .widget<DecoratedBox>(_withinButton(find.byType(DecoratedBox)))
-    .decoration as BoxDecoration;
+/// The focus ring now lives on `FocusHighlight`, which `ControlButton` wraps
+/// around its glyph. Retargeted here from the button's own inner
+/// `DecoratedBox` (which no longer paints a border) at the same key
+/// `FocusHighlight` exposes for exactly this purpose.
+BoxDecoration _decorationOf(WidgetTester tester) =>
+    tester.widget<DecoratedBox>(find.byKey(FocusHighlight.ringKey)).decoration
+        as BoxDecoration;
 
 void main() {
   group('ControlButton', () {
