@@ -76,9 +76,12 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
               <div class="w-full h-full bg-gradient-to-br from-primary/20 to-secondary/20"></div>
             <% end %>
 
-            <%!-- Close button --%>
+            <%!-- Close button. Icon-only (and, since the footer's labeled Close
+                 button was removed, the sole click-based way to close the
+                 modal), so aria-label carries its accessible name. --%>
             <button
               phx-click="close_details"
+              aria-label="Close"
               class="btn btn-circle btn-ghost btn-sm absolute top-4 right-4 z-10 bg-base-100/50 hover:bg-base-100"
             >
               <.icon name="hero-x-mark" class="w-5 h-5" />

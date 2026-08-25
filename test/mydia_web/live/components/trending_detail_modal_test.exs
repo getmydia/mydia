@@ -114,7 +114,12 @@ defmodule MydiaWeb.Components.TrendingDetailModalTest do
       html = render_modal(item(), metadata(%{number_of_seasons: 1}))
 
       assert html =~ ~s(id="trending-detail-modal-actions")
-      refute html =~ ~s(id="trending-detail-modal-footer")
+      # The deleted footer div was the only element carrying this class pair
+      # ("border-t border-base-300 bg-base-100 flex justify-end gap-2", the
+      # footer's own styling). Nothing else in the component uses a top
+      # border, so this proves the footer markup is gone rather than merely
+      # asserting an id that was never on it in the first place.
+      refute html =~ "border-t border-base-300"
     end
 
     test "an owned title offers a link to its page in the header" do
