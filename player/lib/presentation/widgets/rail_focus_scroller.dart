@@ -2,14 +2,21 @@ import 'package:flutter/material.dart';
 
 import '../../core/player/input_capabilities.dart';
 
-/// Scrolls its child to the middle of its scrollable ancestor when it takes
-/// focus.
+/// Scrolls its child to the middle of every enclosing scrollable when it
+/// takes focus.
 ///
 /// Flutter's traversal policy already calls `Scrollable.ensureVisible` with
 /// the default alignment, which parks a newly focused card flush against the
 /// edge it entered from. That is disorienting on a television, where the
 /// viewer is reading the rail rather than pointing at it, and it also leaves
 /// no built item beyond the edge for the next move to reach.
+///
+/// `ensureVisible` walks every scrollable ancestor, not just the rail, and
+/// that is deliberate: a rail sitting in a vertically scrolling page brings
+/// its row toward the middle of the page as focus enters it, which is how a
+/// television is expected to behave. Centring the rail alone would leave the
+/// row parked wherever traversal put it vertically, which is the same
+/// disorientation this widget exists to fix, on the other axis.
 ///
 /// Shared by every horizontal rail (`ContentRail`, `HorizontalRail`) so the
 /// behaviour lives in one place instead of three copies.
