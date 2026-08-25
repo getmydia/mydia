@@ -2,6 +2,7 @@ defmodule MydiaWeb.ActivityLive.Index do
   use MydiaWeb, :live_view
   alias Mydia.Events
   alias Mydia.Events.Presentation
+  alias Mydia.Events.Visibility
   alias Phoenix.PubSub
 
   @page_size 50
@@ -77,6 +78,10 @@ defmodule MydiaWeb.ActivityLive.Index do
     # This check must mirror build_filter_opts/2, which applies it in SQL.
     feed_visible = event.type not in Presentation.feed_hidden_types()
 
+    # Viewer scoping needs no mirroring: this predicate and the SQL clause
+    # applied by Events.list_visible_events/2 are compiled from the same policy.
+    viewer_visible = Visibility.visible?(event, socket.assigns.current_user)
+
     # Only add event if it matches current category filter
     matches_category =
       case category_filter do
@@ -89,7 +94,7 @@ defmodule MydiaWeb.ActivityLive.Index do
     matches_date = event_matches_date_filter?(event.inserted_at, date_filter)
 
     socket =
-      if feed_visible && matches_category && matches_date do
+      if feed_visible && viewer_visible && matches_category && matches_date do
         socket
         |> assign(:events_empty?, false)
         |> stream_insert(:events, event, at: 0)
@@ -109,7 +114,11 @@ defmodule MydiaWeb.ActivityLive.Index do
     filter_opts = build_filter_opts(category_filter, date_filter)
 
     # Request one more than page_size to check if there are more results
-    events = Events.list_events(filter_opts ++ [limit: @page_size + 1, offset: 0])
+    events =
+      Events.list_visible_events(
+        socket.assigns.current_user,
+        filter_opts ++ [limit: @page_size + 1, offset: 0]
+      )
 
     has_more? = length(events) > @page_size
     events = Enum.take(events, @page_size)
@@ -129,7 +138,11 @@ defmodule MydiaWeb.ActivityLive.Index do
     offset = page * @page_size
 
     # Request one more than page_size to check if there are more results
-    events = Events.list_events(filter_opts ++ [limit: @page_size + 1, offset: offset])
+    events =
+      Events.list_visible_events(
+        socket.assigns.current_user,
+        filter_opts ++ [limit: @page_size + 1, offset: offset]
+      )
 
     has_more? = length(events) > @page_size
     events = Enum.take(events, @page_size)

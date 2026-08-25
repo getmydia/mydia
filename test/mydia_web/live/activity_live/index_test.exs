@@ -366,4 +366,183 @@ defmodule MydiaWeb.ActivityLive.IndexTest do
       assert html =~ "Plugin update available: tmdb-art 1.0.0 to 1.2.0"
     end
   end
+
+  describe "Activity feed as a guest" do
+    setup %{conn: conn} do
+      guest = user_fixture(%{role: "guest"})
+      other = user_fixture(%{role: "guest"})
+
+      %{conn: log_in_user(conn, guest), guest: guest, other: other}
+    end
+
+    test "shows media additions and removals", %{conn: conn} do
+      {:ok, _} =
+        Events.create_event(%{
+          category: "media",
+          type: "media_item.added",
+          actor_type: :system,
+          actor_id: "media_context",
+          metadata: %{"title" => "Paddington", "media_type" => "movie"}
+        })
+
+      {:ok, _view, html} = live(conn, ~p"/activity")
+
+      assert html =~ "Added to library: Paddington (movie)"
+    end
+
+    test "shows the guest's own playback", %{conn: conn, guest: guest} do
+      {:ok, _} =
+        Events.create_event(%{
+          category: "playback",
+          type: "playback.started",
+          actor_type: :user,
+          actor_id: guest.id,
+          metadata: %{"origin" => "this-guests-player"}
+        })
+
+      {:ok, _view, html} = live(conn, ~p"/activity")
+
+      assert html =~ "this-guests-player"
+    end
+
+    test "hides another user's playback", %{conn: conn, other: other} do
+      {:ok, _} =
+        Events.create_event(%{
+          category: "playback",
+          type: "playback.started",
+          actor_type: :user,
+          actor_id: other.id,
+          metadata: %{"origin" => "someone-elses-player"}
+        })
+
+      {:ok, _view, html} = live(conn, ~p"/activity")
+
+      refute html =~ "someone-elses-player"
+      assert html =~ "No events found"
+    end
+
+    test "hides the guest's own progressed and paused events", %{conn: conn, guest: guest} do
+      for {type, origin} <- [
+            {"playback.progressed", "progress-noise"},
+            {"playback.paused", "pause-noise"}
+          ] do
+        {:ok, _} =
+          Events.create_event(%{
+            category: "playback",
+            type: type,
+            actor_type: :user,
+            actor_id: guest.id,
+            metadata: %{"origin" => origin}
+          })
+      end
+
+      {:ok, _view, html} = live(conn, ~p"/activity")
+
+      refute html =~ "progress-noise"
+      refute html =~ "pause-noise"
+    end
+
+    test "hides downloads, search, jobs and file operations", %{conn: conn} do
+      {:ok, _} =
+        Events.create_event(%{
+          category: "downloads",
+          type: "download.completed",
+          actor_type: :system,
+          actor_id: "download_monitor",
+          metadata: %{"title" => "Hidden.Download.mkv"}
+        })
+
+      {:ok, _} =
+        Events.create_event(%{
+          category: "search",
+          type: "search.completed",
+          actor_type: :system,
+          actor_id: "search_service",
+          metadata: %{"title" => "Hidden Search"}
+        })
+
+      {:ok, _} =
+        Events.create_event(%{
+          category: "system",
+          type: "job.failed",
+          actor_type: :job,
+          actor_id: "hidden_job",
+          severity: :error,
+          metadata: %{"job_name" => "hidden_job", "error_message" => "Hidden Error"}
+        })
+
+      {:ok, _} =
+        Events.create_event(%{
+          category: "media",
+          type: "media_file.imported",
+          actor_type: :system,
+          actor_id: "file_ingest",
+          metadata: %{"title" => "Hidden.Import.mkv"}
+        })
+
+      {:ok, _view, html} = live(conn, ~p"/activity")
+
+      refute html =~ "Hidden.Download.mkv"
+      refute html =~ "Hidden Search"
+      refute html =~ "Hidden Error"
+      refute html =~ "Hidden.Import.mkv"
+      assert html =~ "No events found"
+    end
+
+    test "a hidden event arriving over PubSub is not inserted", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/activity")
+
+      {:ok, _hidden} =
+        Events.create_event(%{
+          category: "downloads",
+          type: "download.completed",
+          actor_type: :system,
+          actor_id: "download_monitor",
+          metadata: %{"title" => "Hidden.Live.mkv"}
+        })
+
+      {:ok, _visible} =
+        Events.create_event(%{
+          category: "media",
+          type: "media_item.added",
+          actor_type: :system,
+          actor_id: "media_context",
+          metadata: %{"title" => "Visible Live Movie", "media_type" => "movie"}
+        })
+
+      # Both broadcasts reach this LiveView in order on the same topic, so once
+      # the second has rendered the first has already been handled. That makes
+      # the refute below a real assertion rather than a race against a sleep.
+      html =
+        Enum.reduce_while(1..20, nil, fn _attempt, _acc ->
+          html = render(view)
+
+          if html =~ "Visible Live Movie" do
+            {:halt, html}
+          else
+            Process.sleep(50)
+            {:cont, html}
+          end
+        end)
+
+      assert html =~ "Visible Live Movie"
+      refute html =~ "Hidden.Live.mkv"
+    end
+
+    test "an admin's feed is unchanged", %{conn: conn} do
+      {:ok, _} =
+        Events.create_event(%{
+          category: "downloads",
+          type: "download.completed",
+          actor_type: :system,
+          actor_id: "download_monitor",
+          metadata: %{"title" => "Admin.Visible.mkv"}
+        })
+
+      admin_conn = log_in_user(conn, admin_user_fixture())
+      {:ok, _view, html} = live(admin_conn, ~p"/activity")
+
+      assert html =~ "Admin.Visible.mkv"
+    end
+  end
 end
