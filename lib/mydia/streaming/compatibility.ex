@@ -86,6 +86,35 @@ defmodule Mydia.Streaming.Compatibility do
     {Enum.find(streams, &(&1.type == :video)), Enum.find(streams, &(&1.type == :audio))}
   end
 
+  @doc """
+  Whether the client's own stated conditions rule this file's streams out.
+
+  Distinct from "the codec is not on the allowlist". A codec merely absent from
+  the lists means the client never claimed it, which historically still left
+  stream-copy candidates on the table for a client that could judge codec
+  strings itself — a browser calling `canPlayType`, most of it. A codec that is
+  claimed but whose *conditions* fail is a different statement: the client
+  looked at this exact shape of stream and said no.
+
+  Callers use this to drop candidates that preserve the offending stream.
+  `HLS_COPY` repackages without re-encoding, so offering it to a client whose
+  conditions just rejected the codec hands back the same undecodable bytes in a
+  new container. Returns `false` for a client that stated no conditions, so
+  nothing about the pre-conditions candidate lists changes for it.
+  """
+  @spec conditions_reject?(MediaFile.t(), DeviceProfile.t()) :: boolean()
+  def conditions_reject?(%MediaFile{} = media_file, %DeviceProfile{} = profile) do
+    {video_stream, audio_stream} = stream_pair(media_file)
+
+    not (DeviceProfile.codec_conditions_met?(profile, :video, media_file.codec, video_stream) and
+           DeviceProfile.codec_conditions_met?(
+             profile,
+             :audio,
+             media_file.audio_codec,
+             audio_stream
+           ))
+  end
+
   # The client can open this container and decode every stream in it as-is.
   defp client_can_play?(profile, container, video_codec, audio_codec, streams) do
     DeviceProfile.container_allowed?(profile, container) and

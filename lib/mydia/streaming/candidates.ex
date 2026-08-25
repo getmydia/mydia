@@ -132,10 +132,24 @@ defmodule Mydia.Streaming.Candidates do
         ]
 
       :needs_transcoding ->
+        # HLS_COPY repackages without re-encoding, so it carries the original
+        # video codec. Offering it to a client whose stated conditions just
+        # rejected that codec hands back the same undecodable bytes in a new
+        # container, and the player takes it: `_canDirectPlay` treats a leading
+        # HLS_COPY as playable, which inverted this verdict into direct play and
+        # put "Could not open codec." on screen for every 10-bit HEVC file.
+        #
+        # Only conditions suppress it, never a codec's mere absence from the
+        # allowlist. A browser that judges codec strings itself still gets the
+        # stream-copy rungs it has always been offered.
         native_candidates =
-          Enum.map(video_variants, fn video_variant ->
-            build_candidate("HLS_COPY", "ts", video_variant, audio_codec_str)
-          end)
+          if Compatibility.conditions_reject?(media_file, profile) do
+            []
+          else
+            Enum.map(video_variants, fn video_variant ->
+              build_candidate("HLS_COPY", "ts", video_variant, audio_codec_str)
+            end)
+          end
 
         transcode_candidate =
           build_candidate("TRANSCODE", "ts", "avc1.640028", "mp4a.40.2")
