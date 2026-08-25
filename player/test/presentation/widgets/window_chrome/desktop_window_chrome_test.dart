@@ -167,6 +167,7 @@ void main() {
         buttonsHidden: ValueNotifier(true),
         body: () async {
           expect(find.byType(WindowButtonWidget), findsNothing);
+          expect(find.byType(WindowDragBand), findsOneWidget);
           expect(find.byType(WindowResizeEdges), findsOneWidget);
         },
       );
