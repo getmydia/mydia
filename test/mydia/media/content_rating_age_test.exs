@@ -61,4 +61,13 @@ defmodule Mydia.Media.ContentRatingAgeTest do
 
     assert Repo.get!(MediaItem, updated.id).content_rating_age == 13
   end
+
+  test "clears the age when metadata is cleared" do
+    item = create_with_rating("PG-13")
+    assert item.content_rating_age == 13
+
+    {:ok, updated} = Media.update_media_item(item, %{metadata: nil})
+
+    assert Repo.get!(MediaItem, updated.id).content_rating_age == nil
+  end
 end

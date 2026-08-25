@@ -8,7 +8,10 @@ defmodule Mydia.Jobs.ContentRatingAgeBackfill do
   rating stored at all, which on a default install is every TVDB-sourced show
   until a metadata refresh reaches it.
 
-  Idempotent, and matches nothing once the library is caught up.
+  Idempotent and cheap to re-run, but not self-limiting: a row whose rating
+  is absent or unrecognized derives to `nil`, `content_rating_age` stays
+  NULL, and the row keeps matching `is_nil(content_rating_age)` on every
+  future run until a metadata refresh gives it a recognizable rating.
   """
 
   use Oban.Worker,
