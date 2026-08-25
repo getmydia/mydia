@@ -11,6 +11,8 @@ defmodule MydiaWeb.Api.HlsController do
     SessionSubtitles
   }
 
+  alias MydiaWeb.MediaAccess
+
   @doc """
   Serves the HLS master playlist for a session.
 
@@ -344,6 +346,7 @@ defmodule MydiaWeb.Api.HlsController do
   def start_session(conn, %{"media_file_id" => media_file_id}) do
     with {:ok, user_id} <- get_user_id(conn),
          {media_file_id, ""} <- Integer.parse(to_string(media_file_id)),
+         :ok <- authorize_media_file(conn, media_file_id),
          session_opts <- audio_session_opts(user_id, media_file_id),
          {:ok, _pid} <-
            HlsSessionSupervisor.start_session(media_file_id, user_id, :transcode, session_opts),
@@ -365,6 +368,11 @@ defmodule MydiaWeb.Api.HlsController do
         |> json(%{error: "Authentication required"})
 
       {:error, :media_file_not_found} ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{error: "Media file not found"})
+
+      :denied ->
         conn
         |> put_status(:not_found)
         |> json(%{error: "Media file not found"})
@@ -391,6 +399,18 @@ defmodule MydiaWeb.Api.HlsController do
   end
 
   ## Private Helpers
+
+  # Authorizes the media file the session is about to be created for. An id
+  # that does not resolve is denied the same as one that resolves but is
+  # outside the caller's scope, so this endpoint gives no signal about which
+  # is true.
+  defp authorize_media_file(conn, media_file_id) do
+    media_file = Mydia.Library.get_media_file!(media_file_id)
+    MediaAccess.authorize_media_file(conn, media_file)
+  rescue
+    Ecto.NoResultsError -> :denied
+    Ecto.Query.CastError -> :denied
+  end
 
   defp get_user_id(conn) do
     case Mydia.Auth.Guardian.Plug.current_resource(conn) do

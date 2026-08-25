@@ -31,6 +31,8 @@ defmodule Mydia.Downloads.DownloadService do
   Gets available download quality options for a media item.
 
   ## Parameters
+    - scope: The caller's `Mydia.Accounts.Scope`, so a restricted account
+      cannot enumerate quality options for media outside it
     - content_type: "movie" or "episode"
     - id: Media item ID (for movie) or Episode ID (for episode)
 
@@ -41,15 +43,15 @@ defmodule Mydia.Downloads.DownloadService do
 
   ## Example
 
-      iex> get_options("movie", media_item_id)
+      iex> get_options(scope, "movie", media_item_id)
       {:ok, [
         %{resolution: "original", label: "Original", estimated_size: 5242880000},
         %{resolution: "1080p", label: "1080p (Full HD)", estimated_size: 5242880000},
         %{resolution: "720p", label: "720p (HD)", estimated_size: 2621440000}
       ]}
   """
-  def get_options(content_type, id) do
-    with {:ok, media_file} <- get_media_file(content_type, id) do
+  def get_options(%Scope{} = scope, content_type, id) do
+    with {:ok, media_file} <- get_media_file(scope, content_type, id) do
       options = calculate_quality_options(media_file)
       {:ok, options}
     end
@@ -59,6 +61,8 @@ defmodule Mydia.Downloads.DownloadService do
   Prepares a download by creating/returning a transcode job.
 
   ## Parameters
+    - scope: The caller's `Mydia.Accounts.Scope`, so a restricted account
+      cannot queue a transcode for media outside it
     - content_type: "movie" or "episode"
     - id: Media item ID (for movie) or Episode ID (for episode)
     - resolution: Target resolution ("original", "1080p", "720p", "480p")
@@ -72,11 +76,11 @@ defmodule Mydia.Downloads.DownloadService do
 
   ## Example
 
-      iex> prepare("movie", media_item_id, "720p")
+      iex> prepare(scope, "movie", media_item_id, "720p")
       {:ok, %{job_id: "uuid", status: "pending", progress: 0.0, file_size: nil}}
   """
-  def prepare(content_type, id, resolution \\ "720p") do
-    with {:ok, media_file} <- get_media_file(content_type, id),
+  def prepare(%Scope{} = scope, content_type, id, resolution \\ "720p") do
+    with {:ok, media_file} <- get_media_file(scope, content_type, id),
          {:ok, validated_resolution} <- validate_resolution(resolution),
          {:ok, job} <- Downloads.get_or_create_job(media_file.id, validated_resolution),
          :ok <- maybe_start_transcode(job, media_file) do
@@ -219,8 +223,8 @@ defmodule Mydia.Downloads.DownloadService do
   ## Private Helpers
 
   @doc false
-  def get_media_file("movie", media_item_id) do
-    case Media.get_media_item!(Scope.system(), media_item_id) do
+  def get_media_file(%Scope{} = scope, "movie", media_item_id) do
+    case Media.get_media_item!(scope, media_item_id) do
       %{type: "movie"} = media_item ->
         case Library.get_media_files_for_item(media_item.id, preload: [:library_path]) do
           [media_file | _] -> {:ok, media_file}
@@ -234,8 +238,8 @@ defmodule Mydia.Downloads.DownloadService do
     Ecto.NoResultsError -> {:error, :not_found}
   end
 
-  def get_media_file("episode", episode_id) do
-    case Media.get_episode!(Scope.system(), episode_id) do
+  def get_media_file(%Scope{} = scope, "episode", episode_id) do
+    case Media.get_episode!(scope, episode_id) do
       episode ->
         case Library.get_media_files_for_episode(episode.id, preload: [:library_path]) do
           [media_file | _] -> {:ok, media_file}
@@ -246,7 +250,7 @@ defmodule Mydia.Downloads.DownloadService do
     Ecto.NoResultsError -> {:error, :not_found}
   end
 
-  def get_media_file(_content_type, _id), do: {:error, :not_found}
+  def get_media_file(%Scope{}, _content_type, _id), do: {:error, :not_found}
 
   @doc false
   def calculate_quality_options(media_file) do
