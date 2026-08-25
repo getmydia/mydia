@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180" viewBox="0 0 320 180">
+  <rect width="320" height="180" fill="#0f172a"/>
+  <g transform="translate(28, 42) scale(2)">
+    <rect x="1" y="1" width="46" height="46" rx="10" fill="#3b82f6"/>
+    <rect x="5" y="5" width="38" height="38" rx="7" fill="#0f172a"/>
+    <path d="M12 34 L12 14 L18 14 L24 24 L30 14 L36 14 L36 34 L31 34 L31 22 L25.5 31 L22.5 31 L17 22 L17 34 Z" fill="#3b82f6"/>
+  </g>
+  <text x="140" y="103" font-family="sans-serif" font-size="42" font-weight="600" fill="#f8fafc">Mydia</text>
+</svg>
