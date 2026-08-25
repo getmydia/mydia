@@ -4,7 +4,9 @@ defmodule Mydia.Accounts.ScopeTest do
   import Mydia.AccountsFixtures
 
   alias Mydia.Accounts
+  alias Mydia.Accounts.AccessRestriction
   alias Mydia.Accounts.Scope
+  alias Mydia.Repo
 
   test "a user with no restriction row is unrestricted" do
     scope = Scope.for_user(user_fixture())
@@ -34,6 +36,14 @@ defmodule Mydia.Accounts.ScopeTest do
     admin = admin_user_fixture()
 
     assert {:error, :admin} = Accounts.upsert_access_restriction(admin, %{max_content_age: 0})
+
+    # upsert_access_restriction/2 refuses admins, so a stray row can only
+    # reach the table some other way (a role change after the row was
+    # created, a manual insert, a bug). Insert one directly to pin that
+    # for_user/1 still ignores it for an admin regardless of how it got
+    # there.
+    %AccessRestriction{user_id: admin.id, max_content_age: 0}
+    |> Repo.insert!()
 
     scope = Scope.for_user(admin)
 
@@ -72,5 +82,25 @@ defmodule Mydia.Accounts.ScopeTest do
              Accounts.upsert_access_restriction(user, %{max_content_age: 13})
 
     assert changeset.errors[:max_content_age]
+  end
+
+  test "clearing an existing restriction removes it and returns the user to unrestricted" do
+    user = user_fixture()
+
+    {:ok, _} = Accounts.upsert_access_restriction(user, %{max_content_age: 12})
+    assert Accounts.get_access_restriction(user)
+
+    assert :ok = Accounts.clear_access_restriction(user)
+
+    assert Accounts.get_access_restriction(user) == nil
+    refute Scope.restricted?(Scope.for_user(user))
+  end
+
+  test "clearing a restriction for a user who has none is a safe no-op" do
+    user = user_fixture()
+
+    assert Accounts.get_access_restriction(user) == nil
+    assert :ok = Accounts.clear_access_restriction(user)
+    assert Accounts.get_access_restriction(user) == nil
   end
 end

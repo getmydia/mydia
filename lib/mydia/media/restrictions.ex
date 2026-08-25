@@ -61,6 +61,12 @@ defmodule Mydia.Media.Restrictions do
 
   defp apply_categories(query, nil), do: query
 
+  # An empty list means "no category limit", the same as nil. Scope.for_user/1
+  # already normalizes [] to nil, so this is not reachable through that path
+  # today, but a hand-built %Scope{allowed_categories: []} must not fall
+  # through to `category in []`, which would deny every item instead of none.
+  defp apply_categories(query, []), do: query
+
   # A NULL category is unclassified rather than permitted. `in` already excludes
   # NULL in SQL, so this needs no extra clause, but the behaviour is load
   # bearing and is covered by a test.
@@ -84,6 +90,7 @@ defmodule Mydia.Media.Restrictions do
     conditions =
       case scope.allowed_categories do
         nil -> conditions
+        [] -> conditions
         categories -> dynamic([_e, m], ^conditions and m.category in ^categories)
       end
 
@@ -100,6 +107,7 @@ defmodule Mydia.Media.Restrictions do
   end
 
   defp category_ok?(_category, nil), do: true
+  defp category_ok?(_category, []), do: true
   defp category_ok?(category, categories), do: category in categories
 
   defp age_ok?(_age, nil), do: true
