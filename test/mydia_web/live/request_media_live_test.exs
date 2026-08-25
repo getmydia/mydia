@@ -145,4 +145,58 @@ defmodule MydiaWeb.RequestMediaLive.IndexTest do
       refute Mydia.MediaRequests.pending_request_exists?(MetadataStubProvider.movie_tmdb_id())
     end
   end
+
+  describe "RemoteFilter wiring: perform_search filters by category" do
+    # If handle_info({:perform_search, ...}, socket) ever stopped piping
+    # search_results through RemoteFilter.filter/2, this is the test that
+    # would catch it. Built with a hand-constructed socket and handle_info/2
+    # called directly, the same seam AddToLibraryGuardTest uses, so this needs
+    # no connected mount.
+    import Mydia.MetadataStub
+
+    alias Mydia.Accounts.Scope
+    alias Mydia.Metadata
+    alias Mydia.MetadataStubProvider
+    alias MydiaWeb.RequestMediaLive.Index
+
+    setup :setup_metadata_stub
+
+    defp search_socket(scope) do
+      %Phoenix.LiveView.Socket{
+        assigns: %{
+          __changed__: %{},
+          flash: %{},
+          media_type: :movie,
+          metadata_config: Metadata.default_relay_config(),
+          current_scope: scope,
+          search_results: [],
+          searching: true
+        }
+      }
+    end
+
+    test "a category-restricted scope drops an out-of-bounds search hit" do
+      scope = Scope.for_user(restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]}))
+
+      {:noreply, updated} =
+        Index.handle_info({:perform_search, "stub"}, search_socket(scope))
+
+      # The stub movie carries no genre_ids, so it classifies as plain
+      # "movie" -- out of bounds for a cartoon_movie-only scope.
+      refute Enum.any?(
+               updated.assigns.search_results,
+               &(&1.title == MetadataStubProvider.movie_title())
+             )
+    end
+
+    test "an unrestricted scope keeps the same hit" do
+      {:noreply, updated} =
+        Index.handle_info({:perform_search, "stub"}, search_socket(Scope.unrestricted()))
+
+      assert Enum.any?(
+               updated.assigns.search_results,
+               &(&1.title == MetadataStubProvider.movie_title())
+             )
+    end
+  end
 end
