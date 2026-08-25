@@ -12,6 +12,7 @@ defmodule MydiaWeb.MediaLive.Show.FileEventsTest do
   import Mydia.SettingsFixtures
   import Mydia.AccountsFixtures
 
+  alias Mydia.Accounts.Scope
   alias MydiaWeb.MediaLive.Show.FileEvents
   alias Mydia.Library
   alias Mydia.Library.MediaFile
@@ -57,6 +58,7 @@ defmodule MydiaWeb.MediaLive.Show.FileEventsTest do
   defp delete_socket(ctx, file, mode) do
     stub_socket(%{
       current_user: ctx.user,
+      current_scope: Scope.for_user(ctx.user),
       media_item: ctx.media_item,
       file_to_delete: file,
       file_delete_mode: mode

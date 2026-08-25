@@ -34,6 +34,7 @@ defmodule MydiaWeb.Plugs.MediaAuth do
   import Plug.Conn
   import Phoenix.Controller, only: [json: 2]
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Media.TokenCache
   alias Mydia.RemoteAccess
   alias Mydia.RemoteAccess.MediaToken
@@ -96,6 +97,7 @@ defmodule MydiaWeb.Plugs.MediaAuth do
           # though no route currently reaches GraphQL with only a media
           # token (see :api_auth in the router).
           |> assign(:media_token_auth, true)
+          |> assign(:current_scope, Scope.for_user(device.user))
           # Also set Guardian resource so EnsureAuthenticated passes
           |> Mydia.Auth.Guardian.Plug.put_current_resource(device.user)
         else

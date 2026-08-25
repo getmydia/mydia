@@ -8,6 +8,7 @@ defmodule MydiaWeb.Plugs.EnsureAuthenticated do
   import Plug.Conn
   import Phoenix.Controller, only: [redirect: 2, put_flash: 3, json: 2]
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Auth.Guardian
 
   def init(opts), do: opts
@@ -17,8 +18,8 @@ defmodule MydiaWeb.Plugs.EnsureAuthenticated do
       nil ->
         handle_unauthenticated(conn)
 
-      _user ->
-        conn
+      user ->
+        Plug.Conn.assign(conn, :current_scope, Scope.for_user(user))
     end
   end
 
