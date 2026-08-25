@@ -5,6 +5,7 @@ defmodule MydiaWeb.MyRequestsLive.Index do
 
   alias Mydia.MediaRequests
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
+  require Logger
 
   @impl true
   def mount(_params, _session, socket) do
@@ -37,14 +38,13 @@ defmodule MydiaWeb.MyRequestsLive.Index do
     item = request && MediaRequestHelpers.to_search_result(request)
 
     if item do
-      send(self(), {:fetch_request_metadata, request})
-
       {:noreply,
        socket
        |> assign(:detail_request, request)
        |> assign(:detail_item, item)
        |> assign(:detail_metadata, nil)
-       |> assign(:detail_loading, true)}
+       |> assign(:detail_loading, true)
+       |> fetch_request_metadata_async(request)}
     else
       {:noreply, socket}
     end
@@ -55,23 +55,29 @@ defmodule MydiaWeb.MyRequestsLive.Index do
   end
 
   @impl true
-  def handle_info({:backfill_posters, requests}, socket) do
-    MediaRequestHelpers.backfill_poster_paths(requests)
-
+  def handle_async(:backfill_posters, {:ok, :ok}, socket) do
     # Re-read through load_requests/1 so the refreshed rows and the active
-    # filter stay in agreement. Every id in `requests` was already added to
-    # :poster_backfill_attempted before this message was sent (see
-    # maybe_backfill_posters/2), so this cannot re-send for them even when the
-    # fetch above left poster_path nil.
+    # filter stay in agreement. Every id in the batch was already added to
+    # :poster_backfill_attempted before start_async was called (see
+    # maybe_backfill_posters/2), so this cannot re-trigger a backfill for them
+    # even when the fetch above left poster_path nil.
     {:noreply, load_requests(socket)}
   end
 
-  @impl true
-  def handle_info({:fetch_request_metadata, request}, socket) do
+  def handle_async(:backfill_posters, {:exit, reason}, socket) do
+    Logger.warning("Poster backfill crashed: #{inspect(reason)}")
+    {:noreply, load_requests(socket)}
+  end
+
+  def handle_async(:fetch_request_metadata, {:ok, {request_id, result}}, socket) do
     # Drop a fetch the user has already navigated away from, so a slow relay
-    # cannot repopulate a popup that was closed or replaced.
-    if socket.assigns.detail_request && socket.assigns.detail_request.id == request.id do
-      case MediaRequestHelpers.fetch_request_metadata(request) do
+    # cannot repopulate a popup that was closed or switched away from.
+    # Comparing by id here (rather than relying only on start_async's
+    # same-key replacement) also covers the popup being closed outright:
+    # close_details/1 does not start a new task under this key, so the
+    # in-flight one's result would otherwise still land here.
+    if socket.assigns.detail_request && socket.assigns.detail_request.id == request_id do
+      case result do
         {:ok, metadata} ->
           {:noreply,
            socket
@@ -84,6 +90,11 @@ defmodule MydiaWeb.MyRequestsLive.Index do
     else
       {:noreply, socket}
     end
+  end
+
+  def handle_async(:fetch_request_metadata, {:exit, reason}, socket) do
+    Logger.warning("Request metadata fetch crashed: #{inspect(reason)}")
+    {:noreply, assign(socket, :detail_loading, false)}
   end
 
   ## Private Helpers
@@ -118,19 +129,24 @@ defmodule MydiaWeb.MyRequestsLive.Index do
     |> maybe_backfill_posters(requests)
   end
 
-  # Sent to self rather than fetched here: a relay round trip inside mount/3 or
-  # a handle_event would freeze the LiveView while its page is on screen.
+  # Runs through start_async rather than inline: backfill_poster_paths/1 makes
+  # a relay round trip per row, and doing that in mount/3, a handle_event, or
+  # a handle_info would block the LiveView process while its page is already
+  # on screen. Deferring only to handle_info (as this used to) merely lets the
+  # first render paint -- the process is still blocked for every event
+  # afterward (Close) while the batch runs, so start_async is what actually
+  # keeps the page responsive.
   #
   # Ids are marked attempted at send time, not after the fetch completes.
-  # handle_info/2 re-reads through load_requests/1, and LiveView calls
+  # handle_async/3 re-reads through load_requests/1, and LiveView calls
   # handle_params/3 (which also reaches load_requests/1) immediately after
   # mount/3 on the first connected render, so this runs at least twice per
   # page view. needs_poster?/1 never goes false for a row whose fetch cannot
   # succeed (relay down, 404, or metadata with no poster), so marking on
-  # completion would resend that row to self() forever for as long as the
-  # socket stays connected. Marking at send time bounds every id to at most
-  # one attempt per connected socket; a permanently-failing row is retried on
-  # the next page visit, which starts with a fresh MapSet.
+  # completion would resend that row forever for as long as the socket stays
+  # connected. Marking at send time bounds every id to at most one attempt per
+  # connected socket; a permanently-failing row is retried on the next page
+  # visit, which starts with a fresh MapSet.
   defp maybe_backfill_posters(socket, requests) do
     attempted = socket.assigns.poster_backfill_attempted
 
@@ -140,13 +156,28 @@ defmodule MydiaWeb.MyRequestsLive.Index do
       end)
 
     if connected?(socket) and pending != [] do
-      send(self(), {:backfill_posters, pending})
-
       pending_ids = MapSet.new(pending, & &1.id)
-      assign(socket, :poster_backfill_attempted, MapSet.union(attempted, pending_ids))
+
+      socket
+      |> assign(:poster_backfill_attempted, MapSet.union(attempted, pending_ids))
+      |> start_async(:backfill_posters, fn ->
+        MediaRequestHelpers.backfill_poster_paths(pending)
+      end)
     else
       socket
     end
+  end
+
+  # Runs through start_async rather than inline: fetch_request_metadata/1
+  # makes a relay round trip (TMDB via MediaAddHelpers.fetch_detail_metadata/2,
+  # or TVDB via Metadata.fetch_by_id/3), and doing that in the handle_event
+  # would block the LiveView process while the popup is already on screen --
+  # close_details would queue behind the fetch and the modal would look
+  # frozen.
+  defp fetch_request_metadata_async(socket, request) do
+    start_async(socket, :fetch_request_metadata, fn ->
+      {request.id, MediaRequestHelpers.fetch_request_metadata(request)}
+    end)
   end
 
   defp close_details(socket) do

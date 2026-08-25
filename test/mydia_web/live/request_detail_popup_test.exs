@@ -44,6 +44,11 @@ defmodule MydiaWeb.RequestDetailPopupTest do
     |> element(~s(#request-#{request.id} button.link[phx-click="show_details"]))
     |> render_click()
 
+    # show_details now fetches request metadata through start_async, so
+    # render_async/1 is needed to await it before callers assert on
+    # detail_metadata-derived content.
+    render_async(view)
+
     view
   end
 

@@ -70,9 +70,10 @@ defmodule MydiaWeb.RequestPagesPosterTest do
 
     {:ok, view, _html} = live(log_in_user(conn, admin), ~p"/admin/requests")
 
-    # render/1 round-trips through the LiveView process, so the backfill
-    # message queued during mount has been handled by the time it returns.
-    render(view)
+    # render_async/1 awaits the start_async task that mount's load_requests/1
+    # kicks off, so the backfill has finished writing poster_path by the time
+    # it returns.
+    render_async(view)
 
     assert Repo.get!(MediaRequest, request.id).poster_path == "/stub-movie-poster.jpg"
 
@@ -113,10 +114,11 @@ defmodule MydiaWeb.RequestPagesPosterTest do
 
     {:ok, view, _html} = live(log_in_user(conn, admin), ~p"/admin/requests")
 
-    # render/1 round-trips through the LiveView process, so the one backfill
-    # message queued during mount has been handled by the time it returns. If
-    # handle_info re-sent itself, the process would be mid-loop right now.
-    render(view)
+    # render_async/1 awaits the start_async task that mount's load_requests/1
+    # kicks off, so the one backfill batch queued during mount has finished by
+    # the time it returns. If maybe_backfill_posters/2 re-triggered itself,
+    # the task would still be mid-loop right now.
+    render_async(view)
 
     assert Repo.get!(MediaRequest, request.id).poster_path == nil
 

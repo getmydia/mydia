@@ -156,9 +156,13 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpers do
   @doc """
   Resolves and stores posters for requests that have none.
 
-  Callers run this from `handle_info`, never inline: a relay round trip inside
-  `mount/3` or a `handle_event` would freeze the LiveView process while its
-  page is already on screen.
+  Callers run this inside a `start_async/3` task, never inline: a relay round
+  trip per row inside `mount/3`, `handle_event`, or `handle_info` would block
+  the LiveView process while its page is already on screen. Deferring only to
+  `handle_info` (as this used to) merely lets the first render paint -- the
+  process is still blocked for every event afterward (Close, Approve, Reject)
+  while the batch runs, so `start_async/3` is what actually keeps it
+  responsive.
 
   A failed or timed-out fetch leaves `poster_path` nil, so the card falls back
   to the placeholder and the next visit to the page retries. There is
@@ -179,14 +183,18 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpers do
   end
 
   defp backfill_one(request) do
-    # `Task.async_stream/3` links each task to the caller, which here is the
-    # user's connected AdminRequestsLive or MyRequestsLive process running
-    # this synchronously inside `handle_info`. `fetch_request_metadata/1`
+    # `Task.async_stream/3` links each task to the caller, which is the
+    # `start_async/3` task that AdminRequestsLive/MyRequestsLive spawn from
+    # `maybe_backfill_posters/2` (see their `handle_async(:backfill_posters,
+    # ...)`), not the LiveView process itself. `fetch_request_metadata/1`
     # parses an upstream JSON payload this code does not control (via
     # `MediaAddHelpers.fetch_detail_metadata/2` and `Metadata.fetch_by_id/3`
     # into the relay provider), so a malformed response raising here is
-    # realistic, and an uncaught raise would crash that page's process over
-    # one bad row. Catch it here, matching
+    # realistic. An uncaught raise here would still be isolated from the
+    # LiveView process -- `start_async/3` reports it to `handle_async/3` as
+    # `{:exit, reason}` rather than crashing the page -- but it would also
+    # abort every other row still in flight in this batch. Catch it here
+    # instead, matching
     # `Mydia.Metadata.Provider.Relay.fetch_all_season_episodes/3`, which
     # rescues at the same kind of single-relay-call-per-task boundary.
     try do
