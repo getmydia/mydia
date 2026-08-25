@@ -14,6 +14,7 @@ defmodule Mydia.Streaming.Compatibility do
   """
 
   alias Mydia.Library.MediaFile
+  alias Mydia.Library.Structs.FileMetadata
   alias Mydia.Streaming.DeviceProfile
 
   @type streaming_mode :: :direct_play | :needs_remux | :needs_transcoding
@@ -58,11 +59,13 @@ defmodule Mydia.Streaming.Compatibility do
     video_codec = media_file.codec
     audio_codec = media_file.audio_codec
 
+    streams = stream_pair(media_file)
+
     cond do
-      client_can_play?(profile, container, video_codec, audio_codec) ->
+      client_can_play?(profile, container, video_codec, audio_codec, streams) ->
         :direct_play
 
-      remux_eligible?(profile, container, video_codec, audio_codec) ->
+      remux_eligible?(profile, container, video_codec, audio_codec, streams) ->
         :needs_remux
 
       true ->
@@ -70,19 +73,32 @@ defmodule Mydia.Streaming.Compatibility do
     end
   end
 
+  # The first video and first audio stream, which are the two the `codec` and
+  # `audio_codec` columns describe. Read from `metadata.streams` and never from
+  # FileMetadata's flat codec-detail fields (`hevc_profile_idc`, `bit_depth`):
+  # the analyzer declares those but does not write them, so on a real library
+  # they are nil on every row while the per-stream values are present on all of
+  # them. Sourcing conditions from the flat fields would make every constraint
+  # unresolvable and quietly approve everything.
+  defp stream_pair(media_file) do
+    streams = (media_file.metadata || FileMetadata.empty()).streams || []
+
+    {Enum.find(streams, &(&1.type == :video)), Enum.find(streams, &(&1.type == :audio))}
+  end
+
   # The client can open this container and decode every stream in it as-is.
-  defp client_can_play?(profile, container, video_codec, audio_codec) do
+  defp client_can_play?(profile, container, video_codec, audio_codec, streams) do
     DeviceProfile.container_allowed?(profile, container) and
-      codecs_playable?(profile, video_codec, audio_codec)
+      codecs_playable?(profile, video_codec, audio_codec, streams)
   end
 
   # The codecs are fine but the container is not, so ffmpeg can stream-copy into
   # fMP4 without re-encoding. `remuxable_container?/1` stays hardcoded because it
   # describes what ffmpeg can repackage, which is a server capability and does
   # not vary by client.
-  defp remux_eligible?(profile, container, video_codec, audio_codec) do
+  defp remux_eligible?(profile, container, video_codec, audio_codec, streams) do
     remuxable_container?(container) and
-      codecs_playable?(profile, video_codec, audio_codec)
+      codecs_playable?(profile, video_codec, audio_codec, streams)
   end
 
   # HDR is deliberately NOT checked here yet.
@@ -99,9 +115,11 @@ defmodule Mydia.Streaming.Compatibility do
   # Activate this against Mydia.Library.Hdr.profile_tokens/1 when it lands,
   # matching any-member-of rather than equality. DeviceProfile still parses and
   # caps `hdr_formats` so the wire format does not have to change then.
-  defp codecs_playable?(profile, video_codec, audio_codec) do
+  defp codecs_playable?(profile, video_codec, audio_codec, {video_stream, audio_stream}) do
     DeviceProfile.video_codec_allowed?(profile, video_codec) and
-      DeviceProfile.audio_codec_allowed_or_absent?(profile, audio_codec)
+      DeviceProfile.codec_conditions_met?(profile, :video, video_codec, video_stream) and
+      DeviceProfile.audio_codec_allowed_or_absent?(profile, audio_codec) and
+      DeviceProfile.codec_conditions_met?(profile, :audio, audio_codec, audio_stream)
   end
 
   # Containers that can be remuxed to fMP4 without transcoding.
