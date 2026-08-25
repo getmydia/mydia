@@ -4230,16 +4230,27 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // the OSD already hidden leaves playback. Without this, one stray press
     // during a film exits it.
     //
-    // Wrapped in a `ListenableBuilder` rather than reading `.visible` once:
-    // `_chromeVisibility` changes from deep inside the chrome widget tree
-    // (a timer, a tap), never through this screen's own `setState`, so
-    // `canPop` has to be recomputed on every notification or it goes stale
-    // and back either never exits or always does.
+    // Gated on `blocksBack`, not on `!visible` alone: `_chromeVisibility`
+    // reads `visible: true` while detached too, matching how the chrome
+    // mounts, so a bare `!visible` check swallows every back press for as
+    // long as there is no chrome to dismiss at all — the loading spinner
+    // before the OSD ever mounts, the error screen, and the cast placeholder
+    // (`_buildCastPlaceholder`, which swaps in for `_buildBody()` above and
+    // never builds one either). None of those has anything on screen for a
+    // back press to dismiss, and there is no other way out of them on a
+    // remote, so back has to pass straight through in all three.
+    //
+    // Wrapped in a `ListenableBuilder` rather than reading the controller
+    // once: `_chromeVisibility` changes from deep inside the chrome widget
+    // tree (a timer, a tap, attaching or detaching), never through this
+    // screen's own `setState`, so `canPop` has to be recomputed on every
+    // notification or it goes stale and back either never exits or always
+    // does.
     final frame = PlayerScreen.playerFrame(child: body);
     return ListenableBuilder(
       listenable: _chromeVisibility,
       builder: (context, _) => PopScope(
-        canPop: !_chromeVisibility.visible,
+        canPop: !_chromeVisibility.blocksBack,
         onPopInvokedWithResult: (didPop, _) {
           if (didPop) return;
           _chromeVisibility.hide();

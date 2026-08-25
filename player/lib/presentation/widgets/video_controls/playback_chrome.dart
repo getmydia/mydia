@@ -34,6 +34,23 @@ class ChromeVisibilityController extends ChangeNotifier {
   /// how the chrome mounts.
   bool get visible => _state?._visible ?? true;
 
+  /// Whether a [ChromeVisibility] is currently mounted and attached.
+  ///
+  /// Distinguishes "the chrome is up and showing" from "there is no chrome at
+  /// all", which [visible] cannot: a detached controller answers `true` to
+  /// match how the chrome mounts, so a caller gating on visibility alone
+  /// cannot tell the two apart.
+  bool get attached => _state != null;
+
+  /// Whether there is an OSD on screen that a back press should dismiss
+  /// before it is allowed to do anything else.
+  ///
+  /// False whenever the chrome is not mounted at all — loading, an error
+  /// screen, the cast placeholder — not just when it is mounted and hidden.
+  /// A screen phase with no chrome has nothing for a back press to dismiss,
+  /// and on a remote there is no other way out of it.
+  bool get blocksBack => attached && visible;
+
   void show() => _state?._show();
 
   void hide() => _state?._hide();

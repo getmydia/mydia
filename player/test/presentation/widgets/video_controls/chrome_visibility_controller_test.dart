@@ -81,4 +81,85 @@ void main() {
     expect(controller.hide, returnsNormally);
     expect(controller.visible, isTrue);
   });
+
+  group('attached', () {
+    test('false before any ChromeVisibility is pumped', () {
+      final controller = ChromeVisibilityController();
+      addTearDown(controller.dispose);
+
+      expect(controller.attached, isFalse);
+    });
+
+    testWidgets('true while one is mounted', (tester) async {
+      final controller = ChromeVisibilityController();
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(_host(controller));
+
+      expect(controller.attached, isTrue);
+    });
+
+    testWidgets('false again after it is unmounted', (tester) async {
+      final controller = ChromeVisibilityController();
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(_host(controller));
+      await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+
+      expect(controller.attached, isFalse);
+    });
+  });
+
+  // The property `PlayerScreen.build` actually gates the back button's
+  // `PopScope.canPop` on. A screen phase with no chrome mounted at all —
+  // loading, an error screen, the cast placeholder — must let a back press
+  // through rather than swallow it as if there were an OSD to dismiss, since
+  // `visible` alone cannot tell "no chrome" from "chrome up and showing"
+  // (both read `true`). `blocksBack` is what closes that gap.
+  group('blocksBack', () {
+    test(
+        'false while detached, so a back press is never swallowed before '
+        'the chrome exists', () {
+      final controller = ChromeVisibilityController();
+      addTearDown(controller.dispose);
+
+      expect(controller.attached, isFalse);
+      expect(controller.blocksBack, isFalse);
+    });
+
+    testWidgets('true once mounted and visible', (tester) async {
+      final controller = ChromeVisibilityController();
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(_host(controller));
+
+      expect(controller.blocksBack, isTrue);
+    });
+
+    testWidgets('false once mounted but hidden', (tester) async {
+      final controller = ChromeVisibilityController();
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(_host(controller));
+      controller.hide();
+      await tester.pumpAndSettle();
+
+      expect(controller.blocksBack, isFalse);
+    });
+
+    testWidgets(
+        'false again once unmounted, even though visible reports '
+        'true again the instant it detaches', (tester) async {
+      final controller = ChromeVisibilityController();
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(_host(controller));
+      await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+
+      expect(controller.visible, isTrue,
+          reason: 'sanity check: this is exactly the case a bare '
+              '`!visible` gate gets wrong');
+      expect(controller.blocksBack, isFalse);
+    });
+  });
 }
