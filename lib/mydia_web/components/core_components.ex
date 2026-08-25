@@ -449,6 +449,59 @@ defmodule MydiaWeb.CoreComponents do
     """
   end
 
+  @doc """
+  A 2:3 poster in a hover-scaling figure.
+
+  The hover transform used to be hand-written at every poster grid in the app,
+  which is why three of them had it and five did not. It lives here now so a
+  new grid gets it by construction.
+
+  The `group` class stays on the caller's own wrapper rather than moving in
+  here. Those wrappers differ per page: some are a plain `relative group`, the
+  Libraries grid's also carries `phx-click` and a `data-selected` attribute,
+  and a presentation component has no business owning them.
+
+  `loading` accepts nil to render no attribute at all. See the note on
+  `MydiaWeb.DiscoverComponents.trending_card/1`'s `:loading` attr: lazy-loading
+  an above-the-fold poster is what starved the Dashboard's LCP poster under 40
+  competing requests.
+
+  ## Examples
+
+      <div class="group">
+        <.poster_figure src={poster_url(item)} alt={item.title} class="rounded-t-box">
+          <:overlay>
+            <span class="badge badge-warning absolute top-2 left-2">8.1</span>
+          </:overlay>
+        </.poster_figure>
+      </div>
+  """
+  attr :src, :string, default: nil
+  attr :alt, :string, required: true
+  attr :loading, :string, default: "lazy"
+  attr :fallback_icon, :string, default: "hero-film"
+  attr :class, :string, default: nil
+
+  slot :overlay, doc: "badges, progress bars and other chrome layered over the poster"
+
+  def poster_figure(assigns) do
+    ~H"""
+    <figure class={["relative aspect-[2/3] overflow-hidden bg-base-300", @class]}>
+      <img
+        :if={@src}
+        src={@src}
+        alt={@alt}
+        loading={@loading}
+        class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+      />
+      <div :if={is_nil(@src)} class="w-full h-full flex items-center justify-center">
+        <.icon name={@fallback_icon} class="w-16 h-16 text-base-content/20" />
+      </div>
+      {render_slot(@overlay)}
+    </figure>
+    """
+  end
+
   ## JS Commands
 
   def show(js \\ %JS{}, selector) do

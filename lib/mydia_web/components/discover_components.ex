@@ -5,7 +5,7 @@ defmodule MydiaWeb.DiscoverComponents do
   """
   use Phoenix.Component
 
-  import MydiaWeb.CoreComponents, only: [icon: 1]
+  import MydiaWeb.CoreComponents, only: [icon: 1, poster_figure: 1]
 
   alias Mydia.Metadata.ImageUrl
   alias MydiaWeb.LibraryComponents
@@ -71,7 +71,7 @@ defmodule MydiaWeb.DiscoverComponents do
 
     ~H"""
     <div class={[
-      "card bg-base-100 shadow-sm hover:shadow-md transition-shadow relative",
+      "card bg-base-100 shadow-sm hover:shadow-md transition-shadow relative group",
       @current && "ring-2 ring-primary"
     ]}>
       <%= if (vote = Map.get(@item, :vote_average)) && vote > 0 do %>
@@ -98,18 +98,16 @@ defmodule MydiaWeb.DiscoverComponents do
       <%= cond do %>
         <% @navigate -> %>
           <.link navigate={@navigate} class="block">
-            <figure class="aspect-[2/3] bg-base-300 cursor-pointer overflow-hidden rounded-t-box">
-              <.card_poster
-                item={@item}
-                media_type={@media_type}
-                loading={@loading}
-                poster_size={@poster_size}
-              />
-            </figure>
+            <.card_poster
+              item={@item}
+              media_type={@media_type}
+              loading={@loading}
+              poster_size={@poster_size}
+              class="cursor-pointer rounded-t-box"
+            />
           </.link>
         <% @on_select -> %>
-          <figure
-            class="aspect-[2/3] bg-base-300 cursor-pointer overflow-hidden rounded-t-box"
+          <div
             phx-click={@on_select}
             phx-value-id={@item.provider_id}
             phx-value-type={@media_type}
@@ -119,17 +117,17 @@ defmodule MydiaWeb.DiscoverComponents do
               media_type={@media_type}
               loading={@loading}
               poster_size={@poster_size}
+              class="cursor-pointer rounded-t-box"
             />
-          </figure>
+          </div>
         <% true -> %>
-          <figure class="aspect-[2/3] bg-base-300 overflow-hidden rounded-t-box">
-            <.card_poster
-              item={@item}
-              media_type={@media_type}
-              loading={@loading}
-              poster_size={@poster_size}
-            />
-          </figure>
+          <.card_poster
+            item={@item}
+            media_type={@media_type}
+            loading={@loading}
+            poster_size={@poster_size}
+            class="rounded-t-box"
+          />
       <% end %>
       <div class="card-body p-3">
         <h3 class="font-semibold text-sm line-clamp-2" title={@item.title}>
@@ -363,24 +361,17 @@ defmodule MydiaWeb.DiscoverComponents do
   # :loading attr for why that matters for an above-the-fold grid.
   attr :loading, :string, default: nil
   attr :poster_size, :string, default: "w500"
+  attr :class, :string, default: nil
 
   defp card_poster(assigns) do
     ~H"""
-    <%= if @item.poster_path do %>
-      <img
-        src={ImageUrl.poster_url(@item.poster_path, @poster_size)}
-        alt={@item.title}
-        loading={@loading}
-        class="w-full h-full object-cover"
-      />
-    <% else %>
-      <div class="flex items-center justify-center w-full h-full">
-        <.icon
-          name={if(@media_type == :movie, do: "hero-film", else: "hero-tv")}
-          class="w-16 h-16 text-base-content/20"
-        />
-      </div>
-    <% end %>
+    <.poster_figure
+      src={@item.poster_path && ImageUrl.poster_url(@item.poster_path, @poster_size)}
+      alt={@item.title}
+      loading={@loading}
+      fallback_icon={if(@media_type == :movie, do: "hero-film", else: "hero-tv")}
+      class={@class}
+    />
     """
   end
 end
