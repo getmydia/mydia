@@ -83,4 +83,31 @@ defmodule MydiaWeb.AdminUsersLive.AccessRestrictionTest do
 
     assert is_nil(restriction) || is_nil(restriction.max_content_age)
   end
+
+  # `parse_age/1` happily parses any well-formed integer string, including
+  # one that is not one of the six ages the form actually offers (0, 7, 12,
+  # 14, 16, 18 -- see `Mydia.Media.ContentRating.thresholds/0`). Nothing
+  # short-circuits before `AccessRestriction.changeset/2`, so this is really
+  # a test of `validate_inclusion/4` there: it must still catch a crafted,
+  # non-nil, out-of-range value even though Ecto's own `validate_change/3`
+  # skips validation for a change that is `nil` (the encoding the form uses
+  # for "no limit", and the reason an *absent* selection is never a problem
+  # here).
+  test "an out-of-range max_content_age is rejected instead of silently stored",
+       %{conn: conn} do
+    user = user_fixture()
+    {:ok, view, _html} = live(conn, ~p"/admin/users")
+
+    view |> element("#open-access-#{user.id}") |> render_click()
+
+    html =
+      view
+      |> element("#access-form")
+      |> render_submit(%{
+        "access" => %{"allowed_categories" => [], "max_content_age" => "999"}
+      })
+
+    assert html =~ "max_content_age"
+    assert is_nil(Accounts.get_access_restriction(user))
+  end
 end
