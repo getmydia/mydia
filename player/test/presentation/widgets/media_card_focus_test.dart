@@ -19,6 +19,21 @@ Widget _host(Widget child) => ProviderScope(
     );
 
 void main() {
+  // FocusHighlight's ring is gated on FocusManager.highlightMode, which
+  // flutter_test otherwise derives from the default target platform
+  // (android), so `onShowFocusHighlight` never fires and the ring test
+  // below could never see a ring. Forcing the traditional strategy is the
+  // documented way to test focus visuals, and matches what a real keyboard
+  // or D-pad event does at runtime.
+  setUp(() {
+    FocusManager.instance.highlightStrategy =
+        FocusHighlightStrategy.alwaysTraditional;
+  });
+
+  tearDown(() {
+    FocusManager.instance.highlightStrategy = FocusHighlightStrategy.automatic;
+  });
+
   testWidgets('is reachable by focus traversal', (tester) async {
     await tester.pumpWidget(
       _host(

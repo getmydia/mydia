@@ -83,10 +83,12 @@ class _FocusHighlightState extends State<FocusHighlight> {
 
   void _handleFocusChange(bool value) {
     widget.onFocusChange?.call(value);
-    // `onShowFocusHighlight` fires only in the traversal highlight mode. A
-    // caller that requests focus programmatically still needs the ring, so
-    // the plain focus signal drives it too.
-    _handleShowFocusHighlight(value);
+    // The ring itself is driven solely by `onShowFocusHighlight`, which is
+    // gated on `FocusManager.highlightMode`. Do not also drive it from raw
+    // focus here: `Focus.onFocusChange` fires whenever this node or any
+    // descendant holds focus, including a tap on a descendant `InkWell`, so
+    // wiring the ring to it would paint a ring on every tap under touch and
+    // mouse, contradicting this widget's whole purpose.
   }
 
   void _activate() => widget.onActivate?.call();

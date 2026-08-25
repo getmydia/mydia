@@ -13,6 +13,21 @@ Widget _host(Widget child) => MaterialApp(
     );
 
 void main() {
+  // The ring is gated on FocusManager.highlightMode, which flutter_test
+  // otherwise derives from the default target platform (android), meaning
+  // `onShowFocusHighlight` never fires and no test below could ever see a
+  // ring. Forcing the traditional strategy here is the documented way to
+  // test focus visuals; it also matches what a real keyboard or D-pad event
+  // does at runtime.
+  setUp(() {
+    FocusManager.instance.highlightStrategy =
+        FocusHighlightStrategy.alwaysTraditional;
+  });
+
+  tearDown(() {
+    FocusManager.instance.highlightStrategy = FocusHighlightStrategy.automatic;
+  });
+
   testWidgets('paints no ring at rest', (tester) async {
     await tester.pumpWidget(
       _host(
@@ -140,5 +155,38 @@ void main() {
     await tester.pump();
 
     expect(seen, [true, false]);
+  });
+
+  testWidgets(
+      'does not paint a ring on focus under touch highlight mode, even '
+      'though onFocusChange still fires (regression: a tapped InkWell '
+      'descendant must not light up the ring for phone/desktop users)',
+      (tester) async {
+    FocusManager.instance.highlightStrategy =
+        FocusHighlightStrategy.alwaysTouch;
+
+    final seen = <bool>[];
+    final node = FocusNode();
+    addTearDown(node.dispose);
+
+    await tester.pumpWidget(
+      _host(
+        FocusHighlight(
+          focusNode: node,
+          onActivate: () {},
+          onFocusChange: seen.add,
+          child: const SizedBox(width: 40, height: 40),
+        ),
+      ),
+    );
+
+    node.requestFocus();
+    await tester.pump();
+
+    final decorated = tester.widget<DecoratedBox>(
+      find.byKey(FocusHighlight.ringKey),
+    );
+    expect((decorated.decoration as BoxDecoration).border, isNull);
+    expect(seen, [true]);
   });
 }

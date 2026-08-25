@@ -37,6 +37,21 @@ BoxDecoration _decorationOf(WidgetTester tester) =>
         as BoxDecoration;
 
 void main() {
+  // FocusHighlight's ring is gated on FocusManager.highlightMode, which
+  // flutter_test otherwise derives from the default target platform
+  // (android), so `onShowFocusHighlight` never fires and the ring tests
+  // below could never see a ring. Forcing the traditional strategy is the
+  // documented way to test focus visuals, and matches what a real keyboard
+  // or D-pad event does at runtime.
+  setUp(() {
+    FocusManager.instance.highlightStrategy =
+        FocusHighlightStrategy.alwaysTraditional;
+  });
+
+  tearDown(() {
+    FocusManager.instance.highlightStrategy = FocusHighlightStrategy.automatic;
+  });
+
   group('ControlButton', () {
     testWidgets('carries no per-glyph shadow (the glass backs it instead)',
         (tester) async {
