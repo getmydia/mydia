@@ -196,48 +196,54 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
             {render_slot(@rail)}
           </div>
 
-          <%!-- Footer actions --%>
+          <%!-- Footer actions. A caller that passes :actions owns the footer
+               outright; the request pages do, because Add to Library there
+               would create the media item while leaving the request pending. --%>
           <div class="p-4 md:p-6 border-t border-base-300 bg-base-100 flex justify-end gap-2">
-            <button class="btn btn-ghost" phx-click="close_details">
-              Close
-            </button>
-            <%= if not in_library?(@item) do %>
-              <%= if @current_user && @current_user.role == "guest" do %>
-                <button
-                  phx-click="request_media"
-                  phx-value-tmdb_id={@item.provider_id}
-                  phx-value-media_type={media_type_string(@item)}
-                  disabled={Map.get(@item, :request_status) != nil}
-                  class="btn btn-primary"
-                >
-                  <%= if Map.get(@item, :request_status) do %>
-                    <.icon name="hero-check" class="w-4 h-4" /> Requested
-                  <% else %>
-                    <.icon name="hero-paper-airplane" class="w-4 h-4" /> Request
-                  <% end %>
-                </button>
-              <% else %>
-                <div class="join">
+            <%= if @actions != [] do %>
+              {render_slot(@actions)}
+            <% else %>
+              <button class="btn btn-ghost" phx-click="close_details">
+                Close
+              </button>
+              <%= if not in_library?(@item) do %>
+                <%= if @current_user && @current_user.role == "guest" do %>
                   <button
-                    phx-click="add_to_library"
+                    phx-click="request_media"
                     phx-value-tmdb_id={@item.provider_id}
                     phx-value-media_type={media_type_string(@item)}
-                    class="btn btn-primary join-item"
+                    disabled={Map.get(@item, :request_status) != nil}
+                    class="btn btn-primary"
                   >
-                    <.icon name="hero-plus" class="w-4 h-4" /> Add to Library
+                    <%= if Map.get(@item, :request_status) do %>
+                      <.icon name="hero-check" class="w-4 h-4" /> Requested
+                    <% else %>
+                      <.icon name="hero-paper-airplane" class="w-4 h-4" /> Request
+                    <% end %>
                   </button>
-                  <.library_picker_button
-                    libraries={@libraries}
-                    tmdb_id={@item.provider_id}
-                    media_type={media_type_string(@item)}
-                    title={@item.title}
-                  />
-                </div>
+                <% else %>
+                  <div class="join">
+                    <button
+                      phx-click="add_to_library"
+                      phx-value-tmdb_id={@item.provider_id}
+                      phx-value-media_type={media_type_string(@item)}
+                      class="btn btn-primary join-item"
+                    >
+                      <.icon name="hero-plus" class="w-4 h-4" /> Add to Library
+                    </button>
+                    <.library_picker_button
+                      libraries={@libraries}
+                      tmdb_id={@item.provider_id}
+                      media_type={media_type_string(@item)}
+                      title={@item.title}
+                    />
+                  </div>
+                <% end %>
+              <% else %>
+                <.link navigate={library_path(@item)} class="btn btn-ghost">
+                  <.icon name="hero-arrow-right" class="w-4 h-4" /> Go to {media_type_label(@item)}
+                </.link>
               <% end %>
-            <% else %>
-              <.link navigate={library_path(@item)} class="btn btn-ghost">
-                <.icon name="hero-arrow-right" class="w-4 h-4" /> Go to {media_type_label(@item)}
-              </.link>
             <% end %>
           </div>
         </div>
@@ -261,7 +267,9 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
      |> assign_new(:metadata, fn -> nil end)
      |> assign_new(:libraries, fn -> [] end)
      # Optional slot: the dashboard renders this modal without one.
-     |> assign_new(:rail, fn -> [] end)}
+     |> assign_new(:rail, fn -> [] end)
+     # Optional slot: Dashboard and Discovery render the default footer.
+     |> assign_new(:actions, fn -> [] end)}
   end
 
   # Helper functions for accessing data from either SearchResult (item) or MediaMetadata
