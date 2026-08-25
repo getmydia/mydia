@@ -37,6 +37,7 @@ import 'window_fullscreen_controller.dart';
 import 'window_geometry_controller.dart';
 import 'window_geometry_math.dart';
 import 'window_geometry_store.dart';
+import 'window_maximized_controller.dart';
 
 /// Retained so [createPlayerWindowSizer] can pause and resume it. Null until
 /// [initDesktopWindow] succeeds, and on every non-desktop platform.
@@ -83,6 +84,20 @@ Future<void> initDesktopWindow() async {
     windowManager.addListener(fullscreen);
   } catch (e) {
     debugPrint('[DesktopWindow] Failed to track fullscreen state: $e');
+  }
+
+  // Separate try from the fullscreen listener above, for the same reason it
+  // is separate from the geometry one: a failure to track maximized state
+  // costs a stale maximize glyph, which must not also cost fullscreen
+  // tracking or geometry persistence.
+  try {
+    final maximized = WindowMaximizedController(
+      window: const WindowManagerController(),
+    );
+    await maximized.seed();
+    windowManager.addListener(maximized);
+  } catch (e) {
+    debugPrint('[DesktopWindow] Failed to track maximized state: $e');
   }
 }
 
