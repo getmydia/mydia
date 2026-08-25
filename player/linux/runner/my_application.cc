@@ -1,9 +1,6 @@
 #include "my_application.h"
 
 #include <flutter_linux/flutter_linux.h>
-#ifdef GDK_WINDOWING_X11
-#include <gdk/gdkx.h>
-#endif
 
 #include "flutter/generated_plugin_registrant.h"
 
@@ -79,32 +76,24 @@ static void my_application_activate(GApplication* application) {
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
 
-  // Use a header bar when running in GNOME as this is the common style used
-  // by applications and is the setup most users will be using (e.g. Ubuntu
-  // desktop).
-  // If running on X and not using GNOME then just use a traditional title bar
-  // in case the window manager does more exotic layout, e.g. tiling.
-  // If running on Wayland assume the header bar will work (may need changing
-  // if future cases occur).
-  gboolean use_header_bar = TRUE;
-#ifdef GDK_WINDOWING_X11
-  GdkScreen* screen = gtk_window_get_screen(window);
-  if (GDK_IS_X11_SCREEN(screen)) {
-    const gchar* wm_name = gdk_x11_screen_get_window_manager_name(screen);
-    if (g_strcmp0(wm_name, "GNOME Shell") != 0) {
-      use_header_bar = FALSE;
-    }
-  }
-#endif
-  if (use_header_bar) {
-    GtkHeaderBar* header_bar = GTK_HEADER_BAR(gtk_header_bar_new());
-    gtk_widget_show(GTK_WIDGET(header_bar));
-    gtk_header_bar_set_title(header_bar, "Mydia Player");
-    gtk_header_bar_set_show_close_button(header_bar, TRUE);
-    gtk_window_set_titlebar(window, GTK_WIDGET(header_bar));
-  } else {
-    gtk_window_set_title(window, "Mydia Player");
-  }
+  // The window is undecorated and Flutter draws its own buttons, drag band
+  // and resize edges. See
+  // `lib/presentation/widgets/window_chrome/desktop_window_chrome.dart`.
+  //
+  // Done here rather than from Dart through `window_manager`'s
+  // `setTitleBarStyle(hidden)`, which makes the same
+  // `gtk_window_set_decorated` call: doing it at construction avoids a
+  // visible flash of a decorated window while the Flutter engine starts.
+  // Mirrors how `macos/Runner/MainFlutterWindow.swift` handles macOS.
+  //
+  // Collapsing a custom titlebar instead of undecorating was measured and
+  // rejected: it leaves five to six pixels of residual frame above the
+  // content. See the design spec.
+  gtk_window_set_decorated(window, FALSE);
+
+  // Set regardless of decoration, so alt-tab, window lists and taskbars
+  // still have a name for this window.
+  gtk_window_set_title(window, "Mydia Player");
 
   gtk_window_set_default_size(window, 1280, 720);
 
