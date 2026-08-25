@@ -63,6 +63,7 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpers do
       title: item.title,
       year: Map.get(item, :year),
       tmdb_id: tmdb_id,
+      poster_path: Map.get(item, :poster_path),
       requester_id: requester_id
     }
 
