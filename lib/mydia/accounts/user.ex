@@ -24,6 +24,8 @@ defmodule Mydia.Accounts.User do
           avatar_url: String.t() | nil,
           last_login_at: DateTime.t() | nil,
           preference: Mydia.Accounts.UserPreference.t() | nil | Ecto.Association.NotLoaded.t(),
+          access_restriction:
+            Mydia.Accounts.AccessRestriction.t() | nil | Ecto.Association.NotLoaded.t(),
           api_keys: [Mydia.Accounts.ApiKey.t()] | Ecto.Association.NotLoaded.t(),
           media_requests: [Mydia.Media.MediaRequest.t()] | Ecto.Association.NotLoaded.t(),
           approved_requests: [Mydia.Media.MediaRequest.t()] | Ecto.Association.NotLoaded.t(),
@@ -45,6 +47,7 @@ defmodule Mydia.Accounts.User do
     field :last_login_at, :utc_datetime
 
     has_one :preference, Mydia.Accounts.UserPreference
+    has_one :access_restriction, Mydia.Accounts.AccessRestriction
     has_many :api_keys, Mydia.Accounts.ApiKey
     has_many :media_requests, Mydia.Media.MediaRequest, foreign_key: :requester_id
     has_many :approved_requests, Mydia.Media.MediaRequest, foreign_key: :approved_by_id
