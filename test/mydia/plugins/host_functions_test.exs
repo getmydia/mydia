@@ -758,7 +758,7 @@ defmodule Mydia.Plugins.HostFunctionsTest do
       assert {:ok, %{status: :changed}} =
                HostFunctions.ensure_favorite(p, fav_target(user.id, imdb: "tt602"))
 
-      assert Mydia.Collections.is_favorite?(user, movie.id)
+      assert Mydia.Collections.is_favorite?(Scope.for_user(user), movie.id)
 
       assert {:ok, %{status: :"already-favorited"}} =
                HostFunctions.ensure_favorite(p, fav_target(user.id, imdb: "tt602"))

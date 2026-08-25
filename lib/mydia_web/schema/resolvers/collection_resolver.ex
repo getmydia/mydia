@@ -10,14 +10,16 @@ defmodule MydiaWeb.Schema.Resolvers.CollectionResolver do
 
   @spec list_collections(map(), map(), Absinthe.Resolution.t()) ::
           {:ok, term()} | {:error, term()}
-  def list_collections(_parent, args, %{context: %{current_user: user}}) do
+  def list_collections(_parent, args, %{
+        context: %{current_user: user, current_scope: scope}
+      }) do
     first = Map.get(args, :first, 50)
 
     collections =
       Collections.list_collections(user)
       |> Enum.reject(& &1.is_system)
       |> Enum.take(first)
-      |> Enum.map(&build_collection/1)
+      |> Enum.map(&build_collection(&1, scope))
 
     {:ok, collections}
   end
@@ -25,9 +27,9 @@ defmodule MydiaWeb.Schema.Resolvers.CollectionResolver do
   def list_collections(_parent, _args, _info), do: {:ok, []}
 
   @spec collection(map(), map(), Absinthe.Resolution.t()) :: {:ok, term()} | {:error, term()}
-  def collection(_parent, %{id: id}, %{context: %{current_user: user}}) do
+  def collection(_parent, %{id: id}, %{context: %{current_user: user, current_scope: scope}}) do
     collection = Collections.get_collection!(user, id)
-    {:ok, build_collection(collection)}
+    {:ok, build_collection(collection, scope)}
   rescue
     Ecto.NoResultsError -> {:error, "Collection not found"}
   end
@@ -36,10 +38,12 @@ defmodule MydiaWeb.Schema.Resolvers.CollectionResolver do
 
   @spec collection_items(map(), map(), Absinthe.Resolution.t()) ::
           {:ok, term()} | {:error, term()}
-  def collection_items(_parent, %{collection_id: id} = args, %{context: %{current_user: user}}) do
+  def collection_items(_parent, %{collection_id: id} = args, %{
+        context: %{current_user: user, current_scope: scope}
+      }) do
     first = Map.get(args, :first, 50)
     collection = Collections.get_collection!(user, id)
-    items = Collections.list_collection_items(collection, limit: first)
+    items = Collections.list_collection_items(scope, collection, limit: first)
     added_at = Mydia.Media.RecentlyAdded.added_at_map(ids: Enum.map(items, & &1.id))
 
     result =
@@ -56,9 +60,9 @@ defmodule MydiaWeb.Schema.Resolvers.CollectionResolver do
 
   # Private helpers
 
-  defp build_collection(collection) do
+  defp build_collection(collection, scope) do
     item_count = Collections.item_count(collection)
-    posters = Collections.poster_paths(collection, 4)
+    posters = Collections.poster_paths(scope, collection, 4)
 
     %{
       id: collection.id,
