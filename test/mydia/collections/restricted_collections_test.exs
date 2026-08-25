@@ -3,6 +3,7 @@ defmodule Mydia.Collections.RestrictedCollectionsTest do
 
   import Ecto.Query
   import Mydia.AccountsFixtures
+  import Mydia.CollectionsFixtures
 
   alias Mydia.Accounts.Scope
   alias Mydia.Collections
@@ -77,5 +78,55 @@ defmodule Mydia.Collections.RestrictedCollectionsTest do
     {:ok, _} = Collections.toggle_favorite(user, thriller.id)
 
     refute Collections.is_favorite?(Scope.for_user(user), thriller.id)
+  end
+
+  test "a smart collection whose rules match the whole library hides items the scope may not see" do
+    owner = user_fixture()
+    cartoon = categorized(:cartoon_movie, "G")
+    thriller = categorized(:movie, "R")
+
+    collection =
+      smart_collection_fixture(%{
+        user: owner,
+        rules: %{"conditions" => [%{"field" => "type", "operator" => "eq", "value" => "movie"}]}
+      })
+
+    scope = Scope.for_user(restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]}))
+    ids = scope |> Collections.list_collection_items(collection) |> Enum.map(& &1.id)
+
+    assert cartoon.id in ids
+    refute thriller.id in ids
+  end
+
+  test "item_count/2 on a manual collection matches what the scope can see, not the raw total" do
+    owner = user_fixture()
+    cartoon = categorized(:cartoon_movie, "G")
+    thriller = categorized(:movie, "R")
+
+    {:ok, collection} = Collections.create_collection(owner, %{name: "Mixed", type: "manual"})
+    {:ok, _} = Collections.add_item(collection, cartoon.id)
+    {:ok, _} = Collections.add_item(collection, thriller.id)
+
+    scope = Scope.for_user(restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]}))
+
+    assert Collections.item_count(scope, collection) == 1
+    assert Collections.item_count(Scope.unrestricted(), collection) == 2
+  end
+
+  test "item_count/2 on a smart collection matches what the scope can see, not the raw total" do
+    owner = user_fixture()
+    _cartoon = categorized(:cartoon_movie, "G")
+    _thriller = categorized(:movie, "R")
+
+    collection =
+      smart_collection_fixture(%{
+        user: owner,
+        rules: %{"conditions" => [%{"field" => "type", "operator" => "eq", "value" => "movie"}]}
+      })
+
+    scope = Scope.for_user(restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]}))
+
+    assert Collections.item_count(scope, collection) == 1
+    assert Collections.item_count(Scope.unrestricted(), collection) == 2
   end
 end

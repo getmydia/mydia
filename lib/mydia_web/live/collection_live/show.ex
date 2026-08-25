@@ -1428,7 +1428,7 @@ defmodule MydiaWeb.CollectionLive.Show do
         offset: offset
       )
 
-    item_count = Collections.item_count(collection)
+    item_count = Collections.item_count(socket.assigns.current_scope, collection)
 
     items_with_metadata =
       Enum.map(items, fn item ->

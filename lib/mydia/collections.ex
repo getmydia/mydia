@@ -315,18 +315,26 @@ defmodule Mydia.Collections do
   end
 
   @doc """
-  Returns the number of items in a collection.
+  Returns the number of items in a collection visible to `scope`.
+
+  Rooted at `MediaItem` (like the manual clause of `list_collection_items/3`)
+  so `Restrictions.apply/2` attaches to the right binding, otherwise a
+  restricted viewer would see a card claiming more items than
+  `list_collection_items/3` actually returns them.
   """
-  @spec item_count(Collection.t()) :: non_neg_integer()
-  def item_count(%Collection{type: "manual"} = collection) do
-    Repo.aggregate(
-      from(ci in CollectionItem, where: ci.collection_id == ^collection.id),
-      :count
+  @spec item_count(Scope.t(), Collection.t()) :: non_neg_integer()
+  def item_count(%Scope{} = scope, %Collection{type: "manual"} = collection) do
+    from(m in MediaItem,
+      join: ci in CollectionItem,
+      on: ci.media_item_id == m.id,
+      where: ci.collection_id == ^collection.id
     )
+    |> Restrictions.apply(scope)
+    |> Repo.aggregate(:count)
   end
 
-  def item_count(%Collection{type: "smart"} = collection) do
-    SmartRules.execute_count(collection.smart_rules || "{}")
+  def item_count(%Scope{} = scope, %Collection{type: "smart"} = collection) do
+    SmartRules.execute_count(collection.smart_rules || "{}", scope)
   end
 
   @doc """

@@ -61,7 +61,7 @@ defmodule MydiaWeb.Schema.Resolvers.CollectionResolver do
   # Private helpers
 
   defp build_collection(collection, scope) do
-    item_count = Collections.item_count(collection)
+    item_count = Collections.item_count(scope, collection)
     posters = Collections.poster_paths(scope, collection, 4)
 
     %{

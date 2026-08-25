@@ -307,7 +307,7 @@ defmodule Mydia.CollectionsTest do
 
       {:ok, _} = Collections.add_items(collection, item_ids)
 
-      assert Collections.item_count(collection) == 5
+      assert Collections.item_count(Scope.unrestricted(), collection) == 5
     end
 
     test "collections_for_item/2 returns collections containing the item" do
@@ -395,7 +395,7 @@ defmodule Mydia.CollectionsTest do
           }
         })
 
-      assert Collections.item_count(collection) == 3
+      assert Collections.item_count(Scope.unrestricted(), collection) == 3
     end
   end
 end

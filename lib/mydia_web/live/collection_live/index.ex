@@ -903,7 +903,7 @@ defmodule MydiaWeb.CollectionLive.Index do
       user
       |> Collections.list_collections(opts)
       |> filter_by_search(socket.assigns.search_query)
-      |> Enum.map(&add_item_count/1)
+      |> Enum.map(&add_item_count(&1, scope))
       |> Enum.map(&add_poster_paths(&1, scope))
 
     socket
@@ -925,8 +925,8 @@ defmodule MydiaWeb.CollectionLive.Index do
     end)
   end
 
-  defp add_item_count(%Collection{} = collection) do
-    count = Collections.item_count(collection)
+  defp add_item_count(%Collection{} = collection, scope) do
+    count = Collections.item_count(scope, collection)
     Map.put(collection, :item_count, count)
   end
 

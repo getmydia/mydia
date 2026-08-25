@@ -1,9 +1,29 @@
 defmodule Mydia.Collections.SmartRulesTest do
   use Mydia.DataCase
 
-  alias Mydia.Collections.SmartRules
+  import Ecto.Query
 
+  alias Mydia.Accounts.Scope
+  alias Mydia.Collections.SmartRules
+  alias Mydia.Media.MediaItem
+  alias Mydia.Repo
+
+  import Mydia.AccountsFixtures
   import Mydia.MediaFixtures
+
+  # `auto_classify_media_item/1` overwrites whatever `category` a fixture is
+  # given at creation, so tests that need a specific category force it after
+  # the fact, same as `Mydia.Media.RestrictionsTest` and
+  # `Mydia.Collections.RestrictedCollectionsTest`.
+  defp categorized(category) do
+    item = media_item_fixture(%{type: "movie"})
+
+    Repo.update_all(from(m in MediaItem, where: m.id == ^item.id),
+      set: [category: to_string(category)]
+    )
+
+    Repo.get!(MediaItem, item.id)
+  end
 
   describe "validate/1" do
     test "validates empty rules" do
@@ -343,6 +363,70 @@ defmodule Mydia.Collections.SmartRulesTest do
       items = SmartRules.preview(rules, 5)
 
       assert length(items) == 5
+    end
+  end
+
+  describe "scope filtering (execute_query!/3, execute_count/2, preview/3)" do
+    test "execute_query!/3 excludes items outside the scope's allowed categories" do
+      cartoon = categorized(:cartoon_movie)
+      thriller = categorized(:movie)
+      scope = Scope.for_user(restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]}))
+
+      ids = %{"conditions" => []} |> SmartRules.execute_query!([], scope) |> Enum.map(& &1.id)
+
+      assert cartoon.id in ids
+      refute thriller.id in ids
+    end
+
+    test "execute_query!/3 with no scope (the default) returns everything, unfiltered" do
+      cartoon = categorized(:cartoon_movie)
+      thriller = categorized(:movie)
+
+      ids = %{"conditions" => []} |> SmartRules.execute_query!() |> Enum.map(& &1.id)
+
+      assert cartoon.id in ids
+      assert thriller.id in ids
+    end
+
+    test "execute_count/2 counts only what the scope allows" do
+      _cartoon = categorized(:cartoon_movie)
+      _thriller = categorized(:movie)
+      scope = Scope.for_user(restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]}))
+
+      assert SmartRules.execute_count(%{"conditions" => []}, scope) == 1
+    end
+
+    test "execute_count/2 with no scope (the default) counts everything" do
+      _cartoon = categorized(:cartoon_movie)
+      _thriller = categorized(:movie)
+
+      assert SmartRules.execute_count(%{"conditions" => []}) == 2
+    end
+
+    test "preview/3 previews only what the scope allows" do
+      cartoon = categorized(:cartoon_movie)
+      _thriller = categorized(:movie)
+      scope = Scope.for_user(restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]}))
+
+      assert [%{id: id}] = SmartRules.preview(%{"conditions" => []}, 10, scope)
+      assert id == cartoon.id
+    end
+
+    test "a smart collection whose rules match the whole library still respects the scope" do
+      cartoon = categorized(:cartoon_movie)
+      thriller = categorized(:movie)
+      scope = Scope.for_user(restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]}))
+
+      # An empty condition list matches every media item in the library — the
+      # exact "smart collection matches the whole library" scenario this task
+      # exists to close off.
+      ids =
+        %{"match_type" => "all", "conditions" => []}
+        |> SmartRules.execute_query!([], scope)
+        |> Enum.map(& &1.id)
+
+      assert cartoon.id in ids
+      refute thriller.id in ids
     end
   end
 

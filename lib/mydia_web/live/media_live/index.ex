@@ -474,13 +474,14 @@ defmodule MydiaWeb.MediaLive.Index do
   end
 
   def handle_event("show_add_to_collection", _params, socket) do
-    user = socket.assigns.current_scope.user
+    scope = socket.assigns.current_scope
+    user = scope.user
     user_collections = Collections.list_collections(user, type: "manual", include_shared: false)
 
     # Add item counts for each collection
     user_collections_with_counts =
       Enum.map(user_collections, fn collection ->
-        Map.put(collection, :item_count, Collections.item_count(collection))
+        Map.put(collection, :item_count, Collections.item_count(scope, collection))
       end)
 
     {:noreply,
