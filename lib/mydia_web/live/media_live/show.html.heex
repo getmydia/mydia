@@ -15,7 +15,13 @@
     <% end %>
     <%!-- Content Container --%>
     <div class="relative pt-8 md:pt-16 pb-8 px-3 sm:px-4 md:px-6 lg:px-8">
-      <div class="flex flex-col md:flex-row gap-4 md:gap-6">
+      <div class={[
+        "grid gap-4 md:gap-6 grid-cols-1 md:grid-cols-[16rem_minmax(0,1fr)] lg:grid-cols-[20rem_minmax(0,1fr)]",
+        if(@timeline_events == [],
+          do: "xl:grid-cols-[20rem_minmax(0,1fr)]",
+          else: "xl:grid-cols-[20rem_minmax(0,1fr)_22rem]"
+        )
+      ]}>
         <%!-- Left Column: Hero Section (Poster & Quick Actions) --%>
         <Components.hero_section
           media_item={@media_item}
@@ -34,7 +40,7 @@
           target_library_candidates={@target_library_candidates}
         />
         <%!-- Right Column: Main Content --%>
-        <div class="flex-1 min-w-0">
+        <div class="min-w-0">
           <%!-- Title and Basic Info --%>
           <div class="mb-4 md:mb-6">
             <div class="flex items-start justify-between gap-2 md:gap-4 mb-2">
@@ -234,8 +240,6 @@
             media_item={@media_item}
             media_file_subtitles={@media_file_subtitles}
           />
-          <%!-- Timeline Section --%>
-          <Components.timeline_section timeline_events={@timeline_events} />
           <%!-- Everything below here is about other titles, not this one.
                 Franchise Section (Movies in the same TMDB collection) --%>
           <FranchiseComponents.franchise_section
@@ -263,6 +267,31 @@
             libraries={@target_library_candidates}
           />
         </div>
+        <%!-- History. A sibling of the main column rather than part of it: at
+              xl it is the third grid column, and below xl md:col-span-2 drops
+              it to a full-width row under both other columns. One DOM node
+              serves both layouts, so there is no hidden/xl:block duplicate.
+
+              Sticky for the same reason and with the same caveats as the hero
+              column: see the note there on self-start and the inner scroll.
+
+              The :if here is load-bearing alongside the grid template's own
+              @timeline_events == [] conditional above, and neither one makes
+              the other redundant: this aside carries xl:col-start-3 and
+              xl:row-start-1 unconditionally, so even when the grid template
+              picks the two-track layout, a rendered-but-empty aside would
+              still force Grid to open an implicit third column (and, below
+              xl, an implicit row) to satisfy that placement, and gap-4/gap-6
+              still applies to a track that exists but is empty. The template
+              conditional stops the 22rem column from being reserved; this
+              :if stops the aside from existing in the grid at all when there
+              is nothing to place, which is what actually removes the gap. --%>
+        <aside
+          :if={@timeline_events != []}
+          class="md:col-span-2 xl:col-span-1 xl:col-start-3 xl:row-start-1 xl:sticky xl:top-4 xl:self-start xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto"
+        >
+          <Components.timeline_section timeline_events={@timeline_events} />
+        </aside>
       </div>
     </div>
   </div>
@@ -338,6 +367,23 @@
     <%= if trailer_url do %>
       <Modals.trailer_modal trailer_url={trailer_url} title={@media_item.title} />
     <% end %>
+  <% end %>
+  <%= if @show_quality_profile_modal do %>
+    <Modals.quality_profile_modal
+      media_item={@media_item}
+      quality_profiles={@quality_profiles}
+      default_quality_profile_name={@default_quality_profile_name}
+    />
+  <% end %>
+  <%= if @show_target_library_modal do %>
+    <Modals.target_library_modal media_item={@media_item} libraries={@target_library_candidates} />
+  <% end %>
+  <%= if @show_add_to_collection_modal do %>
+    <Modals.add_to_collection_modal
+      media_item={@media_item}
+      user_collections={@user_collections}
+      item_collections={@item_collections}
+    />
   <% end %>
 
   <MydiaWeb.LibraryComponents.library_picker_dialog

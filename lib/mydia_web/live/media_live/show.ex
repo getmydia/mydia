@@ -20,6 +20,7 @@ defmodule MydiaWeb.MediaLive.Show do
   alias MydiaWeb.MediaLive.Show.RecommendationEvents
   alias MydiaWeb.MediaLive.Show.RecommendationComponents
   alias MydiaWeb.MediaLive.Show.LibraryPickerEvents
+  alias MydiaWeb.Live.Helpers.RecommendationsExpanded
 
   # Import helper modules
   import MydiaWeb.MediaLive.Show.Formatters
@@ -142,7 +143,7 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:adding_franchise_tmdb_ids, MapSet.new())
      # Recommendations rail state
      |> assign(:recommendations, [])
-     |> assign(:recommendations_expanded, false)
+     |> RecommendationsExpanded.assign_current()
      |> assign(:adding_recommendation_tmdb_ids, MapSet.new())
      |> assign(:requesting_recommendation_id, nil)
      |> assign_new(:metadata_config, fn -> Mydia.Metadata.default_relay_config() end)
@@ -173,9 +174,22 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:show_category_modal, false)
      |> assign(:category_form, nil)
      |> assign(:available_categories, available_categories_for(media_item.type))
+     # Quality profile picker modal state. A page-level modal rather than an
+     # anchored dropdown because the hero column it lives in is
+     # `overflow-y-auto` (see Components.hero_section/1), and an anchored
+     # `.dropdown-content` gets clipped by that ancestor's overflow box.
+     |> assign(:show_quality_profile_modal, false)
+     # Target library picker modal state, same reasoning as above.
+     |> assign(:show_target_library_modal, false)
      # Trailer modal state
      |> assign(:show_trailer_modal, false)
-     # Collection state
+     # Collection state. show_add_to_collection_modal is initialized here,
+     # not inside load_collection_data/2: that helper also runs after every
+     # add/remove/favorite toggle to refresh the read model, and it must NOT
+     # force the modal closed on those refreshes, or picking more than one
+     # collection in a single sitting becomes impossible (the modal would
+     # slam shut after the very first pick). See CollectionEvents for detail.
+     |> assign(:show_add_to_collection_modal, false)
      |> CollectionEvents.load_collection_data(media_item)
      |> SegmentEvents.assign_segment_status(media_item)
      |> FranchiseEvents.maybe_load()
@@ -410,8 +424,20 @@ defmodule MydiaWeb.MediaLive.Show do
   def handle_event("reset_category_to_auto", params, socket),
     do: CategoryEvents.reset_category_to_auto(params, socket)
 
+  def handle_event("show_quality_profile_modal", params, socket),
+    do: CategoryEvents.show_quality_profile_modal(params, socket)
+
+  def handle_event("hide_quality_profile_modal", params, socket),
+    do: CategoryEvents.hide_quality_profile_modal(params, socket)
+
   def handle_event("update_quality_profile", params, socket),
     do: CategoryEvents.update_quality_profile(params, socket)
+
+  def handle_event("show_target_library_modal", params, socket),
+    do: LibraryEvents.show_target_library_modal(params, socket)
+
+  def handle_event("hide_target_library_modal", params, socket),
+    do: LibraryEvents.hide_target_library_modal(params, socket)
 
   def handle_event("update_target_library", params, socket),
     do: LibraryEvents.update_target_library(params, socket)

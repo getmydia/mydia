@@ -49,10 +49,13 @@ defmodule MydiaWeb.MediaLive.Show.CollectionEvents do
       collection ->
         case Collections.add_item(collection, media_item.id) do
           {:ok, _item} ->
+            # Deliberately does not close the modal: a user picking several
+            # collections for one item in a single sitting needs the picker
+            # to stay open between picks. It closes only from the explicit
+            # Close/Cancel/backdrop actions (close_add_to_collection_modal).
             {:noreply,
              socket
              |> load_collection_data(media_item)
-             |> assign(:show_add_to_collection_modal, false)
              |> put_flash(:info, "Added to #{collection.name}")}
 
           {:error, :smart_collection} ->
@@ -92,6 +95,16 @@ defmodule MydiaWeb.MediaLive.Show.CollectionEvents do
     end
   end
 
+  @doc """
+  Refreshes the favorite/collection read model.
+
+  Called at mount and again after every favorite toggle and collection
+  add/remove, so it must never touch `:show_add_to_collection_modal`: doing
+  so would force the picker modal closed on its own first successful pick,
+  making it impossible to add an item to more than one collection in a
+  single sitting. That assign is owned by `open_add_to_collection_modal/2`,
+  `close_add_to_collection_modal/2`, and mount's own initial `false`.
+  """
   def load_collection_data(socket, media_item) do
     user = socket.assigns.current_scope.user
     is_favorite = Collections.is_favorite?(user, media_item.id)
@@ -102,6 +115,5 @@ defmodule MydiaWeb.MediaLive.Show.CollectionEvents do
     |> assign(:is_favorite, is_favorite)
     |> assign(:item_collections, item_collections)
     |> assign(:user_collections, user_collections)
-    |> assign(:show_add_to_collection_modal, false)
   end
 end

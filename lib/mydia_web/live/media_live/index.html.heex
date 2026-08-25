@@ -354,24 +354,19 @@
 
             <div class="card bg-base-100 shadow-lg hover:shadow-xl transition-shadow duration-200 overflow-hidden">
               <.link navigate={~p"/media/#{item.id}"}>
-                <figure class="relative aspect-[2/3] overflow-hidden bg-base-300">
-                  <img
-                    src={get_poster_url(item)}
-                    alt={item.title}
-                    class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    loading="lazy"
-                  />
-                  <%!-- Progress indicators --%>
-                  <% progress = get_progress(item) %>
-                  <.progress_bar :if={progress} progress={progress} class="hide-on-select" />
-                  <%!-- Playback status and quality, stacked in one top-right container --%>
-                  <.poster_badges
-                    id={"poster-badges-#{item.id}"}
-                    progress={progress}
-                    quality={get_quality_badge(item)}
-                    class="hide-on-select"
-                  />
-                </figure>
+                <% progress = get_progress(item) %>
+                <.poster_figure src={get_poster_url(item)} alt={item.title}>
+                  <:overlay>
+                    <.progress_bar :if={progress} progress={progress} class="hide-on-select" />
+                    <%!-- Playback status and quality, stacked in one top-right container --%>
+                    <.poster_badges
+                      id={"poster-badges-#{item.id}"}
+                      progress={progress}
+                      quality={get_quality_badge(item)}
+                      class="hide-on-select"
+                    />
+                  </:overlay>
+                </.poster_figure>
               </.link>
               <div class="card-body p-3">
                 <h3 class="card-title text-sm line-clamp-2" title={item.title}>

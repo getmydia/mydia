@@ -11,9 +11,19 @@ defmodule MydiaWeb.MediaLive.Show.LibraryComponents do
   @doc """
   Renders the resolved target library.
 
-  With two or more candidates this is a dropdown writing
+  With two or more candidates this is a button opening a page-level picker
+  modal (`MydiaWeb.MediaLive.Show.Modals.target_library_modal/1`) that writes
   `media_items.library_path_id`; with one it is static text. Selecting
   "Automatic" clears the column and returns the item to dynamic resolution.
+
+  This used to be an anchored daisyUI dropdown, but this row lives inside the
+  hero column's `overflow-y-auto` wrapper (see the note at the top of
+  `MydiaWeb.MediaLive.Show.Components.hero_section/1`), and a
+  `.dropdown-content` menu gets clipped by that ancestor's overflow box the
+  moment it runs past the column's remaining headroom, exactly the failure
+  mode issue #465 already fixed once for a different surface. Confirmed by
+  measuring the real page with a realistic library count, not assumed from
+  the CSS alone.
   """
   attr :media_item, :map, required: true
   attr :target_library, :map, default: nil
@@ -22,74 +32,62 @@ defmodule MydiaWeb.MediaLive.Show.LibraryComponents do
 
   def target_library_row(assigns) do
     ~H"""
-    <div class="dropdown dropdown-end w-full" data-test="target-library">
-      <div
-        tabindex="0"
-        role={if length(@libraries) > 1, do: "button", else: nil}
-        class={[
-          "flex items-center gap-2.5 px-2 py-1.5 rounded-lg w-full group transition-colors",
-          length(@libraries) > 1 && "cursor-pointer hover:bg-base-300/50"
-        ]}
-        title={if length(@libraries) > 1, do: "Click to change the download library", else: nil}
+    <%= if length(@libraries) > 1 do %>
+      <button
+        type="button"
+        phx-click="show_target_library_modal"
+        data-test="target-library"
+        class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg w-full group transition-colors cursor-pointer hover:bg-base-300/50"
+        title="Click to change the download library"
       >
-        <div class="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center flex-shrink-0">
-          <.icon name="hero-folder" class="w-4 h-4 text-accent" />
-        </div>
-        <div class="flex-1 min-w-0">
-          <div class="text-xs text-base-content/50">Library</div>
-          <div class="text-sm font-medium truncate">
-            <%= if @target_library do %>
-              {Path.basename(@target_library.path)}
-              <span class="text-xs font-normal text-base-content/50">
-                {reason_label(@target_reason)}
-              </span>
-            <% else %>
-              <span class="text-base-content/40">No compatible library</span>
-            <% end %>
-          </div>
-        </div>
-        <.icon
-          :if={length(@libraries) > 1}
-          name="hero-chevron-right"
-          class="w-4 h-4 text-base-content/30 group-hover:text-base-content/60 transition-colors flex-shrink-0"
+        <.target_library_row_content
+          target_library={@target_library}
+          target_reason={@target_reason}
+          interactive?={true}
+        />
+      </button>
+    <% else %>
+      <div
+        data-test="target-library"
+        class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg w-full group transition-colors"
+      >
+        <.target_library_row_content
+          target_library={@target_library}
+          target_reason={@target_reason}
+          interactive?={false}
         />
       </div>
-      <ul
-        :if={length(@libraries) > 1}
-        tabindex="0"
-        class="dropdown-content z-[1] menu p-2 shadow-lg bg-base-100 rounded-box w-64 border border-base-300"
-      >
-        <li>
-          <button
-            type="button"
-            phx-click="update_target_library"
-            phx-value-library-path-id=""
-            class={["justify-between", is_nil(@media_item.library_path_id) && "active"]}
-          >
-            Automatic
-            <.icon :if={is_nil(@media_item.library_path_id)} name="hero-check" class="w-4 h-4" />
-          </button>
-        </li>
-        <li :for={library <- @libraries}>
-          <button
-            type="button"
-            phx-click="update_target_library"
-            phx-value-library-path-id={library.id}
-            class={["justify-between", @media_item.library_path_id == library.id && "active"]}
-          >
-            {Path.basename(library.path)}
-            <.icon
-              :if={@media_item.library_path_id == library.id}
-              name="hero-check"
-              class="w-4 h-4"
-            />
-          </button>
-        </li>
-        <li class="menu-title text-xs pt-2">
-          Changing this affects future downloads. Files already on disk stay where they are.
-        </li>
-      </ul>
+    <% end %>
+    """
+  end
+
+  attr :target_library, :map, default: nil
+  attr :target_reason, :atom, default: nil
+  attr :interactive?, :boolean, required: true
+
+  defp target_library_row_content(assigns) do
+    ~H"""
+    <div class="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center flex-shrink-0">
+      <.icon name="hero-folder" class="w-4 h-4 text-accent" />
     </div>
+    <div class="flex-1 min-w-0 text-left">
+      <div class="text-xs text-base-content/50">Library</div>
+      <div class="text-sm font-medium truncate">
+        <%= if @target_library do %>
+          {Path.basename(@target_library.path)}
+          <span class="text-xs font-normal text-base-content/50">
+            {reason_label(@target_reason)}
+          </span>
+        <% else %>
+          <span class="text-base-content/40">No compatible library</span>
+        <% end %>
+      </div>
+    </div>
+    <.icon
+      :if={@interactive?}
+      name="hero-chevron-right"
+      class="w-4 h-4 text-base-content/30 group-hover:text-base-content/60 transition-colors flex-shrink-0"
+    />
     """
   end
 

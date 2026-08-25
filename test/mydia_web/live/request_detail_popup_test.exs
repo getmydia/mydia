@@ -65,11 +65,13 @@ defmodule MydiaWeb.RequestDetailPopupTest do
     assert render(view) =~ MetadataStubProvider.movie_title()
 
     # Text filter disambiguates: TrendingDetailModal always renders three
-    # phx-click="close_details" buttons when open (header icon, backdrop, and
-    # this footer button), matching the codebase's idiom for a modal with
-    # multiple same-selector buttons (see import_media_review_test.exs). The
-    # backdrop button's text is lowercase "close", so "Close" targets only
-    # the footer button and not the backdrop as well.
+    # phx-click="close_details" buttons when open (the header's icon-only X,
+    # the backdrop, and this Close button from the request pages' :actions
+    # slot, which also renders in the header's action cluster), matching the
+    # codebase's idiom for a modal with multiple same-selector buttons (see
+    # import_media_review_test.exs). The backdrop button's text is lowercase
+    # "close", so "Close" targets only the actions-slot button and not the
+    # backdrop as well.
     view
     |> element(~s(#request-detail-modal button[phx-click="close_details"]), "Close")
     |> render_click()

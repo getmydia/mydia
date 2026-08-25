@@ -102,6 +102,14 @@ defmodule MydiaWeb.MediaLive.Show.CategoryEvents do
     end
   end
 
+  def show_quality_profile_modal(_params, socket) do
+    {:noreply, assign(socket, :show_quality_profile_modal, true)}
+  end
+
+  def hide_quality_profile_modal(_params, socket) do
+    {:noreply, assign(socket, :show_quality_profile_modal, false)}
+  end
+
   def update_quality_profile(%{"profile-id" => profile_id}, socket) do
     with :ok <- Authorization.authorize_update_media(socket) do
       media_item = socket.assigns.media_item
@@ -118,10 +126,14 @@ defmodule MydiaWeb.MediaLive.Show.CategoryEvents do
           {:noreply,
            socket
            |> assign(:media_item, reloaded_item)
+           |> assign(:show_quality_profile_modal, false)
            |> put_flash(:info, "Quality profile updated")}
 
         {:error, _changeset} ->
-          {:noreply, put_flash(socket, :error, "Failed to update quality profile")}
+          {:noreply,
+           socket
+           |> assign(:show_quality_profile_modal, false)
+           |> put_flash(:error, "Failed to update quality profile")}
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}

@@ -12,6 +12,9 @@ defmodule MydiaWeb.MediaLive.Show.SectionOrderTest do
   # Every section whose position this page decides. Each case asserts the whole
   # list rather than a pairwise precedence, so a section that stops rendering
   # fails the test instead of passing quietly.
+  #
+  # timeline-section is no longer a member of the main column: it is a sibling
+  # aside placed after it, so it always sorts last in document order.
   @sections "#seasons-episodes-section, #media-files-section, #subtitles-section, " <>
               "#timeline-section, #franchise-section, #recommendations-rail"
 
@@ -58,8 +61,8 @@ defmodule MydiaWeb.MediaLive.Show.SectionOrderTest do
     assert section_ids(view) == [
              "media-files-section",
              "subtitles-section",
-             "timeline-section",
-             "recommendations-rail"
+             "recommendations-rail",
+             "timeline-section"
            ]
   end
 
@@ -141,19 +144,18 @@ defmodule MydiaWeb.MediaLive.Show.SectionOrderTest do
     assert section_ids(view) == [
              "media-files-section",
              "subtitles-section",
-             "timeline-section",
              "franchise-section",
-             "recommendations-rail"
+             "recommendations-rail",
+             "timeline-section"
            ]
   end
 
-  # A movie with no file is not left untouched by this reorder: its timeline card
-  # moved above the rails along with the file and subtitle cards. That is the
-  # intended grouping - everything about this copy of the movie, then everything
-  # about other movies - and it holds even when the history is the only thing in
-  # the first group. Pinned here so the placement stays a decision rather than a
-  # side effect of the guards.
-  test "a movie with no media files keeps its history above the rails", %{conn: conn} do
+  # History is no longer part of the main column's ordering decision: it is a
+  # sibling aside, third grid column at xl and a full-width row below it. It
+  # therefore always sorts last in document order regardless of what the main
+  # column contains. Pinned here so a later edit that folds it back into the
+  # flow fails loudly.
+  test "a movie with no media files renders its history outside the main column", %{conn: conn} do
     source_tmdb_id = unique_provider_id()
 
     movie =
@@ -181,8 +183,8 @@ defmodule MydiaWeb.MediaLive.Show.SectionOrderTest do
     # No media-files-section or subtitles-section: both guard on a non-empty
     # media_files. No franchise-section: the fixture carries no collection_id.
     assert section_ids(view) == [
-             "timeline-section",
-             "recommendations-rail"
+             "recommendations-rail",
+             "timeline-section"
            ]
   end
 

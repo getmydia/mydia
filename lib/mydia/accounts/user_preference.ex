@@ -18,7 +18,8 @@ defmodule Mydia.Accounts.UserPreference do
     "interface_language" => "en",
     "theme" => "system",
     "close_manual_search_after_grab" => false,
-    "grid_density" => "comfortable"
+    "grid_density" => "comfortable",
+    "recommendations_expanded" => false
   }
 
   # Valid values for each preference
@@ -83,6 +84,17 @@ defmodule Mydia.Accounts.UserPreference do
   end
 
   @doc """
+  Whether the More Like This rail on a show's detail page starts open.
+
+  Only shows collapse the rail. `MydiaWeb.DiscoverComponents.media_rail/1`
+  computes `open? = not collapsible or expanded`, and the rail is collapsible
+  only for a tv_show, so a movie ignores this value.
+  """
+  def recommendations_expanded(%__MODULE__{preferences: prefs}) do
+    Map.get(prefs, "recommendations_expanded", @defaults["recommendations_expanded"])
+  end
+
+  @doc """
   Changeset for creating or updating user preferences.
 
   The `preferences` param should be a map with string keys, e.g.:
@@ -118,6 +130,7 @@ defmodule Mydia.Accounts.UserPreference do
     |> validate_preference_value("interface_language", @valid_languages)
     |> validate_preference_value("close_manual_search_after_grab", [true, false])
     |> validate_preference_value("grid_density", @valid_densities)
+    |> validate_preference_value("recommendations_expanded", [true, false])
   end
 
   defp validate_preference_value(changeset, key, valid_values) do

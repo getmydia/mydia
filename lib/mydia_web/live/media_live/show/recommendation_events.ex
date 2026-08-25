@@ -13,6 +13,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
+  alias MydiaWeb.Live.Helpers.RecommendationsExpanded
 
   require Logger
 
@@ -65,12 +66,13 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   Flips the rail open or closed.
 
   The rail opens collapsed on TV shows so the episode list is not pushed below a
-  strip of other titles. State is per mount and deliberately not persisted, so
-  every visit starts closed.
+  strip of other titles. The chosen state is persisted per user so it survives
+  a reload; see `MydiaWeb.Live.Helpers.RecommendationsExpanded`.
   """
   def toggle_expanded(_params, socket) do
-    {:noreply,
-     assign(socket, :recommendations_expanded, !socket.assigns.recommendations_expanded)}
+    expanded = !socket.assigns.recommendations_expanded
+
+    {:noreply, RecommendationsExpanded.put(socket, expanded)}
   end
 
   @doc """
