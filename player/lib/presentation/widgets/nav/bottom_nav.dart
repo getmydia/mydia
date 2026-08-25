@@ -190,7 +190,9 @@ class _NavItemState extends State<NavItem> with SingleTickerProviderStateMixin {
 
     return FocusHighlight(
       onActivate: widget.onTap,
-      borderRadius: const BorderRadius.all(Radius.circular(10)),
+      // Matches the pill `BoxDecoration.borderRadius` below: the ring traces
+      // that exact rectangle, so the two radii must move together.
+      borderRadius: const BorderRadius.all(Radius.circular(12)),
       child: GestureDetector(
         onTapDown: _handleTapDown,
         onTapUp: _handleTapUp,

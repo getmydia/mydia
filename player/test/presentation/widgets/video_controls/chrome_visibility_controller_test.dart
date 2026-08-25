@@ -111,11 +111,11 @@ void main() {
   });
 
   // The property `PlayerScreen.build` actually gates the back button's
-  // `PopScope.canPop` on. A screen phase with no chrome mounted at all —
-  // loading, an error screen, the cast placeholder — must let a back press
-  // through rather than swallow it as if there were an OSD to dismiss, since
-  // `visible` alone cannot tell "no chrome" from "chrome up and showing"
-  // (both read `true`). `blocksBack` is what closes that gap.
+  // `PopScope.canPop` on. A screen phase with no chrome mounted at all, such
+  // as loading, an error screen, or the cast placeholder, must let a back
+  // press through rather than swallow it as if there were an OSD to
+  // dismiss, since `visible` alone cannot tell "no chrome" from "chrome up
+  // and showing" (both read `true`). `blocksBack` is what closes that gap.
   group('blocksBack', () {
     test(
         'false while detached, so a back press is never swallowed before '

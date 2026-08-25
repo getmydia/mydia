@@ -110,7 +110,9 @@ class _SidebarRowState extends State<SidebarRow> {
 
     return FocusHighlight(
       onActivate: widget.isEditing ? null : widget.onTap,
-      borderRadius: const BorderRadius.all(Radius.circular(10)),
+      // Matches the pill `BoxDecoration.borderRadius` below: the ring traces
+      // that exact rectangle, so the two radii must move together.
+      borderRadius: const BorderRadius.all(Radius.circular(12)),
       child: MouseRegion(
         onEnter: (_) => setState(() => _isHovered = true),
         onExit: (_) => setState(() {

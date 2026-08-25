@@ -45,8 +45,9 @@ class ChromeVisibilityController extends ChangeNotifier {
   /// Whether there is an OSD on screen that a back press should dismiss
   /// before it is allowed to do anything else.
   ///
-  /// False whenever the chrome is not mounted at all — loading, an error
-  /// screen, the cast placeholder — not just when it is mounted and hidden.
+  /// False whenever the chrome is not mounted at all, such as loading, an
+  /// error screen, or the cast placeholder, not just when it is mounted and
+  /// hidden.
   /// A screen phase with no chrome has nothing for a back press to dismiss,
   /// and on a remote there is no other way out of it.
   bool get blocksBack => attached && visible;

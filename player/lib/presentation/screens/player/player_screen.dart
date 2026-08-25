@@ -4233,7 +4233,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // Gated on `blocksBack`, not on `!visible` alone: `_chromeVisibility`
     // reads `visible: true` while detached too, matching how the chrome
     // mounts, so a bare `!visible` check swallows every back press for as
-    // long as there is no chrome to dismiss at all — the loading spinner
+    // long as there is no chrome to dismiss at all: the loading spinner
     // before the OSD ever mounts, the error screen, and the cast placeholder
     // (`_buildCastPlaceholder`, which swaps in for `_buildBody()` above and
     // never builds one either). None of those has anything on screen for a
