@@ -12,6 +12,7 @@ defmodule MydiaWeb.Plugs.ApiAuth do
   import Phoenix.Controller, only: [json: 2]
 
   alias Mydia.Accounts
+  alias Mydia.Accounts.Scope
   alias Mydia.Auth.Guardian
 
   def init(opts), do: opts
@@ -40,7 +41,9 @@ defmodule MydiaWeb.Plugs.ApiAuth do
                 # Reset rate limit on successful authentication
                 Mydia.Accounts.ApiKeyRateLimiter.reset_rate_limit(ip_address)
                 # Store user in the connection for later use
-                Guardian.Plug.put_current_resource(conn, user)
+                conn
+                |> Guardian.Plug.put_current_resource(user)
+                |> assign(:current_scope, Scope.for_user(user))
 
               {:error, :invalid_key} ->
                 # Record failed attempt

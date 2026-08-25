@@ -41,8 +41,11 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEventsTest do
       selected_item: nil
     }
 
+    merged = Map.merge(defaults, assigns)
+    merged = Map.put_new(merged, :current_scope, Scope.for_user(merged.current_user))
+
     %Phoenix.LiveView.Socket{
-      assigns: Map.merge(defaults, assigns),
+      assigns: merged,
       private: %{live_temp: %{}},
       transport_pid: if(opts[:connected], do: self())
     }
@@ -111,6 +114,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEventsTest do
         __changed__: %{},
         franchise: franchise,
         current_user: user,
+        current_scope: Scope.for_user(user),
         flash: %{},
         # Same reason as stub_socket/2's selected_item default above.
         selected_item: nil
