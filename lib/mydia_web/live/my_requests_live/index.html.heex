@@ -128,5 +128,30 @@
         <% end %>
       </div>
     <% end %>
+
+    <%!-- Detail popup. picker_open is false because this page never opens the
+          library picker, and libraries is empty for the same reason. --%>
+    <.live_component
+      module={MydiaWeb.Live.Components.TrendingDetailModal}
+      id="request-detail-modal"
+      item={@detail_item}
+      metadata={@detail_metadata}
+      loading={@detail_loading}
+      current_user={@current_user}
+      open={@detail_item != nil}
+      libraries={[]}
+      picker_open={false}
+    >
+      <:actions>
+        <button class="btn btn-ghost" phx-click="close_details">Close</button>
+        <.link
+          :if={@detail_request && @detail_request.media_item}
+          navigate={~p"/media/#{@detail_request.media_item.id}"}
+          class="btn btn-primary"
+        >
+          <.icon name="hero-arrow-top-right-on-square" class="w-4 h-4" /> View in Library
+        </.link>
+      </:actions>
+    </.live_component>
   </div>
 </Layouts.app>

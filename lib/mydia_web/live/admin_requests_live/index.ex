@@ -17,6 +17,10 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
      |> assign(:show_reject_modal, false)
      |> assign(:selected_request, nil)
      |> assign(:poster_backfill_attempted, MapSet.new())
+     |> assign(:detail_request, nil)
+     |> assign(:detail_item, nil)
+     |> assign(:detail_metadata, nil)
+     |> assign(:detail_loading, false)
      |> load_requests()}
   end
 
@@ -37,6 +41,7 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
 
     {:noreply,
      socket
+     |> close_details()
      |> assign(:show_approve_modal, true)
      |> assign(:selected_request, request)
      |> assign_approve_form()}
@@ -54,6 +59,7 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
 
     {:noreply,
      socket
+     |> close_details()
      |> assign(:show_reject_modal, true)
      |> assign(:selected_request, request)
      |> assign_reject_form()}
@@ -112,6 +118,28 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
     end
   end
 
+  def handle_event("show_details", %{"id" => id}, socket) do
+    request = Enum.find(socket.assigns.requests, &(&1.id == id))
+    item = request && MediaRequestHelpers.to_search_result(request)
+
+    if item do
+      send(self(), {:fetch_request_metadata, request})
+
+      {:noreply,
+       socket
+       |> assign(:detail_request, request)
+       |> assign(:detail_item, item)
+       |> assign(:detail_metadata, nil)
+       |> assign(:detail_loading, true)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("close_details", _params, socket) do
+    {:noreply, close_details(socket)}
+  end
+
   def handle_event("validate_reject", %{"reject" => reject_params}, socket) do
     changeset = validate_reject(reject_params)
 
@@ -154,6 +182,26 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
     # maybe_backfill_posters/2), so this cannot re-send for them even when the
     # fetch above left poster_path nil.
     {:noreply, load_requests(socket)}
+  end
+
+  @impl true
+  def handle_info({:fetch_request_metadata, request}, socket) do
+    # Drop a fetch the user has already navigated away from, so a slow relay
+    # cannot repopulate a popup that was closed or replaced.
+    if socket.assigns.detail_request && socket.assigns.detail_request.id == request.id do
+      case MediaRequestHelpers.fetch_request_metadata(request) do
+        {:ok, metadata} ->
+          {:noreply,
+           socket
+           |> assign(:detail_metadata, metadata)
+           |> assign(:detail_loading, false)}
+
+        {:error, _reason} ->
+          {:noreply, assign(socket, :detail_loading, false)}
+      end
+    else
+      {:noreply, socket}
+    end
   end
 
   ## Private Helpers
@@ -211,6 +259,14 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
     else
       socket
     end
+  end
+
+  defp close_details(socket) do
+    socket
+    |> assign(:detail_request, nil)
+    |> assign(:detail_item, nil)
+    |> assign(:detail_metadata, nil)
+    |> assign(:detail_loading, false)
   end
 
   defp assign_approve_form(socket) do
