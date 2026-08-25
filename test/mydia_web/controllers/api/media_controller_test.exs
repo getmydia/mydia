@@ -14,7 +14,7 @@ defmodule MydiaWeb.Api.MediaControllerTest do
   alias Mydia.Accounts.Scope
   alias Mydia.Media
   alias Mydia.Metadata.Provider
-  alias Mydia.Metadata.Structs.{ImagesResponse, MediaMetadata}
+  alias Mydia.Metadata.Structs.{EpisodeData, ImagesResponse, MediaMetadata}
 
   # media_controller.ex's extract_year/1 reads metadata.release_date.year, so
   # unlike most other test doubles in this suite it needs a real %Date{}
@@ -107,12 +107,80 @@ defmodule MydiaWeb.Api.MediaControllerTest do
     assert unchanged.category == "cartoon_movie"
   end
 
-  # Not exercised here: the success branch of match/2 calls
-  # serialize_media_item/1, which reads fields like media_item.overview and
-  # media_item.genres directly off the %MediaItem{} struct. Those live under
-  # metadata (media_item.metadata.overview), not on the item itself, so a
-  # successful match already raises KeyError today regardless of this task's
-  # changes -- a pre-existing defect in this controller, out of scope here.
-  # The in-bounds (non-refused) case for update_media_item/4 itself is
-  # covered directly in Media.RestrictedWritesTest and Media.AddTest.
+  test "a successful match serializes without raising", %{conn: conn} do
+    {:ok, movie} =
+      Media.create_media_item(
+        Scope.system(),
+        %{
+          type: "movie",
+          title: "Placeholder Title",
+          year: 1999,
+          tmdb_id: System.unique_integer([:positive]),
+          metadata: %MediaMetadata{
+            provider_id: "1",
+            provider: :tmdb,
+            media_type: :movie,
+            genres: ["Drama"]
+          }
+        },
+        skip_episode_refresh: true
+      )
+
+    conn =
+      conn
+      |> log_in_user(create_test_user())
+      |> post(~p"/api/v1/media/#{movie.id}/match", %{
+        "provider_id" => "12345",
+        "provider_type" => "tmdb"
+      })
+
+    assert %{"data" => data} = json_response(conn, 200)
+
+    # These used to raise KeyError: serialize_media_item/1 read them straight
+    # off %MediaItem{}, which carries no such top-level columns, instead of
+    # off media_item.metadata (see LiveActionProvider's fetch_by_id/3 above).
+    assert data["title"] == "Live Action Rematch"
+    assert data["year"] == 2015
+    assert data["genres"] == ["Action"]
+    assert data["overview"] == nil
+    assert data["poster_url"] == nil
+    assert data["backdrop_url"] == nil
+    assert data["runtime"] == nil
+    assert data["status"] == nil
+  end
+
+  test "an episode with metadata serializes without raising", %{conn: conn} do
+    {:ok, show} =
+      Media.create_media_item(
+        Scope.system(),
+        %{type: "tv_show", title: "Stub Series", year: 2010},
+        skip_episode_refresh: true
+      )
+
+    {:ok, _episode} =
+      Media.create_episode(%{
+        media_item_id: show.id,
+        season_number: 1,
+        episode_number: 1,
+        title: "Pilot",
+        metadata: %EpisodeData{
+          season_number: 1,
+          episode_number: 1,
+          overview: "The one where it all begins.",
+          still_path: "/pilot-still.jpg"
+        }
+      })
+
+    conn =
+      conn
+      |> log_in_user(create_test_user())
+      |> get(~p"/api/v1/media/#{show.id}")
+
+    # serialize_episodes/1 read episode.overview and episode.still_url
+    # directly off %Episode{}, which -- like MediaItem -- carries neither as a
+    # top-level column; both live under episode.metadata.
+    assert %{"data" => %{"episodes" => [episode]}} = json_response(conn, 200)
+    assert episode["overview"] == "The one where it all begins."
+    assert episode["still_url"] =~ "pilot-still.jpg"
+  end
 end

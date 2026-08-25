@@ -10,6 +10,8 @@ defmodule MydiaWeb.Api.MediaController do
   alias Mydia.{Media, Metadata}
   alias Mydia.Accounts.Authorization
   alias Mydia.Auth.Guardian
+  alias Mydia.Metadata.Access, as: MetadataAccess
+  alias Mydia.Metadata.ImageUrl
   require Logger
 
   @doc """
@@ -295,6 +297,12 @@ defmodule MydiaWeb.Api.MediaController do
     end
   end
 
+  # `MediaItem` has no top-level `overview`/`poster_url`/`backdrop_url`/`genres`/
+  # `runtime`/`status` columns -- those live under `media_item.metadata`, an
+  # embedded `MediaMetadata` that is itself nil until a title has been matched.
+  # Reading them straight off `media_item` raised `KeyError` on every call,
+  # including the success path of `match/2`. `MetadataAccess.get_field/2` is
+  # nil-safe for both a missing field and a nil `metadata`.
   defp serialize_media_item(media_item) do
     %{
       id: media_item.id,
@@ -303,16 +311,21 @@ defmodule MydiaWeb.Api.MediaController do
       year: media_item.year,
       tmdb_id: media_item.tmdb_id,
       tvdb_id: media_item.tvdb_id,
-      overview: media_item.overview,
-      poster_url: media_item.poster_url,
-      backdrop_url: media_item.backdrop_url,
-      genres: media_item.genres,
-      runtime: media_item.runtime,
-      status: media_item.status,
+      overview: MetadataAccess.get_field(media_item, :overview),
+      poster_url: media_item |> MetadataAccess.get_field(:poster_path) |> ImageUrl.poster_url(),
+      backdrop_url:
+        media_item |> MetadataAccess.get_field(:backdrop_path) |> ImageUrl.backdrop_url(),
+      genres: MetadataAccess.get_field(media_item, :genres),
+      runtime: MetadataAccess.get_field(media_item, :runtime),
+      status: MetadataAccess.get_field(media_item, :status),
       monitored: media_item.monitored,
       library_path_id: media_item.library_path_id,
       quality_profile_id: media_item.quality_profile_id,
-      metadata: media_item.metadata,
+      # No raw `metadata:` key: `MediaMetadata` has no `Jason.Encoder`, so
+      # embedding the struct raised `Protocol.UndefinedError` the moment a
+      # media item actually carried one -- the second bug hiding behind the
+      # `KeyError` above, since nothing had ever reached this line before.
+      # Its fields worth exposing are already flattened above.
       inserted_at: media_item.inserted_at,
       updated_at: media_item.updated_at,
       # Include associations if preloaded
@@ -322,6 +335,9 @@ defmodule MydiaWeb.Api.MediaController do
 
   defp serialize_episodes(%Ecto.Association.NotLoaded{}), do: nil
 
+  # `Episode` has the same shape of gap as `MediaItem`: no top-level
+  # `overview`/`still_url` columns, only `episode.metadata` (an `EpisodeData`,
+  # nil until the show's seasons have been fetched).
   defp serialize_episodes(episodes) when is_list(episodes) do
     Enum.map(episodes, fn episode ->
       %{
@@ -329,9 +345,9 @@ defmodule MydiaWeb.Api.MediaController do
         season_number: episode.season_number,
         episode_number: episode.episode_number,
         title: episode.title,
-        overview: episode.overview,
+        overview: MetadataAccess.get_field(episode, :overview),
         air_date: episode.air_date,
-        still_url: episode.still_url
+        still_url: episode |> MetadataAccess.get_field(:still_path) |> ImageUrl.still_url()
       }
     end)
   end
