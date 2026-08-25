@@ -17,6 +17,7 @@ defmodule Mydia.Media.MediaRequest do
           tmdb_id: integer() | nil,
           tvdb_id: integer() | nil,
           imdb_id: String.t() | nil,
+          poster_path: String.t() | nil,
           status: String.t(),
           requester_notes: String.t() | nil,
           admin_notes: String.t() | nil,
@@ -41,6 +42,7 @@ defmodule Mydia.Media.MediaRequest do
     field :tmdb_id, :integer
     field :tvdb_id, :integer
     field :imdb_id, :string
+    field :poster_path, :string
     field :status, :string, default: "pending"
     field :requester_notes, :string
     field :admin_notes, :string
@@ -68,6 +70,7 @@ defmodule Mydia.Media.MediaRequest do
       :tmdb_id,
       :tvdb_id,
       :imdb_id,
+      :poster_path,
       :requester_notes,
       :requester_id
     ])
@@ -112,6 +115,35 @@ defmodule Mydia.Media.MediaRequest do
   Returns the list of valid media types.
   """
   def valid_media_types, do: @media_types
+
+  @doc """
+  Returns the provider and id this request can be resolved with, or nil.
+
+  TMDB wins when both ids are present: it is the id the request flow stores by
+  default, and `MediaAddHelpers.fetch_detail_metadata/2` already resolves a
+  TMDB show to TVDB when the instance is configured that way.
+  """
+  @spec external_ref(t()) :: {:tmdb, integer()} | {:tvdb, integer()} | nil
+  def external_ref(%__MODULE__{tmdb_id: tmdb_id}) when is_integer(tmdb_id), do: {:tmdb, tmdb_id}
+  def external_ref(%__MODULE__{tvdb_id: tvdb_id}) when is_integer(tvdb_id), do: {:tvdb, tvdb_id}
+  def external_ref(%__MODULE__{}), do: nil
+
+  @doc """
+  Whether this request can be resolved against a metadata provider.
+
+  False for an IMDb-only request, which `validate_at_least_one_external_id/1`
+  permits. Gates the poster backfill, the clickable title and the detail popup
+  together so those three never disagree about which rows are usable.
+  """
+  @spec detailable?(t()) :: boolean()
+  def detailable?(%__MODULE__{} = request), do: external_ref(request) != nil
+
+  @doc """
+  The stored `media_type` string as the atom the metadata and card APIs take.
+  """
+  @spec media_type_atom(t()) :: :movie | :tv_show
+  def media_type_atom(%__MODULE__{media_type: "tv_show"}), do: :tv_show
+  def media_type_atom(%__MODULE__{}), do: :movie
 
   # Ensure at least one external ID (TMDB, TVDB, or IMDB) is provided
   defp validate_at_least_one_external_id(changeset) do
