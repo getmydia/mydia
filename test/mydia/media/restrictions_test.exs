@@ -113,6 +113,19 @@ defmodule Mydia.Media.RestrictionsTest do
     end
   end
 
+  describe "apply/2 with a scope built directly" do
+    test "an empty category list does not filter, even though Scope.for_user/1 never produces one" do
+      cartoon = categorized(:cartoon_movie, "G")
+      thriller = categorized(:movie, "R")
+
+      scope = %Scope{user: nil, allowed_categories: [], max_content_age: nil}
+      ids = titles(scope)
+
+      assert MapSet.member?(ids, cartoon.id)
+      assert MapSet.member?(ids, thriller.id)
+    end
+  end
+
   describe "apply/2 with both limits" do
     test "an item must satisfy every dimension" do
       allowed = categorized(:cartoon_movie, "G")
@@ -167,6 +180,43 @@ defmodule Mydia.Media.RestrictionsTest do
       scope = Scope.for_user(restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]}))
 
       refute Restrictions.visible?(thriller, scope)
+    end
+
+    test "denies an item whose rating exceeds the limit" do
+      pg13 = categorized(:cartoon_movie, "PG-13")
+      scope = Scope.for_user(restricted_user_fixture(%{max_content_age: 12}))
+
+      refute Restrictions.visible?(pg13, scope)
+    end
+
+    test "denies an unrated item when an age limit is set" do
+      unrated = categorized(:cartoon_movie, nil)
+      scope = Scope.for_user(restricted_user_fixture(%{max_content_age: 18}))
+
+      refute Restrictions.visible?(unrated, scope)
+    end
+
+    test "shows an unrated item when there is no age limit at all" do
+      unrated = categorized(:cartoon_movie, nil)
+      scope = Scope.for_user(restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]}))
+
+      assert Restrictions.visible?(unrated, scope)
+    end
+
+    test "denies an unclassified item when a category limit is set" do
+      unclassified = item(%{})
+      Repo.update_all(from(m in MediaItem, where: m.id == ^unclassified.id), set: [category: nil])
+      unclassified = Repo.get!(MediaItem, unclassified.id)
+
+      scope = Scope.for_user(restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]}))
+
+      refute Restrictions.visible?(unclassified, scope)
+    end
+
+    test "shows any item when neither dimension is restricted" do
+      cartoon = categorized(:cartoon_movie, "G")
+
+      assert Restrictions.visible?(cartoon, Scope.unrestricted())
     end
   end
 end
