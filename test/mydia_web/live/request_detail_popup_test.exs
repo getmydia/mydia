@@ -121,6 +121,25 @@ defmodule MydiaWeb.RequestDetailPopupTest do
     assert has_element?(view, "#approve-form")
   end
 
+  test "switching the status filter closes an open popup", %{
+    conn: conn,
+    admin: admin,
+    guest: guest
+  } do
+    request = request_fixture(guest)
+
+    {:ok, view, _html} = live(log_in_user(conn, admin), ~p"/admin/requests")
+    open_details(view, request)
+
+    assert has_element?(view, "#request-detail-modal[open]")
+
+    view
+    |> element(~s(button[phx-click="filter"][phx-value-status="all"]))
+    |> render_click()
+
+    refute has_element?(view, "#request-detail-modal[open]")
+  end
+
   test "a request with no resolvable id has no title button", %{
     conn: conn,
     admin: admin,

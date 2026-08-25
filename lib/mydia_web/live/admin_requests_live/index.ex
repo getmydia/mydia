@@ -211,6 +211,7 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
 
     socket
     |> assign(:filter_status, status)
+    |> close_details()
     |> load_requests()
   end
 
