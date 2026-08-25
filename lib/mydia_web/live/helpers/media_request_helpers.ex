@@ -18,6 +18,12 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpers do
   # leaves the button enabled so a guest can ask again.
   @outstanding ~w(pending approved)
 
+  # A relay round trip per row, so bounded. Four at a time keeps a large
+  # pending queue from opening a connection storm while still finishing a
+  # typical page in one round trip's time.
+  @backfill_concurrency 4
+  @backfill_timeout 30_000
+
   @doc """
   Maps `tmdb_id` to request status for every outstanding request.
 
@@ -135,6 +141,50 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpers do
           year: request.year,
           poster_path: request.poster_path
         }
+    end
+  end
+
+  @doc """
+  Whether this request should be resolved for a poster.
+  """
+  @spec needs_poster?(MediaRequest.t()) :: boolean()
+  def needs_poster?(%MediaRequest{poster_path: nil} = request),
+    do: MediaRequest.detailable?(request)
+
+  def needs_poster?(%MediaRequest{}), do: false
+
+  @doc """
+  Resolves and stores posters for requests that have none.
+
+  Callers run this from `handle_info`, never inline: a relay round trip inside
+  `mount/3` or a `handle_event` would freeze the LiveView process while its
+  page is already on screen.
+
+  A failed or timed-out fetch leaves `poster_path` nil, so the card falls back
+  to the placeholder and the next visit to the page retries. There is
+  deliberately no retry inside a single pass.
+  """
+  @spec backfill_poster_paths([MediaRequest.t()]) :: :ok
+  def backfill_poster_paths(requests) when is_list(requests) do
+    requests
+    |> Enum.filter(&needs_poster?/1)
+    |> Task.async_stream(&backfill_one/1,
+      max_concurrency: @backfill_concurrency,
+      timeout: @backfill_timeout,
+      on_timeout: :kill_task
+    )
+    |> Stream.run()
+
+    :ok
+  end
+
+  defp backfill_one(request) do
+    with {:ok, metadata} <- fetch_request_metadata(request),
+         path when is_binary(path) <- metadata.poster_path,
+         {:ok, _updated} <- MediaRequests.update_poster_path(request, path) do
+      :ok
+    else
+      _ -> :ok
     end
   end
 end
