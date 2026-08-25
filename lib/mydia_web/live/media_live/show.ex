@@ -53,7 +53,7 @@ defmodule MydiaWeb.MediaLive.Show do
     user_preference = Mydia.Accounts.get_user_preference!(socket.assigns.current_user)
 
     # Load timeline events from Events system
-    timeline_events = load_timeline_events(media_item)
+    timeline_events = load_timeline_events(media_item, socket.assigns.current_user)
 
     # Load next episode for TV shows
     {next_episode, next_episode_state} = load_next_episode(media_item, socket)
@@ -467,7 +467,7 @@ defmodule MydiaWeb.MediaLive.Show do
     if download_for_media?(download, socket.assigns.media_item) do
       media_item = load_media_item(socket.assigns.media_item.id)
       downloads_with_status = load_downloads_with_status(media_item)
-      timeline_events = load_timeline_events(media_item)
+      timeline_events = load_timeline_events(media_item, socket.assigns.current_user)
 
       # If auto searching was in progress, show success message
       socket =
@@ -505,7 +505,7 @@ defmodule MydiaWeb.MediaLive.Show do
     # Reload media item and downloads with status
     media_item = load_media_item(socket.assigns.media_item.id)
     downloads_with_status = load_downloads_with_status(media_item)
-    timeline_events = load_timeline_events(media_item)
+    timeline_events = load_timeline_events(media_item, socket.assigns.current_user)
 
     {:noreply,
      socket
@@ -598,7 +598,8 @@ defmodule MydiaWeb.MediaLive.Show do
     if event.resource_type == "media_item" &&
          event.resource_id == socket.assigns.media_item.id do
       # Reload timeline events to include the new event
-      timeline_events = load_timeline_events(socket.assigns.media_item)
+      timeline_events =
+        load_timeline_events(socket.assigns.media_item, socket.assigns.current_user)
 
       {:noreply, assign(socket, :timeline_events, timeline_events)}
     else
