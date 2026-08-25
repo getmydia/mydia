@@ -28,8 +28,11 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEventsTest do
       current_user: user_fixture()
     }
 
+    merged = Map.merge(defaults, assigns)
+    merged = Map.put_new(merged, :current_scope, Scope.for_user(merged.current_user))
+
     %Phoenix.LiveView.Socket{
-      assigns: Map.merge(defaults, assigns),
+      assigns: merged,
       private: %{live_temp: %{}}
     }
   end

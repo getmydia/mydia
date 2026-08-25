@@ -7,6 +7,7 @@ defmodule MydiaWeb.Plugs.AbsintheContext do
   """
   @behaviour Plug
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Auth.Guardian
   alias Mydia.RemoteAccess
 
@@ -32,6 +33,7 @@ defmodule MydiaWeb.Plugs.AbsintheContext do
       user ->
         base
         |> Map.put(:current_user, user)
+        |> Map.put(:current_scope, Scope.for_user(user))
         |> put_device_id(Guardian.Plug.current_claims(conn))
     end
   end

@@ -4,6 +4,7 @@ defmodule MydiaWeb.SchemaTest do
   import Ecto.Query
 
   alias Absinthe.Schema
+  alias Mydia.Accounts.Scope
   alias Mydia.AccountsFixtures
   alias Mydia.MediaFixtures
 
@@ -577,7 +578,10 @@ defmodule MydiaWeb.SchemaTest do
   end
 
   defp run_query(query, variables, user) do
-    Absinthe.run(query, MydiaWeb.Schema, variables: variables, context: %{current_user: user})
+    Absinthe.run(query, MydiaWeb.Schema,
+      variables: variables,
+      context: %{current_user: user, current_scope: Scope.for_user(user)}
+    )
   end
 
   defp favorite_item(user, media_item) do
