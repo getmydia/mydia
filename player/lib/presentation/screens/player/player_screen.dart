@@ -4240,6 +4240,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // back press to dismiss, and there is no other way out of them on a
     // remote, so back has to pass straight through in all three.
     //
+    // Gated on the directional tier as well, because this is a remote-only
+    // affordance. The chrome mounts on every platform, and it is showing far
+    // more of the time on a phone than on a television: for the first seconds
+    // of playback, after every tap, and for as long as playback is paused
+    // (hiding requires `isPlaying`). Without the tier term, a phone viewer
+    // would need two back presses to leave the player in all of those states,
+    // which is a regression against the behaviour before this screen took a
+    // `PopScope` at all. A remote has no gesture to dismiss the OSD with, so
+    // only there does back need to do that job first.
+    //
     // Wrapped in a `ListenableBuilder` rather than reading the controller
     // once: `_chromeVisibility` changes from deep inside the chrome widget
     // tree (a timer, a tap, attaching or detaching), never through this
@@ -4250,7 +4260,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     return ListenableBuilder(
       listenable: _chromeVisibility,
       builder: (context, _) => PopScope(
-        canPop: !_chromeVisibility.blocksBack,
+        canPop: !(InputCapabilities.directionalPrimary &&
+            _chromeVisibility.blocksBack),
         onPopInvokedWithResult: (didPop, _) {
           if (didPop) return;
           _chromeVisibility.hide();
