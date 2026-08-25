@@ -13,7 +13,7 @@ defmodule Mydia.Streaming.CodecProfileCompatibilityTest do
 
   alias Mydia.Library.MediaFile
   alias Mydia.Library.Structs.{FileMetadata, StreamInfo}
-  alias Mydia.Streaming.{Compatibility, DeviceProfile}
+  alias Mydia.Streaming.{Candidates, Compatibility, DeviceProfile}
 
   # The real file, as the production analyzer recorded it.
   defp lanterns_media_file do
@@ -131,6 +131,50 @@ defmodule Mydia.Streaming.CodecProfileCompatibilityTest do
       profile = profile_claiming_hevc([bit_depth_at_most(8)])
 
       assert Compatibility.check_compatibility(bare, profile) == :needs_transcoding
+    end
+  end
+
+  describe "candidate list" do
+    # The second half of the original bug. The server correctly answered
+    # :needs_transcoding, but that branch led with HLS_COPY variants, and the
+    # player's `_canDirectPlay` treats a leading HLS_COPY as playable. So the
+    # verdict was inverted client-side and the untouched 10-bit file was streamed
+    # anyway. HLS_COPY stream-copies the video, so it was never a real option.
+    test "offers no HLS_COPY when the client's conditions rejected the codec" do
+      profile = profile_claiming_hevc([bit_depth_at_most(8)])
+
+      strategies =
+        lanterns_media_file()
+        |> Candidates.build_streaming_candidates(profile)
+        |> Enum.map(& &1.strategy)
+
+      assert Compatibility.check_compatibility(lanterns_media_file(), profile) ==
+               :needs_transcoding
+
+      refute "HLS_COPY" in strategies
+      assert List.first(strategies) == "TRANSCODE"
+    end
+
+    test "keeps HLS_COPY for a client that stated no conditions" do
+      # A browser judges codec strings itself, so the stream-copy rungs it has
+      # always been offered must survive. Only conditions suppress them.
+      profile = %DeviceProfile{
+        containers: ["mp4"],
+        video_codecs: ["h264"],
+        audio_codecs: ["aac"],
+        hdr_formats: [],
+        codec_profiles: []
+      }
+
+      strategies =
+        lanterns_media_file()
+        |> Candidates.build_streaming_candidates(profile)
+        |> Enum.map(& &1.strategy)
+
+      assert Compatibility.check_compatibility(lanterns_media_file(), profile) ==
+               :needs_transcoding
+
+      assert "HLS_COPY" in strategies
     end
   end
 
