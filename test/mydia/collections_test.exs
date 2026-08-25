@@ -1,6 +1,7 @@
 defmodule Mydia.CollectionsTest do
   use Mydia.DataCase
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Collections
   alias Mydia.Collections.{Collection, CollectionItem}
 
@@ -210,20 +211,21 @@ defmodule Mydia.CollectionsTest do
       user = user_fixture()
       media_item = media_item_fixture()
 
-      refute Collections.is_favorite?(user, media_item.id)
+      refute Collections.is_favorite?(Scope.for_user(user), media_item.id)
     end
 
     test "toggle_favorite/2 adds and removes from favorites" do
       user = user_fixture()
       media_item = media_item_fixture()
+      scope = Scope.for_user(user)
 
       # Add to favorites
       assert {:ok, :added} = Collections.toggle_favorite(user, media_item.id)
-      assert Collections.is_favorite?(user, media_item.id)
+      assert Collections.is_favorite?(scope, media_item.id)
 
       # Remove from favorites
       assert {:ok, :removed} = Collections.toggle_favorite(user, media_item.id)
-      refute Collections.is_favorite?(user, media_item.id)
+      refute Collections.is_favorite?(scope, media_item.id)
     end
   end
 
@@ -235,7 +237,7 @@ defmodule Mydia.CollectionsTest do
 
       assert {:ok, %CollectionItem{}} = Collections.add_item(collection, media_item.id)
 
-      items = Collections.list_collection_items(collection)
+      items = Collections.list_collection_items(Scope.unrestricted(), collection)
       assert length(items) == 1
       assert hd(items).id == media_item.id
     end
@@ -256,7 +258,7 @@ defmodule Mydia.CollectionsTest do
 
       assert {:ok, 3} = Collections.add_items(collection, item_ids)
 
-      collection_items = Collections.list_collection_items(collection)
+      collection_items = Collections.list_collection_items(Scope.unrestricted(), collection)
       assert length(collection_items) == 3
     end
 
@@ -268,7 +270,7 @@ defmodule Mydia.CollectionsTest do
       {:ok, _} = Collections.add_item(collection, media_item.id)
       assert {:ok, %CollectionItem{}} = Collections.remove_item(collection, media_item.id)
 
-      items = Collections.list_collection_items(collection)
+      items = Collections.list_collection_items(Scope.unrestricted(), collection)
       assert items == []
     end
 
@@ -292,7 +294,7 @@ defmodule Mydia.CollectionsTest do
       reversed_ids = Enum.reverse(item_ids)
       assert {:ok, :ok} = Collections.reorder_items(collection, reversed_ids)
 
-      collection_items = Collections.list_collection_items(collection)
+      collection_items = Collections.list_collection_items(Scope.unrestricted(), collection)
       result_ids = Enum.map(collection_items, & &1.id)
       assert result_ids == reversed_ids
     end
@@ -347,7 +349,7 @@ defmodule Mydia.CollectionsTest do
           }
         })
 
-      items = Collections.list_collection_items(collection)
+      items = Collections.list_collection_items(Scope.unrestricted(), collection)
 
       assert length(items) == 1
       assert hd(items).id == movie.id
@@ -370,7 +372,7 @@ defmodule Mydia.CollectionsTest do
           }
         })
 
-      items = Collections.list_collection_items(collection)
+      items = Collections.list_collection_items(Scope.unrestricted(), collection)
 
       assert length(items) == 1
       assert hd(items).id == recent.id

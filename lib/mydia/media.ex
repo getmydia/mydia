@@ -2760,14 +2760,14 @@ defmodule Mydia.Media do
   @doc """
   Checks if a media item is favorited by a user.
 
-  Delegates to Collections.is_favorite?/2.
+  Delegates to Collections.is_favorite?/3.
 
   ## Examples
 
-      iex> is_favorite?(user_id, media_item_id)
+      iex> is_favorite?(scope, user_id, media_item_id)
       true
 
-      iex> is_favorite?(user_id, non_favorited_media_item_id)
+      iex> is_favorite?(scope, user_id, non_favorited_media_item_id)
       false
 
   """
@@ -2780,8 +2780,12 @@ defmodule Mydia.Media do
       |> Repo.exists?()
 
     if visible? do
+      # `user_id` is the favorites owner, which may not be `scope.user` (a
+      # caller could in principle check a different user's status), so the
+      # owner's own restrictions govern the Collections-level check rather
+      # than reusing `scope` as-is.
       user = Mydia.Accounts.get_user!(user_id)
-      Mydia.Collections.is_favorite?(user, media_item_id)
+      Mydia.Collections.is_favorite?(Scope.for_user(user), media_item_id)
     else
       false
     end
@@ -2833,9 +2837,7 @@ defmodule Mydia.Media do
 
     case Mydia.Collections.get_or_create_favorites(user) do
       {:ok, favorites} ->
-        favorites
-        |> Mydia.Collections.list_collection_items(opts)
-        |> Enum.filter(&Restrictions.visible?(&1, scope))
+        Mydia.Collections.list_collection_items(scope, favorites, opts)
 
       {:error, _} ->
         []

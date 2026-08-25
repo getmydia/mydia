@@ -301,7 +301,8 @@ defmodule MydiaWeb.CollectionLive.Index do
 
       collection ->
         # Get all playable items from the collection
-        playable_items = Collections.get_playable_items(collection)
+        playable_items =
+          Collections.get_playable_items(socket.assigns.current_scope, collection)
 
         case playable_items do
           [] ->
@@ -896,12 +897,14 @@ defmodule MydiaWeb.CollectionLive.Index do
       |> maybe_add_filter(:type, socket.assigns.filter_type)
       |> maybe_add_filter(:visibility, socket.assigns.filter_visibility)
 
+    scope = socket.assigns.current_scope
+
     collections =
       user
       |> Collections.list_collections(opts)
       |> filter_by_search(socket.assigns.search_query)
       |> Enum.map(&add_item_count/1)
-      |> Enum.map(&add_poster_paths/1)
+      |> Enum.map(&add_poster_paths(&1, scope))
 
     socket
     |> assign(:collections_empty?, collections == [])
@@ -927,8 +930,8 @@ defmodule MydiaWeb.CollectionLive.Index do
     Map.put(collection, :item_count, count)
   end
 
-  defp add_poster_paths(%Collection{} = collection) do
-    paths = Collections.poster_paths(collection, 4)
+  defp add_poster_paths(%Collection{} = collection, scope) do
+    paths = Collections.poster_paths(scope, collection, 4)
     Map.put(collection, :poster_paths, paths)
   end
 

@@ -29,6 +29,8 @@ defmodule Mydia.Collections do
   alias Mydia.Repo
   alias Mydia.Collections.{Collection, CollectionItem, SmartRules}
   alias Mydia.Media.MediaItem
+  alias Mydia.Media.Restrictions
+  alias Mydia.Accounts.Scope
   alias Mydia.Accounts.User
 
   ## Collections
@@ -221,21 +223,27 @@ defmodule Mydia.Collections do
   end
 
   @doc """
-  Checks if a media item is in the user's Favorites collection.
+  Checks if a media item is in the scope's user's Favorites collection.
+
+  A hidden item never reports as favorited: membership and visibility are
+  checked in the same query, rooted at `MediaItem` so `Restrictions.apply/2`
+  attaches to the right binding, joined to the favorites `CollectionItem` row.
   """
-  @spec is_favorite?(User.t(), MediaItem.t() | binary()) :: boolean()
-  def is_favorite?(%User{} = user, %MediaItem{} = media_item) do
-    is_favorite?(user, media_item.id)
+  @spec is_favorite?(Scope.t(), MediaItem.t() | binary()) :: boolean()
+  def is_favorite?(%Scope{} = scope, %MediaItem{} = media_item) do
+    is_favorite?(scope, media_item.id)
   end
 
-  def is_favorite?(%User{} = user, media_item_id) when is_binary(media_item_id) do
-    case get_or_create_favorites(user) do
+  def is_favorite?(%Scope{user: %User{}} = scope, media_item_id) when is_binary(media_item_id) do
+    case get_or_create_favorites(scope.user) do
       {:ok, favorites} ->
-        Repo.exists?(
-          from(ci in CollectionItem,
-            where: ci.collection_id == ^favorites.id and ci.media_item_id == ^media_item_id
-          )
+        MediaItem
+        |> Restrictions.apply(scope)
+        |> where([m], m.id == ^media_item_id)
+        |> join(:inner, [m], ci in CollectionItem,
+          on: ci.media_item_id == m.id and ci.collection_id == ^favorites.id
         )
+        |> Repo.exists?()
 
       {:error, _} ->
         false
@@ -282,26 +290,28 @@ defmodule Mydia.Collections do
     - `:limit` - Maximum number of items to return
     - `:offset` - Number of items to skip
   """
-  @spec list_collection_items(Collection.t(), keyword()) :: [MediaItem.t()]
-  def list_collection_items(collection, opts \\ [])
+  @spec list_collection_items(Scope.t(), Collection.t(), keyword()) :: [MediaItem.t()]
+  def list_collection_items(scope, collection, opts \\ [])
 
-  def list_collection_items(%Collection{type: "manual"} = collection, opts) do
-    query =
-      from(ci in CollectionItem,
-        where: ci.collection_id == ^collection.id,
-        order_by: [asc: ci.position],
-        preload: [:media_item]
-      )
-
-    query
+  def list_collection_items(%Scope{} = scope, %Collection{type: "manual"} = collection, opts) do
+    # Rooted at MediaItem (not CollectionItem) so `Restrictions.apply/2`
+    # attaches its `where` clauses to the MediaItem binding rather than to
+    # CollectionItem, which has no `category`/`content_rating_age` columns.
+    from(m in MediaItem,
+      join: ci in CollectionItem,
+      on: ci.media_item_id == m.id,
+      where: ci.collection_id == ^collection.id,
+      order_by: [asc: ci.position],
+      select: m
+    )
+    |> Restrictions.apply(scope)
     |> apply_pagination(opts)
+    |> maybe_preload(opts[:preload])
     |> Repo.all()
-    |> Enum.map(& &1.media_item)
-    |> maybe_preload_items(opts[:preload])
   end
 
-  def list_collection_items(%Collection{type: "smart"} = collection, opts) do
-    SmartRules.execute_query!(collection.smart_rules || "{}", opts)
+  def list_collection_items(%Scope{} = scope, %Collection{type: "smart"} = collection, opts) do
+    SmartRules.execute_query!(collection.smart_rules || "{}", opts, scope)
   end
 
   @doc """
@@ -325,9 +335,9 @@ defmodule Mydia.Collections do
   Useful for displaying a poster collage on collection cards.
   Returns a list of TMDB poster paths (strings) from the first N items.
   """
-  @spec poster_paths(Collection.t(), non_neg_integer()) :: [binary()]
-  def poster_paths(%Collection{} = collection, count \\ 4) do
-    items = list_collection_items(collection, limit: count)
+  @spec poster_paths(Scope.t(), Collection.t(), non_neg_integer()) :: [binary()]
+  def poster_paths(%Scope{} = scope, %Collection{} = collection, count \\ 4) do
+    items = list_collection_items(scope, collection, limit: count)
 
     items
     |> Enum.map(fn item ->
@@ -352,9 +362,9 @@ defmodule Mydia.Collections do
   Previews items that would be included in a smart collection with the given rules.
   Useful for showing users what a smart collection will contain before saving.
   """
-  @spec preview_smart_rules(binary() | map(), non_neg_integer()) :: [MediaItem.t()]
-  def preview_smart_rules(rules, limit \\ 10) do
-    SmartRules.preview(rules, limit)
+  @spec preview_smart_rules(Scope.t(), binary() | map(), non_neg_integer()) :: [MediaItem.t()]
+  def preview_smart_rules(%Scope{} = scope, rules, limit \\ 10) do
+    SmartRules.preview(rules, limit, scope)
   end
 
   @doc """
@@ -496,12 +506,12 @@ defmodule Mydia.Collections do
   ## Options
     - `:limit` - Maximum number of items to return (default: 100)
   """
-  @spec get_playable_items(Collection.t(), keyword()) :: [map()]
-  def get_playable_items(%Collection{} = collection, opts \\ []) do
+  @spec get_playable_items(Scope.t(), Collection.t(), keyword()) :: [map()]
+  def get_playable_items(%Scope{} = scope, %Collection{} = collection, opts \\ []) do
     limit = Keyword.get(opts, :limit, 100)
 
     # Get collection items
-    items = list_collection_items(collection, limit: limit)
+    items = list_collection_items(scope, collection, limit: limit)
 
     # For each item, get playable content
     items
@@ -615,8 +625,4 @@ defmodule Mydia.Collections do
 
   defp apply_offset(query, nil), do: query
   defp apply_offset(query, offset) when is_integer(offset), do: offset(query, ^offset)
-
-  defp maybe_preload_items(items, nil), do: items
-  defp maybe_preload_items(items, []), do: items
-  defp maybe_preload_items(items, preloads), do: Repo.preload(items, preloads)
 end

@@ -583,7 +583,7 @@ defmodule MydiaWeb.CollectionLive.Show do
     collection = socket.assigns.collection
 
     # Get all playable items from the collection
-    playable_items = Collections.get_playable_items(collection)
+    playable_items = Collections.get_playable_items(socket.assigns.current_scope, collection)
 
     case playable_items do
       [] ->
@@ -753,7 +753,8 @@ defmodule MydiaWeb.CollectionLive.Show do
 
     # Load current collection item IDs
     item_ids =
-      Collections.list_collection_items(collection)
+      socket.assigns.current_scope
+      |> Collections.list_collection_items(collection)
       |> Enum.map(& &1.id)
       |> MapSet.new()
 
@@ -1421,7 +1422,12 @@ defmodule MydiaWeb.CollectionLive.Show do
     page = if reset, do: 0, else: socket.assigns.page
     offset = page * @items_per_page
 
-    items = Collections.list_collection_items(collection, limit: @items_per_page, offset: offset)
+    items =
+      Collections.list_collection_items(socket.assigns.current_scope, collection,
+        limit: @items_per_page,
+        offset: offset
+      )
+
     item_count = Collections.item_count(collection)
 
     items_with_metadata =

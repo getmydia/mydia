@@ -22,9 +22,11 @@ defmodule Mydia.LibrarySearch do
   Each requested section runs one row query and one `COUNT` query, so a full
   search is eight queries plus, per returned collection, one `item_count`
   query and — since nothing in this codebase currently writes
-  `collections.poster_path` — one more `Collections.poster_paths/2` query to
-  fall back to a member's poster. Movies and TV shows share the `media_items`
-  table but still get their own query pair: splitting a single result set in
+  `collections.poster_path` — one more `Collections.poster_paths/3` query to
+  fall back to a member's poster, plus one `Scope.for_user/1` lookup shared
+  across the whole collection section (skipped for admins). Movies and TV
+  shows share the `media_items` table but still get their own query pair:
+  splitting a single result set in
   Elixir would break the per-section limit, since one `LIMIT 20` over both
   types cannot guarantee twenty of each.
 
@@ -60,6 +62,7 @@ defmodule Mydia.LibrarySearch do
   import Ecto.Query, warn: false
   require Mydia.LibrarySearch.Rank
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Accounts.User
   alias Mydia.Collections
   alias Mydia.Collections.Collection
@@ -130,12 +133,16 @@ defmodule Mydia.LibrarySearch do
 
   defp build_section(:collection, %User{} = user, normalized, limit) do
     base = collection_base(user, normalized)
+    # Resolved once per search rather than per row: an admin short-circuits to
+    # unrestricted with no query, and a restricted user's one extra lookup is
+    # shared across every collection result instead of being repeated per row.
+    scope = Scope.for_user(user)
 
     results =
       base
       |> collection_rows(normalized, limit)
       |> Repo.all()
-      |> Enum.map(&build_collection_result/1)
+      |> Enum.map(&build_collection_result(&1, scope))
 
     %Section{type: :collection, results: results, total_count: Repo.aggregate(base, :count)}
   end
@@ -255,30 +262,30 @@ defmodule Mydia.LibrarySearch do
     )
   end
 
-  defp build_collection_result(%{collection: collection, rank: rank}) do
+  defp build_collection_result(%{collection: collection, rank: rank}, scope) do
     %Result{
       id: collection.id,
       type: :collection,
       title: collection.name,
       score: rank / 1,
       subtitle: item_count_label(Collections.item_count(collection)),
-      poster_path: collection_poster_path(collection)
+      poster_path: collection_poster_path(collection, scope)
     }
   end
 
   # `collections.poster_path` is cast on the schema but no write path in this
   # codebase ever populates it, so every other collection surface (see
-  # `CollectionResolver.build_collection/1` and `CollectionLive.Index`) builds
+  # `CollectionResolver.build_collection/2` and `CollectionLive.Index`) builds
   # a poster from the collection's own items instead. Do the same here rather
   # than showing the bookmark placeholder forever. Only reached when the
   # column is empty, so this is at most one extra query per collection.
-  defp collection_poster_path(%Collection{poster_path: poster_path})
+  defp collection_poster_path(%Collection{poster_path: poster_path}, _scope)
        when is_binary(poster_path) and poster_path != "" do
     poster_path
   end
 
-  defp collection_poster_path(collection) do
-    case Collections.poster_paths(collection, 1) do
+  defp collection_poster_path(collection, scope) do
+    case Collections.poster_paths(scope, collection, 1) do
       [path | _] -> path
       [] -> nil
     end
