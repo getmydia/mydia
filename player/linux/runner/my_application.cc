@@ -10,9 +10,63 @@
 struct _MyApplication {
   GtkApplication parent_instance;
   char** dart_entrypoint_arguments;
+  FlMethodChannel* window_chrome_channel;
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
+
+// The window chrome channel. Shared with macOS, whose AppDelegate.swift
+// answers `setTrafficLightsHidden` on the same name.
+static constexpr char kWindowChromeChannel[] = "dev.mydia.player/window_chrome";
+
+// Reads GTK's button layout, e.g. "appmenu:minimize,maximize,close".
+//
+// Caller owns the result. Returns nullptr when there is no default
+// GtkSettings, which happens only if GTK failed to initialise; Dart falls
+// back to its own default in that case.
+static gchar* get_decoration_layout() {
+  GtkSettings* settings = gtk_settings_get_default();
+  if (settings == nullptr) {
+    return nullptr;
+  }
+  gchar* layout = nullptr;
+  g_object_get(settings, "gtk-decoration-layout", &layout, nullptr);
+  return layout;
+}
+
+// Pushes the new layout to Dart so switching GTK themes reorders the window
+// buttons without a restart.
+static void decoration_layout_changed_cb(GtkSettings* settings,
+                                         GParamSpec* pspec,
+                                         gpointer user_data) {
+  FlMethodChannel* channel = FL_METHOD_CHANNEL(user_data);
+  g_autofree gchar* layout = get_decoration_layout();
+  g_autoptr(FlValue) value = fl_value_new_string(layout != nullptr ? layout : "");
+  fl_method_channel_invoke_method(channel, "onDecorationLayoutChanged", value,
+                                  nullptr, nullptr, nullptr);
+}
+
+static void window_chrome_method_call_cb(FlMethodChannel* channel,
+                                         FlMethodCall* method_call,
+                                         gpointer user_data) {
+  const gchar* method = fl_method_call_get_name(method_call);
+  g_autoptr(FlMethodResponse) response = nullptr;
+
+  if (g_strcmp0(method, "getDecorationLayout") == 0) {
+    g_autofree gchar* layout = get_decoration_layout();
+    g_autoptr(FlValue) result =
+        fl_value_new_string(layout != nullptr ? layout : "");
+    response = FL_METHOD_RESPONSE(fl_method_success_response_new(result));
+  } else {
+    response = FL_METHOD_RESPONSE(fl_method_not_implemented_response_new());
+  }
+
+  g_autoptr(GError) error = nullptr;
+  if (!fl_method_call_respond(method_call, response, &error)) {
+    g_warning("Failed to respond on %s: %s", kWindowChromeChannel,
+              error->message);
+  }
+}
 
 // Called when first Flutter frame received.
 static void first_frame_cb(MyApplication* self, FlView* view) {
@@ -75,6 +129,20 @@ static void my_application_activate(GApplication* application) {
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
 
+  g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
+  self->window_chrome_channel = fl_method_channel_new(
+      fl_engine_get_binary_messenger(fl_view_get_engine(view)),
+      kWindowChromeChannel, FL_METHOD_CODEC(codec));
+  fl_method_channel_set_method_call_handler(
+      self->window_chrome_channel, window_chrome_method_call_cb, self, nullptr);
+
+  GtkSettings* settings = gtk_settings_get_default();
+  if (settings != nullptr) {
+    g_signal_connect(settings, "notify::gtk-decoration-layout",
+                     G_CALLBACK(decoration_layout_changed_cb),
+                     self->window_chrome_channel);
+  }
+
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }
 
@@ -121,6 +189,7 @@ static void my_application_shutdown(GApplication* application) {
 static void my_application_dispose(GObject* object) {
   MyApplication* self = MY_APPLICATION(object);
   g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
+  g_clear_object(&self->window_chrome_channel);
   G_OBJECT_CLASS(my_application_parent_class)->dispose(object);
 }
 
