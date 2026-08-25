@@ -2,6 +2,7 @@ defmodule MydiaWeb.RequestMediaLive.Index do
   use MydiaWeb, :live_view
 
   alias Mydia.{Media, MediaRequests, Metadata}
+  alias MydiaWeb.RemoteFilter
 
   @impl true
   def mount(_params, _session, socket) do
@@ -147,7 +148,7 @@ defmodule MydiaWeb.RequestMediaLive.Index do
       {:ok, results} ->
         {:noreply,
          socket
-         |> assign(:search_results, results)
+         |> assign(:search_results, RemoteFilter.filter(results, socket.assigns.current_scope))
          |> assign(:searching, false)}
 
       {:error, reason} ->

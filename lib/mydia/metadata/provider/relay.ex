@@ -1180,6 +1180,8 @@ defmodule Mydia.Metadata.Provider.Relay do
     year = Keyword.get(opts, :year)
     min_rating = Keyword.get(opts, :min_rating)
     sort_by = Keyword.get(opts, :sort_by, "popularity.desc")
+    certification_country = Keyword.get(opts, :certification_country)
+    certification_lte = Keyword.get(opts, :certification_lte)
 
     endpoint =
       case media_type do
@@ -1187,12 +1189,18 @@ defmodule Mydia.Metadata.Provider.Relay do
         _ -> "/tmdb/movies/discover"
       end
 
+    # TMDB only honours a certification ceiling on /discover/movie. It ignores
+    # the pair on /discover/tv rather than erroring, so sending it there is
+    # harmless but buys nothing; TV is held back by the library-side rating
+    # filter instead.
     params =
       [language: language, page: page, sort_by: sort_by]
       |> maybe_add_param(:with_genres, genres)
       |> maybe_add_param(:with_original_language, original_language)
       |> maybe_add_param(year_param_key(media_type), year)
       |> maybe_add_param(:"vote_average.gte", min_rating)
+      |> maybe_add_param(:certification_country, certification_country)
+      |> maybe_add_param(:"certification.lte", certification_lte)
 
     req = HTTP.new_request(config)
 

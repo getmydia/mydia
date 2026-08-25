@@ -99,8 +99,19 @@ defmodule MydiaWeb.RequestMediaLive.IndexTest do
     # Overrides the module's ResultProvider (whose fetch_by_id/3 returns a
     # bare %{}, fine for the tests above since they never fetch full
     # metadata) with the shared stub, which returns a real %MediaMetadata{}
-    # carrying a genre -- required here because a restricted scope now
-    # triggers exactly that fetch to judge the request.
+    # -- required here because a restricted scope now triggers exactly that
+    # fetch to judge the request.
+    #
+    # An age limit, not a category limit: `MydiaWeb.RemoteFilter` filters
+    # `:search_results` by category using the genre ids TMDB search returns,
+    # but TMDB search carries no certification and RemoteFilter does not
+    # filter search hits by age (see its moduledoc) -- so the stub movie still
+    # reaches this page's list. The stub's full metadata carries no
+    # content_rating, which `Mydia.Media.ContentRating` treats as unrated, and
+    # an unrated title is hidden under an active age limit. That is what
+    # keeps the write-time `Media.writable?/2` check the one that catches it,
+    # reproducing the exact gap this test was written to guard: a search hit
+    # can be shown that a submit must still refuse.
     import Mydia.MetadataStub
 
     alias Mydia.MetadataStubProvider
@@ -108,8 +119,7 @@ defmodule MydiaWeb.RequestMediaLive.IndexTest do
     setup :setup_metadata_stub
 
     setup %{conn: conn} do
-      restricted =
-        restricted_user_fixture(%{role: "user", allowed_categories: ["cartoon_movie"]})
+      restricted = restricted_user_fixture(%{role: "user", max_content_age: 12})
 
       %{conn: log_in_user(conn, restricted)}
     end
@@ -118,8 +128,7 @@ defmodule MydiaWeb.RequestMediaLive.IndexTest do
          %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/request/movie?q=stub")
 
-      # The stub movie carries the "Action" genre, so it classifies as plain
-      # "movie" -- out of bounds for a cartoon_movie-only scope.
+      # Visible: RemoteFilter does not filter search results on age.
       assert render(view) =~ MetadataStubProvider.movie_title()
 
       view

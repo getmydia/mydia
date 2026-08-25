@@ -12,6 +12,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
   alias MydiaWeb.Live.Helpers.GridDensity
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
+  alias MydiaWeb.RemoteFilter
 
   import MydiaWeb.GridDensityComponents
 
@@ -548,6 +549,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
   # title they have already requested, which the duplicate check then rejects.
   defp enrich_recommendations(socket, results) do
     results
+    |> RemoteFilter.filter(socket.assigns.current_scope)
     |> MediaAddHelpers.enrich_with_library_status(socket.assigns.library_status_map)
     |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)
   end
@@ -589,6 +591,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
       {:ok, %{results: results, page: page, total_pages: total_pages}} ->
         enriched =
           results
+          |> RemoteFilter.filter(socket.assigns.current_scope)
           |> MediaAddHelpers.enrich_with_library_status(socket.assigns.library_status_map)
           |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)
 
@@ -611,6 +614,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
         # Search returns a flat list
         enriched =
           results
+          |> RemoteFilter.filter(socket.assigns.current_scope)
           |> MediaAddHelpers.enrich_with_library_status(socket.assigns.library_status_map)
           |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)
 
@@ -638,7 +642,8 @@ defmodule MydiaWeb.DiscoverLive.Index do
   end
 
   defp build_discover_opts(assigns) do
-    opts = [page: assigns.page]
+    opts =
+      [page: assigns.page] ++ RemoteFilter.discover_params(assigns.current_scope)
 
     opts =
       if assigns.selected_genres != [] do
