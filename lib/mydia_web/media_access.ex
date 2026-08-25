@@ -6,7 +6,10 @@ defmodule MydiaWeb.MediaAccess do
   `Mydia.Media.get_media_item!/3` or `Mydia.Media.get_episode!/3`, which are
   already scoped and raise `Ecto.NoResultsError` for a hidden id. This exists
   for the endpoints that resolve a file row by its own id, bypassing that
-  scoped lookup.
+  scoped lookup — both REST controllers (via `authorize_media_file/2`, which
+  reads the scope off `conn.assigns`) and GraphQL resolvers (via
+  `authorize_media_file_for_scope/2`, which takes the scope directly, since a
+  resolver carries `resolution.context[:current_scope]` rather than a conn).
 
   A TV `media_file` has `media_item_id` set to NULL and reaches its show only
   through `episode_id`. A check written against the column alone passes every
@@ -30,6 +33,17 @@ defmodule MydiaWeb.MediaAccess do
   @spec authorize_media_file(Plug.Conn.t(), MediaFile.t()) :: :ok | :denied
   def authorize_media_file(conn, %MediaFile{} = file) do
     authorize(conn.assigns[:current_scope], file)
+  end
+
+  @doc """
+  Same as `authorize_media_file/2`, for callers that already hold a
+  `Mydia.Accounts.Scope` rather than a `Plug.Conn` — the GraphQL resolvers,
+  which carry the scope on `resolution.context[:current_scope]` instead of
+  conn assigns.
+  """
+  @spec authorize_media_file_for_scope(Scope.t() | nil, MediaFile.t()) :: :ok | :denied
+  def authorize_media_file_for_scope(scope, %MediaFile{} = file) do
+    authorize(scope, file)
   end
 
   defp authorize(%Scope{allowed_categories: nil, max_content_age: nil}, _file), do: :ok
