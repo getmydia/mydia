@@ -11,6 +11,7 @@ defmodule MydiaWeb.RequestPagesPosterTest do
   import Phoenix.LiveViewTest
   import Mydia.MetadataStub
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Media.MediaRequest
   alias Mydia.MediaRequests
   alias Mydia.MetadataStubProvider
@@ -34,7 +35,7 @@ defmodule MydiaWeb.RequestPagesPosterTest do
       requester_id: user.id
     }
 
-    {:ok, request} = MediaRequests.create_request(Map.merge(base, attrs))
+    {:ok, request} = MediaRequests.create_request(Scope.unrestricted(), Map.merge(base, attrs))
     request
   end
 

@@ -69,7 +69,12 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpersTest do
       poster_item = Map.put(item(tmdb_id), :poster_path, "/stub-movie-poster.jpg")
 
       assert {:ok, request, _map} =
-               MediaRequestHelpers.handle_request_media(poster_item, :movie, user.id)
+               MediaRequestHelpers.handle_request_media(
+                 Scope.unrestricted(),
+                 poster_item,
+                 :movie,
+                 user.id
+               )
 
       assert request.poster_path == "/stub-movie-poster.jpg"
     end
@@ -79,7 +84,12 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpersTest do
       tmdb_id = System.unique_integer([:positive])
 
       assert {:ok, request, _map} =
-               MediaRequestHelpers.handle_request_media(item(tmdb_id), :movie, user.id)
+               MediaRequestHelpers.handle_request_media(
+                 Scope.unrestricted(),
+                 item(tmdb_id),
+                 :movie,
+                 user.id
+               )
 
       assert is_nil(request.poster_path)
     end
