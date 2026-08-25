@@ -4,7 +4,7 @@
 /// Nothing here is allowed to throw. It runs during app startup, whose stated
 /// invariant is that nothing after `WidgetsFlutterBinding.ensureInitialized()`
 /// escapes uncaught, and a failure only costs the fallback layout. Mirrors
-/// `traffic_lights_native.dart`.
+/// `window_buttons_bridge_native.dart`.
 ///
 /// `dart.library.io` is also true on iOS, Android, macOS and Windows, where
 /// `getDecorationLayout` is not implemented. Those platforms get a

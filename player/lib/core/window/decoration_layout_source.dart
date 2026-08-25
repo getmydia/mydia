@@ -1,7 +1,7 @@
 /// GTK window button layout, read over a platform channel.
 ///
 /// Conditional import so the web build never links a `MethodChannel` call
-/// that could never succeed there. Mirrors `traffic_lights.dart` and
+/// that could never succeed there. Mirrors `window_buttons_bridge.dart` and
 /// `desktop_window.dart`.
 library;
 

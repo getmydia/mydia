@@ -12,15 +12,18 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import 'window_buttons_hidden.dart';
 import 'window_fullscreen.dart';
 
 const MethodChannel _channel = MethodChannel('dev.mydia.player/window_chrome');
 
-/// Whether [setTrafficLightsHidden] should forward a call for the given
-/// [hidden] direction to the native buttons.
+/// Whether [setWindowButtonsHidden] should forward a call for the given
+/// [hidden] direction to the NATIVE buttons.
 ///
-/// False off macOS regardless of [hidden] — there are no traffic lights to
-/// control there. On macOS, a hide (`hidden: true`) is additionally blocked
+/// False off macOS regardless of [hidden]. Windows has no Flutter-drawn
+/// chrome yet, and Linux draws its own buttons in Dart, so on Linux the
+/// signal alone does the work and there is no native call to make.
+/// On macOS, a hide (`hidden: true`) is additionally blocked
 /// while [isFullscreen]: the OS already hides the buttons there on its own,
 /// so forcing them hidden ourselves would fight its own transition. A
 /// restore (`hidden: false`) is never blocked by fullscreen — `isHidden =
@@ -32,19 +35,25 @@ const MethodChannel _channel = MethodChannel('dev.mydia.player/window_chrome');
 /// could be left with its close/minimize/zoom buttons stranded hidden after
 /// returning to windowed mode.
 @visibleForTesting
-bool shouldControlTrafficLights({
+bool shouldCallNativeButtonBridge({
   required TargetPlatform platform,
   required bool hidden,
   required bool isFullscreen,
 }) =>
     platform == TargetPlatform.macOS && !(hidden && isFullscreen);
 
-/// Hides or shows the native close/minimize/zoom buttons.
+/// Hides or shows the window's close/minimize/maximize buttons.
+///
+/// Writes the app-wide signal on every platform, which is what the
+/// Flutter-drawn Linux buttons watch, and additionally forwards to the native
+/// AppKit buttons on macOS.
 ///
 /// Fire-and-forget: callers do not await this, so any failure is caught and
 /// logged here rather than propagating.
-void setTrafficLightsHidden(bool hidden) {
-  if (!shouldControlTrafficLights(
+void setWindowButtonsHidden(bool hidden) {
+  windowButtonsHiddenSignal.value = hidden;
+
+  if (!shouldCallNativeButtonBridge(
     platform: defaultTargetPlatform,
     hidden: hidden,
     isFullscreen: windowFullscreen.value,
@@ -57,11 +66,11 @@ void setTrafficLightsHidden(bool hidden) {
       _channel.invokeMethod<void>(
           'setTrafficLightsHidden', {'hidden': hidden}).catchError(
         (Object e) => debugPrint(
-          '[TrafficLights] Failed to toggle traffic lights: $e',
+          '[WindowButtons] Failed to toggle the native buttons: $e',
         ),
       ),
     );
   } catch (e) {
-    debugPrint('[TrafficLights] Failed to toggle traffic lights: $e');
+    debugPrint('[WindowButtons] Failed to toggle the native buttons: $e');
   }
 }

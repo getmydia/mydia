@@ -7,7 +7,7 @@ import '../../../core/player/input_capabilities.dart';
 import '../../../core/player/platform_features.dart';
 import '../../../core/player/stream_timeline.dart';
 import '../../../core/window/desktop_window.dart';
-import '../../../core/window/traffic_lights.dart';
+import '../../../core/window/window_buttons_bridge.dart';
 import '../../../core/theme/depth_tokens.dart';
 import 'center_play_button.dart';
 import 'chrome_panel.dart';
@@ -112,8 +112,8 @@ class ChromeVisibility extends StatefulWidget {
 
   /// Hides/shows the macOS traffic-light window buttons in step with chrome
   /// visibility. Injected by tests; defaults to the real native bridge
-  /// (`setTrafficLightsHidden` from `core/window/traffic_lights.dart`).
-  final void Function(bool hidden)? onTrafficLightsHidden;
+  /// (`setWindowButtonsHidden` from `core/window/window_buttons_bridge.dart`).
+  final void Function(bool hidden)? onWindowButtonsHidden;
 
   /// Fired from [_show] and from the pointer entering the chrome — the two
   /// places this widget already knows the viewer is doing something.
@@ -132,7 +132,7 @@ class ChromeVisibility extends StatefulWidget {
     this.autoHide = const Duration(seconds: 3),
     this.onDoubleTap,
     this.onWindowDrag,
-    this.onTrafficLightsHidden,
+    this.onWindowButtonsHidden,
     this.onActivity,
     this.controller,
   });
@@ -233,9 +233,9 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
     // makes that invariant self-healing: even if some other bug left the
     // native buttons stranded hidden, the next mount (e.g. re-entering the
     // player) restores them. Safe to fire even if the app happens to
-    // already be fullscreen at mount time — see shouldControlTrafficLights'
+    // already be fullscreen at mount time — see shouldCallNativeButtonBridge'
     // doc comment for why a restore always gets through.
-    _setTrafficLightsHidden(false);
+    _setWindowButtonsHidden(false);
   }
 
   @override
@@ -260,7 +260,7 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
   void dispose() {
     widget.controller?._detach(this);
     _hideTimer?.cancel();
-    _setTrafficLightsHidden(false);
+    _setWindowButtonsHidden(false);
     _curved.dispose();
     _controller.dispose();
     super.dispose();
@@ -278,14 +278,14 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
   }
 
   /// Resolves to the injected test callback, or the real native bridge.
-  void Function(bool hidden) get _setTrafficLightsHidden =>
-      widget.onTrafficLightsHidden ?? setTrafficLightsHidden;
+  void Function(bool hidden) get _setWindowButtonsHidden =>
+      widget.onWindowButtonsHidden ?? setWindowButtonsHidden;
 
   void _show() {
     widget.onActivity?.call();
     if (!_visible) {
       setState(() => _visible = true);
-      _setTrafficLightsHidden(false);
+      _setWindowButtonsHidden(false);
       widget.controller?._notify();
     }
     _controller.forward();
@@ -296,7 +296,7 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
     _hideTimer?.cancel();
     if (_visible) {
       setState(() => _visible = false);
-      _setTrafficLightsHidden(true);
+      _setWindowButtonsHidden(true);
       widget.controller?._notify();
     }
     _controller.reverse();
