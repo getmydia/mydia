@@ -3,22 +3,9 @@ defmodule MydiaWeb.ActivityLive.IndexTest do
 
   import Phoenix.LiveViewTest
   import Mydia.AccountsFixtures
+  import Mydia.EventsFixtures
   alias Mydia.Events
   alias Mydia.Events.Presentation
-
-  # The category an event type is actually recorded under by the `Mydia.Events`
-  # helpers. It is not the type's namespace: `media_item.*` is recorded as
-  # "media" and `job.*` as "system", so deriving it from the type would produce
-  # fixtures no code path ever writes.
-  @category_by_namespace %{
-    "download" => "downloads",
-    "job" => "system",
-    "media_file" => "media",
-    "media_item" => "media",
-    "playback" => "playback",
-    "plugin" => "plugin",
-    "search" => "search"
-  }
 
   describe "Activity feed" do
     setup %{conn: conn} do
@@ -244,23 +231,22 @@ defmodule MydiaWeb.ActivityLive.IndexTest do
       assert has_element?(view, "button", "Errors")
     end
 
+    test "an admin keeps every chip", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/activity")
+
+      for category <- ~w(all media downloads search system playback plugin errors) do
+        assert has_element?(view, "button[phx-value-category='#{category}']"),
+               "#{category} chip is missing for an admin"
+      end
+    end
+
     test "labels every feed-visible event type instead of printing its key", %{conn: conn} do
       types = Presentation.known_types() -- Presentation.feed_hidden_types()
 
       for type <- types do
-        [namespace, _action] = String.split(type, ".")
-
-        category =
-          Map.get_lazy(@category_by_namespace, namespace, fn ->
-            flunk(
-              "no real category mapped for event namespace #{inspect(namespace)}; " <>
-                "add it to @category_by_namespace"
-            )
-          end)
-
         {:ok, _} =
           Events.create_event(%{
-            category: category,
+            category: category_for_type(type),
             type: type,
             actor_type: :system,
             actor_id: "test",
@@ -387,6 +373,229 @@ defmodule MydiaWeb.ActivityLive.IndexTest do
         |> render_click()
 
       assert html =~ "Plugin update available: tmdb-art 1.0.0 to 1.2.0"
+    end
+  end
+
+  describe "Activity feed as a guest" do
+    setup %{conn: conn} do
+      guest = user_fixture(%{role: "guest"})
+      other = user_fixture(%{role: "guest"})
+
+      %{conn: log_in_user(conn, guest), guest: guest, other: other}
+    end
+
+    test "shows media additions and removals", %{conn: conn} do
+      {:ok, _} =
+        Events.create_event(%{
+          category: "media",
+          type: "media_item.added",
+          actor_type: :system,
+          actor_id: "media_context",
+          metadata: %{"title" => "Paddington", "media_type" => "movie"}
+        })
+
+      {:ok, _view, html} = live(conn, ~p"/activity")
+
+      assert html =~ "Added to library: Paddington (movie)"
+    end
+
+    test "shows the guest's own playback", %{conn: conn, guest: guest} do
+      {:ok, _} =
+        Events.create_event(%{
+          category: "playback",
+          type: "playback.started",
+          actor_type: :user,
+          actor_id: guest.id,
+          metadata: %{"origin" => "this-guests-player"}
+        })
+
+      {:ok, _view, html} = live(conn, ~p"/activity")
+
+      assert html =~ "this-guests-player"
+    end
+
+    test "hides another user's playback", %{conn: conn, other: other} do
+      {:ok, _} =
+        Events.create_event(%{
+          category: "playback",
+          type: "playback.started",
+          actor_type: :user,
+          actor_id: other.id,
+          metadata: %{"origin" => "someone-elses-player"}
+        })
+
+      {:ok, _view, html} = live(conn, ~p"/activity")
+
+      refute html =~ "someone-elses-player"
+      assert html =~ "No events found"
+    end
+
+    test "hides the guest's own progressed and paused events", %{conn: conn, guest: guest} do
+      for {type, origin} <- [
+            {"playback.progressed", "progress-noise"},
+            {"playback.paused", "pause-noise"}
+          ] do
+        {:ok, _} =
+          Events.create_event(%{
+            category: "playback",
+            type: type,
+            actor_type: :user,
+            actor_id: guest.id,
+            metadata: %{"origin" => origin}
+          })
+      end
+
+      {:ok, _view, html} = live(conn, ~p"/activity")
+
+      refute html =~ "progress-noise"
+      refute html =~ "pause-noise"
+    end
+
+    test "hides downloads, search, jobs and file operations", %{conn: conn} do
+      {:ok, _} =
+        Events.create_event(%{
+          category: "downloads",
+          type: "download.completed",
+          actor_type: :system,
+          actor_id: "download_monitor",
+          metadata: %{"title" => "Hidden.Download.mkv"}
+        })
+
+      {:ok, _} =
+        Events.create_event(%{
+          category: "search",
+          type: "search.completed",
+          actor_type: :system,
+          actor_id: "search_service",
+          metadata: %{"title" => "Hidden Search"}
+        })
+
+      {:ok, _} =
+        Events.create_event(%{
+          category: "system",
+          type: "job.failed",
+          actor_type: :job,
+          actor_id: "hidden_job",
+          severity: :error,
+          metadata: %{"job_name" => "hidden_job", "error_message" => "Hidden Error"}
+        })
+
+      {:ok, _} =
+        Events.create_event(%{
+          category: "media",
+          type: "media_file.imported",
+          actor_type: :system,
+          actor_id: "file_ingest",
+          metadata: %{"title" => "Hidden.Import.mkv"}
+        })
+
+      {:ok, _view, html} = live(conn, ~p"/activity")
+
+      refute html =~ "Hidden.Download.mkv"
+      refute html =~ "Hidden Search"
+      refute html =~ "Hidden Error"
+      refute html =~ "Hidden.Import.mkv"
+      assert html =~ "No events found"
+    end
+
+    test "a hidden event arriving over PubSub is not inserted", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/activity")
+
+      {:ok, _hidden} =
+        Events.create_event(%{
+          category: "downloads",
+          type: "download.completed",
+          actor_type: :system,
+          actor_id: "download_monitor",
+          metadata: %{"title" => "Hidden.Live.mkv"}
+        })
+
+      {:ok, _visible} =
+        Events.create_event(%{
+          category: "media",
+          type: "media_item.added",
+          actor_type: :system,
+          actor_id: "media_context",
+          metadata: %{"title" => "Visible Live Movie", "media_type" => "movie"}
+        })
+
+      # Both broadcasts reach this LiveView in order on the same topic, so once
+      # the second has rendered the first has already been handled. That makes
+      # the refute below a real assertion rather than a race against a sleep.
+      html =
+        Enum.reduce_while(1..20, nil, fn _attempt, _acc ->
+          html = render(view)
+
+          if html =~ "Visible Live Movie" do
+            {:halt, html}
+          else
+            Process.sleep(50)
+            {:cont, html}
+          end
+        end)
+
+      assert html =~ "Visible Live Movie"
+      refute html =~ "Hidden.Live.mkv"
+    end
+
+    test "an admin's feed is unchanged", %{conn: conn} do
+      {:ok, _} =
+        Events.create_event(%{
+          category: "downloads",
+          type: "download.completed",
+          actor_type: :system,
+          actor_id: "download_monitor",
+          metadata: %{"title" => "Admin.Visible.mkv"}
+        })
+
+      admin_conn = log_in_user(conn, admin_user_fixture())
+      {:ok, _view, html} = live(admin_conn, ~p"/activity")
+
+      assert html =~ "Admin.Visible.mkv"
+    end
+
+    test "shows only the chips that can match", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/activity")
+
+      for category <- ~w(all media playback) do
+        assert has_element?(view, "button[phx-value-category='#{category}']"),
+               "#{category} chip is missing"
+      end
+
+      for category <- ~w(downloads search system plugin errors) do
+        refute has_element?(view, "button[phx-value-category='#{category}']"),
+               "#{category} chip can never match but is still rendered"
+      end
+    end
+
+    test "the media chip still filters", %{conn: conn, guest: guest} do
+      {:ok, _} =
+        Events.create_event(%{
+          category: "media",
+          type: "media_item.added",
+          actor_type: :system,
+          actor_id: "media_context",
+          metadata: %{"title" => "Paddington", "media_type" => "movie"}
+        })
+
+      {:ok, _} =
+        Events.create_event(%{
+          category: "playback",
+          type: "playback.started",
+          actor_type: :user,
+          actor_id: guest.id,
+          metadata: %{"origin" => "this-guests-player"}
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/activity")
+
+      html =
+        view
+        |> element("button[phx-value-category='media']")
+        |> render_click()
+
+      assert html =~ "Paddington"
+      refute html =~ "this-guests-player"
     end
   end
 end

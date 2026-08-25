@@ -43,9 +43,10 @@ defmodule MydiaWeb.MediaLive.Show.Loaders do
     end)
   end
 
-  def load_timeline_events(media_item) do
-    # Get events from Events system for this media item
-    events = Events.get_resource_events("media_item", media_item.id, limit: 50)
+  def load_timeline_events(media_item, user) do
+    # Scoped by viewer: playback events record resource_type "media_item", so an
+    # unscoped read would show a guest every account's watch activity here.
+    events = Events.get_visible_resource_events(user, "media_item", media_item.id, limit: 50)
 
     # Format each event for timeline display
     events
