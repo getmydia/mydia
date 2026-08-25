@@ -1265,7 +1265,7 @@ defmodule Mydia.EventsTest do
       guest = user_fixture(%{role: "guest"})
       other = user_fixture(%{role: "guest"})
 
-      corpus = seed_registry_corpus([guest, other])
+      corpus = seed_registry_corpus([guest, other], guest)
 
       %{guest: guest, other: other, admin: admin_user_fixture(), corpus: corpus}
     end
@@ -1314,11 +1314,17 @@ defmodule Mydia.EventsTest do
              ]
     end
 
-    # One event per registered type, per actor: each of the given users, plus a
-    # system actor. Driving the list off the registry means a newly registered
-    # type is covered here without anyone remembering to add it.
-    defp seed_registry_corpus(users) do
-      actors = Enum.map(users, &{:user, &1.id}) ++ [{:system, "test_system"}]
+    # One event per registered type, per actor: each of the given users, a
+    # system actor, and a non-user actor whose actor_id spoofs the viewing
+    # guest's own id. That last pairing is what an own_type row looks like if
+    # scope/2 or visible?/2 only compared actor_id and forgot actor_type; it
+    # must stay hidden from the guest. Driving the list off the registry means
+    # a newly registered type is covered here without anyone remembering to
+    # add it.
+    defp seed_registry_corpus(users, guest) do
+      actors =
+        Enum.map(users, &{:user, &1.id}) ++
+          [{:system, "test_system"}, {:system, guest.id}]
 
       for type <- Presentation.known_types(), {actor_type, actor_id} <- actors do
         {:ok, event} =

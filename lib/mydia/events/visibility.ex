@@ -14,26 +14,13 @@ defmodule Mydia.Events.Visibility do
 
   alias Mydia.Accounts.User
   alias Mydia.Events.Event
+  alias Mydia.Events.Visibility.Policy
 
-  defmodule Policy do
-    @moduledoc """
-    A restricted viewer's allowlist.
-
-    `types` are visible whoever caused them. `own_types` are visible only when
-    the event's actor is the viewer. `categories` names the categories those
-    types are recorded under, so the UI can drop filter chips that could never
-    match. It is declared rather than derived: the type-to-category mapping
-    lives in the `Mydia.Events` writer functions, not in the type registry.
-    """
-
-    defstruct types: [], own_types: [], categories: []
-
-    @type t :: %__MODULE__{
-            types: [String.t()],
-            own_types: [String.t()],
-            categories: [String.t()]
-          }
-  end
+  @guest_policy %Policy{
+    types: ["media_item.added", "media_item.removed"],
+    own_types: ["playback.started", "playback.finished", "playback.unwatched"],
+    categories: ["media", "playback"]
+  }
 
   @doc """
   Returns the visibility policy for a viewer.
@@ -43,21 +30,8 @@ defmodule Mydia.Events.Visibility do
   """
   @spec policy_for(User.t() | nil) :: :unrestricted | :none | Policy.t()
   def policy_for(nil), do: :none
-  def policy_for(%User{role: "guest"}), do: guest_policy()
+  def policy_for(%User{role: "guest"}), do: @guest_policy
   def policy_for(%User{}), do: :unrestricted
-
-  # A function rather than a module attribute: this compiler rejects a
-  # `@guest_policy %Policy{...}` module attribute that references the nested
-  # Policy struct, because the attribute is evaluated in the same compilation
-  # context that is still defining that struct. A function body runs after
-  # both modules have finished compiling, so it has no such restriction.
-  defp guest_policy do
-    %Policy{
-      types: ["media_item.added", "media_item.removed"],
-      own_types: ["playback.started", "playback.finished", "playback.unwatched"],
-      categories: ["media", "playback"]
-    }
-  end
 
   @doc """
   Restricts an event query to the rows the viewer may read.
