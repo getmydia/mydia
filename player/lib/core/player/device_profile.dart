@@ -1,7 +1,11 @@
 import 'dart:convert';
 
+import 'codec_profile.dart';
 import 'device_profile_web.dart'
     if (dart.library.io) 'device_profile_native.dart' as platform;
+
+export 'codec_profile.dart'
+    show CodecProfile, ProfileComparison, ProfileCondition, ProfileProperty;
 
 /// What this client can decode, sent to the server on every request.
 ///
@@ -14,12 +18,29 @@ class DeviceProfile {
   final List<String> audioCodecs;
   final List<String> hdrFormats;
 
+  /// Per-codec constraints, for the parts a codec name cannot express.
+  ///
+  /// A codec listed in [videoCodecs] with no entry here is claimed
+  /// unconditionally, which is what the flat lists meant on their own. An entry
+  /// narrows that claim: "hevc, but only up to 8-bit" is the difference between
+  /// a tablet playing its library and a tablet showing "Could not open codec."
+  final List<CodecProfile> codecProfiles;
+
   const DeviceProfile({
     required this.containers,
     required this.videoCodecs,
     required this.audioCodecs,
     required this.hdrFormats,
+    this.codecProfiles = const [],
   });
+
+  DeviceProfile copyWith({List<CodecProfile>? codecProfiles}) => DeviceProfile(
+        containers: containers,
+        videoCodecs: videoCodecs,
+        audioCodecs: audioCodecs,
+        hdrFormats: hdrFormats,
+        codecProfiles: codecProfiles ?? this.codecProfiles,
+      );
 
   /// What browsers decode. Mirrors `DeviceProfile.browser_default/0` on the
   /// server, so a web client asserts nothing the server would not have assumed.
@@ -36,13 +57,21 @@ class DeviceProfile {
           'av01',
         ],
         audioCodecs = const ['aac', 'mp3', 'opus', 'vorbis'],
-        hdrFormats = const [];
+        hdrFormats = const [],
+        // A browser enforces its own codec support at `canPlayType`, and this
+        // client has no capability table to read, so it constrains nothing.
+        codecProfiles = const [];
 
-  Map<String, List<String>> toJson() => {
+  Map<String, dynamic> toJson() => {
         'containers': containers,
         'videoCodecs': videoCodecs,
         'audioCodecs': audioCodecs,
         'hdrFormats': hdrFormats,
+        // Omitted entirely when empty. An older server ignores the key either
+        // way, but sending nothing keeps the header at the size it has always
+        // been for clients with nothing to constrain.
+        if (codecProfiles.isNotEmpty)
+          'codecProfiles': codecProfiles.map((p) => p.toJson()).toList(),
       };
 
   /// Unpadded base64url of the JSON, which is what the server's plug decodes.

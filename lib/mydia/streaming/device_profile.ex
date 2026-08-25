@@ -1,11 +1,26 @@
 defmodule Mydia.Streaming.DeviceProfile do
   @moduledoc """
-  What a client can decode, as four allowlists.
+  What a client can decode: four allowlists, plus the constraints on them.
 
   A profile arrives per request in the `X-Mydia-Device-Profile` header and
   parameterizes `Mydia.Streaming.Compatibility`. It is deliberately not
   persisted: a stored profile goes stale silently when the viewer changes OS,
   display, or hardware decode availability, which is the failure this replaces.
+
+  ## Why codec names alone are not enough
+
+  The allowlists answer "which codecs", and that turned out to be the wrong
+  question on its own. A tablet whose MediaCodec decoder opens HEVC Main and
+  refuses HEVC Main 10 still advertised `hevc`, because the native client reads
+  libmpv's `decoder-list` — a libavcodec *build* list, blind to profile and bit
+  depth. The server direct-played a 10-bit stream at it and playback died on
+  "Could not open codec." with no recoverable path.
+
+  `codec_profiles` carries the rest: per-codec `Mydia.Streaming.ProfileCondition`
+  sets over bit depth, profile, level, resolution, frame rate and channel count,
+  evaluated against the file's real per-stream metadata. A codec with no
+  conditions is claimed unconditionally, so a client that sends none behaves
+  exactly as it did before conditions existed.
 
   ## Matching
 
@@ -29,6 +44,9 @@ defmodule Mydia.Streaming.DeviceProfile do
 
   import Ecto.Changeset
 
+  alias Mydia.Library.Structs.StreamInfo
+  alias Mydia.Streaming.CodecProfile
+
   @max_entries 64
   @max_entry_length 64
   @max_encoded_bytes 4096
@@ -37,7 +55,8 @@ defmodule Mydia.Streaming.DeviceProfile do
           containers: [String.t()],
           video_codecs: [String.t()],
           audio_codecs: [String.t()],
-          hdr_formats: [String.t()]
+          hdr_formats: [String.t()],
+          codec_profiles: [CodecProfile.t()]
         }
 
   @primary_key false
@@ -46,6 +65,12 @@ defmodule Mydia.Streaming.DeviceProfile do
     field(:video_codecs, {:array, :string}, default: [])
     field(:audio_codecs, {:array, :string}, default: [])
     field(:hdr_formats, {:array, :string}, default: [])
+
+    # Parsed by hand rather than cast, because these are nested structs and the
+    # "one bad entry rejects the payload" rule below is stricter than a
+    # changeset's per-field errors express. Virtual so the embedded schema stays
+    # the flat, castable shape the four allowlists need.
+    field(:codec_profiles, :any, virtual: true, default: [])
   end
 
   @doc """
@@ -101,13 +126,37 @@ defmodule Mydia.Streaming.DeviceProfile do
       |> downcase_list(:audio_codecs)
       |> downcase_list(:hdr_formats)
 
-    case apply_action(changeset, :insert) do
-      {:ok, profile} -> {:ok, profile}
-      {:error, _changeset} -> :error
+    with {:ok, profile} <- apply_action(changeset, :insert),
+         {:ok, codec_profiles} <- parse_codec_profiles(Map.get(map, "codecProfiles", [])) do
+      {:ok, %{profile | codec_profiles: codec_profiles}}
+    else
+      _ -> :error
     end
   end
 
   def from_map(_other), do: :error
+
+  # A malformed codec profile rejects the whole payload rather than being
+  # dropped. A dropped constraint is indistinguishable from a client that never
+  # had one, and that difference is the direction that widens direct play.
+  defp parse_codec_profiles(entries) when is_list(entries) do
+    if length(entries) > @max_entries do
+      :error
+    else
+      Enum.reduce_while(entries, {:ok, []}, fn entry, {:ok, acc} ->
+        case CodecProfile.from_map(entry) do
+          {:ok, codec_profile} -> {:cont, {:ok, [codec_profile | acc]}}
+          :error -> {:halt, :error}
+        end
+      end)
+      |> case do
+        {:ok, parsed} -> {:ok, Enum.reverse(parsed)}
+        :error -> :error
+      end
+    end
+  end
+
+  defp parse_codec_profiles(_entries), do: :error
 
   @doc """
   Decodes a raw device profile header value into a profile.
@@ -175,6 +224,33 @@ defmodule Mydia.Streaming.DeviceProfile do
   end
 
   def audio_codec_allowed_or_absent?(%__MODULE__{}, _codec), do: false
+
+  @doc """
+  Whether `stream` satisfies every codec profile this client attached to `codec`.
+
+  A codec the client attached no conditions to is unconstrained, which is what
+  the flat allowlist meant on its own — so a client that sends no codec profiles
+  behaves exactly as it did before conditions existed.
+
+  Note this answers only the *conditions*. Whether the codec is claimed at all
+  is still `video_codec_allowed?/2` and `audio_codec_allowed_or_absent?/2`;
+  both have to hold.
+  """
+  @spec codec_conditions_met?(
+          t(),
+          CodecProfile.stream_type(),
+          String.t() | nil,
+          StreamInfo.t() | nil
+        ) ::
+          boolean()
+  def codec_conditions_met?(%__MODULE__{codec_profiles: profiles}, type, codec, stream)
+      when is_list(profiles) do
+    profiles
+    |> Enum.filter(&CodecProfile.applies?(&1, type, codec))
+    |> Enum.all?(&CodecProfile.satisfied?(&1, stream))
+  end
+
+  def codec_conditions_met?(%__MODULE__{}, _type, _codec, _stream), do: true
 
   defp contains_any?(list, value) do
     normalized = String.downcase(value)

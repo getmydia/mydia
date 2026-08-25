@@ -3,10 +3,13 @@
 library;
 
 import 'dart:convert';
+import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:media_kit/media_kit.dart';
 
+import 'android_codec_capabilities.dart';
+import 'codec_profile.dart';
 import 'device_profile.dart';
 
 /// What libmpv is built with on every desktop and mobile target Mydia ships.
@@ -88,7 +91,40 @@ const DeviceProfile _staticNativeProfile = DeviceProfile(
 /// Constructs a throwaway [Player] purely to reach mpv's property API; media_kit
 /// exposes no lighter handle for it. The instance is always disposed before
 /// returning, success or failure.
+/// The profile this client advertises.
+///
+/// Two sources, answering two different questions. libmpv's `decoder-list` says
+/// which codecs this build can decode *at all*; Android's MediaCodec tables say
+/// which of them this hardware can actually open, and at what bit depth. Only
+/// the second one would have caught a Fire HD 10 being handed HEVC Main 10 —
+/// `decoder-list` reports `hevc` on every build Mydia ships, Main 10 or not.
+///
+/// The MediaCodec pass only ever *narrows* what the mpv pass claimed, and only
+/// on Android, where hardware decoding is the path that actually runs. Desktop
+/// keeps the unconstrained claim: mpv software-decodes 10-bit HEVC there
+/// perfectly well.
 Future<DeviceProfile> detectDeviceProfile() async {
+  final profile = await _probeMpvProfile();
+
+  if (!Platform.isAndroid) return profile;
+
+  final List<CodecProfile> codecProfiles = await probeAndroidCodecProfiles();
+
+  // Logged because the absence of exactly this line is what made the original
+  // failure so expensive to diagnose: a device claiming a codec it cannot open
+  // looks identical, from every log we had, to a device that can. One line
+  // naming what this client actually advertised turns that into a lookup.
+  debugPrint(
+    '[DeviceProfile] android codec constraints: '
+    '${codecProfiles.isEmpty ? 'none (unconstrained)' : codecProfiles.join(', ')}',
+  );
+
+  if (codecProfiles.isEmpty) return profile;
+
+  return profile.copyWith(codecProfiles: codecProfiles);
+}
+
+Future<DeviceProfile> _probeMpvProfile() async {
   Player? player;
   try {
     player = Player();
