@@ -76,6 +76,7 @@ import '../../../core/p2p/media_proxy.dart';
 import '../../../core/p2p/media_proxy_factory.dart';
 import '../../../core/window/desktop_window.dart';
 import '../../../core/window/player_window_sizer.dart';
+import '../../../core/player/hls_strategy_selection.dart';
 import '../../../core/player/resume_plan.dart';
 import '../../../core/remote/remote_control_intent.dart';
 import '../../../core/remote/remote_target_controller.dart';
@@ -1441,18 +1442,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   /// Pick the best HLS strategy from streaming candidates.
   ///
-  /// Prefers HLS_COPY (no transcoding) if available, falls back to TRANSCODE.
+  /// Delegates to [pickHlsStrategy], which reads the leading candidate as
+  /// the server's compatibility verdict for this file: a leading `HLS_COPY`
+  /// means `:needs_transcoding`, and `HLS_COPY` never re-encodes, so it is
+  /// never a safe choice in that case. See that function's doc comment for
+  /// why this is correct against both an old server and one carrying the
+  /// #564 fix.
   Enum$StreamingStrategy _pickHlsStrategy(
     List<Query$StreamingCandidates$streamingCandidates$candidates>? candidates,
   ) {
-    if (candidates != null) {
-      for (final c in candidates) {
-        if (c.strategy == Enum$StreamingCandidateStrategy.HLS_COPY) {
-          return Enum$StreamingStrategy.HLS_COPY;
-        }
-      }
-    }
-    return Enum$StreamingStrategy.TRANSCODE;
+    final values = candidates?.map((c) => c.strategy.toJson()).toList() ??
+        const <String>[];
+
+    return pickHlsStrategy(values) == 'HLS_COPY'
+        ? Enum$StreamingStrategy.HLS_COPY
+        : Enum$StreamingStrategy.TRANSCODE;
   }
 
   /// Rebuilds the quality ladder for the file about to play and settles which
@@ -1767,25 +1771,32 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   /// Check if the first candidate supports direct play on native.
   ///
-  /// On native desktop, FFmpeg handles virtually all codecs/containers,
-  /// so DIRECT_PLAY, REMUX, and HLS_COPY are all direct-playable.
+  /// Delegates to [firstStrategyAllowsDirectPlay], which accepts only
+  /// DIRECT_PLAY and REMUX. HLS_COPY is deliberately excluded even when it
+  /// leads the list: the server only ever leads with HLS_COPY from its
+  /// `:needs_transcoding` branch, and HLS_COPY repackages the stream
+  /// without re-encoding it, so it still carries the exact video codec the
+  /// server just said this device cannot decode. Treating a leading
+  /// HLS_COPY as direct-playable is what let a Fire HD 10 — whose HEVC
+  /// decoder is Main 10 only — stream an HEVC Main 10 file untouched,
+  /// straight into mpv's "Could not open codec.".
   ///
-  /// This stays deliberately permissive even now that the server answers
-  /// against a real device profile. The native profile narrows a static
-  /// table with an mpv probe that has not been validated on hardware, so it
-  /// can under-report. Narrowing this guard to DIRECT_PLAY on top of an
-  /// under-reporting profile would refuse files the player handles fine.
-  /// Narrow it once the probe is confirmed on a device.
+  /// This guard used to stay permissive on the theory that the native
+  /// device profile the server checks against hadn't been validated on real
+  /// hardware and might under-report a device's true decoder support. That
+  /// hedge no longer applies: an Android `MediaCodecList` probe against a
+  /// Fire HD 10 confirmed its decoder is exactly as limited as the server's
+  /// verdict assumed — `video/hevc` capped at 8-bit, `video/vp9` capped at
+  /// 10-bit — so a `:needs_transcoding` verdict for a codec this device
+  /// cannot decode is trustworthy, and HLS_COPY must not be used to
+  /// second-guess it. REMUX stays accepted because it only repackages a
+  /// codec the compatibility check already found acceptable into a
+  /// different container — an unrelated case.
   bool _canDirectPlay(
     List<Query$StreamingCandidates$streamingCandidates$candidates> candidates,
   ) {
-    if (candidates.isEmpty) return false;
-
-    final first = candidates.first;
-    // On native desktop, FFmpeg can handle any format directly
-    return first.strategy == Enum$StreamingCandidateStrategy.DIRECT_PLAY ||
-        first.strategy == Enum$StreamingCandidateStrategy.REMUX ||
-        first.strategy == Enum$StreamingCandidateStrategy.HLS_COPY;
+    final values = candidates.map((c) => c.strategy.toJson()).toList();
+    return firstStrategyAllowsDirectPlay(values);
   }
 
   /// Cache the Original-rung delivery subtitle from resolved candidates.
