@@ -56,61 +56,89 @@ void main() {
   // always `false` under `flutter test`, so a regression that deleted the
   // web check from `WindowChromeInset.build` (see that method's doc comment)
   // would pass every widget test in this file, since none of them can ever
-  // observe `kIsWeb` being `true`. Testing the extracted boolean logic with
-  // explicit inputs is the only way to verify the web branch without a
-  // browser test target — mirrors
+  // observe `kIsWeb` being `true`. Testing the extracted logic with explicit
+  // inputs is the only way to verify the web branch without a browser test
+  // target — mirrors
   // `platform_features_keyboard_test.dart`/`computeSupportsKeyboardShortcuts`.
-  group('shouldReserveTitleBar', () {
+  group('windowChromeInsetFor', () {
     test(
-        'false on web, even on macOS — the regression this predicate exists '
+        'zero on web, even on macOS — the regression this function exists '
         'to catch: a deleted kIsWeb check would still pass every other test '
         'in this file, since kIsWeb is always false under flutter test', () {
       expect(
-        shouldReserveTitleBar(
+        windowChromeInsetFor(
           isWeb: true,
           platform: TargetPlatform.macOS,
           isFullscreen: false,
         ),
-        isFalse,
+        0,
       );
     });
 
-    test('true on windowed macOS, off web', () {
+    test('zero on web, even on Linux', () {
       expect(
-        shouldReserveTitleBar(
+        windowChromeInsetFor(
+          isWeb: true,
+          platform: TargetPlatform.linux,
+          isFullscreen: false,
+        ),
+        0,
+      );
+    });
+
+    test('the traffic light strip on windowed macOS', () {
+      expect(
+        windowChromeInsetFor(
           isWeb: false,
           platform: TargetPlatform.macOS,
           isFullscreen: false,
         ),
-        isTrue,
+        kMacTitleBarOverlap,
       );
     });
 
-    test('false on fullscreen macOS, off web', () {
+    test('the button band on windowed Linux', () {
       expect(
-        shouldReserveTitleBar(
+        windowChromeInsetFor(
           isWeb: false,
-          platform: TargetPlatform.macOS,
-          isFullscreen: true,
+          platform: TargetPlatform.linux,
+          isFullscreen: false,
         ),
-        isFalse,
+        kLinuxWindowChromeHeight,
       );
     });
+
+    test('the two platforms reserve different heights', () {
+      expect(kLinuxWindowChromeHeight, isNot(kMacTitleBarOverlap));
+    });
+
+    for (final platform in [TargetPlatform.macOS, TargetPlatform.linux]) {
+      test('zero in fullscreen on ${platform.name}', () {
+        expect(
+          windowChromeInsetFor(
+            isWeb: false,
+            platform: platform,
+            isFullscreen: true,
+          ),
+          0,
+        );
+      });
+    }
 
     for (final platform in [
-      TargetPlatform.linux,
       TargetPlatform.windows,
       TargetPlatform.iOS,
       TargetPlatform.android,
     ]) {
-      test('false on ${platform.name}, off web', () {
+      test('zero on ${platform.name}, which has no Flutter-drawn chrome yet',
+          () {
         expect(
-          shouldReserveTitleBar(
+          windowChromeInsetFor(
             isWeb: false,
             platform: platform,
             isFullscreen: false,
           ),
-          isFalse,
+          0,
         );
       });
     }
@@ -151,8 +179,27 @@ void main() {
       expect(top, 0);
     });
 
+    testWidgets('reserves the button band on windowed Linux', (tester) async {
+      final top = await _topPaddingUnder(
+        tester,
+        platform: TargetPlatform.linux,
+        fullscreen: ValueNotifier(false),
+      );
+
+      expect(top, kLinuxWindowChromeHeight);
+    });
+
+    testWidgets('reserves nothing on fullscreen Linux', (tester) async {
+      final top = await _topPaddingUnder(
+        tester,
+        platform: TargetPlatform.linux,
+        fullscreen: ValueNotifier(true),
+      );
+
+      expect(top, 0);
+    });
+
     for (final platform in [
-      TargetPlatform.linux,
       TargetPlatform.windows,
       TargetPlatform.iOS,
       TargetPlatform.android,

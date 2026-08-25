@@ -31,7 +31,7 @@ enum FullscreenMode {
 ///
 /// Deliberately NOT annotated `@visibleForTesting`, unlike its cousins
 /// `PlatformFeatures.computeSupportsKeyboardShortcuts` and
-/// `shouldReserveTitleBar`. Those are called from inside their own library
+/// `windowChromeInsetFor`. Those are called from inside their own library
 /// file; this one is called from `fullscreen_backend_web.dart`, and the
 /// annotation fires `invalid_use_of_visible_for_testing_member` across files.
 /// `windowFullscreenSignal` in `core/window/window_fullscreen.dart` documents
