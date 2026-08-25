@@ -78,9 +78,10 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
   end
 
   @spec resolve_similar(map(), map(), Absinthe.Resolution.t()) :: {:ok, term()} | {:error, term()}
-  def resolve_similar(parent, _args, _info) do
+  def resolve_similar(parent, _args, %{context: context}) do
+    scope = context[:current_scope]
     tmdb_ids = MetadataAccess.get_field(parent, :recommended_tmdb_ids) || []
-    status = Media.library_status_for_tmdb_ids(tmdb_ids, parent.type)
+    status = Media.library_status_for_tmdb_ids(scope, tmdb_ids, parent.type)
 
     matched_ids =
       tmdb_ids
@@ -88,7 +89,7 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
       |> Enum.reject(&is_nil/1)
 
     items_by_id =
-      Media.list_media_items(ids: matched_ids)
+      Media.list_media_items(scope, ids: matched_ids)
       |> Map.new(&{&1.id, &1})
 
     items =
@@ -257,9 +258,9 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
   # TV Show-specific resolvers
 
   @spec resolve_seasons(map(), map(), Absinthe.Resolution.t()) :: {:ok, term()} | {:error, term()}
-  def resolve_seasons(%{id: media_item_id}, _args, _info) do
+  def resolve_seasons(%{id: media_item_id}, _args, info) do
     # Get all episodes and group by season
-    episodes = Media.list_episodes(media_item_id)
+    episodes = Media.list_episodes(current_scope(info), media_item_id)
 
     seasons =
       episodes
@@ -335,7 +336,7 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
     case context[:current_user] do
       nil ->
         # Return first episode if no user
-        case Media.list_episodes(media_item_id) do
+        case Media.list_episodes(context[:current_scope], media_item_id) do
           [] -> {:ok, nil}
           [first | _] -> {:ok, first}
         end
@@ -355,7 +356,7 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
     case context[:current_user] do
       nil ->
         # Mirrors resolve_next_episode/3 so the two fields never disagree.
-        case Media.list_episodes(media_item_id) do
+        case Media.list_episodes(context[:current_scope], media_item_id) do
           [] -> {:ok, nil}
           [first | _] -> {:ok, %{episode: first, progress_state: "start"}}
         end
@@ -380,10 +381,10 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
   def resolve_season_episodes(
         %{season_number: season_number, _media_item_id: media_item_id},
         _args,
-        _info
+        %{context: context}
       ) do
     episodes =
-      Media.list_episodes(media_item_id)
+      Media.list_episodes(context[:current_scope], media_item_id)
       |> Enum.filter(&(&1.season_number == season_number))
       |> Enum.sort_by(& &1.episode_number)
 
@@ -451,9 +452,9 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
 
   @spec resolve_parent_show(map(), map(), Absinthe.Resolution.t()) ::
           {:ok, term()} | {:error, term()}
-  def resolve_parent_show(%{media_item_id: media_item_id}, _args, _info)
+  def resolve_parent_show(%{media_item_id: media_item_id}, _args, %{context: context})
       when not is_nil(media_item_id) do
-    show = Media.get_media_item!(media_item_id)
+    show = Media.get_media_item!(context[:current_scope], media_item_id)
     {:ok, Map.put(show, :added_at, show.inserted_at)}
   rescue
     Ecto.NoResultsError -> {:ok, nil}
@@ -462,6 +463,9 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
   def resolve_parent_show(_episode, _args, _info), do: {:ok, nil}
 
   # Helper functions
+
+  defp current_scope(%{context: context}), do: context[:current_scope]
+  defp current_scope(_info), do: nil
 
   defp format_progress(progress) do
     %{
@@ -483,7 +487,7 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
         {:ok, false}
 
       user ->
-        {:ok, Media.is_favorite?(user.id, media_item_id)}
+        {:ok, Media.is_favorite?(context[:current_scope], user.id, media_item_id)}
     end
   end
 

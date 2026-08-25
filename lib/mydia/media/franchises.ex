@@ -17,6 +17,7 @@ defmodule Mydia.Media.Franchises do
 
   require Logger
 
+  alias Mydia.Accounts.Scope
   alias Mydia.{Media, Metadata, Repo}
   alias Mydia.Media.{Franchise, FranchiseEntry, MediaItem}
   alias Mydia.Metadata.Provider.Error
@@ -28,22 +29,22 @@ defmodule Mydia.Media.Franchises do
   `Metadata.default_relay_config/0` and exists so tests can inject a stub without
   touching global environment.
   """
-  @spec for_media_item(MediaItem.t(), map() | nil) :: {:ok, Franchise.t()} | :none
-  def for_media_item(media_item, config \\ nil)
+  @spec for_media_item(Scope.t(), MediaItem.t(), map() | nil) :: {:ok, Franchise.t()} | :none
+  def for_media_item(scope, media_item, config \\ nil)
 
-  def for_media_item(%MediaItem{type: "movie", tmdb_id: tmdb_id} = item, config)
+  def for_media_item(%Scope{} = scope, %MediaItem{type: "movie", tmdb_id: tmdb_id} = item, config)
       when is_integer(tmdb_id) do
     config = config || Metadata.default_relay_config()
 
     with {:ok, collection_id} <- resolve_collection_id(item, config),
          {:ok, collection} <- fetch_collection(collection_id, config) do
-      build(collection, item)
+      build(scope, collection, item)
     else
       :none -> :none
     end
   end
 
-  def for_media_item(_media_item, _config), do: :none
+  def for_media_item(%Scope{}, _media_item, _config), do: :none
 
   ## Pointer resolution
 
@@ -122,7 +123,7 @@ defmodule Mydia.Media.Franchises do
 
   ## Assembly
 
-  defp build(collection, %MediaItem{} = item) do
+  defp build(%Scope{} = scope, collection, %MediaItem{} = item) do
     entries =
       collection.parts
       |> Enum.map(&to_entry/1)
@@ -132,7 +133,8 @@ defmodule Mydia.Media.Franchises do
     if length(entries) < 2 do
       :none
     else
-      status = Media.library_status_for_tmdb_ids(Enum.map(entries, & &1.tmdb_id), "movie")
+      status =
+        Media.library_status_for_tmdb_ids(scope, Enum.map(entries, & &1.tmdb_id), "movie")
 
       entries =
         entries

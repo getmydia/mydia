@@ -1,6 +1,7 @@
 defmodule Mydia.Media.ContentRatingAgeTest do
   use Mydia.DataCase, async: true
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Media
   alias Mydia.Media.MediaItem
   alias Mydia.Metadata.Structs.MediaMetadata
@@ -9,6 +10,7 @@ defmodule Mydia.Media.ContentRatingAgeTest do
   defp create_with_rating(rating) do
     {:ok, item} =
       Media.create_media_item(
+        Scope.unrestricted(),
         %{
           type: "movie",
           title: "Rated #{System.unique_integer([:positive])}",
@@ -43,7 +45,7 @@ defmodule Mydia.Media.ContentRatingAgeTest do
     assert item.content_rating_age == 0
 
     {:ok, updated} =
-      Media.update_media_item(item, %{
+      Media.update_media_item(Scope.unrestricted(), item, %{
         metadata: %MediaMetadata{
           provider_id: "1",
           provider: :metadata_relay,
@@ -57,7 +59,7 @@ defmodule Mydia.Media.ContentRatingAgeTest do
 
   test "leaves the age alone when a write does not touch metadata" do
     item = create_with_rating("PG-13")
-    {:ok, updated} = Media.update_media_item(item, %{monitored: false})
+    {:ok, updated} = Media.update_media_item(Scope.unrestricted(), item, %{monitored: false})
 
     assert Repo.get!(MediaItem, updated.id).content_rating_age == 13
   end
@@ -66,7 +68,7 @@ defmodule Mydia.Media.ContentRatingAgeTest do
     item = create_with_rating("PG-13")
     assert item.content_rating_age == 13
 
-    {:ok, updated} = Media.update_media_item(item, %{metadata: nil})
+    {:ok, updated} = Media.update_media_item(Scope.unrestricted(), item, %{metadata: nil})
 
     assert Repo.get!(MediaItem, updated.id).content_rating_age == nil
   end

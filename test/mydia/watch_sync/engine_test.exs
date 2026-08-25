@@ -4,6 +4,7 @@ defmodule Mydia.WatchSync.EngineTest do
   import Mydia.MediaFixtures
   import Mydia.AccountsFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Playback
   alias Mydia.WatchSync
 
@@ -181,6 +182,7 @@ defmodule Mydia.WatchSync.EngineTest do
 
     {:ok, show} =
       Mydia.Media.create_media_item(
+        Scope.unrestricted(),
         %{title: "Tvdb Only Show", type: "tv_show", tvdb_id: 378_982},
         skip_episode_refresh: true
       )

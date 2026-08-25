@@ -5,6 +5,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEventsTest do
   import Mydia.AccountsFixtures
   import ExUnit.CaptureLog
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Media.{Franchise, FranchiseEntry}
   alias MydiaWeb.MediaLive.Show.FranchiseEvents
 
@@ -167,7 +168,8 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEventsTest do
       assert MapSet.member?(socket.assigns.adding_franchise_tmdb_ids, 1002)
 
       # The async body is what performs the add; run it directly.
-      {:ok, media_item} = FranchiseEvents.perform_add(current, {:tmdb, 1002}, config)
+      {:ok, media_item} =
+        FranchiseEvents.perform_add(Scope.unrestricted(), current, {:tmdb, 1002}, config)
 
       assert media_item.tmdb_id == 1002
       assert media_item.title == "Missing Sequel"
@@ -197,7 +199,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEventsTest do
       end)
 
       assert {:already_in_library, media_item} =
-               FranchiseEvents.perform_add(current, {:tmdb, 1302}, config)
+               FranchiseEvents.perform_add(Scope.unrestricted(), current, {:tmdb, 1302}, config)
 
       assert media_item.id == existing.id
     end
@@ -518,7 +520,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEventsTest do
       [_current_entry, requested_entry, untouched_entry] = franchise.entries
 
       {:ok, _request} =
-        Mydia.MediaRequests.create_request(%{
+        Mydia.MediaRequests.create_request(Scope.unrestricted(), %{
           media_type: "movie",
           title: requested_entry.title,
           tmdb_id: requested_entry.tmdb_id,
@@ -563,7 +565,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEventsTest do
       [_current_entry, requested_entry] = franchise.entries
 
       {:ok, _request} =
-        Mydia.MediaRequests.create_request(%{
+        Mydia.MediaRequests.create_request(Scope.unrestricted(), %{
           media_type: "movie",
           title: requested_entry.title,
           tmdb_id: requested_entry.tmdb_id,

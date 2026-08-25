@@ -14,6 +14,7 @@ defmodule Mydia.MediaRequests do
   import Mydia.QueryHelpers
   require Logger
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Repo
   alias Mydia.Media
   alias Mydia.Media.Add
@@ -63,10 +64,10 @@ defmodule Mydia.MediaRequests do
   Returns `{:error, :duplicate_media}` if media exists.
   Returns `{:error, :duplicate_request}` if pending request exists.
   """
-  def create_request(attrs \\ %{}) do
+  def create_request(%Scope{} = scope, attrs \\ %{}) do
     changeset = MediaRequest.create_changeset(%MediaRequest{}, attrs)
 
-    with :ok <- check_duplicate_media(changeset),
+    with :ok <- check_duplicate_media(scope, changeset),
          :ok <- check_duplicate_request(changeset),
          {:ok, request} <- Repo.insert(changeset) do
       {:ok, Repo.preload(request, [:requester])}
@@ -108,9 +109,9 @@ defmodule Mydia.MediaRequests do
     - `:config` - Relay config to fetch with. Defaults to
       `Metadata.default_relay_config/0`. Inject a Bypass config in tests.
   """
-  def approve_request(%MediaRequest{} = request, attrs \\ %{}, opts \\ []) do
+  def approve_request(%Scope{} = scope, %MediaRequest{} = request, attrs \\ %{}, opts \\ []) do
     with {:ok, media_attrs} <- resolve_media_attrs(request, opts),
-         {:ok, result, created?} <- insert_approval(request, media_attrs, attrs, opts) do
+         {:ok, result, created?} <- insert_approval(scope, request, media_attrs, attrs, opts) do
       # After the transaction, never inside it. Repo.transaction defers event
       # broadcasts until commit, and a search queued against an uncommitted
       # media item is a race.
@@ -156,10 +157,11 @@ defmodule Mydia.MediaRequests do
   # rather than creating a new one. `approve_request/3` uses that flag to
   # decide whether to queue a search; a linked request must not queue one for
   # a media item someone else already added.
-  defp insert_approval(request, media_attrs, attrs, opts) do
+  defp insert_approval(scope, request, media_attrs, attrs, opts) do
     Multi.new()
     |> Multi.run(:media_item, fn _repo, _changes ->
       case Add.from_attrs(
+             scope,
              media_attrs,
              opts[:config],
              [
@@ -262,7 +264,7 @@ defmodule Mydia.MediaRequests do
 
   # Private functions
 
-  defp check_duplicate_media(changeset) do
+  defp check_duplicate_media(scope, changeset) do
     tmdb_id = Ecto.Changeset.get_field(changeset, :tmdb_id)
     tvdb_id = Ecto.Changeset.get_field(changeset, :tvdb_id)
     # Provider ids are unique per type. A TV request whose tmdb_id matches a
@@ -277,10 +279,10 @@ defmodule Mydia.MediaRequests do
       type not in MediaRequest.valid_media_types() ->
         :ok
 
-      tmdb_id && Media.find_by_external_ids(%{tmdb: tmdb_id}, type: type) ->
+      tmdb_id && Media.find_by_external_ids(scope, %{tmdb: tmdb_id}, type: type) ->
         {:error, :duplicate_media}
 
-      tvdb_id && Media.find_by_external_ids(%{tvdb: tvdb_id}, type: type) ->
+      tvdb_id && Media.find_by_external_ids(scope, %{tvdb: tvdb_id}, type: type) ->
         {:error, :duplicate_media}
 
       true ->

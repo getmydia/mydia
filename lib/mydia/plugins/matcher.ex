@@ -23,6 +23,7 @@ defmodule Mydia.Plugins.Matcher do
   while `match_item/1` deliberately accepts either.
   """
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Media
 
   @type target :: %{
@@ -45,7 +46,7 @@ defmodule Mydia.Plugins.Matcher do
   """
   @spec match_item(target()) :: item_result()
   def match_item(target) when is_map(target) do
-    case Media.find_by_external_ids(external_ids(target)) do
+    case Media.find_by_external_ids(Scope.system(), external_ids(target)) do
       %{id: id} -> {:media_item, id}
       _ -> :not_found
     end
@@ -65,15 +66,15 @@ defmodule Mydia.Plugins.Matcher do
   end
 
   defp match_movie(ids) do
-    case Media.find_by_external_ids(ids, type: "movie") do
+    case Media.find_by_external_ids(Scope.system(), ids, type: "movie") do
       %{id: id} -> {:movie, id}
       _ -> :not_found
     end
   end
 
   defp match_episode(ids, season, number) do
-    with %{id: show_id} <- Media.find_by_external_ids(ids, type: "tv_show"),
-         %{id: episode_id} <- Media.find_episode(show_id, season, number) do
+    with %{id: show_id} <- Media.find_by_external_ids(Scope.system(), ids, type: "tv_show"),
+         %{id: episode_id} <- Media.find_episode(Scope.system(), show_id, season, number) do
       {:episode, episode_id}
     else
       _ -> :not_found

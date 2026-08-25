@@ -23,7 +23,11 @@ defmodule Mydia.MediaFixtures do
       })
       # Skip episode refresh in tests to avoid external API calls
       # and to allow tests to create their own episode fixtures
-      |> Mydia.Media.create_media_item(skip_episode_refresh: true)
+      |> then(
+        &Mydia.Media.create_media_item(Mydia.Accounts.Scope.system(), &1,
+          skip_episode_refresh: true
+        )
+      )
 
     media_item
   end

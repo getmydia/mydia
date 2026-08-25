@@ -1,6 +1,7 @@
 defmodule Mydia.Media.EpisodeDataTypeTest do
   use Mydia.DataCase, async: true
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Media
   alias Mydia.Media.EpisodeDataType
   alias Mydia.Metadata.Structs.EpisodeData
@@ -10,6 +11,7 @@ defmodule Mydia.Media.EpisodeDataTypeTest do
       # Create a media item first
       {:ok, media_item} =
         Media.create_media_item(
+          Scope.unrestricted(),
           %{
             type: "tv_show",
             title: "Bluey",
@@ -64,6 +66,7 @@ defmodule Mydia.Media.EpisodeDataTypeTest do
     test "handles nil metadata gracefully" do
       {:ok, media_item} =
         Media.create_media_item(
+          Scope.unrestricted(),
           %{
             type: "tv_show",
             title: "Test Show",
@@ -88,6 +91,7 @@ defmodule Mydia.Media.EpisodeDataTypeTest do
     test "handles partial metadata with missing optional fields" do
       {:ok, media_item} =
         Media.create_media_item(
+          Scope.unrestricted(),
           %{
             type: "tv_show",
             title: "Test Show",

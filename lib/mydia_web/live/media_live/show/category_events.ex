@@ -7,7 +7,7 @@ defmodule MydiaWeb.MediaLive.Show.CategoryEvents do
   alias Mydia.Media
   alias MydiaWeb.Live.Authorization
 
-  import MydiaWeb.MediaLive.Show.Loaders, only: [load_media_item: 1]
+  import MydiaWeb.MediaLive.Show.Loaders, only: [load_media_item: 2]
 
   def show_category_modal(_params, socket) do
     media_item = socket.assigns.media_item
@@ -53,7 +53,9 @@ defmodule MydiaWeb.MediaLive.Show.CategoryEvents do
       media_item = socket.assigns.media_item
       params = Map.put(params, "category_override", params["override"] == "true")
 
-      case Media.update_media_item(media_item, params, reason: "Category updated") do
+      case Media.update_media_item(socket.assigns.current_scope, media_item, params,
+             reason: "Category updated"
+           ) do
         {:ok, updated_item} ->
           {:noreply,
            socket
@@ -76,6 +78,7 @@ defmodule MydiaWeb.MediaLive.Show.CategoryEvents do
       new_category = Mydia.Media.CategoryClassifier.classify(media_item)
 
       case Media.update_media_item(
+             socket.assigns.current_scope,
              media_item,
              %{category: new_category, category_override: false},
              reason: "Category reset to auto-detected"
@@ -116,12 +119,13 @@ defmodule MydiaWeb.MediaLive.Show.CategoryEvents do
       quality_profile_id = if profile_id == "", do: nil, else: profile_id
 
       case Media.update_media_item(
+             socket.assigns.current_scope,
              media_item,
              %{quality_profile_id: quality_profile_id},
              reason: "Quality profile updated"
            ) do
         {:ok, _updated_item} ->
-          reloaded_item = load_media_item(media_item.id)
+          reloaded_item = load_media_item(socket.assigns.current_scope, media_item.id)
 
           {:noreply,
            socket

@@ -83,27 +83,32 @@ defmodule MydiaWeb.DashboardLive.Index do
   end
 
   defp load_dashboard_data(socket) do
+    scope = socket.assigns.current_scope
+
     # Load basic stats. The nav hook (MydiaWeb.Live.UserAuth.on_mount
     # :load_navigation_data) runs before mount/3 and already assigns
     # :excluded_categories, so reuse it here rather than recomputing it. This
     # keeps the dashboard's :movie_count / :tv_show_count assigns in sync with
     # the sidebar badges, which the same assign keys drive in Layouts.app.
     excluded_categories = socket.assigns[:excluded_categories] || []
-    movie_count = Media.count_movies(exclude_categories: excluded_categories)
-    tv_show_count = Media.count_tv_shows(exclude_categories: excluded_categories)
+    movie_count = Media.count_movies(scope, exclude_categories: excluded_categories)
+    tv_show_count = Media.count_tv_shows(scope, exclude_categories: excluded_categories)
     active_downloads_count = Downloads.count_active_downloads()
     total_storage = Library.total_storage_bytes() |> format_bytes()
 
     # Load library status map for efficient lookups
-    library_status_map = Media.get_library_status_map()
+    library_status_map = Media.get_library_status_map(scope)
 
     # Load recent and upcoming content for monitored media
     today = Date.utc_today()
     seven_days_ago = Date.add(today, -7)
     seven_days_ahead = Date.add(today, 7)
 
-    recent_episodes = Media.list_episodes_by_air_date(seven_days_ago, today, monitored: true)
-    upcoming_episodes = Media.list_episodes_by_air_date(today, seven_days_ahead, monitored: true)
+    recent_episodes =
+      Media.list_episodes_by_air_date(scope, seven_days_ago, today, monitored: true)
+
+    upcoming_episodes =
+      Media.list_episodes_by_air_date(scope, today, seven_days_ahead, monitored: true)
 
     # Load pending requests count for admins
     pending_requests_count =
@@ -372,6 +377,7 @@ defmodule MydiaWeb.DashboardLive.Index do
       |> Keyword.put_new(:actor_id, socket.assigns.current_user.id)
 
     case MediaAddHelpers.handle_add_media_to_library(
+           socket.assigns.current_scope,
            ref,
            media_type,
            socket.assigns.library_status_map,
@@ -469,6 +475,7 @@ defmodule MydiaWeb.DashboardLive.Index do
 
   defp submit_request(socket, item, media_type) do
     case MediaRequestHelpers.handle_request_media(
+           socket.assigns.current_scope,
            item,
            media_type,
            socket.assigns.current_user.id

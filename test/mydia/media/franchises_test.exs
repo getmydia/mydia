@@ -4,6 +4,7 @@ defmodule Mydia.Media.FranchisesTest do
   import Mydia.MediaFixtures
   import ExUnit.CaptureLog
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Media
   alias Mydia.Media.{Franchise, FranchiseEntry, Franchises}
   alias Mydia.Metadata.Cache
@@ -69,7 +70,8 @@ defmodule Mydia.Media.FranchisesTest do
         part(803, "Third", "2007-01-01")
       ])
 
-      assert {:ok, %Franchise{} = franchise} = Franchises.for_media_item(current, config)
+      assert {:ok, %Franchise{} = franchise} =
+               Franchises.for_media_item(Scope.unrestricted(), current, config)
 
       assert franchise.name == "Collection #{cid}"
       assert franchise.total_count == 3
@@ -103,7 +105,7 @@ defmodule Mydia.Media.FranchisesTest do
         Map.put(part(813, "Third", "2007-01-01"), "vote_average", 5.2)
       ])
 
-      assert {:ok, franchise} = Franchises.for_media_item(current, config)
+      assert {:ok, franchise} = Franchises.for_media_item(Scope.unrestricted(), current, config)
 
       by_id = Map.new(franchise.entries, &{&1.tmdb_id, &1})
 
@@ -129,7 +131,7 @@ defmodule Mydia.Media.FranchisesTest do
         part(822, "Second", "2004-01-01")
       ])
 
-      assert {:ok, franchise} = Franchises.for_media_item(current, config)
+      assert {:ok, franchise} = Franchises.for_media_item(Scope.unrestricted(), current, config)
 
       missing = Enum.find(franchise.entries, &(&1.tmdb_id == 822))
 
@@ -148,7 +150,7 @@ defmodule Mydia.Media.FranchisesTest do
         part(811, "Earlier", "2002-03-01")
       ])
 
-      assert {:ok, franchise} = Franchises.for_media_item(current, config)
+      assert {:ok, franchise} = Franchises.for_media_item(Scope.unrestricted(), current, config)
       assert Enum.map(franchise.entries, & &1.tmdb_id) == [811, 812, 813]
     end
 
@@ -164,7 +166,7 @@ defmodule Mydia.Media.FranchisesTest do
         part(821, "January", "2005-01-30")
       ])
 
-      assert {:ok, franchise} = Franchises.for_media_item(current, config)
+      assert {:ok, franchise} = Franchises.for_media_item(Scope.unrestricted(), current, config)
       assert Enum.map(franchise.entries, & &1.tmdb_id) == [821, 822]
     end
   end
@@ -209,9 +211,9 @@ defmodule Mydia.Media.FranchisesTest do
         part(832, "Second", "2004-01-01")
       ])
 
-      assert {:ok, %Franchise{}} = Franchises.for_media_item(movie, config)
+      assert {:ok, %Franchise{}} = Franchises.for_media_item(Scope.unrestricted(), movie, config)
 
-      reloaded = Media.get_media_item!(movie.id)
+      reloaded = Media.get_media_item!(Scope.unrestricted(), movie.id)
       assert reloaded.metadata.collection_id == cid
       assert reloaded.metadata.collection_name == "Collection #{cid}"
     end
@@ -257,7 +259,7 @@ defmodule Mydia.Media.FranchisesTest do
         part(842, "Second", "2004-01-01")
       ])
 
-      assert {:ok, _} = Franchises.for_media_item(movie, config)
+      assert {:ok, _} = Franchises.for_media_item(Scope.unrestricted(), movie, config)
 
       after_count = length(Mydia.Events.get_resource_events("media_item", movie.id, limit: 100))
       assert after_count == before_count
@@ -267,12 +269,12 @@ defmodule Mydia.Media.FranchisesTest do
   describe "for_media_item/2 returns :none" do
     test "for a TV show", %{config: config} do
       show = media_item_fixture(%{type: "tv_show", title: "A Show", tmdb_id: 851, year: 2010})
-      assert Franchises.for_media_item(show, config) == :none
+      assert Franchises.for_media_item(Scope.unrestricted(), show, config) == :none
     end
 
     test "for a movie with no tmdb_id", %{config: config} do
       movie = media_item_fixture(%{type: "movie", title: "No Id", year: 2001})
-      assert Franchises.for_media_item(movie, config) == :none
+      assert Franchises.for_media_item(Scope.unrestricted(), movie, config) == :none
     end
 
     test "when the movie has no franchise", %{bypass: bypass, config: config} do
@@ -306,7 +308,7 @@ defmodule Mydia.Media.FranchisesTest do
         |> Plug.Conn.resp(200, Jason.encode!(body))
       end)
 
-      assert Franchises.for_media_item(movie, config) == :none
+      assert Franchises.for_media_item(Scope.unrestricted(), movie, config) == :none
     end
 
     test "when the relay predates the endpoint", %{bypass: bypass, config: config} do
@@ -325,7 +327,7 @@ defmodule Mydia.Media.FranchisesTest do
       # view, indistinguishable from a genuinely broken relay.
       log =
         capture_log(fn ->
-          assert Franchises.for_media_item(movie, config) == :none
+          assert Franchises.for_media_item(Scope.unrestricted(), movie, config) == :none
         end)
 
       refute log =~ "Franchise lookup failed"
@@ -339,7 +341,7 @@ defmodule Mydia.Media.FranchisesTest do
       on_exit(fn -> Cache.delete("collection:metadata_relay:#{cid}:en-US") end)
       Bypass.down(bypass)
 
-      assert Franchises.for_media_item(movie, config) == :none
+      assert Franchises.for_media_item(Scope.unrestricted(), movie, config) == :none
     end
 
     test "when the franchise has only one member", %{bypass: bypass, config: config} do
@@ -348,7 +350,7 @@ defmodule Mydia.Media.FranchisesTest do
 
       stub_collection(bypass, cid, [part(891, "Only", "2001-01-01")])
 
-      assert Franchises.for_media_item(movie, config) == :none
+      assert Franchises.for_media_item(Scope.unrestricted(), movie, config) == :none
     end
   end
 
@@ -363,7 +365,7 @@ defmodule Mydia.Media.FranchisesTest do
         %{"id" => "not-a-number", "title" => "Broken"}
       ])
 
-      assert {:ok, franchise} = Franchises.for_media_item(movie, config)
+      assert {:ok, franchise} = Franchises.for_media_item(Scope.unrestricted(), movie, config)
       assert franchise.total_count == 2
       assert Enum.map(franchise.entries, & &1.tmdb_id) == [901, 902]
     end

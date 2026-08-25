@@ -94,9 +94,9 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpers do
   the provider and resolves both, so nothing is lost by not fetching here. That
   keeps the button instant.
   """
-  @spec handle_request_media(map(), :movie | :tv_show, String.t()) ::
+  @spec handle_request_media(Mydia.Accounts.Scope.t(), map(), :movie | :tv_show, String.t()) ::
           {:ok, Mydia.Media.MediaRequest.t(), map()} | {:error, term()}
-  def handle_request_media(item, media_type, requester_id) do
+  def handle_request_media(scope, item, media_type, requester_id) do
     base = %{
       media_type: if(media_type == :movie, do: "movie", else: "tv_show"),
       title: item.title,
@@ -120,15 +120,15 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpers do
         {:error, {:metadata, :tvdb_ref_for_movie}}
 
       {:tv_show, {:tvdb, id}} ->
-        submit_request(Map.put(base, :tvdb_id, id))
+        submit_request(scope, Map.put(base, :tvdb_id, id))
 
       {_media_type, ref} ->
-        submit_request(Map.put(base, :tmdb_id, Ref.id(ref)))
+        submit_request(scope, Map.put(base, :tmdb_id, Ref.id(ref)))
     end
   end
 
-  defp submit_request(attrs) do
-    case MediaRequests.create_request(attrs) do
+  defp submit_request(scope, attrs) do
+    case MediaRequests.create_request(scope, attrs) do
       {:ok, request} ->
         {:ok, request, %{status_map_key(request) => request.status}}
 

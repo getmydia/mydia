@@ -33,7 +33,7 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
         {:error, "Authentication required"}
 
       user ->
-        case Candidates.resolve_media_file(content_type, id) do
+        case Candidates.resolve_media_file(context[:current_scope], content_type, id) do
           {:ok, media_file} ->
             media_file = Candidates.ensure_codec_info(media_file)
 

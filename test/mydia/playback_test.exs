@@ -3,6 +3,7 @@ defmodule Mydia.PlaybackTest do
 
   alias Mydia.Playback
   alias Mydia.Accounts
+  alias Mydia.Accounts.Scope
   alias Mydia.Events
   alias Mydia.Media
 
@@ -625,7 +626,7 @@ defmodule Mydia.PlaybackTest do
   end
 
   defp create_media_item do
-    Media.create_media_item(%{
+    Media.create_media_item(Scope.unrestricted(), %{
       title: "Test Movie #{System.unique_integer([:positive])}",
       tmdb_id: System.unique_integer([:positive]),
       type: "movie",
@@ -637,6 +638,7 @@ defmodule Mydia.PlaybackTest do
   defp create_episode do
     {:ok, media_item} =
       Media.create_media_item(
+        Scope.unrestricted(),
         %{
           title: "Test Show #{System.unique_integer([:positive])}",
           tmdb_id: System.unique_integer([:positive]),
@@ -657,6 +659,7 @@ defmodule Mydia.PlaybackTest do
 
   defp create_show do
     Media.create_media_item(
+      Scope.unrestricted(),
       %{
         title: "Test Show #{System.unique_integer([:positive])}",
         tmdb_id: System.unique_integer([:positive]),

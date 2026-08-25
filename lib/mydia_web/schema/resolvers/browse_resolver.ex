@@ -12,30 +12,30 @@ defmodule MydiaWeb.Schema.Resolvers.BrowseResolver do
 
   Supports: movies, TV shows, episodes, and library paths.
   """
-  def get_node(_parent, %{id: node_id}, _info) do
+  def get_node(_parent, %{id: node_id}, info) do
     case NodeId.decode(node_id) do
       {:movie, id} ->
-        get_movie(nil, %{id: id}, nil)
+        get_movie(nil, %{id: id}, info)
 
       {:tv_show, id} ->
-        get_tv_show(nil, %{id: id}, nil)
+        get_tv_show(nil, %{id: id}, info)
 
       {:episode, id} ->
-        get_episode(nil, %{id: id}, nil)
+        get_episode(nil, %{id: id}, info)
 
       {:library_path, id} ->
-        get_library_path(nil, %{id: id}, nil)
+        get_library_path(nil, %{id: id}, info)
 
       {:season, show_id, season_number} ->
-        get_season(nil, %{show_id: show_id, season_number: season_number}, nil)
+        get_season(nil, %{show_id: show_id, season_number: season_number}, info)
 
       {:error, :invalid_node_id} ->
         {:error, "Invalid node ID"}
     end
   end
 
-  def get_movie(_parent, %{id: id}, _info) do
-    media_item = Media.get_media_item!(id)
+  def get_movie(_parent, %{id: id}, info) do
+    media_item = Media.get_media_item!(current_scope(info), id)
 
     case media_item.type do
       "movie" -> {:ok, Map.put(media_item, :added_at, media_item.inserted_at)}
@@ -45,8 +45,8 @@ defmodule MydiaWeb.Schema.Resolvers.BrowseResolver do
     Ecto.NoResultsError -> {:error, "Movie not found"}
   end
 
-  def get_tv_show(_parent, %{id: id}, _info) do
-    media_item = Media.get_media_item!(id)
+  def get_tv_show(_parent, %{id: id}, info) do
+    media_item = Media.get_media_item!(current_scope(info), id)
 
     case media_item.type do
       "tv_show" -> {:ok, Map.put(media_item, :added_at, media_item.inserted_at)}
@@ -56,8 +56,8 @@ defmodule MydiaWeb.Schema.Resolvers.BrowseResolver do
     Ecto.NoResultsError -> {:error, "TV show not found"}
   end
 
-  def get_episode(_parent, %{id: id}, _info) do
-    episode = Media.get_episode!(id)
+  def get_episode(_parent, %{id: id}, info) do
+    episode = Media.get_episode!(current_scope(info), id)
     {:ok, episode}
   rescue
     Ecto.NoResultsError -> {:error, "Episode not found"}
@@ -79,7 +79,7 @@ defmodule MydiaWeb.Schema.Resolvers.BrowseResolver do
     opts = if category, do: Keyword.put(opts, :category, to_string(category)), else: opts
 
     # Get all movies for now (pagination will be implemented properly later)
-    all_movies = Media.list_media_items(opts)
+    all_movies = Media.list_media_items(current_scope(resolution), opts)
 
     # Sort. The watch-state fields need one batched progress lookup; every
     # other field gets an empty map and costs nothing extra. A signed-out
@@ -128,7 +128,7 @@ defmodule MydiaWeb.Schema.Resolvers.BrowseResolver do
     opts = if category, do: Keyword.put(opts, :category, to_string(category)), else: opts
 
     # Get all TV shows
-    all_shows = Media.list_media_items(opts)
+    all_shows = Media.list_media_items(current_scope(resolution), opts)
 
     # Sort. The watch-state fields need one batched progress lookup; every
     # other field gets an empty map and costs nothing extra. A signed-out
@@ -161,9 +161,9 @@ defmodule MydiaWeb.Schema.Resolvers.BrowseResolver do
      }}
   end
 
-  def list_season_episodes(_parent, %{show_id: show_id, season_number: season_number}, _info) do
+  def list_season_episodes(_parent, %{show_id: show_id, season_number: season_number}, info) do
     episodes =
-      Media.list_episodes(show_id)
+      Media.list_episodes(current_scope(info), show_id)
       |> Enum.filter(&(&1.season_number == season_number))
       |> Enum.sort_by(& &1.episode_number)
 
@@ -174,6 +174,9 @@ defmodule MydiaWeb.Schema.Resolvers.BrowseResolver do
 
   defp current_user(%{context: context}), do: context[:current_user]
   defp current_user(_resolution), do: nil
+
+  defp current_scope(%{context: context}), do: context[:current_scope]
+  defp current_scope(_resolution), do: nil
 
   defp sort_field(%{field: field}), do: field
   defp sort_field(_sort), do: :title
@@ -240,13 +243,14 @@ defmodule MydiaWeb.Schema.Resolvers.BrowseResolver do
 
   Returns a virtual Season struct with episode information.
   """
-  def get_season(_parent, %{show_id: show_id, season_number: season_number}, _info) do
+  def get_season(_parent, %{show_id: show_id, season_number: season_number}, info) do
+    scope = current_scope(info)
     # Verify the show exists
-    _show = Media.get_media_item!(show_id)
+    _show = Media.get_media_item!(scope, show_id)
 
     # Get episodes for this season
     episodes =
-      Media.list_episodes(show_id)
+      Media.list_episodes(scope, show_id)
       |> Enum.filter(&(&1.season_number == season_number))
 
     if episodes == [] do
@@ -304,19 +308,19 @@ defmodule MydiaWeb.Schema.Resolvers.BrowseResolver do
   - TvShow → nil
   - LibraryPath → nil
   """
-  def resolve_parent(parent, _args, _info) do
+  def resolve_parent(parent, _args, info) do
     case determine_node_type(parent) do
       :episode ->
         # Episode → Season
         season_number = parent.season_number
         media_item_id = parent.media_item_id
 
-        get_season(nil, %{show_id: media_item_id, season_number: season_number}, nil)
+        get_season(nil, %{show_id: media_item_id, season_number: season_number}, info)
 
       :season ->
         # Season → TvShow
         show_id = parent._media_item_id
-        get_tv_show(nil, %{id: show_id}, nil)
+        get_tv_show(nil, %{id: show_id}, info)
 
       _ ->
         # Movies, TvShows, and LibraryPaths have no parent
@@ -334,7 +338,7 @@ defmodule MydiaWeb.Schema.Resolvers.BrowseResolver do
   - Episode → []
   - LibraryPath → [] (for now, could be shows/movies in the future)
   """
-  def resolve_children(parent, args, _info) do
+  def resolve_children(parent, args, info) do
     first = Map.get(args, :first, 20)
     after_cursor = Map.get(args, :after)
 
@@ -342,14 +346,14 @@ defmodule MydiaWeb.Schema.Resolvers.BrowseResolver do
       case determine_node_type(parent) do
         :tv_show ->
           # Get all seasons
-          case resolve_seasons_as_list(parent) do
+          case resolve_seasons_as_list(parent, info) do
             {:ok, seasons} -> seasons
             _ -> []
           end
 
         :season ->
           # Get all episodes in this season
-          case resolve_episodes_as_list(parent) do
+          case resolve_episodes_as_list(parent, info) do
             {:ok, episodes} -> episodes
             _ -> []
           end
@@ -389,8 +393,8 @@ defmodule MydiaWeb.Schema.Resolvers.BrowseResolver do
   - TvShow: [TvShow]
   - Movie: [Movie]
   """
-  def resolve_ancestors(node, _args, _info) do
-    ancestors = build_ancestor_path(node, [])
+  def resolve_ancestors(node, _args, info) do
+    ancestors = build_ancestor_path(node, [], info)
     {:ok, ancestors}
   end
 
@@ -430,35 +434,38 @@ defmodule MydiaWeb.Schema.Resolvers.BrowseResolver do
   defp determine_node_type(%{path: _, monitored: _}), do: :library_path
   defp determine_node_type(_), do: :unknown
 
-  defp resolve_seasons_as_list(parent) do
+  defp resolve_seasons_as_list(parent, info) do
     alias MydiaWeb.Schema.Resolvers.MediaResolver
-    MediaResolver.resolve_seasons(parent, %{}, %{})
+    MediaResolver.resolve_seasons(parent, %{}, info)
   end
 
-  defp resolve_episodes_as_list(%{_episodes: episodes}) when is_list(episodes) do
+  defp resolve_episodes_as_list(%{_episodes: episodes}, _info) when is_list(episodes) do
     {:ok, Enum.sort_by(episodes, & &1.episode_number)}
   end
 
-  defp resolve_episodes_as_list(%{season_number: season_number, _media_item_id: media_item_id}) do
+  defp resolve_episodes_as_list(
+         %{season_number: season_number, _media_item_id: media_item_id},
+         info
+       ) do
     episodes =
-      Media.list_episodes(media_item_id)
+      Media.list_episodes(current_scope(info), media_item_id)
       |> Enum.filter(&(&1.season_number == season_number))
       |> Enum.sort_by(& &1.episode_number)
 
     {:ok, episodes}
   end
 
-  defp build_ancestor_path(node, acc) do
+  defp build_ancestor_path(node, acc, info) do
     updated_acc = [node | acc]
 
-    case resolve_parent(node, %{}, %{}) do
+    case resolve_parent(node, %{}, info) do
       {:ok, nil} ->
         # No parent, reverse to get root → node order
         Enum.reverse(updated_acc)
 
       {:ok, parent} ->
         # Continue building path
-        build_ancestor_path(parent, updated_acc)
+        build_ancestor_path(parent, updated_acc, info)
 
       _ ->
         Enum.reverse(updated_acc)

@@ -4,6 +4,7 @@ defmodule Mydia.Jobs.ContentRatingAgeBackfillTest do
 
   import Ecto.Query
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Jobs.ContentRatingAgeBackfill
   alias Mydia.Media
   alias Mydia.Media.MediaItem
@@ -13,6 +14,7 @@ defmodule Mydia.Jobs.ContentRatingAgeBackfillTest do
   defp item_with_rating(rating) do
     {:ok, item} =
       Media.create_media_item(
+        Scope.unrestricted(),
         %{
           type: "movie",
           title: "Backfill #{System.unique_integer([:positive])}",

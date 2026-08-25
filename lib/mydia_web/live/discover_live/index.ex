@@ -138,7 +138,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
         end
 
       # Load library status map
-      library_status_map = Media.get_library_status_map()
+      library_status_map = Media.get_library_status_map(socket.assigns.current_scope)
 
       # request_status only ever affects the Request button, which only a
       # guest sees (Authorization.can_submit_request?/1), so a viewer who
@@ -556,6 +556,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
       |> Keyword.put_new(:actor_id, socket.assigns.current_user.id)
 
     case MediaAddHelpers.handle_add_media_to_library(
+           socket.assigns.current_scope,
            ref,
            media_type,
            socket.assigns.library_status_map,
@@ -631,6 +632,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
   defp submit_request(socket, item, media_type) do
     case MediaRequestHelpers.handle_request_media(
+           socket.assigns.current_scope,
            item,
            media_type,
            socket.assigns.current_user.id
