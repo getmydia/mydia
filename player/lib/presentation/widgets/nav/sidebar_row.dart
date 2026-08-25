@@ -198,37 +198,47 @@ class _SidebarRowState extends State<SidebarRow> {
   }
 
   Widget _overflowMenu({required bool showMenu}) {
-    return Opacity(
-      opacity: showMenu ? 1 : 0,
-      child: IgnorePointer(
-        ignoring: !showMenu,
-        child: PopupMenuButton<String>(
-          padding: EdgeInsets.zero,
-          icon: Icon(
-            Icons.more_vert,
-            size: 20,
-            color: AppColors.textSecondary,
+    // PopupMenuButton wraps a Material IconButton, whose canRequestFocus is
+    // just onPressed != null: neither Opacity nor IgnorePointer removes a
+    // widget from focus traversal, so a hidden button would still be a live,
+    // invisible tab stop. ExcludeFocus is what actually pulls it out of
+    // traversal while hidden; on a TV, showMenu is always false (it is
+    // hover- and edit-driven, and a TV has no hover), so the button drops
+    // out entirely there. Desktop keyboard users keep it once it is shown.
+    return ExcludeFocus(
+      excluding: !showMenu,
+      child: Opacity(
+        opacity: showMenu ? 1 : 0,
+        child: IgnorePointer(
+          ignoring: !showMenu,
+          child: PopupMenuButton<String>(
+            padding: EdgeInsets.zero,
+            icon: Icon(
+              Icons.more_vert,
+              size: 20,
+              color: AppColors.textSecondary,
+            ),
+            onSelected: (value) {
+              setState(() => _isLongPressed = false);
+              switch (value) {
+                case 'hide':
+                  widget.onHide?.call();
+                case 'edit':
+                  widget.onEdit?.call();
+                case 'delete':
+                  widget.onDelete?.call();
+              }
+            },
+            onCanceled: () => setState(() => _isLongPressed = false),
+            itemBuilder: (context) => [
+              if (widget.onHide != null)
+                const PopupMenuItem(value: 'hide', child: Text('Hide')),
+              if (widget.onEdit != null)
+                const PopupMenuItem(value: 'edit', child: Text('Edit')),
+              if (widget.onDelete != null)
+                const PopupMenuItem(value: 'delete', child: Text('Delete')),
+            ],
           ),
-          onSelected: (value) {
-            setState(() => _isLongPressed = false);
-            switch (value) {
-              case 'hide':
-                widget.onHide?.call();
-              case 'edit':
-                widget.onEdit?.call();
-              case 'delete':
-                widget.onDelete?.call();
-            }
-          },
-          onCanceled: () => setState(() => _isLongPressed = false),
-          itemBuilder: (context) => [
-            if (widget.onHide != null)
-              const PopupMenuItem(value: 'hide', child: Text('Hide')),
-            if (widget.onEdit != null)
-              const PopupMenuItem(value: 'edit', child: Text('Edit')),
-            if (widget.onDelete != null)
-              const PopupMenuItem(value: 'delete', child: Text('Delete')),
-          ],
         ),
       ),
     );
