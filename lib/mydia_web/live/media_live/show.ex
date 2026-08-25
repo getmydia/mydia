@@ -20,6 +20,7 @@ defmodule MydiaWeb.MediaLive.Show do
   alias MydiaWeb.MediaLive.Show.RecommendationEvents
   alias MydiaWeb.MediaLive.Show.RecommendationComponents
   alias MydiaWeb.MediaLive.Show.LibraryPickerEvents
+  alias MydiaWeb.Live.Helpers.RecommendationsExpanded
 
   # Import helper modules
   import MydiaWeb.MediaLive.Show.Formatters
@@ -142,7 +143,7 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:adding_franchise_tmdb_ids, MapSet.new())
      # Recommendations rail state
      |> assign(:recommendations, [])
-     |> assign(:recommendations_expanded, false)
+     |> RecommendationsExpanded.assign_current()
      |> assign(:adding_recommendation_tmdb_ids, MapSet.new())
      |> assign(:requesting_recommendation_id, nil)
      |> assign_new(:metadata_config, fn -> Mydia.Metadata.default_relay_config() end)
