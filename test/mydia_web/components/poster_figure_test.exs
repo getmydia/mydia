@@ -41,6 +41,16 @@ defmodule MydiaWeb.CoreComponents.PosterFigureTest do
     assert html =~ "hero-tv"
   end
 
+  # The fallback shipped without the transform at first, so a grid mixing
+  # poster-less cards with poster-bearing ones lifted only some of them on
+  # hover. Pinned here because nothing else would catch it coming back.
+  test "the fallback carries the same hover transform as the poster" do
+    html = render_component(&poster_figure/1, src: nil, alt: "A")
+
+    assert html =~ "group-hover:scale-105"
+    assert html =~ "transition-transform"
+  end
+
   test "appends caller classes to the figure" do
     html = render_component(&poster_figure/1, src: "/p.jpg", alt: "A", class: "rounded-t-box")
 

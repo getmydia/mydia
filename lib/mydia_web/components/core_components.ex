@@ -494,7 +494,13 @@ defmodule MydiaWeb.CoreComponents do
         loading={@loading}
         class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
       />
-      <div :if={is_nil(@src)} class="w-full h-full flex items-center justify-center">
+      <%!-- The fallback carries the same hover transform as the img above. A card
+            whose poster is missing is still a link, and a grid where only some
+            cards lift on hover reads as broken rather than as a distinction. --%>
+      <div
+        :if={is_nil(@src)}
+        class="w-full h-full flex items-center justify-center group-hover:scale-105 transition-transform duration-300"
+      >
         <.icon name={@fallback_icon} class="w-16 h-16 text-base-content/20" />
       </div>
       {render_slot(@overlay)}
