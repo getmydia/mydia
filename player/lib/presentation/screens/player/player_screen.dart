@@ -172,6 +172,33 @@ class PlayerScreen extends ConsumerStatefulWidget {
         backgroundColor: Colors.black,
         body: SafeArea(top: false, child: child),
       );
+
+  /// Whether this build should install the playback key handler.
+  ///
+  /// Exposed as a pure predicate rather than inlined at the call site so it
+  /// can be checked for every platform combination from one non-web host,
+  /// for the same reason `PlatformFeatures.computeSupportsKeyboardShortcuts`
+  /// is. Before the directional term, a television fell through both arms:
+  /// `supportsKeyboardShortcuts` covers desktop and web only, so a remote's
+  /// D-pad reached nothing.
+  @visibleForTesting
+  static bool wantsKeyHandling({
+    required bool supportsKeyboardShortcuts,
+    required bool directionalPrimary,
+  }) =>
+      supportsKeyboardShortcuts || directionalPrimary;
+
+  /// Whether to pin the display to landscape on entering playback.
+  ///
+  /// A television is already landscape and has no sensor to rotate, so the
+  /// request is at best a no-op. It reads `isMobile`, which Android TV
+  /// answers true, so it needs the directional term to opt back out.
+  @visibleForTesting
+  static bool wantsForcedLandscape({
+    required bool isMobile,
+    required bool directionalPrimary,
+  }) =>
+      isMobile && !directionalPrimary;
 }
 
 class _PlayerScreenState extends ConsumerState<PlayerScreen>
@@ -635,8 +662,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _fullscreen.isFullscreen.addListener(_onFullscreenChanged);
     _initializePlayer();
 
-    // Force landscape orientation on mobile devices
-    if (PlatformFeatures.isMobile) {
+    // Force landscape orientation on mobile devices. Skipped on a television,
+    // which is already landscape and has nothing to rotate.
+    if (PlayerScreen.wantsForcedLandscape(
+      isMobile: PlatformFeatures.isMobile,
+      directionalPrimary: InputCapabilities.directionalPrimary,
+    )) {
       SystemChrome.setPreferredOrientations([
         DeviceOrientation.landscapeLeft,
         DeviceOrientation.landscapeRight,
@@ -4061,9 +4092,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         ? _buildCastPlaceholder(castSession)
         : _buildBody();
 
-    // Wrap with keyboard listener wherever a physical keyboard exists
-    // (native desktop or web — see supportsKeyboardShortcuts' own dartdoc).
-    if (PlatformFeatures.supportsKeyboardShortcuts && !isCasting) {
+    // Wrap with the key handler wherever a physical keyboard exists (native
+    // desktop or web, see supportsKeyboardShortcuts' own dartdoc) or a D-pad
+    // does. A remote sends the same arrow, Enter and media key codes a
+    // keyboard does, so one handler serves both.
+    if (PlayerScreen.wantsKeyHandling(
+          supportsKeyboardShortcuts: PlatformFeatures.supportsKeyboardShortcuts,
+          directionalPrimary: InputCapabilities.directionalPrimary,
+        ) &&
+        !isCasting) {
       body = Focus(
         focusNode: _focusNode,
         autofocus: true,
