@@ -3,22 +3,9 @@ defmodule MydiaWeb.ActivityLive.IndexTest do
 
   import Phoenix.LiveViewTest
   import Mydia.AccountsFixtures
+  import Mydia.EventsFixtures
   alias Mydia.Events
   alias Mydia.Events.Presentation
-
-  # The category an event type is actually recorded under by the `Mydia.Events`
-  # helpers. It is not the type's namespace: `media_item.*` is recorded as
-  # "media" and `job.*` as "system", so deriving it from the type would produce
-  # fixtures no code path ever writes.
-  @category_by_namespace %{
-    "download" => "downloads",
-    "job" => "system",
-    "media_file" => "media",
-    "media_item" => "media",
-    "playback" => "playback",
-    "plugin" => "plugin",
-    "search" => "search"
-  }
 
   describe "Activity feed" do
     setup %{conn: conn} do
@@ -248,19 +235,9 @@ defmodule MydiaWeb.ActivityLive.IndexTest do
       types = Presentation.known_types() -- Presentation.feed_hidden_types()
 
       for type <- types do
-        [namespace, _action] = String.split(type, ".")
-
-        category =
-          Map.get_lazy(@category_by_namespace, namespace, fn ->
-            flunk(
-              "no real category mapped for event namespace #{inspect(namespace)}; " <>
-                "add it to @category_by_namespace"
-            )
-          end)
-
         {:ok, _} =
           Events.create_event(%{
-            category: category,
+            category: category_for_type(type),
             type: type,
             actor_type: :system,
             actor_id: "test",

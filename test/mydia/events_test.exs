@@ -2,9 +2,12 @@ defmodule Mydia.EventsTest do
   use Mydia.DataCase
 
   import Mydia.AccountsFixtures
+  import Mydia.EventsFixtures
 
   alias Mydia.Events
   alias Mydia.Events.Event
+  alias Mydia.Events.Presentation
+  alias Mydia.Events.Visibility
   alias Phoenix.PubSub
 
   describe "create_event/1" do
@@ -1254,6 +1257,81 @@ defmodule Mydia.EventsTest do
         |> Enum.map(& &1.id)
 
       assert ids == [own.id]
+    end
+  end
+
+  describe "viewer scoping agreement" do
+    setup do
+      guest = user_fixture(%{role: "guest"})
+      other = user_fixture(%{role: "guest"})
+
+      corpus = seed_registry_corpus([guest, other])
+
+      %{guest: guest, other: other, admin: admin_user_fixture(), corpus: corpus}
+    end
+
+    test "the SQL filter and the boolean predicate select the same events", ctx do
+      # list_visible_events/2 defaults :limit to 50 (see apply_pagination/2 in
+      # Mydia.Events). The corpus has ~174 rows, so an unrestricted viewer
+      # (admin, or a guest policy that matched everything) would otherwise be
+      # silently truncated and look like a scope/2 vs visible?/2 disagreement
+      # that is really just pagination. Pass a limit that covers the whole
+      # corpus so this test compares visibility, not page size.
+      corpus_size = length(ctx.corpus)
+
+      for viewer <- [ctx.guest, ctx.other, ctx.admin, nil] do
+        listed =
+          viewer
+          |> Events.list_visible_events(limit: corpus_size)
+          |> Enum.map(& &1.id)
+          |> Enum.sort()
+
+        expected =
+          ctx.corpus
+          |> Enum.filter(&Visibility.visible?(&1, viewer))
+          |> Enum.map(& &1.id)
+          |> Enum.sort()
+
+        assert listed == expected,
+               "scope/2 and visible?/2 disagree for #{inspect(viewer && viewer.role)}"
+      end
+    end
+
+    test "a guest sees exactly five of the registered types", ctx do
+      types =
+        ctx.guest
+        |> Events.list_visible_events()
+        |> Enum.map(& &1.type)
+        |> Enum.uniq()
+        |> Enum.sort()
+
+      assert types == [
+               "media_item.added",
+               "media_item.removed",
+               "playback.finished",
+               "playback.started",
+               "playback.unwatched"
+             ]
+    end
+
+    # One event per registered type, per actor: each of the given users, plus a
+    # system actor. Driving the list off the registry means a newly registered
+    # type is covered here without anyone remembering to add it.
+    defp seed_registry_corpus(users) do
+      actors = Enum.map(users, &{:user, &1.id}) ++ [{:system, "test_system"}]
+
+      for type <- Presentation.known_types(), {actor_type, actor_id} <- actors do
+        {:ok, event} =
+          Events.create_event(%{
+            category: category_for_type(type),
+            type: type,
+            actor_type: actor_type,
+            actor_id: actor_id,
+            metadata: %{"title" => "Fixture Title"}
+          })
+
+        event
+      end
     end
   end
 
