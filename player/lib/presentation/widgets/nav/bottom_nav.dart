@@ -4,6 +4,7 @@ import '../../../core/config/web_config.dart';
 import '../../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../../core/theme/colors.dart';
 import '../../../domain/navigation/nav_destination.dart';
+import '../focus_highlight.dart';
 import '../glass_surface.dart';
 import 'nav_badges.dart';
 
@@ -187,61 +188,65 @@ class _NavItemState extends State<NavItem> with SingleTickerProviderStateMixin {
             ? AppColors.primary
             : AppColors.textSecondary;
 
-    return GestureDetector(
-      onTapDown: _handleTapDown,
-      onTapUp: _handleTapUp,
-      onTapCancel: _handleTapCancel,
-      child: ScaleTransition(
-        scale: _scaleAnimation,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeInOut,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(
-            color: widget.isSelected && !widget.isDisabled
-                ? AppColors.primary.withValues(alpha: 0.12)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 200),
-                    child: Icon(
-                      widget.isSelected && !widget.isDisabled
-                          ? widget.selectedIcon
-                          : widget.icon,
-                      key:
-                          ValueKey('${widget.isSelected}_${widget.isDisabled}'),
-                      color: effectiveColor,
-                      size: 24,
+    return FocusHighlight(
+      onActivate: widget.onTap,
+      borderRadius: const BorderRadius.all(Radius.circular(10)),
+      child: GestureDetector(
+        onTapDown: _handleTapDown,
+        onTapUp: _handleTapUp,
+        onTapCancel: _handleTapCancel,
+        child: ScaleTransition(
+          scale: _scaleAnimation,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeInOut,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: widget.isSelected && !widget.isDisabled
+                  ? AppColors.primary.withValues(alpha: 0.12)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 200),
+                      child: Icon(
+                        widget.isSelected && !widget.isDisabled
+                            ? widget.selectedIcon
+                            : widget.icon,
+                        key: ValueKey(
+                            '${widget.isSelected}_${widget.isDisabled}'),
+                        color: effectiveColor,
+                        size: 24,
+                      ),
                     ),
-                  ),
-                  if (widget.badge != null)
-                    Positioned(
-                      top: -3,
-                      right: -3,
-                      child: widget.badge!,
-                    ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              AnimatedDefaultTextStyle(
-                duration: const Duration(milliseconds: 200),
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: widget.isSelected && !widget.isDisabled
-                      ? FontWeight.w600
-                      : FontWeight.w500,
-                  color: effectiveColor,
+                    if (widget.badge != null)
+                      Positioned(
+                        top: -3,
+                        right: -3,
+                        child: widget.badge!,
+                      ),
+                  ],
                 ),
-                child: Text(widget.label),
-              ),
-            ],
+                const SizedBox(height: 4),
+                AnimatedDefaultTextStyle(
+                  duration: const Duration(milliseconds: 200),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: widget.isSelected && !widget.isDisabled
+                        ? FontWeight.w600
+                        : FontWeight.w500,
+                    color: effectiveColor,
+                  ),
+                  child: Text(widget.label),
+                ),
+              ],
+            ),
           ),
         ),
       ),
