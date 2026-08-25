@@ -13,8 +13,8 @@ defmodule MydiaWeb.Schema.Resolvers.DownloadResolver do
 
   Returns a list of available resolutions with estimated file sizes.
   """
-  def download_options(_parent, %{content_type: content_type, id: id}, _resolution) do
-    case DownloadService.get_options(content_type, id) do
+  def download_options(_parent, %{content_type: content_type, id: id}, %{context: context}) do
+    case DownloadService.get_options(context[:current_scope], content_type, id) do
       {:ok, options} -> {:ok, options}
       {:error, error} -> {:error, format_error(error)}
     end
@@ -25,12 +25,12 @@ defmodule MydiaWeb.Schema.Resolvers.DownloadResolver do
 
   Returns job_id, status, and progress.
   """
-  def prepare_download(_parent, args, _resolution) do
+  def prepare_download(_parent, args, %{context: context}) do
     content_type = args[:content_type]
     id = args[:id]
     resolution = args[:resolution] || "720p"
 
-    case DownloadService.prepare(content_type, id, resolution) do
+    case DownloadService.prepare(context[:current_scope], content_type, id, resolution) do
       {:ok, job_info} -> {:ok, job_info}
       {:error, error} -> {:error, format_error(error)}
     end

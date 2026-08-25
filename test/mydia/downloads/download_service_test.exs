@@ -1,6 +1,7 @@
 defmodule Mydia.Downloads.DownloadServiceTest do
   use Mydia.DataCase
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Downloads.DownloadService
   alias Mydia.Downloads
 
@@ -22,7 +23,8 @@ defmodule Mydia.Downloads.DownloadServiceTest do
     end
 
     test "returns options for a movie", %{media_item: media_item} do
-      assert {:ok, options} = DownloadService.get_options("movie", media_item.id)
+      assert {:ok, options} =
+               DownloadService.get_options(Scope.unrestricted(), "movie", media_item.id)
 
       assert is_list(options)
       assert options != []
@@ -38,11 +40,13 @@ defmodule Mydia.Downloads.DownloadServiceTest do
     end
 
     test "returns error for non-existent movie" do
-      assert {:error, :not_found} = DownloadService.get_options("movie", Ecto.UUID.generate())
+      assert {:error, :not_found} =
+               DownloadService.get_options(Scope.unrestricted(), "movie", Ecto.UUID.generate())
     end
 
     test "returns error for invalid content type" do
-      assert {:error, :not_found} = DownloadService.get_options("invalid", Ecto.UUID.generate())
+      assert {:error, :not_found} =
+               DownloadService.get_options(Scope.unrestricted(), "invalid", Ecto.UUID.generate())
     end
   end
 
@@ -73,14 +77,16 @@ defmodule Mydia.Downloads.DownloadServiceTest do
     end
 
     test "returns options for an episode", %{episode: episode} do
-      assert {:ok, options} = DownloadService.get_options("episode", episode.id)
+      assert {:ok, options} =
+               DownloadService.get_options(Scope.unrestricted(), "episode", episode.id)
 
       assert is_list(options)
       assert options != []
     end
 
     test "returns error for non-existent episode" do
-      assert {:error, :not_found} = DownloadService.get_options("episode", Ecto.UUID.generate())
+      assert {:error, :not_found} =
+               DownloadService.get_options(Scope.unrestricted(), "episode", Ecto.UUID.generate())
     end
   end
 
@@ -103,7 +109,8 @@ defmodule Mydia.Downloads.DownloadServiceTest do
 
     @tag :requires_ffmpeg
     test "creates a transcode job for movie", %{media_item: media_item} do
-      assert {:ok, job_info} = DownloadService.prepare("movie", media_item.id, "720p")
+      assert {:ok, job_info} =
+               DownloadService.prepare(Scope.unrestricted(), "movie", media_item.id, "720p")
 
       assert is_binary(job_info.job_id)
       assert job_info.status in ["pending", "ready"]
@@ -112,28 +119,39 @@ defmodule Mydia.Downloads.DownloadServiceTest do
 
     @tag :requires_ffmpeg
     test "returns same job when called twice", %{media_item: media_item} do
-      {:ok, first_job} = DownloadService.prepare("movie", media_item.id, "720p")
-      {:ok, second_job} = DownloadService.prepare("movie", media_item.id, "720p")
+      {:ok, first_job} =
+        DownloadService.prepare(Scope.unrestricted(), "movie", media_item.id, "720p")
+
+      {:ok, second_job} =
+        DownloadService.prepare(Scope.unrestricted(), "movie", media_item.id, "720p")
 
       assert first_job.job_id == second_job.job_id
     end
 
     @tag :requires_ffmpeg
     test "creates separate jobs for different resolutions", %{media_item: media_item} do
-      {:ok, job_720} = DownloadService.prepare("movie", media_item.id, "720p")
-      {:ok, job_480} = DownloadService.prepare("movie", media_item.id, "480p")
+      {:ok, job_720} =
+        DownloadService.prepare(Scope.unrestricted(), "movie", media_item.id, "720p")
+
+      {:ok, job_480} =
+        DownloadService.prepare(Scope.unrestricted(), "movie", media_item.id, "480p")
 
       assert job_720.job_id != job_480.job_id
     end
 
     test "returns error for invalid resolution", %{media_item: media_item} do
       assert {:error, :invalid_resolution} =
-               DownloadService.prepare("movie", media_item.id, "4k")
+               DownloadService.prepare(Scope.unrestricted(), "movie", media_item.id, "4k")
     end
 
     test "returns error for non-existent media" do
       assert {:error, :not_found} =
-               DownloadService.prepare("movie", Ecto.UUID.generate(), "720p")
+               DownloadService.prepare(
+                 Scope.unrestricted(),
+                 "movie",
+                 Ecto.UUID.generate(),
+                 "720p"
+               )
     end
   end
 
