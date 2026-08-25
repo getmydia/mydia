@@ -786,7 +786,7 @@ defmodule Mydia.Plugins.HostFunctions do
   defp apply_favorite(user_id, media_item_id) do
     user = Accounts.get_user!(user_id)
 
-    if Collections.is_favorite?(user, media_item_id) do
+    if Collections.is_favorite?(Scope.for_user(user), media_item_id) do
       {:ok, %{status: :"already-favorited"}}
     else
       with {:ok, favorites} <- Collections.get_or_create_favorites(user),

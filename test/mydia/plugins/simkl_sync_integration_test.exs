@@ -272,10 +272,10 @@ defmodule Mydia.Plugins.SimklSyncIntegrationTest do
 
     assert {:ok, _result} = Plugins.invoke_plugin_schedule(@slug)
 
-    refute Collections.is_favorite?(user, owned.id),
+    refute Collections.is_favorite?(Scope.for_user(user), owned.id),
            "an item we pushed must never be favorited back"
 
-    assert Collections.is_favorite?(user, wanted.id),
+    assert Collections.is_favorite?(Scope.for_user(user), wanted.id),
            "a catalogued-but-unowned plan-to-watch item should become a favorite"
   end
 
