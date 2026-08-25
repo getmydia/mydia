@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 
 import '../../core/layout/breakpoints.dart';
 import '../../core/layout/dock_insets.dart';
+import '../../core/player/input_capabilities.dart';
 
 /// The poster grid shared by every browse screen that shows media.
 ///
@@ -15,6 +17,14 @@ import '../../core/layout/dock_insets.dart';
 /// design difference rather than drift, so that screen takes `BrowseScaffold`
 /// alone and keeps its own grid.
 class BrowseGrid extends StatelessWidget {
+  /// How far past the viewport the grid keeps cells built.
+  ///
+  /// Same reasoning as the rails: focus traversal cannot reach a widget that
+  /// has not been built, and `GridView.builder` is as lazy as
+  /// `ListView.builder`. Two viewport heights, applied only in the
+  /// directional tier.
+  static const double _directionalCacheExtent = 1600;
+
   const BrowseGrid({
     super.key,
     required this.itemCount,
@@ -43,6 +53,9 @@ class BrowseGrid extends StatelessWidget {
       builder: (context, constraints) {
         return GridView.builder(
           controller: controller,
+          scrollCacheExtent: InputCapabilities.directionalPrimary
+              ? const ScrollCacheExtent.pixels(_directionalCacheExtent)
+              : null,
           padding: EdgeInsets.fromLTRB(
             horizontalPadding,
             scrollTopPadding,

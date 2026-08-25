@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import '../../core/layout/breakpoints.dart';
+import '../../core/player/input_capabilities.dart';
 import '../../core/theme/colors.dart';
 import '../../domain/models/continue_watching_item.dart';
 import '../../domain/models/recently_added_item.dart';
@@ -8,6 +10,7 @@ import '../../domain/models/watch_status.dart';
 import 'horizontal_wheel_scroll.dart';
 import 'media_card.dart';
 import 'media_context_menu.dart';
+import 'rail_focus_scroller.dart';
 
 /// Shared by the chevron rotation and the height change so a collapsible rail
 /// opens as one motion.
@@ -60,6 +63,16 @@ class ContentRail extends StatefulWidget {
 }
 
 class _ContentRailState extends State<ContentRail> {
+  /// How far past the viewport the list keeps items built.
+  ///
+  /// Focus traversal can only reach a widget that exists, and
+  /// `ListView.builder`'s 250px default is narrower than a single episode
+  /// still. Two viewport widths guarantee at least one built item past each
+  /// edge, and because every focus move rebuilds, that is all continuous
+  /// traversal needs. Applied only in the directional tier: on a phone or a
+  /// desktop this is memory spent for nothing.
+  static const double _directionalCacheExtent = 2400;
+
   final ScrollController _scrollController = ScrollController();
   bool _showLeftFade = false;
   bool _showRightFade = true;
@@ -208,6 +221,9 @@ class _ContentRailState extends State<ContentRail> {
           builder: (context, controller) => ListView.builder(
             controller: controller,
             scrollDirection: Axis.horizontal,
+            scrollCacheExtent: InputCapabilities.directionalPrimary
+                ? const ScrollCacheExtent.pixels(_directionalCacheExtent)
+                : null,
             padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
             itemCount: widget.items.length,
             itemBuilder: (context, index) {
@@ -217,7 +233,9 @@ class _ContentRailState extends State<ContentRail> {
                 padding: EdgeInsets.only(
                   right: index < widget.items.length - 1 ? cardSpacing : 0,
                 ),
-                child: _buildCard(context, item),
+                child: RailFocusScroller(
+                  child: _buildCard(context, item),
+                ),
               );
             },
           ),
