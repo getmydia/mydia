@@ -3,6 +3,7 @@ defmodule Mydia.Media.RefreshEpisodesConfigTest do
 
   import Mydia.MediaFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Media
 
   # REGRESSION: refresh_episodes_for_tv_show/2 previously ignored opts[:config]
@@ -92,6 +93,7 @@ defmodule Mydia.Media.RefreshEpisodesConfigTest do
 
       assert {:ok, _item} =
                Media.create_media_item(
+                 Scope.unrestricted(),
                  %{
                    type: "tv_show",
                    title: "Create Forward Show",

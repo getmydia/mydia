@@ -12,6 +12,7 @@ defmodule Mydia.Media.ProviderSwitch do
 
   import Ecto.Query, warn: false
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Media
   alias Mydia.Media.{Episode, MediaItem}
   alias Mydia.Library.MediaFile
@@ -267,6 +268,7 @@ defmodule Mydia.Media.ProviderSwitch do
           # unique constraint — the caller expects {:error, reason}, not a crash.
           updated =
             case Media.update_media_item(
+                   Scope.system(),
                    item,
                    provider_switch_attrs(target_provider, new_id, metadata),
                    reason: "Provider switched to #{target_provider}"
@@ -316,7 +318,7 @@ defmodule Mydia.Media.ProviderSwitch do
 
           Mydia.Library.match_files_to_episodes(updated.id)
 
-          Media.get_media_item!(updated.id)
+          Media.get_media_item!(Scope.system(), updated.id)
         end)
 
       case result do

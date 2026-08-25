@@ -18,6 +18,7 @@ defmodule Mydia.Jobs.ImportListAutoAdd do
 
   require Logger
 
+  alias Mydia.Accounts.Scope
   alias Mydia.ImportLists
   alias Mydia.Media
 
@@ -174,7 +175,7 @@ defmodule Mydia.Jobs.ImportListAutoAdd do
         attrs
       end
 
-    case Media.create_media_item(attrs) do
+    case Media.create_media_item(Scope.system(), attrs) do
       {:ok, media_item} ->
         ImportLists.mark_item_added(item, media_item.id)
         maybe_add_to_target_collection(import_list, media_item)

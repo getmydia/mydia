@@ -1,6 +1,7 @@
 defmodule Mydia.Media.MetadataTypeTest do
   use Mydia.DataCase, async: true
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Media
   alias Mydia.Media.MetadataType
   alias Mydia.Metadata.Structs.{MediaMetadata, CastMember, CrewMember, SeasonInfo}
@@ -9,7 +10,7 @@ defmodule Mydia.Media.MetadataTypeTest do
     test "loading media item from database returns MediaMetadata struct, not plain map" do
       # Create a media item with full metadata
       {:ok, media_item} =
-        Media.create_media_item(%{
+        Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "The Matrix",
           year: 1999,
@@ -71,6 +72,7 @@ defmodule Mydia.Media.MetadataTypeTest do
     test "handles TV show metadata with seasons" do
       {:ok, media_item} =
         Media.create_media_item(
+          Scope.unrestricted(),
           %{
             type: "tv_show",
             title: "Breaking Bad",
@@ -117,6 +119,7 @@ defmodule Mydia.Media.MetadataTypeTest do
     test "tvdb_season_id survives a database round trip" do
       {:ok, media_item} =
         Media.create_media_item(
+          Scope.unrestricted(),
           %{
             type: "tv_show",
             title: "Black Clover",
@@ -148,7 +151,7 @@ defmodule Mydia.Media.MetadataTypeTest do
 
     test "handles nil metadata gracefully" do
       {:ok, media_item} =
-        Media.create_media_item(%{
+        Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Test Movie",
           year: 2024
@@ -160,7 +163,7 @@ defmodule Mydia.Media.MetadataTypeTest do
 
     test "handles partial metadata with missing optional fields" do
       {:ok, media_item} =
-        Media.create_media_item(%{
+        Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Minimal Movie",
           year: 2024,
@@ -185,7 +188,7 @@ defmodule Mydia.Media.MetadataTypeTest do
 
     test "collection pointer survives a database round trip" do
       {:ok, media_item} =
-        Media.create_media_item(%{
+        Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Harry Potter and the Philosopher's Stone",
           year: 2001,
@@ -200,7 +203,7 @@ defmodule Mydia.Media.MetadataTypeTest do
           }
         })
 
-      reloaded = Media.get_media_item!(media_item.id)
+      reloaded = Media.get_media_item!(Scope.unrestricted(), media_item.id)
 
       assert %MediaMetadata{} = reloaded.metadata
       assert reloaded.metadata.collection_id == 1241
@@ -209,7 +212,7 @@ defmodule Mydia.Media.MetadataTypeTest do
 
     test "collection pointer is nil when the movie has no franchise" do
       {:ok, media_item} =
-        Media.create_media_item(%{
+        Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Standalone Movie",
           year: 1999,
@@ -222,7 +225,7 @@ defmodule Mydia.Media.MetadataTypeTest do
           }
         })
 
-      reloaded = Media.get_media_item!(media_item.id)
+      reloaded = Media.get_media_item!(Scope.unrestricted(), media_item.id)
 
       assert reloaded.metadata.collection_id == nil
       assert reloaded.metadata.collection_name == nil
@@ -230,7 +233,7 @@ defmodule Mydia.Media.MetadataTypeTest do
 
     test "content rating survives a database round trip" do
       {:ok, media_item} =
-        Media.create_media_item(%{
+        Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "The Matrix",
           year: 1999,
@@ -244,14 +247,14 @@ defmodule Mydia.Media.MetadataTypeTest do
           }
         })
 
-      reloaded = Media.get_media_item!(media_item.id)
+      reloaded = Media.get_media_item!(Scope.unrestricted(), media_item.id)
 
       assert reloaded.metadata.content_rating == "R"
     end
 
     test "recommended tmdb ids survive a database round trip" do
       {:ok, media_item} =
-        Media.create_media_item(%{
+        Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "The Matrix",
           year: 1999,
@@ -265,14 +268,14 @@ defmodule Mydia.Media.MetadataTypeTest do
           }
         })
 
-      reloaded = Media.get_media_item!(media_item.id)
+      reloaded = Media.get_media_item!(Scope.unrestricted(), media_item.id)
 
       assert reloaded.metadata.recommended_tmdb_ids == [604, 605, 606]
     end
 
     test "external_ids survive a database round trip" do
       {:ok, media_item} =
-        Media.create_media_item(%{
+        Media.create_media_item(Scope.unrestricted(), %{
           type: "tv_show",
           title: "Game of Thrones",
           year: 2011,
@@ -286,14 +289,14 @@ defmodule Mydia.Media.MetadataTypeTest do
           }
         })
 
-      reloaded = Media.get_media_item!(media_item.id)
+      reloaded = Media.get_media_item!(Scope.unrestricted(), media_item.id)
 
       assert reloaded.metadata.external_ids == %{tmdb: 1399, tvdb: nil, imdb: "tt0944947"}
     end
 
     test "external_ids stays nil across a database round trip when never asked" do
       {:ok, media_item} =
-        Media.create_media_item(%{
+        Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Standalone Movie",
           year: 1999,
@@ -306,7 +309,7 @@ defmodule Mydia.Media.MetadataTypeTest do
           }
         })
 
-      reloaded = Media.get_media_item!(media_item.id)
+      reloaded = Media.get_media_item!(Scope.unrestricted(), media_item.id)
 
       assert reloaded.metadata.external_ids == nil
     end

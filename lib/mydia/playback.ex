@@ -4,6 +4,7 @@ defmodule Mydia.Playback do
   """
 
   import Ecto.Query, warn: false
+  alias Mydia.Accounts.Scope
   alias Mydia.Events
   alias Mydia.Media.Episode
   alias Mydia.Media.MediaItem
@@ -393,7 +394,7 @@ defmodule Mydia.Playback do
   end
 
   defp season_episodes(show_id, season_number) do
-    Mydia.Media.list_episodes(show_id, season: season_number)
+    Mydia.Media.list_episodes(Scope.system(), show_id, season: season_number)
   end
 
   defp season_episode_ids(show_id, season_number) do

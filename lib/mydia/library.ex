@@ -7,6 +7,7 @@ defmodule Mydia.Library do
   import Mydia.DB
   import Mydia.QueryHelpers
   alias Mydia.Repo
+  alias Mydia.Accounts.Scope
   alias Mydia.Library.{MediaFile, FileAnalyzer, Text, TrashStore}
   alias Mydia.Library.ReleaseParser, as: FileParser
   alias Mydia.Library.Structs.FileMetadata
@@ -1050,7 +1051,7 @@ defmodule Mydia.Library do
     episode_number = List.first(episode_numbers)
 
     # Find the matching episode
-    case Mydia.Media.get_episode_by_number(media_item_id, season, episode_number) do
+    case Mydia.Media.get_episode_by_number(Scope.system(), media_item_id, season, episode_number) do
       nil ->
         Logger.debug("No episode found for file",
           filename: filename,
@@ -1116,7 +1117,7 @@ defmodule Mydia.Library do
     alias Mydia.Settings
 
     # Get media item and verify it's a TV show
-    media_item = Media.get_media_item!(media_item_id)
+    media_item = Media.get_media_item!(Scope.system(), media_item_id)
     library_paths = Settings.list_library_paths()
 
     if media_item.type != "tv_show" do
@@ -1268,7 +1269,7 @@ defmodule Mydia.Library do
     alias Mydia.Settings
 
     # Get media item and verify it's a TV show
-    media_item = Media.get_media_item!(media_item_id)
+    media_item = Media.get_media_item!(Scope.system(), media_item_id)
     library_paths = Settings.list_library_paths()
 
     if media_item.type != "tv_show" do
@@ -1474,7 +1475,7 @@ defmodule Mydia.Library do
     alias Mydia.Settings
 
     # Get media item and verify it's a movie
-    media_item = Media.get_media_item!(media_item_id)
+    media_item = Media.get_media_item!(Scope.system(), media_item_id)
     library_paths = Settings.list_library_paths()
 
     if media_item.type != "movie" do

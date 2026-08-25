@@ -13,6 +13,7 @@ defmodule Mydia.Library.MetadataMatcher do
 
   require Logger
   alias Mydia.{Media, Metadata}
+  alias Mydia.Accounts.Scope
   alias Mydia.Library.ReleaseParser, as: FileParser
   alias Mydia.Library.Structs.MatchResult
   alias Mydia.Library.Text
@@ -614,7 +615,7 @@ defmodule Mydia.Library.MetadataMatcher do
   defp find_local_movie(parsed) do
     # Search for movies with matching title (case-insensitive)
     media_items =
-      Media.list_media_items()
+      Media.list_media_items(Scope.system())
       |> Enum.filter(fn item ->
         item.type == "movie" &&
           titles_match?(item.title, parsed.title) &&
@@ -647,7 +648,7 @@ defmodule Mydia.Library.MetadataMatcher do
   defp find_local_tv_show(parsed) do
     # Search for TV shows with matching title (case-insensitive)
     media_items =
-      Media.list_media_items()
+      Media.list_media_items(Scope.system())
       |> Enum.filter(fn item ->
         item.type == "tv_show" &&
           titles_match?(item.title, parsed.title) &&

@@ -14,6 +14,7 @@ defmodule Mydia.RemoteAccess.MediaTokenRevocationTest do
   use Mydia.DataCase, async: false
 
   alias Mydia.Accounts
+  alias Mydia.Accounts.Scope
   alias Mydia.Media.TokenCache
   alias Mydia.MediaRequests
   alias Mydia.RemoteAccess
@@ -97,7 +98,7 @@ defmodule Mydia.RemoteAccess.MediaTokenRevocationTest do
       assert TokenCache.count() == 1
 
       assert {:ok, _request} =
-               MediaRequests.create_request(%{
+               MediaRequests.create_request(Scope.unrestricted(), %{
                  media_type: "movie",
                  title: "Blocking Request",
                  tmdb_id: System.unique_integer([:positive]),

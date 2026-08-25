@@ -4,11 +4,13 @@ defmodule MydiaWeb.PlaybackLive.Show do
 
   @impl true
   def mount(%{"type" => type, "id" => id}, _session, socket) when type in ["movie", "episode"] do
+    scope = socket.assigns.current_scope
+
     # Load content based on type
-    {content, title} = load_content(type, id)
+    {content, title} = load_content(scope, type, id)
 
     # Get next episode info if this is an episode
-    next_episode_info = get_next_episode_info(type, content)
+    next_episode_info = get_next_episode_info(scope, type, content)
 
     # Get intro/credits timestamps from metadata
     {intro_start, intro_end, credits_start} = get_skip_timestamps(type, content)
@@ -34,13 +36,13 @@ defmodule MydiaWeb.PlaybackLive.Show do
     {:noreply, socket}
   end
 
-  defp load_content("movie", media_item_id) do
-    media_item = Media.get_media_item!(media_item_id, preload: [:media_files])
+  defp load_content(scope, "movie", media_item_id) do
+    media_item = Media.get_media_item!(scope, media_item_id, preload: [:media_files])
     {media_item, media_item.title}
   end
 
-  defp load_content("episode", episode_id) do
-    episode = Media.get_episode!(episode_id, preload: [:media_item, :media_files])
+  defp load_content(scope, "episode", episode_id) do
+    episode = Media.get_episode!(scope, episode_id, preload: [:media_item, :media_files])
     title = "#{episode.media_item.title} - S#{episode.season_number}E#{episode.episode_number}"
     {episode, title}
   end
@@ -86,10 +88,10 @@ defmodule MydiaWeb.PlaybackLive.Show do
     Enum.reverse(parts) |> Enum.join(" - ")
   end
 
-  defp get_next_episode_info("movie", _media_item), do: nil
+  defp get_next_episode_info(_scope, "movie", _media_item), do: nil
 
-  defp get_next_episode_info("episode", episode) do
-    case Media.get_next_episode(episode, preload: [:media_item]) do
+  defp get_next_episode_info(scope, "episode", episode) do
+    case Media.get_next_episode(scope, episode, preload: [:media_item]) do
       nil ->
         nil
 

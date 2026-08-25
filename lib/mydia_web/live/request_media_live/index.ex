@@ -90,7 +90,7 @@ defmodule MydiaWeb.RequestMediaLive.Index do
       request_attrs =
         build_request_attrs(socket.assigns.request_modal_result, request_params, socket.assigns)
 
-      case MediaRequests.create_request(request_attrs) do
+      case MediaRequests.create_request(socket.assigns.current_scope, request_attrs) do
         {:ok, _media_request} ->
           result = socket.assigns.request_modal_result
 

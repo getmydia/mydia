@@ -240,12 +240,16 @@ defmodule MydiaWeb.SearchLive.Index do
     end
 
     # Start async task to add media to library
+    scope = socket.assigns.current_scope
+
     {:noreply,
      socket
      |> assign(:pending_release_title, title)
      |> assign(:pending_search_result, search_result)
      |> assign(:should_download_after_add, should_download)
-     |> start_async(:add_to_library, fn -> add_release_to_library(title) end)}
+     |> start_async(:add_to_library, fn ->
+       add_release_to_library(scope, title)
+     end)}
   end
 
   def handle_event("select_metadata_match", %{"match_id" => match_id}, socket) do
@@ -257,6 +261,7 @@ defmodule MydiaWeb.SearchLive.Index do
       # Fetch full metadata and create media item
       media_type = socket.assigns.metadata_media_type
       parsed = socket.assigns.pending_parsed
+      scope = socket.assigns.current_scope
 
       {:noreply,
        socket
@@ -267,7 +272,7 @@ defmodule MydiaWeb.SearchLive.Index do
 
          case fetch_full_metadata(config, selected_match, media_type) do
            {:ok, metadata} ->
-             create_media_item_from_metadata(parsed, metadata)
+             create_media_item_from_metadata(scope, parsed, metadata)
 
            error ->
              error
@@ -316,6 +321,7 @@ defmodule MydiaWeb.SearchLive.Index do
 
     if selected_match do
       media_type_atom = String.to_existing_atom(media_type)
+      scope = socket.assigns.current_scope
 
       {:noreply,
        socket
@@ -329,7 +335,7 @@ defmodule MydiaWeb.SearchLive.Index do
              # Create media item without parsed data (since parsing failed)
              # Episodes are automatically fetched for TV shows via create_media_item
              attrs = build_media_item_attrs_from_metadata_only(metadata, media_type_atom)
-             Media.create_media_item(attrs)
+             Media.create_media_item(scope, attrs)
 
            error ->
              error
@@ -346,11 +352,14 @@ defmodule MydiaWeb.SearchLive.Index do
 
     if release_title do
       Logger.info("Retrying add to library for: #{release_title}")
+      scope = socket.assigns.current_scope
 
       {:noreply,
        socket
        |> assign(:show_retry_modal, false)
-       |> start_async(:add_to_library, fn -> add_release_to_library(release_title) end)}
+       |> start_async(:add_to_library, fn ->
+         add_release_to_library(scope, release_title)
+       end)}
     else
       {:noreply,
        socket
@@ -405,9 +414,11 @@ defmodule MydiaWeb.SearchLive.Index do
         |> stream_insert(:search_results, search_result)
 
       # Use appropriate download flow based on type
+      scope = socket.assigns.current_scope
+
       socket =
         start_async(socket, :add_to_library, fn ->
-          add_release_to_library(search_result.title)
+          add_release_to_library(scope, search_result.title)
         end)
 
       {:noreply, socket}
@@ -455,13 +466,15 @@ defmodule MydiaWeb.SearchLive.Index do
       case target_type do
         type when type in [:movies, :series] ->
           # For movies/series, use the existing metadata lookup flow
+          scope = socket.assigns.current_scope
+
           {:noreply,
            socket
            |> assign(:pending_release_title, search_result.title)
            |> assign(:pending_search_result, search_result)
            |> assign(:should_download_after_add, true)
            |> start_async(:add_to_library, fn ->
-             add_release_to_library(search_result.title)
+             add_release_to_library(scope, search_result.title)
            end)}
 
         _ ->
@@ -1262,7 +1275,7 @@ defmodule MydiaWeb.SearchLive.Index do
 
   ## Add to Library Functions
 
-  defp add_release_to_library(title) do
+  defp add_release_to_library(scope, title) do
     Logger.info("Adding release to library: #{title}")
 
     with {:ok, parsed} <- parse_release_title(title),
@@ -1274,7 +1287,7 @@ defmodule MydiaWeb.SearchLive.Index do
 
         metadata ->
           # Single match, create media item directly
-          create_media_item_from_metadata(parsed, metadata)
+          create_media_item_from_metadata(scope, parsed, metadata)
       end
     else
       {:error, _reason} = error -> error
@@ -1356,14 +1369,14 @@ defmodule MydiaWeb.SearchLive.Index do
     end
   end
 
-  defp create_media_item_from_metadata(parsed, metadata) do
+  defp create_media_item_from_metadata(scope, parsed, metadata) do
     # Check if media already exists by provider ID
     # For TV shows from TVDB, check tvdb_id; otherwise check tmdb_id
     existing =
       if parsed.type == :tv_show and Map.get(metadata, :provider) == :tvdb do
-        Media.get_media_item_by_tvdb(metadata.provider_id)
+        Media.get_media_item_by_tvdb(scope, metadata.provider_id)
       else
-        Media.get_media_item_by_tmdb(metadata.provider_id)
+        Media.get_media_item_by_tmdb(scope, metadata.provider_id)
       end
 
     case existing do
@@ -1372,7 +1385,7 @@ defmodule MydiaWeb.SearchLive.Index do
         attrs = build_media_item_attrs(parsed, metadata)
 
         # Episodes are automatically fetched for TV shows via create_media_item
-        case Media.create_media_item(attrs) do
+        case Media.create_media_item(scope, attrs) do
           {:ok, media_item} ->
             {:ok, media_item}
 

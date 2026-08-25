@@ -3,6 +3,7 @@ defmodule Mydia.MediaRequestsTest do
 
   import ExUnit.CaptureLog
 
+  alias Mydia.Accounts.Scope
   alias Mydia.MediaRequests
   alias Mydia.{Accounts, Media, Repo}
   alias Mydia.Media.MediaItem
@@ -33,7 +34,7 @@ defmodule Mydia.MediaRequestsTest do
       stub_tmdb_movie(bypass, approved.tmdb_id, "Approved Movie", "/x.jpg")
 
       {:ok, _} =
-        MediaRequests.approve_request(approved, %{approved_by_id: admin.id},
+        MediaRequests.approve_request(Scope.unrestricted(), approved, %{approved_by_id: admin.id},
           config: relay_config(bypass)
         )
 
@@ -105,7 +106,7 @@ defmodule Mydia.MediaRequestsTest do
         requester_id: user.id
       }
 
-      assert {:ok, request} = MediaRequests.create_request(attrs)
+      assert {:ok, request} = MediaRequests.create_request(Scope.unrestricted(), attrs)
       assert request.title == "Test Movie"
       assert request.status == "pending"
       assert request.requester_id == user.id
@@ -114,7 +115,7 @@ defmodule Mydia.MediaRequestsTest do
     test "requires required fields", %{user: user} do
       attrs = %{requester_id: user.id}
 
-      assert {:error, changeset} = MediaRequests.create_request(attrs)
+      assert {:error, changeset} = MediaRequests.create_request(Scope.unrestricted(), attrs)
       assert %{media_type: ["can't be blank"], title: ["can't be blank"]} = errors_on(changeset)
     end
 
@@ -125,7 +126,7 @@ defmodule Mydia.MediaRequestsTest do
         requester_id: user.id
       }
 
-      assert {:error, changeset} = MediaRequests.create_request(attrs)
+      assert {:error, changeset} = MediaRequests.create_request(Scope.unrestricted(), attrs)
 
       assert %{tmdb_id: ["either TMDB ID, TVDB ID, or IMDB ID must be provided"]} =
                errors_on(changeset)
@@ -139,14 +140,16 @@ defmodule Mydia.MediaRequestsTest do
         requester_id: user.id
       }
 
-      assert {:ok, _request} = MediaRequests.create_request(attrs)
-      assert {:error, :duplicate_request} = MediaRequests.create_request(attrs)
+      assert {:ok, _request} = MediaRequests.create_request(Scope.unrestricted(), attrs)
+
+      assert {:error, :duplicate_request} =
+               MediaRequests.create_request(Scope.unrestricted(), attrs)
     end
 
     test "prevents requests for media that already exists", %{user: user} do
       # Create a media item
       {:ok, _media_item} =
-        Media.create_media_item(%{
+        Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Existing Movie",
           year: 2023,
@@ -161,7 +164,8 @@ defmodule Mydia.MediaRequestsTest do
         requester_id: user.id
       }
 
-      assert {:error, :duplicate_media} = MediaRequests.create_request(attrs)
+      assert {:error, :duplicate_media} =
+               MediaRequests.create_request(Scope.unrestricted(), attrs)
     end
   end
 
@@ -186,7 +190,7 @@ defmodule Mydia.MediaRequestsTest do
       }
 
       assert {:ok, %{request: updated_request, media_item: media_item}} =
-               MediaRequests.approve_request(request, attrs, config: config)
+               MediaRequests.approve_request(Scope.unrestricted(), request, attrs, config: config)
 
       assert updated_request.status == "approved"
       assert updated_request.approved_by_id == admin.id
@@ -207,7 +211,7 @@ defmodule Mydia.MediaRequestsTest do
       # A row with the same TMDB ID was added to the library after the
       # request was filed but before it was approved.
       {:ok, existing} =
-        Media.create_media_item(%{
+        Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Existing",
           year: 2023,
@@ -217,7 +221,7 @@ defmodule Mydia.MediaRequestsTest do
       attrs = %{approved_by_id: admin.id}
 
       assert {:ok, %{request: updated_request, media_item: media_item}} =
-               MediaRequests.approve_request(request, attrs, config: config)
+               MediaRequests.approve_request(Scope.unrestricted(), request, attrs, config: config)
 
       assert media_item.id == existing.id
       assert updated_request.status == "approved"
@@ -225,7 +229,9 @@ defmodule Mydia.MediaRequestsTest do
     end
 
     test "requires approved_by_id", %{request: request, config: config} do
-      assert {:error, changeset} = MediaRequests.approve_request(request, %{}, config: config)
+      assert {:error, changeset} =
+               MediaRequests.approve_request(Scope.unrestricted(), request, %{}, config: config)
+
       assert %{approved_by_id: ["can't be blank"]} = errors_on(changeset)
     end
 
@@ -246,7 +252,7 @@ defmodule Mydia.MediaRequestsTest do
       # Filed first, so create_request/1's own duplicate check does not fire:
       # the movie lands in the library while the request sits pending.
       {:ok, movie} =
-        Media.create_media_item(%{
+        Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Crossed Type",
           year: 2023,
@@ -261,7 +267,10 @@ defmodule Mydia.MediaRequestsTest do
       log =
         capture_log(fn ->
           assert {:error, %Ecto.Changeset{} = changeset} =
-                   MediaRequests.approve_request(request, %{approved_by_id: admin.id},
+                   MediaRequests.approve_request(
+                     Scope.unrestricted(),
+                     request,
+                     %{approved_by_id: admin.id},
                      config: relay_config(bypass)
                    )
 
@@ -275,7 +284,7 @@ defmodule Mydia.MediaRequestsTest do
       assert is_nil(reloaded.media_item_id)
 
       assert Repo.aggregate(MediaItem, :count) == before_count
-      assert Media.get_media_item_by_tmdb(tmdb_id).id == movie.id
+      assert Media.get_media_item_by_tmdb(Scope.unrestricted(), tmdb_id).id == movie.id
     end
   end
 
@@ -295,7 +304,10 @@ defmodule Mydia.MediaRequestsTest do
       stub_tmdb_movie(bypass, request.tmdb_id, "Fresh Provider Title", "/approved.jpg")
 
       assert {:ok, %{media_item: media_item}} =
-               MediaRequests.approve_request(request, %{approved_by_id: admin.id},
+               MediaRequests.approve_request(
+                 Scope.unrestricted(),
+                 request,
+                 %{approved_by_id: admin.id},
                  config: relay_config(bypass)
                )
 
@@ -313,12 +325,15 @@ defmodule Mydia.MediaRequestsTest do
       Bypass.down(bypass)
 
       assert {:error, {:metadata, _reason}} =
-               MediaRequests.approve_request(request, %{approved_by_id: admin.id},
+               MediaRequests.approve_request(
+                 Scope.unrestricted(),
+                 request,
+                 %{approved_by_id: admin.id},
                  config: relay_config(bypass)
                )
 
       assert Repo.get!(MediaRequest, request.id).status == "pending"
-      refute Media.get_media_item_by_tmdb(request.tmdb_id)
+      refute Media.get_media_item_by_tmdb(Scope.unrestricted(), request.tmdb_id)
     end
 
     test "reports a request with no TMDB or TVDB id rather than creating a shell", %{
@@ -328,7 +343,7 @@ defmodule Mydia.MediaRequestsTest do
       bypass = Bypass.open()
 
       {:ok, request} =
-        MediaRequests.create_request(%{
+        MediaRequests.create_request(Scope.unrestricted(), %{
           media_type: "movie",
           title: "IMDB Only",
           imdb_id: "tt0000001",
@@ -336,7 +351,10 @@ defmodule Mydia.MediaRequestsTest do
         })
 
       assert {:error, {:metadata, :no_provider_id}} =
-               MediaRequests.approve_request(request, %{approved_by_id: admin.id},
+               MediaRequests.approve_request(
+                 Scope.unrestricted(),
+                 request,
+                 %{approved_by_id: admin.id},
                  config: relay_config(bypass)
                )
 
@@ -402,7 +420,7 @@ defmodule Mydia.MediaRequestsTest do
       bypass = Bypass.open()
       stub_tmdb_movie(bypass, request3.tmdb_id, "Third Movie", "/x.jpg")
 
-      MediaRequests.approve_request(request3, %{approved_by_id: admin.id},
+      MediaRequests.approve_request(Scope.unrestricted(), request3, %{approved_by_id: admin.id},
         config: relay_config(bypass)
       )
 
@@ -513,9 +531,7 @@ defmodule Mydia.MediaRequestsTest do
     }
 
     {:ok, request} =
-      default_attrs
-      |> Map.merge(attrs)
-      |> MediaRequests.create_request()
+      MediaRequests.create_request(Scope.unrestricted(), Map.merge(default_attrs, attrs))
 
     request
   end

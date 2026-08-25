@@ -124,7 +124,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
         end
 
       # Load library status map
-      library_status_map = Media.get_library_status_map()
+      library_status_map = Media.get_library_status_map(socket.assigns.current_scope)
 
       socket =
         socket
@@ -430,6 +430,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
   defp add_with_opts(provider_id, media_type, opts, socket) do
     case MediaAddHelpers.handle_add_media_to_library(
+           socket.assigns.current_scope,
            provider_id,
            media_type,
            socket.assigns.library_status_map,
@@ -491,6 +492,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
   defp submit_request(socket, item, media_type) do
     case MediaRequestHelpers.handle_request_media(
+           socket.assigns.current_scope,
            item,
            media_type,
            socket.assigns.current_user.id

@@ -3,6 +3,7 @@ defmodule Mydia.LibraryTest do
 
   import Ecto.Query, only: [from: 2]
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Library
   alias Mydia.Library.MediaFile
 
@@ -200,7 +201,7 @@ defmodule Mydia.LibraryTest do
 
       # Create a media item
       {:ok, media_item} =
-        Mydia.Media.create_media_item(%{
+        Mydia.Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Test Movie",
           year: 2024

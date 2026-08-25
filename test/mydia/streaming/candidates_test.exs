@@ -6,6 +6,7 @@ defmodule Mydia.Streaming.CandidatesTest do
   import Mydia.SettingsFixtures
   import Mydia.MediaFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Library
   alias Mydia.Library.MediaFile
   alias Mydia.Repo
@@ -199,10 +200,14 @@ defmodule Mydia.Streaming.CandidatesTest do
       uhd2 = media_file_fixture(%{media_item_id: uhd_first.id, resolution: "4K"})
       _hd2 = media_file_fixture(%{media_item_id: uhd_first.id, resolution: "1080p"})
 
-      assert {:ok, chosen} = Candidates.resolve_media_file("movie", hd_first.id)
+      assert {:ok, chosen} =
+               Candidates.resolve_media_file(Scope.unrestricted(), "movie", hd_first.id)
+
       assert chosen.id == uhd.id
 
-      assert {:ok, chosen2} = Candidates.resolve_media_file("movie", uhd_first.id)
+      assert {:ok, chosen2} =
+               Candidates.resolve_media_file(Scope.unrestricted(), "movie", uhd_first.id)
+
       assert chosen2.id == uhd2.id
     end
 
@@ -213,7 +218,9 @@ defmodule Mydia.Streaming.CandidatesTest do
       _hd = media_file_fixture(%{episode_id: episode.id, resolution: "720p"})
       uhd = media_file_fixture(%{episode_id: episode.id, resolution: "2160p"})
 
-      assert {:ok, chosen} = Candidates.resolve_media_file("episode", episode.id)
+      assert {:ok, chosen} =
+               Candidates.resolve_media_file(Scope.unrestricted(), "episode", episode.id)
+
       assert chosen.id == uhd.id
     end
 
@@ -226,7 +233,9 @@ defmodule Mydia.Streaming.CandidatesTest do
       high =
         media_file_fixture(%{media_item_id: movie.id, resolution: "1080p", bitrate: 15_000_000})
 
-      assert {:ok, chosen} = Candidates.resolve_media_file("movie", movie.id)
+      assert {:ok, chosen} =
+               Candidates.resolve_media_file(Scope.unrestricted(), "movie", movie.id)
+
       assert chosen.id == high.id
     end
 
@@ -242,7 +251,9 @@ defmodule Mydia.Streaming.CandidatesTest do
 
       known = media_file_fixture(%{media_item_id: movie.id, resolution: "480p"})
 
-      assert {:ok, chosen} = Candidates.resolve_media_file("movie", movie.id)
+      assert {:ok, chosen} =
+               Candidates.resolve_media_file(Scope.unrestricted(), "movie", movie.id)
+
       assert chosen.id == known.id
     end
 
@@ -253,7 +264,7 @@ defmodule Mydia.Streaming.CandidatesTest do
       _uhd = media_file_fixture(%{media_item_id: movie.id, resolution: "4K"})
 
       # This is the path the fixed player takes. It must never re-rank.
-      assert {:ok, chosen} = Candidates.resolve_media_file("file", hd.id)
+      assert {:ok, chosen} = Candidates.resolve_media_file(Scope.unrestricted(), "file", hd.id)
       assert chosen.id == hd.id
     end
 
@@ -269,7 +280,9 @@ defmodule Mydia.Streaming.CandidatesTest do
           trashed_at: DateTime.utc_now() |> DateTime.truncate(:second)
         })
 
-      assert {:ok, chosen} = Candidates.resolve_media_file("movie", movie.id)
+      assert {:ok, chosen} =
+               Candidates.resolve_media_file(Scope.unrestricted(), "movie", movie.id)
+
       assert chosen.id == hd.id
     end
 
@@ -283,12 +296,15 @@ defmodule Mydia.Streaming.CandidatesTest do
       # This is the exact hole the self-heal in the player depends on: a
       # quality upgrade trashes the old file (Mydia.Upgrades.apply_upgrade/4)
       # but leaves its id resolvable if this clause doesn't filter it out.
-      assert {:error, :not_found} = Candidates.resolve_media_file("file", trashed.id)
+      assert {:error, :not_found} =
+               Candidates.resolve_media_file(Scope.unrestricted(), "file", trashed.id)
     end
 
     test "a movie with no files reports :no_media_files" do
       movie = media_item_fixture(%{type: "movie"})
-      assert {:error, :no_media_files} = Candidates.resolve_media_file("movie", movie.id)
+
+      assert {:error, :no_media_files} =
+               Candidates.resolve_media_file(Scope.unrestricted(), "movie", movie.id)
     end
 
     test "a malformed id reports :not_found instead of raising" do
@@ -297,9 +313,14 @@ defmodule Mydia.Streaming.CandidatesTest do
       # the literal string "offline" here when a downloaded file's local
       # copy has gone missing and playback falls through to streaming — that
       # has to come back as a clean not-found, not a crash report.
-      assert {:error, :not_found} = Candidates.resolve_media_file("file", "not-a-uuid")
-      assert {:error, :not_found} = Candidates.resolve_media_file("movie", "not-a-uuid")
-      assert {:error, :not_found} = Candidates.resolve_media_file("episode", "not-a-uuid")
+      assert {:error, :not_found} =
+               Candidates.resolve_media_file(Scope.unrestricted(), "file", "not-a-uuid")
+
+      assert {:error, :not_found} =
+               Candidates.resolve_media_file(Scope.unrestricted(), "movie", "not-a-uuid")
+
+      assert {:error, :not_found} =
+               Candidates.resolve_media_file(Scope.unrestricted(), "episode", "not-a-uuid")
     end
   end
 

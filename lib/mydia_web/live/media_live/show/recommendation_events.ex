@@ -39,7 +39,12 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
 
   def handle_load_result({:ok, {:ok, results}}, socket) do
     recommendations =
-      decorate(results, socket.assigns.media_item, socket.assigns.current_user)
+      decorate(
+        socket.assigns.current_scope,
+        results,
+        socket.assigns.media_item,
+        socket.assigns.current_user
+      )
 
     {:noreply, assign(socket, :recommendations, recommendations)}
   end
@@ -115,12 +120,13 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
     else
       media_item = socket.assigns.media_item
       config = socket.assigns.metadata_config
+      scope = socket.assigns.current_scope
 
       socket =
         socket
         |> mark_in_flight(tmdb_id)
         |> start_async({:add_recommendation, tmdb_id}, fn ->
-          perform_add(media_item, tmdb_id, config, opts)
+          perform_add(scope, media_item, tmdb_id, config, opts)
         end)
 
       {:noreply, socket}
@@ -151,6 +157,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
     socket = assign(socket, :requesting_recommendation_id, tmdb_id)
 
     case MediaRequestHelpers.handle_request_media(
+           socket.assigns.current_scope,
            item,
            media_type,
            socket.assigns.current_user.id
@@ -182,10 +189,11 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   Performs the add. Public so it can be exercised directly in tests without a
   live process.
   """
-  def perform_add(media_item, tmdb_id, config, opts \\ []) do
+  def perform_add(scope, media_item, tmdb_id, config, opts \\ []) do
     media_type = if media_item.type == "tv_show", do: :tv_show, else: :movie
 
     MediaAddHelpers.handle_add_media_to_library(
+      scope,
       to_string(tmdb_id),
       media_type,
       %{},
@@ -246,7 +254,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   # The library join lives here rather than in Mydia.Media.Recommendations
   # because it needs MediaAddHelpers, and a context under Mydia.* must not depend
   # on the web layer.
-  defp decorate(results, media_item, current_user) do
+  defp decorate(scope, results, media_item, current_user) do
     # Drop malformed entries from the list itself, not just from the id lookup.
     # enrich_with_library_status/2 calls the same raising parser, so filtering
     # only the ids would still let a non-numeric provider_id raise one line
@@ -254,7 +262,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
     results = Enum.filter(results, &(safe_provider_id(&1) != nil))
     tmdb_ids = Enum.map(results, &safe_provider_id/1)
 
-    status = Media.library_status_for_tmdb_ids(tmdb_ids, media_item.type)
+    status = Media.library_status_for_tmdb_ids(scope, tmdb_ids, media_item.type)
 
     results
     |> MediaAddHelpers.enrich_with_library_status(status)

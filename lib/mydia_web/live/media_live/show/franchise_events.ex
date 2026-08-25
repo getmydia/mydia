@@ -22,10 +22,11 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
   def maybe_load(socket) do
     media_item = socket.assigns.media_item
     config = socket.assigns.metadata_config
+    scope = socket.assigns.current_scope
 
     if connected?(socket) && media_item.type == "movie" && is_integer(media_item.tmdb_id) do
       start_async(socket, :load_franchise, fn ->
-        Franchises.for_media_item(media_item, config)
+        Franchises.for_media_item(scope, media_item, config)
       end)
     else
       socket
@@ -96,12 +97,13 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
     else
       media_item = socket.assigns.media_item
       config = socket.assigns.metadata_config
+      scope = socket.assigns.current_scope
 
       socket =
         socket
         |> mark_in_flight(tmdb_id)
         |> start_async({:add_franchise_movie, tmdb_id}, fn ->
-          perform_add(media_item, tmdb_id, config, opts)
+          perform_add(scope, media_item, tmdb_id, config, opts)
         end)
 
       {:noreply, socket}
@@ -112,8 +114,9 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
   Performs the add. Public so it can be exercised directly in tests without a
   live process.
   """
-  def perform_add(media_item, tmdb_id, config, opts \\ []) do
+  def perform_add(scope, media_item, tmdb_id, config, opts \\ []) do
     MediaAddHelpers.handle_add_media_to_library(
+      scope,
       to_string(tmdb_id),
       :movie,
       %{},
@@ -223,7 +226,12 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
   defp submit_request(entry, socket) do
     item = %{provider_id: to_string(entry.tmdb_id), title: entry.title, year: entry.year}
 
-    case MediaRequestHelpers.handle_request_media(item, :movie, socket.assigns.current_user.id) do
+    case MediaRequestHelpers.handle_request_media(
+           socket.assigns.current_scope,
+           item,
+           :movie,
+           socket.assigns.current_user.id
+         ) do
       {:ok, request, _status_updates} ->
         {:noreply,
          socket

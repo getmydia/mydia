@@ -31,7 +31,9 @@ defmodule MydiaWeb.Api.StreamController do
   def stream_movie(conn, %{"id" => media_item_id}) do
     try do
       media_item =
-        Mydia.Media.get_media_item!(media_item_id, preload: [media_files: active_files_query()])
+        Mydia.Media.get_media_item!(conn.assigns.current_scope, media_item_id,
+          preload: [media_files: active_files_query()]
+        )
 
       # Highest resolution, then bitrate. See Mydia.Library.FileRanking.
       case FileRanking.best(media_item.media_files) do
@@ -59,7 +61,9 @@ defmodule MydiaWeb.Api.StreamController do
   def stream_episode(conn, %{"id" => episode_id}) do
     try do
       episode =
-        Mydia.Media.get_episode!(episode_id, preload: [media_files: active_files_query()])
+        Mydia.Media.get_episode!(conn.assigns.current_scope, episode_id,
+          preload: [media_files: active_files_query()]
+        )
 
       # Highest resolution, then bitrate. See Mydia.Library.FileRanking.
       case FileRanking.best(episode.media_files) do
@@ -154,7 +158,7 @@ defmodule MydiaWeb.Api.StreamController do
       }
   """
   def candidates(conn, %{"content_type" => content_type, "id" => id}) do
-    case Candidates.resolve_media_file(content_type, id) do
+    case Candidates.resolve_media_file(conn.assigns.current_scope, content_type, id) do
       {:ok, media_file} ->
         media_file = Candidates.ensure_codec_info(media_file)
 

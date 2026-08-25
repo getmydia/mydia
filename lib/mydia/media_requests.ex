@@ -14,6 +14,7 @@ defmodule Mydia.MediaRequests do
   import Mydia.QueryHelpers
   require Logger
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Repo
   alias Mydia.Media
   alias Mydia.Media.Add
@@ -60,10 +61,10 @@ defmodule Mydia.MediaRequests do
   Returns `{:error, :duplicate_media}` if media exists.
   Returns `{:error, :duplicate_request}` if pending request exists.
   """
-  def create_request(attrs \\ %{}) do
+  def create_request(%Scope{} = scope, attrs \\ %{}) do
     changeset = MediaRequest.create_changeset(%MediaRequest{}, attrs)
 
-    with :ok <- check_duplicate_media(changeset),
+    with :ok <- check_duplicate_media(scope, changeset),
          :ok <- check_duplicate_request(changeset),
          {:ok, request} <- Repo.insert(changeset) do
       {:ok, Repo.preload(request, [:requester])}
@@ -105,9 +106,9 @@ defmodule Mydia.MediaRequests do
     - `:config` - Relay config to fetch with. Defaults to
       `Metadata.default_relay_config/0`. Inject a Bypass config in tests.
   """
-  def approve_request(%MediaRequest{} = request, attrs \\ %{}, opts \\ []) do
+  def approve_request(%Scope{} = scope, %MediaRequest{} = request, attrs \\ %{}, opts \\ []) do
     with {:ok, media_attrs} <- resolve_media_attrs(request, opts) do
-      insert_approval(request, media_attrs, attrs, opts)
+      insert_approval(scope, request, media_attrs, attrs, opts)
     end
   end
 
@@ -142,10 +143,10 @@ defmodule Mydia.MediaRequests do
 
   defp request_provider(_request), do: {nil, :tmdb}
 
-  defp insert_approval(request, media_attrs, attrs, opts) do
+  defp insert_approval(scope, request, media_attrs, attrs, opts) do
     Multi.new()
     |> Multi.run(:media_item, fn _repo, _changes ->
-      case Add.from_attrs(media_attrs, opts[:config],
+      case Add.from_attrs(scope, media_attrs, opts[:config],
              actor_type: :user,
              actor_id: attrs[:approved_by_id]
            ) do
@@ -234,10 +235,10 @@ defmodule Mydia.MediaRequests do
 
   # Private functions
 
-  defp check_duplicate_media(changeset) do
+  defp check_duplicate_media(scope, changeset) do
     tmdb_id = Ecto.Changeset.get_field(changeset, :tmdb_id)
 
-    if tmdb_id && Media.get_media_item_by_tmdb(tmdb_id) do
+    if tmdb_id && Media.get_media_item_by_tmdb(scope, tmdb_id) do
       {:error, :duplicate_media}
     else
       :ok

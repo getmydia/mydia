@@ -6,6 +6,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEventsTest do
   import Mydia.MediaFixtures
   import Mydia.AccountsFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.MediaRequests
   alias Mydia.Metadata.Structs.SearchResult
   alias MydiaWeb.MediaLive.Show.RecommendationEvents
@@ -57,7 +58,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEventsTest do
       untouched_tmdb_id = System.unique_integer([:positive])
 
       {:ok, _request} =
-        MediaRequests.create_request(%{
+        MediaRequests.create_request(Scope.unrestricted(), %{
           media_type: "movie",
           title: "Requested Rec",
           tmdb_id: requested_tmdb_id,
@@ -107,7 +108,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEventsTest do
       requested_tmdb_id = System.unique_integer([:positive])
 
       {:ok, _request} =
-        MediaRequests.create_request(%{
+        MediaRequests.create_request(Scope.unrestricted(), %{
           media_type: "movie",
           title: "Requested Rec",
           tmdb_id: requested_tmdb_id,

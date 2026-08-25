@@ -22,7 +22,9 @@ defmodule MydiaWeb.Api.MediaController do
     - 404: Media item not found
   """
   def show(conn, %{"id" => id}) do
-    case Media.get_media_item!(id, preload: [:library_path, :episodes]) do
+    case Media.get_media_item!(conn.assigns.current_scope, id,
+           preload: [:library_path, :episodes]
+         ) do
       nil ->
         conn
         |> put_status(:not_found)
@@ -81,7 +83,7 @@ defmodule MydiaWeb.Api.MediaController do
           |> json(%{error: "invalid provider_type, must be 'tmdb' or 'tvdb'"})
 
         true ->
-          case Media.get_media_item!(id) do
+          case Media.get_media_item!(conn.assigns.current_scope, id) do
             nil ->
               conn
               |> put_status(:not_found)
@@ -119,6 +121,7 @@ defmodule MydiaWeb.Api.MediaController do
   defp parse_media_type(_), do: :movie
 
   defp perform_manual_match(conn, media_item, provider_id, provider_type, fetch_episodes) do
+    scope = conn.assigns.current_scope
     config = Metadata.default_relay_config()
     media_type = parse_media_type(media_item.type)
 
@@ -144,7 +147,7 @@ defmodule MydiaWeb.Api.MediaController do
         }
 
         # Update media item with new metadata
-        case update_media_with_metadata(media_item, match_result, config, fetch_episodes) do
+        case update_media_with_metadata(scope, media_item, match_result, config, fetch_episodes) do
           {:ok, updated_media_item} ->
             Logger.info("Manual match successful",
               media_item_id: media_item.id,
@@ -154,7 +157,9 @@ defmodule MydiaWeb.Api.MediaController do
 
             # Reload with preloads for response
             media_item =
-              Media.get_media_item!(updated_media_item.id, preload: [:library_path, :episodes])
+              Media.get_media_item!(scope, updated_media_item.id,
+                preload: [:library_path, :episodes]
+              )
 
             conn
             |> put_status(:ok)
@@ -188,7 +193,7 @@ defmodule MydiaWeb.Api.MediaController do
     end
   end
 
-  defp update_media_with_metadata(media_item, match_result, config, fetch_episodes) do
+  defp update_media_with_metadata(scope, media_item, match_result, config, fetch_episodes) do
     metadata = match_result.metadata
 
     # Extract relevant fields from metadata
@@ -221,7 +226,7 @@ defmodule MydiaWeb.Api.MediaController do
     # transaction that used to wrap both bought nothing anyway: it covered a
     # single write plus a side effect whose failures are swallowed here, so it
     # could never roll back for the reason it appeared to guard.
-    case Media.update_media_item(media_item, attrs, reason: "Manually matched") do
+    case Media.update_media_item(scope, media_item, attrs, reason: "Manually matched") do
       {:ok, updated_media_item} ->
         maybe_refresh_episodes(updated_media_item, fetch_episodes, config)
         {:ok, updated_media_item}

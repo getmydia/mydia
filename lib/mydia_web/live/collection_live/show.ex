@@ -776,7 +776,11 @@ defmodule MydiaWeb.CollectionLive.Show do
   def handle_event("search_add_items", %{"search" => query}, socket) do
     results =
       if String.length(query) >= 2 do
-        Media.list_media_items(search: query, limit: 20, order_by: :title)
+        Media.list_media_items(socket.assigns.current_scope,
+          search: query,
+          limit: 20,
+          order_by: :title
+        )
         |> Enum.map(&format_search_result/1)
       else
         []
@@ -813,7 +817,7 @@ defmodule MydiaWeb.CollectionLive.Show do
         case Collections.add_item(collection, item_id) do
           {:ok, _} ->
             # Fetch the media item to add to stream
-            media_item = Media.get_media_item!(item_id)
+            media_item = Media.get_media_item!(socket.assigns.current_scope, item_id)
 
             stream_item = %{
               id: media_item.id,

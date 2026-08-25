@@ -7,7 +7,9 @@ defmodule Mydia.Media do
   import Mydia.QueryHelpers
   require Logger
   alias Mydia.Repo
+  alias Mydia.Accounts.Scope
   alias Mydia.Media.{AvailabilityStatus, MediaItem, Episode, CategoryClassifier}
+  alias Mydia.Media.Restrictions
   alias Mydia.Media.Structs.CalendarEntry
   alias Mydia.Metadata.Access, as: MetadataAccess
   alias Mydia.Events
@@ -29,9 +31,10 @@ defmodule Mydia.Media do
     - `:order_by` - Field to order by (:title, :year, or :inserted_at)
     - `:preload` - List of associations to preload
   """
-  @spec list_media_items(keyword()) :: [MediaItem.t()]
-  def list_media_items(opts \\ []) do
+  @spec list_media_items(Scope.t(), keyword()) :: [MediaItem.t()]
+  def list_media_items(%Scope{} = scope, opts \\ []) do
     MediaItem
+    |> Restrictions.apply(scope)
     |> apply_media_item_filters(opts)
     |> maybe_preload(opts[:preload])
     |> Repo.all()
@@ -45,9 +48,10 @@ defmodule Mydia.Media do
 
   Raises `Ecto.NoResultsError` if the media item does not exist.
   """
-  @spec get_media_item!(binary(), keyword()) :: MediaItem.t()
-  def get_media_item!(id, opts \\ []) do
+  @spec get_media_item!(Scope.t(), binary(), keyword()) :: MediaItem.t()
+  def get_media_item!(%Scope{} = scope, id, opts \\ []) do
     MediaItem
+    |> Restrictions.apply(scope)
     |> maybe_preload(opts[:preload])
     |> Repo.get!(id)
   end
@@ -61,13 +65,16 @@ defmodule Mydia.Media do
     * `:updated_since` - only items updated at/after this `DateTime`
     * `:after` - `{updated_at, id}` of the last row of the previous page
   """
-  @spec list_items_page(keyword()) :: [MediaItem.t()]
-  def list_items_page(opts \\ []) do
+  @spec list_items_page(Scope.t(), keyword()) :: [MediaItem.t()]
+  def list_items_page(%Scope{} = scope, opts \\ []) do
     limit = Keyword.get(opts, :limit, 200)
     since = Keyword.get(opts, :updated_since)
     after_cursor = Keyword.get(opts, :after)
 
-    query = from(m in MediaItem, order_by: [asc: m.updated_at, asc: m.id], limit: ^limit)
+    query =
+      MediaItem
+      |> Restrictions.apply(scope)
+      |> then(&from(m in &1, order_by: [asc: m.updated_at, asc: m.id], limit: ^limit))
 
     query = if since, do: from(m in query, where: m.updated_at >= ^since), else: query
 
@@ -96,9 +103,9 @@ defmodule Mydia.Media do
   Two extra queries per page, both plain `IN` filters, so the whole thing stays
   portable across SQLite and PostgreSQL.
   """
-  @spec list_library_items_page(keyword()) :: [map()]
-  def list_library_items_page(opts \\ []) do
-    items = list_items_page(opts)
+  @spec list_library_items_page(Scope.t(), keyword()) :: [map()]
+  def list_library_items_page(%Scope{} = scope, opts \\ []) do
+    items = list_items_page(scope, opts)
     owned = owned_media_item_ids(Enum.map(items, & &1.id))
 
     Enum.map(items, fn item ->
@@ -143,9 +150,10 @@ defmodule Mydia.Media do
   @doc """
   Gets a single media item by TMDB ID.
   """
-  @spec get_media_item_by_tmdb(integer(), keyword()) :: MediaItem.t() | nil
-  def get_media_item_by_tmdb(tmdb_id, opts \\ []) do
+  @spec get_media_item_by_tmdb(Scope.t(), integer(), keyword()) :: MediaItem.t() | nil
+  def get_media_item_by_tmdb(%Scope{} = scope, tmdb_id, opts \\ []) do
     MediaItem
+    |> Restrictions.apply(scope)
     |> where([m], m.tmdb_id == ^tmdb_id)
     |> maybe_preload(opts[:preload])
     |> Repo.one()
@@ -154,9 +162,10 @@ defmodule Mydia.Media do
   @doc """
   Gets a single media item by TVDB ID.
   """
-  @spec get_media_item_by_tvdb(integer(), keyword()) :: MediaItem.t() | nil
-  def get_media_item_by_tvdb(tvdb_id, opts \\ []) do
+  @spec get_media_item_by_tvdb(Scope.t(), integer(), keyword()) :: MediaItem.t() | nil
+  def get_media_item_by_tvdb(%Scope{} = scope, tvdb_id, opts \\ []) do
     MediaItem
+    |> Restrictions.apply(scope)
     |> where([m], m.tvdb_id == ^tvdb_id)
     |> maybe_preload(opts[:preload])
     |> Repo.one()
@@ -181,14 +190,14 @@ defmodule Mydia.Media do
 
   Returns nil if no match is found.
   """
-  @spec find_by_external_ids(map(), keyword()) :: MediaItem.t() | nil
-  def find_by_external_ids(ids, opts \\ []) when is_map(ids) do
+  @spec find_by_external_ids(Scope.t(), map(), keyword()) :: MediaItem.t() | nil
+  def find_by_external_ids(%Scope{} = scope, ids, opts \\ []) when is_map(ids) do
     type = Keyword.get(opts, :type)
     validate_external_id_type!(type)
 
-    find_by_imdb(Map.get(ids, :imdb), type) ||
-      find_by_tvdb(Map.get(ids, :tvdb), type) ||
-      find_by_tmdb(Map.get(ids, :tmdb), type)
+    find_by_imdb(Map.get(ids, :imdb), type, scope) ||
+      find_by_tvdb(Map.get(ids, :tvdb), type, scope) ||
+      find_by_tmdb(Map.get(ids, :tmdb), type, scope)
   end
 
   # `nil` means "no filter" and is always valid. Anything else must be one of
@@ -208,27 +217,42 @@ defmodule Mydia.Media do
     end
   end
 
-  defp find_by_imdb(nil, _type), do: nil
+  defp find_by_imdb(nil, _type, _scope), do: nil
 
-  defp find_by_imdb(imdb, type) do
-    MediaItem |> where([m], m.imdb_id == ^imdb) |> external_id_match(type)
+  defp find_by_imdb(imdb, type, scope) do
+    MediaItem
+    |> Restrictions.apply(scope)
+    |> where([m], m.imdb_id == ^imdb)
+    |> external_id_match(type)
   end
 
-  defp find_by_tvdb(nil, _type), do: nil
+  defp find_by_tvdb(nil, _type, _scope), do: nil
 
-  defp find_by_tvdb(tvdb, type) do
+  defp find_by_tvdb(tvdb, type, scope) do
     case parse_external_id(tvdb) do
-      nil -> nil
-      id -> MediaItem |> where([m], m.tvdb_id == ^id) |> external_id_match(type)
+      nil ->
+        nil
+
+      id ->
+        MediaItem
+        |> Restrictions.apply(scope)
+        |> where([m], m.tvdb_id == ^id)
+        |> external_id_match(type)
     end
   end
 
-  defp find_by_tmdb(nil, _type), do: nil
+  defp find_by_tmdb(nil, _type, _scope), do: nil
 
-  defp find_by_tmdb(tmdb, type) do
+  defp find_by_tmdb(tmdb, type, scope) do
     case parse_external_id(tmdb) do
-      nil -> nil
-      id -> MediaItem |> where([m], m.tmdb_id == ^id) |> external_id_match(type)
+      nil ->
+        nil
+
+      id ->
+        MediaItem
+        |> Restrictions.apply(scope)
+        |> where([m], m.tmdb_id == ^id)
+        |> external_id_match(type)
     end
   end
 
@@ -280,10 +304,11 @@ defmodule Mydia.Media do
 
   Returns nil if no match is found or if season/episode are not integers.
   """
-  @spec find_episode(binary(), integer(), integer()) :: Episode.t() | nil
-  def find_episode(show_id, season_number, episode_number)
+  @spec find_episode(Scope.t(), binary(), integer(), integer()) :: Episode.t() | nil
+  def find_episode(%Scope{} = scope, show_id, season_number, episode_number)
       when is_integer(season_number) and is_integer(episode_number) do
     Episode
+    |> Restrictions.apply_to_episodes(scope)
     |> where([e], e.media_item_id == ^show_id)
     |> where([e], e.season_number == ^season_number)
     |> where([e], e.episode_number == ^episode_number)
@@ -291,7 +316,7 @@ defmodule Mydia.Media do
     |> Repo.one()
   end
 
-  def find_episode(_, _, _), do: nil
+  def find_episode(%Scope{}, _, _, _), do: nil
 
   @doc """
   Creates a media item.
@@ -309,8 +334,9 @@ defmodule Mydia.Media do
       Callers that inject a Bypass (or any non-default relay) must pass it here;
       otherwise the automatic refresh silently uses `Metadata.default_relay_config/0`.
   """
-  @spec create_media_item(map(), keyword()) :: {:ok, MediaItem.t()} | {:error, Ecto.Changeset.t()}
-  def create_media_item(attrs \\ %{}, opts \\ []) do
+  @spec create_media_item(Scope.t(), map(), keyword()) ::
+          {:ok, MediaItem.t()} | {:error, Ecto.Changeset.t()}
+  def create_media_item(%Scope{} = _scope, attrs \\ %{}, opts \\ []) do
     with {:ok, media_item} <-
            %MediaItem{}
            |> MediaItem.changeset(attrs)
@@ -361,9 +387,9 @@ defmodule Mydia.Media do
     - `:actor_id` - The ID of the actor (user_id, job name, etc.)
     - `:reason` - Description of what was updated (e.g., "Metadata refreshed") - defaults to "Updated"
   """
-  @spec update_media_item(MediaItem.t(), map(), keyword()) ::
+  @spec update_media_item(Scope.t(), MediaItem.t(), map(), keyword()) ::
           {:ok, MediaItem.t()} | {:error, Ecto.Changeset.t()}
-  def update_media_item(%MediaItem{} = media_item, attrs, opts \\ []) do
+  def update_media_item(%Scope{} = _scope, %MediaItem{} = media_item, attrs, opts \\ []) do
     changeset = MediaItem.changeset(media_item, attrs)
 
     case Repo.update(changeset) do
@@ -510,9 +536,9 @@ defmodule Mydia.Media do
   before removing the database records. When false (default), only removes database
   records and preserves files on disk.
   """
-  @spec delete_media_item(MediaItem.t(), keyword()) ::
+  @spec delete_media_item(Scope.t(), MediaItem.t(), keyword()) ::
           {:ok, MediaItem.t(), non_neg_integer()} | {:error, Ecto.Changeset.t()}
-  def delete_media_item(%MediaItem{} = media_item, opts \\ []) do
+  def delete_media_item(%Scope{} = _scope, %MediaItem{} = media_item, opts \\ []) do
     delete_files = Keyword.get(opts, :delete_files, false)
 
     Logger.info("delete_media_item called",
@@ -614,9 +640,10 @@ defmodule Mydia.Media do
     - `:actor_type` - The type of actor (:user, :system, :job) - defaults to :system
     - `:actor_id` - The ID of the actor (user_id, job name, etc.)
   """
-  @spec update_media_items_monitored([binary()], boolean(), keyword()) ::
+  @spec update_media_items_monitored(Scope.t(), [binary()], boolean(), keyword()) ::
           {:ok, non_neg_integer()} | {:error, term()}
-  def update_media_items_monitored(ids, monitored, opts \\ []) when is_list(ids) do
+  def update_media_items_monitored(%Scope{} = _scope, ids, monitored, opts \\ [])
+      when is_list(ids) do
     Repo.transaction(fn ->
       # Fetch media items before update to track events
       media_items =
@@ -648,8 +675,10 @@ defmodule Mydia.Media do
   Only updates non-nil attributes. Returns `{:ok, count}` on success
   where count is the number of updated items.
   """
-  @spec update_media_items_batch([binary()], map()) :: {:ok, non_neg_integer()} | {:error, term()}
-  def update_media_items_batch(ids, attrs) when is_list(ids) and is_map(attrs) do
+  @spec update_media_items_batch(Scope.t(), [binary()], map()) ::
+          {:ok, non_neg_integer()} | {:error, term()}
+  def update_media_items_batch(%Scope{} = _scope, ids, attrs)
+      when is_list(ids) and is_map(attrs) do
     Repo.transaction(fn ->
       # Build the update list, only including non-nil values
       updates =
@@ -684,9 +713,9 @@ defmodule Mydia.Media do
   the disk untouched). When false (default), only removes database records and
   preserves files on disk.
   """
-  @spec delete_media_items([binary()], keyword()) ::
+  @spec delete_media_items(Scope.t(), [binary()], keyword()) ::
           {:ok, non_neg_integer(), non_neg_integer()} | {:error, term()}
-  def delete_media_items(ids, opts \\ []) when is_list(ids) do
+  def delete_media_items(%Scope{} = _scope, ids, opts \\ []) when is_list(ids) do
     delete_files = Keyword.get(opts, :delete_files, false)
 
     result =
@@ -742,9 +771,10 @@ defmodule Mydia.Media do
   @doc """
   Returns the count of movies in the library.
   """
-  @spec count_movies() :: non_neg_integer()
-  def count_movies do
+  @spec count_movies(Scope.t()) :: non_neg_integer()
+  def count_movies(%Scope{} = scope) do
     MediaItem
+    |> Restrictions.apply(scope)
     |> where([m], m.type == "movie")
     |> Repo.aggregate(:count)
   end
@@ -752,9 +782,10 @@ defmodule Mydia.Media do
   @doc """
   Returns the count of TV shows in the library.
   """
-  @spec count_tv_shows() :: non_neg_integer()
-  def count_tv_shows do
+  @spec count_tv_shows(Scope.t()) :: non_neg_integer()
+  def count_tv_shows(%Scope{} = scope) do
     MediaItem
+    |> Restrictions.apply(scope)
     |> where([m], m.type == "tv_show")
     |> Repo.aggregate(:count)
   end
@@ -780,9 +811,10 @@ defmodule Mydia.Media do
         {:tvdb, 67890} => %{in_library: true, monitored: false, type: "tv_show", id: 2}
       }
   """
-  @spec get_library_status_map() :: map()
-  def get_library_status_map do
+  @spec get_library_status_map(Scope.t()) :: map()
+  def get_library_status_map(%Scope{} = scope) do
     MediaItem
+    |> Restrictions.apply(scope)
     |> where([m], not is_nil(m.tmdb_id) or not is_nil(m.tvdb_id))
     |> select([m], {m.tmdb_id, m.tvdb_id, m.monitored, m.type, m.id})
     |> Repo.all()
@@ -813,11 +845,13 @@ defmodule Mydia.Media do
       iex> library_status_for_tmdb_ids([671, 672], "movie")
       %{671 => %{in_library: true, monitored: true, type: "movie", id: "..."}}
   """
-  @spec library_status_for_tmdb_ids([integer()], String.t()) :: map()
-  def library_status_for_tmdb_ids([], _type), do: %{}
+  @spec library_status_for_tmdb_ids(Scope.t(), [integer()], String.t()) :: map()
+  def library_status_for_tmdb_ids(%Scope{}, [], _type), do: %{}
 
-  def library_status_for_tmdb_ids(tmdb_ids, type) when is_list(tmdb_ids) and is_binary(type) do
+  def library_status_for_tmdb_ids(%Scope{} = scope, tmdb_ids, type)
+      when is_list(tmdb_ids) and is_binary(type) do
     MediaItem
+    |> Restrictions.apply(scope)
     |> where([m], m.type == ^type and m.tmdb_id in ^tmdb_ids)
     |> select([m], {m.tmdb_id, m.monitored, m.type, m.id})
     |> Repo.all()
@@ -836,9 +870,10 @@ defmodule Mydia.Media do
     - `:monitored` - Filter by monitored status (true/false)
     - `:preload` - List of associations to preload
   """
-  @spec list_episodes(binary(), keyword()) :: [Episode.t()]
-  def list_episodes(media_item_id, opts \\ []) do
+  @spec list_episodes(Scope.t(), binary(), keyword()) :: [Episode.t()]
+  def list_episodes(%Scope{} = scope, media_item_id, opts \\ []) do
     Episode
+    |> Restrictions.apply_to_episodes(scope)
     |> where([e], e.media_item_id == ^media_item_id)
     |> apply_episode_filters(opts)
     |> maybe_preload(opts[:preload])
@@ -854,9 +889,10 @@ defmodule Mydia.Media do
 
   Raises `Ecto.NoResultsError` if the episode does not exist.
   """
-  @spec get_episode!(binary(), keyword()) :: Episode.t()
-  def get_episode!(id, opts \\ []) do
+  @spec get_episode!(Scope.t(), binary(), keyword()) :: Episode.t()
+  def get_episode!(%Scope{} = scope, id, opts \\ []) do
     Episode
+    |> Restrictions.apply_to_episodes(scope)
     |> maybe_preload(opts[:preload])
     |> Repo.get!(id)
   end
@@ -864,9 +900,17 @@ defmodule Mydia.Media do
   @doc """
   Gets a single episode by media item ID, season, and episode number.
   """
-  @spec get_episode_by_number(binary(), integer(), integer(), keyword()) :: Episode.t() | nil
-  def get_episode_by_number(media_item_id, season_number, episode_number, opts \\ []) do
+  @spec get_episode_by_number(Scope.t(), binary(), integer(), integer(), keyword()) ::
+          Episode.t() | nil
+  def get_episode_by_number(
+        %Scope{} = scope,
+        media_item_id,
+        season_number,
+        episode_number,
+        opts \\ []
+      ) do
     Episode
+    |> Restrictions.apply_to_episodes(scope)
     |> where([e], e.media_item_id == ^media_item_id)
     |> where([e], e.season_number == ^season_number)
     |> where([e], e.episode_number == ^episode_number)
@@ -880,11 +924,12 @@ defmodule Mydia.Media do
   otherwise returns the first episode of the next season.
   Returns nil if there is no next episode.
   """
-  @spec get_next_episode(Episode.t(), keyword()) :: Episode.t() | nil
-  def get_next_episode(%Episode{} = episode, opts \\ []) do
+  @spec get_next_episode(Scope.t(), Episode.t(), keyword()) :: Episode.t() | nil
+  def get_next_episode(%Scope{} = scope, %Episode{} = episode, opts \\ []) do
     # Try to get next episode in same season first
     next_in_season =
       Episode
+      |> Restrictions.apply_to_episodes(scope)
       |> where([e], e.media_item_id == ^episode.media_item_id)
       |> where([e], e.season_number == ^episode.season_number)
       |> where([e], e.episode_number > ^episode.episode_number)
@@ -897,6 +942,7 @@ defmodule Mydia.Media do
       nil ->
         # No more episodes in current season, try next season
         Episode
+        |> Restrictions.apply_to_episodes(scope)
         |> where([e], e.media_item_id == ^episode.media_item_id)
         |> where([e], e.season_number > ^episode.season_number)
         |> order_by([e], asc: e.season_number, asc: e.episode_number)
@@ -1036,7 +1082,7 @@ defmodule Mydia.Media do
   def apply_episode_monitoring(%MediaItem{type: "tv_show"} = media_item, preset)
       when preset in @monitoring_presets do
     Repo.transaction(fn ->
-      episodes = list_episodes(media_item.id, preload: [:media_files])
+      episodes = list_episodes(Scope.system(), media_item.id, preload: [:media_files])
       {to_monitor, to_unmonitor} = partition_episodes_by_preset(episodes, preset)
 
       written =
@@ -1095,7 +1141,7 @@ defmodule Mydia.Media do
     |> where([m], m.id == ^media_item.id)
     |> Repo.update_all(set: [monitor_new_seasons: mode, updated_at: DateTime.utc_now()])
 
-    updated = get_media_item!(media_item.id)
+    updated = get_media_item!(Scope.system(), media_item.id)
 
     Events.media_item_updated(
       updated,
@@ -1527,8 +1573,8 @@ defmodule Mydia.Media do
     - `:preload` - List of associations to preload
     - `:monitored` - Filter by media item monitored status (default: true, nil for all)
   """
-  @spec list_episodes_by_air_date(Date.t(), Date.t(), keyword()) :: [CalendarEntry.t()]
-  def list_episodes_by_air_date(start_date, end_date, opts \\ []) do
+  @spec list_episodes_by_air_date(Scope.t(), Date.t(), Date.t(), keyword()) :: [CalendarEntry.t()]
+  def list_episodes_by_air_date(%Scope{} = scope, start_date, end_date, opts \\ []) do
     monitored = Keyword.get(opts, :monitored, true)
 
     query =
@@ -1536,6 +1582,7 @@ defmodule Mydia.Media do
       |> join(:inner, [e], m in MediaItem, on: e.media_item_id == m.id)
       |> where([e, m], not is_nil(e.air_date))
       |> where([e, m], e.air_date >= ^start_date and e.air_date <= ^end_date)
+      |> Restrictions.apply_to_episodes(scope)
 
     query =
       if is_nil(monitored) do
@@ -1592,12 +1639,15 @@ defmodule Mydia.Media do
   ## Options
     - `:monitored` - Filter by monitored status (default: true, nil for all)
   """
-  @spec list_movies_by_release_date(Date.t(), Date.t(), keyword()) :: [CalendarEntry.t()]
-  def list_movies_by_release_date(start_date, end_date, opts \\ []) do
+  @spec list_movies_by_release_date(Scope.t(), Date.t(), Date.t(), keyword()) :: [
+          CalendarEntry.t()
+        ]
+  def list_movies_by_release_date(%Scope{} = scope, start_date, end_date, opts \\ []) do
     monitored = Keyword.get(opts, :monitored, true)
 
     query =
       MediaItem
+      |> Restrictions.apply(scope)
       |> where([m], m.type == "movie")
       |> where([m], ^Mydia.DB.json_is_not_null(:metadata, "$.release_date"))
 
@@ -1758,11 +1808,21 @@ defmodule Mydia.Media do
   # {:incomplete_episode_upsert, ...} count check instead of doing this
   # silently.
   defp fallback_by_number(media_item_id, %{provider_episode_id: nil} = episode) do
-    get_episode_by_number(media_item_id, episode.season_number, episode.episode_number)
+    get_episode_by_number(
+      Scope.system(),
+      media_item_id,
+      episode.season_number,
+      episode.episode_number
+    )
   end
 
   defp fallback_by_number(media_item_id, episode) do
-    case get_episode_by_number(media_item_id, episode.season_number, episode.episode_number) do
+    case get_episode_by_number(
+           Scope.system(),
+           media_item_id,
+           episode.season_number,
+           episode.episode_number
+         ) do
       %Episode{provider_episode_id: nil} = untagged -> untagged
       _ -> nil
     end
@@ -2486,7 +2546,9 @@ defmodule Mydia.Media do
             )
 
             # Update the media item with the recovered ID
-            case update_media_item(media_item, update_attrs, reason: "Provider ID recovered") do
+            case update_media_item(Scope.system(), media_item, update_attrs,
+                   reason: "Provider ID recovered"
+                 ) do
               {:ok, updated_item} ->
                 {:ok, parsed_id, updated_item}
 
@@ -2629,10 +2691,20 @@ defmodule Mydia.Media do
       false
 
   """
-  @spec is_favorite?(binary(), binary()) :: boolean()
-  def is_favorite?(user_id, media_item_id) do
-    user = Mydia.Accounts.get_user!(user_id)
-    Mydia.Collections.is_favorite?(user, media_item_id)
+  @spec is_favorite?(Scope.t(), binary(), binary()) :: boolean()
+  def is_favorite?(%Scope{} = scope, user_id, media_item_id) do
+    visible? =
+      MediaItem
+      |> Restrictions.apply(scope)
+      |> where([m], m.id == ^media_item_id)
+      |> Repo.exists?()
+
+    if visible? do
+      user = Mydia.Accounts.get_user!(user_id)
+      Mydia.Collections.is_favorite?(user, media_item_id)
+    else
+      false
+    end
   end
 
   @doc """
@@ -2675,13 +2747,15 @@ defmodule Mydia.Media do
       [%MediaItem{media_files: [...]}, ...]
 
   """
-  @spec list_user_favorites(binary(), keyword()) :: [MediaItem.t()]
-  def list_user_favorites(user_id, opts \\ []) do
+  @spec list_user_favorites(Scope.t(), binary(), keyword()) :: [MediaItem.t()]
+  def list_user_favorites(%Scope{} = scope, user_id, opts \\ []) do
     user = Mydia.Accounts.get_user!(user_id)
 
     case Mydia.Collections.get_or_create_favorites(user) do
       {:ok, favorites} ->
-        Mydia.Collections.list_collection_items(favorites, opts)
+        favorites
+        |> Mydia.Collections.list_collection_items(opts)
+        |> Enum.filter(&Restrictions.visible?(&1, scope))
 
       {:error, _} ->
         []

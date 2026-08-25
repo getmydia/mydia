@@ -12,9 +12,9 @@ defmodule MydiaWeb.MediaLive.Show.Loaders do
   alias Mydia.Subtitles
   alias Mydia.Library.MediaFile
 
-  def load_media_item(id) do
+  def load_media_item(scope, id) do
     preload_list = build_preload_list()
-    Media.get_media_item!(id, preload: preload_list)
+    Media.get_media_item!(scope, id, preload: preload_list)
   end
 
   defp build_preload_list do

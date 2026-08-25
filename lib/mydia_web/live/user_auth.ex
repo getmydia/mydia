@@ -111,8 +111,8 @@ defmodule MydiaWeb.Live.UserAuth do
 
     socket =
       socket
-      |> assign(:movie_count, Mydia.Media.count_movies())
-      |> assign(:tv_show_count, Mydia.Media.count_tv_shows())
+      |> assign(:movie_count, Mydia.Media.count_movies(socket.assigns.current_scope))
+      |> assign(:tv_show_count, Mydia.Media.count_tv_shows(socket.assigns.current_scope))
       |> assign(:downloads_count, Mydia.Downloads.count_active_downloads())
       |> assign(:import_group_count, Mydia.ImportGroups.count_pending())
       |> assign(:pending_requests_count, pending_requests_count)

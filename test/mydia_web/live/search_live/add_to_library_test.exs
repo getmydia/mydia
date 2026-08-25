@@ -4,6 +4,7 @@ defmodule MydiaWeb.SearchLive.AddToLibraryTest do
   import Phoenix.LiveViewTest
   import Mydia.MediaFixtures
   import MydiaWeb.AuthHelpers
+  alias Mydia.Accounts.Scope
   alias Mydia.Media
 
   @mock_movie_metadata %{
@@ -74,7 +75,7 @@ defmodule MydiaWeb.SearchLive.AddToLibraryTest do
       assert_redirect(view, ~p"/media/#{1}")
 
       # Verify media item was created
-      media_item = Media.get_media_item_by_tmdb(550)
+      media_item = Media.get_media_item_by_tmdb(Scope.unrestricted(), 550)
       assert media_item
       assert media_item.title == "Fight Club"
       assert media_item.year == 1999
@@ -125,7 +126,7 @@ defmodule MydiaWeb.SearchLive.AddToLibraryTest do
 
       # Since we can't easily mock external calls, we'll test the duplicate detection
       # logic by directly verifying the database query works
-      duplicate = Media.get_media_item_by_tmdb(550)
+      duplicate = Media.get_media_item_by_tmdb(Scope.unrestricted(), 550)
       assert duplicate
       assert duplicate.id == existing_item.id
       assert duplicate.title == "Fight Club"
@@ -153,13 +154,13 @@ defmodule MydiaWeb.SearchLive.AddToLibraryTest do
       assert_redirect(view, ~p"/media/#{1}")
 
       # Verify TV show was created
-      media_item = Media.get_media_item_by_tmdb(1396)
+      media_item = Media.get_media_item_by_tmdb(Scope.unrestricted(), 1396)
       assert media_item
       assert media_item.title == "Breaking Bad"
       assert media_item.type == "tv_show"
 
       # Verify episode was created
-      episodes = Media.list_episodes(media_item.id)
+      episodes = Media.list_episodes(Scope.unrestricted(), media_item.id)
       assert length(episodes) == 1
       episode = List.first(episodes)
       assert episode.season_number == 1
@@ -182,8 +183,8 @@ defmodule MydiaWeb.SearchLive.AddToLibraryTest do
       assert_redirect(view, ~p"/media/#{1}")
 
       # Verify all episodes were created
-      media_item = Media.get_media_item_by_tmdb(1396)
-      episodes = Media.list_episodes(media_item.id)
+      media_item = Media.get_media_item_by_tmdb(Scope.unrestricted(), 1396)
+      episodes = Media.list_episodes(Scope.unrestricted(), media_item.id)
       assert length(episodes) == 3
 
       episode_numbers = Enum.map(episodes, & &1.episode_number) |> Enum.sort()
@@ -414,7 +415,7 @@ defmodule MydiaWeb.SearchLive.AddToLibraryTest do
         monitored: true
       }
 
-      {:ok, media_item} = Media.create_media_item(attrs)
+      {:ok, media_item} = Media.create_media_item(Scope.unrestricted(), attrs)
 
       assert media_item.title == "Test Movie"
       assert media_item.year == 2024
@@ -431,14 +432,14 @@ defmodule MydiaWeb.SearchLive.AddToLibraryTest do
           monitored: true
         })
 
-      found = Media.get_media_item_by_tmdb(999)
+      found = Media.get_media_item_by_tmdb(Scope.unrestricted(), 999)
       assert found
       assert found.id == existing_item.id
       assert found.title == "Existing Movie"
     end
 
     test "returns nil when TMDB ID not found" do
-      result = Media.get_media_item_by_tmdb(99999)
+      result = Media.get_media_item_by_tmdb(Scope.unrestricted(), 99999)
       assert result == nil
     end
 
@@ -487,7 +488,7 @@ defmodule MydiaWeb.SearchLive.AddToLibraryTest do
       end
 
       # Use list_episodes with media_item_id as first parameter
-      episodes = Media.list_episodes(tv_show.id)
+      episodes = Media.list_episodes(Scope.unrestricted(), tv_show.id)
       assert length(episodes) == 3
       episode_numbers = Enum.map(episodes, & &1.episode_number) |> Enum.sort()
       assert episode_numbers == [1, 2, 3]

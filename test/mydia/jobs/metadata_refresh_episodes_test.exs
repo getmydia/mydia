@@ -4,6 +4,7 @@ defmodule Mydia.Jobs.MetadataRefreshEpisodesTest do
   import Ecto.Query
   import Mydia.MediaFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Jobs.MetadataRefresh
   alias Mydia.Media
 
@@ -110,7 +111,7 @@ defmodule Mydia.Jobs.MetadataRefreshEpisodesTest do
 
       assert {:ok, _updated} = MetadataRefresh.refresh_one(item, config: config)
 
-      refreshed = Media.get_episode_by_number(item.id, 1, 1)
+      refreshed = Media.get_episode_by_number(Scope.unrestricted(), item.id, 1, 1)
 
       assert refreshed.metadata.still_path == still,
              "the scheduled pass must re-read episode metadata, " <>
@@ -121,7 +122,7 @@ defmodule Mydia.Jobs.MetadataRefreshEpisodesTest do
 
       # The show row must survive the pass intact: a mis-shaped provider payload
       # shows up here as the year being nulled out.
-      assert Media.get_media_item!(item.id).year == 2023
+      assert Media.get_media_item!(Scope.unrestricted(), item.id).year == 2023
     end
   end
 
@@ -132,23 +133,25 @@ defmodule Mydia.Jobs.MetadataRefreshEpisodesTest do
     test "stamp_seasons_refreshed/1 persists the timestamp" do
       item = media_item_fixture(%{type: "tv_show", title: "Stamped Show", year: 2023})
 
-      assert Media.get_media_item!(item.id).seasons_refreshed_at == nil
+      assert Media.get_media_item!(Scope.unrestricted(), item.id).seasons_refreshed_at == nil
 
       Media.stamp_seasons_refreshed(item)
 
-      assert %DateTime{} = Media.get_media_item!(item.id).seasons_refreshed_at
+      assert %DateTime{} =
+               Media.get_media_item!(Scope.unrestricted(), item.id).seasons_refreshed_at
     end
 
     test "the timestamp is not mass-assignable through update_media_item/3" do
       item = media_item_fixture(%{type: "tv_show", title: "Unstamped Show", year: 2023})
       stamp = DateTime.utc_now() |> DateTime.truncate(:second)
 
-      assert {:ok, _} = Media.update_media_item(item, %{seasons_refreshed_at: stamp})
+      assert {:ok, _} =
+               Media.update_media_item(Scope.unrestricted(), item, %{seasons_refreshed_at: stamp})
 
       # The throttle field is owned by the refresh machinery. Writing it through
       # the generic changeset must stay a no-op, so callers cannot extend their
       # own throttle window by passing it in attrs.
-      assert Media.get_media_item!(item.id).seasons_refreshed_at == nil
+      assert Media.get_media_item!(Scope.unrestricted(), item.id).seasons_refreshed_at == nil
     end
 
     test "an ended show is throttled on the completed-show threshold" do
@@ -187,7 +190,7 @@ defmodule Mydia.Jobs.MetadataRefreshEpisodesTest do
         set: [seasons_refreshed_at: stamp]
       )
 
-      item = Media.get_media_item!(item.id)
+      item = Media.get_media_item!(Scope.unrestricted(), item.id)
 
       episode_fixture(%{media_item_id: item.id, season_number: 1, episode_number: 1})
 
@@ -248,7 +251,7 @@ defmodule Mydia.Jobs.MetadataRefreshEpisodesTest do
 
       # Stamping here would throttle the next pass and hide the season that
       # failed until the threshold expired.
-      assert Media.get_media_item!(item.id).seasons_refreshed_at == nil
+      assert Media.get_media_item!(Scope.unrestricted(), item.id).seasons_refreshed_at == nil
     end
 
     test "a partial season selection does not stamp a full-refresh timestamp" do
@@ -301,7 +304,7 @@ defmodule Mydia.Jobs.MetadataRefreshEpisodesTest do
                  season_monitoring: "latest"
                )
 
-      assert Media.get_media_item!(item.id).seasons_refreshed_at == nil
+      assert Media.get_media_item!(Scope.unrestricted(), item.id).seasons_refreshed_at == nil
     end
   end
 

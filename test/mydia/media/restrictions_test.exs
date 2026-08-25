@@ -19,7 +19,7 @@ defmodule Mydia.Media.RestrictionsTest do
         title: "Item #{System.unique_integer([:positive])}",
         year: 2024
       })
-      |> Media.create_media_item(skip_episode_refresh: true)
+      |> then(&Media.create_media_item(Scope.unrestricted(), &1, skip_episode_refresh: true))
 
     item
   end

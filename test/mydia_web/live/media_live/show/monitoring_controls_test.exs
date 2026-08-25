@@ -12,6 +12,8 @@ defmodule MydiaWeb.MediaLive.Show.MonitoringControlsTest do
   import Mydia.MediaFixtures
   import MydiaWeb.AuthHelpers
 
+  alias Mydia.Accounts.Scope
+
   setup %{conn: conn} do
     admin = admin_user_fixture()
     %{conn: log_in_user(conn, admin)}
@@ -76,7 +78,7 @@ defmodule MydiaWeb.MediaLive.Show.MonitoringControlsTest do
     |> element("#episode-monitoring-menu-preset-none")
     |> render_click()
 
-    refute Mydia.Media.get_episode_by_number(media_item.id, 1, 1).monitored
+    refute Mydia.Media.get_episode_by_number(Scope.unrestricted(), media_item.id, 1, 1).monitored
   end
 
   test "the new seasons checkbox is visible and toggles independently", %{conn: conn} do
@@ -95,10 +97,14 @@ defmodule MydiaWeb.MediaLive.Show.MonitoringControlsTest do
     assert has_element?(view, "#monitor-new-seasons-toggle")
     view |> element("#monitor-new-seasons-toggle") |> render_click()
 
-    assert Mydia.Media.get_media_item!(media_item.id).monitor_new_seasons == :none
+    assert Mydia.Media.get_media_item!(Scope.unrestricted(), media_item.id).monitor_new_seasons ==
+             :none
+
     # Applying a preset must not silently move it back.
     view |> element("#episode-monitoring-menu-preset-all") |> render_click()
-    assert Mydia.Media.get_media_item!(media_item.id).monitor_new_seasons == :none
+
+    assert Mydia.Media.get_media_item!(Scope.unrestricted(), media_item.id).monitor_new_seasons ==
+             :none
   end
 
   test "a fully monitored season offers to unmonitor, a partial one offers to monitor", %{

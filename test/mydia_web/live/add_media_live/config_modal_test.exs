@@ -8,6 +8,7 @@ defmodule MydiaWeb.AddMediaLive.ConfigModalTest do
   import Mydia.SettingsFixtures
   import Mydia.AccountsFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Media
   alias Mydia.Metadata.Provider
   alias Mydia.Metadata.Structs.{ImagesResponse, MediaMetadata, SearchResult}
@@ -127,7 +128,7 @@ defmodule MydiaWeb.AddMediaLive.ConfigModalTest do
 
       # Poll briefly: creation happens in handle_info after a metadata fetch.
       assert eventually(fn ->
-               case Media.list_media_items() do
+               case Media.list_media_items(Scope.unrestricted()) do
                  [item | _] -> item.library_path_id == library.id
                  [] -> false
                end
@@ -178,7 +179,7 @@ defmodule MydiaWeb.AddMediaLive.ConfigModalTest do
 
       render_hook(view, "submit_config_modal", params)
 
-      assert eventually(fn -> Media.list_media_items() != [] end)
+      assert eventually(fn -> Media.list_media_items(Scope.unrestricted()) != [] end)
       assert Mydia.Repo.aggregate(Oban.Job, :count) == 0
     end
   end

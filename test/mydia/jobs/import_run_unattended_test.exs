@@ -21,6 +21,7 @@ defmodule Mydia.Jobs.ImportRunUnattendedTest do
   import Mydia.MetadataStub
   import Mydia.SettingsFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Jobs.ImportRun, as: ImportRunJob
   alias Mydia.Library
   alias Mydia.Media
@@ -80,7 +81,9 @@ defmodule Mydia.Jobs.ImportRunUnattendedTest do
 
       assert Library.get_import_run(run.id).files_matched == 1
 
-      assert [item] = Media.list_media_items() |> Enum.filter(&(&1.type == "movie"))
+      assert [item] =
+               Media.list_media_items(Scope.unrestricted()) |> Enum.filter(&(&1.type == "movie"))
+
       assert item.title == MetadataStubProvider.movie_title()
 
       assert [file] = Library.list_media_files(library_path_id: lp.id)

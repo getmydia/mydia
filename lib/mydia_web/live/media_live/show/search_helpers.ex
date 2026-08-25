@@ -342,8 +342,9 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
   def build_manual_ranking_opts(assigns) do
     media_item = assigns.media_item
     context = Map.get(assigns, :manual_search_context) || %{type: :media_item}
+    scope = Map.get(assigns, :current_scope)
 
-    {expected_season, expected_episode} = expected_identity(context)
+    {expected_season, expected_episode} = expected_identity(scope, context)
 
     profile = QualityProfileResolver.resolve(media_item)
 
@@ -361,20 +362,20 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
 
   # Prefer the season/episode the modal already loaded into the context, so
   # re-sorts and modal re-renders don't re-query the episode on every call.
-  defp expected_identity(%{type: :episode, season_number: season, episode_number: episode})
+  defp expected_identity(_scope, %{type: :episode, season_number: season, episode_number: episode})
        when not is_nil(season) and not is_nil(episode) do
     {season, episode}
   end
 
-  defp expected_identity(%{type: :episode, episode_id: episode_id}) do
-    episode = Media.get_episode!(episode_id)
+  defp expected_identity(scope, %{type: :episode, episode_id: episode_id}) do
+    episode = Media.get_episode!(scope, episode_id)
     {episode.season_number, episode.episode_number}
   rescue
     Ecto.NoResultsError -> {nil, nil}
   end
 
-  defp expected_identity(%{type: :season, season_number: season}), do: {season, nil}
-  defp expected_identity(_context), do: {nil, nil}
+  defp expected_identity(_scope, %{type: :season, season_number: season}), do: {season, nil}
+  defp expected_identity(_scope, _context), do: {nil, nil}
 
   @doc """
   Calculate profile-based score for a search result.

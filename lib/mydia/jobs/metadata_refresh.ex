@@ -20,6 +20,7 @@ defmodule Mydia.Jobs.MetadataRefresh do
 
   require Logger
   alias Mydia.{Events, Media}
+  alias Mydia.Accounts.Scope
   alias Mydia.Media.Refresh
 
   defmodule Args do
@@ -94,7 +95,7 @@ defmodule Mydia.Jobs.MetadataRefresh do
   # without a mocking library.
   def run_all(refresh_fun \\ &refresh_one/1) do
     start_time = System.monotonic_time(:millisecond)
-    media_items = Media.list_media_items(monitored: true)
+    media_items = Media.list_media_items(Scope.system(), monitored: true)
     total = length(media_items)
 
     Logger.info("Refreshing metadata for #{total} media items")
@@ -128,8 +129,8 @@ defmodule Mydia.Jobs.MetadataRefresh do
     Logger.info("Starting metadata refresh", media_item_id: media_item_id)
 
     result =
-      media_item_id
-      |> Media.get_media_item!()
+      Scope.system()
+      |> Media.get_media_item!(media_item_id)
       |> Refresh.run(recover_by_title: true, fetch_episodes: fetch_episodes)
 
     duration = System.monotonic_time(:millisecond) - start_time

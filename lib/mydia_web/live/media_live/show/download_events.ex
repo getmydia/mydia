@@ -9,7 +9,7 @@ defmodule MydiaWeb.MediaLive.Show.DownloadEvents do
   alias MydiaWeb.Live.Authorization
 
   import MydiaWeb.MediaLive.Show.Loaders,
-    only: [load_media_item: 1, load_downloads_with_status: 1]
+    only: [load_media_item: 2, load_downloads_with_status: 1]
 
   import MydiaWeb.MediaLive.Show.Helpers, only: [maybe_add_opt: 3]
 
@@ -101,7 +101,10 @@ defmodule MydiaWeb.MediaLive.Show.DownloadEvents do
       {:ok, _} ->
         {:noreply,
          socket
-         |> assign(:media_item, load_media_item(socket.assigns.media_item.id))
+         |> assign(
+           :media_item,
+           load_media_item(socket.assigns.current_scope, socket.assigns.media_item.id)
+         )
          |> assign(:show_download_delete_confirm, false)
          |> assign(:download_to_delete, nil)
          |> put_flash(:info, "Download removed from history")}

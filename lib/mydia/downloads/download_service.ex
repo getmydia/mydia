@@ -17,6 +17,7 @@ defmodule Mydia.Downloads.DownloadService do
 
   require Logger
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Library
   alias Mydia.Media
   alias Mydia.Downloads
@@ -219,7 +220,7 @@ defmodule Mydia.Downloads.DownloadService do
 
   @doc false
   def get_media_file("movie", media_item_id) do
-    case Media.get_media_item!(media_item_id) do
+    case Media.get_media_item!(Scope.system(), media_item_id) do
       %{type: "movie"} = media_item ->
         case Library.get_media_files_for_item(media_item.id, preload: [:library_path]) do
           [media_file | _] -> {:ok, media_file}
@@ -234,7 +235,7 @@ defmodule Mydia.Downloads.DownloadService do
   end
 
   def get_media_file("episode", episode_id) do
-    case Media.get_episode!(episode_id) do
+    case Media.get_episode!(Scope.system(), episode_id) do
       episode ->
         case Library.get_media_files_for_episode(episode.id, preload: [:library_path]) do
           [media_file | _] -> {:ok, media_file}

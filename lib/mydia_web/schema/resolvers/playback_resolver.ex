@@ -78,7 +78,7 @@ defmodule MydiaWeb.Schema.Resolvers.PlaybackResolver do
       user ->
         case Playback.mark_watched(user.id, media_item_id: movie_id) do
           {:ok, _progress} ->
-            movie = Media.get_media_item!(movie_id)
+            movie = Media.get_media_item!(context[:current_scope], movie_id)
             {:ok, Map.put(movie, :added_at, movie.inserted_at)}
 
           {:error, :not_found} ->
@@ -89,7 +89,7 @@ defmodule MydiaWeb.Schema.Resolvers.PlaybackResolver do
                    watched: true
                  }) do
               {:ok, _} ->
-                movie = Media.get_media_item!(movie_id)
+                movie = Media.get_media_item!(context[:current_scope], movie_id)
                 {:ok, Map.put(movie, :added_at, movie.inserted_at)}
 
               {:error, changeset} ->
@@ -107,11 +107,11 @@ defmodule MydiaWeb.Schema.Resolvers.PlaybackResolver do
       user ->
         case Playback.delete_progress(user.id, media_item_id: movie_id) do
           {:ok, _} ->
-            movie = Media.get_media_item!(movie_id)
+            movie = Media.get_media_item!(context[:current_scope], movie_id)
             {:ok, Map.put(movie, :added_at, movie.inserted_at)}
 
           {:error, :not_found} ->
-            movie = Media.get_media_item!(movie_id)
+            movie = Media.get_media_item!(context[:current_scope], movie_id)
             {:ok, Map.put(movie, :added_at, movie.inserted_at)}
         end
     end
@@ -125,7 +125,7 @@ defmodule MydiaWeb.Schema.Resolvers.PlaybackResolver do
       user ->
         case Playback.mark_watched(user.id, episode_id: episode_id) do
           {:ok, _progress} ->
-            {:ok, Media.get_episode!(episode_id)}
+            {:ok, Media.get_episode!(context[:current_scope], episode_id)}
 
           {:error, :not_found} ->
             # Create watched progress if it doesn't exist
@@ -135,7 +135,7 @@ defmodule MydiaWeb.Schema.Resolvers.PlaybackResolver do
                    watched: true
                  }) do
               {:ok, _} ->
-                {:ok, Media.get_episode!(episode_id)}
+                {:ok, Media.get_episode!(context[:current_scope], episode_id)}
 
               {:error, changeset} ->
                 {:error, format_changeset_errors(changeset)}
@@ -152,10 +152,10 @@ defmodule MydiaWeb.Schema.Resolvers.PlaybackResolver do
       user ->
         case Playback.delete_progress(user.id, episode_id: episode_id) do
           {:ok, _} ->
-            {:ok, Media.get_episode!(episode_id)}
+            {:ok, Media.get_episode!(context[:current_scope], episode_id)}
 
           {:error, :not_found} ->
-            {:ok, Media.get_episode!(episode_id)}
+            {:ok, Media.get_episode!(context[:current_scope], episode_id)}
         end
     end
   end

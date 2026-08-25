@@ -25,6 +25,7 @@ defmodule Mydia.Jobs.LibraryScanner do
 
   require Logger
   alias Mydia.{Library, Settings, Repo, Metadata}
+  alias Mydia.Accounts.Scope
 
   # Upper bound of the insert-time jitter applied to automatic scans.
   @max_startup_delay_ms 30 * 60 * 1000
@@ -1034,7 +1035,12 @@ defmodule Mydia.Jobs.LibraryScanner do
           # For multi-episode files, use the first episode
           episode_number = List.first(episodes)
 
-          case Mydia.Media.get_episode_by_number(media_file.media_item_id, season, episode_number) do
+          case Mydia.Media.get_episode_by_number(
+                 Scope.system(),
+                 media_file.media_item_id,
+                 season,
+                 episode_number
+               ) do
             nil ->
               # Episode doesn't exist yet, try to fetch it from TMDB
               Logger.info("Episode not found, attempting to fetch from provider",
@@ -1044,7 +1050,7 @@ defmodule Mydia.Jobs.LibraryScanner do
               )
 
               # Fetch the media item to get provider ID
-              media_item = Mydia.Media.get_media_item!(media_file.media_item_id)
+              media_item = Mydia.Media.get_media_item!(Scope.system(), media_file.media_item_id)
 
               # Prefer tvdb_id for TV shows, fall back to tmdb_id
               {provider_id, has_tvdb} =
@@ -1078,6 +1084,7 @@ defmodule Mydia.Jobs.LibraryScanner do
 
                     # Try to find the episode again
                     case Mydia.Media.get_episode_by_number(
+                           Scope.system(),
                            media_file.media_item_id,
                            season,
                            episode_number
@@ -1167,6 +1174,7 @@ defmodule Mydia.Jobs.LibraryScanner do
 
           # Try to find the correct episode
           case Mydia.Media.get_episode_by_number(
+                 Scope.system(),
                  media_file.episode.media_item_id,
                  season,
                  episode_number

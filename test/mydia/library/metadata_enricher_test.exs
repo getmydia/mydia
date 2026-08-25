@@ -5,6 +5,7 @@ defmodule Mydia.Library.MetadataEnricherTest do
   import Mydia.MediaFixtures
   import Mydia.SettingsFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Indexers.QualityProfileResolver
   alias Mydia.Library.MetadataEnricher
   alias Mydia.{Events, Library, Media, Settings}
@@ -93,7 +94,7 @@ defmodule Mydia.Library.MetadataEnricherTest do
     test "allows movies in movies-only library", %{movies_lib: movies_lib} do
       # First create a movie media item
       {:ok, movie} =
-        Mydia.Media.create_media_item(%{
+        Mydia.Media.create_media_item(Scope.unrestricted(), %{
           title: "The Matrix",
           type: "movie",
           year: 1999,
@@ -118,6 +119,7 @@ defmodule Mydia.Library.MetadataEnricherTest do
       # First create a TV show and episode
       {:ok, tv_show} =
         Mydia.Media.create_media_item(
+          Scope.unrestricted(),
           %{
             title: "Breaking Bad",
             type: "tv_show",
@@ -150,7 +152,7 @@ defmodule Mydia.Library.MetadataEnricherTest do
     test "allows both movies and TV shows in mixed library", %{mixed_lib: mixed_lib} do
       # Create movie
       {:ok, movie} =
-        Mydia.Media.create_media_item(%{
+        Mydia.Media.create_media_item(Scope.unrestricted(), %{
           title: "The Matrix",
           type: "movie",
           year: 1999,
@@ -160,6 +162,7 @@ defmodule Mydia.Library.MetadataEnricherTest do
       # Create TV show and episode
       {:ok, tv_show} =
         Mydia.Media.create_media_item(
+          Scope.unrestricted(),
           %{
             title: "Breaking Bad",
             type: "tv_show",
@@ -200,7 +203,7 @@ defmodule Mydia.Library.MetadataEnricherTest do
     test "prevents movies in series-only library", %{series_lib: series_lib} do
       # First create a movie media item
       {:ok, movie} =
-        Mydia.Media.create_media_item(%{
+        Mydia.Media.create_media_item(Scope.unrestricted(), %{
           title: "The Matrix",
           type: "movie",
           year: 1999,
@@ -224,6 +227,7 @@ defmodule Mydia.Library.MetadataEnricherTest do
       # First create a TV show media item
       {:ok, tv_show} =
         Mydia.Media.create_media_item(
+          Scope.unrestricted(),
           %{
             title: "Breaking Bad",
             type: "tv_show",
@@ -872,7 +876,7 @@ defmodule Mydia.Library.MetadataEnricherTest do
 
       assert {:ok, updated} = MetadataEnricher.enrich(match, config: config, fetch_episodes: true)
 
-      [episode] = Media.list_episodes(updated.id)
+      [episode] = Media.list_episodes(Scope.unrestricted(), updated.id)
       # Without original-language threading these would be the English values.
       assert episode.title == "日本語タイトル"
       assert episode.metadata.overview == "概要"
@@ -945,12 +949,14 @@ defmodule Mydia.Library.MetadataEnricherTest do
       # Switch the show to the DVD ordering and rescan the same series id. The
       # second pass must not read the first pass's cached official grouping:
       # fetch_by_id_cached/3 keys on the ordering precisely so it cannot.
-      {:ok, switched} = Media.update_media_item(official, %{season_order: :dvd})
+      {:ok, switched} =
+        Media.update_media_item(Scope.unrestricted(), official, %{season_order: :dvd})
+
       backdate(switched)
 
       assert {:ok, dvd} = MetadataEnricher.enrich(match, config: config, fetch_episodes: false)
       assert stored_seasons(dvd) == [{1, 2}, {2, 2}]
-      assert Media.get_media_item!(dvd.id).season_order == :dvd
+      assert Media.get_media_item!(Scope.unrestricted(), dvd.id).season_order == :dvd
     end
   end
 
@@ -965,8 +971,8 @@ defmodule Mydia.Library.MetadataEnricherTest do
   end
 
   defp stored_seasons(%MediaItem{} = item) do
-    item.id
-    |> Media.get_media_item!()
+    Scope.unrestricted()
+    |> Media.get_media_item!(item.id)
     |> Map.fetch!(:metadata)
     |> Map.fetch!(:seasons)
     |> Enum.map(&{&1.season_number, &1.episode_count})
