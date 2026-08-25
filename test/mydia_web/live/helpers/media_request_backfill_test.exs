@@ -44,6 +44,7 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestBackfillTest do
         request_fixture(user, %{
           media_type: "tv_show",
           title: "Stub Series",
+          tmdb_id: nil,
           tvdb_id: MetadataStubProvider.series_tvdb_id()
         })
 
