@@ -9,6 +9,14 @@ defmodule MydiaWeb.MediaLive.Show.LibraryEvents do
   alias Mydia.Media
   alias MydiaWeb.Live.Authorization
 
+  def show_target_library_modal(_params, socket) do
+    {:noreply, assign(socket, :show_target_library_modal, true)}
+  end
+
+  def hide_target_library_modal(_params, socket) do
+    {:noreply, assign(socket, :show_target_library_modal, false)}
+  end
+
   def update_target_library(%{"library-path-id" => raw_id}, socket) do
     with :ok <- Authorization.authorize_update_media(socket) do
       media_item = socket.assigns.media_item
@@ -31,10 +39,14 @@ defmodule MydiaWeb.MediaLive.Show.LibraryEvents do
            socket
            |> assign(:media_item, media_item)
            |> assign_target_library(media_item)
+           |> assign(:show_target_library_modal, false)
            |> put_flash(:info, message)}
 
         {:error, _changeset} ->
-          {:noreply, put_flash(socket, :error, "Failed to update the library")}
+          {:noreply,
+           socket
+           |> assign(:show_target_library_modal, false)
+           |> put_flash(:error, "Failed to update the library")}
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}

@@ -55,9 +55,25 @@ defmodule MydiaWeb.MediaLive.Show.Components do
           830px at lg (a 320px poster at 2:3 is 480px, plus about 350px of
           actions and info cards), which is taller than most laptop viewports.
           Plain sticky on a taller-than-viewport element makes its bottom
-          permanently unreachable, so the Path and Target Library rows would
-          never be visible. --%>
-    <div class="md:sticky md:top-4 md:self-start md:max-h-[calc(100vh-2rem)] md:overflow-y-auto">
+          permanently unreachable, so the Target Library and Path rows would
+          never be visible.
+
+          The top offset is NOT a flat top-4 across the whole md+ range.
+          `Layouts.app/1` renders a `lg:hidden sticky top-0 z-30` mobile
+          header, visible from 0 up to just under lg (1024px) - the entire md
+          band this column starts pinning in. Two siblings sharing the page's
+          scroll context both being sticky means whichever pins lower in the
+          DOM and has no z-index (this column; z-index: auto) paints under
+          the one that does (the header; z-30) wherever their boxes overlap.
+          Measured on the running page at 900px wide: with both pinned, the
+          header (0-64px) and the column (16-769px) overlap by 48px, and
+          elementFromPoint over that band hits the header, not the column -
+          the column's top ~48px (through the top of the poster card) is
+          genuinely covered while scrolled. So below lg the column pins
+          beneath the header's 64px instead of at top-4, and max-h shrinks by
+          the same amount so the bottom stays reachable inside the viewport;
+          at lg the header is gone and both revert to the plain top-4. --%>
+    <div class="md:sticky md:self-start md:overflow-y-auto md:top-20 md:max-h-[calc(100vh-6rem)] lg:top-4 lg:max-h-[calc(100vh-2rem)]">
       <%!-- Poster - centered and smaller on mobile --%>
       <div class="card bg-base-100 shadow-xl mb-4 mx-auto w-48 sm:w-56 md:w-full">
         <figure class="aspect-[2/3] bg-base-300 overflow-hidden rounded-t-2xl">
@@ -155,62 +171,21 @@ defmodule MydiaWeb.MediaLive.Show.Components do
             <span class="hidden sm:inline">{if @is_favorite, do: "Favorited", else: "Favorite"}</span>
           </button>
 
-          <div class="dropdown dropdown-end">
-            <div tabindex="0" role="button" class="btn btn-outline w-full">
-              <.icon name="hero-folder-plus" class="w-5 h-5" />
-              <span class="hidden sm:inline">Collection</span>
-              <.icon name="hero-chevron-down" class="w-3 h-3 opacity-70" />
-            </div>
-            <ul
-              tabindex="0"
-              class="dropdown-content z-[1] menu p-2 shadow-lg bg-base-100 rounded-box w-56 border border-base-300"
-            >
-              <%= if Enum.empty?(@user_collections) do %>
-                <li class="menu-title px-2 py-1 text-base-content/50 text-sm">
-                  No collections yet
-                </li>
-                <li>
-                  <.link navigate={~p"/collections"} class="justify-start">
-                    <.icon name="hero-plus" class="w-4 h-4" /> Create Collection
-                  </.link>
-                </li>
-              <% else %>
-                <li class="menu-title px-2 py-1 text-base-content/50 text-xs uppercase">
-                  Your Collections
-                </li>
-                <%= for collection <- @user_collections do %>
-                  <% is_in_collection = Enum.any?(@item_collections, &(&1.id == collection.id)) %>
-                  <li>
-                    <button
-                      type="button"
-                      phx-click={
-                        if is_in_collection, do: "remove_from_collection", else: "add_to_collection"
-                      }
-                      phx-value-collection-id={collection.id}
-                      class="justify-between"
-                    >
-                      <span class="flex items-center gap-2">
-                        <.icon
-                          name={if collection.is_system, do: "hero-star", else: "hero-folder"}
-                          class="w-4 h-4"
-                        />
-                        {collection.name}
-                      </span>
-                      <%= if is_in_collection do %>
-                        <.icon name="hero-check" class="w-4 h-4 text-success" />
-                      <% end %>
-                    </button>
-                  </li>
-                <% end %>
-                <div class="divider my-1"></div>
-                <li>
-                  <.link navigate={~p"/collections"} class="justify-start">
-                    <.icon name="hero-folder-open" class="w-4 h-4" /> Manage Collections
-                  </.link>
-                </li>
-              <% end %>
-            </ul>
-          </div>
+          <%!-- Opens a page-level modal (Modals.add_to_collection_modal/1) rather
+                than an anchored dropdown, because this button lives inside the
+                hero column's overflow-y-auto wrapper (see the note at the top
+                of this function), which clips a `.dropdown-content` menu the
+                moment its content is taller than the column's remaining
+                headroom. Confirmed by measuring the real page: see the
+                UI polish fix wave report. --%>
+          <button
+            type="button"
+            phx-click="open_add_to_collection_modal"
+            class="btn btn-outline w-full"
+          >
+            <.icon name="hero-folder-plus" class="w-5 h-5" />
+            <span class="hidden sm:inline">Collection</span>
+          </button>
         </div>
 
         <%!-- Secondary actions --%>
@@ -226,70 +201,38 @@ defmodule MydiaWeb.MediaLive.Show.Components do
 
         <%!-- Info Cards --%>
         <div class="rounded-box bg-base-200/50 p-2 space-y-1 mt-3">
-          <%!-- Quality Profile --%>
-          <div class="dropdown dropdown-end w-full">
-            <div
-              tabindex="0"
-              role="button"
-              class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-base-300/50 transition-colors w-full group"
-              title="Click to change quality profile"
-            >
-              <div class="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                <.icon name="hero-adjustments-horizontal" class="w-4 h-4 text-primary" />
-              </div>
-              <div class="flex-1 min-w-0">
-                <div class="text-xs text-base-content/50">Quality Profile</div>
-                <div class="text-sm font-medium truncate">
-                  <%= if @media_item.quality_profile do %>
-                    {@media_item.quality_profile.name}
-                  <% else %>
-                    <span class="text-base-content/40">Not Set</span>
-                  <% end %>
-                </div>
-              </div>
-              <.icon
-                name="hero-chevron-right"
-                class="w-4 h-4 text-base-content/30 group-hover:text-base-content/60 transition-colors flex-shrink-0"
-              />
+          <%!-- Quality Profile. A button opening a page-level modal
+                (Modals.quality_profile_modal/1) rather than an anchored
+                dropdown, for the same reason as the Collection button above:
+                the hero column's overflow-y-auto wrapper clips a
+                `.dropdown-content` list once it runs past the column's
+                remaining headroom, which a real quality-profile list (a
+                handful of profiles) reliably does. Measured, not assumed:
+                see the UI polish fix wave report. --%>
+          <button
+            type="button"
+            phx-click="show_quality_profile_modal"
+            class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-base-300/50 transition-colors w-full group"
+            title="Click to change quality profile"
+          >
+            <div class="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+              <.icon name="hero-adjustments-horizontal" class="w-4 h-4 text-primary" />
             </div>
-            <ul
-              tabindex="0"
-              class="dropdown-content z-[1] menu p-2 shadow-lg bg-base-100 rounded-box w-52 border border-base-300"
-            >
-              <li>
-                <button
-                  type="button"
-                  phx-click="update_quality_profile"
-                  phx-value-profile-id=""
-                  class={[
-                    "justify-between",
-                    is_nil(@media_item.quality_profile_id) && "active"
-                  ]}
-                >
-                  {default_quality_profile_label(@default_quality_profile_name)}
-                  <%= if is_nil(@media_item.quality_profile_id) do %>
-                    <.icon name="hero-check" class="w-4 h-4" />
-                  <% end %>
-                </button>
-              </li>
-              <li :for={profile <- @quality_profiles}>
-                <button
-                  type="button"
-                  phx-click="update_quality_profile"
-                  phx-value-profile-id={profile.id}
-                  class={[
-                    "justify-between",
-                    @media_item.quality_profile_id == profile.id && "active"
-                  ]}
-                >
-                  {profile.name}
-                  <%= if @media_item.quality_profile_id == profile.id do %>
-                    <.icon name="hero-check" class="w-4 h-4" />
-                  <% end %>
-                </button>
-              </li>
-            </ul>
-          </div>
+            <div class="flex-1 min-w-0 text-left">
+              <div class="text-xs text-base-content/50">Quality Profile</div>
+              <div class="text-sm font-medium truncate">
+                <%= if @media_item.quality_profile do %>
+                  {@media_item.quality_profile.name}
+                <% else %>
+                  <span class="text-base-content/40">Not Set</span>
+                <% end %>
+              </div>
+            </div>
+            <.icon
+              name="hero-chevron-right"
+              class="w-4 h-4 text-base-content/30 group-hover:text-base-content/60 transition-colors flex-shrink-0"
+            />
+          </button>
 
           <LibraryComponents.target_library_row
             media_item={@media_item}

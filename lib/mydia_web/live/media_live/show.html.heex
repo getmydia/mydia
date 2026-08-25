@@ -368,6 +368,23 @@
       <Modals.trailer_modal trailer_url={trailer_url} title={@media_item.title} />
     <% end %>
   <% end %>
+  <%= if @show_quality_profile_modal do %>
+    <Modals.quality_profile_modal
+      media_item={@media_item}
+      quality_profiles={@quality_profiles}
+      default_quality_profile_name={@default_quality_profile_name}
+    />
+  <% end %>
+  <%= if @show_target_library_modal do %>
+    <Modals.target_library_modal media_item={@media_item} libraries={@target_library_candidates} />
+  <% end %>
+  <%= if @show_add_to_collection_modal do %>
+    <Modals.add_to_collection_modal
+      media_item={@media_item}
+      user_collections={@user_collections}
+      item_collections={@item_collections}
+    />
+  <% end %>
 
   <MydiaWeb.LibraryComponents.library_picker_dialog
     picker={@library_picker}

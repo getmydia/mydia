@@ -212,4 +212,75 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
       assert html =~ "Grabbing…"
     end
   end
+
+  describe "quality_profile_modal/1" do
+    test "lists every profile plus the default choice, marking the active one" do
+      profile_a = %Mydia.Settings.QualityProfile{id: "profile-a", name: "Profile A"}
+      profile_b = %Mydia.Settings.QualityProfile{id: "profile-b", name: "Profile B"}
+
+      html =
+        render_component(&Modals.quality_profile_modal/1,
+          media_item: %Mydia.Media.MediaItem{quality_profile_id: "profile-b"},
+          quality_profiles: [profile_a, profile_b],
+          default_quality_profile_name: "House Default"
+        )
+
+      assert html =~ "Profile A"
+      assert html =~ "Profile B"
+      assert html =~ "Use default (House Default)"
+      assert html =~ ~s(phx-value-profile-id="profile-b")
+      assert html =~ ~s(phx-click="hide_quality_profile_modal")
+    end
+  end
+
+  describe "target_library_modal/1" do
+    test "lists Automatic plus every candidate library, marking the active one" do
+      library = %LibraryPath{id: "lib-a", path: "/media/movies-a"}
+
+      html =
+        render_component(&Modals.target_library_modal/1,
+          media_item: %Mydia.Media.MediaItem{library_path_id: "lib-a"},
+          libraries: [library]
+        )
+
+      assert html =~ "Automatic"
+      assert html =~ "movies-a"
+      assert html =~ ~s(phx-value-library-path-id="lib-a")
+      assert html =~ ~s(phx-click="hide_target_library_modal")
+    end
+  end
+
+  describe "add_to_collection_modal/1" do
+    test "with no collections, offers a create-collection link instead of a list" do
+      html =
+        render_component(&Modals.add_to_collection_modal/1,
+          media_item: %Mydia.Media.MediaItem{},
+          user_collections: [],
+          item_collections: []
+        )
+
+      assert html =~ "No collections yet"
+      assert html =~ "Create Collection"
+      refute html =~ ~s(phx-click="add_to_collection")
+    end
+
+    test "lists collections and marks the ones the item already belongs to" do
+      in_collection = %Mydia.Collections.Collection{id: "c-1", name: "In It", is_system: false}
+      not_in_collection = %Mydia.Collections.Collection{id: "c-2", name: "Not In It"}
+
+      html =
+        render_component(&Modals.add_to_collection_modal/1,
+          media_item: %Mydia.Media.MediaItem{},
+          user_collections: [in_collection, not_in_collection],
+          item_collections: [in_collection]
+        )
+
+      assert html =~ "In It"
+      assert html =~ "Not In It"
+      assert html =~ ~s(phx-click="remove_from_collection")
+      assert html =~ ~s(phx-value-collection-id="c-1")
+      assert html =~ ~s(phx-click="add_to_collection")
+      assert html =~ ~s(phx-value-collection-id="c-2")
+    end
+  end
 end

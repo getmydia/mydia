@@ -174,6 +174,13 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:show_category_modal, false)
      |> assign(:category_form, nil)
      |> assign(:available_categories, available_categories_for(media_item.type))
+     # Quality profile picker modal state. A page-level modal rather than an
+     # anchored dropdown because the hero column it lives in is
+     # `overflow-y-auto` (see Components.hero_section/1), and an anchored
+     # `.dropdown-content` gets clipped by that ancestor's overflow box.
+     |> assign(:show_quality_profile_modal, false)
+     # Target library picker modal state, same reasoning as above.
+     |> assign(:show_target_library_modal, false)
      # Trailer modal state
      |> assign(:show_trailer_modal, false)
      # Collection state
@@ -411,8 +418,20 @@ defmodule MydiaWeb.MediaLive.Show do
   def handle_event("reset_category_to_auto", params, socket),
     do: CategoryEvents.reset_category_to_auto(params, socket)
 
+  def handle_event("show_quality_profile_modal", params, socket),
+    do: CategoryEvents.show_quality_profile_modal(params, socket)
+
+  def handle_event("hide_quality_profile_modal", params, socket),
+    do: CategoryEvents.hide_quality_profile_modal(params, socket)
+
   def handle_event("update_quality_profile", params, socket),
     do: CategoryEvents.update_quality_profile(params, socket)
+
+  def handle_event("show_target_library_modal", params, socket),
+    do: LibraryEvents.show_target_library_modal(params, socket)
+
+  def handle_event("hide_target_library_modal", params, socket),
+    do: LibraryEvents.hide_target_library_modal(params, socket)
 
   def handle_event("update_target_library", params, socket),
     do: LibraryEvents.update_target_library(params, socket)

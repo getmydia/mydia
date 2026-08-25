@@ -12,9 +12,12 @@ defmodule MydiaWeb.MediaLive.Show.DefaultQualityProfileLabelTest do
 
   alias Mydia.Settings
 
-  # The blank "follow the default" choice in the quality-profile dropdown.
-  # It has no DOM id of its own, but phx-value-profile-id="" uniquely
-  # identifies it among the profile buttons.
+  # The blank "follow the default" choice in the quality-profile picker
+  # modal. It has no DOM id of its own, but phx-value-profile-id="" uniquely
+  # identifies it among the profile buttons. The modal only renders once
+  # opened (it is a page-level dialog, not an anchored dropdown: see
+  # MydiaWeb.MediaLive.Show.Components.hero_section/1), so every test here
+  # must open it first.
   @blank_profile_button ~s{button[phx-click="update_quality_profile"][phx-value-profile-id=""]}
 
   setup %{conn: conn} do
@@ -38,6 +41,7 @@ defmodule MydiaWeb.MediaLive.Show.DefaultQualityProfileLabelTest do
     movie = media_item_fixture(%{type: "movie", quality_profile_id: profile_a.id})
 
     {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")
+    render_click(view, "show_quality_profile_modal", %{})
 
     assert has_element?(view, @blank_profile_button, "Use default (#{profile_b.name})")
     refute has_element?(view, @blank_profile_button, "Use default (#{profile_a.name})")
@@ -49,6 +53,7 @@ defmodule MydiaWeb.MediaLive.Show.DefaultQualityProfileLabelTest do
     movie = media_item_fixture(%{type: "movie"})
 
     {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")
+    render_click(view, "show_quality_profile_modal", %{})
 
     assert has_element?(view, @blank_profile_button, "No profile")
   end
