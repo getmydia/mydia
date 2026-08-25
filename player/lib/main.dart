@@ -9,6 +9,7 @@ import 'core/downloads/download_service.dart';
 import 'package:flutter/services.dart';
 
 import 'core/graphql/watch/fetch_log.dart';
+import 'core/player/input_capabilities.dart';
 import 'core/navigation/sidebar_layout_providers.dart';
 import 'core/window/desktop_window.dart';
 import 'core/startup/startup_error_app.dart';
@@ -138,6 +139,16 @@ Future<void> _startApp() async {
     debugPrint('[MediaKit] Failed to initialize: $e');
     debugPrint('Stack trace: $st');
   }
+
+  // Resolve whether this device is a television, so `InputCapabilities`
+  // can answer synchronously from inside `build` methods afterwards. Runs
+  // before `runApp` because the first frame already branches on it: the
+  // player's gesture wiring and every focus ring read it.
+  //
+  // Cannot throw. `probeLeanback` swallows its own failures and answers
+  // false, so this cannot violate this function's invariant that `runApp`
+  // is called exactly once on every path.
+  await InputCapabilities.initialize();
 
   // Pre-compile the playback chrome's glass shaders. Paired with the
   // MediaKit call above deliberately: both exist so that *starting playback*

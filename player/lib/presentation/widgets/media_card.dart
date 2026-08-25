@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../../core/layout/breakpoints.dart';
 import '../../core/theme/colors.dart';
+import '../../core/theme/depth_tokens.dart';
 import '../../domain/models/media_file.dart';
 import '../../domain/models/watch_status.dart';
+import 'focus_highlight.dart';
 import 'poster_badge_corner.dart';
 import 'poster_frame.dart';
 import 'poster_menu_button.dart';
@@ -130,77 +132,91 @@ class MediaCard extends StatelessWidget {
     // The tap target wraps the whole card, title and subtitle included. What
     // the tap promises comes from `action`: an opening card offers a click
     // cursor and no glyph, a playing card also carries the badge below.
-    return MouseRegion(
-      cursor: onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
-      child: GestureDetector(
-        onTap: onTap,
-        // Long press for touch, secondary tap for a desktop right-click. Both
-        // reach the same menu, the way Infuse exposes the same actions on iOS
-        // and on the Mac.
-        onLongPress: contextMenu == null ? null : () => contextMenu(context),
-        onSecondaryTap: contextMenu == null ? null : () => contextMenu(context),
-        child: SizedBox(
-          width: cardWidth,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                width: cardWidth,
-                height: cardHeight,
-                child: PosterFrame(
-                  imageUrl: posterUrl,
-                  placeholder: _buildPlaceholder(),
-                  overlays: [
-                    // `watchStatus` supersedes `progressPercentage` when both
-                    // arrive. See the same guard in `MediaPoster` for why.
-                    if (watchStatus == null && progress != null && progress > 0)
-                      ProgressOverlay(percentage: progress),
-                    WatchProgressOverlay(status: watchStatus),
-                    if (action == MediaCardAction.play) const _PlayBadge(),
-                    PosterBadgeCorner(
-                      children: [
-                        WatchIndicator(status: watchStatus),
-                        if (quality.hasQuality)
-                          QualityBadgeRow(
-                            badges: quality.toBadges(),
-                            spacing: 4.0,
+    //
+    // FocusHighlight sits outermost so the ring encloses the poster and its
+    // labels together, which is what a viewer scanning a rail with a remote
+    // is actually selecting. `borderRadius` uses the shared poster token so
+    // the ring traces the same corner radius `PosterFrame` already paints.
+    return FocusHighlight(
+      onActivate: onTap,
+      borderRadius:
+          const BorderRadius.all(Radius.circular(DepthTokens.radiusPoster)),
+      child: MouseRegion(
+        cursor: onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
+        child: GestureDetector(
+          onTap: onTap,
+          // Long press for touch, secondary tap for a desktop right-click.
+          // Both reach the same menu, the way Infuse exposes the same actions
+          // on iOS and on the Mac.
+          onLongPress: contextMenu == null ? null : () => contextMenu(context),
+          onSecondaryTap:
+              contextMenu == null ? null : () => contextMenu(context),
+          child: SizedBox(
+            width: cardWidth,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: cardWidth,
+                  height: cardHeight,
+                  child: PosterFrame(
+                    imageUrl: posterUrl,
+                    placeholder: _buildPlaceholder(),
+                    overlays: [
+                      // `watchStatus` supersedes `progressPercentage` when
+                      // both arrive. See the same guard in `MediaPoster` for
+                      // why.
+                      if (watchStatus == null &&
+                          progress != null &&
+                          progress > 0)
+                        ProgressOverlay(percentage: progress),
+                      WatchProgressOverlay(status: watchStatus),
+                      if (action == MediaCardAction.play) const _PlayBadge(),
+                      PosterBadgeCorner(
+                        children: [
+                          WatchIndicator(status: watchStatus),
+                          if (quality.hasQuality)
+                            QualityBadgeRow(
+                              badges: quality.toBadges(),
+                              spacing: 4.0,
+                            ),
+                        ],
+                      ),
+                      // Routed through the same callback as the long-press,
+                      // so the button and the gesture can never offer
+                      // different menus.
+                      if (showMenuButton && contextMenu != null)
+                        Builder(
+                          builder: (buttonContext) => PosterMenuButton(
+                            onPressed: () => contextMenu(buttonContext),
                           ),
-                      ],
-                    ),
-                    // Routed through the same callback as the long-press, so
-                    // the button and the gesture can never offer different
-                    // menus.
-                    if (showMenuButton && contextMenu != null)
-                      Builder(
-                        builder: (buttonContext) => PosterMenuButton(
-                          onPressed: () => contextMenu(buttonContext),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                title,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      height: 1.2,
-                    ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              if (subtitle != null) ...[
-                const SizedBox(height: 4),
+                const SizedBox(height: 10),
                 Text(
-                  subtitle!,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppColors.textSecondary,
+                  title,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        height: 1.2,
                       ),
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
+                if (subtitle != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle!,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/models/media_file.dart';
 import 'package:player/domain/models/watch_status.dart';
+import 'package:player/presentation/widgets/focus_highlight.dart';
 import 'package:player/presentation/widgets/media_card.dart';
 import 'package:player/presentation/widgets/progress_overlay.dart';
 import 'package:player/presentation/widgets/quality_badge.dart';
@@ -100,6 +101,13 @@ void main() {
 
     testWidgets('a tappable card offers a click cursor, an inert one defers',
         (tester) async {
+      // Scoped to the ring, not the card root: `FocusHighlight` now wraps
+      // the card, and its own `FocusableActionDetector` contributes an outer
+      // `MouseRegion` of its own (always `MouseCursor.defer`) ahead of the
+      // card's cursor-setting one in tree order. The ring key sits inside
+      // that detector, so searching from there finds the card's own region.
+      final ring = find.byKey(FocusHighlight.ringKey);
+
       await tester.pumpWidget(
         posterHost(
           MediaCard(
@@ -113,7 +121,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        hoverCursor(tester, of: find.byType(MediaCard)),
+        hoverCursor(tester, of: ring),
         SystemMouseCursors.click,
       );
 
@@ -126,7 +134,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        hoverCursor(tester, of: find.byType(MediaCard)),
+        hoverCursor(tester, of: ring),
         MouseCursor.defer,
       );
     });

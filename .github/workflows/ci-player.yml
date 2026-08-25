@@ -69,6 +69,29 @@ jobs:
         # files while still exiting 0, so this is load-bearing, not cosmetic.
         run: flutter test --concurrency=1
 
+      - name: Run television-tier tests
+        # `directionalPrimary` is compile-time influenced, so the VM run above
+        # only ever exercises the non-directional branch. Without this step the
+        # whole Android TV code path has no coverage in CI at all.
+        #
+        # Files are enumerated rather than running the full suite under the
+        # define, which would roughly double this job for no extra signal.
+        # Empty means the naming convention broke, which must fail rather than
+        # silently cover nothing.
+        run: |
+          set -euo pipefail
+          # Read into an array rather than a bare string: an unquoted expansion
+          # would word-split a path containing whitespace into several invalid
+          # arguments, and `flutter test` would report a missing file instead
+          # of the real cause.
+          mapfile -t files < <(git ls-files 'test/**/*_tv_test.dart')
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No test/**/*_tv_test.dart files matched; expected at least one." >&2
+            exit 1
+          fi
+          echo "Television-tier tests: ${files[*]}"
+          flutter test --concurrency=1 --dart-define=MYDIA_FORCE_TV=true "${files[@]}"
+
       - name: Run browser tests
         # The run above is a VM run, which skips every @TestOn('browser') file.
         # Without this step the IndexedDB keystore has no coverage in CI at all.

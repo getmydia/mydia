@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/colors.dart';
+import 'focus_highlight.dart';
 
 class PlayButton extends StatefulWidget {
   final VoidCallback? onPressed;
@@ -47,40 +48,51 @@ class _PlayButtonState extends State<PlayButton>
       child: SizedBox(
         width: _size,
         height: _size,
-        child: Container(
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            // Solid primary fill to match the system's flat primary actions
-            // (FilledButton, hero Play, card play overlay) — no two-hue
-            // gradient.
-            color: _enabled ? AppColors.primary : AppColors.surfaceVariant,
-            boxShadow: _enabled
-                ? [
-                    BoxShadow(
-                      color: AppColors.primary.withValues(alpha: 0.4),
-                      blurRadius: 16,
-                      offset: const Offset(0, 4),
+        child: FocusHighlight(
+          onActivate: widget.onPressed,
+          circular: true,
+          child: Container(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              // Solid primary fill to match the system's flat primary actions
+              // (FilledButton, hero Play, card play overlay) — no two-hue
+              // gradient.
+              color: _enabled ? AppColors.primary : AppColors.surfaceVariant,
+              boxShadow: _enabled
+                  ? [
+                      BoxShadow(
+                        color: AppColors.primary.withValues(alpha: 0.4),
+                        blurRadius: 16,
+                        offset: const Offset(0, 4),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Material(
+              color: Colors.transparent,
+              shape: const CircleBorder(),
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                // FocusHighlight above is the single focus stop for this
+                // button. InkWell defaults canRequestFocus to true, which
+                // would otherwise register a second, invisible focus stop
+                // nested inside the first one, forcing a D-pad user to press
+                // right/down twice to clear one button.
+                canRequestFocus: false,
+                onTap: widget.onPressed,
+                onTapDown: _enabled ? (_) => _controller.forward() : null,
+                onTapUp: _enabled ? (_) => _controller.reverse() : null,
+                onTapCancel: _enabled ? () => _controller.reverse() : null,
+                child: Center(
+                  child: Padding(
+                    // Slight right offset to optically center the play
+                    // triangle
+                    padding: const EdgeInsets.only(left: 3),
+                    child: Icon(
+                      Icons.play_arrow_rounded,
+                      size: 28,
+                      color: _enabled ? Colors.white : AppColors.textDisabled,
                     ),
-                  ]
-                : null,
-          ),
-          child: Material(
-            color: Colors.transparent,
-            shape: const CircleBorder(),
-            child: InkWell(
-              customBorder: const CircleBorder(),
-              onTap: widget.onPressed,
-              onTapDown: _enabled ? (_) => _controller.forward() : null,
-              onTapUp: _enabled ? (_) => _controller.reverse() : null,
-              onTapCancel: _enabled ? () => _controller.reverse() : null,
-              child: Center(
-                child: Padding(
-                  // Slight right offset to optically center the play triangle
-                  padding: const EdgeInsets.only(left: 3),
-                  child: Icon(
-                    Icons.play_arrow_rounded,
-                    size: 28,
-                    color: _enabled ? Colors.white : AppColors.textDisabled,
                   ),
                 ),
               ),

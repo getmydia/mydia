@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import '../../core/layout/breakpoints.dart';
+import '../../core/player/input_capabilities.dart';
 import '../../core/theme/colors.dart';
 import 'horizontal_wheel_scroll.dart';
+import 'rail_focus_scroller.dart';
 
 /// The scroll-and-fade shell shared by the app's horizontal rails.
 ///
@@ -34,6 +37,14 @@ class HorizontalRail extends StatefulWidget {
 }
 
 class _HorizontalRailState extends State<HorizontalRail> {
+  /// How far past the viewport the list keeps items built.
+  ///
+  /// Same reasoning as `ContentRail`: focus traversal can only reach a
+  /// widget that exists, and `ListView.builder`'s 250px default is narrower
+  /// than a single episode still. Two viewport widths guarantee at least one
+  /// built item past each edge, applied only in the directional tier.
+  static const double _directionalCacheExtent = 2400;
+
   final ScrollController _scrollController = ScrollController();
 
   // Both fades start hidden and are turned on once layout reports how far the
@@ -112,6 +123,9 @@ class _HorizontalRailState extends State<HorizontalRail> {
             builder: (context, controller) => ListView.builder(
               controller: controller,
               scrollDirection: Axis.horizontal,
+              scrollCacheExtent: InputCapabilities.directionalPrimary
+                  ? const ScrollCacheExtent.pixels(_directionalCacheExtent)
+                  : null,
               padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
               itemCount: widget.itemCount,
               itemBuilder: (context, index) {
@@ -119,7 +133,9 @@ class _HorizontalRailState extends State<HorizontalRail> {
                   padding: EdgeInsets.only(
                     right: index < widget.itemCount - 1 ? cardSpacing : 0,
                   ),
-                  child: widget.itemBuilder(context, index),
+                  child: RailFocusScroller(
+                    child: widget.itemBuilder(context, index),
+                  ),
                 );
               },
             ),

@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart'
-    show defaultTargetPlatform, TargetPlatform;
+    show defaultTargetPlatform, TargetPlatform, visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,13 +8,25 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../core/auth/auth_service.dart';
 import '../../core/p2p/p2p_service.dart' show defaultRelayUrl;
+import '../../core/player/input_capabilities.dart';
 import '../../core/theme/colors.dart';
+import '../widgets/focus_highlight.dart';
 import '../widgets/glass_surface.dart';
 import '../widgets/storage_unavailable_dialog.dart';
 import 'login/login_controller.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
+
+  /// Whether to offer the camera QR scanner.
+  ///
+  /// Withheld in the directional tier: a Chromecast with Google TV has no
+  /// camera, so the button opens a scanner that can only fail, and it sits
+  /// between the claim-code field and the submit button in the focus order.
+  /// The typed claim code needs no camera, so nothing is lost by removing it.
+  @visibleForTesting
+  static bool offersQrScan({required bool directionalPrimary}) =>
+      !directionalPrimary;
 
   @override
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
@@ -614,49 +626,53 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     required bool isSelected,
     required VoidCallback? onTap,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeInOut,
-        alignment: Alignment.center,
-        height: double.infinity,
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary : Colors.transparent,
-          borderRadius: BorderRadius.circular(7),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: AppColors.primary.withValues(alpha: 0.3),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
+    return FocusHighlight(
+      onActivate: onTap,
+      borderRadius: const BorderRadius.all(Radius.circular(7)),
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeInOut,
+          alignment: Alignment.center,
+          height: double.infinity,
+          decoration: BoxDecoration(
+            color: isSelected ? AppColors.primary : Colors.transparent,
+            borderRadius: BorderRadius.circular(7),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: AppColors.primary.withValues(alpha: 0.3),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 15,
+                color: isSelected ? Colors.white : AppColors.textSecondary,
+              ),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                    color: isSelected ? Colors.white : AppColors.textSecondary,
                   ),
-                ]
-              : null,
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              size: 15,
-              color: isSelected ? Colors.white : AppColors.textSecondary,
-            ),
-            const SizedBox(width: 4),
-            Flexible(
-              child: Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                  color: isSelected ? Colors.white : AppColors.textSecondary,
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -665,34 +681,40 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   Widget _buildClaimCodeContent(LoginState loginState, bool isCompact) {
     final isMobile = defaultTargetPlatform == TargetPlatform.android ||
         defaultTargetPlatform == TargetPlatform.iOS;
+    final offersQr = LoginScreen.offersQrScan(
+      directionalPrimary: InputCapabilities.directionalPrimary,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
         _buildClaimCodeInput(loginState),
-        SizedBox(height: isCompact ? 12 : 14),
-        SizedBox(
-          height: 44,
-          child: OutlinedButton.icon(
-            onPressed: loginState.isLoading ? null : _openQrScanner,
-            icon: const Icon(Icons.qr_code_scanner_rounded, size: 20),
-            label: Text(
-              isMobile ? 'Scan QR Code' : 'Scan QR Code with Camera',
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-            ),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.primary,
-              side: BorderSide(
-                color: AppColors.primary.withValues(alpha: 0.4),
-                width: 1.5,
+        if (offersQr) ...[
+          SizedBox(height: isCompact ? 12 : 14),
+          SizedBox(
+            height: 44,
+            child: OutlinedButton.icon(
+              onPressed: loginState.isLoading ? null : _openQrScanner,
+              icon: const Icon(Icons.qr_code_scanner_rounded, size: 20),
+              label: Text(
+                isMobile ? 'Scan QR Code' : 'Scan QR Code with Camera',
+                style:
+                    const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
               ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: BorderSide(
+                  color: AppColors.primary.withValues(alpha: 0.4),
+                  width: 1.5,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
             ),
           ),
-        ),
+        ],
         if (loginState.claimCodeMessage != null &&
             loginState.claimCodeStatus != ClaimCodeStatus.error) ...[
           const SizedBox(height: 14),
@@ -817,6 +839,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     return TextFormField(
       controller: _claimCodeController,
       focusNode: _claimCodeFocus,
+      autofocus: InputCapabilities.directionalPrimary,
       enabled: !loginState.isLoading,
       textAlign: TextAlign.center,
       textCapitalization: TextCapitalization.characters,

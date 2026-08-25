@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/colors.dart';
+import '../focus_highlight.dart';
 
 /// Individual sidebar navigation item
 class SidebarRow extends StatefulWidget {
@@ -107,84 +108,91 @@ class _SidebarRowState extends State<SidebarRow> {
         ? widget.editingTrailing
         : (widget.canCustomise ? _overflowMenu(showMenu: showMenu) : null);
 
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() {
-        _isHovered = false;
-        _isLongPressed = false;
-      }),
-      // Scoped to anchors only: every row's tap is suppressed while editing,
-      // but only an anchor's cursor changes here. A customisable row is still
-      // draggable and its overflow menu still exists just outside edit mode,
-      // so a click cursor there is arguably still wrong too — left alone as a
-      // separate call, not part of this fix.
-      cursor: widget.isDisabled
-          ? SystemMouseCursors.forbidden
-          : isLockedWhileEditing
-              ? SystemMouseCursors.basic
-              : SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: widget.isEditing ? null : widget.onTap,
-        onLongPress: widget.canCustomise && !widget.isEditing
-            ? () => setState(() => _isLongPressed = true)
-            : null,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOutCubic,
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            color: widget.isDisabled
-                ? Colors.transparent
-                : isSelected
-                    ? AppColors.primary.withValues(alpha: 0.12)
-                    : _isHovered
-                        ? AppColors.surfaceVariant.withValues(alpha: 0.3)
-                        : Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            children: [
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Icon(
-                    isSelected ? widget.selectedIcon : widget.icon,
-                    size: 22,
-                    color: iconColor,
-                  ),
-                  if (widget.badge != null)
-                    Positioned(
-                      top: -3,
-                      right: -3,
-                      child: widget.badge!,
+    return FocusHighlight(
+      onActivate: widget.isEditing ? null : widget.onTap,
+      // Matches the pill `BoxDecoration.borderRadius` below: the ring traces
+      // that exact rectangle, so the two radii must move together.
+      borderRadius: const BorderRadius.all(Radius.circular(12)),
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _isHovered = true),
+        onExit: (_) => setState(() {
+          _isHovered = false;
+          _isLongPressed = false;
+        }),
+        // Scoped to anchors only: every row's tap is suppressed while
+        // editing, but only an anchor's cursor changes here. A customisable
+        // row is still draggable and its overflow menu still exists just
+        // outside edit mode, so a click cursor there is arguably still wrong
+        // too, left alone as a separate call, not part of this fix.
+        cursor: widget.isDisabled
+            ? SystemMouseCursors.forbidden
+            : isLockedWhileEditing
+                ? SystemMouseCursors.basic
+                : SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: widget.isEditing ? null : widget.onTap,
+          onLongPress: widget.canCustomise && !widget.isEditing
+              ? () => setState(() => _isLongPressed = true)
+              : null,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: widget.isDisabled
+                  ? Colors.transparent
+                  : isSelected
+                      ? AppColors.primary.withValues(alpha: 0.12)
+                      : _isHovered
+                          ? AppColors.surfaceVariant.withValues(alpha: 0.3)
+                          : Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Icon(
+                      isSelected ? widget.selectedIcon : widget.icon,
+                      size: 22,
+                      color: iconColor,
                     ),
-                ],
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Text(
-                  widget.label,
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 1,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                    color: textColor,
-                    decoration:
-                        widget.isHidden ? TextDecoration.lineThrough : null,
-                    decorationColor: AppColors.textDisabled,
+                    if (widget.badge != null)
+                      Positioned(
+                        top: -3,
+                        right: -3,
+                        child: widget.badge!,
+                      ),
+                  ],
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    widget.label,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight:
+                          isSelected ? FontWeight.w600 : FontWeight.w500,
+                      color: textColor,
+                      decoration:
+                          widget.isHidden ? TextDecoration.lineThrough : null,
+                      decorationColor: AppColors.textDisabled,
+                    ),
                   ),
                 ),
-              ),
-              // The slot stays reserved for the whole time the row is
-              // editing, even when the caller withholds editingTrailing, so
-              // the row's width never shifts mid-edit.
-              if (trailing != null || widget.isEditing)
-                SizedBox(
-                  width: _menuWidth,
-                  child: Center(child: trailing ?? const SizedBox.shrink()),
-                ),
-            ],
+                // The slot stays reserved for the whole time the row is
+                // editing, even when the caller withholds editingTrailing, so
+                // the row's width never shifts mid-edit.
+                if (trailing != null || widget.isEditing)
+                  SizedBox(
+                    width: _menuWidth,
+                    child: Center(child: trailing ?? const SizedBox.shrink()),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -192,37 +200,47 @@ class _SidebarRowState extends State<SidebarRow> {
   }
 
   Widget _overflowMenu({required bool showMenu}) {
-    return Opacity(
-      opacity: showMenu ? 1 : 0,
-      child: IgnorePointer(
-        ignoring: !showMenu,
-        child: PopupMenuButton<String>(
-          padding: EdgeInsets.zero,
-          icon: Icon(
-            Icons.more_vert,
-            size: 20,
-            color: AppColors.textSecondary,
+    // PopupMenuButton wraps a Material IconButton, whose canRequestFocus is
+    // just onPressed != null: neither Opacity nor IgnorePointer removes a
+    // widget from focus traversal, so a hidden button would still be a live,
+    // invisible tab stop. ExcludeFocus is what actually pulls it out of
+    // traversal while hidden; on a TV, showMenu is always false (it is
+    // hover- and edit-driven, and a TV has no hover), so the button drops
+    // out entirely there. Desktop keyboard users keep it once it is shown.
+    return ExcludeFocus(
+      excluding: !showMenu,
+      child: Opacity(
+        opacity: showMenu ? 1 : 0,
+        child: IgnorePointer(
+          ignoring: !showMenu,
+          child: PopupMenuButton<String>(
+            padding: EdgeInsets.zero,
+            icon: Icon(
+              Icons.more_vert,
+              size: 20,
+              color: AppColors.textSecondary,
+            ),
+            onSelected: (value) {
+              setState(() => _isLongPressed = false);
+              switch (value) {
+                case 'hide':
+                  widget.onHide?.call();
+                case 'edit':
+                  widget.onEdit?.call();
+                case 'delete':
+                  widget.onDelete?.call();
+              }
+            },
+            onCanceled: () => setState(() => _isLongPressed = false),
+            itemBuilder: (context) => [
+              if (widget.onHide != null)
+                const PopupMenuItem(value: 'hide', child: Text('Hide')),
+              if (widget.onEdit != null)
+                const PopupMenuItem(value: 'edit', child: Text('Edit')),
+              if (widget.onDelete != null)
+                const PopupMenuItem(value: 'delete', child: Text('Delete')),
+            ],
           ),
-          onSelected: (value) {
-            setState(() => _isLongPressed = false);
-            switch (value) {
-              case 'hide':
-                widget.onHide?.call();
-              case 'edit':
-                widget.onEdit?.call();
-              case 'delete':
-                widget.onDelete?.call();
-            }
-          },
-          onCanceled: () => setState(() => _isLongPressed = false),
-          itemBuilder: (context) => [
-            if (widget.onHide != null)
-              const PopupMenuItem(value: 'hide', child: Text('Hide')),
-            if (widget.onEdit != null)
-              const PopupMenuItem(value: 'edit', child: Text('Edit')),
-            if (widget.onDelete != null)
-              const PopupMenuItem(value: 'delete', child: Text('Delete')),
-          ],
         ),
       ),
     );

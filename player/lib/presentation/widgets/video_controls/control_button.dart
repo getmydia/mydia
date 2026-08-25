@@ -1,9 +1,9 @@
 import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../../core/theme/depth_tokens.dart';
+import '../focus_highlight.dart';
 
 /// A playback-chrome control button.
 ///
@@ -61,49 +61,21 @@ class ControlButton extends StatefulWidget {
 }
 
 class _ControlButtonState extends State<ControlButton> {
-  /// Owned directly (rather than left for `Focus` to auto-create) so this
-  /// state can request focus, listen for focus changes without a `Builder`
-  /// indirection, and expose the node to tests via `Focus.focusNode`.
+  /// Owned directly (rather than left for `FocusHighlight` to auto-create) so
+  /// this state can request focus and expose the node to tests via
+  /// `Focus.focusNode`. `FocusableActionDetector` installs a `Focus`
+  /// internally, so that finder keeps working.
   final FocusNode _focusNode = FocusNode(debugLabel: 'ControlButton');
 
   bool _hovering = false;
   bool _pressed = false;
-  bool _focused = false;
 
   bool get _interactive => widget.enabled && widget.onTap != null;
 
   @override
-  void initState() {
-    super.initState();
-    _focusNode.addListener(_handleFocusChange);
-  }
-
-  @override
   void dispose() {
-    _focusNode.removeListener(_handleFocusChange);
     _focusNode.dispose();
     super.dispose();
-  }
-
-  void _handleFocusChange() {
-    if (!mounted) return;
-    setState(() => _focused = _focusNode.hasFocus);
-  }
-
-  /// Wires Enter/Space activation for keyboard users. A focus ring that
-  /// nothing responds to is a defect, not polish: without this, a
-  /// keyboard-only user can tab to the button and see the ring, but never
-  /// activate it.
-  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (!_interactive || event is! KeyDownEvent) {
-      return KeyEventResult.ignored;
-    }
-    if (event.logicalKey == LogicalKeyboardKey.enter ||
-        event.logicalKey == LogicalKeyboardKey.space) {
-      widget.onTap!();
-      return KeyEventResult.handled;
-    }
-    return KeyEventResult.ignored;
   }
 
   @override
@@ -118,10 +90,12 @@ class _ControlButtonState extends State<ControlButton> {
         scale: _pressed && !noMotion ? 0.94 : 1.0,
         duration: const Duration(milliseconds: 100),
         curve: DepthTokens.curveStandard,
-        child: Focus(
+        child: FocusHighlight(
           focusNode: _focusNode,
-          canRequestFocus: _interactive,
-          onKeyEvent: _handleKeyEvent,
+          onActivate: _interactive ? widget.onTap : null,
+          circular: true,
+          ringWidth: 2,
+          ringOpacity: ControlButton.focusRingOpacity,
           // A single implicit-animation owner for both the hover backdrop
           // and the glyph opacity: they're the same hover transition and
           // must move together, not just start together. Driving them from
@@ -140,14 +114,6 @@ class _ControlButtonState extends State<ControlButton> {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: Colors.white.withValues(alpha: backdropAlpha),
-                  border: _focused
-                      ? Border.all(
-                          color: Colors.white.withValues(
-                            alpha: ControlButton.focusRingOpacity,
-                          ),
-                          width: 2,
-                        )
-                      : null,
                 ),
                 child: Center(
                   child: Icon(

@@ -43,6 +43,7 @@ import '../../widgets/cast_button.dart';
 import '../../widgets/cast_device_picker.dart';
 import '../../widgets/video_controls/cast_chrome_icon.dart';
 import '../../widgets/video_controls/custom_video_controls.dart';
+import '../../widgets/video_controls/playback_chrome.dart';
 import '../../widgets/video_controls/skip_segment_button.dart';
 import '../../widgets/video_controls/chrome_panel.dart';
 import '../../widgets/tap_to_play_overlay.dart';
@@ -104,6 +105,29 @@ export '../../../core/player/resume_plan.dart'
 /// which is what the player did before restarts existed. Only a deliberate
 /// jump well beyond what has been transcoded is worth a restart.
 const Duration kSeekRestartTolerance = Duration(seconds: 30);
+
+/// What an arrow key press means in the player.
+///
+/// A remote's D-pad and a keyboard's arrows deliver the same key codes, so one
+/// handler serves both, but they cannot mean the same thing. A keyboard viewer
+/// has a pointer and a volume slider; a remote viewer has neither, and the
+/// only focusable things on screen are the OSD controls, which are not there
+/// while the OSD is hidden.
+enum ArrowIntent {
+  seekBackward,
+  seekForward,
+  volumeUp,
+  volumeDown,
+
+  /// Show the OSD. The directional-tier answer for up and down, which have no
+  /// volume to change: on a television that belongs to the remote and the
+  /// receiver, and binding it means one press changes two volumes.
+  revealChrome,
+
+  /// Let the key fall through to focus traversal, so it walks the OSD's
+  /// controls. Returning this means the handler must report `ignored`.
+  traverse,
+}
 
 class PlayerScreen extends ConsumerStatefulWidget {
   final String mediaId;
@@ -172,6 +196,64 @@ class PlayerScreen extends ConsumerStatefulWidget {
         backgroundColor: Colors.black,
         body: SafeArea(top: false, child: child),
       );
+
+  /// Whether this build should install the playback key handler.
+  ///
+  /// Exposed as a pure predicate rather than inlined at the call site so it
+  /// can be checked for every platform combination from one non-web host,
+  /// for the same reason `PlatformFeatures.computeSupportsKeyboardShortcuts`
+  /// is. Before the directional term, a television fell through both arms:
+  /// `supportsKeyboardShortcuts` covers desktop and web only, so a remote's
+  /// D-pad reached nothing.
+  @visibleForTesting
+  static bool wantsKeyHandling({
+    required bool supportsKeyboardShortcuts,
+    required bool directionalPrimary,
+  }) =>
+      supportsKeyboardShortcuts || directionalPrimary;
+
+  /// Whether to pin the display to landscape on entering playback.
+  ///
+  /// A television is already landscape and has no sensor to rotate, so the
+  /// request is at best a no-op. It reads `isMobile`, which Android TV
+  /// answers true, so it needs the directional term to opt back out.
+  @visibleForTesting
+  static bool wantsForcedLandscape({
+    required bool isMobile,
+    required bool directionalPrimary,
+  }) =>
+      isMobile && !directionalPrimary;
+
+  /// Resolves an arrow key to its meaning for this input tier and OSD state.
+  ///
+  /// Pure and exposed for testing, for the same reason
+  /// `PlatformFeatures.computeSupportsKeyboardShortcuts` is: the tier is a
+  /// runtime platform answer that a single test host cannot vary.
+  @visibleForTesting
+  static ArrowIntent resolveArrowIntent({
+    required LogicalKeyboardKey key,
+    required bool directionalPrimary,
+    required bool chromeVisible,
+  }) {
+    if (directionalPrimary && chromeVisible) return ArrowIntent.traverse;
+
+    switch (key) {
+      case LogicalKeyboardKey.arrowLeft:
+        return ArrowIntent.seekBackward;
+      case LogicalKeyboardKey.arrowRight:
+        return ArrowIntent.seekForward;
+      case LogicalKeyboardKey.arrowUp:
+        return directionalPrimary
+            ? ArrowIntent.revealChrome
+            : ArrowIntent.volumeUp;
+      case LogicalKeyboardKey.arrowDown:
+        return directionalPrimary
+            ? ArrowIntent.revealChrome
+            : ArrowIntent.volumeDown;
+      default:
+        return ArrowIntent.traverse;
+    }
+  }
 }
 
 class _PlayerScreenState extends ConsumerState<PlayerScreen>
@@ -538,6 +620,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   // Desktop feature state
   final FocusNode _focusNode = FocusNode();
 
+  /// Handle on the OSD's shown or hidden state, so `_handleKeyEvent` can
+  /// decide what an arrow press means and reveal the chrome on demand.
+  final ChromeVisibilityController _chromeVisibility =
+      ChromeVisibilityController();
+
   /// Fullscreen state, owned by the controller and sourced from platform
   /// events. Deliberately not a local bool: the previous field was flipped
   /// optimistically and never learned that the platform had refused, which is
@@ -635,8 +722,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _fullscreen.isFullscreen.addListener(_onFullscreenChanged);
     _initializePlayer();
 
-    // Force landscape orientation on mobile devices
-    if (PlatformFeatures.isMobile) {
+    // Force landscape orientation on mobile devices. Skipped on a television,
+    // which is already landscape and has nothing to rotate.
+    if (PlayerScreen.wantsForcedLandscape(
+      isMobile: PlatformFeatures.isMobile,
+      directionalPrimary: InputCapabilities.directionalPrimary,
+    )) {
       SystemChrome.setPreferredOrientations([
         DeviceOrientation.landscapeLeft,
         DeviceOrientation.landscapeRight,
@@ -3677,42 +3768,96 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     _upNextCountdown?.noteInput();
 
+    // Arrow keys mean different things depending on the input tier and
+    // whether the OSD is on screen. See `resolveArrowIntent`'s own dartdoc.
+    final arrow = PlayerScreen.resolveArrowIntent(
+      key: event.logicalKey,
+      directionalPrimary: InputCapabilities.directionalPrimary,
+      chromeVisible: _chromeVisibility.visible,
+    );
+
+    switch (arrow) {
+      case ArrowIntent.seekBackward:
+        final currentPosition = _timeline.toReal(player.state.position);
+        final newPosition = currentPosition - const Duration(seconds: 10);
+        seekToReal(newPosition < Duration.zero ? Duration.zero : newPosition);
+        _chromeVisibility.show();
+        return KeyEventResult.handled;
+
+      case ArrowIntent.seekForward:
+        final currentPosition = _timeline.toReal(player.state.position);
+        final duration = _timeline.resolveDuration(player.state.duration);
+        final newPosition = currentPosition + const Duration(seconds: 10);
+        seekToReal(newPosition > duration ? duration : newPosition);
+        _chromeVisibility.show();
+        return KeyEventResult.handled;
+
+      case ArrowIntent.volumeUp:
+        player.setVolume((player.state.volume + 10.0).clamp(0.0, 100.0));
+        return KeyEventResult.handled;
+
+      case ArrowIntent.volumeDown:
+        player.setVolume((player.state.volume - 10.0).clamp(0.0, 100.0));
+        return KeyEventResult.handled;
+
+      case ArrowIntent.revealChrome:
+        _chromeVisibility.show();
+        return KeyEventResult.handled;
+
+      case ArrowIntent.traverse:
+        // Falls through to the switch below, which handles the non-arrow
+        // keys. An arrow reaching here is deliberately left unhandled so
+        // focus traversal moves between the OSD's controls.
+        break;
+    }
+
     switch (event.logicalKey) {
       case LogicalKeyboardKey.space:
         // Play/Pause
         player.playOrPause();
         return KeyEventResult.handled;
 
-      case LogicalKeyboardKey.arrowLeft:
-        // Seek backward 10 seconds
-        final currentPosition = _timeline.toReal(player.state.position);
-        final newPosition = currentPosition - const Duration(seconds: 10);
-        final targetPosition =
-            newPosition < Duration.zero ? Duration.zero : newPosition;
-        seekToReal(targetPosition);
+      // A remote's transport buttons. The Chromecast remote's play/pause is
+      // the one that matters here; the rest arrive from fuller remotes and
+      // from desktop keyboards with a media row, which get them for free.
+      case LogicalKeyboardKey.mediaPlayPause:
+        player.playOrPause();
+        _chromeVisibility.show();
         return KeyEventResult.handled;
 
-      case LogicalKeyboardKey.arrowRight:
-        // Seek forward 10 seconds
-        final currentPosition = _timeline.toReal(player.state.position);
+      case LogicalKeyboardKey.mediaPlay:
+        player.play();
+        _chromeVisibility.show();
+        return KeyEventResult.handled;
+
+      case LogicalKeyboardKey.mediaPause:
+        player.pause();
+        _chromeVisibility.show();
+        return KeyEventResult.handled;
+
+      case LogicalKeyboardKey.mediaFastForward:
+        final position = _timeline.toReal(player.state.position);
         final duration = _timeline.resolveDuration(player.state.duration);
-        final newPosition = currentPosition + const Duration(seconds: 10);
-        final targetPosition = newPosition > duration ? duration : newPosition;
-        seekToReal(targetPosition);
+        final target = position + const Duration(seconds: 30);
+        seekToReal(target > duration ? duration : target);
+        _chromeVisibility.show();
         return KeyEventResult.handled;
 
-      case LogicalKeyboardKey.arrowUp:
-        // Volume up
-        final currentVolume = player.state.volume;
-        final newVolume = (currentVolume + 10.0).clamp(0.0, 100.0);
-        player.setVolume(newVolume);
+      case LogicalKeyboardKey.mediaRewind:
+        final position = _timeline.toReal(player.state.position);
+        final target = position - const Duration(seconds: 30);
+        seekToReal(target < Duration.zero ? Duration.zero : target);
+        _chromeVisibility.show();
         return KeyEventResult.handled;
 
-      case LogicalKeyboardKey.arrowDown:
-        // Volume down
-        final currentVolume = player.state.volume;
-        final newVolume = (currentVolume - 10.0).clamp(0.0, 100.0);
-        player.setVolume(newVolume);
+      case LogicalKeyboardKey.mediaTrackNext:
+        if (!_hasNextEpisode) return KeyEventResult.ignored;
+        _playNextEpisode();
+        return KeyEventResult.handled;
+
+      case LogicalKeyboardKey.mediaTrackPrevious:
+        if (!_hasPreviousEpisode) return KeyEventResult.ignored;
+        _playPreviousEpisode();
         return KeyEventResult.handled;
 
       case LogicalKeyboardKey.keyF:
@@ -3876,6 +4021,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // Dispose player (VideoController is automatically disposed when player is disposed)
     _player?.dispose();
     _focusNode.dispose();
+    _chromeVisibility.dispose();
     super.dispose();
   }
 
@@ -4061,9 +4207,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         ? _buildCastPlaceholder(castSession)
         : _buildBody();
 
-    // Wrap with keyboard listener wherever a physical keyboard exists
-    // (native desktop or web — see supportsKeyboardShortcuts' own dartdoc).
-    if (PlatformFeatures.supportsKeyboardShortcuts && !isCasting) {
+    // Wrap with the key handler wherever a physical keyboard exists (native
+    // desktop or web, see supportsKeyboardShortcuts' own dartdoc) or a D-pad
+    // does. A remote sends the same arrow, Enter and media key codes a
+    // keyboard does, so one handler serves both.
+    if (PlayerScreen.wantsKeyHandling(
+          supportsKeyboardShortcuts: PlatformFeatures.supportsKeyboardShortcuts,
+          directionalPrimary: InputCapabilities.directionalPrimary,
+        ) &&
+        !isCasting) {
       body = Focus(
         focusNode: _focusNode,
         autofocus: true,
@@ -4072,7 +4224,51 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       );
     }
 
-    return PlayerScreen.playerFrame(child: body);
+    // Android's back button, which is the remote's most-pressed key after the
+    // D-pad. It arrives as a route pop rather than a key event, so it needs
+    // its own guard: the first press dismisses the OSD, and only a press with
+    // the OSD already hidden leaves playback. Without this, one stray press
+    // during a film exits it.
+    //
+    // Gated on `blocksBack`, not on `!visible` alone: `_chromeVisibility`
+    // reads `visible: true` while detached too, matching how the chrome
+    // mounts, so a bare `!visible` check swallows every back press for as
+    // long as there is no chrome to dismiss at all: the loading spinner
+    // before the OSD ever mounts, the error screen, and the cast placeholder
+    // (`_buildCastPlaceholder`, which swaps in for `_buildBody()` above and
+    // never builds one either). None of those has anything on screen for a
+    // back press to dismiss, and there is no other way out of them on a
+    // remote, so back has to pass straight through in all three.
+    //
+    // Gated on the directional tier as well, because this is a remote-only
+    // affordance. The chrome mounts on every platform, and it is showing far
+    // more of the time on a phone than on a television: for the first seconds
+    // of playback, after every tap, and for as long as playback is paused
+    // (hiding requires `isPlaying`). Without the tier term, a phone viewer
+    // would need two back presses to leave the player in all of those states,
+    // which is a regression against the behaviour before this screen took a
+    // `PopScope` at all. A remote has no gesture to dismiss the OSD with, so
+    // only there does back need to do that job first.
+    //
+    // Wrapped in a `ListenableBuilder` rather than reading the controller
+    // once: `_chromeVisibility` changes from deep inside the chrome widget
+    // tree (a timer, a tap, attaching or detaching), never through this
+    // screen's own `setState`, so `canPop` has to be recomputed on every
+    // notification or it goes stale and back either never exits or always
+    // does.
+    final frame = PlayerScreen.playerFrame(child: body);
+    return ListenableBuilder(
+      listenable: _chromeVisibility,
+      builder: (context, _) => PopScope(
+        canPop: !(InputCapabilities.directionalPrimary &&
+            _chromeVisibility.blocksBack),
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) return;
+          _chromeVisibility.hide();
+        },
+        child: frame,
+      ),
+    );
   }
 
   /// Tear the local player down and rebuild it from scratch.
@@ -4175,6 +4371,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           timeline: _timeline,
           onSeekToReal: seekToReal,
           title: widget.title,
+          chromeVisibility: _chromeVisibility,
           onBack: () {
             if (context.canPop()) {
               context.pop();

@@ -8,6 +8,7 @@ import '../../domain/models/episode.dart';
 import '../../domain/models/watch_status.dart';
 import '../screens/show/season_episodes_controller.dart';
 import 'episode_download_button.dart';
+import 'focus_highlight.dart';
 import 'watch_indicator.dart';
 
 /// A self-contained landscape (16:9) episode card for the horizontal episodes
@@ -67,14 +68,21 @@ class _EpisodeRailCardState extends ConsumerState<EpisodeRailCard> {
       );
     }
 
-    return SizedBox(
-      width: cardSize.width,
-      child: MouseRegion(
-        onEnter: (_) => setState(() => _isHovered = true),
-        onExit: (_) => setState(() => _isHovered = false),
-        child: GestureDetector(
-          onTap: widget.onTap,
-          child: content,
+    // FocusHighlight sits outermost, mirroring MediaCard: the ring should
+    // enclose the whole card, thumbnail and label together, which is what a
+    // viewer scanning the episode rail with a remote is actually selecting.
+    return FocusHighlight(
+      onActivate: widget.onTap,
+      borderRadius: const BorderRadius.all(Radius.circular(12)),
+      child: SizedBox(
+        width: cardSize.width,
+        child: MouseRegion(
+          onEnter: (_) => setState(() => _isHovered = true),
+          onExit: (_) => setState(() => _isHovered = false),
+          child: GestureDetector(
+            onTap: widget.onTap,
+            child: content,
+          ),
         ),
       ),
     );
