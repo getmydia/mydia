@@ -5,6 +5,15 @@ defmodule MydiaWeb.AddMediaLive.RestrictedWriteTest do
   whatever came back, which raised the moment `Media.create_media_item/3`
   started being able to return the bare atom `:restricted`. This is the
   primary "search and quick-add" path a restricted `user`-role account hits.
+
+  Restricted by `max_content_age` rather than `allowed_categories`: search
+  results are now piped through `RemoteFilter.filter/2`
+  (`remote_filter_wiring_test.exs` proves that wiring), which hides an
+  out-of-bounds *category* before this test's button would ever render.
+  Age is different -- TMDB search returns no certification for
+  `RemoteFilter` to filter on, so an age-restricted hit still reaches the
+  page and this handler's `{:error, :restricted}` guard is still the only
+  thing standing between it and the library.
   """
 
   # async: false — connected LiveView tests hit the Postgres non-shared
@@ -24,8 +33,7 @@ defmodule MydiaWeb.AddMediaLive.RestrictedWriteTest do
   setup %{conn: conn} do
     library_path_fixture(%{type: "movies"})
 
-    restricted =
-      restricted_user_fixture(%{role: "user", allowed_categories: ["cartoon_movie"]})
+    restricted = restricted_user_fixture(%{role: "user", max_content_age: 12})
 
     %{conn: log_in_user(conn, restricted)}
   end
@@ -34,8 +42,11 @@ defmodule MydiaWeb.AddMediaLive.RestrictedWriteTest do
        %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/add/movie?q=stub")
 
-    # Stub movie carries the "Action" genre, so it classifies as plain
-    # "movie" -- out of bounds for a cartoon_movie-only scope.
+    # No `allowed_categories` limit is set, so RemoteFilter.filter/2 (see
+    # remote_filter_wiring_test.exs) lets the stub movie through to the page.
+    # It carries no content rating, and an unrated title under an active age
+    # limit is treated as out of bounds (Restrictions.age_ok?/2), so the
+    # write itself is still the thing that must refuse it.
     assert render(view) =~ MetadataStubProvider.movie_title()
 
     view

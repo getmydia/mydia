@@ -6,6 +6,7 @@ defmodule MydiaWeb.AddMediaLive.Index do
   alias Mydia.{Media, Metadata, Settings}
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
+  alias MydiaWeb.RemoteFilter
 
   @impl true
   def mount(_params, session, socket) do
@@ -193,6 +194,8 @@ defmodule MydiaWeb.AddMediaLive.Index do
 
     case Metadata.search(socket.assigns.metadata_config, query, opts) do
       {:ok, results} ->
+        results = RemoteFilter.filter(results, socket.assigns.current_scope)
+
         # Check which results are already in the library
         added_item_ids =
           check_existing_items(socket.assigns.current_scope, results, socket.assigns.media_type)
