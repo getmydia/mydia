@@ -138,9 +138,13 @@ static void my_application_activate(GApplication* application) {
 
   GtkSettings* settings = gtk_settings_get_default();
   if (settings != nullptr) {
-    g_signal_connect(settings, "notify::gtk-decoration-layout",
-                     G_CALLBACK(decoration_layout_changed_cb),
-                     self->window_chrome_channel);
+    // g_signal_connect_object (not the plain g_signal_connect) ties the
+    // signal's lifetime to window_chrome_channel: GLib disconnects it
+    // automatically when the channel is finalized, so a notification firing
+    // after my_application_dispose can't reach a dangling channel pointer.
+    g_signal_connect_object(settings, "notify::gtk-decoration-layout",
+                            G_CALLBACK(decoration_layout_changed_cb),
+                            self->window_chrome_channel, G_CONNECT_DEFAULT);
   }
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
