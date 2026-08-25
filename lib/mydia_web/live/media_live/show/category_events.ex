@@ -75,6 +75,9 @@ defmodule MydiaWeb.MediaLive.Show.CategoryEvents do
            |> assign(:category_form, nil)
            |> put_flash(:info, "Category updated successfully")}
 
+        {:error, :restricted} ->
+          {:noreply, put_flash(socket, :error, Media.restricted_message())}
+
         {:error, %Ecto.Changeset{} = changeset} ->
           {:noreply, assign(socket, :category_form, Phoenix.Component.to_form(changeset))}
       end
@@ -105,6 +108,9 @@ defmodule MydiaWeb.MediaLive.Show.CategoryEvents do
              :info,
              "Category reset to auto-detected: #{category_display_name(new_category)}"
            )}
+
+        {:error, :restricted} ->
+          {:noreply, put_flash(socket, :error, Media.restricted_message())}
 
         {:error, %Ecto.Changeset{} = changeset} ->
           {:noreply,

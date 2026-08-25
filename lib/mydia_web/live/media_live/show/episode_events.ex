@@ -20,21 +20,27 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeEvents do
       media_item = socket.assigns.media_item
       new_monitored = !media_item.monitored
 
-      {:ok, updated_item} =
-        Media.update_media_item(
-          socket.assigns.current_scope,
-          media_item,
-          %{monitored: new_monitored},
-          reason: if(new_monitored, do: "Monitoring enabled", else: "Monitoring disabled")
-        )
+      case Media.update_media_item(
+             socket.assigns.current_scope,
+             media_item,
+             %{monitored: new_monitored},
+             reason: if(new_monitored, do: "Monitoring enabled", else: "Monitoring disabled")
+           ) do
+        {:ok, updated_item} ->
+          {:noreply,
+           socket
+           |> assign(:media_item, updated_item)
+           |> put_flash(
+             :info,
+             "Monitoring #{if updated_item.monitored, do: "enabled", else: "disabled"}"
+           )}
 
-      {:noreply,
-       socket
-       |> assign(:media_item, updated_item)
-       |> put_flash(
-         :info,
-         "Monitoring #{if updated_item.monitored, do: "enabled", else: "disabled"}"
-       )}
+        {:error, :restricted} ->
+          {:noreply, put_flash(socket, :error, Media.restricted_message())}
+
+        {:error, _changeset} ->
+          {:noreply, put_flash(socket, :error, "Failed to update monitoring")}
+      end
     else
       {:unauthorized, socket} -> {:noreply, socket}
     end
