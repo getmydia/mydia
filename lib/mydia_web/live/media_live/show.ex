@@ -183,7 +183,13 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:show_target_library_modal, false)
      # Trailer modal state
      |> assign(:show_trailer_modal, false)
-     # Collection state
+     # Collection state. show_add_to_collection_modal is initialized here,
+     # not inside load_collection_data/2: that helper also runs after every
+     # add/remove/favorite toggle to refresh the read model, and it must NOT
+     # force the modal closed on those refreshes, or picking more than one
+     # collection in a single sitting becomes impossible (the modal would
+     # slam shut after the very first pick). See CollectionEvents for detail.
+     |> assign(:show_add_to_collection_modal, false)
      |> CollectionEvents.load_collection_data(media_item)
      |> SegmentEvents.assign_segment_status(media_item)
      |> FranchiseEvents.maybe_load()

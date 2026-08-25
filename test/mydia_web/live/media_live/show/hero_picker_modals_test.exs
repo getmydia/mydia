@@ -95,7 +95,10 @@ defmodule MydiaWeb.MediaLive.Show.HeroPickerModalsTest do
       assert has_element?(view, "#add-to-collection-modal", collection.name)
     end
 
-    test "picking a collection adds the item and closes the modal", %{conn: conn, admin: admin} do
+    test "picking a collection adds the item and leaves the modal open", %{
+      conn: conn,
+      admin: admin
+    } do
       collection = collection_fixture(%{user: admin, name: "My Watchlist"})
       item = media_item_fixture(%{type: "movie", title: "Collectible Movie 2", year: 2024})
 
@@ -111,11 +114,60 @@ defmodule MydiaWeb.MediaLive.Show.HeroPickerModalsTest do
       )
       |> render_click()
 
-      refute has_element?(view, "#add-to-collection-modal")
+      # Deliberately stays open: see the regression-guard test below for why.
+      assert has_element?(view, "#add-to-collection-modal")
 
       assert Mydia.Collections.collections_for_item(admin, item.id) |> Enum.map(& &1.id) == [
                collection.id
              ]
+    end
+
+    # The regression guard: CollectionEvents.load_collection_data/2 used to
+    # unconditionally force show_add_to_collection_modal to false on every
+    # call, which was dead weight under the old anchored dropdown (nothing
+    # read that assign) but became live and load-bearing the moment the
+    # dropdown became this modal. Left unfixed, the very first pick in a
+    # session would close the picker, making it impossible to add one item to
+    # more than one collection without reopening the modal between every
+    # single pick.
+    test "toggling membership in two collections in one sitting keeps the modal open between picks",
+         %{conn: conn, admin: admin} do
+      collection_a = collection_fixture(%{user: admin, name: "Collection A"})
+      collection_b = collection_fixture(%{user: admin, name: "Collection B"})
+      item = media_item_fixture(%{type: "movie", title: "Multi Collection Movie", year: 2024})
+
+      {:ok, view, _html} = live(conn, ~p"/media/#{item.id}")
+
+      view
+      |> element("button[phx-click='open_add_to_collection_modal']")
+      |> render_click()
+
+      view
+      |> element(
+        "#add-to-collection-modal button[phx-click='add_to_collection'][phx-value-collection-id='#{collection_a.id}']"
+      )
+      |> render_click()
+
+      assert has_element?(view, "#add-to-collection-modal")
+
+      view
+      |> element(
+        "#add-to-collection-modal button[phx-click='add_to_collection'][phx-value-collection-id='#{collection_b.id}']"
+      )
+      |> render_click()
+
+      assert has_element?(view, "#add-to-collection-modal")
+
+      assert Mydia.Collections.collections_for_item(admin, item.id)
+             |> Enum.map(& &1.id)
+             |> Enum.sort() == Enum.sort([collection_a.id, collection_b.id])
+
+      # It does still close, just only from the explicit Close action.
+      view
+      |> element("#add-to-collection-modal button", "Close")
+      |> render_click()
+
+      refute has_element?(view, "#add-to-collection-modal")
     end
 
     test "before any manual collection exists, the picker still lists the auto-provisioned Favorites",
@@ -138,6 +190,36 @@ defmodule MydiaWeb.MediaLive.Show.HeroPickerModalsTest do
 
       assert has_element?(view, "#add-to-collection-modal", "Favorites")
       refute has_element?(view, "#add-to-collection-modal", "No collections yet")
+    end
+  end
+
+  describe "target library modal" do
+    test "the row is a button that opens the modal, and picking a library closes it", %{
+      conn: conn
+    } do
+      library_path_fixture(%{type: "movies", path: "/tmp/hero-target-a"})
+      library = library_path_fixture(%{type: "movies", path: "/tmp/hero-target-b"})
+      item = media_item_fixture(%{type: "movie", title: "Target Library Movie", year: 2024})
+
+      {:ok, view, _html} = live(conn, ~p"/media/#{item.id}")
+
+      refute has_element?(view, "#target-library-modal")
+
+      view
+      |> element("button[data-test='target-library']")
+      |> render_click()
+
+      assert has_element?(view, "#target-library-modal")
+      assert has_element?(view, "#target-library-modal", "hero-target-b")
+
+      view
+      |> element(
+        "#target-library-modal button[phx-click='update_target_library'][phx-value-library-path-id='#{library.id}']"
+      )
+      |> render_click()
+
+      refute has_element?(view, "#target-library-modal")
+      assert Mydia.Repo.get!(Mydia.Media.MediaItem, item.id).library_path_id == library.id
     end
   end
 end
