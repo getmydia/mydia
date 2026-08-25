@@ -159,6 +159,11 @@ void main() {
     });
 
     test('directionalPrimary is false before initialize() has run', () {
+      // Skipped under the developer override, which exists precisely so the
+      // whole suite can be run in television mode. `forcedTv` short-circuits
+      // `directionalPrimary` to true ahead of the probe, so asserting false
+      // here would fail that run for the one reason it is not about.
+      if (InputCapabilities.forcedTv) return;
       expect(InputCapabilities.directionalPrimary, isFalse);
     });
   });

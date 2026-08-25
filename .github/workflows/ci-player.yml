@@ -80,13 +80,17 @@ jobs:
         # silently cover nothing.
         run: |
           set -euo pipefail
-          files=$(git ls-files 'test/**/*_tv_test.dart')
-          if [ -z "$files" ]; then
+          # Read into an array rather than a bare string: an unquoted expansion
+          # would word-split a path containing whitespace into several invalid
+          # arguments, and `flutter test` would report a missing file instead
+          # of the real cause.
+          mapfile -t files < <(git ls-files 'test/**/*_tv_test.dart')
+          if [ "${#files[@]}" -eq 0 ]; then
             echo "No test/**/*_tv_test.dart files matched; expected at least one." >&2
             exit 1
           fi
-          echo "Television-tier tests: $files"
-          flutter test --concurrency=1 --dart-define=MYDIA_FORCE_TV=true $files
+          echo "Television-tier tests: ${files[*]}"
+          flutter test --concurrency=1 --dart-define=MYDIA_FORCE_TV=true "${files[@]}"
 
       - name: Run browser tests
         # The run above is a VM run, which skips every @TestOn('browser') file.
