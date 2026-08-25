@@ -8,7 +8,11 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpers do
   """
 
   alias Mydia.Media.Add
+  alias Mydia.Media.MediaRequest
   alias Mydia.MediaRequests
+  alias Mydia.Metadata
+  alias Mydia.Metadata.Structs.SearchResult
+  alias MydiaWeb.Live.Helpers.MediaAddHelpers
 
   # Statuses that should keep the request button disabled. A rejected request
   # leaves the button enabled so a guest can ask again.
@@ -70,6 +74,67 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpers do
     case MediaRequests.create_request(attrs) do
       {:ok, request} -> {:ok, request, %{tmdb_id => request.status}}
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Resolves provider metadata for a request.
+
+  Lives here rather than in `Mydia.MediaRequests` because the TMDB branch
+  delegates to `MediaAddHelpers.fetch_detail_metadata/2`, which is already a
+  web helper. Putting it in the context would point a context module at
+  `MydiaWeb`.
+
+  The TMDB branch reuses the Discovery helper so both surfaces show the same
+  metadata for the same title, including its TMDB-to-TVDB resolution for TV.
+  The TVDB branch mirrors `Mydia.Media.Add.fetch_tvdb_series/2` and exists
+  because a TV request made on a TVDB-configured instance stores no tmdb_id.
+  """
+  @spec fetch_request_metadata(MediaRequest.t()) ::
+          {:ok, Mydia.Metadata.Structs.MediaMetadata.t()} | {:error, term()}
+  def fetch_request_metadata(%MediaRequest{} = request) do
+    case MediaRequest.external_ref(request) do
+      {:tmdb, tmdb_id} ->
+        MediaAddHelpers.fetch_detail_metadata(
+          to_string(tmdb_id),
+          MediaRequest.media_type_atom(request)
+        )
+
+      {:tvdb, tvdb_id} ->
+        Metadata.fetch_by_id(
+          Metadata.default_relay_config(),
+          to_string(tvdb_id),
+          media_type: :tv_show,
+          provider: :tvdb
+        )
+
+      nil ->
+        {:error, :no_provider_id}
+    end
+  end
+
+  @doc """
+  Builds the `SearchResult` that `TrendingDetailModal` reads for its header.
+
+  Returns nil for a request with no external ref, which is the same set of rows
+  that render a non-clickable title.
+  """
+  @spec to_search_result(MediaRequest.t()) :: SearchResult.t() | nil
+  def to_search_result(%MediaRequest{} = request) do
+    case MediaRequest.external_ref(request) do
+      nil ->
+        nil
+
+      {provider, id} ->
+        %SearchResult{
+          provider_id: to_string(id),
+          provider: provider,
+          media_type: MediaRequest.media_type_atom(request),
+          id: id,
+          title: request.title,
+          year: request.year,
+          poster_path: request.poster_path
+        }
     end
   end
 end
