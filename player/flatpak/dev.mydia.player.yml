@@ -127,3 +127,14 @@ modules:
           - site/dist
           - site/node_modules
           - target
+          # The flatpak build's own output. `./dev player flatpak` keeps these
+          # in the main checkout, but a plain in-tree build (and CI) puts all
+          # three beside the sources, where they would otherwise be copied into
+          # the snapshot of the very build producing them.
+          - build-dir
+          - staged-repo
+          - .flatpak-builder
+          # devenv/direnv state: hundreds of megabytes of symlinks into
+          # /nix/store, none of it reachable from inside the sandbox.
+          - .devenv
+          - .direnv

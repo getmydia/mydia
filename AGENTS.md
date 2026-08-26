@@ -93,6 +93,25 @@ macOS builds use the **host** toolchain — neither devenv nor the `.#android` d
 
 **Requirements:** **Full Xcode** (Command Line Tools alone cannot build app bundles), CocoaPods (`pod`), Flutter, and rustup installed on the host. `./dev` preflights all four and prints the fix for whichever is missing.
 
+### Player Flatpak Builds
+
+Linux desktop packaging, native for a third reason: `flatpak-builder` drives bubblewrap and needs the host's flatpak installation, runtimes and per-user repo state, none of which devenv provides.
+
+**Commands:**
+
+- `./dev player flatpak build` - Build and export to the staged OSTree repo (30-90 minutes cold)
+- `./dev player flatpak install` - Install `--user` from the staged repo
+- `./dev player flatpak run` - Launch the installed app
+- `./dev player flatpak smoke` - Xvfb smoke test, then kill the leftovers it would otherwise leave running
+- `./dev player flatpak clean` - Remove `build-dir/`, `staged-repo/` and `.flatpak-builder/` (~270M)
+
+**Requirements:** `flatpak` on the host. `flatpak-builder`, `appstreamcli` and `xvfb-run` are resolved through `nix shell` when missing, which is the normal case on NixOS.
+
+**Two traps the wrapper exists to close:**
+
+- `flatpak-builder` shells out to `appstreamcli` on the host during export. Without it the build dies at the very last step, *after* mpv, libplacebo, libass, Flutter and the Rust cdylib have all compiled.
+- Build state (`build-dir/`, `staged-repo/`, `.flatpak-builder/`) always lands in the **main checkout**, never the current worktree, so the builder cache is shared, the `staged` remote survives a worktree deletion, and the 80M `build-dir` stays clear of the `dart-analyze` pre-commit hook, which ignores `.gitignore` and blocks every commit once it walks build output. Override with `MYDIA_FLATPAK_BUILD_DIR`, `MYDIA_FLATPAK_STATE_DIR`, `MYDIA_FLATPAK_REPO`.
+
 ## Project guidelines
 
 - Use `mix precommit` alias when you are done with all changes and fix any pending issues
