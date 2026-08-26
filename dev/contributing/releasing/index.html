@@ -2883,6 +2883,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#building-one-locally" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Building one locally
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#first-time-setup" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3089,6 +3100,17 @@
   
     <nav class="md-nav" aria-label="Flatpak channels">
       <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#building-one-locally" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Building one locally
+      
+    </span>
+  </a>
+  
+</li>
         
           <li class="md-nav__item">
   <a href="#first-time-setup" class="md-nav__link">
@@ -3395,6 +3417,30 @@ check it when cutting a release.</p>
 runtime declares itself and flatpak installs automatically. The older
 <code>org.freedesktop.Platform.ffmpeg-full</code> extension does not exist for freedesktop
 25.08 and cannot be used with this runtime.</p>
+<h3 id="building-one-locally">Building one locally</h3>
+<p><code>./dev player flatpak build</code> runs the same <code>flatpak-builder</code> invocation as the
+<code>flatpak-build</code> CI job, then <code>install</code> and <code>run</code> deploy and launch it:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>./dev<span class="w"> </span>player<span class="w"> </span>flatpak<span class="w"> </span>build<span class="w">      </span><span class="c1"># 30-90 minutes cold</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>./dev<span class="w"> </span>player<span class="w"> </span>flatpak<span class="w"> </span>install<span class="w">    </span><span class="c1"># installs --user from the staged repo</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>./dev<span class="w"> </span>player<span class="w"> </span>flatpak<span class="w"> </span>run
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>./dev<span class="w"> </span>player<span class="w"> </span>flatpak<span class="w"> </span>clean<span class="w">      </span><span class="c1"># reclaims ~270M when you are done</span>
+</code></pre></div>
+<p>Two things the bare <code>flatpak-builder</code> command does not do for you, and which
+the wrapper handles:</p>
+<ul>
+<li><strong>appstreamcli must be present on the host.</strong> <code>flatpak-builder</code> shells out to
+  it during export, so without it the build fails at the very last step, after
+  mpv, libplacebo, libass, Flutter and the Rust cdylib have all compiled. The
+  wrapper resolves it alongside <code>flatpak-builder</code>, through <code>nix shell</code> when the
+  host carries neither.</li>
+<li><strong>Build state goes in the main checkout, never a worktree.</strong> The
+  <code>.flatpak-builder</code> cache is then shared rather than rebuilt per worktree, the
+  <code>staged</code> remote keeps resolving after a worktree is deleted, and the 80M
+  <code>build-dir</code> stays away from the <code>dart-analyze</code> pre-commit hook, which does not
+  read <code>.gitignore</code> and blocks every commit once it starts walking build output.</li>
+</ul>
+<p>Override any of the three paths with <code>MYDIA_FLATPAK_BUILD_DIR</code>,
+<code>MYDIA_FLATPAK_STATE_DIR</code> or <code>MYDIA_FLATPAK_REPO</code>.</p>
 <h3 id="first-time-setup">First-time setup</h3>
 <p>One-time operator actions. The release job fails without them.</p>
 <ol>
@@ -3405,12 +3451,12 @@ runtime declares itself and flatpak installs automatically. The older
    <code>--pinentry-mode loopback</code> flag is required even for an unprotected key, or
    gpg fails with "No pinentry" on a headless machine:</li>
 </ol>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>gpg<span class="w"> </span>--batch<span class="w"> </span>--pinentry-mode<span class="w"> </span>loopback<span class="w"> </span>--passphrase<span class="w"> </span><span class="s1">&#39;&#39;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="w">  </span>--quick-generate-key<span class="w"> </span><span class="s2">&quot;Mydia Flatpak Signing &lt;releases@mydia.dev&gt;&quot;</span><span class="w"> </span>rsa4096<span class="w"> </span>sign<span class="w"> </span>never
-<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="nv">KEYID</span><span class="o">=</span><span class="k">$(</span>gpg<span class="w"> </span>--list-keys<span class="w"> </span>--with-colons<span class="w"> </span>releases@mydia.dev<span class="w"> </span><span class="p">|</span><span class="w"> </span>awk<span class="w"> </span>-F:<span class="w"> </span><span class="s1">&#39;/^fpr:/ {print $10; exit}&#39;</span><span class="k">)</span>
-<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>gpg<span class="w"> </span>--export-secret-keys<span class="w"> </span>--armor<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$KEYID</span><span class="s2">&quot;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>base64<span class="w"> </span><span class="p">|</span><span class="w"> </span>tr<span class="w"> </span>-d<span class="w"> </span><span class="s1">&#39;\n&#39;</span><span class="w"> </span>&gt;<span class="w"> </span>flatpak-signing-key.b64
-<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>gpg<span class="w"> </span>--export<span class="w"> </span>--armor<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$KEYID</span><span class="s2">&quot;</span><span class="w"> </span>&gt;<span class="w"> </span>player/flatpak/flatpak-signing-key.pub.asc
-<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;</span><span class="nv">$KEYID</span><span class="s2">&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>gpg<span class="w"> </span>--batch<span class="w"> </span>--pinentry-mode<span class="w"> </span>loopback<span class="w"> </span>--passphrase<span class="w"> </span><span class="s1">&#39;&#39;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="w">  </span>--quick-generate-key<span class="w"> </span><span class="s2">&quot;Mydia Flatpak Signing &lt;releases@mydia.dev&gt;&quot;</span><span class="w"> </span>rsa4096<span class="w"> </span>sign<span class="w"> </span>never
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="nv">KEYID</span><span class="o">=</span><span class="k">$(</span>gpg<span class="w"> </span>--list-keys<span class="w"> </span>--with-colons<span class="w"> </span>releases@mydia.dev<span class="w"> </span><span class="p">|</span><span class="w"> </span>awk<span class="w"> </span>-F:<span class="w"> </span><span class="s1">&#39;/^fpr:/ {print $10; exit}&#39;</span><span class="k">)</span>
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>gpg<span class="w"> </span>--export-secret-keys<span class="w"> </span>--armor<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$KEYID</span><span class="s2">&quot;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>base64<span class="w"> </span><span class="p">|</span><span class="w"> </span>tr<span class="w"> </span>-d<span class="w"> </span><span class="s1">&#39;\n&#39;</span><span class="w"> </span>&gt;<span class="w"> </span>flatpak-signing-key.b64
+<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>gpg<span class="w"> </span>--export<span class="w"> </span>--armor<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$KEYID</span><span class="s2">&quot;</span><span class="w"> </span>&gt;<span class="w"> </span>player/flatpak/flatpak-signing-key.pub.asc
+<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;</span><span class="nv">$KEYID</span><span class="s2">&quot;</span>
 </code></pre></div>
 <ol>
 <li>Back up <code>flatpak-signing-key.b64</code> somewhere other than GitHub. See below.</li>
@@ -3425,11 +3471,11 @@ auth against R2.</p>
 <h3 id="rolling-back-a-bad-flatpak-publish">Rolling back a bad Flatpak publish</h3>
 <p>Pruning keeps previous commits, so a bad publish is recoverable. From a machine
 with the signing key and R2 credentials:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>rclone<span class="w"> </span>sync<span class="w"> </span>r2:mydia-flatpak/stable<span class="w"> </span>./live-repo<span class="w"> </span>--create-empty-src-dirs
-<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>ostree<span class="w"> </span>log<span class="w"> </span>--repo<span class="o">=</span>live-repo<span class="w"> </span>app/dev.mydia.player/x86_64/stable
-<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>ostree<span class="w"> </span>reset<span class="w"> </span>--repo<span class="o">=</span>live-repo<span class="w"> </span>app/dev.mydia.player/x86_64/stable<span class="w"> </span>&lt;previous-commit&gt;
-<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>flatpak<span class="w"> </span>build-update-repo<span class="w"> </span>--gpg-sign<span class="o">=</span><span class="nv">$GPG_KEY_ID</span><span class="w"> </span>live-repo
-<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>./player/flatpak/sync-repo.sh<span class="w"> </span>./live-repo<span class="w"> </span>r2:mydia-flatpak/stable
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>rclone<span class="w"> </span>sync<span class="w"> </span>r2:mydia-flatpak/stable<span class="w"> </span>./live-repo<span class="w"> </span>--create-empty-src-dirs
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>ostree<span class="w"> </span>log<span class="w"> </span>--repo<span class="o">=</span>live-repo<span class="w"> </span>app/dev.mydia.player/x86_64/stable
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>ostree<span class="w"> </span>reset<span class="w"> </span>--repo<span class="o">=</span>live-repo<span class="w"> </span>app/dev.mydia.player/x86_64/stable<span class="w"> </span>&lt;previous-commit&gt;
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>flatpak<span class="w"> </span>build-update-repo<span class="w"> </span>--gpg-sign<span class="o">=</span><span class="nv">$GPG_KEY_ID</span><span class="w"> </span>live-repo
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>./player/flatpak/sync-repo.sh<span class="w"> </span>./live-repo<span class="w"> </span>r2:mydia-flatpak/stable
 </code></pre></div>
 <p>Anyone who already updated moves back on their next <code>flatpak update</code>.</p>
 <h3 id="if-the-signing-key-is-lost">If the signing key is lost</h3>
@@ -3457,8 +3503,8 @@ itself for anyone who skipped one.</p>
 <h2 id="metadata-relay">Metadata relay</h2>
 <p>The relay releases on a pushed tag rather than a dispatched draft.
 <code>deploy-relay.yml</code> triggers on tags matching <code>metadata-relay-v*</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>git<span class="w"> </span>tag<span class="w"> </span>-a<span class="w"> </span>metadata-relay-v0.12.0<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;Metadata Relay v0.12.0&quot;</span>
-<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>metadata-relay-v0.12.0
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>git<span class="w"> </span>tag<span class="w"> </span>-a<span class="w"> </span>metadata-relay-v0.12.0<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;Metadata Relay v0.12.0&quot;</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>metadata-relay-v0.12.0
 </code></pre></div>
 <p>The relay lives in this repository at <code>metadata-relay/</code> but deploys entirely
 separately, so its version is independent of mydia's.</p>
