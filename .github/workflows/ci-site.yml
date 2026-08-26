@@ -18,8 +18,13 @@ jobs:
       run:
         working-directory: site
     steps:
+      # npm ci runs whatever install scripts the pull request's lockfile
+      # names, so the job must not leave the token sitting in .git/config
+      # where that code can read it. Nothing here needs git credentials.
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Node
         uses: actions/setup-node@v4
