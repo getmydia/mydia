@@ -1,0 +1,37 @@
+name: Dependabot auto-merge
+
+# pull_request_target rather than pull_request, because a Dependabot pull
+# request gets a read-only token on the pull_request event and cannot enable
+# auto-merge. The job checks out nothing and runs no code from the branch, so
+# the usual pull_request_target hazard does not apply here.
+on: pull_request_target
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    name: Enable auto-merge
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      # fetch-metadata is the supported way to read what a Dependabot pull
+      # request changed. Parsing the branch name or title is not.
+      - name: Fetch metadata
+        id: meta
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # --auto queues the merge behind every required check on the Master
+      # ruleset, which since #581 includes Site build and both Load lanes
+      # contexts. Those gates report on every pull request rather than being
+      # path-filtered, precisely so this wait means something.
+      #
+      # Rebase because squash merge is disabled on this repository.
+      - name: Enable auto-merge
+        run: gh pr merge --auto --rebase "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
