@@ -36,6 +36,13 @@ class WindowButtons extends StatelessWidget {
         children: [
           for (final button in buttons)
             Padding(
+              // Keyed on the direct child of the list, not only on the button
+              // inside it. `buttons` comes from GTK's layout string and can
+              // reorder live, and an unkeyed `Padding` would match by position
+              // and force the keyed child under it to be rebuilt rather than
+              // moved. Distinct from `WindowButtonWidget.keyFor` so finders
+              // addressing the button still match exactly one widget.
+              key: ValueKey(button),
               padding: const EdgeInsets.symmetric(horizontal: 2),
               child: WindowButtonWidget(
                 key: WindowButtonWidget.keyFor(button),

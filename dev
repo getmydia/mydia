@@ -813,6 +813,20 @@ case "$COMMAND" in
                     esac
                 done
 
+                # `clean` is three `rm -rf`s and needs none of the tooling
+                # below. Dispatched before the checks so that removing build
+                # state still works on a host where flatpak has since been
+                # uninstalled — otherwise the one command whose whole job is
+                # reclaiming ~270M is the one that refuses to run.
+                if [ "$flatpak_cmd" = "clean" ]; then
+                    echo -e "${GREEN}Removing Flatpak build state...${NC}"
+                    rm -rf "$FLATPAK_BUILD_DIR" "$FLATPAK_STATE_DIR" "$FLATPAK_REPO"
+                    echo "Removed: $FLATPAK_BUILD_DIR"
+                    echo "         $FLATPAK_STATE_DIR"
+                    echo "         $FLATPAK_REPO"
+                    exit 0
+                fi
+
                 if ! command -v flatpak &> /dev/null; then
                     echo -e "${RED}Error: flatpak is not installed${NC}"
                     echo "Install it from your distribution, then re-run. See https://flatpak.org/setup/"
@@ -826,27 +840,27 @@ case "$COMMAND" in
                 # up front. On NixOS neither is normally installed; the flake
                 # registry form is used because `nix-shell -p` needs a NIX_PATH
                 # that a flakes-based system does not set.
+                #
+                # Only `build` runs flatpak-builder. `install`, `run` and
+                # `smoke` drive the plain `flatpak` CLI, so resolving the
+                # builder for them meant a spurious nix resolution (and its
+                # warning) on every install.
                 flatpak_builder_cmd=()
-                if command -v flatpak-builder &> /dev/null && command -v appstreamcli &> /dev/null; then
-                    flatpak_builder_cmd=(flatpak-builder)
-                elif command -v nix &> /dev/null; then
-                    echo -e "${YELLOW}flatpak-builder/appstreamcli not on PATH; resolving both through nix${NC}"
-                    flatpak_builder_cmd=(nix shell nixpkgs#flatpak-builder nixpkgs#appstream --command flatpak-builder)
-                else
-                    echo -e "${RED}Error: need flatpak-builder and appstreamcli (or nix to provide them)${NC}"
-                    echo "Install both: appstreamcli is what flatpak-builder calls during export,"
-                    echo "and without it the build fails only after everything has compiled."
-                    exit 1
+                if [ "$flatpak_cmd" = "build" ]; then
+                    if command -v flatpak-builder &> /dev/null && command -v appstreamcli &> /dev/null; then
+                        flatpak_builder_cmd=(flatpak-builder)
+                    elif command -v nix &> /dev/null; then
+                        echo -e "${YELLOW}flatpak-builder/appstreamcli not on PATH; resolving both through nix${NC}"
+                        flatpak_builder_cmd=(nix shell nixpkgs#flatpak-builder nixpkgs#appstream --command flatpak-builder)
+                    else
+                        echo -e "${RED}Error: need flatpak-builder and appstreamcli (or nix to provide them)${NC}"
+                        echo "Install both: appstreamcli is what flatpak-builder calls during export,"
+                        echo "and without it the build fails only after everything has compiled."
+                        exit 1
+                    fi
                 fi
 
                 case "$flatpak_cmd" in
-                    clean)
-                        echo -e "${GREEN}Removing Flatpak build state...${NC}"
-                        rm -rf "$FLATPAK_BUILD_DIR" "$FLATPAK_STATE_DIR" "$FLATPAK_REPO"
-                        echo "Removed: $FLATPAK_BUILD_DIR"
-                        echo "         $FLATPAK_STATE_DIR"
-                        echo "         $FLATPAK_REPO"
-                        ;;
                     build)
                         # Runtimes are a hard prerequisite of the manifest, and a
                         # missing one fails immediately rather than an hour in,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/window/decoration_layout.dart';
@@ -115,6 +117,45 @@ void main() {
       );
 
       expect(notifications, 0);
+    });
+
+    test('a layout pushed mid-load survives the older read landing after it',
+        () async {
+      // The handler is installed in the constructor while `load()` is fired
+      // unawaited at startup, so GTK can push a change before the initial
+      // read has answered.
+      final gate = Completer<String>();
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        if (call.method != 'getDecorationLayout') return null;
+        return gate.future;
+      });
+
+      final source = DecorationLayoutSource();
+      addTearDown(source.dispose);
+
+      final pending = source.load();
+
+      // Buttons on the start side, which is neither the fallback nor what the
+      // pending read is about to answer, so neither can produce a false pass.
+      await messenger.handlePlatformMessage(
+        channel.name,
+        const StandardMethodCodec().encodeMethodCall(
+          const MethodCall('onDecorationLayoutChanged', 'close,minimize:'),
+        ),
+        (_) {},
+      );
+      expect(source.layout.value.start,
+          [WindowButton.close, WindowButton.minimize]);
+
+      gate.complete('appmenu:close');
+      await pending;
+
+      expect(
+        source.layout.value.start,
+        [WindowButton.close, WindowButton.minimize],
+        reason: 'the superseded read overwrote a newer pushed layout, leaving '
+            'the buttons in the old order until GTK sent another change',
+      );
     });
   });
 }

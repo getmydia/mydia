@@ -34,11 +34,22 @@ class DecorationLayoutSource {
   /// callers can read it before [load] has been awaited.
   ValueListenable<DecorationLayout> get layout => _layout;
 
+  /// Bumped by every read and every pushed change, so a [load] can tell
+  /// whether anything newer landed while it was awaiting the channel.
+  ///
+  /// The handler is installed in the constructor and [load] is fired
+  /// unawaited during startup, so GTK can push a `notify::gtk-decoration-layout`
+  /// while the initial read is still in flight. Without this the older reply
+  /// wins on arrival and the buttons keep the superseded order until GTK
+  /// happens to send another change.
+  int _revision = 0;
+
   /// Reads the layout once. Safe to call on any platform.
   Future<void> load() async {
+    final revision = ++_revision;
     try {
       final raw = await _channel.invokeMethod<String>('getDecorationLayout');
-      _publish(raw ?? '');
+      if (revision == _revision) _publish(raw ?? '');
     } catch (e) {
       debugPrint('[DecorationLayout] Failed to read the layout: $e');
     }
@@ -46,6 +57,7 @@ class DecorationLayoutSource {
 
   Future<dynamic> _onCall(MethodCall call) async {
     if (call.method == 'onDecorationLayoutChanged') {
+      _revision++;
       _publish(call.arguments as String? ?? '');
     }
     return null;
