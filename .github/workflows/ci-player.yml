@@ -304,6 +304,17 @@ jobs:
         working-directory: ${{ env.PLAYER_PATH }}
         run: flutter build ${{ matrix.platform_dir }} --release
 
+      # A release build links against the VC++ runtime, which a clean Windows
+      # install does not ship, so the app dies on launch with "msvcp140.dll was
+      # not found". This runner already has the runtime, which is exactly why
+      # nothing here catches it. The script copies the DLLs into the Release
+      # directory that both this artifact and the installer are built from, and
+      # fails the job if they are missing afterwards.
+      - name: Bundle VC++ runtime
+        if: matrix.platform == 'Windows' && steps.check_platform.outputs.enabled == 'true'
+        shell: pwsh
+        run: pwsh ${{ env.PLAYER_PATH }}/tool/bundle_windows_runtime.ps1
+
       # Do NOT point artifact_path at the .app directory and let upload-artifact
       # zip it. Its zip implementation replaces every symlink with a full copy of
       # the target, which flattens all 25 frameworks in the bundle:
