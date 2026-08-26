@@ -1,0 +1,42 @@
+name: CI / Site
+
+on:
+  pull_request:
+    paths:
+      - 'site/**'
+      - '.github/workflows/ci-site.yml'
+
+concurrency:
+  group: "ci-site-${{ github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      # astro build type-checks every page and renders the whole site. It is
+      # the substantive signal here: site/ has one test file against 23 source
+      # files, so npm test alone would not catch a dependency bump breaking a
+      # component.
+      - name: Build
+        run: npm run build
