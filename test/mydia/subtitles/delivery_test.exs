@@ -5,6 +5,7 @@ defmodule Mydia.Subtitles.DeliveryTest do
   alias Mydia.Repo
   alias Mydia.Subtitles.Delivery
   alias Mydia.Subtitles.Subtitle
+  alias Mydia.Subtitles.TrackSettings
 
   @srt """
   1
@@ -69,6 +70,48 @@ defmodule Mydia.Subtitles.DeliveryTest do
     test "reports an unknown track", %{media_file: media_file} do
       assert {:error, :subtitle_not_found} =
                Delivery.content(media_file, Ecto.UUID.generate(), "vtt")
+    end
+
+    test "is returned unshifted when no offset is stored", %{
+      media_file: media_file,
+      subtitle: subtitle
+    } do
+      assert {:ok, body} = Delivery.content(media_file, subtitle.id, "srt")
+      assert body =~ "00:00:01,000 --> 00:00:04,000"
+    end
+
+    test "is shifted by the stored offset", %{media_file: media_file, subtitle: subtitle} do
+      {:ok, _} = TrackSettings.set_offset(media_file.id, subtitle.id, 3_000)
+
+      assert {:ok, body} = Delivery.content(media_file, subtitle.id, "srt")
+      assert body =~ "00:00:04,000 --> 00:00:07,000"
+    end
+
+    test "changing the offset changes what is delivered", %{
+      media_file: media_file,
+      subtitle: subtitle
+    } do
+      {:ok, _} = TrackSettings.set_offset(media_file.id, subtitle.id, 1_000)
+      {:ok, first} = Delivery.content(media_file, subtitle.id, "srt")
+
+      {:ok, _} = TrackSettings.set_offset(media_file.id, subtitle.id, 5_000)
+      {:ok, second} = Delivery.content(media_file, subtitle.id, "srt")
+
+      refute first == second
+      assert second =~ "00:00:06,000 --> 00:00:09,000"
+    end
+  end
+
+  describe "content/3 for an embedded track" do
+    test "the cache path varies with the offset so a changed offset is not served stale", %{
+      media_file: media_file
+    } do
+      stat = %File.Stat{mtime: {{2026, 1, 1}, {0, 0, 0}}, size: 1_000}
+
+      without = Delivery.cache_path(media_file.id, 3, stat, "vtt", 0)
+      with_offset = Delivery.cache_path(media_file.id, 3, stat, "vtt", 2_500)
+
+      refute without == with_offset
     end
   end
 

@@ -19,7 +19,9 @@ defmodule Mydia.Subtitles.Delivery do
   alias Mydia.Library.MediaFile
   alias Mydia.Repo
   alias Mydia.Subtitles.Format
+  alias Mydia.Subtitles.Offset
   alias Mydia.Subtitles.Subtitle
+  alias Mydia.Subtitles.TrackSettings
 
   @cache_root "mydia-subtitles"
   @extract_timeout 60_000
@@ -47,7 +49,7 @@ defmodule Mydia.Subtitles.Delivery do
   # `format` reaches a cache path and an ffmpeg argument, and the REST
   # controller reads it as a free-form query parameter rather than through the
   # GraphQL enum. Without this an unsupported value walks straight into
-  # `cache_path/4`, so `?format=../../x` writes outside the cache directory.
+  # `cache_path/5`, so `?format=../../x` writes outside the cache directory.
   # `Subtitle.supported_formats/0` is the single source of truth.
   def content(_media_file, _track_id, format)
       when format not in @supported_formats,
@@ -57,15 +59,20 @@ defmodule Mydia.Subtitles.Delivery do
 
   def content(media_file, track_id, format) when is_binary(track_id) do
     with {:ok, subtitle} <- fetch_subtitle(media_file, track_id),
-         {:ok, raw} <- read_file(subtitle.file_path) do
-      Format.convert(raw, subtitle.format, format)
+         {:ok, raw} <- read_file(subtitle.file_path),
+         {:ok, converted} <- Format.convert(raw, subtitle.format, format) do
+      {:ok, apply_offset(converted, format, media_file.id, track_id)}
     end
   end
 
   def content(media_file, track_id, format) when is_integer(track_id) do
+    offset_ms = TrackSettings.offset_ms(media_file.id, to_string(track_id))
+
     with {:ok, path} <- absolute_path(media_file),
          {:ok, stat} <- File.stat(path) do
-      cached = cache_path(media_file.id, track_id, stat, format)
+      # The offset joins the cache key. Without it, changing an offset serves
+      # the body cached from before the change and the feature looks inert.
+      cached = cache_path(media_file.id, track_id, stat, format, offset_ms)
 
       case File.read(cached) do
         {:ok, content} ->
@@ -73,14 +80,32 @@ defmodule Mydia.Subtitles.Delivery do
 
         {:error, _} ->
           with {:ok, content} <- extract(path, track_id, format) do
-            write_cache(cached, content)
-            {:ok, content}
+            shifted = Offset.shift(content, format, offset_ms)
+            write_cache(cached, shifted)
+            {:ok, shifted}
           end
       end
     end
   end
 
+  @doc false
+  # Public with @doc false rather than private: the offset joining this key is
+  # the guard against serving a stale body after an offset changes, and it is
+  # the one part of that path a test can reach without a real media file on
+  # disk and a working ffmpeg. Not part of the module's contract.
+  @spec cache_path(binary(), integer(), File.Stat.t(), String.t(), integer()) :: String.t()
+  def cache_path(media_file_id, track_id, %File.Stat{mtime: mtime, size: size}, format, offset_ms) do
+    stamp = :erlang.phash2({mtime, size, offset_ms})
+    Path.join([cache_dir(), media_file_id, "#{track_id}-#{stamp}.#{format}"])
+  end
+
   ## Private
+
+  # `track_ref` is the string form for both kinds of track, matching what
+  # `Mydia.Subtitles.TrackSetting` stores and what the GraphQL wire carries.
+  defp apply_offset(content, format, media_file_id, track_ref) do
+    Offset.shift(content, format, TrackSettings.offset_ms(media_file_id, to_string(track_ref)))
+  end
 
   defp fetch_subtitle(media_file, track_id) do
     case Repo.get(Subtitle, track_id) do
@@ -105,11 +130,6 @@ defmodule Mydia.Subtitles.Delivery do
       nil -> {:error, :media_file_not_found}
       path -> if File.exists?(path), do: {:ok, path}, else: {:error, :media_file_not_found}
     end
-  end
-
-  defp cache_path(media_file_id, track_id, %File.Stat{mtime: mtime, size: size}, format) do
-    stamp = :erlang.phash2({mtime, size})
-    Path.join([cache_dir(), media_file_id, "#{track_id}-#{stamp}.#{format}"])
   end
 
   defp write_cache(path, content) do
