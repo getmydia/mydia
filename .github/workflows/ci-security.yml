@@ -1,0 +1,33 @@
+name: CI / Security
+
+on:
+  pull_request:
+  schedule:
+    # Monday 12:30 UTC, ahead of the weekly Dependabot run.
+    - cron: "30 12 * * 1"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
+jobs:
+  # OSV-Scanner reads mix.lock and player/pubspec.lock, which Dependabot does
+  # not scan at all, plus the eight Cargo.lock files outside server/. Between
+  # them that is the Elixir application and the Flutter player, which are the
+  # two artifacts users actually run.
+  #
+  # Non-blocking for now. Neither of those trees has ever been scanned, so the
+  # baseline is unknown, and a required check here could wall off every PR in
+  # the repository on day one. Promote to fail-on-vuln once the baseline is
+  # triaged.
+  scan:
+    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@v2.5.0"
+    with:
+      fail-on-vuln: false
+      upload-sarif: true
+    permissions:
+      actions: read
+      contents: read
+      security-events: write

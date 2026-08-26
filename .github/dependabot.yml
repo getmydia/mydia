@@ -1,0 +1,96 @@
+version: 2
+
+# Alerts were on but version updates were not, so 68 advisories accumulated
+# with nothing able to open a pull request for them. Everything here is
+# grouped: ungrouped, the site tree alone would open around thirty PRs.
+#
+# Hex (mix.lock) and pub (player/pubspec.lock) are absent because Dependabot
+# does not support those ecosystems. ci-security.yml covers them instead.
+
+updates:
+  # The marketing site. Its tree drifted two majors behind and accounted for
+  # 44 of the 68 alerts in the August 2026 backlog.
+  - package-ecosystem: npm
+    directory: /site
+    schedule:
+      interval: weekly
+    groups:
+      site:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /assets
+    schedule:
+      interval: weekly
+    groups:
+      assets:
+        patterns: ["*"]
+
+  # metadata-relay is developed in this repo and deployed separately. Its
+  # asset tree is small but nothing updates it today.
+  - package-ecosystem: npm
+    directory: /metadata-relay/assets
+    schedule:
+      interval: weekly
+    groups:
+      metadata-relay-assets:
+        patterns: ["*"]
+
+  - package-ecosystem: uv
+    directory: /docs
+    schedule:
+      interval: weekly
+    groups:
+      docs:
+        patterns: ["*"]
+
+  - package-ecosystem: bundler
+    directory: /player/ios
+    schedule:
+      interval: weekly
+    groups:
+      fastlane-ios:
+        patterns: ["*"]
+
+  - package-ecosystem: bundler
+    directory: /player/android
+    schedule:
+      interval: weekly
+    groups:
+      fastlane-android:
+        patterns: ["*"]
+
+  # server/ is a workspace, so one entry covers every crate under crates/.
+  - package-ecosystem: cargo
+    directory: /server
+    schedule:
+      interval: weekly
+    groups:
+      server:
+        patterns: ["*"]
+
+  # The remaining Cargo.lock files are separate workspaces. `directories`
+  # takes a list, which avoids one block per crate.
+  - package-ecosystem: cargo
+    directories:
+      - /native/mydia_p2p
+      - /native/mydia_p2p_core
+      - /native/mydia_plugin_sdk
+      - /player/rust/mydia_player_p2p
+      - /plugins/simkl_sync
+      - /plugins/webhook_notifier
+    schedule:
+      interval: weekly
+    groups:
+      rust:
+        patterns: ["*"]
+
+  # Nothing updates the action versions themselves. The repository is pinned
+  # at actions/checkout@v4 throughout.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
