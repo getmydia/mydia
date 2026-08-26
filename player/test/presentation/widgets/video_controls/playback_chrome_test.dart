@@ -574,7 +574,7 @@ void main() {
         _host(
           ChromeVisibility(
             isPlaying: true,
-            onTrafficLightsHidden: calls.add,
+            onWindowButtonsHidden: calls.add,
             child: const Text('chrome'),
           ),
         ),
@@ -597,7 +597,7 @@ void main() {
         _host(
           ChromeVisibility(
             isPlaying: true,
-            onTrafficLightsHidden: calls.add,
+            onWindowButtonsHidden: calls.add,
             child: const Text('chrome'),
           ),
         ),
@@ -618,7 +618,7 @@ void main() {
         _host(
           ChromeVisibility(
             isPlaying: true,
-            onTrafficLightsHidden: calls.add,
+            onWindowButtonsHidden: calls.add,
             child: const Text('chrome'),
           ),
         ),
@@ -643,7 +643,7 @@ void main() {
         _host(
           ChromeVisibility(
             isPlaying: false,
-            onTrafficLightsHidden: calls.add,
+            onWindowButtonsHidden: calls.add,
             child: const Text('chrome'),
           ),
         ),
@@ -663,7 +663,7 @@ void main() {
         _host(
           ChromeVisibility(
             isPlaying: true,
-            onTrafficLightsHidden: calls.add,
+            onWindowButtonsHidden: calls.add,
             child: const Text('chrome'),
           ),
         ),

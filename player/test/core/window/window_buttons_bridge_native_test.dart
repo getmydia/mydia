@@ -1,12 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/window/traffic_lights_native.dart';
+import 'package:player/core/window/window_buttons_bridge_native.dart';
 
 void main() {
-  group('shouldControlTrafficLights', () {
+  group('shouldCallNativeButtonBridge', () {
     test('true hiding on windowed macOS', () {
       expect(
-        shouldControlTrafficLights(
+        shouldCallNativeButtonBridge(
           platform: TargetPlatform.macOS,
           hidden: true,
           isFullscreen: false,
@@ -17,7 +17,7 @@ void main() {
 
     test('true restoring on windowed macOS', () {
       expect(
-        shouldControlTrafficLights(
+        shouldCallNativeButtonBridge(
           platform: TargetPlatform.macOS,
           hidden: false,
           isFullscreen: false,
@@ -30,7 +30,7 @@ void main() {
         'false hiding on fullscreen macOS — the OS already hides them '
         'there', () {
       expect(
-        shouldControlTrafficLights(
+        shouldCallNativeButtonBridge(
           platform: TargetPlatform.macOS,
           hidden: true,
           isFullscreen: true,
@@ -44,7 +44,7 @@ void main() {
         'pass through, so the dispose() safety net still reaches native '
         'code even when the player is torn down while still fullscreen', () {
       expect(
-        shouldControlTrafficLights(
+        shouldCallNativeButtonBridge(
           platform: TargetPlatform.macOS,
           hidden: false,
           isFullscreen: true,
@@ -61,7 +61,7 @@ void main() {
     ]) {
       test('false hiding on ${platform.name} — no traffic lights there', () {
         expect(
-          shouldControlTrafficLights(
+          shouldCallNativeButtonBridge(
             platform: platform,
             hidden: true,
             isFullscreen: false,
@@ -74,7 +74,7 @@ void main() {
           'false restoring on ${platform.name} — no traffic lights there '
           'either', () {
         expect(
-          shouldControlTrafficLights(
+          shouldCallNativeButtonBridge(
             platform: platform,
             hidden: false,
             isFullscreen: false,
@@ -83,5 +83,18 @@ void main() {
         );
       });
     }
+
+    test(
+        'false on Linux, where the buttons are Flutter-drawn and the native '
+        'bridge has nothing to hide', () {
+      expect(
+        shouldCallNativeButtonBridge(
+          platform: TargetPlatform.linux,
+          hidden: true,
+          isFullscreen: false,
+        ),
+        isFalse,
+      );
+    });
   });
 }

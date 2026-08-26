@@ -221,6 +221,35 @@ runtime declares itself and flatpak installs automatically. The older
 `org.freedesktop.Platform.ffmpeg-full` extension does not exist for freedesktop
 25.08 and cannot be used with this runtime.
 
+### Building one locally
+
+`./dev player flatpak build` runs the same `flatpak-builder` invocation as the
+`flatpak-build` CI job, then `install` and `run` deploy and launch it:
+
+```bash
+./dev player flatpak build      # 30-90 minutes cold
+./dev player flatpak install    # installs --user from the staged repo
+./dev player flatpak run
+./dev player flatpak clean      # reclaims ~270M when you are done
+```
+
+Two things the bare `flatpak-builder` command does not do for you, and which
+the wrapper handles:
+
+- **appstreamcli must be present on the host.** `flatpak-builder` shells out to
+  it during export, so without it the build fails at the very last step, after
+  mpv, libplacebo, libass, Flutter and the Rust cdylib have all compiled. The
+  wrapper resolves it alongside `flatpak-builder`, through `nix shell` when the
+  host carries neither.
+- **Build state goes in the main checkout, never a worktree.** The
+  `.flatpak-builder` cache is then shared rather than rebuilt per worktree, the
+  `staged` remote keeps resolving after a worktree is deleted, and the 80M
+  `build-dir` stays away from the `dart-analyze` pre-commit hook, which does not
+  read `.gitignore` and blocks every commit once it starts walking build output.
+
+Override any of the three paths with `MYDIA_FLATPAK_BUILD_DIR`,
+`MYDIA_FLATPAK_STATE_DIR` or `MYDIA_FLATPAK_REPO`.
+
 ### First-time setup
 
 One-time operator actions. The release job fails without them.

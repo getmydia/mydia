@@ -14,7 +14,7 @@ Widget _host(ChromeVisibilityController controller) => MaterialApp(
           isPlaying: true,
           isSeeking: false,
           autoHide: const Duration(days: 1),
-          onTrafficLightsHidden: (_) {},
+          onWindowButtonsHidden: (_) {},
           child: const SizedBox.expand(),
         ),
       ),

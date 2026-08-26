@@ -11,6 +11,7 @@
 #   - relay <build|push|restart|deploy>   (Docker + kubectl)
 #   - player android <build|run|shell>    (nix devShell .#android, native Nix)
 #   - player macos <build|run>            (host Xcode/CocoaPods/rustup toolchain)
+#   - player flatpak <build|install|run>  (host flatpak + flatpak-builder)
 #   - player e2e / e2e-build              (Docker E2E stack, compose.player-e2e.yml)
 #     e2e pulls prebuilt images by default; --build forces local builds
 
@@ -165,6 +166,15 @@ ${YELLOW}Player macOS (native, uses the host Xcode/CocoaPods/rustup toolchain):$
   player macos run     Build and run the macOS app (debug, hot reload)
                        Both accept --skip-codegen to reuse existing build_runner
                        output; extra args after 'run' pass through to flutter run.
+
+${YELLOW}Player Flatpak (native, uses host flatpak + flatpak-builder):${NC}
+  player flatpak build Build the Flatpak and export it to the staged repo
+  player flatpak install
+                       Install (or reinstall) the staged build for this user
+  player flatpak run    Launch the installed Flatpak (args pass through)
+  player flatpak smoke  Run the Xvfb smoke test against the installed build
+  player flatpak clean  Remove build-dir/, staged-repo/ and .flatpak-builder/
+                       build/install accept --branch=<name> (default: stable).
 
 ${YELLOW}Metadata Relay (Docker + kubectl):${NC}
   relay deploy         Build, push :dev image, and redeploy to k8s
@@ -743,9 +753,233 @@ case "$COMMAND" in
                     echo "Open it with: open 'player/build/macos/Build/Products/Release/Mydia Player.app'"
                 fi
                 ;;
+            flatpak)
+                # Linux desktop packaging. Native like `player android` and
+                # `player macos`, for a third reason: flatpak-builder drives
+                # bubblewrap and needs the host's flatpak installation, its
+                # runtimes and its per-user repo state. devenv provides none of
+                # that and could not without shipping a second flatpak.
+                if [ "$(uname -s)" != "Linux" ]; then
+                    echo -e "${RED}Error: Flatpak builds require a Linux host${NC}"
+                    echo "Current host: $(uname -s). Use 'player macos' instead."
+                    exit 1
+                fi
+                flatpak_cmd="${2:-}"
+                case "$flatpak_cmd" in
+                    build|install|run|smoke|clean) ;;
+                    *)
+                        echo -e "${RED}Error: Unknown flatpak command: ${flatpak_cmd:-<none>}${NC}"
+                        echo "Usage: ./dev player flatpak <build|install|run|smoke|clean>"
+                        exit 1
+                        ;;
+                esac
+                shift 2
+
+                FLATPAK_APP_ID="dev.mydia.player"
+                FLATPAK_MANIFEST="$ROOT_DIR/player/flatpak/dev.mydia.player.yml"
+
+                # Build state lives in the MAIN checkout, not the current
+                # worktree. Three things depend on that: the ~130M
+                # .flatpak-builder cache is shared instead of rebuilt per
+                # worktree; the exported repo stays at one path, so the `staged`
+                # remote keeps resolving after a worktree is deleted; and the
+                # 80M build-dir never lands inside a worktree, where the
+                # dart-analyze pre-commit hook would walk it (it does not read
+                # .gitignore) and block every commit. `--git-common-dir` is the
+                # main checkout's .git in a worktree and plain `.git` otherwise,
+                # so this collapses to ROOT_DIR for a normal clone and in CI.
+                #
+                # Both tests belong in the `if` condition: a bare `[ -n ... ] &&`
+                # as the last statement of the body would return 1 on an empty
+                # result and, under this script's `set -e`, exit right here.
+                flatpak_state_root="$ROOT_DIR"
+                if git_common="$(git -C "$ROOT_DIR" rev-parse --path-format=absolute --git-common-dir 2> /dev/null)" \
+                    && [ -n "$git_common" ]; then
+                    flatpak_state_root="$(dirname "$git_common")"
+                fi
+                FLATPAK_BUILD_DIR="${MYDIA_FLATPAK_BUILD_DIR:-$flatpak_state_root/build-dir}"
+                FLATPAK_STATE_DIR="${MYDIA_FLATPAK_STATE_DIR:-$flatpak_state_root/.flatpak-builder}"
+                FLATPAK_REPO="${MYDIA_FLATPAK_REPO:-$flatpak_state_root/staged-repo}"
+
+                # The manifest's `dir` source is `path: ../..`, relative to the
+                # manifest file, so the current worktree's code is what gets
+                # built even though the state above is shared.
+                flatpak_branch="stable"
+                flatpak_passthru=()
+                for arg in "$@"; do
+                    case "$arg" in
+                        --branch=*) flatpak_branch="${arg#--branch=}" ;;
+                        *) flatpak_passthru+=("$arg") ;;
+                    esac
+                done
+
+                # `clean` is three `rm -rf`s and needs none of the tooling
+                # below. Dispatched before the checks so that removing build
+                # state still works on a host where flatpak has since been
+                # uninstalled — otherwise the one command whose whole job is
+                # reclaiming ~270M is the one that refuses to run.
+                if [ "$flatpak_cmd" = "clean" ]; then
+                    echo -e "${GREEN}Removing Flatpak build state...${NC}"
+                    rm -rf "$FLATPAK_BUILD_DIR" "$FLATPAK_STATE_DIR" "$FLATPAK_REPO"
+                    echo "Removed: $FLATPAK_BUILD_DIR"
+                    echo "         $FLATPAK_STATE_DIR"
+                    echo "         $FLATPAK_REPO"
+                    exit 0
+                fi
+
+                if ! command -v flatpak &> /dev/null; then
+                    echo -e "${RED}Error: flatpak is not installed${NC}"
+                    echo "Install it from your distribution, then re-run. See https://flatpak.org/setup/"
+                    exit 1
+                fi
+
+                # flatpak-builder shells out to appstreamcli on the HOST during
+                # export. Missing appstreamcli fails the build at the very last
+                # step, after mpv, libplacebo, libass, Flutter and the Rust
+                # cdylib have all compiled — so both are resolved together here,
+                # up front. On NixOS neither is normally installed; the flake
+                # registry form is used because `nix-shell -p` needs a NIX_PATH
+                # that a flakes-based system does not set.
+                #
+                # Only `build` runs flatpak-builder. `install`, `run` and
+                # `smoke` drive the plain `flatpak` CLI, so resolving the
+                # builder for them meant a spurious nix resolution (and its
+                # warning) on every install.
+                flatpak_builder_cmd=()
+                if [ "$flatpak_cmd" = "build" ]; then
+                    if command -v flatpak-builder &> /dev/null && command -v appstreamcli &> /dev/null; then
+                        flatpak_builder_cmd=(flatpak-builder)
+                    elif command -v nix &> /dev/null; then
+                        echo -e "${YELLOW}flatpak-builder/appstreamcli not on PATH; resolving both through nix${NC}"
+                        flatpak_builder_cmd=(nix shell nixpkgs#flatpak-builder nixpkgs#appstream --command flatpak-builder)
+                    else
+                        echo -e "${RED}Error: need flatpak-builder and appstreamcli (or nix to provide them)${NC}"
+                        echo "Install both: appstreamcli is what flatpak-builder calls during export,"
+                        echo "and without it the build fails only after everything has compiled."
+                        exit 1
+                    fi
+                fi
+
+                case "$flatpak_cmd" in
+                    build)
+                        # Runtimes are a hard prerequisite of the manifest, and a
+                        # missing one fails immediately rather than an hour in,
+                        # so installing them is cheap insurance.
+                        flatpak remote-add --user --if-not-exists flathub \
+                            https://dl.flathub.org/repo/flathub.flatpakrepo
+                        echo -e "${GREEN}Ensuring runtimes are installed...${NC}"
+                        flatpak install --user -y --noninteractive flathub \
+                            org.gnome.Platform//50 org.gnome.Sdk//50 \
+                            org.freedesktop.Sdk.Extension.llvm21//25.08 || true
+
+                        # Inside the state dir, which is already gitignored;
+                        # beside build-dir it would show up as an untracked file.
+                        mkdir -p "$FLATPAK_STATE_DIR"
+                        flatpak_log="$FLATPAK_STATE_DIR/build.log"
+                        echo -e "${GREEN}Building ${FLATPAK_APP_ID}//${flatpak_branch}...${NC}"
+                        echo "  manifest:  $FLATPAK_MANIFEST"
+                        echo "  build dir: $FLATPAK_BUILD_DIR"
+                        echo "  state dir: $FLATPAK_STATE_DIR"
+                        echo "  repo:      $FLATPAK_REPO"
+                        echo "  log:       $flatpak_log"
+                        echo "Expect 30-90 minutes cold (mpv, libplacebo, libass, Flutter, Rust)."
+
+                        # --force-clean because flatpak-builder refuses a
+                        # non-empty build dir on a re-run; the expensive compiled
+                        # stages live in the state dir and are reused regardless.
+                        # --disable-rofiles-fuse because the rofiles overlay is
+                        # unreliable on several host filesystems.
+                        #
+                        # tee, and never a bare pipe into tail: a pipeline
+                        # reports the LAST command's status, so a failed build
+                        # would look like exit 0. PIPESTATUS carries the real one.
+                        set +e
+                        "${flatpak_builder_cmd[@]}" \
+                            --user --force-clean --disable-rofiles-fuse \
+                            --state-dir="$FLATPAK_STATE_DIR" \
+                            --repo="$FLATPAK_REPO" \
+                            --default-branch="$flatpak_branch" \
+                            "$FLATPAK_BUILD_DIR" "$FLATPAK_MANIFEST" 2>&1 | tee "$flatpak_log"
+                        flatpak_status=${PIPESTATUS[0]}
+                        set -e
+                        if [ "$flatpak_status" -ne 0 ]; then
+                            echo -e "${RED}Flatpak build failed (exit $flatpak_status)${NC}"
+                            echo "Full log: $flatpak_log"
+                            exit "$flatpak_status"
+                        fi
+                        echo -e "${GREEN}Flatpak built and exported to $FLATPAK_REPO${NC}"
+                        echo "Install it with: ./dev player flatpak install"
+                        ;;
+                    install)
+                        if [ ! -d "$FLATPAK_REPO" ]; then
+                            echo -e "${RED}Error: no staged repo at $FLATPAK_REPO${NC}"
+                            echo "Run './dev player flatpak build' first."
+                            exit 1
+                        fi
+                        # Point `staged` at this repo unconditionally. --if-not-exists
+                        # alone would leave an existing remote aimed at whichever
+                        # checkout last built one, and the install would then
+                        # silently deploy that build instead of this one.
+                        flatpak remote-add --user --no-gpg-verify --if-not-exists staged "$FLATPAK_REPO"
+                        flatpak remote-modify --user --no-gpg-verify --url="file://$FLATPAK_REPO" staged
+                        echo -e "${GREEN}Installing ${FLATPAK_APP_ID}//${flatpak_branch} from staged...${NC}"
+                        flatpak install --user -y --noninteractive --reinstall \
+                            staged "${FLATPAK_APP_ID}//${flatpak_branch}"
+                        echo -e "${GREEN}Installed.${NC} Run it with: ./dev player flatpak run"
+                        ;;
+                    run)
+                        # A shell with no session (ssh, a background job, cron)
+                        # exports neither WAYLAND_DISPLAY nor DISPLAY, and the
+                        # app then dies on "Unable to init server". Adopt the
+                        # logged-in session's socket when one is sitting in
+                        # XDG_RUNTIME_DIR rather than failing on an empty env.
+                        if [ -z "${WAYLAND_DISPLAY:-}" ] && [ -z "${DISPLAY:-}" ]; then
+                            if [ -S "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/wayland-0" ]; then
+                                export WAYLAND_DISPLAY=wayland-0
+                                echo -e "${YELLOW}No display in the environment; using WAYLAND_DISPLAY=wayland-0${NC}"
+                            elif [ -S /tmp/.X11-unix/X0 ]; then
+                                export DISPLAY=:0
+                                echo -e "${YELLOW}No display in the environment; using DISPLAY=:0${NC}"
+                            fi
+                        fi
+                        echo -e "${GREEN}Launching ${FLATPAK_APP_ID}//${flatpak_branch}...${NC}"
+                        exec flatpak run --branch="$flatpak_branch" "$FLATPAK_APP_ID" "${flatpak_passthru[@]}"
+                        ;;
+                    smoke)
+                        # smoke-test.sh is written for CI, where xvfb-run comes
+                        # from apt. Resolve it the same way as flatpak-builder
+                        # when the host does not carry it.
+                        smoke_cmd=("$ROOT_DIR/player/flatpak/smoke-test.sh" "$flatpak_branch")
+                        if ! command -v xvfb-run &> /dev/null; then
+                            if ! command -v nix &> /dev/null; then
+                                echo -e "${RED}Error: the smoke test needs xvfb-run${NC}"
+                                echo "Install xvfb (Debian/Ubuntu: xvfb; Fedora: xorg-x11-server-Xvfb)."
+                                exit 1
+                            fi
+                            echo -e "${YELLOW}xvfb-run not on PATH; resolving through nix${NC}"
+                            smoke_cmd=(nix shell nixpkgs#xvfb-run --command "${smoke_cmd[@]}")
+                        fi
+
+                        set +e
+                        "${smoke_cmd[@]}"
+                        smoke_status=$?
+                        set -e
+
+                        # The test's SIGTERM hits the xvfb-run wrapper, not the
+                        # flatpak, so on a developer machine the app and its
+                        # Xvfb both survive a passing run — and the app keeps a
+                        # live p2p node registered with the relay. CI throws the
+                        # runner away; here the leftovers have to go explicitly.
+                        flatpak kill "$FLATPAK_APP_ID" 2> /dev/null || true
+                        pgrep -f 'Xvfb :99' 2> /dev/null | xargs -r kill 2> /dev/null || true
+
+                        exit "$smoke_status"
+                        ;;
+                esac
+                ;;
             *)
                 echo -e "${RED}Error: Unknown player command: $1${NC}"
-                echo "Usage: ./dev player <logs|build|setup|shell|restart|e2e|e2e-build|android|macos>"
+                echo "Usage: ./dev player <logs|build|setup|shell|restart|e2e|e2e-build|android|macos|flatpak>"
                 exit 1
                 ;;
         esac
