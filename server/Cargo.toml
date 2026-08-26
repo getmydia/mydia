@@ -17,7 +17,7 @@ base64 = "0.22"
 bytes = "1"
 figment = { version = "0.10", features = ["yaml", "env"] }
 futures-util = "0.3"
-jsonwebtoken = "9"
+jsonwebtoken = { version = "10.3", default-features = false, features = ["rust_crypto"] }
 mydia-library = { path = "crates/library" }
 mydia-streaming = { path = "crates/streaming" }
 regex = "1"
