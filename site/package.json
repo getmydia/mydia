@@ -10,10 +10,10 @@
     "astro": "astro"
   },
   "dependencies": {
-    "@astrojs/rss": "^4.0.15",
+    "@astrojs/rss": "^4.0.19",
     "@tailwindcss/typography": "^0.5.19",
     "@tailwindcss/vite": "^4.2.0",
-    "astro": "^5.17.1",
+    "astro": "^6.4.8",
     "daisyui": "^5.5.19",
     "tailwindcss": "^4.2.0"
   },
