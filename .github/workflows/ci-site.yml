@@ -1,10 +1,14 @@
 name: CI / Site
 
+# Deliberately NOT path-filtered, despite only caring about site/.
+#
+# A workflow skipped by a paths: filter never reports a status at all, so a
+# required check pointing at it sits Pending forever and blocks the pull
+# request. This job is registered in the Master ruleset, so it has to report
+# on every pull request. It detects the change itself instead and exits in a
+# few seconds when site/ is untouched.
 on:
   pull_request:
-    paths:
-      - 'site/**'
-      - '.github/workflows/ci-site.yml'
 
 concurrency:
   group: "ci-site-${{ github.ref }}"
@@ -29,12 +33,30 @@ jobs:
       # npm ci runs whatever install scripts the pull request's lockfile
       # names, so the job must not leave the token sitting in .git/config
       # where that code can read it. Nothing here needs git credentials.
+      #
+      # fetch-depth: 0 so the diff below can reach the base commit.
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           persist-credentials: false
 
+      - name: Detect site changes
+        id: changes
+        working-directory: ${{ github.workspace }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if git diff --name-only "$BASE_SHA" HEAD \
+               | grep -qE '^(site/|\.github/workflows/ci-site\.yml$)'; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "relevant=false" >> "$GITHUB_OUTPUT"
+            echo "No changes under site/; nothing to build."
+          fi
+
       - name: Set up Node
+        if: steps.changes.outputs.relevant == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -42,9 +64,11 @@ jobs:
           cache-dependency-path: site/package-lock.json
 
       - name: Install
+        if: steps.changes.outputs.relevant == 'true'
         run: npm ci
 
       - name: Test
+        if: steps.changes.outputs.relevant == 'true'
         run: npm test
 
       # astro build type-checks every page and renders the whole site. It is
@@ -52,4 +76,5 @@ jobs:
       # files, so npm test alone would not catch a dependency bump breaking a
       # component.
       - name: Build
+        if: steps.changes.outputs.relevant == 'true'
         run: npm run build

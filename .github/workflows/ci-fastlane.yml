@@ -1,15 +1,11 @@
 name: CI / Fastlane
 
+# Deliberately NOT path-filtered. See the note in ci-site.yml: a workflow
+# skipped by a paths: filter never reports, so a required check pointing at it
+# blocks the pull request forever. Both matrix legs are registered in the
+# Master ruleset, so both have to report on every pull request.
 on:
   pull_request:
-    paths:
-      - 'player/ios/Gemfile'
-      - 'player/ios/Gemfile.lock'
-      - 'player/ios/fastlane/**'
-      - 'player/android/Gemfile'
-      - 'player/android/Gemfile.lock'
-      - 'player/android/fastlane/**'
-      - '.github/workflows/ci-fastlane.yml'
 
 concurrency:
   group: "ci-fastlane-${{ github.ref }}"
@@ -35,17 +31,38 @@ jobs:
       run:
         working-directory: player/${{ matrix.platform }}
     steps:
-      # bundle install builds native extensions and fastlane executes the
+      # bundle install builds native gem extensions and fastlane executes the
       # pull request's own Fastfile, so the job must not leave the token
       # sitting in .git/config. Nothing here needs git credentials.
+      #
+      # fetch-depth: 0 so the diff below can reach the base commit.
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           persist-credentials: false
 
+      - name: Detect fastlane changes
+        id: changes
+        working-directory: ${{ github.workspace }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          if git diff --name-only "$BASE_SHA" HEAD \
+               | grep -qE "^(player/${PLATFORM}/(Gemfile(\.lock)?|fastlane/)|\.github/workflows/ci-fastlane\.yml$)"; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "relevant=false" >> "$GITHUB_OUTPUT"
+            echo "No changes to player/${PLATFORM} fastlane files; nothing to load."
+          fi
+
       # Mirrors release.yml, which pins 3.2 with bundler-cache for both
-      # fastlane jobs.
+      # fastlane jobs. The lockfiles are resolved under 3.2 to match, because
+      # bundler discards a lockfile resolved under a newer Ruby and re-resolves
+      # on the runner.
       - name: Set up Ruby
+        if: steps.changes.outputs.relevant == 'true'
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.2'
@@ -56,4 +73,5 @@ jobs:
       # Listing lanes proves the resolved gem set installs and that fastlane
       # can parse the Fastfile, which is what a dependency bump can break.
       - name: Load lanes
+        if: steps.changes.outputs.relevant == 'true'
         run: bundle exec fastlane lanes
