@@ -67,33 +67,107 @@ class DesktopWindowChrome extends StatelessWidget {
           return child;
         }
 
-        final controller = _controller ?? const WindowManagerController();
-
-        return WindowResizeEdges(
-          controller: controller,
-          child: Stack(
-            children: [
-              Positioned.fill(child: child),
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: WindowDragBand(
-                  controller: controller,
-                  height: kLinuxWindowChromeHeight,
-                ),
-              ),
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                height: kLinuxWindowChromeHeight,
-                child: _buttons(controller),
-              ),
-            ],
-          ),
+        return _WindowChrome(
+          layout: _layout,
+          controller: _controller ?? const WindowManagerController(),
+          buttonsHidden: _buttonsHidden ?? windowButtonsHidden,
+          child: child,
         );
       },
+    );
+  }
+}
+
+/// The Linux branch of [DesktopWindowChrome].
+///
+/// Split into its own widget so the hover state that keeps the buttons alive
+/// under an approaching cursor has somewhere to live, without making the
+/// public widget stateful on every platform.
+class _WindowChrome extends StatefulWidget {
+  const _WindowChrome({
+    required this.child,
+    required this.layout,
+    required this.controller,
+    required this.buttonsHidden,
+  });
+
+  final Widget child;
+  final ValueListenable<DecorationLayout> layout;
+  final WindowController controller;
+  final ValueListenable<bool> buttonsHidden;
+
+  @override
+  State<_WindowChrome> createState() => _WindowChromeState();
+}
+
+class _WindowChromeState extends State<_WindowChrome> {
+  /// Whether the pointer is somewhere in the top strip.
+  ///
+  /// Tracked because the strip is drawn *over* the app, so everything beneath
+  /// it — the player's chrome most visibly — sees a pointer moving up into the
+  /// strip as a `PointerExitEvent` and concludes the pointer left the window.
+  /// The player answers that by hiding its chrome, which sets
+  /// `windowButtonsHidden`, which used to delete the very buttons the cursor
+  /// was travelling towards. `ChromeVisibility` already refuses to fade out
+  /// from under a cursor resting on one of its own controls; this is that same
+  /// rule applied to the window buttons.
+  bool _pointerOverStrip = false;
+
+  void _setPointerOverStrip(bool over) {
+    if (_pointerOverStrip == over) return;
+    setState(() => _pointerOverStrip = over);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: WindowResizeEdges(
+            controller: widget.controller,
+            child: Stack(
+              children: [
+                Positioned.fill(child: widget.child),
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: WindowDragBand(
+                    controller: widget.controller,
+                    height: kLinuxWindowChromeHeight,
+                  ),
+                ),
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: kLinuxWindowChromeHeight,
+                  child: _buttons(),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        // Topmost so nothing can shadow it — not the resize edges above the
+        // strip, not the drag band, not the buttons themselves — and
+        // `opaque: false` so it shadows nothing in turn.
+        // `RenderMouseRegion.hitTest` returns `super.hitTest(...) && _opaque`,
+        // which still records the region for the mouse tracker while
+        // answering false, so the hit test carries on into the siblings
+        // underneath and every gesture below behaves exactly as it did.
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          height: kLinuxWindowChromeHeight,
+          child: MouseRegion(
+            opaque: false,
+            onEnter: (_) => _setPointerOverStrip(true),
+            onExit: (_) => _setPointerOverStrip(false),
+          ),
+        ),
+      ],
     );
   }
 
@@ -101,21 +175,32 @@ class DesktopWindowChrome extends StatelessWidget {
   /// the resize edges stay live. They are invisible either way, and losing
   /// the ability to move or resize the window mid-playback would be a
   /// regression.
-  Widget _buttons(WindowController controller) {
+  ///
+  /// A pointer inside the strip overrides the hidden state in both
+  /// directions: buttons under the cursor are never taken away, and reaching
+  /// for the top of the window during playback brings them back rather than
+  /// leaving a viewer to hunt for controls that are not drawn.
+  Widget _buttons() {
     return ValueListenableBuilder<bool>(
-      valueListenable: _buttonsHidden ?? windowButtonsHidden,
+      valueListenable: widget.buttonsHidden,
       builder: (context, hidden, _) {
-        if (hidden) return const SizedBox.shrink();
+        if (hidden && !_pointerOverStrip) return const SizedBox.shrink();
 
         return ValueListenableBuilder<DecorationLayout>(
-          valueListenable: _layout,
+          valueListenable: widget.layout,
           builder: (context, layout, _) => Padding(
             padding: const EdgeInsets.symmetric(horizontal: 6),
             child: Row(
               children: [
-                WindowButtons(buttons: layout.start, controller: controller),
+                WindowButtons(
+                  buttons: layout.start,
+                  controller: widget.controller,
+                ),
                 const Spacer(),
-                WindowButtons(buttons: layout.end, controller: controller),
+                WindowButtons(
+                  buttons: layout.end,
+                  controller: widget.controller,
+                ),
               ],
             ),
           ),
