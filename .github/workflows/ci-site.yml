@@ -12,7 +12,11 @@ concurrency:
 
 jobs:
   build:
-    name: Build
+    # The check context is the job name, and ci-player.yml already publishes
+    # Build / Android, Build / Linux, Build / Web, Build / Windows and
+    # Build / macOS. A bare "Build" would be ambiguous in the checks list and
+    # worse as a required status check.
+    name: Site build
     runs-on: ubuntu-latest
     defaults:
       run:
