@@ -16,6 +16,18 @@ import '../window/window_fullscreen.dart';
 /// y14-y26, so this clears them with a few points to spare.
 const double kMacTitleBarOverlap = 28.0;
 
+/// Height of the band reserved at the top of the Linux window for the
+/// Flutter-drawn window buttons.
+///
+/// Full width rather than only as wide as the buttons. The sidebar and the
+/// content column then both clear it with no side-specific logic, which
+/// matters because a user whose `gtk-decoration-layout` puts buttons on the
+/// start side would otherwise have them land on top of the sidebar's logo.
+/// It also makes the whole top edge a drag target instead of a narrow gap
+/// beside the buttons. `MediaQuery.padding.top` could not express a
+/// one-sided inset anyway.
+const double kLinuxWindowChromeHeight = 36.0;
+
 /// Reserves the macOS title bar strip by republishing [MediaQuery] with a
 /// larger `padding.top`.
 ///
@@ -44,29 +56,32 @@ class WindowChromeInset extends StatelessWidget {
     final isWeb = kIsWeb;
     final platform = defaultTargetPlatform;
 
-    // Short-circuits before ever subscribing to the fullscreen signal: off
-    // macOS (and on web, where `defaultTargetPlatform` reports macOS for
-    // Safari/Chrome on a Mac but there is no frameless window to clear)
-    // fullscreen can never flip this decision, so there is no reason to
-    // rebuild on it.
-    if (isWeb || platform != TargetPlatform.macOS) return child;
+    // Short-circuits before ever subscribing to the fullscreen signal: on a
+    // platform with no Flutter-drawn chrome (and on web, where
+    // `defaultTargetPlatform` reports macOS for Safari/Chrome on a Mac but
+    // there is no frameless window to clear) fullscreen can never flip this
+    // decision, so there is no reason to rebuild on it.
+    if (isWeb ||
+        (platform != TargetPlatform.macOS &&
+            platform != TargetPlatform.linux)) {
+      return child;
+    }
 
     return ValueListenableBuilder<bool>(
       valueListenable: _fullscreen ?? windowFullscreen,
       builder: (context, isFullscreen, child) {
-        if (!shouldReserveTitleBar(
+        final inset = windowChromeInsetFor(
           isWeb: isWeb,
           platform: platform,
           isFullscreen: isFullscreen,
-        )) {
-          return child!;
-        }
+        );
+        if (inset == 0) return child!;
 
         final media = MediaQuery.of(context);
         return MediaQuery(
           data: media.copyWith(
             padding: media.padding.copyWith(
-              top: media.padding.top + kMacTitleBarOverlap,
+              top: media.padding.top + inset,
             ),
           ),
           child: child!,
@@ -77,26 +92,35 @@ class WindowChromeInset extends StatelessWidget {
   }
 }
 
-/// Pure predicate behind [WindowChromeInset.build], exposed separately so it
-/// can be unit-tested for every input combination without actually running
-/// on each platform.
+/// How much vertical space the OS window chrome needs reserved at the top,
+/// in logical pixels.
+///
+/// Pure, and exposed separately from [WindowChromeInset.build] so it can be
+/// unit-tested for every input combination without actually running on each
+/// platform.
 ///
 /// `kIsWeb` is a compile-time constant baked in per build target — it is
 /// always `false` under `flutter test`, so a regression that deleted the web
 /// check from [WindowChromeInset.build] would pass every test unless the
-/// underlying boolean logic is tested independently of the real `kIsWeb`
-/// value. Mirrors `PlatformFeatures.computeSupportsKeyboardShortcuts` in
+/// underlying logic is tested independently of the real `kIsWeb` value.
+/// Mirrors `PlatformFeatures.computeSupportsKeyboardShortcuts` in
 /// `platform_features.dart`, which exists for exactly the same reason.
 ///
-/// Web is checked first: `defaultTargetPlatform` reports macOS for Safari
-/// and Chrome on a Mac, where there is no frameless window and no traffic
-/// lights to clear. Fullscreen is checked last: macOS auto-hides the
-/// traffic lights there, so reserving the strip would only letterbox the
-/// video.
+/// Web is checked first: `defaultTargetPlatform` reports macOS for Safari and
+/// Chrome on a Mac, where there is no frameless window and no buttons to
+/// clear. Fullscreen is checked next: macOS auto-hides the traffic lights
+/// there and the Linux chrome unmounts itself, so reserving the strip would
+/// only letterbox the video.
 @visibleForTesting
-bool shouldReserveTitleBar({
+double windowChromeInsetFor({
   required bool isWeb,
   required TargetPlatform platform,
   required bool isFullscreen,
-}) =>
-    !isWeb && platform == TargetPlatform.macOS && !isFullscreen;
+}) {
+  if (isWeb || isFullscreen) return 0;
+  return switch (platform) {
+    TargetPlatform.macOS => kMacTitleBarOverlap,
+    TargetPlatform.linux => kLinuxWindowChromeHeight,
+    _ => 0,
+  };
+}

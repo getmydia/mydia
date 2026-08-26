@@ -7,6 +7,8 @@ import 'package:go_router/go_router.dart';
 import 'core/auth/auth_status.dart';
 import 'core/layout/window_chrome_inset.dart';
 import 'core/theme/app_theme.dart';
+import 'core/window/decoration_layout_source.dart';
+import 'presentation/widgets/window_chrome/desktop_window_chrome.dart';
 import 'core/providers/providers.dart';
 import 'core/graphql/graphql_provider.dart';
 import 'core/graphql/watch/resume_gate.dart';
@@ -147,6 +149,12 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   /// `RemoteTargetController`.
   StreamSubscription<FlutterInboundControlRequest>? _controlRequestSubscription;
 
+  /// Owns the GTK decoration-layout channel for the app's lifetime. The
+  /// chrome reads `.layout`, which starts on a fallback and re-publishes if
+  /// the real layout differs.
+  late final DecorationLayoutSource _decorationLayout =
+      DecorationLayoutSource();
+
   @override
   void initState() {
     super.initState();
@@ -214,6 +222,11 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
         unawaited(_initRemoteControlIfEnabled());
       },
     );
+
+    // Fire and forget: the source starts on its fallback layout, so the
+    // chrome renders correctly before this completes and simply re-renders
+    // if the real layout differs.
+    unawaited(_decorationLayout.load());
   }
 
   /// Whether a restore has already been attempted this launch. Auth state can
@@ -320,6 +333,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _decorationLayout.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _remoteIntentsSubscription?.cancel();
     _controlRequestSubscription?.cancel();
@@ -493,8 +507,16 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       // `WindowChromeInset` wraps it rather than the reverse: the cast bar is
       // itself a route-level overlay, so it has to sit inside the reserved
       // window chrome like everything else.
-      builder: (context, child) => WindowChromeInset(
-        child: CastBarLayer(child: child ?? const SizedBox.shrink()),
+      //
+      // `DesktopWindowChrome` wraps `WindowChromeInset` rather than the
+      // reverse: the buttons and drag band are positioned against the raw
+      // window edge, so they must NOT be pushed down by the very inset that
+      // exists to reserve room for them.
+      builder: (context, child) => DesktopWindowChrome(
+        layout: _decorationLayout.layout,
+        child: WindowChromeInset(
+          child: CastBarLayer(child: child ?? const SizedBox.shrink()),
+        ),
       ),
     );
   }
