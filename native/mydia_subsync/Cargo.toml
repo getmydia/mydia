@@ -1,0 +1,15 @@
+[package]
+name = "mydia_subsync"
+version = "0.1.0"
+authors = []
+edition = "2021"
+
+[lib]
+name = "mydia_subsync"
+path = "src/lib.rs"
+crate-type = ["cdylib"]
+
+[dependencies]
+rustler = "0.37.2"
+alass-core = "2.0.0"
+webrtc-vad = "0.4.0"
