@@ -25,7 +25,7 @@ defmodule Mydia.Subtitles do
   import Ecto.Query
 
   alias Mydia.Repo
-  alias Mydia.Subtitles.{Subtitle, MediaHash, Downloader, Scoring}
+  alias Mydia.Subtitles.{Subtitle, MediaHash, Downloader, Scoring, TrackSettings}
   alias Mydia.Library.MediaFile
   alias Mydia.Media.{MediaItem, Episode}
 
@@ -243,13 +243,11 @@ defmodule Mydia.Subtitles do
         # Delete file first
         case File.rm(subtitle.file_path) do
           :ok ->
-            Repo.delete(subtitle)
-            :ok
+            delete_record_and_settings(subtitle)
 
           {:error, :enoent} ->
             # File already gone, just delete record
-            Repo.delete(subtitle)
-            :ok
+            delete_record_and_settings(subtitle)
 
           {:error, reason} ->
             Logger.warning("Failed to delete subtitle file",
@@ -264,6 +262,35 @@ defmodule Mydia.Subtitles do
   end
 
   ## Private Functions
+
+  # The settings row is keyed by (media_file_id, track_ref) where track_ref
+  # is this subtitle's own id. No foreign key expresses that, so it has to be
+  # deleted here or it outlives the track forever.
+  #
+  # It runs only where the subtitle row itself is deleted. A file removal that
+  # fails for any reason other than the file already being gone leaves the
+  # track in place, and clearing its offset there would silently discard a
+  # correction the user still needs, most plausibly on a read-only library
+  # mount.
+  #
+  # Both deletes run in one transaction so a failure deleting the subtitle
+  # row does not leave the settings gone while the track remains.
+  defp delete_record_and_settings(subtitle) do
+    result =
+      Repo.transaction(fn ->
+        TrackSettings.delete_for_track(subtitle.media_file_id, subtitle.id)
+
+        case Repo.delete(subtitle) do
+          {:ok, _subtitle} -> :ok
+          {:error, changeset} -> Repo.rollback(changeset)
+        end
+      end)
+
+    case result do
+      {:ok, :ok} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
 
   defp result_to_subtitle_info(result) do
     %{
