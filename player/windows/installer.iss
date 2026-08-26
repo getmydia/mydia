@@ -43,7 +43,13 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-; Copy the entire Flutter release bundle
+; Copy the entire Flutter release bundle.
+;
+; This includes the VC++ runtime DLLs (msvcp140, vcruntime140, vcruntime140_1),
+; which player/tool/bundle_windows_runtime.ps1 places in BuildDir before this
+; script runs. They have to ship with the app: a clean Windows install does not
+; have them, and PrivilegesRequired=lowest below means this installer cannot run
+; vc_redist.x64.exe, which needs admin. Do not narrow this glob.
 Source: "{#BuildDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]

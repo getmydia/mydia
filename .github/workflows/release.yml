@@ -941,6 +941,14 @@ jobs:
         working-directory: ${{ env.PLAYER_PATH }}
         run: flutter build windows --release
 
+      # Must run before the installer is packaged: installer.iss globs the same
+      # Release directory, so the DLLs are only in the shipped installer if they
+      # are on disk by now. Without this every clean Windows machine fails to
+      # launch with "msvcp140.dll was not found".
+      - name: Bundle VC++ runtime
+        shell: pwsh
+        run: pwsh ${{ env.PLAYER_PATH }}/tool/bundle_windows_runtime.ps1
+
       - name: Build installer
         uses: Minionguyjpro/Inno-Setup-Action@v1.2.4
         with:
