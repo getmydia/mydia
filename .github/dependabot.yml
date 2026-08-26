@@ -1,13 +1,40 @@
 version: 2
 
-# Alerts were on but version updates were not, so 68 advisories accumulated
-# with nothing able to open a pull request for them. Everything here is
-# grouped: ungrouped, the site tree alone would open around thirty PRs.
-#
-# Hex (mix.lock) and pub (player/pubspec.lock) are absent because Dependabot
-# does not support those ecosystems. ci-security.yml covers them instead.
+# Security updates were on, but version updates were not, so dependencies
+# drifted until the advisory fix was a major bump the security updater would
+# never offer. That is how 44 site alerts accumulated behind an Astro 5 tree
+# whose patches all landed in 6.x and 7.x. Everything here is grouped:
+# ungrouped, the site tree alone would open around thirty PRs.
 
 updates:
+  # mix.lock and player/pubspec.lock have never produced a single Dependabot
+  # alert, while OSV-Scanner finds real advisories in mix.lock. Version
+  # updates for these ecosystems do work, so run them here and keep
+  # ci-security.yml as the advisory net.
+  - package-ecosystem: mix
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      elixir:
+        patterns: ["*"]
+
+  - package-ecosystem: mix
+    directory: /metadata-relay
+    schedule:
+      interval: weekly
+    groups:
+      metadata-relay:
+        patterns: ["*"]
+
+  - package-ecosystem: pub
+    directory: /player
+    schedule:
+      interval: weekly
+    groups:
+      player:
+        patterns: ["*"]
+
   # The marketing site. Its tree drifted two majors behind and accounted for
   # 44 of the 68 alerts in the August 2026 backlog.
   - package-ecosystem: npm
@@ -69,8 +96,15 @@ updates:
       server:
         patterns: ["*"]
 
-  # The remaining Cargo.lock files are separate workspaces. `directories`
-  # takes a list, which avoids one block per crate.
+  # The remaining shipped Cargo.lock files are separate workspaces.
+  # `directories` takes a list, which avoids one block per crate.
+  #
+  # Deliberately excluded, because updating them buys nothing and adds PR
+  # noise: native/mydia_plugin_sdk/examples/minimal is a documentation
+  # example, and test/support/fixtures/plugins/{host_fns,host_test}_fixture
+  # are test fixtures whose whole purpose is a pinned, reproducible build.
+  # ci-security.yml still scans all three, so a real advisory in them
+  # surfaces even though nothing auto-bumps them.
   - package-ecosystem: cargo
     directories:
       - /native/mydia_p2p
