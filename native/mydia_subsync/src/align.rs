@@ -10,6 +10,25 @@ use alass_core::{align_nosplit, standard_scoring, NoProgressHandler, TimePoint, 
 /// The score scales with the number of spans in `list`; callers normalize by
 /// dividing by that length. An empty input on either side returns a zero
 /// offset at zero score, which the caller's gate treats as no confidence.
+///
+/// Callers must check for that empty case before normalizing: the Elixir
+/// wrapper divides by `length(list)` to get the normalized score, and
+/// `0.0 / 0` raises `ArithmeticError` there regardless of the float
+/// numerator. An empty `list` is exactly the input this function returns a
+/// zero score for, so the two behaviors combine into a trap unless the
+/// caller checks first.
+///
+/// `reference` and `list` carry caller-supplied millisecond timestamps that
+/// pass straight through to `alass-core` with no range check. That library
+/// sizes an internal buffer from `max_offset - min_offset` with no ceiling
+/// (see `align_constant_delta` and `align_constant_delta_bucket_sort` in
+/// `alass-core`'s `src/alass.rs`), so a single wildly out-of-range timestamp
+/// forces a correspondingly large allocation. This runs on a dirty CPU
+/// scheduler thread the BEAM cannot cancel once it starts, so callers must
+/// validate or clamp timestamps to a sane bound derived from the media's
+/// known duration before calling this function. This matters as soon as a
+/// caller feeds in real subtitle-file content, since subtitle files are
+/// untrusted input.
 pub fn align_spans(reference: &[(i64, i64)], list: &[(i64, i64)]) -> (i64, f64) {
     let reference_spans = to_spans(reference);
     let list_spans = to_spans(list);

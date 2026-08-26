@@ -22,9 +22,25 @@ defmodule Mydia.Subsync do
   by dividing by `length(list)` before comparing against a threshold. A perfect
   match normalizes to roughly 1.0 and unrelated content to roughly 0.1.
 
+  `list` can be empty, and this function returns a zero score for it rather
+  than raising. Callers must check for that empty case before normalizing:
+  `0.0 / 0` raises `ArithmeticError` in Elixir regardless of the float
+  numerator, and an empty `list` is exactly the input that produces a zero
+  score.
+
   This function never fails on unmatchable input. Given a reference it cannot
   align to, it returns its best guess with a low score, so the score is the only
   thing standing between a failed alignment and a destroyed subtitle.
+
+  `reference` and `list` come from parsed subtitle and speech-detection data,
+  which is untrusted input. The underlying `alass-core` library sizes an
+  internal buffer from the spread between the largest and smallest timestamp
+  it is given, with no upper bound, so a single wildly out-of-range timestamp
+  (well within what a two-digit-hour SRT timestamp can express) can force a
+  very large allocation on the dirty scheduler thread this NIF runs on, one
+  the BEAM cannot cancel once it starts. Callers must validate or clamp span
+  timestamps to a sane bound derived from the media's known duration before
+  calling this function.
   """
   @spec align([{integer(), integer()}], [{integer(), integer()}]) :: {integer(), float()}
   def align(_reference, _list), do: :erlang.nif_error(:nif_not_loaded)
