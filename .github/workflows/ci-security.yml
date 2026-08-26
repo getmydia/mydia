@@ -1,0 +1,54 @@
+name: CI / Security
+
+on:
+  pull_request:
+  schedule:
+    # Monday 12:30 UTC, ahead of the weekly Dependabot run.
+    - cron: "30 12 * * 1"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
+# OSV-Scanner reads every lockfile in the repository, including the eight
+# Cargo.lock files outside server/ and the two test-fixture crates nothing
+# auto-bumps. It is the advisory net behind Dependabot's version updates.
+#
+# Non-blocking for now. mix.lock had never been scanned before this landed, so
+# a required check here could wall off every PR in the repository. Promote to
+# fail-on-vuln once the baseline is triaged.
+#
+# Split into two jobs on purpose. A fork pull request gets a read-only
+# GITHUB_TOKEN, so the SARIF upload inside the reusable workflow would fail for
+# want of security-events: write. Passing an expression to upload-sarif is not
+# an option: the reusable workflow types it as a boolean, and an expression
+# reaches it as a string.
+jobs:
+  scan:
+    name: Scan lockfiles
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@8deb546fdb875b9996d27d4950be7312dac076a1" # v2.5.0
+    with:
+      fail-on-vuln: false
+      upload-sarif: true
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+  scan-fork:
+    name: Scan lockfiles (fork)
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name != github.repository
+    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@8deb546fdb875b9996d27d4950be7312dac076a1" # v2.5.0
+    with:
+      fail-on-vuln: false
+      upload-sarif: false
+    permissions:
+      actions: read
+      contents: read
