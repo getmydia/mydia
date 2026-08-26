@@ -1,0 +1,66 @@
+# Windows VM for testing the Flutter player locally.
+#
+#   docker compose -f compose.windows.yml up -d
+#   open http://localhost:8006      (web viewer; RDP is on 3389)
+#
+# Windows installs itself unattended on first boot; expect ~15-25 minutes,
+# almost all of it downloading the ISO. The disk lives in a named volume, so
+# subsequent boots are fast and survive `down`.
+#
+# The player build is reached from inside the VM at \\host.lan\Data. The
+# quickest way to get one there is the CI artifact rather than a toolchain
+# install:
+#
+#   gh run download <run-id> -n mydia-player-windows-release \
+#     -D player/build/windows-ci
+#
+# then run \\host.lan\Data\build\windows-ci\mydia-player.exe. That bundle
+# carries its own flutter_windows.dll, libmpv-2.dll and mydia_player_p2p.dll,
+# so nothing needs to be compiled inside Windows.
+#
+# On btrfs, disable copy-on-write for the storage volume before Windows Setup
+# writes to the disk image, or the install runs very slowly and can corrupt.
+# The image warns about this on startup. `chattr +C` only applies to files
+# created afterwards, so the existing image has to go -- the cached ISO next to
+# it does not, so this costs no re-download:
+#
+#   docker compose -f compose.windows.yml stop
+#   V=$(docker volume inspect mydia-windows_windows_data --format '{{.Mountpoint}}')
+#   sudo chattr +C "$V" && sudo rm -f "$V/data.img"
+#   docker compose -f compose.windows.yml up -d
+#
+# To build from source in the VM instead, uncomment the /oem mount below.
+# player/windows-vm-scripts/install.bat runs on first boot and pulls in
+# Chocolatey, Git, Flutter and the VS 2022 C++ build tools, which adds roughly
+# 20 minutes to the install.
+
+name: mydia-windows
+
+services:
+  windows-vm:
+    image: dockurr/windows
+    container_name: mydia_windows_vm
+    environment:
+      VERSION: "11"
+      RAM_SIZE: "8G"
+      CPU_CORES: "4"
+      DISK_SIZE: "64G"
+      USERNAME: "Docker"
+      PASSWORD: "password"
+    devices:
+      - /dev/kvm
+      - /dev/net/tun
+    cap_add:
+      - NET_ADMIN
+    ports:
+      - "8006:8006" # Web viewer
+      - "3389:3389" # RDP
+    volumes:
+      - windows_data:/storage
+      - ./player:/data:rw
+      # - ./player/windows-vm-scripts:/oem
+    stop_grace_period: 2m
+    restart: on-failure
+
+volumes:
+  windows_data:
