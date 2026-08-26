@@ -19,6 +19,10 @@ env:
   # Listing lanes otherwise posts anonymous analytics on every run.
   FASTLANE_OPT_OUT_USAGE: '1'
 
+# The lane jobs only read the checked-out tree; nothing here writes.
+permissions:
+  contents: read
+
 jobs:
   lanes:
     name: Load lanes (${{ matrix.platform }})

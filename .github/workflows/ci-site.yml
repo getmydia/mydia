@@ -10,6 +10,10 @@ concurrency:
   group: "ci-site-${{ github.ref }}"
   cancel-in-progress: true
 
+# The job only reads the checked-out tree; nothing here writes.
+permissions:
+  contents: read
+
 jobs:
   build:
     # The check context is the job name, and ci-player.yml already publishes
