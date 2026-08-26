@@ -1,0 +1,55 @@
+name: CI / Site
+
+on:
+  pull_request:
+    paths:
+      - 'site/**'
+      - '.github/workflows/ci-site.yml'
+
+concurrency:
+  group: "ci-site-${{ github.ref }}"
+  cancel-in-progress: true
+
+# The job only reads the checked-out tree; nothing here writes.
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # The check context is the job name, and ci-player.yml already publishes
+    # Build / Android, Build / Linux, Build / Web, Build / Windows and
+    # Build / macOS. A bare "Build" would be ambiguous in the checks list and
+    # worse as a required status check.
+    name: Site build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      # npm ci runs whatever install scripts the pull request's lockfile
+      # names, so the job must not leave the token sitting in .git/config
+      # where that code can read it. Nothing here needs git credentials.
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      # astro build type-checks every page and renders the whole site. It is
+      # the substantive signal here: site/ has one test file against 23 source
+      # files, so npm test alone would not catch a dependency bump breaking a
+      # component.
+      - name: Build
+        run: npm run build

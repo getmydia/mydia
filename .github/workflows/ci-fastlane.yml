@@ -1,0 +1,59 @@
+name: CI / Fastlane
+
+on:
+  pull_request:
+    paths:
+      - 'player/ios/Gemfile'
+      - 'player/ios/Gemfile.lock'
+      - 'player/ios/fastlane/**'
+      - 'player/android/Gemfile'
+      - 'player/android/Gemfile.lock'
+      - 'player/android/fastlane/**'
+      - '.github/workflows/ci-fastlane.yml'
+
+concurrency:
+  group: "ci-fastlane-${{ github.ref }}"
+  cancel-in-progress: true
+
+env:
+  # Listing lanes otherwise posts anonymous analytics on every run.
+  FASTLANE_OPT_OUT_USAGE: '1'
+
+# The lane jobs only read the checked-out tree; nothing here writes.
+permissions:
+  contents: read
+
+jobs:
+  lanes:
+    name: Load lanes (${{ matrix.platform }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ios, android]
+    defaults:
+      run:
+        working-directory: player/${{ matrix.platform }}
+    steps:
+      # bundle install builds native extensions and fastlane executes the
+      # pull request's own Fastfile, so the job must not leave the token
+      # sitting in .git/config. Nothing here needs git credentials.
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # Mirrors release.yml, which pins 3.2 with bundler-cache for both
+      # fastlane jobs.
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+          working-directory: player/${{ matrix.platform }}
+
+      # Running a real lane needs signing credentials this job does not have.
+      # Listing lanes proves the resolved gem set installs and that fastlane
+      # can parse the Fastfile, which is what a dependency bump can break.
+      - name: Load lanes
+        run: bundle exec fastlane lanes
