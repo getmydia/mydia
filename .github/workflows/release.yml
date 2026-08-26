@@ -65,7 +65,7 @@ jobs:
       testflight_notes: ${{ steps.testflight_notes.outputs.notes }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -260,7 +260,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.sha }}
 
@@ -275,21 +275,21 @@ jobs:
           sudo systemctl restart docker
 
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
         with:
           buildkitd-config-inline: |
             [registry."docker.io"]
               mirrors = ["mirror.gcr.io"]
 
       - name: Login to registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push per-arch image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile
@@ -336,14 +336,14 @@ jobs:
           sudo systemctl restart docker
 
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
         with:
           buildkitd-config-inline: |
             [registry."docker.io"]
               mirrors = ["mirror.gcr.io"]
 
       - name: Login to registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -425,7 +425,7 @@ jobs:
           echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
 
       - name: Generate attestation
-        uses: actions/attest-build-provenance@v1
+        uses: actions/attest-build-provenance@v4
         with:
           subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           subject-digest: ${{ steps.merge.outputs.digest }}
@@ -437,7 +437,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.sha }}
 
@@ -449,7 +449,7 @@ jobs:
           cache: true
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
           java-version: '17'
@@ -519,7 +519,7 @@ jobs:
           rm play-store-credentials.json
 
       - name: "Upload artifact: APK"
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mydia-player-android-apk
           path: ${{ env.PLAYER_PATH }}/build/app/outputs/flutter-apk/app-release.apk
@@ -541,7 +541,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.sha }}
 
@@ -676,7 +676,7 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.sha }}
 
@@ -884,7 +884,7 @@ jobs:
           echo "appcast.xml validated (well-formed, single signature/length, sparkle:version=$sparkle_version)"
 
       - name: Upload DMG artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mydia-player-macos-dmg
           path: ${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release/Mydia Player.dmg
@@ -894,7 +894,7 @@ jobs:
         if: env.SPARKLE_EDDSA_KEY != ''
         env:
           SPARKLE_EDDSA_KEY: ${{ secrets.SPARKLE_EDDSA_KEY }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mydia-player-macos-appcast
           path: ${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release/appcast.xml
@@ -910,7 +910,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.sha }}
 
@@ -950,13 +950,13 @@ jobs:
         run: pwsh ${{ env.PLAYER_PATH }}/tool/bundle_windows_runtime.ps1
 
       - name: Build installer
-        uses: Minionguyjpro/Inno-Setup-Action@v1.2.4
+        uses: Minionguyjpro/Inno-Setup-Action@v1.2.9
         with:
           path: player/windows/installer.iss
           options: /DMyAppVersion=${{ needs.prepare.outputs.version }}
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mydia-player-windows-installer
           path: ${{ env.PLAYER_PATH }}/build/installer/mydia-player-windows-v${{ needs.prepare.outputs.version }}.exe
@@ -968,7 +968,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.sha }}
 
@@ -1012,7 +1012,7 @@ jobs:
         run: flutter build linux --release
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mydia-player-linux-bundle
           path: ${{ env.PLAYER_PATH }}/build/linux/x64/release/bundle
@@ -1029,7 +1029,7 @@ jobs:
       channel: ${{ steps.channel.outputs.channel }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.sha }}
 
@@ -1130,7 +1130,7 @@ jobs:
           echo "Dry run rehearsal complete. Nothing was uploaded."
 
       - name: Upload staged repo
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           # Deliberately not named mydia-player-*: the publish job downloads
           # that pattern and has no use for a multi-hundred-megabyte repo.
@@ -1225,7 +1225,7 @@ jobs:
           fi
 
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
           pattern: mydia-player-*
@@ -1370,13 +1370,13 @@ jobs:
       contents: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           ref: ${{ needs.prepare.outputs.sha }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v7
 
       - name: Install dependencies
         run: uv sync --frozen --project docs
@@ -1446,7 +1446,7 @@ jobs:
       cancel-in-progress: false
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.sha }}
 
@@ -1456,7 +1456,7 @@ jobs:
           sudo apt-get install -y flatpak ostree rclone
 
       - name: Download staged repo
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: flatpak-repo-staged
           path: staged-repo
