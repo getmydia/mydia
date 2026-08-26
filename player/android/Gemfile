@@ -1,3 +1,9 @@
 source "https://rubygems.org"
 
 gem "fastlane"
+
+# release.yml pins Ruby 3.2, and excon 1.7.0 requires >= 3.3.0. The advisory
+# this lockfile closes (GHSA on excon) is fixed in 1.5.0, so 1.6.x satisfies
+# it without forcing a Ruby bump in the release pipeline. Drop this pin when
+# the fastlane jobs move to Ruby 3.3 or later.
+gem "excon", "< 1.7.0"
