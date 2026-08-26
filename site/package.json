@@ -10,15 +10,15 @@
     "astro": "astro"
   },
   "dependencies": {
-    "@astrojs/rss": "^4.0.15",
-    "@tailwindcss/typography": "^0.5.19",
-    "@tailwindcss/vite": "^4.2.0",
-    "astro": "^5.17.1",
-    "daisyui": "^5.5.19",
+    "@astrojs/rss": "^4.0.19",
+    "@tailwindcss/typography": "^0.5.20",
+    "@tailwindcss/vite": "^4.3.3",
+    "astro": "^7.2.4",
+    "daisyui": "^5.7.20",
     "tailwindcss": "^4.2.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20260809.1",
-    "vitest": "^4.1.10"
+    "@cloudflare/workers-types": "^5.20260823.1",
+    "vitest": "^4.1.11"
   }
 }
