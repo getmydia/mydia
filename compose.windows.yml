@@ -52,9 +52,15 @@ services:
       - /dev/net/tun
     cap_add:
       - NET_ADMIN
+    # Bound to loopback on purpose. Omitting the host IP would publish on every
+    # interface, and this VM pairs a fixed default password with a read-write
+    # share of the repo, so anyone who can reach the host could take both. It is
+    # a local testing VM; reaching it from another machine is not a goal worth
+    # that. If you do need remote access, tunnel over SSH rather than widening
+    # the binding, and change PASSWORD first.
     ports:
-      - "8006:8006" # Web viewer
-      - "3389:3389" # RDP
+      - "127.0.0.1:8006:8006" # Web viewer
+      - "127.0.0.1:3389:3389" # RDP
     volumes:
       - windows_data:/storage
       - ./player:/data:rw
