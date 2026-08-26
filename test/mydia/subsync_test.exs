@@ -28,4 +28,19 @@ defmodule Mydia.SubsyncTest do
       assert {0, +0.0} = Subsync.align(evenly_spaced(4), [])
     end
   end
+
+  describe "voice_spans/1" do
+    @tag :tmp_dir
+    test "returns no spans for digital silence", %{tmp_dir: tmp_dir} do
+      path = Path.join(tmp_dir, "silence.pcm")
+      File.write!(path, :binary.copy(<<0, 0>>, 8000))
+
+      assert {:ok, []} = Subsync.voice_spans(path)
+    end
+
+    test "returns an error for a missing file" do
+      assert {:error, message} = Subsync.voice_spans("/nonexistent/audio.pcm")
+      assert message =~ "cannot open"
+    end
+  end
 end

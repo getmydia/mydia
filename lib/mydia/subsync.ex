@@ -28,4 +28,18 @@ defmodule Mydia.Subsync do
   """
   @spec align([{integer(), integer()}], [{integer(), integer()}]) :: {integer(), float()}
   def align(_reference, _list), do: :erlang.nif_error(:nif_not_loaded)
+
+  @doc """
+  Detects speech spans in raw PCM at `pcm_path`.
+
+  The file must be signed 16-bit little-endian mono at 8000 Hz, which is what
+  `ffmpeg -f s16le -ac 1 -ar 8000` produces. Returns `{:ok, spans}` where each
+  span is `{start_ms, end_ms}`, or `{:error, message}` when the file cannot be
+  read.
+
+  Spans shorter than 500ms are dropped, matching alass-cli, because very short
+  detections are usually noise rather than dialogue.
+  """
+  @spec voice_spans(String.t()) :: {:ok, [{integer(), integer()}]} | {:error, String.t()}
+  def voice_spans(_pcm_path), do: :erlang.nif_error(:nif_not_loaded)
 end

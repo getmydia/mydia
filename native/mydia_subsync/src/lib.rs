@@ -6,6 +6,7 @@
 //! tested without an Erlang VM.
 
 mod align;
+mod vad;
 
 /// Aligns a subtitle's cue spans against reference speech spans.
 ///
@@ -18,6 +19,15 @@ mod align;
 #[rustler::nif(schedule = "DirtyCpu")]
 fn align(reference: Vec<(i64, i64)>, list: Vec<(i64, i64)>) -> (i64, f64) {
     align::align_spans(&reference, &list)
+}
+
+/// Detects speech spans in raw s16le mono 8kHz PCM at `pcm_path`.
+///
+/// Returns a list of `{start_ms, end_ms}`. Runs on a dirty scheduler: this
+/// reads and processes the whole audio track of a feature film.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn voice_spans(pcm_path: String) -> Result<Vec<(i64, i64)>, String> {
+    vad::voice_spans_from_pcm(&pcm_path)
 }
 
 rustler::init!("Elixir.Mydia.Subsync");
