@@ -32,14 +32,16 @@ defmodule Mydia.Subtitles.Extractor do
   - `title` - Display title
   - `format` - Subtitle format (srt, vtt, ass, subrip, etc.)
   - `embedded` - Boolean indicating if subtitle is embedded in media file
+  - `origin` - Where the track came from: `:embedded` for a container stream,
+    or `:provider` / `:sidecar` / `:upload` for a sidecar row
 
   ## Examples
 
       iex> list_subtitle_tracks(media_file)
       [
-        %{track_id: 0, language: "eng", title: "English", format: "subrip", embedded: true},
-        %{track_id: 1, language: "spa", title: "Spanish", format: "ass", embedded: true},
-        %{track_id: "sub-123", language: "en", title: "English (External)", format: "srt", embedded: false}
+        %{track_id: 0, language: "eng", title: "English", format: "subrip", embedded: true, origin: :embedded},
+        %{track_id: 1, language: "spa", title: "Spanish", format: "ass", embedded: true, origin: :embedded},
+        %{track_id: "sub-123", language: "en", title: "English (Forced)", format: "srt", embedded: false, origin: :sidecar}
       ]
   """
   def list_subtitle_tracks(media_file, _opts \\ []) do
@@ -82,6 +84,7 @@ defmodule Mydia.Subtitles.Extractor do
       title: stream.title || format_language_name(language),
       format: format,
       embedded: true,
+      origin: :embedded,
       deliverable: not Format.image_format?(format)
     }
   end
@@ -201,6 +204,7 @@ defmodule Mydia.Subtitles.Extractor do
       title: title,
       format: normalize_subtitle_format(codec_name),
       embedded: true,
+      origin: :embedded,
       deliverable: not Format.image_format?(normalize_subtitle_format(codec_name))
     }
   end
@@ -230,6 +234,7 @@ defmodule Mydia.Subtitles.Extractor do
         title: format_external_title(subtitle),
         format: subtitle.format,
         embedded: false,
+        origin: origin_atom(subtitle.origin),
         deliverable: true
       }
     end)
@@ -237,10 +242,25 @@ defmodule Mydia.Subtitles.Extractor do
 
   defp get_external_subtitles(media_file_id), do: list_external_subtitle_tracks(media_file_id)
 
-  # Format external subtitle title
+  # A fixed mapping, never String.to_atom/1: `origin` reaches here from the
+  # database and the column is only constrained by a changeset, so it is
+  # effectively external input. Atoms are not garbage collected.
+  defp origin_atom("provider"), do: :provider
+  defp origin_atom("sidecar"), do: :sidecar
+  defp origin_atom("upload"), do: :upload
+  defp origin_atom(_other), do: :provider
+
+  # Forced wins over SDH when both are set: a forced track subtitles only
+  # foreign dialogue rather than everything, which is the more consequential
+  # thing to know before selecting it.
   defp format_external_title(subtitle) do
-    lang_name = format_language_name(subtitle.language)
-    "#{lang_name} (External)"
+    name = format_language_name(subtitle.language)
+
+    cond do
+      subtitle.forced -> "#{name} (Forced)"
+      subtitle.hearing_impaired -> "#{name} (SDH)"
+      true -> name
+    end
   end
 
   # Format language code to display name (basic implementation)
