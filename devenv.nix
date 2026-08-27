@@ -409,6 +409,20 @@ in
       files = "^server/.*\\.rs$";
       pass_filenames = false;
     };
+    subsync-fmt = {
+      enable = true;
+      name = "cargo fmt (subsync)";
+      entry = "cargo fmt --manifest-path native/mydia_subsync/Cargo.toml -- --check";
+      files = "^native/mydia_subsync/.*\\.rs$";
+      pass_filenames = false;
+    };
+    subsync-clippy = {
+      enable = true;
+      name = "cargo clippy (subsync)";
+      entry = "cargo clippy --manifest-path native/mydia_subsync/Cargo.toml --all-targets -- -D warnings";
+      files = "^native/mydia_subsync/.*\\.rs$";
+      pass_filenames = false;
+    };
     plugins-check = {
       enable = true;
       name = "cargo fmt + clippy (wasm plugins)";

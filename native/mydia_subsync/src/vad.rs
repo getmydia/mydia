@@ -127,7 +127,7 @@ mod tests {
         // trailing `false` at frame 64 closes the second span, so it spans
         // 40ms to 640ms. Only the second survives the 500ms minimum.
         let mut flags = vec![true, true, true, false];
-        flags.extend(std::iter::repeat(true).take(60));
+        flags.extend(std::iter::repeat_n(true, 60));
         flags.push(false);
 
         assert_eq!(spans_from_flags(&flags, 10, 500), vec![(40, 640)]);

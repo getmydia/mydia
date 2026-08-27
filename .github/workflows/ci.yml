@@ -265,6 +265,9 @@ jobs:
       - name: wasm build
         run: devenv shell -- cargo build --manifest-path native/mydia_p2p_core/Cargo.toml --target wasm32-unknown-unknown --no-default-features
 
+      - name: Subsync tests
+        run: devenv shell -- cargo test --manifest-path native/mydia_subsync/Cargo.toml
+
   test-postgres:
     name: Test / PostgreSQL
     runs-on: ubuntu-latest
