@@ -8,7 +8,11 @@ defmodule Mydia.Jobs.SubtitleResync do
   streaming.
 
   A media file that no longer exists is a success rather than a failure. There
-  is nothing to re-sync and nothing to retry.
+  is nothing to re-sync and nothing to retry. The same applies to a
+  `media_file_id` that is not even a well-formed UUID: nothing enqueues that
+  today, but a `phx-value` on a client-facing control is forgeable, and
+  `Repo.get/2` would otherwise raise `Ecto.Query.CastError` and burn all three
+  attempts against a value that can never resolve.
   """
 
   use Oban.Worker,
@@ -28,7 +32,14 @@ defmodule Mydia.Jobs.SubtitleResync do
   @impl Oban.Worker
   @spec perform(Oban.Job.t()) :: :ok
   def perform(%Oban.Job{args: %{"media_file_id" => media_file_id, "track_ref" => track_ref}}) do
-    case Library.get_media_file(media_file_id) do
+    case Ecto.UUID.cast(media_file_id) do
+      :error -> :ok
+      {:ok, _uuid} -> resync(media_file_id, track_ref)
+    end
+  end
+
+  defp resync(media_file_id, track_ref) do
+    case Library.get_media_file(media_file_id, preload: [:library_path]) do
       nil ->
         :ok
 
