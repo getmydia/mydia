@@ -25,6 +25,18 @@ permissions:
 # want of security-events: write. Passing an expression to upload-sarif is not
 # an option: the reusable workflow types it as a boolean, and an expression
 # reaches it as a string.
+#
+# Both jobs must still declare security-events: write. The reusable workflow
+# hard-codes that permission on its own job, and a called workflow may not
+# request more than the calling job granted. GitHub checks that while it builds
+# the run graph, before any if: is evaluated, so withholding it on the fork job
+# failed the entire run at startup even on same-repo pull requests where that
+# job never ran. Declaring it hands a fork nothing under the default Actions
+# policy, which downgrades every write permission to read on a fork pull
+# request. That downgrade is the whole protection, so leave "Send write tokens
+# to workflows from pull requests" disabled for the org; enabling it would make
+# this a real grant. upload-sarif: false is a separate guard that stops the
+# upload step from running, and it has no bearing on the token.
 jobs:
   scan:
     name: Scan lockfiles
@@ -52,3 +64,4 @@ jobs:
     permissions:
       actions: read
       contents: read
+      security-events: write
