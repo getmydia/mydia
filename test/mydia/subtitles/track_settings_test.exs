@@ -105,5 +105,17 @@ defmodule Mydia.Subtitles.TrackSettingsTest do
 
       assert "is invalid" in errors_on(changeset).resync_state
     end
+
+    test "accepts too_few_cues as a resync state", %{media_file: media_file} do
+      assert {:ok, setting} =
+               TrackSettings.record_resync(media_file.id, "3", :too_few_cues, 0.4)
+
+      assert setting.resync_state == "too_few_cues"
+    end
+
+    test "returns a changeset error rather than raising for an unparseable media file id" do
+      assert {:error, changeset} = TrackSettings.record_resync("not-a-uuid", "3", :ok, 0.9)
+      assert %{media_file_id: [_ | _]} = errors_on(changeset)
+    end
   end
 end

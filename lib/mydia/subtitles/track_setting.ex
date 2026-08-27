@@ -24,7 +24,7 @@ defmodule Mydia.Subtitles.TrackSetting do
   # database.
   @max_offset_ms 600_000
 
-  @resync_states ~w(ok already_synced low_confidence implausible no_audio no_cues failed)
+  @resync_states ~w(ok already_synced low_confidence too_few_cues implausible no_audio no_cues failed)
 
   @type t :: %__MODULE__{
           id: binary(),

@@ -123,8 +123,7 @@ defmodule Mydia.Subtitles.TrackSettings do
     |> TrackSetting.changeset(
       Map.merge(attrs, %{
         media_file_id: media_file_id,
-        track_ref: track_ref,
-        offset_ms: existing.offset_ms || 0
+        track_ref: track_ref
       })
     )
     |> Repo.insert_or_update()
@@ -136,8 +135,15 @@ defmodule Mydia.Subtitles.TrackSettings do
     # cannot attribute to a named constraint and so re-raises as
     # ConstraintError. Catching both keeps callers adapter agnostic. Read
     # set_offset/3's doc before touching these two clauses.
-    Ecto.Query.CastError -> {:error, unknown_media_file_changeset(track_ref)}
-    Ecto.ConstraintError -> {:error, unknown_media_file_changeset(track_ref)}
+    Ecto.Query.CastError ->
+      {:error, unknown_media_file_changeset(track_ref)}
+
+    error in Ecto.ConstraintError ->
+      if error.type == :foreign_key do
+        {:error, unknown_media_file_changeset(track_ref)}
+      else
+        reraise error, __STACKTRACE__
+      end
   end
 
   defp unknown_media_file_changeset(track_ref) do
