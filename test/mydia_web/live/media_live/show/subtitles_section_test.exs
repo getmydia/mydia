@@ -153,10 +153,10 @@ defmodule MydiaWeb.MediaLive.Show.SubtitlesSectionTest do
 
       {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
 
-      assert has_element?(view, "#subtitle-offset-form-#{subtitle.id}")
+      assert has_element?(view, "#subtitle-offset-form-#{media_file.id}-#{subtitle.id}")
 
       view
-      |> element("#subtitle-offset-form-#{subtitle.id}")
+      |> element("#subtitle-offset-form-#{media_file.id}-#{subtitle.id}")
       |> render_change(%{"offset_ms" => "1500"})
 
       assert Mydia.Subtitles.TrackSettings.offset_ms(media_file.id, subtitle.id) == 1_500
@@ -168,7 +168,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitlesSectionTest do
       {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
 
       view
-      |> element("#subtitle-offset-form-#{subtitle.id}")
+      |> element("#subtitle-offset-form-#{media_file.id}-#{subtitle.id}")
       |> render_change(%{"offset_ms" => "9999999"})
 
       assert Mydia.Subtitles.TrackSettings.offset_ms(media_file.id, subtitle.id) == 0
@@ -249,7 +249,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitlesSectionTest do
       assert render(view) =~ "Rescan complete: 1 adopted"
 
       assert [subtitle] = Mydia.Subtitles.list_subtitles(media_file.id)
-      assert has_element?(view, "#subtitle-offset-form-#{subtitle.id}")
+      assert has_element?(view, "#subtitle-offset-form-#{media_file.id}-#{subtitle.id}")
     end
 
     # media_file_fixture/1 does not create a directory on disk by default
@@ -315,7 +315,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitlesSectionTest do
 
       # The embedded track: form present, badge present, no delete button
       # (there is no subtitles row, and so no file, to delete).
-      assert has_element?(view, "#subtitle-offset-form-2")
+      assert has_element?(view, "#subtitle-offset-form-#{media_file.id}-2")
       assert render(view) =~ "Embedded"
       refute has_element?(view, "[phx-click='delete_subtitle'][phx-value-subtitle-id='2']")
 
@@ -358,7 +358,50 @@ defmodule MydiaWeb.MediaLive.Show.SubtitlesSectionTest do
       {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
 
       assert has_element?(view, "#subtitles-section")
-      assert has_element?(view, "#subtitle-offset-form-#{subtitle.id}")
+      assert has_element?(view, "#subtitle-offset-form-#{media_file.id}-#{subtitle.id}")
+    end
+  end
+
+  describe "subtitle_track_row/1 DOM id uniqueness" do
+    # track_id for an embedded track is the ffprobe stream index, scoped to a
+    # single media file -- not a globally unique value. Two files in the same
+    # season routinely each have an embedded subtitle at the same index (e.g.
+    # both start their streams with index 2), so the row's DOM id has to fold
+    # in media_file_id or two rows in the same #subtitles-section collide.
+    test "gives two media files' same-index embedded track its own form id" do
+      file_a = %MediaFile{
+        id: "mf-a",
+        relative_path: "Show/Season 01/Show.S01E01.mkv",
+        library_path: %LibraryPath{path: "/media/tv"}
+      }
+
+      file_b = %MediaFile{
+        id: "mf-b",
+        relative_path: "Show/Season 01/Show.S01E02.mkv",
+        library_path: %LibraryPath{path: "/media/tv"}
+      }
+
+      track = %{
+        track_id: 2,
+        language: "eng",
+        title: "English",
+        format: "subrip",
+        origin: :embedded,
+        offset_ms: 0
+      }
+
+      html =
+        render_component(&Components.subtitles_section/1,
+          media_item: %{media_files: [], episodes: [%{media_files: [file_a, file_b]}]},
+          media_file_subtitle_tracks: %{"mf-a" => [track], "mf-b" => [track]}
+        )
+
+      assert html =~ ~s|id="subtitle-offset-form-mf-a-2"|
+      assert html =~ ~s|id="subtitle-offset-form-mf-b-2"|
+      # The bug this guards against: without media_file_id folded in, both
+      # rows render the exact same id, which is what makes LiveView's DOM
+      # patching unpredictable once two files share a section.
+      refute html =~ ~s|id="subtitle-offset-form-2"|
     end
   end
 end

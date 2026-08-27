@@ -24,7 +24,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleComponents do
 
       <div class="flex items-center gap-1 shrink-0">
         <form
-          id={"subtitle-offset-form-#{@track.track_id}"}
+          id={"subtitle-offset-form-#{@media_file_id}-#{@track.track_id}"}
           phx-change="set_subtitle_offset"
           phx-value-media-file-id={@media_file_id}
           phx-value-track-ref={@track.track_id}
