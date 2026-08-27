@@ -392,16 +392,41 @@ defmodule Mydia.Collections do
   Adds multiple items to a manual collection.
 
   Items are added at the end in the order provided.
-  Returns {:ok, count} where count is the number of items added.
+  Returns `{:ok, count}` where count is the number of items added, or
+  `{:error, :not_found}` if any id does not reference an existing media item.
   """
   @spec add_items(Collection.t(), [binary()]) ::
-          {:ok, non_neg_integer()} | {:error, :smart_collection}
+          {:ok, non_neg_integer()} | {:error, :smart_collection | :not_found}
   def add_items(%Collection{type: "smart"}, _media_item_ids) do
     {:error, :smart_collection}
   end
 
   def add_items(%Collection{type: "manual"} = collection, media_item_ids)
       when is_list(media_item_ids) do
+    if all_media_items_exist?(media_item_ids) do
+      do_add_items(collection, media_item_ids)
+    else
+      {:error, :not_found}
+    end
+  end
+
+  # Repo.insert_all/3 takes no changeset, so Mydia.Repo.ForeignKeyGuard cannot
+  # turn a foreign key violation below into a changeset error: on SQLite it
+  # raises. Check the ids up front instead. `on_conflict: :nothing` tolerates a
+  # duplicate, but a reference to something that does not exist is a different
+  # thing and should not be dropped silently.
+  defp all_media_items_exist?(media_item_ids) do
+    ids = Enum.uniq(media_item_ids)
+    found = Repo.all(from(m in MediaItem, where: m.id in ^ids, select: m.id)) |> MapSet.new()
+
+    Enum.all?(ids, &MapSet.member?(found, &1))
+  rescue
+    # PostgreSQL raises while binding a non-UUID-shaped id. It certainly does
+    # not exist.
+    Ecto.Query.CastError -> false
+  end
+
+  defp do_add_items(collection, media_item_ids) do
     max_position =
       Repo.one(
         from(ci in CollectionItem,
