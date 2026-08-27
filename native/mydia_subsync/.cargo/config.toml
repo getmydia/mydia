@@ -1,0 +1,19 @@
+[target.'cfg(target_os = "macos")']
+rustflags = [
+    "-C", "link-arg=-undefined",
+    "-C", "link-arg=dynamic_lookup",
+]
+
+# On musl hosts (the Alpine release/e2e images, which now use the rustup
+# toolchain to get the wasm32-wasip2 target for plugin guests) the default
+# crt-static feature forbids producing a cdylib. This NIF is a cdylib
+# dlopen'd by the BEAM, so it must be dynamically linked: turn crt-static off.
+#
+# This mirrors native/mydia_p2p/.cargo/config.toml exactly, and for the same
+# reason. Omitting it is not a subtle degradation: `mix compile` fails outright
+# with "cannot produce cdylib for `mydia_subsync` as the target
+# x86_64-unknown-linux-musl does not support these crate types", which breaks
+# both the release image and the player E2E image while every glibc build
+# (nix, devenv, CI's Rust job) stays green.
+[target.'cfg(target_env = "musl")']
+rustflags = ["-C", "target-feature=-crt-static"]
