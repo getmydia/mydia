@@ -312,6 +312,86 @@ void main() {
     });
   });
 
+  group('effectiveSubtitleDelayMs', () {
+    test('is zero when nothing is stored and nothing is nudged', () {
+      expect(
+        effectiveSubtitleDelayMs(
+          storedOffsetMs: 0,
+          bakedOffsetMs: 0,
+          nudgeMs: 0,
+        ),
+        0,
+      );
+    });
+
+    test('a server-fetched body needs no further delay', () {
+      // The server already shifted the body by the stored offset, so
+      // applying it again through sub-delay would double it.
+      expect(
+        effectiveSubtitleDelayMs(
+          storedOffsetMs: 2000,
+          bakedOffsetMs: 2000,
+          nudgeMs: 0,
+        ),
+        0,
+      );
+    });
+
+    test('an mpv-native track carries the full stored offset', () {
+      // mpv read this track from the container; the server never touched it.
+      expect(
+        effectiveSubtitleDelayMs(
+          storedOffsetMs: 2000,
+          bakedOffsetMs: 0,
+          nudgeMs: 0,
+        ),
+        2000,
+      );
+    });
+
+    test('a nudge adds on top of a baked-in body', () {
+      expect(
+        effectiveSubtitleDelayMs(
+          storedOffsetMs: 2000,
+          bakedOffsetMs: 2000,
+          nudgeMs: 300,
+        ),
+        300,
+      );
+    });
+
+    test('a nudge adds on top of an mpv-native track', () {
+      expect(
+        effectiveSubtitleDelayMs(
+          storedOffsetMs: 2000,
+          bakedOffsetMs: 0,
+          nudgeMs: -300,
+        ),
+        1700,
+      );
+    });
+
+    test('saving a nudge leaves the effective delay unchanged', () {
+      // This is what makes save free of a refetch: storedOffsetMs absorbs
+      // the nudge and nudgeMs resets, and the result does not move.
+      const before = 300;
+
+      final beforeSave = effectiveSubtitleDelayMs(
+        storedOffsetMs: 2000,
+        bakedOffsetMs: 2000,
+        nudgeMs: before,
+      );
+
+      final afterSave = effectiveSubtitleDelayMs(
+        storedOffsetMs: 2000 + before,
+        bakedOffsetMs: 2000,
+        nudgeMs: 0,
+      );
+
+      expect(afterSave, beforeSave);
+    });
+  });
+
   group('failed-fetch retry (regression coverage)', () {
     test(
         'a track whose fetch failed can be requested again, instead of '

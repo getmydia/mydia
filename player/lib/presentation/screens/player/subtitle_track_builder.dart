@@ -159,3 +159,34 @@ SubtitleTrack? pendingSubtitleSelectionAfterFailure({
   if (requestGeneration != currentGeneration) return currentPending;
   return appliedSelection;
 }
+
+/// The subtitle delay to hand mpv right now, in milliseconds.
+///
+/// Three values, one subtraction:
+///
+///  - [storedOffsetMs] is what the server has persisted for this track,
+///    fetched by the `subtitleTrackSettings` query.
+///  - [bakedOffsetMs] is what the server already shifted into the body
+///    currently loaded. It equals [storedOffsetMs] for a track fetched over
+///    `SubtitleContent`, because `Delivery.content/3` applies the offset
+///    before returning, and it is zero for an mpv-native track that mpv read
+///    out of the container itself, which the server never saw.
+///  - [nudgeMs] is the live, unsaved adjustment from the +/- controls. It
+///    resets to zero on track change.
+///
+/// Subtracting [bakedOffsetMs] is what prevents a double-apply. A
+/// server-shifted body plus an mpv `sub-delay` of the same magnitude would be
+/// wrong by twice the offset, in the direction that reads as "the feature is
+/// broken" rather than "the feature is missing".
+///
+/// It also makes saving cheap. Persisting sets `storedOffsetMs += nudgeMs`
+/// and `nudgeMs = 0`, which leaves this expression at exactly the same
+/// value, so nothing refetches, nothing flickers, and the OSD number does
+/// not jump.
+int effectiveSubtitleDelayMs({
+  required int storedOffsetMs,
+  required int bakedOffsetMs,
+  required int nudgeMs,
+}) {
+  return storedOffsetMs - bakedOffsetMs + nudgeMs;
+}
