@@ -106,7 +106,7 @@ defmodule MydiaWeb.MediaLive.Show.Loaders do
 
   @doc """
   Every subtitle track for every media file of a media item, with its stored
-  offset attached.
+  offset and last re-sync outcome attached.
 
   Reads `Extractor.list_subtitle_tracks/2` rather than `Subtitles.list_subtitles/1`
   so embedded tracks appear too. Embedded tracks are where bad timing is most
@@ -117,19 +117,27 @@ defmodule MydiaWeb.MediaLive.Show.Loaders do
   Covers episode media files as well as the item's own, via
   `Helpers.all_media_files/1`: `media_item.media_files` alone is always
   empty for a TV show.
+
+  `resync_state` is `nil` for a track that has never been auto-synced, either
+  automatically or manually; the UI treats that as "nothing to report" rather
+  than as a declined outcome.
   """
   def load_media_file_subtitle_tracks(media_item) do
     media_item
     |> Helpers.all_media_files()
     |> Enum.map(fn media_file ->
       offsets = Subtitles.TrackSettings.offsets_for_media_file(media_file.id)
+      resync_states = Subtitles.TrackSettings.resync_states_for_media_file(media_file.id)
 
       tracks =
         media_file
         |> Subtitles.Extractor.list_subtitle_tracks()
         |> Enum.map(fn track ->
           ref = to_string(track.track_id)
-          Map.put(track, :offset_ms, Map.get(offsets, ref, 0))
+
+          track
+          |> Map.put(:offset_ms, Map.get(offsets, ref, 0))
+          |> Map.put(:resync_state, Map.get(resync_states, ref))
         end)
 
       {media_file.id, tracks}

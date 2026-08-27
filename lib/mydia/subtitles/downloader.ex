@@ -28,6 +28,7 @@ defmodule Mydia.Subtitles.Downloader do
   require Logger
   alias Mydia.Repo
   alias Mydia.Subtitles.Format
+  alias Mydia.Subtitles.ResyncEnqueue
   alias Mydia.Subtitles.Sidecars
   alias Mydia.Subtitles.Subtitle
   alias Mydia.Library.MediaFile
@@ -101,6 +102,8 @@ defmodule Mydia.Subtitles.Downloader do
         provider: provider_type,
         path: final_path
       )
+
+      ResyncEnqueue.enqueue(media_file_id, subtitle.id)
 
       {:ok, subtitle}
     else

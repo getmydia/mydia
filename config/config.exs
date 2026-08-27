@@ -285,7 +285,12 @@ config :mydia, Oban,
     # A user-started import can run for hours over a large library. It gets its
     # own single slot so it can never starve :media, which is only concurrency
     # 3 and also carries library, music and book scans.
-    imports: 1
+    imports: 1,
+    # Subtitle re-sync decodes a whole audio track per job. It gets its own slot
+    # rather than sharing :segments so a season of intro detection cannot delay
+    # a re-sync a user just requested by clicking a button, and rather than
+    # sharing :analysis so heavy decoding cannot starve file analysis.
+    subsync: 1
   ],
   plugins: [
     # Keep completed jobs for 7 days

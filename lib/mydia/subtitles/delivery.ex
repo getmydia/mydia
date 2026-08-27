@@ -99,6 +99,22 @@ defmodule Mydia.Subtitles.Delivery do
     Path.join([cache_dir(), media_file_id, "#{track_id}-#{stamp}.#{format}"])
   end
 
+  @doc """
+  Converts a stored `track_ref` into the shape `content/3` dispatches on.
+
+  An embedded track's ref is a stringified ffprobe stream index and must arrive
+  as an integer; a sidecar's ref is a UUID and must stay a binary. `content/3`
+  distinguishes the two by type alone, so a caller holding a `track_ref` from
+  `subtitle_track_settings` has to translate first.
+  """
+  @spec track_id_from_ref(String.t()) :: String.t() | integer()
+  def track_id_from_ref(track_ref) when is_binary(track_ref) do
+    case Integer.parse(track_ref) do
+      {index, ""} -> index
+      _ -> track_ref
+    end
+  end
+
   ## Private
 
   # `track_ref` is the string form for both kinds of track, matching what

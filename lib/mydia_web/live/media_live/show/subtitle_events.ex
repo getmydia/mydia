@@ -144,6 +144,30 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
   # crashing the LiveView.
   def nudge_subtitle_offset(_params, socket), do: {:noreply, socket}
 
+  # Routed through Mydia.Subtitles.ResyncEnqueue.enqueue/2, the same helper
+  # Mydia.Subtitles.Downloader and Mydia.Subtitles.Sidecars call after a
+  # subtitle arrives automatically, so a manual click behaves exactly like
+  # those triggers: same uniqueness window, same non-fatal failure handling.
+  # The click only starts the job; the outcome shows up later as this track's
+  # resync_state, once MediaLive.Show.Loaders reloads media_file_subtitle_tracks.
+  def resync_subtitle(%{"media-file-id" => media_file_id, "track-ref" => track_ref}, socket) do
+    case Mydia.Subtitles.ResyncEnqueue.enqueue(media_file_id, track_ref) do
+      :ok ->
+        {:noreply, put_flash(socket, :info, "Re-syncing this subtitle in the background.")}
+
+      :error ->
+        {:noreply, put_flash(socket, :error, "Could not start the re-sync.")}
+    end
+  end
+
+  # A hand-crafted payload missing either key. The rendered button's
+  # phx-value-media-file-id and phx-value-track-ref always send both, so this
+  # only guards a crafted channel push, the same class of input
+  # set_subtitle_offset/2 and nudge_subtitle_offset/2 above guard against.
+  # Without it, a missing key would raise FunctionClauseError and take the
+  # whole LiveView process down instead of landing here.
+  def resync_subtitle(_params, socket), do: {:noreply, socket}
+
   # Runs off the LiveView process via start_async, matching every other
   # rescan-shaped action in this LiveView (rescan_movie, rescan_series,
   # rescan_season, rescan_season_files in FileEvents). Mydia.Subtitles.Sidecars.reconcile/1

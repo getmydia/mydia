@@ -225,6 +225,43 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEventsTest do
     end
   end
 
+  describe "resync_subtitle/2" do
+    # No Oban instance is running in this unit-test module (this app skips it
+    # entirely under `testing: :manual`/`engine: false`, see config/test.exs),
+    # so `Mydia.Subtitles.ResyncEnqueue.enqueue/2` always takes its rescue path
+    # here and returns :error. The success flash is exercised end to end in
+    # the connected LiveView test instead, which starts its own Oban instance.
+    test "flashes an error rather than crashing when the enqueue fails" do
+      {:noreply, socket} =
+        SubtitleEvents.resync_subtitle(
+          %{"media-file-id" => Ecto.UUID.generate(), "track-ref" => "3"},
+          socket()
+        )
+
+      assert flash(socket)["error"] == "Could not start the re-sync."
+    end
+
+    # The rendered button always sends both phx-value-* attributes, but a
+    # hand-crafted channel push is not bound by that. Before the fallback
+    # clause existed, either of these raised FunctionClauseError and took the
+    # LiveView process down.
+    test "a payload missing the media-file-id key is ignored rather than raising" do
+      {:noreply, socket} = SubtitleEvents.resync_subtitle(%{"track-ref" => "3"}, socket())
+
+      assert flash(socket) == %{}
+    end
+
+    test "a payload missing the track-ref key is ignored rather than raising" do
+      {:noreply, socket} =
+        SubtitleEvents.resync_subtitle(
+          %{"media-file-id" => Ecto.UUID.generate()},
+          socket()
+        )
+
+      assert flash(socket) == %{}
+    end
+  end
+
   describe "handle_download_subtitle_async/2" do
     defp socket_with_media_item(assigns \\ %{}) do
       socket(Map.merge(%{media_item: %{media_files: []}}, assigns))

@@ -56,6 +56,14 @@
         lockFile = ../../plugins/simkl_sync/Cargo.lock;
       };
 
+      # Vendored crates for the subtitle re-sync NIF. Like the p2p NIF above,
+      # this is its own crate with its own lock, so it needs both this binding
+      # and a `.cargo/config.toml` in postConfigure or the no-network sandbox
+      # build fails without printing an error.
+      subsyncCargoDeps = pkgs.rustPlatform.importCargoLock {
+        lockFile = ../../native/mydia_subsync/Cargo.lock;
+      };
+
       # Precompiled wasmex NIF (rustler_precompiled downloads this at compile
       # time, which the Nix sandbox forbids). Pre-fetch the release tarball and
       # point RUSTLER_PRECOMPILED_GLOBAL_CACHE_PATH at it so the wasmex build
@@ -373,6 +381,17 @@
 
             [source.vendored-sources]
             directory = "${simklSyncCargoDeps}"
+            CARGO_EOF
+
+            # Same for the subtitle re-sync NIF, compiled by rustler during
+            # `mix compile`.
+            mkdir -p native/mydia_subsync/.cargo
+            cat > native/mydia_subsync/.cargo/config.toml <<CARGO_EOF
+            [source.crates-io]
+            replace-with = "vendored-sources"
+
+            [source.vendored-sources]
+            directory = "${subsyncCargoDeps}"
             CARGO_EOF
           '';
 

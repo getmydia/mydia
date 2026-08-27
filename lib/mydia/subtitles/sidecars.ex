@@ -21,6 +21,7 @@ defmodule Mydia.Subtitles.Sidecars do
   alias Mydia.Library.MediaFile
   alias Mydia.Repo
   alias Mydia.Subtitles.Format
+  alias Mydia.Subtitles.ResyncEnqueue
   alias Mydia.Subtitles.Subtitle
   alias Mydia.Subtitles.TrackSettings
 
@@ -470,7 +471,8 @@ defmodule Mydia.Subtitles.Sidecars do
       |> Subtitle.changeset(attrs)
       |> Repo.insert()
       |> case do
-        {:ok, _subtitle} ->
+        {:ok, subtitle} ->
+          ResyncEnqueue.enqueue(media_file.id, subtitle.id)
           :ok
 
         {:error, changeset} ->

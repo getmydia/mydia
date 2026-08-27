@@ -62,6 +62,29 @@ defmodule Mydia.Subtitles.TrackSettingsTest do
     end
   end
 
+  describe "resync_states_for_media_file/1" do
+    test "returns a map keyed by track_ref, omitting tracks never attempted", %{
+      media_file: media_file
+    } do
+      {:ok, _} = TrackSettings.record_resync(media_file.id, "3", :low_confidence, 0.09)
+      {:ok, _} = TrackSettings.record_resync(media_file.id, "4", :ok, 0.95)
+      {:ok, _} = TrackSettings.set_offset(media_file.id, "5", 100)
+
+      assert TrackSettings.resync_states_for_media_file(media_file.id) == %{
+               "3" => "low_confidence",
+               "4" => "ok"
+             }
+    end
+
+    test "returns an empty map when nothing is stored", %{media_file: media_file} do
+      assert TrackSettings.resync_states_for_media_file(media_file.id) == %{}
+    end
+
+    test "returns an empty map for an unparseable media file id" do
+      assert TrackSettings.resync_states_for_media_file("not-a-uuid") == %{}
+    end
+  end
+
   describe "delete_for_track/2" do
     test "removes the row", %{media_file: media_file} do
       {:ok, _} = TrackSettings.set_offset(media_file.id, "3", 100)
@@ -76,6 +99,46 @@ defmodule Mydia.Subtitles.TrackSettingsTest do
 
     test "is a no-op for an unparseable media file id" do
       assert :ok = TrackSettings.delete_for_track("not-a-uuid", "3")
+    end
+  end
+
+  describe "record_resync/4" do
+    test "stores state and score without touching the offset", %{media_file: media_file} do
+      {:ok, _} = TrackSettings.set_offset(media_file.id, "3", 1200)
+
+      assert {:ok, setting} =
+               TrackSettings.record_resync(media_file.id, "3", :low_confidence, 0.09)
+
+      assert setting.offset_ms == 1200
+      assert setting.resync_state == "low_confidence"
+      assert setting.resync_score == 0.09
+      assert setting.resync_at != nil
+    end
+
+    test "creates a row for a track that has no offset yet", %{media_file: media_file} do
+      assert {:ok, setting} = TrackSettings.record_resync(media_file.id, "4", :no_audio, nil)
+
+      assert setting.offset_ms == 0
+      assert setting.resync_state == "no_audio"
+    end
+
+    test "rejects a state outside the known set", %{media_file: media_file} do
+      assert {:error, changeset} =
+               TrackSettings.record_resync(media_file.id, "3", :nonsense, 1.0)
+
+      assert "is invalid" in errors_on(changeset).resync_state
+    end
+
+    test "accepts too_few_cues as a resync state", %{media_file: media_file} do
+      assert {:ok, setting} =
+               TrackSettings.record_resync(media_file.id, "3", :too_few_cues, 0.4)
+
+      assert setting.resync_state == "too_few_cues"
+    end
+
+    test "returns a changeset error rather than raising for an unparseable media file id" do
+      assert {:error, changeset} = TrackSettings.record_resync("not-a-uuid", "3", :ok, 0.9)
+      assert %{media_file_id: [_ | _]} = errors_on(changeset)
     end
   end
 end

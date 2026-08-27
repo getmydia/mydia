@@ -416,6 +416,9 @@ defmodule MydiaWeb.MediaLive.Show do
   def handle_event("nudge_subtitle_offset", params, socket),
     do: SubtitleEvents.nudge_subtitle_offset(params, socket)
 
+  def handle_event("resync_subtitle", params, socket),
+    do: SubtitleEvents.resync_subtitle(params, socket)
+
   def handle_event("rescan_subtitles", params, socket),
     do: SubtitleEvents.rescan_subtitles(params, socket)
 
