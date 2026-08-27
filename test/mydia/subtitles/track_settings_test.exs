@@ -78,4 +78,32 @@ defmodule Mydia.Subtitles.TrackSettingsTest do
       assert :ok = TrackSettings.delete_for_track("not-a-uuid", "3")
     end
   end
+
+  describe "record_resync/4" do
+    test "stores state and score without touching the offset", %{media_file: media_file} do
+      {:ok, _} = TrackSettings.set_offset(media_file.id, "3", 1200)
+
+      assert {:ok, setting} =
+               TrackSettings.record_resync(media_file.id, "3", :low_confidence, 0.09)
+
+      assert setting.offset_ms == 1200
+      assert setting.resync_state == "low_confidence"
+      assert setting.resync_score == 0.09
+      assert setting.resync_at != nil
+    end
+
+    test "creates a row for a track that has no offset yet", %{media_file: media_file} do
+      assert {:ok, setting} = TrackSettings.record_resync(media_file.id, "4", :no_audio, nil)
+
+      assert setting.offset_ms == 0
+      assert setting.resync_state == "no_audio"
+    end
+
+    test "rejects a state outside the known set", %{media_file: media_file} do
+      assert {:error, changeset} =
+               TrackSettings.record_resync(media_file.id, "3", :nonsense, 1.0)
+
+      assert "is invalid" in errors_on(changeset).resync_state
+    end
+  end
 end

@@ -96,6 +96,56 @@ defmodule Mydia.Subtitles.TrackSettings do
     |> Ecto.Changeset.add_error(:media_file_id, "does not exist")
   end
 
+  @doc """
+  Records the outcome of a re-sync attempt without changing the stored offset.
+
+  A skipped or failed attempt still writes a row. Without one the UI cannot
+  distinguish "never attempted" from "attempted and declined", and every ingest
+  of the same file would retry work already known to be fruitless.
+
+  `state` is an atom from a fixed set, converted with `Atom.to_string/1` on the
+  way in. Nothing here converts a stored string back into an atom.
+  """
+  @spec record_resync(binary(), String.t(), atom(), float() | nil) ::
+          {:ok, TrackSetting.t()} | {:error, Ecto.Changeset.t()}
+  def record_resync(media_file_id, track_ref, state, score) do
+    attrs = %{
+      resync_state: Atom.to_string(state),
+      resync_score: score,
+      resync_at: DateTime.utc_now() |> DateTime.truncate(:second)
+    }
+
+    existing =
+      Repo.get_by(TrackSetting, media_file_id: media_file_id, track_ref: track_ref) ||
+        %TrackSetting{}
+
+    existing
+    |> TrackSetting.changeset(
+      Map.merge(attrs, %{
+        media_file_id: media_file_id,
+        track_ref: track_ref,
+        offset_ms: existing.offset_ms || 0
+      })
+    )
+    |> Repo.insert_or_update()
+  rescue
+    # Mirrors set_offset/3 in this module, and for the same reason. A malformed
+    # media_file_id fails differently per adapter: PostgreSQL raises CastError
+    # while binding the query parameter, while SQLite casts any string as a
+    # valid :binary_id and fails later on the foreign key, which ecto_sqlite3
+    # cannot attribute to a named constraint and so re-raises as
+    # ConstraintError. Catching both keeps callers adapter agnostic. Read
+    # set_offset/3's doc before touching these two clauses.
+    Ecto.Query.CastError -> {:error, unknown_media_file_changeset(track_ref)}
+    Ecto.ConstraintError -> {:error, unknown_media_file_changeset(track_ref)}
+  end
+
+  defp unknown_media_file_changeset(track_ref) do
+    %TrackSetting{}
+    |> TrackSetting.changeset(%{track_ref: track_ref})
+    |> Ecto.Changeset.add_error(:media_file_id, "does not exist")
+  end
+
   @doc "Every stored offset for a media file, keyed by `track_ref`."
   @spec offsets_for_media_file(binary()) :: %{String.t() => integer()}
   def offsets_for_media_file(media_file_id) do
