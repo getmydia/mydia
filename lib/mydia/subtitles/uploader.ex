@@ -151,15 +151,26 @@ defmodule Mydia.Subtitles.Uploader do
   # final path itself. mkdir_p mirrors Downloader's defensive call, but
   # deliberately the non-raising form: the media directory normally already
   # exists (the video file lives there), so this never actually attempts a
-  # write; File.write/2 below is what surfaces a read-only mount, and it
+  # write; File.write/3 below is what surfaces a read-only mount, and it
   # returns an error tuple rather than raising.
+  #
+  # :exclusive closes the gap between destination/3's own File.exists?
+  # check and this write: two uploads racing for the same path would both
+  # pass that check, and without :exclusive the second write would silently
+  # overwrite the first's bytes on disk while both still insert their own
+  # database row. With it, the loser gets :eexist here instead, reported the
+  # same as if destination/3 had caught it up front.
   defp write(path, content) do
     with :ok <- File.mkdir_p(Path.dirname(path)),
-         :ok <- File.write(path, content) do
+         :ok <- File.write(path, content, [:exclusive]) do
       :ok
     else
       {:error, reason} -> {:error, write_error_message(path, reason)}
     end
+  end
+
+  defp write_error_message(_path, :eexist) do
+    "There is already a subtitle for that language. Delete it first."
   end
 
   defp write_error_message(path, reason) when reason in [:eacces, :erofs] do
