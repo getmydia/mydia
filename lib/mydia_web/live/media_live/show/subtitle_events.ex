@@ -349,6 +349,17 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
   defp download_error_message(:media_file_path_not_resolved),
     do: "the file's location on disk could not be resolved."
 
+  defp download_error_message(:subtitle_already_exists),
+    do: "there is already a subtitle for that language. Delete it first."
+
+  defp download_error_message({:owned_by_other_media_file, _owner_id}),
+    do:
+      "this file shares its filename with another file in the same folder. " <>
+        "Try downloading from that file instead."
+
+  defp download_error_message(:invalid_language),
+    do: "that provider returned an invalid language code."
+
   defp download_error_message({:unsupported_format, _format}),
     do: "that subtitle format is not supported."
 
