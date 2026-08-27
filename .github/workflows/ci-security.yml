@@ -31,8 +31,12 @@ permissions:
 # request more than the calling job granted. GitHub checks that while it builds
 # the run graph, before any if: is evaluated, so withholding it on the fork job
 # failed the entire run at startup even on same-repo pull requests where that
-# job never ran. On a fork the token stays read-only regardless of what is
-# declared here, and upload-sarif: false keeps the upload step from running.
+# job never ran. Declaring it hands a fork nothing under the default Actions
+# policy, which downgrades every write permission to read on a fork pull
+# request. That downgrade is the whole protection, so leave "Send write tokens
+# to workflows from pull requests" disabled for the org; enabling it would make
+# this a real grant. upload-sarif: false is a separate guard that stops the
+# upload step from running, and it has no bearing on the token.
 jobs:
   scan:
     name: Scan lockfiles
