@@ -39,7 +39,7 @@ defmodule MydiaWeb.MediaLive.Show do
       Phoenix.PubSub.subscribe(Mydia.PubSub, "transcodes")
     end
 
-    media_item = load_media_item(id)
+    media_item = load_media_item(socket.assigns.current_scope, id)
     quality_profiles = Settings.list_quality_profiles()
 
     default_quality_profile_name =
@@ -491,7 +491,7 @@ defmodule MydiaWeb.MediaLive.Show do
   @impl true
   def handle_info({:download_created, download}, socket) do
     if download_for_media?(download, socket.assigns.media_item) do
-      media_item = load_media_item(socket.assigns.media_item.id)
+      media_item = load_media_item(socket.assigns.current_scope, socket.assigns.media_item.id)
       downloads_with_status = load_downloads_with_status(media_item)
       timeline_events = load_timeline_events(media_item, socket.assigns.current_user)
 
@@ -503,7 +503,11 @@ defmodule MydiaWeb.MediaLive.Show do
 
           socket.assigns.auto_searching_season &&
             download.episode_id &&
-              episode_in_season?(download.episode_id, socket.assigns.auto_searching_season) ->
+              episode_in_season?(
+                socket.assigns.current_scope,
+                download.episode_id,
+                socket.assigns.auto_searching_season
+              ) ->
             put_flash(socket, :info, "Download started: #{download.title}")
 
           socket.assigns.auto_searching_episode &&
@@ -529,7 +533,7 @@ defmodule MydiaWeb.MediaLive.Show do
 
   def handle_info({:download_updated, _download_id}, socket) do
     # Reload media item and downloads with status
-    media_item = load_media_item(socket.assigns.media_item.id)
+    media_item = load_media_item(socket.assigns.current_scope, socket.assigns.media_item.id)
     downloads_with_status = load_downloads_with_status(media_item)
     timeline_events = load_timeline_events(media_item, socket.assigns.current_user)
 
@@ -604,7 +608,7 @@ defmodule MydiaWeb.MediaLive.Show do
     # If auto_searching_episode is still set after timeout, reset it and show message
     socket =
       if socket.assigns.auto_searching_episode == episode_id do
-        episode = Media.get_episode!(episode_id)
+        episode = Media.get_episode!(socket.assigns.current_scope, episode_id)
 
         socket
         |> assign(:auto_searching_episode, nil)

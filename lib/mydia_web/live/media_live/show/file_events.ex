@@ -11,7 +11,7 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
   alias MydiaWeb.Live.Authorization
 
   import MydiaWeb.MediaLive.Show.Loaders,
-    only: [load_media_item: 1, load_transcode_jobs: 1]
+    only: [load_media_item: 2, load_transcode_jobs: 1]
 
   import MydiaWeb.MediaLive.Show.Helpers,
     only: [get_season_media_files: 2, refresh_files: 1, provider_label: 1]
@@ -120,7 +120,7 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
      |> assign(:reidentifying, false)
      |> assign(:show_reidentify_modal, false)
      |> assign(:reidentify_candidates, [])
-     |> assign(:media_item, load_media_item(media_item.id))
+     |> assign(:media_item, load_media_item(socket.assigns.current_scope, media_item.id))
      |> put_flash(
        :info,
        "Switched to #{provider_label(target)}. Episodes were re-matched; " <>
@@ -159,7 +159,7 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
       {:ok, _updated_item} ->
         {:noreply,
          socket
-         |> assign(:media_item, load_media_item(media_item.id))
+         |> assign(:media_item, load_media_item(socket.assigns.current_scope, media_item.id))
          |> put_flash(:info, "Metadata refreshed#{ambiguous_note(media_item)}")}
 
       {:error, :missing_provider_id} ->
@@ -219,6 +219,8 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
     if media_item.type != "tv_show" do
       {:noreply, put_flash(socket, :error, "Re-scan is only available for TV shows")}
     else
+      scope = socket.assigns.current_scope
+
       {:noreply,
        socket
        |> put_flash(:info, "Re-scanning series: discovering new files and refreshing metadata...")
@@ -228,7 +230,7 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
          case scan_result do
            {:ok, _result} ->
              updated_media_item =
-               Media.get_media_item!(media_item.id,
+               Media.get_media_item!(scope, media_item.id,
                  preload: [episodes: [media_files: :library_path]]
                )
 
@@ -250,6 +252,8 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
     if media_item.type != "tv_show" do
       {:noreply, put_flash(socket, :error, "Re-scan is only available for TV shows")}
     else
+      scope = socket.assigns.current_scope
+
       {:noreply,
        socket
        |> assign(:rescanning_season, season_num)
@@ -263,7 +267,7 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
          case scan_result do
            {:ok, _result} ->
              updated_media_item =
-               Media.get_media_item!(media_item.id,
+               Media.get_media_item!(scope, media_item.id,
                  preload: [episodes: [media_files: :library_path]]
                )
 
@@ -284,6 +288,8 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
     if media_item.type != "movie" do
       {:noreply, put_flash(socket, :error, "Re-scan is only available for movies")}
     else
+      scope = socket.assigns.current_scope
+
       {:noreply,
        socket
        |> put_flash(:info, "Re-scanning movie: discovering new files and refreshing metadata...")
@@ -293,7 +299,7 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
          case scan_result do
            {:ok, _result} ->
              updated_media_item =
-               Media.get_media_item!(media_item.id, preload: [media_files: :library_path])
+               Media.get_media_item!(scope, media_item.id, preload: [media_files: :library_path])
 
              all_media_files = updated_media_item.media_files
              refresh_result = refresh_files(all_media_files)
@@ -341,13 +347,19 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
         {:ok, _} ->
           {:noreply,
            socket
-           |> assign(:media_item, load_media_item(socket.assigns.media_item.id))
+           |> assign(
+             :media_item,
+             load_media_item(socket.assigns.current_scope, socket.assigns.media_item.id)
+           )
            |> put_flash(:info, delete_file_success_message(delete_files))}
 
         {:ok, _, :file_delete_failed} ->
           {:noreply,
            socket
-           |> assign(:media_item, load_media_item(socket.assigns.media_item.id))
+           |> assign(
+             :media_item,
+             load_media_item(socket.assigns.current_scope, socket.assigns.media_item.id)
+           )
            |> put_flash(
              :error,
              "Removed the file record, but the file on disk could not be deleted. " <>
@@ -417,7 +429,7 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
   end
 
   def show_rename_modal(_params, socket) do
-    media_item = load_media_item(socket.assigns.media_item.id)
+    media_item = load_media_item(socket.assigns.current_scope, socket.assigns.media_item.id)
 
     rename_previews =
       Mydia.Library.FileRenamer.generate_rename_previews_for_media_item(media_item)
@@ -460,7 +472,10 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
       {:ok, _} ->
         {:noreply,
          socket
-         |> assign(:media_item, load_media_item(socket.assigns.media_item.id))
+         |> assign(
+           :media_item,
+           load_media_item(socket.assigns.current_scope, socket.assigns.media_item.id)
+         )
          |> put_flash(:info, "Marked as preferred version")}
 
       {:error, _changeset} ->
@@ -481,7 +496,10 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
     {:noreply,
      socket
      |> assign(:refreshing_file_metadata, false)
-     |> assign(:media_item, load_media_item(socket.assigns.media_item.id))
+     |> assign(
+       :media_item,
+       load_media_item(socket.assigns.current_scope, socket.assigns.media_item.id)
+     )
      |> put_flash(:info, message)}
   end
 
@@ -517,7 +535,10 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
     {:noreply,
      socket
      |> assign(:rescanning_season, nil)
-     |> assign(:media_item, load_media_item(socket.assigns.media_item.id))
+     |> assign(
+       :media_item,
+       load_media_item(socket.assigns.current_scope, socket.assigns.media_item.id)
+     )
      |> put_flash(:info, message)}
   end
 
@@ -544,7 +565,10 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
 
     {:noreply,
      socket
-     |> assign(:media_item, load_media_item(socket.assigns.media_item.id))
+     |> assign(
+       :media_item,
+       load_media_item(socket.assigns.current_scope, socket.assigns.media_item.id)
+     )
      |> put_flash(:info, message)}
   end
 
@@ -576,7 +600,10 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
 
     {:noreply,
      socket
-     |> assign(:media_item, load_media_item(socket.assigns.media_item.id))
+     |> assign(
+       :media_item,
+       load_media_item(socket.assigns.current_scope, socket.assigns.media_item.id)
+     )
      |> put_flash(:info, message)}
   end
 
@@ -611,7 +638,10 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
 
     {:noreply,
      socket
-     |> assign(:media_item, load_media_item(socket.assigns.media_item.id))
+     |> assign(
+       :media_item,
+       load_media_item(socket.assigns.current_scope, socket.assigns.media_item.id)
+     )
      |> assign(:rescanning_season, nil)
      |> put_flash(:info, message)}
   end
@@ -674,7 +704,10 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
      |> assign(:renaming_files, false)
      |> assign(:show_rename_modal, false)
      |> assign(:rename_previews, [])
-     |> assign(:media_item, load_media_item(socket.assigns.media_item.id))
+     |> assign(
+       :media_item,
+       load_media_item(socket.assigns.current_scope, socket.assigns.media_item.id)
+     )
      |> put_flash(flash_type, message)}
   end
 

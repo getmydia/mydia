@@ -112,7 +112,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
   end
 
   def search_episode(%{"episode-id" => episode_id}, socket) do
-    episode = Media.get_episode!(episode_id, preload: [:media_item])
+    episode = Media.get_episode!(socket.assigns.current_scope, episode_id, preload: [:media_item])
     media_item = episode.media_item
 
     search_query =
@@ -208,7 +208,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
   end
 
   def auto_search_episode(%{"episode-id" => episode_id}, socket) do
-    episode = Media.get_episode!(episode_id)
+    episode = Media.get_episode!(socket.assigns.current_scope, episode_id)
 
     %{mode: "specific", episode_id: episode_id}
     |> Mydia.Jobs.TVShowSearch.new()

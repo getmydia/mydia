@@ -1,6 +1,7 @@
 defmodule MydiaWeb.Schema.WatchStatusTest do
   use Mydia.DataCase, async: true
 
+  alias Mydia.Accounts.Scope
   alias Mydia.AccountsFixtures
   alias Mydia.MediaFixtures
   alias Mydia.Playback
@@ -8,7 +9,9 @@ defmodule MydiaWeb.Schema.WatchStatusTest do
   alias MydiaWeb.Schema.Resolvers.MediaResolver
 
   defp run(query, user) do
-    Absinthe.run(query, MydiaWeb.Schema, context: %{current_user: user})
+    Absinthe.run(query, MydiaWeb.Schema,
+      context: %{current_user: user, current_scope: Scope.for_user(user)}
+    )
   end
 
   defp show_with_two_episodes do

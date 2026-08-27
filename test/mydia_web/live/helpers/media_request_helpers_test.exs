@@ -1,6 +1,7 @@
 defmodule MydiaWeb.Live.Helpers.MediaRequestHelpersTest do
   use Mydia.DataCase, async: true
 
+  alias Mydia.Accounts.Scope
   alias Mydia.{Accounts, MediaRequests}
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
 
@@ -28,7 +29,12 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpersTest do
       tmdb_id = System.unique_integer([:positive])
 
       assert {:ok, request, map} =
-               MediaRequestHelpers.handle_request_media(item(tmdb_id), :movie, user.id)
+               MediaRequestHelpers.handle_request_media(
+                 Scope.unrestricted(),
+                 item(tmdb_id),
+                 :movie,
+                 user.id
+               )
 
       assert request.tmdb_id == tmdb_id
       assert request.status == "pending"
@@ -41,10 +47,20 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpersTest do
       tmdb_id = System.unique_integer([:positive])
 
       assert {:ok, _request, _map} =
-               MediaRequestHelpers.handle_request_media(item(tmdb_id), :movie, user.id)
+               MediaRequestHelpers.handle_request_media(
+                 Scope.unrestricted(),
+                 item(tmdb_id),
+                 :movie,
+                 user.id
+               )
 
       assert {:error, :duplicate_request} =
-               MediaRequestHelpers.handle_request_media(item(tmdb_id), :movie, user.id)
+               MediaRequestHelpers.handle_request_media(
+                 Scope.unrestricted(),
+                 item(tmdb_id),
+                 :movie,
+                 user.id
+               )
     end
 
     test "stores the card's poster path on the request" do
@@ -53,7 +69,12 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpersTest do
       poster_item = Map.put(item(tmdb_id), :poster_path, "/stub-movie-poster.jpg")
 
       assert {:ok, request, _map} =
-               MediaRequestHelpers.handle_request_media(poster_item, :movie, user.id)
+               MediaRequestHelpers.handle_request_media(
+                 Scope.unrestricted(),
+                 poster_item,
+                 :movie,
+                 user.id
+               )
 
       assert request.poster_path == "/stub-movie-poster.jpg"
     end
@@ -63,7 +84,12 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpersTest do
       tmdb_id = System.unique_integer([:positive])
 
       assert {:ok, request, _map} =
-               MediaRequestHelpers.handle_request_media(item(tmdb_id), :movie, user.id)
+               MediaRequestHelpers.handle_request_media(
+                 Scope.unrestricted(),
+                 item(tmdb_id),
+                 :movie,
+                 user.id
+               )
 
       assert is_nil(request.poster_path)
     end
@@ -76,7 +102,7 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpersTest do
       tmdb_id = System.unique_integer([:positive])
 
       {:ok, _request} =
-        MediaRequests.create_request(%{
+        MediaRequests.create_request(Scope.unrestricted(), %{
           media_type: "movie",
           title: "Someone Else's Pick",
           tmdb_id: tmdb_id,

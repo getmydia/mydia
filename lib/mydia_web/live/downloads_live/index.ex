@@ -617,7 +617,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
       ) do
     results =
       if String.length(query) >= 2 do
-        Media.list_media_items(search: query) |> Enum.take(10)
+        Media.list_media_items(socket.assigns.current_scope, search: query) |> Enum.take(10)
       else
         []
       end
@@ -654,7 +654,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
   def handle_event("match_modal_search", %{"q" => query}, socket) do
     results =
       if String.length(query) >= 2 do
-        Media.list_media_items(search: query) |> Enum.take(10)
+        Media.list_media_items(socket.assigns.current_scope, search: query) |> Enum.take(10)
       else
         []
       end
@@ -672,7 +672,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
       ) do
     if type == "tv_show" do
       # TV: choose the specific episode in a second step.
-      episodes = Media.list_episodes(media_item_id)
+      episodes = Media.list_episodes(socket.assigns.current_scope, media_item_id)
 
       {:noreply,
        update(socket, :match_modal, fn modal ->
@@ -698,7 +698,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
           {:ok, source, candidates} ->
             episodes =
               if download.media_item && download.media_item.type == "tv_show" do
-                Media.list_episodes(download.media_item.id)
+                Media.list_episodes(socket.assigns.current_scope, download.media_item.id)
               else
                 []
               end
@@ -785,7 +785,9 @@ defmodule MydiaWeb.DownloadsLive.Index do
       valid_episode_ids =
         case download.media_item do
           %{type: "tv_show", id: media_item_id} ->
-            media_item_id |> Media.list_episodes() |> MapSet.new(& &1.id)
+            socket.assigns.current_scope
+            |> Media.list_episodes(media_item_id)
+            |> MapSet.new(& &1.id)
 
           _other ->
             MapSet.new()

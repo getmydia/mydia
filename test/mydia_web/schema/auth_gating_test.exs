@@ -10,6 +10,7 @@ defmodule MydiaWeb.Schema.AuthGatingTest do
   use MydiaWeb.ConnCase
 
   alias Mydia.Accounts
+  alias Mydia.Accounts.Scope
   alias MydiaWeb.Schema
   alias MydiaWeb.Schema.Middleware.RequireAuth
 
@@ -67,7 +68,9 @@ defmodule MydiaWeb.Schema.AuthGatingTest do
       user = create_user()
 
       assert {:ok, %{data: %{"movies" => %{"edges" => edges}}}} =
-               Absinthe.run(@movies_query, Schema, context: %{current_user: user})
+               Absinthe.run(@movies_query, Schema,
+                 context: %{current_user: user, current_scope: Scope.for_user(user)}
+               )
 
       assert is_list(edges)
     end

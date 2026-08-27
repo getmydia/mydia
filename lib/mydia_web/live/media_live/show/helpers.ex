@@ -348,8 +348,8 @@ defmodule MydiaWeb.MediaLive.Show.Helpers do
     end)
   end
 
-  def episode_in_season?(episode_id, season_num) do
-    episode = Media.get_episode!(episode_id)
+  def episode_in_season?(scope, episode_id, season_num) do
+    episode = Media.get_episode!(scope, episode_id)
     episode.season_number == season_num
   end
 

@@ -13,7 +13,7 @@ defmodule Mydia.Accounts do
   import Mydia.QueryHelpers
   require Logger
   alias Mydia.Repo
-  alias Mydia.Accounts.{User, ApiKey, UserPreference, ApiKeyRateLimiter}
+  alias Mydia.Accounts.{User, ApiKey, UserPreference, ApiKeyRateLimiter, AccessRestriction}
 
   @changelog_key "last_seen_changelog_version"
 
@@ -235,6 +235,46 @@ defmodule Mydia.Accounts do
   """
   def change_user(%User{} = user, attrs \\ %{}) do
     User.changeset(user, attrs)
+  end
+
+  ## Access Restrictions
+
+  @doc """
+  Returns the access restriction for a user, or nil when unrestricted.
+  """
+  @spec get_access_restriction(User.t()) :: AccessRestriction.t() | nil
+  def get_access_restriction(%User{id: user_id}) do
+    Repo.get_by(AccessRestriction, user_id: user_id)
+  end
+
+  @doc """
+  Creates or replaces a user's access restriction.
+
+  Refuses admins outright. An admin resolves to an unrestricted scope no matter
+  what rows exist, so storing a restriction for one would be a row that lies
+  about what the system does.
+  """
+  @spec upsert_access_restriction(User.t(), map()) ::
+          {:ok, AccessRestriction.t()} | {:error, Ecto.Changeset.t()} | {:error, :admin}
+  def upsert_access_restriction(%User{role: "admin"}, _attrs), do: {:error, :admin}
+
+  def upsert_access_restriction(%User{id: user_id} = user, attrs) do
+    existing = get_access_restriction(user) || %AccessRestriction{user_id: user_id}
+
+    existing
+    |> AccessRestriction.changeset(attrs)
+    |> Repo.insert_or_update()
+  end
+
+  @doc """
+  Removes a user's access restriction, returning them to unrestricted access.
+  """
+  @spec clear_access_restriction(User.t()) :: :ok
+  def clear_access_restriction(%User{} = user) do
+    case get_access_restriction(user) do
+      nil -> :ok
+      restriction -> Repo.delete!(restriction) && :ok
+    end
   end
 
   @doc """

@@ -16,6 +16,7 @@ defmodule Mydia.Media.ExternalIds do
 
   require Logger
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Events
   alias Mydia.Media
 
@@ -79,8 +80,8 @@ defmodule Mydia.Media.ExternalIds do
     end
   end
 
-  defp lookup(:tmdb, id), do: Media.get_media_item_by_tmdb(id)
-  defp lookup(:tvdb, id), do: Media.get_media_item_by_tvdb(id)
+  defp lookup(:tmdb, id), do: Media.get_media_item_by_tmdb(Scope.system(), id)
+  defp lookup(:tvdb, id), do: Media.get_media_item_by_tvdb(Scope.system(), id)
 
   defp report_conflict(attrs, provider, id, other, opts) do
     title = opts[:title] || Map.get(attrs, :title)

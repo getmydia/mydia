@@ -1,7 +1,7 @@
 defmodule Mydia.Accounts.AuthorizationTest do
   use Mydia.DataCase, async: true
 
-  alias Mydia.Accounts.{Authorization, User}
+  alias Mydia.Accounts.{Authorization, Scope, User}
 
   describe "has_role?/2" do
     test "returns true when user has exact role" do
@@ -54,6 +54,13 @@ defmodule Mydia.Accounts.AuthorizationTest do
     end
   end
 
+  describe "can_create_media?/1 with a scope" do
+    test "delegates to the scope's user, restrictions notwithstanding" do
+      assert Authorization.can_create_media?(%Scope{user: %User{role: "user"}})
+      refute Authorization.can_create_media?(%Scope{user: %User{role: "guest"}})
+    end
+  end
+
   describe "can_update_media?/1" do
     test "returns true for admin users" do
       user = %User{role: "admin"}
@@ -77,6 +84,13 @@ defmodule Mydia.Accounts.AuthorizationTest do
 
     test "returns false for nil user" do
       refute Authorization.can_update_media?(nil)
+    end
+  end
+
+  describe "can_update_media?/1 with a scope" do
+    test "delegates to the scope's user" do
+      assert Authorization.can_update_media?(%Scope{user: %User{role: "user"}})
+      refute Authorization.can_update_media?(%Scope{user: %User{role: "guest"}})
     end
   end
 
@@ -106,6 +120,13 @@ defmodule Mydia.Accounts.AuthorizationTest do
     end
   end
 
+  describe "can_delete_media?/1 with a scope" do
+    test "delegates to the scope's user" do
+      assert Authorization.can_delete_media?(%Scope{user: %User{role: "user"}})
+      refute Authorization.can_delete_media?(%Scope{user: %User{role: "guest"}})
+    end
+  end
+
   describe "can_view_media?/1" do
     test "returns true for all authenticated users" do
       assert Authorization.can_view_media?(%User{role: "admin"})
@@ -116,6 +137,13 @@ defmodule Mydia.Accounts.AuthorizationTest do
 
     test "returns false for nil user" do
       refute Authorization.can_view_media?(nil)
+    end
+  end
+
+  describe "can_view_media?/1 with a scope" do
+    test "delegates to the scope's user" do
+      assert Authorization.can_view_media?(%Scope{user: %User{role: "guest"}})
+      refute Authorization.can_view_media?(%Scope{user: nil})
     end
   end
 
@@ -133,6 +161,13 @@ defmodule Mydia.Accounts.AuthorizationTest do
 
     test "returns false for nil user" do
       refute Authorization.can_submit_request?(nil)
+    end
+  end
+
+  describe "can_submit_request?/1 with a scope" do
+    test "delegates to the scope's user" do
+      assert Authorization.can_submit_request?(%Scope{user: %User{role: "guest"}})
+      refute Authorization.can_submit_request?(%Scope{user: %User{role: "admin"}})
     end
   end
 

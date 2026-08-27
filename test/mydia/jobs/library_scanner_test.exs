@@ -2,6 +2,7 @@ defmodule Mydia.Jobs.LibraryScannerTest do
   use Mydia.DataCase, async: false
   use Oban.Testing, repo: Mydia.Repo
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Jobs.LibraryScanner
   alias Mydia.Settings
   import Mydia.MediaFixtures
@@ -53,7 +54,7 @@ defmodule Mydia.Jobs.LibraryScannerTest do
       assert :ok = perform_job(LibraryScanner, %{})
 
       # Verify monitored item still exists (job doesn't modify items)
-      assert Mydia.Media.get_media_item!(monitored.id).monitored == true
+      assert Mydia.Media.get_media_item!(Scope.unrestricted(), monitored.id).monitored == true
     end
 
     setup do

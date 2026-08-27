@@ -9,6 +9,7 @@ defmodule Mydia.ImportLists do
 
   import Ecto.Query, warn: false
   import Mydia.QueryHelpers
+  alias Mydia.Accounts.Scope
   alias Mydia.Repo
 
   alias Mydia.ImportLists.{ImportList, ImportListItem}
@@ -499,7 +500,7 @@ defmodule Mydia.ImportLists do
       quality_profile_id: import_list.quality_profile_id
     }
 
-    case Mydia.Media.create_media_item(attrs) do
+    case Mydia.Media.create_media_item(Scope.system(), attrs) do
       {:ok, media_item} ->
         mark_item_added(item, media_item.id)
         maybe_add_to_target_collection(import_list, media_item)

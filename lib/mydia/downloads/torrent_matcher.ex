@@ -63,6 +63,7 @@ defmodule Mydia.Downloads.TorrentMatcher do
   - Similar-sounding movies from different years
   """
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Downloads.Structs.CandidatePool
   alias Mydia.Downloads.Structs.TorrentMatchResult
   alias Mydia.Library.ReleaseParser
@@ -429,7 +430,12 @@ defmodule Mydia.Downloads.TorrentMatcher do
   end
 
   defp find_episode(show, torrent_info) do
-    case Media.get_episode_by_number(show.id, torrent_info.season, info_episode(torrent_info)) do
+    case Media.get_episode_by_number(
+           Scope.system(),
+           show.id,
+           torrent_info.season,
+           info_episode(torrent_info)
+         ) do
       nil -> {:error, :episode_not_found}
       episode -> {:ok, episode}
     end
@@ -1027,11 +1033,11 @@ defmodule Mydia.Downloads.TorrentMatcher do
   # which avoids loading every episode row for candidates that never bind.
   defp list_movies(monitored_only) do
     opts = if monitored_only, do: [type: "movie", monitored: true], else: [type: "movie"]
-    Media.list_media_items(opts)
+    Media.list_media_items(Scope.system(), opts)
   end
 
   defp list_tv_shows(monitored_only) do
     opts = if monitored_only, do: [type: "tv_show", monitored: true], else: [type: "tv_show"]
-    Media.list_media_items(opts)
+    Media.list_media_items(Scope.system(), opts)
   end
 end

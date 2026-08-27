@@ -2,7 +2,9 @@ defmodule MydiaWeb.AdminUsersLive.Index do
   use MydiaWeb, :live_view
 
   alias Mydia.Accounts
+  alias Mydia.Accounts.Scope
   alias Mydia.Accounts.User
+  alias Mydia.Media
 
   @impl true
   def mount(_params, _session, socket) do
@@ -15,6 +17,10 @@ defmodule MydiaWeb.AdminUsersLive.Index do
      |> assign(:show_edit_role_modal, false)
      |> assign(:show_reset_password_modal, false)
      |> assign(:show_delete_modal, false)
+     |> assign(:show_access_modal, false)
+     |> assign(:access_user, nil)
+     |> assign(:access_restriction, nil)
+     |> assign(:unrated_count, 0)
      |> assign(:selected_user, nil)
      |> assign(:generated_password, nil)
      |> assign(:password_mode, "auto")
@@ -341,6 +347,52 @@ defmodule MydiaWeb.AdminUsersLive.Index do
     end
   end
 
+  def handle_event("open_access_modal", %{"id" => id}, socket) do
+    user = Accounts.get_user!(id)
+
+    {:noreply,
+     socket
+     |> assign(:show_access_modal, true)
+     |> assign(:access_user, user)
+     |> assign(:access_restriction, Accounts.get_access_restriction(user))
+     |> assign(:unrated_count, Media.count_unrated_items(Scope.system()))}
+  end
+
+  def handle_event("close_access_modal", _params, socket) do
+    {:noreply, assign(socket, :show_access_modal, false)}
+  end
+
+  def handle_event("submit_access", %{"access" => params}, socket) do
+    attrs = %{
+      allowed_categories: Map.get(params, "allowed_categories", []),
+      max_content_age: parse_age(Map.get(params, "max_content_age"))
+    }
+
+    case Accounts.upsert_access_restriction(socket.assigns.access_user, attrs) do
+      {:ok, _restriction} ->
+        {:noreply,
+         socket
+         |> assign(:show_access_modal, false)
+         |> put_flash(:info, "Access updated")
+         |> load_users()}
+
+      {:error, :admin} ->
+        {:noreply, put_flash(socket, :error, "Admins always have full access")}
+
+      {:error, changeset} ->
+        {:noreply, put_flash(socket, :error, error_message(changeset))}
+    end
+  end
+
+  def handle_event("clear_access", _params, socket) do
+    :ok = Accounts.clear_access_restriction(socket.assigns.access_user)
+
+    {:noreply,
+     socket
+     |> assign(:show_access_modal, false)
+     |> put_flash(:info, "Restrictions removed")}
+  end
+
   ## Private Helpers
 
   defp apply_filters(socket, params) do
@@ -349,6 +401,26 @@ defmodule MydiaWeb.AdminUsersLive.Index do
     socket
     |> assign(:filter_role, role)
     |> load_users()
+  end
+
+  # An empty select value means "no limit", which is not the same as 0.
+  # `Integer.parse/1` is used instead of `String.to_integer/1` because the
+  # value arrives from a form post a caller fully controls; a crafted,
+  # non-numeric `access[max_content_age]` must not crash the LiveView.
+  defp parse_age(nil), do: nil
+  defp parse_age(""), do: nil
+
+  defp parse_age(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {age, ""} -> age
+      _ -> nil
+    end
+  end
+
+  defp error_message(changeset) do
+    changeset
+    |> Ecto.Changeset.traverse_errors(fn {msg, _opts} -> msg end)
+    |> Enum.map_join("; ", fn {field, messages} -> "#{field}: #{Enum.join(messages, ", ")}" end)
   end
 
   defp load_users(socket) do

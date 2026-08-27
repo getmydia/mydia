@@ -1,7 +1,8 @@
 defmodule MydiaWeb.RequestMediaLive.Index do
   use MydiaWeb, :live_view
 
-  alias Mydia.{MediaRequests, Metadata}
+  alias Mydia.{Media, MediaRequests, Metadata}
+  alias MydiaWeb.RemoteFilter
 
   @impl true
   def mount(_params, _session, socket) do
@@ -90,7 +91,7 @@ defmodule MydiaWeb.RequestMediaLive.Index do
       request_attrs =
         build_request_attrs(socket.assigns.request_modal_result, request_params, socket.assigns)
 
-      case MediaRequests.create_request(request_attrs) do
+      case MediaRequests.create_request(socket.assigns.current_scope, request_attrs) do
         {:ok, _media_request} ->
           result = socket.assigns.request_modal_result
 
@@ -111,6 +112,12 @@ defmodule MydiaWeb.RequestMediaLive.Index do
            socket
            |> assign(:request_form, to_form(changeset, as: :request))
            |> put_flash(:error, "A request for this media already exists")}
+
+        {:error, :restricted} ->
+          {:noreply,
+           socket
+           |> assign(:request_form, to_form(changeset, as: :request))
+           |> put_flash(:error, Media.restricted_message())}
 
         {:error, changeset} ->
           {:noreply, assign(socket, :request_form, to_form(changeset, as: :request))}
@@ -141,7 +148,7 @@ defmodule MydiaWeb.RequestMediaLive.Index do
       {:ok, results} ->
         {:noreply,
          socket
-         |> assign(:search_results, results)
+         |> assign(:search_results, RemoteFilter.filter(results, socket.assigns.current_scope))
          |> assign(:searching, false)}
 
       {:error, reason} ->

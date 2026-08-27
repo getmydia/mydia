@@ -6,6 +6,7 @@ defmodule MydiaWeb.AddMediaLive.Index do
   alias Mydia.{Media, Metadata, Settings}
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
+  alias MydiaWeb.RemoteFilter
 
   @impl true
   def mount(_params, session, socket) do
@@ -193,8 +194,11 @@ defmodule MydiaWeb.AddMediaLive.Index do
 
     case Metadata.search(socket.assigns.metadata_config, query, opts) do
       {:ok, results} ->
+        results = RemoteFilter.filter(results, socket.assigns.current_scope)
+
         # Check which results are already in the library
-        added_item_ids = check_existing_items(results, socket.assigns.media_type)
+        added_item_ids =
+          check_existing_items(socket.assigns.current_scope, results, socket.assigns.media_type)
 
         {:noreply,
          socket
@@ -223,7 +227,9 @@ defmodule MydiaWeb.AddMediaLive.Index do
         attrs = build_media_item_attrs(full_metadata, config, socket.assigns.media_type)
         season_monitoring = config[:season_monitoring] || "all"
 
-        case Media.create_media_item(attrs, season_monitoring: season_monitoring) do
+        case Media.create_media_item(socket.assigns.current_scope, attrs,
+               season_monitoring: season_monitoring
+             ) do
           {:ok, media_item} ->
             maybe_queue_search(media_item, config)
 
@@ -237,6 +243,12 @@ defmodule MydiaWeb.AddMediaLive.Index do
                Map.put(socket.assigns.added_item_ids, id_key, media_item.id)
              )
              |> put_flash(:info, "#{media_item.title} has been added to your library")}
+
+          {:error, :restricted} ->
+            {:noreply,
+             socket
+             |> assign(:adding_index, nil)
+             |> put_flash(:error, Media.restricted_message())}
 
           {:error, changeset} ->
             {:noreply,
@@ -468,7 +480,7 @@ defmodule MydiaWeb.AddMediaLive.Index do
 
   defp extract_year_from_date(_), do: nil
 
-  defp check_existing_items(results, media_type) do
+  defp check_existing_items(scope, results, media_type) do
     # Extract provider IDs from search results (provider_id is a string)
     provider_ids =
       results
@@ -482,7 +494,7 @@ defmodule MydiaWeb.AddMediaLive.Index do
       # Query for existing media items with these provider IDs
       type_string = if media_type == :movie, do: "movie", else: "tv_show"
 
-      items = Media.list_media_items(type: type_string)
+      items = Media.list_media_items(scope, type: type_string)
 
       # For TV shows, check tvdb_id; for movies, check tmdb_id
       if media_type == :tv_show do

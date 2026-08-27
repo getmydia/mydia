@@ -429,6 +429,17 @@ defmodule Mydia.Metadata.Provider.Relay do
 
   defp find_remote_id(_remote_ids, _source), do: nil
 
+  @doc """
+  Normalizes a TVDB extended series payload into the TMDB response shape.
+
+  Public only so the transform can be tested directly. Production callers reach
+  it through the provider's own response handling.
+  """
+  @spec normalize_tvdb_series(map(), atom(), String.t() | nil, keyword()) :: map()
+  def normalize_tvdb_series(data, media_type, language, opts \\ []) do
+    transform_tvdb_to_tmdb_format(data, media_type, language, opts)
+  end
+
   # Transform TVDB API response to match TMDB format for consistent parsing
   defp transform_tvdb_to_tmdb_format(data, _media_type, language, opts) when is_map(data) do
     # Extract year from firstAired date or year field
@@ -486,7 +497,8 @@ defmodule Mydia.Metadata.Provider.Relay do
       "external_ids" => %{
         "tmdb_id" => find_remote_id(remote_ids, "TheMovieDB.com"),
         "imdb_id" => find_remote_id(remote_ids, "IMDB")
-      }
+      },
+      "content_ratings" => transform_tvdb_content_ratings(data["contentRatings"])
     }
   end
 
@@ -754,6 +766,59 @@ defmodule Mydia.Metadata.Provider.Relay do
   defp transform_tvdb_origin_country(country) when is_binary(country), do: [country]
   defp transform_tvdb_origin_country(countries) when is_list(countries), do: countries
   defp transform_tvdb_origin_country(_), do: []
+
+  # TVDB publishes per-country certifications as
+  # [%{"name" => "TV-14", "country" => "usa"}, ...]. Emitting them under TMDB's
+  # own `content_ratings` key means MediaMetadata.parse_content_rating/2 needs
+  # no TVDB branch, and the US then GB then first-non-blank region preference
+  # applies identically to both providers.
+  #
+  # TVDB uses lowercase ISO 3166-1 alpha-3; TMDB uses uppercase alpha-2.
+  @tvdb_country_codes %{
+    "usa" => "US",
+    "gbr" => "GB",
+    "can" => "CA",
+    "aus" => "AU",
+    "nzl" => "NZ",
+    "irl" => "IE",
+    "deu" => "DE",
+    "fra" => "FR",
+    "esp" => "ES",
+    "ita" => "IT",
+    "nld" => "NL",
+    "swe" => "SE",
+    "nor" => "NO",
+    "dnk" => "DK",
+    "fin" => "FI",
+    "jpn" => "JP",
+    "kor" => "KR",
+    "bra" => "BR",
+    "mex" => "MX"
+  }
+
+  defp transform_tvdb_content_ratings(nil), do: nil
+
+  defp transform_tvdb_content_ratings(ratings) when is_list(ratings) do
+    %{"results" => Enum.map(ratings, &tvdb_rating_entry/1)}
+  end
+
+  defp transform_tvdb_content_ratings(_), do: nil
+
+  defp tvdb_rating_entry(rating) do
+    %{
+      "iso_3166_1" => tvdb_country_to_iso(rating["country"]),
+      "rating" => rating["name"]
+    }
+  end
+
+  # An unmapped alpha-3 code upcases rather than dropping out. It will not match
+  # the US or GB preference, but it still reaches the first-non-blank fallback,
+  # which is better than reporting no rating at all.
+  defp tvdb_country_to_iso(country) when is_binary(country) do
+    Map.get(@tvdb_country_codes, String.downcase(country), String.upcase(country))
+  end
+
+  defp tvdb_country_to_iso(_), do: nil
 
   # TVDB images are full URLs or relative paths
   defp transform_tvdb_image(nil), do: nil
@@ -1115,6 +1180,8 @@ defmodule Mydia.Metadata.Provider.Relay do
     year = Keyword.get(opts, :year)
     min_rating = Keyword.get(opts, :min_rating)
     sort_by = Keyword.get(opts, :sort_by, "popularity.desc")
+    certification_country = Keyword.get(opts, :certification_country)
+    certification_lte = Keyword.get(opts, :certification_lte)
 
     endpoint =
       case media_type do
@@ -1122,12 +1189,18 @@ defmodule Mydia.Metadata.Provider.Relay do
         _ -> "/tmdb/movies/discover"
       end
 
+    # TMDB only honours a certification ceiling on /discover/movie. It ignores
+    # the pair on /discover/tv rather than erroring, so sending it there is
+    # harmless but buys nothing; TV is held back by the library-side rating
+    # filter instead.
     params =
       [language: language, page: page, sort_by: sort_by]
       |> maybe_add_param(:with_genres, genres)
       |> maybe_add_param(:with_original_language, original_language)
       |> maybe_add_param(year_param_key(media_type), year)
       |> maybe_add_param(:"vote_average.gte", min_rating)
+      |> maybe_add_param(:certification_country, certification_country)
+      |> maybe_add_param(:"certification.lte", certification_lte)
 
     req = HTTP.new_request(config)
 

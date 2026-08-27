@@ -12,6 +12,7 @@ defmodule Mydia.Media.Refresh do
 
   require Logger
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Media
   alias Mydia.Media.ExternalIds
   alias Mydia.Media.MediaItem
@@ -154,7 +155,7 @@ defmodule Mydia.Media.Refresh do
         title: metadata.title
       )
 
-    case Media.update_media_item(media_item, attrs, reason: "Metadata refreshed") do
+    case Media.update_media_item(Scope.system(), media_item, attrs, reason: "Metadata refreshed") do
       {:ok, updated} ->
         {:ok, updated}
 

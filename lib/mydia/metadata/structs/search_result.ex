@@ -27,7 +27,13 @@ defmodule Mydia.Metadata.Structs.SearchResult do
     :overview,
     :popularity,
     :vote_average,
-    :vote_count
+    :vote_count,
+    :original_language,
+    # Classification signals. TMDB ships these with every search and discover
+    # hit, so keeping them costs no extra request and lets a caller work out a
+    # title's category without fetching its full metadata.
+    genre_ids: [],
+    origin_country: []
   ]
 
   @type t :: %__MODULE__{
@@ -48,7 +54,10 @@ defmodule Mydia.Metadata.Structs.SearchResult do
           overview: String.t() | nil,
           popularity: float() | nil,
           vote_average: float() | nil,
-          vote_count: integer() | nil
+          vote_count: integer() | nil,
+          genre_ids: [integer()],
+          origin_country: [String.t()],
+          original_language: String.t() | nil
         }
 
   @doc """
@@ -99,7 +108,10 @@ defmodule Mydia.Metadata.Structs.SearchResult do
       release_date: data["release_date"],
       first_air_date: data["first_air_date"],
       id: data["id"],
-      imdb_id: data["imdb_id"]
+      imdb_id: data["imdb_id"],
+      genre_ids: List.wrap(data["genre_ids"]),
+      origin_country: List.wrap(data["origin_country"]),
+      original_language: data["original_language"]
     }
   end
 

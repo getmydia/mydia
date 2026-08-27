@@ -11,6 +11,7 @@ defmodule Mydia.Library.MetadataEnricher do
 
   require Logger
   alias Mydia.{Media, Metadata, Repo, Settings}
+  alias Mydia.Accounts.Scope
   alias Mydia.Media.ExternalIds
   alias Mydia.Metadata.LanguageCode
   alias Mydia.Metadata.NfoWriter
@@ -151,9 +152,9 @@ defmodule Mydia.Library.MetadataEnricher do
     # Look up existing item by the appropriate provider ID
     existing_item =
       if provider_type == :tvdb do
-        Media.get_media_item_by_tvdb(id)
+        Media.get_media_item_by_tvdb(Scope.system(), id)
       else
-        Media.get_media_item_by_tmdb(id)
+        Media.get_media_item_by_tmdb(Scope.system(), id)
       end
 
     case existing_item do
@@ -180,7 +181,7 @@ defmodule Mydia.Library.MetadataEnricher do
       {:ok, full_metadata} ->
         attrs = build_media_item_attrs(full_metadata, media_type, match_result)
 
-        case Media.create_media_item(attrs, skip_episode_refresh: true) do
+        case Media.create_media_item(Scope.system(), attrs, skip_episode_refresh: true) do
           {:ok, media_item} ->
             # Episodes will be fetched by enrich_episodes if needed
             {:ok, media_item}
@@ -236,7 +237,9 @@ defmodule Mydia.Library.MetadataEnricher do
               exclude_id: existing_item.id
             })
 
-          Media.update_media_item(existing_item, attrs, reason: "Metadata enriched")
+          Media.update_media_item(Scope.system(), existing_item, attrs,
+            reason: "Metadata enriched"
+          )
 
         {:error, reason} ->
           Logger.warning("Failed to fetch updated metadata, returning existing item",
@@ -259,7 +262,7 @@ defmodule Mydia.Library.MetadataEnricher do
          provider_type
        )
        when not is_nil(provider_type) do
-    Media.update_media_item(existing_item, %{metadata_source: provider_type},
+    Media.update_media_item(Scope.system(), existing_item, %{metadata_source: provider_type},
       reason: "Provenance recorded"
     )
   end
@@ -512,7 +515,7 @@ defmodule Mydia.Library.MetadataEnricher do
     # Direct lookup for each target episode - O(k) where k is the number of episodes in the file
     # Typically k=1, sometimes k=2 for double episodes
     Enum.each(episode_numbers, fn episode_number ->
-      case Media.get_episode_by_number(media_item.id, season, episode_number) do
+      case Media.get_episode_by_number(Scope.system(), media_item.id, season, episode_number) do
         nil ->
           Logger.warning("Target episode not found for file association",
             media_item_id: media_item.id,

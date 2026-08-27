@@ -10,6 +10,8 @@ defmodule MydiaWeb.Api.MediaController do
   alias Mydia.{Media, Metadata}
   alias Mydia.Accounts.Authorization
   alias Mydia.Auth.Guardian
+  alias Mydia.Metadata.Access, as: MetadataAccess
+  alias Mydia.Metadata.ImageUrl
   require Logger
 
   @doc """
@@ -22,7 +24,9 @@ defmodule MydiaWeb.Api.MediaController do
     - 404: Media item not found
   """
   def show(conn, %{"id" => id}) do
-    case Media.get_media_item!(id, preload: [:library_path, :episodes]) do
+    case Media.get_media_item!(conn.assigns.current_scope, id,
+           preload: [:library_path, :episodes]
+         ) do
       nil ->
         conn
         |> put_status(:not_found)
@@ -81,7 +85,7 @@ defmodule MydiaWeb.Api.MediaController do
           |> json(%{error: "invalid provider_type, must be 'tmdb' or 'tvdb'"})
 
         true ->
-          case Media.get_media_item!(id) do
+          case Media.get_media_item!(conn.assigns.current_scope, id) do
             nil ->
               conn
               |> put_status(:not_found)
@@ -119,6 +123,7 @@ defmodule MydiaWeb.Api.MediaController do
   defp parse_media_type(_), do: :movie
 
   defp perform_manual_match(conn, media_item, provider_id, provider_type, fetch_episodes) do
+    scope = conn.assigns.current_scope
     config = Metadata.default_relay_config()
     media_type = parse_media_type(media_item.type)
 
@@ -144,7 +149,7 @@ defmodule MydiaWeb.Api.MediaController do
         }
 
         # Update media item with new metadata
-        case update_media_with_metadata(media_item, match_result, config, fetch_episodes) do
+        case update_media_with_metadata(scope, media_item, match_result, config, fetch_episodes) do
           {:ok, updated_media_item} ->
             Logger.info("Manual match successful",
               media_item_id: media_item.id,
@@ -154,7 +159,9 @@ defmodule MydiaWeb.Api.MediaController do
 
             # Reload with preloads for response
             media_item =
-              Media.get_media_item!(updated_media_item.id, preload: [:library_path, :episodes])
+              Media.get_media_item!(scope, updated_media_item.id,
+                preload: [:library_path, :episodes]
+              )
 
             conn
             |> put_status(:ok)
@@ -162,6 +169,16 @@ defmodule MydiaWeb.Api.MediaController do
               message: "Media item successfully matched and updated",
               data: serialize_media_item(media_item)
             })
+
+          {:error, :restricted} ->
+            Logger.info("Manual match refused: outside scope restrictions",
+              media_item_id: media_item.id,
+              provider_id: provider_id
+            )
+
+            conn
+            |> put_status(:forbidden)
+            |> json(%{error: Media.restricted_message()})
 
           {:error, reason} ->
             Logger.error("Failed to update media item with manual match",
@@ -188,7 +205,7 @@ defmodule MydiaWeb.Api.MediaController do
     end
   end
 
-  defp update_media_with_metadata(media_item, match_result, config, fetch_episodes) do
+  defp update_media_with_metadata(scope, media_item, match_result, config, fetch_episodes) do
     metadata = match_result.metadata
 
     # Extract relevant fields from metadata
@@ -221,7 +238,7 @@ defmodule MydiaWeb.Api.MediaController do
     # transaction that used to wrap both bought nothing anyway: it covered a
     # single write plus a side effect whose failures are swallowed here, so it
     # could never roll back for the reason it appeared to guard.
-    case Media.update_media_item(media_item, attrs, reason: "Manually matched") do
+    case Media.update_media_item(scope, media_item, attrs, reason: "Manually matched") do
       {:ok, updated_media_item} ->
         maybe_refresh_episodes(updated_media_item, fetch_episodes, config)
         {:ok, updated_media_item}
@@ -280,6 +297,12 @@ defmodule MydiaWeb.Api.MediaController do
     end
   end
 
+  # `MediaItem` has no top-level `overview`/`poster_url`/`backdrop_url`/`genres`/
+  # `runtime`/`status` columns -- those live under `media_item.metadata`, an
+  # embedded `MediaMetadata` that is itself nil until a title has been matched.
+  # Reading them straight off `media_item` raised `KeyError` on every call,
+  # including the success path of `match/2`. `MetadataAccess.get_field/2` is
+  # nil-safe for both a missing field and a nil `metadata`.
   defp serialize_media_item(media_item) do
     %{
       id: media_item.id,
@@ -288,16 +311,21 @@ defmodule MydiaWeb.Api.MediaController do
       year: media_item.year,
       tmdb_id: media_item.tmdb_id,
       tvdb_id: media_item.tvdb_id,
-      overview: media_item.overview,
-      poster_url: media_item.poster_url,
-      backdrop_url: media_item.backdrop_url,
-      genres: media_item.genres,
-      runtime: media_item.runtime,
-      status: media_item.status,
+      overview: MetadataAccess.get_field(media_item, :overview),
+      poster_url: media_item |> MetadataAccess.get_field(:poster_path) |> ImageUrl.poster_url(),
+      backdrop_url:
+        media_item |> MetadataAccess.get_field(:backdrop_path) |> ImageUrl.backdrop_url(),
+      genres: MetadataAccess.get_field(media_item, :genres),
+      runtime: MetadataAccess.get_field(media_item, :runtime),
+      status: MetadataAccess.get_field(media_item, :status),
       monitored: media_item.monitored,
       library_path_id: media_item.library_path_id,
       quality_profile_id: media_item.quality_profile_id,
-      metadata: media_item.metadata,
+      # No raw `metadata:` key: `MediaMetadata` has no `Jason.Encoder`, so
+      # embedding the struct raised `Protocol.UndefinedError` the moment a
+      # media item actually carried one -- the second bug hiding behind the
+      # `KeyError` above, since nothing had ever reached this line before.
+      # Its fields worth exposing are already flattened above.
       inserted_at: media_item.inserted_at,
       updated_at: media_item.updated_at,
       # Include associations if preloaded
@@ -307,6 +335,9 @@ defmodule MydiaWeb.Api.MediaController do
 
   defp serialize_episodes(%Ecto.Association.NotLoaded{}), do: nil
 
+  # `Episode` has the same shape of gap as `MediaItem`: no top-level
+  # `overview`/`still_url` columns, only `episode.metadata` (an `EpisodeData`,
+  # nil until the show's seasons have been fetched).
   defp serialize_episodes(episodes) when is_list(episodes) do
     Enum.map(episodes, fn episode ->
       %{
@@ -314,9 +345,9 @@ defmodule MydiaWeb.Api.MediaController do
         season_number: episode.season_number,
         episode_number: episode.episode_number,
         title: episode.title,
-        overview: episode.overview,
+        overview: MetadataAccess.get_field(episode, :overview),
         air_date: episode.air_date,
-        still_url: episode.still_url
+        still_url: episode |> MetadataAccess.get_field(:still_path) |> ImageUrl.still_url()
       }
     end)
   end

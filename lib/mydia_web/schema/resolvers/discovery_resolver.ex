@@ -108,7 +108,7 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
 
       user ->
         favorites =
-          Media.list_user_favorites(user.id)
+          Media.list_user_favorites(resolution.context[:current_scope], user.id)
           |> maybe_filter_by_type(types)
           |> maybe_filter_by_category(category)
           |> sort_items(sort, resolution)
@@ -140,7 +140,7 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
       user ->
         opts = [has_files: true]
         opts = if category, do: Keyword.put(opts, :category, to_string(category)), else: opts
-        media_items = Media.list_media_items(opts)
+        media_items = Media.list_media_items(resolution.context[:current_scope], opts)
 
         watched_ids =
           Playback.list_user_progress(user.id, watched: true)

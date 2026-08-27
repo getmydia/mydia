@@ -161,6 +161,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   library. TV shows ignore monitored and quality profile today.
   """
   def handle_add_media_to_library(
+        scope,
         provider_id,
         media_type,
         library_status_map,
@@ -169,7 +170,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
       ) do
     provider_id_int = Add.parse_provider_id(provider_id)
 
-    case Add.from_provider(provider_id, media_type, config, opts) do
+    case Add.from_provider(scope, provider_id, media_type, config, opts) do
       {:ok, media_item} ->
         {:ok, media_item,
          update_library_status_map(library_status_map, media_item, provider_id_int)}

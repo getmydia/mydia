@@ -3,6 +3,7 @@ defmodule MydiaWeb.Schema.DiscoveryFiltersTest do
 
   import Mydia.MediaFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.AccountsFixtures
   alias Mydia.Media
 
@@ -94,7 +95,7 @@ defmodule MydiaWeb.Schema.DiscoveryFiltersTest do
     assert {:ok, %{data: data}} =
              Absinthe.run(query, MydiaWeb.Schema,
                variables: variables,
-               context: %{current_user: user}
+               context: %{current_user: user, current_scope: Scope.for_user(user)}
              )
 
     data

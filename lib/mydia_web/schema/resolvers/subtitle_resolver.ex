@@ -6,6 +6,7 @@ defmodule MydiaWeb.Schema.Resolvers.SubtitleResolver do
   alias Mydia.Library
   alias Mydia.Subtitles.Delivery
   alias Mydia.Subtitles.Extractor
+  alias MydiaWeb.MediaAccess
 
   require Logger
 
@@ -75,24 +76,38 @@ defmodule MydiaWeb.Schema.Resolvers.SubtitleResolver do
   id together (there is no root `mediaFile(id:)` query and `MediaFile` does
   not implement `Node`) so a client can fetch exactly one body.
   """
-  def subtitle_content(_root, %{media_file_id: media_file_id, track_id: track_id} = args, _info) do
+  def subtitle_content(
+        _root,
+        %{media_file_id: media_file_id, track_id: track_id} = args,
+        %{context: context}
+      ) do
     format = Atom.to_string(args[:format] || :vtt)
     media_file = Library.get_media_file!(media_file_id, preload: [:library_path])
 
-    track =
-      media_file
-      |> Extractor.list_subtitle_tracks()
-      |> Enum.find(&(to_string(&1.track_id) == track_id))
-
-    cond do
-      is_nil(track) ->
+    # Falls through to the same `{:ok, nil}` this field already returns for a
+    # missing track or a rescued NoResultsError, so a restricted account gets
+    # no signal distinguishing "file does not exist" from "file exists but is
+    # off-limits".
+    case MediaAccess.authorize_media_file_for_scope(context[:current_scope], media_file) do
+      :denied ->
         {:ok, nil}
 
-      not Map.get(track, :deliverable, true) ->
-        {:ok, nil}
+      :ok ->
+        track =
+          media_file
+          |> Extractor.list_subtitle_tracks()
+          |> Enum.find(&(to_string(&1.track_id) == track_id))
 
-      true ->
-        deliver(media_file, track_id, format)
+        cond do
+          is_nil(track) ->
+            {:ok, nil}
+
+          not Map.get(track, :deliverable, true) ->
+            {:ok, nil}
+
+          true ->
+            deliver(media_file, track_id, format)
+        end
     end
   rescue
     Ecto.NoResultsError -> {:ok, nil}

@@ -12,6 +12,7 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestBackfillTest do
   import Mydia.AccountsFixtures
   import Mydia.MetadataStub
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Media.MediaRequest
   alias Mydia.MediaRequests
   alias Mydia.MetadataStubProvider
@@ -110,7 +111,7 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestBackfillTest do
       requester_id: user.id
     }
 
-    {:ok, request} = MediaRequests.create_request(Map.merge(base, attrs))
+    {:ok, request} = MediaRequests.create_request(Scope.unrestricted(), Map.merge(base, attrs))
     request
   end
 

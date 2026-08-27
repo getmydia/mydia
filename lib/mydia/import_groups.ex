@@ -12,6 +12,7 @@ defmodule Mydia.ImportGroups do
 
   require Logger
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Library
   alias Mydia.Library.ImportGroup
   alias Mydia.Library.ImportRun
@@ -1228,6 +1229,7 @@ defmodule Mydia.ImportGroups do
 
         with {:ok, item} <-
                Media.create_media_item(
+                 Scope.system(),
                  %{title: title, year: year, type: "tv_show", monitored: false},
                  skip_episode_refresh: true
                ) do

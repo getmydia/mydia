@@ -5,6 +5,9 @@ defmodule Mydia.Media.MediaItem do
   use Ecto.Schema
   import Ecto.Changeset
 
+  alias Mydia.Media.ContentRating
+  alias Mydia.Metadata.Structs.MediaMetadata
+
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
@@ -20,6 +23,7 @@ defmodule Mydia.Media.MediaItem do
           metadata_source: atom() | nil,
           season_order: :official | :dvd | :absolute | nil,
           metadata: Mydia.Metadata.Structs.MediaMetadata.t() | nil,
+          content_rating_age: integer() | nil,
           monitored: boolean(),
           monitor_new_seasons: :all | :none,
           category: String.t() | nil,
@@ -59,6 +63,8 @@ defmodule Mydia.Media.MediaItem do
     # retired by every show that simply has no alternative ordering.
     field :season_order, Ecto.Enum, values: [:official, :dvd, :absolute]
     field :metadata, Mydia.Media.MetadataType
+    # Derived from metadata.content_rating on write. See put_content_rating_age/1.
+    field :content_rating_age, :integer
     field :monitored, :boolean, default: true
 
     # Governs only seasons that do not exist yet. Whether a new episode in an
@@ -111,6 +117,7 @@ defmodule Mydia.Media.MediaItem do
       :library_path_id
     ])
     |> validate_required([:type, :title])
+    |> put_content_rating_age()
     |> validate_inclusion(:type, @type_values)
     |> validate_number(:year, greater_than: 1800, less_than: 2200)
     |> validate_year_for_movies()
@@ -118,6 +125,25 @@ defmodule Mydia.Media.MediaItem do
     |> unique_constraint(:tvdb_id)
     |> foreign_key_constraint(:quality_profile_id)
     |> foreign_key_constraint(:library_path_id)
+  end
+
+  # content_rating lives inside the metadata JSON blob, which neither adapter
+  # can filter on portably. Deriving the age into its own column at write time
+  # is what lets Mydia.Media.Restrictions express an age limit as plain SQL.
+  #
+  # Only recomputed when metadata itself changes, so a write that touches
+  # monitored or a quality profile leaves an already-derived age alone.
+  defp put_content_rating_age(changeset) do
+    case fetch_change(changeset, :metadata) do
+      {:ok, %MediaMetadata{content_rating: rating}} ->
+        put_change(changeset, :content_rating_age, ContentRating.min_age(rating))
+
+      {:ok, nil} ->
+        put_change(changeset, :content_rating_age, nil)
+
+      :error ->
+        changeset
+    end
   end
 
   # Custom validation to ensure movies have year data

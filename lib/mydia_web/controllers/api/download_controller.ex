@@ -26,7 +26,7 @@ defmodule MydiaWeb.Api.DownloadController do
     }
   """
   def options(conn, %{"content_type" => content_type, "id" => id}) do
-    case DownloadService.get_options(content_type, id) do
+    case DownloadService.get_options(conn.assigns.current_scope, content_type, id) do
       {:ok, options} ->
         conn
         |> put_status(:ok)
@@ -59,7 +59,7 @@ defmodule MydiaWeb.Api.DownloadController do
   def prepare(conn, %{"content_type" => content_type, "id" => id} = params) do
     resolution = params["resolution"] || "720p"
 
-    case DownloadService.prepare(content_type, id, resolution) do
+    case DownloadService.prepare(conn.assigns.current_scope, content_type, id, resolution) do
       {:ok, job_info} ->
         conn
         |> put_status(:ok)

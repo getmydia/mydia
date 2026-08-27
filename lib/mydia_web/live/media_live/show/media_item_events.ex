@@ -50,7 +50,9 @@ defmodule MydiaWeb.MediaLive.Show.MediaItemEvents do
         delete_files: delete_files
       )
 
-      case Media.delete_media_item(media_item, delete_files: delete_files) do
+      case Media.delete_media_item(socket.assigns.current_scope, media_item,
+             delete_files: delete_files
+           ) do
         {:ok, _item, 0} ->
           message =
             if delete_files do
@@ -227,14 +229,20 @@ defmodule MydiaWeb.MediaLive.Show.MediaItemEvents do
       {:ok, :confirmed} ->
         {:noreply,
          socket
-         |> assign(:media_item, Loaders.load_media_item(media_item.id))
+         |> assign(
+           :media_item,
+           Loaders.load_media_item(socket.assigns.current_scope, media_item.id)
+         )
          |> assign(:season_order_suggestion, nil)
          |> put_flash(:info, "Keeping #{SeasonOrder.label(target)}.")}
 
       {:ok, count} ->
         {:noreply,
          socket
-         |> assign(:media_item, Loaders.load_media_item(media_item.id))
+         |> assign(
+           :media_item,
+           Loaders.load_media_item(socket.assigns.current_scope, media_item.id)
+         )
          |> assign(:season_order_suggestion, nil)
          |> put_flash(
            :info,

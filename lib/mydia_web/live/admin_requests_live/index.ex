@@ -86,7 +86,7 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
       admin_notes: approve_params["admin_notes"]
     }
 
-    case MediaRequests.approve_request(request, attrs) do
+    case MediaRequests.approve_request(socket.assigns.current_scope, request, attrs) do
       {:ok, %{request: _updated_request, media_item: media_item}} ->
         {:noreply,
          socket

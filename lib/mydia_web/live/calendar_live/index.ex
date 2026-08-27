@@ -79,7 +79,7 @@ defmodule MydiaWeb.CalendarLive.Index do
   def handle_event("view_item", %{"id" => id, "type" => type}, socket) do
     case type do
       "episode" ->
-        episode = Media.get_episode!(id, preload: [:media_item])
+        episode = Media.get_episode!(socket.assigns.current_scope, id, preload: [:media_item])
         {:noreply, push_navigate(socket, to: ~p"/media/#{episode.media_item_id}")}
 
       "movie" ->
@@ -114,11 +114,13 @@ defmodule MydiaWeb.CalendarLive.Index do
     start_date = Date.new!(socket.assigns.selected_year, socket.assigns.selected_month, 1)
     end_date = Date.end_of_month(start_date)
 
+    scope = socket.assigns.current_scope
+
     # Load episodes (all, regardless of monitored status)
-    episodes = Media.list_episodes_by_air_date(start_date, end_date, monitored: nil)
+    episodes = Media.list_episodes_by_air_date(scope, start_date, end_date, monitored: nil)
 
     # Load movies (all, regardless of monitored status)
-    movies = Media.list_movies_by_release_date(start_date, end_date, monitored: nil)
+    movies = Media.list_movies_by_release_date(scope, start_date, end_date, monitored: nil)
 
     # Combine and filter
     items =
