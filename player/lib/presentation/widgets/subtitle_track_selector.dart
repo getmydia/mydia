@@ -179,6 +179,12 @@ class _SubtitleTrackSelectorSheetState
   SubtitleSearchOutcome? _outcome;
   String? _error;
 
+  /// Separate from [_error]: that field belongs to the search/download flow
+  /// (`_SheetMode.results`), which this delay row is not part of -- it stays
+  /// visible in `_SheetMode.tracks` regardless of what a search attempt is
+  /// doing.
+  String? _delayError;
+
   @override
   void initState() {
     super.initState();
@@ -271,6 +277,54 @@ class _SubtitleTrackSelectorSheetState
     }
   }
 
+  // The three delay-row actions below all wrap a caller-supplied `Future<void>
+  // Function()`-shaped callback that `_SubtitleDelayRow` otherwise wires
+  // straight to an IconButton/TextButton's `onPressed`. `onPressed` is a
+  // `VoidCallback`, so a bare `() => onNudge(-100)` would discard the
+  // returned Future -- Dart allows it (a `T Function()` is assignable to
+  // `void Function()`), but any rejection then escapes as an unhandled
+  // exception with no error state anywhere in the sheet. Each handler here
+  // awaits its action and turns a rejection into `_delayError` instead.
+
+  Future<void> _handleNudge(int deltaMs) async {
+    setState(() => _delayError = null);
+    try {
+      await widget.onNudgeSubtitleDelay(deltaMs);
+    } catch (e) {
+      debugPrint('[SubtitleTrackSelectorSheet] Delay nudge failed: $e');
+      if (!mounted) return;
+      setState(() {
+        _delayError = _viewerMessage(e, 'Could not adjust the subtitle delay.');
+      });
+    }
+  }
+
+  Future<void> _handleReset() async {
+    setState(() => _delayError = null);
+    try {
+      await widget.onResetSubtitleDelay();
+    } catch (e) {
+      debugPrint('[SubtitleTrackSelectorSheet] Delay reset failed: $e');
+      if (!mounted) return;
+      setState(() {
+        _delayError = _viewerMessage(e, 'Could not reset the subtitle delay.');
+      });
+    }
+  }
+
+  Future<void> _handleSave() async {
+    setState(() => _delayError = null);
+    try {
+      await widget.onSaveSubtitleDelay();
+    } catch (e) {
+      debugPrint('[SubtitleTrackSelectorSheet] Delay save failed: $e');
+      if (!mounted) return;
+      setState(() {
+        _delayError = _viewerMessage(e, 'Could not save the subtitle delay.');
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -353,10 +407,18 @@ class _SubtitleTrackSelectorSheetState
                   _SubtitleDelayRow(
                     delayMs: delayMs,
                     canSave: widget.canSaveDelay,
-                    onNudge: widget.onNudgeSubtitleDelay,
-                    onReset: widget.onResetSubtitleDelay,
-                    onSave: widget.onSaveSubtitleDelay,
+                    onNudge: _handleNudge,
+                    onReset: _handleReset,
+                    onSave: _handleSave,
                   ),
+                  if (_delayError != null)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+                      child: Text(
+                        _delayError!,
+                        style: const TextStyle(color: Colors.orangeAccent),
+                      ),
+                    ),
                 ],
               );
             },

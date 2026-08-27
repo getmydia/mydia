@@ -778,4 +778,137 @@ void main() {
             'reports success and silently does not persist is worse than no '
             'control at all');
   });
+
+  // Regression coverage: the delay row's IconButton/TextButton onPressed
+  // fields take a VoidCallback, so a bare `() => onNudge(-100)` discards the
+  // Future onNudge/onReset/onSave return. A rejection then escaped as an
+  // unhandled exception with no error state anywhere in the sheet. These pin
+  // that each action is awaited by a guarded handler that catches the
+  // failure and surfaces it instead of letting it escape.
+  testWidgets(
+      'a rejected nudge surfaces an error instead of an unhandled exception',
+      (tester) async {
+    final delay = ValueNotifier<int?>(0);
+    addTearDown(delay.dispose);
+
+    await tester.pumpWidget(_host(
+      onSearch: (_) async =>
+          const SubtitleSearchOutcome(results: [], providers: []),
+      onDownload: (_) async => _downloaded,
+      subtitleDelayMs: delay,
+      onNudgeSubtitleDelay: (_) async => throw Exception('nudge failed'),
+    ));
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('subtitle-delay-increment')));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Could not adjust'), findsOneWidget);
+  });
+
+  testWidgets(
+      'a rejected reset surfaces an error instead of an unhandled exception',
+      (tester) async {
+    final delay = ValueNotifier<int?>(300);
+    addTearDown(delay.dispose);
+
+    await tester.pumpWidget(_host(
+      onSearch: (_) async =>
+          const SubtitleSearchOutcome(results: [], providers: []),
+      onDownload: (_) async => _downloaded,
+      subtitleDelayMs: delay,
+      onResetSubtitleDelay: () async => throw Exception('reset failed'),
+    ));
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('subtitle-delay-reset')));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Could not reset'), findsOneWidget);
+  });
+
+  testWidgets(
+      'a rejected save surfaces an error instead of an unhandled exception',
+      (tester) async {
+    final delay = ValueNotifier<int?>(300);
+    addTearDown(delay.dispose);
+
+    await tester.pumpWidget(_host(
+      onSearch: (_) async =>
+          const SubtitleSearchOutcome(results: [], providers: []),
+      onDownload: (_) async => _downloaded,
+      subtitleDelayMs: delay,
+      onSaveSubtitleDelay: () async => throw Exception('save failed'),
+    ));
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('subtitle-delay-save')));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Could not save'), findsOneWidget);
+  });
+
+  testWidgets('a SubtitleActionException from a delay action is shown verbatim',
+      (tester) async {
+    final delay = ValueNotifier<int?>(0);
+    addTearDown(delay.dispose);
+
+    await tester.pumpWidget(_host(
+      onSearch: (_) async =>
+          const SubtitleSearchOutcome(results: [], providers: []),
+      onDownload: (_) async => _downloaded,
+      subtitleDelayMs: delay,
+      onNudgeSubtitleDelay: (_) async => throw const SubtitleActionException(
+        'Your session expired. Sign in again.',
+      ),
+    ));
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('subtitle-delay-increment')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Your session expired. Sign in again.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Could not adjust'), findsNothing);
+  });
+
+  testWidgets('a successful nudge after a prior failure clears the error',
+      (tester) async {
+    final delay = ValueNotifier<int?>(0);
+    addTearDown(delay.dispose);
+    var shouldFail = true;
+
+    await tester.pumpWidget(_host(
+      onSearch: (_) async =>
+          const SubtitleSearchOutcome(results: [], providers: []),
+      onDownload: (_) async => _downloaded,
+      subtitleDelayMs: delay,
+      onNudgeSubtitleDelay: (_) async {
+        if (shouldFail) throw Exception('nudge failed');
+      },
+    ));
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('subtitle-delay-increment')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Could not adjust'), findsOneWidget);
+
+    shouldFail = false;
+    await tester.tap(find.byKey(const ValueKey('subtitle-delay-increment')));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Could not adjust'), findsNothing);
+  });
 }
