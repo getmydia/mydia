@@ -1,7 +1,7 @@
 //! NIF bindings for automatic subtitle re-sync.
 //!
 //! Two responsibilities, both wrapping a library rather than a binary:
-//! `align` over `alass-core`, and (added in a later task) `voice_spans` over
+//! `align` over `ilass`, and (added in a later task) `voice_spans` over
 //! `webrtc-vad`. The real logic lives in the sibling modules so it can be unit
 //! tested without an Erlang VM.
 

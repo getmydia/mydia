@@ -3,12 +3,6 @@
 version = 4
 
 [[package]]
-name = "alass-core"
-version = "2.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f4ad56e53efbd3731dc4fb0db24953d399f9789caa706b4c5a1a715010170124"
-
-[[package]]
 name = "cc"
 version = "1.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -37,6 +31,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
+name = "ilass"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "86c8e55d23804f3ce04ff90062ee817883000bc21d0f6c8dbac2f05718d3db83"
+
+[[package]]
 name = "inventory"
 version = "0.3.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -59,7 +59,7 @@ dependencies = [
 name = "mydia_subsync"
 version = "0.1.0"
 dependencies = [
- "alass-core",
+ "ilass",
  "rustler",
  "webrtc-vad",
 ]

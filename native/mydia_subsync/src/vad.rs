@@ -4,6 +4,10 @@
 //! run-length encoded into spans, then short spans dropped. The constants here
 //! match alass-cli's (80 samples per frame, 500ms minimum span) so alignment
 //! behaves the same way the reference implementation does.
+//!
+//! The alignment crate this pairs with is `ilass`, a maintained fork of alass.
+//! These constants are cited against alass-cli because that is where they were
+//! read and verified; the fork inherits the same algorithm.
 
 use std::fs::File;
 use std::io::{BufReader, Read};

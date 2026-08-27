@@ -11,5 +11,5 @@ crate-type = ["cdylib"]
 
 [dependencies]
 rustler = "0.37.2"
-alass-core = "2.0.0"
+ilass = "2.1.0"
 webrtc-vad = "0.4.0"

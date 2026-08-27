@@ -2,7 +2,7 @@ defmodule Mydia.Subsync do
   @moduledoc """
   NIF bindings for automatic subtitle re-sync.
 
-  Wraps two Rust libraries compiled into the release: `alass-core` for constant
+  Wraps two Rust libraries compiled into the release: `ilass` for constant
   offset alignment, and `webrtc-vad` for speech detection. Nothing here shells
   out to a binary, so there is no runtime capability check and no environment in
   which the engine is present in one place and missing in another.
@@ -33,7 +33,7 @@ defmodule Mydia.Subsync do
   thing standing between a failed alignment and a destroyed subtitle.
 
   `reference` and `list` come from parsed subtitle and speech-detection data,
-  which is untrusted input. The underlying `alass-core` library sizes an
+  which is untrusted input. The underlying `ilass` library sizes an
   internal buffer from the spread between the largest and smallest timestamp
   it is given, with no upper bound, so a single wildly out-of-range timestamp
   (well within what a two-digit-hour SRT timestamp can express) can force a

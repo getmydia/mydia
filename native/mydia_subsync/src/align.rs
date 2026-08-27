@@ -3,7 +3,7 @@
 //! `align_spans` is plain Rust with no Erlang types so it can be unit tested
 //! directly. The NIF in `lib.rs` is a thin wrapper over it.
 
-use alass_core::{align_nosplit, standard_scoring, NoProgressHandler, TimePoint, TimeSpan};
+use ilass::{align_nosplit, standard_scoring, NoProgressHandler, TimePoint, TimeSpan};
 
 /// Aligns `list` against `reference` and returns `(offset_ms, score)`.
 ///
@@ -19,10 +19,10 @@ use alass_core::{align_nosplit, standard_scoring, NoProgressHandler, TimePoint, 
 /// caller checks first.
 ///
 /// `reference` and `list` carry caller-supplied millisecond timestamps that
-/// pass straight through to `alass-core` with no range check. That library
+/// pass straight through to `ilass` with no range check. That library
 /// sizes an internal buffer from `max_offset - min_offset` with no ceiling
 /// (see `align_constant_delta` and `align_constant_delta_bucket_sort` in
-/// `alass-core`'s `src/alass.rs`), so a single wildly out-of-range timestamp
+/// `ilass`'s `src/ilass.rs`), so a single wildly out-of-range timestamp
 /// forces a correspondingly large allocation. This runs on a dirty CPU
 /// scheduler thread the BEAM cannot cancel once it starts, so callers must
 /// validate or clamp timestamps to a sane bound derived from the media's
