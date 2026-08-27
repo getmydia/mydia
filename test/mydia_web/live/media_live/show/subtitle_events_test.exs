@@ -225,6 +225,23 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEventsTest do
     end
   end
 
+  describe "resync_subtitle/2" do
+    # No Oban instance is running in this unit-test module (this app skips it
+    # entirely under `testing: :manual`/`engine: false`, see config/test.exs),
+    # so `Mydia.Subtitles.ResyncEnqueue.enqueue/2` always takes its rescue path
+    # here and returns :error. The success flash is exercised end to end in
+    # the connected LiveView test instead, which starts its own Oban instance.
+    test "flashes an error rather than crashing when the enqueue fails" do
+      {:noreply, socket} =
+        SubtitleEvents.resync_subtitle(
+          %{"media-file-id" => Ecto.UUID.generate(), "track-ref" => "3"},
+          socket()
+        )
+
+      assert flash(socket)["error"] == "Could not start the re-sync."
+    end
+  end
+
   describe "handle_download_subtitle_async/2" do
     defp socket_with_media_item(assigns \\ %{}) do
       socket(Map.merge(%{media_item: %{media_files: []}}, assigns))

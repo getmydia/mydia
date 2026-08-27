@@ -3,6 +3,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitlesSectionTest do
   # LiveView (`live/2`), which shares the Postgres sandbox connection with the
   # test process. That only works in non-async mode.
   use MydiaWeb.ConnCase, async: false
+  use Oban.Testing, repo: Mydia.Repo
 
   import Phoenix.LiveViewTest
   import Mydia.AccountsFixtures
@@ -324,6 +325,60 @@ defmodule MydiaWeb.MediaLive.Show.SubtitlesSectionTest do
                view,
                "[phx-click='delete_subtitle'][phx-value-subtitle-id='#{subtitle.id}']"
              )
+    end
+  end
+
+  describe "auto-sync" do
+    setup %{conn: conn} do
+      # The app skips Oban in test (engine: false), so Oban.insert cannot be
+      # resolved from the LiveView process. Start an isolated, manual-mode
+      # instance so the enqueue lands where all_enqueued/1 sees it. Mirrors
+      # test/mydia_web/live/media_live/segment_status_test.exs.
+      engine = if Mydia.DB.postgres?(), do: Oban.Engines.Basic, else: Oban.Engines.Lite
+      start_supervised!({Oban, repo: Mydia.Repo, engine: engine, testing: :manual})
+
+      admin = admin_user_fixture()
+
+      media_item = media_item_fixture(%{type: "movie"})
+
+      media_file =
+        media_file_fixture(%{
+          media_item_id: media_item.id,
+          metadata: %Mydia.Library.Structs.FileMetadata{
+            streams: [
+              %Mydia.Library.Structs.StreamInfo{
+                index: 3,
+                type: :subtitle,
+                codec: "subrip",
+                language: "eng",
+                title: "English"
+              }
+            ]
+          }
+        })
+
+      %{conn: log_in_user(conn, admin), media_item: media_item, media_file: media_file}
+    end
+
+    test "the button enqueues exactly one re-sync job", %{conn: conn, media_item: media_item} do
+      {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+
+      assert view
+             |> element("#resync-subtitle-3")
+             |> render_click()
+
+      assert [_job] = all_enqueued(worker: Mydia.Jobs.SubtitleResync)
+    end
+
+    test "a low confidence outcome renders as declined with the stepper still usable",
+         %{conn: conn, media_item: media_item, media_file: media_file} do
+      {:ok, _} =
+        Mydia.Subtitles.TrackSettings.record_resync(media_file.id, "3", :low_confidence, 0.09)
+
+      {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+
+      assert has_element?(view, "#resync-state-3")
+      assert has_element?(view, "#subtitle-offset-form-3")
     end
   end
 

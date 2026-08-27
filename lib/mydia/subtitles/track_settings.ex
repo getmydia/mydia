@@ -164,6 +164,18 @@ defmodule Mydia.Subtitles.TrackSettings do
     Ecto.Query.CastError -> %{}
   end
 
+  @doc "Every stored resync outcome for a media file, keyed by `track_ref`."
+  @spec resync_states_for_media_file(binary()) :: %{String.t() => String.t()}
+  def resync_states_for_media_file(media_file_id) do
+    TrackSetting
+    |> where([s], s.media_file_id == ^media_file_id and not is_nil(s.resync_state))
+    |> select([s], {s.track_ref, s.resync_state})
+    |> Repo.all()
+    |> Map.new()
+  rescue
+    Ecto.Query.CastError -> %{}
+  end
+
   @doc "Removes a track's stored correction, if any."
   @spec delete_for_track(binary(), String.t()) :: :ok
   def delete_for_track(media_file_id, track_ref) do

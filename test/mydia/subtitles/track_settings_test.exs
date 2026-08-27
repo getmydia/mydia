@@ -62,6 +62,29 @@ defmodule Mydia.Subtitles.TrackSettingsTest do
     end
   end
 
+  describe "resync_states_for_media_file/1" do
+    test "returns a map keyed by track_ref, omitting tracks never attempted", %{
+      media_file: media_file
+    } do
+      {:ok, _} = TrackSettings.record_resync(media_file.id, "3", :low_confidence, 0.09)
+      {:ok, _} = TrackSettings.record_resync(media_file.id, "4", :ok, 0.95)
+      {:ok, _} = TrackSettings.set_offset(media_file.id, "5", 100)
+
+      assert TrackSettings.resync_states_for_media_file(media_file.id) == %{
+               "3" => "low_confidence",
+               "4" => "ok"
+             }
+    end
+
+    test "returns an empty map when nothing is stored", %{media_file: media_file} do
+      assert TrackSettings.resync_states_for_media_file(media_file.id) == %{}
+    end
+
+    test "returns an empty map for an unparseable media file id" do
+      assert TrackSettings.resync_states_for_media_file("not-a-uuid") == %{}
+    end
+  end
+
   describe "delete_for_track/2" do
     test "removes the row", %{media_file: media_file} do
       {:ok, _} = TrackSettings.set_offset(media_file.id, "3", 100)

@@ -64,5 +64,59 @@ defmodule MydiaWeb.MediaLive.Show.LoadersSubtitleTracksTest do
 
       assert %{^file_id => []} = Loaders.load_media_file_subtitle_tracks(media_item)
     end
+
+    test "attaches a recorded resync outcome to its track", %{
+      media_item: media_item,
+      media_file: media_file
+    } do
+      {:ok, subtitle} =
+        %Subtitle{}
+        |> Subtitle.changeset(%{
+          media_file_id: media_file.id,
+          language: "en",
+          provider: "sidecar",
+          origin: "sidecar",
+          subtitle_hash: "loader-resync-hash",
+          file_path: "/tmp/loader-resync-hash.srt",
+          format: "srt"
+        })
+        |> Repo.insert()
+
+      {:ok, _} =
+        Mydia.Subtitles.TrackSettings.record_resync(
+          media_file.id,
+          subtitle.id,
+          :low_confidence,
+          0.09
+        )
+
+      file_id = media_file.id
+
+      assert %{^file_id => [track]} = Loaders.load_media_file_subtitle_tracks(media_item)
+      assert track.resync_state == "low_confidence"
+    end
+
+    test "leaves resync_state nil for a track that has never been attempted", %{
+      media_item: media_item,
+      media_file: media_file
+    } do
+      {:ok, _subtitle} =
+        %Subtitle{}
+        |> Subtitle.changeset(%{
+          media_file_id: media_file.id,
+          language: "en",
+          provider: "sidecar",
+          origin: "sidecar",
+          subtitle_hash: "loader-no-resync-hash",
+          file_path: "/tmp/loader-no-resync-hash.srt",
+          format: "srt"
+        })
+        |> Repo.insert()
+
+      file_id = media_file.id
+
+      assert %{^file_id => [track]} = Loaders.load_media_file_subtitle_tracks(media_item)
+      assert track.resync_state == nil
+    end
   end
 end
