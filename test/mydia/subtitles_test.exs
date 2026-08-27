@@ -279,6 +279,16 @@ defmodule Mydia.SubtitlesTest do
       assert Mydia.Repo.get(Mydia.Subtitles.Subtitle, subtitle.id)
       assert Mydia.Subtitles.TrackSettings.offset_ms(media_file.id, subtitle.id) == 250
     end
+
+    # Repo.get/2 raises Ecto.Query.CastError binding a non-UUID-shaped id on
+    # PostgreSQL (SQLite casts any string as a valid binary_id and just
+    # finds no row). Not reachable through the UI, since the delete button
+    # never renders a non-UUID id, but every other read/write here already
+    # treats a malformed id as a missing row instead of raising; see
+    # test/mydia/subtitles/track_settings_test.exs for the same case.
+    test "a malformed id reports :subtitle_not_found instead of raising" do
+      assert {:error, :subtitle_not_found} = Mydia.Subtitles.delete_subtitle("not-a-uuid")
+    end
   end
 
   describe "normalize_format/1" do

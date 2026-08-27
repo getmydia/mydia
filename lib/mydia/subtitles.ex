@@ -273,6 +273,17 @@ defmodule Mydia.Subtitles do
             {:error, {:file_deletion_failed, reason}}
         end
     end
+  rescue
+    # A non-UUID-shaped id raises Ecto.Query.CastError while Repo.get/2 binds
+    # the query parameter on PostgreSQL (SQLite casts any string as a valid
+    # binary_id and just finds no row instead). Not reachable through the
+    # UI, since the delete button never renders a non-UUID id, but every
+    # other read and write in this module already treats a malformed id the
+    # same as a missing row rather than raising; see
+    # Mydia.Subtitles.Delivery.fetch_subtitle/2 and
+    # Mydia.Subtitles.TrackSettings for the same rescue on the same
+    # database-adapter difference.
+    Ecto.Query.CastError -> {:error, :subtitle_not_found}
   end
 
   ## Private Functions
