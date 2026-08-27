@@ -29,6 +29,11 @@ use ilass::{align_nosplit, standard_scoring, NoProgressHandler, TimePoint, TimeS
 /// known duration before calling this function. This matters as soon as a
 /// caller feeds in real subtitle-file content, since subtitle files are
 /// untrusted input.
+///
+/// The Elixir side's sole caller, `Mydia.Subtitles.Resync`, meets this
+/// obligation: `drop_out_of_range_cues/2` there filters cues against a bound
+/// derived from the media file's duration before `Mydia.Subsync.align/2` (the
+/// NIF wrapping this function) is ever called.
 pub fn align_spans(reference: &[(i64, i64)], list: &[(i64, i64)]) -> (i64, f64) {
     let reference_spans = to_spans(reference);
     let list_spans = to_spans(list);

@@ -10,12 +10,19 @@ defmodule Mydia.Subtitles.Resync do
   Nothing here writes a subtitle file. The correction is stored as an integer
   and applied at delivery time, which makes it reversible and makes it work on
   embedded tracks that cannot be rewritten in place at all.
+
+  This is also the only caller of `Subsync.align/2`, and so the only place
+  that can discharge the allocation-size obligation documented on that
+  function: `drop_out_of_range_cues/2` bounds cue timestamps against the
+  media file's known duration (falling back to `@max_cue_ms_without_duration`
+  when it is not yet known) before they ever reach the NIF.
   """
 
   require Logger
 
   alias Mydia.Library.Ffmpeg
   alias Mydia.Library.MediaFile
+  alias Mydia.Library.Structs.FileMetadata
   alias Mydia.Subsync
   alias Mydia.Subtitles.Delivery
   alias Mydia.Subtitles.TrackSettings
@@ -44,6 +51,27 @@ defmodule Mydia.Subtitles.Resync do
   # gated separately. See the spec calibration section; this number rests on one
   # film and wants more samples before it is trusted.
   @min_cues 200
+
+  # Margin added on top of the media file's own reported duration (converted
+  # to ms) when computing the cue bound in `cue_bound_ms/1`. Subtitle authors
+  # sometimes place a final cue (credits, a post-credits scene) slightly past
+  # the video stream's own reported duration, so a bound equal to duration
+  # alone would drop legitimate cues.
+  @duration_margin_ms 600_000
+
+  # Cue bound, in ms, used when the media file's duration has not been
+  # analyzed yet. `ilass::align_nosplit`, invoked through `Subsync.align/2`
+  # (see that module's doc and `native/mydia_subsync/src/align.rs`), sizes an
+  # internal buffer from the spread between the largest and smallest
+  # timestamp it is given, with no ceiling of its own. Cue timestamps come
+  # straight from a regex parse of untrusted subtitle bytes (`cue_spans/2`),
+  # so a single OCR'd or malformed two-digit-hour timestamp is enough to
+  # force a very large allocation on a dirty scheduler thread the BEAM cannot
+  # cancel. `drop_out_of_range_cues/2` below is what discharges that
+  # obligation; this constant is only its fallback when there is no known
+  # duration to bound against, wide enough that no real single-file movie or
+  # episode ever needs it, so the guard never silently does nothing.
+  @max_cue_ms_without_duration 21_600_000
 
   @doc """
   Re-syncs one subtitle track and persists the result.
@@ -108,6 +136,41 @@ defmodule Mydia.Subtitles.Resync do
   # and `cue_spans/2`, so no other format ever reaches here today. No "ass"
   # clause: an untested, unreachable parser is a liability, not a feature.
   def cue_spans(_content, _format), do: []
+
+  @doc """
+  Drops cues whose start or end falls beyond the bound derived from
+  `media_file`'s known duration (see `cue_bound_ms/1`).
+
+  Public so the bound can be tested without decoding audio, mirroring
+  `decide/4`. This is what discharges the caller obligation documented on
+  `Subsync.align/2` and `native/mydia_subsync/src/align.rs`: cue timestamps
+  come straight from a regex parse of untrusted subtitle bytes, and
+  `ilass::align_nosplit` has no ceiling of its own on the allocation it
+  sizes from them.
+
+  Dropping a cue is preferable to clamping its value: a cue at an
+  impossible timestamp is corrupt data, not data that needs correcting, and
+  a clamped timestamp would feed alignment a fabricated data point instead
+  of just removing a bad one. If this leaves too few cues to align
+  confidently, `@min_cues` in `decide/4` already handles that.
+  """
+  @spec drop_out_of_range_cues([{integer(), integer()}], MediaFile.t()) ::
+          [{integer(), integer()}]
+  def drop_out_of_range_cues(cues, media_file) do
+    bound = cue_bound_ms(media_file)
+    Enum.filter(cues, fn {start_ms, end_ms} -> start_ms >= 0 and end_ms <= bound end)
+  end
+
+  # Duration is stored in seconds as a float and may not be populated yet
+  # (metadata analysis runs independently of, and is not guaranteed to
+  # precede, a subtitle download or sidecar adoption). `@max_cue_ms_without_duration`
+  # covers that case.
+  defp cue_bound_ms(%MediaFile{metadata: %FileMetadata{duration: duration}})
+       when is_number(duration) and duration > 0 do
+    round(duration * 1000) + @duration_margin_ms
+  end
+
+  defp cue_bound_ms(_media_file), do: @max_cue_ms_without_duration
 
   defp to_ms(hours, minutes, seconds, fraction) do
     hours = hours |> String.trim_trailing(":") |> parse_int()
@@ -217,7 +280,7 @@ defmodule Mydia.Subtitles.Resync do
   defp subtitle_spans(media_file, track_ref) do
     case Delivery.content(media_file, Delivery.track_id_from_ref(track_ref), "srt") do
       {:ok, content} ->
-        case cue_spans(content, "srt") do
+        case content |> cue_spans("srt") |> drop_out_of_range_cues(media_file) do
           [] -> {:skip, :no_cues}
           spans -> {:ok, spans}
         end

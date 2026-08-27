@@ -41,6 +41,10 @@ defmodule Mydia.Subsync do
   the BEAM cannot cancel once it starts. Callers must validate or clamp span
   timestamps to a sane bound derived from the media's known duration before
   calling this function.
+
+  The sole caller, `Mydia.Subtitles.Resync`, meets this obligation: its
+  `drop_out_of_range_cues/2` filters cues against a bound derived from the
+  media file's duration before `list` is ever built.
   """
   @spec align([{integer(), integer()}], [{integer(), integer()}]) :: {integer(), float()}
   def align(_reference, _list), do: :erlang.nif_error(:nif_not_loaded)

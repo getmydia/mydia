@@ -2,6 +2,7 @@ defmodule Mydia.Subtitles.ResyncTest do
   use Mydia.DataCase, async: true
 
   alias Mydia.Library.MediaFile
+  alias Mydia.Library.Structs.FileMetadata
   alias Mydia.MediaFixtures
   alias Mydia.Subtitles.Resync
 
@@ -208,6 +209,41 @@ defmodule Mydia.Subtitles.ResyncTest do
 
     test "returns an empty list for content with no cues" do
       assert Resync.cue_spans("not a subtitle", "srt") == []
+    end
+  end
+
+  # Regression coverage for the allocation hazard documented on
+  # `Mydia.Subsync.align/2` and `native/mydia_subsync/src/align.rs`:
+  # `ilass::align_nosplit` sizes an internal buffer from the spread between
+  # the largest and smallest timestamp it receives, with no ceiling of its
+  # own. `drop_out_of_range_cues/2` is what keeps a malformed or OCR'd cue
+  # from ever reaching that call.
+  describe "drop_out_of_range_cues/2" do
+    test "drops a cue that falls beyond the media file's known duration" do
+      media_file = %MediaFile{metadata: %FileMetadata{duration: 3600.0}}
+      in_range = {10_000, 12_000}
+      # 1 hour of duration + the 10 minute margin puts the bound at
+      # 4_200_000ms; this cue's end lands 1ms past it.
+      out_of_range = {4_199_999, 4_200_001}
+
+      assert Resync.drop_out_of_range_cues([in_range, out_of_range], media_file) == [in_range]
+    end
+
+    test "keeps a cue comfortably within the media file's known duration" do
+      media_file = %MediaFile{metadata: %FileMetadata{duration: 3600.0}}
+      cues = [{10_000, 12_000}, {3_500_000, 3_500_500}]
+
+      assert Resync.drop_out_of_range_cues(cues, media_file) == cues
+    end
+
+    test "falls back to a fixed ceiling when the media file's duration is not yet known" do
+      media_file = %MediaFile{metadata: %FileMetadata{duration: nil}}
+      within_fallback = {10_000, 21_600_000}
+      beyond_fallback = {10_000, 21_600_001}
+
+      assert Resync.drop_out_of_range_cues([within_fallback, beyond_fallback], media_file) == [
+               within_fallback
+             ]
     end
   end
 end
