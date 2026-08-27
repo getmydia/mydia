@@ -67,7 +67,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleComponents do
         <span class="text-xs opacity-50 w-6">ms</span>
 
         <button
-          id={"resync-subtitle-#{@track.track_id}"}
+          id={"resync-subtitle-#{@media_file_id}-#{@track.track_id}"}
           type="button"
           class="btn btn-ghost btn-xs"
           phx-click="resync_subtitle"
@@ -79,7 +79,11 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleComponents do
         </button>
 
         <% resync_message = resync_label(@track[:resync_state]) %>
-        <span :if={resync_message} id={"resync-state-#{@track.track_id}"} class="text-xs opacity-70">
+        <span
+          :if={resync_message}
+          id={"resync-state-#{@media_file_id}-#{@track.track_id}"}
+          class="text-xs opacity-70"
+        >
           {resync_message}
         </span>
 

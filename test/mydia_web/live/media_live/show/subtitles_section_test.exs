@@ -360,11 +360,12 @@ defmodule MydiaWeb.MediaLive.Show.SubtitlesSectionTest do
       %{conn: log_in_user(conn, admin), media_item: media_item, media_file: media_file}
     end
 
-    test "the button enqueues exactly one re-sync job", %{conn: conn, media_item: media_item} do
+    test "the button enqueues exactly one re-sync job",
+         %{conn: conn, media_item: media_item, media_file: media_file} do
       {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
 
       assert view
-             |> element("#resync-subtitle-3")
+             |> element("#resync-subtitle-#{media_file.id}-3")
              |> render_click()
 
       assert [_job] = all_enqueued(worker: Mydia.Jobs.SubtitleResync)
@@ -377,8 +378,8 @@ defmodule MydiaWeb.MediaLive.Show.SubtitlesSectionTest do
 
       {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
 
-      assert has_element?(view, "#resync-state-3")
-      assert has_element?(view, "#subtitle-offset-form-3")
+      assert has_element?(view, "#resync-state-#{media_file.id}-3")
+      assert has_element?(view, "#subtitle-offset-form-#{media_file.id}-3")
     end
   end
 
