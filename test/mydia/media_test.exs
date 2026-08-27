@@ -282,6 +282,29 @@ defmodule Mydia.MediaTest do
       episodes = Media.list_episodes(media_item.id, preload: [:media_files])
       assert Media.derive_monitoring_preset(episodes) == :custom
     end
+
+    test "update_media_items_batch/2 rejects a nonexistent quality_profile_id" do
+      media_item = media_item_fixture(%{type: "movie"})
+
+      assert {:error, :not_found} =
+               Media.update_media_items_batch([media_item.id], %{
+                 quality_profile_id: Ecto.UUID.generate()
+               })
+
+      assert Media.get_media_item!(media_item.id).quality_profile_id == nil
+    end
+
+    test "update_media_items_batch/2 applies a valid quality_profile_id" do
+      media_item = media_item_fixture(%{type: "movie"})
+      profile = quality_profile_fixture()
+
+      assert {:ok, 1} =
+               Media.update_media_items_batch([media_item.id], %{
+                 quality_profile_id: profile.id
+               })
+
+      assert Media.get_media_item!(media_item.id).quality_profile_id == profile.id
+    end
   end
 
   # Nested describe is invalid in ExUnit. These live as siblings of "media_items"

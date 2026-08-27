@@ -646,10 +646,39 @@ defmodule Mydia.Media do
   Updates multiple media items with the given attributes in a transaction.
 
   Only updates non-nil attributes. Returns `{:ok, count}` on success
-  where count is the number of updated items.
+  where count is the number of updated items, or `{:error, :not_found}` if
+  `attrs` references a quality profile or library path that does not exist.
   """
-  @spec update_media_items_batch([binary()], map()) :: {:ok, non_neg_integer()} | {:error, term()}
+  @spec update_media_items_batch([binary()], map()) ::
+          {:ok, non_neg_integer()} | {:error, :not_found | term()}
   def update_media_items_batch(ids, attrs) when is_list(ids) and is_map(attrs) do
+    if referenced_foreign_keys_exist?(attrs) do
+      do_update_media_items_batch(ids, attrs)
+    else
+      {:error, :not_found}
+    end
+  end
+
+  # Repo.update_all/3 takes no changeset, so Mydia.Repo.ForeignKeyGuard cannot
+  # turn a foreign key violation below into a changeset error: it raises on
+  # both SQLite and PostgreSQL, unlike the changeset-backed writes elsewhere
+  # in this branch. Check the referenced rows up front instead.
+  defp referenced_foreign_keys_exist?(attrs) do
+    reference_exists?(Mydia.Settings.QualityProfile, attrs[:quality_profile_id]) and
+      reference_exists?(Mydia.Settings.LibraryPath, attrs[:library_path_id])
+  end
+
+  defp reference_exists?(_schema, nil), do: true
+
+  defp reference_exists?(schema, id) do
+    Repo.exists?(from(r in schema, where: r.id == ^id))
+  rescue
+    # PostgreSQL raises while binding a non-UUID-shaped id. It certainly does
+    # not exist.
+    Ecto.Query.CastError -> false
+  end
+
+  defp do_update_media_items_batch(ids, attrs) do
     Repo.transaction(fn ->
       # Build the update list, only including non-nil values
       updates =
