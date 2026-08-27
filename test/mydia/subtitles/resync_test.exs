@@ -1,8 +1,6 @@
 defmodule Mydia.Subtitles.ResyncTest do
   use Mydia.DataCase, async: true
 
-  import ExUnit.CaptureLog
-
   alias Mydia.Library.MediaFile
   alias Mydia.MediaFixtures
   alias Mydia.Subtitles.Resync
@@ -93,52 +91,90 @@ defmodule Mydia.Subtitles.ResyncTest do
     # index), but every `track_ref` this module holds is a string. Without
     # converting a numeric ref back to an integer first, an embedded track's
     # re-sync would always take the sidecar branch and fail looking up a
-    # `subtitles` row that was never going to exist. `subtitle_spans/2` folds
-    # every `Delivery.content/3` error into the same `{:skip, :no_cues}`
-    # outward result either way, so the only place the two branches are still
-    # distinguishable is the logged failure reason; that's what this test reads.
+    # `subtitles` row that was never going to exist.
+    #
+    # `subtitle_spans/2` folds every `Delivery.content/3` error into the same
+    # `{:skip, :no_cues}` outward result, so a missing-sidecar-row failure and
+    # a failed embedded extraction are impossible to tell apart from the
+    # return value alone. This test sidesteps that by giving the embedded
+    # branch something to actually succeed on: a real subtitle stream muxed
+    # into the fixture. On the sidecar branch that stream is invisible (there
+    # is no `subtitles` row for it) and the result is `{:skip, :no_cues}`. On
+    # the embedded branch, ffmpeg extracts its one real cue and the pipeline
+    # reaches the confidence gate, which declines a single cue as
+    # `:too_few_cues` (miles under `@min_cues`) rather than `:no_cues`. That
+    # divergence is the proof the numeric ref reached ffmpeg extraction and
+    # not the sidecar lookup.
     @tag :requires_ffmpeg
     test "a numeric track_ref reaches the embedded extraction path, not the sidecar lookup" do
       media_file =
-        MediaFixtures.media_file_fixture(%{relative_path: "resync-embedded-fixture.mp4"})
+        MediaFixtures.media_file_fixture(%{relative_path: "resync-embedded-fixture.mkv"})
         |> Repo.preload(:library_path)
 
       File.mkdir_p!(media_file.library_path.path)
-      audio_path = Path.join(media_file.library_path.path, media_file.relative_path)
+      media_path = Path.join(media_file.library_path.path, media_file.relative_path)
       on_exit(fn -> File.rm_rf(media_file.library_path.path) end)
 
-      generate_silent_audio!(audio_path)
+      subtitle_index = mux_audio_and_subtitle!(media_path)
 
-      log =
-        capture_log(fn ->
-          assert {:skip, :no_cues} = Resync.run(media_file, "3")
-        end)
-
-      # The sidecar branch would fail with :subtitle_not_found (no such row in
-      # `subtitles`). The embedded branch fails instead because stream index 3
-      # does not exist in a file that only has an audio stream, which is the
-      # proof the conversion routed this call correctly.
-      refute log =~ "subtitle_not_found"
+      assert {:skip, :too_few_cues} = Resync.run(media_file, to_string(subtitle_index))
     end
   end
 
-  defp generate_silent_audio!(path) do
-    args = [
+  # Builds a one-second silent-audio file with one real embedded subtitle
+  # cue, and returns the container's stream index for that subtitle. The
+  # index is read back from ffprobe rather than assumed, since the explicit
+  # `-map` order determines it and hard-coding it would silently stop proving
+  # anything if that order ever changed.
+  defp mux_audio_and_subtitle!(media_path) do
+    srt_path = media_path <> ".srt"
+
+    File.write!(srt_path, """
+    1
+    00:00:00,000 --> 00:00:01,000
+    Hello there.
+    """)
+
+    mux_args = [
       "-v",
       "error",
       "-f",
       "lavfi",
       "-i",
       "anullsrc=r=8000:cl=mono",
+      "-i",
+      srt_path,
       "-t",
       "1",
+      "-map",
+      "0:a",
+      "-map",
+      "1:s",
       "-c:a",
       "aac",
+      "-c:s",
+      "srt",
       "-y",
-      path
+      media_path
     ]
 
-    {_output, 0} = System.cmd("ffmpeg", args, stderr_to_stdout: true)
+    {_output, 0} = System.cmd("ffmpeg", mux_args, stderr_to_stdout: true)
+    File.rm(srt_path)
+
+    probe_args = [
+      "-v",
+      "error",
+      "-select_streams",
+      "s",
+      "-show_entries",
+      "stream=index",
+      "-of",
+      "csv=p=0",
+      media_path
+    ]
+
+    {probe_output, 0} = System.cmd("ffprobe", probe_args)
+    probe_output |> String.trim() |> String.to_integer()
   end
 
   describe "cue_spans/2" do
