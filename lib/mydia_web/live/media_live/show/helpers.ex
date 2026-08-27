@@ -30,6 +30,31 @@ defmodule MydiaWeb.MediaLive.Show.Helpers do
     movie_files || episode_files
   end
 
+  @doc """
+  Every non-trashed media file belonging to a media item, movie or TV.
+
+  A `MediaFile` belongs to either `media_item_id` (movies) or `episode_id`
+  (TV episodes), never both, so `media_item.media_files` alone is always
+  empty for a TV show. Episode files live at
+  `media_item.episodes[].media_files` instead; this merges both so a caller
+  does not have to special-case the movie/TV split, mirroring the split
+  `Loaders.load_transcode_jobs/1` already handles.
+
+  Accepts a plain map with no `:episodes` key (some component tests render
+  against a stand-in map rather than a real `MediaItem`), treating that the
+  same as an empty episode list.
+  """
+  @spec all_media_files(map()) :: [Library.MediaFile.t()]
+  def all_media_files(media_item) do
+    episode_files =
+      media_item
+      |> Map.get(:episodes)
+      |> List.wrap()
+      |> Enum.flat_map(&Map.get(&1, :media_files, []))
+
+    media_item.media_files ++ episode_files
+  end
+
   def get_poster_url(media_item),
     do: MydiaWeb.Live.Helpers.MediaImages.poster_url(media_item)
 

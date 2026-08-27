@@ -55,6 +55,45 @@ defmodule MydiaWeb.MediaLive.Show.SubtitlesSectionTest do
     end
   end
 
+  describe "subtitles_section/1 TV episodes" do
+    # A MediaFile belongs to either media_item_id (movies) or episode_id (TV
+    # episodes), never both, so media_item.media_files alone is always empty
+    # for a TV show. Episode files live at media_item.episodes[].media_files
+    # instead; the section must reach into both.
+    test "renders a media file that belongs to an episode, not just the item's own" do
+      episode_file = %MediaFile{
+        id: "mf-ep-1",
+        path: nil,
+        relative_path: "Breaking Bad/Season 01/Breaking.Bad.S01E01.mkv",
+        library_path: %LibraryPath{path: "/media/tv"},
+        resolution: "1080p",
+        codec: "h264"
+      }
+
+      html =
+        render_component(&Components.subtitles_section/1,
+          media_item: %{
+            media_files: [],
+            episodes: [%{media_files: [episode_file]}]
+          },
+          media_file_subtitle_tracks: %{}
+        )
+
+      assert html =~ "Breaking.Bad.S01E01.mkv"
+      assert html =~ ~s|phx-value-media-file-id="mf-ep-1"|
+    end
+
+    test "still renders nothing for a TV show with no files anywhere" do
+      html =
+        render_component(&Components.subtitles_section/1,
+          media_item: %{media_files: [], episodes: [%{media_files: []}]},
+          media_file_subtitle_tracks: %{}
+        )
+
+      refute html =~ ~s|id="subtitles-section"|
+    end
+  end
+
   describe "media_files_section/1 file naming" do
     defp files_section_html(media_file) do
       render_component(&Components.media_files_section/1,
@@ -285,6 +324,41 @@ defmodule MydiaWeb.MediaLive.Show.SubtitlesSectionTest do
                view,
                "[phx-click='delete_subtitle'][phx-value-subtitle-id='#{subtitle.id}']"
              )
+    end
+  end
+
+  describe "TV episode" do
+    setup %{conn: conn} do
+      admin = admin_user_fixture()
+      %{conn: log_in_user(conn, admin)}
+    end
+
+    # The full page-mount path: a MediaFile belongs to either media_item_id
+    # (movies) or episode_id (TV episodes), never both, so this only renders
+    # if the section reaches into media_item.episodes[].media_files instead
+    # of media_item.media_files alone.
+    test "renders a subtitle track for an episode's media file", %{conn: conn} do
+      media_item = media_item_fixture(%{type: "tv_show"})
+      episode = episode_fixture(%{media_item_id: media_item.id})
+      media_file = media_file_fixture(%{episode_id: episode.id})
+
+      {:ok, subtitle} =
+        %Mydia.Subtitles.Subtitle{}
+        |> Mydia.Subtitles.Subtitle.changeset(%{
+          media_file_id: media_file.id,
+          language: "en",
+          provider: "sidecar",
+          origin: "sidecar",
+          subtitle_hash: "tv-episode-hash",
+          file_path: "/tmp/tv-episode-hash.srt",
+          format: "srt"
+        })
+        |> Mydia.Repo.insert()
+
+      {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+
+      assert has_element?(view, "#subtitles-section")
+      assert has_element?(view, "#subtitle-offset-form-#{subtitle.id}")
     end
   end
 end

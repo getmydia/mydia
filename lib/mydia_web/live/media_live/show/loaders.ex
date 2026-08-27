@@ -11,6 +11,7 @@ defmodule MydiaWeb.MediaLive.Show.Loaders do
   alias Mydia.Events
   alias Mydia.Subtitles
   alias Mydia.Library.MediaFile
+  alias MydiaWeb.MediaLive.Show.Helpers
 
   def load_media_item(id) do
     preload_list = build_preload_list()
@@ -112,9 +113,14 @@ defmodule MydiaWeb.MediaLive.Show.Loaders do
   often baked in and least fixable, so hiding them is exactly backwards for a
   screen whose job is fixing timing. This reads the stored `metadata.streams`
   capture and does not shell out to ffprobe.
+
+  Covers episode media files as well as the item's own, via
+  `Helpers.all_media_files/1`: `media_item.media_files` alone is always
+  empty for a TV show.
   """
   def load_media_file_subtitle_tracks(media_item) do
-    media_item.media_files
+    media_item
+    |> Helpers.all_media_files()
     |> Enum.map(fn media_file ->
       offsets = Subtitles.TrackSettings.offsets_for_media_file(media_file.id)
 

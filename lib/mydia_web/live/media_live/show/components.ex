@@ -953,20 +953,28 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   @doc """
   Subtitles section listing every subtitle track (embedded and sidecar) for
   each media file, with an offset control per track.
+
+  Covers episode media files as well as the item's own, via
+  `all_media_files/1`: a movie's files live at `media_item.media_files`, but
+  a `MediaFile` belongs to either `media_item_id` or `episode_id`, never
+  both, so that list is always empty for a TV show. Without this, the whole
+  section was unreachable for every TV episode.
   """
   attr :media_item, :map, required: true
   attr :media_file_subtitle_tracks, :map, default: %{}
 
   def subtitles_section(assigns) do
+    assigns = assign(assigns, :subtitle_media_files, all_media_files(assigns.media_item))
+
     ~H"""
-    <%= if length(@media_item.media_files) > 0 do %>
+    <%= if @subtitle_media_files != [] do %>
       <div id="subtitles-section" class="card bg-base-200 shadow-lg mb-4 md:mb-6">
         <div class="card-body p-4 md:p-6">
           <h2 class="card-title text-lg md:text-xl mb-3 md:mb-4">Subtitles</h2>
 
           <%!-- Media files with subtitle controls --%>
           <div class="space-y-4">
-            <%= for media_file <- @media_item.media_files do %>
+            <%= for media_file <- @subtitle_media_files do %>
               <% tracks = Map.get(@media_file_subtitle_tracks, media_file.id, []) %>
               <div class="card bg-base-100 shadow">
                 <div class="card-body p-4">
