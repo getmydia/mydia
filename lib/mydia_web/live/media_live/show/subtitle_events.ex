@@ -4,7 +4,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
   import Phoenix.Component, only: [assign: 3]
   import Phoenix.LiveView, only: [put_flash: 3, start_async: 3]
 
-  import MydiaWeb.MediaLive.Show.Loaders, only: [load_media_file_subtitles: 1]
+  import MydiaWeb.MediaLive.Show.Loaders, only: [load_media_file_subtitle_tracks: 1]
 
   require Logger
 
@@ -92,7 +92,10 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
       :ok ->
         {:noreply,
          socket
-         |> assign(:media_file_subtitles, load_media_file_subtitles(socket.assigns.media_item))
+         |> assign(
+           :media_file_subtitle_tracks,
+           load_media_file_subtitle_tracks(socket.assigns.media_item)
+         )
          |> put_flash(:info, "Subtitle deleted successfully")}
 
       {:error, reason} ->
@@ -104,7 +107,102 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
     end
   end
 
+  def set_subtitle_offset(
+        %{"media-file-id" => media_file_id, "track-ref" => track_ref, "offset_ms" => raw},
+        socket
+      )
+      when is_binary(raw) do
+    case Integer.parse(raw) do
+      {offset_ms, ""} -> store_offset(socket, media_file_id, track_ref, offset_ms)
+      _ -> {:noreply, put_flash(socket, :error, "Offset must be a whole number of milliseconds")}
+    end
+  end
+
+  # A hand-crafted payload whose offset is not even a string, or one missing
+  # a key entirely. `Integer.parse/1` requires a binary and raises
+  # FunctionClauseError on anything else, so the `is_binary/1` guard above is
+  # load-bearing: without it, a crafted non-string offset would take the
+  # LiveView process down instead of landing here. Neither case is an error
+  # worth a flash; there is simply nothing to store.
+  def set_subtitle_offset(_params, socket), do: {:noreply, socket}
+
+  def nudge_subtitle_offset(
+        %{"media-file-id" => media_file_id, "track-ref" => track_ref, "delta" => raw},
+        socket
+      )
+      when is_binary(raw) do
+    with {delta, ""} <- Integer.parse(raw) do
+      current = Mydia.Subtitles.TrackSettings.offset_ms(media_file_id, track_ref)
+      store_offset(socket, media_file_id, track_ref, current + delta)
+    else
+      _ -> {:noreply, socket}
+    end
+  end
+
+  # See set_subtitle_offset/2's fallback clause: the is_binary/1 guard above
+  # is what keeps a non-string delta from reaching Integer.parse/1 and
+  # crashing the LiveView.
+  def nudge_subtitle_offset(_params, socket), do: {:noreply, socket}
+
+  # Runs off the LiveView process via start_async, matching every other
+  # rescan-shaped action in this LiveView (rescan_movie, rescan_series,
+  # rescan_season, rescan_season_files in FileEvents). Mydia.Subtitles.Sidecars.reconcile/1
+  # lists a directory, runs two queries, and hashes every newly discovered
+  # sidecar; running that inline in handle_event would block the whole page
+  # for this user with no loading indicator, which is worst on the network
+  # mounts a self-hosted NAS setup is likely to use.
+  def rescan_subtitles(%{"media-file-id" => media_file_id}, socket) do
+    media_file = Mydia.Library.get_media_file!(media_file_id, preload: [:library_path])
+
+    {:noreply,
+     socket
+     |> put_flash(:info, "Checking for subtitle files on disk...")
+     |> start_async(:rescan_subtitles, fn -> Mydia.Subtitles.Sidecars.reconcile(media_file) end)}
+  end
+
+  defp store_offset(socket, media_file_id, track_ref, offset_ms) do
+    case Mydia.Subtitles.TrackSettings.set_offset(media_file_id, track_ref, offset_ms) do
+      {:ok, _setting} ->
+        {:noreply,
+         assign(
+           socket,
+           :media_file_subtitle_tracks,
+           load_media_file_subtitle_tracks(socket.assigns.media_item)
+         )}
+
+      {:error, _changeset} ->
+        max = Mydia.Subtitles.TrackSetting.max_offset_ms()
+
+        {:noreply,
+         put_flash(socket, :error, "Offset must be between -#{max} and #{max} milliseconds")}
+    end
+  end
+
   # handle_async dispatches
+
+  def handle_rescan_subtitles_async({:ok, {:ok, tally}}, socket) do
+    {:noreply,
+     socket
+     |> assign(
+       :media_file_subtitle_tracks,
+       load_media_file_subtitle_tracks(socket.assigns.media_item)
+     )
+     |> put_flash(
+       :info,
+       "Rescan complete: #{tally.adopted} adopted, #{tally.reaped} removed"
+     )}
+  end
+
+  def handle_rescan_subtitles_async({:ok, {:error, reason}}, socket) do
+    {:noreply,
+     put_flash(socket, :error, "Could not read that file's directory: #{inspect(reason)}")}
+  end
+
+  def handle_rescan_subtitles_async({:exit, reason}, socket) do
+    Logger.error("Subtitle rescan task crashed: #{inspect(reason)}")
+
+    {:noreply, put_flash(socket, :error, "Subtitle rescan failed unexpectedly")}
+  end
 
   def handle_subtitle_search_async(
         {:ok, {:ok, %{results: results, providers: providers}}},
@@ -145,7 +243,10 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
      |> assign(:subtitle_search_state, :idle)
      |> assign(:subtitle_search_results, [])
      |> assign(:subtitle_providers, [])
-     |> assign(:media_file_subtitles, load_media_file_subtitles(socket.assigns.media_item))
+     |> assign(
+       :media_file_subtitle_tracks,
+       load_media_file_subtitle_tracks(socket.assigns.media_item)
+     )
      |> put_flash(:info, "Subtitle downloaded successfully")}
   end
 

@@ -135,7 +135,7 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:subtitle_providers, [])
      |> assign(:selected_media_file, nil)
      |> assign(:selected_languages, ["en"])
-     |> assign(:media_file_subtitles, load_media_file_subtitles(media_item))
+     |> assign(:media_file_subtitle_tracks, load_media_file_subtitle_tracks(media_item))
      # Feature flags
      |> assign(:playback_enabled, playback_enabled?())
      # Franchise section state
@@ -400,6 +400,15 @@ defmodule MydiaWeb.MediaLive.Show do
 
   def handle_event("delete_subtitle", params, socket),
     do: SubtitleEvents.delete_subtitle(params, socket)
+
+  def handle_event("set_subtitle_offset", params, socket),
+    do: SubtitleEvents.set_subtitle_offset(params, socket)
+
+  def handle_event("nudge_subtitle_offset", params, socket),
+    do: SubtitleEvents.nudge_subtitle_offset(params, socket)
+
+  def handle_event("rescan_subtitles", params, socket),
+    do: SubtitleEvents.rescan_subtitles(params, socket)
 
   # Category, trailer, and quality profile events
 
@@ -717,6 +726,9 @@ defmodule MydiaWeb.MediaLive.Show do
 
   def handle_async(:download_subtitle, result, socket),
     do: SubtitleEvents.handle_download_subtitle_async(result, socket)
+
+  def handle_async(:rescan_subtitles, result, socket),
+    do: SubtitleEvents.handle_rescan_subtitles_async(result, socket)
 
   def handle_async(:load_franchise, result, socket),
     do: FranchiseEvents.handle_load_result(result, socket)

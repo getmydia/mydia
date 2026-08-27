@@ -103,12 +103,30 @@ defmodule MydiaWeb.MediaLive.Show.Loaders do
     |> Enum.group_by(& &1.media_file_id)
   end
 
-  # Load subtitles for all media files in a media item
-  # Returns a map of media_file_id => list of subtitles
-  def load_media_file_subtitles(media_item) do
+  @doc """
+  Every subtitle track for every media file of a media item, with its stored
+  offset attached.
+
+  Reads `Extractor.list_subtitle_tracks/2` rather than `Subtitles.list_subtitles/1`
+  so embedded tracks appear too. Embedded tracks are where bad timing is most
+  often baked in and least fixable, so hiding them is exactly backwards for a
+  screen whose job is fixing timing. This reads the stored `metadata.streams`
+  capture and does not shell out to ffprobe.
+  """
+  def load_media_file_subtitle_tracks(media_item) do
     media_item.media_files
     |> Enum.map(fn media_file ->
-      {media_file.id, Subtitles.list_subtitles(media_file.id)}
+      offsets = Subtitles.TrackSettings.offsets_for_media_file(media_file.id)
+
+      tracks =
+        media_file
+        |> Subtitles.Extractor.list_subtitle_tracks()
+        |> Enum.map(fn track ->
+          ref = to_string(track.track_id)
+          Map.put(track, :offset_ms, Map.get(offsets, ref, 0))
+        end)
+
+      {media_file.id, tracks}
     end)
     |> Map.new()
   end

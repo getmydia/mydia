@@ -10,6 +10,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   alias MydiaWeb.MediaLive.Show.SegmentComponents
   alias MydiaWeb.MediaLive.Show.SeasonComponents
   alias MydiaWeb.MediaLive.Show.SeasonOrderComponents
+  alias MydiaWeb.MediaLive.Show.SubtitleComponents
 
   @doc """
   Hero section with backdrop image, poster, and quick action buttons.
@@ -950,10 +951,11 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   end
 
   @doc """
-  Subtitles section showing available and downloaded subtitles for media files.
+  Subtitles section listing every subtitle track (embedded and sidecar) for
+  each media file, with an offset control per track.
   """
   attr :media_item, :map, required: true
-  attr :media_file_subtitles, :map, default: %{}
+  attr :media_file_subtitle_tracks, :map, default: %{}
 
   def subtitles_section(assigns) do
     ~H"""
@@ -965,7 +967,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
           <%!-- Media files with subtitle controls --%>
           <div class="space-y-4">
             <%= for media_file <- @media_item.media_files do %>
-              <% file_subtitles = Map.get(@media_file_subtitles, media_file.id, []) %>
+              <% tracks = Map.get(@media_file_subtitle_tracks, media_file.id, []) %>
               <div class="card bg-base-100 shadow">
                 <div class="card-body p-4">
                   <%!-- File info header --%>
@@ -986,48 +988,40 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                         </span>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      phx-click="open_subtitle_search"
-                      phx-value-media-file-id={media_file.id}
-                      class="btn btn-primary btn-sm"
-                    >
-                      <.icon name="hero-magnifying-glass" class="w-4 h-4" /> Search
-                    </button>
+                    <div class="flex items-center gap-2 flex-shrink-0">
+                      <button
+                        type="button"
+                        phx-click="rescan_subtitles"
+                        phx-value-media-file-id={media_file.id}
+                        class="btn btn-ghost btn-sm"
+                      >
+                        <.icon name="hero-arrow-path" class="w-4 h-4" /> Rescan
+                      </button>
+                      <button
+                        type="button"
+                        phx-click="open_subtitle_search"
+                        phx-value-media-file-id={media_file.id}
+                        class="btn btn-primary btn-sm"
+                      >
+                        <.icon name="hero-magnifying-glass" class="w-4 h-4" /> Search
+                      </button>
+                    </div>
                   </div>
 
-                  <%!-- Downloaded subtitles --%>
-                  <%= if length(file_subtitles) > 0 do %>
-                    <div class="divider my-2">Downloaded Subtitles</div>
-                    <ul class="space-y-2">
-                      <%= for subtitle <- file_subtitles do %>
-                        <li class="flex items-center justify-between gap-2 p-2 bg-base-200 rounded">
-                          <div class="flex items-center gap-2 flex-1">
-                            <span class="badge badge-outline badge-sm">{subtitle.language}</span>
-                            <span class="text-sm">{subtitle.format}</span>
-                            <%= if subtitle.rating do %>
-                              <div class="flex items-center gap-1">
-                                <.icon name="hero-star-solid" class="w-3 h-3 text-warning" />
-                                <span class="text-xs">{subtitle.rating}/10</span>
-                              </div>
-                            <% end %>
-                          </div>
-                          <button
-                            type="button"
-                            phx-click="delete_subtitle"
-                            phx-value-subtitle-id={subtitle.id}
-                            class="btn btn-ghost btn-xs btn-square text-error"
-                            title="Delete subtitle"
-                          >
-                            <.icon name="hero-trash" class="w-4 h-4" />
-                          </button>
-                        </li>
-                      <% end %>
-                    </ul>
-                  <% else %>
+                  <%!-- Subtitle tracks: embedded and sidecar together --%>
+                  <%= if tracks == [] do %>
                     <p class="text-sm text-base-content/60 italic">
-                      No subtitles downloaded yet
+                      No subtitle tracks found for this file
                     </p>
+                  <% else %>
+                    <div>
+                      <%= for track <- tracks do %>
+                        <SubtitleComponents.subtitle_track_row
+                          track={track}
+                          media_file_id={media_file.id}
+                        />
+                      <% end %>
+                    </div>
                   <% end %>
                 </div>
               </div>
