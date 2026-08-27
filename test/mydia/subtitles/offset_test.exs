@@ -228,6 +228,88 @@ defmodule Mydia.Subtitles.OffsetTest do
 
       assert result =~ "Dialogue: 0,0:00:11.73,0:00:13.23,Default"
     end
+
+    # Not in the task brief's test list. The Format: line under [Events]
+    # declares field order; the conventional Layer/Start/End/... layout is
+    # common but not guaranteed. Before this, the code always treated fields
+    # two and three as Start/End regardless of what Format: said, which
+    # either left timing unchanged (as it does here -- "Style" and "Name" at
+    # the assumed positions do not parse as timestamps) or rewrote the wrong
+    # fields entirely.
+    test "reads Start and End from a nonstandard Format: field order" do
+      content = """
+      [Events]
+      Format: Layer, Style, Name, Start, End, MarginL, MarginR, MarginV, Effect, Text
+      Dialogue: 0,Default,,0:00:10.50,0:00:12.00,0,0,0,,Hello there.
+      """
+
+      result = Offset.shift(content, "ass", 1_500)
+
+      assert result =~ "Dialogue: 0,Default,,0:00:12.00,0:00:13.50,0,0,0,,Hello there."
+    end
+
+    # Not in the task brief's test list. A Comment: line is governed by the
+    # same Format: mapping as Dialogue: -- pins that the nonstandard-order
+    # fix is not accidentally Dialogue:-specific.
+    test "reads Start and End from a nonstandard order on a Comment line too" do
+      content = """
+      [Events]
+      Format: Layer, Style, Name, Start, End, MarginL, MarginR, MarginV, Effect, Text
+      Comment: 0,Default,,0:00:10.50,0:00:12.00,0,0,0,,A note.
+      """
+
+      result = Offset.shift(content, "ass", 1_500)
+
+      assert result =~ "Comment: 0,Default,,0:00:12.00,0:00:13.50,0,0,0,,A note."
+    end
+
+    # Not in the task brief's test list. No Format: line at all is the
+    # overwhelming majority of ASS files this module actually sees (many
+    # tools omit it and rely on the spec's conventional order): falls back
+    # to Layer/Start/End rather than refusing to shift anything.
+    test "falls back to the conventional field order when no Format line is present" do
+      content = "[Events]\nDialogue: 0,0:00:10.50,0:00:12.00,Default,,0,0,0,,Hello there.\n"
+
+      result = Offset.shift(content, "ass", 1_500)
+
+      assert result =~ "Dialogue: 0,0:00:12.00,0:00:13.50,Default"
+    end
+
+    # Not in the task brief's test list. A Format: line that does not
+    # actually name Start and End (malformed, or a wildly nonstandard dialect)
+    # gives this module nothing safe to guess from -- leaving the line alone
+    # is the only choice that cannot corrupt it.
+    test "leaves event lines unchanged when the Format line has no Start or End" do
+      content = """
+      [Events]
+      Format: Layer, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+      Dialogue: 0,Default,,0,0,0,,Hello there.
+      """
+
+      result = Offset.shift(content, "ass", 1_500)
+
+      assert result == content
+    end
+
+    # Not in the task brief's test list. A Format: line under a different
+    # section (styles routinely have their own "Format:" line) must not be
+    # mistaken for the Events mapping.
+    test "ignores a Format: line outside the Events section" do
+      content = """
+      [V4+ Styles]
+      Format: Name, Fontname, Fontsize
+      Style: Default,Arial,20
+
+      [Events]
+      Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+      Dialogue: 0,0:00:10.50,0:00:12.00,Default,,0,0,0,,Hello there.
+      """
+
+      result = Offset.shift(content, "ass", 1_500)
+
+      assert result =~ "Dialogue: 0,0:00:12.00,0:00:13.50,Default"
+      assert result =~ "Style: Default,Arial,20"
+    end
   end
 
   describe "shift/3 on an unknown format" do

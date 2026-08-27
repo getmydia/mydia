@@ -28,9 +28,13 @@ defmodule Mydia.Subtitles.Offset do
   @ass_time ~r/(\d+):(\d{2}):(\d{2})\.(\d{2})/
 
   # ASS event lines (Dialogue:/Comment:) always carry these ten
-  # comma-separated fields, in this order, per the SSA/ASS v4+ spec:
+  # comma-separated fields, per the SSA/ASS v4+ spec:
   # Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text.
+  # This order is only the *conventional* one, used as a fallback when a
+  # file's `[Events] Format:` line does not say otherwise -- see
+  # `parse_ass_format/1` and `shift_ass/2`.
   @ass_event_fields 10
+  @ass_conventional_mapping {:ok, 1, 2, @ass_event_fields}
 
   @doc """
   Returns `content` with every cue moved by `offset_ms`.
@@ -134,41 +138,111 @@ defmodule Mydia.Subtitles.Offset do
   end
 
   ## ASS
+  #
+  # A file's actual Start/End field positions are declared by the
+  # `[Events] Format:` line, not fixed by the format -- see this module's
+  # moduledoc and the CodeRabbit finding this fixes. `shift_ass/2` walks the
+  # file top to bottom carrying the active mapping forward: which section
+  # it is in (only a Format: line under [Events] governs event lines; the
+  # same keyword appears under `[V4+ Styles]` for an unrelated field list),
+  # and, once seen, which comma-separated positions are Start and End.
 
   defp shift_ass(content, offset_ms) do
-    content
-    |> String.split(~r/\r?\n/)
-    |> Enum.map(&shift_ass_line(&1, offset_ms))
+    lines = String.split(content, ~r/\r?\n/)
+    initial_state = %{section: nil, mapping: @ass_conventional_mapping}
+
+    {shifted_lines, _state} =
+      Enum.map_reduce(lines, initial_state, &shift_ass_traverse_line(&1, &2, offset_ms))
+
+    shifted_lines
     |> Enum.reject(&(&1 == :drop))
     |> Enum.join("\n")
   end
 
-  defp shift_ass_line(line, offset_ms) do
-    if String.starts_with?(line, "Dialogue:") or String.starts_with?(line, "Comment:") do
-      shift_ass_event(line, offset_ms)
-    else
-      line
+  defp shift_ass_traverse_line(line, state, offset_ms) do
+    case classify_ass_line(line) do
+      {:section, name} ->
+        {line, %{state | section: normalize_ass_section(name)}}
+
+      :format ->
+        if state.section == :events do
+          {line, %{state | mapping: parse_ass_format(line)}}
+        else
+          {line, state}
+        end
+
+      :event ->
+        {shift_ass_event(line, state.mapping, offset_ms), state}
+
+      :other ->
+        {line, state}
     end
   end
 
-  # Splits into exactly @ass_event_fields fields so the free-text field keeps
-  # any commas it contains, then rewrites only the Start and End fields. This
-  # keeps the free text untouched even when it contains a timestamp-shaped
-  # substring, the same guarantee SRT and VTT get from the timing living on
-  # its own line.
-  defp shift_ass_event(line, offset_ms) do
-    case String.split(line, ",", parts: @ass_event_fields) do
-      [layer, start_field, end_field | tail] ->
-        shift_ass_fields(line, layer, start_field, end_field, tail, offset_ms)
+  defp classify_ass_line(line) do
+    case Regex.run(~r/^\[(.+)\]\s*$/, line) do
+      [_, name] ->
+        {:section, name}
+
+      nil ->
+        cond do
+          String.starts_with?(line, "Format:") ->
+            :format
+
+          String.starts_with?(line, "Dialogue:") or String.starts_with?(line, "Comment:") ->
+            :event
+
+          true ->
+            :other
+        end
+    end
+  end
+
+  defp normalize_ass_section(name) do
+    if String.downcase(String.trim(name)) == "events", do: :events, else: :other_section
+  end
+
+  # `Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV,
+  # Effect, Text` (in whatever order a given file actually uses) declares
+  # which comma position is Start and which is End. `:unusable` means the
+  # Format line does not name both -- a malformed or wildly nonstandard
+  # file this module has no safe order to guess from.
+  defp parse_ass_format("Format:" <> rest) do
+    fields =
+      rest
+      |> String.split(",")
+      |> Enum.map(&String.trim/1)
+
+    start_index = Enum.find_index(fields, &(String.downcase(&1) == "start"))
+    end_index = Enum.find_index(fields, &(String.downcase(&1) == "end"))
+
+    case {start_index, end_index} do
+      {nil, _} -> :unusable
+      {_, nil} -> :unusable
+      {s, e} -> {:ok, s, e, length(fields)}
+    end
+  end
+
+  defp shift_ass_event(line, :unusable, _offset_ms), do: line
+
+  # Splits into exactly `field_count` fields so the free-text field keeps
+  # any commas it contains, then rewrites only the Start and End fields at
+  # their declared positions. This keeps the free text untouched even when
+  # it contains a timestamp-shaped substring, the same guarantee SRT and
+  # VTT get from the timing living on its own line.
+  defp shift_ass_event(line, {:ok, start_index, end_index, field_count}, offset_ms) do
+    case String.split(line, ",", parts: field_count) do
+      fields when length(fields) == field_count ->
+        shift_ass_fields(line, fields, start_index, end_index, offset_ms)
 
       _ ->
         line
     end
   end
 
-  defp shift_ass_fields(line, layer, start_field, end_field, tail, offset_ms) do
-    with {:ok, start_ms} <- parse_ass_field(start_field),
-         {:ok, end_ms} <- parse_ass_field(end_field) do
+  defp shift_ass_fields(line, fields, start_index, end_index, offset_ms) do
+    with {:ok, start_ms} <- parse_ass_field(Enum.at(fields, start_index)),
+         {:ok, end_ms} <- parse_ass_field(Enum.at(fields, end_index)) do
       new_end = end_ms + offset_ms
 
       if new_end <= 0 do
@@ -176,10 +250,10 @@ defmodule Mydia.Subtitles.Offset do
       else
         new_start = start_ms + offset_ms
 
-        Enum.join(
-          [layer, format_ass_time(max(new_start, 0)), format_ass_time(max(new_end, 0)) | tail],
-          ","
-        )
+        fields
+        |> List.replace_at(start_index, format_ass_time(max(new_start, 0)))
+        |> List.replace_at(end_index, format_ass_time(max(new_end, 0)))
+        |> Enum.join(",")
       end
     else
       :error -> line
