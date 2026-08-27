@@ -653,20 +653,29 @@ defmodule MydiaWeb.MediaLive.Show.Components do
 
   @doc """
   Media files section showing all files for this media item.
+
+  Covers episode media files as well as the item's own, via
+  `all_media_files/1`: a movie's files live at `media_item.media_files`, but a
+  `MediaFile` belongs to either `media_item_id` or `episode_id`, never both, so
+  that list is always empty for a TV show. Without this the card was
+  permanently empty on every TV show page, sitting beside a Subtitles card that
+  reaches into both.
   """
   attr :media_item, :map, required: true
   attr :refreshing_file_metadata, :boolean, required: true
   attr :transcode_jobs, :map, default: %{}
 
   def media_files_section(assigns) do
+    assigns = assign(assigns, :files, all_media_files(assigns.media_item))
+
     ~H"""
-    <%= if length(@media_item.media_files) > 0 do %>
+    <%= if @files != [] do %>
       <div id="media-files-section" class="card bg-base-200 shadow-lg mb-4 md:mb-6">
         <div class="card-body p-4 md:p-6">
           <h2 class="card-title text-lg md:text-xl mb-3 md:mb-4">Media Files</h2>
           <%!-- DaisyUI list component --%>
           <ul class="menu bg-base-100 rounded-box p-0">
-            <li :for={file <- @media_item.media_files}>
+            <li :for={file <- @files}>
               <div class="flex flex-col gap-3 p-4 hover:bg-base-200 rounded-none transition-colors">
                 <div class="flex items-start justify-between gap-4">
                   <%!-- Left side: File info --%>

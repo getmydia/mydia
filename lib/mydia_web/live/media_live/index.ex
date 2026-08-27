@@ -8,6 +8,7 @@ defmodule MydiaWeb.MediaLive.Index do
   alias Mydia.Search
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.Live.Helpers.GridDensity
+  alias MydiaWeb.MediaLive.Show.Helpers, as: MediaFileHelpers
 
   import MydiaWeb.GridDensityComponents
 
@@ -791,8 +792,13 @@ defmodule MydiaWeb.MediaLive.Index do
   defp apply_quality_filter(items, nil), do: items
 
   defp apply_quality_filter(items, quality) do
+    # A MediaFile belongs to either media_item_id (movies) or episode_id (TV
+    # episodes), never both, so item.media_files alone is always empty for a
+    # TV show; filtering on it dropped every TV show from a quality-filtered
+    # result regardless of its episodes' actual resolutions.
     Enum.filter(items, fn item ->
-      item.media_files
+      item
+      |> MediaFileHelpers.all_media_files()
       |> Enum.any?(fn file -> file.resolution == quality end)
     end)
   end
@@ -952,7 +958,10 @@ defmodule MydiaWeb.MediaLive.Index do
   defp format_year(year), do: year
 
   defp get_quality_badge(media_item) do
-    case media_item.media_files do
+    # A MediaFile belongs to either media_item_id (movies) or episode_id (TV
+    # episodes), never both, so media_item.media_files alone is always empty
+    # for a TV show and the badge was silently blank on every show card.
+    case MediaFileHelpers.all_media_files(media_item) do
       [] ->
         nil
 
@@ -979,7 +988,11 @@ defmodule MydiaWeb.MediaLive.Index do
   end
 
   defp total_file_size(media_item) do
-    media_item.media_files
+    # Same split as get_quality_badge/1 above: media_item.media_files alone is
+    # always empty for a TV show, so every show reported "0 B" in the list
+    # view's Size column regardless of what was actually on disk.
+    media_item
+    |> MediaFileHelpers.all_media_files()
     |> Enum.map(& &1.size)
     |> Enum.reject(&is_nil/1)
     |> Enum.sum()

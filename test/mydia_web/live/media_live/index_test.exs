@@ -1072,4 +1072,59 @@ defmodule MydiaWeb.MediaLive.IndexTest do
       refute has_element?(view, "#poster-badges-#{movie.id}")
     end
   end
+
+  describe "TV show media files on the index page" do
+    setup %{conn: conn} do
+      admin = admin_user_fixture()
+      %{conn: log_in_user(conn, admin), admin: admin}
+    end
+
+    # A MediaFile belongs to either media_item_id (movies) or episode_id (TV
+    # episodes), never both, so a TV show's own media_files list is always
+    # empty. apply_quality_filter/2, get_quality_badge/1 and
+    # total_file_size/1 all read that list directly and silently gave a wrong
+    # answer for every TV show.
+    test "a quality filter matches on episode resolution, not the item's own empty list", %{
+      conn: conn
+    } do
+      show = media_item_fixture(%{title: "Quality Show", type: "tv_show"})
+      episode = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
+      media_file_fixture(%{episode_id: episode.id, resolution: "1080p"})
+
+      {:ok, view, _html} = live(conn, ~p"/tv")
+
+      view
+      |> element("form#library-filter-form")
+      |> render_change(%{"quality" => "1080p"})
+
+      assert has_element?(view, "#grid-item-#{show.id}")
+    end
+
+    test "a TV show with an episode file renders the quality badge", %{conn: conn} do
+      show = media_item_fixture(%{title: "Badge Show", type: "tv_show"})
+      episode = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
+      media_file_fixture(%{episode_id: episode.id, resolution: "720p"})
+
+      {:ok, view, _html} = live(conn, ~p"/tv")
+
+      container = "#poster-badges-#{show.id}"
+
+      assert has_element?(view, container)
+      assert has_element?(view, "#{container} .badge-neutral", "720p")
+    end
+
+    test "list view shows a TV show's total episode file size, not zero", %{conn: conn} do
+      show = media_item_fixture(%{title: "Size Show", type: "tv_show"})
+      episode = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
+      media_file_fixture(%{episode_id: episode.id, size: 1_073_741_824})
+
+      {:ok, view, _html} = live(conn, ~p"/tv")
+
+      view
+      |> element("button[aria-label='List']")
+      |> render_click()
+
+      assert has_element?(view, "#list-item-#{show.id}", "1.0 GB")
+    end
+  end
 end
