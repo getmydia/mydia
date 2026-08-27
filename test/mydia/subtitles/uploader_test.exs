@@ -194,4 +194,101 @@ defmodule Mydia.Subtitles.UploaderTest do
       assert File.exists?(Path.join(dir, "Movie.en.srt"))
     end
   end
+
+  # `language` reaches upload/3 from an HTML <select> in the web UI, but
+  # that constrains nothing at this boundary: a phx-submit payload sent
+  # directly over the socket can carry any string, and destination/3
+  # interpolates `language` straight into a file path with no Path.join and
+  # no rejection of "/" or "..". These tests exercise that boundary
+  # directly, without going through the LiveView at all.
+  describe "upload/3 language validation" do
+    test "rejects a language value that attempts path traversal, writing nothing outside the media directory" do
+      {dir, media_file} = movie_with_media_file()
+      marker = "pwned-#{System.unique_integer([:positive])}"
+
+      # Mirrors destination/3's own formula: "#{Path.rootname(absolute_path)}.#{language}.#{format}".
+      # rootname(absolute_path) is "<dir>/Movie"; gluing a language that
+      # starts with ".." onto the "." separator wastes the first ".." as
+      # part of a literal ("Movie...") segment name, so three ".." tokens
+      # are what it actually takes to walk back out of <dir> by one level.
+      escaped_path = Path.join(Path.dirname(dir), "#{marker}.srt")
+      on_exit(fn -> File.rm(escaped_path) end)
+
+      refute File.exists?(escaped_path)
+
+      assert {:error, _message} =
+               Uploader.upload(media_file, @srt, language: "../../../#{marker}")
+
+      refute File.exists?(escaped_path)
+      # The phantom intermediate directory a working exploit would need
+      # mkdir_p to create for it (Path.rootname(absolute_path) <> "." <>
+      # language glues the "." onto language's leading "..", producing the
+      # literal segment name "Movie...") must not exist either.
+      refute File.exists?(Path.join(dir, "Movie..."))
+      assert Mydia.Subtitles.list_subtitles(media_file.id) == []
+    end
+
+    test "rejects a language value containing a path separator that does not escape the directory" do
+      {dir, media_file} = movie_with_media_file()
+
+      assert {:error, message} = Uploader.upload(media_file, @srt, language: "en/evil")
+
+      assert message =~ "language"
+      assert File.ls!(dir) == ["Movie.mkv"]
+      assert Mydia.Subtitles.list_subtitles(media_file.id) == []
+    end
+
+    test "rejects an implausible language code even with no path metacharacters" do
+      {_dir, media_file} = movie_with_media_file()
+
+      assert {:error, message} = Uploader.upload(media_file, @srt, language: "english")
+      assert message =~ "language"
+    end
+
+    test "rejects a non-string language value instead of raising" do
+      {_dir, media_file} = movie_with_media_file()
+
+      assert {:error, message} = Uploader.upload(media_file, @srt, language: nil)
+      assert message =~ "language"
+    end
+
+    # In PCRE (Elixir's Regex engine), a bare `$` matches end-of-string OR
+    # immediately before a single trailing newline, so `^...$` alone would
+    # let "en\n" through and land in a filename with an embedded newline.
+    # Not a traversal (no "/" survives the character class either way), but
+    # filename hygiene this codebase has already been bitten by once, see
+    # @filename_pattern's own comment in lib/mydia/streaming/session_subtitles.ex.
+    test "rejects a language value with a trailing newline" do
+      {_dir, media_file} = movie_with_media_file()
+
+      assert {:error, message} = Uploader.upload(media_file, @srt, language: "en\n")
+      assert message =~ "language"
+      assert Mydia.Subtitles.list_subtitles(media_file.id) == []
+    end
+
+    test "accepts a region-tagged code shaped like a real language" do
+      {dir, media_file} = movie_with_media_file()
+
+      assert {:ok, subtitle} = Uploader.upload(media_file, @srt, language: "pt-BR")
+      assert subtitle.file_path == Path.join(dir, "Movie.pt-BR.srt")
+    end
+  end
+
+  describe "write_error_message/2" do
+    test "read-only-mount reasons name the directory" do
+      path = "/some/library/Movie.en.srt"
+
+      assert Uploader.write_error_message(path, :eacces) =~ "/some/library"
+      assert Uploader.write_error_message(path, :eacces) =~ "read-only"
+      assert Uploader.write_error_message(path, :erofs) =~ "read-only"
+    end
+
+    test "eexist reads as an existing-subtitle refusal" do
+      assert Uploader.write_error_message("/x/Movie.en.srt", :eexist) =~ "already a subtitle"
+    end
+
+    test "an unrecognized reason still returns a string, not a raise" do
+      assert Uploader.write_error_message("/x/Movie.en.srt", :enospc) =~ "Could not write"
+    end
+  end
 end

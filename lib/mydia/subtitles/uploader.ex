@@ -54,11 +54,30 @@ defmodule Mydia.Subtitles.Uploader do
   write into someone's library. See "Identical basenames" below for the
   second case.
 
-  Nothing is written to disk before the destination is confirmed free and
-  owned by `media_file`; nothing is inserted before the write to disk
-  succeeds; the file is removed if the insert then fails (typically a
-  byte-identical subtitle already recorded for this media file). Every
-  failure path here leaves either both the row and the file, or neither.
+  `:language` is validated against a strict code-shaped pattern before it
+  touches any path. It arrives here from an HTML `<select>` in the web UI,
+  but that constrains nothing at this boundary: a `phx-submit` payload sent
+  directly over the socket can carry any string, and `destination/3` below
+  interpolates `:language` straight into a file path. An unvalidated value
+  is a path traversal primitive, not a display string, and
+  `check_ownership/2`'s sidecar-ownership check does not defend against
+  that: it prefix-matches the resulting basename against real siblings, so
+  a traversal payload simply matches none of them and is waved through.
+  Containment is `validate_language/1`'s job alone, enforced before
+  `destination/3` ever runs.
+
+  Nothing is written to disk before the destination is confirmed free,
+  owned by `media_file` (see "Identical basenames"), and reachable only
+  through a language code that cannot contain a path separator; nothing is
+  inserted before the write to disk succeeds; the file is removed if the
+  insert then fails (typically a byte-identical subtitle already recorded
+  for this media file). Every failure path here leaves either both the row
+  and the file, or neither. The directory `write/3` ensures exists is
+  always the media file's own directory from the database, never derived
+  from the computed destination path, so even a caller that reached
+  `destination/3` some other way without going through the language check
+  could not use a crafted path to make this function create directories it
+  should not.
 
   ## Identical basenames
 
@@ -82,15 +101,48 @@ defmodule Mydia.Subtitles.Uploader do
     forced = Keyword.get(opts, :forced, false)
     hearing_impaired = Keyword.get(opts, :hearing_impaired, false)
 
-    with {:ok, format} <- detect_format(content),
+    with :ok <- validate_language(language),
+         {:ok, format} <- detect_format(content),
          {:ok, path} <- destination(media_file, language, format),
          :ok <- check_ownership(media_file, path),
-         :ok <- write(path, content) do
+         :ok <- write(media_file, path, content) do
       insert(media_file, path, language, format, content, forced, hearing_impaired)
     end
   end
 
   ## Private
+
+  # The security boundary for what this function will write to disk, not a
+  # display concern: `destination/3` builds a file path by interpolating
+  # `language` raw, with no `Path.join`, no `..`/`/` rejection, and no
+  # length cap. This allowlist is intentionally NOT `MydiaWeb.Languages.
+  # all/0`'s codes: that module is presentation data ("This is presentation
+  # data rather than domain data" per its own moduledoc), and whichever
+  # languages happen to get a chip in some future UI must never become the
+  # thing that decides what this function is willing to write to disk. A
+  # bare ISO 639-1/639-3 code, optionally with a region subtag, is the
+  # actual shape being trusted; anything else (a "/", a "..", a null byte,
+  # an absolute path) is rejected outright rather than sanitized, because
+  # stripping known-bad substrings and calling the result safe is exactly
+  # the kind of denylist that the next bypass finds a gap in.
+  #
+  # `\A`/`\z` rather than `^`/`$`: in PCRE (what Elixir's Regex uses) a bare
+  # `$` also matches just before a single trailing newline, so "en\n" would
+  # otherwise pass and land in a filename with an embedded newline. Same
+  # trap, same engine, already documented on `@filename_pattern` in
+  # lib/mydia/streaming/session_subtitles.ex. Do not "simplify" this back
+  # to `^...$`.
+  @language_pattern ~r/\A[a-z]{2,3}(-[A-Z]{2})?\z/
+
+  defp validate_language(language) when is_binary(language) do
+    if Regex.match?(@language_pattern, language) do
+      :ok
+    else
+      {:error, "That is not a valid language code"}
+    end
+  end
+
+  defp validate_language(_language), do: {:error, "That is not a valid language code"}
 
   defp detect_format(content) do
     case Format.detect(content) do
@@ -148,8 +200,24 @@ defmodule Mydia.Subtitles.Uploader do
   # No temp file, unlike Downloader: the bytes already live in memory (read
   # from the LiveView upload's own temp path, which Phoenix removes once
   # consumed), so there is nothing to rename or clean up here beyond the
-  # final path itself. mkdir_p mirrors Downloader's defensive call, but
-  # deliberately the non-raising form: the media directory normally already
+  # final path itself.
+  #
+  # The directory mkdir_p targets is deliberately recomputed from
+  # `media_file` via MediaFile.absolute_path/1, a database-backed value,
+  # and NOT derived from `path` (Path.dirname(path) would have been the
+  # obvious shortcut). `path` is built in destination/3 by interpolating
+  # the caller-supplied `language`; validate_language/1 in upload/3 already
+  # rejects anything that is not a bare language code before path is ever
+  # built, but mkdir_p-ing a directory computed from that same path would
+  # have been a second, independent way for a "../../etc/evil" style value
+  # to escape: mkdir_p is exactly the primitive that turns a `..`-laden
+  # path into a real, walkable filesystem location, since File.write/3
+  # alone cannot resolve a path through directories that do not yet exist.
+  # Keeping mkdir_p's target pinned to the media file's own real directory
+  # means this stays safe even for some future caller of destination/3
+  # that does not go through upload/3's validation.
+  #
+  # mkdir_p is the non-raising form: the media directory normally already
   # exists (the video file lives there), so this never actually attempts a
   # write; File.write/3 below is what surfaces a read-only mount, and it
   # returns an error tuple rather than raising.
@@ -160,8 +228,10 @@ defmodule Mydia.Subtitles.Uploader do
   # overwrite the first's bytes on disk while both still insert their own
   # database row. With it, the loser gets :eexist here instead, reported the
   # same as if destination/3 had caught it up front.
-  defp write(path, content) do
-    with :ok <- File.mkdir_p(Path.dirname(path)),
+  defp write(media_file, path, content) do
+    media_dir = media_file |> MediaFile.absolute_path() |> Path.dirname()
+
+    with :ok <- File.mkdir_p(media_dir),
          :ok <- File.write(path, content, [:exclusive]) do
       :ok
     else
@@ -169,15 +239,24 @@ defmodule Mydia.Subtitles.Uploader do
     end
   end
 
-  defp write_error_message(_path, :eexist) do
+  @doc false
+  # Exposed (not doc'd) purely so error-message formatting for the
+  # read-only-mount case (:eacces / :erofs) can be unit tested directly.
+  # The behavior behind those two reasons has no automated coverage
+  # otherwise: reliably producing a real permission-denied write in a test
+  # depends on the test process not running as root, which is not true of
+  # every environment this suite runs in (see the skipped test in
+  # test/mydia/library/scanner_test.exs for the established precedent).
+  @spec write_error_message(Path.t(), atom()) :: String.t()
+  def write_error_message(_path, :eexist) do
     "There is already a subtitle for that language. Delete it first."
   end
 
-  defp write_error_message(path, reason) when reason in [:eacces, :erofs] do
+  def write_error_message(path, reason) when reason in [:eacces, :erofs] do
     "Cannot write to #{Path.dirname(path)}. That library path is read-only."
   end
 
-  defp write_error_message(_path, reason) do
+  def write_error_message(_path, reason) do
     "Could not write the subtitle file: #{inspect(reason)}"
   end
 
@@ -213,10 +292,15 @@ defmodule Mydia.Subtitles.Uploader do
 
   # The unique index on (media_file_id, subtitle_hash) is the only
   # validation on this changeset that a caller of upload/3 can actually
-  # trigger: format is already known-good from detect_format/1, language and
-  # the two flags are never user-typed strings. Anything else reaching this
-  # branch is unexpected, so it gets a generic message rather than a
-  # misleading claim of duplicate content.
+  # trigger: format is already known-good from detect_format/1, language is
+  # already known-good from validate_language/1, and the two flags are
+  # never user-typed strings. Anything else reaching this branch is
+  # unexpected, so it gets a generic message rather than a misleading claim
+  # of duplicate content. It also does NOT interpolate the changeset's own
+  # errors: those are raw Ecto/database internals, already captured by the
+  # Logger.warning/2 call above for whoever reads the server logs, and not
+  # something to hand an operator's browser regardless of how unlikely this
+  # branch is to fire.
   defp insert_error_message(changeset) do
     duplicate? =
       Enum.any?(changeset.errors, fn {_field, {_message, opts}} ->
@@ -226,7 +310,7 @@ defmodule Mydia.Subtitles.Uploader do
     if duplicate? do
       "Mydia already has a subtitle with identical content for this file"
     else
-      "Could not save that subtitle: #{inspect(changeset.errors)}"
+      "Could not save that subtitle. Check the server logs for details."
     end
   end
 
