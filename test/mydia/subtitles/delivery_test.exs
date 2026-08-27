@@ -121,6 +121,17 @@ defmodule Mydia.Subtitles.DeliveryTest do
     end
   end
 
+  describe "track_id_from_ref/1" do
+    test "converts a stringified embedded stream index to an integer" do
+      assert Delivery.track_id_from_ref("3") == 3
+    end
+
+    test "leaves a sidecar's UUID track ref as a string" do
+      uuid = Ecto.UUID.generate()
+      assert Delivery.track_id_from_ref(uuid) == uuid
+    end
+  end
+
   describe "content/3 format validation" do
     # The REST controller reads `format` straight off the query string, and it
     # ends up in a cache path and an ffmpeg argument. GraphQL constrains it via

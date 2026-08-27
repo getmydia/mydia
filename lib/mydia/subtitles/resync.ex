@@ -153,7 +153,16 @@ defmodule Mydia.Subtitles.Resync do
   # crash mid-analysis cannot leak PCM into the temp directory. Same reasoning as
   # Mydia.Library.SegmentDetection.Fingerprint.Fpcalc.
   defp decode_audio(media_file) do
-    path = MediaFile.display_path(media_file)
+    case MediaFile.display_path(media_file) do
+      nil ->
+        log_and_skip(:no_audio, media_file.id, :unresolved_path)
+
+      path ->
+        decode_audio(media_file, path)
+    end
+  end
+
+  defp decode_audio(media_file, path) do
     pcm_path = Path.join(System.tmp_dir!(), "mydia_resync_#{media_file.id}.pcm")
 
     args = [
@@ -189,7 +198,7 @@ defmodule Mydia.Subtitles.Resync do
   end
 
   defp subtitle_spans(media_file, track_ref) do
-    case Delivery.content(media_file, track_ref, "srt") do
+    case Delivery.content(media_file, Delivery.track_id_from_ref(track_ref), "srt") do
       {:ok, content} ->
         case cue_spans(content, "srt") do
           [] -> {:skip, :no_cues}
