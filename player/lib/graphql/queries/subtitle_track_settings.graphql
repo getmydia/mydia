@@ -1,0 +1,15 @@
+# Stored per-track timing corrections for a media file, keyed by track ref.
+#
+# Deliberately a standalone root query, mirroring `subtitleContent` rather
+# than living on `SubtitleTrack`. `SubtitleTrack` is selected through
+# `MediaFileFragment` on the path to playback, and GraphQL treats an unknown
+# field as a document-level error -- a player newer than the server would
+# lose the whole movie/episode query, and playback with it, rather than just
+# these offsets. `player_screen.dart` treats any failure from this query as
+# "no offsets" and keeps playing rather than surfacing it.
+query SubtitleTrackSettings($mediaFileId: ID!) {
+  subtitleTrackSettings(mediaFileId: $mediaFileId) {
+    trackRef
+    offsetMs
+  }
+}

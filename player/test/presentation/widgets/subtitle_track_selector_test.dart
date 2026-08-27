@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_ce_flutter/hive_flutter.dart';
@@ -61,6 +62,15 @@ Widget _host({
   required Future<SubtitleSearchOutcome> Function(List<String>) onSearch,
   required Future<SubtitleTrack> Function(SubtitleCandidate) onDownload,
   ValueChanged<SubtitleTrackSelection>? capture,
+  ValueListenable<int?>? subtitleDelayMs,
+  // True by default: most tests in this file that do pass a non-null
+  // [subtitleDelayMs] are not about Save gating specifically, and the
+  // pre-gating behaviour (Save always offered once a track is selected) is
+  // the right default to keep those unaffected.
+  bool canSaveDelay = true,
+  Future<void> Function(int deltaMs)? onNudgeSubtitleDelay,
+  Future<void> Function()? onResetSubtitleDelay,
+  Future<void> Function()? onSaveSubtitleDelay,
 }) {
   return MaterialApp(
     home: Scaffold(
@@ -73,6 +83,16 @@ Widget _host({
               null,
               onSearch: onSearch,
               onDownload: onDownload,
+              // Most tests in this file don't exercise the delay row -- that
+              // has its own coverage in subtitle_track_loading_test.dart (the
+              // pure functions) and player_screen.dart (the wiring). A
+              // notifier stuck at null keeps the row hidden by default, and
+              // the callbacks are never expected to fire.
+              subtitleDelayMs: subtitleDelayMs ?? ValueNotifier<int?>(null),
+              canSaveDelay: canSaveDelay,
+              onNudgeSubtitleDelay: onNudgeSubtitleDelay ?? (_) async {},
+              onResetSubtitleDelay: onResetSubtitleDelay ?? () async {},
+              onSaveSubtitleDelay: onSaveSubtitleDelay ?? () async {},
             );
             capture?.call(result);
           },
@@ -610,5 +630,152 @@ void main() {
 
     completer.complete(_downloaded);
     await tester.pumpAndSettle();
+  });
+
+  testWidgets('hides the delay row when the notifier is null', (tester) async {
+    await tester.pumpWidget(_host(
+      onSearch: (_) async =>
+          const SubtitleSearchOutcome(results: [], providers: []),
+      onDownload: (_) async => _downloaded,
+    ));
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Subtitle delay'), findsNothing);
+  });
+
+  testWidgets(
+      'shows the delay row with the current value when the '
+      'notifier has one', (tester) async {
+    final delay = ValueNotifier<int?>(250);
+    addTearDown(delay.dispose);
+
+    await tester.pumpWidget(_host(
+      onSearch: (_) async =>
+          const SubtitleSearchOutcome(results: [], providers: []),
+      onDownload: (_) async => _downloaded,
+      subtitleDelayMs: delay,
+    ));
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Subtitle delay'), findsOneWidget);
+    expect(find.text('+250 ms'), findsOneWidget);
+  });
+
+  testWidgets(
+      'the delay row updates live when the notifier changes while the '
+      'sheet is already open', (tester) async {
+    // The sheet is a separate route from whatever owns the notifier, so
+    // this is what proves a keyboard nudge (or the initial offsets load)
+    // reaches the row without the sheet having to be reopened.
+    final delay = ValueNotifier<int?>(0);
+    addTearDown(delay.dispose);
+
+    await tester.pumpWidget(_host(
+      onSearch: (_) async =>
+          const SubtitleSearchOutcome(results: [], providers: []),
+      onDownload: (_) async => _downloaded,
+      subtitleDelayMs: delay,
+    ));
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    expect(find.text('+0 ms'), findsOneWidget);
+
+    delay.value = -400;
+    await tester.pump();
+
+    expect(find.text('-400 ms'), findsOneWidget);
+  });
+
+  testWidgets('the stepper buttons nudge by the documented +/-100ms',
+      (tester) async {
+    final deltas = <int>[];
+    final delay = ValueNotifier<int?>(0);
+    addTearDown(delay.dispose);
+
+    await tester.pumpWidget(_host(
+      onSearch: (_) async =>
+          const SubtitleSearchOutcome(results: [], providers: []),
+      onDownload: (_) async => _downloaded,
+      subtitleDelayMs: delay,
+      onNudgeSubtitleDelay: (delta) async => deltas.add(delta),
+    ));
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('subtitle-delay-increment')));
+    await tester.tap(find.byKey(const ValueKey('subtitle-delay-decrement')));
+    await tester.pump();
+
+    expect(deltas, [100, -100]);
+  });
+
+  testWidgets('Reset and Save call their own callbacks', (tester) async {
+    var resetCalls = 0;
+    var saveCalls = 0;
+    final delay = ValueNotifier<int?>(300);
+    addTearDown(delay.dispose);
+
+    await tester.pumpWidget(_host(
+      onSearch: (_) async =>
+          const SubtitleSearchOutcome(results: [], providers: []),
+      onDownload: (_) async => _downloaded,
+      subtitleDelayMs: delay,
+      onResetSubtitleDelay: () async => resetCalls++,
+      onSaveSubtitleDelay: () async => saveCalls++,
+    ));
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('subtitle-delay-reset')));
+    await tester.tap(find.byKey(const ValueKey('subtitle-delay-save')));
+    await tester.pump();
+
+    expect(resetCalls, 1);
+    expect(saveCalls, 1);
+  });
+
+  testWidgets(
+      'hides Save but keeps the steppers and Reset when canSaveDelay is '
+      'false', (tester) async {
+    // Stands in for the sheet having been opened on an mpv-native track:
+    // the caller (player_screen.dart) computes canSaveDelay from
+    // canSaveSubtitleDelay(currentTrack?.id) and passes false for that
+    // case. This test only pins the sheet's own reaction to that flag, not
+    // the id-space reasoning behind it -- that lives in
+    // subtitle_track_loading_test.dart's canSaveSubtitleDelay coverage.
+    final delay = ValueNotifier<int?>(300);
+    addTearDown(delay.dispose);
+
+    await tester.pumpWidget(_host(
+      onSearch: (_) async =>
+          const SubtitleSearchOutcome(results: [], providers: []),
+      onDownload: (_) async => _downloaded,
+      subtitleDelayMs: delay,
+      canSaveDelay: false,
+    ));
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Subtitle delay'), findsOneWidget,
+        reason: 'the row itself must still show -- the live delay still '
+            'applies for the current session even though it cannot be '
+            'saved');
+    expect(
+        find.byKey(const ValueKey('subtitle-delay-decrement')), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('subtitle-delay-increment')), findsOneWidget);
+    expect(find.byKey(const ValueKey('subtitle-delay-reset')), findsOneWidget);
+    expect(find.byKey(const ValueKey('subtitle-delay-save')), findsNothing,
+        reason: 'Save must be absent, not merely disabled -- a control that '
+            'reports success and silently does not persist is worse than no '
+            'control at all');
   });
 }

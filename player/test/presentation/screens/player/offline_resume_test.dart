@@ -237,7 +237,11 @@ void main() {
     final store = InMemoryPlaybackProgressStore();
 
     final container = buildPlayerScreenContainer(
-      link: StubLink.responses([movieDetailResponse()]),
+      link: StubLink.responses([
+        movieDetailResponse(),
+        movieSegmentsResponse(),
+        subtitleTrackSettingsResponse(),
+      ]),
       connectionState: conn.ConnectionState.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),

@@ -32,6 +32,7 @@ void main() {
     final link = StubLink.responses([
       movieDetailResponse(),
       movieSegmentsResponse(),
+      subtitleTrackSettingsResponse(),
       streamingCandidatesResponse(duration: 5400),
       startStreamingSessionResponse(sessionId: 'sess-42'),
       endStreamingSessionResponse(),

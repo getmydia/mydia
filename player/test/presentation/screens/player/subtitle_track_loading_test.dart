@@ -392,6 +392,89 @@ void main() {
     });
   });
 
+  group('isMpvNativeSubtitleTrackId', () {
+    test('is true for an mpv-native track id', () {
+      expect(isMpvNativeSubtitleTrackId('mk_1'), isTrue);
+    });
+
+    test('is false for a server track id', () {
+      expect(isMpvNativeSubtitleTrackId('3'), isFalse);
+      expect(isMpvNativeSubtitleTrackId('uuid-1'), isFalse);
+    });
+  });
+
+  group('canSaveSubtitleDelay', () {
+    test('refuses an mpv-native track', () {
+      // Its id is media_kit's own container-local one, not the ffprobe
+      // stream index `trackRef` actually means for an embedded track --
+      // saving would persist under an id the next session has no reason to
+      // reproduce.
+      expect(canSaveSubtitleDelay('mk_1'), isFalse);
+    });
+
+    test('allows a server track id', () {
+      expect(canSaveSubtitleDelay('3'), isTrue);
+      expect(canSaveSubtitleDelay('uuid-1'), isTrue);
+    });
+
+    test('refuses when no track is selected', () {
+      expect(canSaveSubtitleDelay(null), isFalse);
+    });
+  });
+
+  group('subtitleDelayDisplayMs', () {
+    test('hides the row when no track is selected', () {
+      expect(
+        subtitleDelayDisplayMs(
+          trackId: null,
+          offsetsLoaded: true,
+          storedOffsetMs: 500,
+          nudgeMs: 0,
+        ),
+        isNull,
+      );
+    });
+
+    test('hides the row when the offsets query never succeeded', () {
+      // Even with a track selected and a non-zero stored value passed in --
+      // this is the exact shape that must be trusted enough to persist over,
+      // and an unloaded query is precisely what makes it untrustworthy.
+      expect(
+        subtitleDelayDisplayMs(
+          trackId: 'uuid-1',
+          offsetsLoaded: false,
+          storedOffsetMs: 500,
+          nudgeMs: 0,
+        ),
+        isNull,
+      );
+    });
+
+    test('shows stored plus the live nudge once a track is selected', () {
+      expect(
+        subtitleDelayDisplayMs(
+          trackId: 'uuid-1',
+          offsetsLoaded: true,
+          storedOffsetMs: 500,
+          nudgeMs: 300,
+        ),
+        800,
+      );
+    });
+
+    test('shows zero for a fresh track with nothing stored or nudged', () {
+      expect(
+        subtitleDelayDisplayMs(
+          trackId: 'uuid-1',
+          offsetsLoaded: true,
+          storedOffsetMs: 0,
+          nudgeMs: 0,
+        ),
+        0,
+      );
+    });
+  });
+
   group('failed-fetch retry (regression coverage)', () {
     test(
         'a track whose fetch failed can be requested again, instead of '

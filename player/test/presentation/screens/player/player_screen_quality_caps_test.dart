@@ -64,6 +64,7 @@ void main() {
     final link = StubLink.responses([
       movieDetailResponse(),
       movieSegmentsResponse(),
+      subtitleTrackSettingsResponse(),
       streamingCandidatesResponse(duration: 5400, height: 2160),
       startStreamingSessionResponse(maxBitrate: 4000, maxHeight: 720),
       endStreamingSessionResponse(),
@@ -94,6 +95,7 @@ void main() {
     final link = StubLink.responses([
       movieDetailResponse(),
       movieSegmentsResponse(),
+      subtitleTrackSettingsResponse(),
       // A 720p source: the 1080p rung would upscale, so it is not on this
       // file's ladder at all.
       streamingCandidatesResponse(duration: 5400, height: 720),
@@ -125,6 +127,7 @@ void main() {
     final link = StubLink.responses([
       movieDetailResponse(),
       movieSegmentsResponse(),
+      subtitleTrackSettingsResponse(),
       // Direct play is on offer and would normally win on native, handing the
       // file over untouched — with no encoder to apply the cap to.
       streamingCandidatesResponse(
@@ -156,6 +159,7 @@ void main() {
     final link = StubLink.responses([
       movieDetailResponse(),
       movieSegmentsResponse(),
+      subtitleTrackSettingsResponse(),
       streamingCandidatesResponse(duration: 5400, height: 2160),
       // Absinthe's verbatim text for an argument the schema does not declare.
       graphqlErrorResponse(
@@ -222,6 +226,9 @@ void main() {
     final link = StubLink((request, _) {
       if (isOperation(request, 'MovieDetail')) return movieDetailResponse();
       if (isOperation(request, 'MovieSegments')) return movieSegmentsResponse();
+      if (isOperation(request, 'SubtitleTrackSettings')) {
+        return subtitleTrackSettingsResponse();
+      }
       if (isOperation(request, 'StreamingCandidates')) {
         return streamingCandidatesResponse(duration: 5400, height: 2160);
       }
@@ -270,6 +277,7 @@ void main() {
     final link = StubLink.responses([
       movieDetailResponse(),
       movieSegmentsResponse(),
+      subtitleTrackSettingsResponse(),
       streamingCandidatesResponse(duration: 5400, height: 2160),
       startStreamingSessionResponse(),
       endStreamingSessionResponse(),
@@ -300,6 +308,7 @@ void main() {
     final link = StubLink.responses([
       movieDetailResponse(),
       movieSegmentsResponse(),
+      subtitleTrackSettingsResponse(),
       streamingCandidatesResponse(duration: 5400, height: 2160),
       graphqlErrorResponse('Failed to start streaming session'),
       endStreamingSessionResponse(),
