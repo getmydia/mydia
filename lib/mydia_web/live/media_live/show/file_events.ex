@@ -14,7 +14,12 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
     only: [load_media_item: 1, load_transcode_jobs: 1]
 
   import MydiaWeb.MediaLive.Show.Helpers,
-    only: [get_season_media_files: 2, refresh_files: 1, provider_label: 1]
+    only: [
+      all_media_files: 1,
+      get_season_media_files: 2,
+      refresh_files: 1,
+      provider_label: 1
+    ]
 
   require Logger
 
@@ -184,7 +189,10 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
 
   def refresh_all_file_metadata(_params, socket) do
     media_item = socket.assigns.media_item
-    media_files = media_item.media_files
+    # A MediaFile belongs to either media_item_id or episode_id, never both, so
+    # media_item.media_files is empty for a TV show and this button was dead on
+    # every show page.
+    media_files = all_media_files(media_item)
 
     if Enum.empty?(media_files) do
       {:noreply, put_flash(socket, :info, "No media files to refresh")}

@@ -260,6 +260,18 @@ defmodule Mydia.CollectionsTest do
       assert length(collection_items) == 3
     end
 
+    test "returns :not_found when a media item id does not exist" do
+      user = user_fixture()
+      collection = collection_fixture(%{user: user})
+      movie = media_item_fixture(%{type: "movie"})
+
+      assert {:error, :not_found} =
+               Collections.add_items(collection, [movie.id, Ecto.UUID.generate()])
+
+      # Nothing was inserted: the valid id must not slip through either.
+      assert Collections.list_collection_items(collection) == []
+    end
+
     test "remove_item/2 removes item from collection" do
       user = user_fixture()
       collection = collection_fixture(%{user: user})

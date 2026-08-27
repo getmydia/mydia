@@ -9,9 +9,8 @@ defmodule Mydia.Subtitles.TrackSettings do
   A malformed media file id returns the same answer as an absent row rather
   than raising. Both `Delivery.content/3` and the GraphQL resolver call this on
   ids that arrive from a client, and a cast failure there is a missing setting,
-  not a server error. `set_offset/3` applies the same rule on the write side,
-  reporting a bad id as a changeset error instead of raising; see its doc for
-  why that needs two rescue clauses rather than one.
+  not a server error. `set_offset/3` applies the same rule on the write side;
+  see its doc for how the two adapters get there differently.
   """
 
   import Ecto.Query
@@ -37,28 +36,19 @@ defmodule Mydia.Subtitles.TrackSettings do
   @doc """
   Stores `offset_ms` for a track, replacing any previous value.
 
-  A `media_file_id` that does not reference an existing media file is
-  reported as a changeset error rather than raising. The GraphQL `ID!`
-  scalar does not validate UUID shape, so a client-supplied id can be
-  malformed, and the two adapters fail that in different ways:
+  A `media_file_id` that does not reference an existing media file is reported
+  as a changeset error rather than raising. The GraphQL `ID!` scalar does not
+  validate UUID shape, so a client-supplied id can be malformed, and the two
+  adapters fail that in different ways:
 
     * On PostgreSQL, a non-UUID-shaped string never reaches the database:
       `Repo.get_by/3` raises `Ecto.Query.CastError` while binding the query
-      parameter.
+      parameter. That is the read this function rescues.
     * On SQLite, any string casts as a valid `:binary_id`, so `Repo.get_by/3`
-      just finds no row and the write proceeds to `Repo.insert_or_update/2`,
-      which fails the foreign key constraint instead. `ecto_sqlite3` cannot
-      recover *which* constraint failed from SQLite's error message (see
-      `to_constraints/2` in its connection module, which maps every foreign
-      key violation to a nameless `nil`), so the changeset's own
-      `foreign_key_constraint/3` can never match it by name and Ecto
-      re-raises as `Ecto.ConstraintError` instead of returning `{:error,
-      changeset}`. The same path also fires for a well-formed but
-      nonexistent id on SQLite, not only a malformed one.
-
-  Catching both keeps callers, including the GraphQL resolver, adapter
-  agnostic: either failure mode becomes a normal `{:error, changeset}`
-  instead of a 500.
+      finds no row and the write proceeds to `Repo.insert_or_update/2`, which
+      fails the foreign key constraint. `Mydia.Repo.ForeignKeyGuard` turns that
+      into a changeset error, covering both a malformed id and a well-formed
+      but nonexistent one.
   """
   @spec set_offset(binary(), String.t(), integer()) ::
           {:ok, TrackSetting.t()} | {:error, Ecto.Changeset.t()}
@@ -77,13 +67,6 @@ defmodule Mydia.Subtitles.TrackSettings do
   rescue
     Ecto.Query.CastError ->
       {:error, missing_media_file_changeset(media_file_id, track_ref, offset_ms)}
-
-    error in Ecto.ConstraintError ->
-      if error.type == :foreign_key do
-        {:error, missing_media_file_changeset(media_file_id, track_ref, offset_ms)}
-      else
-        reraise error, __STACKTRACE__
-      end
   end
 
   defp missing_media_file_changeset(media_file_id, track_ref, offset_ms) do
@@ -128,22 +111,12 @@ defmodule Mydia.Subtitles.TrackSettings do
     )
     |> Repo.insert_or_update()
   rescue
-    # Mirrors set_offset/3 in this module, and for the same reason. A malformed
-    # media_file_id fails differently per adapter: PostgreSQL raises CastError
-    # while binding the query parameter, while SQLite casts any string as a
-    # valid :binary_id and fails later on the foreign key, which ecto_sqlite3
-    # cannot attribute to a named constraint and so re-raises as
-    # ConstraintError. Catching both keeps callers adapter agnostic. Read
-    # set_offset/3's doc before touching these two clauses.
+    # Guards Repo.get_by/3 above: on PostgreSQL a malformed media_file_id
+    # raises while binding the query parameter, before any write. The foreign
+    # key half of this is handled for every write by
+    # Mydia.Repo.ForeignKeyGuard. See set_offset/3's doc.
     Ecto.Query.CastError ->
       {:error, unknown_media_file_changeset(track_ref)}
-
-    error in Ecto.ConstraintError ->
-      if error.type == :foreign_key do
-        {:error, unknown_media_file_changeset(track_ref)}
-      else
-        reraise error, __STACKTRACE__
-      end
   end
 
   defp unknown_media_file_changeset(track_ref) do
