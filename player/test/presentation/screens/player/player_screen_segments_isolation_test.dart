@@ -47,6 +47,9 @@ StubLink _linkAnsweringSegmentsWith(Object segmentsOutcome) {
       // `shouldOfferResume` checks.
       return movieDetailResponse(positionSeconds: 2700);
     }
+    if (_isQuery(request, 'SubtitleTrackSettings')) {
+      return subtitleTrackSettingsResponse();
+    }
     return streamingCandidatesResponse(duration: 5400, directPlay: true);
   });
 }

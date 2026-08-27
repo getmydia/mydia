@@ -11,6 +11,7 @@ defmodule MydiaWeb.Schema.MutationTypes do
   alias MydiaWeb.Schema.Resolvers.StreamingResolver
   alias MydiaWeb.Schema.Resolvers.DownloadResolver
   alias MydiaWeb.Schema.Resolvers.SubtitleSearchResolver
+  alias MydiaWeb.Schema.Resolvers.SubtitleSettingsResolver
 
   object :playback_mutations do
     @desc "Update playback progress for a movie"
@@ -236,6 +237,15 @@ defmodule MydiaWeb.Schema.MutationTypes do
       arg(:media_file_id, non_null(:id))
       arg(:token, non_null(:string))
       resolve(&SubtitleSearchResolver.download/3)
+    end
+
+    @desc "Store a timing correction for one subtitle track"
+    field :set_subtitle_offset, non_null(:subtitle_track_setting) do
+      arg(:media_file_id, non_null(:id))
+      arg(:track_ref, non_null(:string))
+      arg(:offset_ms, non_null(:integer))
+
+      resolve(&SubtitleSettingsResolver.set_offset/3)
     end
   end
 end

@@ -40,6 +40,7 @@ void main() {
     final link = StubLink.responses([
       movieDetailResponse(),
       movieSegmentsResponse(),
+      subtitleTrackSettingsResponse(),
       streamingCandidatesResponse(duration: 5400, directPlay: true),
     ]);
 
@@ -76,6 +77,7 @@ void main() {
     final link = StubLink.responses([
       movieDetailResponse(),
       movieSegmentsResponse(),
+      subtitleTrackSettingsResponse(),
       streamingCandidatesResponse(duration: 5400, directPlay: true),
     ]);
 
@@ -88,12 +90,12 @@ void main() {
     addTearDown(container.dispose);
 
     await pumpPlayerScreen(tester, container, fileId: 'file-2');
-    await pumpUntil(tester, () => link.requests.length >= 3);
+    await pumpUntil(tester, () => link.requests.length >= 4);
 
-    // Third scripted call, matching the response order above. `StubLink` is
-    // index-based, so this ordering is the same one every other PlayerScreen
-    // test relies on.
-    final candidatesVariables = link.requests[2].variables;
+    // Fourth scripted call, matching the response order above: detail,
+    // segments, subtitle offsets, candidates. `StubLink` is index-based, so
+    // this ordering is the same one every other PlayerScreen test relies on.
+    final candidatesVariables = link.requests[3].variables;
 
     expect(
       candidatesVariables['contentType'],
@@ -124,6 +126,7 @@ void main() {
     final link = StubLink.responses([
       movieDetailResponse(),
       movieSegmentsResponse(),
+      subtitleTrackSettingsResponse(),
       http.ClientException('Connection refused'),
       startStreamingSessionResponse(duration: 5400),
       endStreamingSessionResponse(),

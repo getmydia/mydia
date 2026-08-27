@@ -46,6 +46,9 @@ StubLink _link() {
     if (_isOperation(request, 'query MovieDetail')) {
       return movieDetailResponse();
     }
+    if (_isOperation(request, 'query SubtitleTrackSettings')) {
+      return subtitleTrackSettingsResponse();
+    }
     if (_isOperation(request, 'endStreamingSession')) {
       return endStreamingSessionResponse();
     }

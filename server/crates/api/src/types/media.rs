@@ -5,7 +5,7 @@
 //! MovieEdge, MovieConnection, TvShowEdge, TvShowConnection, Artwork,
 //! CastMember, MediaFile, MediaStream, MediaSegment, Progress, LibraryPath,
 //! RecentlyAddedItem, SubtitleTrack, SubtitleCandidate, SubtitleProviderStatus,
-//! SubtitleSearchPayload.
+//! SubtitleSearchPayload, SubtitleTrackSetting.
 
 use async_graphql::{
     ComplexObject, InputValueError, InputValueResult, Scalar, ScalarType, SimpleObject, Value, ID,
@@ -176,6 +176,18 @@ pub struct SubtitleProviderStatus {
 pub struct SubtitleSearchPayload {
     pub results: Vec<SubtitleCandidate>,
     pub providers: Vec<SubtitleProviderStatus>,
+}
+
+/// A stored timing correction for one subtitle track.
+///
+/// common_types.ex:`:subtitle_track_setting`. This server stores no subtitle
+/// corrections, so `subtitleTrackSettings` always answers an empty list, which
+/// is indistinguishable from "nothing has been corrected" and needs no special
+/// handling on the client.
+#[derive(SimpleObject)]
+pub struct SubtitleTrackSetting {
+    pub track_ref: String,
+    pub offset_ms: i32,
 }
 
 /// One elementary stream of a media file, as reported by ffprobe.

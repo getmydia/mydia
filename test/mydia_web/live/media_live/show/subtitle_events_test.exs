@@ -167,6 +167,64 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEventsTest do
     end
   end
 
+  describe "set_subtitle_offset/2" do
+    # The rendered form always serializes offset_ms as a DOM string, but a
+    # hand-crafted channel push is not bound by that. Integer.parse/1 requires
+    # a binary and raises FunctionClauseError on anything else, so this must
+    # never reach it with a non-string value.
+    test "a non-binary offset is ignored rather than raising" do
+      {:noreply, socket} =
+        SubtitleEvents.set_subtitle_offset(
+          %{"media-file-id" => "mf-1", "track-ref" => "0", "offset_ms" => 1500},
+          socket()
+        )
+
+      assert flash(socket) == %{}
+    end
+
+    test "a nil offset is ignored rather than raising" do
+      {:noreply, socket} =
+        SubtitleEvents.set_subtitle_offset(
+          %{"media-file-id" => "mf-1", "track-ref" => "0", "offset_ms" => nil},
+          socket()
+        )
+
+      assert flash(socket) == %{}
+    end
+
+    test "a non-numeric string flashes rather than storing anything" do
+      {:noreply, socket} =
+        SubtitleEvents.set_subtitle_offset(
+          %{"media-file-id" => "mf-1", "track-ref" => "0", "offset_ms" => "not-a-number"},
+          socket()
+        )
+
+      assert flash(socket)["error"] =~ "whole number"
+    end
+  end
+
+  describe "nudge_subtitle_offset/2" do
+    test "a non-binary delta is ignored rather than raising" do
+      {:noreply, socket} =
+        SubtitleEvents.nudge_subtitle_offset(
+          %{"media-file-id" => "mf-1", "track-ref" => "0", "delta" => 100},
+          socket()
+        )
+
+      assert flash(socket) == %{}
+    end
+
+    test "a nil delta is ignored rather than raising" do
+      {:noreply, socket} =
+        SubtitleEvents.nudge_subtitle_offset(
+          %{"media-file-id" => "mf-1", "track-ref" => "0", "delta" => nil},
+          socket()
+        )
+
+      assert flash(socket) == %{}
+    end
+  end
+
   describe "handle_download_subtitle_async/2" do
     defp socket_with_media_item(assigns \\ %{}) do
       socket(Map.merge(%{media_item: %{media_files: []}}, assigns))

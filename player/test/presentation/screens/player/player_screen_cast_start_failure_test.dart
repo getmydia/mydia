@@ -30,11 +30,13 @@ void main() {
       );
     final proxyService = TrackingLocalProxyService();
 
-    // Direct play, and 12s in — below `kMinResumeThresholdSeconds` — so the
-    // only network calls this needs are the two below: no resume dialog to
-    // answer, and no HLS session mutation to stub for the local fallback.
+    // Direct play, and 12s in — below `kMinResumeThresholdSeconds` — so no
+    // resume dialog to answer and no HLS session mutation to stub for the
+    // local fallback.
     final link = StubLink.responses([
       movieDetailResponse(positionSeconds: 12),
+      movieSegmentsResponse(),
+      subtitleTrackSettingsResponse(),
       streamingCandidatesResponse(duration: 5400, directPlay: true),
     ]);
 

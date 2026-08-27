@@ -40,6 +40,7 @@ void main() {
     final link = StubLink.responses([
       movieDetailResponse(positionSeconds: 2700),
       movieSegmentsResponse(),
+      subtitleTrackSettingsResponse(),
       streamingCandidatesResponse(duration: 5400, directPlay: true),
     ]);
 
@@ -80,6 +81,7 @@ void main() {
     final link = StubLink.responses([
       movieDetailResponse(positionSeconds: 12),
       movieSegmentsResponse(),
+      subtitleTrackSettingsResponse(),
       streamingCandidatesResponse(duration: 5400, directPlay: true),
     ]);
 

@@ -25,7 +25,7 @@ defmodule Mydia.Subtitles do
   import Ecto.Query
 
   alias Mydia.Repo
-  alias Mydia.Subtitles.{Subtitle, MediaHash, Downloader, Scoring}
+  alias Mydia.Subtitles.{Subtitle, MediaHash, Downloader, Uploader, Scoring, TrackSettings}
   alias Mydia.Library.MediaFile
   alias Mydia.Media.{MediaItem, Episode}
 
@@ -171,6 +171,20 @@ defmodule Mydia.Subtitles do
   end
 
   @doc """
+  Stores a subtitle file uploaded from the web UI.
+
+  See `Mydia.Subtitles.Uploader.upload/3` for the full storage convention,
+  the existing-file refusal, and the identical-basename ownership check that
+  keeps this from re-entering the dual-adoption bug `Mydia.Subtitles.Sidecars`
+  guards against.
+  """
+  @spec upload_subtitle(MediaFile.t(), binary(), keyword()) ::
+          {:ok, Subtitle.t()} | {:error, String.t()}
+  def upload_subtitle(media_file, content, opts \\ []) do
+    Uploader.upload(media_file, content, opts)
+  end
+
+  @doc """
   Returns the format a result should be recorded as before it is downloaded.
 
   Providers often leave `:format` nil and put the real extension on the file
@@ -243,13 +257,11 @@ defmodule Mydia.Subtitles do
         # Delete file first
         case File.rm(subtitle.file_path) do
           :ok ->
-            Repo.delete(subtitle)
-            :ok
+            delete_record_and_settings(subtitle)
 
           {:error, :enoent} ->
             # File already gone, just delete record
-            Repo.delete(subtitle)
-            :ok
+            delete_record_and_settings(subtitle)
 
           {:error, reason} ->
             Logger.warning("Failed to delete subtitle file",
@@ -261,9 +273,49 @@ defmodule Mydia.Subtitles do
             {:error, {:file_deletion_failed, reason}}
         end
     end
+  rescue
+    # A non-UUID-shaped id raises Ecto.Query.CastError while Repo.get/2 binds
+    # the query parameter on PostgreSQL (SQLite casts any string as a valid
+    # binary_id and just finds no row instead). Not reachable through the
+    # UI, since the delete button never renders a non-UUID id, but every
+    # other read and write in this module already treats a malformed id the
+    # same as a missing row rather than raising; see
+    # Mydia.Subtitles.Delivery.fetch_subtitle/2 and
+    # Mydia.Subtitles.TrackSettings for the same rescue on the same
+    # database-adapter difference.
+    Ecto.Query.CastError -> {:error, :subtitle_not_found}
   end
 
   ## Private Functions
+
+  # The settings row is keyed by (media_file_id, track_ref) where track_ref
+  # is this subtitle's own id. No foreign key expresses that, so it has to be
+  # deleted here or it outlives the track forever.
+  #
+  # It runs only where the subtitle row itself is deleted. A file removal that
+  # fails for any reason other than the file already being gone leaves the
+  # track in place, and clearing its offset there would silently discard a
+  # correction the user still needs, most plausibly on a read-only library
+  # mount.
+  #
+  # Both deletes run in one transaction so a failure deleting the subtitle
+  # row does not leave the settings gone while the track remains.
+  defp delete_record_and_settings(subtitle) do
+    result =
+      Repo.transaction(fn ->
+        TrackSettings.delete_for_track(subtitle.media_file_id, subtitle.id)
+
+        case Repo.delete(subtitle) do
+          {:ok, _subtitle} -> :ok
+          {:error, changeset} -> Repo.rollback(changeset)
+        end
+      end)
+
+    case result do
+      {:ok, :ok} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
 
   defp result_to_subtitle_info(result) do
     %{

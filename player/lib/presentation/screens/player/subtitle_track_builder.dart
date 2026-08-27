@@ -159,3 +159,134 @@ SubtitleTrack? pendingSubtitleSelectionAfterFailure({
   if (requestGeneration != currentGeneration) return currentPending;
   return appliedSelection;
 }
+
+/// The subtitle delay to hand mpv right now, in milliseconds.
+///
+/// Three values, one subtraction:
+///
+///  - [storedOffsetMs] is what the server has persisted for this track,
+///    fetched by the `subtitleTrackSettings` query.
+///  - [bakedOffsetMs] is what the server already shifted into the body
+///    currently loaded. It equals [storedOffsetMs] for a track fetched over
+///    `SubtitleContent`, because `Delivery.content/3` applies the offset
+///    before returning, and it is zero for an mpv-native track that mpv read
+///    out of the container itself, which the server never saw.
+///  - [nudgeMs] is the live, unsaved adjustment from the +/- controls. It
+///    resets to zero on track change.
+///
+/// Subtracting [bakedOffsetMs] is what prevents a double-apply. A
+/// server-shifted body plus an mpv `sub-delay` of the same magnitude would be
+/// wrong by twice the offset, in the direction that reads as "the feature is
+/// broken" rather than "the feature is missing".
+///
+/// It also makes saving cheap. Persisting sets `storedOffsetMs += nudgeMs`
+/// and `nudgeMs = 0`, which leaves this expression at exactly the same
+/// value, so nothing refetches, nothing flickers, and the OSD number does
+/// not jump.
+int effectiveSubtitleDelayMs({
+  required int storedOffsetMs,
+  required int bakedOffsetMs,
+  required int nudgeMs,
+}) {
+  return storedOffsetMs - bakedOffsetMs + nudgeMs;
+}
+
+/// Whether [trackId] identifies a track media_kit read straight out of the
+/// container, rather than one the server has ever touched.
+///
+/// `player_screen.dart`'s `_applySubtitleTracks` is the only place that
+/// mints an id in this shape (`'mk_${mkTrack.id}'`), so the prefix alone is
+/// sufficient. Checking `_mediaKitSubtitleTrackMap` for membership instead
+/// is NOT reliable for this: `_resolveMediaKitSubtitleTrack` adds a
+/// content-fetched track to that same map, under its own non-`mk_` id, once
+/// resolved -- so by the time a selection has succeeded the map holds both
+/// kinds of track and membership alone no longer tells them apart.
+bool isMpvNativeSubtitleTrackId(String trackId) => trackId.startsWith('mk_');
+
+/// Whether the subtitle sheet's Save button should be offered for
+/// [trackId]. `null` (no track selected) is never savable.
+///
+/// False for an mpv-native track ([isMpvNativeSubtitleTrackId]). The
+/// server's `trackRef` for an embedded track means its ffprobe stream
+/// index, but an mpv-native track's id is media_kit's own container-local
+/// one (`'mk_${mkTrack.id}'`) -- a different id space the codebase already
+/// documents as not corresponding (see `resolveSubtitleTracks`'s dartdoc).
+/// Persisting a correction under that id would key it to something the
+/// next session's mpv probe has no reason to reproduce, so the save would
+/// silently not carry forward -- worse than the button being absent,
+/// because it reports success. Mapping the id back to a stream index
+/// heuristically (by language, title, or position) was considered and
+/// rejected for the same reason: a wrong guess would attach the offset to
+/// the wrong track. The live delay still applies for the current session
+/// regardless of this -- only persistence is unavailable.
+bool canSaveSubtitleDelay(String? trackId) =>
+    trackId != null && !isMpvNativeSubtitleTrackId(trackId);
+
+/// What the subtitle sheet's delay row should show, or `null` to hide it
+/// entirely.
+///
+/// Two independent reasons to hide it: no track is selected ([trackId] is
+/// null, the "Off" state), or [offsetsLoaded] is false, meaning the
+/// `subtitleTrackSettings` query has not yet succeeded even once for this
+/// media file. The second case matters because an empty stored-offsets map
+/// looks identical whether nothing has ever been saved for this file or the
+/// query simply failed (an older server, a network blip) -- showing Save in
+/// that case would let it persist just the viewer's live nudge on top of an
+/// assumed-zero baseline, silently discarding whatever offset the server
+/// actually has on file. See [effectiveSubtitleDelayMs]'s dartdoc for the
+/// stored/baked relationship this would otherwise corrupt.
+int? subtitleDelayDisplayMs({
+  required String? trackId,
+  required bool offsetsLoaded,
+  required int storedOffsetMs,
+  required int nudgeMs,
+}) {
+  if (trackId == null || !offsetsLoaded) return null;
+  return storedOffsetMs + nudgeMs;
+}
+
+/// What the OSD snackbar should say right after a `z`/`shift+z` nudge (or a
+/// sheet stepper tap), given the new total delay in [totalMs].
+///
+/// [appliesImmediately] is `false` on web: `applySubtitleDelay` is a genuine
+/// no-op there (media_kit's web backend has no mpv `sub-delay` property to
+/// set), and the body a web viewer sees always comes pre-baked from the
+/// `SubtitleContent` query. `_subtitleNudgeMs` is still tracked and still
+/// contributes to what Save persists, so the nudge itself is not dropped on
+/// web; only the wording changes, to stop claiming a visible change that has
+/// not happened yet. See [subtitleDelaySavedMessage] for the other half of
+/// this: Save does not make the change visible on web either, only
+/// persists it.
+String subtitleDelaySnackBarMessage({
+  required int totalMs,
+  required bool appliesImmediately,
+}) {
+  final signed = '${totalMs >= 0 ? '+' : ''}$totalMs ms';
+  if (appliesImmediately) return 'Subtitle delay $signed';
+  return 'Subtitle delay will be $signed after Save';
+}
+
+/// What the OSD snackbar should say right after a successful subtitle delay
+/// save.
+///
+/// [appliesImmediately] is `false` on web for a second, distinct reason from
+/// [subtitleDelaySnackBarMessage]'s: `_saveSubtitleDelay` persists the offset
+/// to the server and updates `_subtitleOffsets`/`_subtitleNudgeMs`, but never
+/// evicts or refetches the `SubtitleContent` body already cached in
+/// `_mediaKitSubtitleTrackMap` for this track. That cached body still has the
+/// *old* offset baked in by the server, so a web viewer who saves keeps
+/// seeing the old timing until this track loads again. Native is unaffected
+/// -- after a save, `effectiveSubtitleDelayMs` reduces to the (now zero)
+/// nudge and `sub-delay` already carries the correct value live, so "saved"
+/// there is also already true of what is on screen.
+///
+/// A refetch-on-save was deliberately not built to close this gap: it would
+/// mean reloading a track mid-session, which lands in the subtitle-selection
+/// race machinery (`_subtitleSelectionGeneration`, `_pendingSubtitleSelection`,
+/// `shouldApplySubtitleSelection`) that took real effort to get right, on a
+/// surface (the Flutter web build) that is not the primary UI. The message
+/// is corrected instead of the behavior.
+String subtitleDelaySavedMessage({required bool appliesImmediately}) {
+  if (appliesImmediately) return 'Subtitle delay saved';
+  return 'Subtitle delay saved. It applies next time this track loads.';
+}

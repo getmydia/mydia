@@ -1,0 +1,9 @@
+# Persists a subtitle track's timing correction, replacing any previous
+# value for that track. See subtitle_track_settings.graphql for why the
+# corresponding query is a standalone root field.
+mutation SetSubtitleOffset($mediaFileId: ID!, $trackRef: String!, $offsetMs: Int!) {
+  setSubtitleOffset(mediaFileId: $mediaFileId, trackRef: $trackRef, offsetMs: $offsetMs) {
+    trackRef
+    offsetMs
+  }
+}

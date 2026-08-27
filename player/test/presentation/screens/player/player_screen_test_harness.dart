@@ -440,6 +440,25 @@ Map<String, dynamic> movieSegmentsResponse({
   };
 }
 
+/// A well-formed `SubtitleTrackSettings` response: no track has a stored
+/// correction, which is the default every test that is not about subtitle
+/// delay wants.
+///
+/// `_fetchProgressAndEpisodes` issues this right after segments and before
+/// streaming candidates -- see `movieSegmentsResponse`'s dartdoc for the
+/// same slot-shifting hazard this query introduces to every ordered
+/// `StubLink.responses` script for this screen. An empty list here leaves
+/// `_subtitleOffsetsLoaded` true and `_subtitleOffsets` empty, so nothing
+/// downstream (mpv's sub-delay, the sheet's delay row) departs from zero.
+Map<String, dynamic> subtitleTrackSettingsResponse({
+  List<Map<String, dynamic>> settings = const [],
+}) {
+  return {
+    '__typename': 'Query',
+    'subtitleTrackSettings': settings,
+  };
+}
+
 /// A well-formed `StreamingCandidates` response.
 ///
 /// Empty `candidates` (the default) forces the HLS/TRANSCODE path, because

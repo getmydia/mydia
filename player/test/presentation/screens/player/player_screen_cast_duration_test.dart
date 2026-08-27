@@ -32,6 +32,7 @@ void main() {
     final link = StubLink.responses([
       movieDetailResponse(files: [mediaFileWithSubtitle()]),
       movieSegmentsResponse(),
+      subtitleTrackSettingsResponse(),
       streamingCandidatesResponse(duration: 5400),
     ]);
 
@@ -105,6 +106,7 @@ void main() {
         files: [mediaFileWithSubtitle(url: null, deliverable: true)],
       ),
       movieSegmentsResponse(),
+      subtitleTrackSettingsResponse(),
       streamingCandidatesResponse(duration: 5400),
     ]);
 
@@ -151,6 +153,7 @@ void main() {
     final link = StubLink.responses([
       movieDetailResponse(files: [mediaFileWithSubtitle(trackId: 'mk_0')]),
       movieSegmentsResponse(),
+      subtitleTrackSettingsResponse(),
       streamingCandidatesResponse(duration: 5400),
     ]);
 
@@ -187,6 +190,7 @@ void main() {
     final link = StubLink.responses([
       movieDetailResponse(files: [mediaFileWithSubtitle(trackId: uuid)]),
       movieSegmentsResponse(),
+      subtitleTrackSettingsResponse(),
       streamingCandidatesResponse(duration: 5400),
     ]);
 
@@ -223,6 +227,8 @@ void main() {
 
     final link = StubLink.responses([
       movieDetailResponse(),
+      movieSegmentsResponse(),
+      subtitleTrackSettingsResponse(),
       streamingCandidatesResponse(duration: 5400),
     ]);
 

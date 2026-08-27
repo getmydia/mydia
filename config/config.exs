@@ -231,6 +231,18 @@ config :logger, :default_formatter,
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
 
+# The `mime` package (via allow_upload's `accept:` option, see
+# MydiaWeb.MediaLive.Show's subtitle upload) only recognizes an extension it
+# already maps to a MIME type. None of these four are registered by default,
+# so `allow_upload(:subtitle, accept: ~w(.srt .ass .ssa .vtt), ...)` raised
+# ArgumentError on every mount without this. ASS and SSA share a type: ffmpeg
+# and this codebase's own Mydia.Subtitles.Format both treat SSA as ASS.
+config :mime, :types, %{
+  "application/x-subrip" => ["srt"],
+  "text/vtt" => ["vtt"],
+  "text/x-ssa" => ["ssa", "ass"]
+}
+
 # Configure Guardian for JWT authentication
 config :mydia, Mydia.Auth.Guardian,
   issuer: "mydia",

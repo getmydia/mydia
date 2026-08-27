@@ -62,6 +62,9 @@ StubLink _link({List<Map<String, dynamic>> segments = const []}) {
       return movieSegmentsResponse(segments: segments);
     }
     if (_isQuery(request, 'MovieDetail')) return movieDetailResponse();
+    if (_isQuery(request, 'SubtitleTrackSettings')) {
+      return subtitleTrackSettingsResponse();
+    }
     return streamingCandidatesResponse(duration: 5400);
   });
 }

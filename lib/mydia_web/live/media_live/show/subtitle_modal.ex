@@ -1,9 +1,10 @@
 defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
   @moduledoc """
-  Subtitle search modal for the MediaLive.Show page.
+  Subtitle search and upload modals for the MediaLive.Show page.
 
   Split out of `Modals` because that module had grown past three times the
-  project's file-size guideline and this modal is a self-contained third of it.
+  project's file-size guideline and subtitle modals are a self-contained
+  slice of it.
   """
   use Phoenix.Component
   import MydiaWeb.CoreComponents
@@ -311,6 +312,104 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
     </div>
     """
   end
+
+  @doc """
+  Subtitle upload modal for attaching a custom subtitle file to a media file.
+
+  `Mydia.Subtitles.Format.detect/1` is the real validation, run server-side
+  on the received bytes; `accept` here only screens the client-declared
+  filename, which is easy to fake.
+  """
+  attr :media_file, :map, required: true
+  attr :uploads, :map, required: true
+  attr :error, :string, default: nil
+
+  def subtitle_upload_modal(assigns) do
+    ~H"""
+    <div id="subtitle-upload-modal" class="modal modal-open">
+      <div class="modal-box max-w-lg">
+        <h3 class="font-bold text-lg mb-1">Upload a subtitle</h3>
+        <p class="text-sm opacity-60 mb-4 truncate" title={MediaFile.display_path(@media_file)}>
+          {MediaFile.display_name(@media_file)}
+        </p>
+
+        <form
+          id="subtitle-upload-form"
+          phx-submit="save_subtitle_upload"
+          phx-change="validate_subtitle_upload"
+        >
+          <label class="form-control w-full mb-4">
+            <div class="label"><span class="label-text">Language</span></div>
+            <select name="language" class="select select-bordered w-full">
+              <option
+                :for={{code, label} <- MydiaWeb.Languages.all()}
+                value={code}
+                selected={code == "en"}
+              >
+                {label}
+              </option>
+            </select>
+          </label>
+
+          <div class="flex gap-4 mb-4">
+            <label class="label cursor-pointer gap-2">
+              <input type="checkbox" name="forced" class="checkbox checkbox-sm" />
+              <span class="label-text">Forced</span>
+            </label>
+            <label class="label cursor-pointer gap-2">
+              <input type="checkbox" name="hearing_impaired" class="checkbox checkbox-sm" />
+              <span class="label-text">Hearing impaired</span>
+            </label>
+          </div>
+
+          <div
+            class="border-2 border-dashed border-base-300 rounded-lg p-6 text-center mb-4"
+            phx-drop-target={@uploads.subtitle.ref}
+          >
+            <.live_file_input
+              upload={@uploads.subtitle}
+              class="file-input file-input-bordered w-full"
+            />
+            <p class="text-xs opacity-60 mt-2">SRT, ASS, SSA or VTT, up to 2 MB</p>
+          </div>
+
+          <div :for={entry <- @uploads.subtitle.entries} class="mb-2">
+            <div class="flex items-center justify-between text-sm">
+              <span class="truncate">{entry.client_name}</span>
+              <progress
+                class="progress progress-primary w-24"
+                value={entry.progress}
+                max="100"
+              ></progress>
+            </div>
+
+            <p :for={err <- upload_errors(@uploads.subtitle, entry)} class="text-error text-sm mt-1">
+              {upload_error_message(err)}
+            </p>
+          </div>
+
+          <div :if={@error} class="alert alert-error mb-4"><span>{@error}</span></div>
+
+          <div class="modal-action">
+            <button type="button" class="btn btn-ghost" phx-click="close_subtitle_upload">
+              Cancel
+            </button>
+            <button type="submit" class="btn btn-primary">Upload</button>
+          </div>
+        </form>
+      </div>
+      <div class="modal-backdrop" phx-click="close_subtitle_upload"></div>
+    </div>
+    """
+  end
+
+  defp upload_error_message(:too_large), do: "That file is larger than 2 MB"
+
+  defp upload_error_message(:not_accepted),
+    do: "Only .srt, .ass, .ssa and .vtt files are accepted"
+
+  defp upload_error_message(:too_many_files), do: "Upload one file at a time"
+  defp upload_error_message(_), do: "That file could not be accepted"
 
   # Partial-failure warning banner shared by the "results found" and "healthy
   # zero-hit" branches of the loaded subtitle search state, so a provider that

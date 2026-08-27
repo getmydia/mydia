@@ -220,6 +220,77 @@ defmodule Mydia.SubtitlesTest do
     end
   end
 
+  describe "delete_subtitle/1" do
+    alias Mydia.MediaFixtures
+
+    import MediaFixtures
+
+    test "deletes the track's stored offset alongside the subtitle" do
+      media_file = media_file_fixture()
+
+      {:ok, subtitle} =
+        %Mydia.Subtitles.Subtitle{}
+        |> Mydia.Subtitles.Subtitle.changeset(%{
+          media_file_id: media_file.id,
+          language: "en",
+          provider: "test",
+          subtitle_hash: "hash-delete-settings",
+          file_path: Path.join(System.tmp_dir!(), "delete-settings.srt"),
+          format: "srt"
+        })
+        |> Mydia.Repo.insert()
+
+      {:ok, _} = Mydia.Subtitles.TrackSettings.set_offset(media_file.id, subtitle.id, 400)
+
+      assert :ok = Mydia.Subtitles.delete_subtitle(subtitle.id)
+      assert Mydia.Subtitles.TrackSettings.offset_ms(media_file.id, subtitle.id) == 0
+    end
+
+    # Realistic trigger: a read-only library mount, or any other permission
+    # problem removing the on-disk file. File.rm refuses to remove a
+    # directory, which is a reliable way to force a non-:enoent failure
+    # without touching filesystem permissions.
+    test "keeps the subtitle and its offset when file removal fails for a reason other than enoent" do
+      media_file = media_file_fixture()
+
+      dir_path =
+        Path.join(System.tmp_dir!(), "subtitle-dir-#{System.unique_integer([:positive])}")
+
+      File.mkdir_p!(dir_path)
+      on_exit(fn -> File.rm_rf(dir_path) end)
+
+      {:ok, subtitle} =
+        %Mydia.Subtitles.Subtitle{}
+        |> Mydia.Subtitles.Subtitle.changeset(%{
+          media_file_id: media_file.id,
+          language: "en",
+          provider: "test",
+          subtitle_hash: "hash-keep-on-failure",
+          file_path: dir_path,
+          format: "srt"
+        })
+        |> Mydia.Repo.insert()
+
+      {:ok, _} = Mydia.Subtitles.TrackSettings.set_offset(media_file.id, subtitle.id, 250)
+
+      assert {:error, {:file_deletion_failed, _reason}} =
+               Mydia.Subtitles.delete_subtitle(subtitle.id)
+
+      assert Mydia.Repo.get(Mydia.Subtitles.Subtitle, subtitle.id)
+      assert Mydia.Subtitles.TrackSettings.offset_ms(media_file.id, subtitle.id) == 250
+    end
+
+    # Repo.get/2 raises Ecto.Query.CastError binding a non-UUID-shaped id on
+    # PostgreSQL (SQLite casts any string as a valid binary_id and just
+    # finds no row). Not reachable through the UI, since the delete button
+    # never renders a non-UUID id, but every other read/write here already
+    # treats a malformed id as a missing row instead of raising; see
+    # test/mydia/subtitles/track_settings_test.exs for the same case.
+    test "a malformed id reports :subtitle_not_found instead of raising" do
+      assert {:error, :subtitle_not_found} = Mydia.Subtitles.delete_subtitle("not-a-uuid")
+    end
+  end
+
   describe "normalize_format/1" do
     test "keeps a stated format" do
       assert Mydia.Subtitles.normalize_format(%{format: "ass"}) == "ass"

@@ -28,6 +28,7 @@ defmodule Mydia.Subtitles.Downloader do
   require Logger
   alias Mydia.Repo
   alias Mydia.Subtitles.Format
+  alias Mydia.Subtitles.Sidecars
   alias Mydia.Subtitles.Subtitle
   alias Mydia.Library.MediaFile
 
@@ -206,46 +207,33 @@ defmodule Mydia.Subtitles.Downloader do
     end
   end
 
-  # Move subtitle file to permanent location with proper naming
+  # Move subtitle file to permanent location with proper naming.
+  #
+  # This used to be a bare File.rename/2 with no existence check: File.rename/2
+  # silently overwrites an existing destination and returns :ok. That was
+  # harmless while this was the only writer using this naming convention, but
+  # Mydia.Subtitles.Uploader (user uploads) and Mydia.Subtitles.Sidecars
+  # (files adopted from disk during a scan) now write the exact same paths.
+  # Downloading a language that already has an upload- or sidecar-origin row
+  # would otherwise clobber its bytes on disk while leaving both database
+  # rows in place, one of them now describing content it does not match, and
+  # deleting either row would destroy a file the other still references.
+  #
+  # Refuses rather than overwrites (mirroring Uploader.destination/3), and
+  # refuses rather than writing against the losing sibling of an
+  # identical-basename pair like Movie.mkv beside Movie.mp4 (mirroring
+  # Uploader.check_ownership/2, via the same Sidecars.owning_media_file_for/2
+  # this fix now calls here too).
   defp store_subtitle_file(temp_path, media_file, subtitle_info, format) do
-    absolute_path = MediaFile.absolute_path(media_file)
-
-    if is_nil(absolute_path) do
-      File.rm(temp_path)
-      {:error, :media_file_path_not_resolved}
+    with {:ok, absolute_path} <- resolve_absolute_path(media_file),
+         :ok <- validate_language(subtitle_info.language),
+         {:ok, final_path} <- destination(absolute_path, subtitle_info.language, format),
+         :ok <- check_ownership(media_file, final_path) do
+      move_to_final_path(temp_path, absolute_path, final_path)
     else
-      # Extract base filename without extension
-      base_filename = Path.basename(absolute_path, Path.extname(absolute_path))
-      media_dir = Path.dirname(absolute_path)
-
-      # Build subtitle filename: {base}.{language}.{format}
-      subtitle_filename = "#{base_filename}.#{subtitle_info.language}.#{format}"
-      final_path = Path.join(media_dir, subtitle_filename)
-
-      # Ensure directory exists
-      File.mkdir_p!(media_dir)
-
-      # Move file to final location
-      case File.rename(temp_path, final_path) do
-        :ok ->
-          {:ok, final_path}
-
-        {:error, :exdev} ->
-          # Cross-device move, use copy + delete
-          case File.cp(temp_path, final_path) do
-            :ok ->
-              File.rm(temp_path)
-              {:ok, final_path}
-
-            {:error, reason} ->
-              File.rm(temp_path)
-              {:error, {:file_store_failed, reason}}
-          end
-
-        {:error, reason} ->
-          File.rm(temp_path)
-          {:error, {:file_store_failed, reason}}
-      end
+      {:error, reason} ->
+        File.rm(temp_path)
+        {:error, reason}
     end
   rescue
     error ->
@@ -257,6 +245,121 @@ defmodule Mydia.Subtitles.Downloader do
       )
 
       {:error, {:exception, error}}
+  end
+
+  defp resolve_absolute_path(media_file) do
+    case MediaFile.absolute_path(media_file) do
+      nil -> {:error, :media_file_path_not_resolved}
+      absolute_path -> {:ok, absolute_path}
+    end
+  end
+
+  # `language` comes from a provider's search result, external data the same
+  # way an upload's language field is. A traversal through it is not
+  # currently exploitable (File.mkdir_p!/1 below targets the media file's own
+  # known-good directory, never the computed path's dirname, so a traversal
+  # has no phantom directory to resolve through and the write fails outright),
+  # but this allowlist is the same containment Uploader applies at its own
+  # boundary, kept independent on purpose.
+  #
+  # Deliberately NOT shared with Uploader.validate_language/1 as a common
+  # function: the two modules return this failure in incompatible shapes.
+  # Uploader hands a String.t() straight to a LiveView flash; this module
+  # returns an atom matched by MydiaWeb.MediaLive.Show.SubtitleEvents.
+  # download_error_message/1 and by the GraphQL resolver's catch-all. Forcing
+  # one shape to serve both callers would cost more than the ~10 duplicated
+  # lines it would save. This mirrors an existing precedent in this codebase:
+  # see @filename_pattern's own comment in
+  # lib/mydia/streaming/session_subtitles.ex for the same trailing-newline
+  # trap, duplicated there for the same reason.
+  #
+  # `\A`/`\z` rather than `^`/`$`: in PCRE (what Elixir's Regex uses) a bare
+  # `$` also matches just before a single trailing newline, so "en\n" would
+  # otherwise pass and land in a filename with an embedded newline.
+  @language_pattern ~r/\A[a-z]{2,3}(-[A-Z]{2})?\z/
+
+  defp validate_language(language) when is_binary(language) do
+    if Regex.match?(@language_pattern, language) do
+      :ok
+    else
+      {:error, :invalid_language}
+    end
+  end
+
+  defp validate_language(_language), do: {:error, :invalid_language}
+
+  # An existing path is refused rather than overwritten: predictable beats
+  # clever when the result is a file write into someone's library. See
+  # move_to_final_path/3 for how the write itself stays exclusive so two
+  # downloads racing for the same new path cannot both win this check and
+  # then still clobber one another.
+  defp destination(absolute_path, language, format) do
+    base_filename = Path.basename(absolute_path, Path.extname(absolute_path))
+    media_dir = Path.dirname(absolute_path)
+    final_path = Path.join(media_dir, "#{base_filename}.#{language}.#{format}")
+
+    if File.exists?(final_path) do
+      {:error, :subtitle_already_exists}
+    else
+      {:ok, final_path}
+    end
+  end
+
+  # A sidecar whose basename is shared by two media files in the same
+  # directory (Movie.mkv beside Movie.mp4) belongs to whichever one
+  # Mydia.Subtitles.Sidecars.reconcile/1 would adopt it for, never to both.
+  # Downloading against the losing sibling would write a path a later
+  # reconcile pass attributes to the other file: the same two-rows-one-file
+  # shape this whole fix exists to close.
+  defp check_ownership(media_file, final_path) do
+    filename = Path.basename(final_path)
+
+    case Sidecars.owning_media_file_for(media_file, filename) do
+      nil ->
+        :ok
+
+      owner ->
+        if owner.id == media_file.id do
+          :ok
+        else
+          {:error, {:owned_by_other_media_file, owner.id}}
+        end
+    end
+  end
+
+  # Reads the temp file's bytes back and writes them to final_path with
+  # :exclusive rather than renaming temp_path onto it. Two reasons:
+  #
+  #   * File.rename/2 has no exclusive form, so destination/3's existence
+  #     check would leave the same TOCTOU race Uploader closed in
+  #     Uploader.write/3: two downloads racing for the same new path could
+  #     both pass that check and then one rename would silently clobber the
+  #     other's just-placed bytes. File.write/3's :exclusive flag closes it
+  #     the same way it does there: the loser gets :eexist here instead.
+  #   * It also removes the need for the old exdev cross-device fallback:
+  #     @temp_dir (the OS temp directory) is commonly a different filesystem
+  #     than a library path on a self-hosted NAS setup, and File.write/3
+  #     writes directly to final_path's own filesystem regardless, where
+  #     File.rename/2 could not cross that boundary at all.
+  #
+  # mkdir_p targets media_dir, derived from absolute_path (a database-backed
+  # value), never from final_path itself, for the same reason
+  # Uploader.write/3 keeps that same separation: language is already
+  # known-good by the time this runs, but this stays safe even for some
+  # future caller of destination/3 that skipped that check.
+  defp move_to_final_path(temp_path, absolute_path, final_path) do
+    media_dir = Path.dirname(absolute_path)
+    File.mkdir_p!(media_dir)
+
+    with {:ok, content} <- File.read(temp_path),
+         :ok <- File.write(final_path, content, [:exclusive]) do
+      File.rm(temp_path)
+      {:ok, final_path}
+    else
+      {:error, reason} ->
+        File.rm(temp_path)
+        {:error, {:file_store_failed, reason}}
+    end
   end
 
   # Persist subtitle metadata to database

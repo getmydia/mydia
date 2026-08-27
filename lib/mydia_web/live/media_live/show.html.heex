@@ -238,7 +238,7 @@
           <%!-- Subtitles Section --%>
           <Components.subtitles_section
             media_item={@media_item}
-            media_file_subtitles={@media_file_subtitles}
+            media_file_subtitle_tracks={@media_file_subtitle_tracks}
           />
           <%!-- Everything below here is about other titles, not this one.
                 Franchise Section (Movies in the same TMDB collection) --%>
@@ -353,6 +353,13 @@
       subtitle_providers={@subtitle_providers}
       downloading_subtitle_index={@downloading_subtitle_index}
       selected_languages={@selected_languages}
+    />
+  <% end %>
+  <%= if @show_subtitle_upload_modal && @selected_media_file do %>
+    <SubtitleModal.subtitle_upload_modal
+      media_file={@selected_media_file}
+      uploads={@uploads}
+      error={@subtitle_upload_error}
     />
   <% end %>
   <%= if @show_category_modal && @category_form do %>

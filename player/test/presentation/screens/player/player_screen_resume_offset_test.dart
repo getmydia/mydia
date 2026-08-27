@@ -65,6 +65,7 @@ void main() {
     final link = StubLink.responses([
       movieDetailResponse(positionSeconds: 2700),
       movieSegmentsResponse(),
+      subtitleTrackSettingsResponse(),
       streamingCandidatesResponse(duration: 5400),
       startStreamingSessionResponse(startPosition: 2695),
       endStreamingSessionResponse(),
@@ -119,6 +120,7 @@ void main() {
     final link = StubLink.responses([
       movieDetailResponse(positionSeconds: 2700),
       movieSegmentsResponse(),
+      subtitleTrackSettingsResponse(),
       streamingCandidatesResponse(duration: 5400),
       // No `startPosition` key at all — the older-server case.
       startStreamingSessionResponse(startPosition: null),

@@ -84,6 +84,12 @@ type RootQueryType {
   """
   subtitleContent(mediaFileId: ID!, trackId: String!, format: SubtitleFormat): String
 
+  """
+  Stored timing corrections for a media file's subtitle tracks. Tracks with
+  no correction are absent rather than reported as zero.
+  """
+  subtitleTrackSettings(mediaFileId: ID!): [SubtitleTrackSetting!]!
+
   "Get this server's version and the player versions it supports"
   serverCompatibility: ServerCompatibility
 }
@@ -212,6 +218,9 @@ type RootMutationType {
 
   "Download a subtitle candidate returned by subtitleSearch"
   downloadSubtitle(mediaFileId: ID!, token: String!): SubtitleTrack!
+
+  "Store a timing correction for one subtitle track"
+  setSubtitleOffset(mediaFileId: ID!, trackRef: String!, offsetMs: Int!): SubtitleTrackSetting!
 }
 
 type RootSubscriptionType {
@@ -1375,6 +1384,24 @@ type SubtitleProviderStatus {
 type SubtitleSearchPayload {
   results: [SubtitleCandidate!]!
   providers: [SubtitleProviderStatus!]!
+}
+
+"""
+A stored correction for one subtitle track.
+
+Deliberately not a field on `SubtitleTrack`. That type is selected through
+`MediaFileFragment`, which the player uses on the path to playback, and
+GraphQL rejects an entire document containing an unknown field. A player
+selecting an offset field there against an older server would lose playback
+entirely rather than just the offsets. As a standalone root query this fails
+on its own and degrades to "no offsets".
+"""
+type SubtitleTrackSetting {
+  "The track this applies to: a stream index for an embedded track, or a subtitle id"
+  trackRef: String!
+
+  "Milliseconds to shift every cue. Positive shows the subtitle later"
+  offsetMs: Int!
 }
 
 """

@@ -25,6 +25,7 @@ defmodule Mydia.Jobs.LibraryScanner do
 
   require Logger
   alias Mydia.{Library, Settings, Repo, Metadata}
+  alias Mydia.Subtitles.Sidecars
 
   # Upper bound of the insert-time jitter applied to automatic scans.
   @max_startup_delay_ms 30 * 60 * 1000
@@ -229,7 +230,9 @@ defmodule Mydia.Jobs.LibraryScanner do
              progress_callback: progress_callback,
              video_extensions: extensions
            ) do
-      summarize(process_scan_result(library_path, scan_result))
+      summary = summarize(process_scan_result(library_path, scan_result))
+      if reconcile_sidecars?(summary), do: reconcile_sidecars(library_path)
+      summary
     else
       {:error, :not_found} ->
         handle_scan_error(library_path, "Library path does not exist: #{library_path.path}")
@@ -290,6 +293,58 @@ defmodule Mydia.Jobs.LibraryScanner do
 
   # Errors from handle_scan_error/2 pass through unchanged.
   defp summarize(other), do: other
+
+  @doc false
+  # Public only so this guard can be unit-tested directly. `summary` reads
+  # `{:ok, _}` when Library.Scanner.scan/2 succeeded and process_scan_result/2
+  # ran to completion, and `{:error, _}` both when the filesystem scan
+  # failed (the with block's else clauses handle that and never reach the
+  # call site this guards) and when process_scan_result/2 raised internally,
+  # since its own pre-existing rescue converts that into
+  # handle_scan_error/2's error tuple rather than letting the exception
+  # escape. That second case is what this guard exists for: without it,
+  # reconciliation would run against a scan the job reports as failed.
+  # Forcing that path end-to-end would mean reaching a raise that survives
+  # every self-rescuing helper process_scan_result/2 calls
+  # (fix_orphaned_tv_file/2, revalidate_tv_file_association/1,
+  # associate_file_with_episode/2, and match_file_to_existing_items/4 all
+  # already catch their own exceptions), so the guard is pinned directly
+  # here instead of via a contrived scan_library_path/1 integration test.
+  @spec reconcile_sidecars?({:ok, ScanSummary.t()} | {:error, term()}) :: boolean()
+  def reconcile_sidecars?(summary), do: match?({:ok, _}, summary)
+
+  # Sidecar adoption runs after media files are upserted, because it needs
+  # their rows to attach to. A failure here never fails the scan: the video
+  # files are indexed either way, and a missing subtitle row is recoverable
+  # by rescanning. The return value is not used by the caller; this always
+  # reports :ok so a call site never has to distinguish "reconciled" from
+  # "skipped after logging".
+  @spec reconcile_sidecars(Settings.LibraryPath.t()) :: :ok
+  defp reconcile_sidecars(library_path) do
+    media_files =
+      Library.list_media_files(library_path_id: library_path.id, preload: [:library_path])
+
+    tally = Sidecars.reconcile_all(media_files)
+
+    if tally.adopted > 0 or tally.reaped > 0 do
+      Logger.info("Sidecar subtitles reconciled",
+        library_path_id: library_path.id,
+        adopted: tally.adopted,
+        reaped: tally.reaped,
+        skipped: tally.skipped
+      )
+    end
+
+    :ok
+  rescue
+    error ->
+      Logger.warning("Sidecar reconciliation failed",
+        library_path_id: library_path.id,
+        error: Exception.format(:error, error, __STACKTRACE__)
+      )
+
+      :ok
+  end
 
   defp process_scan_result(library_path, scan_result) do
     # Get existing files from database - only files within this library path

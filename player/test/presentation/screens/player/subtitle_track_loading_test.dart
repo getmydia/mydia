@@ -312,6 +312,234 @@ void main() {
     });
   });
 
+  group('effectiveSubtitleDelayMs', () {
+    test('is zero when nothing is stored and nothing is nudged', () {
+      expect(
+        effectiveSubtitleDelayMs(
+          storedOffsetMs: 0,
+          bakedOffsetMs: 0,
+          nudgeMs: 0,
+        ),
+        0,
+      );
+    });
+
+    test('a server-fetched body needs no further delay', () {
+      // The server already shifted the body by the stored offset, so
+      // applying it again through sub-delay would double it.
+      expect(
+        effectiveSubtitleDelayMs(
+          storedOffsetMs: 2000,
+          bakedOffsetMs: 2000,
+          nudgeMs: 0,
+        ),
+        0,
+      );
+    });
+
+    test('an mpv-native track carries the full stored offset', () {
+      // mpv read this track from the container; the server never touched it.
+      expect(
+        effectiveSubtitleDelayMs(
+          storedOffsetMs: 2000,
+          bakedOffsetMs: 0,
+          nudgeMs: 0,
+        ),
+        2000,
+      );
+    });
+
+    test('a nudge adds on top of a baked-in body', () {
+      expect(
+        effectiveSubtitleDelayMs(
+          storedOffsetMs: 2000,
+          bakedOffsetMs: 2000,
+          nudgeMs: 300,
+        ),
+        300,
+      );
+    });
+
+    test('a nudge adds on top of an mpv-native track', () {
+      expect(
+        effectiveSubtitleDelayMs(
+          storedOffsetMs: 2000,
+          bakedOffsetMs: 0,
+          nudgeMs: -300,
+        ),
+        1700,
+      );
+    });
+
+    test('saving a nudge leaves the effective delay unchanged', () {
+      // This is what makes save free of a refetch: storedOffsetMs absorbs
+      // the nudge and nudgeMs resets, and the result does not move.
+      const before = 300;
+
+      final beforeSave = effectiveSubtitleDelayMs(
+        storedOffsetMs: 2000,
+        bakedOffsetMs: 2000,
+        nudgeMs: before,
+      );
+
+      final afterSave = effectiveSubtitleDelayMs(
+        storedOffsetMs: 2000 + before,
+        bakedOffsetMs: 2000,
+        nudgeMs: 0,
+      );
+
+      expect(afterSave, beforeSave);
+    });
+  });
+
+  group('isMpvNativeSubtitleTrackId', () {
+    test('is true for an mpv-native track id', () {
+      expect(isMpvNativeSubtitleTrackId('mk_1'), isTrue);
+    });
+
+    test('is false for a server track id', () {
+      expect(isMpvNativeSubtitleTrackId('3'), isFalse);
+      expect(isMpvNativeSubtitleTrackId('uuid-1'), isFalse);
+    });
+  });
+
+  group('canSaveSubtitleDelay', () {
+    test('refuses an mpv-native track', () {
+      // Its id is media_kit's own container-local one, not the ffprobe
+      // stream index `trackRef` actually means for an embedded track --
+      // saving would persist under an id the next session has no reason to
+      // reproduce.
+      expect(canSaveSubtitleDelay('mk_1'), isFalse);
+    });
+
+    test('allows a server track id', () {
+      expect(canSaveSubtitleDelay('3'), isTrue);
+      expect(canSaveSubtitleDelay('uuid-1'), isTrue);
+    });
+
+    test('refuses when no track is selected', () {
+      expect(canSaveSubtitleDelay(null), isFalse);
+    });
+  });
+
+  group('subtitleDelayDisplayMs', () {
+    test('hides the row when no track is selected', () {
+      expect(
+        subtitleDelayDisplayMs(
+          trackId: null,
+          offsetsLoaded: true,
+          storedOffsetMs: 500,
+          nudgeMs: 0,
+        ),
+        isNull,
+      );
+    });
+
+    test('hides the row when the offsets query never succeeded', () {
+      // Even with a track selected and a non-zero stored value passed in --
+      // this is the exact shape that must be trusted enough to persist over,
+      // and an unloaded query is precisely what makes it untrustworthy.
+      expect(
+        subtitleDelayDisplayMs(
+          trackId: 'uuid-1',
+          offsetsLoaded: false,
+          storedOffsetMs: 500,
+          nudgeMs: 0,
+        ),
+        isNull,
+      );
+    });
+
+    test('shows stored plus the live nudge once a track is selected', () {
+      expect(
+        subtitleDelayDisplayMs(
+          trackId: 'uuid-1',
+          offsetsLoaded: true,
+          storedOffsetMs: 500,
+          nudgeMs: 300,
+        ),
+        800,
+      );
+    });
+
+    test('shows zero for a fresh track with nothing stored or nudged', () {
+      expect(
+        subtitleDelayDisplayMs(
+          trackId: 'uuid-1',
+          offsetsLoaded: true,
+          storedOffsetMs: 0,
+          nudgeMs: 0,
+        ),
+        0,
+      );
+    });
+  });
+
+  group('subtitleDelaySnackBarMessage', () {
+    test('reports the delay plainly when it applies immediately', () {
+      expect(
+        subtitleDelaySnackBarMessage(totalMs: 100, appliesImmediately: true),
+        'Subtitle delay +100 ms',
+      );
+    });
+
+    test('signs a negative total the same way', () {
+      expect(
+        subtitleDelaySnackBarMessage(totalMs: -200, appliesImmediately: true),
+        'Subtitle delay -200 ms',
+      );
+    });
+
+    test('signs zero as positive', () {
+      expect(
+        subtitleDelaySnackBarMessage(totalMs: 0, appliesImmediately: true),
+        'Subtitle delay +0 ms',
+      );
+    });
+
+    // The regression this exists for: on web, applySubtitleDelay is a
+    // genuine no-op (media_kit's web backend has no mpv sub-delay to set),
+    // so a viewer nudging there sees an OSD claiming a change that has not
+    // happened. Saving is what actually persists the nudge -- see
+    // subtitleDelaySavedMessage below for why even Save does not make it
+    // visible on web either.
+    test('does not claim an immediate change when it does not apply yet', () {
+      final message = subtitleDelaySnackBarMessage(
+        totalMs: 100,
+        appliesImmediately: false,
+      );
+
+      expect(message, isNot('Subtitle delay +100 ms'));
+      expect(message, contains('100 ms'));
+      expect(message, contains('Save'));
+    });
+  });
+
+  group('subtitleDelaySavedMessage', () {
+    test('confirms the save plainly when it applies immediately', () {
+      expect(
+        subtitleDelaySavedMessage(appliesImmediately: true),
+        'Subtitle delay saved',
+      );
+    });
+
+    // The finding this exists for: saving persists the offset to the server
+    // and updates local state, but never evicts or refetches the
+    // SubtitleContent body already cached for this track in
+    // _mediaKitSubtitleTrackMap. That body still has the *old* offset baked
+    // in, so a web viewer who saves keeps seeing the old timing until the
+    // track loads again -- the finding-4 fix made the nudge OSD promise
+    // "after Save", which made this gap into a promise the code does not
+    // keep unless this message says otherwise.
+    test('does not claim an immediate change when it does not apply yet', () {
+      final message = subtitleDelaySavedMessage(appliesImmediately: false);
+
+      expect(message, isNot('Subtitle delay saved'));
+      expect(message, contains('saved'));
+      expect(message, contains('next time'));
+    });
+  });
+
   group('failed-fetch retry (regression coverage)', () {
     test(
         'a track whose fetch failed can be requested again, instead of '
