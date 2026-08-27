@@ -28,8 +28,13 @@ defmodule Mydia.Subtitles.Resync do
   # Matches the range validation on subtitle_track_settings.offset_ms.
   @max_offset_ms 600_000
 
-  # score / span_count. A real match normalizes to roughly 1.0 and unrelated
-  # content to roughly 0.1, so this sits an order of magnitude away from both.
+  # score / span_count. Measured against a real 115 minute film (see @min_cues
+  # below): a correct match normalizes to 0.629 and a wrong film to 0.440, so
+  # the real margin is 0.5 sitting roughly in between, not an order of
+  # magnitude from either side. The crate's own synthetic tests see a much
+  # wider spread, roughly 1.0 for a real match and roughly 0.1 for unrelated
+  # content, which is why this threshold can look more generous than it is;
+  # trust the real-media figures over the synthetic ones.
   @min_confidence 0.5
 
   # Measured against a real 115 minute film: a correct match normalizes to 0.629
@@ -99,14 +104,9 @@ defmodule Mydia.Subtitles.Resync do
     end)
   end
 
-  def cue_spans(content, "ass") do
-    ~r/^(?:Dialogue|Comment):[^,]*,(\d):(\d{2}):(\d{2})\.(\d{2}),(\d):(\d{2}):(\d{2})\.(\d{2})/m
-    |> Regex.scan(content)
-    |> Enum.map(fn [_full, h1, m1, s1, cs1, h2, m2, s2, cs2] ->
-      {to_ms(h1 <> ":", m1, s1, cs1 <> "0"), to_ms(h2 <> ":", m2, s2, cs2 <> "0")}
-    end)
-  end
-
+  # `subtitle_spans/2` always requests "srt" from both `Delivery.content/3`
+  # and `cue_spans/2`, so no other format ever reaches here today. No "ass"
+  # clause: an untested, unreachable parser is a liability, not a feature.
   def cue_spans(_content, _format), do: []
 
   defp to_ms(hours, minutes, seconds, fraction) do
@@ -122,49 +122,68 @@ defmodule Mydia.Subtitles.Resync do
   # Returns `{result, normalized_score}`. The score rides alongside the result so
   # `run/2` can record it even for a declined attempt, which is what lets the UI
   # explain why an automatic sync did not happen.
+  #
+  # The whole chain runs inside one `try/after` so the PCM file is removed on
+  # every exit path, not only a successful one: an ffmpeg failure still writes
+  # partial output before it returns its error, and that path used to return
+  # through `log_and_skip/3` without ever reaching a cleanup step. Mirrors
+  # `Mydia.Library.SegmentDetection.Fingerprint.Fpcalc.fingerprint/3`, which
+  # wraps its whole `with` chain, decode included, the same way.
   defp attempt(media_file, track_ref) do
-    with {:ok, pcm_path} <- decode_audio(media_file),
-         {:ok, reference} <- speech_spans(pcm_path),
-         {:ok, cues} <- subtitle_spans(media_file, track_ref) do
-      {residual_ms, score} = Subsync.align(reference, cues)
-      existing_ms = TrackSettings.offset_ms(media_file.id, track_ref)
-      normalized = normalize(score, length(cues))
+    pcm_path = tmp_path(media_file, track_ref)
 
-      case decide(residual_ms, existing_ms, score, length(cues)) do
-        {:ok, absolute_ms} ->
-          case TrackSettings.set_offset(media_file.id, track_ref, absolute_ms) do
-            {:ok, _setting} -> {{:ok, absolute_ms}, normalized}
-            {:error, changeset} -> {{:error, changeset}, normalized}
-          end
+    try do
+      with :ok <- decode_audio(media_file, pcm_path),
+           {:ok, reference} <- speech_spans(pcm_path),
+           {:ok, cues} <- subtitle_spans(media_file, track_ref) do
+        {residual_ms, score} = Subsync.align(reference, cues)
+        existing_ms = TrackSettings.offset_ms(media_file.id, track_ref)
+        normalized = normalize(score, length(cues))
 
-        {:skip, reason} ->
-          {{:skip, reason}, normalized}
+        case decide(residual_ms, existing_ms, score, length(cues)) do
+          {:ok, absolute_ms} ->
+            case TrackSettings.set_offset(media_file.id, track_ref, absolute_ms) do
+              {:ok, _setting} -> {{:ok, absolute_ms}, normalized}
+              {:error, changeset} -> {{:error, changeset}, normalized}
+            end
+
+          {:skip, reason} ->
+            {{:skip, reason}, normalized}
+        end
+      else
+        {:skip, reason} -> {{:skip, reason}, nil}
+        {:error, reason} -> {{:error, reason}, nil}
       end
-    else
-      {:skip, reason} -> {{:skip, reason}, nil}
-      {:error, reason} -> {{:error, reason}, nil}
+    after
+      File.rm(pcm_path)
     end
   end
 
   defp normalize(_score, 0), do: nil
   defp normalize(score, span_count), do: score / span_count
 
-  # The temp file is removed in `after` rather than after a successful run, so a
-  # crash mid-analysis cannot leak PCM into the temp directory. Same reasoning as
-  # Mydia.Library.SegmentDetection.Fingerprint.Fpcalc.
-  defp decode_audio(media_file) do
+  # Keyed on the media file, the track, and a unique integer, mirroring
+  # `Fpcalc.tmp_path/0`. The media file id alone would let two tracks of the
+  # same file share one path (not reachable today, since the `:subsync` queue
+  # runs at concurrency 1, but the fix costs nothing and keeps the hazard from
+  # depending on that queue setting staying put); the track ref is folded in
+  # too so a file that does leak past the `after` above is still identifiable.
+  defp tmp_path(media_file, track_ref) do
+    name = "mydia_resync_#{media_file.id}_#{track_ref}_#{System.unique_integer([:positive])}.pcm"
+    Path.join(System.tmp_dir!(), name)
+  end
+
+  defp decode_audio(media_file, pcm_path) do
     case MediaFile.display_path(media_file) do
       nil ->
         log_and_skip(:no_audio, media_file.id, :unresolved_path)
 
       path ->
-        decode_audio(media_file, path)
+        run_ffmpeg_decode(path, pcm_path)
     end
   end
 
-  defp decode_audio(media_file, path) do
-    pcm_path = Path.join(System.tmp_dir!(), "mydia_resync_#{media_file.id}.pcm")
-
+  defp run_ffmpeg_decode(path, pcm_path) do
     args = [
       "-v",
       "error",
@@ -182,7 +201,7 @@ defmodule Mydia.Subtitles.Resync do
     ]
 
     case Ffmpeg.run(args) do
-      {:ok, _output} -> {:ok, pcm_path}
+      {:ok, _output} -> :ok
       {:error, :ffmpeg_not_found} -> {:error, :ffmpeg_not_found}
       {:error, reason} -> log_and_skip(:no_audio, path, reason)
     end
@@ -193,8 +212,6 @@ defmodule Mydia.Subtitles.Resync do
       {:ok, spans} -> {:ok, spans}
       {:error, reason} -> log_and_skip(:no_audio, pcm_path, reason)
     end
-  after
-    File.rm(pcm_path)
   end
 
   defp subtitle_spans(media_file, track_ref) do

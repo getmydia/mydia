@@ -129,11 +129,13 @@ defmodule MydiaWeb.Schema.Resolvers.SubtitleResolver do
 
   # `list_subtitles/3` stringifies track ids for the wire. Delivery needs the
   # integer back for embedded tracks so it selects the right ffmpeg stream.
+  # `Mydia.Subtitles.Resync` needs the identical conversion for the same
+  # reason, so the conversion itself lives on `Delivery` and this just calls
+  # it; the non-binary fallback stays here since `track_id_from_ref/1` has no
+  # clause for it and every caller of this function already guarantees a
+  # binary in practice, but changing that guarantee is not this function's call.
   defp denormalize_track_id(track_id) when is_binary(track_id) do
-    case Integer.parse(track_id) do
-      {int, ""} -> int
-      _ -> track_id
-    end
+    Delivery.track_id_from_ref(track_id)
   end
 
   defp denormalize_track_id(track_id), do: track_id
