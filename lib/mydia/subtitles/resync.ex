@@ -158,7 +158,10 @@ defmodule Mydia.Subtitles.Resync do
           [{integer(), integer()}]
   def drop_out_of_range_cues(cues, media_file) do
     bound = cue_bound_ms(media_file)
-    Enum.filter(cues, fn {start_ms, end_ms} -> start_ms >= 0 and end_ms <= bound end)
+
+    Enum.filter(cues, fn {start_ms, end_ms} ->
+      start_ms >= 0 and start_ms <= bound and end_ms <= bound
+    end)
   end
 
   # Duration is stored in seconds as a float and may not be populated yet

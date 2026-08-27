@@ -160,6 +160,14 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
     end
   end
 
+  # A hand-crafted payload missing either key. The rendered button's
+  # phx-value-media-file-id and phx-value-track-ref always send both, so this
+  # only guards a crafted channel push, the same class of input
+  # set_subtitle_offset/2 and nudge_subtitle_offset/2 above guard against.
+  # Without it, a missing key would raise FunctionClauseError and take the
+  # whole LiveView process down instead of landing here.
+  def resync_subtitle(_params, socket), do: {:noreply, socket}
+
   # Runs off the LiveView process via start_async, matching every other
   # rescan-shaped action in this LiveView (rescan_movie, rescan_series,
   # rescan_season, rescan_season_files in FileEvents). Mydia.Subtitles.Sidecars.reconcile/1

@@ -240,6 +240,26 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEventsTest do
 
       assert flash(socket)["error"] == "Could not start the re-sync."
     end
+
+    # The rendered button always sends both phx-value-* attributes, but a
+    # hand-crafted channel push is not bound by that. Before the fallback
+    # clause existed, either of these raised FunctionClauseError and took the
+    # LiveView process down.
+    test "a payload missing the media-file-id key is ignored rather than raising" do
+      {:noreply, socket} = SubtitleEvents.resync_subtitle(%{"track-ref" => "3"}, socket())
+
+      assert flash(socket) == %{}
+    end
+
+    test "a payload missing the track-ref key is ignored rather than raising" do
+      {:noreply, socket} =
+        SubtitleEvents.resync_subtitle(
+          %{"media-file-id" => Ecto.UUID.generate()},
+          socket()
+        )
+
+      assert flash(socket) == %{}
+    end
   end
 
   describe "handle_download_subtitle_async/2" do

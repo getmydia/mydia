@@ -52,7 +52,13 @@ pub fn align_spans(reference: &[(i64, i64)], list: &[(i64, i64)]) -> (i64, f64) 
     (i64::from(delta), score)
 }
 
-// `new_safe` orders the pair, so a cue stored end-before-start cannot panic here.
+// `new_safe` reorders a start-after-end pair rather than rejecting it, so a
+// reversed cue cannot panic here -- but reordering is not the same as making
+// it safe. A reversed, wildly out-of-range pair (say, a two-digit-hour typo
+// paired with a normal end time) still turns into a span whose spread is
+// exactly the allocation hazard documented above, just with its endpoints
+// swapped. That is why the Elixir caller must bound both `start` and `end`
+// against the media's duration, not only check that `start` is non-negative.
 fn to_spans(pairs: &[(i64, i64)]) -> Vec<TimeSpan> {
     pairs
         .iter()

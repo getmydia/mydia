@@ -245,5 +245,36 @@ defmodule Mydia.Subtitles.ResyncTest do
                within_fallback
              ]
     end
+
+    # Regression guard for the one-sided filter that only ever checked
+    # `start_ms >= 0`: a two-digit-hour typo like "99:00:00,000 --> 00:00:02,000"
+    # parses to {356_400_000, 2_000}. The start is non-negative and the end is
+    # well under the bound, so the old filter let it straight through. `to_spans/1`
+    # in `native/mydia_subsync/src/align.rs` then reorders it with `new_safe`
+    # into a span from 2_000 to 356_400_000, which is exactly the unbounded
+    # spread `ilass::align_nosplit` sizes its allocation from.
+    test "drops a reversed cue whose start is far beyond the bound even though its end is small" do
+      media_file = %MediaFile{metadata: %FileMetadata{duration: 3600.0}}
+      reversed = {356_400_000, 2_000}
+
+      assert Resync.drop_out_of_range_cues([reversed], media_file) == []
+    end
+
+    test "keeps a normal cue when a reversed out-of-range cue is filtered alongside it" do
+      media_file = %MediaFile{metadata: %FileMetadata{duration: 3600.0}}
+      normal = {10_000, 12_000}
+      reversed = {356_400_000, 2_000}
+
+      assert Resync.drop_out_of_range_cues([normal, reversed], media_file) == [normal]
+    end
+
+    test "drops a cue whose start exceeds the bound even when its end is within range" do
+      media_file = %MediaFile{metadata: %FileMetadata{duration: 3600.0}}
+      # Bound is 4_200_000ms (1 hour duration + the 10 minute margin). The end
+      # alone would pass the old start-only check.
+      cue = {4_200_001, 12_000}
+
+      assert Resync.drop_out_of_range_cues([cue], media_file) == []
+    end
   end
 end
