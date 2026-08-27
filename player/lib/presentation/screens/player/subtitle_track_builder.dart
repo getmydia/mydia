@@ -244,3 +244,23 @@ int? subtitleDelayDisplayMs({
   if (trackId == null || !offsetsLoaded) return null;
   return storedOffsetMs + nudgeMs;
 }
+
+/// What the OSD snackbar should say right after a `z`/`shift+z` nudge (or a
+/// sheet stepper tap), given the new total delay in [totalMs].
+///
+/// [appliesImmediately] is `false` on web: `applySubtitleDelay` is a genuine
+/// no-op there (media_kit's web backend has no mpv `sub-delay` property to
+/// set), and the body a web viewer sees always comes pre-baked from the
+/// `SubtitleContent` query -- Save, followed by a refetch, is the only web
+/// path that actually moves anything. `_subtitleNudgeMs` is still tracked and
+/// still contributes to what Save persists, so the nudge itself is not
+/// dropped on web; only the wording changes, to stop claiming a visible
+/// change that has not happened yet.
+String subtitleDelaySnackBarMessage({
+  required int totalMs,
+  required bool appliesImmediately,
+}) {
+  final signed = '${totalMs >= 0 ? '+' : ''}$totalMs ms';
+  if (appliesImmediately) return 'Subtitle delay $signed';
+  return 'Subtitle delay will be $signed after Save';
+}

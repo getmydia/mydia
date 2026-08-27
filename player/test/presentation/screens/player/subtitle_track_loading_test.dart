@@ -475,6 +475,45 @@ void main() {
     });
   });
 
+  group('subtitleDelaySnackBarMessage', () {
+    test('reports the delay plainly when it applies immediately', () {
+      expect(
+        subtitleDelaySnackBarMessage(totalMs: 100, appliesImmediately: true),
+        'Subtitle delay +100 ms',
+      );
+    });
+
+    test('signs a negative total the same way', () {
+      expect(
+        subtitleDelaySnackBarMessage(totalMs: -200, appliesImmediately: true),
+        'Subtitle delay -200 ms',
+      );
+    });
+
+    test('signs zero as positive', () {
+      expect(
+        subtitleDelaySnackBarMessage(totalMs: 0, appliesImmediately: true),
+        'Subtitle delay +0 ms',
+      );
+    });
+
+    // The regression this exists for: on web, applySubtitleDelay is a
+    // genuine no-op (media_kit's web backend has no mpv sub-delay to set),
+    // so a viewer nudging there sees an OSD claiming a change that has not
+    // happened -- nothing moves until Save, followed by a refetch of
+    // SubtitleContent.
+    test('does not claim an immediate change when it does not apply yet', () {
+      final message = subtitleDelaySnackBarMessage(
+        totalMs: 100,
+        appliesImmediately: false,
+      );
+
+      expect(message, isNot('Subtitle delay +100 ms'));
+      expect(message, contains('100 ms'));
+      expect(message, contains('Save'));
+    });
+  });
+
   group('failed-fetch retry (regression coverage)', () {
     test(
         'a track whose fetch failed can be requested again, instead of '

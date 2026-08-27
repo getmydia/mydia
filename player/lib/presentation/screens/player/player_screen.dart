@@ -2162,8 +2162,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     await _syncSubtitleDelay();
 
+    // applySubtitleDelay is a genuine no-op on web -- there is no mpv
+    // sub-delay to set, and the body a web viewer sees always comes
+    // pre-baked from the SubtitleContent query. The nudge is still tracked
+    // and still contributes to what Save persists, but the OSD must not
+    // claim a visible change that has not happened yet.
     _showSubtitleDelaySnackBar(
-      'Subtitle delay ${total >= 0 ? '+' : ''}$total ms',
+      subtitleDelaySnackBarMessage(
+        totalMs: total,
+        appliesImmediately: !kIsWeb,
+      ),
     );
   }
 
