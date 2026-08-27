@@ -38,6 +38,11 @@ defmodule Mydia.Subtitles.TrackSettingsTest do
       assert {:error, changeset} = TrackSettings.set_offset(media_file.id, "3", 900_000)
       assert %{offset_ms: [_ | _]} = errors_on(changeset)
     end
+
+    test "returns a changeset error rather than raising for an unparseable media file id" do
+      assert {:error, changeset} = TrackSettings.set_offset("not-a-uuid", "3", 500)
+      assert %{media_file_id: [_ | _]} = errors_on(changeset)
+    end
   end
 
   describe "offsets_for_media_file/1" do

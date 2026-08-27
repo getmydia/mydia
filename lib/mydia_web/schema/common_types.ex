@@ -656,6 +656,24 @@ defmodule MydiaWeb.Schema.CommonTypes do
   end
 
   @desc """
+  A stored correction for one subtitle track.
+
+  Deliberately not a field on `SubtitleTrack`. That type is selected through
+  `MediaFileFragment`, which the player uses on the path to playback, and
+  GraphQL rejects an entire document containing an unknown field. A player
+  selecting an offset field there against an older server would lose playback
+  entirely rather than just the offsets. As a standalone root query this fails
+  on its own and degrades to "no offsets".
+  """
+  object :subtitle_track_setting do
+    @desc "The track this applies to: a stream index for an embedded track, or a subtitle id"
+    field :track_ref, non_null(:string)
+
+    @desc "Milliseconds to shift every cue. Positive shows the subtitle later"
+    field :offset_ms, non_null(:integer)
+  end
+
+  @desc """
   What this server needs from a connecting player.
 
   Published so a player can tell the operator that one side is too old, rather

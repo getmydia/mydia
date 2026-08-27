@@ -19,7 +19,8 @@ use crate::types::discovery::{
 };
 use crate::types::media::{
     Episode, LibraryPath, Movie, MovieConnection, MovieEdge, RecentlyAddedItem,
-    SubtitleProviderStatus, SubtitleSearchPayload, TvShow, TvShowConnection, TvShowEdge,
+    SubtitleProviderStatus, SubtitleSearchPayload, SubtitleTrackSetting, TvShow, TvShowConnection,
+    TvShowEdge,
 };
 use crate::types::streaming::StreamingCandidatesResult;
 use mydia_db::media_files::MediaFileRow;
@@ -502,6 +503,22 @@ impl RootQueryType {
         authenticated_user(ctx).await?;
 
         Ok(None)
+    }
+
+    /// Stored timing corrections for a media file's subtitle tracks.
+    ///
+    /// query_types.ex:`:subtitle_track_settings`. This server stores no
+    /// corrections, so the list is always empty. That is the same answer a
+    /// Mydia server gives for a file nobody has corrected, so a client needs no
+    /// branch for it.
+    async fn subtitle_track_settings(
+        &self,
+        ctx: &Context<'_>,
+        _media_file_id: ID,
+    ) -> Result<Vec<SubtitleTrackSetting>> {
+        authenticated_user(ctx).await?;
+
+        Ok(vec![])
     }
 
     async fn streaming_candidates(

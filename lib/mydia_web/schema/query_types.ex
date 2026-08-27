@@ -13,6 +13,7 @@ defmodule MydiaWeb.Schema.QueryTypes do
   alias MydiaWeb.Schema.Resolvers.CollectionResolver
   alias MydiaWeb.Schema.Resolvers.SubtitleResolver
   alias MydiaWeb.Schema.Resolvers.SubtitleSearchResolver
+  alias MydiaWeb.Schema.Resolvers.SubtitleSettingsResolver
   alias MydiaWeb.Schema.Resolvers.ServerResolver
 
   # Node interface for global node resolution with hierarchical navigation
@@ -311,6 +312,16 @@ defmodule MydiaWeb.Schema.QueryTypes do
       arg(:format, :subtitle_format, default_value: :vtt)
 
       resolve(&SubtitleResolver.subtitle_content/3)
+    end
+
+    @desc """
+    Stored timing corrections for a media file's subtitle tracks. Tracks with
+    no correction are absent rather than reported as zero.
+    """
+    field :subtitle_track_settings, non_null(list_of(non_null(:subtitle_track_setting))) do
+      arg(:media_file_id, non_null(:id))
+
+      resolve(&SubtitleSettingsResolver.list/3)
     end
   end
 

@@ -15,7 +15,7 @@ use crate::types::auth::{
 };
 use crate::types::common::StreamingStrategy;
 use crate::types::discovery::RemoveFromContinueWatchingResult;
-use crate::types::media::{Episode, Movie, Progress, SubtitleTrack, TvShow};
+use crate::types::media::{Episode, Movie, Progress, SubtitleTrack, SubtitleTrackSetting, TvShow};
 use crate::types::streaming::{
     AudioLanguagePreferenceResult, CancelDownloadResult, DownloadJobStatus, DownloadOption,
     PrepareDownloadResult, StreamingSessionResult,
@@ -81,6 +81,23 @@ impl RootMutationType {
         authenticated_user(ctx).await?;
 
         Err(not_implemented("downloadSubtitle"))
+    }
+
+    /// Store a timing correction for one subtitle track.
+    ///
+    /// mutation_types.ex:`:set_subtitle_offset`. This server has no table for
+    /// subtitle corrections. The return type is non-null, so an explicit error
+    /// is the only honest answer available.
+    async fn set_subtitle_offset(
+        &self,
+        ctx: &Context<'_>,
+        _media_file_id: ID,
+        _track_ref: String,
+        _offset_ms: i32,
+    ) -> Result<SubtitleTrackSetting> {
+        authenticated_user(ctx).await?;
+
+        Err(not_implemented("setSubtitleOffset"))
     }
 
     /// Mark a movie as watched
