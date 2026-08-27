@@ -5,6 +5,7 @@ defmodule Mydia.Subtitles.ResyncEnqueueTest do
   use Oban.Testing, repo: Mydia.Repo
 
   alias Mydia.Jobs.SubtitleResync
+  alias Mydia.Subtitles.Downloader
   alias Mydia.Subtitles.Sidecars
 
   setup do
@@ -42,6 +43,51 @@ defmodule Mydia.Subtitles.ResyncEnqueueTest do
     {:ok, _} = Sidecars.reconcile(media_file)
 
     assert length(all_enqueued(worker: SubtitleResync)) == 1
+  end
+
+  # Drives Downloader.download/3 through the real relay adapter, with the
+  # relay's own HTTP boundary stubbed by Bypass rather than an in-process
+  # adapter substitute, the same way
+  # test/mydia/subtitles_test.exs's "falls back to the provider type when
+  # the config is gone" test and test/mydia/subtitles/provider/relay_test.exs
+  # both stub it. That is deliberate here: substituting a custom Provider
+  # adapter (as the other downloader_*_test.exs files do) would prove the
+  # enqueue call runs when a *test double* succeeds, not when the
+  # downloader's actual success path, `persist_subtitle/5`, does.
+  @tag :tmp_dir
+  test "a successful download enqueues exactly one re-sync job", %{
+    tmp_dir: tmp_dir,
+    bypass: bypass
+  } do
+    media_file = media_file_fixture_in(tmp_dir)
+
+    Bypass.expect_once(bypass, "GET", "/api/v1/subtitles/download-url/resync-1", fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(
+        200,
+        Jason.encode!(%{"download_url" => "http://localhost:#{bypass.port}/files/resync-1.srt"})
+      )
+    end)
+
+    Bypass.expect_once(bypass, "GET", "/files/resync-1.srt", fn conn ->
+      Plug.Conn.resp(conn, 200, sample_srt())
+    end)
+
+    subtitle_info = %{
+      file_id: "resync-1",
+      language: "en",
+      format: "srt",
+      subtitle_hash: "resync-download-hash"
+    }
+
+    assert {:ok, subtitle} = Downloader.download(subtitle_info, media_file.id)
+
+    assert [%{args: %{"media_file_id" => media_file_id, "track_ref" => track_ref}}] =
+             all_enqueued(worker: SubtitleResync)
+
+    assert media_file_id == media_file.id
+    assert track_ref == subtitle.id
   end
 
   # Built against the existing library_path_fixture/media_file_fixture pair
