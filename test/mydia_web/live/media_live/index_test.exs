@@ -1113,6 +1113,25 @@ defmodule MydiaWeb.MediaLive.IndexTest do
       assert has_element?(view, "#{container} .badge-neutral", "720p")
     end
 
+    # Ranking resolutions with Enum.sort(:desc) compares the raw strings, so
+    # "720p" sorts above "2160p" and the badge reports the worst episode as the
+    # show's quality. Mixed resolutions across a season are ordinary.
+    test "the quality badge picks the highest episode resolution by height, not by string order",
+         %{conn: conn} do
+      show = media_item_fixture(%{title: "Mixed Show", type: "tv_show"})
+      first = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
+      second = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 2})
+      media_file_fixture(%{episode_id: first.id, resolution: "2160p"})
+      media_file_fixture(%{episode_id: second.id, resolution: "720p"})
+
+      {:ok, view, _html} = live(conn, ~p"/tv")
+
+      container = "#poster-badges-#{show.id}"
+
+      assert has_element?(view, "#{container} .badge-neutral", "2160p")
+      refute has_element?(view, "#{container} .badge-neutral", "720p")
+    end
+
     test "list view shows a TV show's total episode file size, not zero", %{conn: conn} do
       show = media_item_fixture(%{title: "Size Show", type: "tv_show"})
       episode = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})

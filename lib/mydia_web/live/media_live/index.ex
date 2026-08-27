@@ -5,6 +5,7 @@ defmodule MydiaWeb.MediaLive.Index do
   alias Mydia.Metadata.Structs.MediaMetadata
   alias Mydia.Settings
   alias Mydia.Collections
+  alias Mydia.Downloads.DownloadService
   alias Mydia.Search
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.Live.Helpers.GridDensity
@@ -966,12 +967,14 @@ defmodule MydiaWeb.MediaLive.Index do
         nil
 
       files ->
-        # Get the highest quality from available files
+        # Rank by parsed height rather than lexically. Enum.sort(:desc) on the
+        # raw strings puts "720p" ahead of "2160p", and a show's episodes
+        # routinely mix resolutions, so that is easy to hit now that TV shows
+        # reach this function at all.
         files
         |> Enum.map(& &1.resolution)
         |> Enum.reject(&is_nil/1)
-        |> Enum.sort(:desc)
-        |> List.first()
+        |> Enum.max_by(&DownloadService.parse_resolution_height/1, fn -> nil end)
     end
   end
 
