@@ -500,8 +500,9 @@ void main() {
     // The regression this exists for: on web, applySubtitleDelay is a
     // genuine no-op (media_kit's web backend has no mpv sub-delay to set),
     // so a viewer nudging there sees an OSD claiming a change that has not
-    // happened -- nothing moves until Save, followed by a refetch of
-    // SubtitleContent.
+    // happened. Saving is what actually persists the nudge -- see
+    // subtitleDelaySavedMessage below for why even Save does not make it
+    // visible on web either.
     test('does not claim an immediate change when it does not apply yet', () {
       final message = subtitleDelaySnackBarMessage(
         totalMs: 100,
@@ -511,6 +512,31 @@ void main() {
       expect(message, isNot('Subtitle delay +100 ms'));
       expect(message, contains('100 ms'));
       expect(message, contains('Save'));
+    });
+  });
+
+  group('subtitleDelaySavedMessage', () {
+    test('confirms the save plainly when it applies immediately', () {
+      expect(
+        subtitleDelaySavedMessage(appliesImmediately: true),
+        'Subtitle delay saved',
+      );
+    });
+
+    // The finding this exists for: saving persists the offset to the server
+    // and updates local state, but never evicts or refetches the
+    // SubtitleContent body already cached for this track in
+    // _mediaKitSubtitleTrackMap. That body still has the *old* offset baked
+    // in, so a web viewer who saves keeps seeing the old timing until the
+    // track loads again -- the finding-4 fix made the nudge OSD promise
+    // "after Save", which made this gap into a promise the code does not
+    // keep unless this message says otherwise.
+    test('does not claim an immediate change when it does not apply yet', () {
+      final message = subtitleDelaySavedMessage(appliesImmediately: false);
+
+      expect(message, isNot('Subtitle delay saved'));
+      expect(message, contains('saved'));
+      expect(message, contains('next time'));
     });
   });
 

@@ -2199,6 +2199,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// [canSaveSubtitleDelay]), but this checks again rather than trusting
   /// that UI gate alone -- the same defensive posture every other guard in
   /// this method already takes.
+  ///
+  /// On web this only ever persists the offset and updates local state; it
+  /// never evicts or refetches the `SubtitleContent` body already cached in
+  /// [_mediaKitSubtitleTrackMap] for [track], so what the viewer sees does
+  /// not actually change until the track loads again. See
+  /// [subtitleDelaySavedMessage]'s dartdoc for why that gap is closed with
+  /// an honest message rather than a reload.
   Future<void> _saveSubtitleDelay() async {
     final track = _selectedSubtitleTrack;
     if (track == null || !_subtitleOffsetsLoaded) return;
@@ -2246,7 +2253,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         await _syncSubtitleDelay();
       }
 
-      _showSubtitleDelaySnackBar('Subtitle delay saved');
+      // On web this save never touches the SubtitleContent body already
+      // cached in _mediaKitSubtitleTrackMap for this track -- it still has
+      // the old offset baked in, so nothing the viewer sees actually moves
+      // yet. See subtitleDelaySavedMessage's dartdoc for why a refetch was
+      // not built to close that gap.
+      _showSubtitleDelaySnackBar(
+        subtitleDelaySavedMessage(appliesImmediately: !kIsWeb),
+      );
     } catch (e) {
       debugPrint('[PlayerScreen] Could not save subtitle delay: $e');
       _showSubtitleDelaySnackBar('Could not save the subtitle delay');

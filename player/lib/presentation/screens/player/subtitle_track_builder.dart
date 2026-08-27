@@ -251,11 +251,12 @@ int? subtitleDelayDisplayMs({
 /// [appliesImmediately] is `false` on web: `applySubtitleDelay` is a genuine
 /// no-op there (media_kit's web backend has no mpv `sub-delay` property to
 /// set), and the body a web viewer sees always comes pre-baked from the
-/// `SubtitleContent` query -- Save, followed by a refetch, is the only web
-/// path that actually moves anything. `_subtitleNudgeMs` is still tracked and
-/// still contributes to what Save persists, so the nudge itself is not
-/// dropped on web; only the wording changes, to stop claiming a visible
-/// change that has not happened yet.
+/// `SubtitleContent` query. `_subtitleNudgeMs` is still tracked and still
+/// contributes to what Save persists, so the nudge itself is not dropped on
+/// web; only the wording changes, to stop claiming a visible change that has
+/// not happened yet. See [subtitleDelaySavedMessage] for the other half of
+/// this: Save does not make the change visible on web either, only
+/// persists it.
 String subtitleDelaySnackBarMessage({
   required int totalMs,
   required bool appliesImmediately,
@@ -263,4 +264,29 @@ String subtitleDelaySnackBarMessage({
   final signed = '${totalMs >= 0 ? '+' : ''}$totalMs ms';
   if (appliesImmediately) return 'Subtitle delay $signed';
   return 'Subtitle delay will be $signed after Save';
+}
+
+/// What the OSD snackbar should say right after a successful subtitle delay
+/// save.
+///
+/// [appliesImmediately] is `false` on web for a second, distinct reason from
+/// [subtitleDelaySnackBarMessage]'s: `_saveSubtitleDelay` persists the offset
+/// to the server and updates `_subtitleOffsets`/`_subtitleNudgeMs`, but never
+/// evicts or refetches the `SubtitleContent` body already cached in
+/// `_mediaKitSubtitleTrackMap` for this track. That cached body still has the
+/// *old* offset baked in by the server, so a web viewer who saves keeps
+/// seeing the old timing until this track loads again. Native is unaffected
+/// -- after a save, `effectiveSubtitleDelayMs` reduces to the (now zero)
+/// nudge and `sub-delay` already carries the correct value live, so "saved"
+/// there is also already true of what is on screen.
+///
+/// A refetch-on-save was deliberately not built to close this gap: it would
+/// mean reloading a track mid-session, which lands in the subtitle-selection
+/// race machinery (`_subtitleSelectionGeneration`, `_pendingSubtitleSelection`,
+/// `shouldApplySubtitleSelection`) that took real effort to get right, on a
+/// surface (the Flutter web build) that is not the primary UI. The message
+/// is corrected instead of the behavior.
+String subtitleDelaySavedMessage({required bool appliesImmediately}) {
+  if (appliesImmediately) return 'Subtitle delay saved';
+  return 'Subtitle delay saved. It applies next time this track loads.';
 }
