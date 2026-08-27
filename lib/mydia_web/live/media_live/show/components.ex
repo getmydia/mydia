@@ -999,6 +999,14 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                       </button>
                       <button
                         type="button"
+                        phx-click="open_subtitle_upload"
+                        phx-value-media-file-id={media_file.id}
+                        class="btn btn-ghost btn-sm"
+                      >
+                        <.icon name="hero-arrow-up-tray" class="w-4 h-4" /> Upload
+                      </button>
+                      <button
+                        type="button"
                         phx-click="open_subtitle_search"
                         phx-value-media-file-id={media_file.id}
                         class="btn btn-primary btn-sm"

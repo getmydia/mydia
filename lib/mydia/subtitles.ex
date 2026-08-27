@@ -25,7 +25,7 @@ defmodule Mydia.Subtitles do
   import Ecto.Query
 
   alias Mydia.Repo
-  alias Mydia.Subtitles.{Subtitle, MediaHash, Downloader, Scoring, TrackSettings}
+  alias Mydia.Subtitles.{Subtitle, MediaHash, Downloader, Uploader, Scoring, TrackSettings}
   alias Mydia.Library.MediaFile
   alias Mydia.Media.{MediaItem, Episode}
 
@@ -168,6 +168,20 @@ defmodule Mydia.Subtitles do
   @spec download_from_result(map(), binary()) :: {:ok, Subtitle.t()} | {:error, term()}
   def download_from_result(result, media_file_id) do
     download_subtitle(result_to_subtitle_info(result), media_file_id, provider_opts(result))
+  end
+
+  @doc """
+  Stores a subtitle file uploaded from the web UI.
+
+  See `Mydia.Subtitles.Uploader.upload/3` for the full storage convention,
+  the existing-file refusal, and the identical-basename ownership check that
+  keeps this from re-entering the dual-adoption bug `Mydia.Subtitles.Sidecars`
+  guards against.
+  """
+  @spec upload_subtitle(MediaFile.t(), binary(), keyword()) ::
+          {:ok, Subtitle.t()} | {:error, String.t()}
+  def upload_subtitle(media_file, content, opts \\ []) do
+    Uploader.upload(media_file, content, opts)
   end
 
   @doc """

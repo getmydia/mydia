@@ -2,7 +2,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
   @moduledoc false
 
   import Phoenix.Component, only: [assign: 3]
-  import Phoenix.LiveView, only: [put_flash: 3, start_async: 3]
+  import Phoenix.LiveView, only: [consume_uploaded_entries: 3, put_flash: 3, start_async: 3]
 
   import MydiaWeb.MediaLive.Show.Loaders, only: [load_media_file_subtitle_tracks: 1]
 
@@ -158,6 +158,78 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
      socket
      |> put_flash(:info, "Checking for subtitle files on disk...")
      |> start_async(:rescan_subtitles, fn -> Mydia.Subtitles.Sidecars.reconcile(media_file) end)}
+  end
+
+  def open_subtitle_upload(%{"media-file-id" => media_file_id}, socket) do
+    # library_path is what resolves the file's location, both for the modal
+    # header and for Mydia.Subtitles.Uploader to compute a destination path.
+    media_file = Mydia.Library.get_media_file!(media_file_id, preload: [:library_path])
+
+    {:noreply,
+     socket
+     |> assign(:show_subtitle_upload_modal, true)
+     |> assign(:selected_media_file, media_file)
+     |> assign(:subtitle_upload_error, nil)}
+  end
+
+  def close_subtitle_upload(_params, socket) do
+    {:noreply,
+     socket
+     |> assign(:show_subtitle_upload_modal, false)
+     |> assign(:selected_media_file, nil)
+     |> assign(:subtitle_upload_error, nil)}
+  end
+
+  # allow_upload validates on every phx-change automatically (size, count,
+  # accepted extensions); there is nothing extra to do here. The handler
+  # still has to exist because the form declares phx-change.
+  def validate_subtitle_upload(_params, socket), do: {:noreply, socket}
+
+  def save_subtitle_upload(params, socket) do
+    media_file = socket.assigns.selected_media_file
+    language = Map.get(params, "language", "en")
+    forced = Map.get(params, "forced") == "on"
+    hearing_impaired = Map.get(params, "hearing_impaired") == "on"
+
+    # consume_uploaded_entries removes the entry from upload state (and
+    # Phoenix removes its temp file once this callback returns) regardless
+    # of what finish_upload/6 goes on to do with the bytes, so a rejected
+    # upload never leaves a temp file behind either.
+    consumed =
+      consume_uploaded_entries(socket, :subtitle, fn %{path: path}, _entry ->
+        {:ok, File.read!(path)}
+      end)
+
+    case consumed do
+      [content] ->
+        finish_upload(socket, media_file, content, language, forced, hearing_impaired)
+
+      [] ->
+        {:noreply, assign(socket, :subtitle_upload_error, "Choose a file first")}
+    end
+  end
+
+  defp finish_upload(socket, media_file, content, language, forced, hearing_impaired) do
+    case Mydia.Subtitles.upload_subtitle(media_file, content,
+           language: language,
+           forced: forced,
+           hearing_impaired: hearing_impaired
+         ) do
+      {:ok, _subtitle} ->
+        {:noreply,
+         socket
+         |> assign(:show_subtitle_upload_modal, false)
+         |> assign(:selected_media_file, nil)
+         |> assign(:subtitle_upload_error, nil)
+         |> assign(
+           :media_file_subtitle_tracks,
+           load_media_file_subtitle_tracks(socket.assigns.media_item)
+         )
+         |> put_flash(:info, "Subtitle uploaded")}
+
+      {:error, message} ->
+        {:noreply, assign(socket, :subtitle_upload_error, message)}
+    end
   end
 
   defp store_offset(socket, media_file_id, track_ref, offset_ms) do

@@ -136,6 +136,15 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:selected_media_file, nil)
      |> assign(:selected_languages, ["en"])
      |> assign(:media_file_subtitle_tracks, load_media_file_subtitle_tracks(media_item))
+     |> assign(:show_subtitle_upload_modal, false)
+     |> assign(:subtitle_upload_error, nil)
+     # accept only screens the filename; Mydia.Subtitles.Format.detect/1 on the
+     # received bytes is the real gate, in SubtitleEvents.finish_upload/6.
+     |> allow_upload(:subtitle,
+       accept: ~w(.srt .ass .ssa .vtt),
+       max_entries: 1,
+       max_file_size: 2_000_000
+     )
      # Feature flags
      |> assign(:playback_enabled, playback_enabled?())
      # Franchise section state
@@ -409,6 +418,18 @@ defmodule MydiaWeb.MediaLive.Show do
 
   def handle_event("rescan_subtitles", params, socket),
     do: SubtitleEvents.rescan_subtitles(params, socket)
+
+  def handle_event("open_subtitle_upload", params, socket),
+    do: SubtitleEvents.open_subtitle_upload(params, socket)
+
+  def handle_event("close_subtitle_upload", params, socket),
+    do: SubtitleEvents.close_subtitle_upload(params, socket)
+
+  def handle_event("validate_subtitle_upload", params, socket),
+    do: SubtitleEvents.validate_subtitle_upload(params, socket)
+
+  def handle_event("save_subtitle_upload", params, socket),
+    do: SubtitleEvents.save_subtitle_upload(params, socket)
 
   # Category, trailer, and quality profile events
 

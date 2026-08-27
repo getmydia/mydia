@@ -281,6 +281,40 @@ defmodule Mydia.Subtitles.Sidecars do
     end)
   end
 
+  @doc """
+  Resolves which media file would adopt a sidecar named `filename` sitting
+  beside `media_file`, using the exact ownership rule `reconcile/1` uses:
+  longest matching basename among siblings in the same directory and
+  library path, ties broken by `Mydia.Library.FileRanking.best/1`.
+  `filename` is a bare filename (`Path.basename/1`'s shape), not a full path.
+
+  Returns `nil` when `media_file` has no resolvable location, in which case
+  there is no directory to look siblings up in. Otherwise always returns a
+  media file: `media_file` itself is always among its own siblings, so its
+  own basename is always at least one candidate match.
+
+  Exposed for `Mydia.Subtitles.Uploader`, which calls this before writing an
+  uploaded file. Two sibling media files that reduce to the exact same
+  basename (`Movie.mkv` beside `Movie.mp4`) cannot be told apart by name, so
+  `reconcile/1` attributes their shared sidecar to whichever one wins here,
+  never to both. Writing a row for the file that loses this tie-break sets
+  up the exact dual-adoption bug this module exists to prevent: reconcile
+  would see the same path as unclaimed from the winner's point of view and
+  adopt it a second time, leaving two rows pointing at one file.
+  """
+  @spec owning_media_file_for(MediaFile.t(), String.t()) :: MediaFile.t() | nil
+  def owning_media_file_for(media_file, filename) do
+    case MediaFile.absolute_path(media_file) do
+      nil ->
+        nil
+
+      absolute_path ->
+        dir = Path.dirname(absolute_path)
+        siblings = siblings_in_dir(media_file.library_path_id, dir)
+        owning_media_file(filename, siblings)
+    end
+  end
+
   ## Private
 
   defp dir_for(media_file) do
