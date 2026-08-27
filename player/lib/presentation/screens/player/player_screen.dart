@@ -2035,6 +2035,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           variables: Variables$Query$SubtitleTrackSettings(
             mediaFileId: widget.fileId,
           ).toJson(),
+          // `client.query` defaults to `FetchPolicy.cacheFirst` over a
+          // persistent `HiveStore`. A viewer who has played this file before
+          // would otherwise get whatever offset was cached last time, and
+          // `_saveSubtitleDelay` sends that stale baseline plus the current
+          // nudge -- silently overwriting a newer server offset with an
+          // older one. See player_screen_subtitle_offsets_cache_test.dart.
+          fetchPolicy: FetchPolicy.networkOnly,
         ),
       );
 
