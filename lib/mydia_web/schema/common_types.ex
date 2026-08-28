@@ -720,9 +720,7 @@ defmodule MydiaWeb.Schema.CommonTypes do
     end
 
     @desc "Playable files for this entry, empty when the library holds nothing"
-    field :files, non_null(list_of(non_null(:media_file))) do
-      resolve(&MydiaWeb.Schema.Resolvers.CalendarResolver.files/3)
-    end
+    field :files, non_null(list_of(non_null(:media_file)))
   end
 
   defp metadata_field(%{metadata: %Mydia.Library.Structs.FileMetadata{} = metadata}, key),
