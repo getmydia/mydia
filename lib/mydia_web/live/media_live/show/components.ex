@@ -679,15 +679,22 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   that list is always empty for a TV show. Without this the card was
   permanently empty on every TV show page.
 
-  Subtitle badges and the manage button are gated to non-TV items. A TV
-  episode's file already renders both inside `episode_file_row/1` once its
-  episode is expanded; rendering them again here for the same file would
-  produce a second element with the exact same `subtitle-open-<id>` /
-  `subtitle-badges-<id>` DOM id the moment a season is expanded, which
-  `Phoenix.LiveViewTest` raises on as a duplicate id and which is a real
-  DOM-patching hazard outside tests too. `Map.get/2` (rather than `@media_item.type`
-  dot access) tolerates the plain test doubles elsewhere in this test suite that
-  omit `:type` entirely.
+  A `MediaFile` can also be attached directly to a TV show with no episode at
+  all (`media_item_id` set, `episode_id` nil) -- see
+  `Mydia.Jobs.MediaImport`'s catch-all fallback and `Mydia.Media.RecentlyAdded`'s
+  "unmatched files" -- so this card is not always redundant with the
+  per-episode listing even for a show. Its subtitle badge and manage button
+  therefore always render here, for every file, regardless of item type.
+
+  The one thing to watch: for a TV show, a file that *does* belong to an
+  episode renders a second time in `episode_file_row/1` once that episode is
+  expanded, with its own copy of the same badge/button. Those two renders
+  must never share a DOM id, so this component's copies are suffixed
+  `-file-` (`subtitle-open-file-<id>`, `subtitle-badges-file-<id>`) while
+  `episode_file_row/1` keeps its plain `subtitle-open-<id>` /
+  `subtitle-badges-<id>` -- the same idiom `subtitle_track_row/1` already
+  uses (folding `media_file_id` into its id) and `episode_rows/1` uses for
+  its own ids (`"episode-\#{episode.id}-actions"`, etc.).
   """
   attr :media_item, :map, required: true
   attr :refreshing_file_metadata, :boolean, required: true
@@ -695,10 +702,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :media_file_subtitle_tracks, :map, default: %{}
 
   def media_files_section(assigns) do
-    assigns =
-      assigns
-      |> assign(:files, all_media_files(assigns.media_item))
-      |> assign(:show_subtitle_controls?, Map.get(assigns.media_item, :type) != "tv_show")
+    assigns = assign(assigns, :files, all_media_files(assigns.media_item))
 
     ~H"""
     <%= if @files != [] do %>
@@ -741,19 +745,15 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                       </div>
                     </div>
                     <SubtitleComponents.subtitle_badges
-                      :if={
-                        @show_subtitle_controls? &&
-                          Map.get(@media_file_subtitle_tracks, file.id, []) != []
-                      }
+                      :if={Map.get(@media_file_subtitle_tracks, file.id, []) != []}
                       tracks={Map.get(@media_file_subtitle_tracks, file.id, [])}
-                      id={file.id}
+                      id={"file-#{file.id}"}
                     />
                   </div>
                   <%!-- Right side: Icon-only action buttons --%>
                   <div class="flex items-center gap-1 flex-shrink-0">
                     <button
-                      :if={@show_subtitle_controls?}
-                      id={"subtitle-open-#{file.id}"}
+                      id={"subtitle-open-file-#{file.id}"}
                       type="button"
                       phx-click="open_subtitle_manage"
                       phx-value-media-file-id={file.id}

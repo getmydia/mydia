@@ -73,6 +73,79 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleSurfaceTest do
     end
   end
 
+  describe "a TV file attached directly to the show, with no episode" do
+    # media_item_id set, episode_id nil: Mydia.Jobs.MediaImport's catch-all
+    # fallback creates exactly this shape when a TV download's episode can't
+    # be resolved, and Mydia.Media.RecentlyAdded's moduledoc documents these
+    # as expected "unmatched files". season_components.ex only ever iterates
+    # episode.media_files, so a file like this renders under no episode row
+    # -- media_files_section/1 (the flat "Media Files" card, which
+    # Loaders.build_preload_list/0 populates for every item type via
+    # media_item.media_files) is its only route to a subtitle affordance.
+    # This is the regression test for gating media_files_section/1's
+    # subtitle controls behind `media_item.type != "tv_show"`: with that
+    # gate in place this file has no subtitle affordance anywhere on the
+    # page, breaking the branch's hard requirement that every file, however
+    # it's attached, can still reach search, upload and download.
+    setup do
+      user = user_fixture()
+      show = media_item_fixture(%{type: "tv_show"})
+      # `file` is a reserved ExUnit context key, hence `media_file` here.
+      media_file = media_file_fixture(%{media_item_id: show.id})
+
+      {:ok, user: user, show: show, media_file: media_file}
+    end
+
+    test "has a subtitle button in the flat Media Files list and can open the manage modal",
+         ctx do
+      {:ok, view, _html} =
+        ctx.conn
+        |> log_in_user(ctx.user)
+        |> live(~p"/media/#{ctx.show.id}")
+
+      # No expand needed: media_files_section/1 always renders, unlike
+      # episode_file_row/1 which only appears once an episode is expanded --
+      # and this file belongs to no episode at all.
+      assert has_element?(view, "#subtitle-open-file-#{ctx.media_file.id}")
+
+      render_click(view, "open_subtitle_manage", %{"media-file-id" => ctx.media_file.id})
+
+      assert has_element?(view, "#subtitle-manage-modal")
+    end
+  end
+
+  describe "a TV episode's file rendered by both surfaces at once" do
+    setup do
+      user = user_fixture()
+      show = media_item_fixture(%{type: "tv_show"})
+      episode = episode_fixture(%{media_item_id: show.id, season_number: 2, episode_number: 3})
+      media_file = media_file_fixture(%{episode_id: episode.id})
+
+      {:ok, user: user, show: show, episode: episode, media_file: media_file}
+    end
+
+    test "expanding the episode does not collide with the flat file list's copy", ctx do
+      {:ok, view, _html} =
+        ctx.conn
+        |> log_in_user(ctx.user)
+        |> live(~p"/media/#{ctx.show.id}")
+
+      # The flat Media Files card already rendered this file (all_media_files/1
+      # reaches into episode files too) before this click. If
+      # media_files_section/1 and episode_file_row/1 ever render the same id
+      # again for this file, Phoenix.LiveViewTest raises "Duplicate id found"
+      # here -- this is the connected repro for that bug.
+      render_click(view, "toggle_episode_expanded", %{"episode-id" => ctx.episode.id})
+
+      flat_list_id = "subtitle-open-file-#{ctx.media_file.id}"
+      episode_row_id = "subtitle-open-#{ctx.media_file.id}"
+
+      assert has_element?(view, "##{flat_list_id}")
+      assert has_element?(view, "##{episode_row_id}")
+      assert flat_list_id != episode_row_id
+    end
+  end
+
   test "the standalone subtitles panel is gone" do
     refute function_exported?(MydiaWeb.MediaLive.Show.Components, :subtitles_section, 1)
   end

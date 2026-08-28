@@ -75,8 +75,12 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleRowTest do
           media_file_subtitle_tracks: %{}
         )
 
-      assert html =~ ~s|id="subtitle-open-mf-1"|
-      refute html =~ "subtitle-badges-mf-1"
+      # -file- suffixed: media_files_section/1 and episode_file_row/1 can
+      # both render the same TV episode file at once (the flat list is
+      # always on; the episode row only once expanded), so their ids must
+      # never collide. See media_files_section/1's moduledoc.
+      assert html =~ ~s|id="subtitle-open-file-mf-1"|
+      refute html =~ "subtitle-badges-file-mf-1"
     end
 
     test "renders the badge line for a file with tracks" do
@@ -88,8 +92,29 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleRowTest do
           media_file_subtitle_tracks: %{"mf-1" => [track("es")]}
         )
 
-      assert html =~ "subtitle-badges-mf-1"
+      assert html =~ "subtitle-badges-file-mf-1"
       assert html =~ "ES"
+    end
+
+    test "renders the subtitle button for a TV file attached directly to the show, with no episode" do
+      # media_item_id set, episode_id nil: Mydia.Jobs.MediaImport's catch-all
+      # fallback creates exactly this shape when a TV download's episode
+      # can't be resolved, and Mydia.Media.RecentlyAdded documents it as an
+      # "unmatched file". season_components.ex only ever iterates
+      # episode.media_files, so this file renders under no episode row --
+      # media_files_section/1 is its only route to a subtitle affordance,
+      # and it must not be gated out by item type.
+      html =
+        render_component(&Components.media_files_section/1,
+          media_item: %{type: "tv_show", media_files: [file()], episodes: []},
+          refreshing_file_metadata: false,
+          transcode_jobs: %{},
+          media_file_subtitle_tracks: %{}
+        )
+
+      assert html =~ ~s|id="subtitle-open-file-mf-1"|
+      assert html =~ ~s|phx-click="open_subtitle_manage"|
+      assert html =~ ~s|phx-value-media-file-id="mf-1"|
     end
   end
 end
