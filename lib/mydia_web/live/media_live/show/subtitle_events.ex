@@ -288,7 +288,12 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
     end
   end
 
-  defp finish_upload(socket, media_file, content, language, forced, hearing_impaired) do
+  # Public (not private) so the :return_to_manage branch below - the exact
+  # thing Critical review finding #1 flagged as untested and silently
+  # revertible - can be exercised directly from a socket-level unit test,
+  # the same way handle_download_subtitle_async/2 and
+  # handle_rescan_subtitles_async/2 already are. No behavior change.
+  def finish_upload(socket, media_file, content, language, forced, hearing_impaired) do
     case Mydia.Subtitles.upload_subtitle(media_file, content,
            language: language,
            forced: forced,

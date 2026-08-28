@@ -419,4 +419,94 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEventsTest do
       assert map_size(socket.assigns.media_file_subtitle_tracks) == 1
     end
   end
+
+  describe "finish_upload/6" do
+    @srt """
+    1
+    00:00:01,000 --> 00:00:02,000
+    Hello.
+    """
+
+    # Mirrors subtitle_upload_test.exs's movie_with_media_file/2: a real
+    # directory and stand-in file on disk, since
+    # Mydia.Subtitles.upload_subtitle/3 (via Uploader) resolves a real
+    # destination path from media_file.library_path. This does not need a
+    # connected LiveView at all: finish_upload/6 receives already-consumed
+    # upload bytes, so this test is invoking the exact same function body
+    # that a real upload runs, just without the file_input/render_upload
+    # dance that produces those bytes in the first place.
+    defp movie_with_real_media_file(relative_path) do
+      dir = Path.join(System.tmp_dir!(), "finish-upload-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(dir)
+      on_exit(fn -> File.rm_rf(dir) end)
+
+      library_path = Mydia.SettingsFixtures.library_path_fixture(%{path: dir})
+      media_item = media_item_fixture(%{type: "movie"})
+
+      media_file =
+        %{
+          media_item_id: media_item.id,
+          library_path_id: library_path.id,
+          relative_path: relative_path
+        }
+        |> media_file_fixture()
+        |> Mydia.Repo.preload(:library_path)
+
+      File.write!(Path.join(dir, relative_path), "not really a video")
+
+      {%{media_item | media_files: [media_file]}, media_file}
+    end
+
+    test "a successful upload started from the manage modal reopens it with the new track" do
+      {media_item, media_file} = movie_with_real_media_file("Finish-Upload-Manage.mkv")
+
+      {:noreply, socket} =
+        SubtitleEvents.finish_upload(
+          socket(%{
+            media_item: media_item,
+            selected_media_file: media_file,
+            return_to_manage: true
+          }),
+          media_file,
+          @srt,
+          "en",
+          false,
+          false
+        )
+
+      assert socket.assigns.show_subtitle_upload_modal == false
+      assert socket.assigns.show_subtitle_manage_modal == true
+      assert socket.assigns.selected_media_file == media_file
+      assert [track] = socket.assigns.manage_tracks
+      assert track.origin == :upload
+
+      assert [subtitle] = Mydia.Subtitles.list_subtitles(media_file.id)
+      on_exit(fn -> File.rm(subtitle.file_path) end)
+    end
+
+    test "a successful upload not started from the manage modal does not reopen it" do
+      {media_item, media_file} = movie_with_real_media_file("Finish-Upload-Direct.mkv")
+
+      {:noreply, socket} =
+        SubtitleEvents.finish_upload(
+          socket(%{
+            media_item: media_item,
+            selected_media_file: media_file,
+            return_to_manage: false
+          }),
+          media_file,
+          @srt,
+          "en",
+          false,
+          false
+        )
+
+      assert socket.assigns.show_subtitle_manage_modal == false
+      assert socket.assigns.selected_media_file == nil
+      refute Map.has_key?(socket.assigns, :manage_tracks)
+
+      assert [subtitle] = Mydia.Subtitles.list_subtitles(media_file.id)
+      on_exit(fn -> File.rm(subtitle.file_path) end)
+    end
+  end
 end
