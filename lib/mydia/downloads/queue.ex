@@ -553,10 +553,14 @@ defmodule Mydia.Downloads.Queue do
             :ok
 
           %MediaItem{type: "movie"} ->
-            # For movies, check if non-trashed media files already exist
+            # For movies, check if non-trashed, non-extra media files already
+            # exist. An extras-only folder (a deleted scene, a featurette) must
+            # not make the queue believe the movie itself is already on disk.
             query =
               from(f in MediaFile,
-                where: f.media_item_id == ^media_item_id and is_nil(f.trashed_at)
+                where:
+                  f.media_item_id == ^media_item_id and is_nil(f.trashed_at) and
+                    is_nil(f.extra_kind)
               )
 
             if Repo.exists?(query) do

@@ -2329,7 +2329,7 @@ defmodule Mydia.Media do
     |> where([m], m.id in ^ids and m.type == "movie")
     |> where([m], m.id not in subquery(occupying_download_media_item_ids()))
     |> join(:left, [m], mf in Mydia.Library.MediaFile,
-      on: mf.media_item_id == m.id and is_nil(mf.trashed_at)
+      on: mf.media_item_id == m.id and is_nil(mf.trashed_at) and is_nil(mf.extra_kind)
     )
     |> group_by([m], m.id)
     |> having([_m, mf], count(mf.id) == 0)
