@@ -1397,6 +1397,83 @@ defmodule Mydia.MediaTest do
     end
   end
 
+  describe "list_movies_by_release_date/3 filtering" do
+    import Mydia.MediaFixtures
+
+    setup do
+      inside = media_item_fixture(%{type: "movie", title: "Inside"})
+      edge_low = media_item_fixture(%{type: "movie", title: "EdgeLow"})
+      edge_high = media_item_fixture(%{type: "movie", title: "EdgeHigh"})
+      outside = media_item_fixture(%{type: "movie", title: "Outside"})
+      undated = media_item_fixture(%{type: "movie", title: "Undated"})
+
+      set_release_date(inside, ~D[2026-08-15])
+      set_release_date(edge_low, ~D[2026-08-01])
+      set_release_date(edge_high, ~D[2026-08-31])
+      set_release_date(outside, ~D[2026-09-05])
+
+      %{inside: inside, edge_low: edge_low, edge_high: edge_high, undated: undated}
+    end
+
+    test "returns only movies inside the range, with both bounds included", ctx do
+      titles =
+        Mydia.Media.list_movies_by_release_date(~D[2026-08-01], ~D[2026-08-31], monitored: nil)
+        |> Enum.map(& &1.media_item_title)
+        |> Enum.sort()
+
+      assert titles == ["EdgeHigh", "EdgeLow", "Inside"]
+      refute ctx.undated.title in titles
+    end
+
+    test "reports has_files from the database", ctx do
+      Mydia.MediaFixtures.media_file_fixture(%{media_item_id: ctx.inside.id})
+
+      entries =
+        Mydia.Media.list_movies_by_release_date(~D[2026-08-01], ~D[2026-08-31], monitored: nil)
+
+      with_files = Enum.find(entries, &(&1.media_item_title == "Inside"))
+      without_files = Enum.find(entries, &(&1.media_item_title == "EdgeLow"))
+
+      assert with_files.has_files
+      refute without_files.has_files
+    end
+
+    test "monitored: nil includes unmonitored movies" do
+      unmonitored = media_item_fixture(%{type: "movie", title: "Unmonitored", monitored: false})
+      set_release_date(unmonitored, ~D[2026-08-10])
+
+      titles =
+        Mydia.Media.list_movies_by_release_date(~D[2026-08-01], ~D[2026-08-31], monitored: nil)
+        |> Enum.map(& &1.media_item_title)
+
+      assert "Unmonitored" in titles
+    end
+
+    # Identical to the helper Task 1 added to test/mydia/db_test.exs. The struct
+    # is Mydia.Metadata.Structs.MediaMetadata, and it carries @enforce_keys on
+    # :provider_id, :provider and :media_type, so a fresh one cannot be built
+    # empty. Copy this verbatim rather than reconstructing it.
+    defp set_release_date(item, date) do
+      metadata =
+        case item.metadata do
+          nil ->
+            %Mydia.Metadata.Structs.MediaMetadata{
+              provider_id: to_string(item.id),
+              provider: :metadata_relay,
+              media_type: :movie,
+              release_date: date
+            }
+
+          existing ->
+            %{existing | release_date: date}
+        end
+
+      item
+      |> Ecto.Changeset.change(metadata: metadata)
+      |> Mydia.Repo.update!()
+    end
+  end
+
   describe "resolve_library_provider/1 (U6)" do
     import Mydia.MediaFixtures
     import Mydia.SettingsFixtures
