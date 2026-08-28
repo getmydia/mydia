@@ -912,20 +912,40 @@ defmodule Mydia.Library do
   end
 
   @doc """
-  Gets all media files for a media item.
+  Gets a media item's files.
+
+  Extras are excluded by default, so callers that ask "which files does this
+  movie have" get versions of the movie. Pass `include_extras: true` for the
+  file list on the movie page, which shows both.
   """
   @spec get_media_files_for_item(binary(), keyword()) :: [MediaFile.t()]
   def get_media_files_for_item(media_item_id, opts \\ []) do
-    list_media_files([media_item_id: media_item_id] ++ opts)
+    {include_extras, opts} = Keyword.pop(opts, :include_extras, false)
+
+    [media_item_id: media_item_id]
+    |> Kernel.++(opts)
+    |> list_media_files()
+    |> reject_extras(include_extras)
   end
 
   @doc """
   Gets all media files for an episode.
+
+  Extras are excluded by default, mirroring `get_media_files_for_item/2`. Pass
+  `include_extras: true` to get both.
   """
   @spec get_media_files_for_episode(binary(), keyword()) :: [MediaFile.t()]
   def get_media_files_for_episode(episode_id, opts \\ []) do
-    list_media_files([episode_id: episode_id] ++ opts)
+    {include_extras, opts} = Keyword.pop(opts, :include_extras, false)
+
+    [episode_id: episode_id]
+    |> Kernel.++(opts)
+    |> list_media_files()
+    |> reject_extras(include_extras)
   end
+
+  defp reject_extras(files, true), do: files
+  defp reject_extras(files, false), do: Enum.filter(files, &is_nil(&1.extra_kind))
 
   @doc """
   Matches unassociated media files to their episodes for a TV show.

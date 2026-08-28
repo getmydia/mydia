@@ -1768,7 +1768,7 @@ defmodule Mydia.Jobs.TVShowSearch do
   ## Private Functions - Helpers
 
   defp has_media_files?(%Episode{} = episode) do
-    active_files_query = from(mf in MediaFile, where: is_nil(mf.trashed_at))
+    active_files_query = MediaFile.versions()
     episode = Repo.preload(episode, [media_files: active_files_query], force: true)
     episode.media_files != []
   end

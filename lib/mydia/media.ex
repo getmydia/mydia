@@ -119,10 +119,12 @@ defmodule Mydia.Media do
   defp owned_media_item_ids([]), do: MapSet.new()
 
   defp owned_media_item_ids(ids) do
+    # is_nil(extra_kind) so a folder holding only bonus content does not
+    # make the movie look downloaded.
     direct =
       Repo.all(
         from(f in Mydia.Library.MediaFile,
-          where: is_nil(f.trashed_at) and f.media_item_id in ^ids,
+          where: is_nil(f.trashed_at) and is_nil(f.extra_kind) and f.media_item_id in ^ids,
           select: f.media_item_id
         )
       )
@@ -132,7 +134,7 @@ defmodule Mydia.Media do
         from(f in Mydia.Library.MediaFile,
           join: e in Mydia.Media.Episode,
           on: e.id == f.episode_id,
-          where: is_nil(f.trashed_at) and e.media_item_id in ^ids,
+          where: is_nil(f.trashed_at) and is_nil(f.extra_kind) and e.media_item_id in ^ids,
           select: e.media_item_id
         )
       )

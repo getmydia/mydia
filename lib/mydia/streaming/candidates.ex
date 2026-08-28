@@ -31,8 +31,7 @@ defmodule Mydia.Streaming.Candidates do
   Returns `{:ok, media_file}` or `{:error, reason}`.
   """
   def resolve_media_file(content_type, id) do
-    active_files_query =
-      from(mf in MediaFile, where: is_nil(mf.trashed_at), preload: :library_path)
+    active_files_query = from(mf in MediaFile.versions(), preload: :library_path)
 
     case content_type do
       "movie" ->
