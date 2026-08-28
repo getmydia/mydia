@@ -63,4 +63,21 @@ defmodule MydiaWeb.MediaLive.Show.SeasonSubtitlesTest do
 
     assert has_element?(view, "#season-2-subtitles .loading")
   end
+
+  test "a finish broadcast for another season of the same item does not clear this season's spinner",
+       ctx do
+    # A second season so both toolbar buttons render.
+    episode_fixture(%{media_item_id: ctx.show.id, season_number: 1, episode_number: 1})
+
+    {:ok, view, _html} =
+      ctx.conn |> log_in_user(ctx.user) |> live(~p"/media/#{ctx.show.id}")
+
+    view |> element("#season-2-subtitles") |> render_click()
+
+    # Finishing season 1 (which was never started) must not clear season 2's
+    # spinner while its job is still in flight.
+    send(view.pid, {:subtitle_season_finished, ctx.show.id, 1})
+
+    assert has_element?(view, "#season-2-subtitles .loading")
+  end
 end

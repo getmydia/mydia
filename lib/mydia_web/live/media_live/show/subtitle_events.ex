@@ -48,9 +48,10 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
 
   # Whether this reopens the manage modal or drops back to the bare page
   # depends on where the search modal was opened from (see :return_to_manage,
-  # set in open_subtitle_search/2). The old Subtitles panel's own Search
-  # button still opens this same modal directly, with the manage modal never
-  # having been shown, so this must not reopen it unconditionally.
+  # set in open_subtitle_search/2). Every current caller opens this modal from
+  # inside the manage modal, but this stays conditional as a defensive
+  # fallback for a child modal opened without the manage modal having been
+  # shown, a path no current caller takes.
   def close_subtitle_search_modal(_params, socket) do
     socket =
       socket
@@ -153,13 +154,24 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
   def delete_subtitle(%{"subtitle-id" => subtitle_id}, socket) do
     case Mydia.Subtitles.delete_subtitle(subtitle_id) do
       :ok ->
-        {:noreply,
-         socket
-         |> assign(
-           :media_file_subtitle_tracks,
-           load_media_file_subtitle_tracks(socket.assigns.media_item)
-         )
-         |> put_flash(:info, "Subtitle deleted successfully")}
+        tracks = load_media_file_subtitle_tracks(socket.assigns.media_item)
+
+        socket =
+          socket
+          |> assign(:media_file_subtitle_tracks, tracks)
+          |> put_flash(:info, "Subtitle deleted successfully")
+
+        # The manage modal renders from :manage_tracks, not
+        # :media_file_subtitle_tracks, so deleting a track from inside it must
+        # also refresh :manage_tracks or the modal keeps showing a track that
+        # no longer exists.
+        socket =
+          case socket.assigns.selected_media_file do
+            nil -> socket
+            media_file -> assign(socket, :manage_tracks, Map.get(tracks, media_file.id, []))
+          end
+
+        {:noreply, socket}
 
       {:error, reason} ->
         Logger.error("Failed to delete subtitle", subtitle_id: subtitle_id, reason: reason)
@@ -261,9 +273,10 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
      |> assign(:subtitle_upload_error, nil)}
   end
 
-  # See close_subtitle_search_modal/2: the old panel's own Upload button opens
-  # this same modal directly, so reopening the manage modal must stay
-  # conditional on :return_to_manage rather than unconditional.
+  # See close_subtitle_search_modal/2: reopening the manage modal must stay
+  # conditional on :return_to_manage rather than unconditional, as a
+  # defensive fallback for a child modal opened without the manage modal
+  # having been shown, a path no current caller takes.
   def close_subtitle_upload(_params, socket) do
     socket =
       socket
@@ -355,12 +368,20 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
   defp store_offset(socket, media_file_id, track_ref, offset_ms) do
     case Mydia.Subtitles.TrackSettings.set_offset(media_file_id, track_ref, offset_ms) do
       {:ok, _setting} ->
-        {:noreply,
-         assign(
-           socket,
-           :media_file_subtitle_tracks,
-           load_media_file_subtitle_tracks(socket.assigns.media_item)
-         )}
+        tracks = load_media_file_subtitle_tracks(socket.assigns.media_item)
+
+        socket = assign(socket, :media_file_subtitle_tracks, tracks)
+
+        # The manage modal's offset stepper renders from :manage_tracks, not
+        # :media_file_subtitle_tracks, so adjusting the offset from inside it
+        # must also refresh :manage_tracks or the displayed value goes stale.
+        socket =
+          case socket.assigns.selected_media_file do
+            nil -> socket
+            media_file -> assign(socket, :manage_tracks, Map.get(tracks, media_file.id, []))
+          end
+
+        {:noreply, socket}
 
       {:error, _changeset} ->
         max = Mydia.Subtitles.TrackSetting.max_offset_ms()

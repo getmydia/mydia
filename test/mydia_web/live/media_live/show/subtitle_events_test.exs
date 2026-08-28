@@ -203,6 +203,47 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEventsTest do
 
       assert flash(socket)["error"] =~ "whole number"
     end
+
+    # The offset stepper inside the manage modal renders from :manage_tracks,
+    # not :media_file_subtitle_tracks. Before this fix, a successful offset
+    # write refreshed only the latter, so the stepper's displayed value never
+    # changed even though the write succeeded.
+    test "refreshes manage_tracks for the file open in the manage modal" do
+      {media_item, media_file, subtitle} = movie_with_subtitle_row("offset-refresh-hash")
+
+      {:noreply, socket} =
+        SubtitleEvents.set_subtitle_offset(
+          %{"media-file-id" => media_file.id, "track-ref" => "0", "offset_ms" => "1500"},
+          socket(%{media_item: media_item, selected_media_file: media_file})
+        )
+
+      assert [track] = socket.assigns.manage_tracks
+      assert to_string(track.track_id) == subtitle.id
+
+      assert socket.assigns.media_file_subtitle_tracks[media_file.id] ==
+               socket.assigns.manage_tracks
+    end
+  end
+
+  describe "delete_subtitle/2" do
+    # The manage modal's track list renders from :manage_tracks, not
+    # :media_file_subtitle_tracks. Before this fix, a successful delete
+    # refreshed only the latter, so the modal kept showing the deleted track
+    # with a live delete button that would then flash :subtitle_not_found.
+    test "refreshes manage_tracks for the file open in the manage modal" do
+      {media_item, media_file, subtitle} = movie_with_subtitle_row("delete-refresh-hash")
+
+      {:noreply, socket} =
+        SubtitleEvents.delete_subtitle(
+          %{"subtitle-id" => subtitle.id},
+          socket(%{media_item: media_item, selected_media_file: media_file})
+        )
+
+      assert socket.assigns.manage_tracks == []
+
+      assert socket.assigns.media_file_subtitle_tracks[media_file.id] ==
+               socket.assigns.manage_tracks
+    end
   end
 
   describe "nudge_subtitle_offset/2" do

@@ -703,18 +703,32 @@ defmodule MydiaWeb.MediaLive.Show do
      )}
   end
 
-  def handle_info({:subtitle_season_finished, media_item_id, _season_number}, socket) do
-    if media_item_id == socket.assigns.media_item.id do
-      {:noreply,
-       socket
-       |> assign(:fetching_season_subtitles, nil)
-       |> assign(
-         :media_file_subtitle_tracks,
-         load_media_file_subtitle_tracks(socket.assigns.media_item)
-       )}
-    else
-      {:noreply, socket}
-    end
+  def handle_info({:subtitle_season_finished, media_item_id, season_number}, socket) do
+    socket =
+      if media_item_id == socket.assigns.media_item.id do
+        assign(
+          socket,
+          :media_file_subtitle_tracks,
+          load_media_file_subtitle_tracks(socket.assigns.media_item)
+        )
+      else
+        socket
+      end
+
+    # Only clear the spinner when the finishing season is the one being
+    # tracked. A user can start season 2's fetch while season 1's is still in
+    # flight; season 1 finishing must not clear season 2's spinner and
+    # re-enable its button while that job is still running. The reload above
+    # still happens regardless, since the work did happen.
+    socket =
+      if media_item_id == socket.assigns.media_item.id &&
+           socket.assigns.fetching_season_subtitles == season_number do
+        assign(socket, :fetching_season_subtitles, nil)
+      else
+        socket
+      end
+
+    {:noreply, socket}
   end
 
   def handle_info({:subtitle_season_timeout, season_num}, socket) do
