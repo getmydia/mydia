@@ -336,4 +336,64 @@ void main() {
       expect(order, contains('collections'));
     });
   });
+
+  group('calendar destination', () {
+    test('is present in the default layout', () {
+      final ids = SidebarLayout.defaults
+          .reconcile(downloadSupported: true)
+          .map((d) => d.id)
+          .toList();
+
+      expect(ids, contains('calendar'));
+    });
+
+    test('sits between TV Shows and Recently Added', () {
+      final ids = SidebarLayout.defaults
+          .reconcile(downloadSupported: true)
+          .map((d) => d.id)
+          .toList();
+
+      expect(ids.indexOf('calendar'), greaterThan(ids.indexOf('shows')));
+      expect(ids.indexOf('calendar'), lessThan(ids.indexOf('recently_added')));
+    });
+
+    test('is inserted at its default position for a user who never had it', () {
+      const stored = SidebarLayout(
+        order: [
+          'search',
+          'home',
+          'continue_watching',
+          'movies',
+          'shows',
+          'recently_added',
+          'unwatched',
+          'favorites',
+          'collections',
+          'downloads',
+          'settings',
+        ],
+        hidden: {},
+        filters: {},
+      );
+
+      final ids =
+          stored.reconcile(downloadSupported: true).map((d) => d.id).toList();
+
+      expect(ids.indexOf('calendar'), greaterThan(ids.indexOf('shows')));
+      expect(ids.indexOf('calendar'), lessThan(ids.indexOf('recently_added')));
+    });
+
+    test('can be hidden, because it is not anchored', () {
+      final stored = SidebarLayout(
+        order: SidebarLayout.defaults.order,
+        hidden: const {'calendar'},
+        filters: const {},
+      );
+
+      final ids =
+          stored.reconcile(downloadSupported: true).map((d) => d.id).toList();
+
+      expect(ids, isNot(contains('calendar')));
+    });
+  });
 }
