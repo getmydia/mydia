@@ -420,4 +420,38 @@ defmodule Mydia.Library.SampleDetectorTest do
       assert SampleDetector.exclusion_reason(detection) == nil
     end
   end
+
+  describe "extra_kind/1" do
+    test "maps a sample to :sample" do
+      detection = SampleDetector.detect("/movies/Avatar/Sample/avatar-sample.mkv")
+      assert SampleDetector.extra_kind(detection) == {:sample, :folder}
+    end
+
+    test "maps a trailer to :trailer" do
+      detection = SampleDetector.detect("/movies/Avatar/avatar-trailer.mkv")
+      assert SampleDetector.extra_kind(detection) == {:trailer, :filename}
+    end
+
+    test "maps a Plex extras folder to its named kind" do
+      detection = SampleDetector.detect("/movies/Avatar/Deleted Scenes/cut.mkv")
+      assert SampleDetector.extra_kind(detection) == {:deleted_scene, :folder}
+    end
+
+    test "falls back to :other for an unrecognised extras folder" do
+      detection = SampleDetector.detect("/movies/Avatar/Other/thing.mkv")
+      assert SampleDetector.extra_kind(detection) == {:other, :folder}
+    end
+
+    test "maps any filename-detected extra to :other" do
+      # The filename layer uses one combined regex that does not report which
+      # alternative matched, so there is no honest kind to name here.
+      detection = SampleDetector.detect("/movies/Avatar/making of-featurette.mkv")
+      assert SampleDetector.extra_kind(detection) == {:other, :filename}
+    end
+
+    test "returns nil for a plain movie file" do
+      detection = SampleDetector.detect("/movies/Avatar/Avatar.2009.1080p.mkv")
+      assert SampleDetector.extra_kind(detection) == nil
+    end
+  end
 end
