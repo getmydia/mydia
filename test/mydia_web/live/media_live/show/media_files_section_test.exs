@@ -37,6 +37,13 @@ defmodule MydiaWeb.MediaLive.Show.MediaFilesSectionTest do
     }
   end
 
+  # An episode's file, in the shape the database actually stores it:
+  # episode_id set, media_item_id nil. `file/2` alone leaves episode_id nil,
+  # which is a *show-level* file and would not exercise the split below.
+  defp episode_file(id, relative_path) do
+    %{file(id, relative_path) | episode_id: "ep-#{id}"}
+  end
+
   defp stub_socket(media_item) do
     %Phoenix.LiveView.Socket{
       assigns: %{__changed__: %{}, flash: %{}, media_item: media_item},
@@ -58,26 +65,48 @@ defmodule MydiaWeb.MediaLive.Show.MediaFilesSectionTest do
       assert html =~ ~s|phx-value-file-id="mf-1"|
     end
 
-    # A MediaFile belongs to either media_item_id (movies) or episode_id (TV
-    # episodes), never both, so media_item.media_files alone is always empty
-    # for a TV show. Episode files live at media_item.episodes[].media_files
-    # instead; the section must reach into both.
-    test "renders files that belong to an episode, not just the item's own" do
+    # This card shows the item's *own* files. An episode's file already renders
+    # under its episode in `episode_rows/1`/`episode_file_row/1`, so merging
+    # `all_media_files/1` in here listed every episode file a second time, with
+    # no episode label, under a heading that reads as show-level. On the
+    # reference deployment that was 49 of 53 shows rendering a card that was
+    # 100% episode files -- Silo showed 29 unlabelled filenames, every one of
+    # them already listed above under its own episode.
+    test "does not render files that belong to an episode" do
       media_item = %{
         media_files: [],
         episodes: [
-          %{media_files: [file("mf-ep-1", "Breaking Bad/Season 01/S01E01.mkv")]},
-          %{media_files: [file("mf-ep-2", "Breaking Bad/Season 01/S01E02.mkv")]}
+          %{media_files: [episode_file("mf-ep-1", "Breaking Bad/Season 01/S01E01.mkv")]},
+          %{media_files: [episode_file("mf-ep-2", "Breaking Bad/Season 01/S01E02.mkv")]}
+        ]
+      }
+
+      html = section_html(media_item)
+
+      refute html =~ "media-files-section"
+      refute html =~ "S01E01.mkv"
+      refute html =~ "S01E02.mkv"
+    end
+
+    # media_item_id set, episode_id nil. `Mydia.Jobs.MediaImport`'s catch-all
+    # fallback creates exactly this when a TV download's episode cannot be
+    # resolved, and no episode row will ever render it. This card is its only
+    # surface, which is why the fix filters by episode_id rather than skipping
+    # `all_media_files/1` for shows outright.
+    test "renders a TV show's own file that belongs to no episode" do
+      media_item = %{
+        media_files: [file("mf-show", "Breaking Bad/unmatched-release.mkv")],
+        episodes: [
+          %{media_files: [episode_file("mf-ep-1", "Breaking Bad/Season 01/S01E01.mkv")]}
         ]
       }
 
       html = section_html(media_item)
 
       assert html =~ "media-files-section"
-      assert html =~ "S01E01.mkv"
-      assert html =~ "S01E02.mkv"
-      assert html =~ ~s|phx-value-file-id="mf-ep-1"|
-      assert html =~ ~s|phx-value-file-id="mf-ep-2"|
+      assert html =~ "unmatched-release.mkv"
+      assert html =~ ~s|phx-value-file-id="mf-show"|
+      refute html =~ "S01E01.mkv"
     end
 
     test "renders nothing when the item has no files anywhere" do
@@ -98,7 +127,7 @@ defmodule MydiaWeb.MediaLive.Show.MediaFilesSectionTest do
         size: nil
       }
 
-      html = section_html(%{media_files: [], episodes: [%{media_files: [broken]}]})
+      html = section_html(%{media_files: [broken], episodes: []})
 
       assert html =~ "Unknown file"
       assert html =~ ~s|phx-value-file-id="mf-broken"|
