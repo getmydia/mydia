@@ -975,15 +975,45 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   Timeline section showing history of events.
 
   Vertical, and positioned by the page grid rather than by its place in the
-  main column: at xl and up it is the third grid column, and below xl it falls
-  to a full-width row under the other two. See show.html.heex for the grid.
+  main column: past the grid's container-query threshold it is the third
+  column, and below it falls to a full-width row under the other two. See
+  show.html.heex for the grid.
 
   It renders nothing at all on an item with no events, which is why the page
   grid picks its column template from `@timeline_events != []`.
+
+  Collapsed, it renders at most five events. That cap is load-bearing rather
+  than cosmetic: `position: sticky` only pins usefully on an element shorter
+  than the viewport, and the rail used to be `max-h-[calc(100vh-2rem)]` with
+  an inner `overflow-y-auto` over as many as 50 events. Measured on the
+  shipped layout, its top offset ran 64 at rest, 0 mid-scroll and -48 at the
+  page bottom, so the heading scrolled off the top and never held. Five dense
+  rows measure 506px, which fits a 768px-tall laptop.
+
+  Expanded, it renders everything it was given, and show.html.heex drops the
+  `sticky` classes, because a taller-than-viewport sticky element has a
+  permanently unreachable bottom.
   """
+  @timeline_visible_count 5
+
   attr :timeline_events, :list, required: true
+  attr :expanded, :boolean, default: false
 
   def timeline_section(assigns) do
+    assigns =
+      assigns
+      |> assign(
+        :shown_events,
+        if(assigns.expanded,
+          do: assigns.timeline_events,
+          else: Enum.take(assigns.timeline_events, @timeline_visible_count)
+        )
+      )
+      |> assign(
+        :hidden_count,
+        max(length(assigns.timeline_events) - @timeline_visible_count, 0)
+      )
+
     ~H"""
     <%= if length(@timeline_events) > 0 do %>
       <div id="timeline-section" class="card bg-base-200 shadow-lg mb-4 md:mb-6">
@@ -996,7 +1026,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
 
             <div class="flex flex-col gap-4">
               <div
-                :for={event <- @timeline_events}
+                :for={event <- @shown_events}
                 class="relative flex items-start gap-3"
               >
                 <%!-- Icon node on the spine --%>
@@ -1055,6 +1085,16 @@ defmodule MydiaWeb.MediaLive.Show.Components do
               </div>
             </div>
           </div>
+
+          <button
+            :if={@hidden_count > 0}
+            id="timeline-toggle"
+            type="button"
+            phx-click="toggle_timeline"
+            class="btn btn-ghost btn-sm justify-start self-start mt-2 -mb-1"
+          >
+            {if @expanded, do: "Show less", else: "Show #{@hidden_count} more"}
+          </button>
         </div>
       </div>
     <% end %>

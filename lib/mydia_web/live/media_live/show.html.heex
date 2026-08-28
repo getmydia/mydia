@@ -288,7 +288,10 @@
           :if={@timeline_events != []}
           class="md:col-span-2 xl:col-span-1 xl:col-start-3 xl:row-start-1 xl:sticky xl:top-4 xl:self-start xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto"
         >
-          <Components.timeline_section timeline_events={@timeline_events} />
+          <Components.timeline_section
+            timeline_events={@timeline_events}
+            expanded={@timeline_expanded}
+          />
         </aside>
       </div>
     </div>

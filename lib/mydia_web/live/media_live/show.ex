@@ -71,6 +71,7 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:timeline_events, timeline_events)
      |> assign(:page_title, media_item.title)
      |> assign(:show_delete_confirm, false)
+     |> assign(:timeline_expanded, false)
      |> assign(:delete_files, false)
      |> assign(:quality_profiles, quality_profiles)
      |> assign(:default_quality_profile_name, default_quality_profile_name)
@@ -530,6 +531,14 @@ defmodule MydiaWeb.MediaLive.Show do
   @impl true
   def handle_event("toggle_recommendations", params, socket),
     do: RecommendationEvents.toggle_expanded(params, socket)
+
+  # Not persisted to UserPreference the way recommendations_expanded is (see
+  # MydiaWeb.Live.Helpers.RecommendationsExpanded). History is reference
+  # material a user opens for one question and closes, not a rail state worth
+  # a schema column.
+  def handle_event("toggle_timeline", _params, socket) do
+    {:noreply, assign(socket, :timeline_expanded, !socket.assigns.timeline_expanded)}
+  end
 
   @impl true
   def handle_event("add_recommendation", params, socket),
