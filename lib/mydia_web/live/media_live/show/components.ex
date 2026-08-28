@@ -673,30 +673,38 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   end
 
   @doc """
-  Media files section showing all files for this media item.
+  Media files section, showing the files that belong to this item directly and
+  to no episode.
 
-  Covers episode media files as well as the item's own, via
-  `all_media_files/1`: a movie's files live at `media_item.media_files`, but a
-  `MediaFile` belongs to either `media_item_id` or `episode_id`, never both, so
-  that list is always empty for a TV show. Without this the card was
-  permanently empty on every TV show page.
+  For a movie that is simply its files. For a TV show it is the files with
+  `media_item_id` set and `episode_id` nil, which `Mydia.Jobs.MediaImport`'s
+  catch-all fallback creates when a download's episode cannot be resolved and
+  `Mydia.Media.RecentlyAdded` documents as "unmatched files". No episode row
+  will ever render those, so this card is their only surface -- hence the
+  filter on `episode_id` rather than skipping the card for shows outright.
 
-  A `MediaFile` can also be attached directly to a TV show with no episode at
-  all (`media_item_id` set, `episode_id` nil) -- see
-  `Mydia.Jobs.MediaImport`'s catch-all fallback and `Mydia.Media.RecentlyAdded`'s
-  "unmatched files" -- so this card is not always redundant with the
-  per-episode listing even for a show. Its subtitle badge and manage button
-  therefore always render here, for every file, regardless of item type.
+  It deliberately does *not* list a show's episode files, even though
+  `all_media_files/1` reaches them. `episode_rows/1` already renders each of
+  those under its own episode, with the season and episode number attached.
+  Listing them again here produced a flat, unlabelled pile under a heading
+  that reads as show-level: on the reference deployment, 49 of 53 shows with
+  files rendered a card that was 100% episode files (Silo: 29 rows, every one
+  a duplicate of something already shown above). That is what the merged list
+  looked like in practice, and it read as detached files rather than as a
+  useful overview.
 
-  The one thing to watch: for a TV show, a file that *does* belong to an
-  episode renders a second time in `episode_file_row/1` once that episode is
-  expanded, with its own copy of the same badge/button. Those two renders
-  must never share a DOM id, so this component's copies are suffixed
-  `-file-` (`subtitle-open-file-<id>`, `subtitle-badges-file-<id>`) while
-  `episode_file_row/1` keeps its plain `subtitle-open-<id>` /
-  `subtitle-badges-<id>` -- the same idiom `subtitle_track_row/1` already
-  uses (folding `media_file_id` into its id) and `episode_rows/1` uses for
-  its own ids (`"episode-\#{episode.id}-actions"`, etc.).
+  Because the two surfaces are now disjoint, no file can render twice on the
+  page. The `-file-` DOM id suffix here (`subtitle-open-file-<id>`,
+  `subtitle-badges-file-<id>`) is kept anyway, distinct from
+  `episode_file_row/1`'s plain `subtitle-open-<id>` / `subtitle-badges-<id>`,
+  so a future change that widens either list cannot silently reintroduce a
+  duplicate-id crash.
+
+  Note the other four call sites fixed alongside this one in #591 -- the
+  quality filter and badge, the list view's Size column, and
+  `FileEvents.refresh_all_file_metadata/2` -- do still want the merged list
+  from `all_media_files/1`. They answer questions about the whole show; this
+  card does not.
   """
   attr :media_item, :map, required: true
   attr :refreshing_file_metadata, :boolean, required: true
@@ -704,7 +712,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :media_file_subtitle_tracks, :map, default: %{}
 
   def media_files_section(assigns) do
-    files = all_media_files(assigns.media_item)
+    files = Enum.filter(all_media_files(assigns.media_item), &is_nil(&1.episode_id))
     {extras, versions} = Enum.split_with(files, &(not is_nil(&1.extra_kind)))
 
     assigns = assign(assigns, files: files, versions: versions, extras: extras)

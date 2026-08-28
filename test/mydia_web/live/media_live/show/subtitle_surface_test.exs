@@ -114,7 +114,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleSurfaceTest do
     end
   end
 
-  describe "a TV episode's file rendered by both surfaces at once" do
+  describe "a TV episode's file is rendered by exactly one surface" do
     setup do
       user = user_fixture()
       show = media_item_fixture(%{type: "tv_show"})
@@ -124,25 +124,26 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleSurfaceTest do
       {:ok, user: user, show: show, episode: episode, media_file: media_file}
     end
 
-    test "expanding the episode does not collide with the flat file list's copy", ctx do
+    # media_files_section/1 used to merge episode files in via
+    # all_media_files/1, so this file rendered twice on one page: once under
+    # its episode and once in the flat card, unlabelled. The two renders were
+    # kept apart only by a DOM-id suffix. They are now disjoint by
+    # construction -- the card filters to files with no episode_id -- which is
+    # a stronger guarantee than distinct ids, so this asserts the split
+    # directly.
+    test "the flat Media Files card leaves it to the episode row", ctx do
       {:ok, view, _html} =
         ctx.conn
         |> log_in_user(ctx.user)
         |> live(~p"/media/#{ctx.show.id}")
 
-      # The flat Media Files card already rendered this file (all_media_files/1
-      # reaches into episode files too) before this click. If
-      # media_files_section/1 and episode_file_row/1 ever render the same id
-      # again for this file, Phoenix.LiveViewTest raises "Duplicate id found"
-      # here -- this is the connected repro for that bug.
+      refute has_element?(view, "#media-files-section")
+      refute has_element?(view, "#subtitle-open-file-#{ctx.media_file.id}")
+
       render_click(view, "toggle_episode_expanded", %{"episode-id" => ctx.episode.id})
 
-      flat_list_id = "subtitle-open-file-#{ctx.media_file.id}"
-      episode_row_id = "subtitle-open-#{ctx.media_file.id}"
-
-      assert has_element?(view, "##{flat_list_id}")
-      assert has_element?(view, "##{episode_row_id}")
-      assert flat_list_id != episode_row_id
+      assert has_element?(view, "#subtitle-open-#{ctx.media_file.id}")
+      refute has_element?(view, "#subtitle-open-file-#{ctx.media_file.id}")
     end
   end
 
