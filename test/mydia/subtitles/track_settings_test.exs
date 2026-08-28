@@ -185,6 +185,7 @@ defmodule Mydia.Subtitles.TrackSettingsTest do
 
     test "tolerates a malformed id the way the per-file functions do", ctx do
       assert TrackSettings.offsets_for_media_files([ctx.file_a.id, "not-a-uuid"]) == %{}
+      assert TrackSettings.resync_states_for_media_files([ctx.file_a.id, "not-a-uuid"]) == %{}
     end
   end
 end
