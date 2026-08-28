@@ -1576,23 +1576,26 @@ defmodule Mydia.Media do
     query
     |> select([e, m], %{
       id: e.id,
-      type: "episode",
       air_date: e.air_date,
       title: e.title,
       season_number: e.season_number,
       episode_number: e.episode_number,
-      media_item_id: m.id,
-      media_item_title: m.title,
-      media_item_type: m.type,
+      show: m,
       has_files:
-        fragment(
-          "CASE WHEN EXISTS(SELECT 1 FROM media_files WHERE episode_id = ?) THEN true ELSE false END",
-          e.id
+        type(
+          fragment(
+            "CASE WHEN EXISTS(SELECT 1 FROM media_files WHERE episode_id = ?) THEN true ELSE false END",
+            e.id
+          ),
+          :boolean
         ),
       has_downloads:
-        fragment(
-          "CASE WHEN EXISTS(SELECT 1 FROM downloads WHERE episode_id = ?) THEN true ELSE false END",
-          e.id
+        type(
+          fragment(
+            "CASE WHEN EXISTS(SELECT 1 FROM downloads WHERE episode_id = ?) THEN true ELSE false END",
+            e.id
+          ),
+          :boolean
         )
     })
     |> order_by([e, m], asc: e.air_date, asc: m.title)
@@ -1604,12 +1607,13 @@ defmodule Mydia.Media do
         title: entry.title,
         season_number: entry.season_number,
         episode_number: entry.episode_number,
-        media_item_id: entry.media_item_id,
-        media_item_title: entry.media_item_title,
-        media_item_type: entry.media_item_type,
-        # SQLite returns 0/1 for booleans, convert to proper Elixir booleans
-        has_files: entry.has_files == 1,
-        has_downloads: entry.has_downloads == 1
+        media_item_id: entry.show.id,
+        media_item_title: entry.show.title,
+        media_item_type: entry.show.type,
+        has_files: entry.has_files,
+        has_downloads: entry.has_downloads,
+        poster_path: entry.show.metadata && entry.show.metadata.poster_path,
+        backdrop_path: entry.show.metadata && entry.show.metadata.backdrop_path
       )
     end)
   end
@@ -1668,7 +1672,9 @@ defmodule Mydia.Media do
         media_item_title: item.title,
         media_item_type: item.type,
         has_files: has_files,
-        has_downloads: has_downloads
+        has_downloads: has_downloads,
+        poster_path: item.metadata.poster_path,
+        backdrop_path: item.metadata.backdrop_path
       )
     end)
   end
