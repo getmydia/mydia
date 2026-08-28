@@ -1037,12 +1037,9 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                 <%!-- Flat row rather than a nested card. Title and time share
                       one baseline, both single-line, so the row height is
                       driven by content and not by card padding. --%>
-                <div
-                  class="flex-1 min-w-0 pt-0.5"
-                  title={format_absolute_time(event.timestamp)}
-                >
+                <div class="flex-1 min-w-0 pt-0.5">
                   <div class="flex items-baseline justify-between gap-2">
-                    <span class="font-semibold text-sm truncate">{event.title}</span>
+                    <span class="font-semibold text-sm truncate" title={event.title}>{event.title}</span>
                     <time
                       class="text-xs text-base-content/50 whitespace-nowrap shrink-0"
                       title={format_absolute_time(event.timestamp)}
@@ -1050,7 +1047,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                       {format_relative_time_short(event.timestamp)}
                     </time>
                   </div>
-                  <div class="text-xs text-base-content/70 truncate">
+                  <div class="text-xs text-base-content/70 truncate" title={event.description}>
                     {event.description}
                   </div>
                   <%= if event.metadata do %>
@@ -1096,6 +1093,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
             id="timeline-toggle"
             type="button"
             phx-click="toggle_timeline"
+            aria-expanded={@expanded}
             class="btn btn-ghost btn-sm justify-start self-start mt-2 -mb-1"
           >
             {if @expanded, do: "Show less", else: "Show #{@hidden_count} more"}

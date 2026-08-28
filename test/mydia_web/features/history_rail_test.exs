@@ -127,6 +127,10 @@ defmodule MydiaWeb.Features.HistoryRailTest do
 
     assert probe(session, @track_count) == 3
 
+    # At 1700px the old `xl:` breakpoint also fires, so @track_count == 3
+    # holds under old code too and does not discriminate old from new. The
+    # assertion that actually does is `rail == 320`: the old layout used a
+    # 22rem / 352px rail track, not the 20rem / 320px track this branch adds.
     [poster, main, rail] = probe(session, @track_widths)
     assert poster == 320, "poster column is #{poster}px, expected a 20rem track"
     assert rail == 320, "History rail is #{rail}px, expected a 20rem track"
