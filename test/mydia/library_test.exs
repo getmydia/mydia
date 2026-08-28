@@ -1057,4 +1057,91 @@ defmodule Mydia.LibraryTest do
       assert Library.count_imported_files_by_download([]) == %{}
     end
   end
+
+  describe "episode_has_media_file?/1" do
+    setup do
+      %{
+        lib: library_path_fixture(%{type: "series"}),
+        show: Mydia.MediaFixtures.media_item_fixture(%{type: "tv_show"})
+      }
+    end
+
+    test "returns true when the episode's only file is ordinary", %{lib: lib, show: show} do
+      episode = Mydia.MediaFixtures.episode_fixture(%{media_item_id: show.id})
+
+      {:ok, _file} =
+        Library.create_media_file(%{
+          relative_path: "ordinary.mkv",
+          library_path_id: lib.id,
+          episode_id: episode.id,
+          size: 100
+        })
+
+      assert Library.episode_has_media_file?(episode.id)
+    end
+
+    test "returns false when the episode's only file is a scanner-flagged extra", %{
+      lib: lib,
+      show: show
+    } do
+      # Regression: the scanner's path-based detection is type-agnostic and
+      # persists a trailer/extra matched to an episode. That file must not
+      # make the importer believe the episode already has its real content.
+      episode = Mydia.MediaFixtures.episode_fixture(%{media_item_id: show.id})
+
+      {:ok, _extra} =
+        Library.create_media_file(%{
+          relative_path: "episode-trailer.mkv",
+          library_path_id: lib.id,
+          episode_id: episode.id,
+          size: 100,
+          extra_kind: :trailer,
+          extra_source: :filename
+        })
+
+      refute Library.episode_has_media_file?(episode.id)
+    end
+
+    test "returns true when the episode has both an ordinary file and an extra", %{
+      lib: lib,
+      show: show
+    } do
+      episode = Mydia.MediaFixtures.episode_fixture(%{media_item_id: show.id})
+
+      {:ok, _file} =
+        Library.create_media_file(%{
+          relative_path: "ordinary.mkv",
+          library_path_id: lib.id,
+          episode_id: episode.id,
+          size: 100
+        })
+
+      {:ok, _extra} =
+        Library.create_media_file(%{
+          relative_path: "episode-trailer.mkv",
+          library_path_id: lib.id,
+          episode_id: episode.id,
+          size: 100,
+          extra_kind: :trailer,
+          extra_source: :filename
+        })
+
+      assert Library.episode_has_media_file?(episode.id)
+    end
+
+    test "returns false when the episode's only file is trashed", %{lib: lib, show: show} do
+      episode = Mydia.MediaFixtures.episode_fixture(%{media_item_id: show.id})
+
+      {:ok, _file} =
+        Library.create_media_file(%{
+          relative_path: "trashed.mkv",
+          library_path_id: lib.id,
+          episode_id: episode.id,
+          size: 100,
+          trashed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      refute Library.episode_has_media_file?(episode.id)
+    end
+  end
 end

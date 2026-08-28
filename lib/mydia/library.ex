@@ -171,11 +171,20 @@ defmodule Mydia.Library do
   Used by the importer to skip season-pack files for episodes the library
   already has, since nothing downstream reconciles two live files for one
   episode outside the upgrade path.
+
+  Counts only real versions of the episode (`is_nil(extra_kind)`). A bonus
+  file scanner-matched to this episode — a trailer, a deleted scene — must
+  not make the importer believe the episode is already filled and skip the
+  real file a season pack is trying to deliver. Getting this wrong here is
+  invisible at the call site: the importer logs "episode already has a media
+  file" as if it succeeded, while the real file is silently dropped.
   """
   @spec episode_has_media_file?(String.t()) :: boolean()
   def episode_has_media_file?(episode_id) when is_binary(episode_id) do
     Repo.exists?(
-      from(f in MediaFile, where: f.episode_id == ^episode_id and is_nil(f.trashed_at))
+      from(f in MediaFile,
+        where: f.episode_id == ^episode_id and is_nil(f.trashed_at) and is_nil(f.extra_kind)
+      )
     )
   end
 
