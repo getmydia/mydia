@@ -4,6 +4,7 @@ defmodule Mydia.Library.MediaFile do
   """
   use Ecto.Schema
   import Ecto.Changeset
+  import Ecto.Query, only: [from: 2]
   require Logger
 
   @primary_key {:id, :binary_id, autogenerate: true}
@@ -38,6 +39,9 @@ defmodule Mydia.Library.MediaFile do
           fingerprint_blob: String.t() | nil,
           generated_at: DateTime.t() | nil,
           trashed_at: DateTime.t() | nil,
+          extra_kind: atom() | nil,
+          extra_source: :folder | :filename | :duration | :operator | nil,
+          extra_checked_at: DateTime.t() | nil,
           relative_path: String.t() | nil,
           supersedes_media_file_id: binary() | nil,
           import_group_id: binary() | nil,
@@ -49,6 +53,26 @@ defmodule Mydia.Library.MediaFile do
           inserted_at: DateTime.t(),
           updated_at: DateTime.t()
         }
+
+  # Extras classification. `extra_kind` nil means the file is a version of its
+  # movie. Duration-based detection cannot tell a featurette from a deleted
+  # scene, so it always writes :other; the named kinds come from the folder and
+  # filename layers in Mydia.Library.SampleDetector.
+  @extra_kinds [
+    :sample,
+    :trailer,
+    :featurette,
+    :deleted_scene,
+    :short,
+    :interview,
+    :behind_the_scenes,
+    :scene,
+    :other
+  ]
+
+  @doc "The permitted `extra_kind` values."
+  @spec extra_kinds() :: [atom()]
+  def extra_kinds, do: @extra_kinds
 
   schema "media_files" do
     field :path, :string
@@ -88,6 +112,11 @@ defmodule Mydia.Library.MediaFile do
 
     # Soft-delete: files missing from disk are trashed for 30 days before permanent deletion
     field :trashed_at, :utc_datetime
+
+    # Extras classification. See @extra_kinds above.
+    field :extra_kind, Ecto.Enum, values: @extra_kinds
+    field :extra_source, Ecto.Enum, values: [:folder, :filename, :duration, :operator]
+    field :extra_checked_at, :utc_datetime
 
     # Relative path storage (Phase 1)
     field :relative_path, :string
@@ -136,6 +165,30 @@ defmodule Mydia.Library.MediaFile do
   end
 
   def absolute_path(%__MODULE__{}), do: nil
+
+  @doc """
+  Files that still exist: untrashed, extras included.
+
+  Use this where you want every file on disk, such as the file list on the
+  movie page. For anything that has to pick *the* file for a movie (playback,
+  streaming, subtitles, ownership, upgrades) use `versions/0` instead.
+  """
+  @spec active() :: Ecto.Query.t()
+  def active do
+    from(mf in __MODULE__, where: is_nil(mf.trashed_at))
+  end
+
+  @doc """
+  Files that are versions of their media item: untrashed and not an extra.
+
+  This is the single place extras are filtered out. Before it existed, the
+  `is_nil(trashed_at)` predicate was hand-copied into six modules, and adding a
+  filter to six copies is how some of them get missed.
+  """
+  @spec versions() :: Ecto.Query.t()
+  def versions do
+    from(mf in __MODULE__, where: is_nil(mf.trashed_at) and is_nil(mf.extra_kind))
+  end
 
   @doc """
   Best path to show an operator, or nil when the file has no location at all.
@@ -233,6 +286,9 @@ defmodule Mydia.Library.MediaFile do
       :fingerprint_blob,
       :generated_at,
       :trashed_at,
+      :extra_kind,
+      :extra_source,
+      :extra_checked_at,
       :supersedes_media_file_id,
       :import_group_id
     ])
@@ -290,7 +346,10 @@ defmodule Mydia.Library.MediaFile do
       :last_segment_analysis_error,
       :fingerprint_blob,
       :generated_at,
-      :trashed_at
+      :trashed_at,
+      :extra_kind,
+      :extra_source,
+      :extra_checked_at
     ])
     |> validate_required([:relative_path, :library_path_id])
     |> validate_parent_exclusivity()
