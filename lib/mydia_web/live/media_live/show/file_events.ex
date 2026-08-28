@@ -476,6 +476,37 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
     end
   end
 
+  @doc """
+  Promotes an extra back to a version, or demotes a version to an extra.
+
+  Both write `extra_source: :operator`, which is sticky:
+  `Mydia.Jobs.ExtraClassification` never reconsiders a row a human has
+  touched, in either direction.
+  """
+  def promote_to_version(%{"id" => id}, socket) do
+    reclassify(socket, id, %{extra_kind: nil, extra_source: :operator})
+  end
+
+  def demote_to_extra(%{"id" => id}, socket) do
+    reclassify(socket, id, %{extra_kind: :other, extra_source: :operator})
+  end
+
+  defp reclassify(socket, id, attrs) do
+    media_file = Library.get_media_file!(id)
+    attrs = Map.put(attrs, :extra_checked_at, DateTime.utc_now() |> DateTime.truncate(:second))
+
+    case Library.update_media_file(media_file, attrs) do
+      {:ok, _updated} ->
+        {:noreply,
+         socket
+         |> assign(:media_item, load_media_item(socket.assigns.media_item.id))
+         |> put_flash(:info, "File reclassified")}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Could not reclassify that file")}
+    end
+  end
+
   # handle_async dispatches
 
   def handle_refresh_files_async({:ok, {:ok, success_count, error_count}}, socket) do

@@ -19,9 +19,11 @@ defmodule MydiaWeb.MediaLive.Show.Loaders do
   end
 
   defp build_preload_list do
-    # Filter out trashed media files from preloads
-    active_files_query =
-      from(mf in MediaFile, where: is_nil(mf.trashed_at), preload: :library_path)
+    # Untrashed media files, extras included: the movie page needs to see
+    # extras in order to display them, split out from versions in the
+    # component. Use MediaFile.versions/0 instead wherever the caller needs
+    # to pick *the* file for a media item (playback, subtitles, upgrades).
+    active_files_query = MediaFile.active() |> preload(:library_path)
 
     [
       quality_profile: [],

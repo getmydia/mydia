@@ -666,7 +666,10 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :transcode_jobs, :map, default: %{}
 
   def media_files_section(assigns) do
-    assigns = assign(assigns, :files, all_media_files(assigns.media_item))
+    files = all_media_files(assigns.media_item)
+    {extras, versions} = Enum.split_with(files, &(not is_nil(&1.extra_kind)))
+
+    assigns = assign(assigns, files: files, versions: versions, extras: extras)
 
     ~H"""
     <%= if @files != [] do %>
@@ -675,7 +678,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
           <h2 class="card-title text-lg md:text-xl mb-3 md:mb-4">Media Files</h2>
           <%!-- DaisyUI list component --%>
           <ul class="menu bg-base-100 rounded-box p-0">
-            <li :for={file <- @files}>
+            <li :for={file <- @versions} id={"version-#{file.id}"}>
               <div class="flex flex-col gap-3 p-4 hover:bg-base-200 rounded-none transition-colors">
                 <div class="flex items-start justify-between gap-4">
                   <%!-- Left side: File info --%>
@@ -773,6 +776,16 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                     >
                       <.icon name="hero-trash" class="w-5 h-5" />
                     </button>
+                    <button
+                      id={"demote-#{file.id}"}
+                      type="button"
+                      class="btn btn-ghost btn-sm btn-square"
+                      title="This is an extra, not a version"
+                      phx-click="demote_to_extra"
+                      phx-value-id={file.id}
+                    >
+                      <.icon name="hero-arrow-down-tray" class="w-5 h-5" />
+                    </button>
                   </div>
                 </div>
                 <%!-- Pre-transcode status and controls --%>
@@ -783,6 +796,41 @@ defmodule MydiaWeb.MediaLive.Show.Components do
               </div>
             </li>
           </ul>
+
+          <details :if={@extras != []} id="extras-disclosure" class="mt-4">
+            <summary class="cursor-pointer text-sm font-medium text-base-content/70 hover:text-base-content">
+              Extras ({length(@extras)})
+            </summary>
+            <ul class="menu bg-base-100 rounded-box p-0 mt-2">
+              <li :for={file <- @extras} id={"extra-#{file.id}"}>
+                <div class="flex items-center justify-between gap-4 p-4 rounded-none">
+                  <div class="flex-1 min-w-0 flex flex-col gap-1">
+                    <p class="text-sm font-mono break-all">
+                      {Mydia.Library.MediaFile.display_path(file) ||
+                        Mydia.Library.MediaFile.display_name(file)}
+                    </p>
+                    <div class="flex flex-wrap gap-2 text-xs text-base-content/60">
+                      <span class="badge badge-ghost badge-sm">{file.extra_kind}</span>
+                      <span class="badge badge-ghost badge-sm">
+                        detected by {file.extra_source}
+                      </span>
+                      <span class="font-mono">{format_file_size(file.size)}</span>
+                    </div>
+                  </div>
+                  <button
+                    id={"promote-#{file.id}"}
+                    type="button"
+                    class="btn btn-ghost btn-sm"
+                    title="This is a version, not an extra"
+                    phx-click="promote_to_version"
+                    phx-value-id={file.id}
+                  >
+                    <.icon name="hero-arrow-up-tray" class="w-4 h-4" /> Version
+                  </button>
+                </div>
+              </li>
+            </ul>
+          </details>
         </div>
       </div>
     <% end %>
