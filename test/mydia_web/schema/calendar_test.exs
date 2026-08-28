@@ -89,6 +89,11 @@ defmodule MydiaWeb.Schema.CalendarTest do
   end
 
   test "orders by air date, then playable first, then title", ctx do
+    # Widened beyond @vars on purpose: the July/September entries below only
+    # catch a regression to day-only date comparison if they land on
+    # opposite sides of a month boundary while still both being in-window.
+    vars = %{"start" => "2026-07-01", "end" => "2026-09-30"}
+
     show = MediaFixtures.media_item_fixture(%{type: "tv_show", title: "Zebra Show"})
     other = MediaFixtures.media_item_fixture(%{type: "tv_show", title: "Alpha Show"})
 
@@ -109,9 +114,32 @@ defmodule MydiaWeb.Schema.CalendarTest do
       air_date: ~D[2026-08-10]
     })
 
-    assert {:ok, %{data: %{"calendar" => entries}}} = run_query(@query, @vars, ctx.user)
+    # A `%Date{}` compared as a bare tuple element sorts by struct field
+    # order (day, then month, then year), which would put 2026-07-31 AFTER
+    # 2026-08-10 and 2026-09-01. These two entries fail under that bug and
+    # pass only when the sort compares dates chronologically.
+    MediaFixtures.episode_fixture(%{
+      media_item_id: show.id,
+      season_number: 1,
+      episode_number: 2,
+      air_date: ~D[2026-07-31]
+    })
 
-    assert Enum.map(entries, & &1["mediaItemTitle"]) == ["Zebra Show", "Alpha Show"]
+    MediaFixtures.episode_fixture(%{
+      media_item_id: other.id,
+      season_number: 1,
+      episode_number: 2,
+      air_date: ~D[2026-09-01]
+    })
+
+    assert {:ok, %{data: %{"calendar" => entries}}} = run_query(@query, vars, ctx.user)
+
+    assert Enum.map(entries, &{&1["airDate"], &1["mediaItemTitle"]}) == [
+             {"2026-07-31", "Zebra Show"},
+             {"2026-08-10", "Zebra Show"},
+             {"2026-08-10", "Alpha Show"},
+             {"2026-09-01", "Alpha Show"}
+           ]
   end
 
   test "never exposes download state", ctx do

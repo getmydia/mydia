@@ -27,7 +27,14 @@ defmodule MydiaWeb.Schema.Resolvers.CalendarResolver do
 
     entries =
       (episodes ++ movies)
-      |> Enum.sort_by(&{&1.air_date, !&1.has_files, &1.media_item_title}, :asc)
+      |> Enum.sort_by(
+        # `Date.to_erl/1` turns the date into a plain `{year, month, day}`
+        # tuple. A bare `%Date{}` inside a sort tuple compares by struct
+        # field order (`day` before `month` before `year`), which is not
+        # chronological order. Do not "simplify" this back to `&1.air_date`.
+        &{Date.to_erl(&1.air_date), !&1.has_files, &1.media_item_title},
+        :asc
+      )
 
     {:ok, entries}
   end
