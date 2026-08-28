@@ -1020,67 +1020,72 @@ defmodule MydiaWeb.MediaLive.Show.Components do
         <div class="card-body p-4 md:p-6">
           <h2 class="card-title text-lg md:text-xl mb-3 md:mb-4">History</h2>
           <div class="relative">
-            <%!-- The spine. Inset to the centre of the 40px icon nodes below
-                  (left-5 is 20px), so every node sits on it. --%>
-            <div class="absolute left-5 top-0 bottom-0 w-0.5 bg-base-300"></div>
+            <%!-- The spine. Inset to the centre of the 32px icon nodes below
+                  (left-4 is 16px), so every node sits on it. --%>
+            <div class="absolute left-4 top-0 bottom-0 w-0.5 bg-base-300"></div>
 
-            <div class="flex flex-col gap-4">
+            <div class="flex flex-col gap-3">
               <div
                 :for={event <- @shown_events}
                 class="relative flex items-start gap-3"
               >
                 <%!-- Icon node on the spine --%>
-                <div class="w-10 h-10 rounded-full bg-base-200 flex items-center justify-center border-2 border-base-300 shrink-0 z-10">
-                  <.icon name={event.icon} class={"w-5 h-5 #{event.color}"} />
+                <div class="w-8 h-8 rounded-full bg-base-200 flex items-center justify-center border-2 border-base-300 shrink-0 z-10">
+                  <.icon name={event.icon} class={"w-4 h-4 #{event.color}"} />
                 </div>
 
-                <%!-- Event card, filling the rest of the column --%>
+                <%!-- Flat row rather than a nested card. Title and time share
+                      one baseline, both single-line, so the row height is
+                      driven by content and not by card padding. --%>
                 <div
-                  class="card bg-base-100 shadow-md flex-1 min-w-0 hover:shadow-xl transition-shadow"
+                  class="flex-1 min-w-0 pt-0.5"
                   title={format_absolute_time(event.timestamp)}
                 >
-                  <div class="card-body p-3">
+                  <div class="flex items-baseline justify-between gap-2">
+                    <span class="font-semibold text-sm truncate">{event.title}</span>
                     <time
-                      class="text-xs text-base-content/60 whitespace-nowrap"
+                      class="text-xs text-base-content/50 whitespace-nowrap shrink-0"
                       title={format_absolute_time(event.timestamp)}
                     >
-                      {format_relative_time(event.timestamp)}
+                      {format_relative_time_short(event.timestamp)}
                     </time>
-                    <div class="font-bold text-sm">{event.title}</div>
-                    <div class="text-sm text-base-content/80 line-clamp-2">
-                      {event.description}
-                    </div>
-                    <%= if event.metadata do %>
-                      <div class="flex flex-wrap gap-1">
-                        <%= if event.metadata[:quality] do %>
-                          <span class="badge badge-primary badge-xs">
-                            {format_download_quality(event.metadata.quality)}
-                          </span>
-                        <% end %>
-                        <%= if event.metadata[:indexer] do %>
-                          <span class="badge badge-outline badge-xs">
-                            {event.metadata.indexer}
-                          </span>
-                        <% end %>
-                        <%= if event.metadata[:resolution] do %>
-                          <span class="badge badge-primary badge-xs">
-                            {event.metadata.resolution}
-                          </span>
-                        <% end %>
-                        <%= if event.metadata[:size] do %>
-                          <span class="badge badge-ghost badge-xs">
-                            {format_file_size(event.metadata.size)}
-                          </span>
-                        <% end %>
-                        <%= if event.metadata[:error] do %>
-                          <div class="text-xs text-error mt-1 line-clamp-2">
-                            <.icon name="hero-exclamation-circle" class="w-3 h-3 inline" />
-                            {event.metadata.error}
-                          </div>
-                        <% end %>
-                      </div>
-                    <% end %>
                   </div>
+                  <div class="text-xs text-base-content/70 truncate">
+                    {event.description}
+                  </div>
+                  <%= if event.metadata do %>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                      <%= if event.metadata[:quality] do %>
+                        <span class="badge badge-primary badge-xs">
+                          {format_download_quality(event.metadata.quality)}
+                        </span>
+                      <% end %>
+                      <%= if event.metadata[:indexer] do %>
+                        <span class="badge badge-outline badge-xs">
+                          {event.metadata.indexer}
+                        </span>
+                      <% end %>
+                      <%= if event.metadata[:resolution] do %>
+                        <span class="badge badge-primary badge-xs">
+                          {event.metadata.resolution}
+                        </span>
+                      <% end %>
+                      <%= if event.metadata[:size] do %>
+                        <span class="badge badge-ghost badge-xs">
+                          {format_file_size(event.metadata.size)}
+                        </span>
+                      <% end %>
+                      <%!-- w-full so the error takes its own line inside the
+                            wrapping badge row rather than being squeezed into
+                            the last badge's slot. --%>
+                      <%= if event.metadata[:error] do %>
+                        <div class="text-xs text-error mt-1 line-clamp-2 w-full">
+                          <.icon name="hero-exclamation-circle" class="w-3 h-3 inline" />
+                          {event.metadata.error}
+                        </div>
+                      <% end %>
+                    </div>
+                  <% end %>
                 </div>
               </div>
             </div>
