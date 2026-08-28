@@ -21,7 +21,19 @@ defmodule Mydia.Media.Structs.CalendarEntry do
   Episode-specific fields:
   - `:season_number` - The season number (nil for movies)
   - `:episode_number` - The episode number (nil for movies)
+
+  Artwork fields (raw metadata paths, not URLs):
+  - `:poster_path` - The parent item's poster path, or nil
+  - `:backdrop_path` - The parent item's backdrop path, or nil
+
+  Player-only fields, populated after construction:
+  - `:files` - Playable files for this entry. Defaults to `[]`; the
+    `CalendarResolver` batch-loads these separately and attaches them, the
+    way `Mydia.Playback.OnDeckEntry` carries `:files`. Not set by
+    `new_episode/1` or `new_movie/1`, and not read by `MydiaWeb.CalendarLive`.
   """
+
+  alias Mydia.Library.MediaFile
 
   @enforce_keys [
     :id,
@@ -46,7 +58,10 @@ defmodule Mydia.Media.Structs.CalendarEntry do
     :media_item_title,
     :media_item_type,
     :has_files,
-    :has_downloads
+    :has_downloads,
+    :poster_path,
+    :backdrop_path,
+    files: []
   ]
 
   @type t :: %__MODULE__{
@@ -60,7 +75,10 @@ defmodule Mydia.Media.Structs.CalendarEntry do
           media_item_title: String.t(),
           media_item_type: String.t(),
           has_files: boolean(),
-          has_downloads: boolean()
+          has_downloads: boolean(),
+          poster_path: String.t() | nil,
+          backdrop_path: String.t() | nil,
+          files: [MediaFile.t()]
         }
 
   @doc """

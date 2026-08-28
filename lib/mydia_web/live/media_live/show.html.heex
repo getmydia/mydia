@@ -220,9 +220,11 @@
             expanded_chunks={@expanded_chunks}
             auto_searching_season={@auto_searching_season}
             rescanning_season={@rescanning_season}
+            fetching_season_subtitles={@fetching_season_subtitles}
             auto_searching_episode={@auto_searching_episode}
             playback_enabled={@playback_enabled}
             transcode_jobs={@transcode_jobs}
+            media_file_subtitle_tracks={@media_file_subtitle_tracks}
             segment_statuses={@segment_statuses}
             segment_detection_available={@segment_detection_available}
             season_order_suggestion={@season_order_suggestion}
@@ -234,10 +236,6 @@
             media_item={@media_item}
             refreshing_file_metadata={@refreshing_file_metadata}
             transcode_jobs={@transcode_jobs}
-          />
-          <%!-- Subtitles Section --%>
-          <Components.subtitles_section
-            media_item={@media_item}
             media_file_subtitle_tracks={@media_file_subtitle_tracks}
           />
           <%!-- Everything below here is about other titles, not this one.
@@ -360,6 +358,12 @@
       media_file={@selected_media_file}
       uploads={@uploads}
       error={@subtitle_upload_error}
+    />
+  <% end %>
+  <%= if @show_subtitle_manage_modal && @selected_media_file do %>
+    <SubtitleModal.subtitle_manage_modal
+      media_file={@selected_media_file}
+      tracks={@manage_tracks}
     />
   <% end %>
   <%= if @show_category_modal && @category_form do %>

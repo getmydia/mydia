@@ -15,6 +15,7 @@ defmodule MydiaWeb.Schema.QueryTypes do
   alias MydiaWeb.Schema.Resolvers.SubtitleSearchResolver
   alias MydiaWeb.Schema.Resolvers.SubtitleSettingsResolver
   alias MydiaWeb.Schema.Resolvers.ServerResolver
+  alias MydiaWeb.Schema.Resolvers.CalendarResolver
 
   # Node interface for global node resolution with hierarchical navigation
   interface :node do
@@ -173,6 +174,16 @@ defmodule MydiaWeb.Schema.QueryTypes do
       arg(:category, :media_category)
       arg(:sort, :sort_input)
       resolve(&DiscoveryResolver.unwatched/3)
+    end
+  end
+
+  # Calendar queries
+  object :calendar_queries do
+    @desc "Get dated episodes and movies between two dates, both bounds inclusive"
+    field :calendar, non_null(list_of(non_null(:calendar_entry))) do
+      arg(:start, non_null(:date))
+      arg(:end, non_null(:date))
+      resolve(&CalendarResolver.calendar/3)
     end
   end
 

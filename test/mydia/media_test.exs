@@ -1395,6 +1395,223 @@ defmodule Mydia.MediaTest do
       assert entry.has_files == true
       assert entry.has_downloads == false
     end
+
+    test "has_files is false when the movie's only file is trashed" do
+      movie =
+        media_item_fixture(%{
+          type: "movie",
+          title: "Movie With Trashed File",
+          year: 2025,
+          metadata: %{
+            provider_id: "7",
+            provider: :metadata_relay,
+            media_type: :movie,
+            release_date: ~D[2025-06-15]
+          }
+        })
+
+      media_file_fixture(
+        media_item_id: movie.id,
+        trashed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+      )
+
+      entries = Media.list_movies_by_release_date(~D[2025-06-01], ~D[2025-06-30])
+
+      assert [%CalendarEntry{} = entry] = entries
+      assert entry.has_files == false
+    end
+  end
+
+  describe "list_movies_by_release_date/3 filtering" do
+    import Mydia.MediaFixtures
+
+    setup do
+      inside = media_item_fixture(%{type: "movie", title: "Inside"})
+      edge_low = media_item_fixture(%{type: "movie", title: "EdgeLow"})
+      edge_high = media_item_fixture(%{type: "movie", title: "EdgeHigh"})
+      outside = media_item_fixture(%{type: "movie", title: "Outside"})
+      undated = media_item_fixture(%{type: "movie", title: "Undated"})
+
+      inside = set_release_date(inside, ~D[2026-08-15])
+      set_release_date(edge_low, ~D[2026-08-01])
+      set_release_date(edge_high, ~D[2026-08-31])
+      set_release_date(outside, ~D[2026-09-05])
+
+      %{inside: inside, edge_low: edge_low, edge_high: edge_high, undated: undated}
+    end
+
+    test "returns only movies inside the range, with both bounds included", ctx do
+      titles =
+        Mydia.Media.list_movies_by_release_date(~D[2026-08-01], ~D[2026-08-31], monitored: nil)
+        |> Enum.map(& &1.media_item_title)
+        |> Enum.sort()
+
+      assert titles == ["EdgeHigh", "EdgeLow", "Inside"]
+      refute ctx.undated.title in titles
+    end
+
+    test "reports has_files from the database", ctx do
+      Mydia.MediaFixtures.media_file_fixture(%{media_item_id: ctx.inside.id})
+
+      entries =
+        Mydia.Media.list_movies_by_release_date(~D[2026-08-01], ~D[2026-08-31], monitored: nil)
+
+      with_files = Enum.find(entries, &(&1.media_item_title == "Inside"))
+      without_files = Enum.find(entries, &(&1.media_item_title == "EdgeLow"))
+
+      assert with_files.has_files
+      refute without_files.has_files
+    end
+
+    test "monitored: nil includes unmonitored movies" do
+      unmonitored = media_item_fixture(%{type: "movie", title: "Unmonitored", monitored: false})
+      set_release_date(unmonitored, ~D[2026-08-10])
+
+      titles =
+        Mydia.Media.list_movies_by_release_date(~D[2026-08-01], ~D[2026-08-31], monitored: nil)
+        |> Enum.map(& &1.media_item_title)
+
+      assert "Unmonitored" in titles
+    end
+
+    test "carries the poster and backdrop paths from metadata", ctx do
+      metadata = %{
+        ctx.inside.metadata
+        | poster_path: "/poster.jpg",
+          backdrop_path: "/backdrop.jpg"
+      }
+
+      ctx.inside
+      |> Ecto.Changeset.change(metadata: metadata)
+      |> Mydia.Repo.update!()
+
+      entry =
+        Mydia.Media.list_movies_by_release_date(~D[2026-08-01], ~D[2026-08-31], monitored: nil)
+        |> Enum.find(&(&1.media_item_title == "Inside"))
+
+      assert entry.poster_path == "/poster.jpg"
+      assert entry.backdrop_path == "/backdrop.jpg"
+    end
+
+    # Identical to the helper Task 1 added to test/mydia/db_test.exs. The struct
+    # is Mydia.Metadata.Structs.MediaMetadata, and it carries @enforce_keys on
+    # :provider_id, :provider and :media_type, so a fresh one cannot be built
+    # empty. Copy this verbatim rather than reconstructing it.
+    defp set_release_date(item, date) do
+      metadata =
+        case item.metadata do
+          nil ->
+            %Mydia.Metadata.Structs.MediaMetadata{
+              provider_id: to_string(item.id),
+              provider: :metadata_relay,
+              media_type: :movie,
+              release_date: date
+            }
+
+          existing ->
+            %{existing | release_date: date}
+        end
+
+      item
+      |> Ecto.Changeset.change(metadata: metadata)
+      |> Mydia.Repo.update!()
+    end
+  end
+
+  describe "list_episodes_by_air_date/3 artwork" do
+    import Mydia.MediaFixtures
+
+    test "carries the show's poster path onto each episode entry" do
+      show = media_item_fixture(%{type: "tv_show", title: "Artful Show"})
+
+      # Mydia.Metadata.Structs.MediaMetadata enforces :provider_id, :provider
+      # and :media_type, so a fresh struct must supply them. See the
+      # set_release_date helper in Task 2 for the same pattern.
+      metadata =
+        case show.metadata do
+          nil ->
+            %Mydia.Metadata.Structs.MediaMetadata{
+              provider_id: to_string(show.id),
+              provider: :metadata_relay,
+              media_type: :tv_show,
+              poster_path: "/show.jpg"
+            }
+
+          existing ->
+            %{existing | poster_path: "/show.jpg"}
+        end
+
+      show
+      |> Ecto.Changeset.change(metadata: metadata)
+      |> Mydia.Repo.update!()
+
+      episode_fixture(%{
+        media_item_id: show.id,
+        season_number: 1,
+        episode_number: 1,
+        air_date: ~D[2026-08-15]
+      })
+
+      [entry] =
+        Mydia.Media.list_episodes_by_air_date(~D[2026-08-01], ~D[2026-08-31], monitored: nil)
+
+      assert entry.poster_path == "/show.jpg"
+    end
+
+    test "reports has_files as a real boolean on both adapters" do
+      show = media_item_fixture(%{type: "tv_show", title: "Boolean Show"})
+
+      with_file =
+        episode_fixture(%{
+          media_item_id: show.id,
+          season_number: 1,
+          episode_number: 1,
+          air_date: ~D[2026-08-10]
+        })
+
+      media_file_fixture(%{episode_id: with_file.id})
+
+      episode_fixture(%{
+        media_item_id: show.id,
+        season_number: 1,
+        episode_number: 2,
+        air_date: ~D[2026-08-11]
+      })
+
+      entries =
+        Mydia.Media.list_episodes_by_air_date(~D[2026-08-01], ~D[2026-08-31], monitored: nil)
+
+      [first, second] = Enum.sort_by(entries, & &1.episode_number)
+
+      # `assert x == true` rather than `assert x`, on purpose. The bug this
+      # pins returned integer 1 on SQLite and boolean false on PostgreSQL, and
+      # a truthiness assertion passes for 1. Identity is the whole point.
+      assert first.has_files == true
+      assert second.has_files == false
+      assert first.has_downloads == false
+    end
+
+    test "has_files is false when the episode's only file is trashed" do
+      show = media_item_fixture(%{type: "tv_show", title: "Trashed File Show"})
+
+      episode =
+        episode_fixture(%{
+          media_item_id: show.id,
+          season_number: 1,
+          episode_number: 1,
+          air_date: ~D[2026-08-10]
+        })
+
+      media_file_fixture(
+        episode_id: episode.id,
+        trashed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+      )
+
+      [entry] =
+        Mydia.Media.list_episodes_by_air_date(~D[2026-08-01], ~D[2026-08-31], monitored: nil)
+
+      assert entry.has_files == false
+    end
   end
 
   describe "resolve_library_provider/1 (U6)" do

@@ -407,6 +407,63 @@ defmodule Mydia.DBTest do
     end
   end
 
+  describe "json_date_between/4" do
+    test "matches rows whose JSON date falls inside the range, bounds included" do
+      before_range = media_item_fixture(%{type: "movie", title: "Before"})
+      first = media_item_fixture(%{type: "movie", title: "First"})
+      middle = media_item_fixture(%{type: "movie", title: "Middle"})
+      last = media_item_fixture(%{type: "movie", title: "Last"})
+      after_range = media_item_fixture(%{type: "movie", title: "After"})
+
+      set_release_date(before_range, ~D[2026-07-31])
+      set_release_date(first, ~D[2026-08-01])
+      set_release_date(middle, ~D[2026-08-15])
+      set_release_date(last, ~D[2026-08-31])
+      set_release_date(after_range, ~D[2026-09-01])
+
+      titles =
+        MediaItem
+        |> where([m], m.type == "movie")
+        |> where(
+          ^Mydia.DB.json_date_between(
+            :metadata,
+            "$.release_date",
+            ~D[2026-08-01],
+            ~D[2026-08-31]
+          )
+        )
+        |> select([m], m.title)
+        |> Repo.all()
+        |> Enum.sort()
+
+      assert titles == ["First", "Last", "Middle"]
+    end
+  end
+
+  # `Mydia.Media.MetadataType` wraps `Mydia.Metadata.Structs.MediaMetadata`,
+  # which enforces `:provider_id`, `:provider`, and `:media_type` via
+  # `@enforce_keys`. `%MediaMetadata{}` with none of those set is a compile
+  # error, so a fresh struct here must supply them explicitly.
+  defp set_release_date(item, date) do
+    metadata =
+      case item.metadata do
+        nil ->
+          %Mydia.Metadata.Structs.MediaMetadata{
+            provider_id: to_string(item.id),
+            provider: :metadata_relay,
+            media_type: :movie,
+            release_date: date
+          }
+
+        existing ->
+          %{existing | release_date: date}
+      end
+
+    item
+    |> Ecto.Changeset.change(metadata: metadata)
+    |> Mydia.Repo.update!()
+  end
+
   describe "avg_timestamp_diff_seconds/2" do
     test "calculates average difference between timestamps" do
       now = DateTime.utc_now()

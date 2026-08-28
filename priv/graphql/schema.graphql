@@ -92,6 +92,9 @@ type RootQueryType {
 
   "Get this server's version and the player versions it supports"
   serverCompatibility: ServerCompatibility
+
+  "Get dated episodes and movies between two dates, both bounds inclusive"
+  calendar(start: Date!, end: Date!): [CalendarEntry!]!
 }
 
 type RootMutationType {
@@ -1423,6 +1426,38 @@ type ServerCompatibility {
   recommendedPlayerVersion: String!
 }
 
+"One dated item on the player's calendar"
+type CalendarEntry {
+  "Episode ID, or media item ID for a movie"
+  id: ID!
+
+  "Episode or movie"
+  kind: CalendarEntryKind!
+
+  "Air date, or release date for a movie"
+  airDate: Date!
+
+  "Episode title, or movie title"
+  title: String!
+
+  "Season number, null for a movie"
+  seasonNumber: Int
+
+  "Episode number, null for a movie"
+  episodeNumber: Int
+
+  "The parent show, or the movie itself"
+  mediaItemId: ID!
+
+  "Show name, or movie title"
+  mediaItemTitle: String!
+
+  artwork: Artwork
+
+  "Playable files for this entry, empty when the library holds nothing"
+  files: [MediaFile!]!
+}
+
 "Media content types"
 enum MediaType {
   "A movie"
@@ -1583,6 +1618,15 @@ enum SegmentType {
 
   "Closing credits"
   CREDITS
+}
+
+"Whether a calendar entry is an episode or a movie"
+enum CalendarEntryKind {
+  "A TV episode, dated by its air date"
+  EPISODE
+
+  "A movie, dated by its release date"
+  MOVIE
 }
 
 """

@@ -289,6 +289,11 @@ defmodule Mydia.Config.Loader do
       System.get_env("PREFER_DEFAULT_AUDIO_TRACK"),
       &parse_boolean/1
     )
+    |> put_if_present(
+      :subtitle_language,
+      System.get_env("SUBTITLE_LANGUAGE"),
+      &parse_string_list/1
+    )
   end
 
   defp load_logging_env do

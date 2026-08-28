@@ -1,8 +1,8 @@
 defmodule MydiaWeb.MediaLive.Show.SubtitleUploadTest do
   # async: false - live/2 below opens a connected LiveView, which shares the
   # Postgres sandbox connection with the test process. That only works in
-  # non-async mode; see subtitles_section_test.exs's "offset control" block
-  # for the same rule applied to the sibling modal.
+  # non-async mode; see subtitle_surface_test.exs for the same rule applied
+  # to the sibling manage-modal tests.
   use MydiaWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
@@ -55,12 +55,13 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleUploadTest do
     ])
   end
 
+  # The panel that used to put an Upload button directly on the page is gone;
+  # the manage modal is now the only path to it. Open that first, then click
+  # its Upload action, rather than the file row's own button (which only
+  # opens the manage modal, not the upload form directly).
   defp open_upload_modal(view, media_file_id) do
-    view
-    |> element(
-      "button[phx-click='open_subtitle_upload'][phx-value-media-file-id='#{media_file_id}']"
-    )
-    |> render_click()
+    render_click(view, "open_subtitle_manage", %{"media-file-id" => media_file_id})
+    view |> element("#subtitle-manage-upload") |> render_click()
   end
 
   test "uploads an SRT and creates an upload-origin track", %{conn: conn} do
@@ -84,11 +85,20 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleUploadTest do
     assert subtitle.format == "srt"
     assert File.exists?(subtitle.file_path)
 
-    # The modal closes and the new track renders on the page immediately,
-    # with no further round trip required. SubtitleComponents.subtitle_track_row/1
-    # labels an upload-origin track "Uploaded".
+    # The upload modal closes and, because it was reached through the manage
+    # modal (open_upload_modal/2 above), returns there rather than closing
+    # outright: return_to_manage is set at open time from whether the manage
+    # modal was already open, and with the standalone panel gone the manage
+    # modal is the only path to Upload. This is the connected, end-to-end
+    # proof that a successful upload surfaces the new track in the manage
+    # modal -- previously impossible to write here because the manage modal
+    # and the old panel rendered the same track with duplicate DOM ids.
+    # SubtitleComponents.subtitle_track_row/1 labels an upload-origin track
+    # "Uploaded".
     refute html =~ "subtitle-upload-form"
     assert html =~ "Uploaded"
+    assert has_element?(view, "#subtitle-manage-modal")
+    assert has_element?(view, "#subtitle-offset-form-#{media_file.id}-#{subtitle.id}")
 
     on_exit(fn -> File.rm(subtitle.file_path) end)
   end

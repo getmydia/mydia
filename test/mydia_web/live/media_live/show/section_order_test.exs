@@ -15,7 +15,7 @@ defmodule MydiaWeb.MediaLive.Show.SectionOrderTest do
   #
   # timeline-section is no longer a member of the main column: it is a sibling
   # aside placed after it, so it always sorts last in document order.
-  @sections "#seasons-episodes-section, #media-files-section, #subtitles-section, " <>
+  @sections "#seasons-episodes-section, #media-files-section, " <>
               "#timeline-section, #franchise-section, #recommendations-rail"
 
   setup %{conn: conn} do
@@ -60,7 +60,6 @@ defmodule MydiaWeb.MediaLive.Show.SectionOrderTest do
     # Events.create_event_async/1 writes synchronously under the SQL sandbox.
     assert section_ids(view) == [
              "media-files-section",
-             "subtitles-section",
              "recommendations-rail",
              "timeline-section"
            ]
@@ -91,9 +90,9 @@ defmodule MydiaWeb.MediaLive.Show.SectionOrderTest do
     {:ok, view, _html} = live(conn, ~p"/media/#{show.id}")
     render_async(view, 5000)
 
-    # No media-files-section or subtitles-section: a show's files hang off its
-    # episodes, so media_item.media_files is always empty here and both cards
-    # guard themselves out.
+    # No media-files-section: a show's files hang off its episodes, so
+    # media_item.media_files is always empty here and the card guards itself
+    # out.
     assert section_ids(view) == [
              "recommendations-rail",
              "seasons-episodes-section",
@@ -143,7 +142,6 @@ defmodule MydiaWeb.MediaLive.Show.SectionOrderTest do
 
     assert section_ids(view) == [
              "media-files-section",
-             "subtitles-section",
              "franchise-section",
              "recommendations-rail",
              "timeline-section"
@@ -180,8 +178,8 @@ defmodule MydiaWeb.MediaLive.Show.SectionOrderTest do
     {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")
     render_async(view, 5000)
 
-    # No media-files-section or subtitles-section: both guard on a non-empty
-    # media_files. No franchise-section: the fixture carries no collection_id.
+    # No media-files-section: it guards on a non-empty media_files. No
+    # franchise-section: the fixture carries no collection_id.
     assert section_ids(view) == [
              "recommendations-rail",
              "timeline-section"

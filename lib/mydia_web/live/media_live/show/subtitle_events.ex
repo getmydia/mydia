@@ -8,6 +8,29 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
 
   require Logger
 
+  def fetch_season_subtitles(%{"season-number" => season_number_str}, socket) do
+    media_item = socket.assigns.media_item
+    season_num = String.to_integer(season_number_str)
+
+    %{mode: "season", media_item_id: media_item.id, season_number: season_num}
+    |> Mydia.Jobs.SubtitleSearch.new()
+    |> Oban.insert()
+
+    Logger.info("Queued season subtitle fetch",
+      media_item_id: media_item.id,
+      season_number: season_num
+    )
+
+    # Backstop only. The job's finish broadcast is what normally clears this;
+    # this covers the job dying without broadcasting.
+    Process.send_after(self(), {:subtitle_season_timeout, season_num}, 300_000)
+
+    {:noreply,
+     socket
+     |> assign(:fetching_season_subtitles, season_num)
+     |> put_flash(:info, "Fetching subtitles for season #{season_num}...")}
+  end
+
   def open_subtitle_search(%{"media-file-id" => media_file_id}, socket) do
     # library_path is what resolves the file's location for the modal header.
     media_file = Mydia.Library.get_media_file!(media_file_id, preload: [:library_path])
@@ -15,20 +38,61 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
     {:noreply,
      socket
      |> assign(:show_subtitle_search_modal, true)
+     |> assign(:show_subtitle_manage_modal, false)
+     |> assign(:return_to_manage, socket.assigns.show_subtitle_manage_modal)
      |> assign(:selected_media_file, media_file)
      |> assign(:subtitle_search_state, :idle)
      |> assign(:subtitle_search_results, [])
      |> assign(:subtitle_providers, [])}
   end
 
+  # Whether this reopens the manage modal or drops back to the bare page
+  # depends on where the search modal was opened from (see :return_to_manage,
+  # set in open_subtitle_search/2). Every current caller opens this modal from
+  # inside the manage modal, but this stays conditional as a defensive
+  # fallback for a child modal opened without the manage modal having been
+  # shown, a path no current caller takes.
   def close_subtitle_search_modal(_params, socket) do
+    socket =
+      socket
+      |> assign(:show_subtitle_search_modal, false)
+      |> assign(:subtitle_search_state, :idle)
+      |> assign(:subtitle_search_results, [])
+      |> assign(:subtitle_providers, [])
+
+    socket =
+      if socket.assigns.return_to_manage do
+        assign(socket, :show_subtitle_manage_modal, true)
+      else
+        socket
+        |> assign(:show_subtitle_manage_modal, false)
+        |> assign(:selected_media_file, nil)
+      end
+
+    {:noreply, socket}
+  end
+
+  def open_subtitle_manage(%{"media-file-id" => media_file_id}, socket) do
+    # library_path is what resolves the file's location for the modal header.
+    media_file = Mydia.Library.get_media_file!(media_file_id, preload: [:library_path])
+
     {:noreply,
      socket
-     |> assign(:show_subtitle_search_modal, false)
+     |> assign(:show_subtitle_manage_modal, true)
+     |> assign(:selected_media_file, media_file)
+     |> assign(
+       :manage_tracks,
+       Map.get(socket.assigns.media_file_subtitle_tracks, media_file_id, [])
+     )}
+  end
+
+  def close_subtitle_manage(_params, socket) do
+    {:noreply,
+     socket
+     |> assign(:show_subtitle_manage_modal, false)
      |> assign(:selected_media_file, nil)
-     |> assign(:subtitle_search_state, :idle)
-     |> assign(:subtitle_search_results, [])
-     |> assign(:subtitle_providers, [])}
+     |> assign(:manage_tracks, [])
+     |> assign(:return_to_manage, false)}
   end
 
   def update_subtitle_languages(%{"languages" => languages}, socket) do
@@ -90,13 +154,24 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
   def delete_subtitle(%{"subtitle-id" => subtitle_id}, socket) do
     case Mydia.Subtitles.delete_subtitle(subtitle_id) do
       :ok ->
-        {:noreply,
-         socket
-         |> assign(
-           :media_file_subtitle_tracks,
-           load_media_file_subtitle_tracks(socket.assigns.media_item)
-         )
-         |> put_flash(:info, "Subtitle deleted successfully")}
+        tracks = load_media_file_subtitle_tracks(socket.assigns.media_item)
+
+        socket =
+          socket
+          |> assign(:media_file_subtitle_tracks, tracks)
+          |> put_flash(:info, "Subtitle deleted successfully")
+
+        # The manage modal renders from :manage_tracks, not
+        # :media_file_subtitle_tracks, so deleting a track from inside it must
+        # also refresh :manage_tracks or the modal keeps showing a track that
+        # no longer exists.
+        socket =
+          case socket.assigns.selected_media_file do
+            nil -> socket
+            media_file -> assign(socket, :manage_tracks, Map.get(tracks, media_file.id, []))
+          end
+
+        {:noreply, socket}
 
       {:error, reason} ->
         Logger.error("Failed to delete subtitle", subtitle_id: subtitle_id, reason: reason)
@@ -192,16 +267,32 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
     {:noreply,
      socket
      |> assign(:show_subtitle_upload_modal, true)
+     |> assign(:show_subtitle_manage_modal, false)
+     |> assign(:return_to_manage, socket.assigns.show_subtitle_manage_modal)
      |> assign(:selected_media_file, media_file)
      |> assign(:subtitle_upload_error, nil)}
   end
 
+  # See close_subtitle_search_modal/2: reopening the manage modal must stay
+  # conditional on :return_to_manage rather than unconditional, as a
+  # defensive fallback for a child modal opened without the manage modal
+  # having been shown, a path no current caller takes.
   def close_subtitle_upload(_params, socket) do
-    {:noreply,
-     socket
-     |> assign(:show_subtitle_upload_modal, false)
-     |> assign(:selected_media_file, nil)
-     |> assign(:subtitle_upload_error, nil)}
+    socket =
+      socket
+      |> assign(:show_subtitle_upload_modal, false)
+      |> assign(:subtitle_upload_error, nil)
+
+    socket =
+      if socket.assigns.return_to_manage do
+        assign(socket, :show_subtitle_manage_modal, true)
+      else
+        socket
+        |> assign(:show_subtitle_manage_modal, false)
+        |> assign(:selected_media_file, nil)
+      end
+
+    {:noreply, socket}
   end
 
   # allow_upload validates on every phx-change automatically (size, count,
@@ -233,23 +324,41 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
     end
   end
 
-  defp finish_upload(socket, media_file, content, language, forced, hearing_impaired) do
+  # Public (not private) so the :return_to_manage branch below - the exact
+  # thing Critical review finding #1 flagged as untested and silently
+  # revertible - can be exercised directly from a socket-level unit test,
+  # the same way handle_download_subtitle_async/2 and
+  # handle_rescan_subtitles_async/2 already are. No behavior change.
+  def finish_upload(socket, media_file, content, language, forced, hearing_impaired) do
     case Mydia.Subtitles.upload_subtitle(media_file, content,
            language: language,
            forced: forced,
            hearing_impaired: hearing_impaired
          ) do
       {:ok, _subtitle} ->
-        {:noreply,
-         socket
-         |> assign(:show_subtitle_upload_modal, false)
-         |> assign(:selected_media_file, nil)
-         |> assign(:subtitle_upload_error, nil)
-         |> assign(
-           :media_file_subtitle_tracks,
-           load_media_file_subtitle_tracks(socket.assigns.media_item)
-         )
-         |> put_flash(:info, "Subtitle uploaded")}
+        tracks = load_media_file_subtitle_tracks(socket.assigns.media_item)
+
+        socket =
+          socket
+          |> assign(:show_subtitle_upload_modal, false)
+          |> assign(:subtitle_upload_error, nil)
+          |> assign(:media_file_subtitle_tracks, tracks)
+          |> put_flash(:info, "Subtitle uploaded")
+
+        # See close_subtitle_upload/2: only reopen the manage modal (and
+        # refresh its track list) when this upload was started from there.
+        socket =
+          if socket.assigns.return_to_manage do
+            socket
+            |> assign(:show_subtitle_manage_modal, true)
+            |> assign(:manage_tracks, Map.get(tracks, media_file.id, []))
+          else
+            socket
+            |> assign(:show_subtitle_manage_modal, false)
+            |> assign(:selected_media_file, nil)
+          end
+
+        {:noreply, socket}
 
       {:error, message} ->
         {:noreply, assign(socket, :subtitle_upload_error, message)}
@@ -259,12 +368,20 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
   defp store_offset(socket, media_file_id, track_ref, offset_ms) do
     case Mydia.Subtitles.TrackSettings.set_offset(media_file_id, track_ref, offset_ms) do
       {:ok, _setting} ->
-        {:noreply,
-         assign(
-           socket,
-           :media_file_subtitle_tracks,
-           load_media_file_subtitle_tracks(socket.assigns.media_item)
-         )}
+        tracks = load_media_file_subtitle_tracks(socket.assigns.media_item)
+
+        socket = assign(socket, :media_file_subtitle_tracks, tracks)
+
+        # The manage modal's offset stepper renders from :manage_tracks, not
+        # :media_file_subtitle_tracks, so adjusting the offset from inside it
+        # must also refresh :manage_tracks or the displayed value goes stale.
+        socket =
+          case socket.assigns.selected_media_file do
+            nil -> socket
+            media_file -> assign(socket, :manage_tracks, Map.get(tracks, media_file.id, []))
+          end
+
+        {:noreply, socket}
 
       {:error, _changeset} ->
         max = Mydia.Subtitles.TrackSetting.max_offset_ms()
@@ -277,16 +394,26 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
   # handle_async dispatches
 
   def handle_rescan_subtitles_async({:ok, {:ok, tally}}, socket) do
-    {:noreply,
-     socket
-     |> assign(
-       :media_file_subtitle_tracks,
-       load_media_file_subtitle_tracks(socket.assigns.media_item)
-     )
-     |> put_flash(
-       :info,
-       "Rescan complete: #{tally.adopted} adopted, #{tally.reaped} removed"
-     )}
+    tracks = load_media_file_subtitle_tracks(socket.assigns.media_item)
+
+    socket =
+      socket
+      |> assign(:media_file_subtitle_tracks, tracks)
+      |> put_flash(
+        :info,
+        "Rescan complete: #{tally.adopted} adopted, #{tally.reaped} removed"
+      )
+
+    # Rescan never toggles the manage modal (it isn't a child modal like
+    # search/upload), so if it's open behind this async result its own track
+    # list would otherwise go stale until closed and reopened.
+    socket =
+      case socket.assigns.selected_media_file do
+        nil -> socket
+        media_file -> assign(socket, :manage_tracks, Map.get(tracks, media_file.id, []))
+      end
+
+    {:noreply, socket}
   end
 
   def handle_rescan_subtitles_async({:ok, {:error, reason}}, socket) do
@@ -331,19 +458,41 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
   def handle_download_subtitle_async({:ok, {:ok, _subtitle}}, socket) do
     Logger.info("Subtitle downloaded successfully")
 
-    {:noreply,
-     socket
-     |> assign(:downloading_subtitle_index, nil)
-     |> assign(:show_subtitle_search_modal, false)
-     |> assign(:selected_media_file, nil)
-     |> assign(:subtitle_search_state, :idle)
-     |> assign(:subtitle_search_results, [])
-     |> assign(:subtitle_providers, [])
-     |> assign(
-       :media_file_subtitle_tracks,
-       load_media_file_subtitle_tracks(socket.assigns.media_item)
-     )
-     |> put_flash(:info, "Subtitle downloaded successfully")}
+    tracks = load_media_file_subtitle_tracks(socket.assigns.media_item)
+
+    socket =
+      socket
+      |> assign(:downloading_subtitle_index, nil)
+      |> assign(:show_subtitle_search_modal, false)
+      |> assign(:subtitle_search_state, :idle)
+      |> assign(:subtitle_search_results, [])
+      |> assign(:subtitle_providers, [])
+      |> assign(:media_file_subtitle_tracks, tracks)
+      |> put_flash(:info, "Subtitle downloaded successfully")
+
+    # selected_media_file can already be nil here: the search modal this
+    # download started from may have been closed and the manage modal it
+    # returned to then closed too (which nils it), all before this async
+    # result lands. media_file_subtitle_tracks is still worth refreshing in
+    # that case; there is just no manage modal left to feed.
+    socket =
+      case socket.assigns.selected_media_file do
+        nil ->
+          socket
+
+        media_file ->
+          if socket.assigns.return_to_manage do
+            socket
+            |> assign(:show_subtitle_manage_modal, true)
+            |> assign(:manage_tracks, Map.get(tracks, media_file.id, []))
+          else
+            socket
+            |> assign(:show_subtitle_manage_modal, false)
+            |> assign(:selected_media_file, nil)
+          end
+      end
+
+    {:noreply, socket}
   end
 
   def handle_download_subtitle_async({:ok, {:error, reason}}, socket) do

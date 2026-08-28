@@ -70,6 +70,7 @@ abstract final class QueryKeys {
   static final QueryKey home = QueryKey('HomeScreen');
   static final QueryKey favorites = QueryKey('Favorites');
   static final QueryKey recentlyAdded = QueryKey('RecentlyAddedFull');
+  static final QueryKey calendar = QueryKey('Calendar');
   static final QueryKey unwatched = QueryKey('Unwatched');
   static final QueryKey collections = QueryKey('Collections');
   static final QueryKey moviesList = QueryKey('MoviesList');

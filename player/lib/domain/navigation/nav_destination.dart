@@ -175,6 +175,14 @@ const List<BuiltinDestination> builtinDestinations = [
     defaultIndex: 130,
   ),
   BuiltinDestination(
+    id: 'calendar',
+    label: 'Calendar',
+    icon: Icons.calendar_month_outlined,
+    selectedIcon: Icons.calendar_month_rounded,
+    route: '/calendar',
+    defaultIndex: 135,
+  ),
+  BuiltinDestination(
     id: 'recently_added',
     label: 'Recently Added',
     icon: Icons.fiber_new_outlined,

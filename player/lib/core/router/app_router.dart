@@ -21,6 +21,7 @@ import '../../presentation/screens/favorites/favorites_screen.dart';
 import '../../presentation/screens/recently_added/recently_added_screen.dart';
 import '../../presentation/screens/unwatched/unwatched_screen.dart';
 import '../../presentation/screens/continue_watching/continue_watching_screen.dart';
+import '../../presentation/screens/calendar/calendar_screen.dart';
 import '../../presentation/screens/collections/collections_screen.dart';
 import '../../presentation/screens/collections/collection_detail_screen.dart';
 import '../../presentation/screens/search/search_screen.dart';
@@ -227,6 +228,11 @@ GoRouter appRouter(Ref ref) {
             path: '/unwatched',
             name: 'unwatched',
             builder: (context, state) => const UnwatchedScreen(),
+          ),
+          GoRoute(
+            path: '/calendar',
+            name: 'calendar',
+            builder: (context, state) => const CalendarScreen(),
           ),
           GoRoute(
             path: '/collections',

@@ -88,4 +88,10 @@ defmodule MydiaWeb.Schema.EnumTypes do
     value(:intro, description: "Opening theme")
     value(:credits, description: "Closing credits")
   end
+
+  @desc "Whether a calendar entry is an episode or a movie"
+  enum :calendar_entry_kind do
+    value(:episode, description: "A TV episode, dated by its air date")
+    value(:movie, description: "A movie, dated by its release date")
+  end
 end
