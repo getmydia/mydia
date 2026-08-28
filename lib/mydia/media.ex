@@ -1584,7 +1584,7 @@ defmodule Mydia.Media do
       has_files:
         type(
           fragment(
-            "CASE WHEN EXISTS(SELECT 1 FROM media_files WHERE episode_id = ?) THEN true ELSE false END",
+            "CASE WHEN EXISTS(SELECT 1 FROM media_files WHERE episode_id = ? AND trashed_at IS NULL) THEN true ELSE false END",
             e.id
           ),
           :boolean
@@ -1647,7 +1647,7 @@ defmodule Mydia.Media do
       has_files:
         type(
           fragment(
-            "CASE WHEN EXISTS(SELECT 1 FROM media_files WHERE media_item_id = ?) THEN true ELSE false END",
+            "CASE WHEN EXISTS(SELECT 1 FROM media_files WHERE media_item_id = ? AND trashed_at IS NULL) THEN true ELSE false END",
             m.id
           ),
           :boolean

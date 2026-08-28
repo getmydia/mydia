@@ -1395,6 +1395,31 @@ defmodule Mydia.MediaTest do
       assert entry.has_files == true
       assert entry.has_downloads == false
     end
+
+    test "has_files is false when the movie's only file is trashed" do
+      movie =
+        media_item_fixture(%{
+          type: "movie",
+          title: "Movie With Trashed File",
+          year: 2025,
+          metadata: %{
+            provider_id: "7",
+            provider: :metadata_relay,
+            media_type: :movie,
+            release_date: ~D[2025-06-15]
+          }
+        })
+
+      media_file_fixture(
+        media_item_id: movie.id,
+        trashed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+      )
+
+      entries = Media.list_movies_by_release_date(~D[2025-06-01], ~D[2025-06-30])
+
+      assert [%CalendarEntry{} = entry] = entries
+      assert entry.has_files == false
+    end
   end
 
   describe "list_movies_by_release_date/3 filtering" do
@@ -1564,6 +1589,28 @@ defmodule Mydia.MediaTest do
       assert first.has_files == true
       assert second.has_files == false
       assert first.has_downloads == false
+    end
+
+    test "has_files is false when the episode's only file is trashed" do
+      show = media_item_fixture(%{type: "tv_show", title: "Trashed File Show"})
+
+      episode =
+        episode_fixture(%{
+          media_item_id: show.id,
+          season_number: 1,
+          episode_number: 1,
+          air_date: ~D[2026-08-10]
+        })
+
+      media_file_fixture(
+        episode_id: episode.id,
+        trashed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+      )
+
+      [entry] =
+        Mydia.Media.list_episodes_by_air_date(~D[2026-08-01], ~D[2026-08-31], monitored: nil)
+
+      assert entry.has_files == false
     end
   end
 

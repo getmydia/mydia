@@ -67,6 +67,26 @@ defmodule MydiaWeb.Schema.CalendarTest do
     assert entry["files"] == []
   end
 
+  test "an entry whose only file is trashed comes back with an empty files list", ctx do
+    show = MediaFixtures.media_item_fixture(%{type: "tv_show", title: "Trashed Only"})
+
+    episode =
+      MediaFixtures.episode_fixture(%{
+        media_item_id: show.id,
+        season_number: 1,
+        episode_number: 1,
+        air_date: ~D[2026-08-10]
+      })
+
+    MediaFixtures.media_file_fixture(%{
+      episode_id: episode.id,
+      trashed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+    })
+
+    assert {:ok, %{data: %{"calendar" => [entry]}}} = run_query(@query, @vars, ctx.user)
+    assert entry["files"] == []
+  end
+
   test "excludes entries outside the window, bounds included", ctx do
     show = MediaFixtures.media_item_fixture(%{type: "tv_show", title: "Edges"})
 

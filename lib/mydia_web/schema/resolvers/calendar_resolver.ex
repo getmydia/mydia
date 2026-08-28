@@ -75,12 +75,14 @@ defmodule MydiaWeb.Schema.Resolvers.CalendarResolver do
   defp load_files_by(_key_field, []), do: %{}
 
   defp load_files_by(:episode_id, episode_ids) do
-    Repo.all(from f in MediaFile, where: f.episode_id in ^episode_ids)
+    Repo.all(from f in MediaFile, where: f.episode_id in ^episode_ids and is_nil(f.trashed_at))
     |> Enum.group_by(& &1.episode_id)
   end
 
   defp load_files_by(:media_item_id, media_item_ids) do
-    Repo.all(from f in MediaFile, where: f.media_item_id in ^media_item_ids)
+    Repo.all(
+      from f in MediaFile, where: f.media_item_id in ^media_item_ids and is_nil(f.trashed_at)
+    )
     |> Enum.group_by(& &1.media_item_id)
   end
 end
