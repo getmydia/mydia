@@ -3,13 +3,13 @@
 //! Types owned by this module (keep in sync with tests/types_remaining.rs):
 //! ContinueWatchingItem, RemoveFromContinueWatchingResult, RecentlyAddedItem,
 //! UpNextItem, Collection, SearchResult, SearchSection, SearchResults,
-//! RemoteAccessStatus, ServerCompatibility.
+//! RemoteAccessStatus, ServerCompatibility, CalendarEntry, CalendarEntryKind.
 
-use async_graphql::{SimpleObject, ID};
+use async_graphql::{Enum, SimpleObject, ID};
 
 use crate::types::{
     common::{MediaType, SearchResultType},
-    media::{Artwork, Episode, MediaFile, Progress, RecentlyAddedItem, TvShow},
+    media::{Artwork, Date, Episode, MediaFile, Progress, RecentlyAddedItem, TvShow},
 };
 
 #[derive(SimpleObject)]
@@ -104,6 +104,39 @@ pub struct ServerCompatibility {
     pub recommended_player_version: String,
 }
 
+/// Whether a calendar entry is an episode or a movie
+#[derive(Enum, Copy, Clone, Eq, PartialEq)]
+pub enum CalendarEntryKind {
+    /// A TV episode, dated by its air date
+    Episode,
+    /// A movie, dated by its release date
+    Movie,
+}
+
+/// One dated item on the player's calendar
+#[derive(SimpleObject)]
+pub struct CalendarEntry {
+    /// Episode ID, or media item ID for a movie
+    pub id: ID,
+    /// Episode or movie
+    pub kind: CalendarEntryKind,
+    /// Air date, or release date for a movie
+    pub air_date: Date,
+    /// Episode title, or movie title
+    pub title: String,
+    /// Season number, null for a movie
+    pub season_number: Option<i32>,
+    /// Episode number, null for a movie
+    pub episode_number: Option<i32>,
+    /// The parent show, or the movie itself
+    pub media_item_id: ID,
+    /// Show name, or movie title
+    pub media_item_title: String,
+    pub artwork: Option<Artwork>,
+    /// Playable files for this entry, empty when the library holds nothing
+    pub files: Vec<MediaFile>,
+}
+
 /// Renders just this group's types as SDL.
 pub fn sdl_fragment() -> String {
     use async_graphql::{EmptyMutation, EmptySubscription, Object, Schema};
@@ -145,6 +178,10 @@ pub fn sdl_fragment() -> String {
         }
 
         async fn server_compatibility(&self) -> ServerCompatibility {
+            std::future::pending().await
+        }
+
+        async fn calendar_entry(&self) -> CalendarEntry {
             std::future::pending().await
         }
     }

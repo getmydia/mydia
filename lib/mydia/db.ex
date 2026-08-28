@@ -245,6 +245,53 @@ defmodule Mydia.DB do
   end
 
   @doc """
+  Runtime-switchable JSON date range check, both bounds inclusive.
+
+  Dates are stored through `Jason.encode!` as ISO-8601 strings, which sort
+  lexicographically, so a string comparison answers a date range correctly on
+  both adapters without any date parsing in SQL.
+
+  ## Parameters
+
+  - `field_atom` - The field name as an atom (e.g. `:metadata`)
+  - `path` - The JSON path string using SQLite `$.key` syntax
+  - `start_date` - Earliest date to match, inclusive
+  - `end_date` - Latest date to match, inclusive
+
+  ## Examples
+
+      from m in MediaItem,
+        where: ^Mydia.DB.json_date_between(:metadata, "$.release_date", ~D[2026-08-01], ~D[2026-08-31])
+
+  ## Database-specific behavior
+
+  - **SQLite**: `json_extract(field, path) BETWEEN ? AND ?`
+  - **PostgreSQL**: `field ->> 'key' BETWEEN ? AND ?`
+  """
+  @spec json_date_between(atom(), String.t(), Date.t(), Date.t()) :: Ecto.Query.dynamic_expr()
+  def json_date_between(field_atom, path, %Date{} = start_date, %Date{} = end_date)
+      when is_atom(field_atom) and is_binary(path) do
+    start_string = Date.to_iso8601(start_date)
+    end_string = Date.to_iso8601(end_date)
+
+    if postgres?() do
+      pg_key = sqlite_path_to_postgres_key(path)
+
+      dynamic(
+        [q],
+        fragment("?::jsonb ->> ?", field(q, ^field_atom), ^pg_key) >= ^start_string and
+          fragment("?::jsonb ->> ?", field(q, ^field_atom), ^pg_key) <= ^end_string
+      )
+    else
+      dynamic(
+        [q],
+        fragment("json_extract(?, ?)", field(q, ^field_atom), ^path) >= ^start_string and
+          fragment("json_extract(?, ?)", field(q, ^field_atom), ^path) <= ^end_string
+      )
+    end
+  end
+
+  @doc """
   Runtime-switchable JSON null check.
 
   Returns a dynamic expression that checks if a JSON field has a null value

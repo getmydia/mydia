@@ -14,11 +14,11 @@ use crate::types::common::{
     MediaCategory, MediaType, Node, PageInfo, SearchResultType, SortInput, SubtitleFormat,
 };
 use crate::types::discovery::{
-    Collection, ContinueWatchingItem, RemoteAccessStatus, SearchResults, ServerCompatibility,
-    UpNextItem,
+    CalendarEntry, Collection, ContinueWatchingItem, RemoteAccessStatus, SearchResults,
+    ServerCompatibility, UpNextItem,
 };
 use crate::types::media::{
-    Episode, LibraryPath, Movie, MovieConnection, MovieEdge, RecentlyAddedItem,
+    Date, Episode, LibraryPath, Movie, MovieConnection, MovieEdge, RecentlyAddedItem,
     SubtitleProviderStatus, SubtitleSearchPayload, SubtitleTrackSetting, TvShow, TvShowConnection,
     TvShowEdge,
 };
@@ -358,6 +358,20 @@ impl RootQueryType {
         _types: Option<Vec<Option<MediaType>>>,
     ) -> Result<Option<Vec<Option<RecentlyAddedItem>>>> {
         Ok(None)
+    }
+
+    /// Get dated episodes and movies between two dates, both bounds inclusive
+    ///
+    /// Schema-only stub for SDL parity with the Elixir server. The real
+    /// implementation lives in
+    /// `lib/mydia_web/schema/resolvers/calendar_resolver.ex`.
+    async fn calendar(
+        &self,
+        _ctx: &Context<'_>,
+        _start: Date,
+        _end: Date,
+    ) -> Result<Vec<CalendarEntry>> {
+        Ok(vec![])
     }
 
     /// Get next episodes to watch across all TV shows

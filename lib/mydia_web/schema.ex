@@ -36,6 +36,7 @@ defmodule MydiaWeb.Schema do
     import_fields(:collection_queries)
     import_fields(:subtitle_queries)
     import_fields(:server_queries)
+    import_fields(:calendar_queries)
   end
 
   mutation do
