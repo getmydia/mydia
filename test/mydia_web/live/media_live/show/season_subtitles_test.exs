@@ -93,6 +93,12 @@ defmodule MydiaWeb.MediaLive.Show.SeasonSubtitlesTest do
     {:ok, view, _html} =
       ctx.conn |> log_in_user(ctx.user) |> live(~p"/media/#{ctx.show.id}")
 
+    view |> element("#season-2-subtitles") |> render_click()
+
+    # Confirm the fetch is actually in flight, not just assumed to be, before
+    # asserting anything about behavior "while the season fetch is running".
+    assert has_element?(view, "#season-2-subtitles .loading")
+
     render_click(view, "open_subtitle_manage", %{"media-file-id" => ctx.media_file.id})
 
     assert has_element?(view, "#subtitle-manage-modal")
