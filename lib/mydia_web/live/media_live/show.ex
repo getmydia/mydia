@@ -695,12 +695,21 @@ defmodule MydiaWeb.MediaLive.Show do
   end
 
   def handle_info({:subtitles_updated, _media_file_id}, socket) do
-    {:noreply,
-     assign(
-       socket,
-       :media_file_subtitle_tracks,
-       load_media_file_subtitle_tracks(socket.assigns.media_item)
-     )}
+    tracks = load_media_file_subtitle_tracks(socket.assigns.media_item)
+
+    socket = assign(socket, :media_file_subtitle_tracks, tracks)
+
+    # The manage modal renders from :manage_tracks, not
+    # :media_file_subtitle_tracks, so a season fetch finishing while the
+    # modal is open must also refresh :manage_tracks or newly downloaded
+    # tracks never appear in it. Same pattern as rescan, delete, and offset.
+    socket =
+      case socket.assigns.selected_media_file do
+        nil -> socket
+        media_file -> assign(socket, :manage_tracks, Map.get(tracks, media_file.id, []))
+      end
+
+    {:noreply, socket}
   end
 
   def handle_info({:subtitle_season_finished, media_item_id, season_number}, socket) do

@@ -7,6 +7,9 @@ defmodule MydiaWeb.MediaLive.Show.SeasonSubtitlesTest do
   import Mydia.AccountsFixtures
   import Mydia.MediaFixtures
 
+  alias Mydia.Repo
+  alias Mydia.Subtitles.Subtitle
+
   setup %{conn: conn} do
     # The app skips Oban in test (engine: false), so Oban.insert cannot be
     # resolved from the LiveView process. Start an isolated, manual-mode
@@ -79,5 +82,37 @@ defmodule MydiaWeb.MediaLive.Show.SeasonSubtitlesTest do
     send(view.pid, {:subtitle_season_finished, ctx.show.id, 1})
 
     assert has_element?(view, "#season-2-subtitles .loading")
+  end
+
+  test "a per-file update while the season fetch is running refreshes the open manage modal",
+       ctx do
+    # Mydia.Jobs.SubtitleSearch broadcasts :subtitles_updated once per file as
+    # it works through the season, well before the season-level :finished
+    # broadcast. If the manage modal for that file is already open, it must
+    # pick up the new track without waiting for the whole season to finish.
+    {:ok, view, _html} =
+      ctx.conn |> log_in_user(ctx.user) |> live(~p"/media/#{ctx.show.id}")
+
+    render_click(view, "open_subtitle_manage", %{"media-file-id" => ctx.media_file.id})
+
+    assert has_element?(view, "#subtitle-manage-modal")
+    refute render(view) =~ "subtitle-offset-form-#{ctx.media_file.id}"
+
+    {:ok, subtitle} =
+      %Subtitle{}
+      |> Subtitle.changeset(%{
+        media_file_id: ctx.media_file.id,
+        language: "en",
+        provider: "opensubtitles",
+        origin: "provider",
+        subtitle_hash: "season-fetch-hash",
+        file_path: "/tmp/season-fetch-hash.srt",
+        format: "srt"
+      })
+      |> Repo.insert()
+
+    send(view.pid, {:subtitles_updated, ctx.media_file.id})
+
+    assert has_element?(view, "#subtitle-offset-form-#{ctx.media_file.id}-#{subtitle.id}")
   end
 end
