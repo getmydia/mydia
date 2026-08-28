@@ -483,10 +483,15 @@ defmodule Mydia.Config.Schema do
   # falls through to the container's default flag, which is the behaviour
   # every mydia before this field had.
   #
-  # Blank entries are rejected rather than dropped. Not reachable from
-  # AUDIO_LANGUAGE, whose parser already strips them, but very much reachable
-  # from a YAML list or a DB/UI value, where a stray empty string would
-  # otherwise become a preference that silently matches nothing.
+  # The blank-entry branch below is currently unreachable through this
+  # pipeline: cast/3's default empty_values ([""]) silently drops blank
+  # entries from array fields before this ever runs, for the same reason
+  # subtitle_language needed a second, scoped cast/3 call with empty_values
+  # disabled (see streaming_changeset/2 above). AUDIO_LANGUAGE's own parser
+  # also strips blanks, so no path reaches this branch today. audio_language
+  # therefore has the same latent gap as subtitle_language would have had;
+  # fixing it (a second scoped cast, like subtitle_language's) is deliberately
+  # left out of scope for this change.
   defp validate_audio_language(changeset) do
     case get_field(changeset, :audio_language) do
       nil ->
