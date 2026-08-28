@@ -401,6 +401,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :expanded_chunks, :any, default: MapSet.new()
   attr :auto_searching_season, :any, default: nil
   attr :rescanning_season, :any, default: nil
+  attr :fetching_season_subtitles, :any, default: nil
   attr :auto_searching_episode, :any, default: nil
   attr :playback_enabled, :boolean, required: true
   attr :transcode_jobs, :map, default: %{}
@@ -508,6 +509,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
               expanded_chunks={@expanded_chunks}
               auto_searching_season={@auto_searching_season}
               rescanning_season={@rescanning_season}
+              fetching_season_subtitles={@fetching_season_subtitles}
               auto_searching_episode={@auto_searching_episode}
               playback_enabled={@playback_enabled}
               transcode_jobs={@transcode_jobs}

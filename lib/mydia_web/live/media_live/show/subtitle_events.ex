@@ -8,6 +8,29 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
 
   require Logger
 
+  def fetch_season_subtitles(%{"season-number" => season_number_str}, socket) do
+    media_item = socket.assigns.media_item
+    season_num = String.to_integer(season_number_str)
+
+    %{mode: "season", media_item_id: media_item.id, season_number: season_num}
+    |> Mydia.Jobs.SubtitleSearch.new()
+    |> Oban.insert()
+
+    Logger.info("Queued season subtitle fetch",
+      media_item_id: media_item.id,
+      season_number: season_num
+    )
+
+    # Backstop only. The job's finish broadcast is what normally clears this;
+    # this covers the job dying without broadcasting.
+    Process.send_after(self(), {:subtitle_season_timeout, season_num}, 300_000)
+
+    {:noreply,
+     socket
+     |> assign(:fetching_season_subtitles, season_num)
+     |> put_flash(:info, "Fetching subtitles for season #{season_num}...")}
+  end
+
   def open_subtitle_search(%{"media-file-id" => media_file_id}, socket) do
     # library_path is what resolves the file's location for the modal header.
     media_file = Mydia.Library.get_media_file!(media_file_id, preload: [:library_path])

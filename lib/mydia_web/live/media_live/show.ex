@@ -37,6 +37,7 @@ defmodule MydiaWeb.MediaLive.Show do
       Phoenix.PubSub.subscribe(Mydia.PubSub, "downloads")
       Phoenix.PubSub.subscribe(Mydia.PubSub, "events:all")
       Phoenix.PubSub.subscribe(Mydia.PubSub, "transcodes")
+      Phoenix.PubSub.subscribe(Mydia.PubSub, "subtitles")
     end
 
     media_item = load_media_item(id)
@@ -116,6 +117,7 @@ defmodule MydiaWeb.MediaLive.Show do
      # File metadata refresh state
      |> assign(:refreshing_file_metadata, false)
      |> assign(:rescanning_season, nil)
+     |> assign(:fetching_season_subtitles, nil)
      # File rename modal state
      |> assign(:show_rename_modal, false)
      |> assign(:rename_previews, [])
@@ -450,6 +452,9 @@ defmodule MydiaWeb.MediaLive.Show do
   def handle_event("close_subtitle_manage", params, socket),
     do: SubtitleEvents.close_subtitle_manage(params, socket)
 
+  def handle_event("fetch_season_subtitles", params, socket),
+    do: SubtitleEvents.fetch_season_subtitles(params, socket)
+
   # Category, trailer, and quality profile events
 
   def handle_event("show_category_modal", params, socket),
@@ -687,6 +692,37 @@ defmodule MydiaWeb.MediaLive.Show do
     media_item = socket.assigns.media_item
 
     {:noreply, assign(socket, :transcode_jobs, load_transcode_jobs(media_item))}
+  end
+
+  def handle_info({:subtitles_updated, _media_file_id}, socket) do
+    {:noreply,
+     assign(
+       socket,
+       :media_file_subtitle_tracks,
+       load_media_file_subtitle_tracks(socket.assigns.media_item)
+     )}
+  end
+
+  def handle_info({:subtitle_season_finished, media_item_id, _season_number}, socket) do
+    if media_item_id == socket.assigns.media_item.id do
+      {:noreply,
+       socket
+       |> assign(:fetching_season_subtitles, nil)
+       |> assign(
+         :media_file_subtitle_tracks,
+         load_media_file_subtitle_tracks(socket.assigns.media_item)
+       )}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_info({:subtitle_season_timeout, season_num}, socket) do
+    if socket.assigns.fetching_season_subtitles == season_num do
+      {:noreply, assign(socket, :fetching_season_subtitles, nil)}
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_info({:grab_completed, payload}, socket),

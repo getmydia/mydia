@@ -162,7 +162,7 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeRowTest do
     test "every header action carries a stable DOM id" do
       html = render_header()
 
-      for id <- ~w(auto-search manual-search rescan monitor-toggle) do
+      for id <- ~w(auto-search manual-search rescan monitor-toggle subtitles) do
         assert has_selector?(html, "#season-2-#{id}"), "expected #season-2-#{id} to render"
       end
     end
@@ -170,7 +170,7 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeRowTest do
     test "the header actions sit in one join group" do
       html = render_header()
 
-      assert html |> query(".join > .join-item") |> Enum.count() == 4
+      assert html |> query(".join > .join-item") |> Enum.count() == 5
     end
 
     test "the season auto search keeps a text label, unlike the row-level bolt" do
