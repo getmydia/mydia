@@ -177,6 +177,15 @@ defmodule Mydia.Config.Schema do
       # ("Play default audio track regardless of language") for the same
       # reason.
       field :prefer_default_audio_track, :boolean, default: false
+
+      # Which subtitle languages to acquire, most preferred first. Read by the
+      # season bulk fetch to decide what a file is missing, and by the search
+      # modal to seed its language chips.
+      #
+      # Unlike audio_language this takes no "original" sentinel. It names
+      # languages to go and get, and resolving "original" per item would make
+      # a bulk run's target set depend on metadata that may be absent.
+      field :subtitle_language, {:array, :string}, default: ["en"]
     end
 
     embeds_one :logging, Logging, on_replace: :update, primary_key: false do
@@ -455,11 +464,19 @@ defmodule Mydia.Config.Schema do
   defp streaming_changeset(schema, attrs) do
     schema
     |> cast(attrs, [:max_transcode_height, :audio_language, :prefer_default_audio_track])
+    # cast/3's default empty_values ([""]) silently drops blank entries from
+    # array fields before validate_subtitle_language/1 ever sees them, which
+    # is also why validate_audio_language/1's blank-entry branch below is
+    # unreachable through this pipeline. Cast subtitle_language on its own
+    # with empty_values disabled so a stray "" survives to be rejected
+    # in the below check rather than being silently dropped.
+    |> cast(attrs, [:subtitle_language], empty_values: [])
     # Not validate_required: nil is the default and means "no ceiling". A
     # zero or negative ceiling would scale every transcode to nothing, so it
     # is rejected here rather than discovered as a dead encoder later.
     |> validate_number(:max_transcode_height, greater_than: 0)
     |> validate_audio_language()
+    |> validate_subtitle_language()
   end
 
   # An empty list is allowed and means "no language preference": selection
@@ -484,6 +501,25 @@ defmodule Mydia.Config.Schema do
 
       _ ->
         add_error(changeset, :audio_language, "must be a list of language codes")
+    end
+  end
+
+  # Same shape as validate_audio_language/1 above, for the language list a
+  # bulk subtitle fetch targets rather than the one playback selects among.
+  defp validate_subtitle_language(changeset) do
+    case get_field(changeset, :subtitle_language) do
+      nil ->
+        changeset
+
+      codes when is_list(codes) ->
+        if Enum.all?(codes, &(is_binary(&1) and String.trim(&1) != "")) do
+          changeset
+        else
+          add_error(changeset, :subtitle_language, "must contain only non-empty language codes")
+        end
+
+      _ ->
+        add_error(changeset, :subtitle_language, "must be a list of language codes")
     end
   end
 

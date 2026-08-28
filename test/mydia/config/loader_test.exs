@@ -736,6 +736,15 @@ defmodule Mydia.Config.LoaderTest do
       assert config.streaming.max_transcode_height == nil
     end
 
+    test "SUBTITLE_LANGUAGE parses as a comma-separated list" do
+      System.put_env("SUBTITLE_LANGUAGE", "en,es,pt")
+      on_exit(fn -> System.delete_env("SUBTITLE_LANGUAGE") end)
+
+      {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+
+      assert config.streaming.subtitle_language == ["en", "es", "pt"]
+    end
+
     test "the automatic-search seeder floor is reachable from every layer" do
       # Like the transcode ceiling above, this shipped as a bare compile-time
       # key (config :mydia, :auto_search, min_seeders: ...) that no operator
