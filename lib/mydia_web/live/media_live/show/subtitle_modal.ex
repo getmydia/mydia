@@ -11,7 +11,69 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
   import MydiaWeb.MediaLive.Show.ScoreBreakdown
 
   alias Mydia.Library.MediaFile
+  alias MydiaWeb.MediaLive.Show.SubtitleComponents
   alias Phoenix.LiveView.JS
+
+  @doc """
+  Everything about one media file's subtitles, in one place.
+
+  This replaces the per-file card the Subtitles panel used to render. The panel
+  put the track controls beside a filename in a page-width list, which could not
+  fit a phone; here each track gets the full width of a bottom sheet.
+
+  One scrolling column rather than tabs: what the file has is on top, what can be
+  added to it is underneath, and there is no navigation to learn for a modal most
+  people open to do one thing and close.
+  """
+  attr :media_file, :map, required: true
+  attr :tracks, :list, required: true
+
+  def subtitle_manage_modal(assigns) do
+    ~H"""
+    <div class="modal modal-bottom sm:modal-middle modal-open" id="subtitle-manage-modal">
+      <div class="modal-box max-w-none sm:max-w-2xl max-h-[92dvh] sm:max-h-[85vh] flex flex-col overflow-hidden p-0">
+        <div class="bg-base-100 border-b border-base-300 p-4 sm:p-6">
+          <div class="flex items-start justify-between gap-4">
+            <div class="min-w-0">
+              <h3 class="text-xl sm:text-2xl font-bold">Subtitles</h3>
+              <p
+                class="text-sm text-base-content/70 truncate mt-1"
+                title={MediaFile.display_path(@media_file)}
+              >
+                {MediaFile.display_name(@media_file)}
+              </p>
+            </div>
+            <button
+              type="button"
+              phx-click="close_subtitle_manage"
+              class="btn btn-ghost btn-sm btn-circle shrink-0"
+              aria-label="Close"
+            >
+              <.icon name="hero-x-mark" class="w-6 h-6" />
+            </button>
+          </div>
+        </div>
+
+        <div id="subtitle-manage-body" class="flex-1 overflow-y-auto p-4 sm:p-6">
+          <%= if @tracks == [] do %>
+            <p class="text-sm text-base-content/60 italic">
+              No subtitle tracks for this file yet.
+            </p>
+          <% else %>
+            <div>
+              <SubtitleComponents.subtitle_track_row
+                :for={track <- @tracks}
+                track={track}
+                media_file_id={@media_file.id}
+              />
+            </div>
+          <% end %>
+        </div>
+      </div>
+      <div class="modal-backdrop" phx-click="close_subtitle_manage"></div>
+    </div>
+    """
+  end
 
   @doc """
   Subtitle search modal for searching and downloading subtitles.

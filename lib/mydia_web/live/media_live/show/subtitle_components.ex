@@ -108,8 +108,8 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleComponents do
 
   def subtitle_track_row(assigns) do
     ~H"""
-    <div class="flex items-center justify-between gap-2 py-2 border-b border-base-300 last:border-0">
-      <div class="flex items-center gap-2 min-w-0">
+    <div class="flex flex-col gap-2 py-2 border-b border-base-300 last:border-0 sm:flex-row sm:items-center sm:justify-between">
+      <div class="flex flex-wrap items-center gap-2 min-w-0">
         <span class="badge badge-outline badge-sm">{@track.language}</span>
         <span class="text-sm truncate">{@track.title}</span>
         <span class="text-xs opacity-60 uppercase">{@track.format}</span>
@@ -118,7 +118,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleComponents do
         </span>
       </div>
 
-      <div class="flex items-center gap-1 shrink-0">
+      <div class="flex flex-wrap items-center gap-1 sm:shrink-0">
         <form
           id={"subtitle-offset-form-#{@media_file_id}-#{@track.track_id}"}
           phx-change="set_subtitle_offset"

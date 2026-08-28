@@ -31,6 +31,28 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
      |> assign(:subtitle_providers, [])}
   end
 
+  def open_subtitle_manage(%{"media-file-id" => media_file_id}, socket) do
+    # library_path is what resolves the file's location for the modal header.
+    media_file = Mydia.Library.get_media_file!(media_file_id, preload: [:library_path])
+
+    {:noreply,
+     socket
+     |> assign(:show_subtitle_manage_modal, true)
+     |> assign(:selected_media_file, media_file)
+     |> assign(
+       :manage_tracks,
+       Map.get(socket.assigns.media_file_subtitle_tracks, media_file_id, [])
+     )}
+  end
+
+  def close_subtitle_manage(_params, socket) do
+    {:noreply,
+     socket
+     |> assign(:show_subtitle_manage_modal, false)
+     |> assign(:selected_media_file, nil)
+     |> assign(:manage_tracks, [])}
+  end
+
   def update_subtitle_languages(%{"languages" => languages}, socket) do
     {:noreply, assign(socket, :selected_languages, languages)}
   end

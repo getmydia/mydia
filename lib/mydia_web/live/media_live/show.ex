@@ -129,6 +129,8 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:next_episode_state, next_episode_state)
      # Subtitle state
      |> assign(:show_subtitle_search_modal, false)
+     |> assign(:show_subtitle_manage_modal, false)
+     |> assign(:manage_tracks, [])
      |> assign(:subtitle_search_state, :idle)
      |> assign(:downloading_subtitle_index, nil)
      |> assign(:subtitle_search_results, [])
@@ -434,11 +436,11 @@ defmodule MydiaWeb.MediaLive.Show do
   def handle_event("save_subtitle_upload", params, socket),
     do: SubtitleEvents.save_subtitle_upload(params, socket)
 
-  # Replaced in full when the manage modal lands. Until then this keeps the
-  # row button from raising on click.
-  def handle_event("open_subtitle_manage", %{"media-file-id" => media_file_id}, socket) do
-    {:noreply, assign(socket, :selected_media_file, Mydia.Library.get_media_file!(media_file_id))}
-  end
+  def handle_event("open_subtitle_manage", params, socket),
+    do: SubtitleEvents.open_subtitle_manage(params, socket)
+
+  def handle_event("close_subtitle_manage", params, socket),
+    do: SubtitleEvents.close_subtitle_manage(params, socket)
 
   # Category, trailer, and quality profile events
 

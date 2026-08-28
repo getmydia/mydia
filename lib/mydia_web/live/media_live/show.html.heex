@@ -364,6 +364,12 @@
       error={@subtitle_upload_error}
     />
   <% end %>
+  <%= if @show_subtitle_manage_modal && @selected_media_file do %>
+    <SubtitleModal.subtitle_manage_modal
+      media_file={@selected_media_file}
+      tracks={@manage_tracks}
+    />
+  <% end %>
   <%= if @show_category_modal && @category_form do %>
     <Modals.category_override_modal
       media_item={@media_item}
