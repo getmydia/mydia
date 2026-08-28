@@ -272,6 +272,101 @@ defmodule MydiaWeb.MediaLive.Show.SubtitlesSectionTest do
     end
   end
 
+  describe "manage modal handoff" do
+    setup %{conn: conn} do
+      admin = admin_user_fixture()
+      %{conn: log_in_user(conn, admin)}
+    end
+
+    defp movie_with_file do
+      media_item = media_item_fixture(%{type: "movie"})
+      media_file = media_file_fixture(%{media_item_id: media_item.id})
+      {media_item, media_file}
+    end
+
+    test "opening the search modal from the manage modal closes the manage modal", %{
+      conn: conn
+    } do
+      {media_item, media_file} = movie_with_file()
+      {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+
+      render_click(view, "open_subtitle_manage", %{"media-file-id" => media_file.id})
+      assert has_element?(view, "#subtitle-manage-modal")
+
+      render_click(view, "open_subtitle_search", %{"media-file-id" => media_file.id})
+
+      refute has_element?(view, "#subtitle-manage-modal")
+      assert has_element?(view, "#subtitle-search-modal")
+    end
+
+    test "opening the upload modal from the manage modal closes the manage modal", %{
+      conn: conn
+    } do
+      {media_item, media_file} = movie_with_file()
+      {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+
+      render_click(view, "open_subtitle_manage", %{"media-file-id" => media_file.id})
+      render_click(view, "open_subtitle_upload", %{"media-file-id" => media_file.id})
+
+      refute has_element?(view, "#subtitle-manage-modal")
+      assert has_element?(view, "#subtitle-upload-modal")
+    end
+
+    test "closing the search modal opened from manage returns to the manage modal", %{
+      conn: conn
+    } do
+      {media_item, media_file} = movie_with_file()
+      {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+
+      render_click(view, "open_subtitle_manage", %{"media-file-id" => media_file.id})
+      render_click(view, "open_subtitle_search", %{"media-file-id" => media_file.id})
+
+      render_click(view, "close_subtitle_search_modal", %{})
+
+      assert has_element?(view, "#subtitle-manage-modal")
+      refute has_element?(view, "#subtitle-search-modal")
+    end
+
+    test "closing the upload modal opened from manage returns to the manage modal", %{
+      conn: conn
+    } do
+      {media_item, media_file} = movie_with_file()
+      {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+
+      render_click(view, "open_subtitle_manage", %{"media-file-id" => media_file.id})
+      render_click(view, "open_subtitle_upload", %{"media-file-id" => media_file.id})
+
+      render_click(view, "close_subtitle_upload", %{})
+
+      assert has_element?(view, "#subtitle-manage-modal")
+      refute has_element?(view, "#subtitle-upload-modal")
+    end
+
+    test "closing a search modal opened directly (not from manage) does not summon the manage modal",
+         %{conn: conn} do
+      {media_item, media_file} = movie_with_file()
+      {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+
+      render_click(view, "open_subtitle_search", %{"media-file-id" => media_file.id})
+      render_click(view, "close_subtitle_search_modal", %{})
+
+      refute has_element?(view, "#subtitle-manage-modal")
+      refute has_element?(view, "#subtitle-search-modal")
+    end
+
+    test "closing an upload modal opened directly (not from manage) does not summon the manage modal",
+         %{conn: conn} do
+      {media_item, media_file} = movie_with_file()
+      {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+
+      render_click(view, "open_subtitle_upload", %{"media-file-id" => media_file.id})
+      render_click(view, "close_subtitle_upload", %{})
+
+      refute has_element?(view, "#subtitle-manage-modal")
+      refute has_element?(view, "#subtitle-upload-modal")
+    end
+  end
+
   describe "embedded tracks" do
     setup %{conn: conn} do
       admin = admin_user_fixture()

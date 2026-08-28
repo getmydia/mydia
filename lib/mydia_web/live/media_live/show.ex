@@ -131,6 +131,11 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:show_subtitle_search_modal, false)
      |> assign(:show_subtitle_manage_modal, false)
      |> assign(:manage_tracks, [])
+     # Whether a child modal (search/upload) was opened from within the
+     # manage modal, so closing it (or a successful action) returns there
+     # instead of dropping to the bare page. Only true while a child modal
+     # opened from the manage modal is in flight.
+     |> assign(:return_to_manage, false)
      |> assign(:subtitle_search_state, :idle)
      |> assign(:downloading_subtitle_index, nil)
      |> assign(:subtitle_search_results, [])

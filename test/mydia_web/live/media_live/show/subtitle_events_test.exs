@@ -1,6 +1,8 @@
 defmodule MydiaWeb.MediaLive.Show.SubtitleEventsTest do
   use MydiaWeb.ConnCase, async: true
 
+  import Mydia.MediaFixtures
+
   alias MydiaWeb.MediaLive.Show.SubtitleEvents
 
   # `flash: %{}` and `private.live_temp` satisfy `Phoenix.LiveView.put_flash/3`,
@@ -266,7 +268,11 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEventsTest do
     defp socket_with_media_item(assigns \\ %{}) do
       socket(
         Map.merge(
-          %{media_item: %{media_files: []}, selected_media_file: %{id: "mf-1"}},
+          %{
+            media_item: %{media_files: []},
+            selected_media_file: %{id: "mf-1"},
+            return_to_manage: false
+          },
           assigns
         )
       )
@@ -280,6 +286,51 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEventsTest do
         )
 
       assert socket.assigns.downloading_subtitle_index == nil
+    end
+
+    test "a successful download started from the manage modal reopens it and refreshes manage_tracks" do
+      {:noreply, socket} =
+        SubtitleEvents.handle_download_subtitle_async(
+          {:ok, {:ok, %{}}},
+          socket_with_media_item(%{return_to_manage: true})
+        )
+
+      assert socket.assigns.show_subtitle_manage_modal == true
+      assert socket.assigns.show_subtitle_search_modal == false
+      assert socket.assigns.selected_media_file == %{id: "mf-1"}
+      assert socket.assigns.manage_tracks == []
+    end
+
+    test "a successful download not started from the manage modal drops back to the page" do
+      {:noreply, socket} =
+        SubtitleEvents.handle_download_subtitle_async(
+          {:ok, {:ok, %{}}},
+          socket_with_media_item(%{return_to_manage: false})
+        )
+
+      assert socket.assigns.show_subtitle_manage_modal == false
+      assert socket.assigns.selected_media_file == nil
+    end
+
+    # Reproduces the sequence a real user can trigger: open search from the
+    # manage modal, start a download, close search (which reopens manage),
+    # then close the manage modal itself (which nils selected_media_file and
+    # resets return_to_manage) before the pending download resolves. The
+    # handler must not dereference a nil selected_media_file.
+    test "a download resolving after the manage modal was already closed does not crash" do
+      {:noreply, socket} =
+        SubtitleEvents.handle_download_subtitle_async(
+          {:ok, {:ok, %{}}},
+          socket_with_media_item(%{
+            selected_media_file: nil,
+            return_to_manage: false,
+            show_subtitle_manage_modal: false
+          })
+        )
+
+      assert socket.assigns.selected_media_file == nil
+      assert socket.assigns.show_subtitle_manage_modal == false
+      assert socket.assigns.media_file_subtitle_tracks == %{}
     end
 
     test "a failed download clears the downloading id and humanizes a known reason" do
@@ -309,6 +360,63 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEventsTest do
       assert socket.assigns.downloading_subtitle_index == nil
       assert flash(socket)["error"] =~ "check the server logs"
       refute flash(socket)["error"] =~ "boom"
+    end
+  end
+
+  describe "handle_rescan_subtitles_async/2" do
+    # A real media_item + media_file (no directory needed:
+    # Extractor.list_subtitle_tracks/1 falls back to [] for embedded tracks
+    # when the file doesn't exist on disk) with one subtitle row inserted
+    # directly, standing in for what Sidecars.reconcile/1 would have just
+    # adopted. media_files is set by hand rather than preloaded, since this
+    # bypasses the real mount entirely.
+    defp movie_with_subtitle_row(hash) do
+      media_item = media_item_fixture(%{type: "movie"})
+      media_file = media_file_fixture(%{media_item_id: media_item.id})
+
+      {:ok, subtitle} =
+        %Mydia.Subtitles.Subtitle{}
+        |> Mydia.Subtitles.Subtitle.changeset(%{
+          media_file_id: media_file.id,
+          language: "en",
+          provider: "sidecar",
+          origin: "sidecar",
+          subtitle_hash: hash,
+          file_path: "/tmp/#{hash}.srt",
+          format: "srt"
+        })
+        |> Mydia.Repo.insert()
+
+      {%{media_item | media_files: [media_file]}, media_file, subtitle}
+    end
+
+    test "refreshes manage_tracks for the file open in the manage modal" do
+      {media_item, media_file, subtitle} = movie_with_subtitle_row("rescan-refresh-hash")
+
+      {:noreply, socket} =
+        SubtitleEvents.handle_rescan_subtitles_async(
+          {:ok, {:ok, %{adopted: 1, reaped: 0}}},
+          socket(%{media_item: media_item, selected_media_file: media_file})
+        )
+
+      assert [track] = socket.assigns.manage_tracks
+      assert to_string(track.track_id) == subtitle.id
+
+      assert socket.assigns.media_file_subtitle_tracks[media_file.id] ==
+               socket.assigns.manage_tracks
+    end
+
+    test "updates media_file_subtitle_tracks without touching manage_tracks when nothing is selected" do
+      {media_item, _media_file, _subtitle} = movie_with_subtitle_row("rescan-no-selection-hash")
+
+      {:noreply, socket} =
+        SubtitleEvents.handle_rescan_subtitles_async(
+          {:ok, {:ok, %{adopted: 1, reaped: 0}}},
+          socket(%{media_item: media_item, selected_media_file: nil})
+        )
+
+      refute Map.has_key?(socket.assigns, :manage_tracks)
+      assert map_size(socket.assigns.media_file_subtitle_tracks) == 1
     end
   end
 end
