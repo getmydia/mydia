@@ -13,12 +13,8 @@ defmodule Mydia.Library.ExtraClassifierTest do
 
   describe "classify/2 with a known runtime" do
     test "a file at 20% of runtime is an extra" do
-      # Ratatouille: 111 minute movie, a 22 minute featurette. Paired with a
-      # full-length file so the last-version-survives invariant (tested on
-      # its own below) has no reason to intervene — a lone file decided
-      # :extra would otherwise be the only candidate and get promoted back.
-      files = [file("feature", 111 * 60), file("a", 22 * 60)]
-      assert %{"a" => :extra} = ExtraClassifier.classify(111, files)
+      # Ratatouille: 111 minute movie, a 22 minute featurette.
+      assert %{"a" => :extra} = ExtraClassifier.classify(111, [file("a", 22 * 60)])
     end
 
     test "a file at 60% of runtime is a version" do
@@ -44,12 +40,7 @@ defmodule Mydia.Library.ExtraClassifierTest do
       # an extra. This case fails under either mistake only in combination
       # with the next assertion, so both are required.
       assert %{"a" => :version} = ExtraClassifier.classify(100, [file("a", 90 * 60)])
-
-      # Paired with a full-length file for the same reason as the 20% test
-      # above — a lone 3-minute clip would otherwise be the only candidate
-      # and the invariant would promote it back to :version.
-      files = [file("feature", 100 * 60), file("a", 3 * 60)]
-      assert %{"a" => :extra} = ExtraClassifier.classify(100, files)
+      assert %{"a" => :extra} = ExtraClassifier.classify(100, [file("a", 3 * 60)])
     end
 
     test "classifies a whole folder at once" do
@@ -72,7 +63,7 @@ defmodule Mydia.Library.ExtraClassifierTest do
     end
 
     test "keeps only the longest when several would all be demoted" do
-      files = [file("short", 3 * 60), file("longer", 20 * 60)]
+      files = [file("short", 3 * 60), file("longer", 70 * 60)]
 
       assert ExtraClassifier.classify(200, files) == %{
                "short" => :extra,
@@ -87,6 +78,19 @@ defmodule Mydia.Library.ExtraClassifierTest do
                "feature" => :version,
                "scene" => :extra
              }
+    end
+
+    test "does not rescue a lone file that is obviously a clip" do
+      # A folder holding only a three minute bonus clip. Rescuing it would make
+      # the movie falsely report as owned.
+      assert %{"a" => :extra} = ExtraClassifier.classify(111, [file("a", 3 * 60)])
+    end
+
+    test "rescues a lone file that is plausibly the feature" do
+      # Enchanted on production: one file at ratio 0.499, a different film
+      # misfiled into the folder. Above the rescue floor, so it stays the
+      # version rather than emptying the movie.
+      assert %{"a" => :version} = ExtraClassifier.classify(107, [file("a", 53.4 * 60)])
     end
   end
 

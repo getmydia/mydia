@@ -41,6 +41,14 @@ defmodule Mydia.Library.ExtraClassifier do
   # calibration figures in the moduledoc before changing it.
   @ratio 0.5
 
+  # The invariant below rescues a file only when it is at least this fraction of
+  # the reference. Calibrated on the same production sample as @ratio: the
+  # 0.30-0.50 band holds exactly one file (a misidentified feature at 0.499)
+  # and 0.20-0.30 holds five genuine extras, so 0.30 sits in a measured empty
+  # band. Without this floor a folder holding only a three minute clip promotes
+  # that clip to a version, and the movie falsely reports as owned.
+  @rescue_floor 0.30
+
   @type decision :: :version | :extra
 
   @doc """
@@ -62,7 +70,7 @@ defmodule Mydia.Library.ExtraClassifier do
 
         eligible
         |> Map.new(fn file -> {file.id, decide(file, reference)} end)
-        |> apply_invariant(eligible, source)
+        |> apply_invariant(eligible, reference, source)
     end
   end
 
@@ -92,21 +100,30 @@ defmodule Mydia.Library.ExtraClassifier do
   end
 
   # An item always keeps at least one version, so a wrong published runtime can
-  # never empty a movie. Mirrors the successor promotion in
-  # Mydia.Library.Prune.Ranker.decide/2.
+  # never empty a movie — but only when the longest file is plausibly the
+  # feature. Rescuing a file that is obviously a clip would defeat the
+  # ownership guarantee this exists to protect: a folder holding nothing but a
+  # three minute bonus clip must still report the movie as not owned. Mirrors
+  # the successor promotion in Mydia.Library.Prune.Ranker.decide/2.
   #
   # Only applied when the reference was the published runtime, the one input
   # that can be externally wrong. A sibling-derived reference always leaves its
   # own longest file a version anyway, and a floor decision on a lone file is
   # confident enough to stand.
-  defp apply_invariant(decisions, _eligible, source) when source != :runtime, do: decisions
+  defp apply_invariant(decisions, _eligible, _reference, source) when source != :runtime,
+    do: decisions
 
-  defp apply_invariant(decisions, eligible, :runtime) do
+  defp apply_invariant(decisions, eligible, reference, :runtime) do
     if Enum.any?(decisions, fn {_id, decision} -> decision == :version end) do
       decisions
     else
       longest = Enum.max_by(eligible, &duration/1)
-      Map.put(decisions, longest.id, :version)
+
+      if duration(longest) >= @rescue_floor * reference do
+        Map.put(decisions, longest.id, :version)
+      else
+        decisions
+      end
     end
   end
 
