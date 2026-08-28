@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:graphql_flutter/graphql_flutter.dart';
 
 import '../../../core/graphql/watch/query_key.dart';
+import '../../../core/graphql/watch/schema_downgrade.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/models/calendar_entry.dart';
 import '../../widgets/browse_scaffold.dart';
@@ -91,6 +93,18 @@ int? indexOfToday(List<DateTime> days, DateTime today) {
     if (!days[i].isBefore(midnight)) return i;
   }
   return null;
+}
+
+/// Whether [error] is this server saying it has no calendar query.
+///
+/// A player installed from an app store can be newer than the server it talks
+/// to. There is no capability probe to ask in advance: `serverCompatibility`
+/// reports version strings and no feature list, and a brand new root field has
+/// no older shape for `QueryWatcher` to fall back to. So the rejection itself
+/// is the signal.
+bool isCalendarUnsupported(Object error) {
+  if (error is! OperationException) return false;
+  return isUnknownFieldError(error);
 }
 
 class CalendarScreen extends ConsumerStatefulWidget {
@@ -268,6 +282,31 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   }
 
   Widget _error(Object error, double scrollTopPadding) {
+    if (isCalendarUnsupported(error)) {
+      return Padding(
+        key: const ValueKey('calendar-unsupported'),
+        padding:
+            EdgeInsets.only(top: scrollTopPadding + 80, left: 32, right: 32),
+        child: const Column(
+          children: [
+            Icon(Icons.update, size: 48, color: AppColors.textDisabled),
+            SizedBox(height: 16),
+            Text(
+              'This server does not have the calendar yet',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 17, color: AppColors.textSecondary),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Update the server and the calendar will appear here.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13, color: AppColors.textDisabled),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Padding(
       padding: EdgeInsets.only(top: scrollTopPadding + 80, left: 32, right: 32),
       child: Column(
