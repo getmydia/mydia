@@ -691,6 +691,40 @@ defmodule MydiaWeb.Schema.CommonTypes do
       description: "Oldest player version this server would rather you ran"
   end
 
+  @desc "One dated item on the player's calendar"
+  object :calendar_entry do
+    field :id, non_null(:id), description: "Episode ID, or media item ID for a movie"
+
+    field :kind, non_null(:calendar_entry_kind), description: "Episode or movie" do
+      resolve(fn entry, _args, _info -> {:ok, String.to_existing_atom(entry.type)} end)
+    end
+
+    field :air_date, non_null(:date), description: "Air date, or release date for a movie"
+    field :title, non_null(:string), description: "Episode title, or movie title"
+
+    field :season_number, :integer, description: "Season number, null for a movie"
+    field :episode_number, :integer, description: "Episode number, null for a movie"
+
+    field :media_item_id, non_null(:id), description: "The parent show, or the movie itself"
+    field :media_item_title, non_null(:string), description: "Show name, or movie title"
+
+    field :artwork, :artwork do
+      resolve(fn entry, _args, _info ->
+        {:ok,
+         %{
+           poster_url: Mydia.Metadata.ImageUrl.poster_url(entry.poster_path),
+           backdrop_url: Mydia.Metadata.ImageUrl.backdrop_url(entry.backdrop_path),
+           thumbnail_url: nil
+         }}
+      end)
+    end
+
+    @desc "Playable files for this entry, empty when the library holds nothing"
+    field :files, non_null(list_of(non_null(:media_file))) do
+      resolve(&MydiaWeb.Schema.Resolvers.CalendarResolver.files/3)
+    end
+  end
+
   defp metadata_field(%{metadata: %Mydia.Library.Structs.FileMetadata{} = metadata}, key),
     do: Map.get(metadata, key)
 
