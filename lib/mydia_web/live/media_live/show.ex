@@ -37,6 +37,7 @@ defmodule MydiaWeb.MediaLive.Show do
       Phoenix.PubSub.subscribe(Mydia.PubSub, "downloads")
       Phoenix.PubSub.subscribe(Mydia.PubSub, "events:all")
       Phoenix.PubSub.subscribe(Mydia.PubSub, "transcodes")
+      Phoenix.PubSub.subscribe(Mydia.PubSub, "subtitles")
     end
 
     media_item = load_media_item(id)
@@ -116,6 +117,7 @@ defmodule MydiaWeb.MediaLive.Show do
      # File metadata refresh state
      |> assign(:refreshing_file_metadata, false)
      |> assign(:rescanning_season, nil)
+     |> assign(:fetching_season_subtitles, nil)
      # File rename modal state
      |> assign(:show_rename_modal, false)
      |> assign(:rename_previews, [])
@@ -129,12 +131,22 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:next_episode_state, next_episode_state)
      # Subtitle state
      |> assign(:show_subtitle_search_modal, false)
+     |> assign(:show_subtitle_manage_modal, false)
+     |> assign(:manage_tracks, [])
+     # Whether a child modal (search/upload) was opened from within the
+     # manage modal, so closing it (or a successful action) returns there
+     # instead of dropping to the bare page. Only true while a child modal
+     # opened from the manage modal is in flight.
+     |> assign(:return_to_manage, false)
      |> assign(:subtitle_search_state, :idle)
      |> assign(:downloading_subtitle_index, nil)
      |> assign(:subtitle_search_results, [])
      |> assign(:subtitle_providers, [])
      |> assign(:selected_media_file, nil)
-     |> assign(:selected_languages, ["en"])
+     |> assign(
+       :selected_languages,
+       Settings.get_config([:streaming, :subtitle_language], ["en"])
+     )
      |> assign(:media_file_subtitle_tracks, load_media_file_subtitle_tracks(media_item))
      |> assign(:show_subtitle_upload_modal, false)
      |> assign(:subtitle_upload_error, nil)
@@ -434,6 +446,15 @@ defmodule MydiaWeb.MediaLive.Show do
   def handle_event("save_subtitle_upload", params, socket),
     do: SubtitleEvents.save_subtitle_upload(params, socket)
 
+  def handle_event("open_subtitle_manage", params, socket),
+    do: SubtitleEvents.open_subtitle_manage(params, socket)
+
+  def handle_event("close_subtitle_manage", params, socket),
+    do: SubtitleEvents.close_subtitle_manage(params, socket)
+
+  def handle_event("fetch_season_subtitles", params, socket),
+    do: SubtitleEvents.fetch_season_subtitles(params, socket)
+
   # Category, trailer, and quality profile events
 
   def handle_event("show_category_modal", params, socket),
@@ -671,6 +692,60 @@ defmodule MydiaWeb.MediaLive.Show do
     media_item = socket.assigns.media_item
 
     {:noreply, assign(socket, :transcode_jobs, load_transcode_jobs(media_item))}
+  end
+
+  def handle_info({:subtitles_updated, _media_file_id}, socket) do
+    tracks = load_media_file_subtitle_tracks(socket.assigns.media_item)
+
+    socket = assign(socket, :media_file_subtitle_tracks, tracks)
+
+    # The manage modal renders from :manage_tracks, not
+    # :media_file_subtitle_tracks, so a season fetch finishing while the
+    # modal is open must also refresh :manage_tracks or newly downloaded
+    # tracks never appear in it. Same pattern as rescan, delete, and offset.
+    socket =
+      case socket.assigns.selected_media_file do
+        nil -> socket
+        media_file -> assign(socket, :manage_tracks, Map.get(tracks, media_file.id, []))
+      end
+
+    {:noreply, socket}
+  end
+
+  def handle_info({:subtitle_season_finished, media_item_id, season_number}, socket) do
+    socket =
+      if media_item_id == socket.assigns.media_item.id do
+        assign(
+          socket,
+          :media_file_subtitle_tracks,
+          load_media_file_subtitle_tracks(socket.assigns.media_item)
+        )
+      else
+        socket
+      end
+
+    # Only clear the spinner when the finishing season is the one being
+    # tracked. A user can start season 2's fetch while season 1's is still in
+    # flight; season 1 finishing must not clear season 2's spinner and
+    # re-enable its button while that job is still running. The reload above
+    # still happens regardless, since the work did happen.
+    socket =
+      if media_item_id == socket.assigns.media_item.id &&
+           socket.assigns.fetching_season_subtitles == season_number do
+        assign(socket, :fetching_season_subtitles, nil)
+      else
+        socket
+      end
+
+    {:noreply, socket}
+  end
+
+  def handle_info({:subtitle_season_timeout, season_num}, socket) do
+    if socket.assigns.fetching_season_subtitles == season_num do
+      {:noreply, assign(socket, :fetching_season_subtitles, nil)}
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_info({:grab_completed, payload}, socket),

@@ -141,4 +141,51 @@ defmodule Mydia.Subtitles.TrackSettingsTest do
       assert %{media_file_id: [_ | _]} = errors_on(changeset)
     end
   end
+
+  describe "offsets_for_media_files/1 and resync_states_for_media_files/1" do
+    setup do
+      media_item = media_item_fixture(%{type: "movie"})
+      file_a = media_file_fixture(%{media_item_id: media_item.id})
+      file_b = media_file_fixture(%{media_item_id: media_item.id})
+      file_c = media_file_fixture(%{media_item_id: media_item.id})
+
+      {:ok, file_a: file_a, file_b: file_b, file_c: file_c}
+    end
+
+    test "groups offsets by media file and omits files with no settings", ctx do
+      {:ok, _} = TrackSettings.set_offset(ctx.file_a.id, "3", 250)
+      {:ok, _} = TrackSettings.set_offset(ctx.file_a.id, "4", -100)
+      {:ok, _} = TrackSettings.set_offset(ctx.file_b.id, "3", 500)
+
+      result =
+        TrackSettings.offsets_for_media_files([ctx.file_a.id, ctx.file_b.id, ctx.file_c.id])
+
+      assert result[ctx.file_a.id] == %{"3" => 250, "4" => -100}
+      assert result[ctx.file_b.id] == %{"3" => 500}
+      refute Map.has_key?(result, ctx.file_c.id)
+    end
+
+    test "groups resync states and omits tracks with no state", ctx do
+      {:ok, _} = TrackSettings.set_offset(ctx.file_a.id, "3", 250)
+      {:ok, _} = TrackSettings.record_resync(ctx.file_a.id, "3", :low_confidence, nil)
+      {:ok, _} = TrackSettings.set_offset(ctx.file_b.id, "7", 0)
+
+      result =
+        TrackSettings.resync_states_for_media_files([ctx.file_a.id, ctx.file_b.id, ctx.file_c.id])
+
+      assert result[ctx.file_a.id] == %{"3" => "low_confidence"}
+      refute Map.has_key?(result, ctx.file_b.id)
+      refute Map.has_key?(result, ctx.file_c.id)
+    end
+
+    test "returns an empty map for an empty id list" do
+      assert TrackSettings.offsets_for_media_files([]) == %{}
+      assert TrackSettings.resync_states_for_media_files([]) == %{}
+    end
+
+    test "tolerates a malformed id the way the per-file functions do", ctx do
+      assert TrackSettings.offsets_for_media_files([ctx.file_a.id, "not-a-uuid"]) == %{}
+      assert TrackSettings.resync_states_for_media_files([ctx.file_a.id, "not-a-uuid"]) == %{}
+    end
+  end
 end

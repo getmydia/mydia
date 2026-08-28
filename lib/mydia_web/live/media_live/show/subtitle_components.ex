@@ -7,13 +7,109 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleComponents do
   """
   use MydiaWeb, :html
 
+  # The resync outcomes that mean the auto-sync did not produce a usable result.
+  # `ok` and `already_synced` are successes; `nil` means it was never attempted.
+  # Anything unrecognised is treated as not-declined, so a future state string
+  # cannot make every badge light up before the UI knows how to phrase it.
+  @declined_resync_states ~w(low_confidence implausible no_audio too_few_cues no_cues failed)
+
+  @max_visible_codes 3
+
+  @doc """
+  The language codes for one media file's subtitle tracks, for a file row.
+
+  Renders nothing when the file has no tracks: a repeated "none" line down a
+  170-episode season is noise, and the row's subtitle button stays present
+  regardless, so an empty file is still actionable.
+
+  Origin is deliberately not encoded here. Whether a track is embedded, sidecar,
+  downloaded, or uploaded is visible in the manage modal, where it is
+  actionable; on the row it would compete with the sync marker for the same
+  small surface.
+  """
+  attr :tracks, :list, required: true
+  attr :id, :string, required: true
+
+  def subtitle_badges(assigns) do
+    codes = summarize_codes(assigns.tracks)
+
+    assigns =
+      assigns
+      |> assign(:visible_codes, Enum.take(codes, @max_visible_codes))
+      |> assign(:overflow_count, max(length(codes) - @max_visible_codes, 0))
+
+    ~H"""
+    <div
+      :if={@visible_codes != []}
+      id={"subtitle-badges-#{@id}"}
+      class="flex flex-wrap items-center gap-1"
+    >
+      <.icon name="hero-language" class="w-3.5 h-3.5 opacity-50 shrink-0" />
+      <span
+        :for={code <- @visible_codes}
+        data-subtitle-code={code.language}
+        data-subtitle-sync={code.declined_reason && "declined"}
+        title={code.declined_reason}
+        class={[
+          "badge badge-xs",
+          if(code.declined_reason, do: "badge-warning", else: "badge-outline")
+        ]}
+      >
+        {String.upcase(code.language)}
+      </span>
+      <span :if={@overflow_count > 0} class="badge badge-xs badge-ghost">
+        +{@overflow_count}
+      </span>
+    </div>
+    """
+  end
+
+  # One entry per distinct language, in first-seen order, carrying the reason
+  # text when any track in that language declined to sync.
+  defp summarize_codes(tracks) do
+    tracks
+    |> Enum.reduce({[], MapSet.new()}, fn track, {acc, seen} ->
+      language = track.language || "und"
+
+      if MapSet.member?(seen, language) do
+        {merge_declined(acc, language, track), seen}
+      else
+        entry = %{language: language, declined_reason: declined_reason(track)}
+        {acc ++ [entry], MapSet.put(seen, language)}
+      end
+    end)
+    |> elem(0)
+  end
+
+  defp merge_declined(acc, language, track) do
+    case declined_reason(track) do
+      nil ->
+        acc
+
+      reason ->
+        Enum.map(acc, fn
+          %{language: ^language, declined_reason: nil} = entry ->
+            %{entry | declined_reason: reason}
+
+          entry ->
+            entry
+        end)
+    end
+  end
+
+  defp declined_reason(%{resync_state: state}) when is_binary(state) do
+    if state in @declined_resync_states, do: resync_label(state), else: nil
+  end
+
+  defp declined_reason(_track), do: nil
+
   attr :track, :map, required: true
   attr :media_file_id, :string, required: true
 
   def subtitle_track_row(assigns) do
     ~H"""
-    <div class="flex items-center justify-between gap-2 py-2 border-b border-base-300 last:border-0">
-      <div class="flex items-center gap-2 min-w-0">
+    <div class="flex flex-col gap-2 py-2 border-b border-base-300 last:border-0 sm:flex-row sm:items-center sm:justify-between">
+      <div class="flex flex-wrap items-center gap-2 min-w-0">
         <span class="badge badge-outline badge-sm">{@track.language}</span>
         <span class="text-sm truncate">{@track.title}</span>
         <span class="text-xs opacity-60 uppercase">{@track.format}</span>
@@ -22,7 +118,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleComponents do
         </span>
       </div>
 
-      <div class="flex items-center gap-1 shrink-0">
+      <div class="flex flex-wrap items-center gap-1 sm:shrink-0">
         <form
           id={"subtitle-offset-form-#{@media_file_id}-#{@track.track_id}"}
           phx-change="set_subtitle_offset"

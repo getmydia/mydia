@@ -44,7 +44,8 @@ defmodule Mydia.Config.LoaderTest do
         "LOG_LEVEL",
         "OBAN_POLL_INTERVAL",
         "MAX_TRANSCODE_HEIGHT",
-        "AUTO_SEARCH_MIN_SEEDERS"
+        "AUTO_SEARCH_MIN_SEEDERS",
+        "SUBTITLE_LANGUAGE"
       ] ++ download_client_vars ++ library_path_vars
 
     # Store original values
@@ -734,6 +735,29 @@ defmodule Mydia.Config.LoaderTest do
       {:ok, config} = Loader.load(config_file: "nonexistent.yml")
 
       assert config.streaming.max_transcode_height == nil
+    end
+
+    test "SUBTITLE_LANGUAGE parses as a comma-separated list" do
+      System.put_env("SUBTITLE_LANGUAGE", "en,es,pt")
+
+      {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+
+      assert config.streaming.subtitle_language == ["en", "es", "pt"]
+    end
+
+    test "SUBTITLE_LANGUAGE drops blank entries from a stray comma instead of failing to boot" do
+      # The schema's scoped cast for subtitle_language deliberately preserves
+      # blanks so a YAML or DB value like ["en", ""] is rejected outright (see
+      # Mydia.Config.Schema's streaming_changeset/2) rather than silently
+      # dropped. An env var typo is a different kind of mistake -- a stray
+      # comma should not take the whole server down at boot -- so the env
+      # parser (parse_string_list/1, shared with AUDIO_LANGUAGE) filters
+      # blanks before that validation ever runs.
+      System.put_env("SUBTITLE_LANGUAGE", "en,,es")
+
+      {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+
+      assert config.streaming.subtitle_language == ["en", "es"]
     end
 
     test "the automatic-search seeder floor is reachable from every layer" do

@@ -123,11 +123,16 @@ defmodule MydiaWeb.MediaLive.Show.Loaders do
   than as a declined outcome.
   """
   def load_media_file_subtitle_tracks(media_item) do
-    media_item
-    |> Helpers.all_media_files()
+    media_files = Helpers.all_media_files(media_item)
+    ids = Enum.map(media_files, & &1.id)
+
+    offsets_by_file = Subtitles.TrackSettings.offsets_for_media_files(ids)
+    resync_by_file = Subtitles.TrackSettings.resync_states_for_media_files(ids)
+
+    media_files
     |> Enum.map(fn media_file ->
-      offsets = Subtitles.TrackSettings.offsets_for_media_file(media_file.id)
-      resync_states = Subtitles.TrackSettings.resync_states_for_media_file(media_file.id)
+      offsets = Map.get(offsets_by_file, media_file.id, %{})
+      resync_states = Map.get(resync_by_file, media_file.id, %{})
 
       tracks =
         media_file

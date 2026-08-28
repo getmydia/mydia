@@ -401,9 +401,11 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :expanded_chunks, :any, default: MapSet.new()
   attr :auto_searching_season, :any, default: nil
   attr :rescanning_season, :any, default: nil
+  attr :fetching_season_subtitles, :any, default: nil
   attr :auto_searching_episode, :any, default: nil
   attr :playback_enabled, :boolean, required: true
   attr :transcode_jobs, :map, default: %{}
+  attr :media_file_subtitle_tracks, :map, default: %{}
   attr :segment_statuses, :map, default: %{}
   attr :segment_detection_available, :boolean, default: true
   attr :season_order_suggestion, :any, default: nil
@@ -507,9 +509,11 @@ defmodule MydiaWeb.MediaLive.Show.Components do
               expanded_chunks={@expanded_chunks}
               auto_searching_season={@auto_searching_season}
               rescanning_season={@rescanning_season}
+              fetching_season_subtitles={@fetching_season_subtitles}
               auto_searching_episode={@auto_searching_episode}
               playback_enabled={@playback_enabled}
               transcode_jobs={@transcode_jobs}
+              media_file_subtitle_tracks={@media_file_subtitle_tracks}
               segment_statuses={@segment_statuses}
               segment_detection_available={@segment_detection_available}
             />
@@ -527,6 +531,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :episode, :map, required: true
   attr :playback_enabled, :boolean, required: true
   attr :transcode_jobs, :list, default: []
+  attr :subtitle_tracks, :list, default: []
 
   def episode_file_row(assigns) do
     ~H"""
@@ -560,9 +565,25 @@ defmodule MydiaWeb.MediaLive.Show.Components do
             {format_file_size(@file.size)}
           </span>
         </div>
+        <SubtitleComponents.subtitle_badges
+          :if={@subtitle_tracks != []}
+          tracks={@subtitle_tracks}
+          id={@file.id}
+        />
       </div>
       <%!-- File actions --%>
       <div class="flex items-center gap-1 flex-shrink-0">
+        <button
+          id={"subtitle-open-#{@file.id}"}
+          type="button"
+          phx-click="open_subtitle_manage"
+          phx-value-media-file-id={@file.id}
+          class="btn btn-ghost btn-xs btn-square"
+          aria-label="Manage subtitles"
+          title="Subtitles"
+        >
+          <.icon name="hero-language" class="w-4 h-4" />
+        </button>
         <% available_resolutions =
           available_transcode_resolutions(
             @file,
@@ -658,12 +679,29 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   `all_media_files/1`: a movie's files live at `media_item.media_files`, but a
   `MediaFile` belongs to either `media_item_id` or `episode_id`, never both, so
   that list is always empty for a TV show. Without this the card was
-  permanently empty on every TV show page, sitting beside a Subtitles card that
-  reaches into both.
+  permanently empty on every TV show page.
+
+  A `MediaFile` can also be attached directly to a TV show with no episode at
+  all (`media_item_id` set, `episode_id` nil) -- see
+  `Mydia.Jobs.MediaImport`'s catch-all fallback and `Mydia.Media.RecentlyAdded`'s
+  "unmatched files" -- so this card is not always redundant with the
+  per-episode listing even for a show. Its subtitle badge and manage button
+  therefore always render here, for every file, regardless of item type.
+
+  The one thing to watch: for a TV show, a file that *does* belong to an
+  episode renders a second time in `episode_file_row/1` once that episode is
+  expanded, with its own copy of the same badge/button. Those two renders
+  must never share a DOM id, so this component's copies are suffixed
+  `-file-` (`subtitle-open-file-<id>`, `subtitle-badges-file-<id>`) while
+  `episode_file_row/1` keeps its plain `subtitle-open-<id>` /
+  `subtitle-badges-<id>` -- the same idiom `subtitle_track_row/1` already
+  uses (folding `media_file_id` into its id) and `episode_rows/1` uses for
+  its own ids (`"episode-\#{episode.id}-actions"`, etc.).
   """
   attr :media_item, :map, required: true
   attr :refreshing_file_metadata, :boolean, required: true
   attr :transcode_jobs, :map, default: %{}
+  attr :media_file_subtitle_tracks, :map, default: %{}
 
   def media_files_section(assigns) do
     assigns = assign(assigns, :files, all_media_files(assigns.media_item))
@@ -708,9 +746,25 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                         <span class="font-mono">{format_file_size(file.size)}</span>
                       </div>
                     </div>
+                    <SubtitleComponents.subtitle_badges
+                      :if={Map.get(@media_file_subtitle_tracks, file.id, []) != []}
+                      tracks={Map.get(@media_file_subtitle_tracks, file.id, [])}
+                      id={"file-#{file.id}"}
+                    />
                   </div>
                   <%!-- Right side: Icon-only action buttons --%>
                   <div class="flex items-center gap-1 flex-shrink-0">
+                    <button
+                      id={"subtitle-open-file-#{file.id}"}
+                      type="button"
+                      phx-click="open_subtitle_manage"
+                      phx-value-media-file-id={file.id}
+                      class="btn btn-ghost btn-sm btn-square"
+                      aria-label="Manage subtitles"
+                      title="Subtitles"
+                    >
+                      <.icon name="hero-language" class="w-5 h-5" />
+                    </button>
                     <% available_resolutions =
                       available_transcode_resolutions(
                         file,
@@ -952,105 +1006,6 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-      </div>
-    <% end %>
-    """
-  end
-
-  @doc """
-  Subtitles section listing every subtitle track (embedded and sidecar) for
-  each media file, with an offset control per track.
-
-  Covers episode media files as well as the item's own, via
-  `all_media_files/1`: a movie's files live at `media_item.media_files`, but
-  a `MediaFile` belongs to either `media_item_id` or `episode_id`, never
-  both, so that list is always empty for a TV show. Without this, the whole
-  section was unreachable for every TV episode.
-  """
-  attr :media_item, :map, required: true
-  attr :media_file_subtitle_tracks, :map, default: %{}
-
-  def subtitles_section(assigns) do
-    assigns = assign(assigns, :subtitle_media_files, all_media_files(assigns.media_item))
-
-    ~H"""
-    <%= if @subtitle_media_files != [] do %>
-      <div id="subtitles-section" class="card bg-base-200 shadow-lg mb-4 md:mb-6">
-        <div class="card-body p-4 md:p-6">
-          <h2 class="card-title text-lg md:text-xl mb-3 md:mb-4">Subtitles</h2>
-
-          <%!-- Media files with subtitle controls --%>
-          <div class="space-y-4">
-            <%= for media_file <- @subtitle_media_files do %>
-              <% tracks = Map.get(@media_file_subtitle_tracks, media_file.id, []) %>
-              <div class="card bg-base-100 shadow">
-                <div class="card-body p-4">
-                  <%!-- File info header --%>
-                  <div class="flex items-start justify-between gap-4 mb-3">
-                    <div class="flex-1 min-w-0">
-                      <p
-                        class="text-sm font-mono text-base-content/80 break-all"
-                        title={Mydia.Library.MediaFile.display_path(media_file)}
-                      >
-                        {Mydia.Library.MediaFile.display_name(media_file)}
-                      </p>
-                      <div class="flex gap-2 mt-1">
-                        <span class="badge badge-primary badge-xs">
-                          {media_file.resolution || "Unknown"}
-                        </span>
-                        <span class="badge badge-ghost badge-xs">
-                          {media_file.codec || "Unknown"}
-                        </span>
-                      </div>
-                    </div>
-                    <div class="flex items-center gap-2 flex-shrink-0">
-                      <button
-                        type="button"
-                        phx-click="rescan_subtitles"
-                        phx-value-media-file-id={media_file.id}
-                        class="btn btn-ghost btn-sm"
-                      >
-                        <.icon name="hero-arrow-path" class="w-4 h-4" /> Rescan
-                      </button>
-                      <button
-                        type="button"
-                        phx-click="open_subtitle_upload"
-                        phx-value-media-file-id={media_file.id}
-                        class="btn btn-ghost btn-sm"
-                      >
-                        <.icon name="hero-arrow-up-tray" class="w-4 h-4" /> Upload
-                      </button>
-                      <button
-                        type="button"
-                        phx-click="open_subtitle_search"
-                        phx-value-media-file-id={media_file.id}
-                        class="btn btn-primary btn-sm"
-                      >
-                        <.icon name="hero-magnifying-glass" class="w-4 h-4" /> Search
-                      </button>
-                    </div>
-                  </div>
-
-                  <%!-- Subtitle tracks: embedded and sidecar together --%>
-                  <%= if tracks == [] do %>
-                    <p class="text-sm text-base-content/60 italic">
-                      No subtitle tracks found for this file
-                    </p>
-                  <% else %>
-                    <div>
-                      <%= for track <- tracks do %>
-                        <SubtitleComponents.subtitle_track_row
-                          track={track}
-                          media_file_id={media_file.id}
-                        />
-                      <% end %>
-                    </div>
-                  <% end %>
-                </div>
-              </div>
-            <% end %>
           </div>
         </div>
       </div>
