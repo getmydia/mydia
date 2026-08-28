@@ -1588,7 +1588,7 @@ defmodule Mydia.Media do
       media_item_type: m.type,
       has_files:
         fragment(
-          "CASE WHEN EXISTS(SELECT 1 FROM media_files WHERE episode_id = ?) THEN true ELSE false END",
+          "CASE WHEN EXISTS(SELECT 1 FROM media_files WHERE episode_id = ? AND extra_kind IS NULL) THEN true ELSE false END",
           e.id
         ),
       has_downloads:
@@ -2353,7 +2353,7 @@ defmodule Mydia.Media do
       |> exclude_special_episodes()
       |> where([e], e.id not in subquery(occupying_download_episode_ids()))
       |> join(:left, [e], mf in Mydia.Library.MediaFile,
-        on: mf.episode_id == e.id and is_nil(mf.trashed_at)
+        on: mf.episode_id == e.id and is_nil(mf.trashed_at) and is_nil(mf.extra_kind)
       )
       |> group_by([e], e.id)
       |> having([_e, _m, mf], count(mf.id) == 0)

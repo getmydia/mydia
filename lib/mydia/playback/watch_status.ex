@@ -123,9 +123,15 @@ defmodule Mydia.Playback.WatchStatus do
     # `Mydia.Library.list_media_files/1`, which is what `resolve_has_file/3`
     # goes through. Without it a trashed file would keep an episode countable
     # here while `hasFile` reported false on the same screen.
+    #
+    # `is_nil(extra_kind)` for the same reason: a scanner-flagged trailer
+    # must not count as the episode's content.
     file_ids =
       MediaFile
-      |> where([f], f.episode_id in ^episode_ids and is_nil(f.trashed_at))
+      |> where(
+        [f],
+        f.episode_id in ^episode_ids and is_nil(f.trashed_at) and is_nil(f.extra_kind)
+      )
       |> select([f], f.episode_id)
       |> distinct(true)
       |> Repo.all()

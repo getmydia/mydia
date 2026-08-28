@@ -498,7 +498,10 @@ defmodule Mydia.Downloads.Queue do
     cond do
       # For episodes, check if media files already exist for this episode
       episode_id ->
-        query = from(f in MediaFile, where: f.episode_id == ^episode_id and is_nil(f.trashed_at))
+        query =
+          from(f in MediaFile,
+            where: f.episode_id == ^episode_id and is_nil(f.trashed_at) and is_nil(f.extra_kind)
+          )
 
         if Repo.exists?(query) do
           Logger.info("Skipping download - media files already exist for episode",
@@ -611,7 +614,7 @@ defmodule Mydia.Downloads.Queue do
     filed =
       Repo.one(
         from(f in MediaFile,
-          where: f.episode_id in ^episode_ids and is_nil(f.trashed_at),
+          where: f.episode_id in ^episode_ids and is_nil(f.trashed_at) and is_nil(f.extra_kind),
           select: count(f.episode_id, :distinct)
         )
       )

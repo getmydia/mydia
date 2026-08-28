@@ -755,6 +755,33 @@ defmodule Mydia.Jobs.TVShowSearchTest do
       refute ep1.id in ids
       assert ep2.id in ids
     end
+
+    test "still selects an episode whose only file is a scanner-flagged extra" do
+      # Regression: the path-based scanner is type-agnostic and always was,
+      # but it used to drop what it found. Since extras persist as media_files
+      # rows, a `show.s01e01-trailer.mkv` match must not make the search job
+      # believe the episode itself is already on disk.
+      tv_show =
+        media_item_fixture(%{type: "tv_show", title: "Trailer Only Show", monitored: true})
+
+      episode =
+        episode_fixture(%{
+          media_item_id: tv_show.id,
+          season_number: 1,
+          episode_number: 1,
+          air_date: ~D[2020-01-01]
+        })
+
+      media_file_fixture(%{
+        episode_id: episode.id,
+        extra_kind: :trailer,
+        extra_source: :filename
+      })
+
+      ids = Enum.map(TVShowSearch.load_monitored_episodes_without_files(), & &1.id)
+
+      assert episode.id in ids
+    end
   end
 
   describe "unsupported mode" do

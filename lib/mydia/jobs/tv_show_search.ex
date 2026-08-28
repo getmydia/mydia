@@ -616,7 +616,9 @@ defmodule Mydia.Jobs.TVShowSearch do
       |> where([e, m], e.monitored == true and m.monitored == true)
       |> where([e], e.air_date <= ^today)
       |> where([e], e.id not in subquery(active_episode_download_ids()))
-      |> join(:left, [e], mf in MediaFile, on: mf.episode_id == e.id and is_nil(mf.trashed_at))
+      |> join(:left, [e], mf in MediaFile,
+        on: mf.episode_id == e.id and is_nil(mf.trashed_at) and is_nil(mf.extra_kind)
+      )
       |> group_by([e], e.id)
       |> having([_e, _m, mf], count(mf.id) == 0)
       |> preload(:media_item)
@@ -649,7 +651,9 @@ defmodule Mydia.Jobs.TVShowSearch do
       |> where([e, m], e.media_item_id == ^media_item_id)
       |> where([e, m], e.monitored == true and m.monitored == true)
       |> where([e], e.air_date <= ^today)
-      |> join(:left, [e], mf in MediaFile, on: mf.episode_id == e.id and is_nil(mf.trashed_at))
+      |> join(:left, [e], mf in MediaFile,
+        on: mf.episode_id == e.id and is_nil(mf.trashed_at) and is_nil(mf.extra_kind)
+      )
       |> group_by([e], e.id)
       |> having([_e, _m, mf], count(mf.id) == 0)
       |> preload(:media_item)
@@ -668,7 +672,9 @@ defmodule Mydia.Jobs.TVShowSearch do
     |> where([e], e.season_number == ^season_number)
     |> where([e, m], e.monitored == true and m.monitored == true)
     |> where([e], e.air_date <= ^today)
-    |> join(:left, [e], mf in MediaFile, on: mf.episode_id == e.id and is_nil(mf.trashed_at))
+    |> join(:left, [e], mf in MediaFile,
+      on: mf.episode_id == e.id and is_nil(mf.trashed_at) and is_nil(mf.extra_kind)
+    )
     |> group_by([e], e.id)
     |> having([_e, _m, mf], count(mf.id) == 0)
     |> preload(:media_item)

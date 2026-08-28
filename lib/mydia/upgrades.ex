@@ -650,8 +650,15 @@ defmodule Mydia.Upgrades do
   end
 
   defp analyzed_episode_ids do
+    # is_nil(extra_kind), same reasoning as analyzed_files_query/0 above: a
+    # scanner-flagged trailer must not be scored and grabbed as an "upgrade"
+    # of the episode it accompanies.
     MediaFile
-    |> where([f], is_nil(f.trashed_at) and not is_nil(f.analyzed_at) and not is_nil(f.episode_id))
+    |> where(
+      [f],
+      is_nil(f.trashed_at) and is_nil(f.extra_kind) and not is_nil(f.analyzed_at) and
+        not is_nil(f.episode_id)
+    )
     |> select([f], f.episode_id)
     |> distinct(true)
   end

@@ -245,7 +245,7 @@ defmodule Mydia.Playback.OnDeck do
   defp load_episodes_with_files([]), do: %{}
 
   defp load_episodes_with_files(show_ids) do
-    active_files = from(mf in MediaFile, where: is_nil(mf.trashed_at))
+    active_files = MediaFile.versions()
 
     from(e in Episode,
       where: e.media_item_id in ^show_ids,
