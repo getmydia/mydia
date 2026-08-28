@@ -677,8 +677,17 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   `all_media_files/1`: a movie's files live at `media_item.media_files`, but a
   `MediaFile` belongs to either `media_item_id` or `episode_id`, never both, so
   that list is always empty for a TV show. Without this the card was
-  permanently empty on every TV show page, sitting beside a Subtitles card that
-  reaches into both.
+  permanently empty on every TV show page.
+
+  Subtitle badges and the manage button are gated to non-TV items. A TV
+  episode's file already renders both inside `episode_file_row/1` once its
+  episode is expanded; rendering them again here for the same file would
+  produce a second element with the exact same `subtitle-open-<id>` /
+  `subtitle-badges-<id>` DOM id the moment a season is expanded, which
+  `Phoenix.LiveViewTest` raises on as a duplicate id and which is a real
+  DOM-patching hazard outside tests too. `Map.get/2` (rather than `@media_item.type`
+  dot access) tolerates the plain test doubles elsewhere in this test suite that
+  omit `:type` entirely.
   """
   attr :media_item, :map, required: true
   attr :refreshing_file_metadata, :boolean, required: true
@@ -686,7 +695,10 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :media_file_subtitle_tracks, :map, default: %{}
 
   def media_files_section(assigns) do
-    assigns = assign(assigns, :files, all_media_files(assigns.media_item))
+    assigns =
+      assigns
+      |> assign(:files, all_media_files(assigns.media_item))
+      |> assign(:show_subtitle_controls?, Map.get(assigns.media_item, :type) != "tv_show")
 
     ~H"""
     <%= if @files != [] do %>
@@ -729,7 +741,10 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                       </div>
                     </div>
                     <SubtitleComponents.subtitle_badges
-                      :if={Map.get(@media_file_subtitle_tracks, file.id, []) != []}
+                      :if={
+                        @show_subtitle_controls? &&
+                          Map.get(@media_file_subtitle_tracks, file.id, []) != []
+                      }
                       tracks={Map.get(@media_file_subtitle_tracks, file.id, [])}
                       id={file.id}
                     />
@@ -737,6 +752,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                   <%!-- Right side: Icon-only action buttons --%>
                   <div class="flex items-center gap-1 flex-shrink-0">
                     <button
+                      :if={@show_subtitle_controls?}
                       id={"subtitle-open-#{file.id}"}
                       type="button"
                       phx-click="open_subtitle_manage"
@@ -988,105 +1004,6 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-      </div>
-    <% end %>
-    """
-  end
-
-  @doc """
-  Subtitles section listing every subtitle track (embedded and sidecar) for
-  each media file, with an offset control per track.
-
-  Covers episode media files as well as the item's own, via
-  `all_media_files/1`: a movie's files live at `media_item.media_files`, but
-  a `MediaFile` belongs to either `media_item_id` or `episode_id`, never
-  both, so that list is always empty for a TV show. Without this, the whole
-  section was unreachable for every TV episode.
-  """
-  attr :media_item, :map, required: true
-  attr :media_file_subtitle_tracks, :map, default: %{}
-
-  def subtitles_section(assigns) do
-    assigns = assign(assigns, :subtitle_media_files, all_media_files(assigns.media_item))
-
-    ~H"""
-    <%= if @subtitle_media_files != [] do %>
-      <div id="subtitles-section" class="card bg-base-200 shadow-lg mb-4 md:mb-6">
-        <div class="card-body p-4 md:p-6">
-          <h2 class="card-title text-lg md:text-xl mb-3 md:mb-4">Subtitles</h2>
-
-          <%!-- Media files with subtitle controls --%>
-          <div class="space-y-4">
-            <%= for media_file <- @subtitle_media_files do %>
-              <% tracks = Map.get(@media_file_subtitle_tracks, media_file.id, []) %>
-              <div class="card bg-base-100 shadow">
-                <div class="card-body p-4">
-                  <%!-- File info header --%>
-                  <div class="flex items-start justify-between gap-4 mb-3">
-                    <div class="flex-1 min-w-0">
-                      <p
-                        class="text-sm font-mono text-base-content/80 break-all"
-                        title={Mydia.Library.MediaFile.display_path(media_file)}
-                      >
-                        {Mydia.Library.MediaFile.display_name(media_file)}
-                      </p>
-                      <div class="flex gap-2 mt-1">
-                        <span class="badge badge-primary badge-xs">
-                          {media_file.resolution || "Unknown"}
-                        </span>
-                        <span class="badge badge-ghost badge-xs">
-                          {media_file.codec || "Unknown"}
-                        </span>
-                      </div>
-                    </div>
-                    <div class="flex items-center gap-2 flex-shrink-0">
-                      <button
-                        type="button"
-                        phx-click="rescan_subtitles"
-                        phx-value-media-file-id={media_file.id}
-                        class="btn btn-ghost btn-sm"
-                      >
-                        <.icon name="hero-arrow-path" class="w-4 h-4" /> Rescan
-                      </button>
-                      <button
-                        type="button"
-                        phx-click="open_subtitle_upload"
-                        phx-value-media-file-id={media_file.id}
-                        class="btn btn-ghost btn-sm"
-                      >
-                        <.icon name="hero-arrow-up-tray" class="w-4 h-4" /> Upload
-                      </button>
-                      <button
-                        type="button"
-                        phx-click="open_subtitle_search"
-                        phx-value-media-file-id={media_file.id}
-                        class="btn btn-primary btn-sm"
-                      >
-                        <.icon name="hero-magnifying-glass" class="w-4 h-4" /> Search
-                      </button>
-                    </div>
-                  </div>
-
-                  <%!-- Subtitle tracks: embedded and sidecar together --%>
-                  <%= if tracks == [] do %>
-                    <p class="text-sm text-base-content/60 italic">
-                      No subtitle tracks found for this file
-                    </p>
-                  <% else %>
-                    <div>
-                      <%= for track <- tracks do %>
-                        <SubtitleComponents.subtitle_track_row
-                          track={track}
-                          media_file_id={media_file.id}
-                        />
-                      <% end %>
-                    </div>
-                  <% end %>
-                </div>
-              </div>
-            <% end %>
           </div>
         </div>
       </div>
