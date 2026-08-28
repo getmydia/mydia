@@ -1144,4 +1144,64 @@ defmodule Mydia.LibraryTest do
       refute Library.episode_has_media_file?(episode.id)
     end
   end
+
+  describe "rescan_movie/1 with a persisted extra" do
+    setup do
+      tmp =
+        Path.join(System.tmp_dir!(), "mydia_rescan_extra_#{System.unique_integer([:positive])}")
+
+      movie_dir = Path.join(tmp, "Movie (2007)")
+      File.mkdir_p!(movie_dir)
+      on_exit(fn -> File.rm_rf(tmp) end)
+
+      %{movie_dir: movie_dir, library_path: library_path_fixture(%{path: tmp, type: "movies"})}
+    end
+
+    test "does not re-insert a persisted extra on repeated rescans", %{
+      movie_dir: movie_dir,
+      library_path: lib
+    } do
+      # Regression: get_media_files_for_item/2 excludes extras by default,
+      # which is right for an ownership question but wrong for the rescan's
+      # inventory question. Before include_extras: true was added to the
+      # rescan call sites, an already-persisted extra was absent from
+      # existing_paths, so every rescan treated it as a brand new file and
+      # inserted a duplicate row — with no unique index on `path` to catch it.
+      movie = Mydia.MediaFixtures.media_item_fixture(%{type: "movie"})
+
+      ordinary_rel = "Movie (2007)/Movie.2007.1080p.mkv"
+      extra_rel = "Movie (2007)/Movie.2007.trailer.mkv"
+
+      File.write!(Path.join(movie_dir, "Movie.2007.1080p.mkv"), "ordinary contents")
+      File.write!(Path.join(movie_dir, "Movie.2007.trailer.mkv"), "trailer contents")
+
+      {:ok, _ordinary} =
+        Library.create_media_file(%{
+          relative_path: ordinary_rel,
+          library_path_id: lib.id,
+          media_item_id: movie.id,
+          size: byte_size("ordinary contents")
+        })
+
+      {:ok, _extra} =
+        Library.create_media_file(%{
+          relative_path: extra_rel,
+          library_path_id: lib.id,
+          media_item_id: movie.id,
+          size: byte_size("trailer contents"),
+          extra_kind: :trailer,
+          extra_source: :filename
+        })
+
+      assert {:ok, _} = Library.rescan_movie(movie.id)
+      assert {:ok, _} = Library.rescan_movie(movie.id)
+
+      all_files = Repo.all(from(f in MediaFile, where: f.media_item_id == ^movie.id))
+
+      assert Enum.count(all_files, &(&1.relative_path == extra_rel)) == 1,
+             "expected exactly one row for the persisted extra, got #{inspect(Enum.map(all_files, & &1.relative_path))}"
+
+      assert length(all_files) == 2
+    end
+  end
 end

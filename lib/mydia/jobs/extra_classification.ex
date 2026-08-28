@@ -42,6 +42,11 @@ defmodule Mydia.Jobs.ExtraClassification do
 
   @default_batch_size 50
 
+  # A settled movie only needs re-checking when something upstream can have
+  # changed: a newly available TMDB runtime, or a newly analyzed file. Without
+  # a floor the aged tier re-reads and re-writes the same rows every tick.
+  @recheck_after_hours 24
+
   @spec perform(Oban.Job.t()) :: :ok
   @impl Oban.Worker
   def perform(%Oban.Job{}) do
@@ -98,8 +103,11 @@ defmodule Mydia.Jobs.ExtraClassification do
   defp fetch_aged_item_ids(0, _exclude_ids), do: []
 
   defp fetch_aged_item_ids(limit, exclude_ids) do
+    cutoff = DateTime.utc_now() |> DateTime.add(-@recheck_after_hours * 3600, :second)
+
     base_item_query()
     |> where([mf], not is_nil(mf.extra_checked_at))
+    |> where([mf], mf.extra_checked_at < ^cutoff)
     |> where([mf], mf.media_item_id not in ^exclude_ids)
     |> group_by([mf], mf.media_item_id)
     |> order_by([mf], asc: min(mf.extra_checked_at))

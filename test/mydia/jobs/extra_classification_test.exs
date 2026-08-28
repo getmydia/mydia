@@ -163,4 +163,34 @@ defmodule Mydia.Jobs.ExtraClassificationTest do
     assert Repo.reload!(borderline).extra_kind == :other,
            "the rescue must not fire when a protected version already exists"
   end
+
+  test "the aged tier leaves a recently-checked movie alone", %{library_path: lp} do
+    # Regression: fetch_aged_item_ids/2 had no age floor, so once the
+    # unchecked tier drained, every tick re-checked and re-stamped the
+    # oldest-checked movies continuously.
+    #
+    # Backdated by 5 seconds, not DateTime.utc_now() outright: write/3 always
+    # re-stamps extra_checked_at to `now` when a row IS selected, and
+    # DateTime.utc_now() truncates to the second — an unbackdated timestamp
+    # can coincidentally match the write's `now` in the same second even when
+    # the row was wrongly reselected, hiding the regression this test exists
+    # to catch.
+    item = movie(111)
+    recent = DateTime.utc_now() |> DateTime.add(-5, :second) |> DateTime.truncate(:second)
+    feature = file(item, lp, 111 * 60, %{extra_checked_at: recent})
+
+    assert :ok = run()
+
+    assert Repo.reload!(feature).extra_checked_at == recent
+  end
+
+  test "the aged tier re-checks a movie stamped past the recheck floor", %{library_path: lp} do
+    item = movie(111)
+    stale = DateTime.utc_now() |> DateTime.add(-25 * 3600, :second) |> DateTime.truncate(:second)
+    feature = file(item, lp, 111 * 60, %{extra_checked_at: stale})
+
+    assert :ok = run()
+
+    refute Repo.reload!(feature).extra_checked_at == stale
+  end
 end
