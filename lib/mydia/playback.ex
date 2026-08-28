@@ -426,8 +426,7 @@ defmodule Mydia.Playback do
   def get_next_episode(media_item_id, user_id) do
     alias Mydia.Media
 
-    active_files_query =
-      from(mf in Mydia.Library.MediaFile, where: is_nil(mf.trashed_at))
+    active_files_query = Mydia.Library.MediaFile.versions()
 
     # Get all episodes for the series, ordered by season and episode number
     episodes =

@@ -198,4 +198,80 @@ defmodule Mydia.Jobs.ThumbnailGenerationTest do
       assert "thumbnail_generation" = ThumbnailGeneration.topic()
     end
   end
+
+  describe "extras" do
+    test "the missing mode's selection query excludes extras" do
+      # On galactica 145 of 354 movie files are extras. Generating sprite
+      # sheets and preview thumbnails for a three minute deleted scene is
+      # wasted ffmpeg time.
+      #
+      # `perform(%{"mode" => "missing"})` never enqueues per-file jobs (it
+      # calls generate_for_file/2 synchronously via process_in_batches/2), so
+      # asserting via refute_enqueued would be vacuously true regardless of
+      # filtering. Assert directly on the row-selecting query instead, via
+      # the `missing_thumbnail_file_ids/1` seam extracted from
+      # `process_missing/2` for exactly this purpose.
+      library_path = library_path_fixture(%{type: "movies"})
+      item = media_item_fixture(%{type: "movie"})
+
+      ordinary =
+        %Mydia.Library.MediaFile{}
+        |> Mydia.Library.MediaFile.changeset(%{
+          media_item_id: item.id,
+          library_path_id: library_path.id,
+          relative_path: "Movie (2007)/movie.mkv",
+          analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second),
+          metadata: %{duration: 5400.0}
+        })
+        |> Mydia.Repo.insert!()
+
+      extra =
+        %Mydia.Library.MediaFile{}
+        |> Mydia.Library.MediaFile.changeset(%{
+          media_item_id: item.id,
+          library_path_id: library_path.id,
+          relative_path: "Movie (2007)/scene.mkv",
+          analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second),
+          metadata: %{duration: 180.0},
+          extra_kind: :deleted_scene,
+          extra_source: :folder
+        })
+        |> Mydia.Repo.insert!()
+
+      file_ids = ThumbnailGeneration.missing_thumbnail_file_ids()
+
+      assert ordinary.id in file_ids
+      refute extra.id in file_ids
+    end
+
+    test "the single mode still reaches generation for an explicitly named extra" do
+      # An operator asking for one specific file gets it, extra or not.
+      #
+      # `generate_for_file(nil, _)` returns `{:error, :file_not_found}` when
+      # the row itself can't be found; a row that IS found but whose file is
+      # missing from disk instead fails inside ThumbnailGenerator with an
+      # `{:error, {:ffmpeg_error, _, _}}` tuple (verified against this exact
+      # setup below). Asserting that specific shape proves the extra's row
+      # was found and generation was attempted, rather than the row being
+      # silently filtered out.
+      library_path = library_path_fixture(%{type: "movies"})
+      item = media_item_fixture(%{type: "movie"})
+
+      extra =
+        %Mydia.Library.MediaFile{}
+        |> Mydia.Library.MediaFile.changeset(%{
+          media_item_id: item.id,
+          library_path_id: library_path.id,
+          relative_path: "Movie (2007)/scene.mkv",
+          extra_kind: :deleted_scene,
+          extra_source: :folder
+        })
+        |> Mydia.Repo.insert!()
+
+      assert {:error, {:ffmpeg_error, _code, _output}} =
+               Mydia.Jobs.ThumbnailGeneration.perform(%Oban.Job{
+                 args: %{"mode" => "single", "media_file_id" => extra.id}
+               })
+    end
+  end
 end

@@ -2646,6 +2646,20 @@ defmodule Mydia.MediaTest do
       assert found.id == movie.id
     end
 
+    test "returns a movie whose only file is an extra" do
+      movie = insert(:media_item, type: "movie")
+
+      insert(:media_file,
+        media_item: movie,
+        episode: nil,
+        extra_kind: :other,
+        extra_source: :duration
+      )
+
+      assert {[found], 0} = Media.partition_for_auto_search([movie.id])
+      assert found.id == movie.id
+    end
+
     test "skips a movie with an occupying download" do
       movie = insert(:media_item, type: "movie")
       insert(:download, media_item: movie)

@@ -307,6 +307,22 @@ defmodule Mydia.Jobs.MovieSearchTest do
       assert movie.id in ids
     end
 
+    test "still selects a monitored movie whose only file is an extra" do
+      # Regression: an extras-only folder (a deleted scene, a featurette) must
+      # not make the search job believe the movie itself is already on disk.
+      movie = media_item_fixture(%{type: "movie", title: "Extras Only", monitored: true})
+
+      media_file_fixture(%{
+        media_item_id: movie.id,
+        extra_kind: :other,
+        extra_source: :duration
+      })
+
+      ids = Enum.map(MovieSearch.load_monitored_movies_without_files(), & &1.id)
+
+      assert movie.id in ids
+    end
+
     test "still selects a movie when its prior download completed" do
       # Edge case: completed_at set but no media_file yet. Search may run again;
       # the queue layer will dedup if appropriate. We mirror queue.ex semantics:

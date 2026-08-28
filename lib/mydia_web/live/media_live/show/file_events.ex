@@ -476,6 +476,59 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
     end
   end
 
+  @doc """
+  Promotes an extra back to a version, or demotes a version to an extra.
+
+  Both write `extra_source: :operator`, which is sticky:
+  `Mydia.Jobs.ExtraClassification` never reconsiders a row a human has
+  touched, in either direction.
+  """
+  def promote_to_version(%{"id" => id}, socket) do
+    reclassify(socket, id, %{extra_kind: nil, extra_source: :operator})
+  end
+
+  def demote_to_extra(%{"id" => id}, socket) do
+    reclassify(socket, id, %{extra_kind: :other, extra_source: :operator})
+  end
+
+  defp reclassify(socket, id, attrs) do
+    with :ok <- Authorization.authorize_update_media(socket),
+         true <- owns_media_file?(socket.assigns.media_item, id) do
+      media_file = Library.get_media_file!(id)
+      attrs = Map.put(attrs, :extra_checked_at, DateTime.utc_now() |> DateTime.truncate(:second))
+
+      case Library.update_media_file(media_file, attrs) do
+        {:ok, _updated} ->
+          {:noreply,
+           socket
+           |> assign(:media_item, load_media_item(socket.assigns.media_item.id))
+           |> put_flash(:info, "File reclassified")}
+
+        {:error, _changeset} ->
+          {:noreply, put_flash(socket, :error, "Could not reclassify that file")}
+      end
+    else
+      {:unauthorized, socket} ->
+        {:noreply, socket}
+
+      false ->
+        {:noreply, put_flash(socket, :error, "Could not reclassify that file")}
+    end
+  end
+
+  # The id comes straight off the event payload, so it must be checked
+  # against the files already loaded for the media item on screen before
+  # anything is fetched or written — otherwise any authenticated user could
+  # reclassify any media file in the library by id, including one belonging
+  # to a different media item. all_media_files/1 is the right source of
+  # truth here (not a media_item_id query) because a TV file's media_item_id
+  # is NULL; it only belongs to its show through episode_id.
+  defp owns_media_file?(media_item, id) do
+    media_item
+    |> all_media_files()
+    |> Enum.any?(&(&1.id == id))
+  end
+
   # handle_async dispatches
 
   def handle_refresh_files_async({:ok, {:ok, success_count, error_count}}, socket) do

@@ -351,6 +351,12 @@ defmodule MydiaWeb.MediaLive.Show do
   def handle_event("mark_file_preferred", params, socket),
     do: FileEvents.mark_file_preferred(params, socket)
 
+  def handle_event("promote_to_version", params, socket),
+    do: FileEvents.promote_to_version(params, socket)
+
+  def handle_event("demote_to_extra", params, socket),
+    do: FileEvents.demote_to_extra(params, socket)
+
   def handle_event("retry_download", params, socket),
     do: DownloadEvents.retry_download(params, socket)
 

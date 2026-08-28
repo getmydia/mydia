@@ -455,7 +455,9 @@ defmodule Mydia.Jobs.MovieSearch do
       |> where([m], m.type == "movie")
       |> where([m], m.monitored == true)
       |> where([m], m.id not in subquery(active_download_media_item_ids()))
-      |> join(:left, [m], mf in MediaFile, on: mf.media_item_id == m.id and is_nil(mf.trashed_at))
+      |> join(:left, [m], mf in MediaFile,
+        on: mf.media_item_id == m.id and is_nil(mf.trashed_at) and is_nil(mf.extra_kind)
+      )
       |> group_by([m], m.id)
       |> having([m, mf], count(mf.id) == 0)
       |> Repo.all()

@@ -286,9 +286,11 @@ defmodule MydiaWeb.MediaLive.Index do
            reason: if(new_monitored_status, do: "Monitoring enabled", else: "Monitoring disabled")
          ) do
       {:ok, _updated_item} ->
-        # Refetch with proper preloads to match the stream items (exclude trashed files)
-        import Ecto.Query
-        active_files_query = from(mf in Mydia.Library.MediaFile, where: is_nil(mf.trashed_at))
+        # Refetch with proper preloads to match the stream items (exclude
+        # trashed and extra files — feeds Media.get_media_status/1, which
+        # would otherwise light up the Downloaded badge for an extras-only
+        # movie).
+        active_files_query = Mydia.Library.MediaFile.versions()
 
         updated_item_with_preloads =
           Media.get_media_item!(id,
@@ -727,10 +729,12 @@ defmodule MydiaWeb.MediaLive.Index do
   defp build_query_opts(assigns) do
     user_id = assigns.current_user.id
 
-    # Build preload queries filtered by current user / active (non-trashed) files
+    # Build preload queries filtered by current user / active (non-trashed,
+    # non-extra) files. media_files feeds Media.get_media_status/1, which
+    # would otherwise light up the Downloaded badge for an extras-only movie.
     import Ecto.Query
     progress_query = from p in Mydia.Playback.Progress, where: p.user_id == ^user_id
-    active_files_query = from(mf in Mydia.Library.MediaFile, where: is_nil(mf.trashed_at))
+    active_files_query = Mydia.Library.MediaFile.versions()
 
     []
     |> maybe_add_filter(:type, assigns.filter_type)

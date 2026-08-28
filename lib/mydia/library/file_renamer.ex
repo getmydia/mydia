@@ -88,7 +88,7 @@ defmodule Mydia.Library.FileRenamer do
   Returns a list of preview maps.
   """
   def generate_rename_previews_for_media_item(%MediaItem{} = media_item) do
-    active_files_query = from(mf in MediaFile, where: is_nil(mf.trashed_at))
+    active_files_query = MediaFile.versions()
 
     media_item =
       Repo.preload(media_item,

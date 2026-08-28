@@ -225,8 +225,10 @@ defmodule Mydia.Playback.OnDeck do
   defp load_movie_files([]), do: %{}
 
   defp load_movie_files(ids) do
+    # is_nil(extra_kind) so a bonus feature never surfaces as a playable
+    # on-deck entry.
     from(mf in MediaFile,
-      where: mf.media_item_id in ^ids and is_nil(mf.trashed_at)
+      where: mf.media_item_id in ^ids and is_nil(mf.trashed_at) and is_nil(mf.extra_kind)
     )
     |> Repo.all()
     |> Enum.group_by(& &1.media_item_id)
@@ -243,7 +245,7 @@ defmodule Mydia.Playback.OnDeck do
   defp load_episodes_with_files([]), do: %{}
 
   defp load_episodes_with_files(show_ids) do
-    active_files = from(mf in MediaFile, where: is_nil(mf.trashed_at))
+    active_files = MediaFile.versions()
 
     from(e in Episode,
       where: e.media_item_id in ^show_ids,

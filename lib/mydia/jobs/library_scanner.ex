@@ -354,15 +354,18 @@ defmodule Mydia.Jobs.LibraryScanner do
     # Detect changes
     changes = Library.Scanner.detect_changes(scan_result, existing_files, library_path)
 
-    # Filter out extras, samples, and trailers from new files
-    {regular_new_files, extras_filtered} =
-      Enum.split_with(changes.new_files, fn file_info ->
-        SampleDetector.skip_detection?(file_info.path) or
-          not SampleDetector.excluded?(SampleDetector.detect(file_info.path))
+    # Extras are persisted with a classification rather than dropped. Dropping
+    # them meant a file Mydia decided to ignore left no trace anywhere, and the
+    # same files were re-detected and re-dropped on every subsequent scan.
+    regular_new_files = changes.new_files
+
+    extras_count =
+      Enum.count(changes.new_files, fn file_info ->
+        not is_nil(extra_classification(file_info.path))
       end)
 
-    if extras_filtered != [] do
-      Logger.info("Filtered #{length(extras_filtered)} sample/trailer/extra files from scan",
+    if extras_count > 0 do
+      Logger.info("Flagged #{extras_count} sample/trailer/extra files during scan",
         library_path_id: library_path.id
       )
     end
@@ -439,12 +442,31 @@ defmodule Mydia.Jobs.LibraryScanner do
                   end
 
                 _ ->
-                  case Library.create_scanned_media_file(%{
-                         library_path_id: library_path.id,
-                         relative_path: relative_path,
-                         size: file_info.size,
-                         verified_at: DateTime.utc_now()
-                       }) do
+                  extra_attrs =
+                    case extra_classification(file_info.path) do
+                      nil ->
+                        %{}
+
+                      {kind, source} ->
+                        %{
+                          extra_kind: kind,
+                          extra_source: source,
+                          extra_checked_at: DateTime.utc_now() |> DateTime.truncate(:second)
+                        }
+                    end
+
+                  attrs =
+                    Map.merge(
+                      %{
+                        library_path_id: library_path.id,
+                        relative_path: relative_path,
+                        size: file_info.size,
+                        verified_at: DateTime.utc_now()
+                      },
+                      extra_attrs
+                    )
+
+                  case Library.create_scanned_media_file(attrs) do
                     {:ok, media_file} ->
                       Logger.debug("Added new media file",
                         path: file_info.path,
@@ -1339,5 +1361,14 @@ defmodule Mydia.Jobs.LibraryScanner do
         media_item_id: media_item.id,
         error: Exception.message(error)
       )
+  end
+
+  # nil when the file is a version, {kind, source} when it is an extra.
+  defp extra_classification(path) do
+    if SampleDetector.skip_detection?(path) do
+      nil
+    else
+      SampleDetector.extra_kind(SampleDetector.detect(path))
+    end
   end
 end

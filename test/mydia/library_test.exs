@@ -1057,4 +1057,151 @@ defmodule Mydia.LibraryTest do
       assert Library.count_imported_files_by_download([]) == %{}
     end
   end
+
+  describe "episode_has_media_file?/1" do
+    setup do
+      %{
+        lib: library_path_fixture(%{type: "series"}),
+        show: Mydia.MediaFixtures.media_item_fixture(%{type: "tv_show"})
+      }
+    end
+
+    test "returns true when the episode's only file is ordinary", %{lib: lib, show: show} do
+      episode = Mydia.MediaFixtures.episode_fixture(%{media_item_id: show.id})
+
+      {:ok, _file} =
+        Library.create_media_file(%{
+          relative_path: "ordinary.mkv",
+          library_path_id: lib.id,
+          episode_id: episode.id,
+          size: 100
+        })
+
+      assert Library.episode_has_media_file?(episode.id)
+    end
+
+    test "returns false when the episode's only file is a scanner-flagged extra", %{
+      lib: lib,
+      show: show
+    } do
+      # Regression: the scanner's path-based detection is type-agnostic and
+      # persists a trailer/extra matched to an episode. That file must not
+      # make the importer believe the episode already has its real content.
+      episode = Mydia.MediaFixtures.episode_fixture(%{media_item_id: show.id})
+
+      {:ok, _extra} =
+        Library.create_media_file(%{
+          relative_path: "episode-trailer.mkv",
+          library_path_id: lib.id,
+          episode_id: episode.id,
+          size: 100,
+          extra_kind: :trailer,
+          extra_source: :filename
+        })
+
+      refute Library.episode_has_media_file?(episode.id)
+    end
+
+    test "returns true when the episode has both an ordinary file and an extra", %{
+      lib: lib,
+      show: show
+    } do
+      episode = Mydia.MediaFixtures.episode_fixture(%{media_item_id: show.id})
+
+      {:ok, _file} =
+        Library.create_media_file(%{
+          relative_path: "ordinary.mkv",
+          library_path_id: lib.id,
+          episode_id: episode.id,
+          size: 100
+        })
+
+      {:ok, _extra} =
+        Library.create_media_file(%{
+          relative_path: "episode-trailer.mkv",
+          library_path_id: lib.id,
+          episode_id: episode.id,
+          size: 100,
+          extra_kind: :trailer,
+          extra_source: :filename
+        })
+
+      assert Library.episode_has_media_file?(episode.id)
+    end
+
+    test "returns false when the episode's only file is trashed", %{lib: lib, show: show} do
+      episode = Mydia.MediaFixtures.episode_fixture(%{media_item_id: show.id})
+
+      {:ok, _file} =
+        Library.create_media_file(%{
+          relative_path: "trashed.mkv",
+          library_path_id: lib.id,
+          episode_id: episode.id,
+          size: 100,
+          trashed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      refute Library.episode_has_media_file?(episode.id)
+    end
+  end
+
+  describe "rescan_movie/1 with a persisted extra" do
+    setup do
+      tmp =
+        Path.join(System.tmp_dir!(), "mydia_rescan_extra_#{System.unique_integer([:positive])}")
+
+      movie_dir = Path.join(tmp, "Movie (2007)")
+      File.mkdir_p!(movie_dir)
+      on_exit(fn -> File.rm_rf(tmp) end)
+
+      %{movie_dir: movie_dir, library_path: library_path_fixture(%{path: tmp, type: "movies"})}
+    end
+
+    test "does not re-insert a persisted extra on repeated rescans", %{
+      movie_dir: movie_dir,
+      library_path: lib
+    } do
+      # Regression: get_media_files_for_item/2 excludes extras by default,
+      # which is right for an ownership question but wrong for the rescan's
+      # inventory question. Before include_extras: true was added to the
+      # rescan call sites, an already-persisted extra was absent from
+      # existing_paths, so every rescan treated it as a brand new file and
+      # inserted a duplicate row — with no unique index on `path` to catch it.
+      movie = Mydia.MediaFixtures.media_item_fixture(%{type: "movie"})
+
+      ordinary_rel = "Movie (2007)/Movie.2007.1080p.mkv"
+      extra_rel = "Movie (2007)/Movie.2007.trailer.mkv"
+
+      File.write!(Path.join(movie_dir, "Movie.2007.1080p.mkv"), "ordinary contents")
+      File.write!(Path.join(movie_dir, "Movie.2007.trailer.mkv"), "trailer contents")
+
+      {:ok, _ordinary} =
+        Library.create_media_file(%{
+          relative_path: ordinary_rel,
+          library_path_id: lib.id,
+          media_item_id: movie.id,
+          size: byte_size("ordinary contents")
+        })
+
+      {:ok, _extra} =
+        Library.create_media_file(%{
+          relative_path: extra_rel,
+          library_path_id: lib.id,
+          media_item_id: movie.id,
+          size: byte_size("trailer contents"),
+          extra_kind: :trailer,
+          extra_source: :filename
+        })
+
+      assert {:ok, _} = Library.rescan_movie(movie.id)
+      assert {:ok, _} = Library.rescan_movie(movie.id)
+
+      all_files = Repo.all(from(f in MediaFile, where: f.media_item_id == ^movie.id))
+
+      assert Enum.count(all_files, &(&1.relative_path == extra_rel)) == 1,
+             "expected exactly one row for the persisted extra, got #{inspect(Enum.map(all_files, & &1.relative_path))}"
+
+      assert length(all_files) == 2
+    end
+  end
 end

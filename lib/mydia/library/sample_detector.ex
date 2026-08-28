@@ -201,6 +201,53 @@ defmodule Mydia.Library.SampleDetector do
     end
   end
 
+  @doc """
+  Translates a `detect/1` result into `{extra_kind, extra_source}` columns.
+
+  Returns `nil` when nothing was detected, meaning the file is a version.
+
+  Folder detections carry a named kind, because the Plex folder names map
+  directly onto the enum. Filename detections do not: `@extra_pattern` is a
+  single combined regex that does not report which alternative matched, so
+  naming a kind from it would be a guess. They land on `:other`.
+  """
+  @spec extra_kind(map()) :: {atom(), :folder | :filename} | nil
+  def extra_kind(detection) when is_map(detection) do
+    source = detection[:detection_method]
+
+    cond do
+      detection[:is_sample] ->
+        {:sample, source}
+
+      detection[:is_trailer] ->
+        {:trailer, source}
+
+      detection[:is_extra] and source == :folder ->
+        {kind_from_folder(detection[:detected_folder]), :folder}
+
+      detection[:is_extra] ->
+        {:other, source}
+
+      true ->
+        nil
+    end
+  end
+
+  @folder_kinds %{
+    "behind the scenes" => :behind_the_scenes,
+    "deleted scenes" => :deleted_scene,
+    "featurettes" => :featurette,
+    "interviews" => :interview,
+    "scenes" => :scene,
+    "shorts" => :short,
+    "other" => :other,
+    "extras" => :other
+  }
+
+  defp kind_from_folder(nil), do: :other
+
+  defp kind_from_folder(folder), do: Map.get(@folder_kinds, String.downcase(folder), :other)
+
   ## Private Functions
 
   # Plex extras folder names (case-insensitive)

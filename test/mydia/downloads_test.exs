@@ -825,6 +825,23 @@ defmodule Mydia.DownloadsTest do
       assert {:error, :already_have_files} = result
     end
 
+    test "does not skip a movie download when the only file is an extra", %{
+      search_result: search_result,
+      movie: movie
+    } do
+      # Regression: an extras-only folder (a deleted scene, a featurette) must
+      # not make the queue believe the movie itself is already downloaded.
+      media_file_fixture(%{
+        media_item_id: movie.id,
+        extra_kind: :other,
+        extra_source: :duration
+      })
+
+      result = Downloads.initiate_download(search_result, media_item_id: movie.id)
+
+      assert {:ok, _download} = result
+    end
+
     test "allows a season pack when only SOME episodes already have media files", %{
       search_result: search_result,
       tv_show: tv_show

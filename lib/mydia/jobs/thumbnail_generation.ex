@@ -161,6 +161,34 @@ defmodule Mydia.Jobs.ThumbnailGeneration do
     |> Oban.insert()
   end
 
+  @doc false
+  # The row-selecting half of the "missing" mode, split out from
+  # `process_missing/2` so tests can assert on selection directly (extras
+  # excluded, ordinary files included) without needing ffmpeg or files on
+  # disk. Not part of the public API.
+  @spec missing_thumbnail_file_ids(String.t() | nil) :: [String.t()]
+  def missing_thumbnail_file_ids(library_type \\ nil) do
+    # Extras are excluded from bulk selection. 145 of galactica's 354 movie
+    # files are bonus content, and a sprite sheet for a three minute
+    # deleted scene is wasted ffmpeg time. The single and batch modes take
+    # explicit ids and deliberately do not filter.
+    query =
+      from mf in MediaFile,
+        join: lp in assoc(mf, :library_path),
+        where: is_nil(mf.cover_blob) and is_nil(mf.extra_kind),
+        select: mf.id
+
+    query =
+      if library_type do
+        type_atom = String.to_existing_atom(library_type)
+        from [mf, lp] in query, where: lp.type == ^type_atom
+      else
+        query
+      end
+
+    Repo.all(query)
+  end
+
   @doc """
   Cancels all pending thumbnail generation jobs.
 
@@ -340,9 +368,14 @@ defmodule Mydia.Jobs.ThumbnailGeneration do
 
   defp process_library(library_path_id, opts, regenerate) do
     # Get all video files in the library
+    #
+    # Extras are excluded from bulk selection. 145 of galactica's 354 movie
+    # files are bonus content, and a sprite sheet for a three minute
+    # deleted scene is wasted ffmpeg time. The single and batch modes take
+    # explicit ids and deliberately do not filter.
     query =
       from mf in MediaFile,
-        where: mf.library_path_id == ^library_path_id,
+        where: mf.library_path_id == ^library_path_id and is_nil(mf.extra_kind),
         select: mf.id
 
     query =
@@ -365,22 +398,7 @@ defmodule Mydia.Jobs.ThumbnailGeneration do
   end
 
   defp process_missing(opts, library_type) do
-    # Query files missing thumbnails
-    query =
-      from mf in MediaFile,
-        join: lp in assoc(mf, :library_path),
-        where: is_nil(mf.cover_blob),
-        select: mf.id
-
-    query =
-      if library_type do
-        type_atom = String.to_existing_atom(library_type)
-        from [mf, lp] in query, where: lp.type == ^type_atom
-      else
-        query
-      end
-
-    file_ids = Repo.all(query)
+    file_ids = missing_thumbnail_file_ids(library_type)
 
     if file_ids == [] do
       broadcast_progress(%{event: :completed, total: 0, completed: 0, failed: 0})

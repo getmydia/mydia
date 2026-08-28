@@ -215,8 +215,12 @@ defmodule MydiaWeb.Api.Player.V1.SubtitleController do
 
   # Mirrors the filter in Mydia.Streaming.Candidates: a trashed file is not a
   # subtitle source.
+  #
+  # Extras are excluded here, not just trashed files. FileRanking.best/1 ranks
+  # on resolution then bitrate, so a featurette encoded above the feature's
+  # bitrate would otherwise be picked as the thing to stream.
   defp active_files_query do
-    from(mf in MediaFile, where: is_nil(mf.trashed_at), preload: :library_path)
+    from(mf in MediaFile.versions(), preload: :library_path)
   end
 
   # Parse track ID from string parameter

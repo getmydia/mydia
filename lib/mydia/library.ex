@@ -171,11 +171,20 @@ defmodule Mydia.Library do
   Used by the importer to skip season-pack files for episodes the library
   already has, since nothing downstream reconciles two live files for one
   episode outside the upgrade path.
+
+  Counts only real versions of the episode (`is_nil(extra_kind)`). A bonus
+  file scanner-matched to this episode — a trailer, a deleted scene — must
+  not make the importer believe the episode is already filled and skip the
+  real file a season pack is trying to deliver. Getting this wrong here is
+  invisible at the call site: the importer logs "episode already has a media
+  file" as if it succeeded, while the real file is silently dropped.
   """
   @spec episode_has_media_file?(String.t()) :: boolean()
   def episode_has_media_file?(episode_id) when is_binary(episode_id) do
     Repo.exists?(
-      from(f in MediaFile, where: f.episode_id == ^episode_id and is_nil(f.trashed_at))
+      from(f in MediaFile,
+        where: f.episode_id == ^episode_id and is_nil(f.trashed_at) and is_nil(f.extra_kind)
+      )
     )
   end
 
@@ -912,20 +921,54 @@ defmodule Mydia.Library do
   end
 
   @doc """
-  Gets all media files for a media item.
+  Gets a media item's files.
+
+  Extras are excluded by default, so callers that ask "which files does this
+  movie have" get versions of the movie. Pass `include_extras: true` for the
+  file list on the movie page, which shows both.
+
+  The default is right for an OWNERSHIP question — "which file is this
+  movie", "does this item have files". It is wrong for INVENTORY or
+  RECONCILIATION — "what rows already exist", "which rows are missing from
+  disk". An inventory caller that gets the filtered set treats an
+  already-persisted extra as absent, so a rescan re-inserts it forever (no
+  unique index on `path` catches the duplicate), and a missing-file sweep
+  never reaps a deleted extra. Inventory and reconciliation callers must pass
+  `include_extras: true`.
   """
   @spec get_media_files_for_item(binary(), keyword()) :: [MediaFile.t()]
   def get_media_files_for_item(media_item_id, opts \\ []) do
-    list_media_files([media_item_id: media_item_id] ++ opts)
+    {include_extras, opts} = Keyword.pop(opts, :include_extras, false)
+
+    [media_item_id: media_item_id]
+    |> Kernel.++(opts)
+    |> list_media_files()
+    |> reject_extras(include_extras)
   end
 
   @doc """
   Gets all media files for an episode.
+
+  Extras are excluded by default, mirroring `get_media_files_for_item/2`. Pass
+  `include_extras: true` to get both.
+
+  Same inventory-versus-ownership rule as `get_media_files_for_item/2`: the
+  default suits "does this episode have a file" callers, not "what rows
+  already exist on disk for this episode" callers. See that function's doc
+  for why getting this wrong is a data-integrity bug, not just a display one.
   """
   @spec get_media_files_for_episode(binary(), keyword()) :: [MediaFile.t()]
   def get_media_files_for_episode(episode_id, opts \\ []) do
-    list_media_files([episode_id: episode_id] ++ opts)
+    {include_extras, opts} = Keyword.pop(opts, :include_extras, false)
+
+    [episode_id: episode_id]
+    |> Kernel.++(opts)
+    |> list_media_files()
+    |> reject_extras(include_extras)
   end
+
+  defp reject_extras(files, true), do: files
+  defp reject_extras(files, false), do: Enum.filter(files, &is_nil(&1.extra_kind))
 
   @doc """
   Matches unassociated media files to their episodes for a TV show.
@@ -1135,7 +1178,11 @@ defmodule Mydia.Library do
           case Scanner.scan(base_directory, recursive: true) do
             {:ok, scan_result} ->
               # Get existing media file paths for this series
-              existing_files = get_media_files_for_item(media_item_id, preload: [:library_path])
+              existing_files =
+                get_media_files_for_item(media_item_id,
+                  preload: [:library_path],
+                  include_extras: true
+                )
 
               existing_paths =
                 existing_files
@@ -1214,7 +1261,10 @@ defmodule Mydia.Library do
             {:error, :not_found} ->
               # Directory no longer exists — trash all files for the series
               existing_files =
-                get_media_files_for_item(media_item_id, preload: [:library_path])
+                get_media_files_for_item(media_item_id,
+                  preload: [:library_path],
+                  include_extras: true
+                )
 
               trashed_count =
                 Enum.count(existing_files, fn file ->
@@ -1297,7 +1347,10 @@ defmodule Mydia.Library do
 
               # Get existing media file paths for this series (with episode for season scoping)
               existing_files =
-                get_media_files_for_item(media_item_id, preload: [:library_path, :episode])
+                get_media_files_for_item(media_item_id,
+                  preload: [:library_path, :episode],
+                  include_extras: true
+                )
 
               existing_paths =
                 existing_files
@@ -1397,7 +1450,10 @@ defmodule Mydia.Library do
             {:error, :not_found} ->
               # Directory no longer exists — trash all season files
               existing_files =
-                get_media_files_for_item(media_item_id, preload: [:library_path, :episode])
+                get_media_files_for_item(media_item_id,
+                  preload: [:library_path, :episode],
+                  include_extras: true
+                )
 
               season_existing =
                 Enum.filter(existing_files, fn file ->
@@ -1493,7 +1549,11 @@ defmodule Mydia.Library do
           case Scanner.scan(base_directory, recursive: false) do
             {:ok, scan_result} ->
               # Get existing media file paths for this movie
-              existing_files = get_media_files_for_item(media_item_id, preload: [:library_path])
+              existing_files =
+                get_media_files_for_item(media_item_id,
+                  preload: [:library_path],
+                  include_extras: true
+                )
 
               existing_paths =
                 existing_files
@@ -1552,7 +1612,10 @@ defmodule Mydia.Library do
             {:error, :not_found} ->
               # Directory no longer exists — trash all files for the movie
               existing_files =
-                get_media_files_for_item(media_item_id, preload: [:library_path])
+                get_media_files_for_item(media_item_id,
+                  preload: [:library_path],
+                  include_extras: true
+                )
 
               trashed_count =
                 Enum.count(existing_files, fn file ->
@@ -1608,7 +1671,11 @@ defmodule Mydia.Library do
   end
 
   defp find_series_base_directory(media_item_id, library_paths) do
-    media_files = get_media_files_for_item(media_item_id, preload: [:episode, :library_path])
+    media_files =
+      get_media_files_for_item(media_item_id,
+        preload: [:episode, :library_path],
+        include_extras: true
+      )
 
     case media_files do
       [] ->
@@ -1709,7 +1776,8 @@ defmodule Mydia.Library do
 
   # Finds the base directory for a movie by looking at existing media file paths
   defp find_movie_base_directory(media_item_id, library_paths) do
-    media_files = get_media_files_for_item(media_item_id, preload: [:library_path])
+    media_files =
+      get_media_files_for_item(media_item_id, preload: [:library_path], include_extras: true)
 
     case media_files do
       [] ->

@@ -616,8 +616,10 @@ defmodule Mydia.Upgrades do
   defp best_file(_files, _profile, _media_type), do: nil
 
   defp analyzed_files_query do
+    # is_nil(extra_kind) so a bonus feature is never scored and grabbed as an
+    # "upgrade" of the movie it accompanies.
     from f in MediaFile,
-      where: is_nil(f.trashed_at) and not is_nil(f.analyzed_at)
+      where: is_nil(f.trashed_at) and is_nil(f.extra_kind) and not is_nil(f.analyzed_at)
   end
 
   defp files_for_media_item(media_item_id) do
@@ -636,18 +638,27 @@ defmodule Mydia.Upgrades do
   # unanalyzed item (fresh off a large import, before background analysis
   # catches up) never consumes a slot in the `@overfetch` page.
   defp analyzed_movie_ids do
+    # is_nil(extra_kind), same reasoning as analyzed_files_query/0 above.
     MediaFile
     |> where(
       [f],
-      is_nil(f.trashed_at) and not is_nil(f.analyzed_at) and not is_nil(f.media_item_id)
+      is_nil(f.trashed_at) and is_nil(f.extra_kind) and not is_nil(f.analyzed_at) and
+        not is_nil(f.media_item_id)
     )
     |> select([f], f.media_item_id)
     |> distinct(true)
   end
 
   defp analyzed_episode_ids do
+    # is_nil(extra_kind), same reasoning as analyzed_files_query/0 above: a
+    # scanner-flagged trailer must not be scored and grabbed as an "upgrade"
+    # of the episode it accompanies.
     MediaFile
-    |> where([f], is_nil(f.trashed_at) and not is_nil(f.analyzed_at) and not is_nil(f.episode_id))
+    |> where(
+      [f],
+      is_nil(f.trashed_at) and is_nil(f.extra_kind) and not is_nil(f.analyzed_at) and
+        not is_nil(f.episode_id)
+    )
     |> select([f], f.episode_id)
     |> distinct(true)
   end

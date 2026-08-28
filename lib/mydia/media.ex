@@ -119,10 +119,12 @@ defmodule Mydia.Media do
   defp owned_media_item_ids([]), do: MapSet.new()
 
   defp owned_media_item_ids(ids) do
+    # is_nil(extra_kind) so a folder holding only bonus content does not
+    # make the movie look downloaded.
     direct =
       Repo.all(
         from(f in Mydia.Library.MediaFile,
-          where: is_nil(f.trashed_at) and f.media_item_id in ^ids,
+          where: is_nil(f.trashed_at) and is_nil(f.extra_kind) and f.media_item_id in ^ids,
           select: f.media_item_id
         )
       )
@@ -132,7 +134,7 @@ defmodule Mydia.Media do
         from(f in Mydia.Library.MediaFile,
           join: e in Mydia.Media.Episode,
           on: e.id == f.episode_id,
-          where: is_nil(f.trashed_at) and e.media_item_id in ^ids,
+          where: is_nil(f.trashed_at) and is_nil(f.extra_kind) and e.media_item_id in ^ids,
           select: e.media_item_id
         )
       )
@@ -1584,7 +1586,7 @@ defmodule Mydia.Media do
       has_files:
         type(
           fragment(
-            "CASE WHEN EXISTS(SELECT 1 FROM media_files WHERE episode_id = ? AND trashed_at IS NULL) THEN true ELSE false END",
+            "CASE WHEN EXISTS(SELECT 1 FROM media_files WHERE episode_id = ? AND trashed_at IS NULL AND extra_kind IS NULL) THEN true ELSE false END",
             e.id
           ),
           :boolean
@@ -2340,7 +2342,7 @@ defmodule Mydia.Media do
     |> where([m], m.id in ^ids and m.type == "movie")
     |> where([m], m.id not in subquery(occupying_download_media_item_ids()))
     |> join(:left, [m], mf in Mydia.Library.MediaFile,
-      on: mf.media_item_id == m.id and is_nil(mf.trashed_at)
+      on: mf.media_item_id == m.id and is_nil(mf.trashed_at) and is_nil(mf.extra_kind)
     )
     |> group_by([m], m.id)
     |> having([_m, mf], count(mf.id) == 0)
@@ -2364,7 +2366,7 @@ defmodule Mydia.Media do
       |> exclude_special_episodes()
       |> where([e], e.id not in subquery(occupying_download_episode_ids()))
       |> join(:left, [e], mf in Mydia.Library.MediaFile,
-        on: mf.episode_id == e.id and is_nil(mf.trashed_at)
+        on: mf.episode_id == e.id and is_nil(mf.trashed_at) and is_nil(mf.extra_kind)
       )
       |> group_by([e], e.id)
       |> having([_e, _m, mf], count(mf.id) == 0)
