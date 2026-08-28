@@ -140,4 +140,27 @@ defmodule Mydia.Jobs.ExtraClassificationTest do
     assert Repo.reload!(feature).extra_kind == nil
     assert Repo.reload!(extra).extra_kind == :other
   end
+
+  test "does not promote a second version when an operator version already exists",
+       %{library_path: lp} do
+    item = movie(111)
+
+    operator_version =
+      file(item, lp, 20 * 60, %{
+        extra_kind: nil,
+        extra_source: :operator,
+        extra_checked_at: DateTime.utc_now() |> DateTime.truncate(:second)
+      })
+
+    # Longer than the operator's file and above the 0.30 rescue floor (0.36),
+    # so an unsuppressed invariant would promote it.
+    borderline = file(item, lp, 40 * 60)
+
+    assert :ok = run()
+
+    assert Repo.reload!(operator_version).extra_kind == nil
+
+    assert Repo.reload!(borderline).extra_kind == :other,
+           "the rescue must not fire when a protected version already exists"
+  end
 end

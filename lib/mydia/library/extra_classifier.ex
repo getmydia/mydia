@@ -58,9 +58,22 @@ defmodule Mydia.Library.ExtraClassifier do
   the files are in seconds. Returns a map of media file id to decision. Files
   with no duration are omitted rather than guessed at, and callers must leave
   those rows untouched.
+
+  ## Options
+
+    * `:rescue` - defaults to `true`. `classify/3` re-decides every file it is
+      handed, so it has no way to see that a file outside its own input is
+      already a settled version (an operator promotion, for instance). A
+      caller that knows one exists must pass `rescue: false`: the invariant
+      exists only to stop a wrong published runtime from emptying a movie,
+      and when a version is already settled there is nothing left to
+      protect, so rescuing anyway just forces a second file into the version
+      slot.
   """
-  @spec classify(pos_integer() | nil, [MediaFile.t()]) :: %{binary() => decision()}
-  def classify(runtime_minutes, files) when is_list(files) do
+  @spec classify(pos_integer() | nil, [MediaFile.t()], keyword()) :: %{binary() => decision()}
+  def classify(runtime_minutes, files, opts \\ []) when is_list(files) do
+    rescue? = Keyword.get(opts, :rescue, true)
+
     case Enum.filter(files, &duration/1) do
       [] ->
         %{}
@@ -70,7 +83,7 @@ defmodule Mydia.Library.ExtraClassifier do
 
         eligible
         |> Map.new(fn file -> {file.id, decide(file, reference)} end)
-        |> apply_invariant(eligible, reference, source)
+        |> apply_invariant(eligible, reference, source, rescue?)
     end
   end
 
@@ -110,10 +123,19 @@ defmodule Mydia.Library.ExtraClassifier do
   # that can be externally wrong. A sibling-derived reference always leaves its
   # own longest file a version anyway, and a floor decision on a lone file is
   # confident enough to stand.
-  defp apply_invariant(decisions, _eligible, _reference, source) when source != :runtime,
-    do: decisions
+  #
+  # A caller that already knows the item retains a version it may not touch
+  # passes `rescue: false`. The invariant exists to stop a wrong published
+  # runtime emptying a movie; when a version is already settled there is
+  # nothing to protect, and rescuing anyway promotes a second file into the
+  # version slot.
+  defp apply_invariant(decisions, _eligible, _reference, _source, false), do: decisions
 
-  defp apply_invariant(decisions, eligible, reference, :runtime) do
+  defp apply_invariant(decisions, _eligible, _reference, source, _rescue?)
+       when source != :runtime,
+       do: decisions
+
+  defp apply_invariant(decisions, eligible, reference, :runtime, _rescue?) do
     if Enum.any?(decisions, fn {_id, decision} -> decision == :version end) do
       decisions
     else

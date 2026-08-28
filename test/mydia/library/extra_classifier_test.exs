@@ -92,6 +92,11 @@ defmodule Mydia.Library.ExtraClassifierTest do
       # version rather than emptying the movie.
       assert %{"a" => :version} = ExtraClassifier.classify(107, [file("a", 53.4 * 60)])
     end
+
+    test "rescue: false suppresses the invariant" do
+      assert %{"a" => :extra} =
+               ExtraClassifier.classify(107, [file("a", 53.4 * 60)], rescue: false)
+    end
   end
 
   describe "classify/2 without a runtime" do

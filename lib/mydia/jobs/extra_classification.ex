@@ -117,12 +117,20 @@ defmodule Mydia.Jobs.ExtraClassification do
 
     {eligible, protected} = Enum.split_with(files, &eligible?/1)
 
-    # Protected rows still count toward the invariant: a movie whose only
-    # version was promoted by an operator must not have a second file forced
-    # into the version slot behind their back.
+    # Protected rows still feed the sibling reference duration when the
+    # runtime is unknown, so a movie with no published runtime and a settled
+    # long extra still has a plausible feature length to compare against.
     reference_files = eligible ++ Enum.filter(protected, &is_nil(&1.extra_kind))
 
-    decisions = ExtraClassifier.classify(runtime(item), reference_files)
+    # classify/3 re-decides every file it is handed, so it cannot see that a
+    # protected row is already a version. When one is, the movie cannot be
+    # emptied and the rescue must not fire — otherwise it promotes a second
+    # file into the version slot behind the operator's back.
+    protected_version? = Enum.any?(protected, &is_nil(&1.extra_kind))
+
+    decisions =
+      ExtraClassifier.classify(runtime(item), reference_files, rescue: not protected_version?)
+
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 
     Enum.each(eligible, fn file ->
