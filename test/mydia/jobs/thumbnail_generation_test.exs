@@ -198,4 +198,72 @@ defmodule Mydia.Jobs.ThumbnailGenerationTest do
       assert "thumbnail_generation" = ThumbnailGeneration.topic()
     end
   end
+
+  describe "extras" do
+    setup do
+      # The app skips Oban in test (engine: false), so refute_enqueued cannot
+      # see jobs without a supervised, manual-mode instance. See
+      # test/mydia_web/live/media_live/show/season_collapse_test.exs and
+      # test/mydia_web/live/media_live/segment_status_test.exs.
+      engine = if Mydia.DB.postgres?(), do: Oban.Engines.Basic, else: Oban.Engines.Lite
+      start_supervised!({Oban, repo: Repo, engine: engine, testing: :manual})
+      :ok
+    end
+
+    test "the missing mode skips extras" do
+      # On galactica 145 of 354 movie files are extras. Generating sprite
+      # sheets and preview thumbnails for a three minute deleted scene is
+      # wasted ffmpeg time.
+      library_path = library_path_fixture(%{type: "movies"})
+      item = media_item_fixture(%{type: "movie"})
+
+      extra =
+        %Mydia.Library.MediaFile{}
+        |> Mydia.Library.MediaFile.changeset(%{
+          media_item_id: item.id,
+          library_path_id: library_path.id,
+          relative_path: "Movie (2007)/scene.mkv",
+          analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second),
+          metadata: %{duration: 180.0},
+          extra_kind: :deleted_scene,
+          extra_source: :folder
+        })
+        |> Mydia.Repo.insert!()
+
+      assert :ok =
+               Mydia.Jobs.ThumbnailGeneration.perform(%Oban.Job{args: %{"mode" => "missing"}})
+
+      refute_enqueued(
+        worker: Mydia.Jobs.ThumbnailGeneration,
+        args: %{"media_file_id" => extra.id}
+      )
+    end
+
+    test "the single mode still generates for an explicitly named extra" do
+      # An operator asking for one specific file gets it, extra or not.
+      library_path = library_path_fixture(%{type: "movies"})
+      item = media_item_fixture(%{type: "movie"})
+
+      extra =
+        %Mydia.Library.MediaFile{}
+        |> Mydia.Library.MediaFile.changeset(%{
+          media_item_id: item.id,
+          library_path_id: library_path.id,
+          relative_path: "Movie (2007)/scene.mkv",
+          extra_kind: :deleted_scene,
+          extra_source: :folder
+        })
+        |> Mydia.Repo.insert!()
+
+      # Asserts the id is accepted rather than filtered out. The generation
+      # itself will fail on a nonexistent file, which is fine: the point is
+      # that the mode does not silently skip the row.
+      refute match?(
+               {:error, :not_found},
+               Mydia.Jobs.ThumbnailGeneration.perform(%Oban.Job{
+                 args: %{"mode" => "single", "media_file_id" => extra.id}
+               })
+             )
+    end
+  end
 end

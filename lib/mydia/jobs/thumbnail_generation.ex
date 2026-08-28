@@ -340,9 +340,14 @@ defmodule Mydia.Jobs.ThumbnailGeneration do
 
   defp process_library(library_path_id, opts, regenerate) do
     # Get all video files in the library
+    #
+    # Extras are excluded from bulk selection. 145 of galactica's 354 movie
+    # files are bonus content, and a sprite sheet for a three minute
+    # deleted scene is wasted ffmpeg time. The single and batch modes take
+    # explicit ids and deliberately do not filter.
     query =
       from mf in MediaFile,
-        where: mf.library_path_id == ^library_path_id,
+        where: mf.library_path_id == ^library_path_id and is_nil(mf.extra_kind),
         select: mf.id
 
     query =
@@ -366,10 +371,15 @@ defmodule Mydia.Jobs.ThumbnailGeneration do
 
   defp process_missing(opts, library_type) do
     # Query files missing thumbnails
+    #
+    # Extras are excluded from bulk selection. 145 of galactica's 354 movie
+    # files are bonus content, and a sprite sheet for a three minute
+    # deleted scene is wasted ffmpeg time. The single and batch modes take
+    # explicit ids and deliberately do not filter.
     query =
       from mf in MediaFile,
         join: lp in assoc(mf, :library_path),
-        where: is_nil(mf.cover_blob),
+        where: is_nil(mf.cover_blob) and is_nil(mf.extra_kind),
         select: mf.id
 
     query =
