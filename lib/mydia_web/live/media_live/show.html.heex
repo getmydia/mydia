@@ -13,15 +13,43 @@
       <div class="absolute inset-0 bg-gradient-to-b from-transparent via-base-100/80 to-base-100">
       </div>
     <% end %>
-    <%!-- Content Container --%>
-    <div class="relative pt-8 md:pt-16 pb-8 px-3 sm:px-4 md:px-6 lg:px-8">
-      <div class={[
-        "grid gap-4 md:gap-6 grid-cols-1 md:grid-cols-[16rem_minmax(0,1fr)] lg:grid-cols-[20rem_minmax(0,1fr)]",
-        if(@timeline_events == [],
-          do: "xl:grid-cols-[20rem_minmax(0,1fr)]",
-          else: "xl:grid-cols-[20rem_minmax(0,1fr)_22rem]"
-        )
-      ]}>
+    <%!-- @container, not a viewport breakpoint. `xl:` measures the window, but
+          this page never gets the window: `Layouts.app/1`'s sidebar is a hard
+          w-64 that is always open at lg and up. Measured, `xl:` turned the
+          third column on with 225px left for the main content column at a
+          1280px window, narrower than either rail, and the title's action
+          buttons overflowed it by 78px so two of the four landed underneath
+          this very rail.
+
+          `container-type: inline-size` queries this element's CONTENT box,
+          which is exactly the grid's available width, so the sidebar is
+          accounted for by construction rather than by a magic number, and the
+          layout stays correct if the sidebar ever gains a collapsed state.
+          @7xl is the stock 80rem container size: 1280px of grid, which is a
+          roughly 1616px window with the sidebar open. Measured main content
+          column: 597px at the threshold, 897px at 1920.
+
+          The md: and lg: templates below stay viewport queries on purpose.
+          Below lg the sidebar is a closed drawer taking no width, so the
+          window is the right measurement there; only the third-column
+          decision is the one the sidebar's 256px distorts.
+
+          Containment does not trap page content under the sidebar's z-40.
+          Measured with container-type: inline-size on this element, both a
+          plain z-50 element and a daisyUI dropdown-content z-50 still win
+          elementFromPoint over the sidebar, identically to the uncontained
+          control. --%>
+    <div class="@container relative pt-8 md:pt-16 pb-8 px-3 sm:px-4 md:px-6 lg:px-8">
+      <div
+        id="page-grid"
+        class={[
+          "grid gap-4 md:gap-6 grid-cols-1 md:grid-cols-[16rem_minmax(0,1fr)] lg:grid-cols-[20rem_minmax(0,1fr)]",
+          if(@timeline_events == [],
+            do: "@7xl:grid-cols-[20rem_minmax(0,1fr)]",
+            else: "@7xl:grid-cols-[20rem_minmax(0,1fr)_20rem]"
+          )
+        ]}
+      >
         <%!-- Left Column: Hero Section (Poster & Quick Actions) --%>
         <Components.hero_section
           media_item={@media_item}
@@ -40,7 +68,7 @@
           target_library_candidates={@target_library_candidates}
         />
         <%!-- Right Column: Main Content --%>
-        <div class="min-w-0">
+        <div id="main-column" class="min-w-0">
           <%!-- Title and Basic Info --%>
           <div class="mb-4 md:mb-6">
             <div class="flex items-start justify-between gap-2 md:gap-4 mb-2">
@@ -265,30 +293,50 @@
             libraries={@target_library_candidates}
           />
         </div>
-        <%!-- History. A sibling of the main column rather than part of it: at
-              xl it is the third grid column, and below xl md:col-span-2 drops
-              it to a full-width row under both other columns. One DOM node
-              serves both layouts, so there is no hidden/xl:block duplicate.
+        <%!-- History. A sibling of the main column rather than part of it: past
+              the container-query threshold it is the third grid column, and
+              below it md:col-span-2 drops it to a full-width row under both
+              other columns. One DOM node serves both layouts, so there is no
+              hidden/@7xl:block duplicate.
 
-              Sticky for the same reason and with the same caveats as the hero
-              column: see the note there on self-start and the inner scroll.
+              No max-height and no inner scroll. The rail used to be
+              max-h-[calc(100vh-2rem)] with overflow-y-auto over as many as 50
+              events, which put a third vertical scrollbar on screen next to
+              the poster column's and the page's, and its sticky still never
+              pinned: measured top offsets were 64 at rest, 0 mid-scroll and
+              -48 at the page bottom. Capping the collapsed render at five
+              dense rows makes the rail 506px, short enough that sticky pins
+              for the whole page instead.
+
+              The sticky classes come off when expanded. A sticky element
+              taller than the viewport has a permanently unreachable bottom,
+              so an expanded rail scrolls with the page like an ordinary
+              column.
 
               The :if here is load-bearing alongside the grid template's own
               @timeline_events == [] conditional above, and neither one makes
-              the other redundant: this aside carries xl:col-start-3 and
-              xl:row-start-1 unconditionally, so even when the grid template
+              the other redundant: this aside carries @7xl:col-start-3 and
+              @7xl:row-start-1 unconditionally, so even when the grid template
               picks the two-track layout, a rendered-but-empty aside would
               still force Grid to open an implicit third column (and, below
-              xl, an implicit row) to satisfy that placement, and gap-4/gap-6
-              still applies to a track that exists but is empty. The template
-              conditional stops the 22rem column from being reserved; this
-              :if stops the aside from existing in the grid at all when there
-              is nothing to place, which is what actually removes the gap. --%>
+              the threshold, an implicit row) to satisfy that placement, and
+              gap-4/gap-6 still applies to a track that exists but is empty.
+              The template conditional stops the 20rem column from being
+              reserved; this :if stops the aside from existing in the grid at
+              all when there is nothing to place, which is what actually
+              removes the gap. --%>
         <aside
           :if={@timeline_events != []}
-          class="md:col-span-2 xl:col-span-1 xl:col-start-3 xl:row-start-1 xl:sticky xl:top-4 xl:self-start xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto"
+          id="history-rail"
+          class={[
+            "md:col-span-2 @7xl:col-span-1 @7xl:col-start-3 @7xl:row-start-1",
+            !@timeline_expanded && "@7xl:sticky @7xl:top-4 @7xl:self-start"
+          ]}
         >
-          <Components.timeline_section timeline_events={@timeline_events} />
+          <Components.timeline_section
+            timeline_events={@timeline_events}
+            expanded={@timeline_expanded}
+          />
         </aside>
       </div>
     </div>

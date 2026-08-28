@@ -36,17 +36,23 @@ defmodule MydiaWeb.MediaLive.Show.Formatters do
   def format_download_status("grabbing"), do: "Grabbing…"
   def format_download_status(_), do: "Unknown"
 
-  def format_relative_time(timestamp) do
-    now = DateTime.utc_now()
-    diff = DateTime.diff(now, timestamp, :second)
+  @doc """
+  A compact relative time for the History rail: "5h", "2d", "7mo".
+
+  Compact because the label shares a baseline with the event title inside a
+  20rem column: a prose form like "3 hours ago" wraps there, and that wrap is
+  what made each row 156px tall.
+  """
+  def format_relative_time_short(timestamp) do
+    diff = DateTime.diff(DateTime.utc_now(), timestamp, :second)
 
     cond do
-      diff < 60 -> "Just now"
-      diff < 3600 -> "#{div(diff, 60)} minutes ago"
-      diff < 86400 -> "#{div(diff, 3600)} hours ago"
-      diff < 2_592_000 -> "#{div(diff, 86400)} days ago"
-      diff < 31_536_000 -> "#{div(diff, 2_592_000)} months ago"
-      true -> "#{div(diff, 31_536_000)} years ago"
+      diff < 60 -> "now"
+      diff < 3600 -> "#{div(diff, 60)}m"
+      diff < 86_400 -> "#{div(diff, 3600)}h"
+      diff < 2_592_000 -> "#{div(diff, 86_400)}d"
+      diff < 31_536_000 -> "#{div(diff, 2_592_000)}mo"
+      true -> "#{div(diff, 31_536_000)}y"
     end
   end
 
