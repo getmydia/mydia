@@ -264,7 +264,12 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEventsTest do
 
   describe "handle_download_subtitle_async/2" do
     defp socket_with_media_item(assigns \\ %{}) do
-      socket(Map.merge(%{media_item: %{media_files: []}}, assigns))
+      socket(
+        Map.merge(
+          %{media_item: %{media_files: []}, selected_media_file: %{id: "mf-1"}},
+          assigns
+        )
+      )
     end
 
     test "a successful download clears the downloading id" do

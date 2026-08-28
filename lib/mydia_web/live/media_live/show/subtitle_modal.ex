@@ -69,6 +69,36 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
             </div>
           <% end %>
         </div>
+
+        <div class="bg-base-200/50 border-t border-base-300 px-4 py-3 sm:px-6 flex flex-col gap-2 sm:flex-row">
+          <button
+            id="subtitle-manage-search"
+            type="button"
+            phx-click="open_subtitle_search"
+            phx-value-media-file-id={@media_file.id}
+            class="btn btn-primary btn-sm btn-block sm:w-auto sm:flex-1"
+          >
+            <.icon name="hero-magnifying-glass" class="w-4 h-4" /> Search
+          </button>
+          <button
+            id="subtitle-manage-upload"
+            type="button"
+            phx-click="open_subtitle_upload"
+            phx-value-media-file-id={@media_file.id}
+            class="btn btn-sm btn-block sm:w-auto sm:flex-1"
+          >
+            <.icon name="hero-arrow-up-tray" class="w-4 h-4" /> Upload
+          </button>
+          <button
+            id="subtitle-manage-rescan"
+            type="button"
+            phx-click="rescan_subtitles"
+            phx-value-media-file-id={@media_file.id}
+            class="btn btn-ghost btn-sm btn-block sm:w-auto sm:flex-1"
+          >
+            <.icon name="hero-arrow-path" class="w-4 h-4" /> Rescan
+          </button>
+        </div>
       </div>
       <div class="modal-backdrop" phx-click="close_subtitle_manage"></div>
     </div>

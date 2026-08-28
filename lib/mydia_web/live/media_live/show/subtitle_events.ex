@@ -15,6 +15,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
     {:noreply,
      socket
      |> assign(:show_subtitle_search_modal, true)
+     |> assign(:show_subtitle_manage_modal, false)
      |> assign(:selected_media_file, media_file)
      |> assign(:subtitle_search_state, :idle)
      |> assign(:subtitle_search_results, [])
@@ -25,7 +26,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
     {:noreply,
      socket
      |> assign(:show_subtitle_search_modal, false)
-     |> assign(:selected_media_file, nil)
+     |> assign(:show_subtitle_manage_modal, true)
      |> assign(:subtitle_search_state, :idle)
      |> assign(:subtitle_search_results, [])
      |> assign(:subtitle_providers, [])}
@@ -214,6 +215,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
     {:noreply,
      socket
      |> assign(:show_subtitle_upload_modal, true)
+     |> assign(:show_subtitle_manage_modal, false)
      |> assign(:selected_media_file, media_file)
      |> assign(:subtitle_upload_error, nil)}
   end
@@ -222,7 +224,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
     {:noreply,
      socket
      |> assign(:show_subtitle_upload_modal, false)
-     |> assign(:selected_media_file, nil)
+     |> assign(:show_subtitle_manage_modal, true)
      |> assign(:subtitle_upload_error, nil)}
   end
 
@@ -353,17 +355,20 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
   def handle_download_subtitle_async({:ok, {:ok, _subtitle}}, socket) do
     Logger.info("Subtitle downloaded successfully")
 
+    tracks = load_media_file_subtitle_tracks(socket.assigns.media_item)
+
     {:noreply,
      socket
      |> assign(:downloading_subtitle_index, nil)
      |> assign(:show_subtitle_search_modal, false)
-     |> assign(:selected_media_file, nil)
+     |> assign(:show_subtitle_manage_modal, true)
      |> assign(:subtitle_search_state, :idle)
      |> assign(:subtitle_search_results, [])
      |> assign(:subtitle_providers, [])
+     |> assign(:media_file_subtitle_tracks, tracks)
      |> assign(
-       :media_file_subtitle_tracks,
-       load_media_file_subtitle_tracks(socket.assigns.media_item)
+       :manage_tracks,
+       Map.get(tracks, socket.assigns.selected_media_file.id, [])
      )
      |> put_flash(:info, "Subtitle downloaded successfully")}
   end

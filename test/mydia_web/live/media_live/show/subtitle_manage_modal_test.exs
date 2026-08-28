@@ -59,4 +59,32 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleManageModalTest do
     assert external =~ ~s|phx-value-subtitle-id="sub-uuid"|
     refute embedded =~ ~s|phx-click="delete_subtitle"|
   end
+
+  describe "actions" do
+    test "offers search, upload and rescan for a file with tracks" do
+      html = modal([track(track_id: 1)])
+
+      assert html =~ ~s|id="subtitle-manage-search"|
+      assert html =~ ~s|id="subtitle-manage-upload"|
+      assert html =~ ~s|id="subtitle-manage-rescan"|
+    end
+
+    test "offers all three for a file with no tracks" do
+      html = modal([])
+
+      assert html =~ ~s|id="subtitle-manage-search"|
+      assert html =~ ~s|id="subtitle-manage-upload"|
+      assert html =~ ~s|id="subtitle-manage-rescan"|
+    end
+
+    test "each action carries the media file id" do
+      html = modal([])
+      document = LazyHTML.from_fragment(html)
+
+      for id <- ~w(subtitle-manage-search subtitle-manage-upload subtitle-manage-rescan) do
+        [button] = LazyHTML.query(document, "##{id}") |> Enum.to_list()
+        assert LazyHTML.attribute(button, "phx-value-media-file-id") == ["mf-1"]
+      end
+    end
+  end
 end
