@@ -32,6 +32,20 @@ defmodule Mydia.Quality.Sources do
   through, which is the pre-existing behavior anyway. A false positive means a
   legitimate release is silently refused with no way for the operator to find
   out why. Precision wins.
+
+  ## Why some source names have to dodge each other
+
+  Several source tokens contain another source's token: `DVDScr`, `DVDRip`,
+  `PDVD` and `PreDVD` all contain `dvd`. Because `patterns/0` is first-wins, a
+  broad pattern placed above them swallows the longer name and reports the
+  wrong source. `DVDRip` and `Screener` avoid it by sitting above `DVD` in the
+  table; `PDVD`/`PreDVD` avoid it with lookbehinds on the `DVD` pattern,
+  because reordering would have put a cam-tier source above a good one.
+
+  Getting this wrong is quiet and expensive. A `PreDVD` release reported as
+  `DVD` passes every profile's `excluded_sources` list, scores like a real
+  digital source, and gets grabbed. Any new source token added below a broader
+  one needs a test proving the broader one does not claim it first.
   """
 
   @cam_tier ["CAM", "Telesync", "Telecine", "Screener", "Workprint"]
@@ -115,7 +129,13 @@ defmodule Mydia.Quality.Sources do
       {"DVDRip", ~r/dvd[\-\s]?rip|dvdrip/i},
       # Screener must precede DVD so DVDScr does not match the bare dvd pattern.
       {"Screener", ~r/\b(?:dvd|bd|web)scr(?:eener)?\b|\bscreener\b|#{delimited("scr")}/i},
-      {"DVD", ~r/dvd/i},
+      # The lookbehinds keep this from swallowing the `dvd` inside `PDVD` and
+      # `PreDVD`, which are Telesync tokens listed below. Without them the bare
+      # pattern matches first and a cam-tier release resolves to `DVD`, which
+      # no `excluded_sources` list rejects. Solved here rather than by moving
+      # Telesync above DVD so the "good sources before cam-tier" rule below
+      # stays true and no legitimate DVD release becomes a false positive.
+      {"DVD", ~r/(?<!p)(?<!pre)dvd/i},
       {"Telecine", ~r/\btelecine\b|\bhd\-?tc\b|#{delimited("tc")}/i},
       {"Telesync", ~r/\btelesync\b|\bhd\-?ts\b|\bpdvd\b|\bpredvd\b|#{delimited("ts")}/i},
       {"CAM", ~r/\bhd\-?cam\b|\bcam\-?rip\b|\bhqcam\b|#{delimited("cam")}/i},
