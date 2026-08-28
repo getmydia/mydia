@@ -8,6 +8,7 @@ import '../../../core/theme/colors.dart';
 import '../../../domain/models/calendar_entry.dart';
 import '../../widgets/browse_scaffold.dart';
 import 'calendar_controller.dart';
+import 'calendar_dates.dart';
 import 'calendar_row.dart';
 
 /// Short weekday names, indexed by `DateTime.weekday - 1` (Monday first).
@@ -41,11 +42,6 @@ const List<String> _monthNames = [
   'December',
 ];
 
-/// Zero-padded `yyyy-MM-dd`, for the day header's test key.
-String _isoDate(DateTime date) => '${date.year.toString().padLeft(4, '0')}-'
-    '${date.month.toString().padLeft(2, '0')}-'
-    '${date.day.toString().padLeft(2, '0')}';
-
 /// Entries grouped into day sections, in the order the server sent them.
 ///
 /// The resolver already orders by air date, then playable first, then title,
@@ -66,9 +62,7 @@ List<MapEntry<DateTime, List<CalendarEntry>>> groupByDay(
 
 /// The label above one day's entries.
 String formatDayHeader(DateTime day, DateTime today) {
-  final isToday = day.year == today.year &&
-      day.month == today.month &&
-      day.day == today.day;
+  final isToday = isSameDay(day, today);
 
   final sameYear = day.year == today.year;
   final weekday = _weekdayAbbreviations[day.weekday - 1];
@@ -87,7 +81,7 @@ String formatDayHeader(DateTime day, DateTime today) {
 /// all, and the calendar still has to open somewhere sensible. The first
 /// upcoming day is that place.
 int? indexOfToday(List<DateTime> days, DateTime today) {
-  final midnight = DateTime(today.year, today.month, today.day);
+  final midnight = truncateToDay(today);
 
   for (var i = 0; i < days.length; i++) {
     if (!days[i].isBefore(midnight)) return i;
@@ -225,9 +219,9 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                 delegate: _DayHeaderDelegate(
                   headerKey: index == todayIndex ? _todayKey : null,
                   label: formatDayHeader(group.key, today),
-                  isToday: _isSameDay(group.key, today),
+                  isToday: isSameDay(group.key, today),
                   dayKey: ValueKey(
-                    'calendar-day-${_isoDate(group.key)}',
+                    'calendar-day-${isoDate(group.key)}',
                   ),
                 ),
               ),
@@ -327,9 +321,6 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
       ),
     );
   }
-
-  bool _isSameDay(DateTime a, DateTime b) =>
-      a.year == b.year && a.month == b.month && a.day == b.day;
 }
 
 class _DayHeaderDelegate extends SliverPersistentHeaderDelegate {

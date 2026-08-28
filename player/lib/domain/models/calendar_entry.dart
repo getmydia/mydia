@@ -37,6 +37,11 @@ class CalendarEntry {
   bool get isPlayable => files.isNotEmpty;
 
   /// The day this entry belongs to, with no time component, for grouping.
+  ///
+  /// Deliberately not built on `presentation/screens/calendar/calendar_dates
+  /// .dart`'s `truncateToDay`: this is `domain/`, which stays plain Dart with
+  /// no dependency on `presentation/`, so the one-line truncation is repeated
+  /// here rather than reaching up a layer for it.
   DateTime get day => DateTime(airDate.year, airDate.month, airDate.day);
 
   factory CalendarEntry.fromJson(Map<String, dynamic> json) {

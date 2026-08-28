@@ -5,6 +5,7 @@ import '../../../core/graphql/watch/controller_watcher.dart';
 import '../../../core/graphql/watch/query_key.dart';
 import '../../../core/graphql/watch/query_watcher.dart';
 import '../../../domain/models/calendar_entry.dart';
+import 'calendar_dates.dart';
 
 part 'calendar_controller.g.dart';
 
@@ -40,10 +41,6 @@ query Calendar($start: Date!, $end: Date!) {
   }
 }
 ''';
-
-String _isoDate(DateTime date) => '${date.year.toString().padLeft(4, '0')}-'
-    '${date.month.toString().padLeft(2, '0')}-'
-    '${date.day.toString().padLeft(2, '0')}';
 
 /// Turns a `calendar` response into entries.
 ///
@@ -87,7 +84,7 @@ class CalendarController extends _$CalendarController {
       ref,
       key: QueryKeys.calendar,
       document: gql(calendarQuery),
-      variables: {'start': _isoDate(start), 'end': _isoDate(end)},
+      variables: {'start': isoDate(start), 'end': isoDate(end)},
       parse: parseCalendar,
     );
 

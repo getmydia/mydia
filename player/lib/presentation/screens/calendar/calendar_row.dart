@@ -21,6 +21,7 @@ import '../../../core/cache/poster_cache_manager.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/models/calendar_entry.dart';
 import '../../widgets/smart_play_button.dart';
+import 'calendar_dates.dart';
 
 /// One dated entry on the calendar, rendered as a single row.
 ///
@@ -41,9 +42,7 @@ class CalendarRow extends ConsumerWidget {
   /// Injected rather than read from the clock so tests are deterministic.
   final DateTime today;
 
-  bool get _isFuture => entry.day.isAfter(
-        DateTime(today.year, today.month, today.day),
-      );
+  bool get _isFuture => entry.day.isAfter(truncateToDay(today));
 
   String get _subtitle {
     if (entry.kind == CalendarEntryKind.movie) return 'Movie';
