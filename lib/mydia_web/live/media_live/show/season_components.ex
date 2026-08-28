@@ -26,6 +26,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
   attr :auto_searching_episode, :any, default: nil
   attr :playback_enabled, :boolean, required: true
   attr :transcode_jobs, :map, default: %{}
+  attr :media_file_subtitle_tracks, :map, default: %{}
   attr :segment_statuses, :map, default: %{}
   attr :segment_detection_available, :boolean, default: true
 
@@ -60,6 +61,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
                   auto_searching_episode={@auto_searching_episode}
                   playback_enabled={@playback_enabled}
                   transcode_jobs={@transcode_jobs}
+                  media_file_subtitle_tracks={@media_file_subtitle_tracks}
                 />
               </div>
             <% else %>
@@ -93,6 +95,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
                   auto_searching_episode={@auto_searching_episode}
                   playback_enabled={@playback_enabled}
                   transcode_jobs={@transcode_jobs}
+                  media_file_subtitle_tracks={@media_file_subtitle_tracks}
                 />
               </div>
             <% end %>
@@ -125,6 +128,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
   attr :auto_searching_episode, :any, default: nil
   attr :playback_enabled, :boolean, required: true
   attr :transcode_jobs, :map, default: %{}
+  attr :media_file_subtitle_tracks, :map, default: %{}
 
   defp episode_rows(assigns) do
     ~H"""
@@ -321,6 +325,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
                 episode={episode}
                 playback_enabled={@playback_enabled}
                 transcode_jobs={Map.get(@transcode_jobs, file.id, [])}
+                subtitle_tracks={Map.get(@media_file_subtitle_tracks, file.id, [])}
               />
             </div>
           </div>

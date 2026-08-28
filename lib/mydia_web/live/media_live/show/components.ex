@@ -404,6 +404,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :auto_searching_episode, :any, default: nil
   attr :playback_enabled, :boolean, required: true
   attr :transcode_jobs, :map, default: %{}
+  attr :media_file_subtitle_tracks, :map, default: %{}
   attr :segment_statuses, :map, default: %{}
   attr :segment_detection_available, :boolean, default: true
   attr :season_order_suggestion, :any, default: nil
@@ -510,6 +511,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
               auto_searching_episode={@auto_searching_episode}
               playback_enabled={@playback_enabled}
               transcode_jobs={@transcode_jobs}
+              media_file_subtitle_tracks={@media_file_subtitle_tracks}
               segment_statuses={@segment_statuses}
               segment_detection_available={@segment_detection_available}
             />
@@ -527,6 +529,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :episode, :map, required: true
   attr :playback_enabled, :boolean, required: true
   attr :transcode_jobs, :list, default: []
+  attr :subtitle_tracks, :list, default: []
 
   def episode_file_row(assigns) do
     ~H"""
@@ -560,9 +563,25 @@ defmodule MydiaWeb.MediaLive.Show.Components do
             {format_file_size(@file.size)}
           </span>
         </div>
+        <SubtitleComponents.subtitle_badges
+          :if={@subtitle_tracks != []}
+          tracks={@subtitle_tracks}
+          id={@file.id}
+        />
       </div>
       <%!-- File actions --%>
       <div class="flex items-center gap-1 flex-shrink-0">
+        <button
+          id={"subtitle-open-#{@file.id}"}
+          type="button"
+          phx-click="open_subtitle_manage"
+          phx-value-media-file-id={@file.id}
+          class="btn btn-ghost btn-xs btn-square"
+          aria-label="Manage subtitles"
+          title="Subtitles"
+        >
+          <.icon name="hero-language" class="w-4 h-4" />
+        </button>
         <% available_resolutions =
           available_transcode_resolutions(
             @file,
@@ -664,6 +683,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :media_item, :map, required: true
   attr :refreshing_file_metadata, :boolean, required: true
   attr :transcode_jobs, :map, default: %{}
+  attr :media_file_subtitle_tracks, :map, default: %{}
 
   def media_files_section(assigns) do
     assigns = assign(assigns, :files, all_media_files(assigns.media_item))
@@ -708,9 +728,25 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                         <span class="font-mono">{format_file_size(file.size)}</span>
                       </div>
                     </div>
+                    <SubtitleComponents.subtitle_badges
+                      :if={Map.get(@media_file_subtitle_tracks, file.id, []) != []}
+                      tracks={Map.get(@media_file_subtitle_tracks, file.id, [])}
+                      id={file.id}
+                    />
                   </div>
                   <%!-- Right side: Icon-only action buttons --%>
                   <div class="flex items-center gap-1 flex-shrink-0">
+                    <button
+                      id={"subtitle-open-#{file.id}"}
+                      type="button"
+                      phx-click="open_subtitle_manage"
+                      phx-value-media-file-id={file.id}
+                      class="btn btn-ghost btn-sm btn-square"
+                      aria-label="Manage subtitles"
+                      title="Subtitles"
+                    >
+                      <.icon name="hero-language" class="w-5 h-5" />
+                    </button>
                     <% available_resolutions =
                       available_transcode_resolutions(
                         file,

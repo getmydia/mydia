@@ -434,6 +434,12 @@ defmodule MydiaWeb.MediaLive.Show do
   def handle_event("save_subtitle_upload", params, socket),
     do: SubtitleEvents.save_subtitle_upload(params, socket)
 
+  # Replaced in full when the manage modal lands. Until then this keeps the
+  # row button from raising on click.
+  def handle_event("open_subtitle_manage", %{"media-file-id" => media_file_id}, socket) do
+    {:noreply, assign(socket, :selected_media_file, Mydia.Library.get_media_file!(media_file_id))}
+  end
+
   # Category, trailer, and quality profile events
 
   def handle_event("show_category_modal", params, socket),
