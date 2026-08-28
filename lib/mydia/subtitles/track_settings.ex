@@ -149,6 +149,52 @@ defmodule Mydia.Subtitles.TrackSettings do
     Ecto.Query.CastError -> %{}
   end
 
+  @doc """
+  Every stored offset for a list of media files, keyed by `media_file_id` then
+  `track_ref`.
+
+  Exists so the media detail page issues one query instead of one per file. A
+  file with no stored settings is absent from the result rather than mapped to
+  an empty map, which lets a caller use `Map.get(result, id, %{})` and get the
+  same answer either way.
+  """
+  @spec offsets_for_media_files([binary()]) :: %{binary() => %{String.t() => integer()}}
+  def offsets_for_media_files([]), do: %{}
+
+  def offsets_for_media_files(media_file_ids) do
+    TrackSetting
+    |> where([s], s.media_file_id in ^media_file_ids)
+    |> select([s], {s.media_file_id, s.track_ref, s.offset_ms})
+    |> Repo.all()
+    |> group_by_media_file()
+  rescue
+    Ecto.Query.CastError -> %{}
+  end
+
+  @doc """
+  Every stored resync outcome for a list of media files, keyed by
+  `media_file_id` then `track_ref`. Tracks with no recorded outcome are omitted.
+  """
+  @spec resync_states_for_media_files([binary()]) :: %{binary() => %{String.t() => String.t()}}
+  def resync_states_for_media_files([]), do: %{}
+
+  def resync_states_for_media_files(media_file_ids) do
+    TrackSetting
+    |> where([s], s.media_file_id in ^media_file_ids and not is_nil(s.resync_state))
+    |> select([s], {s.media_file_id, s.track_ref, s.resync_state})
+    |> Repo.all()
+    |> group_by_media_file()
+  rescue
+    Ecto.Query.CastError -> %{}
+  end
+
+  defp group_by_media_file(rows) do
+    Enum.group_by(rows, fn {media_file_id, _ref, _value} -> media_file_id end)
+    |> Map.new(fn {media_file_id, entries} ->
+      {media_file_id, Map.new(entries, fn {_id, ref, value} -> {ref, value} end)}
+    end)
+  end
+
   @doc "Removes a track's stored correction, if any."
   @spec delete_for_track(binary(), String.t()) :: :ok
   def delete_for_track(media_file_id, track_ref) do
