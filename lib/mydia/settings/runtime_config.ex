@@ -4,6 +4,8 @@ defmodule Mydia.Settings.RuntimeConfig do
   import Ecto.Query, warn: false
   import Mydia.QueryHelpers
 
+  require Logger
+
   alias Mydia.Repo
 
   alias Mydia.Settings.{
@@ -106,20 +108,42 @@ defmodule Mydia.Settings.RuntimeConfig do
 
   ## Runtime Configuration Loading
 
-  def load_database_config do
+  @doc """
+  Builds the database configuration layer from the `config_settings` table.
+
+  Takes an optional loader so the rescue policy below can be exercised without
+  standing up a broken Repo.
+
+  ## Rescue policy
+
+  A database that is unreachable or not yet migrated is a legitimate state
+  during initial setup, and an empty layer is the right answer for it.
+
+  A bare `RuntimeError` is deliberately NOT rescued. That is what Ecto raises
+  when the Repo has not started, and nothing calls this before the Repo is up
+  any more: `Mydia.Application.start/2` loads its pre-supervisor config with
+  `sources: [:yaml, :env]`, and `Mydia.Config.Bootstrap` merges this layer only
+  after `Ecto.Migrator`. Rescuing it again would restore the original defect, in
+  which every database-backed setting was dropped on every boot with nothing
+  logged and nothing failing.
+  """
+  @spec load_database_config((-> [ConfigSetting.t()])) :: {:ok, map()}
+  def load_database_config(loader \\ &list_config_settings/0) do
     try do
-      config_settings = list_config_settings()
-      config_map = build_config_map(config_settings)
-      {:ok, config_map}
+      {:ok, loader.() |> build_config_map()}
     rescue
-      # Database might not be available during initial setup
-      DBConnection.ConnectionError -> {:ok, %{}}
-      # Catch query errors during app startup (e.g., table doesn't exist yet)
-      Ecto.QueryError -> {:ok, %{}}
-      # Catch SQLite-specific errors
-      Exqlite.Error -> {:ok, %{}}
-      # Catch Repo not started yet error during application startup
-      RuntimeError -> {:ok, %{}}
+      error in [
+        DBConnection.ConnectionError,
+        Ecto.QueryError,
+        Exqlite.Error,
+        Postgrex.Error
+      ] ->
+        Logger.warning(
+          "Database configuration layer unavailable (#{inspect(error.__struct__)}); " <>
+            "continuing with file and environment configuration only"
+        )
+
+        {:ok, %{}}
     end
   end
 

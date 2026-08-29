@@ -316,7 +316,11 @@ defmodule Mydia.Application do
   end
 
   defp load_config! do
-    Mydia.Config.Loader.load!()
+    # Phase one: no database layer. Mydia.Repo is a child of the tree this
+    # config is used to build, and on a fresh install config_settings has not
+    # been migrated. Mydia.Config.Bootstrap merges the database layer after
+    # Ecto.Migrator.
+    Mydia.Config.Loader.load!(sources: [:yaml, :env])
   end
 
   defp ensure_default_quality_profiles do
