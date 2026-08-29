@@ -876,14 +876,40 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
 
       opts
     else
-      cookie_header = Enum.join(cookies, "; ")
-      existing_headers = Keyword.get(opts, :headers, [])
+      cookie_header =
+        cookies
+        |> Enum.map(&normalize_cookie/1)
+        |> Enum.reject(&is_nil/1)
+        |> Enum.join("; ")
 
-      opts
-      |> Keyword.put(:headers, [{"Cookie", cookie_header} | existing_headers])
-      |> Keyword.put(:redirect, false)
+      if cookie_header == "" do
+        opts
+      else
+        existing_headers = Keyword.get(opts, :headers, [])
+
+        opts
+        |> Keyword.put(:headers, [{"Cookie", cookie_header} | existing_headers])
+        |> Keyword.put(:redirect, false)
+      end
     end
   end
+
+  # A stored session row holds either plain "name=value" strings or the cookie
+  # maps store_flaresolverr_cookies/2 writes, and
+  # CardigannAuth.get_stored_session/1 hands back whatever is in the row without
+  # looking. Joining a map raises Protocol.UndefinedError before the request is
+  # even sent, so any indexer that had once been through FlareSolverr crashed its
+  # next search. Entries are normalized here and anything unusable is dropped.
+  defp normalize_cookie(cookie) when is_binary(cookie), do: cookie
+
+  defp normalize_cookie(cookie) when is_map(cookie) do
+    name = cookie["name"] || Map.get(cookie, :name)
+    value = cookie["value"] || Map.get(cookie, :value)
+
+    if name && value, do: "#{name}=#{value}", else: nil
+  end
+
+  defp normalize_cookie(_cookie), do: nil
 
   # Loopback is a secure context in the same sense browsers use the term: the
   # request never reaches a network, so a local mirror or a test server is not

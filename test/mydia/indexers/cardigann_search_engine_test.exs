@@ -872,6 +872,60 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
       assert_receive {:cookie_header, ["session=abc123; token=xyz789"]}
     end
 
+    test "FlareSolverr map-shaped cookies are sent as name=value", %{definition: definition} do
+      # store_flaresolverr_cookies/2 writes maps into the same session row
+      # CardigannAuth.get_stored_session/1 reads back, so map entries reach here.
+      bypass = Bypass.open()
+      test_pid = self()
+
+      Bypass.expect_once(bypass, "GET", "/search", fn conn ->
+        send(test_pid, {:cookie_header, Plug.Conn.get_req_header(conn, "cookie")})
+        Plug.Conn.resp(conn, 200, "<html></html>")
+      end)
+
+      params = %{query_params: %{}, headers: [], method: :get}
+
+      user_config = %{
+        cookies: [
+          %{"name" => "cf_clearance", "value" => "abc123", "domain" => ".example.com"},
+          %{"name" => "session", "value" => "xyz789"}
+        ]
+      }
+
+      assert {:ok, _response} =
+               CardigannSearchEngine.execute_http_request(
+                 definition,
+                 "http://localhost:#{bypass.port}/search",
+                 params,
+                 user_config
+               )
+
+      assert_receive {:cookie_header, ["cf_clearance=abc123; session=xyz789"]}
+    end
+
+    test "unusable cookie entries are dropped rather than crashing", %{definition: definition} do
+      bypass = Bypass.open()
+      test_pid = self()
+
+      Bypass.expect_once(bypass, "GET", "/search", fn conn ->
+        send(test_pid, {:cookie_header, Plug.Conn.get_req_header(conn, "cookie")})
+        Plug.Conn.resp(conn, 200, "<html></html>")
+      end)
+
+      params = %{query_params: %{}, headers: [], method: :get}
+      user_config = %{cookies: [%{"domain" => ".example.com"}, 42]}
+
+      assert {:ok, _response} =
+               CardigannSearchEngine.execute_http_request(
+                 definition,
+                 "http://localhost:#{bypass.port}/search",
+                 params,
+                 user_config
+               )
+
+      assert_receive {:cookie_header, []}
+    end
+
     test "a cookie-bearing request does not follow a redirect", %{definition: definition} do
       # Req carries a manually supplied Cookie header to the redirect target even
       # on a different host, so a followed redirect would leak the session.
