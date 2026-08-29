@@ -19,6 +19,8 @@ defmodule Mydia.Jobs.LibraryScannerImportGroupsTest do
   alias Mydia.ImportGroups
   alias Mydia.Jobs.LibraryScanner
   alias Mydia.Library
+  alias Mydia.Library.MatchCandidate
+  alias Mydia.Repo
 
   defp orphan_with_candidate(library_path, opts) do
     file =
@@ -40,6 +42,69 @@ defmodule Mydia.Jobs.LibraryScannerImportGroupsTest do
       })
 
     file
+  end
+
+  # `ImportGroup.changeset/2` refuses a `min_confidence` outside [0.0, 1.0]
+  # via `validate_number/3`, and every real write path
+  # (`Library.upsert_match_candidate/1`) runs `MatchCandidate.changeset/2`,
+  # which enforces that same range on `confidence` before a row can ever be
+  # written. So the only way to get an out-of-range value into the table at
+  # all is to skip the module's own changeset, which is what this does: it
+  # builds the insert with `Ecto.Changeset.change/2` directly instead of
+  # `MatchCandidate.changeset/2`.
+  defp orphan_with_out_of_range_confidence(library_path, opts) do
+    file =
+      orphaned_media_file_fixture(%{
+        library_path_id: library_path.id,
+        relative_path: Keyword.fetch!(opts, :relative_path)
+      })
+
+    %MatchCandidate{}
+    |> Ecto.Changeset.change(%{
+      media_file_id: file.id,
+      rank: 0,
+      provider_type: "tmdb",
+      provider_id: Keyword.fetch!(opts, :provider_id),
+      title: Keyword.fetch!(opts, :title),
+      year: 1999,
+      media_type: "movie",
+      confidence: 5.0
+    })
+    |> Repo.insert!()
+
+    file
+  end
+
+  test "an exception while rebuilding groups is caught and does not crash the scan" do
+    # This is not a reproduction of the real failure mode described in the
+    # code review finding (a genuine unique-constraint collision from a
+    # rebuild racing a freshly started import run's own upsert on the same
+    # cluster_key). That race needs two processes interleaved between
+    # write_group/4's existence check and its insert, which is not
+    # reproducible deterministically against the sandboxed test connection
+    # (both sides would serialize onto the same connection and the race
+    # window would never open).
+    #
+    # Instead this forces `ImportGroup.changeset/2`'s existing
+    # `validate_number(:min_confidence, ...)` to fail by smuggling an
+    # out-of-range confidence into `write_group/4`'s attrs (see
+    # `orphan_with_out_of_range_confidence/2`). An invalid changeset makes
+    # `Repo.insert_or_update/1` return `{:error, changeset}` without ever
+    # touching the database, which is the exact same shape write_group/4's
+    # hard match `{:ok, group} = Repo.insert_or_update()` fails on for a real
+    # unique-constraint collision: both raise a MatchError from that one
+    # line. So while the trigger is artificial, the exception this test
+    # proves gets caught is the same MatchError the real race produces.
+    library_path = library_path_fixture(%{type: "movies"})
+
+    orphan_with_out_of_range_confidence(library_path,
+      relative_path: "Broken (2000)/broken.2000.mkv",
+      provider_id: "1",
+      title: "Broken"
+    )
+
+    assert LibraryScanner.rebuild_import_groups(library_path) == :error
+    assert ImportGroups.count_pending() == 0
   end
 
   test "a scan rebuild makes matched orphans visible as groups" do

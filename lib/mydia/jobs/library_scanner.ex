@@ -908,8 +908,20 @@ defmodule Mydia.Jobs.LibraryScanner do
   # `:status` from an existing row but not `:import_run_id`, so rebuilding with
   # no run id would detach the running import's own groups from it. The run
   # rebuilds them itself when it finishes, so yielding costs nothing.
+  #
+  # A failure here must not fail the scan either: by the time this runs,
+  # process_scan_result/2 has already committed every file change and the
+  # caller already reports the scan a success, so letting an exception here
+  # crash the whole Oban job would report a false failure over work that
+  # already landed. upsert_for_library/2 is idempotent, so the next scan (or
+  # the import run this raced against, once it finishes) redoes any group
+  # this attempt missed, for free. Concretely, `write_group/4` hard-matches
+  # `{:ok, group} = Repo.insert_or_update()`, and the active-run check above
+  # is check-then-act with a real window: if this rebuild races a freshly
+  # started import run's own upsert on the same new cluster_key, the loser
+  # hits a genuine unique-constraint collision and that match raises.
   @spec rebuild_import_groups(LibraryPath.t()) ::
-          {:ok, %{groups: non_neg_integer(), files: non_neg_integer()}} | :skipped
+          {:ok, %{groups: non_neg_integer(), files: non_neg_integer()}} | :skipped | :error
   def rebuild_import_groups(library_path) do
     case Library.active_import_run(library_path.id) do
       nil ->
@@ -922,6 +934,14 @@ defmodule Mydia.Jobs.LibraryScanner do
 
         :skipped
     end
+  rescue
+    error ->
+      Logger.warning("Import group rebuild failed",
+        library_path_id: library_path.id,
+        error: Exception.format(:error, error, __STACKTRACE__)
+      )
+
+      :error
   end
 
   defp process_media_file(media_file, file_info, metadata_config) do
