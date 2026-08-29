@@ -217,6 +217,23 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
      |> put_flash(:info, "Crash report queue cleared")}
   end
 
+  @impl true
+  def handle_event("delete_invalid_config_setting", %{"id" => id}, socket) do
+    # Only rows this page reported as unusable can be deleted here: the id is
+    # checked against that list rather than trusted, so this cannot be used to
+    # delete a working setting.
+    socket.assigns.invalid_config_settings
+    |> Enum.find(fn %{setting: setting} -> setting.id == id end)
+    |> case do
+      nil ->
+        {:noreply, socket}
+
+      %{setting: setting} ->
+        {:ok, _} = Settings.delete_config_setting(setting)
+        {:noreply, socket |> load_data() |> put_flash(:info, "Removed #{setting.key}")}
+    end
+  end
+
   ## Private Helpers
 
   # Validates, persists, and reloads a single key. Shared by the typed-input
@@ -300,6 +317,7 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
     socket
     |> assign(:config_settings_with_sources, get_all_settings_with_sources())
     |> assign(:crash_report_stats, Mydia.CrashReporter.stats())
+    |> assign(:invalid_config_settings, Settings.invalid_config_settings())
   end
 
   defp get_all_settings_with_sources do

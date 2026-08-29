@@ -4,10 +4,44 @@ defmodule MydiaWeb.AdminSettingsLive.Components do
 
   attr :config_settings_with_sources, :map, required: true
   attr :crash_report_stats, :map, required: true
+  attr :invalid_config_settings, :list, default: []
 
   def general_settings_tab(assigns) do
     ~H"""
     <div class="p-4 sm:p-6 space-y-6 sm:space-y-8">
+      <div
+        :if={@invalid_config_settings != []}
+        id="invalid-config-settings"
+        class="alert alert-warning mb-6"
+      >
+        <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
+        <div>
+          <h3 class="font-bold">Some saved settings are not being applied</h3>
+          <p class="text-sm">
+            These rows name a setting that no longer exists, or hold a value of the
+            wrong type. They are skipped so the rest of your configuration still
+            applies. Removing them is safe.
+          </p>
+          <ul class="mt-3 space-y-2">
+            <li
+              :for={%{setting: setting, reason: reason} <- @invalid_config_settings}
+              id={"invalid-config-setting-#{String.replace(setting.key, ".", "-")}"}
+              class="flex items-center justify-between gap-3"
+            >
+              <span class="font-mono text-sm">{reason}</span>
+              <button
+                type="button"
+                id={"delete-invalid-config-setting-#{String.replace(setting.key, ".", "-")}"}
+                class="btn btn-sm btn-ghost"
+                phx-click="delete_invalid_config_setting"
+                phx-value-id={setting.id}
+              >
+                Remove
+              </button>
+            </li>
+          </ul>
+        </div>
+      </div>
       <%!-- Settings Categories --%>
       <%= for {category, settings} <- @config_settings_with_sources do %>
         <div class="space-y-2">
