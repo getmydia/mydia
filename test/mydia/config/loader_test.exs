@@ -1049,6 +1049,44 @@ defmodule Mydia.Config.LoaderTest do
     end
   end
 
+  describe "load/1 :sources option" do
+    test "the default source list includes the database layer" do
+      {:ok, _} =
+        Mydia.Settings.upsert_config_setting(%{
+          key: "flaresolverr.url",
+          value: "http://from-the-database:8191",
+          category: :flaresolverr
+        })
+
+      assert {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+      assert config.flaresolverr.url == "http://from-the-database:8191"
+    end
+
+    test "sources: [:yaml, :env] skips the database layer entirely" do
+      {:ok, _} =
+        Mydia.Settings.upsert_config_setting(%{
+          key: "flaresolverr.url",
+          value: "http://from-the-database:8191",
+          category: :flaresolverr
+        })
+
+      assert {:ok, config} =
+               Loader.load(config_file: "nonexistent.yml", sources: [:yaml, :env])
+
+      assert config.flaresolverr.url == nil
+    end
+
+    test "sources: [:yaml, :env] still reads environment variables" do
+      System.put_env("FLARESOLVERR_URL", "http://from-the-environment:8191")
+      on_exit(fn -> System.delete_env("FLARESOLVERR_URL") end)
+
+      assert {:ok, config} =
+               Loader.load(config_file: "nonexistent.yml", sources: [:yaml, :env])
+
+      assert config.flaresolverr.url == "http://from-the-environment:8191"
+    end
+  end
+
   describe "reload/0" do
     setup do
       original = Application.get_env(:mydia, :runtime_config)
