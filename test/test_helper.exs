@@ -15,6 +15,46 @@ max_cases =
 ExUnit.start(max_cases: max_cases, exclude: [:external, :feature, :requires_relay])
 Ecto.Adapters.SQL.Sandbox.mode(Mydia.Repo, :manual)
 
+# Refuse outbound HTTP. Nothing else stops a test reaching the production
+# metadata relay: Mydia.Metadata.default_relay_config/0 falls back to
+# relay.mydia.dev in test, and the cache warming that protects detail-page
+# tests is opt-in and silent when forgotten (#530).
+#
+# Skipped when the run explicitly opts into relay-touching tests, which are
+# excluded by default above. This disarms the guard for the whole run rather
+# than for the tagged tests alone: a per-test allowance would have to resolve
+# the current test from inside an arbitrary spawned process, and a LiveView
+# async task is not a $callers descendant of its test.
+relay_tags = [:external, :requires_relay]
+
+relay_tags_included? =
+  ExUnit.configuration()
+  |> Keyword.get(:include, [])
+  |> Enum.any?(fn
+    tag when is_atom(tag) -> tag in relay_tags
+    {tag, _value} -> tag in relay_tags
+    _other -> false
+  end)
+
+unless relay_tags_included? do
+  Mydia.RelayGuard.Escapes.setup()
+  Req.default_options(adapter: Mydia.RelayGuard)
+
+  ExUnit.after_suite(fn _results ->
+    case Mydia.RelayGuard.Escapes.all() do
+      [] ->
+        :ok
+
+      escapes ->
+        IO.puts(Mydia.RelayGuard.Escapes.format(escapes))
+
+        # ExUnit discards after_suite return values and exposes no hook to fail
+        # a run, so force the exit status here.
+        System.at_exit(fn _status -> exit({:shutdown, 1}) end)
+    end
+  end)
+end
+
 # Clear runtime config indexers, download clients, and media servers so tests
 # never accidentally hit real external services (e.g. Prowlarr from Docker env vars).
 # Tests that need indexers should create their own via Bypass + Settings.create_indexer_config.
