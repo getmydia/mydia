@@ -173,7 +173,11 @@ defmodule Mydia.Indexers.CardigannParser do
         download: parse_download_config(yaml_data),
         settings: parse_settings(yaml_data),
         request_delay: Map.get(yaml_data, "requestdelay"),
-        follow_redirect: Map.get(yaml_data, "followredirect", false),
+        # Jackett follows redirects on search requests, and no definition in the
+        # corpus sets this key, so a `false` default meant Mydia followed none
+        # of them. A definition that genuinely needs the raw 3xx sets
+        # `followredirect: false` explicitly.
+        follow_redirect: Map.get(yaml_data, "followredirect", true),
         test_link_torrent: Map.get(yaml_data, "testlinktorrent", false),
         certificates: Map.get(yaml_data, "certificates", []),
         replaces: Map.get(yaml_data, "replaces", [])

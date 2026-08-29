@@ -50,7 +50,7 @@ defmodule Mydia.Indexers.CardigannDefinition.Parsed do
     settings: [],
     legacylinks: [],
     request_delay: nil,
-    follow_redirect: false,
+    follow_redirect: true,
     test_link_torrent: false,
     certificates: [],
     replaces: []

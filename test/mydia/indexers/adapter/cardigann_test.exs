@@ -69,8 +69,11 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
       Plug.Conn.resp(conn, 200, "OK")
     end)
 
-    # Stub search paths with empty HTML table (Cardigann parses HTML from search results)
-    for query <- ["test+query", "test%20query", "query"] do
+    # Stub search paths with empty HTML table (Cardigann parses HTML from search results).
+    # "The%20Matrix" is the health check's own probe query (this definition declares
+    # movie-search, so test_indexer_reachable/2 now runs a real search against it
+    # instead of only fetching "/") rather than a query any of these tests submit.
+    for query <- ["test+query", "test%20query", "query", "The%20Matrix"] do
       Bypass.stub(bypass, "GET", "/search/#{query}/", fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("text/html")
@@ -150,6 +153,156 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
                Cardigann.test_connection(config)
 
       assert message =~ "not found"
+    end
+
+    # Regression: test_indexer_reachable/3 used to probe with only
+    # definition.config, never building the authenticated session
+    # get_or_create_session/3 builds for a real search. A private indexer
+    # with a stored session - established the same way a real search
+    # establishes one - searched successfully because its cookies rode along
+    # on every real search, while Test reported a connection failure because
+    # the probe's HTTP request carried no Cookie header at all.
+    test "carries a stored session's cookies into the probe search request", %{
+      definition: definition,
+      bypass: bypass
+    } do
+      Bypass.stub(bypass, "GET", "/search/The%20Matrix/", fn conn ->
+        case Plug.Conn.get_req_header(conn, "cookie") do
+          ["sessionid=letmein123"] ->
+            conn
+            |> Plug.Conn.put_resp_content_type("text/html")
+            |> Plug.Conn.resp(
+              200,
+              "<html><body><table class=\"results\"><tr><th>Header</th></tr></table></body></html>"
+            )
+
+          _ ->
+            Plug.Conn.resp(conn, 401, "Unauthorized")
+        end
+      end)
+
+      {:ok, _session} =
+        %CardigannSearchSession{}
+        |> CardigannSearchSession.changeset(%{
+          cardigann_definition_id: definition.id,
+          cookies: ["sessionid=letmein123"],
+          expires_at:
+            DateTime.utc_now() |> DateTime.add(3600, :second) |> DateTime.truncate(:second)
+        })
+        |> Repo.insert()
+
+      config = %{
+        type: :cardigann,
+        name: "Test Indexer",
+        indexer_id: "test-indexer"
+      }
+
+      assert {:ok, _info} = Cardigann.test_connection(config)
+    end
+  end
+
+  describe "credential key shape" do
+    # `definition.config` is a JsonMapType, so anything that has been through the
+    # database comes back string-keyed, and the admin form supplies string keys
+    # too. Reading only atom keys authenticated every private indexer with empty
+    # credentials, which made the login fail and the probe report a failure the
+    # tracker never caused.
+    setup do
+      bypass = Bypass.open()
+      base_url = "http://localhost:#{bypass.port}"
+
+      yaml = """
+      id: private-indexer
+      name: Private Indexer
+      description: A private test indexer
+      language: en-US
+      type: private
+      encoding: UTF-8
+      links:
+        - #{base_url}
+      caps:
+        modes:
+          search: {search-type: q}
+        categories:
+          5000: TV
+      login:
+        path: /login.php
+        method: form
+        inputs:
+          username: "{{ .Config.username }}"
+          password: "{{ .Config.password }}"
+        test:
+          selector: "a[href*=logout]"
+      search:
+        path: /search
+        rows:
+          selector: "table.results tr"
+          after: 1
+        fields:
+          title:
+            selector: "td.title a"
+          size:
+            selector: "td.size"
+          seeders:
+            selector: "td.seeders"
+      """
+
+      {:ok, definition} =
+        %CardigannDefinition{}
+        |> CardigannDefinition.changeset(%{
+          indexer_id: "private-indexer",
+          name: "Private Indexer",
+          description: "A private test indexer",
+          language: "en-US",
+          type: "private",
+          encoding: "UTF-8",
+          links: %{"0" => base_url},
+          capabilities: %{modes: %{"search" => %{}}, categories: %{"5000" => "TV"}},
+          definition: yaml,
+          schema_version: "v11",
+          enabled: true,
+          # String keys, exactly as the database and the admin form supply them.
+          config: %{"username" => "stringuser", "password" => "stringpass"},
+          last_synced_at: DateTime.utc_now()
+        })
+        |> Repo.insert()
+
+      %{bypass: bypass, private_definition: definition}
+    end
+
+    test "string-keyed credentials reach a form login", %{bypass: bypass} do
+      test_pid = self()
+
+      Bypass.expect_once(bypass, "POST", "/login.php", fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        send(test_pid, {:login_params, URI.decode_query(body)})
+
+        conn
+        |> Plug.Conn.put_resp_header("set-cookie", "session=abc123; Path=/")
+        |> Plug.Conn.resp(200, "<html><body><a href='/logout'>Logout</a></body></html>")
+      end)
+
+      Bypass.stub(bypass, "GET", "/search", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("text/html")
+        |> Plug.Conn.resp(
+          200,
+          "<html><body><table class=\"results\"><tr><th>Header</th></tr></table></body></html>"
+        )
+      end)
+
+      config = %{
+        type: :cardigann,
+        name: "Private Indexer",
+        indexer_id: "private-indexer",
+        user_settings: %{"username" => "stringuser", "password" => "stringpass"}
+      }
+
+      assert {:ok, _results} = Cardigann.search(config, "query")
+
+      assert_receive {:login_params, params}
+      assert params["username"] == "stringuser"
+      assert params["password"] == "stringpass"
     end
   end
 

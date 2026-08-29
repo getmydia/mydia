@@ -150,6 +150,86 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
 
       assert url == "https://example.com/search/test%20%26%20query%3Dvalue"
     end
+
+    test "uses an absolute path verbatim instead of appending it to the base URL" do
+      # The Pirate Bay's definition points its search at apibay.org. Appending
+      # that to the site's base URL produced
+      # https://thepiratebay.org/https://apibay.org/q.php?... and the site
+      # answered with a redirect, surfacing as "Unexpected status: 302".
+      definition = %Parsed{
+        id: "thepiratebay",
+        name: "The Pirate Bay",
+        description: "Test indexer",
+        language: "en-US",
+        type: "public",
+        encoding: "UTF-8",
+        links: ["https://thepiratebay.org"],
+        capabilities: %{modes: %{}},
+        search: %{
+          paths: [%{path: "https://apibay.org/q.php?q={{ .Keywords }}"}],
+          inputs: %{},
+          rows: %{selector: "tr"},
+          fields: %{title: %{selector: "td.title"}}
+        },
+        login: nil,
+        download: nil
+      }
+
+      assert {:ok, "https://apibay.org/q.php?q=ubuntu"} =
+               CardigannSearchEngine.build_search_url(definition, query: "ubuntu")
+    end
+
+    test "still joins a relative path onto the base URL" do
+      definition = %Parsed{
+        id: "test",
+        name: "Test",
+        description: "Test indexer",
+        language: "en-US",
+        type: "public",
+        encoding: "UTF-8",
+        links: ["https://example.com"],
+        capabilities: %{modes: %{}},
+        search: %{
+          paths: [%{path: "/search/{{ .Keywords }}/1/"}],
+          inputs: %{},
+          rows: %{selector: "tr"},
+          fields: %{title: %{selector: "td.title"}}
+        },
+        login: nil,
+        download: nil
+      }
+
+      assert {:ok, "https://example.com/search/ubuntu/1/"} =
+               CardigannSearchEngine.build_search_url(definition, query: "ubuntu")
+    end
+
+    test "joins a relative path that merely contains a colon onto the base URL" do
+      # URI.parse/1 is lenient: a leading "mailto:someone"-shaped path parses
+      # with a scheme but no host. A scheme-only guard would mistake it for
+      # an absolute URL and skip the join; the scheme-and-host guard must
+      # not.
+      definition = %Parsed{
+        id: "test",
+        name: "Test",
+        description: "Test indexer",
+        language: "en-US",
+        type: "public",
+        encoding: "UTF-8",
+        links: ["https://example.com"],
+        capabilities: %{modes: %{}},
+        search: %{
+          paths: [%{path: "mailto:{{ .Keywords }}"}],
+          inputs: %{},
+          rows: %{selector: "tr"},
+          fields: %{title: %{selector: "td.title"}}
+        },
+        login: nil,
+        download: nil
+      }
+
+      assert {:ok, "https://example.com/mailto:someone"} =
+               CardigannSearchEngine.build_search_url(definition, query: "someone")
+    end
   end
 
   describe "build_request_params/2" do
@@ -768,6 +848,172 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
                  user_config
                )
     end
+
+    test "cookies are sent to a loopback host over http", %{definition: definition} do
+      bypass = Bypass.open()
+      test_pid = self()
+
+      Bypass.expect_once(bypass, "GET", "/search", fn conn ->
+        send(test_pid, {:cookie_header, Plug.Conn.get_req_header(conn, "cookie")})
+        Plug.Conn.resp(conn, 200, "<html></html>")
+      end)
+
+      params = %{query_params: %{}, headers: [], method: :get}
+      user_config = %{cookies: ["session=abc123", "token=xyz789"]}
+
+      assert {:ok, _response} =
+               CardigannSearchEngine.execute_http_request(
+                 definition,
+                 "http://localhost:#{bypass.port}/search",
+                 params,
+                 user_config
+               )
+
+      assert_receive {:cookie_header, ["session=abc123; token=xyz789"]}
+    end
+
+    test "FlareSolverr map-shaped cookies are sent as name=value", %{definition: definition} do
+      # store_flaresolverr_cookies/2 writes maps into the same session row
+      # CardigannAuth.get_stored_session/1 reads back, so map entries reach here.
+      bypass = Bypass.open()
+      test_pid = self()
+
+      Bypass.expect_once(bypass, "GET", "/search", fn conn ->
+        send(test_pid, {:cookie_header, Plug.Conn.get_req_header(conn, "cookie")})
+        Plug.Conn.resp(conn, 200, "<html></html>")
+      end)
+
+      params = %{query_params: %{}, headers: [], method: :get}
+
+      user_config = %{
+        cookies: [
+          %{"name" => "cf_clearance", "value" => "abc123", "domain" => ".example.com"},
+          %{"name" => "session", "value" => "xyz789"}
+        ]
+      }
+
+      assert {:ok, _response} =
+               CardigannSearchEngine.execute_http_request(
+                 definition,
+                 "http://localhost:#{bypass.port}/search",
+                 params,
+                 user_config
+               )
+
+      assert_receive {:cookie_header, ["cf_clearance=abc123; session=xyz789"]}
+    end
+
+    test "unusable cookie entries are dropped rather than crashing", %{definition: definition} do
+      bypass = Bypass.open()
+      test_pid = self()
+
+      Bypass.expect_once(bypass, "GET", "/search", fn conn ->
+        send(test_pid, {:cookie_header, Plug.Conn.get_req_header(conn, "cookie")})
+        Plug.Conn.resp(conn, 200, "<html></html>")
+      end)
+
+      params = %{query_params: %{}, headers: [], method: :get}
+      # Decoded JSON can put a nested object or a number in either field, and
+      # interpolating one would raise the error normalization exists to prevent.
+      user_config = %{
+        cookies: [
+          %{"domain" => ".example.com"},
+          42,
+          %{"name" => %{"nested" => true}, "value" => "x"},
+          %{"name" => "n", "value" => ["a", "b"]},
+          %{"name" => 7, "value" => 9}
+        ]
+      }
+
+      assert {:ok, _response} =
+               CardigannSearchEngine.execute_http_request(
+                 definition,
+                 "http://localhost:#{bypass.port}/search",
+                 params,
+                 user_config
+               )
+
+      assert_receive {:cookie_header, []}
+    end
+
+    test "a cookie-bearing request does not follow a redirect", %{definition: definition} do
+      # Req carries a manually supplied Cookie header to the redirect target even
+      # on a different host, so a followed redirect would leak the session.
+      origin = Bypass.open()
+      target = Bypass.open()
+      test_pid = self()
+
+      Bypass.expect_once(origin, "GET", "/search", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("location", "http://localhost:#{target.port}/landing")
+        |> Plug.Conn.resp(302, "")
+      end)
+
+      Bypass.stub(target, "GET", "/landing", fn conn ->
+        send(test_pid, :target_was_reached)
+        Plug.Conn.resp(conn, 200, "ok")
+      end)
+
+      definition = %{definition | follow_redirect: true}
+      params = %{query_params: %{}, headers: [], method: :get}
+      user_config = %{cookies: ["session=secret"]}
+
+      assert {:ok, response} =
+               CardigannSearchEngine.execute_http_request(
+                 definition,
+                 "http://localhost:#{origin.port}/search",
+                 params,
+                 user_config
+               )
+
+      assert response.status == 302
+      refute_receive :target_was_reached
+    end
+
+    test "a request without cookies still follows redirects", %{definition: definition} do
+      origin = Bypass.open()
+      target = Bypass.open()
+
+      Bypass.expect_once(origin, "GET", "/search", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("location", "http://localhost:#{target.port}/landing")
+        |> Plug.Conn.resp(302, "")
+      end)
+
+      Bypass.expect_once(target, "GET", "/landing", fn conn ->
+        Plug.Conn.resp(conn, 200, "followed")
+      end)
+
+      definition = %{definition | follow_redirect: true}
+      params = %{query_params: %{}, headers: [], method: :get}
+
+      assert {:ok, response} =
+               CardigannSearchEngine.execute_http_request(
+                 definition,
+                 "http://localhost:#{origin.port}/search",
+                 params,
+                 %{}
+               )
+
+      assert response.status == 200
+    end
+
+    test "cookies are withheld from a cleartext non-loopback host", %{definition: definition} do
+      params = %{query_params: %{}, headers: [], method: :get}
+      user_config = %{cookies: ["session=abc123"]}
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          CardigannSearchEngine.execute_http_request(
+            definition,
+            "http://invalid-domain-for-testing.example/search",
+            params,
+            user_config
+          )
+        end)
+
+      assert log =~ "withholding session cookies"
+    end
   end
 
   describe "execute_search/4 base URL failover" do
@@ -861,6 +1107,68 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
       assert {:error, _} =
                CardigannSearchEngine.execute_search(parsed, [query: "ubuntu"], %{}, %{})
     end
+
+    test "advances to the next candidate on a 404" do
+      # YTS proxies answer / with HTML but 404 on /api/v2/list_movies.json, so
+      # the homepage probe promotes a mirror whose search does not exist. Ending
+      # the search there left five working mirrors untried.
+      missing = Bypass.open()
+      Bypass.stub(missing, "GET", "/search", fn conn -> Plug.Conn.resp(conn, 404, "") end)
+
+      working = Bypass.open()
+
+      Bypass.stub(working, "GET", "/search", fn conn ->
+        Plug.Conn.resp(
+          conn,
+          200,
+          "<html><body><table><tr><td>row</td></tr></table></body></html>"
+        )
+      end)
+
+      test_pid = self()
+      working_url = "http://localhost:#{working.port}"
+      parsed = parsed_for(["http://localhost:#{missing.port}", working_url])
+
+      assert {:ok, %{status: 200}} =
+               CardigannSearchEngine.execute_search(
+                 parsed,
+                 [query: "ubuntu", on_promote: fn url -> send(test_pid, {:promoted, url}) end],
+                 %{},
+                 %{}
+               )
+
+      assert_received {:promoted, ^working_url}
+    end
+
+    test "advances to the next candidate on an unfollowed redirect" do
+      redirecting = Bypass.open()
+
+      Bypass.stub(redirecting, "GET", "/search", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("location", "https://elsewhere.test/")
+        |> Plug.Conn.resp(302, "")
+      end)
+
+      working = Bypass.open()
+
+      Bypass.stub(working, "GET", "/search", fn conn ->
+        Plug.Conn.resp(
+          conn,
+          200,
+          "<html><body><table><tr><td>row</td></tr></table></body></html>"
+        )
+      end)
+
+      working_url = "http://localhost:#{working.port}"
+
+      parsed = %{
+        parsed_for(["http://localhost:#{redirecting.port}", working_url])
+        | follow_redirect: false
+      }
+
+      assert {:ok, %{status: 200}} =
+               CardigannSearchEngine.execute_search(parsed, [query: "ubuntu"], %{}, %{})
+    end
   end
 
   describe "keywordsfilters" do
@@ -924,6 +1232,114 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
                )
 
       assert url =~ "1999"
+    end
+  end
+
+  describe "redirect handling" do
+    test "follows a redirect by default" do
+      bypass = Bypass.open()
+
+      Bypass.expect_once(bypass, "GET", "/search", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("location", "/moved")
+        |> Plug.Conn.resp(302, "")
+      end)
+
+      Bypass.expect_once(bypass, "GET", "/moved", fn conn ->
+        Plug.Conn.resp(
+          conn,
+          200,
+          "<html><body><table><tr><td>row</td></tr></table></body></html>"
+        )
+      end)
+
+      parsed = redirecting_definition("http://localhost:#{bypass.port}", true)
+
+      assert {:ok, %{status: 200}} =
+               CardigannSearchEngine.execute_search(parsed, [query: "ubuntu"], %{}, %{})
+    end
+
+    test "an unfollowed redirect reports its Location instead of Unexpected status" do
+      bypass = Bypass.open()
+
+      Bypass.stub(bypass, "GET", "/search", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("location", "https://elsewhere.test/blocked")
+        |> Plug.Conn.resp(302, "")
+      end)
+
+      parsed = redirecting_definition("http://localhost:#{bypass.port}", false)
+
+      assert {:error, %Error{message: message}} =
+               CardigannSearchEngine.execute_search(parsed, [query: "ubuntu"], %{}, %{})
+
+      assert message =~ "Redirected (HTTP 302)"
+      assert message =~ "https://elsewhere.test/blocked"
+      refute message =~ "Unexpected status"
+    end
+
+    defp redirecting_definition(link, follow_redirect) do
+      %Parsed{
+        id: "redirect-test",
+        name: "Redirect Test",
+        description: "Test indexer",
+        language: "en-US",
+        type: "public",
+        encoding: "UTF-8",
+        links: [link],
+        legacylinks: [],
+        capabilities: %{modes: %{}},
+        follow_redirect: follow_redirect,
+        settings: [],
+        search: %{
+          paths: [%{path: "/search"}],
+          inputs: %{},
+          headers: nil,
+          keywordsfilters: [],
+          rows: %{selector: "tr"},
+          fields: %{}
+        },
+        login: nil,
+        download: nil
+      }
+    end
+  end
+
+  describe "follow_redirect default" do
+    test "a definition without followredirect follows redirects" do
+      # No definition in the shipped corpus sets this key, so the old `false`
+      # default meant Mydia followed no redirects at all on search.
+      yaml = """
+      ---
+      id: no-followredirect
+      name: No Follow Redirect
+      description: test
+      language: en-US
+      type: public
+      encoding: UTF-8
+      links:
+        - https://example.test/
+      caps:
+        categorymappings:
+          - {id: 1, cat: Movies, desc: "Movies"}
+        modes:
+          search: [q]
+      search:
+        paths:
+          - path: /search
+        rows:
+          selector: tr
+        fields:
+          title:
+            selector: td
+          size:
+            selector: td
+          seeders:
+            selector: td
+      """
+
+      assert {:ok, parsed} = Mydia.Indexers.CardigannParser.parse_definition(yaml)
+      assert parsed.follow_redirect == true
     end
   end
 end

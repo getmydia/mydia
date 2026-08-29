@@ -55,6 +55,7 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
 
   alias Mydia.Indexers.{CardigannParser, CardigannSearchEngine, CardigannResultParser}
   alias Mydia.Indexers.{CardigannDefinition, CardigannAuth, CardigannFeatureFlags}
+  alias Mydia.Indexers.CardigannHealthCheck
   alias Mydia.Indexers.CardigannSearchSession
   alias Mydia.Indexers.Adapter.Error
   alias Mydia.Repo
@@ -68,7 +69,7 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
     if CardigannFeatureFlags.enabled?() do
       with {:ok, definition} <- fetch_definition(config),
            {:ok, parsed} <- parse_definition(definition),
-           :ok <- test_indexer_reachable(parsed, config) do
+           :ok <- test_indexer_reachable(parsed, definition, config) do
         {:ok,
          %{
            name: parsed.name,
@@ -416,16 +417,65 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
     end
   end
 
-  defp test_indexer_reachable(parsed, _config) do
-    case Mydia.Indexers.CardigannHealthCheck.probe_candidates(parsed, %{}) do
-      {:ok, _url, _status} ->
-        :ok
+  # Reaching the homepage is not the same as being able to search, and treating
+  # it as such is what let 1337x, EZTV, KickassTorrents, YTS and The Pirate Bay
+  # all report a successful connection test while every search failed.
+  #
+  # Also takes the caller-supplied adapter config (not just the
+  # CardigannDefinition) so the probe can build the same authenticated session
+  # get_or_create_session/3 builds for a real search. Without it, a private
+  # indexer with a stored session (or one whose login the caller's credentials
+  # can satisfy) probed unauthenticated and reported a false connection
+  # failure while its real, authenticated searches kept succeeding - the exact
+  # false red this task exists to eliminate, mirror image of the false green
+  # above.
+  #
+  # The template-context :config still comes from definition.config alone,
+  # never from the adapter config's :user_settings or a nested :config key:
+  # build_search_opts/4 (the real search path) does the same, so sourcing it
+  # any other way here would let the probe render {{ .Config.* }} differently
+  # than a real search does, either dropping settings that do work or
+  # reporting settings that don't. build_probe_user_config/3 layers the
+  # session's cookies/api_key on top of definition.config instead of
+  # replacing it, so both stay true at once.
+  defp test_indexer_reachable(parsed, %CardigannDefinition{} = definition, config) do
+    with {:ok, user_config} <- build_probe_user_config(parsed, definition, config) do
+      case CardigannHealthCheck.probe_candidates(parsed, user_config) do
+        {:ok, url, _status} ->
+          case CardigannHealthCheck.probe_search(parsed, user_config, url) do
+            {:ok, _count, _served_by} ->
+              :ok
 
-      {:error, status} when map_size(status) == 0 ->
-        {:error, Error.invalid_config("No base URL configured in definition")}
+            {:cloudflare, _message} ->
+              {:error,
+               Error.connection_failed(
+                 "Cloudflare protection detected on #{url}. Enable FlareSolverr for this indexer."
+               )}
 
-      {:error, _status} ->
-        {:error, Error.connection_failed("No reachable base URL")}
+            {:error, message} ->
+              {:error, Error.search_failed("Reached #{url} but the search failed: #{message}")}
+          end
+
+        {:error, status} when map_size(status) == 0 ->
+          {:error, Error.invalid_config("No base URL configured in definition")}
+
+        {:error, _status} ->
+          {:error, Error.connection_failed("No reachable base URL")}
+      end
+    end
+  end
+
+  # Builds the same authenticated session get_or_create_session/3 builds for a
+  # real search (a stored session's cookies, or a fresh login when the
+  # definition requires one), then layers it onto definition.config. A
+  # genuine login failure (credentials configured but rejected) surfaces as a
+  # connection failure here, same as it would surface as a search failure for
+  # a real search; an indexer with no credentials configured authenticates as
+  # :none and is not penalized for it, matching get_or_create_session/3's own
+  # success case for public indexers.
+  defp build_probe_user_config(parsed, %CardigannDefinition{} = definition, config) do
+    with {:ok, session_user_config} <- get_or_create_session(parsed, definition, config) do
+      {:ok, Map.merge(definition.config || %{}, session_user_config)}
     end
   end
 
@@ -452,18 +502,24 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
   end
 
   defp get_or_create_session(parsed, definition, config) do
-    user_settings = Map.get(config, :user_settings, %{})
+    user_settings = setting(config, :user_settings) || %{}
 
     # Build user config from settings
     credentials = %{
-      username: Map.get(user_settings, :username),
-      password: Map.get(user_settings, :password),
-      api_key: Map.get(user_settings, :api_key),
-      cookies: Map.get(user_settings, :cookies, [])
+      username: setting(user_settings, :username),
+      password: setting(user_settings, :password),
+      api_key: setting(user_settings, :api_key),
+      cookies: setting(user_settings, :cookies) || []
     }
 
-    # Remove nil values
-    credentials = Map.reject(credentials, fn {_k, v} -> is_nil(v) end)
+    # Drop anything the user has not actually configured. An empty cookie list or
+    # a blank form field is not a credential, and leaving the key in place made
+    # CardigannAuth.determine_auth_method/2 - which tests for :cookies before
+    # :username - select :cookie and skip the form login outright, so a private
+    # tracker with a username and password searched anonymously and returned
+    # nothing. The admin form submits untouched fields as "", so blank strings
+    # reach here as readily as nils.
+    credentials = Map.reject(credentials, fn {_k, v} -> blank?(v) end)
 
     # Try to get stored session first
     case CardigannAuth.get_stored_session(definition.id) do
@@ -485,6 +541,28 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
         authenticate_and_convert(parsed, credentials, definition.id)
     end
   end
+
+  # Credentials are read by name rather than by key type. `definition.config` is
+  # a `Mydia.Settings.JsonMapType`, so anything that has been through the
+  # database comes back from `Jason.decode/1` with string keys, and the admin
+  # form supplies string keys too. Reading only atoms meant every configured
+  # private indexer authenticated with empty credentials: the login failed, the
+  # search returned nothing, and the connection test now reports a failure the
+  # tracker never caused.
+  defp setting(map, key) when is_map(map) do
+    case Map.fetch(map, key) do
+      {:ok, value} -> value
+      :error -> Map.get(map, Atom.to_string(key))
+    end
+  end
+
+  defp setting(_map, _key), do: nil
+
+  defp blank?(nil), do: true
+  defp blank?(value) when is_binary(value), do: String.trim(value) == ""
+  defp blank?([]), do: true
+  defp blank?(%{} = value), do: map_size(value) == 0
+  defp blank?(_value), do: false
 
   defp authenticate_and_convert(parsed, credentials, definition_id) do
     case CardigannAuth.authenticate(parsed, credentials, definition_id) do

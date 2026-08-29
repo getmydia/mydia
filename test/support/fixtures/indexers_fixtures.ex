@@ -51,6 +51,10 @@ defmodule Mydia.IndexersFixtures do
           fields:
             title:
               selector: td.title
+            size:
+              selector: td.size
+            seeders:
+              selector: td.seeders
             download:
               selector: td.download a
               attribute: href

@@ -210,10 +210,20 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     end
   end
 
+  # A dead or wrong mirror answers 404 or redirects away, and neither is a
+  # reason to abandon the working mirrors behind it. YTS ships six links whose
+  # proxies serve HTML on / but 404 on /api/v2/list_movies.json, so the first
+  # candidate the homepage probe promotes is routinely the wrong one.
+  #
+  # Failures that would repeat identically on every candidate stay terminal: a
+  # template that will not render, or a request target the client refuses, is
+  # not going to behave differently against another host.
   defp retryable_failure?({:error, %Error{type: :connection_failed}}), do: true
 
   defp retryable_failure?({:error, %Error{message: message}}) when is_binary(message) do
-    String.contains?(message, "Server error: HTTP 5")
+    String.contains?(message, "Server error: HTTP 5") or
+      String.contains?(message, "HTTP 404") or
+      String.contains?(message, "Redirected (HTTP 3")
   end
 
   defp retryable_failure?(_), do: false
@@ -529,7 +539,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     apply_rate_limit(definition)
 
     # Build request options
-    req_opts = build_request_options(definition, request_params, user_config)
+    req_opts = build_request_options(definition, url, request_params, user_config)
 
     Logger.debug("Cardigann search request: #{request_params.method} #{url}")
     Logger.debug("Request params: #{inspect(request_params.query_params)}")
@@ -588,6 +598,22 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       {:error, %Error{type: :rate_limited}}
   """
   @spec validate_response(http_response()) :: :ok | {:error, Error.t()}
+
+  # An unfollowed redirect used to land in the catch-all below as
+  # "Unexpected status: 302", which told an operator nothing about where the
+  # indexer was trying to send them. This is now only reachable when a
+  # definition sets `followredirect: false`, since search follows by default.
+  #
+  # Task 5's retryable_failure?/1 matches on the "Redirected (HTTP " prefix.
+  def validate_response(%{status: status} = response) when status in 300..399 do
+    location = response |> Map.get(:headers) |> location_header()
+
+    suffix = if location, do: " to #{location}", else: " with no Location header"
+
+    {:error,
+     Error.search_failed("Redirected (HTTP #{status})#{suffix} and the redirect was not followed")}
+  end
+
   def validate_response(%{status: status, body: body}) do
     cond do
       status == 200 ->
@@ -613,6 +639,25 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   end
 
   # Private functions
+
+  # Req 0.5 returns headers as a map of lowercase name to a list of values;
+  # older shapes and hand-built test responses use a keyword-ish list.
+  defp location_header(headers) when is_map(headers) do
+    case Map.get(headers, "location") do
+      [value | _] -> value
+      value when is_binary(value) -> value
+      _ -> nil
+    end
+  end
+
+  defp location_header(headers) when is_list(headers) do
+    Enum.find_value(headers, fn
+      {name, value} -> if String.downcase(to_string(name)) == "location", do: value
+      _ -> nil
+    end)
+  end
+
+  defp location_header(_), do: nil
 
   defp get_base_url(definition, opts) do
     case Keyword.get(opts, :base_url) do
@@ -671,10 +716,20 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     Mydia.Indexers.Cardigann.TemplateContext.build(definition, opts)
   end
 
+  # A Cardigann definition may put a full URL in `path:` rather than a path
+  # relative to the site's base. The Pirate Bay does exactly that, pointing at
+  # https://apibay.org/q.php. Concatenating it onto the base URL produced
+  # https://thepiratebay.org/https://apibay.org/q.php?... which the site
+  # answered with a redirect, surfacing to the operator as
+  # "Unexpected status: 302".
   defp build_full_url(base_url, path) do
-    # Ensure proper joining of base URL and path
-    path_without_leading_slash = String.trim_leading(path, "/")
-    "#{base_url}/#{path_without_leading_slash}"
+    case URI.parse(path) do
+      %URI{scheme: scheme, host: host} when is_binary(scheme) and is_binary(host) ->
+        path
+
+      _ ->
+        "#{base_url}/#{String.trim_leading(path, "/")}"
+    end
   end
 
   defp build_query_params(%Parsed{} = definition, opts) do
@@ -757,7 +812,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     :ok
   end
 
-  defp build_request_options(definition, request_params, user_config) do
+  defp build_request_options(definition, url, request_params, user_config) do
     # Base options
     base_opts = [
       headers: request_params.headers,
@@ -789,17 +844,90 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
 
     # Add cookies if present in user config
     case Map.get(user_config, :cookies) do
-      nil ->
-        opts_with_params
-
-      cookies when is_list(cookies) ->
-        cookie_header = Enum.join(cookies, "; ")
-        existing_headers = Keyword.get(opts_with_params, :headers, [])
-        updated_headers = [{"Cookie", cookie_header} | existing_headers]
-        Keyword.put(opts_with_params, :headers, updated_headers)
+      cookies when is_list(cookies) and cookies != [] ->
+        attach_cookies(opts_with_params, url, cookies)
 
       _ ->
         opts_with_params
     end
   end
+
+  # A session cookie is a bearer credential for the tracker account. Base URL
+  # candidates come straight from the definition's `links`, and a few of them are
+  # cleartext (torrentlt ships `http://www.torrent.ai/`), so the header is
+  # withheld rather than handed to anyone on the path. The request still goes
+  # out: an anonymous result is a better outcome than a leaked login, and the
+  # search reports whatever the tracker returns for a logged-out visitor.
+  #
+  # A cookie-bearing request also stops following redirects, because Req carries
+  # a manually supplied Cookie header along a redirect even to a different host
+  # (checked against the pinned Req, not assumed). Following one would hand the
+  # session to whatever host the Location names, which is a leak an attacker can
+  # trigger from a hijacked mirror rather than an accident. Unfollowed 3xx keeps
+  # the honest handling this branch already added: validate_response/1 names the
+  # Location, and failover moves on to the next candidate. Redirect following is
+  # unaffected for every request without cookies.
+  defp attach_cookies(opts, url, cookies) do
+    if cleartext_url?(url) do
+      Logger.warning(
+        "Cardigann: withholding session cookies from cleartext URL #{inspect(url)}. " <>
+          "Configure an https base URL for this indexer to send credentials."
+      )
+
+      opts
+    else
+      cookie_header =
+        cookies
+        |> Enum.map(&normalize_cookie/1)
+        |> Enum.reject(&is_nil/1)
+        |> Enum.join("; ")
+
+      if cookie_header == "" do
+        opts
+      else
+        existing_headers = Keyword.get(opts, :headers, [])
+
+        opts
+        |> Keyword.put(:headers, [{"Cookie", cookie_header} | existing_headers])
+        |> Keyword.put(:redirect, false)
+      end
+    end
+  end
+
+  # A stored session row holds either plain "name=value" strings or the cookie
+  # maps store_flaresolverr_cookies/2 writes, and
+  # CardigannAuth.get_stored_session/1 hands back whatever is in the row without
+  # looking. Joining a map raises Protocol.UndefinedError before the request is
+  # even sent, so any indexer that had once been through FlareSolverr crashed its
+  # next search. Entries are normalized here and anything unusable is dropped.
+  defp normalize_cookie(cookie) when is_binary(cookie), do: cookie
+
+  defp normalize_cookie(cookie) when is_map(cookie) do
+    name = cookie["name"] || Map.get(cookie, :name)
+    value = cookie["value"] || Map.get(cookie, :value)
+
+    # Both halves have to be strings. These rows are decoded JSON, so a nested
+    # object or array can land in either field, and interpolating one raises the
+    # same Protocol.UndefinedError this function exists to prevent.
+    if is_binary(name) and is_binary(value), do: name <> "=" <> value, else: nil
+  end
+
+  defp normalize_cookie(_cookie), do: nil
+
+  # Loopback is a secure context in the same sense browsers use the term: the
+  # request never reaches a network, so a local mirror or a test server is not
+  # an exposure. Everything else on plain http is.
+  @loopback_hosts ~w(localhost 127.0.0.1 ::1 0:0:0:0:0:0:0:1)
+
+  defp cleartext_url?(url) when is_binary(url) do
+    case URI.parse(url) do
+      %URI{scheme: "http", host: host} ->
+        String.downcase(host || "") not in @loopback_hosts
+
+      _ ->
+        false
+    end
+  end
+
+  defp cleartext_url?(_url), do: false
 end

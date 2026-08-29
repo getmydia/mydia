@@ -317,11 +317,22 @@ defmodule Mydia.Indexers.CardigannTemplate do
     eval_tokens(rest, ctx, url_encode?, [output | acc])
   end
 
-  # Function call or pipeline - never URL-encode function results
+  # Function call or pipeline. Encodes exactly like a bare field reference: in a
+  # path context the caller asks for encoding, and a value that reached the
+  # template through `or`, `re_replace` or `join` is no less user-supplied than
+  # one that came straight from `.Keywords`.
+  #
+  # This is load-bearing. CardigannOverrides.patch_1337x/1 routes keywords
+  # through `{{ or .Query.Album .Query.Artist .Keywords }}`, so leaving function
+  # results raw put an unescaped query into the URL path and every 1337x search
+  # failed with {:invalid_request_target, "/search/Some Title: Here/1/"}.
+  #
+  # Query parameters are unaffected: build_query_params/2 renders them with
+  # url_encode: false and lets Req do the escaping.
   defp eval_tokens([{action_type, [{:expr, expr_parts}]} | rest], ctx, url_encode?, acc)
        when action_type in [:action, :action_trim_left, :action_trim_right, :action_trim_both] do
     value = eval_expression(expr_parts, ctx)
-    output = format_output(value, false)
+    output = format_output(value, url_encode?)
     eval_tokens(rest, ctx, url_encode?, [output | acc])
   end
 
@@ -887,21 +898,21 @@ defmodule Mydia.Indexers.CardigannTemplate do
 
   @doc """
   URL-encodes a string for use in URL paths.
+
+  Percent-encodes UTF-8 BYTES, not code points. `String.to_charlist/1`
+  followed by packing each code point into a single `<<char>>` byte
+  percent-encodes the code point instead: a code point above 255 truncates
+  (silently dropping data), and even a two-byte code point like "é"
+  (U+00E9) encodes as its raw ordinal ("%E9") rather than its two UTF-8
+  bytes ("%C3%A9"), producing a URL that matches nothing at the origin.
+  `URI.encode/2` iterates the binary's bytes directly, so a multi-byte
+  character comes out as consecutive `%XX` pairs, one per UTF-8 byte.
   """
   @spec url_encode(String.t()) :: String.t()
   def url_encode(string) when is_binary(string) do
-    string
-    |> String.to_charlist()
-    |> Enum.map_join("", fn char ->
-      if unreserved_char?(char), do: <<char>>, else: "%" <> Base.encode16(<<char>>, case: :upper)
-    end)
+    URI.encode(string, &URI.char_unreserved?/1)
   end
 
   def url_encode(nil), do: ""
   def url_encode(value), do: url_encode(to_string(value))
-
-  defp unreserved_char?(c) do
-    (c >= ?A and c <= ?Z) or (c >= ?a and c <= ?z) or (c >= ?0 and c <= ?9) or
-      c in [?-, ?_, ?., ?~]
-  end
 end
