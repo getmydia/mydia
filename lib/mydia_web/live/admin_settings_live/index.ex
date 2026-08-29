@@ -1,6 +1,7 @@
 defmodule MydiaWeb.AdminSettingsLive.Index do
   use MydiaWeb, :live_view
 
+  alias Mydia.Config.Schema.Paths
   alias Mydia.Settings
   alias MydiaWeb.AdminSettingsLive.Components
 
@@ -333,8 +334,16 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
     metadata = config.metadata || %Mydia.Config.Schema.Metadata{}
     streaming = config.streaming || %Mydia.Config.Schema.Streaming{}
 
-    # Fetch all DB settings in one query to avoid N+1 per-key lookups
-    all_db_settings = Settings.list_config_settings() |> Map.new(&{&1.key, &1})
+    # Fetch all DB settings in one query to avoid N+1 per-key lookups. A row
+    # the merge skips (unknown key, or a value that will not cast to the
+    # field's type) must not be reported as the source of a value it did not
+    # supply, or the source badge and the invalid-settings alert above would
+    # contradict each other for the same key. Direct-lookup rows resolve to
+    # `:direct`, not `{:error, _}`, so they are kept.
+    all_db_settings =
+      Settings.list_config_settings()
+      |> Enum.reject(&match?({:error, _}, Paths.cast_overlay(&1.key, &1.value)))
+      |> Map.new(&{&1.key, &1})
 
     %{
       "Server" => [

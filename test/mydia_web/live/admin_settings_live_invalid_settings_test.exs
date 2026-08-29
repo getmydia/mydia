@@ -31,6 +31,39 @@ defmodule MydiaWeb.AdminSettingsLiveInvalidSettingsTest do
     assert has_element?(view, "#invalid-config-setting-server-port")
   end
 
+  test "an unusable row does not show a Database source badge", %{conn: conn} do
+    # streaming.max_transcode_height has no environment variable set in this
+    # test run, so its source badge is decided purely by whether the row
+    # survives into `all_db_settings`. It keeps rendering the schema default
+    # once the merge skips this row, so it must not also be tagged as coming
+    # from the database: that would tell the operator two different things
+    # about the same value on the same screen.
+    Repo.insert!(%ConfigSetting{
+      key: "streaming.max_transcode_height",
+      value: "not-a-number",
+      category: :streaming
+    })
+
+    {:ok, _view, html} = live(conn, ~p"/admin/config/settings")
+
+    # Scope to this setting's own row via its value control's phx-value-key,
+    # climbing to the row content div that also holds the source badge.
+    # setting_source_badge/1 (components.ex) renders :database as
+    # `badge badge-primary`, everything else (including :default) as
+    # `badge badge-ghost`.
+    row_html =
+      html
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query(~s([phx-value-key="streaming.max_transcode_height"]))
+      |> LazyHTML.parent_node()
+      |> LazyHTML.parent_node()
+      |> LazyHTML.parent_node()
+      |> LazyHTML.to_html()
+
+    refute row_html =~ "badge-primary"
+    assert row_html =~ "badge-ghost"
+  end
+
   test "deleting an unusable row removes it from the alert", %{conn: conn} do
     setting = Repo.insert!(%ConfigSetting{key: "server.port", value: "abc", category: :server})
 
