@@ -185,6 +185,11 @@ defmodule Mydia.RemoteAccess.DirectUrlsTest do
       %{original_config: original_config}
     end
 
+    # Genuinely reaches the public internet (ifconfig.me/icanhazip.com/
+    # api.ipify.org) rather than a stub, so it stays out of the default run
+    # like every other :external test — Mydia.RelayGuard refuses it
+    # otherwise (#530).
+    @tag :external
     test "returns {:ok, ip} when successful" do
       # Enable public IP detection
       Application.put_env(:mydia, :direct_urls, public_ip_enabled: true)

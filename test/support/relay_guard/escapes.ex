@@ -77,6 +77,28 @@ defmodule Mydia.RelayGuard.Escapes do
   end
 
   @doc """
+  Removes every recorded row for `url`.
+
+  For a test that intentionally triggers a guard block as one of its own
+  assertions (`Mydia.RelayGuardTest`, `Mydia.RelayGuard.EscapesTest`): the row
+  it created is real, in the sense that the guard genuinely recorded it, but
+  it is not a real *application* escape, so it must not linger in the shared
+  table for the end-of-suite report to flag alongside genuinely unwarmed
+  lookups. Mirrors the `on_exit(fn -> Cache.delete(key) end)` convention
+  `Mydia.MetadataCacheHelpers` already uses for the cache it warms — clean up
+  only the row you wrote, never the whole table (that is what made the report
+  under-count real escapes in the first place, see `reset/0`'s callers before
+  #530's fix round 1).
+  """
+  def delete(url) when is_binary(url) do
+    if :ets.whereis(@table) != :undefined do
+      :ets.match_delete(@table, {:_, :_, url, :_})
+    end
+
+    :ok
+  end
+
+  @doc """
   The `Mydia.MetadataCacheHelpers` call that would have prevented this escape,
   or nil.
 

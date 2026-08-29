@@ -194,12 +194,62 @@ defmodule MydiaWeb.MediaLive.Show.RailPickerHostTest do
   end
 
   describe "add_from_library_picker/2 routing" do
+    # `add_from_library_picker/2` dispatches to `FranchiseEvents.perform_add/4`
+    # or `RecommendationEvents.perform_add/4`, both of which call
+    # `Mydia.Media.Add.from_provider/4` for the card's tmdb_id — the one being
+    # added, not the mounted movie's own. `from_provider/4` fetches that
+    # movie's full TMDB details through `Metadata.fetch_by_id/3` directly,
+    # which is uncached (unlike the mount-time franchise/recommendations
+    # lookups `Mydia.MetadataCacheHelpers` warms), so cache-warming it does
+    # nothing: the request still leaves for the live relay every time
+    # (confirmed by reading `Mydia.Media.Add.resolve_movie_attrs/4` and
+    # `Mydia.Metadata.fetch_by_id/3` — neither touches `Mydia.Metadata.Cache`).
+    # `test/mydia_web/features/library_picker_test.exs` hits this exact call
+    # and already documents the fix: point `metadata_relay_url` at a Bypass
+    # server for the duration of the test, matching the pattern here.
+    setup do
+      bypass = Bypass.open()
+      previous_metadata_relay_url = Application.get_env(:mydia, :metadata_relay_url)
+      Application.put_env(:mydia, :metadata_relay_url, "http://localhost:#{bypass.port}")
+
+      on_exit(fn ->
+        case previous_metadata_relay_url do
+          nil -> Application.delete_env(:mydia, :metadata_relay_url)
+          value -> Application.put_env(:mydia, :metadata_relay_url, value)
+        end
+      end)
+
+      %{bypass: bypass}
+    end
+
+    # Stubs the added title's own TMDB details lookup so `Add.from_provider/4`
+    # succeeds instead of reaching the live relay. Mirrors the fixture body in
+    # `test/mydia_web/features/library_picker_test.exs`'s "/tmdb/movies/900001"
+    # stub, which is the same call site.
+    defp stub_added_movie_details(bypass, tmdb_id, title) do
+      Bypass.stub(bypass, "GET", "/tmdb/movies/#{tmdb_id}", fn conn ->
+        body = %{
+          "id" => tmdb_id,
+          "title" => title,
+          "release_date" => "2024-01-01",
+          "overview" => "",
+          "credits" => %{"cast" => [], "crew" => []},
+          "genres" => []
+        }
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(body))
+      end)
+    end
+
     test "a recommendation-only title routes the add to the recommendations rail",
-         %{conn: conn} do
+         %{conn: conn, bypass: bypass} do
       library_path_fixture(%{path: "/media/host-a", type: "movies"})
       library_path_fixture(%{path: "/media/host-b", type: "movies"})
 
       {movie, recommended_tmdb_id} = movie_with_recommendation()
+      stub_added_movie_details(bypass, recommended_tmdb_id, "The Eternal Daughter")
 
       {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")
       render_async(view, 5000)
@@ -222,11 +272,12 @@ defmodule MydiaWeb.MediaLive.Show.RailPickerHostTest do
     end
 
     test "a movie that is a franchise entry routes the add to the franchise rail",
-         %{conn: conn} do
+         %{conn: conn, bypass: bypass} do
       library_path_fixture(%{path: "/media/host-a", type: "movies"})
       library_path_fixture(%{path: "/media/host-b", type: "movies"})
 
       {movie, missing_tmdb_id} = movie_with_franchise_entry()
+      stub_added_movie_details(bypass, missing_tmdb_id, "Aliens")
 
       {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")
       render_async(view, 5000)
@@ -244,11 +295,12 @@ defmodule MydiaWeb.MediaLive.Show.RailPickerHostTest do
 
     test "a title in both rails (#460) routes to the franchise rail even when the click " <>
            "starts from the recommendations card",
-         %{conn: conn} do
+         %{conn: conn, bypass: bypass} do
       library_path_fixture(%{path: "/media/host-a", type: "movies"})
       library_path_fixture(%{path: "/media/host-b", type: "movies"})
 
       {movie, overlap_tmdb_id} = movie_with_overlapping_entry()
+      stub_added_movie_details(bypass, overlap_tmdb_id, "Aliens")
 
       {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")
       render_async(view, 5000)
