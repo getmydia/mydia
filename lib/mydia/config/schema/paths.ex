@@ -14,9 +14,13 @@ defmodule Mydia.Config.Schema.Paths do
   `Mydia.Settings.get_config_setting_by_key/1` and never reach that merge. They
   have no schema field, so the merge has always built them into its map and
   `Mydia.Config.Schema.changeset/2` has always dropped them again by ignoring
-  the unknown key. Three of the five name a section the schema does not have at
-  all. They are listed in `@direct_keys` with their reader, so the next person
-  to add a `get_config_setting_by_key/1` call with a literal key finds the list.
+  the unknown key. Four of the five keys name a section the schema does not
+  have at all, spread across three such sections: `crash_reporting`,
+  `feedback`, and `library` (which contributes two keys). The fifth,
+  `media.default_quality_profile_id`, names a section that does exist but
+  bypasses the merge anyway. They are listed in `@direct_keys` with their
+  reader, so the next person to add a `get_config_setting_by_key/1` call with
+  a literal key finds the list.
 
   `database.*` is deliberately in neither. The database section is consumed to
   open the repo, before the database layer can be read, so such a row can never
@@ -26,6 +30,16 @@ defmodule Mydia.Config.Schema.Paths do
   alias Mydia.Config.Schema
 
   @excluded_sections [:database]
+
+  # The environment variable that actually controls a key in an excluded
+  # section, for the ones that map to one. `Mydia.Repo`'s real pool_size and
+  # database_path come from these variables in config/runtime.exs, never from
+  # a config_settings row, which is why :database is excluded from
+  # @overlay_index below rather than folded into it.
+  @excluded_key_env_vars %{
+    "database.path" => "DATABASE_PATH",
+    "database.pool_size" => "POOL_SIZE"
+  }
 
   @direct_keys %{
     "crash_reporting.enabled" => "Mydia.CrashReporter",
@@ -53,6 +67,23 @@ defmodule Mydia.Config.Schema.Paths do
                    end
                  end)
                  |> Map.new()
+
+  # Every leaf of an excluded section, built the same way as @overlay_index
+  # above. Used only so cast_overlay_key/2 can tell an operator "this cannot
+  # be set from the database" apart from "this key does not exist"; never
+  # accepted anywhere else.
+  @excluded_index Schema.__schema__(:embeds)
+                  |> Enum.filter(&(&1 in @excluded_sections))
+                  |> Enum.flat_map(fn section ->
+                    case Schema.__schema__(:embed, section) do
+                      %Ecto.Embedded{cardinality: :one, related: related} ->
+                        Enum.map(related.__schema__(:fields), &"#{section}.#{&1}")
+
+                      _ ->
+                        []
+                    end
+                  end)
+                  |> MapSet.new()
 
   @doc "Every dotted key that maps to a leaf of an `embeds_one` schema section."
   @spec overlay_keys() :: [String.t()]
@@ -99,13 +130,31 @@ defmodule Mydia.Config.Schema.Paths do
         end
 
       :error ->
-        {:error, "#{key}: unknown configuration key"}
+        {:error, unknown_key_reason(key)}
+    end
+  end
+
+  # A key outside @overlay_index is either a genuine typo or a real schema
+  # field that was excluded on purpose. Telling those apart matters: an
+  # operator who sees "unknown configuration key" for database.pool_size will
+  # reasonably conclude they mistyped something, when the actionable fact is
+  # that the row can never take effect and POOL_SIZE is the real knob.
+  defp unknown_key_reason(key) do
+    case Map.fetch(@excluded_key_env_vars, key) do
+      {:ok, env_var} ->
+        "#{key}: set via the #{env_var} environment variable, not the database"
+
+      :error ->
+        if MapSet.member?(@excluded_index, key) do
+          "#{key}: cannot be set from the database; this section is read before the database layer exists"
+        else
+          "#{key}: unknown configuration key"
+        end
     end
   end
 
   # An empty value means unset, which is how clearing a field in the admin UI
-  # has always behaved, and how media.default_quality_profile_id records a
-  # cleared default.
+  # has always behaved, and how server.url_host records a cleared default.
   defp cast_value(_type, nil), do: {:ok, nil}
   defp cast_value(_type, ""), do: {:ok, nil}
 

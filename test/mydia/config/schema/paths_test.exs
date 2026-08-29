@@ -82,6 +82,20 @@ defmodule Mydia.Config.Schema.PathsTest do
       assert reason =~ "unknown"
     end
 
+    test "reports an excluded-section key by its environment variable, not as unknown" do
+      assert {:error, unknown_reason} = Paths.cast_overlay("server.nonexistent", "1")
+      assert {:error, path_reason} = Paths.cast_overlay("database.path", "/data/mydia.db")
+      assert {:error, pool_size_reason} = Paths.cast_overlay("database.pool_size", "5")
+
+      refute path_reason =~ "unknown"
+      refute pool_size_reason =~ "unknown"
+      assert path_reason != unknown_reason
+      assert pool_size_reason != unknown_reason
+
+      assert path_reason =~ "DATABASE_PATH"
+      assert pool_size_reason =~ "POOL_SIZE"
+    end
+
     test "reports a direct-lookup key as :direct, not as an error" do
       assert :direct = Paths.cast_overlay("crash_reporting.enabled", "true")
       assert :direct = Paths.cast_overlay("media.default_quality_profile_id", "")
