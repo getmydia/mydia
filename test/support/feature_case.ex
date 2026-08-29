@@ -259,6 +259,20 @@ defmodule MydiaWeb.FeatureCase do
   raise from `find/2` reports only that a selector did not match, which cannot
   say whether the page had no LiveView at all or had one that never connected.
 
+  Each poll reads the DOM through `eval_js/3` (`Wallaby.Browser.execute_script/4`),
+  not `Wallaby.Browser.has?/2`. `has?/2` goes through `execute_query/2` and
+  `retry/2`, which themselves poll up to the global `:max_wait_time` before
+  reporting a miss, so a single failed `has?/2` call can eat that entire budget
+  and make the `:timeout` option here a lower bound in name only. `execute_script`
+  issues one WebDriver call and returns, so `eventually/2`'s own budget is what
+  actually governs the wait.
+
+  A WebDriver-level failure (a crashed browser session, for example) surfaces
+  as a `RuntimeError` from deep inside Wallaby's HTTP client, indistinguishable
+  by type from `eventually/2`'s own timeout. Only the latter's exact message is
+  turned into the diagnostic below; anything else is re-raised unchanged so a
+  dead session is never reported as an ordinary unconnected socket.
+
   Options: `:timeout` (ms, default 15_000).
   """
   def wait_for_liveview(session, opts \\ []) do
@@ -267,10 +281,7 @@ defmodule MydiaWeb.FeatureCase do
     try do
       eventually(
         fn ->
-          if Wallaby.Browser.has?(
-               session,
-               Wallaby.Query.css("[data-phx-main].phx-connected", count: :any)
-             ) do
+          if root_connected?(session) do
             {:ok, session}
           else
             :error
@@ -280,14 +291,23 @@ defmodule MydiaWeb.FeatureCase do
         description: "the root LiveView to connect its socket"
       )
     rescue
-      RuntimeError ->
-        root_present? =
-          Wallaby.Browser.has?(session, Wallaby.Query.css("[data-phx-main]", count: :any))
-
-        reraise liveview_failure_message(root_present?, timeout), __STACKTRACE__
+      e in RuntimeError ->
+        if String.starts_with?(e.message, "eventually/2 timed out") do
+          reraise liveview_failure_message(root_present?(session), timeout), __STACKTRACE__
+        else
+          reraise e, __STACKTRACE__
+        end
     end
 
     session
+  end
+
+  defp root_connected?(session) do
+    eval_js(session, "return document.querySelector('[data-phx-main].phx-connected') !== null;")
+  end
+
+  defp root_present?(session) do
+    eval_js(session, "return document.querySelector('[data-phx-main]') !== null;")
   end
 
   @doc """
