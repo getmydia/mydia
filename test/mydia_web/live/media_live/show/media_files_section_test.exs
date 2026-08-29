@@ -52,6 +52,24 @@ defmodule MydiaWeb.MediaLive.Show.MediaFilesSectionTest do
     }
   end
 
+  # The full path is on the label's title attribute, so `html =~ path` passes
+  # even when the visible text is wrong. Query the element and read its text.
+  defp element_text(html, id) do
+    html
+    |> LazyHTML.from_fragment()
+    |> LazyHTML.query("##{id}")
+    |> LazyHTML.text()
+    |> String.trim()
+  end
+
+  defp element_title(html, id) do
+    html
+    |> LazyHTML.from_fragment()
+    |> LazyHTML.query("##{id}")
+    |> LazyHTML.attribute("title")
+    |> List.first()
+  end
+
   describe "media_files_section/1" do
     test "renders a movie's own files" do
       media_item = %{
@@ -63,6 +81,40 @@ defmodule MydiaWeb.MediaLive.Show.MediaFilesSectionTest do
 
       assert html =~ "The.Matrix.1999.1080p.mkv"
       assert html =~ ~s|phx-value-file-id="mf-1"|
+    end
+
+    test "labels a version with its basename, not its full path" do
+      media_item = %{
+        media_files: [file("mf-1", "The Matrix (1999)/The.Matrix.1999.1080p.mkv")],
+        episodes: []
+      }
+
+      html = section_html(media_item)
+
+      assert element_text(html, "file-name-mf-1") == "The.Matrix.1999.1080p.mkv"
+    end
+
+    test "carries a version's full path on the label's title attribute" do
+      media_item = %{
+        media_files: [file("mf-1", "The Matrix (1999)/The.Matrix.1999.1080p.mkv")],
+        episodes: []
+      }
+
+      html = section_html(media_item)
+
+      assert element_title(html, "file-name-mf-1") ==
+               "/media/The Matrix (1999)/The.Matrix.1999.1080p.mkv"
+    end
+
+    test "does not render a version's directory as visible text" do
+      media_item = %{
+        media_files: [file("mf-1", "The Matrix (1999)/The.Matrix.1999.1080p.mkv")],
+        episodes: []
+      }
+
+      html = section_html(media_item)
+
+      refute element_text(html, "file-name-mf-1") =~ "The Matrix (1999)/"
     end
 
     # This card shows the item's *own* files. An episode's file already renders

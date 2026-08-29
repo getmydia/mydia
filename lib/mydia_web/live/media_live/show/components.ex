@@ -729,15 +729,20 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                 <div class="flex items-start justify-between gap-4">
                   <%!-- Left side: File info --%>
                   <div class="flex-1 min-w-0 flex flex-col gap-2">
-                    <%!-- File path --%>
+                    <%!-- File name. The full path lives on the title attribute
+                          and in the file details modal. Rendered here it left
+                          about 90px of column beside the button strip on a
+                          375px phone, and break-all shredded it into a tall
+                          narrow stack of characters rather than clipping. --%>
                     <% file_path = Mydia.Library.MediaFile.display_path(file) %>
                     <p
-                      class="text-sm font-mono text-base-content break-all leading-relaxed"
+                      id={"file-name-#{file.id}"}
+                      class="text-sm font-mono text-base-content truncate leading-relaxed"
                       title={file_path}
                     >
                       <%!-- display_name/1 is the "Unknown file" label when there is no path,
                             so an orphaned row reads the same here as everywhere else. --%>
-                      {file_path || Mydia.Library.MediaFile.display_name(file)}
+                      {Mydia.Library.MediaFile.display_name(file)}
                     </p>
                     <%!-- Technical details with quality badge --%>
                     <div class="flex flex-wrap gap-4 text-xs text-base-content/70 items-center">
