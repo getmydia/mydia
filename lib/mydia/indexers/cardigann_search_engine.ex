@@ -539,7 +539,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     apply_rate_limit(definition)
 
     # Build request options
-    req_opts = build_request_options(definition, request_params, user_config)
+    req_opts = build_request_options(definition, url, request_params, user_config)
 
     Logger.debug("Cardigann search request: #{request_params.method} #{url}")
     Logger.debug("Request params: #{inspect(request_params.query_params)}")
@@ -812,7 +812,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     :ok
   end
 
-  defp build_request_options(definition, request_params, user_config) do
+  defp build_request_options(definition, url, request_params, user_config) do
     # Base options
     base_opts = [
       headers: request_params.headers,
@@ -844,17 +844,49 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
 
     # Add cookies if present in user config
     case Map.get(user_config, :cookies) do
-      nil ->
-        opts_with_params
-
-      cookies when is_list(cookies) ->
-        cookie_header = Enum.join(cookies, "; ")
-        existing_headers = Keyword.get(opts_with_params, :headers, [])
-        updated_headers = [{"Cookie", cookie_header} | existing_headers]
-        Keyword.put(opts_with_params, :headers, updated_headers)
+      cookies when is_list(cookies) and cookies != [] ->
+        attach_cookies(opts_with_params, url, cookies)
 
       _ ->
         opts_with_params
     end
   end
+
+  # A session cookie is a bearer credential for the tracker account. Base URL
+  # candidates come straight from the definition's `links`, and a few of them are
+  # cleartext (torrentlt ships `http://www.torrent.ai/`), so the header is
+  # withheld rather than handed to anyone on the path. The request still goes
+  # out: an anonymous result is a better outcome than a leaked login, and the
+  # search reports whatever the tracker returns for a logged-out visitor.
+  defp attach_cookies(opts, url, cookies) do
+    if cleartext_url?(url) do
+      Logger.warning(
+        "Cardigann: withholding session cookies from cleartext URL #{inspect(url)}. " <>
+          "Configure an https base URL for this indexer to send credentials."
+      )
+
+      opts
+    else
+      cookie_header = Enum.join(cookies, "; ")
+      existing_headers = Keyword.get(opts, :headers, [])
+      Keyword.put(opts, :headers, [{"Cookie", cookie_header} | existing_headers])
+    end
+  end
+
+  # Loopback is a secure context in the same sense browsers use the term: the
+  # request never reaches a network, so a local mirror or a test server is not
+  # an exposure. Everything else on plain http is.
+  @loopback_hosts ~w(localhost 127.0.0.1 ::1 0:0:0:0:0:0:0:1)
+
+  defp cleartext_url?(url) when is_binary(url) do
+    case URI.parse(url) do
+      %URI{scheme: "http", host: host} ->
+        String.downcase(host || "") not in @loopback_hosts
+
+      _ ->
+        false
+    end
+  end
+
+  defp cleartext_url?(_url), do: false
 end

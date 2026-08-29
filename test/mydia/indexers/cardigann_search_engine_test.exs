@@ -848,6 +848,46 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
                  user_config
                )
     end
+
+    test "cookies are sent to a loopback host over http", %{definition: definition} do
+      bypass = Bypass.open()
+      test_pid = self()
+
+      Bypass.expect_once(bypass, "GET", "/search", fn conn ->
+        send(test_pid, {:cookie_header, Plug.Conn.get_req_header(conn, "cookie")})
+        Plug.Conn.resp(conn, 200, "<html></html>")
+      end)
+
+      params = %{query_params: %{}, headers: [], method: :get}
+      user_config = %{cookies: ["session=abc123", "token=xyz789"]}
+
+      assert {:ok, _response} =
+               CardigannSearchEngine.execute_http_request(
+                 definition,
+                 "http://localhost:#{bypass.port}/search",
+                 params,
+                 user_config
+               )
+
+      assert_receive {:cookie_header, ["session=abc123; token=xyz789"]}
+    end
+
+    test "cookies are withheld from a cleartext non-loopback host", %{definition: definition} do
+      params = %{query_params: %{}, headers: [], method: :get}
+      user_config = %{cookies: ["session=abc123"]}
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          CardigannSearchEngine.execute_http_request(
+            definition,
+            "http://invalid-domain-for-testing.example/search",
+            params,
+            user_config
+          )
+        end)
+
+      assert log =~ "withholding session cookies"
+    end
   end
 
   describe "execute_search/4 base URL failover" do
