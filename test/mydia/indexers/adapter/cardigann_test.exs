@@ -69,8 +69,11 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
       Plug.Conn.resp(conn, 200, "OK")
     end)
 
-    # Stub search paths with empty HTML table (Cardigann parses HTML from search results)
-    for query <- ["test+query", "test%20query", "query"] do
+    # Stub search paths with empty HTML table (Cardigann parses HTML from search results).
+    # "The%20Matrix" is the health check's own probe query (this definition declares
+    # movie-search, so test_indexer_reachable/2 now runs a real search against it
+    # instead of only fetching "/") rather than a query any of these tests submit.
+    for query <- ["test+query", "test%20query", "query", "The%20Matrix"] do
       Bypass.stub(bypass, "GET", "/search/#{query}/", fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("text/html")

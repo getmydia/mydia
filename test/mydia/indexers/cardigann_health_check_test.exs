@@ -139,6 +139,13 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
       Bypass.down(dead)
       Bypass.expect(live, "GET", "/", fn conn -> Plug.Conn.resp(conn, 200, "ok") end)
 
+      # The homepage answering is no longer enough to promote active_link: the
+      # health check now also runs a real search, so the winning candidate's
+      # search path has to answer too.
+      Bypass.expect(live, "GET", "/search", fn conn ->
+        Plug.Conn.resp(conn, 200, "<html><body></body></html>")
+      end)
+
       dead_url = "http://localhost:#{dead.port}"
       live_url = "http://localhost:#{live.port}"
 

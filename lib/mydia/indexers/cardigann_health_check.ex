@@ -259,32 +259,84 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
     result =
       case probe_candidates(parsed_definition, user_config) do
         {:ok, active_link, link_status} ->
-          response_time = System.monotonic_time(:millisecond) - start_time
-          store_link_state(definition, active_link, link_status)
-
-          %{
-            success: true,
-            status: determine_health_status(definition, true, response_time),
-            message: "Connection successful via #{active_link}",
-            response_time_ms: response_time,
-            error: nil
-          }
+          search_leg(
+            definition,
+            parsed_definition,
+            user_config,
+            active_link,
+            link_status,
+            start_time
+          )
 
         {:error, link_status} ->
-          response_time = System.monotonic_time(:millisecond) - start_time
           store_link_state(definition, nil, link_status)
 
           %{
             success: false,
-            status: determine_health_status(definition, false, response_time),
+            status: "unhealthy",
             message: "No reachable base URL",
-            response_time_ms: response_time,
+            response_time_ms: System.monotonic_time(:millisecond) - start_time,
             error: "All #{map_size(link_status)} candidate links failed"
           }
       end
 
     update_health_status(definition, result)
     {:ok, result}
+  end
+
+  defp search_leg(definition, parsed, user_config, active_link, link_status, start_time) do
+    outcome = probe_search(parsed, user_config, active_link)
+    elapsed = System.monotonic_time(:millisecond) - start_time
+
+    case outcome do
+      {:ok, 0} ->
+        store_link_state(definition, active_link, link_status)
+
+        %{
+          success: true,
+          status: "degraded",
+          message: "Search reached #{active_link} but parsed no rows",
+          response_time_ms: elapsed,
+          error: nil
+        }
+
+      {:ok, count} ->
+        store_link_state(definition, active_link, link_status)
+
+        %{
+          success: true,
+          status: determine_health_status(definition, true, elapsed),
+          message: "Search returned #{count} result(s) via #{active_link}",
+          response_time_ms: elapsed,
+          error: nil
+        }
+
+      {:cloudflare, message} ->
+        store_link_state(definition, active_link, link_status)
+
+        %{
+          success: true,
+          status: "degraded",
+          message:
+            "Cloudflare challenge on #{active_link}. Enable FlareSolverr for this indexer.",
+          response_time_ms: elapsed,
+          error: message
+        }
+
+      {:error, message} ->
+        # The homepage answered but the search did not, so this candidate is not
+        # a working base URL and must not be promoted to active_link on the
+        # strength of a homepage GET.
+        store_link_state(definition, nil, link_status)
+
+        %{
+          success: false,
+          status: determine_health_status(definition, false, elapsed),
+          message: "Search failed via #{active_link}",
+          response_time_ms: elapsed,
+          error: message
+        }
+    end
   end
 
   defp store_link_state(definition, nil, link_status) do

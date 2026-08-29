@@ -420,12 +420,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
   def handle_event("test_library_indexer", %{"id" => id}, socket) do
     case Indexers.test_cardigann_connection(id) do
       {:ok, result} ->
-        flash_message =
-          if result.success,
-            do: "Connection successful (#{result.response_time_ms}ms)",
-            else: "Connection failed: #{result.error || "Unknown error"}"
-
-        flash_type = if result.success, do: :info, else: :error
+        {flash_type, flash_message} = library_test_flash(result)
         {:noreply, socket |> put_flash(flash_type, flash_message) |> load_data()}
 
       {:error, reason} ->
@@ -1275,4 +1270,22 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
   defp format_sync_error({:unexpected_status, status}), do: "Unexpected HTTP status: #{status}"
   defp format_sync_error(reason) when is_binary(reason), do: reason
   defp format_sync_error(reason), do: inspect(reason)
+
+  # A search that reached the site but parsed nothing is neither a success nor
+  # an outage, and flattening it into "Connection successful" is what let five
+  # indexers report a green test while every search returned zero results. The
+  # flash component only has :info and :error (core_components.ex:45), so a
+  # degraded result is :error with a message that says what is degraded; the
+  # row's health badge carries the "degraded" state separately.
+  defp library_test_flash(%{success: true, status: "degraded"} = result) do
+    {:error, "#{result.message} (#{result.response_time_ms}ms)"}
+  end
+
+  defp library_test_flash(%{success: true} = result) do
+    {:info, "#{result.message} (#{result.response_time_ms}ms)"}
+  end
+
+  defp library_test_flash(result) do
+    {:error, "#{result.message}: #{result.error || "Unknown error"}"}
+  end
 end

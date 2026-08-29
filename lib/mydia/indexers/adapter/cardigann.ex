@@ -55,6 +55,7 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
 
   alias Mydia.Indexers.{CardigannParser, CardigannSearchEngine, CardigannResultParser}
   alias Mydia.Indexers.{CardigannDefinition, CardigannAuth, CardigannFeatureFlags}
+  alias Mydia.Indexers.CardigannHealthCheck
   alias Mydia.Indexers.CardigannSearchSession
   alias Mydia.Indexers.Adapter.Error
   alias Mydia.Repo
@@ -416,10 +417,27 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
     end
   end
 
-  defp test_indexer_reachable(parsed, _config) do
-    case Mydia.Indexers.CardigannHealthCheck.probe_candidates(parsed, %{}) do
-      {:ok, _url, _status} ->
-        :ok
+  # Reaching the homepage is not the same as being able to search, and treating
+  # it as such is what let 1337x, EZTV, KickassTorrents, YTS and The Pirate Bay
+  # all report a successful connection test while every search failed.
+  defp test_indexer_reachable(parsed, config) do
+    user_config = Map.get(config, :config, %{})
+
+    case CardigannHealthCheck.probe_candidates(parsed, user_config) do
+      {:ok, url, _status} ->
+        case CardigannHealthCheck.probe_search(parsed, user_config, url) do
+          {:ok, _count} ->
+            :ok
+
+          {:cloudflare, _message} ->
+            {:error,
+             Error.connection_failed(
+               "Cloudflare protection detected on #{url}. Enable FlareSolverr for this indexer."
+             )}
+
+          {:error, message} ->
+            {:error, Error.search_failed("Reached #{url} but the search failed: #{message}")}
+        end
 
       {:error, status} when map_size(status) == 0 ->
         {:error, Error.invalid_config("No base URL configured in definition")}
