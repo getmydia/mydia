@@ -116,5 +116,20 @@ defmodule MydiaWeb.CollectionLive.SmartRulesDialogTest do
         assert has_element?(view, ~s(select[name="conditions[0][operator]"]))
       end
     end
+
+    test "opening the editor via ?edit=true still offers the seeded options", %{
+      conn: conn,
+      collection: collection
+    } do
+      {:ok, view, _html} = live(conn, ~p"/collections/#{collection.id}?edit=true")
+
+      html =
+        view
+        |> element("#edit-collection-form")
+        |> render_change(condition_params("metadata.genres"))
+
+      assert html =~ "Action"
+      assert html =~ "Drama"
+    end
   end
 end

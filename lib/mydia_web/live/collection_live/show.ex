@@ -124,9 +124,14 @@ defmodule MydiaWeb.CollectionLive.Show do
         user = socket.assigns.current_user
 
         if can_edit?(collection, user) and not collection.is_system do
-          socket
-          |> assign(:show_edit_modal, true)
-          |> parse_existing_rules(collection)
+          socket =
+            socket
+            |> assign(:show_edit_modal, true)
+            |> parse_existing_rules(collection)
+
+          if collection.type == "smart",
+            do: load_value_options(socket),
+            else: socket
         else
           socket
         end
