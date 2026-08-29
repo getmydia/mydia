@@ -315,12 +315,19 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
   # execute_health_check parses and probes against (see
   # test/support/fixtures/indexers_fixtures.ex). Rewriting the column alone
   # would leave the probe hitting the fixture's https://example.com default.
-  defp put_link(definition, url) do
+  # Accepts either a single URL or a list, so a test can set up more than one
+  # candidate mirror in order (Links.candidates/1 preserves that order).
+  defp put_link(definition, url_or_urls) do
+    yaml_links =
+      url_or_urls
+      |> List.wrap()
+      |> Enum.map_join("\n", &"  - #{&1}")
+
     updated_yaml =
       String.replace(
         definition.definition,
         ~r/^links:\n(?:  - .*\n?)+/m,
-        "links:\n  - #{url}\n"
+        "links:\n#{yaml_links}\n"
       )
 
     {:ok, updated} =
@@ -345,8 +352,11 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
 
       url = "http://localhost:#{bypass.port}"
 
-      assert {:ok, count} = CardigannHealthCheck.probe_search(parsed_for(url), %{}, url)
+      assert {:ok, count, served_by} =
+               CardigannHealthCheck.probe_search(parsed_for(url), %{}, url)
+
       assert count > 0
+      assert served_by == url
     end
 
     test "reports zero rows rather than success when the search parses nothing" do
@@ -360,7 +370,7 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
 
       url = "http://localhost:#{bypass.port}"
 
-      assert {:ok, 0} = CardigannHealthCheck.probe_search(parsed_for(url), %{}, url)
+      assert {:ok, 0, ^url} = CardigannHealthCheck.probe_search(parsed_for(url), %{}, url)
     end
 
     test "reports an error when the search 404s even though the homepage is fine" do
@@ -397,7 +407,7 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
       parsed =
         parsed_for(url, modes: %{"movie-search" => ["q"]}, path: "/search/{{ .Keywords }}")
 
-      assert {:ok, _} = CardigannHealthCheck.probe_search(parsed, %{}, url)
+      assert {:ok, _, _} = CardigannHealthCheck.probe_search(parsed, %{}, url)
       assert_received {:request_path, path}
       assert path =~ "The%20Matrix"
     end
@@ -410,7 +420,7 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
 
       parsed = parsed_for(url, modes: %{"tv-search" => ["q"]}, path: "/search/{{ .Keywords }}")
 
-      assert {:ok, _} = CardigannHealthCheck.probe_search(parsed, %{}, url)
+      assert {:ok, _, _} = CardigannHealthCheck.probe_search(parsed, %{}, url)
       assert_received {:request_path, path}
       assert path =~ "Breaking%20Bad"
     end
@@ -422,7 +432,7 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
       url = "http://localhost:#{bypass.port}"
       parsed = parsed_for(url, modes: %{"search" => ["q"]}, path: "/search/{{ .Keywords }}")
 
-      assert {:ok, _} = CardigannHealthCheck.probe_search(parsed, %{}, url)
+      assert {:ok, _, _} = CardigannHealthCheck.probe_search(parsed, %{}, url)
       assert_received {:request_path, path}
       assert path =~ "ubuntu"
     end
@@ -445,7 +455,7 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
       url = "http://localhost:#{bypass.port}"
       parsed = parsed_for(url, path: "/search/{{ .Config.apikey }}")
 
-      assert {:ok, _} =
+      assert {:ok, _, _} =
                CardigannHealthCheck.probe_search(parsed, %{"apikey" => "topsecret123"}, url)
 
       assert_received {:request_path, path}
@@ -500,6 +510,47 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
 
       refute result.success
       assert Mydia.Repo.reload!(definition).active_link == nil
+    end
+
+    test "the persisted active_link and message name the mirror that actually served the result" do
+      # Same YTS shape as above, but with a second candidate that works: mirror
+      # A's homepage answers 200 but its search 404s, so execute_search's own
+      # failover (Task 5) advances past A to mirror B, which serves a real
+      # row. Regression: probe_search/3 used to have no way to report that a
+      # different candidate than the one it was asked to try had served the
+      # response, so search_leg/6 stored and reported A - the mirror that did
+      # NOT serve the result - as active_link.
+      definition = cardigann_definition_fixture(%{active_link: nil})
+
+      mirror_a = Bypass.open()
+      mirror_b = Bypass.open()
+
+      Bypass.stub(mirror_a, "GET", "/", fn conn -> Plug.Conn.resp(conn, 200, "<html/>") end)
+      Bypass.stub(mirror_a, "GET", "/search", fn conn -> Plug.Conn.resp(conn, 404, "") end)
+
+      Bypass.stub(mirror_b, "GET", "/", fn conn -> Plug.Conn.resp(conn, 200, "<html/>") end)
+
+      Bypass.stub(mirror_b, "GET", "/search", fn conn ->
+        Plug.Conn.resp(
+          conn,
+          200,
+          "<html><body><table class=\"results\">" <>
+            "<tr><td class=\"title\">Some Release</td>" <>
+            "<td class=\"download\"><a href=\"/download/1\">grab</a></td></tr>" <>
+            "</table></body></html>"
+        )
+      end)
+
+      url_a = "http://localhost:#{mirror_a.port}"
+      url_b = "http://localhost:#{mirror_b.port}"
+
+      {:ok, result} =
+        CardigannHealthCheck.execute_health_check(put_link(definition, [url_a, url_b]))
+
+      assert result.success
+      assert result.message =~ url_b
+      refute result.message =~ url_a
+      assert Mydia.Repo.reload!(definition).active_link == url_b
     end
   end
 end

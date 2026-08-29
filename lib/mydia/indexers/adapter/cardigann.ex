@@ -434,7 +434,7 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
     case CardigannHealthCheck.probe_candidates(parsed, user_config) do
       {:ok, url, _status} ->
         case CardigannHealthCheck.probe_search(parsed, user_config, url) do
-          {:ok, _count} ->
+          {:ok, _count, _served_by} ->
             :ok
 
           {:cloudflare, _message} ->

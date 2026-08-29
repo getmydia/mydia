@@ -44,11 +44,15 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   @typedoc """
   Outcome of a real search against one base URL.
 
-  `{:ok, count}` where count is 0 means the site answered and parsed cleanly but
-  matched nothing, which is degraded rather than healthy or failed.
+  `{:ok, count, served_by}` where count is 0 means the site answered and
+  parsed cleanly but matched nothing, which is degraded rather than healthy
+  or failed. `served_by` is the URL that actually produced the response:
+  `execute_search/4` fails over past `base_url` to later candidates on a
+  retryable failure (a dead or wrong mirror answering 404, say), so the
+  candidate that answered is not always the one the probe was asked to try.
   """
   @type probe_outcome ::
-          {:ok, non_neg_integer()}
+          {:ok, non_neg_integer(), String.t()}
           | {:cloudflare, String.t()}
           | {:error, String.t()}
 
@@ -209,16 +213,21 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
       # indexer, the exact inverse of the false green this task removes.
       config: user_config,
       settings: parsed.settings,
-      base_url: base_url
+      base_url: base_url,
+      on_promote: &report_promotion/1
     ]
 
     with {:ok, response} <-
            parsed
            |> CardigannSearchEngine.execute_search(opts, user_config, %{})
            |> normalize_search_result(),
+         # Read the promotion signal as soon as execute_search/4 returns, before
+         # resolving relative result URLs against the (possibly stale) base_url
+         # argument below.
+         winner = served_by(base_url),
          :ok <- CardigannSearchEngine.validate_response(response),
-         {:ok, results} <- parse_probe_results(parsed, response, base_url, opts) do
-      {:ok, length(results)}
+         {:ok, results} <- parse_probe_results(parsed, response, winner, opts) do
+      {:ok, length(results), winner}
     else
       {:error, %Error{message: message}} -> classify_probe_error(message)
       {:error, reason} when is_binary(reason) -> classify_probe_error(reason)
@@ -229,6 +238,23 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   defp normalize_search_result({:ok, response}), do: {:ok, response}
   defp normalize_search_result({:ok, response, _flaresolverr_cookies}), do: {:ok, response}
   defp normalize_search_result(other), do: other
+
+  # execute_search/4 calls opts[:on_promote] with the winning candidate URL
+  # only when it had to fail over past the first one tried (build_search_opts/4
+  # uses the same hook to persist active_link after a real search). try_candidates/7
+  # runs synchronously in this process, so a self-message survives the call and
+  # lets probe_search report which mirror actually served the result instead of
+  # the one it was asked to try. At most one promotion happens per probe_search
+  # call, so there is nothing to drain beforehand.
+  defp report_promotion(winning_url), do: send(self(), {:cardigann_probe_promoted, winning_url})
+
+  defp served_by(default_url) do
+    receive do
+      {:cardigann_probe_promoted, winning_url} -> winning_url
+    after
+      0 -> default_url
+    end
+  end
 
   defp classify_probe_error(message) when is_binary(message) do
     if String.contains?(String.downcase(message), "cloudflare") do
@@ -297,24 +323,24 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
     elapsed = System.monotonic_time(:millisecond) - start_time
 
     case outcome do
-      {:ok, 0} ->
-        store_link_state(definition, active_link, link_status)
+      {:ok, 0, served_by} ->
+        store_link_state(definition, served_by, link_status)
 
         %{
           success: true,
           status: "degraded",
-          message: "Search reached #{active_link} but parsed no rows",
+          message: "Search reached #{served_by} but parsed no rows",
           response_time_ms: elapsed,
           error: nil
         }
 
-      {:ok, count} ->
-        store_link_state(definition, active_link, link_status)
+      {:ok, count, served_by} ->
+        store_link_state(definition, served_by, link_status)
 
         %{
           success: true,
           status: determine_health_status(definition, true, elapsed),
-          message: "Search returned #{count} result(s) via #{active_link}",
+          message: "Search returned #{count} result(s) via #{served_by}",
           response_time_ms: elapsed,
           error: nil
         }
