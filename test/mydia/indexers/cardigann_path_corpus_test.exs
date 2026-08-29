@@ -43,8 +43,15 @@ defmodule Mydia.Indexers.CardigannPathCorpusTest do
     test "every search path in #{@indexer_name} renders to a legal URI" do
       yaml = File.read!(@definition_file)
 
-      assert {:ok, parsed} = CardigannParser.parse_definition(yaml),
-             "#{@definition_file} failed to parse"
+      # Bind, assert with match?/2, then destructure. `assert pattern = expr, msg`
+      # raises MatchError from the match itself before assert/2 can report the
+      # message, which would drop the fixture name from a corpus-wide failure.
+      parse_result = CardigannParser.parse_definition(yaml)
+
+      assert match?({:ok, _}, parse_result),
+             "#{@definition_file} failed to parse: #{inspect(parse_result)}"
+
+      {:ok, parsed} = parse_result
 
       context =
         TemplateContext.build(parsed, query: @query, categories: [2000], config: %{})
@@ -58,10 +65,15 @@ defmodule Mydia.Indexers.CardigannPathCorpusTest do
         assert is_binary(template),
                "#{@indexer_name} path #{index} has no path template"
 
-        assert {:ok, rendered} = CardigannTemplate.render(template, context),
-               "#{@indexer_name} path #{index} failed to render: #{inspect(template)}"
+        render_result = CardigannTemplate.render(template, context)
 
-        assert {:ok, _uri} = URI.new(rendered),
+        assert match?({:ok, _}, render_result),
+               "#{@indexer_name} path #{index} failed to render: #{inspect(template)} " <>
+                 "(#{inspect(render_result)})"
+
+        {:ok, rendered} = render_result
+
+        assert match?({:ok, _}, URI.new(rendered)),
                "#{@indexer_name} path #{index} rendered an illegal URI: " <>
                  "#{inspect(rendered)} (from #{inspect(template)})"
       end)
