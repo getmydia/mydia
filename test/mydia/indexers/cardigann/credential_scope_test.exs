@@ -18,8 +18,7 @@ defmodule Mydia.Indexers.Cardigann.CredentialScopeTest do
     login = if is_map(parsed.login), do: [Map.get(parsed.login, :path)], else: []
 
     (login ++ search_paths)
-    |> Enum.filter(&is_binary/1)
-    |> Enum.filter(&String.match?(&1, ~r{^https?://}i))
+    |> Enum.filter(fn path -> is_binary(path) and String.match?(path, ~r{^https?://}i) end)
     |> Enum.flat_map(fn template ->
       context = %{
         keywords: "",
@@ -58,18 +57,18 @@ defmodule Mydia.Indexers.Cardigann.CredentialScopeTest do
     struct!(base, overrides)
   end
 
-  describe "trusted_hosts/2" do
+  describe "trusted_origins/2" do
     test "includes every host in links" do
-      hosts = CredentialScope.trusted_hosts(definition(), %{})
+      origins = CredentialScope.trusted_origins(definition(), %{})
 
-      assert MapSet.member?(hosts, "tracker.example")
-      assert MapSet.member?(hosts, "mirror.example")
+      assert MapSet.member?(origins, "tracker.example:443")
+      assert MapSet.member?(origins, "mirror.example:443")
     end
 
     test "excludes legacylinks" do
-      hosts = CredentialScope.trusted_hosts(definition(), %{})
+      origins = CredentialScope.trusted_origins(definition(), %{})
 
-      refute MapSet.member?(hosts, "old-tracker.example")
+      refute MapSet.member?(origins, "old-tracker.example:443")
     end
 
     test "includes the host of an absolute search path" do
@@ -83,9 +82,9 @@ defmodule Mydia.Indexers.Cardigann.CredentialScopeTest do
           }
         )
 
-      hosts = CredentialScope.trusted_hosts(parsed, %{})
+      origins = CredentialScope.trusted_origins(parsed, %{})
 
-      assert MapSet.member?(hosts, "api.tracker.example")
+      assert MapSet.member?(origins, "api.tracker.example:443")
     end
 
     test "renders a templated absolute path from a setting default" do
@@ -100,9 +99,9 @@ defmodule Mydia.Indexers.Cardigann.CredentialScopeTest do
           }
         )
 
-      hosts = CredentialScope.trusted_hosts(parsed, %{})
+      origins = CredentialScope.trusted_origins(parsed, %{})
 
-      assert MapSet.member?(hosts, "api.v3x.club")
+      assert MapSet.member?(origins, "api.v3x.club:443")
     end
 
     test "an operator override of the setting wins over the default" do
@@ -117,65 +116,80 @@ defmodule Mydia.Indexers.Cardigann.CredentialScopeTest do
           }
         )
 
-      hosts = CredentialScope.trusted_hosts(parsed, %{"apiurl" => "api.mine.example"})
+      origins = CredentialScope.trusted_origins(parsed, %{"apiurl" => "api.mine.example"})
 
-      assert MapSet.member?(hosts, "api.mine.example")
-      refute MapSet.member?(hosts, "api.v3x.club")
+      assert MapSet.member?(origins, "api.mine.example:443")
+      refute MapSet.member?(origins, "api.v3x.club:443")
     end
 
     test "includes the host of an absolute login path" do
       parsed = definition(login: %{method: "form", path: "https://auth.tracker.example/login"})
 
-      hosts = CredentialScope.trusted_hosts(parsed, %{})
+      origins = CredentialScope.trusted_origins(parsed, %{})
 
-      assert MapSet.member?(hosts, "auth.tracker.example")
+      assert MapSet.member?(origins, "auth.tracker.example:443")
     end
 
     test "a relative path contributes no host" do
-      hosts = CredentialScope.trusted_hosts(definition(), %{})
+      origins = CredentialScope.trusted_origins(definition(), %{})
 
-      assert MapSet.size(hosts) == 2
+      assert MapSet.size(origins) == 2
+    end
+
+    test "a different port on a trusted host is a different origin" do
+      origins = CredentialScope.trusted_origins(definition(links: ["http://127.0.0.1:3333"]), %{})
+
+      assert CredentialScope.allows?(origins, "http://127.0.0.1:3333/search")
+      refute CredentialScope.allows?(origins, "http://127.0.0.1:8080/search")
+    end
+
+    test "an explicit default port matches its implicit form" do
+      origins =
+        CredentialScope.trusted_origins(definition(links: ["https://tracker.example"]), %{})
+
+      assert CredentialScope.allows?(origins, "https://tracker.example:443/search")
     end
   end
 
   describe "allows?/2" do
     setup do
-      %{hosts: CredentialScope.trusted_hosts(definition(), %{})}
+      %{origins: CredentialScope.trusted_origins(definition(), %{})}
     end
 
-    test "allows an exact host match", %{hosts: hosts} do
-      assert CredentialScope.allows?(hosts, "https://tracker.example/search?q=x")
+    test "allows an exact host match", %{origins: origins} do
+      assert CredentialScope.allows?(origins, "https://tracker.example/search?q=x")
     end
 
-    test "match is case insensitive", %{hosts: hosts} do
-      assert CredentialScope.allows?(hosts, "https://TRACKER.Example/search")
+    test "match is case insensitive", %{origins: origins} do
+      assert CredentialScope.allows?(origins, "https://TRACKER.Example/search")
     end
 
-    test "refuses a host outside the set", %{hosts: hosts} do
-      refute CredentialScope.allows?(hosts, "https://evil.example/search")
+    test "refuses a host outside the set", %{origins: origins} do
+      refute CredentialScope.allows?(origins, "https://evil.example/search")
     end
 
-    test "refuses a legacy host", %{hosts: hosts} do
-      refute CredentialScope.allows?(hosts, "https://old-tracker.example/search")
+    test "refuses a legacy host", %{origins: origins} do
+      refute CredentialScope.allows?(origins, "https://old-tracker.example/search")
     end
 
     # limetorrents.proxyninja.net and extratorrent.ninjaproxy1.com are real
     # shipped links entries on shared proxy services fronting many unrelated
     # trackers. A subdomain-suffix rule would leak one tracker's session to a
     # neighbour behind the same proxy.
-    test "refuses a subdomain of a trusted host", %{hosts: hosts} do
-      refute CredentialScope.allows?(hosts, "https://sub.tracker.example/search")
+    test "refuses a subdomain of a trusted host", %{origins: origins} do
+      refute CredentialScope.allows?(origins, "https://sub.tracker.example/search")
     end
 
     test "refuses a parent domain of a trusted host" do
-      hosts = CredentialScope.trusted_hosts(definition(links: ["https://a.proxy.example"]), %{})
+      origins =
+        CredentialScope.trusted_origins(definition(links: ["https://a.proxy.example"]), %{})
 
-      refute CredentialScope.allows?(hosts, "https://proxy.example/search")
+      refute CredentialScope.allows?(origins, "https://proxy.example/search")
     end
 
-    test "refuses a url with no host", %{hosts: hosts} do
-      refute CredentialScope.allows?(hosts, "/search")
-      refute CredentialScope.allows?(hosts, "magnet:?xt=urn:btih:abc")
+    test "refuses a url with no host", %{origins: origins} do
+      refute CredentialScope.allows?(origins, "/search")
+      refute CredentialScope.allows?(origins, "magnet:?xt=urn:btih:abc")
     end
   end
 
@@ -216,9 +230,9 @@ defmodule Mydia.Indexers.Cardigann.CredentialScopeTest do
       offenders =
         for file <- @corpus,
             {:ok, parsed} <- [CardigannParser.parse_definition(File.read!(file))],
-            hosts = CredentialScope.trusted_hosts(parsed, %{}),
+            origins = CredentialScope.trusted_origins(parsed, %{}),
             url <- absolute_urls(parsed),
-            not CredentialScope.allows?(hosts, url) do
+            not CredentialScope.allows?(origins, url) do
           {Path.basename(file), url}
         end
 
