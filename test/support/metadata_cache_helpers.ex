@@ -140,4 +140,158 @@ defmodule Mydia.MetadataCacheHelpers do
 
     :ok
   end
+
+  @doc """
+  Populates both cached entry points to the TMDB trending list for
+  `media_type` (`:movie` or `:tv_show`) with `results`.
+
+  `Mydia.Metadata.trending_movies/0`/`trending_tv_shows/0` (used by
+  `DashboardLive`) and `Mydia.Metadata.fetch_curated_list/2` called with
+  `:trending` (used by `DiscoverLive`'s default category) build the exact
+  same `/tmdb/movies|tv/trending` request but land in two different cache
+  keys, so both need warming or one of the two LiveViews still escapes.
+
+  Unlike `fetch_by_id_cached/3` and friends, neither cached function accepts
+  a config override, so this swaps `metadata_relay_url` for the duration of
+  the call instead of building a throwaway config struct.
+  """
+  def warm_trending_cache(media_type, results) do
+    bypass = Bypass.open()
+    previous_metadata_relay_url = Application.get_env(:mydia, :metadata_relay_url)
+    Application.put_env(:mydia, :metadata_relay_url, "http://localhost:#{bypass.port}")
+
+    trending_key = if media_type == :tv_show, do: "trending_tv_shows", else: "trending_movies"
+    curated_key = "curated:trending:#{media_type}:1"
+
+    on_exit(fn ->
+      Cache.delete(trending_key)
+      Cache.delete(curated_key)
+    end)
+
+    path = if media_type == :tv_show, do: "/tmdb/tv/trending", else: "/tmdb/movies/trending"
+
+    # try/after: a raise anywhere between the swap above and the restore
+    # below (Bypass.expect/4, or either fetch call) must not skip the
+    # restore, or the global metadata_relay_url is left pointing at a
+    # Bypass server that is about to close, and later unrelated tests read
+    # a dead URL from global config — precisely the cross-test pollution
+    # this whole branch exists to eliminate.
+    try do
+      Bypass.expect(bypass, "GET", path, fn conn ->
+        body = %{
+          "page" => 1,
+          "total_pages" => 1,
+          "total_results" => length(results),
+          "results" => results
+        }
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(body))
+      end)
+
+      {:ok, _results} =
+        if media_type == :tv_show do
+          Metadata.trending_tv_shows()
+        else
+          Metadata.trending_movies()
+        end
+
+      {:ok, _curated} = Metadata.fetch_curated_list(:trending, media_type: media_type, page: 1)
+    after
+      case previous_metadata_relay_url do
+        nil -> Application.delete_env(:mydia, :metadata_relay_url)
+        value -> Application.put_env(:mydia, :metadata_relay_url, value)
+      end
+    end
+
+    :ok
+  end
+
+  @doc """
+  Populates the TMDB genre-list cache for `media_type` (`:movie` or
+  `:tv_show`) with `genres` (raw TMDB genre maps, e.g.
+  `%{"id" => 28, "name" => "Action"}`).
+
+  `Mydia.Metadata.genres/1` (used by `DiscoverLive`) does not accept a config
+  override, so this swaps `metadata_relay_url` for the duration of the call,
+  same as `warm_trending_cache/2`.
+  """
+  def warm_genre_cache(media_type, genres) do
+    bypass = Bypass.open()
+    previous_metadata_relay_url = Application.get_env(:mydia, :metadata_relay_url)
+    Application.put_env(:mydia, :metadata_relay_url, "http://localhost:#{bypass.port}")
+
+    on_exit(fn -> Cache.delete("genres:#{media_type}") end)
+
+    path = if media_type == :tv_show, do: "/tmdb/genre/tv", else: "/tmdb/genre/movie"
+
+    # try/after: see the identical comment in warm_trending_cache/2 above —
+    # a raise between the swap and the restore must not skip the restore.
+    try do
+      Bypass.expect(bypass, "GET", path, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(%{"genres" => genres}))
+      end)
+
+      {:ok, _genres} = Metadata.genres(media_type)
+    after
+      case previous_metadata_relay_url do
+        nil -> Application.delete_env(:mydia, :metadata_relay_url)
+        value -> Application.put_env(:mydia, :metadata_relay_url, value)
+      end
+    end
+
+    :ok
+  end
+
+  @doc """
+  Populates the movie search cache for `query` with `results`.
+
+  `results` are raw TMDB result maps with string keys, matching
+  `warm_recommendations_cache/3`. `opts` accepts `:year`, since both
+  `Mydia.Library.MetadataMatcher.search_external_movie/3` (the library
+  scanner) and callers of `Mydia.Metadata.search_cached/3` in general search
+  with the parsed release year when one is known, and the year rides in the
+  cache key.
+
+  Unlike `fetch_recommendations_cached/3`, `search_cached/3` takes a
+  `config` argument directly, so this follows the throwaway-config shape the
+  other helpers above use rather than the env-swap `warm_trending_cache/2`
+  and `warm_genre_cache/2` need.
+  """
+  def warm_movie_search_cache(query, opts, results) do
+    bypass = Bypass.open()
+    relay = Metadata.default_relay_config()
+    config = %{relay | base_url: "http://localhost:#{bypass.port}"}
+
+    year = Keyword.get(opts, :year)
+
+    # Mirrors the key search_cached/3 builds for these opts: no :provider or
+    # :language override, so provider defaults to the config type and
+    # language to the config's own.
+    on_exit(fn ->
+      Cache.delete("search:#{relay.type}:#{query}:movie:#{year}:#{relay.options.language}:1")
+    end)
+
+    Bypass.expect_once(bypass, "GET", "/tmdb/movies/search", fn conn ->
+      body = %{
+        "page" => 1,
+        "total_pages" => 1,
+        "total_results" => length(results),
+        "results" => results
+      }
+
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, Jason.encode!(body))
+    end)
+
+    search_opts = if year, do: [media_type: :movie, year: year], else: [media_type: :movie]
+
+    {:ok, _results} = Metadata.search_cached(config, query, search_opts)
+
+    :ok
+  end
 end

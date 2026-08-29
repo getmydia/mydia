@@ -46,7 +46,7 @@ defmodule Mydia.Downloads.Client.NzbgetTest do
       unreachable_config = %{@config | host: "nonexistent.invalid", port: 9999}
       timeout_config = put_in(unreachable_config, [:options, :connect_timeout], 100)
 
-      nzb_url = "https://example.com/test.nzb"
+      nzb_url = "https://nonexistent.invalid/test.nzb"
 
       {:error, error} = Nzbget.add_torrent(timeout_config, {:url, nzb_url})
       # URL download will fail first before reaching NZBGet

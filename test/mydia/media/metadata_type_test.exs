@@ -271,20 +271,27 @@ defmodule Mydia.Media.MetadataTypeTest do
     end
 
     test "external_ids survive a database round trip" do
+      # skip_episode_refresh: true — this test is only about metadata JSON
+      # round-tripping, not episodes. Without it, the real tvdb_id here sends
+      # refresh_episodes_for_tv_show/2 to the live relay for the series'
+      # extended details (#530).
       {:ok, media_item} =
-        Media.create_media_item(%{
-          type: "tv_show",
-          title: "Game of Thrones",
-          year: 2011,
-          tvdb_id: 121_361,
-          metadata: %{
-            "provider_id" => "121361",
-            "provider" => "tvdb",
-            "media_type" => "tv_show",
-            "title" => "Game of Thrones",
-            "external_ids" => %{"tmdb" => 1399, "tvdb" => nil, "imdb" => "tt0944947"}
-          }
-        })
+        Media.create_media_item(
+          %{
+            type: "tv_show",
+            title: "Game of Thrones",
+            year: 2011,
+            tvdb_id: 121_361,
+            metadata: %{
+              "provider_id" => "121361",
+              "provider" => "tvdb",
+              "media_type" => "tv_show",
+              "title" => "Game of Thrones",
+              "external_ids" => %{"tmdb" => 1399, "tvdb" => nil, "imdb" => "tt0944947"}
+            }
+          },
+          skip_episode_refresh: true
+        )
 
       reloaded = Media.get_media_item!(media_item.id)
 

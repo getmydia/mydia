@@ -11,6 +11,26 @@ defmodule Mydia.CrashReporter.QueueTest do
       _ -> :ok
     end
 
+    # Point Sender.send_report/1 at a local Bypass server rather than the
+    # live relay. Unlike report_resilience_test.exs and tower_reporter_test.exs,
+    # which point METADATA_RELAY_URL at an unreachable loopback address
+    # (127.0.0.1:1) because they only care that a report got *enqueued*, this
+    # module's tests exercise the queue's actual send-and-retry behaviour, so
+    # the request needs a real round trip and a real HTTP response — just not
+    # one that leaves the machine (#530). Bypass replies 400, matching the
+    # "no API key configured" failure these tests were written against when
+    # they still hit the real relay, so every retry/entry-shape assertion
+    # below keeps exercising the same failure path it always did.
+    bypass = Bypass.open()
+    previous_metadata_relay_url = Application.get_env(:mydia, :metadata_relay_url)
+    Application.put_env(:mydia, :metadata_relay_url, "http://localhost:#{bypass.port}")
+
+    Bypass.stub(bypass, "POST", "/crashes/report", fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(400, Jason.encode!(%{"error" => "no_api_key_configured"}))
+    end)
+
     # Configure for testing with reasonable defaults
     Application.put_env(:mydia, Queue,
       initial_retry_delay: 1_000,
@@ -23,8 +43,16 @@ defmodule Mydia.CrashReporter.QueueTest do
     )
 
     on_exit(fn ->
+      # Clear pending entries before restoring the relay url, so a scheduled
+      # retry timer that fires after teardown finds nothing to send rather
+      # than reaching for a url that no longer points at this test's Bypass.
       Queue.clear_all()
       Application.delete_env(:mydia, Queue)
+
+      case previous_metadata_relay_url do
+        nil -> Application.delete_env(:mydia, :metadata_relay_url)
+        value -> Application.put_env(:mydia, :metadata_relay_url, value)
+      end
     end)
 
     # Give the queue time to settle

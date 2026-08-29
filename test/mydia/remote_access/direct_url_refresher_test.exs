@@ -13,10 +13,15 @@ defmodule Mydia.RemoteAccess.DirectUrlRefresherTest do
     # Save original config
     original_direct_urls_config = Application.get_env(:mydia, :direct_urls, [])
 
-    # Set test data directory and external port
+    # Set test data directory and external port. public_ip_enabled defaults
+    # to true, and every test below calls detect_all/0 directly, so without
+    # this every test here reaches ifconfig.me/icanhazip.com/api.ipify.org
+    # for real — none of them assert anything that depends on a
+    # public-IP-derived URL specifically being present (#530).
     Application.put_env(:mydia, :direct_urls,
       data_dir: @test_data_dir,
-      external_port: 4000
+      external_port: 4000,
+      public_ip_enabled: false
     )
 
     on_exit(fn ->
@@ -110,7 +115,8 @@ defmodule Mydia.RemoteAccess.DirectUrlRefresherTest do
       Application.put_env(:mydia, :direct_urls,
         data_dir: @test_data_dir,
         external_port: 4000,
-        external_url: "https://mydia.example.com:443"
+        external_url: "https://mydia.example.com:443",
+        public_ip_enabled: false
       )
 
       # Initialize remote access config
@@ -131,7 +137,8 @@ defmodule Mydia.RemoteAccess.DirectUrlRefresherTest do
         additional_direct_urls: [
           "https://vpn.mydia.local:4000",
           "https://tailscale.mydia.local:4000"
-        ]
+        ],
+        public_ip_enabled: false
       )
 
       # Initialize remote access config
@@ -155,7 +162,8 @@ defmodule Mydia.RemoteAccess.DirectUrlRefresherTest do
           # Duplicate
           "https://mydia.example.com:443",
           "https://vpn.mydia.local:4000"
-        ]
+        ],
+        public_ip_enabled: false
       )
 
       # Initialize remote access config

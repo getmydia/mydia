@@ -14,13 +14,20 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseSectionTest do
   end
 
   test "a TV show page never renders the franchise section", %{conn: conn} do
+    show_tmdb_id = unique_provider_id()
+
     show =
       media_item_fixture(%{
         type: "tv_show",
         title: "A Show",
         year: 2010,
-        tmdb_id: unique_provider_id()
+        tmdb_id: show_tmdb_id
       })
+
+    # The page starts a recommendations lookup on any connected mount with an
+    # integer tmdb_id, franchise strip or not. Unwarmed it leaves the VM for
+    # the production relay.
+    warm_recommendations_cache(show_tmdb_id, :tv_show, [])
 
     {:ok, view, _html} = live(conn, ~p"/media/#{show.id}")
 
@@ -53,6 +60,8 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseSectionTest do
       %{"id" => owned_tmdb_id, "title" => "First", "release_date" => "2001-01-01"},
       %{"id" => missing_tmdb_id, "title" => "Second", "release_date" => "2004-01-01"}
     ])
+
+    warm_recommendations_cache(owned_tmdb_id, :movie, [])
 
     {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")
     render_async(view, 5000)

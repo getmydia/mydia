@@ -2,11 +2,21 @@ defmodule MydiaWeb.FeedbackModalTest do
   use MydiaWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
+  import Mydia.MetadataCacheHelpers
 
   alias Mydia.Accounts
   alias Mydia.Settings
 
   setup %{conn: conn} do
+    # Every test here mounts "/", and DashboardLive.Index unconditionally
+    # loads both trending rails on connected mount. stub_dashboard_requests/1
+    # below additionally covers the 3 tests that override metadata_relay_url
+    # for their own Bypass, but warming the cache here protects every test in
+    # the file regardless of which relay url happens to be configured at
+    # mount time — a cache hit never reaches the network at all (#530).
+    warm_trending_cache(:movie, [])
+    warm_trending_cache(:tv_show, [])
+
     unique_id = System.unique_integer([:positive])
 
     {:ok, user} =

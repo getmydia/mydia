@@ -7,9 +7,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationsRailTest do
   import Mydia.MediaFixtures
   import Mydia.AccountsFixtures
   import MydiaWeb.AuthHelpers
-
-  alias Mydia.Metadata
-  alias Mydia.Metadata.Cache
+  import Mydia.MetadataCacheHelpers
 
   setup %{conn: conn} do
     # The app disables Oban in test (engine: false), so Oban.insert cannot run
@@ -22,8 +20,8 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationsRailTest do
   end
 
   test "a movie with recommendations renders the rail", %{conn: conn} do
-    source_tmdb_id = System.unique_integer([:positive])
-    recommended_tmdb_id = System.unique_integer([:positive])
+    source_tmdb_id = unique_provider_id()
+    recommended_tmdb_id = unique_provider_id()
 
     movie =
       media_item_fixture(%{
@@ -42,6 +40,8 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationsRailTest do
       }
     ])
 
+    warm_movie_details_cache(source_tmdb_id)
+
     {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")
     render_async(view, 5000)
 
@@ -50,7 +50,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationsRailTest do
   end
 
   test "a movie with no recommendations renders no rail", %{conn: conn} do
-    source_tmdb_id = System.unique_integer([:positive])
+    source_tmdb_id = unique_provider_id()
 
     movie =
       media_item_fixture(%{
@@ -61,6 +61,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationsRailTest do
       })
 
     warm_recommendations_cache(source_tmdb_id, :movie, [])
+    warm_movie_details_cache(source_tmdb_id)
 
     {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")
     render_async(view, 5000)
@@ -70,8 +71,8 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationsRailTest do
 
   test "an owned recommendation links to its page instead of offering an add",
        %{conn: conn} do
-    source_tmdb_id = System.unique_integer([:positive])
-    owned_tmdb_id = System.unique_integer([:positive])
+    source_tmdb_id = unique_provider_id()
+    owned_tmdb_id = unique_provider_id()
 
     movie =
       media_item_fixture(%{
@@ -93,6 +94,8 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationsRailTest do
       %{"id" => owned_tmdb_id, "title" => "Already Here", "release_date" => "2013-01-01"}
     ])
 
+    warm_movie_details_cache(source_tmdb_id)
+
     {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")
     render_async(view, 5000)
 
@@ -100,8 +103,8 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationsRailTest do
   end
 
   test "a tv show starts collapsed and the header toggles it", %{conn: conn} do
-    source_tmdb_id = System.unique_integer([:positive])
-    recommended_tmdb_id = System.unique_integer([:positive])
+    source_tmdb_id = unique_provider_id()
+    recommended_tmdb_id = unique_provider_id()
 
     show =
       media_item_fixture(%{
@@ -137,7 +140,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationsRailTest do
   end
 
   test "a movie rail is not collapsible", %{conn: conn} do
-    source_tmdb_id = System.unique_integer([:positive])
+    source_tmdb_id = unique_provider_id()
 
     movie =
       media_item_fixture(%{
@@ -148,55 +151,15 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationsRailTest do
       })
 
     warm_recommendations_cache(source_tmdb_id, :movie, [
-      %{"id" => System.unique_integer([:positive]), "title" => "The Eternal Daughter"}
+      %{"id" => unique_provider_id(), "title" => "The Eternal Daughter"}
     ])
+
+    warm_movie_details_cache(source_tmdb_id)
 
     {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")
     render_async(view, 5000)
 
     assert has_element?(view, "#recommendations-rail")
     refute has_element?(view, "#recommendations-rail-toggle")
-  end
-
-  # Populates the shared metadata cache through the real fetch path, with the
-  # relay response coming from Bypass. `fetch_recommendations_cached/3` keys on
-  # the provider type, id, media type and language but NOT the base URL, so the
-  # LiveView's own default config reads this entry back without any outbound
-  # request.
-  defp warm_recommendations_cache(tmdb_id, media_type, results) do
-    bypass = Bypass.open()
-    relay = Metadata.default_relay_config()
-    config = %{relay | base_url: "http://localhost:#{bypass.port}"}
-
-    on_exit(fn ->
-      Cache.delete(
-        "recommendations:#{relay.type}:#{tmdb_id}:#{media_type}:#{relay.options.language}"
-      )
-    end)
-
-    path =
-      if media_type == :tv_show, do: "/tmdb/tv/shows/#{tmdb_id}", else: "/tmdb/movies/#{tmdb_id}"
-
-    Bypass.expect_once(bypass, "GET", path, fn conn ->
-      body = %{
-        "id" => tmdb_id,
-        "title" => "Source",
-        "recommendations" => %{
-          "page" => 1,
-          "results" => results,
-          "total_pages" => 1,
-          "total_results" => length(results)
-        }
-      }
-
-      conn
-      |> Plug.Conn.put_resp_content_type("application/json")
-      |> Plug.Conn.resp(200, Jason.encode!(body))
-    end)
-
-    {:ok, _results} =
-      Metadata.fetch_recommendations_cached(config, to_string(tmdb_id), media_type: media_type)
-
-    :ok
   end
 end

@@ -16,6 +16,33 @@ defmodule Mydia.Jobs.MetadataRefreshTest do
     end
 
     test "returns missing_provider_id when nothing resolves and recovery fails" do
+      # perform/1 takes no config option (job args are the only input Oban's
+      # perform_job/2 can drive), so Media.Refresh.run/2 falls back to
+      # Metadata.default_relay_config/0. The recovery search this test means
+      # to exercise must actually happen and come back empty, not be skipped,
+      # so point the relay at a Bypass server that legitimately answers "no
+      # results" instead of letting Metadata.search/3 (uncached, unlike the
+      # mount-time detail-page lookups) reach the live relay (#530).
+      bypass = Bypass.open()
+      previous_metadata_relay_url = Application.get_env(:mydia, :metadata_relay_url)
+      Application.put_env(:mydia, :metadata_relay_url, "http://localhost:#{bypass.port}")
+
+      on_exit(fn ->
+        case previous_metadata_relay_url do
+          nil -> Application.delete_env(:mydia, :metadata_relay_url)
+          value -> Application.put_env(:mydia, :metadata_relay_url, value)
+        end
+      end)
+
+      Bypass.stub(bypass, "GET", "/tmdb/movies/search", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          200,
+          Jason.encode!(%{"page" => 1, "total_pages" => 1, "total_results" => 0, "results" => []})
+        )
+      end)
+
       media_item =
         media_item_fixture(%{
           type: "movie",

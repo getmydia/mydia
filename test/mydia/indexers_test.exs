@@ -699,7 +699,7 @@ defmodule Mydia.IndexersTest do
       # the config conversion doesn't crash
       config = %{
         type: :prowlarr,
-        base_url: "https://prowlarr.example.com:9696",
+        base_url: "https://prowlarr.nonexistent.invalid:9696",
         api_key: "test-api-key"
       }
 

@@ -6,6 +6,19 @@ defmodule MydiaWeb.AdminRemoteAccessLiveTest do
   alias Mydia.RemoteAccess
 
   setup do
+    # AdminRemoteAccessLive.Components renders Mydia.RemoteAccess.DirectUrls
+    # .detect_public_urls/0 unconditionally, and public_ip_enabled defaults
+    # to true, so every test that mounts this page reaches
+    # ifconfig.me/icanhazip.com/api.ipify.org for real unless told not to.
+    # None of the tests below assert anything about the public-IP-derived
+    # URL (#530).
+    original_direct_urls_config = Application.get_env(:mydia, :direct_urls, [])
+    Application.put_env(:mydia, :direct_urls, public_ip_enabled: false)
+
+    on_exit(fn ->
+      Application.put_env(:mydia, :direct_urls, original_direct_urls_config)
+    end)
+
     unique_id = System.unique_integer([:positive])
 
     {:ok, user} =

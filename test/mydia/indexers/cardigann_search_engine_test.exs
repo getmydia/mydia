@@ -595,7 +595,12 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
         language: "en-US",
         type: "public",
         encoding: "UTF-8",
-        links: ["https://example.com"],
+        # .test is an RFC 2606 reserved TLD that never resolves, same as
+        # "invalid-domain.example" a few tests up in this same file — unlike
+        # example.com, which resolves to a real server, so Mydia.RelayGuard
+        # correctly refuses it and this test loosely asserts {:error, _}
+        # regardless of which failure it is (#530).
+        links: ["https://cardigann-search.test"],
         capabilities: %{modes: %{}},
         search: %{
           paths: [%{path: "/search/{{ .Keywords }}"}],
@@ -609,8 +614,8 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
         follow_redirect: false
       }
 
-      # This will fail to connect since example.com doesn't have our endpoint,
-      # but it tests the flow up to the HTTP request
+      # This will fail to connect since the host doesn't resolve, but it
+      # tests the flow up to the HTTP request.
       assert {:error, _} = CardigannSearchEngine.execute_search(definition, query: "Ubuntu")
     end
 
@@ -622,7 +627,7 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
         language: "en-US",
         type: "public",
         encoding: "UTF-8",
-        links: ["https://example.com"],
+        links: ["https://cardigann-search.test"],
         capabilities: %{modes: %{}},
         search: %{
           paths: [%{path: "/search/{{ .Keywords }}"}],
@@ -650,7 +655,10 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
         language: "en-US",
         type: "public",
         encoding: "UTF-8",
-        links: ["https://example.com"],
+        # .test never resolves (RFC 2606), unlike example.com, so
+        # Mydia.RelayGuard correctly refuses it rather than letting it
+        # through as if it were safe (#530).
+        links: ["https://cardigann-search.test"],
         capabilities: %{modes: %{}},
         search: %{
           paths: [%{path: "/search/{{ .Keywords }}"}],
