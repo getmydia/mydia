@@ -112,6 +112,29 @@ defmodule Mydia.Indexers.CardigannTemplateTest do
       assert result == "/search/Dune%3A%20Part%20Two%202024/"
     end
 
+    # Regression: url_encode/1 used to convert the string to a charlist (Unicode
+    # code points) and pack each code point into a single byte, so it
+    # percent-encoded code points instead of UTF-8 bytes. "é" (U+00E9) came out
+    # as "%E9" (the raw code point) instead of "%C3%A9" (its two UTF-8 bytes),
+    # sending a request that matched nothing at the origin - silent corruption,
+    # not a crash, so it went unnoticed until inspected directly.
+    test "URL-encodes an accented title as UTF-8 bytes, not the raw code point" do
+      context = %{keywords: "Amélie"}
+      assert {:ok, result} = CardigannTemplate.render("/search/{{ .Keywords }}/", context)
+      assert result == "/search/Am%C3%A9lie/"
+    end
+
+    # Regression: for a code point whose UTF-8 encoding spans multiple bytes -
+    # every CJK character does - the old code truncated the code point to its
+    # low byte before encoding, so a full title collapsed into a couple of
+    # garbage %XX pairs. Foreign film and anime titles are routine content for
+    # a media manager, so this was not a theoretical edge case.
+    test "URL-encodes a CJK title as UTF-8 bytes instead of truncating it" do
+      context = %{keywords: "你好"}
+      assert {:ok, result} = CardigannTemplate.render("/search/{{ .Keywords }}/", context)
+      assert result == "/search/%E4%BD%A0%E5%A5%BD/"
+    end
+
     test "does not URL-encode when url_encode: false for query params" do
       context = %{keywords: "Dune: Part Two 2024"}
 
@@ -854,6 +877,18 @@ defmodule Mydia.Indexers.CardigannTemplateTest do
       assert {:ok, from_function} = CardigannTemplate.render("{{ or .Keywords }}", context)
 
       assert from_field == from_function
+    end
+
+    # Regression: this PR's first commit widened url_encode/1's reach to
+    # function and pipeline results (CardigannOverrides.patch_1337x/1 routes
+    # keywords through `{{ or .Query.Album .Query.Artist .Keywords }}`), so
+    # the byte-vs-code-point bug now corrupts a non-ASCII title reached
+    # through `or`, not only a bare `{{ .Keywords }}`.
+    test "encodes a non-ASCII function result as UTF-8 bytes, not code points" do
+      context = url_context("Amélie")
+
+      assert {:ok, "search/Am%C3%A9lie/1/"} =
+               CardigannTemplate.render("search/{{ or .Query.Album .Keywords }}/1/", context)
     end
 
     test "leaves a function result raw when the caller opts out" do

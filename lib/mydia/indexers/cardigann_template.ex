@@ -898,21 +898,21 @@ defmodule Mydia.Indexers.CardigannTemplate do
 
   @doc """
   URL-encodes a string for use in URL paths.
+
+  Percent-encodes UTF-8 BYTES, not code points. `String.to_charlist/1`
+  followed by packing each code point into a single `<<char>>` byte
+  percent-encodes the code point instead: a code point above 255 truncates
+  (silently dropping data), and even a two-byte code point like "é"
+  (U+00E9) encodes as its raw ordinal ("%E9") rather than its two UTF-8
+  bytes ("%C3%A9"), producing a URL that matches nothing at the origin.
+  `URI.encode/2` iterates the binary's bytes directly, so a multi-byte
+  character comes out as consecutive `%XX` pairs, one per UTF-8 byte.
   """
   @spec url_encode(String.t()) :: String.t()
   def url_encode(string) when is_binary(string) do
-    string
-    |> String.to_charlist()
-    |> Enum.map_join("", fn char ->
-      if unreserved_char?(char), do: <<char>>, else: "%" <> Base.encode16(<<char>>, case: :upper)
-    end)
+    URI.encode(string, &URI.char_unreserved?/1)
   end
 
   def url_encode(nil), do: ""
   def url_encode(value), do: url_encode(to_string(value))
-
-  defp unreserved_char?(c) do
-    (c >= ?A and c <= ?Z) or (c >= ?a and c <= ?z) or (c >= ?0 and c <= ?9) or
-      c in [?-, ?_, ?., ?~]
-  end
 end
