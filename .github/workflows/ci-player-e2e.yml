@@ -29,20 +29,20 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Login to registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push toolbox
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./player/Dockerfile.test
@@ -79,12 +79,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Detect relevant changes
         id: filter
         if: github.event_name == 'pull_request'
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@v4
         with:
           # Invariant: `relevant` must be a superset of the union of
           # `server`, `toolbox`, and `relay`. `relevant` gates whether this
@@ -162,7 +162,7 @@ jobs:
 
       - name: Setup Docker Buildx
         if: steps.should.outputs.run == 'true'
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       # The resolve steps below replace the former `docker compose build`.
       # They pull by default and build only what a PR actually changed, which
@@ -185,7 +185,7 @@ jobs:
       # run still leaves something warm behind.
       - name: Log in to registry
         if: steps.should.outputs.run == 'true'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         continue-on-error: true
         with:
           registry: ghcr.io
@@ -321,7 +321,7 @@ jobs:
 
       - name: Upload logs on failure
         if: failure() && steps.should.outputs.run == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: player-e2e-logs
           path: |

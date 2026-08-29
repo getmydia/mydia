@@ -16,7 +16,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # The nix eval below only proves player/.fvmrc agrees with nixpkgs. It
       # cannot see a stale `flutter-version:` literal re-added to a workflow --
@@ -78,7 +78,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # The minimum OS version is duplicated across a Podfile, an Xcode project
       # and a podspec on each Apple platform. Nothing in the toolchain keeps
@@ -101,7 +101,7 @@ jobs:
       # fetch-depth: 0 because the commit-log fallback resolves a previous tag
       # and walks a commit range. A shallow checkout has neither.
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -128,7 +128,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@main
@@ -152,7 +152,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@main
