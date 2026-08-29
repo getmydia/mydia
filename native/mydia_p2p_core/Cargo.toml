@@ -42,11 +42,11 @@ serde_json = "1.0"
 # Elixir server and the Dart player both reach this module through their
 # bindings, so a parameter that differs between them breaks pairing outright.
 argon2 = { version = "0.5", default-features = false, features = ["alloc"] }
-chacha20poly1305 = { version = "0.10", default-features = false, features = ["alloc", "getrandom"] }
-hkdf = "0.12"
-sha2 = { version = "0.10", default-features = false }
+chacha20poly1305 = { version = "0.11", default-features = false, features = ["alloc", "getrandom"] }
+hkdf = "0.13"
+sha2 = { version = "0.11", default-features = false }
 hex = { version = "0.4", default-features = false, features = ["alloc"] }
-base64 = { version = "0.22", default-features = false, features = ["alloc"] }
+base64 = { version = "0.23", default-features = false, features = ["alloc"] }
 # The nonce needs randomness on both targets. The wasm section below already
 # names `wasm_js` as the backend; this line makes it a direct dependency so
 # native builds get one too.

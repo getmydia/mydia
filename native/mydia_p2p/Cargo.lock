@@ -1442,9 +1442,9 @@ dependencies = [
 
 [[package]]
 name = "iroh"
-version = "1.0.3"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "460de6bc52163b41b1646931f2897e5ab986f0966ade444467fec25024751a72"
+checksum = "329552fad4e46b5ccb4439d5635216f6289eec2c46f3fde4bc732d762694b9e5"
 dependencies = [
  "backon",
  "blake3",
@@ -1493,9 +1493,9 @@ dependencies = [
 
 [[package]]
 name = "iroh-base"
-version = "1.0.3"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6be73e16ee21c923aca9b3121aaa0db936f7c7ecc156ff47b8dac944c68d59a8"
+checksum = "3ccf4cde68a02ef03c0095ab2c031c6adfe508f3bc8e7c258558a027ebe64a8e"
 dependencies = [
  "curve25519-dalek",
  "data-encoding",
@@ -1512,9 +1512,9 @@ dependencies = [
 
 [[package]]
 name = "iroh-dns"
-version = "1.0.3"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46f6a9b39d18e6345f5c151afd299f2488e2cb5c520fe41b107b6bd3dc4c3349"
+checksum = "9a41224eb0140a5c519935d4073fc6b236d174080be401f9bf7da126b2ee3aa4"
 dependencies = [
  "arc-swap",
  "cfg_aliases",
@@ -1563,9 +1563,9 @@ dependencies = [
 
 [[package]]
 name = "iroh-relay"
-version = "1.0.3"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "24bd586cf927f7b700f56ec3639b53cb5fa901ce284784051ff71092bfbf8193"
+checksum = "1b5f6f07e2c9b0c4bc82e2864be09f4aea4320165d5316e668616dbc822f428a"
 dependencies = [
  "blake3",
  "bytes",
@@ -1742,9 +1742,9 @@ dependencies = [
 
 [[package]]
 name = "log"
-version = "0.4.33"
+version = "0.4.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ceec5bc11778974d1bcb055b18002eba7f4b3518b6a0081b3af5f21666da9ad"
+checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
 
 [[package]]
 name = "loom"
@@ -1948,6 +1948,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "netdev"
+version = "0.46.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3a5f88621a4b468e8ce92626f847cc02462cef3e06d793baa8b1c8617e304b20"
+dependencies = [
+ "block2",
+ "dispatch2",
+ "dlopen2",
+ "ipnet",
+ "jni 0.21.1",
+ "libc",
+ "mac-addr",
+ "ndk-context",
+ "netlink-packet-core",
+ "netlink-packet-route",
+ "netlink-sys",
+ "objc2-core-foundation",
+ "objc2-system-configuration",
+ "once_cell",
+ "plist",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "netlink-packet-core"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1998,9 +2022,9 @@ dependencies = [
 
 [[package]]
 name = "netwatch"
-version = "0.19.1"
+version = "0.19.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d9cbe01741347ef750d743d6690603f5eed8341e679fb51c8e629337aa11976"
+checksum = "39da9cad5f23aa43401f09497d3b280e51b5feba115d9ffbf38ca35d6ff95e96"
 dependencies = [
  "atomic-waker",
  "bytes",
@@ -2012,7 +2036,8 @@ dependencies = [
  "n0-error",
  "n0-future",
  "n0-watcher",
- "netdev",
+ "netdev 0.45.0",
+ "netdev 0.46.1",
  "netlink-packet-core",
  "netlink-packet-route",
  "netlink-proto",
@@ -2035,9 +2060,9 @@ dependencies = [
 
 [[package]]
 name = "noq"
-version = "1.1.1"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09e4bb6601fa543c110d8957813267d5a8d775a0f8fbaccf1f615d06ba9b10da"
+checksum = "f1e6c57353d26be91a242f0ec96073066c4481a03f6be874daafb18902394515"
 dependencies = [
  "bytes",
  "cfg_aliases",
@@ -2057,9 +2082,9 @@ dependencies = [
 
 [[package]]
 name = "noq-proto"
-version = "1.1.1"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "baa7b5ccd819a9c68a0d955e67a881032d09b1a17219b1f90b0997a0888e1a15"
+checksum = "9a46813e306c29c4f86357b6ffa39a8e1c97bb274b9a296a19a56d62e4111225"
 dependencies = [
  "aes-gcm",
  "bytes",
@@ -2084,9 +2109,9 @@ dependencies = [
 
 [[package]]
 name = "noq-udp"
-version = "1.1.1"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02bba20e097a5a16cd0ad14ec882fae1e80a092a124e9422fc4dddd92e96a647"
+checksum = "b56d621ed2c1773b5356ab39cc68c819f8d0103f7493d8661c4a5f5f8ea55f40"
 dependencies = [
  "cfg_aliases",
  "libc",
@@ -2417,9 +2442,9 @@ dependencies = [
 
 [[package]]
 name = "portmapper"
-version = "0.19.1"
+version = "0.19.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb3713e4977408279158444a18c1a01ac9bf2e7eaf1fbfd1a19ac9cd18d90721"
+checksum = "ca97242f016e090a25330613bc2382aab65eb22f9149dbe84d8f8e711d49a530"
 dependencies = [
  "base64",
  "bytes",
@@ -2702,11 +2727,12 @@ dependencies = [
 
 [[package]]
 name = "rustler"
-version = "0.37.4"
+version = "0.38.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "875c8fe88089b9bbc0977385e107d35bfae740c6b0734e60a1e9cc82d0017f49"
+checksum = "60ac8495cb6091c1f8bd0c3bb816cd4e6f0a073f396d77eb602cb7f0615212de"
 dependencies = [
  "inventory",
+ "libc",
  "libloading",
  "regex-lite",
  "rustler_codegen",
@@ -2714,9 +2740,9 @@ dependencies = [
 
 [[package]]
 name = "rustler_codegen"
-version = "0.37.4"
+version = "0.38.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "afb5848e9c4cf3796f190d9b4516523af27f3444a3af1771f20465f6586d40b2"
+checksum = "780a2a6b7e3cfac35820473f85cec1cd84d1bdd37ebcb4e24fb126ef0f074838"
 dependencies = [
  "heck",
  "inventory",
@@ -3040,9 +3066,9 @@ checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
 
 [[package]]
 name = "simple-dns"
-version = "0.11.3"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a75cbde1bf934313596a004973e462f9a82caa814dcf1a5f507bdf51597eeb4"
+checksum = "2b6f884fa9a8d48101774bfbd3aeb81e968dd22cffd19a372da69f183db22c1a"
 dependencies = [
  "bitflags",
 ]
@@ -3613,9 +3639,9 @@ checksum = "b6c140620e7ffbb22c2dee59cafe6084a59b5ffc27a8859a5f0d494b5d52b6be"
 
 [[package]]
 name = "uuid"
-version = "1.24.0"
+version = "1.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf3923a6f5c4c6382e0b653c4117f48d631ea17f38ed86e2a828e6f7412f5239"
+checksum = "b5772d71c9be8a8a6ac2117d949c5b224c1b72241bb611d9a3012edcf8af7812"
 dependencies = [
  "getrandom 0.4.3",
  "js-sys",
