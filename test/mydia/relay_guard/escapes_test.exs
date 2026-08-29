@@ -52,6 +52,17 @@ defmodule Mydia.RelayGuard.EscapesTest do
     assert length(Escapes.all()) == 2
   end
 
+  test "the recorded frames exclude the guard's own modules" do
+    Escapes.record(request("https://relay.mydia.dev/tmdb/movies/900000123"))
+
+    assert [{_key, _count, _url, frames}] = Escapes.all()
+
+    refute Enum.any?(frames, fn {mod, _fun, _arity, _loc} ->
+             mod == Mydia.RelayGuard or
+               mod |> Atom.to_string() |> String.starts_with?("Elixir.Mydia.RelayGuard.")
+           end)
+  end
+
   test "suggests the collection helper for a collection path" do
     assert Escapes.suggest("/tmdb/collections/900000123", nil) ==
              "warm_collection_cache(900000123, parts)"
