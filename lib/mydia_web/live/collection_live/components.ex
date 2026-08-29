@@ -1,16 +1,36 @@
 defmodule MydiaWeb.CollectionLive.Components do
   @moduledoc """
-  Components shared by the collection index and show LiveViews.
+  Components (and the socket helper that feeds them) shared by the
+  collection index and show LiveViews.
 
   The smart rules condition editor is rendered both by the create-collection
   dialog and by the edit-rules dialog of an existing collection. It lives here
   rather than in `MydiaWeb.CollectionComponents` because only these two
-  sibling LiveViews use it.
+  sibling LiveViews use it. `load_value_options/1` is grouped alongside it for
+  the same reason: both LiveViews must load the same option lists before
+  showing the editor, and `assign_new/3` (from `Phoenix.Component`, which this
+  module already uses) works identically on a `%Phoenix.LiveView.Socket{}` or
+  a plain assigns map, so the helper fits here without pulling in
+  `Phoenix.LiveView` itself.
   """
 
   use MydiaWeb, :html
 
   alias Mydia.Collections.SmartRulesFields
+
+  @doc """
+  Loads the smart rule condition "value" option lists (used to populate enum
+  and boolean condition dropdowns) into the socket.
+
+  The option lists come from a scan of `media_items.metadata`, so this must
+  be called once, right before the smart rules editor becomes visible,
+  rather than on every `phx-change`. `assign_new/3` gives us that "compute
+  once per socket" semantics for free: it only calls `SmartRulesFields.value_options/0`
+  if `:rules_value_options` isn't already assigned.
+  """
+  def load_value_options(socket) do
+    assign_new(socket, :rules_value_options, fn -> SmartRulesFields.value_options() end)
+  end
 
   # Smart rules editor component
   attr :conditions, :list, required: true

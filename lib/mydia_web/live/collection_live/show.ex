@@ -13,10 +13,9 @@ defmodule MydiaWeb.CollectionLive.Show do
 
   alias Mydia.Collections
   alias Mydia.Collections.Collection
-  alias Mydia.Collections.SmartRulesFields
   alias Mydia.Media
 
-  import MydiaWeb.CollectionLive.Components, only: [smart_rules_editor: 1]
+  import MydiaWeb.CollectionLive.Components, only: [smart_rules_editor: 1, load_value_options: 1]
 
   @items_per_page 50
   @default_condition %{"field" => "", "operator" => "eq", "value" => ""}
@@ -59,18 +58,6 @@ defmodule MydiaWeb.CollectionLive.Show do
     |> assign(:rules_sort_field, "")
     |> assign(:rules_sort_direction, "desc")
     |> assign(:rules_limit, nil)
-    |> assign_new(:rules_value_options, fn -> %{} end)
-  end
-
-  # The option lists come from a scan of media_items.metadata, so they are
-  # loaded when the smart editor first becomes visible rather than on every
-  # phx-change.
-  defp load_value_options(socket) do
-    if socket.assigns.rules_value_options == %{} do
-      assign(socket, :rules_value_options, SmartRulesFields.value_options())
-    else
-      socket
-    end
   end
 
   defp parse_existing_rules(socket, collection) do
