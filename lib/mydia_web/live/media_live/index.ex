@@ -584,7 +584,8 @@ defmodule MydiaWeb.MediaLive.Index do
            type: scan_type,
            new_files: new_files,
            modified_files: modified_files,
-           deleted_files: deleted_files
+           deleted_files: deleted_files,
+           auto_linked: auto_linked
          }},
         socket
       ) do
@@ -599,18 +600,13 @@ defmodule MydiaWeb.MediaLive.Index do
 
     socket =
       if should_process do
-        total_changes = new_files + modified_files + deleted_files
-
         message =
-          if total_changes > 0 do
-            parts = []
-            parts = if new_files > 0, do: ["#{new_files} new" | parts], else: parts
-            parts = if modified_files > 0, do: ["#{modified_files} modified" | parts], else: parts
-            parts = if deleted_files > 0, do: ["#{deleted_files} removed" | parts], else: parts
-            "Library scan completed: " <> Enum.join(parts, ", ")
-          else
-            "Library scan completed: No changes detected"
-          end
+          scan_completed_message(%{
+            new_files: new_files,
+            modified_files: modified_files,
+            deleted_files: deleted_files,
+            auto_linked: auto_linked
+          })
 
         socket
         |> assign(:scanning, false)
@@ -1058,4 +1054,34 @@ defmodule MydiaWeb.MediaLive.Index do
        do: "#{downloaded}/#{total} episodes"
 
   defp format_episode_count(_), do: nil
+
+  @doc false
+  # Public so the copy can be unit-tested without mounting the LiveView.
+  #
+  # `auto_linked` is a subset of the files a scan touched, so it is appended as
+  # detail and kept out of the change total. It is also counted on its own,
+  # because the orphan branch links existing files: a scan can auto-import
+  # without any on-disk change at all, and reporting "No changes detected"
+  # there would hide the exact work the flag was turned on for.
+  @spec scan_completed_message(map()) :: String.t()
+  def scan_completed_message(%{
+        new_files: new_files,
+        modified_files: modified_files,
+        deleted_files: deleted_files,
+        auto_linked: auto_linked
+      }) do
+    parts = []
+    parts = if new_files > 0, do: ["#{new_files} new" | parts], else: parts
+    parts = if modified_files > 0, do: ["#{modified_files} modified" | parts], else: parts
+    parts = if deleted_files > 0, do: ["#{deleted_files} removed" | parts], else: parts
+
+    parts =
+      if auto_linked > 0, do: parts ++ ["#{auto_linked} imported automatically"], else: parts
+
+    if parts == [] do
+      "Library scan completed: No changes detected"
+    else
+      "Library scan completed: " <> Enum.join(parts, ", ")
+    end
+  end
 end

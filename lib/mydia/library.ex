@@ -2363,6 +2363,26 @@ defmodule Mydia.Library do
   end
 
   @doc """
+  Rank-0 candidates for many files at once, keyed by `media_file_id`.
+
+  `list_match_candidates/1` is per file. `OrphanReenricher` decides what to do
+  with every orphan in a library, so calling it per file would issue one query
+  per orphan on a library that can hold hundreds.
+
+  Files with no rank-0 candidate are simply absent from the map, which is the
+  same thing the caller's "no candidate" branch already means.
+  """
+  @spec rank_zero_candidates_by_file_id([binary()]) :: %{binary() => MatchCandidate.t()}
+  def rank_zero_candidates_by_file_id([]), do: %{}
+
+  def rank_zero_candidates_by_file_id(media_file_ids) do
+    MatchCandidate
+    |> where([c], c.media_file_id in ^media_file_ids and c.rank == 0)
+    |> Repo.all()
+    |> Map.new(fn candidate -> {candidate.media_file_id, candidate} end)
+  end
+
+  @doc """
   Lists the cached match candidates for a media file, best first.
   """
   @spec list_match_candidates(binary()) :: [MatchCandidate.t()]

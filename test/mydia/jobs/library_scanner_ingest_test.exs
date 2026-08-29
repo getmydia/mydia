@@ -1,8 +1,10 @@
 defmodule Mydia.Jobs.LibraryScannerIngestTest do
   @moduledoc """
-  Pins the contract between the scheduled scan and `FileIngest`: an external
-  provider match must never create a `MediaItem` from the cron scan, and it
-  must leave a cached candidate behind so the import inbox can offer it.
+  Pins the contract between the scheduled scan and `FileIngest`: on a library
+  that has not opted into auto-import, an external provider match must never
+  create a `MediaItem` from the cron scan, and it must leave a cached candidate
+  behind so the import inbox can offer it. `FileIngest.policy_for/2` is what
+  decides which libraries those are.
 
   This exercises `FileIngest.ingest/3` directly with `policy: :local_only`,
   which is exactly what `Jobs.LibraryScanner.match_file_to_existing_items/4`
@@ -107,33 +109,64 @@ defmodule Mydia.Jobs.LibraryScannerIngestTest do
     end
   end
 
-  describe "scan_result_from_ingest/1" do
-    test "maps a link to the enriched contract" do
-      assert LibraryScanner.scan_result_from_ingest({:linked, %Mydia.Media.MediaItem{}}) ==
+  describe "auto_linked?/2" do
+    test "an external match under :create_items is a link auto-import caused" do
+      assert LibraryScanner.auto_linked?(:create_items, %{from_local_db: false})
+    end
+
+    test "a local match under :create_items would have linked anyway" do
+      refute LibraryScanner.auto_linked?(:create_items, %{from_local_db: true})
+    end
+
+    test "a match missing the key is treated as external" do
+      assert LibraryScanner.auto_linked?(:create_items, %{})
+    end
+
+    test "nothing under :local_only counts, whatever the match says" do
+      refute LibraryScanner.auto_linked?(:local_only, %{from_local_db: false})
+      refute LibraryScanner.auto_linked?(:local_only, %{from_local_db: true})
+    end
+  end
+
+  describe "scan_result_from_ingest/2" do
+    test "maps a local link to the enriched contract" do
+      assert LibraryScanner.scan_result_from_ingest({:linked, %Mydia.Media.MediaItem{}}, false) ==
                {:ok, :enriched}
     end
 
+    test "maps an auto-import link to its own atom so it can be counted" do
+      assert LibraryScanner.scan_result_from_ingest({:linked, %Mydia.Media.MediaItem{}}, true) ==
+               {:ok, :auto_linked}
+    end
+
     test "maps a cached candidate to :no_local_match" do
-      assert LibraryScanner.scan_result_from_ingest({:candidate, %Library.MatchCandidate{}}) ==
+      assert LibraryScanner.scan_result_from_ingest(
+               {:candidate, %Library.MatchCandidate{}},
+               false
+             ) ==
                {:error, :no_local_match}
     end
 
     test "maps a library type mismatch to its own atom, ahead of the generic error clause" do
       assert LibraryScanner.scan_result_from_ingest(
-               {:error, {:library_type_mismatch, "series file in a movies-only library"}}
+               {:error, {:library_type_mismatch, "series file in a movies-only library"}},
+               false
              ) == {:error, :library_type_mismatch}
     end
 
     test "maps any other error to :enrichment_failed" do
-      assert LibraryScanner.scan_result_from_ingest({:error, :some_other_reason}) ==
+      assert LibraryScanner.scan_result_from_ingest({:error, :some_other_reason}, false) ==
                {:error, :enrichment_failed}
 
-      assert LibraryScanner.scan_result_from_ingest({:error, {:metadata_fetch_failed, :timeout}}) ==
-               {:error, :enrichment_failed}
+      assert LibraryScanner.scan_result_from_ingest(
+               {:error, {:metadata_fetch_failed, :timeout}},
+               false
+             ) == {:error, :enrichment_failed}
     end
 
     test "maps :no_match to :no_matches_found" do
-      assert LibraryScanner.scan_result_from_ingest(:no_match) == {:error, :no_matches_found}
+      assert LibraryScanner.scan_result_from_ingest(:no_match, false) ==
+               {:error, :no_matches_found}
     end
   end
 end

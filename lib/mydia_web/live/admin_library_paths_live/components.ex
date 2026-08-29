@@ -202,7 +202,9 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
                     <.icon name="hero-arrow-down-tray" class="w-4 h-4 text-base-content/60" />
                     <div>
                       <span class="text-sm font-medium">Auto Import</span>
-                      <p class="text-xs text-base-content/50">Import new files automatically</p>
+                      <p class="text-xs text-base-content/50">
+                        Let background scans import confident matches
+                      </p>
                     </div>
                   </div>
                   <input type="hidden" name={@library_path_form[:auto_import].name} value="false" />

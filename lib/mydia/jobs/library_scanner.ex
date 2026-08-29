@@ -33,9 +33,13 @@ defmodule Mydia.Jobs.LibraryScanner do
   alias Mydia.Library.{
     FileIngest,
     MetadataMatcher,
+    OrphanReenricher,
     SampleDetector,
     ScanSummary
   }
+
+  alias Mydia.ImportGroups
+  alias Mydia.Settings.LibraryPath
 
   alias Mydia.Library.ReleaseParser, as: FileParser
 
@@ -231,7 +235,12 @@ defmodule Mydia.Jobs.LibraryScanner do
              video_extensions: extensions
            ) do
       summary = summarize(process_scan_result(library_path, scan_result))
-      if reconcile_sidecars?(summary), do: reconcile_sidecars(library_path)
+
+      if reconcile_sidecars?(summary) do
+        reconcile_sidecars(library_path)
+        rebuild_import_groups(library_path)
+      end
+
       summary
     else
       {:error, :not_found} ->
@@ -287,6 +296,7 @@ defmodule Mydia.Jobs.LibraryScanner do
        new_files: length(changes.new_files),
        modified_files: length(changes.modified_files),
        deleted_files: length(changes.deleted_files),
+       auto_linked: details |> Map.get(:cleanup_stats, %{}) |> Map.get(:auto_linked, 0),
        details: details
      }}
   end
@@ -656,6 +666,14 @@ defmodule Mydia.Jobs.LibraryScanner do
         result == {:error, :library_type_mismatch}
       end)
 
+    # Both populations, deliberately. The new-file stream alone would report
+    # zero on a library whose backlog is all existing orphans, which is the
+    # shape this change exists to fix.
+    new_file_auto_linked =
+      Enum.count(enrichment_results, fn {_file, result} ->
+        result == {:ok, :auto_linked}
+      end)
+
     # Initialize tracking for robust cleanup operations
     cleanup_stats = %{
       orphaned_files_fixed: 0,
@@ -664,11 +682,12 @@ defmodule Mydia.Jobs.LibraryScanner do
       invalid_paths_removed: 0,
       type_mismatches_detected: type_mismatch_count,
       movies_in_series_libs: 0,
-      tv_in_movies_libs: 0
+      tv_in_movies_libs: 0,
+      auto_linked: 0
     }
 
     # 1. Re-enrich completely orphaned files (no media_item_id and no episode_id)
-    # Skip extras/samples/trailers — they should remain orphaned
+    # Skip extras/samples/trailers, they should remain orphaned.
     completely_orphaned =
       existing_files
       |> Enum.filter(fn file ->
@@ -682,34 +701,28 @@ defmodule Mydia.Jobs.LibraryScanner do
           SampleDetector.excluded?(SampleDetector.detect(abs_path))
       end)
 
-    cleanup_stats =
-      if completely_orphaned != [] do
-        Logger.info("Re-enriching completely orphaned files",
-          count: length(completely_orphaned)
-        )
+    file_info_by_path =
+      Map.new(result.scan_result.files, fn file_info -> {file_info.path, file_info} end)
 
-        fixed_count =
-          Enum.count(completely_orphaned, fn media_file ->
-            # Preload library_path association for path resolution
-            media_file = Mydia.Repo.preload(media_file, :library_path)
-            absolute_path = Mydia.Library.MediaFile.absolute_path(media_file)
+    orphan_stats =
+      OrphanReenricher.run(library_path, completely_orphaned, file_info_by_path,
+        reenrich: &process_media_file/3,
+        config: metadata_config
+      )
 
-            file_info =
-              Enum.find(result.scan_result.files, fn f -> f.path == absolute_path end)
+    cleanup_stats = Map.put(cleanup_stats, :orphaned_files_fixed, orphan_stats.fixed)
 
-            if file_info do
-              Logger.debug("Re-enriching orphaned file", path: absolute_path)
-              process_media_file(media_file, file_info, metadata_config)
-              true
-            else
-              false
-            end
-          end)
+    # Kept separate from cleanup_stats so Task 5's auto_linked total can add
+    # the new-file stream's count to this one. Galactica's orphans are all
+    # existing files, so a total taken from the new-file stream alone would
+    # report zero while items were being created.
+    orphan_auto_linked = orphan_stats.auto_linked
 
-        Map.put(cleanup_stats, :orphaned_files_fixed, fixed_count)
-      else
-        cleanup_stats
-      end
+    # Both populations, summed only now that both are computed:
+    # new_file_auto_linked comes from the new-file stream above, and
+    # orphan_auto_linked from the orphan branch that just ran.
+    auto_linked_count = new_file_auto_linked + orphan_auto_linked
+    cleanup_stats = Map.put(cleanup_stats, :auto_linked, auto_linked_count)
 
     # 2. Fix orphaned TV show files (have media_item_id for TV show but no episode_id)
     # Preload media_item to check type
@@ -859,6 +872,7 @@ defmodule Mydia.Jobs.LibraryScanner do
          associations_updated: Map.get(cleanup_stats, :associations_updated, 0),
          invalid_paths_removed: Map.get(cleanup_stats, :invalid_paths_removed, 0),
          type_mismatches_detected: Map.get(cleanup_stats, :type_mismatches_detected, 0),
+         auto_linked: Map.get(cleanup_stats, :auto_linked, 0),
          movies_in_series_libs: Map.get(cleanup_stats, :movies_in_series_libs, 0),
          tv_in_movies_libs: Map.get(cleanup_stats, :tv_in_movies_libs, 0)
        }}
@@ -880,6 +894,56 @@ defmodule Mydia.Jobs.LibraryScanner do
 
   defp updatable_library_path?(_), do: true
 
+  @doc false
+  # Public so the rebuild can be tested directly. Its caller `scan_library_path/1`
+  # is private and the entry point `perform_job/1` is tagged `:external` and
+  # excluded from the default suite.
+  #
+  # The scan caches matches as `MatchCandidate` rows, but `/import` renders
+  # `ImportGroup` rows, and nothing built the second from the first unless a
+  # human started an import run. That is why a library could hold hundreds of
+  # matched orphans while the inbox said there was nothing to review.
+  #
+  # Skipped while a run is active. `ImportGroups.write_group/4` strips
+  # `:status` from an existing row but not `:import_run_id`, so rebuilding with
+  # no run id would detach the running import's own groups from it. The run
+  # rebuilds them itself when it finishes, so yielding costs nothing.
+  #
+  # A failure here must not fail the scan either: by the time this runs,
+  # process_scan_result/2 has already committed every file change and the
+  # caller already reports the scan a success, so letting an exception here
+  # crash the whole Oban job would report a false failure over work that
+  # already landed. upsert_for_library/2 is idempotent, so the next scan (or
+  # the import run this raced against, once it finishes) redoes any group
+  # this attempt missed, for free. Concretely, `write_group/4` hard-matches
+  # `{:ok, group} = Repo.insert_or_update()`, and the active-run check above
+  # is check-then-act with a real window: if this rebuild races a freshly
+  # started import run's own upsert on the same new cluster_key, the loser
+  # hits a genuine unique-constraint collision and that match raises.
+  @spec rebuild_import_groups(LibraryPath.t()) ::
+          {:ok, %{groups: non_neg_integer(), files: non_neg_integer()}} | :skipped | :error
+  def rebuild_import_groups(library_path) do
+    case Library.active_import_run(library_path.id) do
+      nil ->
+        ImportGroups.upsert_for_library(library_path)
+
+      _run ->
+        Logger.debug("Skipping import group rebuild, a run is active",
+          library_path_id: library_path.id
+        )
+
+        :skipped
+    end
+  rescue
+    error ->
+      Logger.warning("Import group rebuild failed",
+        library_path_id: library_path.id,
+        error: Exception.format(:error, error, __STACKTRACE__)
+      )
+
+      :error
+  end
+
   defp process_media_file(media_file, file_info, metadata_config) do
     Logger.debug("Processing media file for metadata", path: file_info.path)
 
@@ -895,7 +959,7 @@ defmodule Mydia.Jobs.LibraryScanner do
     case validate_file_type_for_library(parsed.type, library_path, file_info.path) do
       :ok ->
         # Type is compatible, proceed with matching
-        match_file_to_existing_items(media_file, file_info, metadata_config, parsed)
+        match_file_to_existing_items(media_file, file_info, metadata_config, library_path)
 
       {:error, _reason} = error ->
         # Type mismatch, skip processing
@@ -949,9 +1013,9 @@ defmodule Mydia.Jobs.LibraryScanner do
     end
   end
 
-  defp match_file_to_existing_items(media_file, file_info, metadata_config, _parsed) do
+  defp match_file_to_existing_items(media_file, file_info, metadata_config, library_path) do
     # Use the library's configured TV metadata source for new matches.
-    provider = media_file.library_path && media_file.library_path.tv_metadata_source
+    provider = library_path && library_path.tv_metadata_source
 
     # Try to match the file to metadata
     case MetadataMatcher.match_file(file_info.path,
@@ -967,17 +1031,20 @@ defmodule Mydia.Jobs.LibraryScanner do
           from_local_db: Map.get(match_result, :from_local_db, false)
         )
 
-        # :local_only is what keeps the scheduled scan from inventing items.
-        # An external match is cached as a candidate and the file stays
-        # orphaned for the import inbox to offer. See Library.FileIngest.
+        # The policy is the auto-import gate. It stays `:local_only` for every
+        # library that has not opted in, which is what keeps a scheduled scan
+        # from inventing items behind the user: an external match is cached as
+        # a candidate and the file stays orphaned for the inbox to offer.
+        policy = FileIngest.policy_for(library_path, media_file)
+
         ingest_result =
           FileIngest.ingest(media_file, match_result,
-            policy: :local_only,
+            policy: policy,
             config: metadata_config
           )
 
         log_ingest_result(ingest_result, match_result, file_info)
-        scan_result_from_ingest(ingest_result)
+        scan_result_from_ingest(ingest_result, auto_linked?(policy, match_result))
 
       {:error, :unknown_media_type} ->
         Logger.debug("Could not determine media type",
@@ -1044,22 +1111,38 @@ defmodule Mydia.Jobs.LibraryScanner do
   defp log_ingest_result(_ingest_result, _match_result, _file_info), do: :ok
 
   @doc false
-  # Public only so the mapping from a `FileIngest.ingest/3` result to the
-  # scanner's legacy return contract can be tested directly. The caller,
-  # `match_file_to_existing_items/4`, is private and its only entry point
-  # (`perform_job/1`) is tagged `:external` and excluded from the default
-  # test suite, so without this seam the translation — including the
-  # ordering that makes `{:library_type_mismatch, _}` take priority over the
-  # generic `{:error, _}` catch-all — would have zero coverage.
-  @spec scan_result_from_ingest(FileIngest.result()) :: {:ok, :enriched} | {:error, atom()}
-  def scan_result_from_ingest({:linked, _media_item}), do: {:ok, :enriched}
-  def scan_result_from_ingest({:candidate, _candidate}), do: {:error, :no_local_match}
+  # True only for a link that `:local_only` would not have made: the library
+  # opted into auto-import and the match came from an external provider. A
+  # local-database link would have happened on any scan, so counting it would
+  # overstate what auto-import actually did.
+  @spec auto_linked?(FileIngest.policy(), map()) :: boolean()
+  def auto_linked?(:create_items, match_result),
+    do: not Map.get(match_result, :from_local_db, false)
 
-  def scan_result_from_ingest({:error, {:library_type_mismatch, _message}}),
+  def auto_linked?(:local_only, _match_result), do: false
+
+  @doc false
+  # Public only so the mapping from a `FileIngest.ingest/3` result plus its
+  # auto-import classification to the scanner's legacy return contract can be
+  # tested directly. The caller, `match_file_to_existing_items/4`, is private
+  # and its only entry point (`perform_job/1`) is tagged `:external` and
+  # excluded from the default test suite, so without this seam the
+  # translation, including the ordering that makes `{:library_type_mismatch,
+  # _}` take priority over the generic `{:error, _}` catch-all, would have
+  # zero coverage.
+  @spec scan_result_from_ingest(FileIngest.result(), boolean()) ::
+          {:ok, :enriched | :auto_linked} | {:error, atom()}
+  def scan_result_from_ingest({:linked, _media_item}, true), do: {:ok, :auto_linked}
+  def scan_result_from_ingest({:linked, _media_item}, false), do: {:ok, :enriched}
+
+  def scan_result_from_ingest({:candidate, _candidate}, _auto_linked?),
+    do: {:error, :no_local_match}
+
+  def scan_result_from_ingest({:error, {:library_type_mismatch, _message}}, _auto_linked?),
     do: {:error, :library_type_mismatch}
 
-  def scan_result_from_ingest({:error, _reason}), do: {:error, :enrichment_failed}
-  def scan_result_from_ingest(:no_match), do: {:error, :no_matches_found}
+  def scan_result_from_ingest({:error, _reason}, _auto_linked?), do: {:error, :enrichment_failed}
+  def scan_result_from_ingest(:no_match, _auto_linked?), do: {:error, :no_matches_found}
 
   # Detects type mismatches in existing files based on library path type
   defp detect_type_mismatches(existing_files, library_path, mismatch_type) do
