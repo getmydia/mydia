@@ -367,12 +367,18 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
           source: Settings.config_source("URL_HOST", "server.url_host", all_db_settings)
         }
       ],
+      # Read-only: Mydia.Repo reads its pool_size and database_path straight
+      # from DATABASE_PATH/POOL_SIZE at boot (config/runtime.exs), never from
+      # this config layer. Mydia.Config.Schema.Paths deliberately excludes the
+      # `database` section, so a row here is rejected on write and would be
+      # inert even if it were allowed to save. Shown for visibility only.
       "Database" => [
         %{
           key: "database.path",
           label: "Database Path",
           type: :string,
           value: config.database.path,
+          editable: false,
           source: Settings.config_source("DATABASE_PATH", "database.path", all_db_settings)
         },
         %{
@@ -380,6 +386,7 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
           label: "Pool Size",
           type: :integer,
           value: config.database.pool_size,
+          editable: false,
           source: Settings.config_source("POOL_SIZE", "database.pool_size", all_db_settings)
         }
       ],

@@ -127,6 +127,21 @@ defmodule MydiaWeb.AdminSettingsLiveTest do
       refute has_element?(view, "input[phx-value-key='flaresolverr.url']")
     end
 
+    test "database settings render read-only, never as an editable input", %{view: view} do
+      # Mydia.Repo reads pool_size and database_path straight from
+      # DATABASE_PATH/POOL_SIZE at boot (config/runtime.exs); this config
+      # layer never reaches it. Mydia.Config.Schema.Paths deliberately
+      # excludes the `database` section, so a row written from this page is
+      # now rejected on write. Neither field is a per-setting :env source
+      # here (DATABASE_PATH/POOL_SIZE are unset in test), so without the
+      # explicit `editable: false` override these would render as editable
+      # text inputs and blurring one would surface "Invalid setting value".
+      refute has_element?(view, "input[phx-value-key='database.path']")
+      refute has_element?(view, "input[phx-value-key='database.pool_size']")
+      assert has_element?(view, "div.text-xs.font-mono.truncate", "database.path")
+      assert has_element?(view, "div.text-xs.font-mono.truncate", "database.pool_size")
+    end
+
     test "offers the transcode height ceiling", %{view: view} do
       # The escape hatch for an operator whose hardware cannot encode a 4K
       # file in realtime. It shipped once as a compile-time key in
