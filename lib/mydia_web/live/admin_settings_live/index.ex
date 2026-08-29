@@ -230,12 +230,41 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
         {:noreply, socket}
 
       %{setting: setting} ->
-        {:ok, _} = Settings.delete_config_setting(setting)
-        {:noreply, socket |> load_data() |> put_flash(:info, "Removed #{setting.key}")}
+        delete_invalid_config_setting(socket, setting)
     end
   end
 
   ## Private Helpers
+
+  # Mydia.Repo only wraps insert/update/insert_or_update (see its module doc),
+  # so this delete runs through stock Ecto. A row that is already gone by the
+  # time the delete reaches the database (an operator double-clicking Remove,
+  # or two admins clearing the same row) does not come back as
+  # {:error, changeset}: Ecto.Repo.delete/1 raises Ecto.StaleEntryError for a
+  # stale/missing row unless the caller passes :stale_error_field, which this
+  # call site does not. Since removing the row is the whole point of this
+  # handler, an already-absent row already satisfies the operator's intent,
+  # so it is treated the same as a successful delete rather than surfaced as
+  # an error.
+  defp delete_invalid_config_setting(socket, setting) do
+    case Settings.delete_config_setting(setting) do
+      {:ok, _} ->
+        {:noreply, socket |> load_data() |> put_flash(:info, "Removed #{setting.key}")}
+
+      {:error, changeset} ->
+        MydiaLogger.log_error(:liveview, "Failed to delete invalid config setting",
+          error: changeset,
+          error_details: inspect(changeset, pretty: true),
+          operation: :delete_invalid_config_setting,
+          setting_key: setting.key
+        )
+
+        {:noreply, put_flash(socket, :error, "Failed to remove #{setting.key}")}
+    end
+  rescue
+    Ecto.StaleEntryError ->
+      {:noreply, socket |> load_data() |> put_flash(:info, "Removed #{setting.key}")}
+  end
 
   # Validates, persists, and reloads a single key. Shared by the typed-input
   # path above; the toggle and select paths predate it and still inline the

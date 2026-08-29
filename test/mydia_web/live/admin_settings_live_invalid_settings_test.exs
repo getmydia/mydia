@@ -76,4 +76,25 @@ defmodule MydiaWeb.AdminSettingsLiveInvalidSettingsTest do
     refute has_element?(view, "#invalid-config-settings")
     refute Repo.get(ConfigSetting, setting.id)
   end
+
+  test "removing a row already deleted out from under the LiveView does not crash", %{
+    conn: conn
+  } do
+    setting = Repo.insert!(%ConfigSetting{key: "server.port", value: "abc", category: :server})
+
+    {:ok, view, _html} = live(conn, ~p"/admin/config/settings")
+
+    # Simulate a double-click, or a second admin clearing the same row first:
+    # the row is gone from the database, but the LiveView's assigns still
+    # hold it from mount, so the click still reaches the delete handler.
+    Repo.delete!(setting)
+
+    view
+    |> element("#delete-invalid-config-setting-server-port")
+    |> render_click()
+
+    assert Process.alive?(view.pid)
+    refute has_element?(view, "#invalid-config-settings")
+    refute Repo.get(ConfigSetting, setting.id)
+  end
 end
