@@ -409,4 +409,74 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
       assert has_element?(view, "#flaresolverr-form")
     end
   end
+
+  describe "FlareSolverr row and client agreement" do
+    setup %{conn: conn, token: token} do
+      start_supervised!(Mydia.Indexers.Health)
+      Mydia.Indexers.register_adapters()
+
+      original = Application.get_env(:mydia, :runtime_config)
+      on_exit(fn -> Application.put_env(:mydia, :runtime_config, original) end)
+
+      conn =
+        conn
+        |> init_test_session(%{})
+        |> put_session(:guardian_default_token, token)
+        |> put_req_header("authorization", "Bearer #{token}")
+
+      %{conn: conn}
+    end
+
+    test "the Enabled badge reflects the merged config, not the raw rows", %{conn: conn} do
+      # A row saying enabled, with a cached config that has not been reloaded,
+      # is exactly the state that produced "badge says Enabled, Test says
+      # disabled". Both readers must now answer the same way.
+      {:ok, _} =
+        Mydia.Settings.upsert_config_setting(%{
+          key: "flaresolverr.enabled",
+          value: "true",
+          category: :flaresolverr
+        })
+
+      {:ok, _} =
+        Mydia.Settings.upsert_config_setting(%{
+          key: "flaresolverr.url",
+          value: "http://fs.test:8191",
+          category: :flaresolverr
+        })
+
+      stale = Mydia.Config.Loader.load!(sources: [:yaml, :env])
+      Application.put_env(:mydia, :runtime_config, stale)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+
+      refute Mydia.Indexers.FlareSolverr.enabled?()
+
+      assert has_element?(view, "#flaresolverr-panel .badge-ghost", "Disabled"),
+             "the badge must agree with FlareSolverr.enabled?/0"
+    end
+
+    test "the Enabled badge turns on once the merged config carries the rows", %{conn: conn} do
+      {:ok, _} =
+        Mydia.Settings.upsert_config_setting(%{
+          key: "flaresolverr.enabled",
+          value: "true",
+          category: :flaresolverr
+        })
+
+      {:ok, _} =
+        Mydia.Settings.upsert_config_setting(%{
+          key: "flaresolverr.url",
+          value: "http://fs.test:8191",
+          category: :flaresolverr
+        })
+
+      assert {:ok, _} = Mydia.Config.Bootstrap.run()
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+
+      assert Mydia.Indexers.FlareSolverr.enabled?()
+      assert has_element?(view, "#flaresolverr-panel .badge-success", "Enabled")
+    end
+  end
 end

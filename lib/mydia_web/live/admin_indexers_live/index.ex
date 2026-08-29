@@ -988,45 +988,31 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
     assign(socket, :flaresolverr, summary)
   end
 
-  # Returns `{values, sources}` for the four flaresolverr.* keys. Display values
-  # come from the DB side when a row exists (so a save reflects without an app
-  # restart); env- and default-sourced fields use the effective runtime config.
+  # Returns `{values, sources}` for the four flaresolverr.* keys.
+  #
+  # Values come only from the merged runtime config, which is the same thing
+  # `Mydia.Indexers.FlareSolverr.get_config/0` reads. `all_db` is consulted to
+  # label a field ENV / DB / Default and for nothing else.
+  #
+  # A second reader here is precisely how the row's Enabled badge came to
+  # contradict the client's "FlareSolverr is disabled": the badge read the
+  # ConfigSetting rows while the client read the cached merged config, and the
+  # two disagreed for as long as the database layer was being dropped at boot.
+  # Reading rows for values again would reintroduce that class of bug even
+  # though the underlying boot defect is fixed.
   defp flaresolverr_values_and_sources do
     config = Settings.get_runtime_config()
     config = if is_struct(config), do: config, else: Mydia.Config.Schema.defaults()
     fs = config.flaresolverr || %Mydia.Config.Schema.FlareSolverr{}
     all_db = Settings.list_config_settings() |> Map.new(&{&1.key, &1})
 
-    Enum.reduce(@flaresolverr_specs, {%{}, %{}}, fn {field, env_var, key, type},
+    Enum.reduce(@flaresolverr_specs, {%{}, %{}}, fn {field, env_var, key, _type},
                                                     {values, sources} ->
       source = Settings.config_source(env_var, key, all_db)
-      fallback = Map.get(fs, field)
 
-      value =
-        case source do
-          :database -> parse_flaresolverr_value(Map.get(all_db, key).value, type, fallback)
-          _ -> fallback
-        end
-
-      {Map.put(values, field, value), Map.put(sources, key, source)}
+      {Map.put(values, field, Map.get(fs, field)), Map.put(sources, key, source)}
     end)
   end
-
-  # A missing/NULL stored value falls back to the schema default rather than
-  # coercing to a misleading empty string (or "nil") in the UI.
-  defp parse_flaresolverr_value(nil, _type, fallback), do: fallback
-
-  defp parse_flaresolverr_value(raw, :boolean, _fallback),
-    do: Settings.parse_setting_boolean(raw)
-
-  defp parse_flaresolverr_value(raw, :integer, fallback) do
-    case Integer.parse(to_string(raw)) do
-      {int, _} -> int
-      :error -> fallback
-    end
-  end
-
-  defp parse_flaresolverr_value(raw, :string, _fallback), do: to_string(raw)
 
   defp flaresolverr_changeset(params, sources \\ %{}) do
     changeset =
