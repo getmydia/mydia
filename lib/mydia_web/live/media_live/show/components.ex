@@ -879,11 +879,14 @@ defmodule MydiaWeb.MediaLive.Show.Components do
             </summary>
             <ul class="menu bg-base-100 rounded-box p-0 mt-2">
               <li :for={file <- @extras} id={"extra-#{file.id}"}>
-                <div class="flex items-center justify-between gap-4 p-4 rounded-none">
-                  <div class="flex-1 min-w-0 flex flex-col gap-1">
-                    <p class="text-sm font-mono break-all">
-                      {Mydia.Library.MediaFile.display_path(file) ||
-                        Mydia.Library.MediaFile.display_name(file)}
+                <div class="flex flex-col gap-2 p-4 rounded-none sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                  <div class="min-w-0 sm:flex-1 flex flex-col gap-1">
+                    <p
+                      id={"extra-name-#{file.id}"}
+                      class="text-sm font-mono truncate"
+                      title={Mydia.Library.MediaFile.display_path(file)}
+                    >
+                      {Mydia.Library.MediaFile.display_name(file)}
                     </p>
                     <div class="flex flex-wrap gap-2 text-xs text-base-content/60">
                       <span class="badge badge-ghost badge-sm">{file.extra_kind}</span>
@@ -896,7 +899,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                   <button
                     id={"promote-#{file.id}"}
                     type="button"
-                    class="btn btn-ghost btn-sm"
+                    class="btn btn-ghost btn-sm self-end sm:self-auto"
                     title="This is a version, not an extra"
                     phx-click="promote_to_version"
                     phx-value-id={file.id}

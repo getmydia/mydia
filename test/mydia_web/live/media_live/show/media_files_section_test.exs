@@ -209,6 +209,26 @@ defmodule MydiaWeb.MediaLive.Show.MediaFilesSectionTest do
 
       assert meta =~ "Unknown"
     end
+
+    test "labels an extra with its basename and keeps the path on title" do
+      extra = %{
+        file("mf-x", "The Matrix (1999)/Featurettes/Making.Of.mkv")
+        | extra_kind: :featurette,
+          extra_source: :filename
+      }
+
+      # Both are Ecto.Enum fields, so production rows hold atoms. A bare struct
+      # does not validate, so string values would render fine here and hide the
+      # mismatch. Valid extra_kind values come from MediaFile.extra_kinds/0;
+      # extra_source is one of :folder, :filename, :duration, :operator.
+
+      html = section_html(%{media_files: [extra], episodes: []})
+
+      assert element_text(html, "extra-name-mf-x") == "Making.Of.mkv"
+
+      assert element_title(html, "extra-name-mf-x") ==
+               "/media/The Matrix (1999)/Featurettes/Making.Of.mkv"
+    end
   end
 
   describe "refresh_all_file_metadata/2" do
