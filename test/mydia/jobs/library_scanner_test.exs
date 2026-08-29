@@ -144,4 +144,17 @@ defmodule Mydia.Jobs.LibraryScannerTest do
     on_exit(fn -> File.rm_rf(path) end)
     path
   end
+
+  describe "ScanSummary auto_linked" do
+    test "defaults to zero so a scan that imported nothing reports nothing" do
+      assert %ScanSummary{}.auto_linked == 0
+    end
+
+    test "carries a count independent of the new-file count" do
+      summary = %ScanSummary{new_files: 5, auto_linked: 2}
+
+      assert summary.auto_linked == 2
+      assert summary.new_files == 5
+    end
+  end
 end

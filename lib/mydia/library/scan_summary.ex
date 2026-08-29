@@ -9,14 +9,20 @@ defmodule Mydia.Library.ScanSummary do
 
   `details` carries the processor's own return value unchanged, so data such as
   `new_media_files` stays reachable by the code that already relies on it.
+
+  `auto_linked` counts files this scan linked only because the library has
+  `auto_import` enabled, across both the new-file stream and the orphan
+  re-enrichment branch. It is a subset of the files the scan touched, not a
+  separate kind of change.
   """
 
   @type t :: %__MODULE__{
           new_files: non_neg_integer(),
           modified_files: non_neg_integer(),
           deleted_files: non_neg_integer(),
+          auto_linked: non_neg_integer(),
           details: map()
         }
 
-  defstruct new_files: 0, modified_files: 0, deleted_files: 0, details: %{}
+  defstruct new_files: 0, modified_files: 0, deleted_files: 0, auto_linked: 0, details: %{}
 end
