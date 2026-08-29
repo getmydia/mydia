@@ -913,7 +913,17 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
       end)
 
       params = %{query_params: %{}, headers: [], method: :get}
-      user_config = %{cookies: [%{"domain" => ".example.com"}, 42]}
+      # Decoded JSON can put a nested object or a number in either field, and
+      # interpolating one would raise the error normalization exists to prevent.
+      user_config = %{
+        cookies: [
+          %{"domain" => ".example.com"},
+          42,
+          %{"name" => %{"nested" => true}, "value" => "x"},
+          %{"name" => "n", "value" => ["a", "b"]},
+          %{"name" => 7, "value" => 9}
+        ]
+      }
 
       assert {:ok, _response} =
                CardigannSearchEngine.execute_http_request(

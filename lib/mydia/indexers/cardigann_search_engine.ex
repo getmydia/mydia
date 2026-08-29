@@ -906,7 +906,10 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     name = cookie["name"] || Map.get(cookie, :name)
     value = cookie["value"] || Map.get(cookie, :value)
 
-    if name && value, do: "#{name}=#{value}", else: nil
+    # Both halves have to be strings. These rows are decoded JSON, so a nested
+    # object or array can land in either field, and interpolating one raises the
+    # same Protocol.UndefinedError this function exists to prevent.
+    if is_binary(name) and is_binary(value), do: name <> "=" <> value, else: nil
   end
 
   defp normalize_cookie(_cookie), do: nil
