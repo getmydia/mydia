@@ -52,6 +52,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       {:ok, response} = CardigannSearchEngine.execute_search(definition, opts)
   """
 
+  alias Mydia.Indexers.Cardigann.CredentialScope
   alias Mydia.Indexers.Cardigann.Links
   alias Mydia.Indexers.CardigannDefinition.Parsed
   alias Mydia.Indexers.CardigannTemplate
@@ -178,7 +179,14 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
         if should_use_flaresolverr?(flaresolverr_opts) do
           execute_with_flaresolverr(definition, url, request_params, user_config)
         else
-          execute_direct_request(definition, url, request_params, user_config, flaresolverr_opts)
+          execute_direct_request(
+            definition,
+            url,
+            request_params,
+            user_config,
+            flaresolverr_opts,
+            Keyword.get(opts, :config, %{})
+          )
         end
 
       cond do
@@ -229,8 +237,15 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   defp retryable_failure?(_), do: false
 
   # Execute request directly and detect Cloudflare challenges
-  defp execute_direct_request(definition, url, request_params, user_config, flaresolverr_opts) do
-    case execute_http_request(definition, url, request_params, user_config) do
+  defp execute_direct_request(
+         definition,
+         url,
+         request_params,
+         user_config,
+         flaresolverr_opts,
+         config
+       ) do
+    case execute_http_request(definition, url, request_params, user_config, config) do
       {:ok, response} ->
         if cloudflare_challenge?(response) do
           handle_cloudflare_challenge(
@@ -528,18 +543,18 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   ## Examples
 
       iex> params = %{query_params: %{}, headers: [], method: :get}
-      iex> {:ok, response} = execute_http_request(definition, url, params, %{})
+      iex> {:ok, response} = execute_http_request(definition, url, params, %{}, %{})
       iex> response.status
       200
   """
-  @spec execute_http_request(Parsed.t(), String.t(), map(), map()) ::
+  @spec execute_http_request(Parsed.t(), String.t(), map(), map(), map()) ::
           {:ok, http_response()} | {:error, Error.t()}
-  def execute_http_request(%Parsed{} = definition, url, request_params, user_config) do
+  def execute_http_request(%Parsed{} = definition, url, request_params, user_config, config) do
     # Apply rate limiting if configured
     apply_rate_limit(definition)
 
     # Build request options
-    req_opts = build_request_options(definition, url, request_params, user_config)
+    req_opts = build_request_options(definition, url, request_params, user_config, config)
 
     Logger.debug("Cardigann search request: #{request_params.method} #{url}")
     Logger.debug("Request params: #{inspect(request_params.query_params)}")
@@ -816,7 +831,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     :ok
   end
 
-  defp build_request_options(definition, url, request_params, user_config) do
+  defp build_request_options(definition, url, request_params, user_config, config) do
     # Base options
     base_opts = [
       headers: request_params.headers,
@@ -849,7 +864,12 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     # Add cookies if present in user config
     case Map.get(user_config, :cookies) do
       cookies when is_list(cookies) and cookies != [] ->
-        attach_cookies(opts_with_params, url, cookies)
+        attach_cookies(
+          opts_with_params,
+          url,
+          cookies,
+          CredentialScope.trusted_origins(definition, config)
+        )
 
       _ ->
         opts_with_params
@@ -871,30 +891,47 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   # the honest handling this branch already added: validate_response/1 names the
   # Location, and failover moves on to the next candidate. Redirect following is
   # unaffected for every request without cookies.
-  defp attach_cookies(opts, url, cookies) do
-    if cleartext_url?(url) do
-      Logger.warning(
-        "Cardigann: withholding session cookies from cleartext URL #{inspect(url)}. " <>
-          "Configure an https base URL for this indexer to send credentials."
-      )
-
-      opts
-    else
-      cookie_header =
-        cookies
-        |> Enum.map(&normalize_cookie/1)
-        |> Enum.reject(&is_nil/1)
-        |> Enum.join("; ")
-
-      if cookie_header == "" do
-        opts
-      else
-        existing_headers = Keyword.get(opts, :headers, [])
+  #
+  # A session cookie is scoped to the origins the definition names as its own:
+  # its links, plus any absolute search or login path it renders. A mirror
+  # failover onto a stale legacylinks domain, or a download link parsed out
+  # of a result row, can both name an origin the operator never trusted, and a
+  # download link is remote content rather than shipped YAML. Withhold and
+  # continue, because an anonymous result beats a leaked login.
+  defp attach_cookies(opts, url, cookies, trusted_origins) do
+    cond do
+      cleartext_url?(url) ->
+        Logger.warning(
+          "Cardigann: withholding session cookies from cleartext URL #{inspect(url)}. " <>
+            "Configure an https base URL for this indexer to send credentials."
+        )
 
         opts
-        |> Keyword.put(:headers, [{"Cookie", cookie_header} | existing_headers])
-        |> Keyword.put(:redirect, false)
-      end
+
+      not CredentialScope.allows?(trusted_origins, url) ->
+        Logger.warning(
+          "Cardigann: withholding session cookies from #{inspect(url)}, which is not " <>
+            "one of this definition's own hosts. Searching anonymously."
+        )
+
+        opts
+
+      true ->
+        cookie_header =
+          cookies
+          |> Enum.map(&normalize_cookie/1)
+          |> Enum.reject(&is_nil/1)
+          |> Enum.join("; ")
+
+        if cookie_header == "" do
+          opts
+        else
+          existing_headers = Keyword.get(opts, :headers, [])
+
+          opts
+          |> Keyword.put(:headers, [{"Cookie", cookie_header} | existing_headers])
+          |> Keyword.put(:redirect, false)
+        end
     end
   end
 

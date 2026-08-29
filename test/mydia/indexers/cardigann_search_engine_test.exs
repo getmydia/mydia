@@ -479,6 +479,7 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
                  definition,
                  "https://httpbin.org/html",
                  params,
+                 %{},
                  %{}
                )
 
@@ -505,6 +506,7 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
                  definition_with_short_timeout,
                  "https://httpbin.org/delay/10",
                  params,
+                 %{},
                  %{}
                )
     end
@@ -528,7 +530,8 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
                  definition,
                  "https://invalid-domain-for-testing.example",
                  params,
-                 user_config
+                 user_config,
+                 %{}
                )
     end
   end
@@ -570,6 +573,7 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
         definition,
         "https://invalid-domain.example",
         params,
+        %{},
         %{}
       )
 
@@ -807,7 +811,8 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
                  definition,
                  "https://invalid-domain-for-testing.example",
                  params,
-                 user_config
+                 user_config,
+                 %{}
                )
     end
 
@@ -827,7 +832,8 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
                  definition,
                  "https://invalid-domain-for-testing.example",
                  params,
-                 user_config
+                 user_config,
+                 %{}
                )
     end
 
@@ -845,7 +851,8 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
                  definition,
                  "https://invalid-domain-for-testing.example",
                  params,
-                 user_config
+                 user_config,
+                 %{}
                )
     end
 
@@ -858,6 +865,7 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
         Plug.Conn.resp(conn, 200, "<html></html>")
       end)
 
+      definition = %{definition | links: ["http://localhost:#{bypass.port}"]}
       params = %{query_params: %{}, headers: [], method: :get}
       user_config = %{cookies: ["session=abc123", "token=xyz789"]}
 
@@ -866,7 +874,8 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
                  definition,
                  "http://localhost:#{bypass.port}/search",
                  params,
-                 user_config
+                 user_config,
+                 %{}
                )
 
       assert_receive {:cookie_header, ["session=abc123; token=xyz789"]}
@@ -883,6 +892,7 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
         Plug.Conn.resp(conn, 200, "<html></html>")
       end)
 
+      definition = %{definition | links: ["http://localhost:#{bypass.port}"]}
       params = %{query_params: %{}, headers: [], method: :get}
 
       user_config = %{
@@ -897,7 +907,8 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
                  definition,
                  "http://localhost:#{bypass.port}/search",
                  params,
-                 user_config
+                 user_config,
+                 %{}
                )
 
       assert_receive {:cookie_header, ["cf_clearance=abc123; session=xyz789"]}
@@ -912,6 +923,7 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
         Plug.Conn.resp(conn, 200, "<html></html>")
       end)
 
+      definition = %{definition | links: ["http://localhost:#{bypass.port}"]}
       params = %{query_params: %{}, headers: [], method: :get}
       # Decoded JSON can put a nested object or a number in either field, and
       # interpolating one would raise the error normalization exists to prevent.
@@ -930,7 +942,8 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
                  definition,
                  "http://localhost:#{bypass.port}/search",
                  params,
-                 user_config
+                 user_config,
+                 %{}
                )
 
       assert_receive {:cookie_header, []}
@@ -954,7 +967,12 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
         Plug.Conn.resp(conn, 200, "ok")
       end)
 
-      definition = %{definition | follow_redirect: true}
+      definition = %{
+        definition
+        | follow_redirect: true,
+          links: ["http://localhost:#{origin.port}"]
+      }
+
       params = %{query_params: %{}, headers: [], method: :get}
       user_config = %{cookies: ["session=secret"]}
 
@@ -963,7 +981,8 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
                  definition,
                  "http://localhost:#{origin.port}/search",
                  params,
-                 user_config
+                 user_config,
+                 %{}
                )
 
       assert response.status == 302
@@ -992,6 +1011,7 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
                  definition,
                  "http://localhost:#{origin.port}/search",
                  params,
+                 %{},
                  %{}
                )
 
@@ -1008,11 +1028,179 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
             definition,
             "http://invalid-domain-for-testing.example/search",
             params,
-            user_config
+            user_config,
+            %{}
           )
         end)
 
       assert log =~ "withholding session cookies"
+    end
+  end
+
+  defp scoped_definition(links, paths) do
+    %Parsed{
+      id: "scoped",
+      name: "Scoped",
+      description: "",
+      language: "en-US",
+      type: "private",
+      encoding: "UTF-8",
+      links: links,
+      capabilities: %{modes: %{}},
+      search: %{paths: paths, inputs: %{}, rows: %{selector: "tr"}, fields: %{}},
+      login: nil,
+      download: nil,
+      settings: [],
+      request_delay: nil,
+      follow_redirect: false
+    }
+  end
+
+  describe "credential scope" do
+    test "an absolute search path brings its own host into scope" do
+      site = Bypass.open()
+      api = Bypass.open()
+      test_pid = self()
+
+      Bypass.expect_once(api, "GET", "/q.php", fn conn ->
+        send(test_pid, {:cookie_header, Plug.Conn.get_req_header(conn, "cookie")})
+        Plug.Conn.resp(conn, 200, "<html></html>")
+      end)
+
+      definition =
+        scoped_definition(
+          ["http://localhost:#{site.port}"],
+          [%{path: "http://localhost:#{api.port}/q.php"}]
+        )
+
+      params = %{query_params: %{}, headers: [], method: :get}
+
+      assert {:ok, _response} =
+               CardigannSearchEngine.execute_http_request(
+                 definition,
+                 "http://localhost:#{api.port}/q.php",
+                 params,
+                 %{cookies: ["session=secret"]},
+                 %{}
+               )
+
+      # The api host IS reachable through the definition's own absolute path, so
+      # it is in scope and does receive the session.
+      assert_receive {:cookie_header, ["session=secret"]}
+    end
+
+    test "cookies are withheld from a host the definition never names" do
+      site = Bypass.open()
+      evil = Bypass.open()
+      test_pid = self()
+
+      Bypass.expect_once(evil, "GET", "/steal", fn conn ->
+        send(test_pid, {:cookie_header, Plug.Conn.get_req_header(conn, "cookie")})
+        Plug.Conn.resp(conn, 200, "<html></html>")
+      end)
+
+      definition = scoped_definition(["http://localhost:#{site.port}"], [%{path: "/search"}])
+      params = %{query_params: %{}, headers: [], method: :get}
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert {:ok, _response} =
+                   CardigannSearchEngine.execute_http_request(
+                     definition,
+                     "http://localhost:#{evil.port}/steal",
+                     params,
+                     %{cookies: ["session=secret"]},
+                     %{}
+                   )
+        end)
+
+      assert_receive {:cookie_header, []}
+      assert log =~ "withholding session cookies"
+    end
+
+    test "cookies are withheld from a legacylinks host but the request still goes out" do
+      site = Bypass.open()
+      legacy = Bypass.open()
+      test_pid = self()
+
+      Bypass.expect_once(legacy, "GET", "/search", fn conn ->
+        send(test_pid, {:cookie_header, Plug.Conn.get_req_header(conn, "cookie")})
+        Plug.Conn.resp(conn, 200, "<html><body>ok</body></html>")
+      end)
+
+      definition =
+        %{
+          scoped_definition(["http://localhost:#{site.port}"], [%{path: "/search"}])
+          | legacylinks: ["http://localhost:#{legacy.port}"]
+        }
+
+      params = %{query_params: %{}, headers: [], method: :get}
+
+      assert {:ok, response} =
+               CardigannSearchEngine.execute_http_request(
+                 definition,
+                 "http://localhost:#{legacy.port}/search",
+                 params,
+                 %{cookies: ["session=secret"]},
+                 %{}
+               )
+
+      assert response.status == 200
+      assert_receive {:cookie_header, []}
+    end
+
+    test "cookies are sent to a links host" do
+      site = Bypass.open()
+      test_pid = self()
+
+      Bypass.expect_once(site, "GET", "/search", fn conn ->
+        send(test_pid, {:cookie_header, Plug.Conn.get_req_header(conn, "cookie")})
+        Plug.Conn.resp(conn, 200, "<html></html>")
+      end)
+
+      definition = scoped_definition(["http://localhost:#{site.port}"], [%{path: "/search"}])
+      params = %{query_params: %{}, headers: [], method: :get}
+
+      assert {:ok, _response} =
+               CardigannSearchEngine.execute_http_request(
+                 definition,
+                 "http://localhost:#{site.port}/search",
+                 params,
+                 %{cookies: ["session=secret"]},
+                 %{}
+               )
+
+      assert_receive {:cookie_header, ["session=secret"]}
+    end
+
+    test "an operator-configured apiurl brings its host into scope" do
+      site = Bypass.open()
+      api = Bypass.open()
+      test_pid = self()
+
+      Bypass.expect_once(api, "GET", "/v1/search", fn conn ->
+        send(test_pid, {:cookie_header, Plug.Conn.get_req_header(conn, "cookie")})
+        Plug.Conn.resp(conn, 200, "<html></html>")
+      end)
+
+      definition =
+        scoped_definition(
+          ["http://localhost:#{site.port}"],
+          [%{path: "http://{{ .Config.apiurl }}/v1/search"}]
+        )
+
+      params = %{query_params: %{}, headers: [], method: :get}
+
+      assert {:ok, _response} =
+               CardigannSearchEngine.execute_http_request(
+                 definition,
+                 "http://localhost:#{api.port}/v1/search",
+                 params,
+                 %{cookies: ["session=secret"]},
+                 %{"apiurl" => "localhost:#{api.port}"}
+               )
+
+      assert_receive {:cookie_header, ["session=secret"]}
     end
   end
 

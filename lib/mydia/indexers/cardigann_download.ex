@@ -43,8 +43,10 @@ defmodule Mydia.Indexers.CardigannDownload do
   Resolves `download_url` through the definition's `download:` block.
 
   `user_config` is passed through to the HTTP layer for cookies, and matches
-  the shape `Mydia.Indexers.CardigannSearchEngine.execute_http_request/4`
-  expects.
+  the shape `Mydia.Indexers.CardigannSearchEngine.execute_http_request/5`
+  expects. The operator config map that call takes is passed as an empty map
+  here: the credential scope it derives falls back to the definition's own
+  `links`, which is what a download request resolves against.
 
   Returns `:not_applicable` when the definition has no `download:` block, or has
   one carrying neither a usable `infohash` nor any `selectors`, which lets the
@@ -118,7 +120,7 @@ defmodule Mydia.Indexers.CardigannDownload do
 
       Logger.debug("Cardigann download before-request: #{url} #{inspect(inputs)}")
 
-      CardigannSearchEngine.execute_http_request(definition, url, params, user_config)
+      CardigannSearchEngine.execute_http_request(definition, url, params, user_config, %{})
     end
   end
 
@@ -262,7 +264,7 @@ defmodule Mydia.Indexers.CardigannDownload do
 
   defp fetch(definition, url, user_config) do
     params = %{query_params: %{}, headers: [], method: :get, decode_body: false}
-    CardigannSearchEngine.execute_http_request(definition, url, params, user_config)
+    CardigannSearchEngine.execute_http_request(definition, url, params, user_config, %{})
   end
 
   defp to_body(%{body: body}), do: to_body(body)
