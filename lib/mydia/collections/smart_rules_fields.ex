@@ -7,10 +7,11 @@ defmodule Mydia.Collections.SmartRulesFields do
   """
 
   import Ecto.Query, warn: false
-  alias Mydia.Repo
-  alias Mydia.Media.MediaItem
+  import Mydia.DB, only: [json_extract: 2, json_not_null: 2]
+
   alias Mydia.Media.MediaCategory
-  alias Mydia.DB
+  alias Mydia.Media.MediaItem
+  alias Mydia.Repo
 
   @doc """
   Returns field definitions with their types, operators, and value options.
@@ -175,26 +176,25 @@ defmodule Mydia.Collections.SmartRulesFields do
   Returns distinct genres from all media items in the database.
   """
   def genre_values do
-    # Query distinct genres from metadata JSON
-    json_val = json_extract_dynamic(:metadata, "$.genres")
-
-    query =
-      from(m in MediaItem,
-        select: ^json_val,
-        where: not is_nil(^json_val)
-      )
-
-    Repo.all(query)
-    |> Enum.flat_map(fn json_str ->
-      case Jason.decode(json_str || "[]") do
-        {:ok, genres} when is_list(genres) -> genres
-        _ -> []
-      end
-    end)
+    from(m in MediaItem,
+      select: json_extract(m.metadata, "$.genres"),
+      where: json_not_null(m.metadata, "$.genres")
+    )
+    |> Repo.all()
+    |> Enum.flat_map(&decode_genre_list/1)
     |> Enum.uniq()
     |> Enum.sort()
     |> Enum.map(fn genre -> {genre, genre} end)
   end
+
+  defp decode_genre_list(json_str) when is_binary(json_str) do
+    case Jason.decode(json_str) do
+      {:ok, genres} when is_list(genres) -> Enum.filter(genres, &is_binary/1)
+      _ -> []
+    end
+  end
+
+  defp decode_genre_list(_), do: []
 
   @doc """
   Returns distinct languages from all media items in the database.
@@ -238,17 +238,12 @@ defmodule Mydia.Collections.SmartRulesFields do
       "cn" => "Cantonese"
     }
 
-    # Query distinct languages from metadata JSON
-    json_val = json_extract_dynamic(:metadata, "$.original_language")
-
-    query =
-      from(m in MediaItem,
-        select: ^json_val,
-        where: not is_nil(^json_val),
-        distinct: true
-      )
-
-    Repo.all(query)
+    from(m in MediaItem,
+      select: json_extract(m.metadata, "$.original_language"),
+      where: json_not_null(m.metadata, "$.original_language"),
+      distinct: true
+    )
+    |> Repo.all()
     |> Enum.filter(&is_binary/1)
     |> Enum.sort()
     |> Enum.map(fn code ->
@@ -261,29 +256,14 @@ defmodule Mydia.Collections.SmartRulesFields do
   Returns distinct status values from all media items in the database.
   """
   def status_values do
-    # Query distinct status values from metadata JSON
-    json_val = json_extract_dynamic(:metadata, "$.status")
-
-    query =
-      from(m in MediaItem,
-        select: ^json_val,
-        where: not is_nil(^json_val),
-        distinct: true
-      )
-
-    Repo.all(query)
+    from(m in MediaItem,
+      select: json_extract(m.metadata, "$.status"),
+      where: json_not_null(m.metadata, "$.status"),
+      distinct: true
+    )
+    |> Repo.all()
     |> Enum.filter(&is_binary/1)
     |> Enum.sort()
     |> Enum.map(fn status -> {status, status} end)
-  end
-
-  # Returns a dynamic expression for extracting a JSON value, adapter-aware
-  defp json_extract_dynamic(field_atom, path) do
-    if DB.postgres?() do
-      pg_key = DB.sqlite_path_to_postgres_key(path)
-      dynamic([q], fragment("?::jsonb ->> ?", field(q, ^field_atom), ^pg_key))
-    else
-      dynamic([q], fragment("json_extract(?, ?)", field(q, ^field_atom), ^path))
-    end
   end
 end
