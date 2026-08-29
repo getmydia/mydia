@@ -154,6 +154,51 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
 
       assert message =~ "not found"
     end
+
+    # Regression: test_indexer_reachable/3 used to probe with only
+    # definition.config, never building the authenticated session
+    # get_or_create_session/3 builds for a real search. A private indexer
+    # with a stored session - established the same way a real search
+    # establishes one - searched successfully because its cookies rode along
+    # on every real search, while Test reported a connection failure because
+    # the probe's HTTP request carried no Cookie header at all.
+    test "carries a stored session's cookies into the probe search request", %{
+      definition: definition,
+      bypass: bypass
+    } do
+      Bypass.stub(bypass, "GET", "/search/The%20Matrix/", fn conn ->
+        case Plug.Conn.get_req_header(conn, "cookie") do
+          ["sessionid=letmein123"] ->
+            conn
+            |> Plug.Conn.put_resp_content_type("text/html")
+            |> Plug.Conn.resp(
+              200,
+              "<html><body><table class=\"results\"><tr><th>Header</th></tr></table></body></html>"
+            )
+
+          _ ->
+            Plug.Conn.resp(conn, 401, "Unauthorized")
+        end
+      end)
+
+      {:ok, _session} =
+        %CardigannSearchSession{}
+        |> CardigannSearchSession.changeset(%{
+          cardigann_definition_id: definition.id,
+          cookies: ["sessionid=letmein123"],
+          expires_at:
+            DateTime.utc_now() |> DateTime.add(3600, :second) |> DateTime.truncate(:second)
+        })
+        |> Repo.insert()
+
+      config = %{
+        type: :cardigann,
+        name: "Test Indexer",
+        indexer_id: "test-indexer"
+      }
+
+      assert {:ok, _info} = Cardigann.test_connection(config)
+    end
   end
 
   describe "search/3" do
