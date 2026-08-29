@@ -306,6 +306,123 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
     end
   end
 
+  describe "operator config override reaches the login request" do
+    # Regression: get_or_create_session/3 built the credentials map passed to
+    # CardigannAuth.authenticate/3 from config.user_settings alone, never from
+    # definition.config. A login.path templated as {{ .Config.apiurl }} always
+    # rendered to the setting's schema default, so an operator's override was
+    # silently ignored and a login could be established against the wrong
+    # host while a search (which does read definition.config) used the right
+    # one. Two Bypasses stand in for "wrong host" (the setting default) and
+    # "right host" (the operator override); the test proves which one the
+    # login actually reached.
+    test "a login-path setting's operator override, not its schema default, receives the login" do
+      site = Bypass.open()
+      override = Bypass.open()
+      site_base_url = "http://localhost:#{site.port}"
+
+      yaml = """
+      id: login-override-indexer
+      name: Login Override Indexer
+      description: A private indexer whose login path is templated
+      language: en-US
+      type: private
+      encoding: UTF-8
+      links:
+        - #{site_base_url}
+      caps:
+        modes:
+          search: {search-type: q}
+        categories:
+          5000: TV
+      settings:
+        - name: apiurl
+          type: text
+          label: API URL
+          default: localhost:1
+      login:
+        path: http://{{ .Config.apiurl }}/login.php
+        method: form
+        inputs:
+          username: "{{ .Config.username }}"
+          password: "{{ .Config.password }}"
+        test:
+          selector: "a[href*=logout]"
+      search:
+        path: /search
+        rows:
+          selector: "table.results tr"
+          after: 1
+        fields:
+          title:
+            selector: "td.title a"
+          size:
+            selector: "td.size"
+          seeders:
+            selector: "td.seeders"
+      """
+
+      {:ok, _definition} =
+        %CardigannDefinition{}
+        |> CardigannDefinition.changeset(%{
+          indexer_id: "login-override-indexer",
+          name: "Login Override Indexer",
+          description: "A private indexer whose login path is templated",
+          language: "en-US",
+          type: "private",
+          encoding: "UTF-8",
+          links: %{"0" => site_base_url},
+          capabilities: %{modes: %{"search" => %{}}, categories: %{"5000" => "TV"}},
+          definition: yaml,
+          schema_version: "v11",
+          enabled: true,
+          # String keys, exactly as the database and the admin form supply
+          # them. apiurl deliberately does not match the setting's default
+          # (localhost:1), so the rendered login URL can only hit `override`
+          # if the adapter actually threads this map into the login render.
+          config: %{
+            "username" => "stringuser",
+            "password" => "stringpass",
+            "apiurl" => "localhost:#{override.port}"
+          },
+          last_synced_at: DateTime.utc_now()
+        })
+        |> Repo.insert()
+
+      test_pid = self()
+
+      Bypass.expect_once(override, "POST", "/login.php", fn conn ->
+        send(test_pid, :login_hit)
+
+        conn
+        |> Plug.Conn.put_resp_header("set-cookie", "session=granted; Path=/")
+        |> Plug.Conn.resp(200, "<html><body><a href='/logout'>Logout</a></body></html>")
+      end)
+
+      Bypass.stub(site, "GET", "/search", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("text/html")
+        |> Plug.Conn.resp(
+          200,
+          "<html><body><table class=\"results\"><tr><th>Header</th></tr></table></body></html>"
+        )
+      end)
+
+      config = %{
+        type: :cardigann,
+        name: "Login Override Indexer",
+        indexer_id: "login-override-indexer"
+      }
+
+      # The point of this test is which host received the login, not what
+      # Cardigann.search/2 returns. If the login never reaches `override`,
+      # Bypass.expect_once fails the test on exit regardless of this result.
+      Cardigann.search(config, "query")
+
+      assert_receive :login_hit
+    end
+  end
+
   describe "search/3" do
     test "builds search options correctly", %{definition: _definition} do
       config = %{
