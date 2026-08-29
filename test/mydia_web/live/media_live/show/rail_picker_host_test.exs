@@ -226,8 +226,24 @@ defmodule MydiaWeb.MediaLive.Show.RailPickerHostTest do
     # succeeds instead of reaching the live relay. Mirrors the fixture body in
     # `test/mydia_web/features/library_picker_test.exs`'s "/tmdb/movies/900001"
     # stub, which is the same call site.
+    #
+    # Blocks the response until `release_added_movie_details/1` is called.
+    # `Add.from_provider/4` runs inside a `start_async/3` task the picker
+    # click starts, and every test below asserts the card is still showing
+    # "Adding..." immediately after that click — proof that the
+    # recommendations (or franchise) rail, not the other one, registered the
+    # in-flight add. Before this branch's guard existed, that call was a
+    # real round trip to relay.mydia.dev, and the round-trip latency is what
+    # accidentally kept the in-flight window open long enough to observe: it
+    # won locally and lost on a slower CI runner (#530 fix round 6). Blocking
+    # here makes the window deterministic instead of relying on how fast a
+    # network call happens not to resolve.
     defp stub_added_movie_details(bypass, tmdb_id, title) do
+      {:ok, gate} = Agent.start_link(fn -> false end)
+
       Bypass.stub(bypass, "GET", "/tmdb/movies/#{tmdb_id}", fn conn ->
+        await_release(gate)
+
         body = %{
           "id" => tmdb_id,
           "title" => title,
@@ -241,6 +257,22 @@ defmodule MydiaWeb.MediaLive.Show.RailPickerHostTest do
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.resp(200, Jason.encode!(body))
       end)
+
+      gate
+    end
+
+    defp release_added_movie_details(gate), do: Agent.update(gate, fn _ -> true end)
+
+    # Runs in the Bypass connection process, not the test process, so this
+    # sleep only delays that one HTTP response — it has no effect on how
+    # fast the test process's own assertions run.
+    defp await_release(gate) do
+      if Agent.get(gate, & &1) do
+        :ok
+      else
+        Process.sleep(5)
+        await_release(gate)
+      end
     end
 
     test "a recommendation-only title routes the add to the recommendations rail",
@@ -249,7 +281,7 @@ defmodule MydiaWeb.MediaLive.Show.RailPickerHostTest do
       library_path_fixture(%{path: "/media/host-b", type: "movies"})
 
       {movie, recommended_tmdb_id} = movie_with_recommendation()
-      stub_added_movie_details(bypass, recommended_tmdb_id, "The Eternal Daughter")
+      gate = stub_added_movie_details(bypass, recommended_tmdb_id, "The Eternal Daughter")
 
       {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")
       render_async(view, 5000)
@@ -266,9 +298,14 @@ defmodule MydiaWeb.MediaLive.Show.RailPickerHostTest do
 
       # Proof of routing: the recommendations rail registered the in-flight
       # add (its card now shows the spinner) and there is no franchise strip
-      # at all to have wrongly claimed it.
+      # at all to have wrongly claimed it. The added title's own details
+      # fetch is still blocked at this point (see stub_added_movie_details/3),
+      # so this in-flight window is guaranteed rather than raced.
       assert has_element?(view, "#recommendations-rail-item-#{recommended_tmdb_id}", "Adding...")
       refute has_element?(view, "#franchise-section")
+
+      release_added_movie_details(gate)
+      render_async(view, 5000)
     end
 
     test "a movie that is a franchise entry routes the add to the franchise rail",
@@ -277,7 +314,7 @@ defmodule MydiaWeb.MediaLive.Show.RailPickerHostTest do
       library_path_fixture(%{path: "/media/host-b", type: "movies"})
 
       {movie, missing_tmdb_id} = movie_with_franchise_entry()
-      stub_added_movie_details(bypass, missing_tmdb_id, "Aliens")
+      gate = stub_added_movie_details(bypass, missing_tmdb_id, "Aliens")
 
       {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")
       render_async(view, 5000)
@@ -290,7 +327,12 @@ defmodule MydiaWeb.MediaLive.Show.RailPickerHostTest do
       |> element("#library-picker-dialog [data-test='library-picker-option']", "host-a")
       |> render_click()
 
+      # Same deterministic-in-flight-window reasoning as the recommendation
+      # test above: the added title's details fetch is still blocked here.
       assert has_element?(view, "#franchise-section-item-#{missing_tmdb_id}", "Adding...")
+
+      release_added_movie_details(gate)
+      render_async(view, 5000)
     end
 
     test "a title in both rails (#460) routes to the franchise rail even when the click " <>
@@ -300,7 +342,7 @@ defmodule MydiaWeb.MediaLive.Show.RailPickerHostTest do
       library_path_fixture(%{path: "/media/host-b", type: "movies"})
 
       {movie, overlap_tmdb_id} = movie_with_overlapping_entry()
-      stub_added_movie_details(bypass, overlap_tmdb_id, "Aliens")
+      gate = stub_added_movie_details(bypass, overlap_tmdb_id, "Aliens")
 
       {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")
       render_async(view, 5000)
@@ -318,8 +360,13 @@ defmodule MydiaWeb.MediaLive.Show.RailPickerHostTest do
       |> element("#library-picker-dialog [data-test='library-picker-option']", "host-a")
       |> render_click()
 
+      # Same deterministic-in-flight-window reasoning as the two tests above:
+      # the added title's details fetch is still blocked here.
       assert has_element?(view, "#franchise-section-item-#{overlap_tmdb_id}", "Adding...")
       refute has_element?(view, "#recommendations-rail-item-#{overlap_tmdb_id}", "Adding...")
+
+      release_added_movie_details(gate)
+      render_async(view, 5000)
     end
   end
 end
