@@ -61,7 +61,7 @@ defmodule Mydia.Jobs.ApplyImportGroups do
       library_path_id
       |> accepted_groups()
       |> Enum.map(&apply_group(&1, page))
-      |> Enum.reject(&(&1 == :applied))
+      |> Enum.reject(&(&1 in [:applied, :vanished]))
 
     broadcast(library_path_id)
 
@@ -83,7 +83,7 @@ defmodule Mydia.Jobs.ApplyImportGroups do
     |> Repo.all()
   end
 
-  @spec apply_group(ImportGroup.t(), pos_integer()) :: :applied | :stuck
+  @spec apply_group(ImportGroup.t(), pos_integer()) :: :applied | :stuck | :vanished
   defp apply_group(%ImportGroup{} = group, page) do
     remaining = drain(group, ImportGroups.member_count(group.id), page)
     now = DateTime.utc_now() |> DateTime.truncate(:second)
@@ -92,9 +92,31 @@ defmodule Mydia.Jobs.ApplyImportGroups do
 
     group
     |> Ecto.Changeset.change(unresolved_count: remaining, status: status, updated_at: now)
-    |> Repo.update!()
+    |> Repo.update(stale_error_field: :id, stale_error_message: "vanished")
+    |> case do
+      {:ok, _group} ->
+        if status == "applied", do: :applied, else: :stuck
 
-    if status == "applied", do: :applied, else: :stuck
+      # The row went away while we were draining it, which
+      # `ImportGroups.clear_for_library/1` can do: its guard only refuses while
+      # an ImportRun is active, and this worker is not one. A deleted group has
+      # no work left, so reporting it stuck would burn the retry budget
+      # re-applying something that no longer exists.
+      {:error, %Ecto.Changeset{errors: [{:id, {"vanished", _}}]}} ->
+        Logger.info("Import group vanished mid-drain, nothing to apply",
+          import_group_id: group.id
+        )
+
+        :vanished
+
+      {:error, changeset} ->
+        Logger.error("Could not record an import group's outcome",
+          import_group_id: group.id,
+          errors: inspect(changeset.errors)
+        )
+
+        :stuck
+    end
   rescue
     error ->
       Logger.error("Applying an import group failed, leaving it accepted for retry",

@@ -11,6 +11,7 @@ defmodule Mydia.Library.MetadataEnricher do
 
   require Logger
   alias Mydia.{Media, Metadata, Repo, Settings}
+  alias Mydia.Library.EpisodeMinter
   alias Mydia.Media.ExternalIds
   alias Mydia.Metadata.LanguageCode
   alias Mydia.Metadata.NfoWriter
@@ -39,6 +40,7 @@ defmodule Mydia.Library.MetadataEnricher do
       when not is_nil(provider_id) and not is_nil(provider_type) do
     config = Keyword.get(opts, :config, Metadata.default_relay_config())
     media_file_id = Keyword.get(opts, :media_file_id)
+    allow_episode_creation = Keyword.get(opts, :allow_episode_creation, false)
 
     media_type = determine_media_type(match_result)
 
@@ -89,9 +91,19 @@ defmodule Mydia.Library.MetadataEnricher do
                 title: media_item.title
               )
 
-              associate_file_with_target_episodes(media_item, match_result_with_file_id)
+              associate_file_with_target_episodes(
+                media_item,
+                match_result_with_file_id,
+                allow_episode_creation
+              )
             else
-              enrich_episodes(media_item, provider_id, config, match_result_with_file_id)
+              enrich_episodes(
+                media_item,
+                provider_id,
+                config,
+                match_result_with_file_id,
+                allow_episode_creation
+              )
             end
           end
 
@@ -421,7 +433,13 @@ defmodule Mydia.Library.MetadataEnricher do
       {:error, error}
   end
 
-  defp enrich_episodes(media_item, provider_id, config, match_result) do
+  defp enrich_episodes(
+         media_item,
+         provider_id,
+         config,
+         match_result,
+         allow_episode_creation
+       ) do
     Logger.debug("Fetching episodes for TV show",
       media_item_id: media_item.id,
       title: media_item.title
@@ -458,7 +476,7 @@ defmodule Mydia.Library.MetadataEnricher do
       end)
 
       # After all episodes are created, directly associate the file with the target episode(s)
-      associate_file_with_target_episodes(media_item, match_result)
+      associate_file_with_target_episodes(media_item, match_result, allow_episode_creation)
     else
       Logger.warning("No season information available",
         media_item_id: media_item.id
@@ -497,9 +515,10 @@ defmodule Mydia.Library.MetadataEnricher do
   defp associate_file_with_target_episodes(
          media_item,
          %{
-           parsed_info: %{season: season, episodes: episode_numbers},
+           parsed_info: %{season: season, episodes: episode_numbers} = parsed,
            media_file_id: media_file_id
-         }
+         },
+         allow_episode_creation
        )
        when is_binary(media_file_id) and is_list(episode_numbers) do
     Logger.debug("Associating file with target episodes via direct lookup",
@@ -514,10 +533,13 @@ defmodule Mydia.Library.MetadataEnricher do
     Enum.each(episode_numbers, fn episode_number ->
       case Media.get_episode_by_number(media_item.id, season, episode_number) do
         nil ->
-          Logger.warning("Target episode not found for file association",
-            media_item_id: media_item.id,
-            season: season,
-            episode: episode_number
+          maybe_mint_and_associate(
+            media_item,
+            season,
+            episode_number,
+            media_file_id,
+            Map.get(parsed, :original_filename),
+            allow_episode_creation
           )
 
         episode ->
@@ -526,7 +548,7 @@ defmodule Mydia.Library.MetadataEnricher do
     end)
   end
 
-  defp associate_file_with_target_episodes(_media_item, match_result) do
+  defp associate_file_with_target_episodes(_media_item, match_result, _allow) do
     # No media_file_id or parsed_info - nothing to associate
     Logger.debug("Skipping file association - no media_file_id or parsed episode info",
       has_media_file_id: Map.has_key?(match_result, :media_file_id),
@@ -534,6 +556,49 @@ defmodule Mydia.Library.MetadataEnricher do
     )
 
     :ok
+  end
+
+  # The provider does not have this episode. Creating it is allowed only on a
+  # user-accepted import (`FileIngest`'s `:create_items` policy), and only for a
+  # coordinate `EpisodeMinter` considers plausible for this show. Anything else
+  # keeps the old behaviour exactly: warn, leave the file orphaned, and let
+  # `FileIngest.confirm_association/3` write the reason onto the rank-0
+  # candidate so the inbox can show it.
+  defp maybe_mint_and_associate(
+         media_item,
+         season,
+         episode_number,
+         media_file_id,
+         filename,
+         true
+       ) do
+    case EpisodeMinter.mint(media_item, season, episode_number, filename) do
+      {:ok, episode} ->
+        associate_media_file_with_episode(episode, media_file_id)
+
+      {:error, reason} ->
+        Logger.warning("Could not create the missing episode for file association",
+          media_item_id: media_item.id,
+          season: season,
+          episode: episode_number,
+          reason: inspect(reason)
+        )
+    end
+  end
+
+  defp maybe_mint_and_associate(
+         media_item,
+         season,
+         episode_number,
+         _media_file_id,
+         _filename,
+         false
+       ) do
+    Logger.warning("Target episode not found for file association",
+      media_item_id: media_item.id,
+      season: season,
+      episode: episode_number
+    )
   end
 
   defp associate_media_file_with_episode(episode, media_file_id) do

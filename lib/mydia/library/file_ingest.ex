@@ -165,8 +165,18 @@ defmodule Mydia.Library.FileIngest do
 
   defp link(media_file, match_result, opts) do
     config = Keyword.get(opts, :config) || Metadata.default_relay_config()
+    policy = Keyword.fetch!(opts, :policy)
 
-    case MetadataEnricher.enrich(match_result, config: config, media_file_id: media_file.id) do
+    enrich_opts = [
+      config: config,
+      media_file_id: media_file.id,
+      # The policy is the consent signal. `:create_items` means a user accepted
+      # this import, which is what authorises creating an episode the provider
+      # does not have. A scheduled scan is `:local_only` and never mints.
+      allow_episode_creation: policy == :create_items
+    ]
+
+    case MetadataEnricher.enrich(match_result, enrich_opts) do
       {:ok, media_item} ->
         confirm_association(media_file, media_item, match_result)
 

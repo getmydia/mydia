@@ -906,6 +906,31 @@ defmodule Mydia.Media do
   end
 
   @doc """
+  The highest regular-season and episode numbers recorded for a show.
+
+  Season 0 (specials) is excluded from the aggregate. This function exists to
+  bound plausible *regular-season* coordinates for `EpisodeMinter`, and
+  specials routinely carry episode numbers far outside that range -- a
+  special's episode number must never raise the ceiling used to judge a
+  regular-season file.
+
+  Returns `{0, 0}` for a show with no regular-season episodes so callers can
+  treat the result as a numeric ceiling with no nil branch. `max/1` over an
+  integer column behaves identically on SQLite and PostgreSQL.
+  """
+  @spec episode_bounds(binary()) :: {non_neg_integer(), non_neg_integer()}
+  def episode_bounds(media_item_id) do
+    {season, episode} =
+      Episode
+      |> where([e], e.media_item_id == ^media_item_id)
+      |> where([e], e.season_number > 0)
+      |> select([e], {max(e.season_number), max(e.episode_number)})
+      |> Repo.one() || {nil, nil}
+
+    {season || 0, episode || 0}
+  end
+
+  @doc """
   Gets the next episode for the given episode.
   Returns the next episode in the same season if available,
   otherwise returns the first episode of the next season.
