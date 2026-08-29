@@ -3201,5 +3201,27 @@ defmodule Mydia.MediaTest do
 
       assert Mydia.Media.episode_bounds(show.id) == {0, 0}
     end
+
+    test "a high-numbered special does not raise the regular-season ceiling" do
+      show = media_item_fixture(%{type: "tv_show", title: "Special-Heavy Show"})
+
+      for {season, episode} <- [{1, 1}, {2, 10}] do
+        {:ok, _} =
+          Mydia.Media.create_episode(%{
+            media_item_id: show.id,
+            season_number: season,
+            episode_number: episode
+          })
+      end
+
+      {:ok, _} =
+        Mydia.Media.create_episode(%{
+          media_item_id: show.id,
+          season_number: 0,
+          episode_number: 187
+        })
+
+      assert Mydia.Media.episode_bounds(show.id) == {2, 10}
+    end
   end
 end

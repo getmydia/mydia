@@ -15,7 +15,8 @@ defmodule Mydia.Library.EpisodeMinter do
   ## The anchor
 
   A misparse must not be able to invent an episode. Given `{max_season,
-  max_episode}` from `Media.episode_bounds/1`, minting requires:
+  max_episode}` from `Media.episode_bounds/1`, which excludes season 0 so a
+  special's episode number can never inflate the ceiling, minting requires:
 
     * `season_number >= 1`, because season 0 specials are too ragged to guess at
     * `season_number <= max_season + 1`, so season 4 on a show ending at 3

@@ -66,6 +66,15 @@ defmodule Mydia.Library.EpisodeMinterTest do
       refute EpisodeMinter.mintable?(show, 1, 31)
       refute EpisodeMinter.mintable?(show, 2, 1)
     end
+
+    test "a high-numbered special does not inflate the ceiling for a regular season" do
+      show = show_with_episodes([{1, 21}, {2, 21}, {3, 16}, {0, 187}])
+
+      # Without excluding season 0 from Media.episode_bounds/1, max_episode
+      # would be 187 and the ceiling max(187 + 10, 30) = 197 would accept
+      # this misparsed coordinate.
+      refute EpisodeMinter.mintable?(show, 4, 190)
+    end
   end
 
   describe "mint/4" do
