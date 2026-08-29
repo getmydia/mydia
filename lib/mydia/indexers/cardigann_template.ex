@@ -317,11 +317,22 @@ defmodule Mydia.Indexers.CardigannTemplate do
     eval_tokens(rest, ctx, url_encode?, [output | acc])
   end
 
-  # Function call or pipeline - never URL-encode function results
+  # Function call or pipeline. Encodes exactly like a bare field reference: in a
+  # path context the caller asks for encoding, and a value that reached the
+  # template through `or`, `re_replace` or `join` is no less user-supplied than
+  # one that came straight from `.Keywords`.
+  #
+  # This is load-bearing. CardigannOverrides.patch_1337x/1 routes keywords
+  # through `{{ or .Query.Album .Query.Artist .Keywords }}`, so leaving function
+  # results raw put an unescaped query into the URL path and every 1337x search
+  # failed with {:invalid_request_target, "/search/Some Title: Here/1/"}.
+  #
+  # Query parameters are unaffected: build_query_params/2 renders them with
+  # url_encode: false and lets Req do the escaping.
   defp eval_tokens([{action_type, [{:expr, expr_parts}]} | rest], ctx, url_encode?, acc)
        when action_type in [:action, :action_trim_left, :action_trim_right, :action_trim_both] do
     value = eval_expression(expr_parts, ctx)
-    output = format_output(value, false)
+    output = format_output(value, url_encode?)
     eval_tokens(rest, ctx, url_encode?, [output | acc])
   end
 
