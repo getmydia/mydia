@@ -833,6 +833,13 @@ defmodule Mydia.Settings do
   defdelegate load_database_config(), to: Mydia.Settings.RuntimeConfig
 
   @doc """
+  Same as `load_database_config/0`, but takes a loader function so callers can
+  exercise the rescue policy without standing up a broken Repo.
+  """
+  @spec load_database_config((-> [Mydia.Settings.ConfigSetting.t()])) :: {:ok, map()}
+  defdelegate load_database_config(loader), to: Mydia.Settings.RuntimeConfig
+
+  @doc """
   Gets the runtime configuration.
 
   Returns the full configuration struct loaded at application startup.

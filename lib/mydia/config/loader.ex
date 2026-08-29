@@ -15,24 +15,44 @@ defmodule Mydia.Config.Loader do
   alias Mydia.Config.Schema
   alias Mydia.Settings
 
+  @default_sources [:yaml, :database, :env]
+
   @doc """
   Loads configuration from all sources and returns validated config.
 
   ## Options
     - `:config_file` - Path to YAML config file (default: "config/config.yml")
-    - `:env` - Environment to use for config (default: Mix.env())
+    - `:sources` - Which layers to merge. Defaults to yaml, database and env.
+      An omitted layer contributes an empty map rather than failing.
+
+  `Mydia.Application.start/2` passes `sources: [:yaml, :env]` because it runs
+  before `Mydia.Repo` is in the supervision tree. `Mydia.Config.Bootstrap`
+  re-merges the full list once the Repo and the migrator have run.
 
   Returns `{:ok, config}` or `{:error, errors}`.
   """
   def load(opts \\ []) do
     config_file = Keyword.get(opts, :config_file, default_config_path())
+    sources = Keyword.get(opts, :sources, @default_sources)
 
-    with {:ok, yaml_config} <- load_yaml(config_file),
-         {:ok, db_config} <- load_database_config(),
-         env_config <- load_env(),
+    with {:ok, yaml_config} <- maybe_load_yaml(config_file, sources),
+         {:ok, db_config} <- maybe_load_database_config(sources),
+         env_config <- maybe_load_env(sources),
          merged <- merge_all_configs(yaml_config, db_config, env_config) do
       validate(merged)
     end
+  end
+
+  defp maybe_load_yaml(config_file, sources) do
+    if :yaml in sources, do: load_yaml(config_file), else: {:ok, %{}}
+  end
+
+  defp maybe_load_database_config(sources) do
+    if :database in sources, do: load_database_config(), else: {:ok, %{}}
+  end
+
+  defp maybe_load_env(sources) do
+    if :env in sources, do: load_env(), else: %{}
   end
 
   @doc """
