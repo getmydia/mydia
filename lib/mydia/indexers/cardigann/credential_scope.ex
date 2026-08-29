@@ -45,7 +45,7 @@ defmodule Mydia.Indexers.Cardigann.CredentialScope do
 
     template_origins =
       parsed
-      |> absolute_templates()
+      |> template_candidates()
       |> Enum.flat_map(&rendered_origin(&1, parsed, config))
 
     MapSet.new(link_origins ++ template_origins)
@@ -137,7 +137,10 @@ defmodule Mydia.Indexers.Cardigann.CredentialScope do
 
   defp origin_of(_url), do: []
 
-  defp absolute_templates(%Parsed{} = parsed) do
+  # Not "absolute templates": whether a template is absolute can only be
+  # decided after it is rendered, since the scheme itself may come from
+  # configuration. This collects the candidates worth rendering at all.
+  defp template_candidates(%Parsed{} = parsed) do
     search_paths =
       parsed.search
       |> case do
@@ -157,13 +160,23 @@ defmodule Mydia.Indexers.Cardigann.CredentialScope do
       end
 
     [login_path | search_paths]
-    |> Enum.filter(fn template -> is_binary(template) and absolute_template?(template) end)
+    |> Enum.filter(fn template -> is_binary(template) and worth_rendering?(template) end)
   end
 
-  # Only a template that already opens with a scheme can render to another host.
-  # A relative path can never introduce one, so it is skipped without being
-  # rendered at all.
-  defp absolute_template?(template), do: Regex.match?(~r{^https?://}i, template)
+  # A template can name its own host through configuration, as in
+  # `{{ .Config.apiurl }}/search`, so a literal-only check for a leading
+  # `http` on the unrendered text misses every candidate whose scheme comes
+  # from a setting rather than the template itself. The only template that
+  # can be ruled out without rendering is one with no `{{` at all and no
+  # leading scheme: that is a bare relative literal, and rendering can never
+  # turn it into an absolute URL. Everything else is rendered, and
+  # `rendered_origin/3` (via `origin_of/1`) decides whether the result is
+  # actually absolute; it already returns `[]` for a template that fails to
+  # render or renders to a relative path, so this is only a cheap prefilter,
+  # not the decision itself.
+  defp worth_rendering?(template) do
+    String.contains?(template, "{{") or Regex.match?(~r{^https?://}i, template)
+  end
 
   defp rendered_origin(template, %Parsed{} = parsed, config) do
     context = %{

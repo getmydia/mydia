@@ -122,6 +122,41 @@ defmodule Mydia.Indexers.Cardigann.CredentialScopeTest do
       refute MapSet.member?(origins, "api.v3x.club:443")
     end
 
+    test "renders a path whose scheme, not just its host, comes from configuration" do
+      parsed =
+        definition(
+          settings: [%{name: "apiurl", type: "text", default: "https://api.example"}],
+          search: %{
+            paths: [%{path: "{{ .Config.apiurl }}/v1/search"}],
+            inputs: %{},
+            rows: %{},
+            fields: %{}
+          }
+        )
+
+      origins = CredentialScope.trusted_origins(parsed, %{})
+
+      assert MapSet.member?(origins, "api.example:443")
+    end
+
+    test "an operator override of a configured scheme wins over the default" do
+      parsed =
+        definition(
+          settings: [%{name: "apiurl", type: "text", default: "https://api.example"}],
+          search: %{
+            paths: [%{path: "{{ .Config.apiurl }}/v1/search"}],
+            inputs: %{},
+            rows: %{},
+            fields: %{}
+          }
+        )
+
+      origins = CredentialScope.trusted_origins(parsed, %{"apiurl" => "https://api.mine.example"})
+
+      assert MapSet.member?(origins, "api.mine.example:443")
+      refute MapSet.member?(origins, "api.example:443")
+    end
+
     test "includes the host of an absolute login path" do
       parsed = definition(login: %{method: "form", path: "https://auth.tracker.example/login"})
 
