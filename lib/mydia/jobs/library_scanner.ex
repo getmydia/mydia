@@ -32,7 +32,6 @@ defmodule Mydia.Jobs.LibraryScanner do
 
   alias Mydia.Library.{
     FileIngest,
-    MediaFile,
     MetadataMatcher,
     SampleDetector,
     ScanSummary
