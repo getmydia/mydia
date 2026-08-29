@@ -492,9 +492,16 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
       settings: parsed.settings,
       base_url: definition.active_link,
       on_promote: fn winning_url ->
-        definition
-        |> Ecto.Changeset.change(%{active_link: winning_url})
-        |> Mydia.Repo.update()
+        # A legacy mirror that answers must not become sticky for a definition
+        # that has a session to protect; the credential scope would then withhold
+        # its cookies on every subsequent search.
+        if CardigannHealthCheck.promotable?(parsed, definition.config || %{}, winning_url) do
+          definition
+          |> Ecto.Changeset.change(%{active_link: winning_url})
+          |> Mydia.Repo.update()
+        else
+          :ok
+        end
       end
     ]
 

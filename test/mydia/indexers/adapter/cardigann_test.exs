@@ -491,6 +491,88 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
     end
   end
 
+  describe "on_promote credential scope" do
+    test "a legacy mirror that wins search failover does not become active_link when credentials are configured" do
+      # Mirrors the health check's "a legacy mirror that answers is not
+      # promoted" regression, but through the real search/2 path: the first
+      # candidate (an in-scope links entry) is unreachable, execute_search
+      # fails over to the second candidate (a legacylinks entry, out of
+      # scope), and on_promote fires for it. With a credential configured on
+      # the definition, that promotion must be withheld.
+      dead = Bypass.open()
+      Bypass.down(dead)
+
+      legacy = Bypass.open()
+
+      Bypass.stub(legacy, "GET", "/search", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("text/html")
+        |> Plug.Conn.resp(
+          200,
+          "<html><body><table class=\"results\"><tr><th>Header</th></tr></table></body></html>"
+        )
+      end)
+
+      dead_url = "http://localhost:#{dead.port}"
+      legacy_url = "http://localhost:#{legacy.port}"
+
+      yaml = """
+      id: legacy-promo
+      name: Legacy Promo
+      description: d
+      language: en-US
+      type: private
+      encoding: UTF-8
+      links:
+        - #{dead_url}
+      legacylinks:
+        - #{legacy_url}
+      caps:
+        categories:
+          2000: Movies
+      settings: []
+      search:
+        paths:
+          - path: /search
+        rows:
+          selector: tr
+        fields:
+          title:
+            selector: td.title
+          size:
+            selector: td.size
+          seeders:
+            selector: td.seeders
+          download:
+            selector: a
+            attribute: href
+      """
+
+      {:ok, definition} =
+        %CardigannDefinition{}
+        |> CardigannDefinition.changeset(%{
+          indexer_id: "legacy-promo",
+          name: "Legacy Promo",
+          type: "private",
+          links: %{"0" => dead_url},
+          capabilities: %{},
+          schema_version: "v11",
+          config: %{"username" => "me", "password" => "secret"},
+          definition: yaml,
+          enabled: true
+        })
+        |> Repo.insert()
+
+      config = %{type: :cardigann, name: "Legacy Promo", indexer_id: "legacy-promo"}
+
+      assert {:ok, _results} = Cardigann.search(config, "query")
+
+      reloaded = Repo.reload!(definition)
+      refute reloaded.active_link == legacy_url
+      assert reloaded.active_link == nil
+    end
+  end
+
   describe "get_capabilities/1" do
     test "returns capabilities from definition", %{definition: _definition} do
       config = %{

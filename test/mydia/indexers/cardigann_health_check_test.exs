@@ -387,6 +387,56 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
     end
   end
 
+  defp promo_definition do
+    %Parsed{
+      id: "promo",
+      name: "Promo",
+      description: "",
+      language: "en-US",
+      type: "private",
+      encoding: "UTF-8",
+      links: ["https://tracker.example"],
+      legacylinks: ["https://old-tracker.example"],
+      capabilities: %{modes: %{}},
+      search: %{paths: [%{path: "/search"}], inputs: %{}, rows: %{}, fields: %{}},
+      login: nil,
+      download: nil,
+      settings: [],
+      request_delay: nil,
+      follow_redirect: true
+    }
+  end
+
+  describe "promotable?/3" do
+    test "an in-scope host is promotable with credentials" do
+      assert CardigannHealthCheck.promotable?(
+               promo_definition(),
+               %{"username" => "me", "password" => "secret"},
+               "https://tracker.example"
+             )
+    end
+
+    test "a legacy host is not promotable when credentials are configured" do
+      refute CardigannHealthCheck.promotable?(
+               promo_definition(),
+               %{"username" => "me", "password" => "secret"},
+               "https://old-tracker.example"
+             )
+    end
+
+    test "a legacy host is promotable when there are no credentials to protect" do
+      assert CardigannHealthCheck.promotable?(
+               promo_definition(),
+               %{"sort" => "seeders"},
+               "https://old-tracker.example"
+             )
+    end
+
+    test "a nil candidate is never promotable" do
+      refute CardigannHealthCheck.promotable?(promo_definition(), %{}, nil)
+    end
+  end
+
   defp parsed_for(link, opts \\ []) do
     %Parsed{
       id: "probe-test",
@@ -681,6 +731,183 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
       assert result.message =~ url_b
       refute result.message =~ url_a
       assert Mydia.Repo.reload!(definition).active_link == url_b
+    end
+
+    test "a legacy mirror that answers is not promoted when credentials are configured" do
+      # Same shape as "the persisted active_link..." above, but the only
+      # reachable candidate is a legacylinks entry, not a links entry, and the
+      # definition carries a credential. This exercises the store_link_state
+      # guard inside search_leg/6 end to end, not just promotable?/3 in
+      # isolation: with the guard removed this test writes legacy_url to
+      # active_link instead of leaving it nil.
+      dead = Bypass.open()
+      Bypass.down(dead)
+      legacy = Bypass.open()
+      Bypass.expect(legacy, "GET", "/", fn conn -> Plug.Conn.resp(conn, 200, "ok") end)
+
+      Bypass.expect(legacy, "GET", "/search", fn conn ->
+        Plug.Conn.resp(
+          conn,
+          200,
+          ~s"""
+          <html><body><table class="results">
+          <tr><td class="title">Some Release</td>
+          <td class="download"><a href="/download/1">grab</a></td></tr>
+          </table></body></html>
+          """
+        )
+      end)
+
+      dead_url = "http://localhost:#{dead.port}"
+      legacy_url = "http://localhost:#{legacy.port}"
+
+      {:ok, definition} =
+        %CardigannDefinition{}
+        |> CardigannDefinition.changeset(%{
+          indexer_id: "probe-legacy-scope",
+          name: "Probe Legacy Scope",
+          type: "private",
+          links: %{"0" => dead_url},
+          capabilities: %{},
+          schema_version: "v11",
+          config: %{"username" => "me", "password" => "secret"},
+          definition: """
+          id: probe-legacy-scope
+          name: Probe Legacy Scope
+          description: d
+          language: en-US
+          type: private
+          encoding: UTF-8
+          links:
+            - #{dead_url}
+          legacylinks:
+            - #{legacy_url}
+          caps:
+            categories:
+              2000: Movies
+          settings: []
+          search:
+            paths:
+              - path: /search
+            rows:
+              selector: tr
+            fields:
+              title:
+                selector: td.title
+              size:
+                selector: td.size
+              seeders:
+                selector: td.seeders
+              download:
+                selector: a
+                attribute: href
+          """
+        })
+        |> Repo.insert()
+
+      assert {:ok, result} = CardigannHealthCheck.execute_health_check(definition)
+      assert result.success
+
+      reloaded = Repo.get!(CardigannDefinition, definition.id)
+      refute reloaded.active_link == legacy_url
+      assert reloaded.active_link == nil
+    end
+
+    test "a legacy mirror behind Cloudflare is not promoted when credentials are configured" do
+      # Regression: the {:cloudflare, message} branch of search_leg/6 called
+      # store_link_state(definition, active_link, link_status) with no
+      # promotable?/3 guard, unlike its two {:ok, ...} siblings. active_link
+      # here is whatever probe_candidates/2 picked at the homepage stage, so a
+      # legacylinks entry that only answers "/" can still ride this branch to
+      # active_link if its real search then hits a Cloudflare challenge.
+      #
+      # Both mirrors answer their search path with the same Cloudflare 403:
+      # execute_search's own failover (Task 5) is retryable on a Cloudflare
+      # response, so with only one mirror doing so the health check would
+      # fail over past it to the other candidate and this test would never
+      # observe the {:cloudflare, ...} outcome at all. Making both mirrors
+      # answer the same way keeps the final classification "cloudflare"
+      # regardless of which one failover lands on last, while only the
+      # legacylinks mirror's homepage succeeds, so it is still the one
+      # search_leg/6 receives as active_link.
+      in_scope = Bypass.open()
+      legacy = Bypass.open()
+
+      cloudflare_challenge = fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("server", "cloudflare")
+        |> Plug.Conn.resp(
+          403,
+          "<html><title>Just a moment...</title><body>Checking your browser before " <>
+            "accessing this site. cf-browser-verification. DDoS protection by Cloudflare." <>
+            "</body></html>"
+        )
+      end
+
+      # The in-scope link fails its homepage probe too (same Cloudflare
+      # response, any non-2xx/3xx status would do), so probe_candidates/2
+      # skips it and picks the legacylinks entry as active_link.
+      Bypass.stub(in_scope, "GET", "/", cloudflare_challenge)
+      Bypass.stub(in_scope, "GET", "/search", cloudflare_challenge)
+
+      Bypass.stub(legacy, "GET", "/", fn conn -> Plug.Conn.resp(conn, 200, "ok") end)
+      Bypass.stub(legacy, "GET", "/search", cloudflare_challenge)
+
+      in_scope_url = "http://localhost:#{in_scope.port}"
+      legacy_url = "http://localhost:#{legacy.port}"
+
+      {:ok, definition} =
+        %CardigannDefinition{}
+        |> CardigannDefinition.changeset(%{
+          indexer_id: "probe-legacy-cloudflare",
+          name: "Probe Legacy Cloudflare",
+          type: "private",
+          active_link: nil,
+          links: %{"0" => in_scope_url},
+          capabilities: %{},
+          schema_version: "v11",
+          config: %{"username" => "me", "password" => "secret"},
+          definition: """
+          id: probe-legacy-cloudflare
+          name: Probe Legacy Cloudflare
+          description: d
+          language: en-US
+          type: private
+          encoding: UTF-8
+          links:
+            - #{in_scope_url}
+          legacylinks:
+            - #{legacy_url}
+          caps:
+            categories:
+              2000: Movies
+          settings: []
+          search:
+            paths:
+              - path: /search
+            rows:
+              selector: tr
+            fields:
+              title:
+                selector: td.title
+              size:
+                selector: td.size
+              seeders:
+                selector: td.seeders
+              download:
+                selector: a
+                attribute: href
+          """
+        })
+        |> Repo.insert()
+
+      assert {:ok, result} = CardigannHealthCheck.execute_health_check(definition)
+      assert result.success
+      assert result.status == "degraded"
+
+      reloaded = Repo.get!(CardigannDefinition, definition.id)
+      refute reloaded.active_link == legacy_url
+      assert reloaded.active_link == nil
     end
   end
 end
