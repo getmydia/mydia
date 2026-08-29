@@ -210,10 +210,20 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     end
   end
 
+  # A dead or wrong mirror answers 404 or redirects away, and neither is a
+  # reason to abandon the working mirrors behind it. YTS ships six links whose
+  # proxies serve HTML on / but 404 on /api/v2/list_movies.json, so the first
+  # candidate the homepage probe promotes is routinely the wrong one.
+  #
+  # Failures that would repeat identically on every candidate stay terminal: a
+  # template that will not render, or a request target the client refuses, is
+  # not going to behave differently against another host.
   defp retryable_failure?({:error, %Error{type: :connection_failed}}), do: true
 
   defp retryable_failure?({:error, %Error{message: message}}) when is_binary(message) do
-    String.contains?(message, "Server error: HTTP 5")
+    String.contains?(message, "Server error: HTTP 5") or
+      String.contains?(message, "HTTP 404") or
+      String.contains?(message, "Redirected (HTTP 3")
   end
 
   defp retryable_failure?(_), do: false

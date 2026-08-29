@@ -941,6 +941,68 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
       assert {:error, _} =
                CardigannSearchEngine.execute_search(parsed, [query: "ubuntu"], %{}, %{})
     end
+
+    test "advances to the next candidate on a 404" do
+      # YTS proxies answer / with HTML but 404 on /api/v2/list_movies.json, so
+      # the homepage probe promotes a mirror whose search does not exist. Ending
+      # the search there left five working mirrors untried.
+      missing = Bypass.open()
+      Bypass.stub(missing, "GET", "/search", fn conn -> Plug.Conn.resp(conn, 404, "") end)
+
+      working = Bypass.open()
+
+      Bypass.stub(working, "GET", "/search", fn conn ->
+        Plug.Conn.resp(
+          conn,
+          200,
+          "<html><body><table><tr><td>row</td></tr></table></body></html>"
+        )
+      end)
+
+      test_pid = self()
+      working_url = "http://localhost:#{working.port}"
+      parsed = parsed_for(["http://localhost:#{missing.port}", working_url])
+
+      assert {:ok, %{status: 200}} =
+               CardigannSearchEngine.execute_search(
+                 parsed,
+                 [query: "ubuntu", on_promote: fn url -> send(test_pid, {:promoted, url}) end],
+                 %{},
+                 %{}
+               )
+
+      assert_received {:promoted, ^working_url}
+    end
+
+    test "advances to the next candidate on an unfollowed redirect" do
+      redirecting = Bypass.open()
+
+      Bypass.stub(redirecting, "GET", "/search", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("location", "https://elsewhere.test/")
+        |> Plug.Conn.resp(302, "")
+      end)
+
+      working = Bypass.open()
+
+      Bypass.stub(working, "GET", "/search", fn conn ->
+        Plug.Conn.resp(
+          conn,
+          200,
+          "<html><body><table><tr><td>row</td></tr></table></body></html>"
+        )
+      end)
+
+      working_url = "http://localhost:#{working.port}"
+
+      parsed = %{
+        parsed_for(["http://localhost:#{redirecting.port}", working_url])
+        | follow_redirect: false
+      }
+
+      assert {:ok, %{status: 200}} =
+               CardigannSearchEngine.execute_search(parsed, [query: "ubuntu"], %{}, %{})
+    end
   end
 
   describe "keywordsfilters" do
