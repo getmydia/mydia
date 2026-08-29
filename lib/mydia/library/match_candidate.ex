@@ -66,4 +66,65 @@ defmodule Mydia.Library.MatchCandidate do
     |> foreign_key_constraint(:media_file_id)
     |> unique_constraint([:media_file_id, :rank])
   end
+
+  @doc """
+  Builds the match map `FileIngest.ingest/3` expects from a stored candidate.
+
+  The single conversion, shared by `Jobs.ApplyImportGroups` (which layers its
+  group-level fallbacks on top) and `Library.OrphanReenricher` (which uses it
+  as is). Both traps below are why this is one function rather than two.
+
+  `provider_type` is a free-text column with no inclusion validation, so
+  `String.to_existing_atom/1` on it could raise for a value this VM has never
+  interned. Only the two providers this ever legitimately holds are mapped;
+  anything else takes the same default a nil would.
+
+  `parsed_info` round-trips through JSON (`Mydia.Settings.JsonMapType`), so its
+  keys and its "type" value are strings.
+  `MetadataEnricher.determine_media_type/1` pattern-matches
+  `%{parsed_info: %{type: :movie}}` with atom keys and an atom value, so the
+  stored shape matches neither clause and silently falls through to the movie
+  default for every file. This rebuilds the atom-keyed shape it expects.
+  """
+  @spec to_match(t()) :: map()
+  def to_match(%__MODULE__{} = candidate) do
+    %{
+      provider_id: candidate.provider_id,
+      provider_type: known_provider(candidate.provider_type) || :tvdb,
+      title: candidate.title,
+      year: candidate.year,
+      match_confidence: candidate.confidence || 1.0,
+      # A cached candidate was written from a provider lookup, never from the
+      # local database, so auto-import accounting counts it as external.
+      from_local_db: false,
+      parsed_info: parsed_info(candidate)
+    }
+  end
+
+  @doc "Maps the two provider strings this column legitimately holds, nil otherwise."
+  @spec known_provider(String.t() | nil) :: :tmdb | :tvdb | nil
+  def known_provider("tmdb"), do: :tmdb
+  def known_provider("tvdb"), do: :tvdb
+  def known_provider(_other), do: nil
+
+  @doc "Rebuilds the atom-keyed parsed_info shape from the stored JSON map."
+  @spec parsed_info(t()) :: %{
+          type: :movie | :tv_show,
+          season: integer() | nil,
+          episodes: [integer()]
+        }
+  def parsed_info(%__MODULE__{} = candidate) do
+    stored = candidate.parsed_info || %{}
+
+    %{
+      type: media_type_atom(candidate.media_type),
+      season: Map.get(stored, "season"),
+      episodes: Map.get(stored, "episodes") || []
+    }
+  end
+
+  @doc "The two media types this column holds, defaulting to movie."
+  @spec media_type_atom(String.t() | nil) :: :movie | :tv_show
+  def media_type_atom("tv_show"), do: :tv_show
+  def media_type_atom(_other), do: :movie
 end

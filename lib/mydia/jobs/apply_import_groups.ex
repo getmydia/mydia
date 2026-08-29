@@ -48,7 +48,7 @@ defmodule Mydia.Jobs.ApplyImportGroups do
   require Logger
 
   alias Mydia.ImportGroups
-  alias Mydia.Library.{FileIngest, ImportGroup}
+  alias Mydia.Library.{FileIngest, ImportGroup, MatchCandidate}
   alias Mydia.Repo
 
   @member_page 1_000
@@ -165,58 +165,27 @@ defmodule Mydia.Jobs.ApplyImportGroups do
   end
 
   defp ingest_member(%{media_file: media_file, candidate: candidate}, group) do
+    base = MatchCandidate.to_match(candidate)
+
     match = %{
-      provider_id: candidate.provider_id || group.provider_id,
-      provider_type: provider_type(candidate, group),
-      title: candidate.title || group.suggested_title,
-      year: candidate.year || group.suggested_year,
-      match_confidence: candidate.confidence || group.min_confidence || 1.0,
-      parsed_info: parsed_info(candidate, group)
+      base
+      | provider_id: candidate.provider_id || group.provider_id,
+        provider_type:
+          MatchCandidate.known_provider(candidate.provider_type) ||
+            MatchCandidate.known_provider(group.provider_type) || :tvdb,
+        title: candidate.title || group.suggested_title,
+        year: candidate.year || group.suggested_year,
+        match_confidence: candidate.confidence || group.min_confidence || 1.0,
+        parsed_info: %{
+          MatchCandidate.parsed_info(candidate)
+          | type: MatchCandidate.media_type_atom(candidate.media_type || group.media_type)
+        }
     }
 
     media_file = Repo.preload(media_file, :library_path)
 
     FileIngest.ingest(media_file, match, policy: :create_items)
   end
-
-  # `provider_type` is a free-text database column with no inclusion
-  # validation, so `String.to_existing_atom/1` on it could raise for a value
-  # this VM has never interned as an atom. That would leave `safe_ingest/2`
-  # catching the raise, the member unresolved, and the group stuck
-  # "accepted" until `max_attempts` strands it -- rather than trust the
-  # column, map the two providers this ever legitimately holds and fall back
-  # to the same default a `nil` value already took.
-  defp provider_type(candidate, group),
-    do:
-      known_provider(Map.get(candidate, :provider_type)) || known_provider(group.provider_type) ||
-        :tvdb
-
-  defp known_provider("tmdb"), do: :tmdb
-  defp known_provider("tvdb"), do: :tvdb
-  defp known_provider(_), do: nil
-
-  # `candidate.parsed_info` round-trips through JSON (`MatchCandidate`'s
-  # `parsed_info` column is `Mydia.Settings.JsonMapType`), so its keys and its
-  # "type" value are strings. `MetadataEnricher.determine_media_type/1`
-  # pattern-matches on `%{parsed_info: %{type: :movie}}` / `%{type: :tv_show}}`
-  # with atom keys and an atom value, so handing the stored map through
-  # unchanged never matches either clause and silently falls through to the
-  # movie default for every file, regardless of the group's real media type.
-  # This rebuilds the atom-keyed shape `FileIngest`/`MetadataEnricher` expect
-  # (see `test/mydia/library/file_ingest_test.exs`'s `match/1` and
-  # `local_tv_match/2` helpers).
-  defp parsed_info(candidate, group) do
-    stored = candidate.parsed_info || %{}
-
-    %{
-      type: media_type_atom(candidate.media_type || group.media_type),
-      season: Map.get(stored, "season"),
-      episodes: Map.get(stored, "episodes") || []
-    }
-  end
-
-  defp media_type_atom("tv_show"), do: :tv_show
-  defp media_type_atom(_), do: :movie
 
   defp broadcast(library_path_id) do
     Phoenix.PubSub.broadcast(
