@@ -117,9 +117,16 @@ defmodule Mydia.Settings.ConfigSetting do
     end)
   end
 
-  # Only overlay rows are typed; a direct-lookup row's reader parses its own
-  # value. Skipped entirely when the key is already invalid, so one bad row
-  # produces one error rather than two.
+  # validate_known_key/1 is built on validate_change/3, which Ecto skips
+  # whenever :key is absent from this changeset's changes — the case on a
+  # value-only update (e.g. the API's PATCH endpoint, which only ever sends
+  # :value and :description) against a row whose existing key predates this
+  # validation. Re-check known?/1 unconditionally here so an unknown key is
+  # always caught and always blamed on :key, rather than surfacing as a
+  # :value error from the cast_overlay/2 call below. Only overlay rows are
+  # typed beyond that; a direct-lookup row's reader parses its own value.
+  # Skipped entirely when :key already has an error, so one bad row produces
+  # one error rather than two.
   defp validate_value_type(%Ecto.Changeset{errors: errors} = changeset) do
     key = get_field(changeset, :key)
 
@@ -127,7 +134,13 @@ defmodule Mydia.Settings.ConfigSetting do
       Keyword.has_key?(errors, :key) ->
         changeset
 
-      key == nil or Paths.direct?(key) ->
+      key == nil ->
+        changeset
+
+      not Paths.known?(key) ->
+        add_error(changeset, :key, "is not a known configuration key")
+
+      Paths.direct?(key) ->
         changeset
 
       true ->

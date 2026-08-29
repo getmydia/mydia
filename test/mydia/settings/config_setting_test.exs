@@ -64,5 +64,29 @@ defmodule Mydia.Settings.ConfigSettingTest do
       assert %{key: [_ | _]} = errors_on(cs)
       refute Map.has_key?(errors_on(cs), :value)
     end
+
+    test "does not add a value error when :key is absent from attrs" do
+      cs = changeset(%{"value" => "8080", "category" => :server})
+
+      refute cs.valid?
+      assert %{key: [_ | _]} = errors_on(cs)
+      refute Map.has_key?(errors_on(cs), :value)
+    end
+
+    test "blames the key, not the value, on a value-only update against a row whose existing key is already invalid" do
+      # validate_change/3 (inside validate_known_key/1) is skipped by Ecto
+      # whenever :key is absent from this changeset's changes, which is the
+      # case on a value-only update -- e.g. the API's PATCH endpoint, which
+      # only ever sends :value and :description. A row written before this
+      # validation existed may carry an unknown key; updating just :value
+      # must still blame :key, not surface as a :value error.
+      existing = %ConfigSetting{key: "server.nonexistent", value: "1", category: :server}
+
+      cs = ConfigSetting.changeset(existing, %{"value" => "2"})
+
+      refute cs.valid?
+      assert %{key: [_ | _]} = errors_on(cs)
+      refute Map.has_key?(errors_on(cs), :value)
+    end
   end
 end
