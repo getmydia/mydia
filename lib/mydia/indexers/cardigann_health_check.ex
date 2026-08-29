@@ -275,7 +275,12 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   end
 
   defp probe_query(%Parsed{capabilities: capabilities}) do
-    modes = Map.get(capabilities || %{}, :modes, %{})
+    # Map.get/3's default only applies when the key is ABSENT. A parsed
+    # definition can have `modes: nil` (key present, value nil), in which case
+    # Map.get(capabilities, :modes, %{}) returns nil, not %{}, and the
+    # Map.has_key?(modes, ...) calls below raise BadMapError before any of
+    # the surrounding error handling runs.
+    modes = Map.get(capabilities || %{}, :modes) || %{}
 
     cond do
       Map.has_key?(modes, "movie-search") -> @movie_probe_query

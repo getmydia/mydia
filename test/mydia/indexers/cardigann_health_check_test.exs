@@ -546,6 +546,24 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
       assert_received {:request_path, path}
       assert path =~ "ubuntu"
     end
+
+    # Regression: Map.get/3's default only applies when the key is ABSENT, not
+    # when it is present with a nil value. A definition parsed with
+    # `modes: nil` (key present) made probe_query/1's
+    # Map.get(capabilities, :modes, %{}) return nil, and the following
+    # Map.has_key?(nil, ...) raised BadMapError, crashing the health check
+    # before any of its error handling ran.
+    test "a definition with modes: nil falls back to a generic term instead of raising" do
+      bypass = Bypass.open()
+      capture_path(bypass, self())
+
+      url = "http://localhost:#{bypass.port}"
+      parsed = parsed_for(url, modes: nil, path: "/search/{{ .Keywords }}")
+
+      assert {:ok, _, _} = CardigannHealthCheck.probe_search(parsed, %{}, url)
+      assert_received {:request_path, path}
+      assert path =~ "ubuntu"
+    end
   end
 
   describe "user config passthrough" do
