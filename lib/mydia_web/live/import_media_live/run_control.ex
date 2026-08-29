@@ -79,7 +79,9 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
           phx-update="ignore"
           class="toggle toggle-primary toggle-sm"
         />
-        <span class="text-sm font-medium whitespace-nowrap">Automatically import confident matches</span>
+        <span class="text-sm font-medium whitespace-nowrap">
+          Automatically import confident matches in this run
+        </span>
       </label>
 
       <.button id="start-run-button" type="submit" variant="primary">

@@ -968,7 +968,7 @@ type LibraryPath implements Node {
   "Whether auto-organization is enabled"
   autoOrganize: Boolean!
 
-  "Whether auto-import is enabled"
+  "Whether background scans of this library import confident matches"
   autoImport: Boolean!
 
   "Whether NFO files are written alongside media"

@@ -302,7 +302,9 @@ defmodule MydiaWeb.Schema.CommonTypes do
     field :scan_interval, :integer, description: "Scan interval in seconds"
     field :last_scan_at, :datetime, description: "Last scan timestamp"
     field :auto_organize, non_null(:boolean), description: "Whether auto-organization is enabled"
-    field :auto_import, non_null(:boolean), description: "Whether auto-import is enabled"
+
+    field :auto_import, non_null(:boolean),
+      description: "Whether background scans of this library import confident matches"
 
     field :write_nfo, non_null(:boolean),
       description: "Whether NFO files are written alongside media"
