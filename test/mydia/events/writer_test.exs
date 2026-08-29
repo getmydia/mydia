@@ -20,6 +20,22 @@ defmodule Mydia.Events.WriterTest do
     %{category: "downloads", type: type, metadata: %{"title" => "Test"}}
   end
 
+  # GenServer.cast/2 returns before the message reaches the mailbox, so a bare
+  # Process.info/2 read straight after an enqueue is a race. Poll instead.
+  defp await_mailbox_len(pid, expected, remaining_ms \\ 2_000) do
+    case Process.info(pid, :message_queue_len) do
+      {:message_queue_len, ^expected} ->
+        :ok
+
+      {:message_queue_len, _actual} when remaining_ms > 0 ->
+        Process.sleep(10)
+        await_mailbox_len(pid, expected, remaining_ms - 10)
+
+      {:message_queue_len, actual} ->
+        flunk("mailbox never reached #{expected}; last read #{actual}")
+    end
+  end
+
   describe "enqueue/2" do
     test "flushes when the buffer reaches max_batch" do
       writer = start_writer(max_batch: 3, flush_interval_ms: 60_000)
@@ -92,37 +108,44 @@ defmodule Mydia.Events.WriterTest do
       assert types == ["download.completed", "download.initiated"]
     end
 
-    test "the mailbox bound is soft under concurrent enqueue/2 callers" do
+    test "the mailbox bound holds under concurrent enqueue/2 callers" do
       # cast_or_drop/2 reads Process.info/2 and then calls GenServer.cast/2 as
-      # two separate steps. That is fine against a single caller looping,
-      # since each iteration re-reads the mailbox length before casting, but
-      # concurrent callers can each observe room under max_mailbox before any
-      # of them casts. The result is not a hard cap: it can overshoot by up
-      # to one event per caller enqueuing at the same instant. Closing that
-      # gap exactly would need something like :atomics.compare_exchange/4
-      # (a plain :counters get-then-add is just as racy) plus reconciling
-      # that counter against buffer-overflow drops and writer restarts, and a
-      # bug in that accounting either wedges every future event or silently
-      # removes the bound, which is worse than a small overshoot for a
-      # droppable activity log. So this test documents the real, soft
-      # guarantee instead of asserting a hard cap the implementation does
-      # not provide.
+      # two separate steps, so the bound is soft: concurrent callers can each
+      # observe room before any of them casts, overshooting by up to one event
+      # per caller. Closing that gap exactly would need something like
+      # :atomics.compare_exchange/4 (a plain :counters get-then-add is just as
+      # racy) plus reconciling that counter against buffer-overflow drops and
+      # writer restarts, and a bug in that accounting either wedges every
+      # future event or silently removes the bound, which is worse than a small
+      # overshoot for a droppable activity log.
       #
-      # caller_count is deliberately much larger than this machine's core
-      # count. A small burst (say 32) can race entirely within one wave of
-      # true parallelism and land every event, which would make the "some
-      # events get dropped" assertion below flaky. A few hundred concurrent
-      # callers cannot all be scheduled at once, so later callers reliably
-      # observe an already-elevated mailbox length and get dropped, even
-      # though which ones do is nondeterministic.
+      # An earlier formulation released 300 concurrent callers against an empty
+      # mailbox and asserted that fewer than 300 landed, reasoning that a few
+      # hundred callers cannot all be scheduled at once so the later ones would
+      # observe an elevated mailbox and drop. That asserted scheduler behavior
+      # rather than writer behavior, and it failed on CI (Test / PostgreSQL at
+      # 12bdd3d62, left 300, both sides equal) on a runner fast enough to
+      # schedule every caller in one wave.
+      #
+      # This formulation establishes the over-bound condition before any
+      # concurrent caller runs. cast_or_drop/2 drops on `len >= max_mailbox`
+      # (lib/mydia/events/writer.ex:132), and every caller reads the mailbox at
+      # its own enqueue time, which is after the pre-fill, so every caller
+      # drops no matter how they interleave. The soft overshoot is not asserted
+      # because it cannot be observed deterministically.
       caller_count = 300
       max_mailbox = 2
       writer = start_writer(max_batch: 1000, flush_interval_ms: 60_000, max_mailbox: max_mailbox)
 
-      # :sys.suspend/1 halts the writer's own receive loop without touching
-      # its real mailbox, so casts pile up there exactly as they would while
-      # the writer is genuinely blocked inside Repo.insert_all/2.
+      # :sys.suspend/1 halts the writer's own receive loop without touching its
+      # real mailbox, so casts pile up there exactly as they would while the
+      # writer is genuinely blocked inside Repo.insert_all/2.
       :sys.suspend(writer)
+
+      # Fill the mailbox to the bound. GenServer.cast/2 is asynchronous, so poll
+      # rather than assuming the messages have landed.
+      for _ <- 1..max_mailbox, do: Writer.enqueue(attrs(), writer)
+      await_mailbox_len(writer, max_mailbox)
 
       test_pid = self()
 
@@ -131,7 +154,7 @@ defmodule Mydia.Events.WriterTest do
           spawn(fn ->
             send(test_pid, :ready)
             receive do: (:go -> :ok)
-            Writer.enqueue(attrs("download.initiated"), writer)
+            Writer.enqueue(attrs("download.completed"), writer)
             send(test_pid, {:done, n})
           end)
         end
@@ -140,18 +163,15 @@ defmodule Mydia.Events.WriterTest do
       for pid <- callers, do: send(pid, :go)
       for _ <- callers, do: assert_receive({:done, _}, 5_000)
 
-      {:message_queue_len, len} = Process.info(writer, :message_queue_len)
-
-      # The bound still did real work: well under every offered event landed.
-      assert len < caller_count
-      # The bound is soft, not exact: the theoretical worst case is every
-      # caller landing between the check and the cast, i.e. max_mailbox
-      # plus caller_count. Actual runs land nowhere near that, but the test
-      # only asserts what is actually guaranteed.
-      assert len <= max_mailbox + caller_count
+      # Not one concurrent caller landed: the mailbox is still exactly at the
+      # bound. This is the assertion the earlier formulation was reaching for.
+      assert {:message_queue_len, ^max_mailbox} =
+               Process.info(writer, :message_queue_len)
 
       :sys.resume(writer)
-      Writer.flush(writer)
+
+      log = capture_log(fn -> Writer.flush(writer) end)
+      assert log =~ "Events.Writer mailbox full, dropped #{caller_count} event(s)"
     end
   end
 
