@@ -253,13 +253,78 @@ defmodule MydiaWeb.FeatureCase do
   on it alone proves nothing. LiveView adds `phx-connected` to the view
   container in `hideLoader()` once the join succeeds, which is the real signal.
 
-  `find/2` polls through `Wallaby.Browser.retry/2` until `:max_wait_time`
-  (10s, see config/test.exs), so this returns as soon as the socket is up
-  rather than after a fixed delay.
+  This polls through `eventually/2` with its own budget rather than through
+  `Wallaby.Browser.find/2` and the global `:max_wait_time`, for two reasons: a
+  socket join is slower than a DOM assertion and deserves a longer wait, and a
+  raise from `find/2` reports only that a selector did not match, which cannot
+  say whether the page had no LiveView at all or had one that never connected.
+
+  Options: `:timeout` (ms, default 15_000).
   """
-  def wait_for_liveview(session) do
-    Wallaby.Browser.find(session, Wallaby.Query.css("[data-phx-main].phx-connected"))
+  def wait_for_liveview(session, opts \\ []) do
+    timeout = Keyword.get(opts, :timeout, 15_000)
+
+    try do
+      eventually(
+        fn ->
+          if Wallaby.Browser.has?(
+               session,
+               Wallaby.Query.css("[data-phx-main].phx-connected", count: :any)
+             ) do
+            {:ok, session}
+          else
+            :error
+          end
+        end,
+        timeout: timeout,
+        description: "the root LiveView to connect its socket"
+      )
+    rescue
+      RuntimeError ->
+        root_present? =
+          Wallaby.Browser.has?(session, Wallaby.Query.css("[data-phx-main]", count: :any))
+
+        reraise liveview_failure_message(root_present?, timeout), __STACKTRACE__
+    end
+
     session
+  end
+
+  @doc """
+  The message `wait_for_liveview/2` raises when the socket does not join.
+
+  Public so it can be tested without a browser. `root_present?` is whether any
+  `[data-phx-main]` element exists, which is what separates the two causes.
+  """
+  def liveview_failure_message(true, timeout_ms) do
+    """
+    The root LiveView rendered but its socket never joined within #{timeout_ms}ms.
+    `[data-phx-main]` is present; `phx-connected` is not.
+
+    The usual cause is a missing asset build. Without priv/static/assets/app.js
+    there is no LiveView client, so the socket cannot connect. A fresh worktree
+    never has one, since the asset build is per-worktree. Fix with:
+
+        devenv shell -- bash -c 'mix assets.setup && mix assets.build'
+
+    Then confirm the setup with:
+
+        mix test test/mydia_web/features/smoke_test.exs --only feature
+
+    Other causes: a JavaScript exception before LiveView boots, or a server
+    crash during the join.
+    """
+  end
+
+  def liveview_failure_message(false, timeout_ms) do
+    """
+    No root LiveView rendered within #{timeout_ms}ms: no element matches
+    `[data-phx-main]`.
+
+    The page under test is probably not the page expected. Check for a redirect,
+    an unauthenticated session lands on the log-in page, or for a route that
+    renders a plain controller view rather than a LiveView.
+    """
   end
 
   @doc """
