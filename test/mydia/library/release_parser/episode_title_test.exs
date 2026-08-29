@@ -35,5 +35,29 @@ defmodule Mydia.Library.ReleaseParser.EpisodeTitleTest do
     test "returns nil for nil input" do
       assert EpisodeTitle.extract(nil) == nil
     end
+
+    test "drops a residual episode fragment when '.' splits the marker" do
+      assert EpisodeTitle.extract("Show.S04.E01.Title.mkv") == "Title"
+    end
+
+    test "drops a residual episode fragment when whitespace splits the marker" do
+      assert EpisodeTitle.extract("Show S04 E01 - Title.mkv") == "Title"
+    end
+
+    test "drops a residual fragment from a multi-episode marker" do
+      assert EpisodeTitle.extract("Show.S02E05.E06.Title.mkv") == "Title"
+    end
+
+    test "keeps a trailing exclamation mark that belongs to the title" do
+      assert EpisodeTitle.extract("Show - S04E01 - Surprise!.mkv") == "Surprise!"
+    end
+
+    test "keeps a trailing question mark that belongs to the title" do
+      assert EpisodeTitle.extract("Show - S04E01 - Who Are You?.mkv") == "Who Are You?"
+    end
+
+    test "returns nil when only punctuation follows the marker" do
+      assert EpisodeTitle.extract("Show - S04E01 - !!!.mkv") == nil
+    end
   end
 end
