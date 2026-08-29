@@ -111,6 +111,22 @@ defmodule Mydia.Collections.SmartRulesFields do
   end
 
   @doc """
+  Returns `%{field_name => [{value, label}]}` for every field that has a value
+  provider.
+
+  Callers load this once when a rules editor opens and pass it into the editor,
+  so that rendering a condition row performs no database work.
+  """
+  def value_options do
+    field_definitions()
+    |> Enum.flat_map(fn
+      {name, %{values: fun}} when is_function(fun, 0) -> [{name, fun.()}]
+      _ -> []
+    end)
+    |> Map.new()
+  end
+
+  @doc """
   Returns operators for a field.
   """
   def get_operators(field_name) do

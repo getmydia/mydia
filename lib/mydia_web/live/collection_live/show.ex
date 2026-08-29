@@ -13,6 +13,7 @@ defmodule MydiaWeb.CollectionLive.Show do
 
   alias Mydia.Collections
   alias Mydia.Collections.Collection
+  alias Mydia.Collections.SmartRulesFields
   alias Mydia.Media
 
   import MydiaWeb.CollectionLive.Components, only: [smart_rules_editor: 1]
@@ -58,6 +59,18 @@ defmodule MydiaWeb.CollectionLive.Show do
     |> assign(:rules_sort_field, "")
     |> assign(:rules_sort_direction, "desc")
     |> assign(:rules_limit, nil)
+    |> assign_new(:rules_value_options, fn -> %{} end)
+  end
+
+  # The option lists come from a scan of media_items.metadata, so they are
+  # loaded when the smart editor first becomes visible rather than on every
+  # phx-change.
+  defp load_value_options(socket) do
+    if socket.assigns.rules_value_options == %{} do
+      assign(socket, :rules_value_options, SmartRulesFields.value_options())
+    else
+      socket
+    end
   end
 
   defp parse_existing_rules(socket, collection) do
@@ -394,6 +407,7 @@ defmodule MydiaWeb.CollectionLive.Show do
                   sort_field={@rules_sort_field}
                   sort_direction={@rules_sort_direction}
                   limit={@rules_limit}
+                  value_options={@rules_value_options}
                 />
               <% end %>
             </div>
@@ -627,6 +641,11 @@ defmodule MydiaWeb.CollectionLive.Show do
       socket
       |> assign(:show_edit_modal, true)
       |> parse_existing_rules(socket.assigns.collection)
+
+    socket =
+      if socket.assigns.collection.type == "smart",
+        do: load_value_options(socket),
+        else: socket
 
     {:noreply, socket}
   end

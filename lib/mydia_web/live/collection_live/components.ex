@@ -18,6 +18,7 @@ defmodule MydiaWeb.CollectionLive.Components do
   attr :sort_field, :string, required: true
   attr :sort_direction, :string, required: true
   attr :limit, :any, required: true
+  attr :value_options, :map, required: true
 
   def smart_rules_editor(assigns) do
     ~H"""
@@ -113,6 +114,7 @@ defmodule MydiaWeb.CollectionLive.Components do
                   field={condition["field"]}
                   operator={condition["operator"]}
                   value={condition["value"]}
+                  value_options={@value_options}
                   index={index}
                 />
 
@@ -244,6 +246,7 @@ defmodule MydiaWeb.CollectionLive.Components do
   attr :field, :string, required: true
   attr :operator, :string, required: true
   attr :value, :any, required: true
+  attr :value_options, :map, required: true
   attr :index, :integer, required: true
 
   defp condition_value_input(assigns) do
@@ -251,10 +254,9 @@ defmodule MydiaWeb.CollectionLive.Components do
     render_value_input(assigns, field_def)
   end
 
-  # Enum fields - render dropdown with values from database
-  defp render_value_input(assigns, %{type: :enum} = field_def) do
-    values = field_def.values.()
-    assigns = assign(assigns, :options, values)
+  # Enum fields - options are loaded once when the dialog opens, never in render
+  defp render_value_input(assigns, %{type: :enum}) do
+    assigns = assign(assigns, :options, Map.get(assigns.value_options, assigns.field, []))
 
     ~H"""
     <select
@@ -270,9 +272,8 @@ defmodule MydiaWeb.CollectionLive.Components do
   end
 
   # Boolean fields - render yes/no dropdown
-  defp render_value_input(assigns, %{type: :boolean} = field_def) do
-    values = field_def.values.()
-    assigns = assign(assigns, :options, values)
+  defp render_value_input(assigns, %{type: :boolean}) do
+    assigns = assign(assigns, :options, Map.get(assigns.value_options, assigns.field, []))
 
     ~H"""
     <select
@@ -281,7 +282,7 @@ defmodule MydiaWeb.CollectionLive.Components do
     >
       <option value="">Select...</option>
       <%= for {val, label} <- @options do %>
-        <option value={val} selected={@value == val or @value == String.to_atom(val)}>{label}</option>
+        <option value={val} selected={@value == val or @value == to_string(val)}>{label}</option>
       <% end %>
     </select>
     """

@@ -53,4 +53,33 @@ defmodule Mydia.Collections.SmartRulesFieldsTest do
       end
     end
   end
+
+  describe "value_options/0" do
+    test "returns options for every field that has a value provider" do
+      options = SmartRulesFields.value_options()
+
+      expected =
+        for {name, %{values: fun}} <- SmartRulesFields.field_definitions(),
+            is_function(fun, 0),
+            do: name
+
+      assert Enum.sort(Map.keys(options)) == Enum.sort(expected)
+    end
+
+    test "carries the values the individual providers return" do
+      options = SmartRulesFields.value_options()
+
+      assert {"Action", "Action"} in options["metadata.genres"]
+      assert {"ja", "Japanese"} in options["metadata.original_language"]
+      assert {"Released", "Released"} in options["metadata.status"]
+    end
+
+    test "omits fields that have no value provider" do
+      options = SmartRulesFields.value_options()
+
+      refute Map.has_key?(options, "year")
+      refute Map.has_key?(options, "title")
+      refute Map.has_key?(options, "inserted_at")
+    end
+  end
 end
