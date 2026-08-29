@@ -588,6 +588,22 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       {:error, %Error{type: :rate_limited}}
   """
   @spec validate_response(http_response()) :: :ok | {:error, Error.t()}
+
+  # An unfollowed redirect used to land in the catch-all below as
+  # "Unexpected status: 302", which told an operator nothing about where the
+  # indexer was trying to send them. This is now only reachable when a
+  # definition sets `followredirect: false`, since search follows by default.
+  #
+  # Task 5's retryable_failure?/1 matches on the "Redirected (HTTP " prefix.
+  def validate_response(%{status: status} = response) when status in 300..399 do
+    location = response |> Map.get(:headers) |> location_header()
+
+    suffix = if location, do: " to #{location}", else: " with no Location header"
+
+    {:error,
+     Error.search_failed("Redirected (HTTP #{status})#{suffix} and the redirect was not followed")}
+  end
+
   def validate_response(%{status: status, body: body}) do
     cond do
       status == 200 ->
@@ -613,6 +629,25 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   end
 
   # Private functions
+
+  # Req 0.5 returns headers as a map of lowercase name to a list of values;
+  # older shapes and hand-built test responses use a keyword-ish list.
+  defp location_header(headers) when is_map(headers) do
+    case Map.get(headers, "location") do
+      [value | _] -> value
+      value when is_binary(value) -> value
+      _ -> nil
+    end
+  end
+
+  defp location_header(headers) when is_list(headers) do
+    Enum.find_value(headers, fn
+      {name, value} -> if String.downcase(to_string(name)) == "location", do: value
+      _ -> nil
+    end)
+  end
+
+  defp location_header(_), do: nil
 
   defp get_base_url(definition, opts) do
     case Keyword.get(opts, :base_url) do

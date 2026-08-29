@@ -1006,4 +1006,112 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
       assert url =~ "1999"
     end
   end
+
+  describe "redirect handling" do
+    test "follows a redirect by default" do
+      bypass = Bypass.open()
+
+      Bypass.expect_once(bypass, "GET", "/search", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("location", "/moved")
+        |> Plug.Conn.resp(302, "")
+      end)
+
+      Bypass.expect_once(bypass, "GET", "/moved", fn conn ->
+        Plug.Conn.resp(
+          conn,
+          200,
+          "<html><body><table><tr><td>row</td></tr></table></body></html>"
+        )
+      end)
+
+      parsed = redirecting_definition("http://localhost:#{bypass.port}", true)
+
+      assert {:ok, %{status: 200}} =
+               CardigannSearchEngine.execute_search(parsed, [query: "ubuntu"], %{}, %{})
+    end
+
+    test "an unfollowed redirect reports its Location instead of Unexpected status" do
+      bypass = Bypass.open()
+
+      Bypass.stub(bypass, "GET", "/search", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("location", "https://elsewhere.test/blocked")
+        |> Plug.Conn.resp(302, "")
+      end)
+
+      parsed = redirecting_definition("http://localhost:#{bypass.port}", false)
+
+      assert {:error, %Error{message: message}} =
+               CardigannSearchEngine.execute_search(parsed, [query: "ubuntu"], %{}, %{})
+
+      assert message =~ "Redirected (HTTP 302)"
+      assert message =~ "https://elsewhere.test/blocked"
+      refute message =~ "Unexpected status"
+    end
+
+    defp redirecting_definition(link, follow_redirect) do
+      %Parsed{
+        id: "redirect-test",
+        name: "Redirect Test",
+        description: "Test indexer",
+        language: "en-US",
+        type: "public",
+        encoding: "UTF-8",
+        links: [link],
+        legacylinks: [],
+        capabilities: %{modes: %{}},
+        follow_redirect: follow_redirect,
+        settings: [],
+        search: %{
+          paths: [%{path: "/search"}],
+          inputs: %{},
+          headers: nil,
+          keywordsfilters: [],
+          rows: %{selector: "tr"},
+          fields: %{}
+        },
+        login: nil,
+        download: nil
+      }
+    end
+  end
+
+  describe "follow_redirect default" do
+    test "a definition without followredirect follows redirects" do
+      # No definition in the shipped corpus sets this key, so the old `false`
+      # default meant Mydia followed no redirects at all on search.
+      yaml = """
+      ---
+      id: no-followredirect
+      name: No Follow Redirect
+      description: test
+      language: en-US
+      type: public
+      encoding: UTF-8
+      links:
+        - https://example.test/
+      caps:
+        categorymappings:
+          - {id: 1, cat: Movies, desc: "Movies"}
+        modes:
+          search: [q]
+      search:
+        paths:
+          - path: /search
+        rows:
+          selector: tr
+        fields:
+          title:
+            selector: td
+          size:
+            selector: td
+          seeders:
+            selector: td
+      """
+
+      assert {:ok, parsed} = Mydia.Indexers.CardigannParser.parse_definition(yaml)
+      assert parsed.follow_redirect == true
+    end
+  end
 end
