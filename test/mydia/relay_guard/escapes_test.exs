@@ -38,27 +38,42 @@ defmodule Mydia.RelayGuard.EscapesTest do
     assert length(Escapes.all()) == 2
   end
 
+  test "records two requests for the same movie id with different append_to_response queries as two rows" do
+    Escapes.record(
+      request("https://relay.mydia.dev/tmdb/movies/900000123?append_to_response=recommendations")
+    )
+
+    Escapes.record(
+      request(
+        "https://relay.mydia.dev/tmdb/movies/900000123?append_to_response=credits,alternative_titles,videos,external_ids"
+      )
+    )
+
+    assert length(Escapes.all()) == 2
+  end
+
   test "suggests the collection helper for a collection path" do
-    assert Escapes.suggest("/tmdb/collections/900000123", []) ==
+    assert Escapes.suggest("/tmdb/collections/900000123", nil) ==
              "warm_collection_cache(900000123, parts)"
   end
 
   test "suggests the recommendations helper for a tv path" do
-    assert Escapes.suggest("/tmdb/tv/shows/900000123", []) ==
+    assert Escapes.suggest("/tmdb/tv/shows/900000123", nil) ==
              "warm_recommendations_cache(900000123, :tv_show, results)"
   end
 
-  test "disambiguates a movie path by the calling module" do
-    assert Escapes.suggest("/tmdb/movies/900000123", [Mydia.Media.Recommendations]) ==
+  test "disambiguates a movie path by the append_to_response query" do
+    assert Escapes.suggest("/tmdb/movies/900000123", "append_to_response=recommendations") ==
              "warm_recommendations_cache(900000123, :movie, results)"
 
-    assert Escapes.suggest("/tmdb/movies/900000123", [Mydia.Media.Franchises]) ==
-             "warm_movie_details_cache(900000123)"
+    assert Escapes.suggest(
+             "/tmdb/movies/900000123",
+             "append_to_response=credits,alternative_titles,videos,external_ids"
+           ) == "warm_movie_details_cache(900000123)"
   end
 
-  test "suggests nothing when the path or caller is unrecognised" do
-    refute Escapes.suggest("/tmdb/movies/900000123", [])
-    refute Escapes.suggest("/some/other/path", [Mydia.Media.Franchises])
+  test "suggests nothing for an unrecognised path" do
+    refute Escapes.suggest("/some/other/path", nil)
   end
 
   test "the report names the url and the fix" do

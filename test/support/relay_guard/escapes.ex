@@ -22,6 +22,7 @@ defmodule Mydia.RelayGuard.Escapes do
   @tv_path ~r{^/tmdb/tv/shows/(?<id>\d+)}
 
   @app_prefixes ["Elixir.Mydia.", "Elixir.MydiaWeb."]
+  @self_prefix "Elixir.Mydia.RelayGuard."
 
   @doc "Creates the escape table. Idempotent."
   def setup do
@@ -44,7 +45,7 @@ defmodule Mydia.RelayGuard.Escapes do
   def record(%Req.Request{} = req) do
     if :ets.whereis(@table) != :undefined do
       frames = app_frames()
-      key = {req.method, req.url.host, req.url.path, List.first(frames)}
+      key = {req.method, req.url.host, req.url.path, req.url.query}
       default = {key, 0, URI.to_string(req.url), frames}
 
       :ets.update_counter(@table, key, {2, 1}, default)
@@ -79,11 +80,13 @@ defmodule Mydia.RelayGuard.Escapes do
   The `Mydia.MetadataCacheHelpers` call that would have prevented this escape,
   or nil.
 
-  `/tmdb/movies/:id` is reachable from two different lookups, so the calling
-  modules disambiguate it. Anything unrecognised returns nil: a wrong suggestion
-  is worse than none.
+  `/tmdb/movies/:id` is reachable from two different lookups, so the
+  `append_to_response` query parameter disambiguates them: an exact
+  `append_to_response=recommendations` value is the recommendations lookup,
+  anything else is the details lookup. Anything unrecognised returns nil: a
+  wrong suggestion is worse than none.
   """
-  def suggest(path, modules) when is_binary(path) and is_list(modules) do
+  def suggest(path, query) when is_binary(path) and (is_nil(query) or is_binary(query)) do
     cond do
       caps = Regex.named_captures(@collection_path, path) ->
         "warm_collection_cache(#{caps["id"]}, parts)"
@@ -92,14 +95,18 @@ defmodule Mydia.RelayGuard.Escapes do
         "warm_recommendations_cache(#{caps["id"]}, :tv_show, results)"
 
       caps = Regex.named_captures(@movie_path, path) ->
-        movie_suggestion(caps["id"], modules)
+        if recommendations_query?(query) do
+          "warm_recommendations_cache(#{caps["id"]}, :movie, results)"
+        else
+          "warm_movie_details_cache(#{caps["id"]})"
+        end
 
       true ->
         nil
     end
   end
 
-  def suggest(_path, _modules), do: nil
+  def suggest(_path, _query), do: nil
 
   @doc "The end-of-suite report."
   def format(escapes) do
@@ -117,24 +124,20 @@ defmodule Mydia.RelayGuard.Escapes do
     """
   end
 
-  defp movie_suggestion(id, modules) do
-    cond do
-      Mydia.Media.Recommendations in modules ->
-        "warm_recommendations_cache(#{id}, :movie, results)"
+  defp recommendations_query?(nil), do: false
 
-      Mydia.Media.Franchises in modules ->
-        "warm_movie_details_cache(#{id})"
-
-      true ->
-        nil
+  defp recommendations_query?(query) when is_binary(query) do
+    case URI.decode_query(query) do
+      %{"append_to_response" => "recommendations"} -> true
+      _other -> false
     end
   end
 
-  defp format_one({{method, _host, path, _frame}, count, url, frames}) do
-    modules = Enum.map(frames, fn {mod, _fun, _arity, _loc} -> mod end)
+  defp format_one({{method, _host, path, _query}, count, url, frames}) do
+    query = URI.parse(url).query
 
     fix =
-      case suggest(path, modules) do
+      case suggest(path, query) do
         nil -> ""
         call -> "\n      fix: #{call}\n"
       end
@@ -159,7 +162,7 @@ defmodule Mydia.RelayGuard.Escapes do
 
     frames
     |> Enum.filter(fn
-      {mod, _fun, _arity, _loc} -> app_module?(mod)
+      {mod, _fun, _arity, _loc} -> app_module?(mod) and not self_module?(mod)
       _other -> false
     end)
     |> Enum.take(5)
@@ -170,4 +173,10 @@ defmodule Mydia.RelayGuard.Escapes do
   end
 
   defp app_module?(_mod), do: false
+
+  defp self_module?(mod) when is_atom(mod) do
+    mod |> Atom.to_string() |> String.starts_with?(@self_prefix)
+  end
+
+  defp self_module?(_mod), do: false
 end
