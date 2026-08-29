@@ -308,4 +308,125 @@ defmodule Mydia.Indexers.CardigannDownloadTest do
       assert magnet =~ "VIALIVE"
     end
   end
+
+  describe "credential scope on downloads" do
+    test "a download url on a foreign host does not receive the session" do
+      site = Bypass.open()
+      foreign = Bypass.open()
+      test_pid = self()
+
+      Bypass.expect_once(foreign, "GET", "/get.torrent", fn conn ->
+        send(test_pid, {:cookie_header, Plug.Conn.get_req_header(conn, "cookie")})
+        Plug.Conn.resp(conn, 200, "d8:announce")
+      end)
+
+      definition = %Parsed{
+        id: "dl-scope",
+        name: "DL Scope",
+        description: "",
+        language: "en-US",
+        type: "private",
+        encoding: "UTF-8",
+        links: ["http://localhost:#{site.port}"],
+        capabilities: %{modes: %{}},
+        search: %{paths: [%{path: "/search"}], inputs: %{}, rows: %{}, fields: %{}},
+        login: nil,
+        download: %{selectors: [%{selector: "a.dl", attribute: "href"}]},
+        settings: [],
+        request_delay: nil,
+        follow_redirect: false
+      }
+
+      CardigannDownload.resolve(definition, "http://localhost:#{foreign.port}/get.torrent", %{
+        cookies: ["session=secret"],
+        base_url: "http://localhost:#{site.port}",
+        config: %{}
+      })
+
+      assert_receive {:cookie_header, []}
+    end
+
+    test "a download url on the site host does receive the session" do
+      site = Bypass.open()
+      test_pid = self()
+
+      Bypass.expect_once(site, "GET", "/get.torrent", fn conn ->
+        send(test_pid, {:cookie_header, Plug.Conn.get_req_header(conn, "cookie")})
+        Plug.Conn.resp(conn, 200, "d8:announce")
+      end)
+
+      definition = %Parsed{
+        id: "dl-scope-ok",
+        name: "DL Scope OK",
+        description: "",
+        language: "en-US",
+        type: "private",
+        encoding: "UTF-8",
+        links: ["http://localhost:#{site.port}"],
+        capabilities: %{modes: %{}},
+        search: %{paths: [%{path: "/search"}], inputs: %{}, rows: %{}, fields: %{}},
+        login: nil,
+        download: %{selectors: [%{selector: "a.dl", attribute: "href"}]},
+        settings: [],
+        request_delay: nil,
+        follow_redirect: false
+      }
+
+      CardigannDownload.resolve(definition, "/get.torrent", %{
+        cookies: ["session=secret"],
+        base_url: "http://localhost:#{site.port}",
+        config: %{}
+      })
+
+      assert_receive {:cookie_header, ["session=secret"]}
+    end
+
+    # The two tests above hold on with the interim `%{}` config Task 3 passed
+    # in: link-based scoping alone already decides them, so they cannot tell
+    # `scope_config/1` threading the operator's settings through from a
+    # regression that drops those settings back to `%{}`. This test can: the
+    # download host is named only by a templated `{{ .Config.apiurl }}`
+    # search path, resolvable exclusively from the operator's own config, not
+    # from the definition's shipped default.
+    test "a download url reachable only via the operator's configured api host receives the session" do
+      site = Bypass.open()
+      api = Bypass.open()
+      test_pid = self()
+
+      Bypass.expect_once(api, "GET", "/get.torrent", fn conn ->
+        send(test_pid, {:cookie_header, Plug.Conn.get_req_header(conn, "cookie")})
+        Plug.Conn.resp(conn, 200, "d8:announce")
+      end)
+
+      definition = %Parsed{
+        id: "dl-scope-apiurl",
+        name: "DL Scope Apiurl",
+        description: "",
+        language: "en-US",
+        type: "private",
+        encoding: "UTF-8",
+        links: ["http://localhost:#{site.port}"],
+        capabilities: %{modes: %{}},
+        search: %{
+          paths: [%{path: "https://{{ .Config.apiurl }}/search"}],
+          inputs: %{},
+          rows: %{},
+          fields: %{}
+        },
+        login: nil,
+        download: %{selectors: [%{selector: "a.dl", attribute: "href"}]},
+        settings: [%{name: "apiurl", type: "text", default: "unused.invalid"}],
+        request_delay: nil,
+        follow_redirect: false
+      }
+
+      CardigannDownload.resolve(definition, "http://localhost:#{api.port}/get.torrent", %{
+        cookies: ["session=secret"],
+        base_url: "http://localhost:#{site.port}",
+        config: %{"apiurl" => "localhost:#{api.port}"}
+      })
+
+      assert_receive {:cookie_header, ["session=secret"]}
+    end
+  end
 end

@@ -878,7 +878,11 @@ defmodule Mydia.Indexers do
          {:ok, parsed} <- CardigannParser.parse_definition(definition.definition) do
       CardigannDownload.resolve(parsed, download_url, %{
         cookies: get_cardigann_auth_cookies(indexer_name),
-        base_url: definition.active_link
+        base_url: definition.active_link,
+        # The credential scope renders absolute `{{ .Config.apiurl }}` paths, so
+        # it needs the operator's settings. Without them an API host reached
+        # through a setting would fall outside the scope and lose its session.
+        config: definition.config || %{}
       })
     else
       nil ->
