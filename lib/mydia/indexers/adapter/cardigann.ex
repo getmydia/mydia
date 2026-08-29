@@ -502,18 +502,23 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
   end
 
   defp get_or_create_session(parsed, definition, config) do
-    user_settings = Map.get(config, :user_settings, %{})
+    user_settings = setting(config, :user_settings) || %{}
 
     # Build user config from settings
     credentials = %{
-      username: Map.get(user_settings, :username),
-      password: Map.get(user_settings, :password),
-      api_key: Map.get(user_settings, :api_key),
-      cookies: Map.get(user_settings, :cookies, [])
+      username: setting(user_settings, :username),
+      password: setting(user_settings, :password),
+      api_key: setting(user_settings, :api_key),
+      cookies: setting(user_settings, :cookies) || []
     }
 
-    # Remove nil values
-    credentials = Map.reject(credentials, fn {_k, v} -> is_nil(v) end)
+    # Drop anything the user has not actually configured. An empty cookie list is
+    # not a credential, and leaving the key in place made
+    # CardigannAuth.determine_auth_method/2 - which tests for :cookies before
+    # :username - select :cookie and skip the form login outright, so a private
+    # tracker with a username and password searched anonymously and returned
+    # nothing.
+    credentials = Map.reject(credentials, fn {_k, v} -> is_nil(v) or v == [] end)
 
     # Try to get stored session first
     case CardigannAuth.get_stored_session(definition.id) do
@@ -535,6 +540,22 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
         authenticate_and_convert(parsed, credentials, definition.id)
     end
   end
+
+  # Credentials are read by name rather than by key type. `definition.config` is
+  # a `Mydia.Settings.JsonMapType`, so anything that has been through the
+  # database comes back from `Jason.decode/1` with string keys, and the admin
+  # form supplies string keys too. Reading only atoms meant every configured
+  # private indexer authenticated with empty credentials: the login failed, the
+  # search returned nothing, and the connection test now reports a failure the
+  # tracker never caused.
+  defp setting(map, key) when is_map(map) do
+    case Map.fetch(map, key) do
+      {:ok, value} -> value
+      :error -> Map.get(map, Atom.to_string(key))
+    end
+  end
+
+  defp setting(_map, _key), do: nil
 
   defp authenticate_and_convert(parsed, credentials, definition_id) do
     case CardigannAuth.authenticate(parsed, credentials, definition_id) do

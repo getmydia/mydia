@@ -201,6 +201,111 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
     end
   end
 
+  describe "credential key shape" do
+    # `definition.config` is a JsonMapType, so anything that has been through the
+    # database comes back string-keyed, and the admin form supplies string keys
+    # too. Reading only atom keys authenticated every private indexer with empty
+    # credentials, which made the login fail and the probe report a failure the
+    # tracker never caused.
+    setup do
+      bypass = Bypass.open()
+      base_url = "http://localhost:#{bypass.port}"
+
+      yaml = """
+      id: private-indexer
+      name: Private Indexer
+      description: A private test indexer
+      language: en-US
+      type: private
+      encoding: UTF-8
+      links:
+        - #{base_url}
+      caps:
+        modes:
+          search: {search-type: q}
+        categories:
+          5000: TV
+      login:
+        path: /login.php
+        method: form
+        inputs:
+          username: "{{ .Config.username }}"
+          password: "{{ .Config.password }}"
+        test:
+          selector: "a[href*=logout]"
+      search:
+        path: /search
+        rows:
+          selector: "table.results tr"
+          after: 1
+        fields:
+          title:
+            selector: "td.title a"
+          size:
+            selector: "td.size"
+          seeders:
+            selector: "td.seeders"
+      """
+
+      {:ok, definition} =
+        %CardigannDefinition{}
+        |> CardigannDefinition.changeset(%{
+          indexer_id: "private-indexer",
+          name: "Private Indexer",
+          description: "A private test indexer",
+          language: "en-US",
+          type: "private",
+          encoding: "UTF-8",
+          links: %{"0" => base_url},
+          capabilities: %{modes: %{"search" => %{}}, categories: %{"5000" => "TV"}},
+          definition: yaml,
+          schema_version: "v11",
+          enabled: true,
+          # String keys, exactly as the database and the admin form supply them.
+          config: %{"username" => "stringuser", "password" => "stringpass"},
+          last_synced_at: DateTime.utc_now()
+        })
+        |> Repo.insert()
+
+      %{bypass: bypass, private_definition: definition}
+    end
+
+    test "string-keyed credentials reach a form login", %{bypass: bypass} do
+      test_pid = self()
+
+      Bypass.expect_once(bypass, "POST", "/login.php", fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        send(test_pid, {:login_params, URI.decode_query(body)})
+
+        conn
+        |> Plug.Conn.put_resp_header("set-cookie", "session=abc123; Path=/")
+        |> Plug.Conn.resp(200, "<html><body><a href='/logout'>Logout</a></body></html>")
+      end)
+
+      Bypass.stub(bypass, "GET", "/search", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("text/html")
+        |> Plug.Conn.resp(
+          200,
+          "<html><body><table class=\"results\"><tr><th>Header</th></tr></table></body></html>"
+        )
+      end)
+
+      config = %{
+        type: :cardigann,
+        name: "Private Indexer",
+        indexer_id: "private-indexer",
+        user_settings: %{"username" => "stringuser", "password" => "stringpass"}
+      }
+
+      assert {:ok, _results} = Cardigann.search(config, "query")
+
+      assert_receive {:login_params, params}
+      assert params["username"] == "stringuser"
+      assert params["password"] == "stringpass"
+    end
+  end
+
   describe "search/3" do
     test "builds search options correctly", %{definition: _definition} do
       config = %{
