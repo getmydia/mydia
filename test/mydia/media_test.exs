@@ -3108,4 +3108,29 @@ defmodule Mydia.MediaTest do
       assert id == show.id
     end
   end
+
+  describe "episode_bounds/1" do
+    import Mydia.MediaFixtures
+
+    test "returns the highest season and episode numbers" do
+      show = media_item_fixture(%{type: "tv_show", title: "Bounds Show"})
+
+      for {season, episode} <- [{1, 1}, {1, 21}, {2, 5}, {3, 16}] do
+        {:ok, _} =
+          Mydia.Media.create_episode(%{
+            media_item_id: show.id,
+            season_number: season,
+            episode_number: episode
+          })
+      end
+
+      assert Mydia.Media.episode_bounds(show.id) == {3, 21}
+    end
+
+    test "returns zeroes for a show with no episodes" do
+      show = media_item_fixture(%{type: "tv_show", title: "Empty Show"})
+
+      assert Mydia.Media.episode_bounds(show.id) == {0, 0}
+    end
+  end
 end
