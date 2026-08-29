@@ -368,9 +368,22 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
 
   describe "check_all_enabled/0" do
     test "checks all enabled indexers" do
+      # See the comment on "tests connection for valid public indexer" above:
+      # an enabled fixture's definition now parses cleanly, so each one here
+      # gets its own Bypass rather than reaching the fixture's
+      # https://example.com default for real.
+      bypass1 = Bypass.open()
+      Bypass.stub(bypass1, "GET", "/", fn conn -> Plug.Conn.resp(conn, 200, "<html/>") end)
+      Bypass.stub(bypass1, "GET", "/search", fn conn -> Plug.Conn.resp(conn, 200, "<html/>") end)
+      bypass2 = Bypass.open()
+      Bypass.stub(bypass2, "GET", "/", fn conn -> Plug.Conn.resp(conn, 200, "<html/>") end)
+      Bypass.stub(bypass2, "GET", "/search", fn conn -> Plug.Conn.resp(conn, 200, "<html/>") end)
+
       # Create mix of enabled and disabled
-      _enabled1 = cardigann_definition_fixture(%{enabled: true, name: "Enabled 1"})
-      _enabled2 = cardigann_definition_fixture(%{enabled: true, name: "Enabled 2"})
+      enabled1 = cardigann_definition_fixture(%{enabled: true, name: "Enabled 1"})
+      put_link(enabled1, "http://localhost:#{bypass1.port}")
+      enabled2 = cardigann_definition_fixture(%{enabled: true, name: "Enabled 2"})
+      put_link(enabled2, "http://localhost:#{bypass2.port}")
       _disabled = cardigann_definition_fixture(%{enabled: false, name: "Disabled 1"})
 
       assert {:ok, results} = CardigannHealthCheck.check_all_enabled()

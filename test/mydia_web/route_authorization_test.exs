@@ -15,6 +15,16 @@ defmodule MydiaWeb.RouteAuthorizationTest do
 
   import Phoenix.LiveViewTest
   import Mydia.AccountsFixtures
+  import Mydia.MetadataCacheHelpers
+
+  setup do
+    # "/" is DashboardLive.Index, which unconditionally loads both trending
+    # rails on connected mount, reached here by every role in both describe
+    # blocks below (#530).
+    warm_trending_cache(:movie, [])
+    warm_trending_cache(:tv_show, [])
+    :ok
+  end
 
   # live_session :authenticated — guarded only by :ensure_authenticated
   @authenticated_routes ["/", "/movies", "/downloads", "/calendar"]

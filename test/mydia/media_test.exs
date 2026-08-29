@@ -3043,19 +3043,29 @@ defmodule Mydia.MediaTest do
       # not guarantee LIMIT 1 returns insertion order, and since the crawl now
       # repeats daily a nondeterministic pick could flip the stored mapping
       # between runs.
+      # skip_episode_refresh: true — this test is only about imdb_id
+      # duplicate-ordering, not episodes. Without it, a tv_show with no
+      # tmdb_id/tvdb_id sends refresh_episodes_for_tv_show/2 straight to the
+      # live relay trying to recover one by title (#530).
       {:ok, older} =
-        Media.create_media_item(%{
-          title: "Older Duplicate",
-          type: "tv_show",
-          imdb_id: "tt-dup-order"
-        })
+        Media.create_media_item(
+          %{
+            title: "Older Duplicate",
+            type: "tv_show",
+            imdb_id: "tt-dup-order"
+          },
+          skip_episode_refresh: true
+        )
 
       {:ok, _newer} =
-        Media.create_media_item(%{
-          title: "Newer Duplicate",
-          type: "tv_show",
-          imdb_id: "tt-dup-order"
-        })
+        Media.create_media_item(
+          %{
+            title: "Newer Duplicate",
+            type: "tv_show",
+            imdb_id: "tt-dup-order"
+          },
+          skip_episode_refresh: true
+        )
 
       assert %{id: id} = Media.find_by_external_ids(%{imdb: "tt-dup-order"})
       assert id == older.id

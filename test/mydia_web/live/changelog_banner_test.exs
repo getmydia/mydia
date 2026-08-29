@@ -2,11 +2,17 @@ defmodule MydiaWeb.ChangelogBannerTest do
   use MydiaWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
+  import Mydia.MetadataCacheHelpers
 
   alias Mydia.Accounts
   alias Mydia.Changelog
 
   setup %{conn: conn} do
+    # Every test here mounts "/", and DashboardLive.Index unconditionally
+    # loads both trending rails on connected mount (#530).
+    warm_trending_cache(:movie, [])
+    warm_trending_cache(:tv_show, [])
+
     unique_id = System.unique_integer([:positive])
 
     {:ok, user} =

@@ -6,6 +6,25 @@ defmodule Mydia.Jobs.LibraryScannerExtrasTest do
   alias Mydia.Library.MediaFile
 
   import Mydia.SettingsFixtures
+  import Mydia.MetadataCacheHelpers
+
+  # Every "Ratatouille (2007)" file the scanner cannot match locally sends
+  # MetadataMatcher.search_external_movie/3 to the live relay — one search
+  # per file, all for the same title+year, so warming it once covers however
+  # many files a given test scans (#530). A non-empty, matching result is
+  # required: an empty match triggers search_external_movie/3's own
+  # retry-without-year fallback, which is a different, separately-cached
+  # search that would escape all over again.
+  defp warm_ratatouille_search do
+    warm_movie_search_cache("Ratatouille", [year: 2007], [
+      %{
+        "id" => unique_provider_id(),
+        "title" => "Ratatouille",
+        "release_date" => "2007-06-22",
+        "popularity" => 50.0
+      }
+    ])
+  end
 
   defp scan(library_path) do
     LibraryScanner.perform(%Oban.Job{args: %{"library_path_id" => library_path.id}})
@@ -29,6 +48,8 @@ defmodule Mydia.Jobs.LibraryScannerExtrasTest do
     File.write!(Path.join(movie_dir, "Ratatouille.2007.1080p.BluRay.mkv"), "feature")
     File.write!(Path.join(movie_dir, "gusteau-featurette.mkv"), "extra")
     File.write!(Path.join(movie_dir, "ratatouille-trailer.mkv"), "trailer")
+
+    warm_ratatouille_search()
 
     library_path = library_path_fixture(%{path: tmp_dir, type: "movies"})
     scan(library_path)
@@ -66,6 +87,8 @@ defmodule Mydia.Jobs.LibraryScannerExtrasTest do
     File.mkdir_p!(movie_dir)
     File.write!(Path.join(movie_dir, "Ratatouille.2007.1080p.BluRay.mkv"), "feature")
     File.write!(Path.join(movie_dir, "gusteau-featurette.mkv"), "extra")
+
+    warm_ratatouille_search()
 
     library_path = library_path_fixture(%{path: tmp_dir, type: "movies"})
     scan(library_path)

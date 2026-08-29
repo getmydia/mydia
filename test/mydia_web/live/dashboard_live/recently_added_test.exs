@@ -11,9 +11,15 @@ defmodule MydiaWeb.DashboardLive.RecentlyAddedTest do
   import Phoenix.LiveViewTest
   import Mydia.MediaFixtures
   import Mydia.AccountsFixtures
+  import Mydia.MetadataCacheHelpers
   import MydiaWeb.AuthHelpers
 
   setup %{conn: conn} do
+    # Every test here mounts "/", and DashboardLive.Index unconditionally
+    # loads both trending rails on connected mount (#530).
+    warm_trending_cache(:movie, [])
+    warm_trending_cache(:tv_show, [])
+
     %{conn: log_in_user(conn, admin_user_fixture())}
   end
 

@@ -80,8 +80,15 @@ defmodule Mydia.RemoteAccess.DirectUrlsTest do
       %{original_config: original_config}
     end
 
+    # public_ip_enabled defaults to true (DirectUrls.detect_public_ip/0), and
+    # detect_all/0 always calls it regardless of what these tests actually
+    # configure, so every test in this describe block needs it turned off
+    # explicitly or it reaches ifconfig.me/icanhazip.com/api.ipify.org for
+    # real — none of them assert anything about the public-IP-derived URL
+    # detect_all/0 would otherwise prepend (#530).
+
     test "includes local URLs" do
-      Application.put_env(:mydia, :direct_urls, external_port: 4000)
+      Application.put_env(:mydia, :direct_urls, external_port: 4000, public_ip_enabled: false)
 
       urls = DirectUrls.detect_all()
 
@@ -92,7 +99,8 @@ defmodule Mydia.RemoteAccess.DirectUrlsTest do
     test "includes external URL when configured" do
       Application.put_env(:mydia, :direct_urls,
         external_port: 4000,
-        external_url: "https://example.com:443"
+        external_url: "https://example.com:443",
+        public_ip_enabled: false
       )
 
       urls = DirectUrls.detect_all()
@@ -106,7 +114,8 @@ defmodule Mydia.RemoteAccess.DirectUrlsTest do
         additional_direct_urls: [
           "https://custom1.example.com:443",
           "https://custom2.example.com:443"
-        ]
+        ],
+        public_ip_enabled: false
       )
 
       urls = DirectUrls.detect_all()
@@ -124,7 +133,8 @@ defmodule Mydia.RemoteAccess.DirectUrlsTest do
           # Duplicate of external_url
           "https://example.com:443",
           "https://custom.example.com:443"
-        ]
+        ],
+        public_ip_enabled: false
       )
 
       urls = DirectUrls.detect_all()
@@ -144,7 +154,8 @@ defmodule Mydia.RemoteAccess.DirectUrlsTest do
       Application.put_env(:mydia, :direct_urls,
         external_port: 4000,
         external_url: nil,
-        additional_direct_urls: []
+        additional_direct_urls: [],
+        public_ip_enabled: false
       )
 
       urls = DirectUrls.detect_all()
@@ -159,7 +170,8 @@ defmodule Mydia.RemoteAccess.DirectUrlsTest do
       Application.put_env(:mydia, :direct_urls,
         external_port: 4000,
         external_url: nil,
-        additional_direct_urls: []
+        additional_direct_urls: [],
+        public_ip_enabled: false
       )
 
       urls = DirectUrls.detect_all()
@@ -214,6 +226,9 @@ defmodule Mydia.RemoteAccess.DirectUrlsTest do
       assert {:error, :disabled} = DirectUrls.detect_public_ip()
     end
 
+    # Genuinely reaches the public internet, same as "returns {:ok, ip} when
+    # successful" above (#530).
+    @tag :external
     test "caches successful results" do
       Application.put_env(:mydia, :direct_urls, public_ip_enabled: true)
 
@@ -240,6 +255,9 @@ defmodule Mydia.RemoteAccess.DirectUrlsTest do
       %{original_config: original_config}
     end
 
+    # Genuinely reaches the public internet: detect_public_url/0 calls
+    # detect_public_ip/0 internally (#530).
+    @tag :external
     test "returns sslip.io URL on success" do
       Application.put_env(:mydia, :direct_urls, public_ip_enabled: true, http_port: 4443)
 
@@ -257,6 +275,9 @@ defmodule Mydia.RemoteAccess.DirectUrlsTest do
       end
     end
 
+    # Genuinely reaches the public internet, same as "returns sslip.io URL on
+    # success" above (#530).
+    @tag :external
     test "uses http_port from config" do
       Application.put_env(:mydia, :direct_urls,
         public_ip_enabled: true,

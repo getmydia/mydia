@@ -2,6 +2,7 @@ defmodule MydiaWeb.AdminSettingsLiveFeedbackTest do
   use MydiaWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
+  import Mydia.MetadataCacheHelpers
 
   alias Mydia.{Accounts, Settings}
 
@@ -96,6 +97,11 @@ defmodule MydiaWeb.AdminSettingsLiveFeedbackTest do
         value: "false",
         category: :feedback
       })
+
+    # DashboardLive.Index unconditionally loads both trending rails on
+    # connected mount (#530).
+    warm_trending_cache(:movie, [])
+    warm_trending_cache(:tv_show, [])
 
     {:ok, _view, html} = live(conn, ~p"/")
 

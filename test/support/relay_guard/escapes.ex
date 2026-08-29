@@ -20,6 +20,9 @@ defmodule Mydia.RelayGuard.Escapes do
   @collection_path ~r{^/tmdb/collections/(?<id>\d+)}
   @movie_path ~r{^/tmdb/movies/(?<id>\d+)}
   @tv_path ~r{^/tmdb/tv/shows/(?<id>\d+)}
+  @trending_path ~r{^/tmdb/(?<kind>movies|tv)/trending$}
+  @genre_path ~r{^/tmdb/genre/(?<kind>movie|tv)$}
+  @movie_search_path ~r{^/tmdb/movies/search$}
 
   @app_prefixes ["Elixir.Mydia.", "Elixir.MydiaWeb."]
   @self_prefix "Elixir.Mydia.RelayGuard."
@@ -123,6 +126,15 @@ defmodule Mydia.RelayGuard.Escapes do
           "warm_movie_details_cache(#{caps["id"]})"
         end
 
+      caps = Regex.named_captures(@trending_path, path) ->
+        "warm_trending_cache(#{inspect(trending_media_type(caps["kind"]))}, results)"
+
+      caps = Regex.named_captures(@genre_path, path) ->
+        "warm_genre_cache(#{inspect(trending_media_type(caps["kind"]))}, genres)"
+
+      Regex.match?(@movie_search_path, path) ->
+        movie_search_suggestion(query)
+
       true ->
         nil
     end
@@ -144,6 +156,29 @@ defmodule Mydia.RelayGuard.Escapes do
     #{entries}
     ================================================================================
     """
+  end
+
+  # "tv" (trending) and "tv" (genre) both name the same media type; "movies"
+  # (trending, plural) and "movie" (genre, singular) both name the other.
+  # Neither regex's capture is ever anything else, so this has no fallback.
+  defp trending_media_type("tv"), do: :tv_show
+  defp trending_media_type(_movies_or_movie), do: :movie
+
+  # Unlike the by-id paths above, a movie search's cache key includes the
+  # query and the release year, both of which only exist in the query
+  # string, so there is no fixed suggestion — build one from what is there,
+  # or say nothing at all when the query cannot be parsed.
+  defp movie_search_suggestion(nil), do: nil
+
+  defp movie_search_suggestion(query) do
+    case URI.decode_query(query) do
+      %{"query" => q} = params when is_binary(q) ->
+        opts = if params["year"], do: "year: #{params["year"]}", else: ""
+        "warm_movie_search_cache(#{inspect(q)}, [#{opts}], results)"
+
+      _other ->
+        nil
+    end
   end
 
   defp recommendations_query?(nil), do: false

@@ -11,7 +11,16 @@ defmodule MydiaWeb.DashboardLive.StatTilesTest do
 
   import Phoenix.LiveViewTest
   import Mydia.AccountsFixtures
+  import Mydia.MetadataCacheHelpers
   import MydiaWeb.AuthHelpers
+
+  setup do
+    # Every test here mounts "/", and DashboardLive.Index unconditionally
+    # loads both trending rails on connected mount (#530).
+    warm_trending_cache(:movie, [])
+    warm_trending_cache(:tv_show, [])
+    :ok
+  end
 
   test "the library and downloads tiles link for a regular user", %{conn: conn} do
     conn = log_in_user(conn, user_fixture())

@@ -115,6 +115,43 @@ defmodule Mydia.RelayGuard.EscapesTest do
            ) == "warm_movie_details_cache(900000123)"
   end
 
+  test "suggests the trending helper for movies and tv" do
+    assert Escapes.suggest("/tmdb/movies/trending", nil) ==
+             "warm_trending_cache(:movie, results)"
+
+    assert Escapes.suggest("/tmdb/tv/trending", nil) ==
+             "warm_trending_cache(:tv_show, results)"
+  end
+
+  test "suggests the genre helper for movies and tv" do
+    assert Escapes.suggest("/tmdb/genre/movie", nil) ==
+             "warm_genre_cache(:movie, genres)"
+
+    assert Escapes.suggest("/tmdb/genre/tv", nil) ==
+             "warm_genre_cache(:tv_show, genres)"
+  end
+
+  test "suggests the movie search helper, carrying the query and year through" do
+    assert Escapes.suggest(
+             "/tmdb/movies/search",
+             "query=Ratatouille&language=en-US&include_adult=false&page=1&year=2007"
+           ) == "warm_movie_search_cache(\"Ratatouille\", [year: 2007], results)"
+  end
+
+  test "suggests the movie search helper with no year when none was searched" do
+    assert Escapes.suggest("/tmdb/movies/search", "query=Ratatouille&language=en-US") ==
+             "warm_movie_search_cache(\"Ratatouille\", [], results)"
+  end
+
+  test "suggests nothing for a movie search path with no parseable query" do
+    refute Escapes.suggest("/tmdb/movies/search", nil)
+    refute Escapes.suggest("/tmdb/movies/search", "language=en-US")
+  end
+
+  test "suggests nothing for a tvdb search path (uncached, no safe suggestion)" do
+    refute Escapes.suggest("/tvdb/search", "query=Test&type=series")
+  end
+
   test "suggests nothing for an unrecognised path" do
     refute Escapes.suggest("/some/other/path", nil)
   end

@@ -246,7 +246,11 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
     end
 
     test "env-sourced config shows an ENV badge on the row", %{conn: conn} do
-      System.put_env("FLARESOLVERR_URL", "http://env-flaresolverr:8191")
+      # .test is an RFC 2606 reserved TLD Mydia.RelayGuard already lets
+      # through: a container hostname like "flaresolverr" would resolve to
+      # something real elsewhere, so the guard cannot allowlist it, but this
+      # fixture only needs to look like one, not resolve as one (#530).
+      System.put_env("FLARESOLVERR_URL", "http://env-flaresolverr.test:8191")
 
       {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
 
@@ -270,11 +274,15 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
 
       view |> element(~s{button[phx-click="edit_flaresolverr"]}) |> render_click()
 
+      # Saving with enabled: true makes maybe_load_flaresolverr_status/1 fire a
+      # real health-check request at this url immediately, so it has to be a
+      # host Mydia.RelayGuard already lets through (.test, RFC 2606) rather
+      # than a container hostname the guard cannot safely allowlist (#530).
       view
       |> form("#flaresolverr-form",
         flaresolverr: %{
           enabled: "true",
-          url: "http://flaresolverr:8191",
+          url: "http://flaresolverr.test:8191",
           timeout: "60000",
           max_timeout: "120000"
         }
@@ -282,7 +290,7 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
       |> render_submit()
 
       url = Settings.get_config_setting_by_key("flaresolverr.url")
-      assert url.value == "http://flaresolverr:8191"
+      assert url.value == "http://flaresolverr.test:8191"
       assert url.category == :flaresolverr
       assert Settings.get_config_setting_by_key("flaresolverr.timeout").value == "60000"
       refute has_element?(view, "#flaresolverr-form")
@@ -291,7 +299,7 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
       # restart — FlareSolverr now reads enabled/url from the merged config.
       config = Mydia.Indexers.FlareSolverr.config()
       assert config.enabled == true
-      assert config.url == "http://flaresolverr:8191"
+      assert config.url == "http://flaresolverr.test:8191"
     end
 
     test "invalid timeout shows a validation error and writes no setting", %{conn: conn} do
@@ -357,7 +365,10 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
 
     test "enabling is allowed and the env URL is never persisted when the URL is env-sourced",
          %{conn: conn} do
-      System.put_env("FLARESOLVERR_URL", "http://env-flaresolverr:8191")
+      # Same reason as "saving the modal form upserts the settings" above:
+      # enabled: true fires a real health check at whatever url is
+      # effective, so it must resolve nowhere rather than be allowlisted.
+      System.put_env("FLARESOLVERR_URL", "http://env-flaresolverr.test:8191")
 
       {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
 
@@ -378,7 +389,7 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
       # The effective config still reflects the env URL plus the saved enabled flag.
       config = Mydia.Indexers.FlareSolverr.config()
       assert config.enabled == true
-      assert config.url == "http://env-flaresolverr:8191"
+      assert config.url == "http://env-flaresolverr.test:8191"
     end
 
     test "Cancel closes the modal without writing a setting", %{conn: conn} do

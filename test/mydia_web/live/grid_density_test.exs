@@ -11,12 +11,18 @@ defmodule MydiaWeb.GridDensityTest do
 
   import Phoenix.LiveViewTest
   import Mydia.AccountsFixtures
+  import Mydia.MetadataCacheHelpers
   import MydiaWeb.AuthHelpers
 
   alias Mydia.Accounts
   alias Mydia.Accounts.UserPreference
 
   setup %{conn: conn} do
+    # DiscoverLive.Index unconditionally loads the movie genre list and its
+    # default (trending) category on connected mount (#530).
+    warm_genre_cache(:movie, [])
+    warm_trending_cache(:movie, [])
+
     user = admin_user_fixture()
     %{conn: log_in_user(conn, user), user: user}
   end
