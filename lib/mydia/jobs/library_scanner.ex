@@ -32,10 +32,14 @@ defmodule Mydia.Jobs.LibraryScanner do
 
   alias Mydia.Library.{
     FileIngest,
+    MediaFile,
     MetadataMatcher,
     SampleDetector,
     ScanSummary
   }
+
+  alias Mydia.ImportGroups
+  alias Mydia.Settings.LibraryPath
 
   alias Mydia.Library.ReleaseParser, as: FileParser
 
@@ -231,7 +235,12 @@ defmodule Mydia.Jobs.LibraryScanner do
              video_extensions: extensions
            ) do
       summary = summarize(process_scan_result(library_path, scan_result))
-      if reconcile_sidecars?(summary), do: reconcile_sidecars(library_path)
+
+      if reconcile_sidecars?(summary) do
+        reconcile_sidecars(library_path)
+        rebuild_import_groups(library_path)
+      end
+
       summary
     else
       {:error, :not_found} ->
@@ -879,6 +888,36 @@ defmodule Mydia.Jobs.LibraryScanner do
   end
 
   defp updatable_library_path?(_), do: true
+
+  @doc false
+  # Public so the rebuild can be tested directly. Its caller `scan_library_path/1`
+  # is private and the entry point `perform_job/1` is tagged `:external` and
+  # excluded from the default suite.
+  #
+  # The scan caches matches as `MatchCandidate` rows, but `/import` renders
+  # `ImportGroup` rows, and nothing built the second from the first unless a
+  # human started an import run. That is why a library could hold hundreds of
+  # matched orphans while the inbox said there was nothing to review.
+  #
+  # Skipped while a run is active. `ImportGroups.write_group/4` strips
+  # `:status` from an existing row but not `:import_run_id`, so rebuilding with
+  # no run id would detach the running import's own groups from it. The run
+  # rebuilds them itself when it finishes, so yielding costs nothing.
+  @spec rebuild_import_groups(LibraryPath.t()) ::
+          {:ok, %{groups: non_neg_integer(), files: non_neg_integer()}} | :skipped
+  def rebuild_import_groups(library_path) do
+    case Library.active_import_run(library_path.id) do
+      nil ->
+        ImportGroups.upsert_for_library(library_path)
+
+      _run ->
+        Logger.debug("Skipping import group rebuild, a run is active",
+          library_path_id: library_path.id
+        )
+
+        :skipped
+    end
+  end
 
   defp process_media_file(media_file, file_info, metadata_config) do
     Logger.debug("Processing media file for metadata", path: file_info.path)
