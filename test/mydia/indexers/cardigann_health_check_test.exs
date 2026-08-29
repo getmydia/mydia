@@ -18,10 +18,33 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
     end
 
     test "tests connection for valid public indexer" do
+      # The fixture's default links point at https://example.com. Before
+      # cardigann_definition_fixture/1 carried size/seeders fields,
+      # CardigannParser.validate_search_fields/1 rejected that YAML before any
+      # HTTP call happened, so this test never actually reached the network.
+      # Now that the definition parses, it must be pointed at a local Bypass
+      # server instead, or it makes a live, unmocked, un-tagged :external
+      # request to example.com on every run.
       definition = cardigann_definition_fixture(%{enabled: true, type: "public"})
 
-      # Mock a successful test (this will actually attempt to parse and connect)
-      # In a real scenario, we'd need to use mocks or have test definitions
+      bypass = Bypass.open()
+      Bypass.stub(bypass, "GET", "/", fn conn -> Plug.Conn.resp(conn, 200, "<html/>") end)
+
+      Bypass.stub(bypass, "GET", "/search", fn conn ->
+        Plug.Conn.resp(
+          conn,
+          200,
+          ~s"""
+          <html><body><table class="results">
+          <tr><td class="title">Some Release</td>
+          <td class="download"><a href="/download/1">grab</a></td></tr>
+          </table></body></html>
+          """
+        )
+      end)
+
+      put_link(definition, "http://localhost:#{bypass.port}")
+
       result = CardigannHealthCheck.test_connection(definition.id)
 
       assert {:ok, test_result} = result
@@ -34,10 +57,31 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
 
   describe "execute_health_check/2" do
     test "updates health status after successful check" do
+      # See the comment on "tests connection for valid public indexer" above:
+      # the unmodified fixture now parses and would otherwise reach
+      # example.com over the real network.
       definition = cardigann_definition_fixture(%{enabled: true})
 
-      # Note: This will likely fail with actual connection, but will update health status
-      {:ok, _result} = CardigannHealthCheck.execute_health_check(definition)
+      bypass = Bypass.open()
+      Bypass.stub(bypass, "GET", "/", fn conn -> Plug.Conn.resp(conn, 200, "<html/>") end)
+
+      Bypass.stub(bypass, "GET", "/search", fn conn ->
+        Plug.Conn.resp(
+          conn,
+          200,
+          ~s"""
+          <html><body><table class="results">
+          <tr><td class="title">Some Release</td>
+          <td class="download"><a href="/download/1">grab</a></td></tr>
+          </table></body></html>
+          """
+        )
+      end)
+
+      {:ok, _result} =
+        CardigannHealthCheck.execute_health_check(
+          put_link(definition, "http://localhost:#{bypass.port}")
+        )
 
       # Verify health status was updated in database
       updated_definition = Repo.get!(CardigannDefinition, definition.id)
@@ -46,10 +90,18 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
     end
 
     test "tracks consecutive failures" do
+      # A closed local port, not a real hostname, gives a deterministic
+      # connection failure without touching the network (same pattern as the
+      # failover tests in cardigann_search_engine_test.exs).
       definition = cardigann_definition_fixture(%{enabled: true, consecutive_failures: 2})
 
-      # Execute health check (will likely fail without proper definition)
-      {:ok, result} = CardigannHealthCheck.execute_health_check(definition)
+      bypass = Bypass.open()
+      Bypass.down(bypass)
+
+      {:ok, result} =
+        CardigannHealthCheck.execute_health_check(
+          put_link(definition, "http://localhost:#{bypass.port}")
+        )
 
       # Check that consecutive failures was updated
       updated_definition = Repo.get!(CardigannDefinition, definition.id)
@@ -534,10 +586,12 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
         Plug.Conn.resp(
           conn,
           200,
-          "<html><body><table class=\"results\">" <>
-            "<tr><td class=\"title\">Some Release</td>" <>
-            "<td class=\"download\"><a href=\"/download/1\">grab</a></td></tr>" <>
-            "</table></body></html>"
+          ~s"""
+          <html><body><table class="results">
+          <tr><td class="title">Some Release</td>
+          <td class="download"><a href="/download/1">grab</a></td></tr>
+          </table></body></html>
+          """
         )
       end)
 
