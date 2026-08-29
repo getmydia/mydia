@@ -40,8 +40,11 @@ defmodule Mydia.Indexers.CardigannAuth do
       {:ok, session} = CardigannAuth.authenticate(definition, user_config)
   """
 
+  alias Mydia.Indexers.Cardigann.CredentialScope
   alias Mydia.Indexers.CardigannDefinition.Parsed
+  alias Mydia.Indexers.CardigannSearchEngine
   alias Mydia.Indexers.CardigannSearchSession
+  alias Mydia.Indexers.CardigannTemplate
   alias Mydia.Indexers.Adapter.Error
   alias Mydia.Repo
 
@@ -263,7 +266,8 @@ defmodule Mydia.Indexers.CardigannAuth do
   end
 
   defp perform_form_login(definition, user_config, cardigann_definition_id) do
-    with {:ok, login_url} <- build_login_url(definition),
+    with {:ok, login_url} <- build_login_url(definition, config_for(user_config)),
+         :ok <- check_login_transport(login_url),
          {:ok, login_params} <- build_login_params(definition, user_config),
          {:ok, response} <- execute_login_request(definition, login_url, login_params),
          {:ok, cookies} <- extract_cookies(response),
@@ -276,6 +280,41 @@ defmodule Mydia.Indexers.CardigannAuth do
       {:ok, %{cookies: cookies, expires_at: calculate_expiration(), method: :form}}
     end
   end
+
+  # A form login POSTs the username and password, and #601 already withholds a
+  # session cookie from a cleartext non-loopback host. That asymmetry is the
+  # hole: Mydia would send the password in the clear, receive a session, and
+  # then refuse to use it, so the login leaks the credentials and buys nothing.
+  #
+  # There is deliberately NO origin check here, and one should not be added. The
+  # login URL is derived from the definition, and the definition also defines
+  # the credential scope, so comparing them is circular: trusted_origins/2
+  # includes an absolute login.path's own origin by construction. An adversary
+  # who can set login.path can set links too.
+  defp check_login_transport(login_url) do
+    if CredentialScope.cleartext?(login_url) do
+      {:error,
+       Error.connection_failed(
+         "Refusing to send credentials to #{login_url} over an unencrypted connection. " <>
+           "Configure an https URL for this indexer."
+       )}
+    else
+      :ok
+    end
+  end
+
+  # The adapter passes the operator's settings under :config alongside the
+  # credentials. The bare-map fallback covers a direct caller (tests, and
+  # authenticate/3 called with a plain settings map) that passes settings
+  # without wrapping them.
+  defp config_for(user_config) when is_map(user_config) do
+    case Map.get(user_config, :config) || Map.get(user_config, "config") do
+      %{} = config -> config
+      _ -> user_config
+    end
+  end
+
+  defp config_for(_user_config), do: %{}
 
   defp perform_api_key_auth(_definition, user_config) do
     case Map.get(user_config, :api_key) do
@@ -318,15 +357,45 @@ defmodule Mydia.Indexers.CardigannAuth do
     end
   end
 
-  defp build_login_url(%Parsed{} = definition) do
-    case definition.login do
-      %{path: path} when is_binary(path) ->
-        base_url = List.first(definition.links)
-        url = "#{String.trim_trailing(base_url, "/")}/#{String.trim_leading(path, "/")}"
-        {:ok, url}
+  @doc """
+  Builds the login URL for a definition.
 
-      _ ->
-        {:error, Error.search_failed("Login path not configured")}
+  The path is rendered first, because five shipped v11 definitions declare
+  `login.path` as `https://{{ .Config.apiurl }}/...`, and then joined with
+  `build_full_url/2` so an absolute path is used as-is rather than appended to
+  the site link. Concatenating one produced
+  `https://abn.lol/https://{{ .Config.apiurl }}/api`, curly braces intact.
+  """
+  @spec build_login_url(Parsed.t(), map()) :: {:ok, String.t()} | {:error, Error.t()}
+  def build_login_url(%Parsed{} = definition, config) do
+    with {:ok, path} <- login_path(definition),
+         {:ok, base_url} <- site_link(definition),
+         {:ok, rendered} <- render_login_path(path, definition, config) do
+      {:ok, CardigannSearchEngine.build_full_url(String.trim_trailing(base_url, "/"), rendered)}
+    end
+  end
+
+  defp login_path(%Parsed{login: %{path: path}}) when is_binary(path), do: {:ok, path}
+  defp login_path(%Parsed{}), do: {:error, Error.search_failed("Login path not configured")}
+
+  defp site_link(%Parsed{links: [link | _]}) when is_binary(link), do: {:ok, link}
+  defp site_link(%Parsed{}), do: {:error, Error.search_failed("No site link configured")}
+
+  defp render_login_path(path, %Parsed{} = definition, config) do
+    context = %{
+      keywords: "",
+      config: config,
+      query: %{series: "", season: nil, episode: nil, imdb_id: nil, tmdb_id: nil, tvdb_id: nil},
+      categories: [],
+      settings: definition.settings
+    }
+
+    case CardigannTemplate.render(path, context, url_encode: false) do
+      {:ok, rendered} ->
+        {:ok, rendered}
+
+      {:error, reason} ->
+        {:error, Error.search_failed("Login path failed to render: #{inspect(reason)}")}
     end
   end
 

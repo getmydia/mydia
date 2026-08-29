@@ -52,6 +52,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       {:ok, response} = CardigannSearchEngine.execute_search(definition, opts)
   """
 
+  alias Mydia.Indexers.Cardigann.CredentialScope
   alias Mydia.Indexers.Cardigann.Links
   alias Mydia.Indexers.CardigannDefinition.Parsed
   alias Mydia.Indexers.CardigannTemplate
@@ -174,11 +175,20 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
 
     with {:ok, url} <- build_search_url(definition, opts_for_candidate),
          {:ok, request_params} <- build_request_params(definition, opts_for_candidate) do
+      config = Keyword.get(opts, :config, %{})
+
       result =
         if should_use_flaresolverr?(flaresolverr_opts) do
-          execute_with_flaresolverr(definition, url, request_params, user_config)
+          execute_with_flaresolverr(definition, url, request_params, user_config, config)
         else
-          execute_direct_request(definition, url, request_params, user_config, flaresolverr_opts)
+          execute_direct_request(
+            definition,
+            url,
+            request_params,
+            user_config,
+            flaresolverr_opts,
+            config
+          )
         end
 
       cond do
@@ -229,8 +239,15 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   defp retryable_failure?(_), do: false
 
   # Execute request directly and detect Cloudflare challenges
-  defp execute_direct_request(definition, url, request_params, user_config, flaresolverr_opts) do
-    case execute_http_request(definition, url, request_params, user_config) do
+  defp execute_direct_request(
+         definition,
+         url,
+         request_params,
+         user_config,
+         flaresolverr_opts,
+         config
+       ) do
+    case execute_http_request(definition, url, request_params, user_config, config) do
       {:ok, response} ->
         if cloudflare_challenge?(response) do
           handle_cloudflare_challenge(
@@ -238,7 +255,8 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
             url,
             request_params,
             user_config,
-            flaresolverr_opts
+            flaresolverr_opts,
+            config
           )
         else
           with :ok <- validate_response(response) do
@@ -257,12 +275,13 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
          url,
          request_params,
          user_config,
-         _flaresolverr_opts
+         _flaresolverr_opts,
+         config
        ) do
     Logger.info("Cloudflare challenge detected for #{definition.id}, attempting FlareSolverr")
 
     if FlareSolverr.enabled?() do
-      case execute_with_flaresolverr(definition, url, request_params, user_config) do
+      case execute_with_flaresolverr(definition, url, request_params, user_config, config) do
         {:ok, response, cookies} ->
           # Return with indicator that FlareSolverr was used and indexer should be flagged
           {:ok, response, [{:flaresolverr_required, true} | cookies]}
@@ -294,11 +313,18 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   end
 
   # Execute request through FlareSolverr
-  defp execute_with_flaresolverr(definition, url, request_params, user_config) do
+  #
+  # FlareSolverr used to receive user_config's cookies unconditionally, whatever
+  # host url named, while the direct Req path gated every request through
+  # attach_cookies/4. The two paths carry the same session credential, so they
+  # now consult the same cookie_disposition/2 decision before it is forwarded.
+  defp execute_with_flaresolverr(definition, url, request_params, user_config, config) do
     Logger.debug("Executing request through FlareSolverr: #{url}")
 
     # Apply rate limiting if configured
     apply_rate_limit(definition)
+
+    user_config = withhold_flaresolverr_cookies(user_config, url, definition, config)
 
     # Build FlareSolverr options from user_config
     flaresolverr_request_opts = build_flaresolverr_opts(user_config)
@@ -356,6 +382,28 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       {:error, reason} ->
         Logger.error("FlareSolverr error for #{definition.id}: #{inspect(reason)}")
         {:error, Error.search_failed("FlareSolverr error: #{inspect(reason)}")}
+    end
+  end
+
+  # Only consult the scope when there is a cookie to protect. Mirrors the gate
+  # in build_request_options/5, so a cookie-less FlareSolverr request never
+  # logs a withholding warning it has nothing to withhold.
+  defp withhold_flaresolverr_cookies(user_config, url, definition, config) do
+    case Map.get(user_config, :cookies) do
+      cookies when is_list(cookies) and cookies != [] ->
+        trusted_origins = CredentialScope.trusted_origins(definition, config)
+
+        case cookie_disposition(url, trusted_origins) do
+          {:withhold, reason} ->
+            Logger.warning("Cardigann: withholding session cookies from #{reason}")
+            Map.delete(user_config, :cookies)
+
+          :ok ->
+            user_config
+        end
+
+      _ ->
+        user_config
     end
   end
 
@@ -528,18 +576,18 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   ## Examples
 
       iex> params = %{query_params: %{}, headers: [], method: :get}
-      iex> {:ok, response} = execute_http_request(definition, url, params, %{})
+      iex> {:ok, response} = execute_http_request(definition, url, params, %{}, %{})
       iex> response.status
       200
   """
-  @spec execute_http_request(Parsed.t(), String.t(), map(), map()) ::
+  @spec execute_http_request(Parsed.t(), String.t(), map(), map(), map()) ::
           {:ok, http_response()} | {:error, Error.t()}
-  def execute_http_request(%Parsed{} = definition, url, request_params, user_config) do
+  def execute_http_request(%Parsed{} = definition, url, request_params, user_config, config) do
     # Apply rate limiting if configured
     apply_rate_limit(definition)
 
     # Build request options
-    req_opts = build_request_options(definition, url, request_params, user_config)
+    req_opts = build_request_options(definition, url, request_params, user_config, config)
 
     Logger.debug("Cardigann search request: #{request_params.method} #{url}")
     Logger.debug("Request params: #{inspect(request_params.query_params)}")
@@ -716,13 +764,17 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     Mydia.Indexers.Cardigann.TemplateContext.build(definition, opts)
   end
 
-  # A Cardigann definition may put a full URL in `path:` rather than a path
-  # relative to the site's base. The Pirate Bay does exactly that, pointing at
-  # https://apibay.org/q.php. Concatenating it onto the base URL produced
-  # https://thepiratebay.org/https://apibay.org/q.php?... which the site
-  # answered with a redirect, surfacing to the operator as
-  # "Unexpected status: 302".
-  defp build_full_url(base_url, path) do
+  @doc """
+  Joins a rendered path onto a base URL, honouring an absolute path.
+
+  A Cardigann definition may put a full URL in `path:` rather than a path
+  relative to the site's base. Concatenating one produced
+  `https://thepiratebay.org/https://apibay.org/q.php?...`, which the site
+  answered with a redirect. The guard requires both a scheme and a host, so a
+  relative path containing a colon still joins correctly.
+  """
+  @spec build_full_url(String.t(), String.t()) :: String.t()
+  def build_full_url(base_url, path) do
     case URI.parse(path) do
       %URI{scheme: scheme, host: host} when is_binary(scheme) and is_binary(host) ->
         path
@@ -812,7 +864,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     :ok
   end
 
-  defp build_request_options(definition, url, request_params, user_config) do
+  defp build_request_options(definition, url, request_params, user_config, config) do
     # Base options
     base_opts = [
       headers: request_params.headers,
@@ -845,7 +897,12 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     # Add cookies if present in user config
     case Map.get(user_config, :cookies) do
       cookies when is_list(cookies) and cookies != [] ->
-        attach_cookies(opts_with_params, url, cookies)
+        attach_cookies(
+          opts_with_params,
+          url,
+          cookies,
+          CredentialScope.trusted_origins(definition, config)
+        )
 
       _ ->
         opts_with_params
@@ -867,30 +924,57 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   # the honest handling this branch already added: validate_response/1 names the
   # Location, and failover moves on to the next candidate. Redirect following is
   # unaffected for every request without cookies.
-  defp attach_cookies(opts, url, cookies) do
-    if cleartext_url?(url) do
-      Logger.warning(
-        "Cardigann: withholding session cookies from cleartext URL #{inspect(url)}. " <>
-          "Configure an https base URL for this indexer to send credentials."
-      )
-
-      opts
-    else
-      cookie_header =
-        cookies
-        |> Enum.map(&normalize_cookie/1)
-        |> Enum.reject(&is_nil/1)
-        |> Enum.join("; ")
-
-      if cookie_header == "" do
+  #
+  # A session cookie is scoped to the origins the definition names as its own:
+  # its links, plus any absolute search or login path it renders. A mirror
+  # failover onto a stale legacylinks domain, or a download link parsed out
+  # of a result row, can both name an origin the operator never trusted, and a
+  # download link is remote content rather than shipped YAML. Withhold and
+  # continue, because an anonymous result beats a leaked login.
+  defp attach_cookies(opts, url, cookies, trusted_origins) do
+    case cookie_disposition(url, trusted_origins) do
+      {:withhold, reason} ->
+        Logger.warning("Cardigann: withholding session cookies from #{reason}")
         opts
-      else
-        existing_headers = Keyword.get(opts, :headers, [])
 
-        opts
-        |> Keyword.put(:headers, [{"Cookie", cookie_header} | existing_headers])
-        |> Keyword.put(:redirect, false)
-      end
+      :ok ->
+        cookie_header =
+          cookies
+          |> Enum.map(&normalize_cookie/1)
+          |> Enum.reject(&is_nil/1)
+          |> Enum.join("; ")
+
+        if cookie_header == "" do
+          opts
+        else
+          existing_headers = Keyword.get(opts, :headers, [])
+
+          opts
+          |> Keyword.put(:headers, [{"Cookie", cookie_header} | existing_headers])
+          |> Keyword.put(:redirect, false)
+        end
+    end
+  end
+
+  # The one place that decides whether a URL may receive the definition's
+  # session. Both the direct Req path (attach_cookies/4) and the FlareSolverr
+  # path (withhold_flaresolverr_cookies/4) consult it, so the policy cannot
+  # drift between them. It drifted once: FlareSolverr forwarded cookies to any
+  # host at all while the direct path was gated.
+  defp cookie_disposition(url, trusted_origins) do
+    cond do
+      CredentialScope.cleartext?(url) ->
+        {:withhold,
+         "cleartext URL #{inspect(url)}. Configure an https base URL for this indexer to " <>
+           "send credentials."}
+
+      not CredentialScope.allows?(trusted_origins, url) ->
+        {:withhold,
+         "#{inspect(url)}, which is not one of this definition's own hosts. Searching " <>
+           "anonymously."}
+
+      true ->
+        :ok
     end
   end
 
@@ -913,21 +997,4 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   end
 
   defp normalize_cookie(_cookie), do: nil
-
-  # Loopback is a secure context in the same sense browsers use the term: the
-  # request never reaches a network, so a local mirror or a test server is not
-  # an exposure. Everything else on plain http is.
-  @loopback_hosts ~w(localhost 127.0.0.1 ::1 0:0:0:0:0:0:0:1)
-
-  defp cleartext_url?(url) when is_binary(url) do
-    case URI.parse(url) do
-      %URI{scheme: "http", host: host} ->
-        String.downcase(host || "") not in @loopback_hosts
-
-      _ ->
-        false
-    end
-  end
-
-  defp cleartext_url?(_url), do: false
 end

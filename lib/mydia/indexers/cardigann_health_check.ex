@@ -15,6 +15,7 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   """
 
   alias Mydia.Indexers.Adapter.Error
+  alias Mydia.Indexers.Cardigann.CredentialScope
   alias Mydia.Indexers.Cardigann.Links
   alias Mydia.Indexers.Cardigann.TemplateContext
   alias Mydia.Indexers.CardigannDefinition
@@ -274,6 +275,23 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
     end
   end
 
+  @doc """
+  True when `candidate` may become the definition's sticky `active_link`.
+
+  `Links.candidates/1` offers `legacylinks` as failover targets, and a legacy
+  domain that answers would otherwise become sticky, silently readmitting a host
+  the credential scope excludes. The rule is conditional on credentials because
+  42 of the 81 public v11 definitions ship legacylinks and depend on promoting
+  them, while having no session to protect.
+  """
+  @spec promotable?(Parsed.t(), map(), String.t() | nil) :: boolean()
+  def promotable?(%Parsed{} = parsed, user_config, candidate) when is_binary(candidate) do
+    not CredentialScope.credentialed?(user_config) or
+      CredentialScope.allows?(CredentialScope.trusted_origins(parsed, user_config), candidate)
+  end
+
+  def promotable?(_parsed, _user_config, _candidate), do: false
+
   defp probe_query(%Parsed{capabilities: capabilities}) do
     # Map.get/3's default only applies when the key is ABSENT. A parsed
     # definition can have `modes: nil` (key present, value nil), in which case
@@ -336,29 +354,46 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
 
     case outcome do
       {:ok, 0, served_by} ->
-        store_link_state(definition, served_by, link_status)
+        store_link_state(
+          definition,
+          promoted_link(definition, parsed, user_config, served_by),
+          link_status
+        )
 
         %{
           success: true,
           status: "degraded",
-          message: "Search reached #{served_by} but parsed no rows",
+          message:
+            "Search reached #{served_by} but parsed no rows" <>
+              (anonymous_search_note(parsed, user_config, served_by) || ""),
           response_time_ms: elapsed,
           error: nil
         }
 
       {:ok, count, served_by} ->
-        store_link_state(definition, served_by, link_status)
+        store_link_state(
+          definition,
+          promoted_link(definition, parsed, user_config, served_by),
+          link_status
+        )
+
+        note = anonymous_search_note(parsed, user_config, served_by)
 
         %{
           success: true,
-          status: determine_health_status(definition, true, elapsed),
-          message: "Search returned #{count} result(s) via #{served_by}",
+          status:
+            if(note, do: "degraded", else: determine_health_status(definition, true, elapsed)),
+          message: "Search returned #{count} result(s) via #{served_by}#{note}",
           response_time_ms: elapsed,
           error: nil
         }
 
       {:cloudflare, message} ->
-        store_link_state(definition, active_link, link_status)
+        store_link_state(
+          definition,
+          promoted_link(definition, parsed, user_config, active_link),
+          link_status
+        )
 
         %{
           success: true,
@@ -382,6 +417,36 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
           response_time_ms: elapsed,
           error: message
         }
+    end
+  end
+
+  # An operator whose private tracker suddenly returns nothing deserves to be
+  # told why. A search served by a host outside the credential scope went out
+  # without its session, so it is degraded rather than healthy no matter how
+  # many rows it parsed.
+  defp anonymous_search_note(parsed, user_config, served_by) do
+    cond do
+      not CredentialScope.credentialed?(user_config) ->
+        nil
+
+      CredentialScope.allows?(CredentialScope.trusted_origins(parsed, user_config), served_by) ->
+        nil
+
+      true ->
+        " Searched anonymously: #{served_by} is not one of this definition's own hosts, " <>
+          "so its session was withheld."
+    end
+  end
+
+  # Links.candidates/1 offers legacylinks as failover targets, so a probe can
+  # land on one. Persisting it as the sticky active_link would quietly readmit a
+  # host the credential scope excludes, for every later request. Falling back to
+  # the current active_link leaves the field untouched rather than clearing it.
+  defp promoted_link(definition, parsed, user_config, candidate) do
+    if promotable?(parsed, user_config, candidate) do
+      candidate
+    else
+      definition.active_link
     end
   end
 

@@ -6,6 +6,25 @@ defmodule Mydia.Indexers.CardigannAuthTest do
   alias Mydia.Indexers.CardigannSearchSession
   alias Mydia.Repo
 
+  defp login_definition(login, settings \\ []) do
+    %Parsed{
+      id: "login-url",
+      name: "Login URL",
+      description: "",
+      language: "en-US",
+      type: "private",
+      encoding: "UTF-8",
+      links: ["https://abn.lol/"],
+      capabilities: %{modes: %{}},
+      search: %{paths: [%{path: "/search"}], inputs: %{}, rows: %{}, fields: %{}},
+      login: login,
+      download: nil,
+      settings: settings,
+      request_delay: nil,
+      follow_redirect: true
+    }
+  end
+
   describe "authenticate/3 with form login" do
     setup do
       definition = %Parsed{
@@ -151,6 +170,47 @@ defmodule Mydia.Indexers.CardigannAuthTest do
       assert stored_session != nil
       assert stored_session.cookies != nil
       assert stored_session.expires_at != nil
+    end
+
+    test "an operator override of a login-path setting reaches the login request" do
+      override = Bypass.open()
+
+      Bypass.expect_once(override, "POST", "/api/login", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("set-cookie", "session=granted; Path=/")
+        |> Plug.Conn.resp(200, "<html>welcome</html>")
+      end)
+
+      parsed = %Parsed{
+        id: "login-override",
+        name: "Login Override",
+        description: "",
+        language: "en-US",
+        type: "private",
+        encoding: "UTF-8",
+        links: ["http://localhost:1/"],
+        capabilities: %{modes: %{}},
+        search: %{paths: [%{path: "/search"}], inputs: %{}, rows: %{}, fields: %{}},
+        login: %{
+          method: "form",
+          path: "http://{{ .Config.apiurl }}/api/login",
+          inputs: %{
+            "username" => "{{ .Config.username }}",
+            "password" => "{{ .Config.password }}"
+          }
+        },
+        download: nil,
+        settings: [%{name: "apiurl", type: "text", default: "localhost:2"}],
+        request_delay: nil,
+        follow_redirect: true
+      }
+
+      assert {:ok, _session} =
+               CardigannAuth.authenticate(parsed, %{
+                 username: "me",
+                 password: "secret",
+                 config: %{"apiurl" => "localhost:#{override.port}"}
+               })
     end
   end
 
@@ -416,6 +476,121 @@ defmodule Mydia.Indexers.CardigannAuthTest do
       assert session.method == :none
       assert session.cookies == []
       assert session.expires_at == nil
+    end
+  end
+
+  describe "build_login_url/2" do
+    test "joins a relative login path onto the site link" do
+      parsed = login_definition(%{method: "form", path: "/login.php"})
+
+      assert {:ok, "https://abn.lol/login.php"} = CardigannAuth.build_login_url(parsed, %{})
+    end
+
+    test "an absolute login path is used as-is, not appended to the site link" do
+      parsed = login_definition(%{method: "form", path: "https://auth.abn.lol/api/login"})
+
+      assert {:ok, "https://auth.abn.lol/api/login"} = CardigannAuth.build_login_url(parsed, %{})
+    end
+
+    test "a templated login path is rendered before use" do
+      parsed =
+        login_definition(
+          %{method: "form", path: "https://{{ .Config.apiurl }}/api/Release/Search"},
+          [%{name: "apiurl", type: "text", default: "api.abn.lol"}]
+        )
+
+      assert {:ok, "https://api.abn.lol/api/Release/Search"} =
+               CardigannAuth.build_login_url(parsed, %{})
+    end
+
+    test "an operator override of the setting is honoured" do
+      parsed =
+        login_definition(
+          %{method: "form", path: "https://{{ .Config.apiurl }}/api"},
+          [%{name: "apiurl", type: "text", default: "api.abn.lol"}]
+        )
+
+      assert {:ok, "https://api.mine.example/api"} =
+               CardigannAuth.build_login_url(parsed, %{"apiurl" => "api.mine.example"})
+    end
+
+    test "a missing login path is an error" do
+      assert {:error, _} = CardigannAuth.build_login_url(login_definition(%{method: "form"}), %{})
+    end
+
+    test "a definition with no login block names the login path as the problem" do
+      parsed = login_definition(nil)
+
+      assert {:error, %{message: message}} = CardigannAuth.build_login_url(parsed, %{})
+      assert message =~ "Login path not configured"
+    end
+
+    test "a definition with no site link names the site link as the problem" do
+      parsed = %{login_definition(%{method: "form", path: "/login.php"}) | links: []}
+
+      assert {:error, %{message: message}} = CardigannAuth.build_login_url(parsed, %{})
+      assert message =~ "No site link configured"
+    end
+  end
+
+  describe "form login credential scope" do
+    test "refuses to POST credentials over cleartext to a non-loopback host" do
+      parsed =
+        login_definition(%{
+          method: "form",
+          path: "/login.php",
+          inputs: %{
+            "username" => "{{ .Config.username }}",
+            "password" => "{{ .Config.password }}"
+          }
+        })
+
+      parsed = %{parsed | links: ["http://tracker.example"]}
+
+      assert {:error, error} =
+               CardigannAuth.authenticate(parsed, %{username: "me", password: "secret"})
+
+      assert error.message =~ "unencrypted"
+      assert error.message =~ "tracker.example"
+    end
+
+    test "allows a login on a host the definition names" do
+      bypass = Bypass.open()
+
+      Bypass.expect_once(bypass, "POST", "/login", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("set-cookie", "session=granted; Path=/")
+        |> Plug.Conn.resp(200, "<html>welcome</html>")
+      end)
+
+      parsed = %Parsed{
+        id: "login-scope-ok",
+        name: "Login Scope OK",
+        description: "",
+        language: "en-US",
+        type: "private",
+        encoding: "UTF-8",
+        links: ["http://localhost:#{bypass.port}"],
+        capabilities: %{modes: %{}},
+        search: %{paths: [%{path: "/search"}], inputs: %{}, rows: %{}, fields: %{}},
+        login: %{
+          method: "form",
+          path: "/login",
+          inputs: %{
+            "username" => "{{ .Config.username }}",
+            "password" => "{{ .Config.password }}"
+          }
+        },
+        download: nil,
+        settings: [],
+        request_delay: nil,
+        follow_redirect: true
+      }
+
+      assert {:ok, %{cookies: cookies}} =
+               CardigannAuth.authenticate(parsed, %{username: "me", password: "secret"})
+
+      assert Enum.any?(cookies, &String.contains?(&1, "session=granted"))
     end
   end
 end

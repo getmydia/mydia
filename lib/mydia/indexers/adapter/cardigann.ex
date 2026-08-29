@@ -492,9 +492,16 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
       settings: parsed.settings,
       base_url: definition.active_link,
       on_promote: fn winning_url ->
-        definition
-        |> Ecto.Changeset.change(%{active_link: winning_url})
-        |> Mydia.Repo.update()
+        # A legacy mirror that answers must not become sticky for a definition
+        # that has a session to protect; the credential scope would then withhold
+        # its cookies on every subsequent search.
+        if CardigannHealthCheck.promotable?(parsed, definition.config || %{}, winning_url) do
+          definition
+          |> Ecto.Changeset.change(%{active_link: winning_url})
+          |> Mydia.Repo.update()
+        else
+          :ok
+        end
       end
     ]
 
@@ -529,16 +536,16 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
           {:ok, convert_session_to_user_config(session)}
         else
           # Session expired, re-authenticate
-          authenticate_and_convert(parsed, credentials, definition.id)
+          authenticate_and_convert(parsed, credentials, definition.id, definition.config || %{})
         end
 
       {:error, :not_found} ->
         # No stored session, authenticate if needed
-        authenticate_and_convert(parsed, credentials, definition.id)
+        authenticate_and_convert(parsed, credentials, definition.id, definition.config || %{})
 
       {:error, :expired} ->
         # Session expired, re-authenticate
-        authenticate_and_convert(parsed, credentials, definition.id)
+        authenticate_and_convert(parsed, credentials, definition.id, definition.config || %{})
     end
   end
 
@@ -564,14 +571,19 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
   defp blank?(%{} = value), do: map_size(value) == 0
   defp blank?(_value), do: false
 
-  defp authenticate_and_convert(parsed, credentials, definition_id) do
-    case CardigannAuth.authenticate(parsed, credentials, definition_id) do
+  defp authenticate_and_convert(parsed, credentials, definition_id, definition_config) do
+    case CardigannAuth.authenticate(
+           parsed,
+           Map.put(credentials, :config, definition_config),
+           definition_id
+         ) do
       {:ok, session} ->
         {:ok, convert_session_to_user_config(session)}
 
       {:error, error} ->
-        # If authentication is required but failed, return error
-        # Otherwise return empty config for public indexers
+        # `credentials` deliberately stays free of :config here: this test asks
+        # whether the operator configured any credential at all, and a settings
+        # map is not a credential.
         if parsed.login != nil and credentials != %{} do
           {:error, error}
         else
