@@ -150,6 +150,86 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
 
       assert url == "https://example.com/search/test%20%26%20query%3Dvalue"
     end
+
+    test "uses an absolute path verbatim instead of appending it to the base URL" do
+      # The Pirate Bay's definition points its search at apibay.org. Appending
+      # that to the site's base URL produced
+      # https://thepiratebay.org/https://apibay.org/q.php?... and the site
+      # answered with a redirect, surfacing as "Unexpected status: 302".
+      definition = %Parsed{
+        id: "thepiratebay",
+        name: "The Pirate Bay",
+        description: "Test indexer",
+        language: "en-US",
+        type: "public",
+        encoding: "UTF-8",
+        links: ["https://thepiratebay.org"],
+        capabilities: %{modes: %{}},
+        search: %{
+          paths: [%{path: "https://apibay.org/q.php?q={{ .Keywords }}"}],
+          inputs: %{},
+          rows: %{selector: "tr"},
+          fields: %{title: %{selector: "td.title"}}
+        },
+        login: nil,
+        download: nil
+      }
+
+      assert {:ok, "https://apibay.org/q.php?q=ubuntu"} =
+               CardigannSearchEngine.build_search_url(definition, query: "ubuntu")
+    end
+
+    test "still joins a relative path onto the base URL" do
+      definition = %Parsed{
+        id: "test",
+        name: "Test",
+        description: "Test indexer",
+        language: "en-US",
+        type: "public",
+        encoding: "UTF-8",
+        links: ["https://example.com"],
+        capabilities: %{modes: %{}},
+        search: %{
+          paths: [%{path: "/search/{{ .Keywords }}/1/"}],
+          inputs: %{},
+          rows: %{selector: "tr"},
+          fields: %{title: %{selector: "td.title"}}
+        },
+        login: nil,
+        download: nil
+      }
+
+      assert {:ok, "https://example.com/search/ubuntu/1/"} =
+               CardigannSearchEngine.build_search_url(definition, query: "ubuntu")
+    end
+
+    test "joins a relative path that merely contains a colon onto the base URL" do
+      # URI.parse/1 is lenient: a leading "mailto:someone"-shaped path parses
+      # with a scheme but no host. A scheme-only guard would mistake it for
+      # an absolute URL and skip the join; the scheme-and-host guard must
+      # not.
+      definition = %Parsed{
+        id: "test",
+        name: "Test",
+        description: "Test indexer",
+        language: "en-US",
+        type: "public",
+        encoding: "UTF-8",
+        links: ["https://example.com"],
+        capabilities: %{modes: %{}},
+        search: %{
+          paths: [%{path: "mailto:{{ .Keywords }}"}],
+          inputs: %{},
+          rows: %{selector: "tr"},
+          fields: %{title: %{selector: "td.title"}}
+        },
+        login: nil,
+        download: nil
+      }
+
+      assert {:ok, "https://example.com/mailto:someone"} =
+               CardigannSearchEngine.build_search_url(definition, query: "someone")
+    end
   end
 
   describe "build_request_params/2" do

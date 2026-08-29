@@ -671,10 +671,20 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     Mydia.Indexers.Cardigann.TemplateContext.build(definition, opts)
   end
 
+  # A Cardigann definition may put a full URL in `path:` rather than a path
+  # relative to the site's base. The Pirate Bay does exactly that, pointing at
+  # https://apibay.org/q.php. Concatenating it onto the base URL produced
+  # https://thepiratebay.org/https://apibay.org/q.php?... which the site
+  # answered with a redirect, surfacing to the operator as
+  # "Unexpected status: 302".
   defp build_full_url(base_url, path) do
-    # Ensure proper joining of base URL and path
-    path_without_leading_slash = String.trim_leading(path, "/")
-    "#{base_url}/#{path_without_leading_slash}"
+    case URI.parse(path) do
+      %URI{scheme: scheme, host: host} when is_binary(scheme) and is_binary(host) ->
+        path
+
+      _ ->
+        "#{base_url}/#{String.trim_leading(path, "/")}"
+    end
   end
 
   defp build_query_params(%Parsed{} = definition, opts) do
