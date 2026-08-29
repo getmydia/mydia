@@ -27,7 +27,12 @@ jobs:
       # Those gates report on every pull request rather than being
       # path-filtered, precisely so this wait means something.
       #
-      # Rebase because squash merge is disabled on this repository.
+      # --merge because it is the only strategy this repository allows.
+      # Both allow_squash_merge and allow_rebase_merge are false, so
+      # `gh pr merge --rebase` fails outright with "Rebase merges are not
+      # allowed on this repository" and no auto-merge is ever queued. The
+      # failure is invisible on a green pull request: the merge simply never
+      # happens.
       #
       # dependabot/fetch-metadata is deliberately absent. It is the right way
       # to read what a Dependabot pull request changed, but nothing here needs
@@ -35,7 +40,7 @@ jobs:
       # branch on. Leaving it out keeps a job holding contents: write on
       # pull_request_target free of third-party actions entirely.
       - name: Enable auto-merge
-        run: gh pr merge --auto --rebase "$PR_URL"
+        run: gh pr merge --auto --merge "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
