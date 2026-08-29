@@ -76,6 +76,32 @@ defmodule Mydia.Library.FileIngest do
   def default_threshold, do: @default_threshold
 
   @doc """
+  The ingest policy for one file in one library.
+
+  Lives here rather than on a caller because this module owns the policy type
+  and both callers need it: `Jobs.LibraryScanner` for new files and
+  `Library.OrphanReenricher` for existing orphans.
+
+  Fails closed on everything that is not an auto-import library holding a
+  regular file. A nil association, a read-only `runtime::` struct, and a row
+  whose flag is false all keep the historical `:local_only` behavior, which is
+  what makes enabling this a per-library opt-in rather than a global change.
+
+  Extras are excluded because nothing filters them out of the enrichment stream
+  on the scanner's new-file branch the way `SampleDetector.excluded?/1` does for
+  re-enriched orphans. Under `:local_only` that was harmless, since only a local
+  match could link. Under `:create_items` a trailer drawing an above-threshold
+  external match would create a `MediaItem` of its own. `extra_kind` is already
+  persisted at creation time, so this needs no re-detection: nil means the file
+  is a version of its item, non-nil means it is an extra.
+  """
+  @spec policy_for(Mydia.Settings.LibraryPath.t() | nil, MediaFile.t()) :: policy()
+  def policy_for(%Mydia.Settings.LibraryPath{auto_import: true}, %MediaFile{extra_kind: nil}),
+    do: :create_items
+
+  def policy_for(_library_path, _media_file), do: :local_only
+
+  @doc """
   Decides what to do with a matched file and commits that decision.
 
   See the module doc for the policies. Returns `:no_match` when the matcher

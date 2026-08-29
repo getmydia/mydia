@@ -933,7 +933,7 @@ defmodule Mydia.Jobs.LibraryScanner do
     case validate_file_type_for_library(parsed.type, library_path, file_info.path) do
       :ok ->
         # Type is compatible, proceed with matching
-        match_file_to_existing_items(media_file, file_info, metadata_config, parsed)
+        match_file_to_existing_items(media_file, file_info, metadata_config, library_path)
 
       {:error, _reason} = error ->
         # Type mismatch, skip processing
@@ -987,9 +987,9 @@ defmodule Mydia.Jobs.LibraryScanner do
     end
   end
 
-  defp match_file_to_existing_items(media_file, file_info, metadata_config, _parsed) do
+  defp match_file_to_existing_items(media_file, file_info, metadata_config, library_path) do
     # Use the library's configured TV metadata source for new matches.
-    provider = media_file.library_path && media_file.library_path.tv_metadata_source
+    provider = library_path && library_path.tv_metadata_source
 
     # Try to match the file to metadata
     case MetadataMatcher.match_file(file_info.path,
@@ -1005,12 +1005,13 @@ defmodule Mydia.Jobs.LibraryScanner do
           from_local_db: Map.get(match_result, :from_local_db, false)
         )
 
-        # :local_only is what keeps the scheduled scan from inventing items.
-        # An external match is cached as a candidate and the file stays
-        # orphaned for the import inbox to offer. See Library.FileIngest.
+        # The policy is the auto-import gate. It stays `:local_only` for every
+        # library that has not opted in, which is what keeps a scheduled scan
+        # from inventing items behind the user: an external match is cached as
+        # a candidate and the file stays orphaned for the inbox to offer.
         ingest_result =
           FileIngest.ingest(media_file, match_result,
-            policy: :local_only,
+            policy: FileIngest.policy_for(library_path, media_file),
             config: metadata_config
           )
 

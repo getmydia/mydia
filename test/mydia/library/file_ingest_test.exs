@@ -13,9 +13,11 @@ defmodule Mydia.Library.FileIngestTest do
   alias Mydia.Library
   alias Mydia.Library.FileIngest
   alias Mydia.Library.MatchCandidate
+  alias Mydia.Library.MediaFile
   alias Mydia.Library.ReleaseParser
   alias Mydia.Library.Structs.ParsedFileInfo
   alias Mydia.Library.Structs.Quality
+  alias Mydia.Settings.LibraryPath
 
   defp match(overrides) do
     Map.merge(
@@ -339,6 +341,36 @@ defmodule Mydia.Library.FileIngestTest do
   describe "auto-link threshold" do
     test "links at 0.85 and holds below it" do
       assert FileIngest.default_threshold() == 0.85
+    end
+  end
+
+  describe "policy_for/2" do
+    test "an auto-import library holding a regular file creates items" do
+      library_path = %LibraryPath{auto_import: true}
+      file = %MediaFile{extra_kind: nil}
+
+      assert FileIngest.policy_for(library_path, file) == :create_items
+    end
+
+    test "a library without auto-import keeps the historical local-only policy" do
+      assert FileIngest.policy_for(%LibraryPath{auto_import: false}, %MediaFile{}) ==
+               :local_only
+    end
+
+    test "a nil library path fails closed" do
+      assert FileIngest.policy_for(nil, %MediaFile{}) == :local_only
+    end
+
+    test "an extra is never auto-imported, even on an auto-import library" do
+      # The regression this clause exists for. Nothing filters extras out of
+      # the enrichment stream on the new-file branch, so without it a trailer
+      # with an above-threshold external match would create a MediaItem.
+      library_path = %LibraryPath{auto_import: true}
+
+      for kind <- [:trailer, :sample, :featurette, :behind_the_scenes] do
+        assert FileIngest.policy_for(library_path, %MediaFile{extra_kind: kind}) == :local_only,
+               "#{kind} must not be auto-imported"
+      end
     end
   end
 end

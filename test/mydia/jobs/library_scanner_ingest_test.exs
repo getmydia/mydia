@@ -1,8 +1,10 @@
 defmodule Mydia.Jobs.LibraryScannerIngestTest do
   @moduledoc """
-  Pins the contract between the scheduled scan and `FileIngest`: an external
-  provider match must never create a `MediaItem` from the cron scan, and it
-  must leave a cached candidate behind so the import inbox can offer it.
+  Pins the contract between the scheduled scan and `FileIngest`: on a library
+  that has not opted into auto-import, an external provider match must never
+  create a `MediaItem` from the cron scan, and it must leave a cached candidate
+  behind so the import inbox can offer it. `FileIngest.policy_for/2` is what
+  decides which libraries those are.
 
   This exercises `FileIngest.ingest/3` directly with `policy: :local_only`,
   which is exactly what `Jobs.LibraryScanner.match_file_to_existing_items/4`
