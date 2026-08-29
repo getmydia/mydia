@@ -199,7 +199,15 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
     opts = [
       query: probe_query(parsed),
       categories: [],
-      config: Map.get(user_config, :config, %{}),
+      # user_config is already the flat settings map (definition.config, see
+      # perform_test_search/2), not a wrapper holding a nested :config key.
+      # Map.get(user_config, :config, %{}) used to always evaluate to %{},
+      # silently dropping every user-supplied setting (API keys, mirror
+      # overrides, auth tokens) from the probe's template context while the
+      # real search rendered them correctly. That made the probe capable of
+      # reporting a false failure/degraded for a correctly configured
+      # indexer, the exact inverse of the false green this task removes.
+      config: user_config,
       settings: parsed.settings,
       base_url: base_url
     ]

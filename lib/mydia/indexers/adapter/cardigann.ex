@@ -69,7 +69,7 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
     if CardigannFeatureFlags.enabled?() do
       with {:ok, definition} <- fetch_definition(config),
            {:ok, parsed} <- parse_definition(definition),
-           :ok <- test_indexer_reachable(parsed, config) do
+           :ok <- test_indexer_reachable(parsed, definition) do
         {:ok,
          %{
            name: parsed.name,
@@ -420,8 +420,16 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
   # Reaching the homepage is not the same as being able to search, and treating
   # it as such is what let 1337x, EZTV, KickassTorrents, YTS and The Pirate Bay
   # all report a successful connection test while every search failed.
-  defp test_indexer_reachable(parsed, config) do
-    user_config = Map.get(config, :config, %{})
+  #
+  # Takes the CardigannDefinition, not the caller-supplied adapter config map:
+  # build_search_opts/4 (the real search path) always sources the template
+  # context's :config from definition.config, never from the adapter config's
+  # :user_settings or a nested :config key. Sourcing it any other way here
+  # would let the probe render {{ .Config.* }} differently than a real search
+  # does, either dropping settings that do work or reporting settings that
+  # don't.
+  defp test_indexer_reachable(parsed, %CardigannDefinition{} = definition) do
+    user_config = definition.config || %{}
 
     case CardigannHealthCheck.probe_candidates(parsed, user_config) do
       {:ok, url, _status} ->

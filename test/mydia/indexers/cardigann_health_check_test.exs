@@ -428,6 +428,31 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
     end
   end
 
+  describe "user config passthrough" do
+    test "a user-configured setting reaches the search request instead of rendering empty" do
+      # Regression: probe_search/3 originally rendered
+      # config: Map.get(user_config, :config, %{}), but user_config arriving
+      # here IS ALREADY the flat settings map (definition.config, see
+      # perform_test_search/2), which has no nested :config key. That always
+      # evaluated to %{}, so a search path or input referencing
+      # {{ .Config.* }} rendered empty during the probe while rendering
+      # correctly in a real search - reporting a false failure/degraded state
+      # for a correctly configured indexer, the inverse of the false green
+      # this task exists to remove.
+      bypass = Bypass.open()
+      capture_path(bypass, self())
+
+      url = "http://localhost:#{bypass.port}"
+      parsed = parsed_for(url, path: "/search/{{ .Config.apikey }}")
+
+      assert {:ok, _} =
+               CardigannHealthCheck.probe_search(parsed, %{"apikey" => "topsecret123"}, url)
+
+      assert_received {:request_path, path}
+      assert path =~ "topsecret123"
+    end
+  end
+
   describe "Cloudflare" do
     test "a Cloudflare challenge is reported as :cloudflare, not as a generic error" do
       # EZTV in the bug report. The operator needs to be told to configure
