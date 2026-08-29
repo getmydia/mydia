@@ -170,31 +170,39 @@ defmodule Mydia.MetadataCacheHelpers do
 
     path = if media_type == :tv_show, do: "/tmdb/tv/trending", else: "/tmdb/movies/trending"
 
-    Bypass.expect(bypass, "GET", path, fn conn ->
-      body = %{
-        "page" => 1,
-        "total_pages" => 1,
-        "total_results" => length(results),
-        "results" => results
-      }
+    # try/after: a raise anywhere between the swap above and the restore
+    # below (Bypass.expect/4, or either fetch call) must not skip the
+    # restore, or the global metadata_relay_url is left pointing at a
+    # Bypass server that is about to close, and later unrelated tests read
+    # a dead URL from global config — precisely the cross-test pollution
+    # this whole branch exists to eliminate.
+    try do
+      Bypass.expect(bypass, "GET", path, fn conn ->
+        body = %{
+          "page" => 1,
+          "total_pages" => 1,
+          "total_results" => length(results),
+          "results" => results
+        }
 
-      conn
-      |> Plug.Conn.put_resp_content_type("application/json")
-      |> Plug.Conn.resp(200, Jason.encode!(body))
-    end)
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(body))
+      end)
 
-    {:ok, _results} =
-      if media_type == :tv_show do
-        Metadata.trending_tv_shows()
-      else
-        Metadata.trending_movies()
+      {:ok, _results} =
+        if media_type == :tv_show do
+          Metadata.trending_tv_shows()
+        else
+          Metadata.trending_movies()
+        end
+
+      {:ok, _curated} = Metadata.fetch_curated_list(:trending, media_type: media_type, page: 1)
+    after
+      case previous_metadata_relay_url do
+        nil -> Application.delete_env(:mydia, :metadata_relay_url)
+        value -> Application.put_env(:mydia, :metadata_relay_url, value)
       end
-
-    {:ok, _curated} = Metadata.fetch_curated_list(:trending, media_type: media_type, page: 1)
-
-    case previous_metadata_relay_url do
-      nil -> Application.delete_env(:mydia, :metadata_relay_url)
-      value -> Application.put_env(:mydia, :metadata_relay_url, value)
     end
 
     :ok
@@ -218,17 +226,21 @@ defmodule Mydia.MetadataCacheHelpers do
 
     path = if media_type == :tv_show, do: "/tmdb/genre/tv", else: "/tmdb/genre/movie"
 
-    Bypass.expect(bypass, "GET", path, fn conn ->
-      conn
-      |> Plug.Conn.put_resp_content_type("application/json")
-      |> Plug.Conn.resp(200, Jason.encode!(%{"genres" => genres}))
-    end)
+    # try/after: see the identical comment in warm_trending_cache/2 above —
+    # a raise between the swap and the restore must not skip the restore.
+    try do
+      Bypass.expect(bypass, "GET", path, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(%{"genres" => genres}))
+      end)
 
-    {:ok, _genres} = Metadata.genres(media_type)
-
-    case previous_metadata_relay_url do
-      nil -> Application.delete_env(:mydia, :metadata_relay_url)
-      value -> Application.put_env(:mydia, :metadata_relay_url, value)
+      {:ok, _genres} = Metadata.genres(media_type)
+    after
+      case previous_metadata_relay_url do
+        nil -> Application.delete_env(:mydia, :metadata_relay_url)
+        value -> Application.put_env(:mydia, :metadata_relay_url, value)
+      end
     end
 
     :ok
