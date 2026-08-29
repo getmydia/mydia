@@ -415,8 +415,27 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
       start_supervised!(Mydia.Indexers.Health)
       Mydia.Indexers.register_adapters()
 
+      # Env is the highest-precedence config layer (defaults > YAML > database >
+      # env), so a FLARESOLVERR_* variable exported on the host running the
+      # tests would defeat the stale-config state these tests deliberately
+      # build with `Loader.load!(sources: [:yaml, :env])` below, flipping the
+      # client to enabled for reasons unrelated to the code under test.
+      fs_env_vars = ~w(
+        FLARESOLVERR_URL FLARESOLVERR_ENABLED FLARESOLVERR_TIMEOUT FLARESOLVERR_MAX_TIMEOUT
+      )
+      original_env = Map.new(fs_env_vars, &{&1, System.get_env(&1)})
+      Enum.each(fs_env_vars, &System.delete_env/1)
+
       original = Application.get_env(:mydia, :runtime_config)
-      on_exit(fn -> Application.put_env(:mydia, :runtime_config, original) end)
+
+      on_exit(fn ->
+        Enum.each(original_env, fn
+          {key, nil} -> System.delete_env(key)
+          {key, value} -> System.put_env(key, value)
+        end)
+
+        Application.put_env(:mydia, :runtime_config, original)
+      end)
 
       conn =
         conn
