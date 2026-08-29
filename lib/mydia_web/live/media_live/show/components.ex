@@ -744,18 +744,27 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                             so an orphaned row reads the same here as everywhere else. --%>
                       {Mydia.Library.MediaFile.display_name(file)}
                     </p>
-                    <%!-- Technical details with quality badge --%>
-                    <div class="flex flex-wrap gap-4 text-xs text-base-content/70 items-center">
+                    <%!-- Technical details with quality badge. gap-x-3 rather
+                          than gap-4: four short badges do not need 16px of
+                          separation, and on a phone that gap forces a ragged
+                          wrap. Codec names run through shorten_codec/1, the
+                          same helper episode_file_row/1 uses. --%>
+                    <div
+                      id={"file-meta-#{file.id}"}
+                      class="flex flex-wrap gap-x-3 gap-y-1.5 text-xs text-base-content/70 items-center"
+                    >
                       <span class="badge badge-primary badge-sm">
                         {file.resolution || "Unknown"}
                       </span>
                       <div class="flex items-center gap-1.5">
                         <.icon name="hero-film" class="w-3.5 h-3.5" />
-                        <span>{file.codec || "Unknown"}</span>
+                        <span title={file.codec}>{shorten_codec(file.codec) || "Unknown"}</span>
                       </div>
                       <div class="flex items-center gap-1.5">
                         <.icon name="hero-speaker-wave" class="w-3.5 h-3.5" />
-                        <span>{file.audio_codec || "Unknown"}</span>
+                        <span title={file.audio_codec}>
+                          {shorten_codec(file.audio_codec) || "Unknown"}
+                        </span>
                       </div>
                       <div class="flex items-center gap-1.5">
                         <.icon name="hero-circle-stack" class="w-3.5 h-3.5" />

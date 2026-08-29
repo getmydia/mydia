@@ -184,6 +184,31 @@ defmodule MydiaWeb.MediaLive.Show.MediaFilesSectionTest do
       assert html =~ "Unknown file"
       assert html =~ ~s|phx-value-file-id="mf-broken"|
     end
+
+    test "shortens long codec names in the metadata row" do
+      long_codec = %{
+        file("mf-1", "Movie (2020)/movie.mkv")
+        | codec: "hevc (Main 10)",
+          audio_codec: "Dolby Digital Plus"
+      }
+
+      meta =
+        element_text(section_html(%{media_files: [long_codec], episodes: []}), "file-meta-mf-1")
+
+      assert meta =~ "DD+"
+      assert meta =~ "hevc"
+      refute meta =~ "Dolby Digital Plus"
+      refute meta =~ "Main 10"
+    end
+
+    test "still labels a missing codec Unknown" do
+      no_codec = %{file("mf-1", "Movie (2020)/movie.mkv") | codec: nil, audio_codec: nil}
+
+      meta =
+        element_text(section_html(%{media_files: [no_codec], episodes: []}), "file-meta-mf-1")
+
+      assert meta =~ "Unknown"
+    end
   end
 
   describe "refresh_all_file_metadata/2" do
