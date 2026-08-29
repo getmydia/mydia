@@ -363,7 +363,9 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
         %{
           success: true,
           status: "degraded",
-          message: "Search reached #{served_by} but parsed no rows",
+          message:
+            "Search reached #{served_by} but parsed no rows" <>
+              (anonymous_search_note(parsed, user_config, served_by) || ""),
           response_time_ms: elapsed,
           error: nil
         }
@@ -375,10 +377,13 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
           link_status
         )
 
+        note = anonymous_search_note(parsed, user_config, served_by)
+
         %{
           success: true,
-          status: determine_health_status(definition, true, elapsed),
-          message: "Search returned #{count} result(s) via #{served_by}",
+          status:
+            if(note, do: "degraded", else: determine_health_status(definition, true, elapsed)),
+          message: "Search returned #{count} result(s) via #{served_by}#{note}",
           response_time_ms: elapsed,
           error: nil
         }
@@ -412,6 +417,24 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
           response_time_ms: elapsed,
           error: message
         }
+    end
+  end
+
+  # An operator whose private tracker suddenly returns nothing deserves to be
+  # told why. A search served by a host outside the credential scope went out
+  # without its session, so it is degraded rather than healthy no matter how
+  # many rows it parsed.
+  defp anonymous_search_note(parsed, user_config, served_by) do
+    cond do
+      not CredentialScope.credentialed?(user_config) ->
+        nil
+
+      CredentialScope.allows?(CredentialScope.trusted_origins(parsed, user_config), served_by) ->
+        nil
+
+      true ->
+        " Searched anonymously: #{served_by} is not one of this definition's own hosts, " <>
+          "so its session was withheld."
     end
   end
 

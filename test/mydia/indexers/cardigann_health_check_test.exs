@@ -910,4 +910,89 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
       assert reloaded.active_link == nil
     end
   end
+
+  describe "connection test reports an anonymous search" do
+    test "a credentialed definition served by an out-of-scope host reports degraded" do
+      # Same shape as "a legacy mirror that answers is not promoted when
+      # credentials are configured" above: the only reachable candidate is a
+      # legacylinks entry outside the credential scope. That test only checks
+      # persistence; this one checks that the operator-facing message and
+      # status actually say why. The row includes a download link so this
+      # goes through the {:ok, count, served_by} branch, not the {:ok, 0, _}
+      # branch, which already reports "degraded" for an unrelated reason and
+      # would pass this assertion with or without the fix under test.
+      site = Bypass.open()
+      legacy = Bypass.open()
+      Bypass.down(site)
+
+      Bypass.stub(legacy, "GET", "/", fn conn -> Plug.Conn.resp(conn, 200, "<html></html>") end)
+
+      Bypass.stub(legacy, "GET", "/search", fn conn ->
+        Plug.Conn.resp(
+          conn,
+          200,
+          ~s"""
+          <html><body><table class="results">
+          <tr><td class="title">A Movie</td>
+          <td class="download"><a href="/download/1">grab</a></td></tr>
+          </table></body></html>
+          """
+        )
+      end)
+
+      site_url = "http://localhost:#{site.port}"
+      legacy_url = "http://localhost:#{legacy.port}"
+
+      {:ok, definition} =
+        %CardigannDefinition{}
+        |> CardigannDefinition.changeset(%{
+          indexer_id: "degraded-scope",
+          name: "Degraded Scope",
+          type: "private",
+          links: %{"0" => site_url},
+          capabilities: %{},
+          schema_version: "v11",
+          config: %{"username" => "me", "password" => "secret"},
+          definition: """
+          id: degraded-scope
+          name: Degraded Scope
+          description: scope test
+          language: en-US
+          type: private
+          encoding: UTF-8
+          links:
+            - #{site_url}
+          legacylinks:
+            - #{legacy_url}
+          caps:
+            categories:
+              2000: Movies
+          settings: []
+          search:
+            paths:
+              - path: /search
+            rows:
+              selector: tr
+            fields:
+              title:
+                selector: td.title
+              size:
+                selector: td.size
+              seeders:
+                selector: td.seeders
+              download:
+                selector: a
+                attribute: href
+          """
+        })
+        |> Repo.insert()
+
+      assert {:ok, result} = CardigannHealthCheck.execute_health_check(definition)
+
+      assert result.success
+      assert result.status == "degraded"
+      assert result.message =~ "anonymously"
+      assert result.message =~ "#{legacy.port}"
+    end
+  end
 end
