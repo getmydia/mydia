@@ -99,6 +99,11 @@ defmodule Mydia.Application do
       {Mydia.Release.MigrationBackup, skip: skip_migrations?()},
       {Ecto.Migrator,
        repos: Application.fetch_env!(:mydia, :ecto_repos), skip: skip_migrations?()},
+      # Re-merges the database configuration layer, which start/2 could not read
+      # because it runs before this tree exists. Must sit after the migrator: on
+      # a fresh install config_settings does not exist until the migrator has
+      # run. Returns :ignore once done. See the module doc.
+      {Mydia.Config.Bootstrap, skip: skip_config_merge?()},
       # Releases import runs whose coordinator died with the previous node.
       # Must run after the migrator (it queries import_runs) and before the
       # Oban child below, because "no queue has started yet" is exactly what
@@ -313,6 +318,18 @@ defmodule Mydia.Application do
   defp skip_migrations? do
     # By default, sqlite migrations are run when using a release
     System.get_env("RELEASE_NAME") == nil
+  end
+
+  # The merge reads config_settings from the supervisor's own process, which
+  # owns no SQL Sandbox connection, so running it under `mix test` raises
+  # DBConnection.OwnershipError before any test starts, and that error is
+  # deliberately absent from load_database_config/1's rescue list. Same reason
+  # ClientHealth, IndexerHealth and MediaServerHealth are gated in test; those
+  # use `++ []` splicing because their position does not matter, while this
+  # child has to stay between Ecto.Migrator and its consumers, so it stays in
+  # the list and no-ops instead.
+  defp skip_config_merge? do
+    not Application.get_env(:mydia, :start_health_monitors, true)
   end
 
   defp load_config! do
