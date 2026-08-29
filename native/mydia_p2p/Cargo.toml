@@ -10,7 +10,7 @@ path = "src/lib.rs"
 crate-type = ["cdylib"]
 
 [dependencies]
-rustler = "0.37.2"
+rustler = "0.38.0"
 mydia_p2p_core = { path = "../mydia_p2p_core" }
 tokio = { version = "1.49", features = ["rt-multi-thread", "sync"] }
 anyhow = "1.0"
