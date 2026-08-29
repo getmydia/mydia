@@ -1204,4 +1204,29 @@ defmodule Mydia.LibraryTest do
       assert length(all_files) == 2
     end
   end
+
+  describe "rank_zero_candidates_by_file_id/1" do
+    test "returns a map keyed by media_file_id" do
+      file_a = Mydia.MediaFixtures.orphaned_media_file_fixture()
+      file_b = Mydia.MediaFixtures.orphaned_media_file_fixture()
+
+      {:ok, _} =
+        Library.upsert_match_candidate(%{
+          media_file_id: file_a.id,
+          rank: 0,
+          provider_type: "tmdb",
+          provider_id: "603",
+          confidence: 0.9
+        })
+
+      result = Library.rank_zero_candidates_by_file_id([file_a.id, file_b.id])
+
+      assert result[file_a.id].provider_id == "603"
+      refute Map.has_key?(result, file_b.id)
+    end
+
+    test "an empty list issues no query and returns an empty map" do
+      assert Library.rank_zero_candidates_by_file_id([]) == %{}
+    end
+  end
 end

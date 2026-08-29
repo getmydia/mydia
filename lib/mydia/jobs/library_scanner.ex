@@ -33,6 +33,7 @@ defmodule Mydia.Jobs.LibraryScanner do
   alias Mydia.Library.{
     FileIngest,
     MetadataMatcher,
+    OrphanReenricher,
     SampleDetector,
     ScanSummary
   }
@@ -676,7 +677,7 @@ defmodule Mydia.Jobs.LibraryScanner do
     }
 
     # 1. Re-enrich completely orphaned files (no media_item_id and no episode_id)
-    # Skip extras/samples/trailers — they should remain orphaned
+    # Skip extras/samples/trailers, they should remain orphaned.
     completely_orphaned =
       existing_files
       |> Enum.filter(fn file ->
@@ -690,34 +691,22 @@ defmodule Mydia.Jobs.LibraryScanner do
           SampleDetector.excluded?(SampleDetector.detect(abs_path))
       end)
 
-    cleanup_stats =
-      if completely_orphaned != [] do
-        Logger.info("Re-enriching completely orphaned files",
-          count: length(completely_orphaned)
-        )
+    file_info_by_path =
+      Map.new(result.scan_result.files, fn file_info -> {file_info.path, file_info} end)
 
-        fixed_count =
-          Enum.count(completely_orphaned, fn media_file ->
-            # Preload library_path association for path resolution
-            media_file = Mydia.Repo.preload(media_file, :library_path)
-            absolute_path = Mydia.Library.MediaFile.absolute_path(media_file)
+    orphan_stats =
+      OrphanReenricher.run(library_path, completely_orphaned, file_info_by_path,
+        reenrich: &process_media_file/3,
+        config: metadata_config
+      )
 
-            file_info =
-              Enum.find(result.scan_result.files, fn f -> f.path == absolute_path end)
+    cleanup_stats = Map.put(cleanup_stats, :orphaned_files_fixed, orphan_stats.fixed)
 
-            if file_info do
-              Logger.debug("Re-enriching orphaned file", path: absolute_path)
-              process_media_file(media_file, file_info, metadata_config)
-              true
-            else
-              false
-            end
-          end)
-
-        Map.put(cleanup_stats, :orphaned_files_fixed, fixed_count)
-      else
-        cleanup_stats
-      end
+    # Kept separate from cleanup_stats so Task 5's auto_linked total can add
+    # the new-file stream's count to this one. Galactica's orphans are all
+    # existing files, so a total taken from the new-file stream alone would
+    # report zero while items were being created.
+    _orphan_auto_linked = orphan_stats.auto_linked
 
     # 2. Fix orphaned TV show files (have media_item_id for TV show but no episode_id)
     # Preload media_item to check type
