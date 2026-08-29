@@ -512,13 +512,14 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
       cookies: setting(user_settings, :cookies) || []
     }
 
-    # Drop anything the user has not actually configured. An empty cookie list is
-    # not a credential, and leaving the key in place made
+    # Drop anything the user has not actually configured. An empty cookie list or
+    # a blank form field is not a credential, and leaving the key in place made
     # CardigannAuth.determine_auth_method/2 - which tests for :cookies before
     # :username - select :cookie and skip the form login outright, so a private
     # tracker with a username and password searched anonymously and returned
-    # nothing.
-    credentials = Map.reject(credentials, fn {_k, v} -> is_nil(v) or v == [] end)
+    # nothing. The admin form submits untouched fields as "", so blank strings
+    # reach here as readily as nils.
+    credentials = Map.reject(credentials, fn {_k, v} -> blank?(v) end)
 
     # Try to get stored session first
     case CardigannAuth.get_stored_session(definition.id) do
@@ -556,6 +557,12 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
   end
 
   defp setting(_map, _key), do: nil
+
+  defp blank?(nil), do: true
+  defp blank?(value) when is_binary(value), do: String.trim(value) == ""
+  defp blank?([]), do: true
+  defp blank?(%{} = value), do: map_size(value) == 0
+  defp blank?(_value), do: false
 
   defp authenticate_and_convert(parsed, credentials, definition_id) do
     case CardigannAuth.authenticate(parsed, credentials, definition_id) do

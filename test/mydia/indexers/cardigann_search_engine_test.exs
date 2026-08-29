@@ -872,6 +872,68 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
       assert_receive {:cookie_header, ["session=abc123; token=xyz789"]}
     end
 
+    test "a cookie-bearing request does not follow a redirect", %{definition: definition} do
+      # Req carries a manually supplied Cookie header to the redirect target even
+      # on a different host, so a followed redirect would leak the session.
+      origin = Bypass.open()
+      target = Bypass.open()
+      test_pid = self()
+
+      Bypass.expect_once(origin, "GET", "/search", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("location", "http://localhost:#{target.port}/landing")
+        |> Plug.Conn.resp(302, "")
+      end)
+
+      Bypass.stub(target, "GET", "/landing", fn conn ->
+        send(test_pid, :target_was_reached)
+        Plug.Conn.resp(conn, 200, "ok")
+      end)
+
+      definition = %{definition | follow_redirect: true}
+      params = %{query_params: %{}, headers: [], method: :get}
+      user_config = %{cookies: ["session=secret"]}
+
+      assert {:ok, response} =
+               CardigannSearchEngine.execute_http_request(
+                 definition,
+                 "http://localhost:#{origin.port}/search",
+                 params,
+                 user_config
+               )
+
+      assert response.status == 302
+      refute_receive :target_was_reached
+    end
+
+    test "a request without cookies still follows redirects", %{definition: definition} do
+      origin = Bypass.open()
+      target = Bypass.open()
+
+      Bypass.expect_once(origin, "GET", "/search", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("location", "http://localhost:#{target.port}/landing")
+        |> Plug.Conn.resp(302, "")
+      end)
+
+      Bypass.expect_once(target, "GET", "/landing", fn conn ->
+        Plug.Conn.resp(conn, 200, "followed")
+      end)
+
+      definition = %{definition | follow_redirect: true}
+      params = %{query_params: %{}, headers: [], method: :get}
+
+      assert {:ok, response} =
+               CardigannSearchEngine.execute_http_request(
+                 definition,
+                 "http://localhost:#{origin.port}/search",
+                 params,
+                 %{}
+               )
+
+      assert response.status == 200
+    end
+
     test "cookies are withheld from a cleartext non-loopback host", %{definition: definition} do
       params = %{query_params: %{}, headers: [], method: :get}
       user_config = %{cookies: ["session=abc123"]}

@@ -858,6 +858,15 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   # withheld rather than handed to anyone on the path. The request still goes
   # out: an anonymous result is a better outcome than a leaked login, and the
   # search reports whatever the tracker returns for a logged-out visitor.
+  #
+  # A cookie-bearing request also stops following redirects, because Req carries
+  # a manually supplied Cookie header along a redirect even to a different host
+  # (checked against the pinned Req, not assumed). Following one would hand the
+  # session to whatever host the Location names, which is a leak an attacker can
+  # trigger from a hijacked mirror rather than an accident. Unfollowed 3xx keeps
+  # the honest handling this branch already added: validate_response/1 names the
+  # Location, and failover moves on to the next candidate. Redirect following is
+  # unaffected for every request without cookies.
   defp attach_cookies(opts, url, cookies) do
     if cleartext_url?(url) do
       Logger.warning(
@@ -869,7 +878,10 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     else
       cookie_header = Enum.join(cookies, "; ")
       existing_headers = Keyword.get(opts, :headers, [])
-      Keyword.put(opts, :headers, [{"Cookie", cookie_header} | existing_headers])
+
+      opts
+      |> Keyword.put(:headers, [{"Cookie", cookie_header} | existing_headers])
+      |> Keyword.put(:redirect, false)
     end
   end
 
