@@ -175,9 +175,11 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
 
     with {:ok, url} <- build_search_url(definition, opts_for_candidate),
          {:ok, request_params} <- build_request_params(definition, opts_for_candidate) do
+      config = Keyword.get(opts, :config, %{})
+
       result =
         if should_use_flaresolverr?(flaresolverr_opts) do
-          execute_with_flaresolverr(definition, url, request_params, user_config)
+          execute_with_flaresolverr(definition, url, request_params, user_config, config)
         else
           execute_direct_request(
             definition,
@@ -185,7 +187,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
             request_params,
             user_config,
             flaresolverr_opts,
-            Keyword.get(opts, :config, %{})
+            config
           )
         end
 
@@ -253,7 +255,8 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
             url,
             request_params,
             user_config,
-            flaresolverr_opts
+            flaresolverr_opts,
+            config
           )
         else
           with :ok <- validate_response(response) do
@@ -272,12 +275,13 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
          url,
          request_params,
          user_config,
-         _flaresolverr_opts
+         _flaresolverr_opts,
+         config
        ) do
     Logger.info("Cloudflare challenge detected for #{definition.id}, attempting FlareSolverr")
 
     if FlareSolverr.enabled?() do
-      case execute_with_flaresolverr(definition, url, request_params, user_config) do
+      case execute_with_flaresolverr(definition, url, request_params, user_config, config) do
         {:ok, response, cookies} ->
           # Return with indicator that FlareSolverr was used and indexer should be flagged
           {:ok, response, [{:flaresolverr_required, true} | cookies]}
@@ -309,11 +313,18 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   end
 
   # Execute request through FlareSolverr
-  defp execute_with_flaresolverr(definition, url, request_params, user_config) do
+  #
+  # FlareSolverr used to receive user_config's cookies unconditionally, whatever
+  # host url named, while the direct Req path gated every request through
+  # attach_cookies/4. The two paths carry the same session credential, so they
+  # now consult the same cookie_disposition/2 decision before it is forwarded.
+  defp execute_with_flaresolverr(definition, url, request_params, user_config, config) do
     Logger.debug("Executing request through FlareSolverr: #{url}")
 
     # Apply rate limiting if configured
     apply_rate_limit(definition)
+
+    user_config = withhold_flaresolverr_cookies(user_config, url, definition, config)
 
     # Build FlareSolverr options from user_config
     flaresolverr_request_opts = build_flaresolverr_opts(user_config)
@@ -371,6 +382,28 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       {:error, reason} ->
         Logger.error("FlareSolverr error for #{definition.id}: #{inspect(reason)}")
         {:error, Error.search_failed("FlareSolverr error: #{inspect(reason)}")}
+    end
+  end
+
+  # Only consult the scope when there is a cookie to protect. Mirrors the gate
+  # in build_request_options/5, so a cookie-less FlareSolverr request never
+  # logs a withholding warning it has nothing to withhold.
+  defp withhold_flaresolverr_cookies(user_config, url, definition, config) do
+    case Map.get(user_config, :cookies) do
+      cookies when is_list(cookies) and cookies != [] ->
+        trusted_origins = CredentialScope.trusted_origins(definition, config)
+
+        case cookie_disposition(url, trusted_origins) do
+          {:withhold, reason} ->
+            Logger.warning("Cardigann: withholding session cookies from #{reason}")
+            Map.delete(user_config, :cookies)
+
+          :ok ->
+            user_config
+        end
+
+      _ ->
+        user_config
     end
   end
 
@@ -899,24 +932,12 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   # download link is remote content rather than shipped YAML. Withhold and
   # continue, because an anonymous result beats a leaked login.
   defp attach_cookies(opts, url, cookies, trusted_origins) do
-    cond do
-      CredentialScope.cleartext?(url) ->
-        Logger.warning(
-          "Cardigann: withholding session cookies from cleartext URL #{inspect(url)}. " <>
-            "Configure an https base URL for this indexer to send credentials."
-        )
-
+    case cookie_disposition(url, trusted_origins) do
+      {:withhold, reason} ->
+        Logger.warning("Cardigann: withholding session cookies from #{reason}")
         opts
 
-      not CredentialScope.allows?(trusted_origins, url) ->
-        Logger.warning(
-          "Cardigann: withholding session cookies from #{inspect(url)}, which is not " <>
-            "one of this definition's own hosts. Searching anonymously."
-        )
-
-        opts
-
-      true ->
+      :ok ->
         cookie_header =
           cookies
           |> Enum.map(&normalize_cookie/1)
@@ -932,6 +953,28 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
           |> Keyword.put(:headers, [{"Cookie", cookie_header} | existing_headers])
           |> Keyword.put(:redirect, false)
         end
+    end
+  end
+
+  # The one place that decides whether a URL may receive the definition's
+  # session. Both the direct Req path (attach_cookies/4) and the FlareSolverr
+  # path (withhold_flaresolverr_cookies/4) consult it, so the policy cannot
+  # drift between them. It drifted once: FlareSolverr forwarded cookies to any
+  # host at all while the direct path was gated.
+  defp cookie_disposition(url, trusted_origins) do
+    cond do
+      CredentialScope.cleartext?(url) ->
+        {:withhold,
+         "cleartext URL #{inspect(url)}. Configure an https base URL for this indexer to " <>
+           "send credentials."}
+
+      not CredentialScope.allows?(trusted_origins, url) ->
+        {:withhold,
+         "#{inspect(url)}, which is not one of this definition's own hosts. Searching " <>
+           "anonymously."}
+
+      true ->
+        :ok
     end
   end
 
