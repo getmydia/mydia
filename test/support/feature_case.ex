@@ -119,6 +119,24 @@ defmodule MydiaWeb.FeatureCase do
   end
 
   setup tags do
+    # Every :feature test module sets `async: false` (SQLite can't take
+    # concurrent writes), so exactly one of these setups runs at a time —
+    # the Application.put_env swap warm_trending_cache/2 does internally is
+    # safe here for that reason alone. DashboardLive.Index unconditionally
+    # loads both trending rails on connected mount, and many feature tests
+    # land there via the post-login redirect even when the test itself is
+    # about something else entirely, so this is warmed for every feature
+    # test rather than per file (#530). Empty results are fine: no feature
+    # test asserts on trending content, confirmed by grep across
+    # test/mydia_web/features/ before relying on it.
+    #
+    # library_picker_test.exs manages its own separate Bypass, its own
+    # metadata_relay_url, and its own Cache.clear() afterwards; its `setup`
+    # runs after this one (declared later in that file) and simply
+    # overwrites what this warms, so there is no conflict between the two.
+    Mydia.MetadataCacheHelpers.warm_trending_cache(:movie, [])
+    Mydia.MetadataCacheHelpers.warm_trending_cache(:tv_show, [])
+
     pid = Ecto.Adapters.SQL.Sandbox.start_owner!(Mydia.Repo, shared: not tags[:async])
 
     on_exit(fn ->
