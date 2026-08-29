@@ -27,16 +27,18 @@ Ecto.Adapters.SQL.Sandbox.mode(Mydia.Repo, :manual)
 # async task is not a $callers descendant of its test.
 relay_tags = [:external, :requires_relay]
 
-relay_tags_included? =
+included_tags =
   ExUnit.configuration()
   |> Keyword.get(:include, [])
-  |> Enum.any?(fn
-    tag when is_atom(tag) -> tag in relay_tags
-    {tag, _value} -> tag in relay_tags
-    _other -> false
+  |> Enum.map(fn
+    tag when is_atom(tag) -> tag
+    {tag, _value} -> tag
+    _other -> nil
   end)
 
-unless relay_tags_included? do
+relay_tags_included = Enum.filter(relay_tags, &(&1 in included_tags))
+
+if relay_tags_included == [] do
   Mydia.RelayGuard.Escapes.setup()
   Req.default_options(adapter: Mydia.RelayGuard)
 
@@ -53,6 +55,13 @@ unless relay_tags_included? do
         System.at_exit(fn _status -> exit({:shutdown, 1}) end)
     end
   end)
+else
+  # Defense in depth: this disarm is exactly the "silent when forgotten"
+  # failure mode the whole guard exists to close, so make the one deliberate
+  # case that reintroduces it loud instead (#530).
+  IO.puts(
+    "Mydia.RelayGuard is disarmed for this run: --include #{Enum.map_join(relay_tags_included, ", ", &inspect/1)} opted into relay-touching tests."
+  )
 end
 
 # Clear runtime config indexers, download clients, and media servers so tests

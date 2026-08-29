@@ -85,13 +85,33 @@ defmodule Mydia.RelayGuardTest do
     assert [{_key, 1, ^url, _frames}] = rows_for(url)
   end
 
-  test "the error message points at the warming helpers" do
+  test "the error message names every current cache-warming helper" do
+    # A plain substring match on "Mydia.MetadataCacheHelpers" would not catch
+    # the message text drifting out of sync with the helpers module — it
+    # already had, once: fix round 2 added three helpers here and to
+    # Escapes.suggest/2 but never updated this message (#530). Introspecting
+    # the module's own exports instead means this only breaks when a warm_*
+    # helper is genuinely missing from the message, not whenever one is
+    # added: naming a new helper here in the same change keeps this green.
     {:error, error} = Req.request(Req.new(url: blocked_url(), adapter: RelayGuard))
 
     message = Exception.message(error)
 
     assert message =~ "relay.mydia.dev"
     assert message =~ "Mydia.MetadataCacheHelpers"
+
+    warm_helpers =
+      Mydia.MetadataCacheHelpers.__info__(:functions)
+      |> Enum.filter(fn {name, _arity} ->
+        name |> Atom.to_string() |> String.starts_with?("warm_")
+      end)
+
+    assert warm_helpers != [], "expected Mydia.MetadataCacheHelpers to export warm_* helpers"
+
+    Enum.each(warm_helpers, fn {name, arity} ->
+      assert message =~ "#{name}/#{arity}",
+             "BlockedError's message should name #{name}/#{arity}"
+    end)
   end
 
   test "loopback?/1 recognises this machine and nothing else" do
