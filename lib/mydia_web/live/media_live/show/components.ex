@@ -722,11 +722,42 @@ defmodule MydiaWeb.MediaLive.Show.Components do
       <div id="media-files-section" class="card bg-base-200 shadow-lg mb-4 md:mb-6">
         <div class="card-body p-4 md:p-6">
           <h2 class="card-title text-lg md:text-xl mb-3 md:mb-4">Media Files</h2>
-          <%!-- DaisyUI list component --%>
-          <ul class="menu bg-base-100 rounded-box p-0">
-            <li :for={file <- @versions} id={"version-#{file.id}"}>
-              <div class="flex flex-col gap-3 p-4 hover:bg-base-200 rounded-none transition-colors">
-                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+          <%!-- DaisyUI list component.
+
+                w-full and flex-nowrap on the <ul>, flex-nowrap on the <li>, and
+                items-stretch on the row div all override defaults that
+                DaisyUI's `.menu` component ships for its own reasons and that
+                fight the fixed-width row this card needs:
+
+                - `.menu` itself is `width: fit-content` and `flex-flow: column
+                  wrap` (so a plain sidebar menu hugs its content and can spill
+                  into extra columns rather than stretch full width). With an
+                  82-char unbroken basename below in a `truncate` label, that
+                  let the whole <ul> grow to the label's max-content width
+                  (measured 712px against a 351px card) instead of the
+                  available column width, so `truncate` had nothing to clip
+                  against and the page scrolled horizontally. w-full pins the
+                  <ul> to the card's width; flex-nowrap stops it from opening
+                  a second content-sized column instead of shrinking.
+                - `.menu li` inherits the same `flex-flow: column wrap`, so
+                  without its own flex-nowrap the <li> repeats the same
+                  content-sized-column trick one level down.
+                - DaisyUI's `:where(li > :not(ul,menu,details,.menu-title,.btn))`
+                  selector sets `align-items: center` on any plain <div> child
+                  of <li> (styling meant for a menu item's icon+label row),
+                  which stops that div from stretching its own child to the
+                  row's width. items-stretch overrides it back to the default
+                  so the info block underneath can actually be squeezed down
+                  to a fixed width and truncate the filename.
+
+                Measured before/after at 375px: row width 712.5px -> 319px
+                (card clientWidth 351px), label no longer forced wide,
+                `label.scrollWidth > label.clientWidth` false -> true (it now
+                genuinely clips), no more horizontal document scroll. --%>
+          <ul class="menu w-full flex-nowrap bg-base-100 rounded-box p-0">
+            <li :for={file <- @versions} id={"version-#{file.id}"} class="min-w-0 flex-nowrap">
+              <div class="min-w-0 items-stretch flex flex-col gap-3 p-4 hover:bg-base-200 rounded-none transition-colors">
+                <div class="min-w-0 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                   <%!-- Left side: File info --%>
                   <div class="min-w-0 sm:flex-1 flex flex-col gap-2">
                     <%!-- File name. The full path lives on the title attribute
@@ -877,9 +908,13 @@ defmodule MydiaWeb.MediaLive.Show.Components do
             <summary class="cursor-pointer text-sm font-medium text-base-content/70 hover:text-base-content">
               Extras ({length(@extras)})
             </summary>
-            <ul class="menu bg-base-100 rounded-box p-0 mt-2">
-              <li :for={file <- @extras} id={"extra-#{file.id}"}>
-                <div class="flex flex-col gap-2 p-4 rounded-none sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+            <%!-- Same w-full/flex-nowrap/items-stretch overrides as the versions
+                  <ul> above, and for the same reason: without them this list
+                  grows to its longest unbroken filename instead of the card's
+                  width. --%>
+            <ul class="menu w-full flex-nowrap bg-base-100 rounded-box p-0 mt-2">
+              <li :for={file <- @extras} id={"extra-#{file.id}"} class="min-w-0 flex-nowrap">
+                <div class="min-w-0 items-stretch flex flex-col gap-2 p-4 rounded-none sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                   <div class="min-w-0 sm:flex-1 flex flex-col gap-1">
                     <p
                       id={"extra-name-#{file.id}"}
