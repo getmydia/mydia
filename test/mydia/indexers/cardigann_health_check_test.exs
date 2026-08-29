@@ -306,6 +306,64 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
       assert reloaded.active_link == prior_active_link
       assert reloaded.link_status[dead_url]["ok"] == false
     end
+
+    # Regression: the unreachable-probe branch hardcoded "unhealthy" while the
+    # search-failure branch calls determine_health_status/3, which reports
+    # "degraded" until consecutive_failures reaches 3. A single transient
+    # network blip marked the indexer unhealthy while a search that had been
+    # broken for weeks only reached degraded - backwards severity. Both
+    # branches now escalate through the same three-strikes rule.
+    test "an unreachable probe reports degraded, not unhealthy, before three consecutive failures" do
+      dead = Bypass.open()
+      Bypass.down(dead)
+      dead_url = "http://localhost:#{dead.port}"
+
+      {:ok, definition} =
+        %CardigannDefinition{}
+        |> CardigannDefinition.changeset(%{
+          indexer_id: "probe-unreachable-severity",
+          name: "Probe Unreachable Severity",
+          type: "public",
+          links: %{"0" => dead_url},
+          capabilities: %{},
+          schema_version: "v11",
+          consecutive_failures: 0,
+          definition: """
+          id: probe-unreachable-severity
+          name: Probe Unreachable Severity
+          description: d
+          language: en-US
+          type: public
+          encoding: UTF-8
+          links:
+            - #{dead_url}
+          caps:
+            categories:
+              2000: Movies
+          settings: []
+          search:
+            paths:
+              - path: /search
+            rows:
+              selector: tr
+            fields:
+              title:
+                selector: td.title
+              size:
+                selector: td.size
+              seeders:
+                selector: td.seeders
+              download:
+                selector: a
+                attribute: href
+          """
+        })
+        |> Repo.insert()
+
+      assert {:ok, result} = CardigannHealthCheck.execute_health_check(definition)
+      refute result.success
+      assert result.status == "degraded"
+    end
   end
 
   describe "check_all_enabled/0" do

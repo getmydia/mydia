@@ -304,12 +304,19 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
 
         {:error, link_status} ->
           store_link_state(definition, nil, link_status)
+          elapsed = System.monotonic_time(:millisecond) - start_time
 
+          # Use the same escalation determine_health_status/3 applies to a
+          # search failure below: a transient network blip should read as
+          # degraded, same as a persistent search defect, and only climb to
+          # unhealthy after consecutive_failures/3 crosses the threshold.
+          # Hardcoding "unhealthy" here made one unreachable probe report
+          # worse than a search that has been broken for weeks.
           %{
             success: false,
-            status: "unhealthy",
+            status: determine_health_status(definition, false, elapsed),
             message: "No reachable base URL",
-            response_time_ms: System.monotonic_time(:millisecond) - start_time,
+            response_time_ms: elapsed,
             error: "All #{map_size(link_status)} candidate links failed"
           }
       end
