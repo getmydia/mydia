@@ -40,6 +40,7 @@ defmodule Mydia.Indexers.CardigannAuth do
       {:ok, session} = CardigannAuth.authenticate(definition, user_config)
   """
 
+  alias Mydia.Indexers.Cardigann.CredentialScope
   alias Mydia.Indexers.CardigannDefinition.Parsed
   alias Mydia.Indexers.CardigannSearchEngine
   alias Mydia.Indexers.CardigannSearchSession
@@ -266,6 +267,7 @@ defmodule Mydia.Indexers.CardigannAuth do
 
   defp perform_form_login(definition, user_config, cardigann_definition_id) do
     with {:ok, login_url} <- build_login_url(definition, config_for(user_config)),
+         :ok <- check_login_transport(login_url),
          {:ok, login_params} <- build_login_params(definition, user_config),
          {:ok, response} <- execute_login_request(definition, login_url, login_params),
          {:ok, cookies} <- extract_cookies(response),
@@ -276,6 +278,28 @@ defmodule Mydia.Indexers.CardigannAuth do
       end
 
       {:ok, %{cookies: cookies, expires_at: calculate_expiration(), method: :form}}
+    end
+  end
+
+  # A form login POSTs the username and password, and #601 already withholds a
+  # session cookie from a cleartext non-loopback host. That asymmetry is the
+  # hole: Mydia would send the password in the clear, receive a session, and
+  # then refuse to use it, so the login leaks the credentials and buys nothing.
+  #
+  # There is deliberately NO origin check here, and one should not be added. The
+  # login URL is derived from the definition, and the definition also defines
+  # the credential scope, so comparing them is circular: trusted_origins/2
+  # includes an absolute login.path's own origin by construction. An adversary
+  # who can set login.path can set links too.
+  defp check_login_transport(login_url) do
+    if CredentialScope.cleartext?(login_url) do
+      {:error,
+       Error.connection_failed(
+         "Refusing to send credentials to #{login_url} over an unencrypted connection. " <>
+           "Configure an https URL for this indexer."
+       )}
+    else
+      :ok
     end
   end
 

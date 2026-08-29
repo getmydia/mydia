@@ -67,6 +67,28 @@ defmodule Mydia.Indexers.Cardigann.CredentialScope do
 
   def allows?(_hosts, _url), do: false
 
+  # Loopback is a secure context in the same sense browsers use the term: the
+  # request never reaches a network, so a local mirror or a test server is not
+  # an exposure. Everything else on plain http is.
+  @loopback_hosts ~w(localhost 127.0.0.1 ::1 0:0:0:0:0:0:0:1)
+
+  @doc """
+  True when `url` would send a credential over an unencrypted connection to a
+  host other than loopback.
+  """
+  @spec cleartext?(String.t()) :: boolean()
+  def cleartext?(url) when is_binary(url) do
+    case URI.parse(url) do
+      %URI{scheme: "http", host: host} ->
+        String.downcase(host || "") not in @loopback_hosts
+
+      _ ->
+        false
+    end
+  end
+
+  def cleartext?(_url), do: false
+
   @doc """
   True when the map carries a credential worth protecting.
 

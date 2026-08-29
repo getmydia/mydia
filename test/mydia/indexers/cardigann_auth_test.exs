@@ -532,4 +532,65 @@ defmodule Mydia.Indexers.CardigannAuthTest do
       assert message =~ "No site link configured"
     end
   end
+
+  describe "form login credential scope" do
+    test "refuses to POST credentials over cleartext to a non-loopback host" do
+      parsed =
+        login_definition(%{
+          method: "form",
+          path: "/login.php",
+          inputs: %{
+            "username" => "{{ .Config.username }}",
+            "password" => "{{ .Config.password }}"
+          }
+        })
+
+      parsed = %{parsed | links: ["http://tracker.example"]}
+
+      assert {:error, error} =
+               CardigannAuth.authenticate(parsed, %{username: "me", password: "secret"})
+
+      assert error.message =~ "unencrypted"
+      assert error.message =~ "tracker.example"
+    end
+
+    test "allows a login on a host the definition names" do
+      bypass = Bypass.open()
+
+      Bypass.expect_once(bypass, "POST", "/login", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("set-cookie", "session=granted; Path=/")
+        |> Plug.Conn.resp(200, "<html>welcome</html>")
+      end)
+
+      parsed = %Parsed{
+        id: "login-scope-ok",
+        name: "Login Scope OK",
+        description: "",
+        language: "en-US",
+        type: "private",
+        encoding: "UTF-8",
+        links: ["http://localhost:#{bypass.port}"],
+        capabilities: %{modes: %{}},
+        search: %{paths: [%{path: "/search"}], inputs: %{}, rows: %{}, fields: %{}},
+        login: %{
+          method: "form",
+          path: "/login",
+          inputs: %{
+            "username" => "{{ .Config.username }}",
+            "password" => "{{ .Config.password }}"
+          }
+        },
+        download: nil,
+        settings: [],
+        request_delay: nil,
+        follow_redirect: true
+      }
+
+      assert {:ok, %{cookies: cookies}} =
+               CardigannAuth.authenticate(parsed, %{username: "me", password: "secret"})
+
+      assert Enum.any?(cookies, &String.contains?(&1, "session=granted"))
+    end
+  end
 end

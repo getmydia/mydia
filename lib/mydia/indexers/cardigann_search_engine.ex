@@ -900,7 +900,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   # continue, because an anonymous result beats a leaked login.
   defp attach_cookies(opts, url, cookies, trusted_origins) do
     cond do
-      cleartext_url?(url) ->
+      CredentialScope.cleartext?(url) ->
         Logger.warning(
           "Cardigann: withholding session cookies from cleartext URL #{inspect(url)}. " <>
             "Configure an https base URL for this indexer to send credentials."
@@ -954,21 +954,4 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   end
 
   defp normalize_cookie(_cookie), do: nil
-
-  # Loopback is a secure context in the same sense browsers use the term: the
-  # request never reaches a network, so a local mirror or a test server is not
-  # an exposure. Everything else on plain http is.
-  @loopback_hosts ~w(localhost 127.0.0.1 ::1 0:0:0:0:0:0:0:1)
-
-  defp cleartext_url?(url) when is_binary(url) do
-    case URI.parse(url) do
-      %URI{scheme: "http", host: host} ->
-        String.downcase(host || "") not in @loopback_hosts
-
-      _ ->
-        false
-    end
-  end
-
-  defp cleartext_url?(_url), do: false
 end
