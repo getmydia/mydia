@@ -589,6 +589,75 @@ defmodule Mydia.MediaTest do
     end
   end
 
+  describe "upsert_episodes_from_season/3 adopts a minted episode" do
+    import Mydia.MediaFixtures
+
+    test "a provider catch-up adopts the minted row instead of duplicating it" do
+      # This is the load-bearing claim behind EpisodeMinter: a minted row
+      # carries `provider_episode_id: nil` precisely so that when the
+      # provider later publishes the season, the (season_number,
+      # episode_number) fallback in `fallback_by_number/2` adopts it in
+      # place instead of colliding with the unique index and leaving the
+      # file link stranded on a duplicate row. If this ever breaks, users
+      # get permanent duplicate episodes and the file link goes stale.
+      show = media_item_fixture(%{type: "tv_show", title: "Catch-Up"})
+
+      # Give the show a season the provider already has, so season 4 below
+      # is a plausible next season for the minter rather than a misparse.
+      episode_fixture(%{media_item_id: show.id, season_number: 3, episode_number: 8})
+
+      assert {:ok, minted} =
+               Mydia.Library.EpisodeMinter.mint(
+                 show,
+                 4,
+                 1,
+                 "Catch-Up - S04E01 - New Season Begins.mkv"
+               )
+
+      assert is_nil(minted.provider_episode_id)
+      assert minted.title == "New Season Begins"
+
+      # Attach a file to the minted row so its survival through the adoption
+      # can be proven, not just assumed.
+      media_file = media_file_fixture(%{episode_id: minted.id})
+
+      # The provider has now caught up and published season 4 with a real id.
+      season_data = %Mydia.Metadata.Structs.SeasonData{
+        season_number: 4,
+        episodes: [
+          %Mydia.Metadata.Structs.EpisodeData{
+            season_number: 4,
+            episode_number: 1,
+            provider_episode_id: "778899",
+            name: "New Season Begins (Official)"
+          }
+        ]
+      }
+
+      assert {:ok, 1} =
+               Media.upsert_episodes_from_season(show, season_data, monitor_new?: true)
+
+      # Exactly one row at these coordinates -- not two. A broken adoption
+      # would hit the unique index and get swallowed by
+      # `upsert_episodes_from_season/3`'s per-episode error handling,
+      # returning {:ok, 0} instead, or (if the unique index were somehow
+      # bypassed) would leave two rows here.
+      matching =
+        show.id
+        |> Media.list_episodes()
+        |> Enum.filter(&(&1.season_number == 4 and &1.episode_number == 1))
+
+      assert [adopted] = matching
+      assert adopted.id == minted.id
+      assert adopted.provider_episode_id == "778899"
+      assert adopted.title == "New Season Begins (Official)"
+
+      # The file link, made before the provider ever knew about this
+      # episode, survives the adoption untouched.
+      assert Mydia.Repo.get!(Mydia.Library.MediaFile, media_file.id).episode_id == adopted.id
+    end
+  end
+
   describe "episodes" do
     alias Mydia.Media.Episode
 
