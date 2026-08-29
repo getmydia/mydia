@@ -52,6 +52,24 @@ defmodule MydiaWeb.MediaLive.Show.MediaFilesSectionTest do
     }
   end
 
+  # The full path is on the label's title attribute, so `html =~ path` passes
+  # even when the visible text is wrong. Query the element and read its text.
+  defp element_text(html, id) do
+    html
+    |> LazyHTML.from_fragment()
+    |> LazyHTML.query("##{id}")
+    |> LazyHTML.text()
+    |> String.trim()
+  end
+
+  defp element_title(html, id) do
+    html
+    |> LazyHTML.from_fragment()
+    |> LazyHTML.query("##{id}")
+    |> LazyHTML.attribute("title")
+    |> List.first()
+  end
+
   describe "media_files_section/1" do
     test "renders a movie's own files" do
       media_item = %{
@@ -63,6 +81,40 @@ defmodule MydiaWeb.MediaLive.Show.MediaFilesSectionTest do
 
       assert html =~ "The.Matrix.1999.1080p.mkv"
       assert html =~ ~s|phx-value-file-id="mf-1"|
+    end
+
+    test "labels a version with its basename, not its full path" do
+      media_item = %{
+        media_files: [file("mf-1", "The Matrix (1999)/The.Matrix.1999.1080p.mkv")],
+        episodes: []
+      }
+
+      html = section_html(media_item)
+
+      assert element_text(html, "file-name-mf-1") == "The.Matrix.1999.1080p.mkv"
+    end
+
+    test "carries a version's full path on the label's title attribute" do
+      media_item = %{
+        media_files: [file("mf-1", "The Matrix (1999)/The.Matrix.1999.1080p.mkv")],
+        episodes: []
+      }
+
+      html = section_html(media_item)
+
+      assert element_title(html, "file-name-mf-1") ==
+               "/media/The Matrix (1999)/The.Matrix.1999.1080p.mkv"
+    end
+
+    test "does not render a version's directory as visible text" do
+      media_item = %{
+        media_files: [file("mf-1", "The Matrix (1999)/The.Matrix.1999.1080p.mkv")],
+        episodes: []
+      }
+
+      html = section_html(media_item)
+
+      refute element_text(html, "file-name-mf-1") =~ "The Matrix (1999)/"
     end
 
     # This card shows the item's *own* files. An episode's file already renders
@@ -131,6 +183,51 @@ defmodule MydiaWeb.MediaLive.Show.MediaFilesSectionTest do
 
       assert html =~ "Unknown file"
       assert html =~ ~s|phx-value-file-id="mf-broken"|
+    end
+
+    test "shortens long codec names in the metadata row" do
+      long_codec = %{
+        file("mf-1", "Movie (2020)/movie.mkv")
+        | codec: "hevc (Main 10)",
+          audio_codec: "Dolby Digital Plus"
+      }
+
+      meta =
+        element_text(section_html(%{media_files: [long_codec], episodes: []}), "file-meta-mf-1")
+
+      assert meta =~ "DD+"
+      assert meta =~ "hevc"
+      refute meta =~ "Dolby Digital Plus"
+      refute meta =~ "Main 10"
+    end
+
+    test "still labels a missing codec Unknown" do
+      no_codec = %{file("mf-1", "Movie (2020)/movie.mkv") | codec: nil, audio_codec: nil}
+
+      meta =
+        element_text(section_html(%{media_files: [no_codec], episodes: []}), "file-meta-mf-1")
+
+      assert meta =~ "Unknown"
+    end
+
+    test "labels an extra with its basename and keeps the path on title" do
+      extra = %{
+        file("mf-x", "The Matrix (1999)/Featurettes/Making.Of.mkv")
+        | extra_kind: :featurette,
+          extra_source: :filename
+      }
+
+      # Both are Ecto.Enum fields, so production rows hold atoms. A bare struct
+      # does not validate, so string values would render fine here and hide the
+      # mismatch. Valid extra_kind values come from MediaFile.extra_kinds/0;
+      # extra_source is one of :folder, :filename, :duration, :operator.
+
+      html = section_html(%{media_files: [extra], episodes: []})
+
+      assert element_text(html, "extra-name-mf-x") == "Making.Of.mkv"
+
+      assert element_title(html, "extra-name-mf-x") ==
+               "/media/The Matrix (1999)/Featurettes/Making.Of.mkv"
     end
   end
 

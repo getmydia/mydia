@@ -722,35 +722,80 @@ defmodule MydiaWeb.MediaLive.Show.Components do
       <div id="media-files-section" class="card bg-base-200 shadow-lg mb-4 md:mb-6">
         <div class="card-body p-4 md:p-6">
           <h2 class="card-title text-lg md:text-xl mb-3 md:mb-4">Media Files</h2>
-          <%!-- DaisyUI list component --%>
-          <ul class="menu bg-base-100 rounded-box p-0">
-            <li :for={file <- @versions} id={"version-#{file.id}"}>
-              <div class="flex flex-col gap-3 p-4 hover:bg-base-200 rounded-none transition-colors">
-                <div class="flex items-start justify-between gap-4">
+          <%!-- DaisyUI list component.
+
+                w-full and flex-nowrap on the <ul>, flex-nowrap on the <li>, and
+                items-stretch on the row div all override defaults that
+                DaisyUI's `.menu` component ships for its own reasons and that
+                fight the fixed-width row this card needs:
+
+                - `.menu` itself is `width: fit-content` and `flex-flow: column
+                  wrap` (so a plain sidebar menu hugs its content and can spill
+                  into extra columns rather than stretch full width). With an
+                  82-char unbroken basename below in a `truncate` label, that
+                  let the whole <ul> grow to the label's max-content width
+                  (measured 712px against a 351px card) instead of the
+                  available column width, so `truncate` had nothing to clip
+                  against and the page scrolled horizontally. w-full pins the
+                  <ul> to the card's width; flex-nowrap stops it from opening
+                  a second content-sized column instead of shrinking.
+                - `.menu li` inherits the same `flex-flow: column wrap`, so
+                  without its own flex-nowrap the <li> repeats the same
+                  content-sized-column trick one level down.
+                - DaisyUI's `:where(li > :not(ul,menu,details,.menu-title,.btn))`
+                  selector sets `align-items: center` on any plain <div> child
+                  of <li> (styling meant for a menu item's icon+label row),
+                  which stops that div from stretching its own child to the
+                  row's width. items-stretch overrides it back to the default
+                  so the info block underneath can actually be squeezed down
+                  to a fixed width and truncate the filename.
+
+                Measured before/after at 375px: row width 712.5px -> 319px
+                (card clientWidth 351px), label no longer forced wide,
+                `label.scrollWidth > label.clientWidth` false -> true (it now
+                genuinely clips), no more horizontal document scroll. --%>
+          <ul class="menu w-full flex-nowrap bg-base-100 rounded-box p-0">
+            <li :for={file <- @versions} id={"version-#{file.id}"} class="min-w-0 flex-nowrap">
+              <div class="min-w-0 items-stretch flex flex-col gap-3 p-4 hover:bg-base-200 rounded-none transition-colors">
+                <div class="min-w-0 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                   <%!-- Left side: File info --%>
-                  <div class="flex-1 min-w-0 flex flex-col gap-2">
-                    <%!-- File path --%>
+                  <div class="min-w-0 sm:flex-1 flex flex-col gap-2">
+                    <%!-- File name. The full path lives on the title attribute
+                          and in the file details modal. Rendered here it left
+                          about 90px of column beside the button strip on a
+                          375px phone, and break-all shredded it into a tall
+                          narrow stack of characters rather than clipping. --%>
                     <% file_path = Mydia.Library.MediaFile.display_path(file) %>
                     <p
-                      class="text-sm font-mono text-base-content break-all leading-relaxed"
+                      id={"file-name-#{file.id}"}
+                      class="text-sm font-mono text-base-content truncate leading-relaxed"
                       title={file_path}
                     >
                       <%!-- display_name/1 is the "Unknown file" label when there is no path,
                             so an orphaned row reads the same here as everywhere else. --%>
-                      {file_path || Mydia.Library.MediaFile.display_name(file)}
+                      {Mydia.Library.MediaFile.display_name(file)}
                     </p>
-                    <%!-- Technical details with quality badge --%>
-                    <div class="flex flex-wrap gap-4 text-xs text-base-content/70 items-center">
+                    <%!-- Technical details with quality badge. gap-x-3 rather
+                          than gap-4: four short badges do not need 16px of
+                          separation, and on a phone that gap forces a ragged
+                          wrap. Codec names run through shorten_codec/1, the
+                          same helper episode_file_row/1 uses. --%>
+                    <div
+                      id={"file-meta-#{file.id}"}
+                      class="flex flex-wrap gap-x-3 gap-y-1.5 text-xs text-base-content/70 items-center"
+                    >
                       <span class="badge badge-primary badge-sm">
                         {file.resolution || "Unknown"}
                       </span>
                       <div class="flex items-center gap-1.5">
                         <.icon name="hero-film" class="w-3.5 h-3.5" />
-                        <span>{file.codec || "Unknown"}</span>
+                        <span title={file.codec}>{shorten_codec(file.codec) || "Unknown"}</span>
                       </div>
                       <div class="flex items-center gap-1.5">
                         <.icon name="hero-speaker-wave" class="w-3.5 h-3.5" />
-                        <span>{file.audio_codec || "Unknown"}</span>
+                        <span title={file.audio_codec}>
+                          {shorten_codec(file.audio_codec) || "Unknown"}
+                        </span>
                       </div>
                       <div class="flex items-center gap-1.5">
                         <.icon name="hero-circle-stack" class="w-3.5 h-3.5" />
@@ -764,13 +809,13 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                     />
                   </div>
                   <%!-- Right side: Icon-only action buttons --%>
-                  <div class="flex items-center gap-1 flex-shrink-0">
+                  <div class="flex items-center justify-end gap-1 flex-shrink-0">
                     <button
                       id={"subtitle-open-file-#{file.id}"}
                       type="button"
                       phx-click="open_subtitle_manage"
                       phx-value-media-file-id={file.id}
-                      class="btn btn-ghost btn-sm btn-square"
+                      class="btn btn-ghost btn-square sm:btn-sm"
                       aria-label="Manage subtitles"
                       title="Subtitles"
                     >
@@ -786,7 +831,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                         <div
                           tabindex="0"
                           role="button"
-                          class="btn btn-ghost btn-sm btn-square"
+                          class="btn btn-ghost btn-square sm:btn-sm"
                           title="Pre-transcode"
                         >
                           <.icon name="hero-wrench" class="w-5 h-5" />
@@ -812,7 +857,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                       type="button"
                       phx-click="show_file_details"
                       phx-value-file-id={file.id}
-                      class="btn btn-ghost btn-sm btn-square"
+                      class="btn btn-ghost btn-square sm:btn-sm"
                       aria-label="View file details"
                       title="View file details"
                     >
@@ -822,7 +867,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                       type="button"
                       phx-click="mark_file_preferred"
                       phx-value-file-id={file.id}
-                      class="btn btn-ghost btn-sm btn-square"
+                      class="btn btn-ghost btn-square sm:btn-sm"
                       aria-label="Mark this file as preferred"
                       title="Mark as preferred"
                     >
@@ -832,7 +877,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                       type="button"
                       phx-click="show_file_delete_confirm"
                       phx-value-file-id={file.id}
-                      class="btn btn-ghost btn-sm btn-square text-error hover:bg-error hover:text-error-content"
+                      class="btn btn-ghost btn-square sm:btn-sm text-error hover:bg-error hover:text-error-content"
                       aria-label="Delete this file"
                       title="Delete file"
                     >
@@ -841,7 +886,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                     <button
                       id={"demote-#{file.id}"}
                       type="button"
-                      class="btn btn-ghost btn-sm btn-square"
+                      class="btn btn-ghost btn-square sm:btn-sm"
                       title="This is an extra, not a version"
                       phx-click="demote_to_extra"
                       phx-value-id={file.id}
@@ -863,13 +908,20 @@ defmodule MydiaWeb.MediaLive.Show.Components do
             <summary class="cursor-pointer text-sm font-medium text-base-content/70 hover:text-base-content">
               Extras ({length(@extras)})
             </summary>
-            <ul class="menu bg-base-100 rounded-box p-0 mt-2">
-              <li :for={file <- @extras} id={"extra-#{file.id}"}>
-                <div class="flex items-center justify-between gap-4 p-4 rounded-none">
-                  <div class="flex-1 min-w-0 flex flex-col gap-1">
-                    <p class="text-sm font-mono break-all">
-                      {Mydia.Library.MediaFile.display_path(file) ||
-                        Mydia.Library.MediaFile.display_name(file)}
+            <%!-- Same w-full/flex-nowrap/items-stretch overrides as the versions
+                  <ul> above, and for the same reason: without them this list
+                  grows to its longest unbroken filename instead of the card's
+                  width. --%>
+            <ul class="menu w-full flex-nowrap bg-base-100 rounded-box p-0 mt-2">
+              <li :for={file <- @extras} id={"extra-#{file.id}"} class="min-w-0 flex-nowrap">
+                <div class="min-w-0 items-stretch flex flex-col gap-2 p-4 rounded-none sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                  <div class="min-w-0 sm:flex-1 flex flex-col gap-1">
+                    <p
+                      id={"extra-name-#{file.id}"}
+                      class="text-sm font-mono truncate"
+                      title={Mydia.Library.MediaFile.display_path(file)}
+                    >
+                      {Mydia.Library.MediaFile.display_name(file)}
                     </p>
                     <div class="flex flex-wrap gap-2 text-xs text-base-content/60">
                       <span class="badge badge-ghost badge-sm">{file.extra_kind}</span>
@@ -882,7 +934,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                   <button
                     id={"promote-#{file.id}"}
                     type="button"
-                    class="btn btn-ghost btn-sm"
+                    class="btn btn-ghost self-end sm:self-auto sm:btn-sm"
                     title="This is a version, not an extra"
                     phx-click="promote_to_version"
                     phx-value-id={file.id}

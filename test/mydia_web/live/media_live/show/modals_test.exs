@@ -87,6 +87,42 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
     end
   end
 
+  describe "file_details_modal/1 file path" do
+    test "names an orphaned file instead of rendering a blank path" do
+      orphaned = %MediaFile{
+        id: "mf-orphan",
+        path: nil,
+        relative_path: nil,
+        library_path: nil,
+        resolution: nil,
+        codec: nil,
+        audio_codec: nil,
+        size: nil
+      }
+
+      html = render_component(&Modals.file_details_modal/1, file_details: orphaned)
+
+      assert html =~ "Unknown file"
+    end
+
+    test "renders the absolute path of a resolvable file" do
+      resolvable = %MediaFile{
+        id: "mf-ok",
+        path: nil,
+        relative_path: "Movie (2020)/movie.mkv",
+        library_path: %LibraryPath{path: "/movies"},
+        resolution: "1080p",
+        codec: "hevc",
+        audio_codec: "eac3",
+        size: 1_000
+      }
+
+      html = render_component(&Modals.file_details_modal/1, file_details: resolvable)
+
+      assert html =~ "/movies/Movie (2020)/movie.mkv"
+    end
+  end
+
   describe "reidentify_modal/1" do
     test "renders candidates with selectable buttons wired to the select event" do
       html =

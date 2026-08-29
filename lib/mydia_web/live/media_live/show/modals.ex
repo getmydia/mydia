@@ -250,8 +250,12 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
           <%!-- File Path --%>
           <div>
             <h4 class="text-sm font-semibold text-base-content/70 mb-2">File Path</h4>
+            <%!-- display_path/1 returns nil for a fully orphaned row, which
+                  rendered an empty box. This modal is the only surface showing
+                  a full path now that the card labels rows by basename. --%>
             <p class="text-sm font-mono bg-base-200 p-3 rounded-box break-all">
-              {Mydia.Library.MediaFile.absolute_path(@file_details)}
+              {Mydia.Library.MediaFile.display_path(@file_details) ||
+                Mydia.Library.MediaFile.display_name(@file_details)}
             </p>
           </div>
           <%!-- Quality Information --%>
