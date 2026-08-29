@@ -6,6 +6,7 @@ defmodule Mydia.Settings.RuntimeConfig do
 
   require Logger
 
+  alias Mydia.Config.Schema.Paths
   alias Mydia.Repo
 
   alias Mydia.Settings.{
@@ -130,7 +131,9 @@ defmodule Mydia.Settings.RuntimeConfig do
   @spec load_database_config((-> [ConfigSetting.t()])) :: {:ok, map()}
   def load_database_config(loader \\ &list_config_settings/0) do
     try do
-      {:ok, loader.() |> build_config_map()}
+      {config_map, skipped} = build_config_map(loader.())
+      log_skipped_config_settings(skipped)
+      {:ok, config_map}
     rescue
       error in [
         DBConnection.ConnectionError,
@@ -145,6 +148,25 @@ defmodule Mydia.Settings.RuntimeConfig do
 
         {:ok, %{}}
     end
+  end
+
+  @doc """
+  Every `config_settings` row that cannot be used, with the reason.
+
+  A row reaches this list by naming a key the schema does not have, or by
+  holding a value that will not cast to its field's type. Each one is skipped
+  by the merge rather than invalidating it, so this is what the admin UI shows
+  an operator to explain why a setting is not taking effect.
+  """
+  @spec invalid_config_settings() :: [%{setting: ConfigSetting.t(), reason: String.t()}]
+  def invalid_config_settings do
+    list_config_settings()
+    |> Enum.flat_map(fn setting ->
+      case Paths.cast_overlay(setting.key, setting.value) do
+        {:error, reason} -> [%{setting: setting, reason: reason}]
+        _ -> []
+      end
+    end)
   end
 
   def get_runtime_config do
@@ -582,47 +604,32 @@ defmodule Mydia.Settings.RuntimeConfig do
     end)
   end
 
+  # Returns {config_map, skipped}. A row that names an unknown key or holds an
+  # uncastable value is skipped, never allowed to invalidate the batch: before
+  # this, one bad row made Loader.validate/1's changeset invalid and
+  # Mydia.Config.Bootstrap dropped every database-backed setting. Keys are
+  # resolved through the compile-time index, so a segment can no longer mint an
+  # atom from database content, and a parent/child key pair can no longer drive
+  # put_in_path/3 into Map.put/3 on a non-map.
   defp build_config_map(config_settings) do
-    Enum.reduce(config_settings, %{}, fn setting, acc ->
-      # Parse the dot-notation key into path segments
-      # e.g., "server.port" -> [:server, :port]
-      path =
-        setting.key
-        |> String.split(".")
-        |> Enum.map(&String.to_atom/1)
-
-      # Parse the value based on common patterns
-      parsed_value = parse_config_value(setting.value)
-
-      # Put the value into the nested map
-      put_in_path(acc, path, parsed_value)
+    Enum.reduce(config_settings, {%{}, []}, fn setting, {acc, skipped} ->
+      case Paths.cast_overlay(setting.key, setting.value) do
+        {:ok, path, value} -> {put_in_path(acc, path, value), skipped}
+        :direct -> {acc, skipped}
+        {:error, reason} -> {acc, [%{key: setting.key, reason: reason} | skipped]}
+      end
     end)
   end
 
-  defp parse_config_value(nil), do: nil
-  defp parse_config_value(""), do: nil
+  defp log_skipped_config_settings([]), do: :ok
 
-  defp parse_config_value(value) when is_binary(value) do
-    cond do
-      # Boolean values
-      value == "true" ->
-        true
-
-      value == "false" ->
-        false
-
-      # Integer values
-      match?({_int, ""}, Integer.parse(value)) ->
-        {int, ""} = Integer.parse(value)
-        int
-
-      # Default to string
-      true ->
-        value
+  defp log_skipped_config_settings(skipped) do
+    for %{reason: reason} <- Enum.reverse(skipped) do
+      Logger.warning("Ignoring unusable config_settings row: #{reason}")
     end
-  end
 
-  defp parse_config_value(value), do: value
+    :ok
+  end
 
   defp put_in_path(map, [key], value) do
     Map.put(map, key, value)

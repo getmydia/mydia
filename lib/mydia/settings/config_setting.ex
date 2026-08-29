@@ -48,6 +48,8 @@ defmodule Mydia.Settings.ConfigSetting do
   use Ecto.Schema
   import Ecto.Changeset
 
+  alias Mydia.Config.Schema.Paths
+
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
@@ -96,7 +98,56 @@ defmodule Mydia.Settings.ConfigSetting do
     |> cast(attrs, [:key, :value, :category, :description, :updated_by_id])
     |> validate_required([:key, :category])
     |> validate_inclusion(:category, @categories)
+    |> validate_known_key()
+    |> validate_value_type()
     |> unique_constraint(:key)
     |> foreign_key_constraint(:updated_by_id)
+  end
+
+  # A key outside both populations names nothing. Merged, it was built into the
+  # config map and then dropped by Mydia.Config.Schema.changeset/2 ignoring the
+  # unknown field, so the operator saw a saved setting that never applied.
+  defp validate_known_key(changeset) do
+    validate_change(changeset, :key, fn :key, key ->
+      if Paths.known?(key) do
+        []
+      else
+        [key: "is not a known configuration key"]
+      end
+    end)
+  end
+
+  # validate_known_key/1 is built on validate_change/3, which Ecto skips
+  # whenever :key is absent from this changeset's changes — the case on a
+  # value-only update (e.g. the API's PATCH endpoint, which only ever sends
+  # :value and :description) against a row whose existing key predates this
+  # validation. Re-check known?/1 unconditionally here so an unknown key is
+  # always caught and always blamed on :key, rather than surfacing as a
+  # :value error from the cast_overlay/2 call below. Only overlay rows are
+  # typed beyond that; a direct-lookup row's reader parses its own value.
+  # Skipped entirely when :key already has an error, so one bad row produces
+  # one error rather than two.
+  defp validate_value_type(%Ecto.Changeset{errors: errors} = changeset) do
+    key = get_field(changeset, :key)
+
+    cond do
+      Keyword.has_key?(errors, :key) ->
+        changeset
+
+      key == nil ->
+        changeset
+
+      not Paths.known?(key) ->
+        add_error(changeset, :key, "is not a known configuration key")
+
+      Paths.direct?(key) ->
+        changeset
+
+      true ->
+        case Paths.cast_overlay(key, get_field(changeset, :value)) do
+          {:error, reason} -> add_error(changeset, :value, reason)
+          _ -> changeset
+        end
+    end
   end
 end

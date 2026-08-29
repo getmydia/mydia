@@ -993,6 +993,19 @@ defmodule Mydia.Config.LoaderTest do
           category: :server
         })
 
+      {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+
+      assert config.server.port == 5555
+    end
+
+    test "a database.* row never reaches the merge" do
+      # This used to pass with config.database.pool_size == 25: build_config_map/1
+      # minted a path from any dotted key it was given, with no notion of which
+      # keys were legal. Mydia.Config.Schema.Paths now excludes database.* from
+      # the overlay index on purpose (see its moduledoc) -- the database section
+      # is consumed to open the repo, before the database layer can even be
+      # read, so a config_settings row naming it could never actually take
+      # effect. The row is skipped rather than silently accepted.
       {:ok, _} =
         Repo.insert(%ConfigSetting{
           key: "database.pool_size",
@@ -1002,8 +1015,7 @@ defmodule Mydia.Config.LoaderTest do
 
       {:ok, config} = Loader.load(config_file: "nonexistent.yml")
 
-      assert config.server.port == 5555
-      assert config.database.pool_size == 25
+      assert config.database.pool_size == 5
     end
 
     test "database config parses booleans correctly" do

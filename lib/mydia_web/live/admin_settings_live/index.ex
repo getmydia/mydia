@@ -1,6 +1,7 @@
 defmodule MydiaWeb.AdminSettingsLive.Index do
   use MydiaWeb, :live_view
 
+  alias Mydia.Config.Schema.Paths
   alias Mydia.Settings
   alias MydiaWeb.AdminSettingsLive.Components
 
@@ -217,7 +218,53 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
      |> put_flash(:info, "Crash report queue cleared")}
   end
 
+  @impl true
+  def handle_event("delete_invalid_config_setting", %{"id" => id}, socket) do
+    # Only rows this page reported as unusable can be deleted here: the id is
+    # checked against that list rather than trusted, so this cannot be used to
+    # delete a working setting.
+    socket.assigns.invalid_config_settings
+    |> Enum.find(fn %{setting: setting} -> setting.id == id end)
+    |> case do
+      nil ->
+        {:noreply, socket}
+
+      %{setting: setting} ->
+        delete_invalid_config_setting(socket, setting)
+    end
+  end
+
   ## Private Helpers
+
+  # Mydia.Repo only wraps insert/update/insert_or_update (see its module doc),
+  # so this delete runs through stock Ecto. A row that is already gone by the
+  # time the delete reaches the database (an operator double-clicking Remove,
+  # or two admins clearing the same row) does not come back as
+  # {:error, changeset}: Ecto.Repo.delete/1 raises Ecto.StaleEntryError for a
+  # stale/missing row unless the caller passes :stale_error_field, which this
+  # call site does not. Since removing the row is the whole point of this
+  # handler, an already-absent row already satisfies the operator's intent,
+  # so it is treated the same as a successful delete rather than surfaced as
+  # an error.
+  defp delete_invalid_config_setting(socket, setting) do
+    case Settings.delete_config_setting(setting) do
+      {:ok, _} ->
+        {:noreply, socket |> load_data() |> put_flash(:info, "Removed #{setting.key}")}
+
+      {:error, changeset} ->
+        MydiaLogger.log_error(:liveview, "Failed to delete invalid config setting",
+          error: changeset,
+          error_details: inspect(changeset, pretty: true),
+          operation: :delete_invalid_config_setting,
+          setting_key: setting.key
+        )
+
+        {:noreply, put_flash(socket, :error, "Failed to remove #{setting.key}")}
+    end
+  rescue
+    Ecto.StaleEntryError ->
+      {:noreply, socket |> load_data() |> put_flash(:info, "Removed #{setting.key}")}
+  end
 
   # Validates, persists, and reloads a single key. Shared by the typed-input
   # path above; the toggle and select paths predate it and still inline the
@@ -300,6 +347,7 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
     socket
     |> assign(:config_settings_with_sources, get_all_settings_with_sources())
     |> assign(:crash_report_stats, Mydia.CrashReporter.stats())
+    |> assign(:invalid_config_settings, Settings.invalid_config_settings())
   end
 
   defp get_all_settings_with_sources do
@@ -315,8 +363,16 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
     metadata = config.metadata || %Mydia.Config.Schema.Metadata{}
     streaming = config.streaming || %Mydia.Config.Schema.Streaming{}
 
-    # Fetch all DB settings in one query to avoid N+1 per-key lookups
-    all_db_settings = Settings.list_config_settings() |> Map.new(&{&1.key, &1})
+    # Fetch all DB settings in one query to avoid N+1 per-key lookups. A row
+    # the merge skips (unknown key, or a value that will not cast to the
+    # field's type) must not be reported as the source of a value it did not
+    # supply, or the source badge and the invalid-settings alert above would
+    # contradict each other for the same key. Direct-lookup rows resolve to
+    # `:direct`, not `{:error, _}`, so they are kept.
+    all_db_settings =
+      Settings.list_config_settings()
+      |> Enum.reject(&match?({:error, _}, Paths.cast_overlay(&1.key, &1.value)))
+      |> Map.new(&{&1.key, &1})
 
     %{
       "Server" => [
@@ -349,12 +405,18 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
           source: Settings.config_source("URL_HOST", "server.url_host", all_db_settings)
         }
       ],
+      # Read-only: Mydia.Repo reads its pool_size and database_path straight
+      # from DATABASE_PATH/POOL_SIZE at boot (config/runtime.exs), never from
+      # this config layer. Mydia.Config.Schema.Paths deliberately excludes the
+      # `database` section, so a row here is rejected on write and would be
+      # inert even if it were allowed to save. Shown for visibility only.
       "Database" => [
         %{
           key: "database.path",
           label: "Database Path",
           type: :string,
           value: config.database.path,
+          editable: false,
           source: Settings.config_source("DATABASE_PATH", "database.path", all_db_settings)
         },
         %{
@@ -362,6 +424,7 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
           label: "Pool Size",
           type: :integer,
           value: config.database.pool_size,
+          editable: false,
           source: Settings.config_source("POOL_SIZE", "database.pool_size", all_db_settings)
         }
       ],

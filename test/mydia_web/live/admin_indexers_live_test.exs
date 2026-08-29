@@ -2,7 +2,8 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
   use MydiaWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
-  alias Mydia.{Accounts, Settings}
+  alias Mydia.{Accounts, Repo, Settings}
+  alias Mydia.Settings.ConfigSetting
 
   setup do
     unique_id = System.unique_integer([:positive])
@@ -394,12 +395,17 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
     end
 
     test "tolerates a non-integer timeout value stored in the database", %{conn: conn} do
-      {:ok, _} =
-        Settings.upsert_config_setting(%{
-          key: "flaresolverr.timeout",
-          value: "not-a-number",
-          category: :flaresolverr
-        })
+      # ConfigSetting.changeset/2 now rejects a value that won't cast to its
+      # field's type, so upsert_config_setting/1 can no longer create this
+      # row. Insert straight through Repo, bypassing the changeset, to seed
+      # the malformed row this test exists to prove the panel survives, the
+      # kind of row a pre-validation write or a direct database edit can
+      # still leave behind.
+      Repo.insert!(%ConfigSetting{
+        key: "flaresolverr.timeout",
+        value: "not-a-number",
+        category: :flaresolverr
+      })
 
       # Should not crash on mount or when opening the edit modal; the malformed
       # value falls back to the schema default rather than raising.
