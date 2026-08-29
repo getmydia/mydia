@@ -934,7 +934,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                   <button
                     id={"promote-#{file.id}"}
                     type="button"
-                    class="btn btn-ghost btn-sm self-end sm:self-auto"
+                    class="btn btn-ghost self-end sm:self-auto sm:btn-sm"
                     title="This is a version, not an extra"
                     phx-click="promote_to_version"
                     phx-value-id={file.id}
