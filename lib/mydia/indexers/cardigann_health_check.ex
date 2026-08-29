@@ -14,10 +14,14 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   - Consecutive failure tracking
   """
 
+  alias Mydia.Indexers.Adapter.Error
   alias Mydia.Indexers.Cardigann.Links
+  alias Mydia.Indexers.Cardigann.TemplateContext
   alias Mydia.Indexers.CardigannDefinition
   alias Mydia.Indexers.CardigannDefinition.Parsed
   alias Mydia.Indexers.CardigannParser
+  alias Mydia.Indexers.CardigannResultParser
+  alias Mydia.Indexers.CardigannSearchEngine
   alias Mydia.Repo
 
   require Logger
@@ -29,6 +33,24 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
           response_time_ms: non_neg_integer() | nil,
           error: String.t() | nil
         }
+
+  # A single fixed probe query reads as "no rows" on every tracker that does not
+  # carry that kind of content, which trains an operator to ignore the degraded
+  # state. Ask the indexer something it says it can answer.
+  @movie_probe_query "The Matrix"
+  @tv_probe_query "Breaking Bad"
+  @generic_probe_query "ubuntu"
+
+  @typedoc """
+  Outcome of a real search against one base URL.
+
+  `{:ok, count}` where count is 0 means the site answered and parsed cleanly but
+  matched nothing, which is degraded rather than healthy or failed.
+  """
+  @type probe_outcome ::
+          {:ok, non_neg_integer()}
+          | {:cloudflare, String.t()}
+          | {:error, String.t()}
 
   @doc """
   Tests connection to an indexer by executing a simple test search.
@@ -159,6 +181,73 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
           {:cont, {:error, Map.put(status, candidate, error_entry(error))}}
       end
     end)
+  end
+
+  @doc """
+  Runs a real search against `base_url` and reports what came back.
+
+  The homepage probe in `probe_candidates/2` only proves the site answers on
+  `/`. Every defect in the 1.4 indexer bug report lived in the search leg: an
+  unescaped query in the URL path, an absolute path concatenated onto the base
+  URL, a redirect nobody followed, a 404 that ended the search instead of
+  advancing to the next mirror. A Test that stopped at the homepage reported
+  "successful" for all of them, which is how five broken indexers shipped with
+  five green checkmarks.
+  """
+  @spec probe_search(Parsed.t(), map(), String.t()) :: probe_outcome()
+  def probe_search(%Parsed{} = parsed, user_config, base_url) do
+    opts = [
+      query: probe_query(parsed),
+      categories: [],
+      config: Map.get(user_config, :config, %{}),
+      settings: parsed.settings,
+      base_url: base_url
+    ]
+
+    with {:ok, response} <-
+           parsed
+           |> CardigannSearchEngine.execute_search(opts, user_config, %{})
+           |> normalize_search_result(),
+         :ok <- CardigannSearchEngine.validate_response(response),
+         {:ok, results} <- parse_probe_results(parsed, response, base_url, opts) do
+      {:ok, length(results)}
+    else
+      {:error, %Error{message: message}} -> classify_probe_error(message)
+      {:error, reason} when is_binary(reason) -> classify_probe_error(reason)
+      {:error, reason} -> {:error, inspect(reason)}
+    end
+  end
+
+  defp normalize_search_result({:ok, response}), do: {:ok, response}
+  defp normalize_search_result({:ok, response, _flaresolverr_cookies}), do: {:ok, response}
+  defp normalize_search_result(other), do: other
+
+  defp classify_probe_error(message) when is_binary(message) do
+    if String.contains?(String.downcase(message), "cloudflare") do
+      {:cloudflare, message}
+    else
+      {:error, message}
+    end
+  end
+
+  defp parse_probe_results(parsed, response, base_url, opts) do
+    with {:ok, search_path} <- CardigannSearchEngine.select_search_path(parsed, opts) do
+      CardigannResultParser.parse_results(parsed, response, parsed.name,
+        template_context: TemplateContext.build(parsed, opts),
+        base_url: base_url,
+        search_path: search_path
+      )
+    end
+  end
+
+  defp probe_query(%Parsed{capabilities: capabilities}) do
+    modes = Map.get(capabilities || %{}, :modes, %{})
+
+    cond do
+      Map.has_key?(modes, "movie-search") -> @movie_probe_query
+      Map.has_key?(modes, "tv-search") -> @tv_probe_query
+      true -> @generic_probe_query
+    end
   end
 
   # Private Functions

@@ -1,5 +1,8 @@
 defmodule Mydia.Indexers.CardigannHealthCheckTest do
-  use Mydia.DataCase, async: true
+  # probe_search/3 issues real HTTP searches through Bypass and, in the
+  # "active_link promotion" test, persists through Repo from the test process.
+  # async: false keeps this on the shared sandbox connection.
+  use Mydia.DataCase, async: false
 
   alias Mydia.Indexers.CardigannHealthCheck
   alias Mydia.Indexers.CardigannDefinition
@@ -264,6 +267,207 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
 
       assert {:ok, results} = CardigannHealthCheck.check_all_enabled()
       assert results == %{}
+    end
+  end
+
+  defp parsed_for(link, opts \\ []) do
+    %Parsed{
+      id: "probe-test",
+      name: "Probe Test",
+      description: "Test indexer",
+      language: "en-US",
+      type: "public",
+      encoding: "UTF-8",
+      links: [link],
+      legacylinks: [],
+      capabilities: %{modes: Keyword.get(opts, :modes, %{"search" => ["q"]})},
+      follow_redirect: true,
+      settings: [],
+      search: %{
+        paths: [%{path: Keyword.get(opts, :path, "/search")}],
+        inputs: %{},
+        headers: nil,
+        keywordsfilters: [],
+        rows: %{selector: "tr"},
+        # CardigannResultParser only counts a row once it has both a title and a
+        # download/infohash field (see "Only return row if we got at least
+        # title and download/infohash" in cardigann_result_parser.ex), so the
+        # probe fixture needs a download selector or every probe reads as zero
+        # rows regardless of what the site actually returned.
+        fields: %{
+          title: %{selector: "td"},
+          download: %{selector: "a", attribute: "href"}
+        }
+      },
+      login: nil,
+      download: nil
+    }
+  end
+
+  # The stored definition YAML, not the definition's `links` column, is what
+  # execute_health_check parses and probes against (see
+  # test/support/fixtures/indexers_fixtures.ex). Rewriting the column alone
+  # would leave the probe hitting the fixture's https://example.com default.
+  defp put_link(definition, url) do
+    updated_yaml =
+      String.replace(
+        definition.definition,
+        ~r/^links:\n(?:  - .*\n?)+/m,
+        "links:\n  - #{url}\n"
+      )
+
+    {:ok, updated} =
+      definition
+      |> Ecto.Changeset.change(%{definition: updated_yaml})
+      |> Repo.update()
+
+    updated
+  end
+
+  describe "probe_search/3" do
+    test "reports the row count when the search returns results" do
+      bypass = Bypass.open()
+
+      Bypass.stub(bypass, "GET", "/search", fn conn ->
+        Plug.Conn.resp(
+          conn,
+          200,
+          "<html><body><table><tr><td><a href=\"/download/1\">Some Release</a></td></tr></table></body></html>"
+        )
+      end)
+
+      url = "http://localhost:#{bypass.port}"
+
+      assert {:ok, count} = CardigannHealthCheck.probe_search(parsed_for(url), %{}, url)
+      assert count > 0
+    end
+
+    test "reports zero rows rather than success when the search parses nothing" do
+      # This is the state the reporter hit on KickassTorrents: "0 results".
+      # It is not a healthy indexer and it is not an unreachable one.
+      bypass = Bypass.open()
+
+      Bypass.stub(bypass, "GET", "/search", fn conn ->
+        Plug.Conn.resp(conn, 200, "<html><body><p>nothing here</p></body></html>")
+      end)
+
+      url = "http://localhost:#{bypass.port}"
+
+      assert {:ok, 0} = CardigannHealthCheck.probe_search(parsed_for(url), %{}, url)
+    end
+
+    test "reports an error when the search 404s even though the homepage is fine" do
+      # A homepage probe passes here. This is exactly the false green.
+      bypass = Bypass.open()
+
+      Bypass.stub(bypass, "GET", "/", fn conn -> Plug.Conn.resp(conn, 200, "<html/>") end)
+      Bypass.stub(bypass, "GET", "/search", fn conn -> Plug.Conn.resp(conn, 404, "") end)
+
+      url = "http://localhost:#{bypass.port}"
+
+      assert {:error, message} = CardigannHealthCheck.probe_search(parsed_for(url), %{}, url)
+      assert message =~ "404"
+    end
+  end
+
+  describe "probe query selection" do
+    # The definition below puts the keyword in the PATH, so the probe query is
+    # observable. A definition with an empty `inputs` map and a static path
+    # sends the query nowhere at all, which would make this assertion vacuous.
+    defp capture_path(bypass, test_pid) do
+      Bypass.stub(bypass, "GET", "/search/:term", fn conn ->
+        send(test_pid, {:request_path, conn.request_path})
+        Plug.Conn.resp(conn, 200, "<html><body><table><tr><td>x</td></tr></table></body></html>")
+      end)
+    end
+
+    test "a movie-search indexer is probed with a film title" do
+      bypass = Bypass.open()
+      capture_path(bypass, self())
+
+      url = "http://localhost:#{bypass.port}"
+
+      parsed =
+        parsed_for(url, modes: %{"movie-search" => ["q"]}, path: "/search/{{ .Keywords }}")
+
+      assert {:ok, _} = CardigannHealthCheck.probe_search(parsed, %{}, url)
+      assert_received {:request_path, path}
+      assert path =~ "The%20Matrix"
+    end
+
+    test "a tv-search indexer is probed with a series title" do
+      bypass = Bypass.open()
+      capture_path(bypass, self())
+
+      url = "http://localhost:#{bypass.port}"
+
+      parsed = parsed_for(url, modes: %{"tv-search" => ["q"]}, path: "/search/{{ .Keywords }}")
+
+      assert {:ok, _} = CardigannHealthCheck.probe_search(parsed, %{}, url)
+      assert_received {:request_path, path}
+      assert path =~ "Breaking%20Bad"
+    end
+
+    test "an indexer declaring neither mode falls back to a generic term" do
+      bypass = Bypass.open()
+      capture_path(bypass, self())
+
+      url = "http://localhost:#{bypass.port}"
+      parsed = parsed_for(url, modes: %{"search" => ["q"]}, path: "/search/{{ .Keywords }}")
+
+      assert {:ok, _} = CardigannHealthCheck.probe_search(parsed, %{}, url)
+      assert_received {:request_path, path}
+      assert path =~ "ubuntu"
+    end
+  end
+
+  describe "Cloudflare" do
+    test "a Cloudflare challenge is reported as :cloudflare, not as a generic error" do
+      # EZTV in the bug report. The operator needs to be told to configure
+      # FlareSolverr, which requires distinguishing this from an ordinary
+      # failure.
+      bypass = Bypass.open()
+
+      Bypass.stub(bypass, "GET", "/search", fn conn ->
+        # CardigannSearchEngine.cloudflare_challenge?/1 matches on body content
+        # (cf-browser-verification, "Cloudflare", etc.), not on the "server"
+        # header alone, so the body needs a real indicator string to be
+        # detected as a challenge rather than a bare 403.
+        conn
+        |> Plug.Conn.put_resp_header("server", "cloudflare")
+        |> Plug.Conn.resp(
+          403,
+          "<html><title>Just a moment...</title><body>Checking your browser before " <>
+            "accessing this site. cf-browser-verification. DDoS protection by Cloudflare." <>
+            "</body></html>"
+        )
+      end)
+
+      url = "http://localhost:#{bypass.port}"
+
+      assert {:cloudflare, _message} =
+               CardigannHealthCheck.probe_search(parsed_for(url), %{}, url)
+    end
+  end
+
+  describe "active_link promotion" do
+    test "a candidate whose homepage answers but whose search fails is not promoted" do
+      # This is the YTS shape: a proxy mirror serves HTML on / and 404s on the
+      # API path. Promoting it on the strength of the homepage GET is what made
+      # every later search use the wrong mirror.
+      definition = cardigann_definition_fixture(%{active_link: nil})
+
+      bypass = Bypass.open()
+      Bypass.stub(bypass, "GET", "/", fn conn -> Plug.Conn.resp(conn, 200, "<html/>") end)
+      Bypass.stub(bypass, "GET", "/search", fn conn -> Plug.Conn.resp(conn, 404, "") end)
+
+      {:ok, result} =
+        CardigannHealthCheck.execute_health_check(
+          put_link(definition, "http://localhost:#{bypass.port}")
+        )
+
+      refute result.success
+      assert Mydia.Repo.reload!(definition).active_link == nil
     end
   end
 end
