@@ -478,4 +478,30 @@ defmodule Mydia.Jobs.ApplyImportGroupsTest do
 
     refute Repo.reload!(stuck_file).episode_id
   end
+
+  test "a group deleted mid-drain does not raise and is not reported as stuck", %{
+    library_path: lp
+  } do
+    scope = lp.id |> SelectionScope.new() |> SelectionScope.select_all_matching(%{band: :ready})
+    {:ok, 1} = ImportGroups.accept(scope)
+
+    group_id = Repo.one!(ImportGroup).id
+
+    block_ref = MetadataStubProvider.block_next_season_fetch(self())
+    on_exit(fn -> MetadataStubProvider.clear_season_fetch_block(block_ref) end)
+
+    task =
+      Task.async(fn ->
+        perform_job(ApplyImportGroups, %{"library_path_id" => lp.id})
+      end)
+
+    assert_receive {:metadata_season_fetch_started, ^block_ref, fetch_pid}, 5_000
+
+    # What ImportGroups.clear_for_library/1 does while a drain is in flight.
+    Repo.delete_all(from(g in ImportGroup, where: g.id == ^group_id))
+
+    send(fetch_pid, {:release_metadata_season_fetch, block_ref})
+
+    assert :ok = Task.await(task, 5_000)
+  end
 end
