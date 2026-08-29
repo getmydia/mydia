@@ -840,6 +840,18 @@ defmodule Mydia.Settings do
   defdelegate load_database_config(loader), to: Mydia.Settings.RuntimeConfig
 
   @doc """
+  Every `config_settings` row that cannot be used, with the reason.
+
+  A row reaches this list by naming a key the schema does not have, or by
+  holding a value that will not cast to its field's type. This is what the
+  admin UI shows an operator to explain why a setting is not taking effect.
+  """
+  @spec invalid_config_settings() :: [
+          %{setting: Mydia.Settings.ConfigSetting.t(), reason: String.t()}
+        ]
+  defdelegate invalid_config_settings(), to: Mydia.Settings.RuntimeConfig
+
+  @doc """
   Gets the runtime configuration.
 
   Returns the full configuration struct loaded at application startup.
