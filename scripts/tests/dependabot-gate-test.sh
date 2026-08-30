@@ -44,6 +44,7 @@ assert_verdict rollup-merge.json   MERGE
 assert_verdict rollup-blocked.json BLOCKED
 assert_verdict rollup-pending.json WAIT
 assert_verdict rollup-empty.json   WAIT
+assert_verdict rollup-null.json    WAIT
 
 # PR #613's seven red contexts, alphabetically. This is the regression: every
 # one of them was visible and none of them was required.

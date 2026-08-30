@@ -38,7 +38,7 @@ USAGE
 # which a naive script reads as "still running" and waits on forever. Normalise
 # both into { name, state } where state is terminal or the literal PENDING.
 normalise='
-  [ .statusCheckRollup[]
+  [ (.statusCheckRollup // [])[]
     | if .__typename == "StatusContext"
       then { name: .context, state: (.state // "PENDING") }
       else { name: .name,
