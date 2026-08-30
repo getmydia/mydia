@@ -1,46 +1,56 @@
 name: Dependabot auto-merge
 
-# pull_request_target rather than pull_request, because a Dependabot pull
-# request gets a read-only token on the pull_request event and cannot enable
-# auto-merge. The job checks out nothing, runs no code from the branch, and
-# uses no third-party actions, so it does not take on the usual
-# pull_request_target hazard.
-on: pull_request_target
+# check_suite rather than pull_request_target. GitHub's native auto-merge
+# (`gh pr merge --auto`, which this file used to call) waits on REQUIRED checks
+# only, and there is no flag to widen it. The Master ruleset requires six of
+# roughly twenty-six contexts, so on 2026-08-29 PR #613 auto-merged with seven
+# red checks and broke the master Docker image. This workflow waits on the whole
+# rollup instead.
+#
+# A check_suite workflow runs in default-branch context, so it does not carry the
+# pull_request_target hazard the previous revision of this file reasoned about.
+on:
+  check_suite:
+    types: [completed]
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
+  pull-requests: read
 
 jobs:
-  auto-merge:
-    name: Enable auto-merge
-    # The pull request AUTHOR, not github.actor. github.actor is whoever
-    # triggered the event, so a maintainer reopening or synchronising a
-    # Dependabot pull request would fail this gate and silently skip the
-    # auto-merge. The author is dependabot on every Dependabot pull request
-    # and cannot be spoofed.
-    if: github.event.pull_request.user.login == 'dependabot[bot]'
+  gate:
+    name: Dependabot merge gate
     runs-on: ubuntu-latest
+
     steps:
-      # --auto queues the merge behind every required check on the Master
-      # ruleset, which now includes Site build and both Load lanes contexts.
-      # Those gates report on every pull request rather than being
-      # path-filtered, precisely so this wait means something.
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # The check_suite payload does carry a pull_requests array, but it is
+      # empty in some cases. Matching open dependabot pull requests on the
+      # suite's head SHA is unconditional and needs no payload archaeology.
       #
-      # --merge because it is the only strategy this repository allows.
-      # Both allow_squash_merge and allow_rebase_merge are false, so
-      # `gh pr merge --rebase` fails outright with "Rebase merges are not
-      # allowed on this repository" and no auto-merge is ever queued. The
-      # failure is invisible on a green pull request: the merge simply never
-      # happens.
-      #
-      # dependabot/fetch-metadata is deliberately absent. It is the right way
-      # to read what a Dependabot pull request changed, but nothing here needs
-      # to know: every update auto-merges on green, so there is no policy to
-      # branch on. Leaving it out keeps a job holding contents: write on
-      # pull_request_target free of third-party actions entirely.
-      - name: Enable auto-merge
-        run: gh pr merge --auto --merge "$PR_URL"
+      # Note the author spelling: `gh pr list --author` wants `app/dependabot`,
+      # while the webhook payload spells the same account `dependabot[bot]`.
+      - name: Decide
         env:
-          PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_SHA: ${{ github.event.check_suite.head_sha }}
+        run: |
+          set -euo pipefail
+
+          prs="$(gh pr list --author 'app/dependabot' --state open \
+                   --json number,headRefOid \
+                   --jq ".[] | select(.headRefOid == \"$HEAD_SHA\") | .number")"
+
+          if [ -z "$prs" ]; then
+            echo "No open dependabot pull request at $HEAD_SHA. Nothing to do."
+            exit 0
+          fi
+
+          for pr in $prs; do
+            verdict="$(./scripts/dependabot-gate.sh verdict --pr "$pr")"
+            echo "PR #$pr: $verdict"
+          done
