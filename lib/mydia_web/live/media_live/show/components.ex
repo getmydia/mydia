@@ -883,15 +883,19 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                     >
                       <.icon name="hero-trash" class="w-5 h-5" />
                     </button>
+                    <%!-- Not a tray/arrow icon: `hero-arrow-down-tray` is the
+                          download icon everywhere else in the app, including the
+                          hero button on this same page. --%>
                     <button
                       id={"demote-#{file.id}"}
                       type="button"
                       class="btn btn-ghost btn-square sm:btn-sm"
+                      aria-label="Move this file to extras"
                       title="This is an extra, not a version"
                       phx-click="demote_to_extra"
                       phx-value-id={file.id}
                     >
-                      <.icon name="hero-arrow-down-tray" class="w-5 h-5" />
+                      <.icon name="hero-chevron-double-down" class="w-5 h-5" />
                     </button>
                   </div>
                 </div>
@@ -939,7 +943,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                     phx-click="promote_to_version"
                     phx-value-id={file.id}
                   >
-                    <.icon name="hero-arrow-up-tray" class="w-4 h-4" /> Version
+                    <.icon name="hero-chevron-double-up" class="w-4 h-4" /> Version
                   </button>
                 </div>
               </li>
