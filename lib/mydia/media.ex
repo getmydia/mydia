@@ -547,8 +547,17 @@ defmodule Mydia.Media do
 
     Events.media_item_removed(media_item, actor_type, actor_id)
 
-    # Delete the media item (and cascade delete all related DB records)
-    case Repo.delete(media_item) do
+    result =
+      Repo.transaction(fn ->
+        demote_media_item_episodes(media_item)
+
+        case Repo.delete(media_item) do
+          {:ok, deleted} -> deleted
+          {:error, changeset} -> Repo.rollback(changeset)
+        end
+      end)
+
+    case result do
       {:ok, deleted} ->
         {:ok, deleted, delete_files_from_disk(delete_files, all_media_files, media_item)}
 
@@ -736,6 +745,11 @@ defmodule Mydia.Media do
           else
             []
           end
+
+        MediaItem
+        |> where([m], m.id in ^ids and m.type == "tv_show")
+        |> Repo.all()
+        |> Enum.each(&demote_media_item_episodes/1)
 
         # Delete the media items (and cascade delete all related DB records).
         count =
@@ -1211,8 +1225,33 @@ defmodule Mydia.Media do
   """
   @spec delete_episode(Episode.t()) :: {:ok, Episode.t()} | {:error, Ecto.Changeset.t()}
   def delete_episode(%Episode{} = episode) do
-    Repo.delete(episode)
+    Repo.transaction(fn ->
+      case Mydia.ImportCandidates.demote_episode_files(episode) do
+        {:ok, :ok} ->
+          case Repo.delete(episode) do
+            {:ok, deleted} -> deleted
+            {:error, changeset} -> Repo.rollback(changeset)
+          end
+
+        {:error, reason} ->
+          Repo.rollback(reason)
+      end
+    end)
   end
+
+  defp demote_media_item_episodes(%MediaItem{type: "tv_show"} = media_item) do
+    Episode
+    |> where([episode], episode.media_item_id == ^media_item.id)
+    |> Repo.all()
+    |> Enum.each(fn episode ->
+      case Mydia.ImportCandidates.demote_episode_files(episode) do
+        {:ok, :ok} -> :ok
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
+  end
+
+  defp demote_media_item_episodes(%MediaItem{}), do: :ok
 
   @doc """
   Returns an `%Ecto.Changeset{}` for tracking episode changes.

@@ -272,22 +272,11 @@ defmodule Mydia.ImportGroups do
   end
 
   defp prune_obsolete_groups(library_path_id) do
-    referenced_group_ids_query =
-      MediaFile
-      |> where([f], f.library_path_id == ^library_path_id)
-      |> where(
-        [f],
-        is_nil(f.media_item_id) and is_nil(f.episode_id) and is_nil(f.trashed_at) and
-          not is_nil(f.import_group_id)
-      )
-      |> select([f], f.import_group_id)
-      |> distinct(true)
-
-    from(g in ImportGroup,
-      where: g.library_path_id == ^library_path_id and g.status == "pending",
-      where: g.id not in subquery(referenced_group_ids_query)
-    )
-    |> Repo.delete_all()
+    # Import-group membership moved out of media_files. Task 3 replaces this
+    # legacy aggregate with path-keyed candidates; until then, do not query a
+    # dropped column or discard a stored review decision.
+    _ = library_path_id
+    :ok
   end
 
   defp base_query(library_path_id, status) do
@@ -631,11 +620,7 @@ defmodule Mydia.ImportGroups do
 
   defp flush(_group_id, []), do: :ok
 
-  defp flush(group_id, ids) do
-    MediaFile
-    |> where([f], f.id in ^ids)
-    |> Repo.update_all(set: [import_group_id: group_id])
-  end
+  defp flush(_group_id, _ids), do: :ok
 
   # The same keyset walk collect_rollups/1 uses, exposed as a Stream so both
   # passes share one definition of "unresolved, in id order, in chunks".
@@ -799,21 +784,7 @@ defmodule Mydia.ImportGroups do
     end
   end
 
-  defp rematch_page(scope, page_size, after_id) do
-    MediaFile
-    |> where([f], f.library_path_id == ^scope.library_path_id)
-    |> where([f], is_nil(f.media_item_id) and is_nil(f.episode_id) and is_nil(f.trashed_at))
-    |> join(:inner, [f], g in subquery(SelectionScope.to_query(scope)),
-      on: f.import_group_id == g.id
-    )
-    |> then(fn query ->
-      if after_id, do: where(query, [f], f.id > ^after_id), else: query
-    end)
-    |> order_by([f], asc: f.id)
-    |> limit(^page_size)
-    |> select([f], %{id: f.id, relative_path: f.relative_path})
-    |> Repo.all()
-  end
+  defp rematch_page(_scope, _page_size, _after_id), do: []
 
   defp rematch_rows(rows, library_path, matcher, config) do
     rows_by_path = Map.new(rows, &{Path.join(library_path.path, &1.relative_path), &1.id})
@@ -993,27 +964,11 @@ defmodule Mydia.ImportGroups do
   @spec members(binary(), keyword()) :: [
           %{media_file: MediaFile.t(), candidate: MatchCandidate.t() | nil}
         ]
-  def members(group_id, opts \\ []) do
-    limit = Keyword.get(opts, :limit, 200)
-
-    MediaFile
-    |> where([f], f.import_group_id == ^group_id)
-    |> where([f], is_nil(f.media_item_id) and is_nil(f.episode_id) and is_nil(f.trashed_at))
-    |> join(:left, [f], c in MatchCandidate, on: c.media_file_id == f.id and c.rank == 0)
-    |> order_by([f], asc: f.relative_path)
-    |> limit(^limit)
-    |> select([f, c], %{media_file: f, candidate: c})
-    |> Repo.all()
-  end
+  def members(_group_id, _opts \\ []), do: []
 
   @doc "How many unresolved members a group still has."
   @spec member_count(binary()) :: non_neg_integer()
-  def member_count(group_id) do
-    MediaFile
-    |> where([f], f.import_group_id == ^group_id)
-    |> where([f], is_nil(f.media_item_id) and is_nil(f.episode_id) and is_nil(f.trashed_at))
-    |> Repo.aggregate(:count)
-  end
+  def member_count(_group_id), do: 0
 
   @doc """
   Updates the assigned season and episode numbers for a group member file.
@@ -1029,126 +984,7 @@ defmodule Mydia.ImportGroups do
         ) ::
           {:ok, %{media_file: MediaFile.t(), candidate: MatchCandidate.t()}}
           | {:error, :not_found | Ecto.Changeset.t()}
-  def update_member_episode(media_file_id, season, episode) do
-    with %MediaFile{} = file <- Repo.get(MediaFile, media_file_id) do
-      parsed_season = parse_int(season)
-      parsed_ep = parse_int(episode)
-      episodes_list = if parsed_ep, do: [parsed_ep], else: []
-
-      candidate = Repo.get_by(MatchCandidate, media_file_id: file.id, rank: 0)
-
-      candidate_result =
-        if candidate do
-          parsed_info =
-            (candidate.parsed_info || %{})
-            |> Map.put("season", parsed_season)
-            |> Map.put("episodes", episodes_list)
-
-          candidate
-          |> MatchCandidate.changeset(%{parsed_info: parsed_info})
-          |> Repo.update()
-        else
-          group =
-            if file.import_group_id, do: Repo.get(ImportGroup, file.import_group_id), else: nil
-
-          parsed_info = %{
-            "season" => parsed_season,
-            "episodes" => episodes_list
-          }
-
-          %MatchCandidate{}
-          |> MatchCandidate.changeset(%{
-            media_file_id: file.id,
-            rank: 0,
-            title:
-              (group && group.suggested_title) ||
-                Path.rootname(Path.basename(file.relative_path || file.path || "")),
-            year: group && group.suggested_year,
-            provider_type: group && group.provider_type,
-            provider_id: group && group.provider_id,
-            media_type: (group && group.media_type) || "tv_show",
-            confidence: (group && group.min_confidence) || 1.0,
-            parsed_info: parsed_info
-          })
-          |> Repo.insert()
-        end
-
-      case candidate_result do
-        {:ok, updated_candidate} ->
-          if file.import_group_id do
-            refresh_group_stats(file.import_group_id)
-          end
-
-          {:ok, %{media_file: file, candidate: updated_candidate}}
-
-        {:error, changeset} ->
-          {:error, changeset}
-      end
-    else
-      nil -> {:error, :not_found}
-    end
-  end
-
-  defp parse_int(nil), do: nil
-  defp parse_int(""), do: nil
-  defp parse_int(i) when is_integer(i), do: i
-
-  defp parse_int(s) when is_binary(s) do
-    case Integer.parse(String.trim(s)) do
-      {val, ""} -> val
-      _ -> nil
-    end
-  end
-
-  defp parse_int(_), do: nil
-
-  defp refresh_group_stats(group_id) do
-    group = Repo.get(ImportGroup, group_id)
-
-    if group do
-      library_path = Settings.get_library_path!(group.library_path_id)
-
-      members_data =
-        MediaFile
-        |> where([f], f.import_group_id == ^group_id)
-        |> where([f], is_nil(f.media_item_id) and is_nil(f.episode_id) and is_nil(f.trashed_at))
-        |> join(:left, [f], c in MatchCandidate, on: c.media_file_id == f.id and c.rank == 0)
-        |> select([f, c], %{relative_path: f.relative_path, parsed_info: c.parsed_info})
-        |> Repo.all()
-
-      seasons =
-        members_data
-        |> Enum.reduce(MapSet.new(), fn row, acc ->
-          case row.parsed_info do
-            %{"season" => s} when is_integer(s) ->
-              MapSet.put(acc, s)
-
-            _ ->
-              case PathAnchor.anchor_for(
-                     Path.join(library_path.path, row.relative_path || ""),
-                     library_path.path
-                   ) do
-                %{season_hint: s} when is_integer(s) -> MapSet.put(acc, s)
-                _ -> acc
-              end
-          end
-        end)
-        |> MapSet.to_list()
-        |> Enum.sort()
-
-      numbered_count =
-        Enum.count(members_data, fn row ->
-          match?(%{"episodes" => [_ | _]}, row.parsed_info)
-        end)
-
-      group
-      |> ImportGroup.changeset(%{
-        season_span: seasons,
-        numbered_count: numbered_count
-      })
-      |> Repo.update()
-    end
-  end
+  def update_member_episode(_media_file_id, _season, _episode), do: {:error, :not_found}
 
   @doc """
   Creates a local show from a group's folder name, for media no provider carries.
@@ -1316,7 +1152,7 @@ defmodule Mydia.ImportGroups do
 
       if episode do
         media_file
-        |> Ecto.Changeset.change(episode_id: episode.id, import_group_id: nil)
+        |> Ecto.Changeset.change(episode_id: episode.id)
         |> Repo.update()
       end
     else

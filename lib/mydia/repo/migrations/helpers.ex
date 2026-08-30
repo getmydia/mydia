@@ -327,6 +327,7 @@ defmodule Mydia.Repo.Migrations.Helpers do
   - `:indexes` - List of index specs (optional)
   - `:timestamps` - Timestamp options, `false` to disable, or keyword opts (default: `[type: :utc_datetime]`)
   - `:primary_key` - Primary key option for `create table` (default: `false` for binary_id tables)
+  - `:checks` - Named SQLite check constraints as `{name, expression}` tuples (optional)
   - `:postgres` - List of ALTER SQL strings for PostgreSQL, or `:skip` to do nothing
 
   ## Column Definition Format
@@ -394,11 +395,14 @@ defmodule Mydia.Repo.Migrations.Helpers do
 
   defp sqlite_recreate_table_body(table_name, opts) do
     columns = opts[:columns] || raise ArgumentError, ":columns option is required for SQLite"
+    checks = opts[:checks] || []
     indexes = opts[:indexes] || []
     primary_key_opt = Keyword.get(opts, :primary_key, false)
     timestamps_opt = Keyword.get(opts, :timestamps, type: :utc_datetime)
 
     new_table = :"#{table_name}_new"
+
+    columns = attach_sqlite_checks(columns, checks)
 
     # Build list of column names for copying data
     column_names = Enum.map(columns, &elem(&1, 0))
@@ -459,6 +463,23 @@ defmodule Mydia.Repo.Migrations.Helpers do
           create index(table_name, [col])
       end
     end
+  end
+
+  defp attach_sqlite_checks(columns, []), do: columns
+
+  defp attach_sqlite_checks(columns, checks) when length(checks) <= length(columns) do
+    Enum.zip_with(columns, checks ++ List.duplicate(nil, length(columns) - length(checks)), fn
+      {name, type, opts}, {check_name, expression} ->
+        {name, type,
+         Keyword.put(opts || [], :check, %{name: to_string(check_name), expr: expression})}
+
+      column, nil ->
+        column
+    end)
+  end
+
+  defp attach_sqlite_checks(_columns, _checks) do
+    raise ArgumentError, "SQLite table recreation has more checks than columns"
   end
 
   @doc """

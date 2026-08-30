@@ -660,6 +660,8 @@ defmodule Mydia.MediaTest do
 
   describe "episodes" do
     alias Mydia.Media.Episode
+    alias Mydia.Library.{ImportCandidate, MediaFile}
+    alias Mydia.Repo
 
     import Mydia.MediaFixtures
 
@@ -711,6 +713,27 @@ defmodule Mydia.MediaTest do
       episode = episode_fixture(media_item_id: media_item.id)
       assert {:ok, %Episode{}} = Media.delete_episode(episode)
       assert_raise Ecto.NoResultsError, fn -> Media.get_episode!(episode.id) end
+    end
+
+    test "deleting an episode demotes its file without leaving an orphan" do
+      show = media_item_fixture(%{type: "tv_show", tvdb_id: 1234})
+      episode = episode_fixture(media_item_id: show.id, season_number: 2, episode_number: 3)
+
+      file =
+        media_file_fixture(
+          episode_id: episode.id,
+          relative_path: "Show/Season 02/S02E03.mkv"
+        )
+
+      assert {:ok, _episode} = Media.delete_episode(episode)
+      refute Repo.get(MediaFile, file.id)
+
+      assert %ImportCandidate{
+               relative_path: "Show/Season 02/S02E03.mkv",
+               provider_type: "tvdb",
+               provider_id: "1234",
+               parsed_info: %{"season" => 2, "episodes" => [3]}
+             } = Repo.get_by!(ImportCandidate, library_path_id: file.library_path_id)
     end
 
     test "create_episode/1 casts and persists absolute_number and provider_episode_id" do
@@ -1973,7 +1996,7 @@ defmodule Mydia.MediaTest do
       assert is_nil(Mydia.Repo.get!(MediaItem, reconciled.id).season_order)
     end
 
-    test "swaps provider ids, recreates episodes, and re-links files", ctx do
+    test "swaps provider ids, recreates episodes, and demotes episode files", ctx do
       stub_tmdb_show(ctx.bypass, ctx.new_id, "Switch Show", 2010)
       stub_tmdb_season(ctx.bypass, ctx.new_id, 1, [1, 2])
 
@@ -1998,16 +2021,14 @@ defmodule Mydia.MediaTest do
       # The old episode row is gone (wiped, not left parallel).
       assert is_nil(Mydia.Repo.get(Mydia.Media.Episode, ctx.old_episode.id))
 
-      # The previously episode-linked file is still attached to the show
-      # (re-linked by filename), not orphaned with both ids null.
       media_file = Mydia.Repo.get(Mydia.Library.MediaFile, ctx.media_file.id)
-      refute is_nil(media_file)
-      # Re-linked by filename to a recreated episode (not left orphaned).
-      assert not is_nil(media_file.episode_id)
+      assert is_nil(media_file)
 
-      relinked = Mydia.Repo.get(Mydia.Media.Episode, media_file.episode_id)
-      assert relinked.season_number == 1
-      assert relinked.episode_number == 1
+      assert %Mydia.Library.ImportCandidate{} =
+               Mydia.Repo.get_by(Mydia.Library.ImportCandidate,
+                 library_path_id: ctx.media_file.library_path_id,
+                 relative_path: ctx.media_file.relative_path
+               )
     end
 
     test "a failed new-provider fetch leaves existing episodes intact", ctx do
@@ -2162,7 +2183,7 @@ defmodule Mydia.MediaTest do
       }
     end
 
-    test "swaps to tvdb ids, recreates episodes, and re-links files", ctx do
+    test "swaps to tvdb ids, recreates episodes, and demotes episode files", ctx do
       tvdb_season_id = System.unique_integer([:positive])
       stub_tvdb_show(ctx.bypass, ctx.new_id, "TVDB Show", 2010, [{1, tvdb_season_id}])
       stub_tvdb_season(ctx.bypass, tvdb_season_id, 1, [1, 2])
@@ -2188,10 +2209,14 @@ defmodule Mydia.MediaTest do
       # The old episode row is gone (wiped, not left parallel).
       assert is_nil(Mydia.Repo.get(Mydia.Media.Episode, ctx.old_episode.id))
 
-      # The previously episode-linked file is re-linked by filename.
       media_file = Mydia.Repo.get(Mydia.Library.MediaFile, ctx.media_file.id)
-      refute is_nil(media_file)
-      assert not is_nil(media_file.episode_id)
+      assert is_nil(media_file)
+
+      assert %Mydia.Library.ImportCandidate{} =
+               Mydia.Repo.get_by(Mydia.Library.ImportCandidate,
+                 library_path_id: ctx.media_file.library_path_id,
+                 relative_path: ctx.media_file.relative_path
+               )
     end
 
     test "clears a stale season_order picked under the old provider", ctx do

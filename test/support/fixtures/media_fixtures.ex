@@ -182,4 +182,38 @@ defmodule Mydia.MediaFixtures do
 
     media_file
   end
+
+  @doc "Generate a durable import candidate."
+  def import_candidate_fixture(attrs \\ %{}) do
+    attrs = Map.new(attrs)
+
+    library_path_id = Map.get_lazy(attrs, :library_path_id, fn -> library_path_fixture().id end)
+
+    relative_path =
+      Map.get(attrs, :relative_path, "candidate/file-#{System.unique_integer([:positive])}.mkv")
+
+    library_path = Mydia.Settings.get_library_path!(library_path_id)
+
+    anchor =
+      Mydia.Library.PathAnchor.anchor_for(
+        Path.join(library_path.path, relative_path),
+        library_path.path
+      )
+
+    {:ok, candidate} =
+      Mydia.ImportCandidates.upsert(
+        Map.merge(
+          %{
+            library_path_id: library_path_id,
+            relative_path: relative_path,
+            anchor_key: anchor.cluster_key,
+            size: 1_000_000_000,
+            discovered_at: DateTime.utc_now() |> DateTime.truncate(:second)
+          },
+          attrs
+        )
+      )
+
+    candidate
+  end
 end

@@ -504,18 +504,8 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       season = Map.get(params, "season")
       episode = Map.get(params, "episode")
 
-      case ImportGroups.update_member_episode(file_id, season, episode) do
-        {:ok, updated_member} ->
-          socket =
-            socket
-            |> stream_insert(:members, updated_member)
-            |> maybe_refresh_group_row(updated_member.media_file.import_group_id)
-
-          {:noreply, socket}
-
-        {:error, _reason} ->
-          {:noreply, socket}
-      end
+      _ = {file_id, season, episode}
+      {:noreply, socket}
     else
       {:unauthorized, socket} -> {:noreply, socket}
     end
@@ -1036,9 +1026,6 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       group -> stream_insert(socket, :groups, group)
     end
   end
-
-  defp maybe_refresh_group_row(socket, nil), do: socket
-  defp maybe_refresh_group_row(socket, id), do: refresh_group_row(socket, id)
 
   # Fires (or re-fires) the group match search asynchronously -- the page
   # this replaced ran two synchronous relay calls inline in a keystroke
