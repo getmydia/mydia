@@ -35,6 +35,14 @@ defmodule Mydia.Library.CandidatePromotionTest do
 
   defp stub_config, do: Mydia.Metadata.default_relay_config()
 
+  defp import_candidate_with_id!(id, attrs) do
+    attrs = Map.new(attrs)
+
+    %ImportCandidate{id: id}
+    |> ImportCandidate.changeset(attrs)
+    |> Repo.insert!()
+  end
+
   test "promotes a movie group in one ownership transaction" do
     library_path = library_path_fixture(%{type: "movies"})
     movie = media_item_fixture(%{type: "movie", tmdb_id: 60_300})
@@ -89,17 +97,26 @@ defmodule Mydia.Library.CandidatePromotionTest do
     library_path = library_path_fixture(%{type: "mixed"})
     movie = media_item_fixture(%{type: "movie", tmdb_id: 60_305})
 
+    # CandidatePromotion orders ownership writes by ID. These explicit IDs make
+    # the movie insert happen before the incompatible TV candidate fails.
     first =
-      import_candidate_fixture(%{
+      import_candidate_with_id!("00000000-0000-4000-8000-000000000001", %{
         library_path_id: library_path.id,
+        relative_path: "atomic-first.mkv",
+        anchor_key: "atomic-group",
+        size: 1_000_000_000,
+        discovered_at: DateTime.utc_now() |> DateTime.truncate(:second),
         media_type: "movie",
         parsed_info: %{"type" => "movie"}
       })
 
     second =
-      import_candidate_fixture(%{
+      import_candidate_with_id!("00000000-0000-4000-8000-000000000002", %{
         library_path_id: library_path.id,
+        relative_path: "atomic-second.mkv",
         anchor_key: first.anchor_key,
+        size: 1_000_000_000,
+        discovered_at: DateTime.utc_now() |> DateTime.truncate(:second),
         media_type: "tv_show",
         parsed_info: %{"type" => "tv_show", "season" => 1, "episodes" => [1]}
       })
@@ -210,40 +227,89 @@ defmodule Mydia.Library.CandidatePromotionTest do
     assert episode_id
   end
 
-  test "simultaneous promotion attempts create one owned file" do
-    library_path = library_path_fixture(%{type: "movies"})
-    movie = media_item_fixture(%{type: "movie", tmdb_id: 60_311})
+  test "separate database connections serialize competing promotions at ownership" do
+    %{library_path: library_path, movie: movie, candidate: candidate} =
+      Ecto.Adapters.SQL.Sandbox.unboxed_run(Repo, fn ->
+        library_path = library_path_fixture(%{type: "movies"})
+        movie = media_item_fixture(%{type: "movie", tmdb_id: 60_311})
 
-    candidate =
-      import_candidate_fixture(%{
-        library_path_id: library_path.id,
-        media_type: "movie",
-        parsed_info: %{"type" => "movie"}
-      })
+        candidate =
+          import_candidate_fixture(%{
+            library_path_id: library_path.id,
+            media_type: "movie",
+            parsed_info: %{"type" => "movie"}
+          })
+
+        %{library_path: library_path, movie: movie, candidate: candidate}
+      end)
+
+    on_exit(fn ->
+      Ecto.Adapters.SQL.Sandbox.unboxed_run(Repo, fn ->
+        Repo.delete_all(from file in MediaFile, where: file.library_path_id == ^library_path.id)
+        Repo.delete_all(from candidate in ImportCandidate, where: candidate.id == ^candidate.id)
+        Repo.delete(movie)
+        Repo.delete(library_path)
+      end)
+    end)
 
     parent = self()
+    ref = make_ref()
 
     promote = fn ->
-      send(parent, :promotion_ready)
+      :ok = Ecto.Adapters.SQL.Sandbox.checkout(Repo, sandbox: false)
+      send(parent, {:connection_ready, self()})
 
-      receive do: (:start_promotion ->
-                     CandidatePromotion.promote_group([candidate], movie_match(movie),
-                       config: stub_config()
-                     ))
+      try do
+        receive do
+          {:start_promotion, ^ref} ->
+            CandidatePromotion.promote_group([candidate], movie_match(movie),
+              config: stub_config(),
+              ownership_attempt: fn -> send(parent, {:ownership_attempt, self()}) end,
+              ownership_boundary: fn ->
+                send(parent, {:ownership_boundary, self()})
+
+                receive do
+                  {:release_ownership, ^ref} -> :ok
+                end
+              end
+            )
+        end
+      after
+        Ecto.Adapters.SQL.Sandbox.checkin(Repo)
+      end
     end
 
     first = Task.async(promote)
     second = Task.async(promote)
 
-    assert_receive :promotion_ready, 1_000
-    assert_receive :promotion_ready, 1_000
-    send(first.pid, :start_promotion)
-    send(second.pid, :start_promotion)
+    assert_receive {:connection_ready, first_pid}, 1_000
+    assert_receive {:connection_ready, second_pid}, 1_000
+    refute first_pid == second_pid
 
-    results = [Task.await(first, 2_000), Task.await(second, 2_000)]
-    assert Enum.count(results, &match?({:ok, [_]}, &1)) == 1
-    assert Enum.count(results, &match?({:error, _}, &1)) == 1
-    assert Repo.aggregate(MediaFile, :count) == 1
-    refute Repo.get(ImportCandidate, candidate.id)
+    send(first.pid, {:start_promotion, ref})
+    assert_receive {:ownership_attempt, ^first_pid}, 1_000
+    assert_receive {:ownership_boundary, ^first_pid}, 1_000
+
+    # The first task holds SQLite's write lock. The second has reached the
+    # ownership boundary but cannot enter its write transaction yet.
+    send(second.pid, {:start_promotion, ref})
+    assert_receive {:ownership_attempt, ^second_pid}, 1_000
+    assert Task.yield(second, 0) == nil
+
+    send(first.pid, {:release_ownership, ref})
+    assert {:ok, [_]} = Task.await(first, 2_000)
+
+    assert_receive {:ownership_boundary, ^second_pid}, 1_000
+    send(second.pid, {:release_ownership, ref})
+    assert {:error, {:candidate_missing, _}} = Task.await(second, 2_000)
+
+    Ecto.Adapters.SQL.Sandbox.unboxed_run(Repo, fn ->
+      assert Repo.aggregate(
+               from(file in MediaFile, where: file.library_path_id == ^library_path.id),
+               :count
+             ) == 1
+
+      refute Repo.get(ImportCandidate, candidate.id)
+    end)
   end
 end

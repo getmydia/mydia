@@ -29,8 +29,12 @@ defmodule Mydia.Library.CandidatePromotion do
   defp commit_group(candidates, snapshot, media_item, opts) do
     transaction_opts = if DB.sqlite?(), do: [mode: :immediate], else: []
 
+    ownership_attempt(opts)
+
     Repo.transaction(
       fn ->
+        ownership_boundary(opts)
+
         with :ok <- lock_group(candidates),
              {:ok, locked_candidates} <- reread_candidates(candidates),
              :ok <- snapshot_matches?(locked_candidates, snapshot),
@@ -47,6 +51,19 @@ defmodule Mydia.Library.CandidatePromotion do
     |> case do
       {:ok, media_files} -> {:ok, media_files}
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  # These optional hooks keep deterministic transaction-boundary
+  # synchronization local to tests rather than introducing a callback registry.
+  defp ownership_attempt(opts), do: ownership_hook(opts, :ownership_attempt)
+
+  defp ownership_boundary(opts), do: ownership_hook(opts, :ownership_boundary)
+
+  defp ownership_hook(opts, name) do
+    case Keyword.get(opts, name) do
+      callback when is_function(callback, 0) -> callback.()
+      _ -> :ok
     end
   end
 

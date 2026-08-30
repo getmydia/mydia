@@ -105,6 +105,91 @@ defmodule Mydia.Library.FileIngestTest do
     refute Mydia.ImportCandidates.get_by_path(candidate.library_path_id, candidate.relative_path)
   end
 
+  test "a losing promotion failure cannot resurrect the winner's deleted candidate" do
+    %{library_path: library_path, movie: movie, candidate: candidate} =
+      Ecto.Adapters.SQL.Sandbox.unboxed_run(Repo, fn ->
+        library_path = library_path_fixture(%{type: "movies"})
+        movie = media_item_fixture(%{type: "movie", tmdb_id: 60_312})
+
+        candidate =
+          import_candidate_fixture(%{
+            library_path_id: library_path.id,
+            media_type: "movie",
+            parsed_info: %{"type" => "movie"}
+          })
+
+        %{library_path: library_path, movie: movie, candidate: candidate}
+      end)
+
+    on_exit(fn ->
+      Ecto.Adapters.SQL.Sandbox.unboxed_run(Repo, fn ->
+        Repo.delete_all(from file in MediaFile, where: file.library_path_id == ^library_path.id)
+        Repo.delete_all(from stored in ImportCandidate, where: stored.id == ^candidate.id)
+        Repo.delete(movie)
+        Repo.delete(library_path)
+      end)
+    end)
+
+    parent = self()
+    ref = make_ref()
+
+    ingest = fn ->
+      :ok = Ecto.Adapters.SQL.Sandbox.checkout(Repo, sandbox: false)
+      send(parent, {:ingest_connection_ready, self()})
+
+      try do
+        receive do
+          {:start_ingest, ^ref} ->
+            FileIngest.ingest(candidate, match(movie, 1.0),
+              policy: :unattended,
+              ownership_attempt: fn -> send(parent, {:ingest_ownership_attempt, self()}) end,
+              ownership_boundary: fn ->
+                send(parent, {:ingest_ownership_boundary, self()})
+
+                receive do
+                  {:release_ingest_ownership, ^ref} -> :ok
+                end
+              end
+            )
+        end
+      after
+        Ecto.Adapters.SQL.Sandbox.checkin(Repo)
+      end
+    end
+
+    winner = Task.async(ingest)
+    loser = Task.async(ingest)
+
+    assert_receive {:ingest_connection_ready, winner_pid}, 1_000
+    assert_receive {:ingest_connection_ready, loser_pid}, 1_000
+
+    send(winner.pid, {:start_ingest, ref})
+    assert_receive {:ingest_ownership_boundary, ^winner_pid}, 1_000
+
+    # The losing FileIngest reaches promotion while the winner owns the SQLite
+    # write lock, so it records its failure only after the winner deletes.
+    send(loser.pid, {:start_ingest, ref})
+    assert_receive {:ingest_ownership_attempt, ^loser_pid}, 1_000
+    assert Task.yield(loser, 0) == nil
+
+    send(winner.pid, {:release_ingest_ownership, ref})
+    assert {:promoted, [_]} = Task.await(winner, 2_000)
+
+    assert_receive {:ingest_ownership_boundary, ^loser_pid}, 1_000
+    send(loser.pid, {:release_ingest_ownership, ref})
+    assert {:error, {:candidate_missing, candidate_id}} = Task.await(loser, 2_000)
+    assert candidate_id == candidate.id
+
+    Ecto.Adapters.SQL.Sandbox.unboxed_run(Repo, fn ->
+      refute Repo.get(ImportCandidate, candidate.id)
+
+      refute Mydia.ImportCandidates.get_by_path(
+               candidate.library_path_id,
+               candidate.relative_path
+             )
+    end)
+  end
+
   test "an unrecognized provider type is retryable and cannot promote" do
     candidate = candidate()
 

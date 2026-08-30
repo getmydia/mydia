@@ -1,6 +1,8 @@
 defmodule Mydia.Library.FileIngest do
   @moduledoc "Decides whether a durable import candidate stays in review or is promoted."
 
+  import Ecto.Query, only: [where: 3]
+
   alias Mydia.ImportCandidates
   alias Mydia.Library.{CandidatePromotion, ImportCandidate, MediaFile}
   alias Mydia.Repo
@@ -70,6 +72,7 @@ defmodule Mydia.Library.FileIngest do
   defp update_candidate(candidate, nil) do
     case record_failure(candidate, "no_match") do
       {:ok, _candidate} -> :no_match
+      {:error, :candidate_missing} -> :no_match
       {:error, changeset} -> {:error, {:candidate_write_failed, changeset}}
     end
   end
@@ -82,23 +85,21 @@ defmodule Mydia.Library.FileIngest do
   end
 
   defp record_failure(candidate, error) do
-    case Repo.get(ImportCandidate, candidate.id) do
-      nil ->
-        {:error, :candidate_missing}
+    {updated, _} =
+      ImportCandidate
+      |> where([stored], stored.id == ^candidate.id)
+      |> Repo.update_all(
+        inc: [attempts: 1],
+        set: [
+          last_error: error,
+          next_retry_at: next_retry_at(candidate.attempts + 1)
+        ]
+      )
 
-      current ->
-        attempts = current.attempts + 1
-
-        case ImportCandidates.upsert(
-               candidate_attrs(current, %{
-                 attempts: attempts,
-                 last_error: error,
-                 next_retry_at: next_retry_at(attempts)
-               })
-             ) do
-          {:ok, updated} -> {:ok, updated}
-          {:error, changeset} -> {:error, changeset}
-        end
+    if updated == 1 do
+      {:ok, :updated}
+    else
+      {:error, :candidate_missing}
     end
   end
 
