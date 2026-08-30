@@ -1,16 +1,39 @@
 name: Dependabot auto-merge
 
-# check_suite rather than pull_request_target. GitHub's native auto-merge
-# (`gh pr merge --auto`, which this file used to call) waits on REQUIRED checks
-# only, and there is no flag to widen it. The Master ruleset requires six of
-# roughly twenty-six contexts, so on 2026-08-29 PR #613 auto-merged with seven
-# red checks and broke the master Docker image. This workflow waits on the whole
-# rollup instead.
+# workflow_run rather than check_suite, and neither of them pull_request_target.
 #
-# A check_suite workflow runs in default-branch context, so it does not carry the
-# pull_request_target hazard the previous revision of this file reasoned about.
+# GitHub's native auto-merge (`gh pr merge --auto`, which this file used to
+# call) waits on REQUIRED checks only, and there is no flag to widen it. The
+# Master ruleset requires six of roughly twenty-six contexts, so on 2026-08-29
+# PR #613 auto-merged with seven red checks and broke the master Docker image.
+# This workflow waits on the whole rollup instead.
+#
+# check_suite would have been the natural event and was tried first. It cannot
+# work here: "this event does not trigger workflows if the check suite was
+# created by GitHub Actions or if the check suite's head SHA is associated with
+# GitHub Actions." Every check suite on a pull request here is Actions-created,
+# so the trigger never fired at all.
+#
+# workflow_run has no such restriction. It is listed against every workflow that
+# runs on pull requests, so the gate re-evaluates as each one finishes and the
+# last to complete sees a terminal rollup. Missing one from this list only costs
+# a re-evaluation point, not correctness, because the gate always re-reads the
+# full rollup rather than trusting the triggering event.
+#
+# A workflow_run workflow runs in default-branch context, so it does not carry
+# the pull_request_target hazard an earlier revision of this file reasoned about.
 on:
-  check_suite:
+  workflow_run:
+    workflows:
+      - CI
+      - CI / Documentation
+      - CI / Fastlane
+      - CI / Nix
+      - CI / Player Desktop
+      - CI / Relay
+      - CI / Security
+      - CI / Site
+      - CI Server
     types: [completed]
 
 permissions:
@@ -28,16 +51,15 @@ jobs:
         with:
           persist-credentials: false
 
-      # The check_suite payload does carry a pull_requests array, but it is
-      # empty in some cases. Matching open dependabot pull requests on the
-      # suite's head SHA is unconditional and needs no payload archaeology.
+      # Matching open dependabot pull requests on the triggering run's head SHA
+      # is unconditional and needs no payload archaeology.
       #
       # Note the author spelling: `gh pr list --author` wants `app/dependabot`,
       # while the webhook payload spells the same account `dependabot[bot]`.
       - name: Decide
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HEAD_SHA: ${{ github.event.check_suite.head_sha }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
 
