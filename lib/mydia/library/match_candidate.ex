@@ -70,9 +70,9 @@ defmodule Mydia.Library.MatchCandidate do
   @doc """
   Builds the match map `FileIngest.ingest/3` expects from a stored candidate.
 
-  The single conversion, shared by `Jobs.ApplyImportGroups` (which layers its
-  group-level fallbacks on top) and `Library.OrphanReenricher` (which uses it
-  as is). Both traps below are why this is one function rather than two.
+  Used by `Jobs.ApplyImportGroups`, which layers its own group-level
+  fallbacks on top. Both traps below are why this is one function rather
+  than two.
 
   `provider_type` is a free-text column with no inclusion validation, so
   `String.to_existing_atom/1` on it could raise for a value this VM has never

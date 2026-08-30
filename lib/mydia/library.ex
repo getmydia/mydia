@@ -2339,9 +2339,9 @@ defmodule Mydia.Library do
   @doc """
   Rank-0 candidates for many files at once, keyed by `media_file_id`.
 
-  `list_match_candidates/1` is per file. `OrphanReenricher` decides what to do
-  with every orphan in a library, so calling it per file would issue one query
-  per orphan on a library that can hold hundreds.
+  `list_match_candidates/1` is per file; this is the bulk form for a caller
+  deciding what to do with every file in a library at once, so it can issue
+  one query instead of one per file on a library that can hold hundreds.
 
   Files with no rank-0 candidate are simply absent from the map, which is the
   same thing the caller's "no candidate" branch already means.

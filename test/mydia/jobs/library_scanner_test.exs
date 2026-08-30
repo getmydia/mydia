@@ -88,20 +88,16 @@ defmodule Mydia.Jobs.LibraryScannerTest do
       refute LibraryScanner.reconcile_sidecars?({:error, "Library path does not exist: /gone"})
     end
 
-    test "false when process_scan_result/2 raised internally and its own rescue converted that into an error" do
-      # scan_library_path/1 always feeds this guard whatever
-      # summarize(process_scan_result(library_path, scan_result)) produced,
-      # and process_scan_result/2 has its own pre-existing rescue that turns
+    test "false when process_scan_result/3 raised internally and its own rescue converted that into an error" do
+      # scan_library_path/2 always feeds this guard whatever
+      # summarize(process_scan_result(library_path, scan_result, opts)) produced,
+      # and process_scan_result/3 has its own pre-existing rescue that turns
       # an internal exception into handle_scan_error/2's {:error, message}
       # rather than letting it propagate. That is indistinguishable, from
       # this guard's perspective, from the filesystem scan itself failing:
       # both arrive as a plain {:error, _} tuple, and both must refuse
-      # reconciliation. Reaching that rescue for real would mean finding a
-      # raise that survives every self-rescuing helper
-      # process_scan_result/2 calls (fix_orphaned_tv_file/2,
-      # revalidate_tv_file_association/1, associate_file_with_episode/2,
-      # match_file_to_existing_items/4), so this pins the guard against the
-      # same shape handle_scan_error/2 actually returns instead.
+      # reconciliation. This pins the guard against the same shape
+      # handle_scan_error/2 actually returns.
       refute LibraryScanner.reconcile_sidecars?(
                {:error, Exception.format(:error, %RuntimeError{message: "boom"}, [])}
              )
@@ -109,17 +105,18 @@ defmodule Mydia.Jobs.LibraryScannerTest do
   end
 
   describe "sidecar reconciliation" do
-    test "a scan adopts a sidecar sitting beside a scanned video" do
+    test "a scan adopts a sidecar sitting beside an already-owned file" do
+      # Sidecar reconciliation runs over every currently-owned media file
+      # (Sidecars.reconcile_all/1), unconditionally, in both auto_import
+      # modes -- it has nothing to do with discovering unknown paths, so a
+      # file already owned before the scan is what exercises it without
+      # depending on matching or the metadata relay at all.
       dir = empty_library_dir()
+      media_item = media_item_fixture(%{type: "movie"})
+      relative_path = "movie.mkv"
+      File.write!(Path.join(dir, relative_path), "not really a video")
 
-      # A TV-shaped filename inside a movies-only library path trips the
-      # existing type-mismatch guard in process_media_file/3, so metadata
-      # enrichment (and any real network call to the metadata relay) is
-      # skipped. The media_file row is still created before enrichment ever
-      # runs, which is all sidecar reconciliation needs.
-      File.write!(Path.join(dir, "Show.S01E01.mkv"), "not really a video")
-
-      File.write!(Path.join(dir, "Show.S01E01.en.srt"), """
+      File.write!(Path.join(dir, "movie.en.srt"), """
       1
       00:00:01,000 --> 00:00:02,000
       Hello.
@@ -128,9 +125,16 @@ defmodule Mydia.Jobs.LibraryScannerTest do
       {:ok, library_path} =
         Settings.create_library_path(%{path: dir, type: "movies", monitored: true})
 
-      assert :ok = perform_job(LibraryScanner, %{"library_path_id" => library_path.id})
+      {:ok, media_file} =
+        Mydia.Library.create_media_file(%{
+          media_item_id: media_item.id,
+          library_path_id: library_path.id,
+          relative_path: relative_path,
+          size: File.stat!(Path.join(dir, relative_path)).size,
+          verified_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
 
-      assert [media_file] = Mydia.Library.list_media_files(library_path_id: library_path.id)
+      assert :ok = perform_job(LibraryScanner, %{"library_path_id" => library_path.id})
 
       assert [subtitle] = Mydia.Subtitles.list_subtitles(media_file.id)
       assert subtitle.origin == "sidecar"

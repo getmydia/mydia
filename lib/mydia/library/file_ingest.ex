@@ -26,7 +26,7 @@ defmodule Mydia.Library.FileIngest do
     policy = Keyword.fetch!(opts, :policy)
     threshold = Keyword.get(opts, :threshold, @default_threshold)
 
-    case decide(match, policy, threshold) do
+    case decide(candidate, match, policy, threshold) do
       :candidate ->
         update_candidate(candidate, match)
 
@@ -52,20 +52,38 @@ defmodule Mydia.Library.FileIngest do
   # preserving the no-parentless-file invariant while the call sites move.
   def ingest(%MediaFile{}, _match, _opts), do: {:error, :candidate_required}
 
-  @spec policy_for(Mydia.Settings.LibraryPath.t() | nil, MediaFile.t()) ::
-          :local_only | :create_items
-  def policy_for(%Mydia.Settings.LibraryPath{auto_import: true}, %MediaFile{extra_kind: nil}),
-    do: :create_items
+  defp decide(_candidate, nil, _policy, _threshold), do: :candidate
+  defp decide(_candidate, _match, :review, _threshold), do: :candidate
 
-  def policy_for(_library_path, _media_file), do: :local_only
+  defp decide(candidate, match, :unattended, threshold) do
+    cond do
+      extra?(candidate, match) -> :candidate
+      (Map.get(match, :match_confidence) || 0.0) >= threshold -> :promote
+      true -> :candidate
+    end
+  end
 
-  defp decide(nil, _policy, _threshold), do: :candidate
-  defp decide(_match, :review, _threshold), do: :candidate
+  # Extras stay in review even under the unattended scanner policy: a
+  # sample/trailer/bonus file has no business becoming an owned movie or
+  # episode file just because the anchor folder it sits in matched
+  # confidently (`Mydia.Library.BatchMatcher` reuses one anchor's match
+  # across every file beneath it, extras included). `match.parsed_info` is
+  # preferred because it reflects the match just made; a matcher that omits
+  # it falls back to the candidate's own stored `parsed_info`, captured at
+  # discovery time.
+  defp extra?(candidate, match) do
+    parsed = match_parsed_info(candidate, match)
 
-  defp decide(match, :unattended, threshold) do
-    if (Map.get(match, :match_confidence) || 0.0) >= threshold,
-      do: :promote,
-      else: :candidate
+    parsed_value(parsed, :is_sample) == true or
+      parsed_value(parsed, :is_trailer) == true or
+      parsed_value(parsed, :is_extra) == true
+  end
+
+  defp match_parsed_info(candidate, match) do
+    case match && Map.get(match, :parsed_info) do
+      nil -> candidate.parsed_info || %{}
+      parsed -> parsed
+    end
   end
 
   defp update_candidate(candidate, nil) do

@@ -1,9 +1,19 @@
 defmodule Mydia.Jobs.LibraryScannerExtrasFilterTest do
   @moduledoc """
-  Tests that the LibraryScanner job correctly filters out extras, samples, and trailers
-  from new files during scanning. Since the filtering is inline in process_scan_result,
-  we test the filtering logic through SampleDetector applied to the same file_info
-  structure that the scanner uses.
+  Tests the `SampleDetector` composition that classifies extras, samples, and
+  trailers found during a scan.
+
+  The scanner itself no longer filters these out of what it processes --
+  since Task 5, every unrecognized path (extras included) becomes an
+  `ImportCandidate` when the library has `auto_import: true`, classified via
+  `parsed_info["is_sample"/"is_trailer"/"is_extra"]` (see
+  `library_scanner_extras_test.exs` for the end-to-end behavior and
+  `library_scanner_ingest_test.exs` for the review-only promotion rule this
+  classification drives). This module instead pins the lower-level
+  composition -- `SampleDetector.skip_detection?/1` plus
+  `SampleDetector.excluded?(SampleDetector.detect/1)` -- that
+  `Mydia.Library.ReleaseParser.parse_with_path/1` runs internally
+  (`SampleDetector.apply_detection/2`) to populate those flags.
   """
   use ExUnit.Case, async: true
 
