@@ -6,10 +6,15 @@ library;
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-/// Android: use the EncryptedSharedPreferences backend.
-const kAndroidSecureStorageOptions = AndroidOptions(
-  encryptedSharedPreferences: true,
-);
+/// Android: the package's default backend.
+///
+/// This used to pass `encryptedSharedPreferences: true`, selecting the Jetpack
+/// Security backend. `flutter_secure_storage` 11.0.0 removed that backend and
+/// the parameter with it: v10 migrated any data it held into the custom cipher
+/// storage that is now the only Android implementation, so there is nothing
+/// left to opt into and no replacement to pass. The constant stays so both call
+/// sites keep a single place to change if Android ever needs an option again.
+const kAndroidSecureStorageOptions = AndroidOptions();
 
 /// macOS: use the legacy file-based login keychain, not the data-protection
 /// keychain.
