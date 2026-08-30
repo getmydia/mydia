@@ -46,6 +46,14 @@ jobs:
       #                                  player/lib/graphql/schema.graphql is a
       #                                  symlink to it, so filtering on the
       #                                  symlink's own path would never fire
+      #   rust-toolchain.toml            build-android's cargokit step pins its
+      #                                  Rust toolchain from this file at the
+      #                                  repo root (see the Build APK comment
+      #                                  below), not from whatever the runner
+      #                                  image calls stable. This gap predates
+      #                                  this job -- the workflow-level
+      #                                  `paths:` filter it replaced didn't
+      #                                  watch this file either.
       #   .github/workflows/ci-player.yml
       - name: Decide whether player code changed
         id: filter
@@ -65,8 +73,12 @@ jobs:
               # not failed -- exactly the ambiguous state this job exists to
               # avoid on `Build / Web` and `Test / Player`. A transient API
               # failure here must run everything rather than abort the step.
+              #
+              # `previous_filename` is only set for renames, where `filename`
+              # is the new path. Emitting both means renaming a file out of
+              # player/ (or into it) still shows up in the change set.
               changed="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR}/files" \
-                           --paginate --jq '.[].filename' || echo "")"
+                           --paginate --jq '.[] | .filename, (.previous_filename // empty)' || echo "")"
               if [ -z "$changed" ]; then
                 echo "player=true" >> "$GITHUB_OUTPUT"
                 echo "Could not compute the change set; running everything."
@@ -97,7 +109,7 @@ jobs:
               ;;
           esac
 
-          if printf '%s\n' "$changed" | grep -qE '^(player/|native/|priv/graphql/schema\.graphql$|\.github/workflows/ci-player\.yml$)'; then
+          if printf '%s\n' "$changed" | grep -qE '^(player/|native/|priv/graphql/schema\.graphql$|rust-toolchain\.toml$|\.github/workflows/ci-player\.yml$)'; then
             echo "player=true" >> "$GITHUB_OUTPUT"
             echo "Player-relevant changes found."
           else
