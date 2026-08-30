@@ -138,9 +138,20 @@ defmodule Mydia.ImportCandidates do
   @doc """
   Which review band a group falls into.
 
-  Mirrors the `HAVING` predicates `group_query/2` applies in SQL: the two
-  must agree; `import_candidates_test.exs` proves it for every band this
-  clause set can produce.
+  Mirrors the `HAVING` predicates `group_query/2` applies in SQL: `:needs_attention`
+  is built as the logical complement of `:no_match` and `:ready` in both places
+  (`needs_attention_condition/0` below, and this function's fallback `cond`
+  clause), specifically so the two cannot drift into disagreeing about a group
+  that is genuinely neither -- a `provider_type: "local"` group with a single
+  agreeing provider at or above the threshold was exactly that case: excluded
+  from `:ready` by the local carve-out, excluded from `:no_match` because it
+  has a provider id, and (before this) also excluded from a `:needs_attention`
+  predicate that only recognised disagreement or low confidence as reasons to
+  land there. That gap made such a group invisible to `band_counts/1`'s total
+  and to any band-filtered `page/2`/`SelectionScope` selection, even though
+  this function has always called it `:needs_attention` via its explicit
+  `provider_type: "local"` clause below. `import_candidates_test.exs` proves
+  the two paths agree, including for that exact shape.
   """
   @spec band(ImportCandidateGroup.t()) :: :ready | :needs_attention | :no_match
   def band(%ImportCandidateGroup{provider_id: nil}), do: :no_match
@@ -204,28 +215,48 @@ defmodule Mydia.ImportCandidates do
   defp apply_band(query, :all), do: query
 
   defp apply_band(query, :no_match) do
-    having(query, [c], is_nil(max(c.provider_id)))
+    having(query, [c], ^no_match_condition())
   end
 
   defp apply_band(query, :ready) do
+    having(query, [c], ^ready_condition())
+  end
+
+  # Built as the logical complement of the other two bands, not as its own
+  # independent predicate, so the three can never fail to partition the data:
+  # every group is :no_match, :ready, or (by construction) neither, and
+  # "neither" is exactly what :needs_attention means. A hand-derived version
+  # of this predicate (disagreement or low confidence) is what let a
+  # `provider_type: "local"` group with a single agreeing high-confidence
+  # provider -- excluded from :ready by the local carve-out, but not
+  # disagreeing and not low-confidence -- match none of the three bands at
+  # all. See `band/1`'s doc for the full story.
+  defp apply_band(query, :needs_attention) do
+    having(query, [c], ^needs_attention_condition())
+  end
+
+  # A pinned `dynamic/2` value may only be interpolated at the top level of a
+  # `having`/`where` (or combined with other pinned dynamics inside a fresh
+  # `dynamic/2` call) -- not nested under `not (...)` directly inside
+  # `having/3`. So the complement is built as its own dynamic here and handed
+  # to `having/3` as one single top-level interpolation, rather than trying to
+  # negate and combine `no_match_condition/0` and `ready_condition/0` inline.
+  defp needs_attention_condition do
+    no_match = no_match_condition()
+    ready = ready_condition()
+
+    dynamic([c], not (^no_match) and not (^ready))
+  end
+
+  defp no_match_condition, do: dynamic([c], is_nil(max(c.provider_id)))
+
+  defp ready_condition do
     threshold = @auto_accept_threshold
 
-    having(
-      query,
+    dynamic(
       [c],
       count(c.provider_id, :distinct) == 1 and min(c.confidence) >= ^threshold and
         (is_nil(max(c.provider_type)) or max(c.provider_type) != "local")
-    )
-  end
-
-  defp apply_band(query, :needs_attention) do
-    threshold = @auto_accept_threshold
-
-    having(
-      query,
-      [c],
-      not is_nil(max(c.provider_id)) and
-        (count(c.provider_id, :distinct) != 1 or min(c.confidence) < ^threshold)
     )
   end
 
@@ -457,7 +488,7 @@ defmodule Mydia.ImportCandidates do
   """
   @spec dismiss(SelectionScope.t()) :: {:ok, non_neg_integer()}
   def dismiss(%SelectionScope{} = scope) do
-    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    now = now()
 
     {count, _} =
       candidate_query(scope)
@@ -474,7 +505,7 @@ defmodule Mydia.ImportCandidates do
   """
   @spec restore(SelectionScope.t()) :: {:ok, non_neg_integer()}
   def restore(%SelectionScope{} = scope) do
-    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    now = now()
 
     {count, _} =
       candidate_query(scope)
@@ -524,7 +555,7 @@ defmodule Mydia.ImportCandidates do
   @spec change_match(binary(), String.t(), map()) ::
           {:ok, non_neg_integer()} | {:error, :not_found}
   def change_match(library_path_id, anchor_key, match) do
-    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    now = now()
     match = stringify_match(match)
 
     {count, _} =
@@ -912,7 +943,7 @@ defmodule Mydia.ImportCandidates do
       library_path_id: candidate.library_path_id,
       relative_path: candidate.relative_path,
       size: candidate.size,
-      verified_at: DateTime.utc_now() |> DateTime.truncate(:second)
+      verified_at: now()
     }
 
     case %MediaFile{} |> MediaFile.changeset(attrs) |> Repo.insert() do
@@ -928,6 +959,11 @@ defmodule Mydia.ImportCandidates do
       {:import_candidates_changed, library_path_id}
     )
   end
+
+  # `DateTime.truncate(:second)` matters here, not just cosmetically: every
+  # caller stores this into a `:utc_datetime` column, which cannot hold
+  # microseconds, and Ecto would otherwise raise a cast error on insert.
+  defp now, do: DateTime.utc_now() |> DateTime.truncate(:second)
 
   # --- internal helpers ----------------------------------------------------
 

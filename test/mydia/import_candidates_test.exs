@@ -145,6 +145,42 @@ defmodule Mydia.ImportCandidatesTest do
     end
   end
 
+  describe "a local-marked group surfaces as needs_attention through the SQL path, not just band/1" do
+    # Regression: a `provider_type: "local"` group with a single agreeing
+    # provider at or above the threshold is excluded from `:ready` by the
+    # local carve-out, but is neither disagreeing nor low-confidence, so a
+    # `:needs_attention` predicate written as its own independent condition
+    # (rather than the complement of the other two) missed it entirely --
+    # invisible to band_counts/1's total and to every band-filtered read.
+    # `band/1` (a pure function over an already-materialized struct) got this
+    # right from the start; this proves the SQL aggregate path agrees.
+    test "count_by_status/2, band_counts/1, and page(band: :needs_attention) all see it" do
+      lp = library_path_fixture(%{type: "series"})
+
+      import_candidate_fixture(%{
+        library_path_id: lp.id,
+        anchor_key: "local-show",
+        provider_id: "local-abc",
+        provider_type: "local",
+        confidence: 1.0
+      })
+
+      assert ImportCandidates.count_by_status(lp.id, "pending") == 1
+
+      assert %{ready: 0, needs_attention: 1, no_match: 0, total: 1} =
+               ImportCandidates.band_counts(lp.id)
+
+      {needs_attention, _cursor} = ImportCandidates.page(lp.id, band: :needs_attention)
+      assert Enum.map(needs_attention, & &1.anchor_key) == ["local-show"]
+
+      {ready, _cursor} = ImportCandidates.page(lp.id, band: :ready)
+      assert ready == []
+
+      {no_match, _cursor} = ImportCandidates.page(lp.id, band: :no_match)
+      assert no_match == []
+    end
+  end
+
   describe "band_counts/1, count_by_status/2, and count_pending/0" do
     test "band_counts/1 partitions pending groups by band" do
       lp = library_path_fixture(%{type: "series"})
