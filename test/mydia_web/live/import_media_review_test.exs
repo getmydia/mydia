@@ -376,16 +376,31 @@ defmodule MydiaWeb.ImportMediaReviewTest do
 
   test "accepting select-all-matching covers every matching group, not just one page",
        %{conn: conn} do
-    lp = library_path_fixture(%{type: "series", path: "/media/Series"})
+    lp = library_path_fixture(%{type: "movies", path: "/media/Movies"})
     # ImportCandidates' default page size is 50; 55 forces the filter-mode
     # accept to reach past a single page or this assertion catches it at 50.
+    # A real (non-"local") provider per group, at a needs_attention
+    # confidence, is deliberate: accept_group/2 refuses provider_type:
+    # "local" outright ({:error, :local_show}), so a "local" fixture here
+    # would make every click of #accept-selected a guaranteed no-op and this
+    # test would stop proving anything about the page boundary at all.
+    #
+    # Each movie is pre-created locally (not resolved through a fresh relay
+    # fetch) so promotion takes MetadataEnricher's "update existing item by
+    # id" branch: MetadataStubProvider.fetch_by_id/3 always returns the same
+    # canned movie regardless of the id requested, so 55 *new* creates driven
+    # by a stub fetch would all race to persist the *same* stubbed tmdb_id
+    # and only the first would ever land -- not a page-boundary bug, but a
+    # fixture-shape trap this test fell into once already.
     for n <- 1..55 do
+      movie = insert(:media_item, type: "movie", tmdb_id: 9000 + n)
+
       seed_group(lp, "g#{n}", %{
-        provider_type: "local",
-        provider_id: "local-#{n}",
-        media_type: "tv_show",
-        confidence: nil,
-        parsed_info: %{}
+        media_type: "movie",
+        provider_type: "tmdb",
+        provider_id: to_string(movie.tmdb_id),
+        confidence: 0.7,
+        parsed_info: %{"type" => "movie"}
       })
     end
 
@@ -393,8 +408,16 @@ defmodule MydiaWeb.ImportMediaReviewTest do
 
     view |> element("#band-needs-attention") |> render_click()
     view |> element("#select-all-matching") |> render_click()
-
     assert has_element?(view, "#bulk-bar", "55 group(s) selected")
+
+    view |> element("#accept-selected") |> render_click()
+
+    assert Repo.aggregate(
+             from(f in Mydia.Library.MediaFile, where: f.library_path_id == ^lp.id),
+             :count
+           ) == 55
+
+    assert ImportCandidates.page(lp.id) == {[], nil}
   end
 
   test "keyset paging: next, next, prev covers the full set with no repeats", %{conn: conn} do

@@ -4,6 +4,7 @@ defmodule Mydia.Library.FileIngestTest do
   import Mydia.MediaFixtures
   import Mydia.SettingsFixtures
 
+  alias Mydia.Events.Event
   alias Mydia.Library.{FileIngest, ImportCandidate, MediaFile}
   alias Mydia.Repo
 
@@ -125,6 +126,13 @@ defmodule Mydia.Library.FileIngestTest do
       Ecto.Adapters.SQL.Sandbox.unboxed_run(Repo, fn ->
         Repo.delete_all(from file in MediaFile, where: file.library_path_id == ^library_path.id)
         Repo.delete_all(from stored in ImportCandidate, where: stored.id == ^candidate.id)
+        # media_item_fixture/1 above ran on this same real (sandbox: false)
+        # connection, so its media_item.added event -- like the media item
+        # itself -- was a genuine commit, not something the ordinary
+        # per-test sandbox rollback would ever undo. Without this, every run
+        # of this test leaks one Event row into the shared, session-persistent
+        # SQLite test database, permanently.
+        Repo.delete_all(from event in Event, where: event.resource_id == ^movie.id)
         Repo.delete(movie)
         Repo.delete(library_path)
       end)
