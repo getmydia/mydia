@@ -8,8 +8,19 @@ on:
   push:
     branches: [master, main]
 
+# Keyed to the commit, not the ref. A concurrency group holds at most one
+# PENDING run and cancels the previous one when a new run enters, so a burst of
+# master merges silently discards its own queue: on 2026-08-29 the runs for
+# #577, #612 and #613 were all superseded and never executed, and #613 was the
+# commit that broke the image. Per-SHA groups mean nothing supersedes anything
+# and every commit gets a real verdict. Re-runs of the same SHA still dedupe,
+# which is the only thing the ref-keyed group was buying.
+#
+# cancel-in-progress stays as an expression rather than a literal false: it is
+# always false today (this workflow is push-only), but the expression keeps the
+# right behaviour if a pull_request trigger is ever added back.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
