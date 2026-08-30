@@ -31,10 +31,15 @@ defmodule Mydia.Repo.Migrations.MbaRemovalTest do
       # guards is media_files.library_path_id being on_delete: :delete_all, which
       # would cascade if the migration deleted the row instead of converting it.
       {:ok, path} = Settings.create_library_path(%{path: "/media/mixed", type: :mixed})
+      movie = insert(:media_item, type: "movie")
 
       {:ok, _file} =
         %MediaFile{}
-        |> MediaFile.scan_changeset(%{relative_path: "a.mkv", library_path_id: path.id})
+        |> MediaFile.scan_changeset(%{
+          relative_path: "a.mkv",
+          library_path_id: path.id,
+          media_item_id: movie.id
+        })
         |> Repo.insert()
 
       before_count = Repo.aggregate(MediaFile, :count)

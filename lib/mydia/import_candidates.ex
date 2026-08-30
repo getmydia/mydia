@@ -321,6 +321,30 @@ defmodule Mydia.ImportCandidates do
     end
   end
 
+  @doc """
+  One group's current aggregate row, or `nil` if the anchor has no candidates
+  matching `opts`.
+
+  Reuses `group_query/2` -- the same aggregate `page/2` builds from -- rather
+  than hand-rolling a second aggregate, so a single-group refresh can never
+  drift from `page/2`'s band, status, and search semantics. Accepts the same
+  `:status` and `:band` options as `page/2`; a caller refreshing one row after
+  a mutation should pass whatever `:status` the surrounding view is showing.
+  """
+  @spec get_group(binary(), String.t(), keyword()) :: ImportCandidateGroup.t() | nil
+  def get_group(library_path_id, anchor_key, opts \\ []) do
+    status = Keyword.get(opts, :status, "pending")
+
+    library_path_id
+    |> group_query(status: status, band: Keyword.get(opts, :band), q: Keyword.get(opts, :q))
+    |> where([c], c.anchor_key == ^anchor_key)
+    |> Repo.one()
+    |> case do
+      nil -> nil
+      row -> to_group(row, status)
+    end
+  end
+
   defp apply_cursor(query, nil), do: query
 
   defp apply_cursor(query, {file_count, anchor_key}) do
@@ -928,6 +952,16 @@ defmodule Mydia.ImportCandidates do
   A candidate with no parsed episode number is left alone -- undismissed,
   visible, and still part of whatever the anchor's next read computes -- since
   there is nothing here that could number it.
+
+  A repeat call against the same anchor is refused with
+  `{:error, :already_created}` rather than minting a second, emptier show:
+  every candidate this function leaves behind (the unnumbered leftovers) is
+  stamped `provider_type: "local"` with `provider_id` set to the created
+  item's id, so the anchor still exists to look at (it now bands as
+  `:needs_attention`, never `:no_match`, via the same local carve-out
+  `band/1` and `group_query/2` already give a provider-matched local group),
+  but this function's own precondition -- every remaining candidate already
+  local-marked -- is what a second click actually hits.
   """
   @spec create_local_show(binary(), String.t()) :: {:ok, Media.MediaItem.t()} | {:error, term()}
   def create_local_show(library_path_id, anchor_key) do
@@ -944,21 +978,44 @@ defmodule Mydia.ImportCandidates do
         {:error, :not_found}
 
       candidates ->
-        {title, year} = title_and_year(anchor_key)
-
-        case Media.create_media_item(
-               %{title: title, year: year, type: "tv_show", monitored: false},
-               skip_episode_refresh: true
-             ) do
-          {:ok, item} ->
-            Enum.each(candidates, &link_local_candidate(&1, item))
-            broadcast(library_path_id)
-            {:ok, item}
-
-          {:error, reason} ->
-            Repo.rollback(reason)
+        if Enum.all?(candidates, &(&1.provider_type == "local")) do
+          {:error, :already_created}
+        else
+          do_create_local_show(library_path_id, anchor_key, candidates)
         end
     end
+  end
+
+  defp do_create_local_show(library_path_id, anchor_key, candidates) do
+    {title, year} = title_and_year(anchor_key)
+
+    case Media.create_media_item(
+           %{title: title, year: year, type: "tv_show", monitored: false},
+           skip_episode_refresh: true
+         ) do
+      {:ok, item} ->
+        Enum.each(candidates, &link_local_candidate(&1, item))
+        mark_leftover_candidates_local(library_path_id, anchor_key, item)
+        broadcast(library_path_id)
+        {:ok, item}
+
+      {:error, reason} ->
+        Repo.rollback(reason)
+    end
+  end
+
+  # Every candidate `link_local_candidate/2` successfully linked is already
+  # deleted by the time this runs; what remains is exactly the unnumbered
+  # leftovers `create_local_show/2`'s doc promises to leave visible. Stamping
+  # them here (not before creating `item`, since `provider_id` needs its id)
+  # is what makes a second call against the same anchor see an
+  # all-local-marked group and refuse rather than minting a second show.
+  defp mark_leftover_candidates_local(library_path_id, anchor_key, item) do
+    now = now()
+
+    ImportCandidate
+    |> for_anchor(library_path_id, anchor_key)
+    |> Repo.update_all(set: [provider_type: "local", provider_id: item.id, updated_at: now])
   end
 
   # `anchor_key` is already normalized (lowercased, punctuation and any

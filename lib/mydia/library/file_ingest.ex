@@ -7,7 +7,7 @@ defmodule Mydia.Library.FileIngest do
   alias Mydia.Library.{CandidatePromotion, ImportCandidate, MediaFile}
   alias Mydia.Repo
 
-  @default_threshold Mydia.ImportGroups.auto_accept_threshold()
+  @default_threshold Mydia.ImportCandidates.auto_accept_threshold()
   @retry_backoff_seconds [300, 1_800, 7_200, 21_600, 86_400]
 
   @type policy :: :review | :unattended

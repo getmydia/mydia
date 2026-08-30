@@ -23,6 +23,7 @@ defmodule Mydia.LibraryTest do
         Library.create_scanned_media_file(%{
           relative_path: rel,
           library_path_id: library_path.id,
+          media_item_id: insert(:media_item, type: "movie").id,
           size: byte_size(contents)
         })
 
@@ -60,6 +61,7 @@ defmodule Mydia.LibraryTest do
         Library.create_scanned_media_file(%{
           relative_path: rel,
           library_path_id: lp.id,
+          media_item_id: insert(:media_item, type: "movie").id,
           size: 1
         })
 
@@ -91,13 +93,18 @@ defmodule Mydia.LibraryTest do
         Library.create_scanned_media_file(%{
           relative_path: "movie.mp4",
           library_path_id: movies_path.id,
+          media_item_id: insert(:media_item, type: "movie").id,
           size: 1_000_000
         })
+
+      series_show = insert(:tv_show)
+      series_episode = insert(:episode, media_item: series_show)
 
       {:ok, series_file} =
         Library.create_scanned_media_file(%{
           relative_path: "video.mp4",
           library_path_id: series_path.id,
+          episode_id: series_episode.id,
           size: 2_000_000
         })
 
@@ -120,6 +127,7 @@ defmodule Mydia.LibraryTest do
         Library.create_scanned_media_file(%{
           relative_path: "movie2.mp4",
           library_path_id: movies_path.id,
+          media_item_id: insert(:media_item, type: "movie").id,
           size: 1_000_000
         })
 
@@ -130,11 +138,14 @@ defmodule Mydia.LibraryTest do
 
     test "can combine library_path_type with preload" do
       series_path = library_path_fixture(%{path: "/series2", type: "series"})
+      show = insert(:tv_show)
+      episode = insert(:episode, media_item: show)
 
       {:ok, _series_file} =
         Library.create_scanned_media_file(%{
           relative_path: "video2.mp4",
           library_path_id: series_path.id,
+          episode_id: episode.id,
           size: 2_000_000
         })
 
@@ -145,21 +156,17 @@ defmodule Mydia.LibraryTest do
   end
 
   describe "update_media_file_scan/2" do
-    test "updates orphaned media file without validation errors" do
+    test "updates size and verified_at on an already-owned file" do
       library_path = library_path_fixture(%{type: "movies"})
 
-      # Create an orphaned file (no media_item_id or episode_id)
       {:ok, media_file} =
         Library.create_scanned_media_file(%{
-          relative_path: "orphaned/file.mp4",
+          relative_path: "owned/file.mp4",
           library_path_id: library_path.id,
+          media_item_id: insert(:media_item, type: "movie").id,
           size: 1_000_000
         })
 
-      assert is_nil(media_file.media_item_id)
-      assert is_nil(media_file.episode_id)
-
-      # Update using scan function should succeed
       {:ok, updated} =
         Library.update_media_file_scan(media_file, %{
           size: 2_000_000,
@@ -170,23 +177,21 @@ defmodule Mydia.LibraryTest do
       assert updated.verified_at != nil
     end
 
-    test "regular update_media_file fails on orphaned files" do
+    test "update_media_file rejects clearing the file's only parent" do
+      # media_files_has_parent is a DB-level CHECK constraint (media_item_id
+      # IS NOT NULL OR episode_id IS NOT NULL); this proves the changeset
+      # catches the violation itself rather than surfacing a raw SQL error.
       library_path = library_path_fixture(%{type: "movies"})
 
-      # Create an orphaned file
       {:ok, media_file} =
         Library.create_scanned_media_file(%{
-          relative_path: "orphaned/file2.mp4",
+          relative_path: "owned/file2.mp4",
           library_path_id: library_path.id,
+          media_item_id: insert(:media_item, type: "movie").id,
           size: 1_000_000
         })
 
-      # Regular update should fail due to missing parent
-      {:error, changeset} =
-        Library.update_media_file(media_file, %{
-          size: 2_000_000,
-          verified_at: DateTime.utc_now()
-        })
+      {:error, changeset} = Library.update_media_file(media_file, %{media_item_id: nil})
 
       assert %{media_item_id: ["either media_item_id or episode_id must be set"]} =
                errors_on(changeset)
@@ -240,15 +245,23 @@ defmodule Mydia.LibraryTest do
       assert media_ids == []
     end
 
-    test "excludes files without media_item_id" do
-      unique_path = "/media/orphaned_#{System.unique_integer([:positive])}"
-      library_path = library_path_fixture(%{path: unique_path, type: "movies"})
+    test "excludes files owned by an episode instead of a media item" do
+      # list_media_ids_in_library_path/1 selects media_item_id specifically,
+      # so an episode-owned file (media_item_id nil, episode_id set -- every
+      # media_files row is database-enforced to have exactly one of the two)
+      # contributes nothing to the result, same as the movie-only libraries
+      # this function's callers actually use it for.
+      unique_path = "/media/episode_owned_#{System.unique_integer([:positive])}"
+      library_path = library_path_fixture(%{path: unique_path, type: "series"})
 
-      # Create orphaned file (no media_item_id)
-      {:ok, _orphaned_file} =
+      show = insert(:tv_show)
+      episode = insert(:episode, media_item: show)
+
+      {:ok, _episode_file} =
         Library.create_scanned_media_file(%{
-          relative_path: "orphaned.mp4",
+          relative_path: "episode.mp4",
           library_path_id: library_path.id,
+          episode_id: episode.id,
           size: 1_000_000
         })
 
@@ -266,6 +279,7 @@ defmodule Mydia.LibraryTest do
         Library.create_scanned_media_file(%{
           relative_path: "trash_test.mp4",
           library_path_id: library_path.id,
+          media_item_id: insert(:media_item, type: "movie").id,
           size: 1_000_000
         })
 
@@ -284,6 +298,7 @@ defmodule Mydia.LibraryTest do
         Library.create_scanned_media_file(%{
           relative_path: "restore_test.mp4",
           library_path_id: library_path.id,
+          media_item_id: insert(:media_item, type: "movie").id,
           size: 1_000_000
         })
 
@@ -307,6 +322,7 @@ defmodule Mydia.LibraryTest do
         Library.create_scanned_media_file(%{
           relative_path: "active.mp4",
           library_path_id: library_path.id,
+          media_item_id: insert(:media_item, type: "movie").id,
           size: 1_000_000
         })
 
@@ -314,6 +330,7 @@ defmodule Mydia.LibraryTest do
         Library.create_scanned_media_file(%{
           relative_path: "trashed.mp4",
           library_path_id: library_path.id,
+          media_item_id: insert(:media_item, type: "movie").id,
           size: 2_000_000
         })
 
@@ -335,6 +352,7 @@ defmodule Mydia.LibraryTest do
         Library.create_scanned_media_file(%{
           relative_path: "active2.mp4",
           library_path_id: library_path.id,
+          media_item_id: insert(:media_item, type: "movie").id,
           size: 1_000_000
         })
 
@@ -342,6 +360,7 @@ defmodule Mydia.LibraryTest do
         Library.create_scanned_media_file(%{
           relative_path: "trashed2.mp4",
           library_path_id: library_path.id,
+          media_item_id: insert(:media_item, type: "movie").id,
           size: 2_000_000
         })
 
@@ -365,6 +384,7 @@ defmodule Mydia.LibraryTest do
         Library.create_scanned_media_file(%{
           relative_path: "old_trashed.mp4",
           library_path_id: library_path.id,
+          media_item_id: insert(:media_item, type: "movie").id,
           size: 1_000_000
         })
 
@@ -372,6 +392,7 @@ defmodule Mydia.LibraryTest do
         Library.create_scanned_media_file(%{
           relative_path: "recent_trashed.mp4",
           library_path_id: library_path.id,
+          media_item_id: insert(:media_item, type: "movie").id,
           size: 2_000_000
         })
 
@@ -406,6 +427,7 @@ defmodule Mydia.LibraryTest do
         Library.create_scanned_media_file(%{
           relative_path: "active_purge.mp4",
           library_path_id: library_path.id,
+          media_item_id: insert(:media_item, type: "movie").id,
           size: 1_000_000
         })
 
@@ -428,6 +450,7 @@ defmodule Mydia.LibraryTest do
         Library.create_scanned_media_file(%{
           relative_path: "trashable.mp4",
           library_path_id: library_path.id,
+          media_item_id: insert(:media_item, type: "movie").id,
           size: 1_000_000
         })
 
@@ -447,6 +470,7 @@ defmodule Mydia.LibraryTest do
         Library.create_scanned_media_file(%{
           relative_path: "trashable2.mp4",
           library_path_id: library_path.id,
+          media_item_id: insert(:media_item, type: "movie").id,
           size: 1_000_000
         })
 
@@ -474,6 +498,7 @@ defmodule Mydia.LibraryTest do
         Library.create_scanned_media_file(%{
           relative_path: "counted.mp4",
           library_path_id: library_path.id,
+          media_item_id: insert(:media_item, type: "movie").id,
           size: 500
         })
 
@@ -481,6 +506,7 @@ defmodule Mydia.LibraryTest do
         Library.create_scanned_media_file(%{
           relative_path: "not_counted.mp4",
           library_path_id: library_path.id,
+          media_item_id: insert(:media_item, type: "movie").id,
           size: 300
         })
 
@@ -507,6 +533,7 @@ defmodule Mydia.LibraryTest do
         Library.create_scanned_media_file(%{
           relative_path: "subject.mkv",
           library_path_id: library_path.id,
+          media_item_id: insert(:media_item, type: "movie").id,
           size: 1_500_000
         })
 
@@ -667,6 +694,7 @@ defmodule Mydia.LibraryTest do
         Library.create_scanned_media_file(%{
           relative_path: "Untouched.mkv",
           library_path_id: library_path.id,
+          media_item_id: insert(:media_item, type: "movie").id,
           size: 1_000_000
         })
 
@@ -688,6 +716,7 @@ defmodule Mydia.LibraryTest do
         Library.create_scanned_media_file(%{
           relative_path: "NoJobs.mkv",
           library_path_id: library_path.id,
+          media_item_id: insert(:media_item, type: "movie").id,
           size: 1_000_000
         })
 
@@ -705,6 +734,7 @@ defmodule Mydia.LibraryTest do
               Library.create_scanned_media_file(%{
                 relative_path: "Fast/file_#{i}.mkv",
                 library_path_id: library_path.id,
+                media_item_id: insert(:media_item, type: "movie").id,
                 size: 1_000_000
               })
           end
@@ -743,6 +773,7 @@ defmodule Mydia.LibraryTest do
         Library.create_scanned_media_file(%{
           relative_path: "missing.mkv",
           library_path_id: library_path.id,
+          media_item_id: insert(:media_item, type: "movie").id,
           size: 1_000_000
         })
 
@@ -757,6 +788,7 @@ defmodule Mydia.LibraryTest do
         Library.create_scanned_media_file(%{
           relative_path: "stub.mkv",
           library_path_id: library_path.id,
+          media_item_id: insert(:media_item, type: "movie").id,
           size: 1_000_000
         })
 
@@ -783,6 +815,7 @@ defmodule Mydia.LibraryTest do
           Library.create_scanned_media_file(%{
             relative_path: Path.basename(target),
             library_path_id: library_path.id,
+            media_item_id: insert(:media_item, type: "movie").id,
             size: File.stat!(target).size
           })
 
@@ -824,6 +857,7 @@ defmodule Mydia.LibraryTest do
           Library.create_scanned_media_file(%{
             relative_path: Path.basename(target),
             library_path_id: library_path.id,
+            media_item_id: insert(:media_item, type: "movie").id,
             size: File.stat!(target).size
           })
 
@@ -855,6 +889,7 @@ defmodule Mydia.LibraryTest do
         Library.create_scanned_media_file(%{
           relative_path: "subject.mkv",
           library_path_id: library_path.id,
+          media_item_id: insert(:media_item, type: "movie").id,
           size: 1_500_000
         })
 
@@ -892,6 +927,7 @@ defmodule Mydia.LibraryTest do
         Library.create_scanned_media_file(%{
           relative_path: "vanished.mkv",
           library_path_id: library_path.id,
+          media_item_id: insert(:media_item, type: "movie").id,
           size: 1_500_000
         })
 
@@ -913,6 +949,7 @@ defmodule Mydia.LibraryTest do
         Library.create_scanned_media_file(%{
           relative_path: "subject.mkv",
           library_path_id: library_path.id,
+          media_item_id: insert(:media_item, type: "movie").id,
           size: 1_500_000
         })
 
@@ -1202,31 +1239,6 @@ defmodule Mydia.LibraryTest do
              "expected exactly one row for the persisted extra, got #{inspect(Enum.map(all_files, & &1.relative_path))}"
 
       assert length(all_files) == 2
-    end
-  end
-
-  describe "rank_zero_candidates_by_file_id/1" do
-    test "returns a map keyed by media_file_id" do
-      file_a = Mydia.MediaFixtures.orphaned_media_file_fixture()
-      file_b = Mydia.MediaFixtures.orphaned_media_file_fixture()
-
-      {:ok, _} =
-        Library.upsert_match_candidate(%{
-          media_file_id: file_a.id,
-          rank: 0,
-          provider_type: "tmdb",
-          provider_id: "603",
-          confidence: 0.9
-        })
-
-      result = Library.rank_zero_candidates_by_file_id([file_a.id, file_b.id])
-
-      assert result[file_a.id].provider_id == "603"
-      refute Map.has_key?(result, file_b.id)
-    end
-
-    test "an empty list issues no query and returns an empty map" do
-      assert Library.rank_zero_candidates_by_file_id([]) == %{}
     end
   end
 end

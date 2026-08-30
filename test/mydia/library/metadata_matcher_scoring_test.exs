@@ -18,7 +18,7 @@ defmodule Mydia.Library.MetadataMatcherScoringTest do
   """
   use Mydia.DataCase, async: false
 
-  alias Mydia.ImportGroups
+  alias Mydia.ImportCandidates
   alias Mydia.Library.MetadataMatcher
   alias Mydia.Metadata.Cache
 
@@ -186,7 +186,7 @@ defmodule Mydia.Library.MetadataMatcherScoringTest do
 
       assert {:ok, match} = MetadataMatcher.match_movie(movie("Inception", 2010), config)
       assert match.provider_id == "27205"
-      assert match.match_confidence >= ImportGroups.auto_accept_threshold()
+      assert match.match_confidence >= ImportCandidates.auto_accept_threshold()
     end
   end
 
@@ -327,7 +327,7 @@ defmodule Mydia.Library.MetadataMatcherScoringTest do
 
       assert {:ok, match} = MetadataMatcher.match_tv_show(tv("Le safari de Joanie", 2022), config)
 
-      assert match.match_confidence < ImportGroups.auto_accept_threshold(),
+      assert match.match_confidence < ImportCandidates.auto_accept_threshold(),
              "an exact title with a four-year year contradiction scored " <>
                "#{match.match_confidence}, which auto-accepts without a human ever seeing it"
     end
@@ -339,7 +339,7 @@ defmodule Mydia.Library.MetadataMatcherScoringTest do
       stub(bypass, @tvdb_search, data([tvdb_show(277_262, "Cornemuse", 1999)]))
 
       assert {:ok, match} = MetadataMatcher.match_tv_show(tv("Cornemuse", 1999), config)
-      assert match.match_confidence >= ImportGroups.auto_accept_threshold()
+      assert match.match_confidence >= ImportCandidates.auto_accept_threshold()
     end
 
     test "counts a year the provider only put in the title", %{bypass: bypass, config: config} do
@@ -351,7 +351,7 @@ defmodule Mydia.Library.MetadataMatcherScoringTest do
 
       assert {:ok, match} = MetadataMatcher.match_tv_show(tv("Cornemuse", 2005), config)
 
-      assert match.match_confidence < ImportGroups.auto_accept_threshold(),
+      assert match.match_confidence < ImportCandidates.auto_accept_threshold(),
              "the title's own (2019) contradicts the folder's 2005, but it scored " <>
                "#{match.match_confidence}"
     end
@@ -370,7 +370,7 @@ defmodule Mydia.Library.MetadataMatcherScoringTest do
       assert {:ok, match} = MetadataMatcher.match_movie(movie("Dune", 2021), config)
       assert match.provider_id == "841"
 
-      assert match.match_confidence < ImportGroups.auto_accept_threshold(),
+      assert match.match_confidence < ImportCandidates.auto_accept_threshold(),
              "a 37-year year contradiction scored #{match.match_confidence}"
     end
   end
@@ -394,7 +394,7 @@ defmodule Mydia.Library.MetadataMatcherScoringTest do
 
       assert {:ok, match} = MetadataMatcher.match_movie(movie("Dune", 1984), config)
       assert match.provider_id == "841"
-      assert match.match_confidence >= ImportGroups.auto_accept_threshold()
+      assert match.match_confidence >= ImportCandidates.auto_accept_threshold()
     end
   end
 end

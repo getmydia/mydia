@@ -239,7 +239,7 @@ defmodule Mydia.Jobs.ImportRunJobTest do
   describe "library types that cannot be imported" do
     # This guard used to be reachable: music, books and adult paths were real
     # enum values that run_scan_phase/2 had to turn away, because nothing
-    # downstream (inbox_base_query/1, MediaFile.library_type_compatible?/3)
+    # downstream (the old review inbox query, MediaFile.library_type_compatible?/3)
     # restricts by library type, so an unattended run over one could link a
     # track to a movie. Those types are gone, and no constructible
     # library path is refused any more -- library_path_fixture cannot even

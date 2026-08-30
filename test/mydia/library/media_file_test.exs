@@ -287,11 +287,15 @@ defmodule Mydia.Library.MediaFileTest do
       assert :library_path_id in Keyword.keys(changeset.errors)
     end
 
-    test "allows orphaned files (no parent association)" do
+    test "rejects a file with no parent association" do
+      # Every media_files row is database-enforced to belong to a media item
+      # or an episode (the media_files_has_parent CHECK constraint added
+      # alongside import_candidates); a discovered-but-unmatched file lives
+      # there instead, never as a parentless media_files row.
       {:ok, library} =
         %LibraryPath{}
         |> LibraryPath.changeset(%{
-          path: "/test/orphaned",
+          path: "/test/no-parent",
           type: :mixed,
           monitored: true
         })
@@ -300,12 +304,15 @@ defmodule Mydia.Library.MediaFileTest do
       changeset =
         %MediaFile{}
         |> MediaFile.scan_changeset(%{
-          relative_path: "orphaned.mkv",
+          relative_path: "no-parent.mkv",
           library_path_id: library.id,
           size: 1_000_000_000
         })
 
-      assert changeset.valid?
+      refute changeset.valid?
+
+      assert {"either media_item_id or episode_id must be set", _} =
+               changeset.errors[:media_item_id]
     end
 
     test "validates with scan_changeset when parent is set", %{series_library: series_library} do
@@ -451,6 +458,7 @@ defmodule Mydia.Library.MediaFileTest do
         |> MediaFile.scan_changeset(%{
           relative_path: "Movie.mkv",
           library_path_id: library.id,
+          media_item_id: insert(:media_item, type: "movie").id,
           size: 1_000_000_000
         })
         |> Repo.insert()
@@ -469,7 +477,8 @@ defmodule Mydia.Library.MediaFileTest do
         %MediaFile{}
         |> MediaFile.scan_changeset(%{
           relative_path: "Movie.mkv",
-          library_path_id: library.id
+          library_path_id: library.id,
+          media_item_id: insert(:media_item, type: "movie").id
         })
         |> Repo.insert()
 
@@ -497,6 +506,7 @@ defmodule Mydia.Library.MediaFileTest do
         |> MediaFile.scan_changeset(%{
           relative_path: "Other.mkv",
           library_path_id: library.id,
+          media_item_id: insert(:media_item, type: "movie").id,
           analyzed_at: analyzed_at,
           analysis_attempts: 1,
           last_analysis_error: ":invalid_json"

@@ -305,7 +305,8 @@ defmodule Mydia.Media.SeasonOrderSwitchTest do
     end
 
     # The importer creates episode rows from parsed filenames with no provider
-    # id (`ImportGroups.link_local_member/2`), so a stray S00E99 file is enough
+    # id (`Mydia.ImportCandidates.create_local_show/2`), so a stray S00E99 file
+    # is enough
     # to produce a special that nothing can ever tag. Letting that block the
     # switch would put the show back behind the same unactionable message, for
     # good this time, over a row the switch does not touch.

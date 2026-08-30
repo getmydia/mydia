@@ -219,11 +219,14 @@ defmodule Mydia.Jobs.MediaRematchTest do
           metadata: %{"imported_from_download_id" => download.id}
         })
 
-      # Simulate a racing scan that already created an orphan row at the dest path.
-      {:ok, _orphan} =
+      # Simulate a duplicate row a concurrent process already created at the
+      # dest path (every media_files row is database-enforced to have a
+      # parent, so the duplicate is owned too -- just by an unrelated item).
+      {:ok, _duplicate} =
         Library.create_scanned_media_file(%{
           relative_path: "Right Movie (2021)/movie.mkv",
           library_path_id: library.id,
+          media_item_id: media_item_fixture(%{type: "movie"}).id,
           size: size
         })
 

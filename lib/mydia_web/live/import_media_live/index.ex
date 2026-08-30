@@ -4,19 +4,21 @@ defmodule MydiaWeb.ImportMediaLive.Index do
 
   The run itself lives in Oban, so the run-control section holds no import
   progress of its own beyond what it reads back. The review section below it
-  is a streamed, keyset-paged table of `Mydia.Library.ImportGroup` rows (one
-  row per anchor folder, not one per file), so opening this page never loads
-  more than one page of groups regardless of how large the library is.
+  is a streamed, keyset-paged table of `Mydia.Library.ImportCandidateGroup`
+  rows (one row per anchor folder, not one per file), computed at query time
+  by `Mydia.ImportCandidates.page/2` from `import_candidates` rows -- so
+  opening this page never loads more than one page of groups regardless of
+  how large the library is, and there is no separate rollup row to keep in
+  sync with what a rescan or a review decision changes underneath it.
   """
   use MydiaWeb, :live_view
 
   require Logger
 
-  alias Mydia.{Library, Metadata, Repo, Settings}
-  alias Mydia.ImportGroups
-  alias Mydia.Jobs.RematchImportGroups
+  alias Mydia.{Library, Metadata, Settings}
+  alias Mydia.ImportCandidates
   alias Mydia.Jobs.ImportRun, as: ImportRunJob
-  alias Mydia.Library.{ImportGroup, ImportRun, SelectionScope}
+  alias Mydia.Library.{ImportCandidate, ImportCandidateGroup, ImportRun, SelectionScope}
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.ImportMediaLive.{Components, RunControl}
 
@@ -25,7 +27,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   # no form state to explain a rejection to.
   # `:ignored` is not a confidence band -- it is a status -- but it rides the
   # same chip row and the same client-controlled atom lookup as the real
-  # bands, and load_groups/1 translates it into ImportGroups.page/2's
+  # bands, and load_groups/1 translates it into ImportCandidates.page/2's
   # `:status` option rather than its `:band` option (which has no clause for
   # it and would raise).
   @bands %{
@@ -38,15 +40,14 @@ defmodule MydiaWeb.ImportMediaLive.Index do
 
   @empty_band_counts %{ready: 0, needs_attention: 0, no_match: 0, ignored: 0, total: 0}
 
-  # How long an :import_groups_changed burst is allowed to coalesce into one
-  # refresh. ApplyImportGroups.broadcast/1 fires once per Oban job, and an
-  # active run can enqueue and complete many of those jobs in quick
-  # succession -- each one otherwise re-triggering refresh_counts/1's full
-  # band_counts/1 read (every pending group row, once per importable library
-  # path) on every open page. Mirrors Jobs.ImportRun's own
-  # @broadcast_ms_interval for progress updates, just applied on the
-  # receiving end here instead of the sending end there, since this
-  # broadcast has no single producer to throttle.
+  # How long an :import_candidates_changed burst is allowed to coalesce into
+  # one refresh. The scanner and the match phase can each broadcast many of
+  # these in quick succession during an active run -- every one otherwise
+  # re-triggering refresh_counts/1's full band_counts/1 read (every pending
+  # group row, once per importable library path) on every open page. Mirrors
+  # Jobs.ImportRun's own @broadcast_ms_interval for progress updates, just
+  # applied on the receiving end here instead of the sending end there, since
+  # this broadcast has no single producer to throttle.
   @refresh_debounce_ms 500
   @scan_complete_display_ms 5_000
 
@@ -83,7 +84,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       end
 
       if selected_library_path_id do
-        Phoenix.PubSub.subscribe(Mydia.PubSub, "import_groups:#{selected_library_path_id}")
+        Phoenix.PubSub.subscribe(Mydia.PubSub, "import_candidates:#{selected_library_path_id}")
       end
     end
 
@@ -117,7 +118,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       |> assign(:selected_library_path_id, selected_library_path_id)
       |> assign(:selected_library_path, selected_library_path)
       |> assign(:selection, SelectionScope.new(selected_library_path_id))
-      # Guards the :import_groups_changed debounce below: true while a
+      # Guards the :import_candidates_changed debounce below: true while a
       # deferred refresh is already scheduled, so a burst of broadcasts
       # schedules exactly one Process.send_after/3 rather than one per
       # message.
@@ -131,16 +132,10 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       # flight by the time it does, so the token is the actual guard.
       |> assign(:match_search, nil)
       |> assign(:match_search_token, 0)
-      # `ImportGroup` rows carry an `:id` field, so the default `"groups-<id>"`
-      # naming would be adequate, but the page's key elements are addressed as
-      # `#group-<id>` (singular). `ImportGroups.members/2` rows are plain
-      # `%{media_file:, candidate:}` maps with no top-level `:id` at all, so
-      # without an explicit `:dom_id` here streaming them crashes outright --
-      # LiveView's default id function requires one. `member-row-` (not
-      # `member-`) keeps the stream item's id distinct from the
-      # `#member-<file id>` span `group_row/1` renders inside each row.
-      |> stream_configure(:groups, dom_id: &"group-#{&1.id}")
-      |> stream_configure(:members, dom_id: &"member-row-#{&1.media_file.id}")
+      |> stream_configure(:groups,
+        dom_id: fn group -> "group-#{ImportCandidateGroup.dom_id(group)}" end
+      )
+      |> stream_configure(:members, dom_id: fn candidate -> "candidate-#{candidate.id}" end)
       |> stream(:groups, [])
       |> stream(:members, [])
 
@@ -220,7 +215,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   def handle_event("clear_scan_results", %{"library_path_id" => path_id}, socket) do
     with :ok <- Authorization.authorize_import_media(socket),
          :ok <- authorize_library_path(socket, path_id),
-         {:ok, counts} <- ImportGroups.clear_for_library(path_id) do
+         {:ok, counts} <- ImportCandidates.clear_for_library(path_id) do
       {:noreply,
        socket
        |> put_flash(:info, cleared_message(counts))
@@ -248,7 +243,9 @@ defmodule MydiaWeb.ImportMediaLive.Index do
            socket.assigns.selected_library_path_id do
       {:noreply,
        socket
-       |> accept_result(ImportGroups.accept_all_matched(library_path_id))}
+       |> accept_result(
+         ImportCandidates.accept_all_matched(library_path_id, allow_episode_creation: true)
+       )}
     else
       {:unauthorized, socket} -> {:noreply, socket}
       nil -> {:noreply, put_flash(socket, :error, "Select a library before importing results.")}
@@ -322,7 +319,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
      # A selection made under one search must not survive into another: in
      # :filter mode select_all_matching/1 captures the current :q, and both
      # SelectionScope.selected?/2 (checkbox state) and to_query/1 (what
-     # accept_selected/ignore_selected act on) would otherwise disagree with
+     # accept_selected/dismiss_selected act on) would otherwise disagree with
      # what is actually on screen after the search changes. select_band/1
      # resets the selection for the same reason.
      |> assign(:selection, SelectionScope.new(socket.assigns.selected_library_path_id, status))
@@ -357,9 +354,11 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     end
   end
 
-  def handle_event("toggle_group", %{"id" => id}, socket) do
-    socket = assign(socket, :selection, SelectionScope.toggle(socket.assigns.selection, id))
-    {:noreply, refresh_group_row(socket, id)}
+  def handle_event("toggle_group", %{"id" => anchor_key}, socket) do
+    socket =
+      assign(socket, :selection, SelectionScope.toggle(socket.assigns.selection, anchor_key))
+
+    {:noreply, refresh_group_row(socket, anchor_key)}
   end
 
   def handle_event("select_current_page", _params, socket) do
@@ -404,19 +403,21 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     with :ok <- Authorization.authorize_import_media(socket) do
       {:noreply,
        socket
-       |> accept_result(ImportGroups.accept(socket.assigns.selection))}
+       |> accept_result(
+         ImportCandidates.accept(socket.assigns.selection, allow_episode_creation: true)
+       )}
     else
       {:unauthorized, socket} -> {:noreply, socket}
     end
   end
 
-  def handle_event("ignore_selected", _params, socket) do
+  def handle_event("dismiss_selected", _params, socket) do
     with :ok <- Authorization.authorize_import_media(socket) do
-      {:ok, count} = ImportGroups.ignore(socket.assigns.selection)
+      {:ok, count} = ImportCandidates.dismiss(socket.assigns.selection)
 
       {:noreply,
        socket
-       |> put_flash(:info, "Ignored #{count} group(s).")
+       |> put_flash(:info, "Dismissed #{count} group(s).")
        |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
        |> load_groups()
        |> refresh_counts()}
@@ -427,7 +428,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
 
   def handle_event("restore_selected", _params, socket) do
     with :ok <- Authorization.authorize_import_media(socket) do
-      {:ok, count} = ImportGroups.restore(socket.assigns.selection)
+      {:ok, count} = ImportCandidates.restore(socket.assigns.selection)
 
       {:noreply,
        socket
@@ -445,36 +446,32 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       selection = socket.assigns.selection
       count = SelectionScope.count(selection)
 
-      %{
-        "library_path_id" => selection.library_path_id,
-        "selection" => SelectionScope.to_args(selection)
-      }
-      |> RematchImportGroups.new()
-      |> Oban.insert!()
-
       {:noreply,
        socket
-       |> put_flash(:info, "Queued #{count} group(s) for re-match.")
+       |> put_flash(:info, "Re-matching #{count} group(s)…")
        |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
-       |> load_groups()}
+       |> load_groups()
+       |> start_async(:rematch_candidates, fn -> ImportCandidates.rematch(selection) end)}
     else
       {:unauthorized, socket} -> {:noreply, socket}
     end
   end
 
   # `expanded_ids` tracks which groups are visually open (the chevron).
-  # Expanding a group populates `@streams.members` with its files and collapses
-  # any previously open group so that only the active group shows as expanded
-  # and the file list matches the open chevron.
-  def handle_event("expand_group", %{"id" => id}, socket) do
-    if socket.assigns.expanded_group_id == id do
+  # Expanding a group populates `@streams.members` with its candidates and
+  # collapses any previously open group so that only the active group shows
+  # as expanded and the member list matches the open chevron.
+  def handle_event("expand_group", %{"id" => anchor_key}, socket) do
+    library_path_id = socket.assigns.selected_library_path_id
+
+    if socket.assigns.expanded_group_id == anchor_key do
       # Collapsing the currently open group
       socket =
         socket
-        |> assign(:expanded_ids, MapSet.delete(socket.assigns.expanded_ids, id))
+        |> assign(:expanded_ids, MapSet.delete(socket.assigns.expanded_ids, anchor_key))
         |> assign(:expanded_group_id, nil)
         |> stream(:members, [], reset: true)
-        |> refresh_group_row(id)
+        |> refresh_group_row(anchor_key)
 
       {:noreply, socket}
     else
@@ -484,28 +481,33 @@ defmodule MydiaWeb.ImportMediaLive.Index do
 
       socket =
         socket
-        |> assign(:expanded_ids, MapSet.new([id]))
-        |> assign(:expanded_group_id, id)
-        |> stream(:members, ImportGroups.members(id, limit: 200), reset: true)
-        |> refresh_group_row(id)
+        |> assign(:expanded_ids, MapSet.new([anchor_key]))
+        |> assign(:expanded_group_id, anchor_key)
+        |> stream(:members, ImportCandidates.members(library_path_id, anchor_key), reset: true)
+        |> refresh_group_row(anchor_key)
 
       # Redraw any rows that were previously expanded so their chevrons close
       socket =
         Enum.reduce(old_expanded_ids, socket, fn old_id, acc ->
-          if old_id != id, do: refresh_group_row(acc, old_id), else: acc
+          if old_id != anchor_key, do: refresh_group_row(acc, old_id), else: acc
         end)
 
       {:noreply, socket}
     end
   end
 
-  def handle_event("update_member_episode", %{"file_id" => file_id} = params, socket) do
+  def handle_event("update_member_episode", %{"candidate_id" => id} = params, socket) do
     with :ok <- Authorization.authorize_import_media(socket) do
       season = Map.get(params, "season")
       episode = Map.get(params, "episode")
 
-      _ = {file_id, season, episode}
-      {:noreply, socket}
+      case ImportCandidates.update_member_episode(id, season, episode) do
+        {:ok, %ImportCandidate{}} ->
+          {:noreply, refresh_expanded_members(socket)}
+
+        {:error, _reason} ->
+          {:noreply, socket}
+      end
     else
       {:unauthorized, socket} -> {:noreply, socket}
     end
@@ -513,20 +515,22 @@ defmodule MydiaWeb.ImportMediaLive.Index do
 
   # The escape hatch for a group no provider carries: build the show straight
   # from its folder name instead of waiting on a match that will never come.
-  # `total` is read before the call, not after: on success `create_local_show/1`
-  # stamps the group with a synthetic provider identity so a second call is
-  # refused, and its own `unresolved_count` is the only trace of how many
-  # members it started with. A file with no parsed episode number stays
-  # orphaned rather than guessed at, and the flash says so rather than
-  # reporting a clean success for a partially-done action -- the failure mode
-  # this project has already corrected twice.
-  def handle_event("create_local_show", %{"id" => id}, socket) do
+  # `total` is read before the call, not after: on success `create_local_show/2`
+  # stamps every leftover candidate with a synthetic `provider_type: "local"`
+  # identity so a second call is refused, and the difference between the
+  # before/after member counts is the only trace of how many files it linked.
+  # A file with no parsed episode number stays unlinked rather than guessed
+  # at, and the flash says so rather than reporting a clean success for a
+  # partially-done action -- the failure mode this project has already
+  # corrected twice.
+  def handle_event("create_local_show", %{"id" => anchor_key}, socket) do
     with :ok <- Authorization.authorize_import_media(socket) do
-      total = ImportGroups.member_count(id)
+      library_path_id = socket.assigns.selected_library_path_id
+      total = ImportCandidates.member_count(library_path_id, anchor_key)
 
-      case ImportGroups.create_local_show(id) do
+      case ImportCandidates.create_local_show(library_path_id, anchor_key) do
         {:ok, item} ->
-          remaining = ImportGroups.member_count(id)
+          remaining = ImportCandidates.member_count(library_path_id, anchor_key)
           linked = total - remaining
 
           message =
@@ -559,15 +563,21 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     end
   end
 
-  # Ignore used to be a one-way door: a rescan can never bring a group back
-  # (write_group/4 preserves status on purpose), and until now there was no
-  # UI that could even see an ignored group to reconsider it. This is the way
-  # back -- only reachable from the Ignored view's own row, which is the only
-  # place `restore_group` is rendered, but a stale click after another tab
-  # already restored the same group is a normal, silent `{:ok, 0}`.
-  def handle_event("restore_group", %{"id" => id}, socket) do
+  # Dismiss used to be a one-way door: a rescan can never bring a group back
+  # (`ImportCandidates.upsert/1` preserves `dismissed_at` on purpose), and
+  # until now there was no UI that could even see a dismissed group to
+  # reconsider it. This is the way back -- only reachable from the Ignored
+  # view's own row, which is the only place `restore_group` is rendered, but
+  # a stale click after another tab already restored the same group is a
+  # normal, silent `{:ok, 0}`.
+  def handle_event("restore_group", %{"id" => anchor_key}, socket) do
     with :ok <- Authorization.authorize_import_media(socket) do
-      case ImportGroups.restore(id) do
+      scope =
+        socket.assigns.selected_library_path_id
+        |> SelectionScope.new("ignored")
+        |> SelectionScope.select_page([anchor_key])
+
+      case ImportCandidates.restore(scope) do
         {:ok, count} when count > 0 ->
           {:noreply,
            socket
@@ -592,8 +602,8 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   # that is where the guard and the readonly-user test live, matching how
   # `create_local_show`'s button is rendered for every viewer but its handler
   # is the one that checks.
-  def handle_event("open_match_search", %{"id" => id}, socket) do
-    case Repo.get(ImportGroup, id) do
+  def handle_event("open_match_search", %{"id" => anchor_key}, socket) do
+    case ImportCandidates.get_group(socket.assigns.selected_library_path_id, anchor_key) do
       nil ->
         {:noreply, put_flash(socket, :error, "That group is no longer available.")}
 
@@ -601,7 +611,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
         query = group.suggested_title || group.display_title || ""
 
         state = %{
-          group_id: group.id,
+          anchor_key: group.anchor_key,
           media_type: group.media_type,
           query: query,
           results: [],
@@ -658,8 +668,8 @@ defmodule MydiaWeb.ImportMediaLive.Index do
           {:noreply,
            put_flash(socket, :error, "That result is no longer available. Search again.")}
 
-        {%{group_id: group_id}, result} ->
-          apply_selected_match(socket, group_id, result)
+        {%{anchor_key: anchor_key}, result} ->
+          apply_selected_match(socket, anchor_key, result)
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
@@ -667,8 +677,8 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   end
 
   @impl true
-  def handle_async(:group_match_search, {:ok, {token, group_id, result}}, socket) do
-    if stale_match_search?(socket, token, group_id) do
+  def handle_async(:group_match_search, {:ok, {token, anchor_key, result}}, socket) do
+    if stale_match_search?(socket, token, anchor_key) do
       {:noreply, socket}
     else
       {:noreply,
@@ -693,6 +703,22 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       end
 
     {:noreply, socket}
+  end
+
+  def handle_async(:rematch_candidates, {:ok, {:ok, stats}}, socket) do
+    message =
+      if stats.failures > 0 do
+        "Re-matched #{stats.files} file(s), #{stats.failures} failed."
+      else
+        "Re-matched #{stats.files} file(s)."
+      end
+
+    {:noreply, socket |> put_flash(:info, message) |> load_groups() |> refresh_counts()}
+  end
+
+  def handle_async(:rematch_candidates, {:exit, reason}, socket) do
+    Logger.warning("Batch re-match crashed", reason: inspect(reason))
+    {:noreply, put_flash(socket, :error, "Re-match failed. Try again.")}
   end
 
   @impl true
@@ -730,7 +756,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     end
   end
 
-  def handle_info({:import_groups_changed, _library_path_id}, socket) do
+  def handle_info({:import_candidates_changed, _library_path_id}, socket) do
     # Only ever arrives for the currently selected library: switch_library/2
     # unsubscribes from the old topic and subscribes to the new one in the
     # same step, so there is nothing to filter on here.
@@ -776,40 +802,21 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     end
   end
 
-  # Naming the cached matches matters: without it the operator reads a small
-  # group count and has no idea the next scan will re-match every file and take
-  # as long as the first one did.
-  defp cleared_message(%{groups: groups, candidates: 0}) do
-    "Cleared #{groups} scan result group(s)."
+  # `ImportCandidates.clear_for_library/1` deletes every undismissed
+  # candidate and finished run history for the library, but preserves
+  # dismissed candidates -- naming that explicitly is what keeps a reviewer
+  # from reading "Cleared" as "every decision I made is gone".
+  defp cleared_message(%{candidates: 0}) do
+    "Nothing to clear. Dismissed decisions are preserved."
   end
 
-  defp cleared_message(%{groups: groups, candidates: candidates}) do
-    "Cleared #{groups} scan result group(s) and #{candidates} cached match(es). " <>
-      "The next scan will re-match every file."
+  defp cleared_message(%{candidates: candidates}) do
+    "Cleared #{candidates} scan result(s). Dismissed decisions are preserved."
   end
 
-  defp accept_result(socket, {:ok, count}) do
+  defp accept_result(socket, {:ok, %{accepted: accepted}}) do
     socket
-    |> put_flash(:info, "Accepted #{count} group(s). Linking in the background.")
-    |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
-    |> load_groups()
-    |> refresh_counts()
-  end
-
-  defp accept_result(socket, {:error, reason}) do
-    Logger.error("Could not enqueue the import group apply job", reason: inspect(reason))
-
-    # The status update commits before the enqueue is attempted, so affected
-    # rows are already outside the pending review query even on this error.
-    # Refresh the page and keep the recovery guidance consistent for selected
-    # accepts and Import All.
-    socket
-    |> put_flash(
-      :error,
-      "Marked for import, but the background job could not be started. " <>
-        "They are not lost: the next successful accept for this library " <>
-        "will pick them up."
-    )
+    |> put_flash(:info, "Accepted #{accepted} group(s).")
     |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
     |> load_groups()
     |> refresh_counts()
@@ -896,12 +903,13 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     selected_library_path = Enum.find(socket.assigns.importable_library_paths, &(&1.id == id))
 
     if connected?(socket) and previous_id != id do
-      if previous_id, do: Phoenix.PubSub.unsubscribe(Mydia.PubSub, "import_groups:#{previous_id}")
+      if previous_id,
+        do: Phoenix.PubSub.unsubscribe(Mydia.PubSub, "import_candidates:#{previous_id}")
 
       if previous_run,
         do: Phoenix.PubSub.unsubscribe(Mydia.PubSub, ImportRunJob.progress_topic(previous_run.id))
 
-      Phoenix.PubSub.subscribe(Mydia.PubSub, "import_groups:#{id}")
+      Phoenix.PubSub.subscribe(Mydia.PubSub, "import_candidates:#{id}")
 
       if active_run,
         do: Phoenix.PubSub.subscribe(Mydia.PubSub, ImportRunJob.progress_topic(active_run.id))
@@ -927,22 +935,22 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   end
 
   # Paging and filtering (band, search, cursor) never change how many groups
-  # exist in each band or in any other library -- only accepting, ignoring,
-  # switching libraries, or another session's own accept/ignore (over
+  # exist in each band or in any other library -- only accepting, dismissing,
+  # switching libraries, or another session's own accept/dismiss (over
   # PubSub) do. So this reloads only the current page of groups; callers
   # that know the counts actually changed also call refresh_counts/1.
   defp load_groups(socket) do
     library_path_id = socket.assigns.selected_library_path_id
     band = socket.assigns.band
-    # `:ignored` is a status, not a real band -- ImportGroups.page/2's :band
-    # option has no clause for it, so it goes through :status instead and the
-    # band filter itself is left at :all (an ignored group's own confidence
-    # band plays no part in the Ignored view).
+    # `:ignored` is a status, not a real band -- ImportCandidates.page/2's
+    # :band option has no clause for it, so it goes through :status instead
+    # and the band filter itself is left at :all (a dismissed group's own
+    # confidence band plays no part in the Ignored view).
     {status, page_band} = if band == :ignored, do: {"ignored", :all}, else: {"pending", band}
     filter = %{band: page_band, q: socket.assigns.search}
 
     {groups, next_cursor} =
-      ImportGroups.page(library_path_id,
+      ImportCandidates.page(library_path_id,
         band: filter.band,
         q: filter.q,
         status: status,
@@ -961,12 +969,11 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       |> SelectionScope.select_all_matching(filter)
       |> SelectionScope.count()
 
-    # The wizard pre-collapsed any season whose episodes all matched confidently,
-    # and losing that is why the rewritten page read as one huge list. Same rule,
-    # one level up: a settled group starts closed, an unsettled one starts open.
+    # A settled group starts closed, an unsettled one starts open -- same
+    # rule the wizard this page replaced applied per season.
     expanded =
       groups
-      |> Enum.reject(&(ImportGroups.band(&1) == :ready))
+      |> Enum.reject(&(ImportCandidates.band(&1) == :ready))
       |> Enum.map(& &1.id)
       |> MapSet.new()
 
@@ -984,8 +991,8 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   # importable library's pending total for the picker. band_counts/1 loads
   # every pending group row for each library path it is asked about, so this
   # is deliberately called only from mount/1, switch_library/2,
-  # accept/ignore/restore, and the PubSub handler -- never from load_groups/1,
-  # which paging and search both go through.
+  # accept/dismiss/restore, and the PubSub handler -- never from
+  # load_groups/1, which paging and search both go through.
   defp refresh_counts(socket) do
     library_path_id = socket.assigns.selected_library_path_id
 
@@ -995,8 +1002,8 @@ defmodule MydiaWeb.ImportMediaLive.Index do
 
     band_counts =
       library_path_id
-      |> ImportGroups.band_counts()
-      |> Map.put(:ignored, ImportGroups.count_by_status(library_path_id, "ignored"))
+      |> ImportCandidates.band_counts()
+      |> Map.put(:ignored, ImportCandidates.count_by_status(library_path_id, "ignored"))
 
     socket
     |> assign(:band_counts, band_counts)
@@ -1004,7 +1011,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     |> assign(
       :library_group_counts,
       Map.new(socket.assigns.importable_library_paths, fn path ->
-        {path.id, ImportGroups.band_counts(path.id).total}
+        {path.id, ImportCandidates.band_counts(path.id).total}
       end)
     )
   end
@@ -1016,14 +1023,43 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   # handler that only reassigns those has nothing else that would make the
   # checkbox or chevron move. A stream's contents can only be walked from
   # inside the `:for` a template compiles it into, not from a handler, so
-  # this re-reads the one row by primary key rather than searching the
+  # this re-reads the one row by anchor key rather than searching the
   # in-memory stream. A group that has vanished between render and click
-  # (accepted or ignored from another session) is a silent no-op: the row
+  # (accepted or dismissed from another session) is a silent no-op: the row
   # will drop out on the next full `load_groups/1` regardless.
-  defp refresh_group_row(socket, id) do
-    case Repo.get(ImportGroup, id) do
+  defp refresh_group_row(socket, anchor_key) do
+    library_path_id = socket.assigns.selected_library_path_id
+    status = if socket.assigns.band == :ignored, do: "ignored", else: "pending"
+
+    case ImportCandidates.get_group(library_path_id, anchor_key, status: status) do
       nil -> socket
       group -> stream_insert(socket, :groups, group)
+    end
+  end
+
+  # Reloads the currently-expanded group's members wholesale, same as
+  # `expand_group`'s own initial population, and also re-inserts the parent
+  # group row. Confirmed by hand: resetting the `:members` stream alone is
+  # not enough. `Components.group_row/1`'s `members` prop is computed as
+  # `if @expanded_group_id == group.id, do: @streams.members, else: []`
+  # inside the `:groups` `:for` in index.html.heex, so the `<ul
+  # phx-update="stream">` reading it only exists inside that group's own
+  # already-rendered output. A `:members`-only change does not, by itself,
+  # cause LiveView to revisit that specific `:groups` iteration and re-invoke
+  # the component with the fresh prop; `refresh_group_row/2`'s own
+  # `stream_insert/3` on `:groups` is what forces that row to re-render, the
+  # same way toggling a group already relies on it for the chevron.
+  defp refresh_expanded_members(socket) do
+    case socket.assigns.expanded_group_id do
+      nil ->
+        socket
+
+      anchor_key ->
+        library_path_id = socket.assigns.selected_library_path_id
+
+        socket
+        |> stream(:members, ImportCandidates.members(library_path_id, anchor_key), reset: true)
+        |> refresh_group_row(anchor_key)
     end
   end
 
@@ -1044,7 +1080,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       assign(socket, :match_search, %{socket.assigns.match_search | results: [], searching: false})
     else
       token = socket.assigns.match_search_token + 1
-      group_id = socket.assigns.match_search.group_id
+      anchor_key = socket.assigns.match_search.anchor_key
       media_type_hint = socket.assigns.match_search.media_type
 
       library_path =
@@ -1067,7 +1103,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
             [media_type: media_type]
           end
 
-        {token, group_id, Metadata.search(config, query, opts)}
+        {token, anchor_key, Metadata.search(config, query, opts)}
       end)
     end
   end
@@ -1085,10 +1121,10 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   defp search_media_type(%{type: :mixed}, "movie"), do: :movie
   defp search_media_type(_library_path, _hint), do: nil
 
-  defp stale_match_search?(socket, token, group_id) do
+  defp stale_match_search?(socket, token, anchor_key) do
     case socket.assigns.match_search do
       nil -> true
-      %{group_id: ^group_id} -> socket.assigns.match_search_token != token
+      %{anchor_key: ^anchor_key} -> socket.assigns.match_search_token != token
       _different_group -> true
     end
   end
@@ -1102,21 +1138,15 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     %{state | results: [], searching: false, error: "Search failed. Try again."}
   end
 
-  defp apply_selected_match(socket, group_id, result) do
-    case ImportGroups.change_match(group_id, match_from_result(result)) do
-      {:ok, _group} ->
+  defp apply_selected_match(socket, anchor_key, result) do
+    library_path_id = socket.assigns.selected_library_path_id
+
+    case ImportCandidates.change_match(library_path_id, anchor_key, match_from_result(result)) do
+      {:ok, _count} ->
         {:noreply,
          socket
          |> assign(:match_search, nil)
          |> put_flash(:info, "Updated the match for this group.")
-         |> load_groups()
-         |> refresh_counts()}
-
-      {:error, :not_pending} ->
-        {:noreply,
-         socket
-         |> assign(:match_search, nil)
-         |> put_flash(:error, "That group has already been decided.")
          |> load_groups()
          |> refresh_counts()}
 

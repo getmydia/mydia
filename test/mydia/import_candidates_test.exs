@@ -491,6 +491,30 @@ defmodule Mydia.ImportCandidatesTest do
       lp = library_path_fixture(%{type: "series"})
       assert {:error, :not_found} = ImportCandidates.create_local_show(lp.id, "missing")
     end
+
+    test "a repeat call against the same anchor is refused instead of creating a second show" do
+      lp = library_path_fixture(%{type: "series", path: "/media/Series"})
+
+      import_candidate_fixture(%{
+        library_path_id: lp.id,
+        anchor_key: "unnumbered only",
+        relative_path: "Unnumbered Only/bonus.mkv",
+        media_type: "tv_show",
+        parsed_info: %{}
+      })
+
+      assert {:ok, item} = ImportCandidates.create_local_show(lp.id, "unnumbered only")
+
+      assert {:error, :already_created} =
+               ImportCandidates.create_local_show(lp.id, "unnumbered only")
+
+      assert Repo.aggregate(Mydia.Media.MediaItem, :count) == 1
+      assert item.title == "Unnumbered Only"
+
+      assert {[group], nil} = ImportCandidates.page(lp.id)
+      assert group.anchor_key == "unnumbered only"
+      assert ImportCandidates.band(group) == :needs_attention
+    end
   end
 
   describe "clear_for_library/1" do

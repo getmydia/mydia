@@ -3,15 +3,14 @@ defmodule Mydia.Library.DatabaseHealthCheck do
   Startup health check that detects database integrity issues and automatically
   triggers library re-scans when needed.
 
-  Runs on application startup to detect:
-  1. Stuck media files: no `media_item_id`, no `episode_id`, under a monitored
-     library path, AND carrying no match candidate. The candidate exclusion is
-     the load-bearing half. The import coordinator commits orphaned rows as its
-     first phase and can legitimately leave thousands of them queued in the
-     review inbox; those are pending work, not damage, and counting them here
-     would queue a re-scan against a healthy library. See
-     `count_orphaned_files/0`.
-  2. Media files with relative_path but missing library_path_id
+  Runs on application startup to detect media files with relative_path but
+  missing library_path_id.
+
+  There is no orphaned-file check here. Every `media_files` row is
+  database-enforced to belong to a media item or an episode (the
+  `media_files_has_parent` CHECK constraint); a file that has not been matched
+  yet lives in `import_candidates` instead, and is pending review work, not
+  database damage.
 
   When issues are detected above a threshold, a library re-scan is queued as a
   background job to attempt automatic repair.
@@ -45,9 +44,7 @@ defmodule Mydia.Library.DatabaseHealthCheck do
 
   alias Mydia.Repo
   alias Mydia.Settings
-  alias Mydia.Library.MatchCandidate
   alias Mydia.Library.MediaFile
-  alias Mydia.Settings.LibraryPath
 
   @default_threshold 10
 
@@ -89,63 +86,17 @@ defmodule Mydia.Library.DatabaseHealthCheck do
   Returns a map with issue counts:
 
       %{
-        orphaned_files: 15,
         missing_library_path: 2,
-        total_issues: 17
+        total_issues: 2
       }
   """
   def detect_issues do
-    orphaned_count = count_orphaned_files()
     missing_library_path_count = count_files_missing_library_path()
 
     %{
-      orphaned_files: orphaned_count,
       missing_library_path: missing_library_path_count,
-      total_issues: orphaned_count + missing_library_path_count
+      total_issues: missing_library_path_count
     }
-  end
-
-  @doc """
-  Counts orphaned media files in monitored libraries.
-
-  Orphaned files are those with no `media_item_id` and no `episode_id`.
-
-  Unmonitored library paths are excluded. The repair this count triggers is a
-  rescan, and a rescan only walks monitored paths, so an orphan under an
-  unmonitored one would be reported on every boot and never go away. Paths
-  converted off the removed music, books and adult types are exactly that case:
-  they are `:mixed` and unmonitored, and the parentless rows they left behind
-  are not something a rescan can resolve.
-
-  Files that already hold a match candidate are excluded too. A candidate
-  means the file is queued in the import inbox for review, not stuck: the
-  import coordinator writes orphaned rows as its first phase, and a scan can
-  legitimately leave thousands of them sitting there awaiting a decision.
-  Without this exclusion, that queued work reads as database damage.
-
-  The two exclusions cover different populations and neither subsumes the
-  other: a converted music/books/adult file carries no candidate, so only the
-  `monitored` filter keeps it out.
-
-  The `standard_types` filter is a tripwire rather than a live narrowing. It
-  currently names every value of `LibraryPath`'s type enum, so it excludes
-  nothing today; it exists so that adding a specialized library type back has
-  to come here and decide what this count means for it.
-  """
-  def count_orphaned_files do
-    standard_types = [:movies, :series, :mixed]
-
-    from(mf in MediaFile,
-      join: lp in LibraryPath,
-      on: mf.library_path_id == lp.id,
-      left_join: c in MatchCandidate,
-      on: c.media_file_id == mf.id,
-      where: is_nil(mf.media_item_id) and is_nil(mf.episode_id),
-      where: lp.type in ^standard_types and lp.monitored,
-      where: is_nil(c.id),
-      select: count(mf.id)
-    )
-    |> Repo.one()
   end
 
   @doc """
@@ -225,23 +176,7 @@ defmodule Mydia.Library.DatabaseHealthCheck do
   end
 
   defp log_detected_issues(issues) do
-    parts = []
-
-    parts =
-      if issues.orphaned_files > 0 do
-        ["#{issues.orphaned_files} orphaned file(s)" | parts]
-      else
-        parts
-      end
-
-    parts =
-      if issues.missing_library_path > 0 do
-        ["#{issues.missing_library_path} file(s) missing library path" | parts]
-      else
-        parts
-      end
-
-    message = Enum.join(Enum.reverse(parts), ", ")
+    message = "#{issues.missing_library_path} file(s) missing library path"
     Logger.warning("[DatabaseHealthCheck] Detected issues: #{message}")
   end
 

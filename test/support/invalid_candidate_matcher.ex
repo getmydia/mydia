@@ -5,13 +5,14 @@ defmodule Mydia.Library.InvalidCandidateMatcher do
   `Jobs.ImportRun.verify_match_phase_complete/2` exists to catch after the
   keyset match loop reports the phase "done".
 
-  `match_confidence: 2.0` is outside `MatchCandidate.changeset/2`'s
+  `match_confidence: 2.0` is outside `ImportCandidate.changeset/2`'s
   `validate_number(:confidence, greater_than_or_equal_to: 0.0,
-  less_than_or_equal_to: 1.0)`, so `Library.upsert_match_candidate/1` returns
-  a real `{:error, changeset}` -- this is not a match `FileIngest` chooses to
-  reject, it is one it genuinely fails to record. `from_local_db` is left
-  unset, so `:local_only` policy (review mode) still routes to the
-  `:candidate` branch rather than `:link`, where that write failure bites.
+  less_than_or_equal_to: 1.0)`, so `Mydia.ImportCandidates.upsert/1` returns a
+  real `{:error, changeset}` -- this is not a match `FileIngest` chooses to
+  reject, it is one it genuinely fails to record. Under the `:review` policy
+  this write failure surfaces as `FileIngest.ingest/3` returning
+  `{:error, {:candidate_write_failed, _}}` for the candidate, leaving it with
+  no match, no retry timestamp, and no dismissal.
   """
 
   @behaviour Mydia.Library.Matcher

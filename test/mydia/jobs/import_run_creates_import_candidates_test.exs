@@ -1,4 +1,4 @@
-defmodule Mydia.Jobs.ImportRunCreatesImportGroupsTest do
+defmodule Mydia.Jobs.ImportRunCreatesImportCandidatesTest do
   @moduledoc """
   Regression coverage for the review page's read path after the candidate
   split.
@@ -44,7 +44,7 @@ defmodule Mydia.Jobs.ImportRunCreatesImportGroupsTest do
 
   defp library_with(type, files) do
     dir =
-      Path.join(System.tmp_dir!(), "import_groups_e2e_#{System.unique_integer([:positive])}")
+      Path.join(System.tmp_dir!(), "import_candidates_e2e_#{System.unique_integer([:positive])}")
 
     Enum.each(files, fn relative ->
       full = Path.join(dir, relative)

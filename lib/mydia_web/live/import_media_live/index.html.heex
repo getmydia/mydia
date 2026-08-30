@@ -63,7 +63,7 @@
             class="btn btn-ghost btn-sm text-error"
             phx-click="clear_scan_results"
             phx-value-library_path_id={@selected_library_path.id}
-            data-confirm="Clear all scan and review results for this library? Imported media will not be removed."
+            data-confirm="Clear all unresolved scan results for this library? Dismissed decisions and imported media will not be removed."
           >
             <.icon name="hero-trash" class="w-4 h-4" /> Clear
           </button>
@@ -90,7 +90,7 @@
           <p class="text-xs text-base-content/50 mt-1">Every file in this library is linked.</p>
         </div>
         <%= for {dom_id, group} <- @streams.groups do %>
-          <%= if group.status == "ignored" do %>
+          <%= if @band == :ignored do %>
             <Components.ignored_group_row
               id={dom_id}
               group={group}
@@ -100,7 +100,7 @@
             <Components.group_row
               id={dom_id}
               group={group}
-              band={ImportGroups.band(group)}
+              band={ImportCandidates.band(group)}
               selected={SelectionScope.selected?(@selection, group.id)}
               expanded={MapSet.member?(@expanded_ids, group.id)}
               members={if @expanded_group_id == group.id, do: @streams.members, else: []}

@@ -43,9 +43,9 @@ defmodule MydiaWeb.Layouts do
   attr :downloads_count, :integer, default: 0, doc: "number of active downloads"
   attr :pending_requests_count, :integer, default: 0, doc: "number of pending requests"
 
-  attr :import_group_count, :integer,
+  attr :import_candidate_group_count, :integer,
     default: 0,
-    doc: "number of pending import groups awaiting review"
+    doc: "number of pending import candidate groups awaiting review"
 
   attr :executing_jobs, :list, default: [], doc: "list of currently executing background jobs"
   attr :feedback_enabled?, :boolean, default: false, doc: "whether to render feedback UI"
@@ -187,11 +187,11 @@ defmodule MydiaWeb.Layouts do
                 >
                   <.icon name="hero-inbox-stack" class="w-5 h-5" /> Import
                   <span
-                    :if={@import_group_count > 0}
+                    :if={@import_candidate_group_count > 0}
                     id="nav-import-badge"
                     class="badge badge-primary badge-sm"
                   >
-                    {@import_group_count}
+                    {@import_candidate_group_count}
                   </span>
                 </.link>
               </li>

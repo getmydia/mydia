@@ -245,17 +245,15 @@ defmodule Mydia.Jobs.HdrBackfillTest do
     # is what changes this test's outcome, not the test file. It first rolls
     # the schema back to just before the migration ran (dropping the three
     # HDR columns it already added for real, on the persistent test
-    # database, before ExUnit even starts), then re-runs up/0. This mirrors
-    # backfill_import_groups_test.exs's "up/0 and down/0 via the real
-    # migrator" pattern, including its Postgres caveat below.
+    # database, before ExUnit even starts), then re-runs up/0.
     #
     # Ecto.Migrator against a DataCase-sandboxed repo deadlocks under
-    # PostgreSQL (see backfill_import_groups_test.exs for the full writeup),
-    # so this only needs to run once, on SQLite, the default `mix test`
-    # adapter.
+    # PostgreSQL: the migrator opens its own connection outside the test's
+    # sandboxed one, and the two contend for the same table lock. So this
+    # only needs to run once, on SQLite, the default `mix test` adapter.
     @describetag skip:
                    Mydia.DB.postgres?() and
-                     "Ecto.Migrator against the DataCase-sandboxed Repo deadlocks on Postgres (see backfill_import_groups_test.exs)"
+                     "Ecto.Migrator against the DataCase-sandboxed Repo deadlocks on Postgres"
 
     # The migration's real, already-applied version. Unlike a synthetic
     # version, down/4 only runs a migration's down/0 for a version it finds

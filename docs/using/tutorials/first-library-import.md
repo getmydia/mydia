@@ -16,21 +16,15 @@ Use that name exactly. Mydia reads the title and year straight out of the filena
 
 ## Step 2: Trigger a Library Scan
 
-Open Mydia in your browser and click **Import Files** on the dashboard, the same page you landed on after creating your admin account.
+Open Mydia in your browser and click **Import Files** on the dashboard, the same page you landed on after creating your admin account. Your **Movies** library tab is already selected.
 
-On the **Select a Library to Scan** screen, click your **Movies** library. Mydia scans the folder immediately and searches for a metadata match for anything it finds.
+Click **Start scan**. Mydia scans the folder and searches for a metadata match for anything it finds, with **Automatically import confident matches in this run** checked by default.
 
-## Step 3: Watch It Get Matched
+## Step 3: Watch It Get Matched and Imported
 
-When the scan finishes, you land on the **Review Matches** screen. Your placeholder file shows up under **Movies** with a poster thumbnail, a title and year pulled from The Movie Database, and a confidence badge.
+Because the filename parsed cleanly, the match is confident, and automatic import is on, Mydia imports it on its own once the scan finishes -- there is nothing left to review for this file.
 
-Because the filename parsed cleanly, the match is already selected and ready to import.
-
-## Step 4: Import It
-
-Click **Import (1)** at the top of the screen. Mydia creates the movie and shows it on the **Complete** screen. Click **Done**.
-
-## Step 5: See the Result
+## Step 4: See the Result
 
 Open **Movies** in the sidebar. Big Buck Bunny is there with its poster. Click it to see the full metadata page, including the synopsis, all pulled from a filename and a scan.
 

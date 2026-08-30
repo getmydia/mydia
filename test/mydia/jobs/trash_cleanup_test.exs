@@ -4,6 +4,7 @@ defmodule Mydia.Jobs.TrashCleanupTest do
   alias Mydia.Jobs.TrashCleanup
   alias Mydia.Library
 
+  import Mydia.MediaFixtures
   import Mydia.SettingsFixtures
 
   describe "perform/1" do
@@ -15,10 +16,13 @@ defmodule Mydia.Jobs.TrashCleanupTest do
         })
 
       # Create and trash a file
+      movie = media_item_fixture(%{type: "movie"})
+
       {:ok, media_file} =
         Library.create_scanned_media_file(%{
           relative_path: "old_cleanup.mp4",
           library_path_id: library_path.id,
+          media_item_id: movie.id,
           size: 1_000_000
         })
 
@@ -46,10 +50,13 @@ defmodule Mydia.Jobs.TrashCleanupTest do
           type: "movies"
         })
 
+      movie = media_item_fixture(%{type: "movie"})
+
       {:ok, media_file} =
         Library.create_scanned_media_file(%{
           relative_path: "recent_cleanup.mp4",
           library_path_id: library_path.id,
+          media_item_id: movie.id,
           size: 1_000_000
         })
 

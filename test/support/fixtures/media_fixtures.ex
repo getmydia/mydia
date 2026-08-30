@@ -150,39 +150,6 @@ defmodule Mydia.MediaFixtures do
     %{media_file | inserted_at: at}
   end
 
-  @doc """
-  Creates a media file with no parent association.
-
-  `media_file_fixture/1` cannot do this. It goes through
-  `Library.create_media_file/1`, and that changeset requires a media_item or an
-  episode on any non-specialized library. Orphans are a first-class state in
-  this app (the scanner creates them constantly) but they are only reachable
-  through `create_scanned_media_file/1`, which uses `scan_changeset`.
-  """
-  def orphaned_media_file_fixture(attrs \\ %{}) do
-    attrs = Map.new(attrs)
-
-    attrs =
-      if Map.has_key?(attrs, :library_path_id) do
-        attrs
-      else
-        Map.put(attrs, :library_path_id, library_path_fixture().id)
-      end
-
-    defaults = %{
-      relative_path: "orphan/file-#{System.unique_integer([:positive])}.mkv",
-      size: 1_000_000_000,
-      verified_at: DateTime.utc_now()
-    }
-
-    {:ok, media_file} =
-      defaults
-      |> Map.merge(attrs)
-      |> Mydia.Library.create_scanned_media_file()
-
-    media_file
-  end
-
   @doc "Generate a durable import candidate."
   def import_candidate_fixture(attrs \\ %{}) do
     attrs = Map.new(attrs)

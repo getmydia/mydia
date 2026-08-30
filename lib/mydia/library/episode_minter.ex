@@ -32,9 +32,11 @@ defmodule Mydia.Library.EpisodeMinter do
 
   The season ceiling is read fresh on every call, so importing seasons 4 and 5
   together cascades: the season 4 rows land first and raise the ceiling for
-  season 5. Out of order, the season 5 files stay outstanding and the next pass
-  takes them, because `Jobs.ApplyImportGroups.drain/3` retries while it makes
-  progress.
+  season 5. Out of order, the season 5 anchor's candidates stay matched but
+  unpromoted -- `Mydia.Library.CandidatePromotion.promote_group/3` commits one
+  anchor as a single transaction, so a season 5 group that fails to mint rolls
+  back whole and is simply eligible for another Accept once season 4 has
+  raised the ceiling.
 
   ## Why the row is untagged
 

@@ -2,14 +2,16 @@ defmodule MydiaWeb.ImportMediaLive.Components do
   @moduledoc """
   Reusable UI components for the grouped import review table.
 
-  Each component renders from an `Mydia.Library.ImportGroup` row (or a page of
-  them), never from a loaded collection of files: that is what keeps the page
-  independent of how many files a group actually has.
+  Each component renders from an `Mydia.Library.ImportCandidateGroup` row (or
+  a page of them), never from a loaded collection of files: that is what keeps
+  the page independent of how many files a group actually has. Member rows
+  render directly from `Mydia.Library.ImportCandidate` structs.
   """
 
   use Phoenix.Component
   import MydiaWeb.CoreComponents
 
+  alias Mydia.Library.ImportCandidateGroup
   alias Mydia.Metadata.ImageUrl
 
   @doc """
@@ -80,9 +82,10 @@ defmodule MydiaWeb.ImportMediaLive.Components do
   @doc """
   The band filter chips plus the folder search box.
 
-  `counts` is `ImportGroups.band_counts/1`'s return shape: `:ready`,
-  `:needs_attention`, `:no_match` and `:total`. `:all` has no key of its own
-  in that map, so `count_for/2` reads `:total` for it instead.
+  `counts` is `ImportCandidates.band_counts/1`'s return shape (`:ready`,
+  `:needs_attention`, `:no_match`, `:total`) with an `:ignored` key merged in
+  by the caller. `:all` has no key of its own in that map, so `count_for/2`
+  reads `:total` for it instead.
 
   Each chip is a `<label>` wrapping a checkbox rather than a bare
   `<input class="btn">`: daisyUI's own `.filter` CSS supports both (it targets
@@ -163,7 +166,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
 
   @doc """
   The selection toolbar: how many groups are selected, a shortcut to select
-  every group matching the active filter, and the accept/ignore/clear actions.
+  every group matching the active filter, and the accept/dismiss/clear actions.
 
   Shown whenever there is something to act on -- either a group is already
   selected, or the band/search filter narrows the page to a subset a user
@@ -241,12 +244,12 @@ defmodule MydiaWeb.ImportMediaLive.Components do
             <.icon name="hero-arrow-path" class="w-4 h-4 mr-1" /> Re-match
           </button>
           <button
-            id="ignore-selected"
+            id="dismiss-selected"
             class="btn btn-sm btn-ghost"
             disabled={@count == 0}
-            phx-click="ignore_selected"
+            phx-click="dismiss_selected"
           >
-            Ignore
+            Dismiss
           </button>
           <button id="clear-selection" class="btn btn-sm btn-ghost" phx-click="clear_selection">
             Clear
@@ -259,7 +262,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
 
   @doc """
   One group row: a checkbox, the collapsed summary, and (when expanded) its
-  member files.
+  member candidates.
 
   `expanded` is per-row (any number of rows can be open at once -- a settled
   group starts closed, an unsettled one starts open). `members` is not: only
@@ -267,6 +270,13 @@ defmodule MydiaWeb.ImportMediaLive.Components do
   other open row is passed `[]` so its `<ul>` renders with nothing in it
   until it, too, is clicked. That is what keeps the page bounded even when
   every group on it is unsettled and auto-expanded.
+
+  Every element id derived from `@group` uses `ImportCandidateGroup.dom_id/1`
+  (URL-safe base64), never `@group.anchor_key`/`@group.id` directly -- an
+  anchor key is a normalized folder name and can hold spaces or Unicode, which
+  are not safe inside a bare CSS/DOM id. `phx-value-id`, by contrast, always
+  sends the raw `anchor_key`: that is what `Mydia.ImportCandidates`' group
+  functions take.
   """
   attr :id, :string, required: true
   attr :group, :map, required: true
@@ -276,6 +286,8 @@ defmodule MydiaWeb.ImportMediaLive.Components do
   attr :members, :any, required: true
 
   def group_row(assigns) do
+    assigns = assign(assigns, :dom_key, ImportCandidateGroup.dom_id(assigns.group))
+
     ~H"""
     <div id={@id} class="p-3.5 sm:p-4 hover:bg-base-200/40 transition-colors flex flex-col gap-2">
       <div class="flex items-center gap-3 min-w-0">
@@ -285,15 +297,15 @@ defmodule MydiaWeb.ImportMediaLive.Components do
           checked={@selected}
           aria-label={"Select #{@group.display_title}"}
           phx-click="toggle_group"
-          phx-value-id={@group.id}
+          phx-value-id={@group.anchor_key}
         />
 
         <button
           type="button"
-          id={"group-toggle-#{@group.id}"}
+          id={"group-toggle-#{@dom_key}"}
           class="flex-1 flex items-center gap-2 min-w-0 text-left cursor-pointer group/title"
           phx-click="expand_group"
-          phx-value-id={@group.id}
+          phx-value-id={@group.anchor_key}
         >
           <.icon
             name={if(@expanded, do: "hero-chevron-down", else: "hero-chevron-right")}
@@ -304,9 +316,6 @@ defmodule MydiaWeb.ImportMediaLive.Components do
           </span>
           <span class="badge badge-ghost badge-sm shrink-0 font-normal">
             {@group.file_count} file{if @group.file_count == 1, do: "", else: "s"}
-          </span>
-          <span :if={season_label(@group)} class="badge badge-ghost badge-sm shrink-0">
-            {season_label(@group)}
           </span>
         </button>
 
@@ -321,29 +330,29 @@ defmodule MydiaWeb.ImportMediaLive.Components do
             {suggestion_line(@group)}
           </span>
           <span
-            :if={evidence_label(@group.evidence)}
-            class="badge badge-ghost badge-xs text-base-content/60"
+            :if={disagreement_label(@group)}
+            class="badge badge-warning/20 text-warning badge-xs"
           >
-            {evidence_label(@group.evidence)}
+            {disagreement_label(@group)}
           </span>
         </div>
 
         <div class="flex items-center gap-2 shrink-0">
           <button
-            id={"change-match-#{@group.id}"}
+            id={"change-match-#{@dom_key}"}
             class="btn btn-xs btn-outline"
             phx-click="open_match_search"
-            phx-value-id={@group.id}
+            phx-value-id={@group.anchor_key}
           >
             <.icon name="hero-pencil-square" class="w-3.5 h-3.5 mr-1 opacity-70" />
             {if @band == :no_match, do: "Identify", else: "Change match"}
           </button>
           <button
             :if={@band == :no_match}
-            id={"create-local-#{@group.id}"}
+            id={"create-local-#{@dom_key}"}
             class="btn btn-xs btn-outline"
             phx-click="create_local_show"
-            phx-value-id={@group.id}
+            phx-value-id={@group.anchor_key}
           >
             <.icon name="hero-folder-plus" class="w-3.5 h-3.5 mr-1 opacity-70" />
             Create show from folder
@@ -353,12 +362,12 @@ defmodule MydiaWeb.ImportMediaLive.Components do
 
       <div :if={@expanded} class="pl-7 sm:pl-9 pt-1">
         <ul
-          id={"members-#{@group.id}"}
+          id={"members-#{@dom_key}"}
           phx-update="stream"
           class="bg-base-200/50 rounded-xl p-3 divide-y divide-base-200/60 max-h-80 overflow-y-auto"
         >
           <li
-            :for={{member_dom_id, member} <- @members}
+            :for={{member_dom_id, candidate} <- @members}
             id={member_dom_id}
             class="py-2 first:pt-0 last:pb-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
           >
@@ -367,14 +376,14 @@ defmodule MydiaWeb.ImportMediaLive.Components do
               <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-2 flex-wrap min-w-0">
                   <span
-                    id={"member-#{member.media_file.id}"}
+                    id={"member-#{candidate.id}"}
                     class="font-mono font-medium text-xs text-base-content/90 truncate"
-                    title={member.media_file.relative_path}
+                    title={candidate.relative_path}
                   >
-                    {member_filename(member)}
+                    {member_filename(candidate)}
                   </span>
                   <%= if @group.media_type != "movie" do %>
-                    <%= case member_episode_badge(member) do %>
+                    <%= case member_episode_badge(candidate) do %>
                       <% {known?, label} -> %>
                         <span class={[
                           "badge badge-xs font-mono font-medium shrink-0",
@@ -389,22 +398,22 @@ defmodule MydiaWeb.ImportMediaLive.Components do
                   <% end %>
                 </div>
                 <p
-                  :if={member_folder(member)}
+                  :if={member_folder(candidate)}
                   class="text-[11px] font-mono text-base-content/50 truncate mt-0.5"
                 >
-                  {member_folder(member)}
+                  {member_folder(candidate)}
                 </p>
               </div>
             </div>
 
             <form
               :if={@group.media_type != "movie"}
-              id={"member-form-#{member.media_file.id}"}
+              id={"member-form-#{candidate.id}"}
               phx-change="update_member_episode"
               phx-submit="update_member_episode"
               class="flex items-center gap-1.5 shrink-0 self-end sm:self-center"
             >
-              <input type="hidden" name="file_id" value={member.media_file.id} />
+              <input type="hidden" name="candidate_id" value={candidate.id} />
               <div class="join items-center bg-base-100 rounded-lg border border-base-300 shadow-xs">
                 <span class="join-item px-1.5 text-[11px] text-base-content/60 font-mono font-bold">
                   S
@@ -412,14 +421,14 @@ defmodule MydiaWeb.ImportMediaLive.Components do
                 <.input
                   type="number"
                   name="season"
-                  value={member_season(member)}
+                  value={member_season(candidate)}
                   placeholder="--"
                   min="0"
                   max="999"
                   phx-debounce="400"
                   class="join-item input input-xs w-12 text-center font-mono border-0 focus:outline-none"
                   container_class="contents"
-                  aria-label={"Season for #{member_filename(member)}"}
+                  aria-label={"Season for #{member_filename(candidate)}"}
                 />
                 <span class="join-item px-1.5 text-[11px] text-base-content/60 font-mono font-bold">
                   E
@@ -427,14 +436,14 @@ defmodule MydiaWeb.ImportMediaLive.Components do
                 <.input
                   type="number"
                   name="episode"
-                  value={member_episode(member)}
+                  value={member_episode(candidate)}
                   placeholder="--"
                   min="0"
                   max="9999"
                   phx-debounce="400"
                   class="join-item input input-xs w-14 text-center font-mono border-0 focus:outline-none"
                   container_class="contents"
-                  aria-label={"Episode for #{member_filename(member)}"}
+                  aria-label={"Episode for #{member_filename(candidate)}"}
                 />
               </div>
             </form>
@@ -453,6 +462,8 @@ defmodule MydiaWeb.ImportMediaLive.Components do
   attr :selected, :boolean, default: false
 
   def ignored_group_row(assigns) do
+    assigns = assign(assigns, :dom_key, ImportCandidateGroup.dom_id(assigns.group))
+
     ~H"""
     <div
       id={@id}
@@ -465,26 +476,23 @@ defmodule MydiaWeb.ImportMediaLive.Components do
           checked={@selected}
           aria-label={"Select #{@group.display_title}"}
           phx-click="toggle_group"
-          phx-value-id={@group.id}
+          phx-value-id={@group.anchor_key}
         />
 
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-2">
             <span class="font-semibold text-sm truncate opacity-70">{@group.display_title}</span>
             <span class="badge badge-ghost badge-sm shrink-0">{@group.file_count} files</span>
-            <span :if={season_label(@group)} class="badge badge-ghost badge-sm shrink-0">
-              {season_label(@group)}
-            </span>
           </div>
           <p class="text-xs text-base-content/50 truncate mt-0.5">{suggestion_line(@group)}</p>
         </div>
       </div>
 
       <button
-        id={"restore-#{@group.id}"}
+        id={"restore-#{@dom_key}"}
         class="btn btn-xs btn-outline shrink-0"
         phx-click="restore_group"
-        phx-value-id={@group.id}
+        phx-value-id={@group.anchor_key}
       >
         <.icon name="hero-arrow-uturn-left" class="w-3.5 h-3.5 mr-1" /> Restore
       </button>
@@ -496,7 +504,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
   The "Change match" / "Identify" search modal.
 
   `state` is `ImportMediaLive.Index`'s `@match_search` assign -- nil when
-  closed, otherwise `%{group_id:, media_type:, query:, results:, searching:,
+  closed, otherwise `%{anchor_key:, media_type:, query:, results:, searching:,
   error:}`. Selecting a result submits `provider_id` *and* `provider`
   together (a result's own provider tag, `:tvdb` or `:metadata_relay`/etc for
   TMDB), which is what lets the handler tell two providers' ids apart rather
@@ -607,16 +615,6 @@ defmodule MydiaWeb.ImportMediaLive.Components do
   defp band_label(:needs_attention), do: "needs attention"
   defp band_label(:no_match), do: "no match"
 
-  defp season_label(%{media_type: "movie"}), do: nil
-
-  defp season_label(group) do
-    case Mydia.Library.ImportGroup.season_span(group) do
-      [] -> nil
-      [one] -> "S#{one}"
-      seasons -> "S#{List.first(seasons)}–S#{List.last(seasons)}"
-    end
-  end
-
   defp suggestion_line(%{provider_id: nil}), do: "No provider match"
 
   defp suggestion_line(group) do
@@ -624,45 +622,26 @@ defmodule MydiaWeb.ImportMediaLive.Components do
     "→ #{group.suggested_title}#{year}"
   end
 
-  # The human-readable side of `Mydia.ImportGroups`'s `evidence` column: what
-  # actually earned a group its suggested match, not just the confidence
-  # number. This is the design's own accountability mechanism for a fixed
-  # 0.85 threshold -- "the evidence label in the UI is what keeps this
-  # honest" -- so it has to render, not just get computed and stored.
-  #
-  # Only `"none"`, `"exact_title"` and `"fuzzy"` are emitted by
-  # `ImportGroups`'s `evidence_kind/2` today; `"external_id"` and `"reused"`
-  # are the spec's own table for a future matcher pass, and `"manual"` is
-  # `ImportGroups.change_match/2`'s own kind for a human-picked match. Every
-  # other kind (including one this module has never heard of) falls through
-  # to the raw string rather than crashing, so a future evidence kind renders
-  # as *something* immediately, with no LiveView deploy required just to stop
-  # erroring.
-  defp evidence_label(%{"kind" => "external_id"}), do: "tvdb id in folder name"
-  defp evidence_label(%{"kind" => "reused"}), do: "matched before"
-  defp evidence_label(%{"kind" => "exact_title"}), do: "exact title match"
-  defp evidence_label(%{"kind" => "manual"}), do: "manually matched"
+  # `ImportCandidateGroup` carries no persisted evidence trail (unlike the old
+  # `ImportGroup.evidence` column) -- `provider_count` is the one disagreement
+  # signal the aggregate itself can cheaply surface: more than one distinct
+  # provider id among a group's candidates is exactly what nulls out
+  # `min_confidence` and forces the group into `:needs_attention` (see
+  # `Mydia.ImportCandidates.group_query/2`), so the badge explains why an
+  # otherwise-matched-looking group still needs a look.
+  defp disagreement_label(%{provider_count: n}) when is_integer(n) and n > 1,
+    do: "#{n} conflicting matches"
 
-  defp evidence_label(%{"kind" => "fuzzy", "candidates" => n}) when is_integer(n) and n > 0,
-    do: "fuzzy title, #{n} candidate#{if n == 1, do: "", else: "s"}"
+  defp disagreement_label(_), do: nil
 
-  defp evidence_label(%{"kind" => "fuzzy"}), do: "fuzzy title match"
-  # "no match" is already said by suggestion_line/1 above; a second badge
-  # repeating it would be noise, not evidence.
-  defp evidence_label(%{"kind" => "none"}), do: nil
-  defp evidence_label(%{"kind" => kind}) when is_binary(kind), do: kind
-  defp evidence_label(_), do: nil
+  defp member_filename(candidate), do: Path.basename(candidate.relative_path || "")
 
-  defp member_filename(member) do
-    Path.basename(member.media_file.relative_path || member.media_file.path || "")
-  end
-
-  defp member_folder(member) do
-    dir = Path.dirname(member.media_file.relative_path || member.media_file.path || "")
+  defp member_folder(candidate) do
+    dir = Path.dirname(candidate.relative_path || "")
     if dir in [".", "", "/"], do: nil, else: dir
   end
 
-  defp member_season(%{candidate: %{parsed_info: %{} = info}}) do
+  defp member_season(%{parsed_info: %{} = info}) do
     case Map.get(info, "season") || Map.get(info, :season) do
       s when is_integer(s) -> s
       _ -> nil
@@ -671,7 +650,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
 
   defp member_season(_), do: nil
 
-  defp member_episode(%{candidate: %{parsed_info: %{} = info}}) do
+  defp member_episode(%{parsed_info: %{} = info}) do
     episodes = Map.get(info, "episodes") || Map.get(info, :episodes) || []
 
     case episodes do
@@ -682,9 +661,9 @@ defmodule MydiaWeb.ImportMediaLive.Components do
 
   defp member_episode(_), do: nil
 
-  defp member_episode_badge(member) do
-    season = member_season(member)
-    episode = member_episode(member)
+  defp member_episode_badge(candidate) do
+    season = member_season(candidate)
+    episode = member_episode(candidate)
 
     cond do
       season != nil and episode != nil ->

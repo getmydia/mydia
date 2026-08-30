@@ -176,6 +176,7 @@ defmodule Mydia.Streaming.CandidatesTest do
         Library.create_scanned_media_file(%{
           relative_path: "nonexistent.mkv",
           library_path_id: library_path.id,
+          media_item_id: media_item_fixture(%{type: "movie"}).id,
           size: 1_000_000
         })
 
@@ -421,6 +422,7 @@ defmodule Mydia.Streaming.CandidatesTest do
       Library.create_scanned_media_file(%{
         relative_path: relative,
         library_path_id: library_path.id,
+        media_item_id: media_item_fixture(%{type: "movie"}).id,
         size: File.stat!(target).size
       })
 
