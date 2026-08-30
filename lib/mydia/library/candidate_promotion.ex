@@ -3,19 +3,22 @@ defmodule Mydia.Library.CandidatePromotion do
 
   import Ecto.Query
 
-  alias Mydia.{Metadata, Repo}
+  alias Mydia.{DB, Metadata, Repo}
   alias Mydia.Library.{EpisodeMinter, ImportCandidate, MediaFile, MetadataEnricher}
   alias Mydia.Media
+  alias Mydia.Settings.LibraryPath
   alias Mydia.Subtitles.Sidecars
 
   @spec promote_group([ImportCandidate.t()], map(), keyword()) ::
           {:ok, [MediaFile.t()]} | {:error, term()}
   def promote_group([%ImportCandidate{} | _] = candidates, match, opts) do
     config = Keyword.get(opts, :config) || Metadata.default_relay_config()
+    candidates = Enum.sort_by(candidates, & &1.id)
+    snapshot = candidate_snapshot(candidates)
 
     with :ok <- one_group?(candidates),
          {:ok, media_item} <- MetadataEnricher.enrich(match, config: config),
-         {:ok, media_files} <- commit_group(candidates, media_item, opts) do
+         {:ok, media_files} <- commit_group(candidates, snapshot, media_item, opts) do
       Sidecars.reconcile_all(Repo.preload(media_files, :library_path))
       {:ok, media_files}
     end
@@ -23,26 +26,62 @@ defmodule Mydia.Library.CandidatePromotion do
 
   def promote_group([], _match, _opts), do: {:error, :empty_group}
 
-  defp commit_group(candidates, media_item, opts) do
-    Repo.transaction(fn ->
-      with {:ok, locked_candidates} <- reread_candidates(candidates),
-           :ok <- one_group?(locked_candidates),
-           {:ok, media_files} <- insert_files(locked_candidates, media_item, opts),
-           :ok <- delete_candidates(locked_candidates) do
-        media_files
-      else
-        {:error, reason} -> Repo.rollback(reason)
-      end
-    end)
+  defp commit_group(candidates, snapshot, media_item, opts) do
+    transaction_opts = if DB.sqlite?(), do: [mode: :immediate], else: []
+
+    Repo.transaction(
+      fn ->
+        with :ok <- lock_group(candidates),
+             {:ok, locked_candidates} <- reread_candidates(candidates),
+             :ok <- snapshot_matches?(locked_candidates, snapshot),
+             :ok <- one_group?(locked_candidates),
+             {:ok, media_files} <- insert_files(locked_candidates, media_item, opts),
+             :ok <- delete_candidates(locked_candidates) do
+          media_files
+        else
+          {:error, reason} -> Repo.rollback(reason)
+        end
+      end,
+      transaction_opts
+    )
     |> case do
       {:ok, media_files} -> {:ok, media_files}
       {:error, reason} -> {:error, reason}
     end
   end
 
-  # SQLite has no row-level FOR UPDATE syntax. Re-reading each candidate inside
-  # the ownership transaction makes the transaction the authoritative snapshot;
-  # the first media-file insert acquires the database write lock.
+  # PostgreSQL serializes every promotion for a library on its library row,
+  # then takes candidate row locks in ID order. SQLite uses BEGIN IMMEDIATE,
+  # acquiring its single writer lock before any snapshot read.
+  defp lock_group([%ImportCandidate{library_path_id: library_path_id} | _] = candidates) do
+    if DB.postgres?() do
+      case Repo.one(
+             from library_path in LibraryPath,
+               where: library_path.id == ^library_path_id,
+               lock: "FOR UPDATE"
+           ) do
+        nil -> {:error, {:library_path_missing, library_path_id}}
+        _library_path -> lock_candidates(candidates)
+      end
+    else
+      :ok
+    end
+  end
+
+  defp lock_candidates(candidates) do
+    ids = Enum.map(candidates, & &1.id)
+
+    locked_ids =
+      ImportCandidate
+      |> where([candidate], candidate.id in ^ids)
+      |> order_by([candidate], asc: candidate.id)
+      |> lock("FOR UPDATE")
+      |> select([candidate], candidate.id)
+      |> Repo.all()
+
+    if locked_ids == ids, do: :ok, else: {:error, :candidate_missing}
+  end
+
   defp reread_candidates(candidates) do
     candidates
     |> Enum.reduce_while({:ok, []}, fn candidate, {:ok, acc} ->
@@ -55,6 +94,43 @@ defmodule Mydia.Library.CandidatePromotion do
       {:ok, locked} -> {:ok, Enum.reverse(locked)}
       error -> error
     end
+  end
+
+  defp candidate_snapshot(candidates) do
+    Map.new(candidates, fn candidate -> {candidate.id, snapshot_fields(candidate)} end)
+  end
+
+  defp snapshot_matches?(candidates, snapshot) do
+    case Enum.find(candidates, fn candidate ->
+           Map.get(snapshot, candidate.id) != snapshot_fields(candidate)
+         end) do
+      nil -> :ok
+      candidate -> {:error, {:stale_candidate, candidate.id}}
+    end
+  end
+
+  defp snapshot_fields(candidate) do
+    Map.take(candidate, [
+      :id,
+      :library_path_id,
+      :relative_path,
+      :anchor_key,
+      :size,
+      :mtime,
+      :parsed_info,
+      :provider_type,
+      :provider_id,
+      :title,
+      :year,
+      :media_type,
+      :confidence,
+      :attempts,
+      :last_error,
+      :next_retry_at,
+      :dismissed_at,
+      :discovered_at,
+      :updated_at
+    ])
   end
 
   defp insert_files(candidates, media_item, opts) do

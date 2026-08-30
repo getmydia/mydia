@@ -71,6 +71,13 @@ defmodule Mydia.Library.ImportCandidateTest do
            }
   end
 
+  test "to_match does not turn an unknown stored provider into TVDB" do
+    match =
+      ImportCandidate.to_match(%ImportCandidate{provider_type: "unknown", media_type: "movie"})
+
+    assert is_nil(match.provider_type)
+  end
+
   test "delete_missing removes only candidates absent from the current scan" do
     library_path = library_path_fixture()
 

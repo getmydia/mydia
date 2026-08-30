@@ -39,6 +39,7 @@ defmodule Mydia.Library.FileIngest do
           {:error, reason} ->
             case record_failure(candidate, format_error(reason)) do
               {:ok, _candidate} -> {:error, reason}
+              {:error, :candidate_missing} -> {:error, reason}
               {:error, changeset} -> {:error, {:candidate_write_failed, changeset}}
             end
         end
@@ -81,18 +82,23 @@ defmodule Mydia.Library.FileIngest do
   end
 
   defp record_failure(candidate, error) do
-    current = Repo.get(ImportCandidate, candidate.id) || candidate
-    attempts = current.attempts + 1
+    case Repo.get(ImportCandidate, candidate.id) do
+      nil ->
+        {:error, :candidate_missing}
 
-    case ImportCandidates.upsert(
-           candidate_attrs(current, %{
-             attempts: attempts,
-             last_error: error,
-             next_retry_at: next_retry_at(attempts)
-           })
-         ) do
-      {:ok, updated} -> {:ok, updated}
-      {:error, changeset} -> {:error, changeset}
+      current ->
+        attempts = current.attempts + 1
+
+        case ImportCandidates.upsert(
+               candidate_attrs(current, %{
+                 attempts: attempts,
+                 last_error: error,
+                 next_retry_at: next_retry_at(attempts)
+               })
+             ) do
+          {:ok, updated} -> {:ok, updated}
+          {:error, changeset} -> {:error, changeset}
+        end
     end
   end
 

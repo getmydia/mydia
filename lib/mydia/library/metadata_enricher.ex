@@ -36,7 +36,7 @@ defmodule Mydia.Library.MetadataEnricher do
   def enrich(match_result, opts \\ [])
 
   def enrich(%{provider_id: provider_id, provider_type: provider_type} = match_result, opts)
-      when not is_nil(provider_id) and not is_nil(provider_type) do
+      when is_binary(provider_id) and provider_type in [:tmdb, :tvdb] do
     config = Keyword.get(opts, :config, Metadata.default_relay_config())
     media_type = determine_media_type(match_result)
 
@@ -111,26 +111,34 @@ defmodule Mydia.Library.MetadataEnricher do
 
   defp get_or_create_media_item(provider_id, media_type, match_result, config) do
     provider_type = Map.get(match_result, :provider_type, :tmdb)
-    id = String.to_integer(provider_id)
 
-    # Look up existing item by the appropriate provider ID
-    existing_item =
-      if provider_type == :tvdb do
-        Media.get_media_item_by_tvdb(id)
-      else
-        Media.get_media_item_by_tmdb(id)
+    with {:ok, id} <- provider_id(provider_id) do
+      # Look up existing item by the appropriate provider ID
+      existing_item =
+        if provider_type == :tvdb do
+          Media.get_media_item_by_tvdb(id)
+        else
+          Media.get_media_item_by_tmdb(id)
+        end
+
+      case existing_item do
+        nil ->
+          # Fetch full metadata and create new item
+          create_new_media_item(provider_id, media_type, match_result, config)
+
+        item ->
+          # Update existing item with latest metadata. Pass the match's resolved
+          # provider so a nil-source item can adopt it (see provenance handling
+          # in update_existing_media_item/5).
+          update_existing_media_item(item, provider_id, media_type, config, provider_type)
       end
+    end
+  end
 
-    case existing_item do
-      nil ->
-        # Fetch full metadata and create new item
-        create_new_media_item(provider_id, media_type, match_result, config)
-
-      item ->
-        # Update existing item with latest metadata. Pass the match's resolved
-        # provider so a nil-source item can adopt it (see provenance handling
-        # in update_existing_media_item/5).
-        update_existing_media_item(item, provider_id, media_type, config, provider_type)
+  defp provider_id(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {id, ""} when id > 0 -> {:ok, id}
+      _ -> {:error, {:invalid_provider_id, value}}
     end
   end
 

@@ -61,7 +61,7 @@ defmodule Mydia.Library.ImportCandidate do
   def to_match(%__MODULE__{} = candidate) do
     %{
       provider_id: candidate.provider_id,
-      provider_type: known_provider(candidate.provider_type) || :tvdb,
+      provider_type: known_provider(candidate.provider_type),
       title: candidate.title,
       year: candidate.year,
       match_confidence: candidate.confidence || 1.0,

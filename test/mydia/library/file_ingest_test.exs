@@ -90,4 +90,51 @@ defmodule Mydia.Library.FileIngestTest do
     assert parsed_info["season"] == 2
     assert parsed_info["episodes"] == [5, 6]
   end
+
+  test "a deleted candidate is not recreated when promotion loses the row" do
+    candidate = candidate()
+    movie = media_item_fixture(%{type: "movie", tmdb_id: 60_308})
+    assert {:ok, _} = Repo.delete(candidate)
+
+    candidate_id = candidate.id
+
+    assert {:error, {:candidate_missing, ^candidate_id}} =
+             FileIngest.ingest(candidate, match(movie, 1.0), policy: :unattended)
+
+    refute Repo.get(ImportCandidate, candidate.id)
+    refute Mydia.ImportCandidates.get_by_path(candidate.library_path_id, candidate.relative_path)
+  end
+
+  test "an unrecognized provider type is retryable and cannot promote" do
+    candidate = candidate()
+
+    invalid_match = %{
+      match(media_item_fixture(%{type: "movie", tmdb_id: 60_309}), 1.0)
+      | provider_type: :other
+    }
+
+    assert {:error, {:invalid_match_result, _}} =
+             FileIngest.ingest(candidate, invalid_match, policy: :unattended)
+
+    assert %ImportCandidate{attempts: 1, next_retry_at: next_retry_at} =
+             Repo.get!(ImportCandidate, candidate.id)
+
+    assert next_retry_at
+    refute Repo.exists?(MediaFile)
+  end
+
+  test "a malformed provider ID is retryable rather than raising" do
+    candidate = candidate()
+
+    malformed_match = %{
+      match(media_item_fixture(%{type: "movie", tmdb_id: 60_310}), 1.0)
+      | provider_id: "not-an-id"
+    }
+
+    assert {:error, {:invalid_provider_id, "not-an-id"}} =
+             FileIngest.ingest(candidate, malformed_match, policy: :unattended)
+
+    assert %ImportCandidate{attempts: 1} = Repo.get!(ImportCandidate, candidate.id)
+    refute Repo.exists?(MediaFile)
+  end
 end
