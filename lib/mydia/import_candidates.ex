@@ -49,14 +49,16 @@ defmodule Mydia.ImportCandidates do
             library_path.path
           )
 
+        {provider_type, provider_id} = provider_identity(episode.media_item)
+
         case upsert(%{
                library_path_id: file.library_path_id,
                relative_path: file.relative_path,
                anchor_key: anchor.cluster_key,
                size: file.size,
                discovered_at: file.inserted_at,
-               provider_type: provider_type(episode.media_item),
-               provider_id: provider_id(episode.media_item),
+               provider_type: provider_type,
+               provider_id: provider_id,
                media_type: "tv_show",
                parsed_info: %{
                  "type" => "tv_show",
@@ -91,11 +93,13 @@ defmodule Mydia.ImportCandidates do
     end
   end
 
-  defp provider_type(%{tvdb_id: id}) when not is_nil(id), do: "tvdb"
-  defp provider_type(%{tmdb_id: id}) when not is_nil(id), do: "tmdb"
-  defp provider_type(_), do: nil
+  defp provider_identity(%{metadata_source: :tmdb, tmdb_id: id}) when not is_nil(id),
+    do: {"tmdb", Integer.to_string(id)}
 
-  defp provider_id(%{tvdb_id: id}) when not is_nil(id), do: Integer.to_string(id)
-  defp provider_id(%{tmdb_id: id}) when not is_nil(id), do: Integer.to_string(id)
-  defp provider_id(_), do: nil
+  defp provider_identity(%{metadata_source: :tvdb, tvdb_id: id}) when not is_nil(id),
+    do: {"tvdb", Integer.to_string(id)}
+
+  defp provider_identity(%{tvdb_id: id}) when not is_nil(id), do: {"tvdb", Integer.to_string(id)}
+  defp provider_identity(%{tmdb_id: id}) when not is_nil(id), do: {"tmdb", Integer.to_string(id)}
+  defp provider_identity(_), do: {nil, nil}
 end

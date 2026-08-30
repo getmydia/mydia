@@ -28,11 +28,30 @@ defmodule Mydia.Repo.Migrations.SplitImportCandidatesFromMediaFilesTest do
              WHERE relative_path = 'Unmatched.mkv'
              """)
 
+    assert %{rows: [[id]]} =
+             sql!("""
+             SELECT id
+             FROM import_candidates
+             WHERE relative_path = 'Show/Season 02/S02E03.mkv'
+             """)
+
+    assert byte_size(id) == 16
+    assert {:ok, _uuid} = Ecto.UUID.load(id)
+
     assert %{rows: [[2]]} = sql!("SELECT count(*) FROM import_candidates")
     assert %{rows: [[2]]} = sql!("SELECT count(*) FROM media_files")
 
     assert %{rows: [["episode-owned"], ["movie-owned"]]} =
              sql!("SELECT id FROM media_files ORDER BY id")
+
+    assert %{rows: [["episode-segment"], ["movie-segment"]]} =
+             sql!("SELECT id FROM media_segments ORDER BY id")
+
+    assert %{rows: [["episode-subtitle"], ["movie-subtitle"]]} =
+             sql!("SELECT id FROM subtitles ORDER BY id")
+
+    assert %{rows: [["episode-setting"], ["movie-setting"]]} =
+             sql!("SELECT id FROM subtitle_track_settings ORDER BY id")
 
     assert %{rows: [[0]]} =
              sql!(
@@ -83,6 +102,27 @@ defmodule Mydia.Repo.Migrations.SplitImportCandidatesFromMediaFilesTest do
     )
     """)
 
+    sql!("""
+    CREATE TABLE media_segments (
+      id TEXT PRIMARY KEY,
+      media_file_id TEXT REFERENCES media_files(id) ON DELETE CASCADE
+    )
+    """)
+
+    sql!("""
+    CREATE TABLE subtitles (
+      id TEXT PRIMARY KEY,
+      media_file_id TEXT REFERENCES media_files(id) ON DELETE CASCADE
+    )
+    """)
+
+    sql!("""
+    CREATE TABLE subtitle_track_settings (
+      id TEXT PRIMARY KEY,
+      media_file_id TEXT REFERENCES media_files(id) ON DELETE CASCADE
+    )
+    """)
+
     sql!("INSERT INTO library_paths (id, path) VALUES ('library', '/media')")
     sql!("INSERT INTO media_items (id) VALUES ('movie')")
     sql!("INSERT INTO episodes (id) VALUES ('episode')")
@@ -92,6 +132,20 @@ defmodule Mydia.Repo.Migrations.SplitImportCandidatesFromMediaFilesTest do
     insert_media_file("trashed", nil, nil, "2026-08-01 00:00:00", "Trashed.mkv")
     insert_media_file("movie-owned", "movie", nil, nil, "Movie.mkv")
     insert_media_file("episode-owned", nil, "episode", nil, "Show/Season 01/S01E01.mkv")
+
+    for {table, id, media_file_id} <- [
+          {"media_segments", "orphan-segment", "active-match"},
+          {"subtitles", "orphan-subtitle", "active-match"},
+          {"subtitle_track_settings", "orphan-setting", "active-match"},
+          {"media_segments", "movie-segment", "movie-owned"},
+          {"subtitles", "movie-subtitle", "movie-owned"},
+          {"subtitle_track_settings", "movie-setting", "movie-owned"},
+          {"media_segments", "episode-segment", "episode-owned"},
+          {"subtitles", "episode-subtitle", "episode-owned"},
+          {"subtitle_track_settings", "episode-setting", "episode-owned"}
+        ] do
+      sql!("INSERT INTO #{table} (id, media_file_id) VALUES (?, ?)", [id, media_file_id])
+    end
 
     sql!("""
     INSERT INTO media_file_match_candidates

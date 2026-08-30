@@ -123,7 +123,7 @@ defmodule Mydia.Repo.Migrations.SplitImportCandidatesFromMediaFiles do
               COALESCE($13, 0), $14, $15, $16, $16, $16)
       """,
       [
-        Ecto.UUID.generate(),
+        Ecto.UUID.bingenerate(),
         library_path_id,
         relative_path,
         anchor_key,
