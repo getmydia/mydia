@@ -1,30 +1,19 @@
 name: CI / Player Desktop
 
+# No path filters here, deliberately. `Build / Web` and `Test / Player` are
+# required contexts on the Master ruleset, and a required check that never
+# reports leaves a pull request pending forever. The filter lives in the
+# `changes` job below instead, so every job always reports -- concluding in a
+# few seconds with its steps skipped when nothing relevant changed.
+#
+# The push filter is gone for the same reason the pull_request one is: it keeps
+# exactly one copy of the path list, in `changes`.
 on:
   push:
     branches:
       - master
       - main
-    paths:
-      - "player/**"
-      # player/rust/mydia_player_p2p depends on ../../native/mydia_p2p_core by
-      # relative path, so build-android cross-compiles code that lives outside
-      # player/. Without this, a change breaking the Android target lands green
-      # (ci.yml only builds the NIF for the host) and surfaces at release time.
-      - "native/**"
-      # test-player's build_runner step runs graphql_codegen, which validates
-      # the ~29 .graphql query files under player/lib/graphql/ against this
-      # schema. player/lib/graphql/schema.graphql is a symlink to this file,
-      # so filtering on the symlink's own path would never fire when only the
-      # target changes.
-      - "priv/graphql/schema.graphql"
-      - ".github/workflows/ci-player.yml"
   pull_request:
-    paths:
-      - "player/**"
-      - "native/**"
-      - "priv/graphql/schema.graphql"
-      - ".github/workflows/ci-player.yml"
   workflow_dispatch:
 
 concurrency:
@@ -35,6 +24,99 @@ env:
   PLAYER_PATH: 'player'
 
 jobs:
+  changes:
+    name: Check / Player paths
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      player: ${{ steps.filter.outputs.player }}
+
+    steps:
+      # The single source of truth for what this workflow cares about:
+      #
+      #   player/**                      the app itself
+      #   native/**                      build-android cross-compiles
+      #                                  player/rust/mydia_player_p2p, which
+      #                                  depends on ../../native/mydia_p2p_core
+      #                                  by relative path
+      #   priv/graphql/schema.graphql    test-player's build_runner step runs
+      #                                  graphql_codegen against this schema.
+      #                                  player/lib/graphql/schema.graphql is a
+      #                                  symlink to it, so filtering on the
+      #                                  symlink's own path would never fire
+      #   rust-toolchain.toml            build-android's cargokit step pins its
+      #                                  Rust toolchain from this file at the
+      #                                  repo root (see the Build APK comment
+      #                                  below), not from whatever the runner
+      #                                  image calls stable. This gap predates
+      #                                  this job -- the workflow-level
+      #                                  `paths:` filter it replaced didn't
+      #                                  watch this file either.
+      #   .github/workflows/ci-player.yml
+      - name: Decide whether player code changed
+        id: filter
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          changed=""
+          case "$EVENT" in
+            pull_request)
+              # A failed `changes` job reports every dependent job as skipped,
+              # not failed -- exactly the ambiguous state this job exists to
+              # avoid on `Build / Web` and `Test / Player`. A transient API
+              # failure here must run everything rather than abort the step.
+              #
+              # `previous_filename` is only set for renames, where `filename`
+              # is the new path. Emitting both means renaming a file out of
+              # player/ (or into it) still shows up in the change set.
+              changed="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR}/files" \
+                           --paginate --jq '.[] | .filename, (.previous_filename // empty)' || echo "")"
+              if [ -z "$changed" ]; then
+                echo "player=true" >> "$GITHUB_OUTPUT"
+                echo "Could not compute the change set; running everything."
+                exit 0
+              fi
+              ;;
+            push)
+              # `before` is all-zeros on a branch's first push and unreliable
+              # after a force-push. Either way, run everything rather than
+              # silently skipping.
+              if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+                echo "player=true" >> "$GITHUB_OUTPUT"
+                echo "No usable base commit; running everything."
+                exit 0
+              fi
+              changed="$(gh api "repos/${GITHUB_REPOSITORY}/compare/${BEFORE}...${AFTER}" \
+                           --jq '.files[].filename' || echo "")"
+              if [ -z "$changed" ]; then
+                echo "player=true" >> "$GITHUB_OUTPUT"
+                echo "Could not compute the change set; running everything."
+                exit 0
+              fi
+              ;;
+            *)
+              echo "player=true" >> "$GITHUB_OUTPUT"
+              echo "Event $EVENT has no change set; running everything."
+              exit 0
+              ;;
+          esac
+
+          if printf '%s\n' "$changed" | grep -qE '^(player/|native/|priv/graphql/schema\.graphql$|rust-toolchain\.toml$|\.github/workflows/ci-player\.yml$)'; then
+            echo "player=true" >> "$GITHUB_OUTPUT"
+            echo "Player-relevant changes found."
+          else
+            echo "player=false" >> "$GITHUB_OUTPUT"
+            echo "No player-relevant changes."
+          fi
+
   # Moved here from ci.yml, which has no path filter and therefore ran the
   # whole Flutter suite on every Elixir-only PR. This workflow already filters
   # on player/** and native/**, which is the correct trigger surface for it.
@@ -42,6 +124,7 @@ jobs:
   test-player:
     name: Test / Player
     runs-on: ubuntu-latest
+    needs: changes
 
     defaults:
       run:
@@ -49,9 +132,11 @@ jobs:
 
     steps:
       - name: Checkout
+        if: needs.changes.outputs.player == 'true'
         uses: actions/checkout@v7
 
       - name: Setup Flutter
+        if: needs.changes.outputs.player == 'true'
         uses: subosito/flutter-action@v2
         with:
           flutter-version-file: player/.fvmrc
@@ -59,14 +144,17 @@ jobs:
           cache: true
 
       - name: Install dependencies
+        if: needs.changes.outputs.player == 'true'
         run: flutter pub get
 
       - name: Run code generation
+        if: needs.changes.outputs.player == 'true'
         run: flutter pub run build_runner build
 
       - name: Run tests
         # --concurrency=1: the default concurrency silently drops 2-4 test
         # files while still exiting 0, so this is load-bearing, not cosmetic.
+        if: needs.changes.outputs.player == 'true'
         run: flutter test --concurrency=1
 
       - name: Run television-tier tests
@@ -78,6 +166,7 @@ jobs:
         # define, which would roughly double this job for no extra signal.
         # Empty means the naming convention broke, which must fail rather than
         # silently cover nothing.
+        if: needs.changes.outputs.player == 'true'
         run: |
           set -euo pipefail
           # Read into an array rather than a bare string: an unquoted expansion
@@ -104,6 +193,7 @@ jobs:
         # No --concurrency here, unlike the VM run above: flutter parses it and
         # then ignores it for web runs, printing a warning that reads like a
         # mistake.
+        if: needs.changes.outputs.player == 'true'
         run: |
           set -euo pipefail
           files=$(git ls-files 'test/**/*_web_test.dart')
@@ -137,6 +227,7 @@ jobs:
   build-web:
     name: Build / Web
     runs-on: ubuntu-latest
+    needs: changes
 
     # Reading the tree is all this job does. Scoped to this job rather than
     # added file-wide, which would be its own sweep: the steps below run
@@ -151,6 +242,7 @@ jobs:
 
     steps:
       - name: Checkout
+        if: needs.changes.outputs.player == 'true'
         uses: actions/checkout@v7
         with:
           # Nothing in this job runs a git command, so the token has no reason
@@ -158,6 +250,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup Flutter
+        if: needs.changes.outputs.player == 'true'
         uses: subosito/flutter-action@v2
         with:
           flutter-version-file: player/.fvmrc
@@ -165,12 +258,15 @@ jobs:
           cache: true
 
       - name: Install dependencies
+        if: needs.changes.outputs.player == 'true'
         run: flutter pub get
 
       - name: Run code generation
+        if: needs.changes.outputs.player == 'true'
         run: flutter pub run build_runner build
 
       - name: Build the web bundle
+        if: needs.changes.outputs.player == 'true'
         run: |
           flutter build web --release --base-href / \
             --no-web-resources-cdn \
@@ -185,6 +281,7 @@ jobs:
       # whose directives had been edited away, which breaks identically and is
       # the likelier edit of the two.
       - name: Check _headers survived the build
+        if: needs.changes.outputs.player == 'true'
         run: |
           set -euo pipefail
           headers=build/web/_headers
@@ -231,6 +328,7 @@ jobs:
             shell: bash
 
     runs-on: ${{ matrix.os }}
+    needs: changes
     defaults:
       run:
         shell: ${{ matrix.shell }}
@@ -242,7 +340,10 @@ jobs:
       - name: Check platform support
         id: check_platform
         run: |
-          if [ -d "${{ env.PLAYER_PATH }}/${{ matrix.platform_dir }}" ]; then
+          if [ "${{ needs.changes.outputs.player }}" != "true" ]; then
+            echo "enabled=false" >> $GITHUB_OUTPUT
+            echo "No player-relevant changes. Skipping build."
+          elif [ -d "${{ env.PLAYER_PATH }}/${{ matrix.platform_dir }}" ]; then
             echo "enabled=true" >> $GITHUB_OUTPUT
           else
             echo "enabled=false" >> $GITHUB_OUTPUT
@@ -412,12 +513,15 @@ jobs:
   build-android:
     name: Build / Android
     runs-on: ubuntu-latest
+    needs: changes
 
     steps:
       - name: Checkout
+        if: needs.changes.outputs.player == 'true'
         uses: actions/checkout@v7
 
       - name: Setup Flutter
+        if: needs.changes.outputs.player == 'true'
         uses: subosito/flutter-action@v2
         with:
           flutter-version-file: player/.fvmrc
@@ -425,12 +529,14 @@ jobs:
           cache: true
 
       - name: Setup Java
+        if: needs.changes.outputs.player == 'true'
         uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
           java-version: '17'
 
       - name: Cache pub dependencies
+        if: needs.changes.outputs.player == 'true'
         uses: actions/cache@v6
         with:
           path: |
@@ -441,6 +547,7 @@ jobs:
             ${{ runner.os }}-pub-
 
       - name: Install dependencies
+        if: needs.changes.outputs.player == 'true'
         working-directory: player
         run: flutter pub get
 
@@ -449,6 +556,7 @@ jobs:
       # near codegen. No --delete-conflicting-outputs; it was removed in
       # build_runner 2.15 and is now warned about and ignored.
       - name: Run code generation
+        if: needs.changes.outputs.player == 'true'
         working-directory: player
         run: flutter pub run build_runner build
 
@@ -459,10 +567,12 @@ jobs:
       # rust-toolchain.toml, not from whatever the runner image calls stable;
       # cargokit installs the pinned toolchain on demand.
       - name: Build APK
+        if: needs.changes.outputs.player == 'true'
         working-directory: player
         run: flutter build apk --release
 
       - name: Upload artifact
+        if: needs.changes.outputs.player == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: mydia-player-android-apk
@@ -472,9 +582,11 @@ jobs:
   icons:
     name: Check / Web icons
     runs-on: ubuntu-latest
+    needs: changes
 
     steps:
       - name: Checkout
+        if: needs.changes.outputs.player == 'true'
         uses: actions/checkout@v7
 
       # Guards against the web icon set drifting from its SVG sources: a
@@ -482,15 +594,18 @@ jobs:
       # hand-edited, or a generated file was deleted. --check needs only
       # coreutils, hence no Flutter, no nix and no matrix here.
       - name: Check web icons are current
+        if: needs.changes.outputs.player == 'true'
         working-directory: player
         run: tool/gen-web-icons.sh --check
 
   flatpak-validate:
     name: Flatpak / Validate metadata
     runs-on: ubuntu-latest
+    needs: changes
 
     steps:
       - name: Checkout
+        if: needs.changes.outputs.player == 'true'
         uses: actions/checkout@v7
 
       # player/flatpak/test/ holds four script tests and nothing ran any of
@@ -498,36 +613,44 @@ jobs:
       # needs no packages beyond bash, so it runs first. The other three want
       # ostree, rclone, flatpak and gpg and are still manual.
       - name: Test the ostree skeleton repair
+        if: needs.changes.outputs.player == 'true'
         run: ./player/flatpak/test/ensure-skeleton-test.sh
 
       # Seconds, not minutes. Catches most manifest metadata mistakes long
       # before the full flatpak-build job below finishes compiling mpv.
       - name: Install validators
+        if: needs.changes.outputs.player == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y desktop-file-utils appstream
 
       - name: Validate desktop entry
+        if: needs.changes.outputs.player == 'true'
         run: desktop-file-validate player/flatpak/dev.mydia.player.desktop
 
       - name: Validate AppStream metainfo
+        if: needs.changes.outputs.player == 'true'
         run: appstreamcli validate --explain player/flatpak/dev.mydia.player.metainfo.xml
 
       - name: Validate finish-args
+        if: needs.changes.outputs.player == 'true'
         run: player/flatpak/test/finish-args-test.sh
 
   flatpak-build:
     name: Flatpak / Build
     runs-on: ubuntu-latest
+    needs: changes
     # mpv, libplacebo and libass account for roughly a third of this; the
     # Flutter build and its Rust cdylib account for the rest.
     timeout-minutes: 90
 
     steps:
       - name: Checkout
+        if: needs.changes.outputs.player == 'true'
         uses: actions/checkout@v7
 
       - name: Install flatpak-builder
+        if: needs.changes.outputs.player == 'true'
         run: |
           sudo apt-get update
           # appstream provides appstreamcli, which flatpak-builder shells out to
@@ -538,9 +661,11 @@ jobs:
       - name: Allow unprivileged user namespaces
         # Ubuntu 24.04 restricts these through AppArmor, which breaks the
         # bubblewrap sandbox flatpak-builder needs.
+        if: needs.changes.outputs.player == 'true'
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
       - name: Add Flathub and install the runtime
+        if: needs.changes.outputs.player == 'true'
         run: |
           flatpak remote-add --user --if-not-exists flathub \
             https://dl.flathub.org/repo/flathub.flatpakrepo
@@ -549,12 +674,14 @@ jobs:
             org.freedesktop.Sdk.Extension.llvm21//25.08
 
       - name: Build
+        if: needs.changes.outputs.player == 'true'
         run: |
           flatpak-builder --user --force-clean --disable-rofiles-fuse \
             --repo=staged-repo --default-branch=stable \
             build-dir player/flatpak/dev.mydia.player.yml
 
       - name: Install and smoke test
+        if: needs.changes.outputs.player == 'true'
         run: |
           flatpak remote-add --user --no-gpg-verify --if-not-exists \
             staged "$PWD/staged-repo"
