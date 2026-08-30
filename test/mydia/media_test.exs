@@ -754,6 +754,23 @@ defmodule Mydia.MediaTest do
                Repo.get_by!(ImportCandidate, library_path_id: file.library_path_id)
     end
 
+    test "episode demotion preserves a known provider when its id is unavailable" do
+      show =
+        media_item_fixture(%{
+          type: "tv_show",
+          tvdb_id: 1234,
+          metadata_source: :tmdb
+        })
+
+      episode = episode_fixture(media_item_id: show.id, season_number: 2, episode_number: 3)
+      file = media_file_fixture(episode_id: episode.id, relative_path: "Show/S02E03.mkv")
+
+      assert {:ok, _episode} = Media.delete_episode(episode)
+
+      assert %ImportCandidate{provider_type: "tmdb", provider_id: nil} =
+               Repo.get_by!(ImportCandidate, library_path_id: file.library_path_id)
+    end
+
     test "create_episode/1 casts and persists absolute_number and provider_episode_id" do
       media_item = media_item_fixture(%{type: "tv_show"})
 

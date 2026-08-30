@@ -99,6 +99,9 @@ defmodule Mydia.ImportCandidates do
   defp provider_identity(%{metadata_source: :tvdb, tvdb_id: id}) when not is_nil(id),
     do: {"tvdb", Integer.to_string(id)}
 
+  defp provider_identity(%{metadata_source: :tmdb}), do: {"tmdb", nil}
+  defp provider_identity(%{metadata_source: :tvdb}), do: {"tvdb", nil}
+
   defp provider_identity(%{tvdb_id: id}) when not is_nil(id), do: {"tvdb", Integer.to_string(id)}
   defp provider_identity(%{tmdb_id: id}) when not is_nil(id), do: {"tmdb", Integer.to_string(id)}
   defp provider_identity(_), do: {nil, nil}
