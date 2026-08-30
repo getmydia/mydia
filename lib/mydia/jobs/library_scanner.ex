@@ -376,13 +376,23 @@ defmodule Mydia.Jobs.LibraryScanner do
   # then simply never handed to discover_unknown_paths/3, so no candidate is
   # written and no parser, matcher, or relay call ever runs for it.
   defp process_scan_result(library_path, scan_result, opts) do
-    existing_files = Library.list_media_files(library_path_id: library_path.id)
-    changes = Library.Scanner.detect_changes(scan_result, existing_files, library_path)
+    # One bulk query builds both path-index maps known-file maintenance
+    # needs below, instead of a query per changed file: `active_by_path`
+    # (used by `detect_changes/3` and by `process_modified_files/3`) and
+    # `trashed_by_path` (used by `partition_and_restore/3` to recognize a
+    # path that reappeared where a trashed file used to be).
+    all_files = Library.list_media_files(library_path_id: library_path.id, include_trashed: true)
+    {trashed_files, active_files} = Enum.split_with(all_files, & &1.trashed_at)
+    active_by_path = Map.new(active_files, &{&1.relative_path, &1})
+    trashed_by_path = Map.new(trashed_files, &{&1.relative_path, &1})
 
-    process_modified_files(changes.modified_files, library_path)
+    changes = Library.Scanner.detect_changes(scan_result, active_files, library_path)
+
+    process_modified_files(changes.modified_files, library_path, active_by_path)
     process_deleted_files(changes.deleted_files)
 
-    {restored_count, unknown} = partition_and_restore(changes.new_files, library_path)
+    {restored_count, unknown} =
+      partition_and_restore(changes.new_files, library_path, trashed_by_path)
 
     on_disk_paths = Enum.map(scan_result.files, &Path.relative_to(&1.path, library_path.path))
     {reaped_candidates, _} = ImportCandidates.delete_missing(library_path.id, on_disk_paths)
@@ -435,12 +445,14 @@ defmodule Mydia.Jobs.LibraryScanner do
 
   # Known-file maintenance: a file whose size or effective mtime changed
   # since it was last verified gets its stats refreshed. Runs unconditionally,
-  # in both auto_import modes.
-  defp process_modified_files(modified_file_infos, library_path) do
+  # in both auto_import modes. `active_by_path` is the caller's already-fetched
+  # path index (see process_scan_result/3), so this issues zero queries of
+  # its own regardless of how many files changed.
+  defp process_modified_files(modified_file_infos, library_path, active_by_path) do
     Enum.each(modified_file_infos, fn file_info ->
       relative_path = Path.relative_to(file_info.path, library_path.path)
 
-      case Library.get_media_file_by_relative_path(library_path.id, relative_path) do
+      case Map.get(active_by_path, relative_path) do
         nil ->
           Logger.warning("Modified file not found in database",
             path: file_info.path,
@@ -464,7 +476,7 @@ defmodule Mydia.Jobs.LibraryScanner do
   # Known-file maintenance: an owned file no longer found on disk is trashed,
   # not deleted -- `Library.trash_media_file/1` moves the record into the
   # trashed state so it can be restored if the file reappears (see
-  # partition_and_restore/2). Runs unconditionally, in both auto_import modes.
+  # partition_and_restore/3). Runs unconditionally, in both auto_import modes.
   defp process_deleted_files(deleted_media_files) do
     Enum.each(deleted_media_files, fn media_file ->
       media_file = Repo.preload(media_file, :library_path)
@@ -497,15 +509,17 @@ defmodule Mydia.Jobs.LibraryScanner do
   # known-file maintenance, not discovery, and runs the same in both
   # auto_import modes. What is left after peeling those off is genuinely
   # unknown, and is the only thing the auto_import gate in
-  # process_scan_result/3 ever gets to see.
-  defp partition_and_restore(new_file_infos, library_path) do
+  # process_scan_result/3 ever gets to see. `trashed_by_path` is the
+  # caller's already-fetched path index (see process_scan_result/3), so this
+  # issues zero lookup queries of its own regardless of how many new paths
+  # there are -- only `Library.restore_media_file/1` writes, one per actual
+  # restoration.
+  defp partition_and_restore(new_file_infos, library_path, trashed_by_path) do
     {restored_count, unknown_acc} =
       Enum.reduce(new_file_infos, {0, []}, fn file_info, {restored_count, unknown_acc} ->
         relative_path = Path.relative_to(file_info.path, library_path.path)
 
-        case Library.get_media_file_by_relative_path(library_path.id, relative_path,
-               include_trashed: true
-             ) do
+        case Map.get(trashed_by_path, relative_path) do
           %{trashed_at: %DateTime{}} = trashed_file ->
             case Library.restore_media_file(trashed_file) do
               {:ok, _restored} ->
@@ -526,7 +540,7 @@ defmodule Mydia.Jobs.LibraryScanner do
                 {restored_count, unknown_acc}
             end
 
-          _ ->
+          nil ->
             {restored_count, [file_info | unknown_acc]}
         end
       end)
@@ -568,25 +582,61 @@ defmodule Mydia.Jobs.LibraryScanner do
     %{candidates: length(unknown_file_infos), auto_promoted: auto_promoted}
   end
 
+  # A file whose parsed type cannot belong to this library path is skipped
+  # entirely: no candidate is written for it at all, mirroring what
+  # `auto_import: false` already does for every unknown path. This is
+  # deliberately a hard skip rather than a candidate that stays permanently
+  # unmatched -- skipping means there is never a row to leave outstanding
+  # forever, and it reproduces master's actual guarantee (no parse-driven
+  # matcher/relay call for a type-incompatible file), which
+  # `validate_file_type_for_library/3` used to provide before this file's
+  # discovery rewrite deleted it along with the rest of the old per-file
+  # enrichment branch. See `type_compatible?/2`.
   defp upsert_discovered_candidate(file_info, library_path) do
-    relative_path = Path.relative_to(file_info.path, library_path.path)
-    existing = ImportCandidates.get_by_path(library_path.id, relative_path)
-    attrs = discovered_candidate_attrs(file_info, library_path, relative_path, existing)
+    parsed = FileParser.parse_with_path(file_info.path)
 
-    case ImportCandidates.upsert(attrs) do
-      {:ok, _candidate} ->
-        :ok
+    if type_compatible?(library_path.type, parsed.type) do
+      relative_path = Path.relative_to(file_info.path, library_path.path)
+      existing = ImportCandidates.get_by_path(library_path.id, relative_path)
+      attrs = discovered_candidate_attrs(file_info, library_path, relative_path, parsed, existing)
 
-      {:error, changeset} ->
-        Logger.warning("Could not upsert an import candidate during a scan",
-          library_path_id: library_path.id,
-          relative_path: relative_path,
-          errors: inspect(changeset.errors)
-        )
+      case ImportCandidates.upsert(attrs) do
+        {:ok, _candidate} ->
+          :ok
 
-        :error
+        {:error, changeset} ->
+          Logger.warning("Could not upsert an import candidate during a scan",
+            library_path_id: library_path.id,
+            relative_path: relative_path,
+            errors: inspect(changeset.errors)
+          )
+
+          :error
+      end
+    else
+      Logger.debug("Skipping a library-type-incompatible file during discovery",
+        library_path_id: library_path.id,
+        library_type: library_path.type,
+        parsed_type: parsed.type,
+        path: file_info.path
+      )
+
+      :skipped
     end
   end
+
+  # Mirrors `MediaFile.library_type_compatible?/3`'s rules at the file level
+  # (that function checks a resolved media item's type; this checks a
+  # freshly-parsed file's type, before any candidate or match exists to
+  # resolve). `:mixed` always accepts either type. An `:unknown` parsed type
+  # is let through, same as the deleted `validate_file_type_for_library/3`
+  # did ("allowing a matching attempt" for a file the parser could not
+  # classify) -- rejecting it here instead would silently hide every
+  # unparseable file from discovery.
+  defp type_compatible?(:mixed, _parsed_type), do: true
+  defp type_compatible?(:series, :movie), do: false
+  defp type_compatible?(:movies, :tv_show), do: false
+  defp type_compatible?(_library_type, _parsed_type), do: true
 
   # `size`/`mtime`/`parsed_info`/`media_type` are refreshed on every scan --
   # they are derived from the file and the path alone, never from a match, so
@@ -601,9 +651,8 @@ defmodule Mydia.Jobs.LibraryScanner do
   # unless the file's size or mtime actually changed on disk, in which case
   # they are explicitly cleared: a match cached against the old bytes is not
   # trustworthy evidence about the new ones.
-  defp discovered_candidate_attrs(file_info, library_path, relative_path, existing) do
+  defp discovered_candidate_attrs(file_info, library_path, relative_path, parsed, existing) do
     mtime = DateTime.truncate(file_info.modified_at, :second)
-    parsed = FileParser.parse_with_path(file_info.path)
     anchor = PathAnchor.anchor_for(file_info.path, library_path.path)
 
     base = %{

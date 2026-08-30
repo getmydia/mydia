@@ -241,5 +241,84 @@ defmodule Mydia.Jobs.LibraryScannerDiscoveryTest do
       assert :ok = scan(lp, matcher: ScriptedMatcher)
       assert Repo.reload!(owned.media_file).trashed_at
     end
+
+    test "a dismissed candidate whose file content changed still has match state cleared and stays dismissed",
+         %{tmp_dir: tmp_dir} do
+      lp = library_path_fixture(%{path: tmp_dir, type: "movies", auto_import: true})
+      relative_path = "Dismissed Changed (1999)/Dismissed.Changed.1999.1080p.mkv"
+      absolute_path = Path.join(tmp_dir, relative_path)
+      File.mkdir_p!(Path.dirname(absolute_path))
+      File.write!(absolute_path, "new content, a different size than the dismissed candidate")
+
+      dismissed =
+        import_candidate_fixture(
+          library_path_id: lp.id,
+          relative_path: relative_path,
+          size: 1,
+          provider_id: "999999",
+          provider_type: "tmdb",
+          title: "Stale Dismissed Match",
+          confidence: 1.0,
+          dismissed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        )
+
+      # Content-changed clearing must not depend on the outstanding sweep --
+      # a dismissed candidate never enters it (ImportCandidates.outstanding/3
+      # excludes dismissed rows), so ScriptedMatcher is never actually called
+      # here either way. RaisingMatcher pins that this scenario truly cannot
+      # reach a matcher, not merely that it happens not to today.
+      assert :ok = scan(lp, matcher: RaisingMatcher)
+
+      reloaded = Repo.get!(ImportCandidate, dismissed.id)
+      assert reloaded.dismissed_at
+      refute reloaded.provider_id
+      refute reloaded.title == "Stale Dismissed Match"
+      assert reloaded.confidence == nil
+      assert Repo.aggregate(MediaFile, :count) == 0
+    end
+  end
+
+  describe "library type compatibility" do
+    test "a movie file in a series-only library makes no matcher call and creates nothing", %{
+      tmp_dir: tmp_dir
+    } do
+      lp = library_path_fixture(%{path: tmp_dir, type: "series", auto_import: true})
+      dir = Path.join(tmp_dir, "Confident Movie (1999)")
+      File.mkdir_p!(dir)
+      File.write!(Path.join(dir, "Confident.Movie.1999.1080p.mkv"), "video")
+
+      assert :ok = scan(lp, matcher: RaisingMatcher)
+
+      assert Repo.aggregate(MediaFile, :count) == 0
+      assert Repo.aggregate(ImportCandidate, :count) == 0
+    end
+
+    test "a TV-shaped file in a movies-only library makes no matcher call and creates nothing",
+         %{tmp_dir: tmp_dir} do
+      lp = library_path_fixture(%{path: tmp_dir, type: "movies", auto_import: true})
+      dir = Path.join(tmp_dir, "Confident Show")
+      File.mkdir_p!(dir)
+      File.write!(Path.join(dir, "Confident.Show.S01E01.1080p.mkv"), "video")
+
+      assert :ok = scan(lp, matcher: RaisingMatcher)
+
+      assert Repo.aggregate(MediaFile, :count) == 0
+      assert Repo.aggregate(ImportCandidate, :count) == 0
+    end
+
+    test "a mixed library accepts both a movie and a TV-shaped file", %{tmp_dir: tmp_dir} do
+      lp = library_path_fixture(%{path: tmp_dir, type: "mixed", auto_import: true})
+      movie_dir = Path.join(tmp_dir, "AMBIGUOUS Movie (1999)")
+      File.mkdir_p!(movie_dir)
+      File.write!(Path.join(movie_dir, "AMBIGUOUS.Movie.1999.1080p.mkv"), "video")
+
+      tv_dir = Path.join(tmp_dir, "AMBIGUOUS Show")
+      File.mkdir_p!(tv_dir)
+      File.write!(Path.join(tv_dir, "AMBIGUOUS.Show.S01E01.1080p.mkv"), "video")
+
+      assert :ok = scan(lp, matcher: ScriptedMatcher)
+
+      assert Repo.aggregate(ImportCandidate, :count) == 2
+    end
   end
 end
